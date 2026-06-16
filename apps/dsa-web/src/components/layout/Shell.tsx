@@ -39,6 +39,7 @@ function resolveRailDescription(t: (key: string) => string): string {
 
 function isAdminOpsRoute(pathname: string): boolean {
   return pathname.startsWith('/settings/system')
+    || pathname.startsWith('/admin/launch-cockpit')
     || pathname.startsWith('/admin/mission-control')
     || pathname.startsWith('/admin/logs')
     || pathname.startsWith('/admin/evidence-workflow')
@@ -53,6 +54,9 @@ function resolveAdminOpsRouteLabel(pathname: string, language: string): string |
   const isEnglish = language === 'en';
   if (pathname.startsWith('/settings/system')) {
     return isEnglish ? 'Ops Overview / System Settings' : '运维总览/系统设置';
+  }
+  if (pathname.startsWith('/admin/launch-cockpit')) {
+    return 'Launch Cockpit';
   }
   if (pathname.startsWith('/admin/mission-control')) {
     return 'Mission Control';
@@ -88,11 +92,17 @@ function resolveMobileRouteLabel(pathname: string, t: (key: string) => string, l
   if (pathname.startsWith('/market/decision-cockpit')) {
     return language === 'en' ? 'Market Decision Cockpit' : '市场决策驾驶舱';
   }
+  if (pathname === '/stocks/structure-decision') {
+    return language === 'en' ? 'Stock Structure Entry' : '个股结构入口';
+  }
   if (/^\/stocks\/[^/]+\/structure-decision(?:\/)?$/i.test(pathname)) {
     return language === 'en' ? 'Stock Structure Panel' : '个股结构面板';
   }
   if (pathname.startsWith('/research/radar')) {
     return language === 'en' ? 'Research Radar' : '研究雷达';
+  }
+  if (pathname.startsWith('/scenario-lab')) {
+    return language === 'en' ? 'Scenario Lab' : '情景实验室';
   }
   const adminRouteLabel = resolveAdminOpsRouteLabel(pathname, language);
   if (adminRouteLabel) {
@@ -345,12 +355,14 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const isMarketDecisionCockpitRoute = surfacePathname.startsWith('/market/decision-cockpit');
   const isLiquidityMonitorRoute = surfacePathname.startsWith('/market/liquidity-monitor');
   const isRotationRadarRoute = surfacePathname.startsWith('/market/rotation-radar');
-  const isStockStructureDecisionRoute = /^\/stocks\/[^/]+\/structure-decision(?:\/)?$/i.test(surfacePathname);
+  const isStockStructureDecisionRoute = surfacePathname === '/stocks/structure-decision'
+    || /^\/stocks\/[^/]+\/structure-decision(?:\/)?$/i.test(surfacePathname);
   const isScannerRoute = surfacePathname.startsWith('/scanner');
   const isResearchRadarRoute = surfacePathname.startsWith('/research/radar');
   const isWatchlistRoute = surfacePathname.startsWith('/watchlist');
   const isPortfolioRoute = surfacePathname.startsWith('/portfolio');
   const isOptionsLabRoute = surfacePathname.startsWith('/options-lab');
+  const isScenarioLabRoute = surfacePathname.startsWith('/scenario-lab');
   const isSystemControlRoute = isAdminOpsRoute(surfacePathname);
   const isConsumerShellRoute = isHomeRoute
     || isBacktestRoute
@@ -363,7 +375,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     || isResearchRadarRoute
     || isWatchlistRoute
     || isPortfolioRoute
-    || isOptionsLabRoute;
+    || isOptionsLabRoute
+    || isScenarioLabRoute;
   const isPageScrollRoute = isConsumerShellRoute;
   const shellViewportClass = isPageScrollRoute ? 'min-h-screen' : 'h-full min-h-0';
   const shellFrameOverflowClass = '';

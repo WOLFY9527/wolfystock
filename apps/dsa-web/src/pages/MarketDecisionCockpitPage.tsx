@@ -155,7 +155,7 @@ export default function MarketDecisionCockpitPage() {
           className="flex-1"
           command={(
             <WolfyCommandBar
-              leading={<span className="text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Market / Rough shell' : '市场 / 粗框架'}</span>}
+              leading={<span className="text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Market Structure / Cockpit' : '市场结构 / 驾驶舱'}</span>}
               trailing={(
                 <div className="flex flex-wrap items-center gap-2">
                   <Link
@@ -164,6 +164,12 @@ export default function MarketDecisionCockpitPage() {
                   >
                     {locale === 'en' ? 'Research radar' : '研究雷达'}
                   </Link>
+                  <Link
+                    to={localize('/scenario-lab')}
+                    className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+                  >
+                    {locale === 'en' ? 'Scenario lab' : '情景实验室'}
+                  </Link>
                   <TerminalButton variant="compact" onClick={() => void load()}>
                     {locale === 'en' ? 'Refresh' : '刷新'}
                   </TerminalButton>
@@ -171,7 +177,7 @@ export default function MarketDecisionCockpitPage() {
               )}
             >
               <div className="text-xs text-[color:var(--wolfy-text-secondary)]">
-                {locale === 'en' ? 'Observation-only market frame for Open Design information architecture.' : '仅用于 Open Design 信息架构的市场观察型框架。'}
+                {locale === 'en' ? 'Primary market-structure entry for regime, queue, confidence limits, and observation-only gamma context.' : '市场结构主入口，集中呈现状态、队列、置信边界与仅观察 Gamma 语境。'}
               </div>
             </WolfyCommandBar>
           )}
@@ -202,10 +208,10 @@ export default function MarketDecisionCockpitPage() {
           <ConsoleBoard className="min-h-0" data-testid="market-decision-cockpit-page">
             <RoughSurfaceIntro
               eyebrow={locale === 'en' ? 'Market decision cockpit' : '市场决策驾驶舱'}
-              title={locale === 'en' ? 'Rough shell for regime, queue, and confidence limits' : '用于展示市场状态、研究队列与置信边界的粗框架'}
+              title={locale === 'en' ? 'Market structure, positioning context, and research queue' : '市场结构、定位语境与研究队列'}
               description={locale === 'en'
-                ? 'This surface keeps market regime, queue preview, what to watch, and gamma observation status on one route without redesigning the current frontend.'
-                : '这个页面把市场状态、研究队列预览、关注点与 Gamma 观察状态放在同一路由中，不重做现有前端视觉体系。'}
+                ? 'This surface is the first-stop cockpit for reading the current market backdrop, evidence quality, and what deserves research attention next.'
+                : '这个页面是新版研究工作流的第一站，用于阅读当前市场背景、证据质量和下一步研究关注点。'}
             />
             {error ? (
               <div className="p-4 md:p-5">
@@ -319,10 +325,13 @@ export default function MarketDecisionCockpitPage() {
                         },
                         {
                           key: 'observation',
-                          label: locale === 'en' ? 'Boundary' : '边界',
-                          value: optionsStatus?.observationOnly
-                            ? (locale === 'en' ? 'Observation only · decisionGrade=false' : '仅观察 · decisionGrade=false')
-                            : '--',
+                          label: 'observationOnly',
+                          value: optionsStatus?.observationOnly === false ? 'false' : 'true',
+                        },
+                        {
+                          key: 'decision-grade',
+                          label: 'decisionGrade',
+                          value: optionsStatus?.decisionGrade === true ? 'true' : 'false',
                         },
                         {
                           key: 'blocked',

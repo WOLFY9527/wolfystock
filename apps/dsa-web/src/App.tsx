@@ -33,7 +33,9 @@ const MarketDecisionCockpitPage = lazy(() => import('./pages/MarketDecisionCockp
 const LiquidityMonitorPage = lazy(() => import('./pages/LiquidityMonitorPage'));
 const MarketRotationRadarPage = lazy(() => import('./pages/MarketRotationRadarPage'));
 const StockStructureDecisionPage = lazy(() => import('./pages/StockStructureDecisionPage'));
+const StockStructureDecisionEntryPage = lazy(() => import('./pages/StockStructureDecisionEntryPage'));
 const ResearchRadarPage = lazy(() => import('./pages/ResearchRadarPage'));
+const ScenarioLabPage = lazy(() => import('./pages/ScenarioLabPage'));
 const WatchlistPage = lazy(() => import('./pages/WatchlistPage'));
 const BacktestPage = lazy(() => import('./pages/BacktestPage'));
 const OptionsLabPage = lazy(() => import('./pages/OptionsLabPage'));
@@ -239,7 +241,8 @@ function isAdminSurfacePath(pathname: string): boolean {
 }
 
 function isStockStructureDecisionPath(pathname: string): boolean {
-  return /^\/stocks\/[^/]+\/structure-decision(?:\/)?$/i.test(pathname);
+  return pathname === '/stocks/structure-decision'
+    || /^\/stocks\/[^/]+\/structure-decision(?:\/)?$/i.test(pathname);
 }
 
 function isProtectedProductPath(pathname: string): boolean {
@@ -247,6 +250,7 @@ function isProtectedProductPath(pathname: string): boolean {
     || pathname === '/options'
     || isPathMatch(pathname, '/portfolio')
     || isPathMatch(pathname, '/research/radar')
+    || isPathMatch(pathname, '/scenario-lab')
     || isPathMatch(pathname, '/watchlist')
     || isPathMatch(pathname, '/backtest')
     || isPathMatch(pathname, '/options-lab');
@@ -381,6 +385,8 @@ const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ child
     moduleName = language === 'en' ? 'Market Overview' : '市场总览';
   } else if (routePathname.startsWith('/research/radar')) {
     moduleName = language === 'en' ? 'Research Radar' : '研究雷达';
+  } else if (routePathname.startsWith('/scenario-lab')) {
+    moduleName = language === 'en' ? 'Scenario Lab' : '情景实验室';
   } else if (routePathname.startsWith('/watchlist')) {
     moduleName = language === 'en' ? 'Watchlist' : '观察列表';
   } else if (routePathname.startsWith('/backtest')) {
@@ -529,8 +535,10 @@ export const AppContent: React.FC = () => {
           <Route path="/market/decision-cockpit" element={<MarketDecisionCockpitPage />} />
           <Route path="/market/liquidity-monitor" element={<LiquidityMonitorPage />} />
           <Route path="/market/rotation-radar" element={<MarketRotationRadarPage />} />
+          <Route path="/stocks/structure-decision" element={<StockStructureDecisionEntryPage />} />
           <Route path="/stocks/:stockCode/structure-decision" element={<StockStructureDecisionPage />} />
           <Route path="/research/radar" element={<RegisteredSurfaceRoute><ResearchRadarPage /></RegisteredSurfaceRoute>} />
+          <Route path="/scenario-lab" element={<RegisteredSurfaceRoute><ScenarioLabPage /></RegisteredSurfaceRoute>} />
           <Route path="/watchlist" element={<RegisteredSurfaceRoute><WatchlistPage /></RegisteredSurfaceRoute>} />
           <Route path="/backtest" element={<RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute>} />
           <Route path="/options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />
@@ -573,8 +581,10 @@ export const AppContent: React.FC = () => {
           <Route path="market/decision-cockpit" element={<MarketDecisionCockpitPage />} />
           <Route path="market/liquidity-monitor" element={<LiquidityMonitorPage />} />
           <Route path="market/rotation-radar" element={<MarketRotationRadarPage />} />
+          <Route path="stocks/structure-decision" element={<StockStructureDecisionEntryPage />} />
           <Route path="stocks/:stockCode/structure-decision" element={<StockStructureDecisionPage />} />
           <Route path="research/radar" element={<RegisteredSurfaceRoute><ResearchRadarPage /></RegisteredSurfaceRoute>} />
+          <Route path="scenario-lab" element={<RegisteredSurfaceRoute><ScenarioLabPage /></RegisteredSurfaceRoute>} />
           <Route path="watchlist" element={<RegisteredSurfaceRoute><WatchlistPage /></RegisteredSurfaceRoute>} />
           <Route path="backtest" element={<RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute>} />
           <Route path="options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />

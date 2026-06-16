@@ -113,7 +113,7 @@ export default function StockStructureDecisionPage() {
           className="flex-1"
           command={(
             <WolfyCommandBar
-              leading={<span className="text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Stocks / Rough shell' : '个股 / 粗框架'}</span>}
+              leading={<span className="text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Single-name Research / Structure' : '个股研究 / 结构'}</span>}
               trailing={(
                 <div className="flex flex-wrap items-center gap-2">
                   <Link
@@ -129,7 +129,7 @@ export default function StockStructureDecisionPage() {
               )}
             >
               <div className="text-xs text-[color:var(--wolfy-text-secondary)]">
-                {locale === 'en' ? 'Observation-only structure panel for a single ticker.' : '面向单一标的的观察型结构面板。'}
+                {locale === 'en' ? 'Observation-only structure workspace for state, key levels, research notes, and evidence gaps.' : '仅观察结构工作区，集中呈现状态、关键位置、研究备注与证据缺口。'}
               </div>
             </WolfyCommandBar>
           )}
@@ -164,10 +164,10 @@ export default function StockStructureDecisionPage() {
           <ConsoleBoard className="min-h-0" data-testid="stock-structure-decision-page">
             <RoughSurfaceIntro
               eyebrow={locale === 'en' ? 'Stock structure panel' : '个股结构面板'}
-              title={locale === 'en' ? `${stockCode.toUpperCase()} rough shell` : `${stockCode.toUpperCase()} 粗框架`}
+              title={locale === 'en' ? `${stockCode.toUpperCase()} structure workspace` : `${stockCode.toUpperCase()} 结构工作区`}
               description={locale === 'en'
-                ? 'This panel keeps structure state, confidence, component scores, research notes, and evidence gaps together for Open Design handoff.'
-                : '这个面板把结构状态、置信度、组件评分、研究备注与证据缺口放在同一页，便于后续 Open Design 接手。'}
+                ? 'This panel keeps structure state, confidence, component scores, research notes, and evidence gaps together before the name moves into watchlist or portfolio context.'
+                : '这个面板把结构状态、置信度、组件评分、研究备注与证据缺口放在同一页，再决定是否沉淀到观察列表或组合上下文。'}
             />
             {error ? (
               <div className="p-4 md:p-5">

@@ -110,7 +110,7 @@ export default function ResearchRadarPage() {
           className="flex-1"
           command={(
             <WolfyCommandBar
-              leading={<span className="text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Research / Rough shell' : '研究 / 粗框架'}</span>}
+              leading={<span className="text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Research Queue / Radar' : '研究队列 / 雷达'}</span>}
               trailing={(
                 <div className="flex flex-wrap items-center gap-2">
                   <Link
@@ -126,7 +126,7 @@ export default function ResearchRadarPage() {
               )}
             >
               <div className="text-xs text-[color:var(--wolfy-text-secondary)]">
-                {locale === 'en' ? 'Authenticated queue for observation, verification, and evidence gaps.' : '面向登录用户的观察、验证与证据缺口队列。'}
+                {locale === 'en' ? 'Core queue for priority, structure handoff, verification items, and evidence gaps.' : '用于优先级、结构交接、验证事项与证据缺口的核心研究队列。'}
               </div>
             </WolfyCommandBar>
           )}
@@ -158,10 +158,10 @@ export default function ResearchRadarPage() {
           <ConsoleBoard className="min-h-0" data-testid="research-radar-page">
             <RoughSurfaceIntro
               eyebrow={locale === 'en' ? 'Research radar' : '研究雷达'}
-              title={locale === 'en' ? 'Queue rough shell for priority, bias, and evidence gaps' : '用于展示优先级、研究偏向与证据缺口的队列粗框架'}
+              title={locale === 'en' ? 'Research queue for market-structure follow-through' : '承接市场结构的研究队列'}
               description={locale === 'en'
-                ? 'This route keeps queue ranking, why-on-radar rationale, verify items, and risk flags together for a later visual redesign.'
-                : '这个路由把队列排序、上榜原因、验证事项与风险标记放在一起，供后续视觉重构使用。'}
+                ? 'This route turns cockpit signals into reviewable ticker work, keeping queue order, why-on-radar rationale, verification items, and risk flags together.'
+                : '这个路由把驾驶舱信号转成可复核的标的研究工作，把队列顺序、上榜原因、验证事项与风险标记放在一起。'}
             />
             {error ? (
               <div className="p-4 md:p-5">

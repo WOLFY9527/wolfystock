@@ -1,18 +1,18 @@
 import type { UiLanguage } from '../../i18n/core';
 import { stripLocalePrefix } from '../../utils/localeRouting';
 
-export type ConsumerNavGroupKey = 'start' | 'research' | 'account' | 'markets' | 'validate';
+export type ConsumerNavGroupKey = 'cockpit' | 'research' | 'context' | 'observe';
 export type ConsumerNavItemKey =
-  | 'home'
-  | 'scanner'
-  | 'portfolio'
+  | 'decision-cockpit'
   | 'market-overview'
-  | 'liquidity-monitor'
-  | 'rotation-radar'
+  | 'research-radar'
+  | 'stock-structure'
+  | 'scanner'
   | 'watchlist'
-  | 'backtest'
-  | 'options-lab';
-export type ConsumerRouteKey = ConsumerNavItemKey | 'guest';
+  | 'portfolio'
+  | 'options-lab'
+  | 'scenario-lab';
+export type ConsumerRouteKey = ConsumerNavItemKey | 'home' | 'guest' | 'liquidity-monitor' | 'rotation-radar' | 'backtest';
 
 export type ConsumerNavItem = {
   key: ConsumerNavItemKey;
@@ -50,59 +50,58 @@ export const CONSUMER_NAV_GROUPS: Array<{
   key: ConsumerNavGroupKey;
   label: Record<UiLanguage, string>;
 }> = [
-  { key: 'start', label: { zh: '起点', en: 'Start' } },
-  { key: 'research', label: { zh: '研究', en: 'Research' } },
-  { key: 'account', label: { zh: '账户', en: 'Account' } },
-  { key: 'markets', label: { zh: '市场', en: 'Markets' } },
-  { key: 'validate', label: { zh: '验证', en: 'Validate' } },
+  { key: 'cockpit', label: { zh: '市场结构', en: 'Market Structure' } },
+  { key: 'research', label: { zh: '研究队列', en: 'Research Queue' } },
+  { key: 'context', label: { zh: '研究上下文', en: 'Research Context' } },
+  { key: 'observe', label: { zh: '观察验证', en: 'Observation' } },
 ];
 
 export const CONSUMER_NAV_ITEMS: ConsumerNavItem[] = [
-  { key: 'home', labelKey: 'nav.home', to: '/', group: 'start', requiresAuth: false },
-  { key: 'scanner', labelKey: 'nav.scanner', to: '/scanner', group: 'research', requiresAuth: false },
-  { key: 'portfolio', labelKey: 'nav.portfolio', to: '/portfolio', group: 'account', requiresAuth: false },
-  { key: 'market-overview', labelKey: 'nav.marketOverview', to: '/market-overview', group: 'markets', requiresAuth: false },
-  { key: 'liquidity-monitor', labelKey: 'nav.liquidityMonitor', to: '/market/liquidity-monitor', group: 'markets', requiresAuth: false },
-  { key: 'rotation-radar', labelKey: 'nav.rotationRadar', to: '/market/rotation-radar', group: 'markets', requiresAuth: false },
-  { key: 'watchlist', labelKey: 'nav.watchlist', to: '/watchlist', group: 'research', requiresAuth: false },
-  { key: 'backtest', labelKey: 'nav.backtest', to: '/backtest', group: 'validate', requiresAuth: false },
-  { key: 'options-lab', labelKey: 'nav.optionsLab', to: '/options-lab', group: 'validate', requiresAuth: false },
+  { key: 'decision-cockpit', labelKey: 'nav.marketDecisionCockpit', to: '/market/decision-cockpit', group: 'cockpit', requiresAuth: false },
+  { key: 'market-overview', labelKey: 'nav.marketOverview', to: '/market-overview', group: 'cockpit', requiresAuth: false },
+  { key: 'research-radar', labelKey: 'nav.researchRadar', to: '/research/radar', group: 'research', requiresAuth: false },
+  { key: 'stock-structure', labelKey: 'nav.stockStructure', to: '/stocks/structure-decision', group: 'research', requiresAuth: false },
+  { key: 'scanner', labelKey: 'nav.scanner', to: '/scanner', group: 'context', requiresAuth: false },
+  { key: 'watchlist', labelKey: 'nav.watchlist', to: '/watchlist', group: 'context', requiresAuth: false },
+  { key: 'portfolio', labelKey: 'nav.portfolio', to: '/portfolio', group: 'context', requiresAuth: false },
+  { key: 'options-lab', labelKey: 'nav.optionsLab', to: '/options-lab', group: 'observe', requiresAuth: false },
+  { key: 'scenario-lab', labelKey: 'nav.scenarioLab', to: '/scenario-lab', group: 'observe', requiresAuth: false },
 ];
 
 export const ROUTE_STORIES: ConsumerRouteStory[] = [
   {
     routeKey: 'home',
-    group: 'start',
+    group: 'cockpit',
     to: '/',
     exact: true,
-    primaryTo: '/market-overview',
-    secondaryTo: '/scanner',
+    primaryTo: '/market/decision-cockpit',
+    secondaryTo: '/research/radar',
     copy: {
       zh: {
         eyebrow: '首页 / 研究起点',
-        title: '先确认市场背景，再进入个股研究。',
-        purpose: '首页用于输入标的、查看最近观察和继续未完成的研究流程。',
-        nextStep: '从市场总览确认环境，或进入扫描器查看公开可达的研究入口。',
+        title: '从市场结构驾驶舱开始，再进入个股研究。',
+        purpose: '首页保留标的搜索、最近观察和继续研究入口；主要市场入口迁移到决策驾驶舱。',
+        nextStep: '先打开决策驾驶舱确认市场结构，再进入研究雷达查看队列。',
         evidence: '证据边界：摘要、图表与报告状态会标明覆盖度。',
         boundary: '当前内容只用于研究观察，不产生外部动作，也不会改变持仓记录。',
-        primaryAction: '打开市场总览',
-        secondaryAction: '查看扫描器',
+        primaryAction: '打开决策驾驶舱',
+        secondaryAction: '查看研究雷达',
       },
       en: {
         eyebrow: 'Home / Research Start',
-        title: 'Confirm market context before single-name research.',
-        purpose: 'Home starts ticker research, resumes recent observations, and keeps unfinished work visible.',
-        nextStep: 'Use Market Overview for context, or open Scanner as the public research entry.',
+        title: 'Start from the market-structure cockpit, then move into single-name research.',
+        purpose: 'Home keeps ticker search, recent observations, and continuation entry points; the primary market entry is the Decision Cockpit.',
+        nextStep: 'Open Decision Cockpit first, then use Research Radar for the queue.',
         evidence: 'Evidence boundary: summaries, charts, and reports expose coverage status.',
         boundary: 'Content is for research observation only; it creates no external action and does not change holdings.',
-        primaryAction: 'Open Market Overview',
-        secondaryAction: 'Review Scanner',
+        primaryAction: 'Open Decision Cockpit',
+        secondaryAction: 'Review Research Radar',
       },
     },
   },
   {
     routeKey: 'guest',
-    group: 'start',
+    group: 'cockpit',
     to: '/guest',
     exact: true,
     primaryTo: '/market-overview',
@@ -131,8 +130,95 @@ export const ROUTE_STORIES: ConsumerRouteStory[] = [
     },
   },
   {
-    routeKey: 'scanner',
+    routeKey: 'decision-cockpit',
+    group: 'cockpit',
+    to: '/market/decision-cockpit',
+    primaryTo: '/research/radar',
+    secondaryTo: '/market-overview',
+    copy: {
+      zh: {
+        eyebrow: '市场结构 / 决策驾驶舱',
+        title: '把市场状态、研究队列和置信边界放在第一屏。',
+        purpose: '决策驾驶舱是市场入口，用于判断今天应先看结构、流动性、主题扩散还是证据缺口。',
+        nextStep: '继续进入研究雷达，或回到市场总览查看更细的市场地图。',
+        evidence: '证据边界：Gamma/期权信号保持 observationOnly=true 且 decisionGrade=false。',
+        boundary: '驾驶舱只做市场结构观察，不产生外部动作，不形成个性化建议。',
+        primaryAction: '打开研究雷达',
+        secondaryAction: '打开市场总览',
+      },
+      en: {
+        eyebrow: 'Market Structure / Decision Cockpit',
+        title: 'Put regime, research queue, and confidence limits in the first viewport.',
+        purpose: 'Decision Cockpit is the market entry for deciding whether structure, liquidity, theme breadth, or evidence gaps need attention first.',
+        nextStep: 'Continue to Research Radar, or open Market Overview for the wider market map.',
+        evidence: 'Evidence boundary: Gamma/options signals remain observationOnly=true and decisionGrade=false.',
+        boundary: 'The cockpit is market-structure observation only; it creates no external action and no personalized advice.',
+        primaryAction: 'Open Research Radar',
+        secondaryAction: 'Open Market Overview',
+      },
+    },
+  },
+  {
+    routeKey: 'research-radar',
     group: 'research',
+    to: '/research/radar',
+    primaryTo: '/stocks/structure-decision',
+    secondaryTo: '/scanner',
+    copy: {
+      zh: {
+        eyebrow: '研究队列 / 雷达',
+        title: '把市场结构线索转成可复核的个股研究队列。',
+        purpose: '研究雷达承接驾驶舱，把优先级、研究偏向、验证项和风险标记放在同一队列。',
+        nextStep: '选择队列条目进入个股结构，或回到扫描器补充候选来源。',
+        evidence: '证据边界：队列展示原因、待验证事项、失效观察和数据质量，不暴露原始诊断。',
+        boundary: '研究雷达只排序研究关注点，不触发提醒、账户动作或外部执行。',
+        primaryAction: '打开个股结构',
+        secondaryAction: '查看扫描器',
+      },
+      en: {
+        eyebrow: 'Research Queue / Radar',
+        title: 'Translate market-structure clues into a reviewable single-name queue.',
+        purpose: 'Research Radar follows the cockpit with priority, research bias, verification items, and risk flags.',
+        nextStep: 'Open Stock Structure for a queue item, or return to Scanner for candidate context.',
+        evidence: 'Evidence boundary: queue rationale, verification items, invalidation observations, and data quality are shown without raw diagnostics.',
+        boundary: 'Research Radar ranks research attention only; it triggers no alert, account action, or external execution.',
+        primaryAction: 'Open Stock Structure',
+        secondaryAction: 'Review Scanner',
+      },
+    },
+  },
+  {
+    routeKey: 'stock-structure',
+    group: 'research',
+    to: '/stocks/structure-decision',
+    primaryTo: '/research/radar',
+    secondaryTo: '/watchlist',
+    copy: {
+      zh: {
+        eyebrow: '个股研究 / 结构',
+        title: '先看结构状态、证据缺口和失效观察，再沉淀到上下文。',
+        purpose: '个股结构入口用于进入具体标的结构页，并把趋势、相对强弱、关键位置和研究备注组织到同一工作区。',
+        nextStep: '从研究雷达选择标的，或把需要持续观察的对象沉淀到观察列表。',
+        evidence: '证据边界：结构页显示可用 K 线、缺失证据和 no-advice 披露。',
+        boundary: '结构状态是研究观察，不是外部动作、记录变更或个性化建议。',
+        primaryAction: '返回研究雷达',
+        secondaryAction: '打开观察列表',
+      },
+      en: {
+        eyebrow: 'Single-name Research / Structure',
+        title: 'Read structure state, evidence gaps, and invalidation observations before adding context.',
+        purpose: 'Stock Structure opens a specific ticker workspace with trend, relative strength, key levels, and research notes.',
+        nextStep: 'Choose a ticker from Research Radar, or keep ongoing names in Watchlist.',
+        evidence: 'Evidence boundary: the structure page exposes usable bars, missing evidence, and no-advice disclosure.',
+        boundary: 'Structure state is research observation, not external action, record mutation, or personalized advice.',
+        primaryAction: 'Back to Research Radar',
+        secondaryAction: 'Open Watchlist',
+      },
+    },
+  },
+  {
+    routeKey: 'scanner',
+    group: 'context',
     to: '/scanner',
     primaryTo: '/watchlist',
     secondaryTo: '/market-overview',
@@ -161,7 +247,7 @@ export const ROUTE_STORIES: ConsumerRouteStory[] = [
   },
   {
     routeKey: 'portfolio',
-    group: 'account',
+    group: 'context',
     to: '/portfolio',
     primaryTo: '/watchlist',
     secondaryTo: '/backtest',
@@ -190,7 +276,7 @@ export const ROUTE_STORIES: ConsumerRouteStory[] = [
   },
   {
     routeKey: 'market-overview',
-    group: 'markets',
+    group: 'cockpit',
     to: '/market-overview',
     primaryTo: '/market/liquidity-monitor',
     secondaryTo: '/market/rotation-radar',
@@ -219,7 +305,7 @@ export const ROUTE_STORIES: ConsumerRouteStory[] = [
   },
   {
     routeKey: 'liquidity-monitor',
-    group: 'markets',
+    group: 'cockpit',
     to: '/market/liquidity-monitor',
     primaryTo: '/market/rotation-radar',
     secondaryTo: '/market-overview',
@@ -248,7 +334,7 @@ export const ROUTE_STORIES: ConsumerRouteStory[] = [
   },
   {
     routeKey: 'rotation-radar',
-    group: 'markets',
+    group: 'cockpit',
     to: '/market/rotation-radar',
     primaryTo: '/scanner',
     secondaryTo: '/market-overview',
@@ -277,7 +363,7 @@ export const ROUTE_STORIES: ConsumerRouteStory[] = [
   },
   {
     routeKey: 'watchlist',
-    group: 'research',
+    group: 'context',
     to: '/watchlist',
     primaryTo: '/portfolio',
     secondaryTo: '/scanner',
@@ -306,7 +392,7 @@ export const ROUTE_STORIES: ConsumerRouteStory[] = [
   },
   {
     routeKey: 'backtest',
-    group: 'validate',
+    group: 'observe',
     to: '/backtest',
     primaryTo: '/options-lab',
     secondaryTo: '/watchlist',
@@ -335,7 +421,7 @@ export const ROUTE_STORIES: ConsumerRouteStory[] = [
   },
   {
     routeKey: 'options-lab',
-    group: 'validate',
+    group: 'observe',
     to: '/options-lab',
     primaryTo: '/backtest',
     secondaryTo: '/market-overview',
@@ -359,6 +445,35 @@ export const ROUTE_STORIES: ConsumerRouteStory[] = [
         boundary: 'The page is scenario review only; it creates no external action and does not change holdings.',
         primaryAction: 'Open Backtest',
         secondaryAction: 'Back to Market Overview',
+      },
+    },
+  },
+  {
+    routeKey: 'scenario-lab',
+    group: 'observe',
+    to: '/scenario-lab',
+    primaryTo: '/market/decision-cockpit',
+    secondaryTo: '/options-lab',
+    copy: {
+      zh: {
+        eyebrow: '观察验证 / Scenario Lab',
+        title: 'Scenario Lab 先作为研究入口占位，不接入后端执行。',
+        purpose: '该入口预留给后续跨市场、个股和期权证据的只读情景对照。',
+        nextStep: '当前先回到决策驾驶舱或期权实验室查看已有观察面。',
+        evidence: '证据边界：占位页不读取 provider、broker、portfolio 或 raw debug payload。',
+        boundary: 'Scenario Lab 当前不运行模型、不写入记录、不形成个性化建议。',
+        primaryAction: '打开决策驾驶舱',
+        secondaryAction: '打开期权实验室',
+      },
+      en: {
+        eyebrow: 'Observation / Scenario Lab',
+        title: 'Scenario Lab is a research entry placeholder until the frontend contract is available.',
+        purpose: 'The entry is reserved for future read-only scenario comparison across market, single-name, and options evidence.',
+        nextStep: 'Use Decision Cockpit or Options Lab for the currently available observation surfaces.',
+        evidence: 'Evidence boundary: the placeholder reads no provider, broker, portfolio, or raw debug payload.',
+        boundary: 'Scenario Lab currently runs no model, writes no record, and creates no personalized advice.',
+        primaryAction: 'Open Decision Cockpit',
+        secondaryAction: 'Open Options Lab',
       },
     },
   },

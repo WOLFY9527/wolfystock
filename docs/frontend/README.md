@@ -44,35 +44,60 @@ Point-in-time frontend audit and CSS evidence moved to
 
 | Route family | Surface | Current start point |
 | --- | --- | --- |
-| Home | ResearchConsole | [Visual System](./visual-system.md#route-surface-taxonomy) |
-| Scanner | RankingBoard | [Scanner domain](../scanner/README.md) |
-| Watchlist | WatchBoard | [Visual System](./visual-system.md#route-template-requirements) |
-| Chat | ResearchWorkspace | [Visual System](./visual-system.md#route-template-requirements) |
+| Home | ResearchStart | [Visual System](./visual-system.md#route-surface-taxonomy) |
+| Decision Cockpit | MarketStructureCockpit | `apps/dsa-web/src/pages/MarketDecisionCockpitPage.tsx` |
 | Market Overview | MarketMonitor | [Market Overview domain](../market-overview/README.md) |
 | Liquidity | LiquidityMonitor | [Liquidity domain](../liquidity/README.md) |
 | Rotation Radar | RotationMonitor | [Rotation domain](../rotation/README.md) |
+| Research Radar | ResearchQueue | `apps/dsa-web/src/pages/ResearchRadarPage.tsx` |
+| Stock Structure | StructureDecisionWorkbench | `apps/dsa-web/src/pages/StockStructureDecisionEntryPage.tsx` |
+| Scanner | ResearchContextBoard | [Scanner domain](../scanner/README.md) |
+| Watchlist | WatchBoard | [Visual System](./visual-system.md#route-template-requirements) |
 | Portfolio | RiskConsole / LedgerBoard | [Portfolio domain](../portfolio/README.md) |
-| Options Lab | ExperimentConsole | [Options domain](../options/README.md) |
+| Options/Gamma Observation | ObservationConsole | [Options domain](../options/README.md) |
+| Scenario Lab | ScenarioPlaceholder | `apps/dsa-web/src/pages/ScenarioLabPage.tsx` |
 | Backtest | ResearchRunConsole | [Backtest domain](../backtest/README.md) |
 | Admin/Ops | OpsConsole | [Admin/Ops domain](../admin-ops/README.md) |
 | Settings | PreferenceConsole | [Visual System](./visual-system.md#route-surface-taxonomy) |
 
-## Additive Rough Shell Routes
+## Research Cockpit IA v1
 
-The current frontend also exposes three additive rough-shell routes intended
-for information architecture handoff and not for final visual sign-off:
+The current consumer frontend is organized around a professional Market
+Structure + Positioning Intelligence workflow:
 
-- `GET /market/decision-cockpit` consumer route:
+- `/market/decision-cockpit` is the primary market entry and leads with market
+  regime, research queue preview, confidence limits, and Options/Gamma
+  observation boundaries.
+- `/market-overview` remains the broader market map. `/market/liquidity-monitor`
+  and `/market/rotation-radar` are deep market routes rather than top-level
+  consumer navigation items.
+- `/research/radar` is the core research queue for turning market-structure
+  clues into reviewable single-name candidates.
+- `/stocks/structure-decision` is the stock-structure entry route, while
+  `/stocks/:stockCode/structure-decision` opens a specific structure workspace.
+- `/scanner`, `/watchlist`, and `/portfolio` remain research-context entries.
+- `/options-lab` is labeled as observation/validation context; Options/Gamma
+  status must remain `observationOnly=true` and `decisionGrade=false` where
+  surfaced.
+- `/scenario-lab` is a static placeholder entry until a backend scenario API is
+  available in the active branch.
+
+Primary implementation anchors:
+
+- Market Decision Cockpit:
   `apps/dsa-web/src/pages/MarketDecisionCockpitPage.tsx`
-- `GET /stocks/:stockCode/structure-decision` consumer route:
+- Stock Structure detail:
   `apps/dsa-web/src/pages/StockStructureDecisionPage.tsx`
-- `GET /research/radar` authenticated route:
+- Stock Structure entry:
+  `apps/dsa-web/src/pages/StockStructureDecisionEntryPage.tsx`
+- Research Radar:
   `apps/dsa-web/src/pages/ResearchRadarPage.tsx`
+- Scenario Lab placeholder:
+  `apps/dsa-web/src/pages/ScenarioLabPage.tsx`
 
-These routes intentionally reuse the shared Shell plus consumer workspace
-primitives, stay additive, avoid global navigation expansion, and keep
-observation-only / research-only copy boundaries while Open Design prepares the
-later full redesign.
+These routes reuse the shared Shell plus consumer workspace primitives, keep
+Admin/Ops separate, avoid broker/order/trade controls, avoid raw provider/debug
+payload leakage, and keep observation-only / no-advice copy boundaries.
 
 ## Implementation Rules
 
