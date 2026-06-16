@@ -7,9 +7,10 @@ import ResearchRadarPage from '../ResearchRadarPage';
 import ScenarioLabPage from '../ScenarioLabPage';
 import StockStructureDecisionEntryPage from '../StockStructureDecisionEntryPage';
 
-const { languageState, getDecisionCockpitMock, getResearchRadarMock } = vi.hoisted(() => ({
+const { languageState, getDecisionCockpitMock, getDailyIntelligenceMock, getResearchRadarMock } = vi.hoisted(() => ({
   languageState: { value: 'zh' as 'zh' | 'en' },
   getDecisionCockpitMock: vi.fn(),
+  getDailyIntelligenceMock: vi.fn(),
   getResearchRadarMock: vi.fn(),
 }));
 
@@ -23,6 +24,12 @@ vi.mock('../../contexts/UiLanguageContext', () => ({
 vi.mock('../../api/marketDecisionCockpit', () => ({
   marketDecisionCockpitApi: {
     getDecisionCockpit: (...args: unknown[]) => getDecisionCockpitMock(...args),
+  },
+}));
+
+vi.mock('../../api/dailyIntelligence', () => ({
+  dailyIntelligenceApi: {
+    getDailyIntelligence: (...args: unknown[]) => getDailyIntelligenceMock(...args),
   },
 }));
 
@@ -44,7 +51,7 @@ describe('research IA pages', () => {
     languageState.value = 'zh';
   });
 
-  it('renders the market decision cockpit as the primary market-structure entry with Options/Gamma observation boundaries', async () => {
+  it('renders the market decision cockpit with a daily intelligence briefing and calm degraded notes', async () => {
     getDecisionCockpitMock.mockResolvedValue({
       schemaVersion: 'market_decision_cockpit.v1',
       generatedAt: '2026-06-15T09:30:00Z',
@@ -90,11 +97,83 @@ describe('research IA pages', () => {
       noAdviceDisclosure: '仅供研究语境参考。',
       dataQuality: { status: 'degraded' },
     });
+    getDailyIntelligenceMock.mockResolvedValue({
+      schemaVersion: 'daily_intelligence_briefing_v1',
+      generatedAt: '2026-06-15T09:30:00Z',
+      briefingDate: '2026-06-15',
+      sessionLabel: 'pre-market',
+      marketRegimeSummary: {
+        regime: 'risk_on',
+        confidence: 'medium',
+        summary: '广度与流动性仍支撑当前风险偏好观察。',
+        supportingObservations: ['广度参与维持稳定。'],
+        invalidationObservations: ['若广度明显收窄，当前观察需要重估。'],
+      },
+      whatChanged: ['研究队列更偏向相对强弱延续。'],
+      topResearchPriorities: [
+        {
+          label: 'ALFA research queue',
+          source: 'research_radar',
+          priority: 'high',
+          ticker: 'ALFA',
+          observations: ['相对强弱改善。'],
+          whatToVerify: ['确认跟随性。'],
+          evidenceGaps: ['themeBreadth'],
+        },
+      ],
+      scannerHighlights: [
+        {
+          ticker: 'ALFA',
+          priority: 'high',
+          observations: ['相对强弱改善。'],
+          whatToVerify: ['确认跟随性。'],
+          evidenceGaps: ['themeBreadth'],
+          riskFlags: ['evidence_partial'],
+        },
+      ],
+      watchlistHighlights: [],
+      portfolioStructureHighlights: [],
+      scenarioRisks: [
+        {
+          label: 'Scenario risk section unavailable',
+          source: 'degraded_state',
+          observations: ['Stored scenario read model is unavailable.'],
+          evidenceGaps: ['scenario_risk_read_model_unavailable'],
+        },
+      ],
+      evidenceGaps: ['scenario_risk_read_model_unavailable'],
+      degradedInputs: [
+        {
+          section: 'scenarioRisks',
+          status: 'unavailable',
+          reason: 'scenario_risk_read_model_unavailable',
+        },
+        {
+          section: 'watchlistHighlights',
+          status: 'degraded',
+          reason: 'owner_context_missing',
+        },
+      ],
+      observationOnly: true,
+      decisionGrade: false,
+    });
 
     renderRoute(<MarketDecisionCockpitPage />, '/zh/market/decision-cockpit');
 
     const page = await screen.findByTestId('market-decision-cockpit-page');
     expect(page).toHaveTextContent('市场结构、定位语境与研究队列');
+    const dailyBriefing = await screen.findByTestId('daily-intelligence-briefing');
+    await within(dailyBriefing).findByText('仅观察简报');
+    expect(dailyBriefing).toHaveTextContent('每日研究简报');
+    expect(page).toHaveTextContent('仅观察简报');
+    expect(page).toHaveTextContent('非决策级');
+    expect(page).toHaveTextContent('研究优先级');
+    expect(page).toHaveTextContent('扫描重点');
+    expect(page).toHaveTextContent('ALFA');
+    expect(page).toHaveTextContent('情景风险区块暂不可用');
+    expect(page).toHaveTextContent('登录后可附加个人研究队列、观察列表和持仓语境');
+    expect(page.textContent || '').not.toContain('scenario_risk_read_model_unavailable');
+    expect(page.textContent || '').not.toContain('owner_context_missing');
     expect(page).toHaveTextContent('observationOnly');
     expect(page).toHaveTextContent('true');
     expect(page).toHaveTextContent('decisionGrade');
@@ -103,6 +182,54 @@ describe('research IA pages', () => {
     expect(screen.getByRole('link', { name: '研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
     expect(screen.getByRole('link', { name: '情景实验室' })).toHaveAttribute('href', '/zh/scenario-lab');
     expect(page.textContent || '').not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议/);
+  });
+
+  it('keeps the cockpit visible when the daily intelligence briefing is unavailable', async () => {
+    getDecisionCockpitMock.mockResolvedValue({
+      schemaVersion: 'market_decision_cockpit.v1',
+      generatedAt: '2026-06-15T09:30:00Z',
+      marketRegimeDecision: {
+        regime: 'risk_on',
+        confidence: 'medium',
+        driverScores: {},
+        explanation: {
+          whyThisRegime: ['市场广度改善'],
+          whatConfirmsIt: ['跨资产压力缓和'],
+        },
+        invalidationConditions: [],
+        researchPriorities: null,
+      },
+      researchQueuePreview: {
+        topCandidates: [],
+        queueQuality: 'mixed',
+        evidenceGaps: [],
+        previewOnly: true,
+      },
+      optionsStructureStatus: {
+        gammaEvidenceStatus: 'unavailable',
+        observationOnly: true,
+        decisionGrade: false,
+        missingEvidence: [],
+        blockedReasonCodes: [],
+      },
+      cockpitSummary: {
+        whatChanged: ['广度改善'],
+        whatToWatch: [],
+        confidenceLimits: [],
+      },
+      noAdviceDisclosure: '仅供研究语境参考。',
+      dataQuality: { status: 'degraded' },
+    });
+    getDailyIntelligenceMock.mockRejectedValue(new Error('briefing unavailable'));
+
+    renderRoute(<MarketDecisionCockpitPage />, '/zh/market/decision-cockpit');
+
+    const page = await screen.findByTestId('market-decision-cockpit-page');
+    const dailyBriefing = await screen.findByTestId('daily-intelligence-briefing');
+    await within(dailyBriefing).findByText('请求失败');
+    expect(dailyBriefing).toHaveTextContent('请求未成功完成，请稍后重试。');
+    expect(page).toHaveTextContent('市场结构、定位语境与研究队列');
+    expect(page).toHaveTextContent('驱动评分');
   });
 
   it('renders Research Radar as the core queue and links queue rows to Stock Structure', async () => {
