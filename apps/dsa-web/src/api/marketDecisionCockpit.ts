@@ -30,6 +30,7 @@ export type MarketDecisionCockpitResponse = {
   marketRegimeDecision: {
     regime?: string | null;
     confidence?: string | null;
+    confidenceScore?: number | null;
     driverScores?: Record<string, MarketDecisionCockpitDriverScore>;
     explanation?: {
       whyThisRegime?: string[];
@@ -87,6 +88,7 @@ function normalizeCockpitResponse(payload: unknown): MarketDecisionCockpitRespon
     marketRegimeDecision: {
       regime: normalized.marketRegimeDecision?.regime ?? null,
       confidence: normalized.marketRegimeDecision?.confidence ?? null,
+      confidenceScore: normalized.marketRegimeDecision?.confidenceScore ?? null,
       driverScores: normalized.marketRegimeDecision?.driverScores ?? {},
       explanation: normalized.marketRegimeDecision?.explanation ?? null,
       invalidationConditions: normalized.marketRegimeDecision?.invalidationConditions ?? [],

@@ -25,6 +25,7 @@ describe('marketDecisionCockpitApi', () => {
         market_regime_decision: {
           regime: 'riskOn',
           confidence: 'medium',
+          confidence_score: 0.68,
           driver_scores: {
             breadth_participation: {
               score: 62,
@@ -85,6 +86,7 @@ describe('marketDecisionCockpitApi', () => {
 
     expect(get).toHaveBeenCalledWith('/api/v1/market/decision-cockpit');
     expect(payload.schemaVersion).toBe('market_decision_cockpit.v1');
+    expect(payload.marketRegimeDecision.confidenceScore).toBe(0.68);
     expect(payload.marketRegimeDecision.driverScores?.breadthParticipation?.score).toBe(62);
     expect(payload.researchQueuePreview.topCandidates[0]?.researchBias).toBe('strengthContinuation');
     expect(payload.optionsStructureStatus.blockedReasonCodes).toEqual(['option_chain_unavailable']);

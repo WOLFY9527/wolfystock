@@ -1,0 +1,118 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { post } = vi.hoisted(() => ({
+  post: vi.fn(),
+}));
+
+vi.mock('../index', () => ({
+  default: {
+    post,
+  },
+}));
+
+describe('scenarioLabApi', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('posts a scenario request and normalizes the response payload', async () => {
+    const { scenarioLabApi } = await import('../scenarioLab');
+
+    post.mockResolvedValueOnce({
+      data: {
+        schema_version: 'market_scenario_lab_engine.v1',
+        base_regime: {
+          regime: 'riskOn',
+          confidence: 'medium',
+          confidence_score: 0.68,
+        },
+        scenario_regime: {
+          regime: 'mixed',
+          confidence: 'low',
+          confidence_score: 0.43,
+          status: 'partial',
+        },
+        confidence_delta: -0.25,
+        driver_deltas: {
+          breadth_participation: -75,
+          volatility_structure: -145,
+          cross_asset_risk: -40,
+        },
+        changed_drivers: ['breadthParticipation', 'volatilityStructure', 'crossAssetRisk'],
+        scenario_summary: ['Breadth weakens.'],
+        what_would_confirm: ['Need score-grade confirmation.'],
+        what_would_invalidate: ['Drivers do not move together.'],
+        evidence_limits: ['Gamma evidence remains capped.'],
+        no_advice_disclosure: 'Research planning only; not a personalized decision basis.',
+      },
+    });
+
+    const payload = await scenarioLabApi.runScenarioLab({
+      baseRegime: {
+        regime: 'riskOn',
+        confidence: 'medium',
+        confidenceScore: 0.68,
+      },
+      scenarioName: 'volatilitySpike',
+    });
+
+    expect(post).toHaveBeenCalledWith('/api/v1/market/scenario-lab', {
+      baseRegime: {
+        regime: 'riskOn',
+        confidence: 'medium',
+        confidenceScore: 0.68,
+      },
+      scenarioName: 'volatilitySpike',
+    });
+    expect(payload.schemaVersion).toBe('market_scenario_lab_engine.v1');
+    expect(payload.baseRegime.confidenceScore).toBe(0.68);
+    expect(payload.scenarioRegime.status).toBe('partial');
+    expect(payload.driverDeltas.breadthParticipation).toBe(-75);
+    expect(payload.driverDeltas.volatilityStructure).toBe(-145);
+    expect(payload.evidenceLimits).toEqual(['Gamma evidence remains capped.']);
+  });
+
+  it('supplies safe defaults for unavailable scenario payloads', async () => {
+    const { scenarioLabApi } = await import('../scenarioLab');
+
+    post.mockResolvedValueOnce({
+      data: {
+        schema_version: 'market_scenario_lab_engine.v1',
+        base_regime: {
+          regime: 'lowConfidence',
+          confidence: 'low',
+          confidence_score: 0,
+        },
+        scenario_regime: {
+          regime: 'lowConfidence',
+          confidence: 'low',
+          confidence_score: 0,
+          status: 'unavailable',
+        },
+        confidence_delta: 0,
+        driver_deltas: null,
+        changed_drivers: null,
+        scenario_summary: null,
+        what_would_confirm: null,
+        what_would_invalidate: null,
+        evidence_limits: ['Base regime evidence is missing.'],
+        no_advice_disclosure: null,
+      },
+    });
+
+    const payload = await scenarioLabApi.runScenarioLab({
+      driverScores: {
+        breadthParticipation: 0,
+      },
+      scenarioName: 'gammaUnavailable',
+    });
+
+    expect(payload.driverDeltas).toEqual({});
+    expect(payload.changedDrivers).toEqual([]);
+    expect(payload.scenarioSummary).toEqual([]);
+    expect(payload.whatWouldConfirm).toEqual([]);
+    expect(payload.whatWouldInvalidate).toEqual([]);
+    expect(payload.noAdviceDisclosure).toBeNull();
+    expect(payload.evidenceLimits).toEqual(['Base regime evidence is missing.']);
+  });
+});
