@@ -22,6 +22,48 @@ def _payload() -> dict:
             "invalidationConditions": [],
             "researchPriorities": {"watchToday": [], "needsMoreEvidence": [], "investigateNext": []},
         },
+        "marketRegimeSummary": {
+            "regime": "Risk-on observation",
+            "confidence": "moderate",
+            "summary": "Current regime observation is Risk-on observation.",
+            "supportingObservations": [],
+            "invalidationObservations": [],
+        },
+        "whatChanged": [
+            "Current regime observation is Risk-on observation with moderate confidence.",
+            "Research queue quality is thin.",
+            "Options structure evidence is unavailable for this cockpit snapshot.",
+        ],
+        "topResearchPriorities": [],
+        "scannerHighlights": [],
+        "watchlistHighlights": [],
+        "portfolioHighlights": [],
+        "scenarioRisks": [
+            {
+                "label": "Regime confidence scenario",
+                "source": "Scenario Lab",
+                "observations": ["Options structure evidence is unavailable for this cockpit snapshot."],
+                "evidenceGaps": ["Options structure evidence is unavailable."],
+            }
+        ],
+        "evidenceGaps": ["Options structure evidence is unavailable."],
+        "degradedInputs": [
+            {
+                "section": "scenarioRisks",
+                "status": "unavailable",
+                "reason": "Options structure evidence is unavailable.",
+            }
+        ],
+        "drilldownTargets": [
+            {
+                "label": "Research Radar",
+                "route": "/research/radar",
+                "section": "topResearchPriorities",
+                "reason": "Review the research queue.",
+            }
+        ],
+        "observationOnly": True,
+        "decisionGrade": False,
         "researchQueuePreview": {
             "topCandidates": [],
             "queueQuality": "thin",
@@ -86,6 +128,15 @@ def test_market_decision_cockpit_endpoint_returns_service_payload(monkeypatch) -
     assert payload["researchQueuePreview"]["previewOnly"] is True
     assert payload["optionsStructureStatus"]["observationOnly"] is True
     assert payload["optionsStructureStatus"]["decisionGrade"] is False
+    assert payload["marketRegimeSummary"]["regime"] == "Risk-on observation"
+    assert payload["whatChanged"][0].startswith("Current regime observation")
+    assert payload["topResearchPriorities"] == []
+    assert payload["scannerHighlights"] == []
+    assert payload["watchlistHighlights"] == []
+    assert payload["portfolioHighlights"] == []
+    assert payload["drilldownTargets"][0]["route"] == "/research/radar"
+    assert payload["observationOnly"] is True
+    assert payload["decisionGrade"] is False
     assert fake_service.calls == [
         {"actor": {"actor_type": "anonymous", "role": "anonymous", "display_name": "Anonymous"}}
     ]
