@@ -387,6 +387,26 @@ class StockStructureDecisionComparativeContext(BaseModel):
     reason: Optional[str] = Field(None, description="不可用原因码")
 
 
+class StockStructureDecisionDegradedInput(BaseModel):
+    """结构判断中的降级输入说明。"""
+
+    section: str = Field(..., description="受影响的结构面板区段")
+    status: Literal["degraded", "unavailable"] = Field(..., description="降级状态")
+    reason: str = Field(..., description="降级原因码")
+
+
+class StockStructureDecisionSourceContext(BaseModel):
+    """结构判断的安全来源/钻取上下文。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    source: str = Field(..., description="来源面板标识")
+    label: str = Field(..., description="来源面板标签")
+    route: str = Field(..., description="来源面板安全路由")
+    section: str = Field(..., description="来源面板区段")
+    reason: str = Field(..., description="来源上下文原因码")
+
+
 class StockStructureDecisionResponse(BaseModel):
     """单股票结构判断响应。"""
 
@@ -394,18 +414,45 @@ class StockStructureDecisionResponse(BaseModel):
 
     schema_version: str = Field(..., alias="schemaVersion", description="API 响应 schema 版本")
     ticker: str = Field(..., description="股票代码")
+    symbol: str = Field(..., description="显式归一化股票代码")
     structure_state: str = Field(..., alias="structureState", description="结构状态")
     confidence: Literal["high", "medium", "low"] = Field(..., description="结构判断置信度")
     component_scores: Dict[str, int] = Field(..., alias="componentScores", description="组件分数")
     explanation: Dict[str, Any] = Field(..., description="结构说明")
     research_notes: Dict[str, List[str]] = Field(..., alias="researchNotes", description="研究观察备注")
+    key_levels: List[Dict[str, Any]] = Field(..., alias="keyLevels", description="仅观察型关键位置")
+    evidence_notes: List[str] = Field(..., alias="evidenceNotes", description="结构证据观察")
+    risk_observations: List[str] = Field(..., alias="riskObservations", description="风险与失效观察")
+    evidence_gaps: List[str] = Field(..., alias="evidenceGaps", description="面向消费者的证据缺口")
     data_quality: StockStructureDecisionDataQuality = Field(..., alias="dataQuality", description="输入数据质量")
     missing_evidence: List[StockStructureDecisionMissingEvidence] = Field(
         ...,
         alias="missingEvidence",
         description="缺失证据列表",
     )
+    degraded_inputs: List[StockStructureDecisionDegradedInput] = Field(
+        ...,
+        alias="degradedInputs",
+        description="降级输入说明",
+    )
+    consumer_issues: List[Dict[str, str]] = Field(
+        ...,
+        alias="consumerIssues",
+        description="消费者安全问题提示",
+    )
     no_advice_disclosure: str = Field(..., alias="noAdviceDisclosure", description="非个性化建议披露")
+    observation_only: Literal[True] = Field(..., alias="observationOnly", description="仅观察型结构阅读")
+    decision_grade: Literal[False] = Field(..., alias="decisionGrade", description="不输出决策等级")
+    source_context: Optional[StockStructureDecisionSourceContext] = Field(
+        None,
+        alias="sourceContext",
+        description="可选的来源/钻取上下文",
+    )
+    drilldown_links: List[StockStructureDecisionSourceContext] = Field(
+        ...,
+        alias="drilldownLinks",
+        description="安全的来源/钻取路由列表",
+    )
 
 
 class StockStructureDecisionBatchRequest(BaseModel):
