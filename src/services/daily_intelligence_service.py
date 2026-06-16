@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Sequence
+from urllib.parse import quote
 
 from src.repositories.scanner_repo import ScannerRepository
 from src.services.market_overview_service import MarketOverviewService
@@ -82,6 +83,11 @@ class DailyIntelligenceService:
         )
         evidence_gaps.append(_SCENARIO_RISK_UNAVAILABLE_REASON)
 
+        top_research_priorities = self._top_research_priorities(radar_payload)
+        scanner_highlights = self._scanner_highlights(radar_payload)
+        watchlist_highlights = self._watchlist_highlights(watchlist_payload)
+        portfolio_highlights = self._portfolio_highlights(portfolio_payload)
+
         return {
             "schemaVersion": DAILY_INTELLIGENCE_SERVICE_SCHEMA_VERSION,
             "generatedAt": generated_at.isoformat(),
@@ -89,10 +95,15 @@ class DailyIntelligenceService:
             "sessionLabel": self._session_label(generated_at),
             "marketRegimeSummary": market_regime_summary,
             "whatChanged": what_changed,
-            "topResearchPriorities": self._top_research_priorities(radar_payload),
-            "scannerHighlights": self._scanner_highlights(radar_payload),
-            "watchlistHighlights": self._watchlist_highlights(watchlist_payload),
-            "portfolioStructureHighlights": self._portfolio_highlights(portfolio_payload),
+            "sectionLinks": self._section_links(
+                radar_payload=radar_payload,
+                watchlist_payload=watchlist_payload,
+                portfolio_payload=portfolio_payload,
+            ),
+            "topResearchPriorities": top_research_priorities,
+            "scannerHighlights": scanner_highlights,
+            "watchlistHighlights": watchlist_highlights,
+            "portfolioStructureHighlights": portfolio_highlights,
             "scenarioRisks": [
                 {
                     "label": "Scenario risk section unavailable",
@@ -281,15 +292,23 @@ class DailyIntelligenceService:
         items: list[dict[str, Any]] = []
         for item in queue[:5]:
             payload = _mapping(item)
+            ticker = _text(payload.get("ticker")) or _text(payload.get("symbol")) or None
             items.append(
                 {
-                    "label": f"{_text(payload.get('ticker')) or _text(payload.get('symbol')) or 'Unknown'} research queue",
+                    "label": f"{ticker or 'Unknown'} research queue",
                     "source": "research_radar",
                     "priority": _text(payload.get("priority")) or None,
-                    "ticker": _text(payload.get("ticker")) or _text(payload.get("symbol")) or None,
+                    "ticker": ticker,
                     "observations": _safe_text_list(payload.get("whyOnRadar")),
                     "whatToVerify": _safe_text_list(payload.get("whatToVerify")),
                     "evidenceGaps": _safe_text_list(payload.get("evidenceGaps")),
+                    "evidenceLinks": self._item_links(
+                        section="topResearchPriorities",
+                        ticker=ticker,
+                        primary_label="Research Radar",
+                        primary_route="/research/radar",
+                        primary_reason="research_queue_origin",
+                    ),
                 }
             )
         return items
@@ -299,14 +318,22 @@ class DailyIntelligenceService:
         highlights: list[dict[str, Any]] = []
         for item in queue[:3]:
             payload = _mapping(item)
+            ticker = _text(payload.get("ticker")) or _text(payload.get("symbol")) or "UNKNOWN"
             highlights.append(
                 {
-                    "ticker": _text(payload.get("ticker")) or _text(payload.get("symbol")) or "UNKNOWN",
+                    "ticker": ticker,
                     "priority": _text(payload.get("priority")) or "medium",
                     "observations": _safe_text_list(payload.get("whyOnRadar")),
                     "whatToVerify": _safe_text_list(payload.get("whatToVerify")),
                     "evidenceGaps": _safe_text_list(payload.get("evidenceGaps")),
                     "riskFlags": _safe_text_list(payload.get("riskFlags")),
+                    "evidenceLinks": self._item_links(
+                        section="scannerHighlights",
+                        ticker=ticker,
+                        primary_label="Research Radar",
+                        primary_route="/research/radar",
+                        primary_reason="research_queue_origin",
+                    ),
                 }
             )
         return highlights
@@ -316,15 +343,23 @@ class DailyIntelligenceService:
         highlights: list[dict[str, Any]] = []
         for item in items[:3]:
             payload = _mapping(item)
+            ticker = _text(payload.get("ticker")) or "UNKNOWN"
             highlights.append(
                 {
-                    "ticker": _text(payload.get("ticker")) or "UNKNOWN",
+                    "ticker": ticker,
                     "structureState": _text(payload.get("structureState")) or "unavailable",
                     "researchPriority": _text(payload.get("researchPriority")) or None,
                     "whyWatching": _text(payload.get("whyWatching")) or None,
                     "whatToVerify": _safe_text_list(payload.get("whatToVerify")),
                     "evidenceGaps": _safe_text_list(payload.get("evidenceGaps")),
                     "riskFlags": _safe_text_list(payload.get("riskFlags")),
+                    "evidenceLinks": self._item_links(
+                        section="watchlistHighlights",
+                        ticker=ticker,
+                        primary_label="Watchlist",
+                        primary_route="/watchlist",
+                        primary_reason="watchlist_research_context",
+                    ),
                 }
             )
         return highlights
@@ -335,17 +370,112 @@ class DailyIntelligenceService:
         for item in items[:3]:
             payload = _mapping(item)
             notes = _mapping(payload.get("researchNotes"))
+            ticker = _text(payload.get("ticker")) or "UNKNOWN"
             highlights.append(
                 {
-                    "ticker": _text(payload.get("ticker")) or "UNKNOWN",
+                    "ticker": ticker,
                     "structureState": _text(payload.get("structureState")) or "unavailable",
                     "confidence": _text(payload.get("confidence")) or "low",
                     "watchNext": _safe_text_list(notes.get("watchNext")),
                     "riskFlags": _safe_text_list(payload.get("riskFlags")) or _safe_text_list(notes.get("riskFlags")),
                     "missingEvidence": _missing_evidence_codes(payload.get("missingEvidence")),
+                    "evidenceLinks": self._item_links(
+                        section="portfolioStructureHighlights",
+                        ticker=ticker,
+                        primary_label="Portfolio",
+                        primary_route="/portfolio",
+                        primary_reason="portfolio_structure_context",
+                    ),
                 }
             )
         return highlights
+
+    def _section_links(
+        self,
+        *,
+        radar_payload: Mapping[str, Any],
+        watchlist_payload: Mapping[str, Any],
+        portfolio_payload: Mapping[str, Any],
+    ) -> list[dict[str, str]]:
+        links: list[dict[str, str]] = []
+        if radar_payload:
+            links.extend(
+                [
+                    self._evidence_link(
+                        label="Research Radar",
+                        route="/research/radar",
+                        section="topResearchPriorities",
+                        reason="research_queue_origin",
+                    ),
+                    self._evidence_link(
+                        label="Scanner",
+                        route="/scanner",
+                        section="scannerHighlights",
+                        reason="scanner_candidates_origin",
+                    ),
+                    self._evidence_link(
+                        label="Research Radar",
+                        route="/research/radar",
+                        section="scannerHighlights",
+                        reason="research_queue_origin",
+                    ),
+                ]
+            )
+        if watchlist_payload:
+            links.append(
+                self._evidence_link(
+                    label="Watchlist",
+                    route="/watchlist",
+                    section="watchlistHighlights",
+                    reason="watchlist_research_context",
+                )
+            )
+        if portfolio_payload:
+            links.append(
+                self._evidence_link(
+                    label="Portfolio",
+                    route="/portfolio",
+                    section="portfolioStructureHighlights",
+                    reason="portfolio_structure_context",
+                )
+            )
+        return _dedupe_links(links)
+
+    def _item_links(
+        self,
+        *,
+        section: str,
+        ticker: str | None,
+        primary_label: str,
+        primary_route: str,
+        primary_reason: str,
+    ) -> list[dict[str, str]]:
+        links = [self._evidence_link(label=primary_label, route=primary_route, section=section, reason=primary_reason)]
+        symbol_link = self._stock_structure_link(section=section, ticker=ticker)
+        if symbol_link is not None:
+            links.append(symbol_link)
+        return links
+
+    @staticmethod
+    def _evidence_link(*, label: str, route: str, section: str, reason: str) -> dict[str, str]:
+        return {
+            "label": label,
+            "route": route,
+            "section": section,
+            "reason": reason,
+        }
+
+    @staticmethod
+    def _stock_structure_link(*, section: str, ticker: str | None) -> dict[str, str] | None:
+        symbol = _text(ticker)
+        if not symbol or symbol.upper() == "UNKNOWN":
+            return None
+        return {
+            "label": "Stock Structure",
+            "route": f"/stocks/{quote(symbol, safe='')}/structure-decision",
+            "section": section,
+            "reason": "symbol_structure_detail",
+        }
 
     @staticmethod
     def _session_label(generated_at: datetime) -> str:
@@ -425,4 +555,29 @@ def _dedupe(values: Sequence[str]) -> list[str]:
             continue
         seen.add(text)
         result.append(text)
+    return result
+
+
+def _dedupe_links(values: Sequence[Mapping[str, str]]) -> list[dict[str, str]]:
+    seen: set[tuple[str, str, str, str]] = set()
+    result: list[dict[str, str]] = []
+    for item in values:
+        label = _text(item.get("label"))
+        route = _text(item.get("route"))
+        section = _text(item.get("section"))
+        reason = _text(item.get("reason"))
+        if not label or not route or not section:
+            continue
+        key = (label, route, section, reason)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(
+            {
+                "label": label,
+                "route": route,
+                "section": section,
+                "reason": reason,
+            }
+        )
     return result

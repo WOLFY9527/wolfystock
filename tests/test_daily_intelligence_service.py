@@ -110,10 +110,117 @@ def test_build_briefing_projects_required_contract_and_degrades_scenario_risks()
     assert payload["marketRegimeSummary"]["regime"] == "riskOn"
     assert payload["whatChanged"]
     assert payload["topResearchPriorities"][0]["ticker"] == "ALFA"
+    assert payload["topResearchPriorities"][0]["evidenceLinks"] == [
+        {
+            "label": "Research Radar",
+            "route": "/research/radar",
+            "section": "topResearchPriorities",
+            "reason": "research_queue_origin",
+        },
+        {
+            "label": "Stock Structure",
+            "route": "/stocks/ALFA/structure-decision",
+            "section": "topResearchPriorities",
+            "reason": "symbol_structure_detail",
+        },
+    ]
     assert payload["scannerHighlights"][0]["ticker"] == "ALFA"
+    assert payload["scannerHighlights"][0]["evidenceLinks"] == [
+        {
+            "label": "Research Radar",
+            "route": "/research/radar",
+            "section": "scannerHighlights",
+            "reason": "research_queue_origin",
+        },
+        {
+            "label": "Stock Structure",
+            "route": "/stocks/ALFA/structure-decision",
+            "section": "scannerHighlights",
+            "reason": "symbol_structure_detail",
+        },
+    ]
     assert payload["watchlistHighlights"][0]["ticker"] == "NVDA"
+    assert payload["watchlistHighlights"][0]["evidenceLinks"] == [
+        {
+            "label": "Watchlist",
+            "route": "/watchlist",
+            "section": "watchlistHighlights",
+            "reason": "watchlist_research_context",
+        },
+        {
+            "label": "Stock Structure",
+            "route": "/stocks/NVDA/structure-decision",
+            "section": "watchlistHighlights",
+            "reason": "symbol_structure_detail",
+        },
+    ]
     assert payload["portfolioStructureHighlights"][0]["ticker"] == "AAPL"
+    assert payload["portfolioStructureHighlights"][0]["evidenceLinks"] == [
+        {
+            "label": "Portfolio",
+            "route": "/portfolio",
+            "section": "portfolioStructureHighlights",
+            "reason": "portfolio_structure_context",
+        },
+        {
+            "label": "Stock Structure",
+            "route": "/stocks/AAPL/structure-decision",
+            "section": "portfolioStructureHighlights",
+            "reason": "symbol_structure_detail",
+        },
+    ]
     assert payload["scenarioRisks"][0]["source"] == "degraded_state"
     assert "scenario_risk_read_model_unavailable" in payload["evidenceGaps"]
+    assert payload["sectionLinks"] == [
+        {
+            "label": "Research Radar",
+            "route": "/research/radar",
+            "section": "topResearchPriorities",
+            "reason": "research_queue_origin",
+        },
+        {
+            "label": "Scanner",
+            "route": "/scanner",
+            "section": "scannerHighlights",
+            "reason": "scanner_candidates_origin",
+        },
+        {
+            "label": "Research Radar",
+            "route": "/research/radar",
+            "section": "scannerHighlights",
+            "reason": "research_queue_origin",
+        },
+        {
+            "label": "Watchlist",
+            "route": "/watchlist",
+            "section": "watchlistHighlights",
+            "reason": "watchlist_research_context",
+        },
+        {
+            "label": "Portfolio",
+            "route": "/portfolio",
+            "section": "portfolioStructureHighlights",
+            "reason": "portfolio_structure_context",
+        },
+    ]
     assert any(item["section"] == "scenarioRisks" for item in payload["degradedInputs"])
     assert any(item["section"] == "watchlistHighlights" for item in payload["degradedInputs"]) is False
+    assert not any(link["section"] == "scenarioRisks" for link in payload["sectionLinks"])
+
+
+def test_build_briefing_does_not_invent_evidence_links_when_owner_context_is_missing() -> None:
+    service = DailyIntelligenceService(
+        market_overview_service=_FakeMarketOverviewService(),
+        research_radar_service=_FakeResearchRadarService(),
+        watchlist_overlay_service=_FakeWatchlistOverlayService(),
+        portfolio_structure_review_service=_FakePortfolioStructureReviewService(),
+        now=lambda: datetime(2026, 6, 15, 9, 30, tzinfo=timezone.utc),
+    )
+
+    payload = service.build_briefing(actor={"actor_type": "anonymous"}, owner_id=None, market="us", profile="us_preopen_v1")
+
+    assert payload["topResearchPriorities"] == []
+    assert payload["scannerHighlights"] == []
+    assert payload["watchlistHighlights"] == []
+    assert payload["portfolioStructureHighlights"] == []
+    assert payload["sectionLinks"] == []

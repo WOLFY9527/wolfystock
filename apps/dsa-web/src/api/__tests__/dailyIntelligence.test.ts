@@ -32,6 +32,14 @@ describe('dailyIntelligenceApi', () => {
           invalidation_observations: ['Breadth narrows materially.'],
         },
         what_changed: ['Queue focus rotated toward relative-strength names.'],
+        section_links: [
+          {
+            label: 'Research Radar',
+            route: '/research/radar',
+            section: 'topResearchPriorities',
+            reason: 'research_queue_origin',
+          },
+        ],
         top_research_priorities: [
           {
             label: 'ALFA research queue',
@@ -41,6 +49,20 @@ describe('dailyIntelligenceApi', () => {
             observations: ['Relative strength improved.'],
             what_to_verify: ['Confirm follow-through.'],
             evidence_gaps: ['themeBreadth'],
+            evidence_links: [
+              {
+                label: 'Research Radar',
+                route: '/research/radar',
+                section: 'topResearchPriorities',
+                reason: 'research_queue_origin',
+              },
+              {
+                label: 'Stock Structure',
+                route: '/stocks/ALFA/structure-decision',
+                section: 'topResearchPriorities',
+                reason: 'symbol_structure_detail',
+              },
+            ],
           },
         ],
         scanner_highlights: [
@@ -100,7 +122,27 @@ describe('dailyIntelligenceApi', () => {
     expect(get).toHaveBeenCalledWith('/api/v1/market/daily-intelligence');
     expect(payload.schemaVersion).toBe('daily_intelligence_briefing_v1');
     expect(payload.marketRegimeSummary.supportingObservations).toEqual(['Breadth participation held.']);
+    expect(payload.sectionLinks[0]).toEqual({
+      label: 'Research Radar',
+      route: '/research/radar',
+      section: 'topResearchPriorities',
+      reason: 'research_queue_origin',
+    });
     expect(payload.topResearchPriorities[0]?.ticker).toBe('ALFA');
+    expect(payload.topResearchPriorities[0]?.evidenceLinks).toEqual([
+      {
+        label: 'Research Radar',
+        route: '/research/radar',
+        section: 'topResearchPriorities',
+        reason: 'research_queue_origin',
+      },
+      {
+        label: 'Stock Structure',
+        route: '/stocks/ALFA/structure-decision',
+        section: 'topResearchPriorities',
+        reason: 'symbol_structure_detail',
+      },
+    ]);
     expect(payload.watchlistHighlights[0]?.structureState).toBe('structure_changed');
     expect(payload.portfolioStructureHighlights[0]?.watchNext).toEqual(['Verify support persists.']);
     expect(payload.degradedInputs[0]).toEqual({

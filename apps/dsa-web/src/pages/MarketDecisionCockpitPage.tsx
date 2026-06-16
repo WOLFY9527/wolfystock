@@ -12,7 +12,11 @@ import {
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { TerminalButton, TerminalChip, TerminalEmptyState } from '../components/terminal/TerminalPrimitives';
-import { dailyIntelligenceApi, type DailyIntelligenceResponse } from '../api/dailyIntelligence';
+import {
+  dailyIntelligenceApi,
+  type DailyIntelligenceEvidenceLink,
+  type DailyIntelligenceResponse,
+} from '../api/dailyIntelligence';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
 import { marketDecisionCockpitApi, type MarketDecisionCockpitResponse } from '../api/marketDecisionCockpit';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -82,6 +86,15 @@ const DAILY_REASON_LABELS = {
     zh: '情景风险读模型暂未接入本次日度简报。',
     en: 'Scenario-risk readouts are not yet attached to this daily briefing.',
   },
+} as const;
+
+const DAILY_EVIDENCE_LINK_LABELS = {
+  'Research Radar': { zh: '研究雷达', en: 'Research Radar' },
+  Scanner: { zh: '扫描器', en: 'Scanner' },
+  Watchlist: { zh: '观察列表', en: 'Watchlist' },
+  Portfolio: { zh: '组合', en: 'Portfolio' },
+  'Stock Structure': { zh: '结构详情', en: 'Stock structure' },
+  'Scenario Lab': { zh: '情景实验室', en: 'Scenario Lab' },
 } as const;
 
 function labelFromKey(
@@ -192,8 +205,16 @@ function dailyReasonLabel(reason: string | null | undefined, language: 'zh' | 'e
   }
   const mapped = DAILY_REASON_LABELS[reason as keyof typeof DAILY_REASON_LABELS];
   return mapped
-    ? mapped[language]
-    : (language === 'en' ? 'Some evidence still needs verification.' : '该部分证据仍待补充验证。');
+      ? mapped[language]
+      : (language === 'en' ? 'Some evidence still needs verification.' : '该部分证据仍待补充验证。');
+}
+
+function dailyEvidenceLinkLabel(label: string | null | undefined, language: 'zh' | 'en'): string {
+  if (!label) {
+    return language === 'en' ? 'Evidence' : '证据';
+  }
+  const mapped = DAILY_EVIDENCE_LINK_LABELS[label as keyof typeof DAILY_EVIDENCE_LINK_LABELS];
+  return mapped ? mapped[language] : label;
 }
 
 function createLocalizedApiError(
@@ -211,16 +232,55 @@ function BriefingBlock({
   eyebrow,
   title,
   children,
+  footer,
 }: {
   eyebrow: string;
   title: string;
   children: ReactNode;
+  footer?: ReactNode;
 }) {
   return (
     <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 p-3">
       <div className="text-[11px] text-[color:var(--wolfy-text-muted)]">{eyebrow}</div>
       <div className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">{title}</div>
       <div className="mt-3 min-w-0">{children}</div>
+      {footer ? <div className="mt-3 min-w-0">{footer}</div> : null}
+    </div>
+  );
+}
+
+function EvidenceLinkStrip({
+  links,
+  language,
+  localizePath,
+}: {
+  links: DailyIntelligenceEvidenceLink[];
+  language: 'zh' | 'en';
+  localizePath: (path: string) => string;
+}) {
+  if (!links.length) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {links.map((link, index) => {
+        const route = String(link.route || '').trim();
+        if (!route) {
+          return null;
+        }
+        const label = dailyEvidenceLinkLabel(link.label, language);
+        const prefix = language === 'en' ? 'Inspect evidence:' : '查看证据：';
+        return (
+          <Link
+            key={`${route}-${label}-${index}`}
+            to={localizePath(route)}
+            className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-2.5 py-1 text-[11px] text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+          >
+            {`${prefix}${label}`}
+          </Link>
+        );
+      })}
     </div>
   );
 }
@@ -230,11 +290,13 @@ function DailyIntelligenceBriefingSection({
   loading,
   error,
   language,
+  localizePath,
 }: {
   briefing: DailyIntelligenceResponse | null;
   loading: boolean;
   error: ParsedApiError | null;
   language: 'zh' | 'en';
+  localizePath: (path: string) => string;
 }) {
   const locale = language === 'en' ? 'en' : 'zh';
 
@@ -284,6 +346,10 @@ function DailyIntelligenceBriefingSection({
     },
   ] : [];
 
+  const sectionLinksFor = (section: string) => (
+    briefing?.sectionLinks.filter((link) => link.section === section && link.route) ?? []
+  );
+
   const renderPriorityItems = () => {
     if (!briefing?.topResearchPriorities.length) {
       return (
@@ -317,6 +383,13 @@ function DailyIntelligenceBriefingSection({
                 <span className="text-[color:var(--wolfy-text-secondary)]">{locale === 'en' ? 'Evidence gap: ' : '证据缺口：'}</span>
                 {(item.evidenceGaps ?? []).map((gap) => dailyReasonLabel(gap, locale)).join(locale === 'en' ? ' · ' : '；') || '--'}
               </div>
+            </div>
+            <div className="mt-3">
+              <EvidenceLinkStrip
+                links={item.evidenceLinks ?? []}
+                language={locale}
+                localizePath={localizePath}
+              />
             </div>
           </div>
         ))}
@@ -398,6 +471,13 @@ function DailyIntelligenceBriefingSection({
                     .join(locale === 'en' ? ' · ' : '；')}
                 </div>
               ) : null}
+            </div>
+            <div className="mt-3">
+              <EvidenceLinkStrip
+                links={item.evidenceLinks ?? []}
+                language={locale}
+                localizePath={localizePath}
+              />
             </div>
           </div>
         ))}
@@ -501,6 +581,13 @@ function DailyIntelligenceBriefingSection({
               <BriefingBlock
                 eyebrow={dailySectionLabel('topResearchPriorities', locale)}
                 title={locale === 'en' ? 'Top research priorities' : '研究优先级'}
+                footer={(
+                  <EvidenceLinkStrip
+                    links={sectionLinksFor('topResearchPriorities')}
+                    language={locale}
+                    localizePath={localizePath}
+                  />
+                )}
               >
                 {renderPriorityItems()}
               </BriefingBlock>
@@ -538,18 +625,39 @@ function DailyIntelligenceBriefingSection({
               <BriefingBlock
                 eyebrow={dailySectionLabel('scannerHighlights', locale)}
                 title={locale === 'en' ? 'Scanner highlights' : '扫描重点'}
+                footer={(
+                  <EvidenceLinkStrip
+                    links={sectionLinksFor('scannerHighlights')}
+                    language={locale}
+                    localizePath={localizePath}
+                  />
+                )}
               >
                 {renderHighlightItems(briefing.scannerHighlights, 'scannerHighlights')}
               </BriefingBlock>
               <BriefingBlock
                 eyebrow={dailySectionLabel('watchlistHighlights', locale)}
                 title={locale === 'en' ? 'Watchlist highlights' : '观察列表重点'}
+                footer={(
+                  <EvidenceLinkStrip
+                    links={sectionLinksFor('watchlistHighlights')}
+                    language={locale}
+                    localizePath={localizePath}
+                  />
+                )}
               >
                 {renderHighlightItems(briefing.watchlistHighlights, 'watchlistHighlights')}
               </BriefingBlock>
               <BriefingBlock
                 eyebrow={dailySectionLabel('portfolioStructureHighlights', locale)}
                 title={locale === 'en' ? 'Portfolio structure highlights' : '持仓结构重点'}
+                footer={(
+                  <EvidenceLinkStrip
+                    links={sectionLinksFor('portfolioStructureHighlights')}
+                    language={locale}
+                    localizePath={localizePath}
+                  />
+                )}
               >
                 {renderHighlightItems(briefing.portfolioStructureHighlights, 'portfolioStructureHighlights')}
               </BriefingBlock>
@@ -733,6 +841,7 @@ export default function MarketDecisionCockpitPage() {
               loading={dailyIntelligenceLoading}
               error={dailyIntelligenceError}
               language={locale}
+              localizePath={localize}
             />
             {error ? (
               <div className="p-4 md:p-5">

@@ -9,6 +9,13 @@ export type DailyIntelligenceMarketRegimeSummary = {
   invalidationObservations?: string[];
 };
 
+export type DailyIntelligenceEvidenceLink = {
+  label?: string | null;
+  route?: string | null;
+  section?: string | null;
+  reason?: string | null;
+};
+
 export type DailyIntelligencePriorityItem = {
   label?: string | null;
   source?: string | null;
@@ -17,6 +24,7 @@ export type DailyIntelligencePriorityItem = {
   observations?: string[];
   whatToVerify?: string[];
   evidenceGaps?: string[];
+  evidenceLinks?: DailyIntelligenceEvidenceLink[];
 };
 
 export type DailyIntelligenceScannerHighlight = {
@@ -26,6 +34,7 @@ export type DailyIntelligenceScannerHighlight = {
   whatToVerify?: string[];
   evidenceGaps?: string[];
   riskFlags?: string[];
+  evidenceLinks?: DailyIntelligenceEvidenceLink[];
 };
 
 export type DailyIntelligenceWatchlistHighlight = {
@@ -36,6 +45,7 @@ export type DailyIntelligenceWatchlistHighlight = {
   whatToVerify?: string[];
   evidenceGaps?: string[];
   riskFlags?: string[];
+  evidenceLinks?: DailyIntelligenceEvidenceLink[];
 };
 
 export type DailyIntelligencePortfolioStructureHighlight = {
@@ -45,6 +55,7 @@ export type DailyIntelligencePortfolioStructureHighlight = {
   watchNext?: string[];
   riskFlags?: string[];
   missingEvidence?: string[];
+  evidenceLinks?: DailyIntelligenceEvidenceLink[];
 };
 
 export type DailyIntelligenceScenarioRisk = {
@@ -67,6 +78,7 @@ export type DailyIntelligenceResponse = {
   sessionLabel?: string | null;
   marketRegimeSummary: DailyIntelligenceMarketRegimeSummary;
   whatChanged: string[];
+  sectionLinks: DailyIntelligenceEvidenceLink[];
   topResearchPriorities: DailyIntelligencePriorityItem[];
   scannerHighlights: DailyIntelligenceScannerHighlight[];
   watchlistHighlights: DailyIntelligenceWatchlistHighlight[];
@@ -77,6 +89,18 @@ export type DailyIntelligenceResponse = {
   observationOnly: boolean;
   decisionGrade: boolean;
 };
+
+function normalizeEvidenceLinks(payload: unknown): DailyIntelligenceEvidenceLink[] {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+  return payload.map((item) => ({
+    label: item?.label ?? null,
+    route: item?.route ?? null,
+    section: item?.section ?? null,
+    reason: item?.reason ?? null,
+  }));
+}
 
 function normalizeDailyIntelligenceResponse(payload: unknown): DailyIntelligenceResponse {
   const normalized = toCamelCase<DailyIntelligenceResponse>(payload);
@@ -94,10 +118,31 @@ function normalizeDailyIntelligenceResponse(payload: unknown): DailyIntelligence
       invalidationObservations: normalized.marketRegimeSummary?.invalidationObservations ?? [],
     },
     whatChanged: normalized.whatChanged ?? [],
-    topResearchPriorities: Array.isArray(normalized.topResearchPriorities) ? normalized.topResearchPriorities : [],
-    scannerHighlights: Array.isArray(normalized.scannerHighlights) ? normalized.scannerHighlights : [],
-    watchlistHighlights: Array.isArray(normalized.watchlistHighlights) ? normalized.watchlistHighlights : [],
-    portfolioStructureHighlights: Array.isArray(normalized.portfolioStructureHighlights) ? normalized.portfolioStructureHighlights : [],
+    sectionLinks: normalizeEvidenceLinks(normalized.sectionLinks),
+    topResearchPriorities: Array.isArray(normalized.topResearchPriorities)
+      ? normalized.topResearchPriorities.map((item) => ({
+        ...item,
+        evidenceLinks: normalizeEvidenceLinks(item?.evidenceLinks),
+      }))
+      : [],
+    scannerHighlights: Array.isArray(normalized.scannerHighlights)
+      ? normalized.scannerHighlights.map((item) => ({
+        ...item,
+        evidenceLinks: normalizeEvidenceLinks(item?.evidenceLinks),
+      }))
+      : [],
+    watchlistHighlights: Array.isArray(normalized.watchlistHighlights)
+      ? normalized.watchlistHighlights.map((item) => ({
+        ...item,
+        evidenceLinks: normalizeEvidenceLinks(item?.evidenceLinks),
+      }))
+      : [],
+    portfolioStructureHighlights: Array.isArray(normalized.portfolioStructureHighlights)
+      ? normalized.portfolioStructureHighlights.map((item) => ({
+        ...item,
+        evidenceLinks: normalizeEvidenceLinks(item?.evidenceLinks),
+      }))
+      : [],
     scenarioRisks: Array.isArray(normalized.scenarioRisks) ? normalized.scenarioRisks : [],
     evidenceGaps: normalized.evidenceGaps ?? [],
     degradedInputs: Array.isArray(normalized.degradedInputs)

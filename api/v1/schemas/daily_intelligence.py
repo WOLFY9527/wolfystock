@@ -19,6 +19,13 @@ class DailyIntelligenceMarketRegimeSummaryResponse(BaseModel):
     invalidationObservations: List[str] = Field(default_factory=list)
 
 
+class DailyIntelligenceEvidenceLinkResponse(BaseModel):
+    label: str
+    route: str
+    section: str
+    reason: Optional[str] = None
+
+
 class DailyIntelligencePriorityItemResponse(BaseModel):
     label: str
     source: str
@@ -27,6 +34,7 @@ class DailyIntelligencePriorityItemResponse(BaseModel):
     observations: List[str] = Field(default_factory=list)
     whatToVerify: List[str] = Field(default_factory=list)
     evidenceGaps: List[str] = Field(default_factory=list)
+    evidenceLinks: List[DailyIntelligenceEvidenceLinkResponse] = Field(default_factory=list)
 
 
 class DailyIntelligenceScannerHighlightResponse(BaseModel):
@@ -36,6 +44,7 @@ class DailyIntelligenceScannerHighlightResponse(BaseModel):
     whatToVerify: List[str] = Field(default_factory=list)
     evidenceGaps: List[str] = Field(default_factory=list)
     riskFlags: List[str] = Field(default_factory=list)
+    evidenceLinks: List[DailyIntelligenceEvidenceLinkResponse] = Field(default_factory=list)
 
 
 class DailyIntelligenceWatchlistHighlightResponse(BaseModel):
@@ -46,6 +55,7 @@ class DailyIntelligenceWatchlistHighlightResponse(BaseModel):
     whatToVerify: List[str] = Field(default_factory=list)
     evidenceGaps: List[str] = Field(default_factory=list)
     riskFlags: List[str] = Field(default_factory=list)
+    evidenceLinks: List[DailyIntelligenceEvidenceLinkResponse] = Field(default_factory=list)
 
 
 class DailyIntelligencePortfolioStructureHighlightResponse(BaseModel):
@@ -55,6 +65,7 @@ class DailyIntelligencePortfolioStructureHighlightResponse(BaseModel):
     watchNext: List[str] = Field(default_factory=list)
     riskFlags: List[str] = Field(default_factory=list)
     missingEvidence: List[str] = Field(default_factory=list)
+    evidenceLinks: List[DailyIntelligenceEvidenceLinkResponse] = Field(default_factory=list)
 
 
 class DailyIntelligenceScenarioRiskResponse(BaseModel):
@@ -77,6 +88,7 @@ class DailyIntelligenceBriefingResponse(BaseModel):
     sessionLabel: Optional[str] = None
     marketRegimeSummary: DailyIntelligenceMarketRegimeSummaryResponse
     whatChanged: List[str] = Field(default_factory=list)
+    sectionLinks: List[DailyIntelligenceEvidenceLinkResponse] = Field(default_factory=list)
     topResearchPriorities: List[DailyIntelligencePriorityItemResponse] = Field(default_factory=list)
     scannerHighlights: List[DailyIntelligenceScannerHighlightResponse] = Field(default_factory=list)
     watchlistHighlights: List[DailyIntelligenceWatchlistHighlightResponse] = Field(default_factory=list)
