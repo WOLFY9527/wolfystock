@@ -74,7 +74,7 @@
     },
     {
       "route_id": "portfolio.member_surface",
-      "path_pattern": "^/api/v1/portfolio/(?:accounts(?:/\\{account_id\\})?|fx-rate(?:/refresh)?|broker-connections(?:/\\{connection_id\\})?|sync/ibkr|trades(?:/\\{trade_id\\})?|cash-ledger(?:/\\{entry_id\\})?|corporate-actions(?:/\\{action_id\\})?|snapshot|history|imports/(?:parse|brokers|commit|csv/parse|csv/brokers|csv/commit)|fx/refresh|risk|scenario-risk)$",
+      "path_pattern": "^/api/v1/portfolio/(?:accounts(?:/\\{account_id\\})?|fx-rate(?:/refresh)?|broker-connections(?:/\\{connection_id\\})?|sync/ibkr|trades(?:/\\{trade_id\\})?|cash-ledger(?:/\\{entry_id\\})?|corporate-actions(?:/\\{action_id\\})?|snapshot|history|imports/(?:parse|brokers|commit|csv/parse|csv/brokers|csv/commit)|fx/refresh|risk|scenario-risk|structure-review)$",
       "methods": ["GET", "POST", "PUT", "PATCH", "DELETE"],
       "surface": "portfolio",
       "auth_dependency_label": "authenticated_user",
