@@ -2642,6 +2642,12 @@ describe('MarketOverviewPage', () => {
     expect(marketIntelligenceReasonLabel('Rotation Non Scoring Or Taxonomy Only', 'zh')).toBe('轮动证据仅作分类参考');
   });
 
+  it('maps consumer-safety blocked reason codes to calm market copy', () => {
+    expect(marketIntelligenceReasonLabel('freshness_blocked:fallback', 'zh')).toBe('当前以延迟或替代数据为主，先保持观察。');
+    expect(marketIntelligenceReasonLabel('source_authority_or_score_gate_blocked', 'zh')).toBe('当前来源授权或评分条件未满足，暂不形成进一步判断。');
+    expect(marketIntelligenceReasonLabel('avoidLowEvidence', 'zh')).toBe('当前证据质量偏弱，先保持观察。');
+  });
+
   it('copies a market overview summary from the current visible state', async () => {
     render(createElement(MarketOverviewPage));
 

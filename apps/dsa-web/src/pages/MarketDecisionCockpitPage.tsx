@@ -22,6 +22,7 @@ import { marketDecisionCockpitApi, type MarketDecisionCockpitResponse } from '..
 import { useI18n } from '../contexts/UiLanguageContext';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import { formatDateTime } from '../utils/format';
+import { sanitizeUserFacingDataIssue, sanitizeUserFacingDataIssues } from '../utils/userFacingDataIssues';
 import {
   RoughBulletList,
   RoughKeyValueRows,
@@ -121,6 +122,30 @@ function confidenceLabel(value: string | null | undefined, language: 'zh' | 'en'
   }
 }
 
+function consumerOptionsBoundaryLabel(observationOnly: boolean | null | undefined, language: 'zh' | 'en'): string {
+  if (observationOnly === false) {
+    return language === 'en' ? 'Structured observation' : '可继续观察';
+  }
+  return language === 'en' ? 'Observe only' : '仅供观察';
+}
+
+function consumerDecisionGradeLabel(decisionGrade: boolean | null | undefined, language: 'zh' | 'en'): string {
+  if (decisionGrade === true) {
+    return language === 'en' ? 'Decision-grade reached' : '达到可判断等级';
+  }
+  return language === 'en' ? 'Not decision-grade yet' : '未达到可判断等级';
+}
+
+function consumerMissingEvidenceLabels(
+  items: Array<{ code?: string | null; kind?: string | null; field?: string | null; message?: string | null }> | null | undefined,
+  language: 'zh' | 'en',
+): string[] {
+  return sanitizeUserFacingDataIssues(
+    (items ?? []).map((item) => item.message || item.code || item.kind || item.field || ''),
+    language,
+  );
+}
+
 function regimeLabel(value: string | null | undefined, language: 'zh' | 'en'): string {
   switch (String(value || '').toLowerCase()) {
     case 'riskon':
@@ -182,10 +207,20 @@ function humanizeEnum(value: string | null | undefined, language: 'zh' | 'en'): 
       return language === 'en' ? 'Structure changed' : '结构变化';
     case 'mixed':
       return language === 'en' ? 'Mixed' : '混合';
+    case 'partial':
+      return language === 'en' ? 'Partly available' : '部分可用';
     case 'degraded':
       return language === 'en' ? 'Partial context' : '部分缺口';
+    case 'blocked':
+      return language === 'en' ? 'Blocked' : '已阻断';
     case 'unavailable':
       return language === 'en' ? 'Unavailable' : '暂不可用';
+    case 'available':
+      return language === 'en' ? 'Available' : '可用';
+    case 'ready':
+      return language === 'en' ? 'Ready' : '就绪';
+    case 'preview':
+      return language === 'en' ? 'Preview' : '预览';
     default:
       return normalized.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
   }
@@ -204,9 +239,14 @@ function dailyReasonLabel(reason: string | null | undefined, language: 'zh' | 'e
     return language === 'en' ? 'Some evidence is still unavailable.' : '部分证据仍暂不可用。';
   }
   const mapped = DAILY_REASON_LABELS[reason as keyof typeof DAILY_REASON_LABELS];
-  return mapped
-      ? mapped[language]
-      : (language === 'en' ? 'Some evidence still needs verification.' : '该部分证据仍待补充验证。');
+  if (mapped) {
+    return mapped[language];
+  }
+  const safeLabel = sanitizeUserFacingDataIssue(reason, language);
+  if (safeLabel !== String(reason).trim()) {
+    return safeLabel;
+  }
+  return language === 'en' ? 'Some evidence still needs verification.' : '该部分证据仍待补充验证。';
 }
 
 function dailyEvidenceLinkLabel(label: string | null | undefined, language: 'zh' | 'en'): string {
@@ -460,7 +500,7 @@ function DailyIntelligenceBriefingSection({
               {item.riskFlags?.length ? (
                 <div>
                   <span className="text-[color:var(--wolfy-text-secondary)]">{locale === 'en' ? 'Risk flags: ' : '风险标记：'}</span>
-                  {item.riskFlags.join(locale === 'en' ? ' · ' : '；')}
+                  {item.riskFlags.map((flag) => dailyReasonLabel(flag, locale)).join(locale === 'en' ? ' · ' : '；')}
                 </div>
               ) : null}
               {(item.evidenceGaps?.length || item.missingEvidence?.length) ? (
@@ -755,10 +795,12 @@ export default function MarketDecisionCockpitPage() {
       key,
       label: labelFromKey(key, locale),
       value: value?.score ?? '--',
-      meta: value?.reasons?.join(' · ') || value?.evidenceState || (locale === 'en' ? 'Observation signal' : '观察信号'),
+      meta: value?.reasons?.join(' · ')
+        || (value?.evidenceState ? dailyReasonLabel(value.evidenceState, locale) : null)
+        || (locale === 'en' ? 'Observation signal' : '观察信号'),
       badge: value?.evidenceState
         ? {
-          label: value.evidenceState,
+          label: humanizeEnum(value.evidenceState, locale),
           variant: value.evidenceState === 'unavailable' ? ('caution' as const) : ('info' as const),
         }
         : undefined,
@@ -869,7 +911,7 @@ export default function MarketDecisionCockpitPage() {
                     },
                     {
                       label: locale === 'en' ? 'Data quality' : '数据质量',
-                      value: <StatusBadge status={statusTone(data.dataQuality?.status)} label={data.dataQuality?.status || '--'} size="sm" />,
+                      value: <StatusBadge status={statusTone(data.dataQuality?.status)} label={humanizeEnum(data.dataQuality?.status, locale)} size="sm" />,
                     },
                     {
                       label: locale === 'en' ? 'Preview mode' : '预览模式',
@@ -892,7 +934,7 @@ export default function MarketDecisionCockpitPage() {
                     {
                       key: 'queue',
                       label: locale === 'en' ? 'Queue quality' : '队列质量',
-                      value: data.researchQueuePreview.queueQuality || '--',
+                      value: humanizeEnum(data.researchQueuePreview.queueQuality, locale),
                     },
                   ]}
                 />
@@ -935,7 +977,9 @@ export default function MarketDecisionCockpitPage() {
                         {
                           key: 'evidence',
                           label: locale === 'en' ? 'Needs more evidence' : '待补证据',
-                          value: (priorities?.needsMoreEvidence ?? data.researchQueuePreview.evidenceGaps ?? []).join('；') || '--',
+                          value: (priorities?.needsMoreEvidence ?? data.researchQueuePreview.evidenceGaps ?? [])
+                            .map((item) => dailyReasonLabel(item, locale))
+                            .join('；') || '--',
                         },
                         {
                           key: 'next',
@@ -946,37 +990,47 @@ export default function MarketDecisionCockpitPage() {
                     />
                   </RoughSectionCard>
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Options / gamma' : '期权 / Gamma'} title={locale === 'en' ? 'Observation-only status' : '仅观察状态'}>
-                    <RoughKeyValueRows
-                      rows={[
-                        {
-                          key: 'gamma',
-                          label: locale === 'en' ? 'Gamma evidence' : 'Gamma 证据',
-                          value: optionsStatus?.gammaEvidenceStatus || '--',
-                        },
-                        {
-                          key: 'observation',
-                          label: 'observationOnly',
-                          value: optionsStatus?.observationOnly === false ? 'false' : 'true',
-                        },
-                        {
-                          key: 'decision-grade',
-                          label: 'decisionGrade',
-                          value: optionsStatus?.decisionGrade === true ? 'true' : 'false',
-                        },
-                        {
-                          key: 'blocked',
-                          label: locale === 'en' ? 'Blocked reasons' : '阻塞原因',
-                          value: (optionsStatus?.blockedReasonCodes ?? []).join('；') || '--',
-                        },
-                      ]}
-                    />
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {(optionsStatus?.missingEvidence ?? []).map((item, index) => (
-                        <TerminalChip key={`${item.code || item.kind || 'missing'}-${index}`} variant="caution">
-                          {item.code || item.kind || item.field || (locale === 'en' ? 'Missing evidence' : '缺失证据')}
-                        </TerminalChip>
-                      ))}
-                    </div>
+                    {(() => {
+                      const blockedReasonLabels = sanitizeUserFacingDataIssues(optionsStatus?.blockedReasonCodes ?? [], locale);
+                      const missingEvidenceLabels = consumerMissingEvidenceLabels(optionsStatus?.missingEvidence, locale);
+                      return (
+                        <>
+                          <RoughKeyValueRows
+                            rows={[
+                              {
+                                key: 'gamma',
+                                label: locale === 'en' ? 'Gamma evidence' : 'Gamma 证据',
+                                value: optionsStatus?.gammaEvidenceStatus
+                                  ? sanitizeUserFacingDataIssue(optionsStatus.gammaEvidenceStatus, locale)
+                                  : '--',
+                              },
+                              {
+                                key: 'observation',
+                                label: locale === 'en' ? 'Research boundary' : '研究边界',
+                                value: consumerOptionsBoundaryLabel(optionsStatus?.observationOnly, locale),
+                              },
+                              {
+                                key: 'decision-grade',
+                                label: locale === 'en' ? 'Decision grade' : '判断等级',
+                                value: consumerDecisionGradeLabel(optionsStatus?.decisionGrade, locale),
+                              },
+                              {
+                                key: 'blocked',
+                                label: locale === 'en' ? 'Blocked reasons' : '阻塞原因',
+                                value: blockedReasonLabels.join(locale === 'en' ? ' ; ' : '；') || '--',
+                              },
+                            ]}
+                          />
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {missingEvidenceLabels.map((label, index) => (
+                              <TerminalChip key={`${label}-${index}`} variant="caution">
+                                {label || (locale === 'en' ? 'Missing evidence' : '缺失证据')}
+                              </TerminalChip>
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
                   </RoughSectionCard>
                 </div>
                 <div className="border-t border-[color:var(--wolfy-divider)] p-3">
@@ -995,8 +1049,8 @@ export default function MarketDecisionCockpitPage() {
                                 </div>
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
-                                {candidate.priority ? <StatusBadge status={statusTone(candidate.priority)} label={candidate.priority} size="sm" /> : null}
-                                {candidate.researchBias ? <TerminalChip variant="info">{candidate.researchBias}</TerminalChip> : null}
+                                {candidate.priority ? <StatusBadge status={statusTone(candidate.priority)} label={humanizeEnum(candidate.priority, locale)} size="sm" /> : null}
+                                {candidate.researchBias ? <TerminalChip variant="info">{humanizeEnum(candidate.researchBias, locale)}</TerminalChip> : null}
                               </div>
                             </div>
                           </div>

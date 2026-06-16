@@ -90,10 +90,10 @@ describe('research IA pages', () => {
         previewOnly: true,
       },
       optionsStructureStatus: {
-        gammaEvidenceStatus: 'unavailable',
+        gammaEvidenceStatus: 'live_gex_not_implemented_v1',
         observationOnly: true,
         decisionGrade: false,
-        missingEvidence: [{ code: 'missing_contracts' }],
+        missingEvidence: [{ code: 'insufficient_usable_contracts' }, { code: 'missing_spot_reference' }],
         blockedReasonCodes: ['option_chain_unavailable'],
       },
       cockpitSummary: {
@@ -230,11 +230,20 @@ describe('research IA pages', () => {
     expect(page).toHaveTextContent('登录后可附加个人研究队列、观察列表和持仓语境');
     expect(page.textContent || '').not.toContain('scenario_risk_read_model_unavailable');
     expect(page.textContent || '').not.toContain('owner_context_missing');
-    expect(page).toHaveTextContent('observationOnly');
-    expect(page).toHaveTextContent('true');
-    expect(page).toHaveTextContent('decisionGrade');
-    expect(page).toHaveTextContent('false');
-    expect(page).toHaveTextContent('missing_contracts');
+    expect(page).toHaveTextContent('研究边界');
+    expect(page).toHaveTextContent('仅供观察');
+    expect(page).toHaveTextContent('判断等级');
+    expect(page).toHaveTextContent('未达到可判断等级');
+    expect(page).toHaveTextContent('实时 Gamma 观察暂未提供。');
+    expect(page).toHaveTextContent('期权链数据暂不可用。');
+    expect(page).toHaveTextContent('可用合约不足，暂不形成判断。');
+    expect(page).toHaveTextContent('缺少标的现价参考，暂不形成判断。');
+    expect(page.textContent || '').not.toContain('observationOnly');
+    expect(page.textContent || '').not.toContain('decisionGrade');
+    expect(page.textContent || '').not.toContain('live_gex_not_implemented_v1');
+    expect(page.textContent || '').not.toContain('option_chain_unavailable');
+    expect(page.textContent || '').not.toContain('insufficient_usable_contracts');
+    expect(page.textContent || '').not.toContain('missing_spot_reference');
     expect(screen.getByRole('link', { name: '研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
     expect(screen.getAllByRole('link', { name: '查看证据：研究雷达' }).some((link) => link.getAttribute('href') === '/zh/research/radar')).toBe(true);
     expect(screen.getByRole('link', { name: '查看证据：扫描器' })).toHaveAttribute('href', '/zh/scanner');

@@ -1,6 +1,7 @@
 import type { MarketOverviewPanel } from '../api/marketOverview';
 import type { MarketBriefingResponse, MarketDecisionSemantics, MarketRegimeSynthesis, MarketTemperatureResponse } from '../api/market';
 import type { LiquidityMonitorResponse } from '../api/liquidityMonitor';
+import { sanitizeUserFacingDataIssue } from './userFacingDataIssues';
 
 export type MarketIntelligenceGuidanceLocale = 'zh' | 'en';
 
@@ -194,12 +195,17 @@ export function marketIntelligenceReasonLabel(
   locale: MarketIntelligenceGuidanceLocale = 'zh',
 ): string {
   const normalized = normalizeReason(value);
+  const raw = String(value || '').trim();
   if (!normalized) {
     return locale === 'en' ? 'Data availability unconfirmed' : '数据状态待确认';
   }
   const labels = locale === 'en' ? EN_REASON_LABELS : ZH_REASON_LABELS;
   if (labels[normalized]) {
     return labels[normalized];
+  }
+  const sharedLabel = sanitizeUserFacingDataIssue(raw, locale);
+  if (sharedLabel && sharedLabel !== raw) {
+    return sharedLabel;
   }
   return locale === 'en' ? 'Data boundary pending confirmation' : titleCaseFromCode(normalized);
 }
