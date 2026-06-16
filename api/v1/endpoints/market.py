@@ -11,10 +11,13 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
 from api.deps import CurrentUser, get_optional_current_user, require_admin_capability
+from api.v1.errors import safe_api_error
+from api.v1.schemas.market_scenario_lab import MarketScenarioLabRequest, MarketScenarioLabResponse
 from api.v1.schemas.market_rotation import MarketRotationRadarResponse
 from api.v1.schemas.market_temperature import MarketTemperatureConsumedSubsetResponse
 from src.services.cn_provider_health_service import CNProviderHealthService
 from src.services.crypto_realtime_service import get_crypto_realtime_service
+from src.services.market_scenario_lab_engine import build_market_scenario_lab
 from src.services.market_decision_cockpit_service import MarketDecisionCockpitService
 from src.services.market_data_readiness_diagnostics import build_market_data_readiness_diagnostics
 from src.services.market_overview_service import MarketOverviewService
@@ -180,6 +183,27 @@ def get_regime_decision(current_user: Optional[CurrentUser] = Depends(get_option
 @router.get("/decision-cockpit", summary="Get market decision cockpit aggregate")
 def get_decision_cockpit(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
     return MarketDecisionCockpitService().get_decision_cockpit(actor=_actor(current_user))
+
+
+@router.post(
+    "/scenario-lab",
+    response_model=MarketScenarioLabResponse,
+    response_model_exclude_none=True,
+    summary="Compare a market regime against bounded research-planning scenarios",
+)
+def post_scenario_lab(request: MarketScenarioLabRequest):
+    try:
+        return build_market_scenario_lab(
+            base_decision=request.base_regime,
+            driver_scores=request.driver_scores,
+            scenario=request.to_engine_scenario(),
+        )
+    except ValueError as exc:
+        raise safe_api_error(
+            status_code=400,
+            error="invalid_market_scenario_lab_request",
+            message="Market scenario lab request could not be processed.",
+        ) from exc
 
 
 @router.get("/market-briefing", summary="Get rule-based market briefing")
