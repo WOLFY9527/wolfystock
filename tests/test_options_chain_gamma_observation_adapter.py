@@ -129,6 +129,9 @@ def test_missing_gamma_blocks_without_fabricating_greeks() -> None:
     assert result["observation"]["gexSummary"]["netGamma"] is None
     assert "missing_gamma" in result["blockedReasonCodes"]
     assert any(item["code"] == "missing_gamma" for item in result["missingEvidence"])
+    assert result["consumerIssues"]
+    serialized_issues = json.dumps(result["consumerIssues"], ensure_ascii=False).lower()
+    assert "missing_gamma" not in serialized_issues
 
 
 def test_missing_open_interest_blocks_without_fabricating_oi() -> None:
@@ -176,6 +179,7 @@ def test_stale_or_unknown_freshness_degrades_but_keeps_zero_values_as_evidence(
     assert "missing_open_interest" not in result["blockedReasonCodes"]
     assert expected_code in result["blockedReasonCodes"]
     assert any(item["code"] == expected_code for item in result["missingEvidence"])
+    assert result["consumerIssues"]
 
 
 def test_put_call_sign_convention_is_deterministic() -> None:

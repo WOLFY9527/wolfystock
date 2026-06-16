@@ -100,6 +100,7 @@ class DailyIntelligenceBriefingResponse(BaseModel):
     evidenceGaps: List[str] = Field(default_factory=list)
     degradedInputs: List[DailyIntelligenceDegradedInputResponse | Dict[str, Any]] = Field(default_factory=list)
     drilldownTargets: List[DailyIntelligenceEvidenceLinkResponse] = Field(default_factory=list)
+    consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
     noAdviceDisclosure: str
     observationOnly: Literal[True] = True
     decisionGrade: Literal[False] = False

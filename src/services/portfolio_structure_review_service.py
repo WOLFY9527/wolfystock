@@ -9,6 +9,7 @@ from datetime import date
 from typing import Any, Optional
 
 from src.repositories.portfolio_repo import PortfolioRepository
+from src.services.consumer_issue_labels import build_consumer_issues
 from src.services.stock_structure_decision_engine import NO_ADVICE_DISCLOSURE
 from src.services.stock_structure_decision_service import StockStructureDecisionService
 
@@ -128,6 +129,12 @@ class PortfolioStructureReviewService:
             "consumerMessage": _consumer_message(consumer_state),
             "drilldownSymbols": _drilldown_symbols(holdings_structure),
             "dataQuality": data_quality,
+            "consumerIssues": build_consumer_issues(
+                missing_evidence,
+                data_quality,
+                [item.get("missingEvidence") for item in holdings_structure],
+                [item.get("riskFlags") for item in holdings_structure],
+            ),
             "noAdviceDisclosure": str(batch_payload.get("noAdviceDisclosure") or NO_ADVICE_DISCLOSURE),
         }
 
@@ -303,11 +310,18 @@ def _holding_structure_payload(holding: Mapping[str, Any], item: Mapping[str, An
             "missingEvidence": [
                 _missing("daily_ohlcv", "Daily OHLCV evidence is unavailable for this cached holding.")
             ],
+            "consumerIssues": build_consumer_issues(["daily_ohlcv"]),
         }
 
     component_scores = _safe_mapping(item.get("componentScores"))
     research_notes = _safe_mapping(item.get("researchNotes"))
     data_quality = _safe_mapping(item.get("dataQuality"))
+    missing_evidence = [
+        _missing(str(entry.get("kind") or "structure_evidence"), str(entry.get("message") or ""))
+        for entry in _safe_list(item.get("missingEvidence"))
+        if isinstance(entry, Mapping)
+    ]
+    risk_flags = [str(flag) for flag in _safe_list(research_notes.get("riskFlags"))]
     return {
         "ticker": str(item.get("ticker") or holding.get("ticker") or ""),
         "structureState": str(item.get("structureState") or "lowConfidence"),
@@ -316,17 +330,14 @@ def _holding_structure_payload(holding: Mapping[str, Any], item: Mapping[str, An
             "score": int(component_scores.get("evidenceQuality") or 0),
             "status": str(data_quality.get("status") or "unavailable"),
         },
-        "riskFlags": [str(flag) for flag in _safe_list(research_notes.get("riskFlags"))],
+        "riskFlags": risk_flags,
         "researchNotes": {
             "watchNext": [str(note) for note in _safe_list(research_notes.get("watchNext"))],
             "needsMoreEvidence": [str(note) for note in _safe_list(research_notes.get("needsMoreEvidence"))],
-            "riskFlags": [str(flag) for flag in _safe_list(research_notes.get("riskFlags"))],
+            "riskFlags": risk_flags,
         },
-        "missingEvidence": [
-            _missing(str(entry.get("kind") or "structure_evidence"), str(entry.get("message") or ""))
-            for entry in _safe_list(item.get("missingEvidence"))
-            if isinstance(entry, Mapping)
-        ],
+        "missingEvidence": missing_evidence,
+        "consumerIssues": build_consumer_issues(missing_evidence, risk_flags, data_quality),
     }
 
 
@@ -346,6 +357,7 @@ def _invalid_holding_payload() -> dict[str, Any]:
         "missingEvidence": [
             _missing("security_metadata", "Ticker, market, or currency metadata is missing for this cached holding.")
         ],
+        "consumerIssues": build_consumer_issues(["security_metadata"]),
     }
 
 

@@ -812,6 +812,7 @@ class ScannerResearchOverlayItem(BaseModel):
     whatToVerify: List[str] = Field(default_factory=list)
     riskFlags: List[str] = Field(default_factory=list)
     evidenceGaps: List[str] = Field(default_factory=list)
+    consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
     noAdviceDisclosure: str
 
 
@@ -820,6 +821,7 @@ class ScannerResearchOverlayDataQuality(BaseModel):
     availableCandidateCount: int = 0
     reliableCandidateCount: int = 0
     missingEvidence: List[str] = Field(default_factory=list)
+    consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
 
 
 class ScannerResearchOverlayResponse(BaseModel):
@@ -833,6 +835,7 @@ class ScannerResearchOverlayResponse(BaseModel):
     queueDiversity: Dict[str, Any] = Field(default_factory=dict)
     dataQuality: ScannerResearchOverlayDataQuality
     missingEvidence: List[str] = Field(default_factory=list)
+    consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
     noAdviceDisclosure: str
 
 

@@ -13,6 +13,7 @@ from src.services.market_overview_service import MarketOverviewService
 from src.services.portfolio_structure_review_service import PortfolioStructureReviewService
 from src.services.research_radar_service import ResearchRadarService
 from src.services.watchlist_research_overlay_service import WatchlistResearchOverlayService
+from src.services.consumer_issue_labels import build_consumer_issues
 
 
 DAILY_INTELLIGENCE_SERVICE_SCHEMA_VERSION = "daily_intelligence_briefing_v1"
@@ -129,6 +130,17 @@ class DailyIntelligenceService:
             watchlist_payload=watchlist_payload,
             portfolio_payload=portfolio_payload,
         )
+        consumer_issues = build_consumer_issues(
+            evidence_gaps,
+            degraded_inputs,
+            [item.get("evidenceGaps") for item in top_research_priorities],
+            [item.get("evidenceGaps") for item in scanner_highlights],
+            [item.get("riskFlags") for item in scanner_highlights],
+            [item.get("evidenceGaps") for item in watchlist_highlights],
+            [item.get("riskFlags") for item in watchlist_highlights],
+            [item.get("missingEvidence") for item in portfolio_highlights],
+            [item.get("riskFlags") for item in portfolio_highlights],
+        )
 
         return {
             "schemaVersion": DAILY_INTELLIGENCE_SERVICE_SCHEMA_VERSION,
@@ -156,6 +168,7 @@ class DailyIntelligenceService:
             "evidenceGaps": _safe_phrase_list(evidence_gaps),
             "degradedInputs": _safe_degraded_inputs(degraded_inputs),
             "drilldownTargets": section_links,
+            "consumerIssues": consumer_issues,
             "noAdviceDisclosure": DAILY_INTELLIGENCE_NO_ADVICE_DISCLOSURE,
             "observationOnly": True,
             "decisionGrade": False,

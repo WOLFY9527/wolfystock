@@ -13,6 +13,8 @@ from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from src.services.consumer_issue_labels import build_consumer_issues
+
 
 OBSERVATION_CONTRACT_NAME = "optionsMarketStructureObservation"
 OBSERVATION_CONTRACT_VERSION = "options-market-structure-observation-v1"
@@ -116,6 +118,7 @@ def build_options_market_structure_observation(
         **field_coverage,
     }
 
+    consumer_issues = build_consumer_issues(blocked_reason_codes, missing_evidence, data_quality_labels)
     return {
         "contractName": OBSERVATION_CONTRACT_NAME,
         "contractVersion": OBSERVATION_CONTRACT_VERSION,
@@ -136,6 +139,7 @@ def build_options_market_structure_observation(
         "missingEvidence": missing_evidence,
         "blockedReasonCodes": blocked_reason_codes,
         "dataQualityLabels": data_quality_labels,
+        "consumerIssues": consumer_issues,
         "methodology": {
             "formulaId": GEX_FORMULA_ID,
             "formula": GEX_FORMULA,

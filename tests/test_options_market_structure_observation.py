@@ -146,6 +146,10 @@ def test_missing_core_prerequisites_fail_closed_without_gex_guessing() -> None:
         "missing_iv",
     }.issubset(set(observation["blockedReasonCodes"]))
     assert "unavailable" in observation["dataQualityLabels"]
+    assert observation["consumerIssues"]
+    serialized_issues = json.dumps(observation["consumerIssues"], ensure_ascii=False).lower()
+    for raw_code in ("missing_spot_reference", "insufficient_usable_contracts", "methodology_approval_missing"):
+        assert raw_code not in serialized_issues
 
 
 def test_partial_contract_coverage_degrades_and_excludes_missing_inputs() -> None:
@@ -168,6 +172,7 @@ def test_partial_contract_coverage_degrades_and_excludes_missing_inputs() -> Non
     assert "missing_iv" in observation["blockedReasonCodes"]
     assert observation["missingEvidence"][0]["contractSymbol"] == "MISSING_IV"
     assert observation["dataQualityLabels"] == ["delayed"]
+    assert observation["consumerIssues"]
 
 
 def test_existing_option_contract_schema_is_accepted_without_provider_runtime_coupling() -> None:

@@ -7,6 +7,8 @@ import copy
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
+from src.services.consumer_issue_labels import build_consumer_issues
+
 
 SCANNER_RESEARCH_OVERLAY_SCHEMA_VERSION = "scanner_research_overlay_v1"
 SCANNER_RESEARCH_OVERLAY_NO_ADVICE_DISCLOSURE = (
@@ -44,6 +46,7 @@ class ScannerResearchOverlayService:
         if not candidate_payloads:
             missing_evidence = [_MISSING_SCANNER_CANDIDATES]
 
+        data_quality = self._data_quality(items=items, missing_evidence=missing_evidence)
         return {
             "schemaVersion": SCANNER_RESEARCH_OVERLAY_SCHEMA_VERSION,
             "generatedAt": _iso_timestamp(self._now()),
@@ -53,8 +56,14 @@ class ScannerResearchOverlayService:
             "items": items,
             "aggregateSummary": self._aggregate_summary(items),
             "queueDiversity": self._queue_diversity(items),
-            "dataQuality": self._data_quality(items=items, missing_evidence=missing_evidence),
+            "dataQuality": data_quality,
             "missingEvidence": missing_evidence,
+            "consumerIssues": build_consumer_issues(
+                missing_evidence,
+                data_quality,
+                [item.get("riskFlags") for item in items],
+                [item.get("evidenceGaps") for item in items],
+            ),
             "noAdviceDisclosure": SCANNER_RESEARCH_OVERLAY_NO_ADVICE_DISCLOSURE,
         }
 
@@ -93,6 +102,7 @@ class ScannerResearchOverlayService:
             "whatToVerify": _what_to_verify(candidate, evidence_gaps),
             "riskFlags": risk_flags,
             "evidenceGaps": evidence_gaps,
+            "consumerIssues": build_consumer_issues(evidence_gaps, risk_flags, evidence_quality),
             "noAdviceDisclosure": SCANNER_RESEARCH_OVERLAY_NO_ADVICE_DISCLOSURE,
         }
 
@@ -142,6 +152,7 @@ class ScannerResearchOverlayService:
                 "availableCandidateCount": 0,
                 "reliableCandidateCount": 0,
                 "missingEvidence": list(missing_evidence),
+                "consumerIssues": build_consumer_issues(missing_evidence),
             }
         reliable_count = sum(
             1
@@ -165,6 +176,7 @@ class ScannerResearchOverlayService:
             "availableCandidateCount": len(items),
             "reliableCandidateCount": reliable_count,
             "missingEvidence": list(missing_evidence),
+            "consumerIssues": build_consumer_issues(missing_evidence),
         }
 
 

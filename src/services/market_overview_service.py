@@ -34,6 +34,7 @@ from src.services.futures_contracts import list_futures_contracts
 from src.services.investor_signal_model import build_consumer_safe_investor_signal
 from src.services.liquidity_monitor_service import LiquidityMonitorService
 from src.services.market_data_quality import build_consumer_data_quality_state
+from src.services.consumer_issue_labels import build_consumer_issues
 from src.services.market_data_source_registry import resolve_source_label
 from src.services.market_rotation_radar_service import MarketRotationRadarService
 from src.services.official_macro_source_registry import get_official_macro_source_for_transport_source
@@ -1229,6 +1230,7 @@ class MarketOverviewService:
         payload = self._with_market_research_readiness(payload)
         payload["providerHealth"] = self._provider_health(payload, "temperature", duration_ms=int((time.monotonic() - started_at) * 1000), error_summary=_compact_error_summary(payload.get("lastError")))
         payload = self._with_evidence_snapshot(payload, self._category_for_cache_key("temperature"))
+        payload = self._with_consumer_issues(payload)
         return payload
 
     @staticmethod
@@ -1376,6 +1378,27 @@ class MarketOverviewService:
         payload = self._with_market_meta(payload, self._category_for_cache_key("market_briefing"))
         payload["providerHealth"] = self._provider_health(payload, "market_briefing", duration_ms=int((time.monotonic() - started_at) * 1000), error_summary=_compact_error_summary(payload.get("lastError")))
         payload = self._with_evidence_snapshot(payload, self._category_for_cache_key("market_briefing"))
+        payload = self._with_consumer_issues(payload)
+        return payload
+
+    @staticmethod
+    def _with_consumer_issues(payload: Dict[str, Any]) -> Dict[str, Any]:
+        freshness_evidence = payload.get("sourceFreshnessEvidence")
+        freshness_payload = freshness_evidence if isinstance(freshness_evidence, Mapping) else {}
+        freshness = str(freshness_payload.get("freshness") or payload.get("freshness") or "").lower()
+        freshness_issue = None
+        if freshness in {"fallback", "stale", "cached", "delayed", "partial"}:
+            freshness_issue = "freshness_blocked:fallback"
+        elif freshness in {"unavailable", "error", "unknown"}:
+            freshness_issue = "freshness_blocked:unavailable"
+        payload["consumerIssues"] = build_consumer_issues(
+            freshness_issue,
+            payload.get("disabledReason"),
+            payload.get("unavailableReason"),
+            payload.get("researchReadiness"),
+            payload.get("evidenceSnapshot"),
+            payload.get("dataQuality"),
+        )
         return payload
 
     def _get_market_temperature_input_snapshot(self) -> Dict[str, Any]:

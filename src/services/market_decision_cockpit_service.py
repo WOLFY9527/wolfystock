@@ -17,6 +17,7 @@ from src.services.market_overview_service import MarketOverviewService
 from src.services.market_regime_decision_engine import build_market_regime_decision
 from src.services.options_market_structure_observation import build_options_market_structure_observation
 from src.services.research_radar_candidate_engine import build_research_radar_candidate_queue
+from src.services.consumer_issue_labels import build_consumer_issues
 
 
 SCHEMA_VERSION = "market_decision_cockpit.v1"
@@ -98,6 +99,13 @@ class MarketDecisionCockpitService:
             research_preview,
             options_status,
         )
+        consumer_issues = build_consumer_issues(
+            data_quality,
+            decision.get("missingEvidence"),
+            _driver_reason_codes(decision),
+            research_preview,
+            options_status,
+        )
 
         return {
             "schemaVersion": SCHEMA_VERSION,
@@ -131,6 +139,7 @@ class MarketDecisionCockpitService:
                 data_quality,
             ),
             "scenarioHints": self._build_scenario_hints(decision),
+            "consumerIssues": consumer_issues,
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
             "observationOnly": True,
             "decisionGrade": False,
@@ -156,6 +165,11 @@ class MarketDecisionCockpitService:
             payload = self._market_overview_decision(actor=actor)
 
         payload.setdefault("invalidationConditions", _invalidation_conditions(payload))
+        payload["consumerIssues"] = build_consumer_issues(
+            payload.get("missingEvidence"),
+            _driver_reason_codes(payload),
+            _mapping(payload.get("dataQuality")).get("confidenceCapReasons"),
+        )
         return payload
 
     def _market_overview_decision(self, *, actor: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -198,6 +212,10 @@ class MarketDecisionCockpitService:
                 "status": "empty",
                 "reasonCodes": [_RESEARCH_EMPTY_REASON],
             }
+        preview["consumerIssues"] = build_consumer_issues(
+            preview.get("evidenceGaps"),
+            _mapping(preview.get("degradedState")).get("reasonCodes"),
+        )
         return preview
 
     def _build_options_structure_status(
@@ -231,12 +249,14 @@ class MarketDecisionCockpitService:
         if gamma_status == "unavailable" and _OPTION_CHAIN_EMPTY_REASON not in blocked_reason_codes:
             blocked_reason_codes.insert(0, _OPTION_CHAIN_EMPTY_REASON)
 
+        consumer_issues = build_consumer_issues(blocked_reason_codes, observation.get("missingEvidence"))
         return {
             "gammaEvidenceStatus": gamma_status,
             "observationOnly": bool(observation.get("observationOnly", True)),
             "decisionGrade": False,
             "missingEvidence": list(observation.get("missingEvidence") or []),
             "blockedReasonCodes": blocked_reason_codes,
+            "consumerIssues": consumer_issues,
         }
 
     def _build_cockpit_summary(
@@ -494,6 +514,7 @@ class MarketDecisionCockpitService:
             "regimeEvidenceGrade": regime_quality.get("evidenceGrade"),
             "availableDriverCount": available_driver_count,
             "proxyEvidenceCount": int(regime_quality.get("proxyEvidenceCount") or 0),
+            "consumerIssues": build_consumer_issues(reason_codes, regime_quality.get("confidenceCapReasons")),
         }
 
     def _build_driver_attribution(self, market_regime_decision: Mapping[str, Any]) -> dict[str, Any]:
@@ -876,7 +897,18 @@ def _driver_item(driver: str, payload: Mapping[str, Any]) -> dict[str, Any]:
         "whyItMatters": _driver_why_it_matters(driver, score),
         "currentEvidence": observations or ["No current driver observation is available."],
         "reasonCodes": reasons,
+        "consumerIssues": build_consumer_issues(reasons, evidence_state),
     }
+
+
+def _driver_reason_codes(payload: Mapping[str, Any]) -> list[str]:
+    drivers = _mapping(payload.get("driverScores"))
+    reasons: list[str] = []
+    for driver_payload in drivers.values():
+        if not isinstance(driver_payload, Mapping):
+            continue
+        reasons.extend(str(reason) for reason in list(driver_payload.get("reasons") or []) if str(reason))
+    return _dedupe(reasons)
 
 
 def _conflicting_driver_items(

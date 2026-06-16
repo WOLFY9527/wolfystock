@@ -70,6 +70,14 @@ def _payload() -> dict:
             "evidenceGaps": ["research_candidates_unavailable"],
             "previewOnly": True,
             "degradedState": {"status": "empty", "reasonCodes": ["research_candidates_unavailable"]},
+            "consumerIssues": [
+                {
+                    "label": "Research candidates unavailable",
+                    "message": "Research candidates are not available for this payload.",
+                    "severity": "warning",
+                    "category": "research",
+                }
+            ],
         },
         "optionsStructureStatus": {
             "gammaEvidenceStatus": "unavailable",
@@ -77,6 +85,14 @@ def _payload() -> dict:
             "decisionGrade": False,
             "missingEvidence": [{"code": "missing_contracts", "field": "contracts", "contractSymbol": None}],
             "blockedReasonCodes": ["option_chain_unavailable", "missing_contracts"],
+            "consumerIssues": [
+                {
+                    "label": "Options chain unavailable",
+                    "message": "Options chain evidence is not available for this read.",
+                    "severity": "warning",
+                    "category": "options",
+                }
+            ],
         },
         "cockpitSummary": {
             "whatChanged": ["Regime selected as riskOn."],
@@ -84,8 +100,27 @@ def _payload() -> dict:
             "whatToWatch": ["Confirm breadth participation."],
             "confidenceLimits": ["Dealer gamma evidence is unavailable."],
         },
+        "consumerIssues": [
+            {
+                "label": "Options chain unavailable",
+                "message": "Options chain evidence is not available for this read.",
+                "severity": "warning",
+                "category": "options",
+            }
+        ],
         "noAdviceDisclosure": "Decision support for research context only; not investment advice or trading instruction.",
-        "dataQuality": {"status": "degraded", "reasonCodes": ["option_chain_unavailable"]},
+        "dataQuality": {
+            "status": "degraded",
+            "reasonCodes": ["option_chain_unavailable"],
+            "consumerIssues": [
+                {
+                    "label": "Options chain unavailable",
+                    "message": "Options chain evidence is not available for this read.",
+                    "severity": "warning",
+                    "category": "options",
+                }
+            ],
+        },
     }
 
 
@@ -137,6 +172,7 @@ def test_market_decision_cockpit_endpoint_returns_service_payload(monkeypatch) -
     assert payload["drilldownTargets"][0]["route"] == "/research/radar"
     assert payload["observationOnly"] is True
     assert payload["decisionGrade"] is False
+    assert payload["consumerIssues"][0]["label"] == "Options chain unavailable"
     assert fake_service.calls == [
         {"actor": {"actor_type": "anonymous", "role": "anonymous", "display_name": "Anonymous"}}
     ]

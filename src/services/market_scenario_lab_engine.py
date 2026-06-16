@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
+from src.services.consumer_issue_labels import build_consumer_issues
+
 
 SCHEMA_VERSION = "market_scenario_lab_engine.v1"
 NO_ADVICE_DISCLOSURE = "Research planning only; not a personalized decision basis."
@@ -157,7 +159,12 @@ class MarketScenarioLabEngine:
             "The scenario frame weakens if key drivers are proxy-only, stale, blocked, or observation-only.",
         ]
         evidence_limits = _evidence_limits(base, scenario_input)
-
+        consumer_issues = build_consumer_issues(
+            base.get("missingEvidence"),
+            base.get("dataQuality"),
+            evidence_limits,
+            scenario_input.get("gammaEvidenceStatus"),
+        )
         return {
             "schemaVersion": SCHEMA_VERSION,
             "contractStatus": _contract_status(base=base, evidence_limits=evidence_limits),
@@ -190,6 +197,7 @@ class MarketScenarioLabEngine:
             "whatWouldConfirm": confirm_context,
             "whatWouldInvalidate": invalidate_context,
             "evidenceLimits": evidence_limits,
+            "consumerIssues": consumer_issues,
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
         }
 
@@ -550,6 +558,7 @@ def _unavailable_payload(base: Mapping[str, Any], scenario: Mapping[str, Any]) -
         "whatWouldConfirm": [],
         "whatWouldInvalidate": [],
         "evidenceLimits": evidence_limits,
+        "consumerIssues": build_consumer_issues(base.get("missingEvidence"), base.get("dataQuality")),
         "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
     }
 

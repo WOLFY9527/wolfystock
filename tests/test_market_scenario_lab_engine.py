@@ -191,6 +191,7 @@ def test_volatility_spike_scenario_reclassifies_base_decision_without_mutating_i
         "whatWouldConfirm",
         "whatWouldInvalidate",
         "evidenceLimits",
+        "consumerIssues",
         "noAdviceDisclosure",
     ]
     assert payload["schemaVersion"] == "market_scenario_lab_engine.v1"
@@ -241,6 +242,9 @@ def test_volatility_spike_scenario_reclassifies_base_decision_without_mutating_i
     assert "Dealer gamma evidence is unavailable in the base read." in payload["evidenceLimits"]
     assert "dealer_gamma_unavailable_caps_volatility_compression" not in payload["evidenceLimits"]
     assert all(not INTERNAL_LOOKING_TOKEN.search(item) for item in payload["evidenceLimits"])
+    assert payload["consumerIssues"]
+    serialized_issues = json.dumps(payload["consumerIssues"], ensure_ascii=False).lower()
+    assert "dealer_gamma_unavailable_caps_volatility_compression" not in serialized_issues
     assert payload["noAdviceDisclosure"] == "Research planning only; not a personalized decision basis."
     assert payload["confirmInvalidateContext"] == {
         "confirm": payload["whatWouldConfirm"],

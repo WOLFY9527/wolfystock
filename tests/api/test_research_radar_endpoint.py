@@ -55,6 +55,14 @@ class _FakeResearchRadarService:
                     "duplicateEvidenceMerged": 1,
                     "riskFlags": [],
                     "evidenceQuality": {"status": "partial", "score": 54},
+                    "consumerIssues": [
+                        {
+                            "label": "Evidence needs review",
+                            "message": "Some quality checks are not fully cleared yet.",
+                            "severity": "info",
+                            "category": "evidence",
+                        }
+                    ],
                 }
             ],
             "aggregateSummary": {
@@ -65,8 +73,27 @@ class _FakeResearchRadarService:
             },
             "evidenceGaps": [],
             "marketContextFit": "neutral",
+            "consumerIssues": [
+                {
+                    "label": "Evidence needs review",
+                    "message": "Some quality checks are not fully cleared yet.",
+                    "severity": "info",
+                    "category": "evidence",
+                }
+            ],
             "noAdviceDisclosure": "Research-only queue; verify evidence gaps before further review.",
-            "dataQuality": {"status": "partial", "missingEvidence": []},
+            "dataQuality": {
+                "status": "partial",
+                "missingEvidence": [],
+                "consumerIssues": [
+                    {
+                        "label": "Evidence needs review",
+                        "message": "Some quality checks are not fully cleared yet.",
+                        "severity": "info",
+                        "category": "evidence",
+                    }
+                ],
+            },
         }
 
 
@@ -98,6 +125,7 @@ def test_get_research_radar_endpoint_is_registered_and_returns_contract(monkeypa
         "aggregateSummary",
         "evidenceGaps",
         "marketContextFit",
+        "consumerIssues",
         "noAdviceDisclosure",
         "dataQuality",
     }.issubset(payload)
@@ -106,6 +134,8 @@ def test_get_research_radar_endpoint_is_registered_and_returns_contract(monkeypa
         "Evidence quality is below the strong research threshold."
     ]
     assert payload["researchQueue"][0]["evidenceGaps"] == ["themeBreadth"]
+    assert payload["researchQueue"][0]["consumerIssues"][0]["label"] == "Evidence needs review"
+    assert payload["consumerIssues"][0]["label"] == "Evidence needs review"
     assert payload["researchQueue"][0]["duplicateEvidenceMerged"] == 1
     assert payload["aggregateSummary"]["duplicateEvidenceMerged"] == 1
     assert _FakeResearchRadarService.calls == [

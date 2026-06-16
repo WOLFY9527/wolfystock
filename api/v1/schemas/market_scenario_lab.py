@@ -125,6 +125,7 @@ class MarketScenarioLabResponse(_MarketScenarioLabModel):
     whatWouldConfirm: List[str]
     whatWouldInvalidate: List[str]
     evidenceLimits: List[str]
+    consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
     noAdviceDisclosure: str
 
 
