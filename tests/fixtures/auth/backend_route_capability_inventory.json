@@ -191,7 +191,7 @@
     },
     {
       "route_id": "admin.ops.status",
-      "path_pattern": "^/api/v1/admin/ops/status$",
+      "path_pattern": "^/api/v1/admin/ops/(?:status|surface-readiness)$",
       "methods": ["GET"],
       "surface": "admin_ops_status",
       "auth_dependency_label": "admin_capability",
@@ -728,6 +728,16 @@
       "capability_label": "ops:logs:read",
       "no_go_marker": null,
       "transitional_note": "Ops status is admin-capability gated and not a public or member route."
+    },
+    {
+      "route_id": "admin.ops.surface_readiness",
+      "path": "/api/v1/admin/ops/surface-readiness",
+      "method": "GET",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:logs:read",
+      "no_go_marker": null,
+      "transitional_note": "Backend surface contract parity gate is admin-capability gated and not a public or member route."
     },
     {
       "route_id": "admin.mission_control",
