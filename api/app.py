@@ -240,6 +240,7 @@ def _readiness_payload(app: FastAPI) -> Tuple[int, Dict[str, Any]]:
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
     """Initialize and release shared services for the app lifecycle."""
+    app.state.backend_runtime_started_at = _iso_now()
     app.state.system_config_service = SystemConfigService()
     app.state.task_queue = get_task_queue()
     if should_auto_start_crypto_realtime():
@@ -292,6 +293,8 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
         redoc_url=None,
         openapi_url=None,
     )
+    app.state.frontend_static_dir = static_dir
+    app.state.backend_runtime_started_at = _iso_now()
     
     # ============================================================
     # CORS 配置
@@ -378,6 +381,7 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
     # ============================================================
     
     has_frontend = static_dir.exists() and (static_dir / "index.html").exists()
+    app.state.frontend_static_mode = "static_dist" if has_frontend else "unavailable"
     
     if has_frontend:
         @app.get("/", include_in_schema=False)

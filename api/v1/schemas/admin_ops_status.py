@@ -116,6 +116,32 @@ class AdminOpsLaunchCockpit(_AdminOpsStatusModel):
     limitations: List[str] = Field(default_factory=list)
 
 
+class AdminBuildProvenance(_AdminOpsStatusModel):
+    contract: str = "admin_build_provenance_v1"
+    read_only: bool = Field(default=True, alias="readOnly")
+    no_external_calls: bool = Field(default=True, alias="noExternalCalls")
+    runtime_behavior_changed: bool = Field(default=False, alias="runtimeBehaviorChanged")
+    consumer_visible: bool = Field(default=False, alias="consumerVisible")
+    backend_git_sha: Optional[str] = Field(default=None, alias="backendGitSha")
+    backend_branch: Optional[str] = Field(default=None, alias="backendBranch")
+    backend_commit_timestamp: Optional[str] = Field(default=None, alias="backendCommitTimestamp")
+    backend_runtime_started_at: Optional[str] = Field(default=None, alias="backendRuntimeStartedAt")
+    frontend_main_asset_filename: Optional[str] = Field(default=None, alias="frontendMainAssetFilename")
+    frontend_main_asset_hash: Optional[str] = Field(default=None, alias="frontendMainAssetHash")
+    frontend_asset_manifest_hash: Optional[str] = Field(default=None, alias="frontendAssetManifestHash")
+    frontend_asset_manifest_source: Optional[str] = Field(default=None, alias="frontendAssetManifestSource")
+    frontend_static_build_timestamp: Optional[str] = Field(default=None, alias="frontendStaticBuildTimestamp")
+    static_asset_mode: str = Field(default="unknown", alias="staticAssetMode")
+    static_asset_root_provenance: str = Field(default="unknown", alias="staticAssetRootProvenance")
+    static_asset_root_label: Optional[str] = Field(default=None, alias="staticAssetRootLabel")
+    static_asset_root_exists: bool = Field(default=False, alias="staticAssetRootExists")
+    static_index_present: bool = Field(default=False, alias="staticIndexPresent")
+    freshness_status: str = Field(default="unknown", alias="freshnessStatus")
+    comparison_basis: Optional[str] = Field(default=None, alias="comparisonBasis")
+    stale: Optional[bool] = None
+    reason_codes: List[str] = Field(default_factory=list, alias="reasonCodes")
+
+
 class AdminOpsStatusResponse(_AdminOpsStatusModel):
     generated_at: str = Field(alias="generatedAt")
     read_only: bool = Field(default=True, alias="readOnly")
@@ -129,5 +155,6 @@ class AdminOpsStatusResponse(_AdminOpsStatusModel):
     storage_readiness_summary: AdminOpsStatusSection = Field(alias="storageReadinessSummary")
     task_queue_status_summary: AdminOpsStatusSection = Field(alias="taskQueueStatusSummary")
     admin_log_evidence_summary: AdminOpsStatusSection = Field(alias="adminLogEvidenceSummary")
+    build_provenance: AdminBuildProvenance = Field(alias="buildProvenance")
     launch_cockpit: AdminOpsLaunchCockpit = Field(alias="launchCockpit")
     metadata: Dict[str, Any] = Field(default_factory=dict)

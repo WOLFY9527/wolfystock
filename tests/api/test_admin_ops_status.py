@@ -136,6 +136,18 @@ def _json_text(payload: object) -> str:
     return json.dumps(payload, ensure_ascii=False, sort_keys=True).lower()
 
 
+def _write_static_dist(static_dir: Path, *, asset_name: str = "index-CKPdXr8Q.js") -> Path:
+    assets_dir = static_dir / "assets"
+    assets_dir.mkdir(parents=True)
+    (static_dir / "index.html").write_text(
+        f'<html><head><script type="module" crossorigin src="/assets/{asset_name}"></script></head></html>',
+        encoding="utf-8",
+    )
+    asset_path = assets_dir / asset_name
+    asset_path.write_text("console.log('wolfystock build');\n", encoding="utf-8")
+    return asset_path
+
+
 def _assert_no_sensitive_markers(payload: object) -> None:
     text = _json_text(payload)
     for marker in FORBIDDEN_RESPONSE_MARKERS:
@@ -220,9 +232,41 @@ def test_admin_ops_status_returns_read_only_advisory_markers(app: FastAPI, monke
     assert payload["storageReadinessSummary"]["readOnly"] is True
     assert payload["taskQueueStatusSummary"]["noExternalCalls"] is True
     assert payload["adminLogEvidenceSummary"]["deleteAllowed"] is False
+    assert payload["buildProvenance"]["readOnly"] is True
+    assert payload["buildProvenance"]["noExternalCalls"] is True
+    assert payload["buildProvenance"]["runtimeBehaviorChanged"] is False
+    assert payload["buildProvenance"]["consumerVisible"] is False
     assert payload["metadata"]["contract"] == "admin_ops_status_snapshot_v2"
     assert payload["metadata"]["projection"] == "bounded_admin_diagnostics"
     assert payload["metadata"]["publicLaunchNoGo"] is True
+    _assert_no_sensitive_markers(payload)
+
+
+def test_admin_ops_status_includes_build_provenance_contract(app: FastAPI, tmp_path: Path) -> None:
+    static_dir = tmp_path / "static"
+    _write_static_dist(static_dir)
+    app.state.frontend_static_dir = static_dir
+    app.state.backend_runtime_started_at = "2026-06-16T12:01:00+00:00"
+
+    with _client(app, _ops_admin) as client:
+        response = client.get("/api/v1/admin/ops/status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    provenance = payload["buildProvenance"]
+    assert provenance["contract"] == "admin_build_provenance_v1"
+    assert provenance["staticAssetMode"] == "static_dist"
+    assert provenance["staticAssetRootProvenance"] in {"repo_static_dir", "configured_static_dir"}
+    assert provenance["staticAssetRootExists"] is True
+    assert provenance["staticIndexPresent"] is True
+    assert provenance["frontendMainAssetFilename"] == "index-CKPdXr8Q.js"
+    assert provenance["frontendMainAssetHash"] == "CKPdXr8Q"
+    assert provenance["frontendAssetManifestSource"] == "static_asset_inventory"
+    assert len(provenance["frontendAssetManifestHash"]) == 64
+    assert provenance["backendRuntimeStartedAt"] == "2026-06-16T12:01:00+00:00"
+    assert provenance["freshnessStatus"] in {"fresh", "stale", "unknown"}
+    assert provenance["reasonCodes"]
+    assert str(tmp_path) not in _json_text(payload)
     _assert_no_sensitive_markers(payload)
 
 

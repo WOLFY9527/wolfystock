@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, Optional
 
 from sqlalchemy import func, select, text
 
+from src.services.build_provenance_service import BuildProvenanceService, build_unknown_provenance
 from src.services.admin_logs_service import AdminLogsRetentionService
 from src.services.llm_cost_ledger_service import LlmCostLedgerService
 from src.services.quota_policy_service import QuotaPolicyService
@@ -57,6 +58,7 @@ class AdminOpsStatusService:
         storage_status = self._safe_source(self._build_storage_readiness_summary)
         task_queue_status = self._safe_source(lambda: self._build_task_queue_status_summary(app_state))
         admin_log_status = self._safe_source(self._build_admin_log_evidence_summary)
+        build_provenance = self._safe_build_provenance(app_state)
         return {
             "generatedAt": generated_at_iso,
             "readOnly": True,
@@ -109,6 +111,7 @@ class AdminOpsStatusService:
                 last_checked_at=generated_at_iso if admin_log_status.get("available") else None,
                 message=self._admin_log_status_message(admin_log_status),
             ),
+            "buildProvenance": build_provenance,
             "launchCockpit": self._safe_launch_cockpit(generated_at_iso),
             "metadata": {
                 "contract": "admin_ops_status_snapshot_v2",
@@ -120,6 +123,7 @@ class AdminOpsStatusService:
                     "storage",
                     "task_queue",
                     "admin_logs",
+                    "build_provenance",
                     "launch_readiness",
                 ],
             },
@@ -191,6 +195,13 @@ class AdminOpsStatusService:
         except Exception:
             return self._fallback_launch_cockpit()
         return self._project_launch_cockpit(raw, generated_at=generated_at)
+
+    @staticmethod
+    def _safe_build_provenance(app_state: object | None) -> Dict[str, Any]:
+        try:
+            return BuildProvenanceService().build(app_state=app_state)
+        except Exception:
+            return build_unknown_provenance(reason_code="build_provenance_unavailable")
 
     def _project_launch_cockpit(self, snapshot: Dict[str, Any], *, generated_at: str) -> Dict[str, Any]:
         return {
