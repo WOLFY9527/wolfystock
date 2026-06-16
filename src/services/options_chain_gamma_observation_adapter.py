@@ -11,13 +11,19 @@ from src.services.options_market_structure_observation import (
     GEX_FORMULA,
     GEX_FORMULA_ID,
     GEX_UNIT_CONVENTION,
+    NO_ADVICE_DISCLOSURE,
     SIGN_CONVENTION,
+    build_options_gamma_data_quality,
+    build_options_gamma_evidence_limits,
+    build_options_gamma_observation_source_class,
+    build_options_gamma_reason_details,
     build_options_market_structure_observation,
 )
 
 
 ADAPTER_NAME = "optionsChainGammaObservationAdapter"
 ADAPTER_VERSION = "options-chain-gamma-observation-adapter-v1"
+OPTIONS_CHAIN_GAMMA_OBSERVATION_SCHEMA_VERSION = "options_chain_gamma_observation_contract_v1"
 DATA_REQUIREMENTS = [
     "underlying",
     "spot",
@@ -166,10 +172,33 @@ def build_options_chain_gamma_observation(
     observation["methodology"] = methodology
 
     consumer_issues = build_consumer_issues(blocked_reason_codes, missing_evidence, data_quality_labels)
+    observation_source_class = build_options_gamma_observation_source_class(
+        source,
+        freshness,
+        data_quality_labels,
+        metadata,
+        contracts,
+    )
+    issue_tokens = [*blocked_reason_codes, *data_quality_labels]
+    if observation_source_class in {"fixture", "demo"}:
+        issue_tokens.append("proxy_or_sample_evidence_present")
+    elif observation_source_class == "cached":
+        issue_tokens.append("non_score_grade_freshness_present")
+    elif observation_source_class == "unknown":
+        issue_tokens.append("missing_evidence")
+    consumer_issues = build_consumer_issues(issue_tokens, missing_evidence)
+    data_quality = build_options_gamma_data_quality(
+        status=status,
+        data_quality_labels=data_quality_labels,
+        observation_source_class=observation_source_class,
+        consumer_issues=consumer_issues,
+    )
     return {
+        "schemaVersion": OPTIONS_CHAIN_GAMMA_OBSERVATION_SCHEMA_VERSION,
         "adapterName": ADAPTER_NAME,
         "adapterVersion": ADAPTER_VERSION,
         "status": status,
+        "observationSourceClass": observation_source_class,
         "underlying": underlying or None,
         "spot": spot,
         "chainAsOf": chain_as_of or None,
@@ -182,7 +211,20 @@ def build_options_chain_gamma_observation(
         "missingEvidence": missing_evidence,
         "blockedReasonCodes": blocked_reason_codes,
         "dataQualityLabels": data_quality_labels,
+        "dataQuality": data_quality,
         "consumerIssues": consumer_issues,
+        "blockedReasonDetails": build_options_gamma_reason_details(blocked_reason_codes, missing_evidence)
+        if status == "blocked"
+        else [],
+        "degradedReasonDetails": build_options_gamma_reason_details(
+            blocked_reason_codes,
+            missing_evidence,
+            data_quality_labels,
+        )
+        if status == "degraded"
+        else [],
+        "evidenceLimits": build_options_gamma_evidence_limits(consumer_issues),
+        "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
         "methodology": methodology,
         "rights": {
             "providerAuthorityVerified": flags["provider_authority_verified"],

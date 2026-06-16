@@ -13,11 +13,12 @@ from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from src.services.consumer_issue_labels import build_consumer_issues
+from src.services.consumer_issue_labels import build_consumer_issues, build_consumer_message
 
 
 OBSERVATION_CONTRACT_NAME = "optionsMarketStructureObservation"
 OBSERVATION_CONTRACT_VERSION = "options-market-structure-observation-v1"
+OPTIONS_GAMMA_OBSERVATION_SCHEMA_VERSION = "options_gamma_observation_contract_v1"
 GEX_FORMULA_ID = "gex_open_interest_spot_squared_one_percent_v1"
 GEX_FORMULA = "gamma * open_interest * multiplier * spot * spot * 0.01"
 GEX_UNIT_CONVENTION = "estimated_underlying_currency_delta_per_1pct_spot_move"
@@ -35,6 +36,16 @@ MIXED_SIDE_GEX_SHARE = 0.25
 MIXED_NET_GEX_SHARE = 0.35
 DEFAULT_MIN_CALCULATION_COVERAGE_PCT = 90.0
 ALLOWED_DATA_QUALITY_LABELS = ("live", "delayed", "estimated", "proxy", "unavailable")
+_DEMO_SOURCE_MARKERS = ("demo", "sample")
+_FIXTURE_SOURCE_MARKERS = ("fixture", "synthetic", "mock")
+_CACHED_SOURCE_MARKERS = ("cached", "cache", "stale", "delayed", "fallback", "proxy")
+_LIVE_SOURCE_MARKERS = ("live", "fresh", "realtime", "real-time", "real_time")
+_SOURCE_CLASS_ISSUES = {
+    "demo": ["proxy_or_sample_evidence_present"],
+    "fixture": ["proxy_or_sample_evidence_present"],
+    "cached": ["non_score_grade_freshness_present"],
+    "unknown": ["missing_evidence"],
+}
 _CALCULATION_PREREQUISITES = (
     "side",
     "strike",
@@ -118,10 +129,31 @@ def build_options_market_structure_observation(
         **field_coverage,
     }
 
-    consumer_issues = build_consumer_issues(blocked_reason_codes, missing_evidence, data_quality_labels)
+    observation_source_class = build_options_gamma_observation_source_class(
+        data_quality_labels,
+        [item["freshness"] for item in normalized],
+        [item["source"] for item in normalized],
+    )
+    issue_tokens = [*blocked_reason_codes, *data_quality_labels, *_source_class_issue_tokens(observation_source_class)]
+    consumer_issues = build_consumer_issues(issue_tokens, missing_evidence)
+    blocked_reason_details = build_options_gamma_reason_details(blocked_reason_codes, missing_evidence)
+    degraded_reason_details = build_options_gamma_reason_details(
+        blocked_reason_codes,
+        missing_evidence,
+        data_quality_labels,
+        _source_class_issue_tokens(observation_source_class),
+    )
+    data_quality = build_options_gamma_data_quality(
+        status=observation_state,
+        data_quality_labels=data_quality_labels,
+        observation_source_class=observation_source_class,
+        consumer_issues=consumer_issues,
+    )
     return {
+        "schemaVersion": OPTIONS_GAMMA_OBSERVATION_SCHEMA_VERSION,
         "contractName": OBSERVATION_CONTRACT_NAME,
         "contractVersion": OBSERVATION_CONTRACT_VERSION,
+        "observationSourceClass": observation_source_class,
         "observationOnly": True,
         "decisionGrade": False,
         "decisionGradeBlocked": True,
@@ -139,7 +171,11 @@ def build_options_market_structure_observation(
         "missingEvidence": missing_evidence,
         "blockedReasonCodes": blocked_reason_codes,
         "dataQualityLabels": data_quality_labels,
+        "dataQuality": data_quality,
         "consumerIssues": consumer_issues,
+        "blockedReasonDetails": blocked_reason_details if observation_state == "blocked" else [],
+        "degradedReasonDetails": degraded_reason_details if observation_state == "degraded" else [],
+        "evidenceLimits": build_options_gamma_evidence_limits(consumer_issues),
         "methodology": {
             "formulaId": GEX_FORMULA_ID,
             "formula": GEX_FORMULA,
@@ -505,6 +541,48 @@ def _data_quality_labels(
     return labels or ["unavailable"]
 
 
+def build_options_gamma_observation_source_class(*values: Any) -> str:
+    texts = _source_class_texts(values)
+    if any(any(marker in text for marker in _DEMO_SOURCE_MARKERS) for text in texts):
+        return "demo"
+    if any(any(marker in text for marker in _FIXTURE_SOURCE_MARKERS) for text in texts):
+        return "fixture"
+    if any(any(marker in text for marker in _CACHED_SOURCE_MARKERS) for text in texts):
+        return "cached"
+    if any(text in {"live", "fresh"} or any(marker in text for marker in _LIVE_SOURCE_MARKERS) for text in texts):
+        return "live"
+    return "unknown"
+
+
+def build_options_gamma_data_quality(
+    *,
+    status: str,
+    data_quality_labels: Sequence[str],
+    observation_source_class: str,
+    consumer_issues: Sequence[Mapping[str, str]],
+) -> dict[str, Any]:
+    return {
+        "status": status,
+        "labels": list(data_quality_labels),
+        "observationSourceClass": observation_source_class,
+        "observationOnly": True,
+        "decisionGrade": False,
+        "consumerMessage": build_consumer_message(consumer_issues),
+    }
+
+
+def build_options_gamma_reason_details(*sources: Any) -> list[dict[str, str]]:
+    return [dict(item) for item in build_consumer_issues(*sources)]
+
+
+def build_options_gamma_evidence_limits(issues: Sequence[Mapping[str, str]]) -> list[str]:
+    return _dedupe([str(issue.get("message") or "").strip() for issue in issues if issue.get("message")])
+
+
+def _source_class_issue_tokens(source_class: str) -> list[str]:
+    return list(_SOURCE_CLASS_ISSUES.get(source_class, []))
+
+
 def _normalize_quality_label(value: Any) -> str:
     text = str(value or "").strip().lower()
     if text in ALLOWED_DATA_QUALITY_LABELS:
@@ -551,6 +629,39 @@ def _coerce_int(value: Any) -> int | None:
 
 def _text(value: Any) -> str:
     return str(value or "").strip()
+
+
+def _source_class_texts(values: Sequence[Any]) -> list[str]:
+    texts: list[str] = []
+    for value in values:
+        texts.extend(_texts_from_value(value))
+    return _dedupe(texts)
+
+
+def _texts_from_value(value: Any) -> list[str]:
+    if value in (None, ""):
+        return []
+    if isinstance(value, str):
+        text = _text(value).lower()
+        return [text] if text else []
+    if isinstance(value, Mapping):
+        texts: list[str] = []
+        for key in ("source", "sourceClass", "freshness", "providerQuality"):
+            texts.extend(_texts_from_value(value.get(key)))
+        return texts
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        texts: list[str] = []
+        for item in value:
+            texts.extend(_texts_from_value(item))
+        return texts
+    if any(hasattr(value, key) for key in ("source", "sourceClass", "freshness", "provider_quality", "providerQuality")):
+        texts: list[str] = []
+        for key in ("source", "sourceClass", "freshness", "provider_quality", "providerQuality"):
+            if hasattr(value, key):
+                texts.extend(_texts_from_value(getattr(value, key)))
+        return texts
+    text = _text(value).lower()
+    return [text] if text else []
 
 
 def _pct(count: int, total: int) -> float:
