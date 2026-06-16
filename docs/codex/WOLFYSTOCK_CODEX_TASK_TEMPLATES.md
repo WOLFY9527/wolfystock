@@ -201,3 +201,34 @@ Validation:
 - git diff --check -- <changed-doc-files>
 - bash scripts/release_secret_scan.sh
 ```
+
+## Compact Surface Delta Task
+
+```text
+Use the currently selected Codex worktree/branch.
+
+Read and obey:
+- docs/codex/WOLFYSTOCK_SURFACE_MAP.md
+- docs/codex/WOLFYSTOCK_CODEX_DISCOVERY_PROTOCOL.md
+- docs/codex/WOLFYSTOCK_CODEX_EXECUTION_POLICY.md
+- docs/codex/WOLFYSTOCK_CODEX_VALIDATION_MATRIX.md
+- docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md
+- docs/codex/NO_ADVICE_REGRESSION_GUARDS.md
+
+Surface:
+Change type:
+Goal:
+Contract delta:
+Risk domain:
+Validation profile:
+Commit:
+```
+
+Validation:
+Docs-only profile:
+
+- `git diff --check`
+- `bash scripts/release_secret_scan.sh --base-ref origin/main`
+
+Commit:
+`docs(codex): add surface map discovery protocol`
