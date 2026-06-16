@@ -6,7 +6,15 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from src.services.options_market_structure_observation import GEX_FORMULA_ID, SIGN_CONVENTION
+from src.services.consumer_issue_labels import build_consumer_issues
+from src.services.options_market_structure_observation import (
+    GEX_FORMULA_ID,
+    SIGN_CONVENTION,
+    build_options_gamma_data_quality,
+    build_options_gamma_evidence_limits,
+    build_options_gamma_observation_source_class,
+    build_options_gamma_reason_details,
+)
 
 
 OPTIONS_GAMMA_METHODOLOGY_SCHEMA_VERSION = "options_gamma_methodology_contract_v1"
@@ -137,9 +145,30 @@ def assess_options_gamma_methodology_readiness(
     elif degraded:
         readiness = "degraded"
 
+    observation_source_class = build_options_gamma_observation_source_class(
+        _get(payload, "source", "sourceClass", "source_class"),
+        freshness_values,
+        contracts_value,
+    )
+    issue_tokens = [*blocked, *degraded]
+    if observation_source_class in {"fixture", "demo"}:
+        issue_tokens.append("proxy_or_sample_evidence_present")
+    elif observation_source_class == "cached":
+        issue_tokens.append("non_score_grade_freshness_present")
+    elif observation_source_class == "unknown":
+        issue_tokens.append("missing_evidence")
+    consumer_issues = build_consumer_issues(issue_tokens)
+    data_quality = build_options_gamma_data_quality(
+        status=readiness,
+        data_quality_labels=_methodology_quality_labels(freshness_values),
+        observation_source_class=observation_source_class,
+        consumer_issues=consumer_issues,
+    )
+
     return {
         "schemaVersion": OPTIONS_GAMMA_METHODOLOGY_SCHEMA_VERSION,
         "readiness": readiness,
+        "observationSourceClass": observation_source_class,
         "observationOnly": True,
         "decisionGrade": False,
         "formulaVersion": formula or None,
@@ -148,6 +177,11 @@ def assess_options_gamma_methodology_readiness(
         "missingRequirements": missing,
         "degradedReasons": degraded,
         "blockedReasons": blocked,
+        "dataQuality": data_quality,
+        "consumerIssues": consumer_issues,
+        "blockedReasonDetails": build_options_gamma_reason_details(blocked) if blocked else [],
+        "degradedReasonDetails": build_options_gamma_reason_details(degraded) if degraded else [],
+        "evidenceLimits": build_options_gamma_evidence_limits(consumer_issues),
         "noAdviceDisclosure": OPTIONS_GAMMA_NO_ADVICE_DISCLOSURE,
     }
 
@@ -304,6 +338,25 @@ def _freshness_values(payload: Mapping[str, Any], contracts: Sequence[Any]) -> l
     values = [_text(_get(payload, "freshness"))]
     values.extend(_text(_get(row, "freshness")) for row in contracts)
     return [value for value in values if value]
+
+
+def _methodology_quality_labels(values: Sequence[str]) -> list[str]:
+    labels: list[str] = []
+    for value in values:
+        normalized = _normalize(value)
+        if normalized in {"live", "fresh"}:
+            labels.append("live")
+        elif any(marker in normalized for marker in ("delayed", "cached", "stale", "fallback")):
+            labels.append("delayed")
+        elif any(marker in normalized for marker in ("fixture", "synthetic", "mock", "demo", "sample")):
+            labels.append("proxy")
+        else:
+            labels.append("unavailable")
+    deduped: list[str] = []
+    for label in labels:
+        if label not in deduped:
+            deduped.append(label)
+    return deduped or ["unavailable"]
 
 
 def _coverage_value(payload: Mapping[str, Any]) -> Any:

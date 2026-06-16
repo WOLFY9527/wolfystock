@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 
 import pytest
@@ -16,6 +17,9 @@ from src.services.options_market_structure_observation import (
     SIGN_CONVENTION,
     build_options_market_structure_observation,
 )
+
+
+INTERNAL_LOOKING_TOKEN = re.compile(r"\b[a-z]+(?:_[a-z0-9]+){1,}\b")
 
 
 @dataclass
@@ -75,6 +79,8 @@ def test_complete_normalized_contracts_emit_observation_only_gex_walls_flip_and_
     assert observation["decisionGradeBlocked"] is True
     assert observation["blockedReasonCodes"] == ["observation_only_not_decision_grade"]
     assert observation["observationState"] == "ready"
+    assert observation.get("schemaVersion") == "options_gamma_observation_contract_v1"
+    assert observation.get("observationSourceClass") == "live"
     assert observation["gammaRegime"] == "positive"
     assert observation["methodology"]["formulaId"] == GEX_FORMULA_ID
     assert observation["methodology"]["unitConvention"] == GEX_UNIT_CONVENTION
@@ -104,6 +110,10 @@ def test_complete_normalized_contracts_emit_observation_only_gex_walls_flip_and_
     assert observation["coverage"]["calculationCoveragePct"] == 100.0
     assert observation["missingEvidence"] == []
     assert observation["dataQualityLabels"] == ["live"]
+    assert observation.get("dataQuality", {}).get("status") == "ready"
+    assert observation.get("dataQuality", {}).get("observationSourceClass") == "live"
+    assert observation.get("dataQuality", {}).get("observationOnly") is True
+    assert observation.get("dataQuality", {}).get("decisionGrade") is False
 
 
 def test_missing_core_prerequisites_fail_closed_without_gex_guessing() -> None:
@@ -147,9 +157,17 @@ def test_missing_core_prerequisites_fail_closed_without_gex_guessing() -> None:
     }.issubset(set(observation["blockedReasonCodes"]))
     assert "unavailable" in observation["dataQualityLabels"]
     assert observation["consumerIssues"]
+    assert observation.get("dataQuality", {}).get("status") == "blocked"
+    assert observation.get("blockedReasonDetails")
+    assert observation.get("evidenceLimits")
     serialized_issues = json.dumps(observation["consumerIssues"], ensure_ascii=False).lower()
+    serialized_details = json.dumps(observation.get("blockedReasonDetails"), ensure_ascii=False).lower()
+    serialized_limits = json.dumps(observation.get("evidenceLimits"), ensure_ascii=False).lower()
     for raw_code in ("missing_spot_reference", "insufficient_usable_contracts", "methodology_approval_missing"):
         assert raw_code not in serialized_issues
+        assert raw_code not in serialized_details
+        assert raw_code not in serialized_limits
+    assert all(not INTERNAL_LOOKING_TOKEN.search(item) for item in observation["evidenceLimits"])
 
 
 def test_partial_contract_coverage_degrades_and_excludes_missing_inputs() -> None:
@@ -173,6 +191,31 @@ def test_partial_contract_coverage_degrades_and_excludes_missing_inputs() -> Non
     assert observation["missingEvidence"][0]["contractSymbol"] == "MISSING_IV"
     assert observation["dataQualityLabels"] == ["delayed"]
     assert observation["consumerIssues"]
+    assert observation.get("dataQuality", {}).get("status") == "degraded"
+    assert observation.get("degradedReasonDetails")
+    assert observation.get("evidenceLimits")
+
+
+def test_fixture_source_class_is_explicit_and_keeps_observation_non_live() -> None:
+    contracts = [
+        _ContractFixture(
+            "FIXTURE260619C00100000",
+            "call",
+            100.0,
+            "2026-06-19",
+            0.02,
+            100,
+            freshness="synthetic_fixture",
+            source="synthetic_options_lab_fixture",
+        )
+    ]
+
+    observation = build_options_market_structure_observation(contracts, spot=100.0)
+
+    assert observation.get("observationSourceClass") == "fixture"
+    assert observation.get("dataQuality", {}).get("observationSourceClass") == "fixture"
+    assert observation["observationOnly"] is True
+    assert observation["decisionGrade"] is False
 
 
 def test_existing_option_contract_schema_is_accepted_without_provider_runtime_coupling() -> None:

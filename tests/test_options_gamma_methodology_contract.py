@@ -60,6 +60,7 @@ def test_complete_methodology_evidence_is_approved_and_observation_only() -> Non
 
     assert result["schemaVersion"] == OPTIONS_GAMMA_METHODOLOGY_SCHEMA_VERSION
     assert result["readiness"] == "approved"
+    assert result.get("observationSourceClass") == "live"
     assert result["observationOnly"] is True
     assert result["decisionGrade"] is False
     assert result["formulaVersion"] == GEX_FORMULA_ID
@@ -68,6 +69,10 @@ def test_complete_methodology_evidence_is_approved_and_observation_only() -> Non
     assert result["degradedReasons"] == []
     assert result["blockedReasons"] == []
     assert result["noAdviceDisclosure"] == OPTIONS_GAMMA_NO_ADVICE_DISCLOSURE
+    assert result.get("dataQuality", {}).get("status") == "approved"
+    assert result.get("dataQuality", {}).get("observationSourceClass") == "live"
+    assert result.get("dataQuality", {}).get("observationOnly") is True
+    assert result.get("dataQuality", {}).get("decisionGrade") is False
 
     states = _requirement_states(result)
     assert states["openInterest"] == "satisfied"
@@ -165,6 +170,35 @@ def test_missing_option_records_are_unavailable_not_decision_grade() -> None:
         result["missingRequirements"]
     )
     assert "options_gamma_evidence_unavailable" in result["blockedReasons"]
+    assert result.get("dataQuality", {}).get("status") == "unavailable"
+    assert result.get("consumerIssues")
+    assert result.get("blockedReasonDetails")
+    assert result.get("evidenceLimits")
+    serialized_details = json.dumps(result.get("blockedReasonDetails"), ensure_ascii=False).lower()
+    serialized_limits = json.dumps(result.get("evidenceLimits"), ensure_ascii=False).lower()
+    assert "options_gamma_evidence_unavailable" not in serialized_details
+    assert "options_gamma_evidence_unavailable" not in serialized_limits
+
+
+def test_fixture_source_class_is_explicit_without_promoting_decision_grade() -> None:
+    payload = _complete_payload(
+        source="synthetic_options_lab_fixture",
+        freshness="synthetic_delayed",
+        contracts=[
+            {
+                **_complete_payload()["contracts"][0],
+                "source": "synthetic_options_lab_fixture",
+                "freshness": "synthetic_delayed",
+            }
+        ],
+    )
+
+    result = assess_options_gamma_methodology_readiness(payload)
+
+    assert result.get("observationSourceClass") == "fixture"
+    assert result.get("dataQuality", {}).get("observationSourceClass") == "fixture"
+    assert result["observationOnly"] is True
+    assert result["decisionGrade"] is False
 
 
 def test_coverage_below_threshold_degrades_when_core_evidence_is_calculable() -> None:

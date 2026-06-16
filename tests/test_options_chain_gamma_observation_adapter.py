@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import json
+import re
+from dataclasses import replace
 
 import pytest
 
@@ -15,6 +17,9 @@ from src.services.options_market_structure_observation import (
     GEX_FORMULA,
     SIGN_CONVENTION,
 )
+
+
+INTERNAL_LOOKING_TOKEN = re.compile(r"\b[a-z]+(?:_[a-z0-9]+){1,}\b")
 
 
 def _normalized_chain(*, freshness: str = "fresh", contract_overrides: list[dict] | None = None):
@@ -83,6 +88,8 @@ def test_complete_normalized_chain_produces_gex_gamma_observation() -> None:
 
     assert result["adapterName"] == "optionsChainGammaObservationAdapter"
     assert result["status"] == "available"
+    assert result.get("schemaVersion") == "options_chain_gamma_observation_contract_v1"
+    assert result.get("observationSourceClass") == "live"
     assert result["observationOnly"] is True
     assert result["decisionGrade"] is False
     assert result["underlying"] == "TEST"
@@ -99,6 +106,10 @@ def test_complete_normalized_chain_produces_gex_gamma_observation() -> None:
     assert observation["gexSummary"]["netGamma"] == pytest.approx(15_000.0)
     assert result["inputRecords"][0]["openInterest"] == 100
     assert result["inputRecords"][0]["gamma"] == 0.02
+    assert result.get("dataQuality", {}).get("status") == "available"
+    assert result.get("dataQuality", {}).get("observationSourceClass") == "live"
+    assert result.get("dataQuality", {}).get("observationOnly") is True
+    assert result.get("dataQuality", {}).get("decisionGrade") is False
 
     methodology = result["methodology"]
     assert methodology["formula"] == GEX_FORMULA
@@ -130,8 +141,16 @@ def test_missing_gamma_blocks_without_fabricating_greeks() -> None:
     assert "missing_gamma" in result["blockedReasonCodes"]
     assert any(item["code"] == "missing_gamma" for item in result["missingEvidence"])
     assert result["consumerIssues"]
+    assert result.get("dataQuality", {}).get("status") == "blocked"
+    assert result.get("blockedReasonDetails")
+    assert result.get("evidenceLimits")
     serialized_issues = json.dumps(result["consumerIssues"], ensure_ascii=False).lower()
+    serialized_details = json.dumps(result.get("blockedReasonDetails"), ensure_ascii=False).lower()
+    serialized_limits = json.dumps(result.get("evidenceLimits"), ensure_ascii=False).lower()
     assert "missing_gamma" not in serialized_issues
+    assert "missing_gamma" not in serialized_details
+    assert "missing_gamma" not in serialized_limits
+    assert all(not INTERNAL_LOOKING_TOKEN.search(item) for item in result["evidenceLimits"])
 
 
 def test_missing_open_interest_blocks_without_fabricating_oi() -> None:
@@ -197,6 +216,46 @@ def test_put_call_sign_convention_is_deterministic() -> None:
     assert summary["putGamma"] == pytest.approx(-20_000.0)
     assert summary["netGamma"] == pytest.approx(0.0)
     assert result["methodology"]["signConvention"] == SIGN_CONVENTION
+
+
+@pytest.mark.parametrize(
+    ("source", "freshness", "expected"),
+    [
+        ("approved_live_research_snapshot", "fresh", "live"),
+        ("cached_provider_snapshot", "cached", "cached"),
+        ("synthetic_options_lab_fixture", "synthetic_delayed", "fixture"),
+        ("options_demo_payload", "fresh", "demo"),
+        ("mystery_source", "mystery", "unknown"),
+    ],
+)
+def test_source_classification_is_explicit_for_live_cached_fixture_demo_and_unknown(
+    source: str,
+    freshness: str,
+    expected: str,
+) -> None:
+    base_chain = _normalized_chain(freshness=freshness)
+    chain = replace(
+        base_chain,
+        source=source,
+        freshness=freshness,
+        spot_reference={
+            **base_chain.spot_reference,
+            "source": source,
+            "freshness": freshness,
+        },
+        metadata={
+            **base_chain.metadata,
+            "source": source,
+            "freshness": freshness,
+        },
+    )
+
+    result = _approved_adapter(chain)
+
+    assert result.get("observationSourceClass") == expected
+    assert result.get("dataQuality", {}).get("observationSourceClass") == expected
+    assert result["observationOnly"] is True
+    assert result["decisionGrade"] is False
 
 
 def test_adapter_copy_avoids_advice_support_resistance_and_dealer_book_claims() -> None:

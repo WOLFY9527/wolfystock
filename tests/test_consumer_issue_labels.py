@@ -7,6 +7,8 @@ import json
 import re
 from typing import Any
 
+import pytest
+
 from src.services.consumer_issue_labels import build_consumer_issues, build_consumer_message
 
 
@@ -41,6 +43,24 @@ RAW_CODES = (
     "news",
     "catalyst",
     "freshness",
+    "missing_gamma",
+    "missing_open_interest",
+    "missing_multiplier",
+    "missing_strike",
+    "missing_expiration",
+    "missing_side",
+    "missing_iv",
+    "missing_as_of",
+    "freshness_unknown",
+    "freshness_degraded",
+    "options_gamma_evidence_unavailable",
+    "provider_rights_incomplete",
+    "formula_version_missing",
+    "formula_version_unsupported",
+    "sign_convention_missing",
+    "sign_convention_unsupported",
+    "coverage_missing",
+    "coverage_below_threshold",
 )
 FORBIDDEN_ADVICE_RE = re.compile(
     r"\b(buy|sell|hold|recommendation|target|stop|position\s*sizing)\b|买入|卖出|持有|目标价|止损|仓位",
@@ -75,6 +95,11 @@ def test_known_raw_codes_map_to_consumer_safe_issue_labels_without_echoing_codes
     assert "Research candidates unavailable" in labels
     assert "Low-evidence filter active" in labels
     assert "Fundamental evidence missing" in labels
+    assert "Gamma evidence missing" in labels
+    assert "Freshness needs verification" in labels
+    assert "Options gamma evidence unavailable" in labels
+    assert "Provider rights review incomplete" in labels
+    assert "Coverage below review threshold" in labels
 
     serialized = json.dumps(issues, ensure_ascii=False).lower()
     for raw_code in RAW_CODES:
@@ -102,6 +127,69 @@ def test_unknown_internal_looking_code_uses_generic_consumer_copy() -> None:
     for text in _strings(issues):
         assert ":" not in text
         assert "=" not in text
+
+
+@pytest.mark.parametrize(
+    ("raw_code", "expected"),
+    [
+        (
+            "missing_gamma",
+            {
+                "label": "Gamma evidence missing",
+                "message": "Some option records are missing gamma values for this observation.",
+                "severity": "warning",
+                "category": "options",
+            },
+        ),
+        (
+            "freshness_unknown",
+            {
+                "label": "Freshness needs verification",
+                "message": "The observation time cannot be verified from the current evidence.",
+                "severity": "warning",
+                "category": "freshness",
+            },
+        ),
+        (
+            "options_gamma_evidence_unavailable",
+            {
+                "label": "Options gamma evidence unavailable",
+                "message": "Options gamma evidence is not available for this observation.",
+                "severity": "warning",
+                "category": "options",
+            },
+        ),
+        (
+            "provider_rights_incomplete",
+            {
+                "label": "Provider rights review incomplete",
+                "message": "Provider rights are not fully confirmed for this observation.",
+                "severity": "warning",
+                "category": "rights",
+            },
+        ),
+        (
+            "coverage_below_threshold",
+            {
+                "label": "Coverage below review threshold",
+                "message": "Coverage is below the review threshold for this observation.",
+                "severity": "warning",
+                "category": "methodology",
+            },
+        ),
+    ],
+)
+def test_options_gamma_codes_project_to_specific_consumer_safe_copy(
+    raw_code: str,
+    expected: dict[str, str],
+) -> None:
+    issues = build_consumer_issues([raw_code])
+
+    assert issues == [expected]
+    for text in _strings(issues):
+        assert raw_code not in text.lower()
+        assert INTERNAL_CODE_RE.search(text) is None
+        assert FORBIDDEN_ADVICE_RE.search(text) is None
 
 
 def test_consumer_message_summarizes_safe_labels_without_advice_language() -> None:
