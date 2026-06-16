@@ -71,14 +71,57 @@ class MarketScenarioLabRegime(_MarketScenarioLabModel):
     status: str | None = None
 
 
-class MarketScenarioLabResponse(_MarketScenarioLabModel):
-    schemaVersion: str
-    baseRegime: MarketScenarioLabRegime
+class MarketScenarioLabContractStatus(_MarketScenarioLabModel):
+    state: Literal["available", "degraded", "unavailable"]
+    label: str
+    message: str
+    observationOnly: bool
+    decisionGrade: bool
+
+
+class MarketScenarioLabScenarioPreset(_MarketScenarioLabModel):
+    name: str
+    label: str
+    description: str
+
+
+class MarketScenarioLabBaseContext(_MarketScenarioLabModel):
+    source: str
+    label: str
+    message: str
+    evidenceState: Literal["ready", "degraded", "unavailable"]
+    scoringDriverCount: int
+
+
+class MarketScenarioLabScenarioOutput(_MarketScenarioLabModel):
     scenarioRegime: MarketScenarioLabRegime
     confidenceDelta: float
     driverDeltas: Dict[str, int]
     changedDrivers: List[str]
+    summary: List[str]
+
+
+class MarketScenarioLabConfirmInvalidateContext(_MarketScenarioLabModel):
+    confirm: List[str]
+    invalidate: List[str]
+
+
+class MarketScenarioLabResponse(_MarketScenarioLabModel):
+    schemaVersion: str
+    contractStatus: MarketScenarioLabContractStatus
+    observationOnly: bool
+    decisionGrade: bool
+    selectedScenario: MarketScenarioLabScenarioPreset
+    scenarioPresets: List[MarketScenarioLabScenarioPreset]
+    baseMarketContext: MarketScenarioLabBaseContext
+    baseRegime: MarketScenarioLabRegime
+    scenarioRegime: MarketScenarioLabRegime
+    scenarioOutput: MarketScenarioLabScenarioOutput
+    confidenceDelta: float
+    driverDeltas: Dict[str, int]
+    changedDrivers: List[str]
     scenarioSummary: List[str]
+    confirmInvalidateContext: MarketScenarioLabConfirmInvalidateContext
     whatWouldConfirm: List[str]
     whatWouldInvalidate: List[str]
     evidenceLimits: List[str]

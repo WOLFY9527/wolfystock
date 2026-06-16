@@ -13,6 +13,8 @@ from typing import Any, Mapping, Sequence
 
 SCHEMA_VERSION = "market_scenario_lab_engine.v1"
 NO_ADVICE_DISCLOSURE = "Research planning only; not a personalized decision basis."
+OBSERVATION_ONLY = True
+DECISION_GRADE = False
 
 DRIVER_KEYS: tuple[str, ...] = (
     "dealerGamma",
@@ -68,6 +70,40 @@ _NAMED_SCENARIOS: dict[str, dict[str, int]] = {
     },
     "gammaUnavailable": {},
 }
+_SCENARIO_PRESETS: tuple[dict[str, str], ...] = (
+    {
+        "name": "volatilitySpike",
+        "label": "Volatility stress observation",
+        "description": "Stress volatility and breadth inputs to compare research-context sensitivity.",
+    },
+    {
+        "name": "breadthBreakdown",
+        "label": "Breadth deterioration observation",
+        "description": "Stress market breadth inputs to compare research-context resilience.",
+    },
+    {
+        "name": "ratesUpDollarUp",
+        "label": "Rates and dollar stress observation",
+        "description": "Stress rates-dollar inputs to compare macro-pressure sensitivity.",
+    },
+    {
+        "name": "liquidityStress",
+        "label": "Liquidity stress observation",
+        "description": "Stress liquidity and cross-asset inputs to compare evidence limits.",
+    },
+    {
+        "name": "riskOnConfirmation",
+        "label": "Risk-on confirmation observation",
+        "description": "Lift multiple score-grade drivers to compare what would support a stronger frame.",
+    },
+    {
+        "name": "gammaUnavailable",
+        "label": "Gamma evidence gap observation",
+        "description": "Keep gamma evidence unavailable to compare capped scenario output.",
+    },
+)
+_SCENARIO_PRESETS_BY_NAME = {preset["name"]: preset for preset in _SCENARIO_PRESETS}
+_GENERIC_EVIDENCE_LIMIT = "No additional evidence limits were supplied with the base read."
 
 
 class MarketScenarioLabEngine:
@@ -83,7 +119,7 @@ class MarketScenarioLabEngine:
         scenario_input = _scenario_mapping(scenario)
         base = _base_from_inputs(base_decision=base_decision, driver_scores=driver_scores)
         if base["scoringDriverCount"] < _MIN_BASE_SCORING_DRIVERS:
-            return _unavailable_payload(base)
+            return _unavailable_payload(base, scenario_input)
 
         deltas = _scenario_deltas(scenario_input)
         scenario_scores = {
@@ -102,32 +138,58 @@ class MarketScenarioLabEngine:
         )
         changed_drivers = [key for key in DRIVER_KEYS if deltas.get(key, 0) != 0]
         confidence_delta = round(scenario_confidence_score - base_confidence_score, 2)
+        driver_deltas = {key: deltas.get(key, 0) for key in DRIVER_KEYS}
+        scenario_regime_payload = {
+            "regime": scenario_regime,
+            "confidence": _confidence_label(scenario_confidence_score),
+            "confidenceScore": scenario_confidence_score,
+        }
+        scenario_summary = _scenario_summary(deltas)
+        confirm_context = [
+            "Score-grade evidence would need to show the stressed drivers moving together in the scenario direction.",
+            (
+                "The scenario frame would need current breadth, volatility, rates-dollar, "
+                "liquidity, and cross-asset inputs."
+            ),
+        ]
+        invalidate_context = [
+            "The scenario frame weakens if score-grade evidence does not move with the selected shocks.",
+            "The scenario frame weakens if key drivers are proxy-only, stale, blocked, or observation-only.",
+        ]
+        evidence_limits = _evidence_limits(base, scenario_input)
 
         return {
             "schemaVersion": SCHEMA_VERSION,
+            "contractStatus": _contract_status(base=base, evidence_limits=evidence_limits),
+            "observationOnly": OBSERVATION_ONLY,
+            "decisionGrade": DECISION_GRADE,
+            "selectedScenario": _selected_scenario(scenario_input),
+            "scenarioPresets": _scenario_presets(),
+            "baseMarketContext": _base_market_context(base),
             "baseRegime": {
                 "regime": base["regime"],
                 "confidence": base["confidence"],
                 "confidenceScore": base_confidence_score,
             },
-            "scenarioRegime": {
-                "regime": scenario_regime,
-                "confidence": _confidence_label(scenario_confidence_score),
-                "confidenceScore": scenario_confidence_score,
+            "scenarioRegime": scenario_regime_payload,
+            "scenarioOutput": {
+                "scenarioRegime": scenario_regime_payload,
+                "confidenceDelta": confidence_delta,
+                "driverDeltas": driver_deltas,
+                "changedDrivers": changed_drivers,
+                "summary": scenario_summary,
             },
             "confidenceDelta": confidence_delta,
-            "driverDeltas": {key: deltas.get(key, 0) for key in DRIVER_KEYS},
+            "driverDeltas": driver_deltas,
             "changedDrivers": changed_drivers,
-            "scenarioSummary": _scenario_summary(deltas),
-            "whatWouldConfirm": [
-                "Score-grade evidence would need to show the stressed drivers moving together in the scenario direction.",
-                "The scenario frame would need current breadth, volatility, rates-dollar, liquidity, and cross-asset inputs.",
-            ],
-            "whatWouldInvalidate": [
-                "The scenario frame weakens if score-grade evidence does not move with the selected shocks.",
-                "The scenario frame weakens if key drivers are proxy-only, stale, blocked, or observation-only.",
-            ],
-            "evidenceLimits": _evidence_limits(base, scenario_input),
+            "scenarioSummary": scenario_summary,
+            "confirmInvalidateContext": {
+                "confirm": confirm_context,
+                "invalidate": invalidate_context,
+            },
+            "whatWouldConfirm": confirm_context,
+            "whatWouldInvalidate": invalidate_context,
+            "evidenceLimits": evidence_limits,
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
         }
 
@@ -180,7 +242,17 @@ def _base_from_inputs(
         "missingEvidence": list(decision.get("missingEvidence") or []),
         "dataQuality": decision.get("dataQuality") if isinstance(decision.get("dataQuality"), Mapping) else {},
         "scoringDriverCount": scoring_driver_count,
+        "contextSource": _base_context_source(decision=decision, driver_scores=driver_scores),
     }
+
+
+def _base_context_source(*, decision: Mapping[str, Any], driver_scores: Mapping[str, Any] | None) -> str:
+    schema_version = str(decision.get("schemaVersion") or "")
+    if schema_version or decision.get("regime") or decision.get("driverScores"):
+        return "decisionCockpitInput"
+    if isinstance(driver_scores, Mapping) and driver_scores:
+        return "driverScoreInput"
+    return "requestInput"
 
 
 def _normalize_driver_scores(raw_scores: Mapping[str, Any]) -> tuple[dict[str, int], dict[str, str]]:
@@ -205,8 +277,12 @@ def _scenario_mapping(scenario: Mapping[str, Any] | str | None) -> Mapping[str, 
     return {}
 
 
+def _scenario_name(scenario: Mapping[str, Any]) -> str:
+    return str(scenario.get("name") or scenario.get("scenarioName") or "").strip()
+
+
 def _scenario_deltas(scenario: Mapping[str, Any]) -> dict[str, int]:
-    name = str(scenario.get("name") or scenario.get("scenarioName") or "").strip()
+    name = _scenario_name(scenario)
     deltas = {key: 0 for key in DRIVER_KEYS}
     for key, value in _NAMED_SCENARIOS.get(name, {}).items():
         deltas[key] = value
@@ -324,10 +400,19 @@ def _evidence_limits(base: Mapping[str, Any], scenario: Mapping[str, Any]) -> li
         limits.append("Gamma evidence status is unavailable, so gamma-sensitive conclusions remain capped.")
     data_quality = base.get("dataQuality") if isinstance(base.get("dataQuality"), Mapping) else {}
     for reason in data_quality.get("confidenceCapReasons") or []:
-        text = str(reason)
+        text = _consumer_safe_confidence_limit(reason)
         if text and text not in limits:
             limits.append(text)
-    return _dedupe(limits) or ["No additional evidence limits were supplied with the base read."]
+    return _dedupe(limits) or [_GENERIC_EVIDENCE_LIMIT]
+
+
+def _consumer_safe_confidence_limit(reason: Any) -> str:
+    normalized = str(reason or "").strip().lower()
+    if normalized == "dealer_gamma_unavailable_caps_volatility_compression":
+        return "Dealer gamma evidence is unavailable, so volatility-compression confidence remains capped."
+    if not normalized:
+        return ""
+    return "The base read includes a data-quality confidence cap."
 
 
 def _gamma_status(scenario: Mapping[str, Any], base: Mapping[str, Any]) -> str:
@@ -341,29 +426,130 @@ def _gamma_status(scenario: Mapping[str, Any], base: Mapping[str, Any]) -> str:
     return "available"
 
 
-def _unavailable_payload(base: Mapping[str, Any]) -> dict[str, Any]:
+def _scenario_presets() -> list[dict[str, str]]:
+    return [dict(preset) for preset in _SCENARIO_PRESETS]
+
+
+def _selected_scenario(scenario: Mapping[str, Any]) -> dict[str, str]:
+    name = _scenario_name(scenario) or "customScenario"
+    preset = _SCENARIO_PRESETS_BY_NAME.get(name)
+    if preset is not None:
+        return dict(preset)
+    return {
+        "name": "customScenario",
+        "label": "Custom scenario observation",
+        "description": "Compare caller-supplied driver adjustments against the base research context.",
+    }
+
+
+def _base_market_context(base: Mapping[str, Any]) -> dict[str, Any]:
+    source = str(base.get("contextSource") or "requestInput")
+    labels = {
+        "decisionCockpitInput": "Decision Cockpit market context",
+        "driverScoreInput": "Driver score context",
+        "requestInput": "Request market context",
+    }
+    messages = {
+        "decisionCockpitInput": (
+            "Base regime context was supplied by the request and is treated as observation-only evidence."
+        ),
+        "driverScoreInput": (
+            "Base driver scores were supplied by the request and are treated as observation-only evidence."
+        ),
+        "requestInput": "Base market context was supplied by the request and is treated as observation-only evidence.",
+    }
+    return {
+        "source": source,
+        "label": labels.get(source, labels["requestInput"]),
+        "message": messages.get(source, messages["requestInput"]),
+        "evidenceState": _base_evidence_state(base),
+        "scoringDriverCount": int(base.get("scoringDriverCount") or 0),
+    }
+
+
+def _base_evidence_state(base: Mapping[str, Any]) -> str:
+    if int(base.get("scoringDriverCount") or 0) < _MIN_BASE_SCORING_DRIVERS:
+        return "unavailable"
+    evidence_states = base.get("evidenceStates") if isinstance(base.get("evidenceStates"), Mapping) else {}
+    if any(str(evidence_states.get(key) or "") != "score_grade" for key in DRIVER_KEYS):
+        return "degraded"
+    data_quality = base.get("dataQuality") if isinstance(base.get("dataQuality"), Mapping) else {}
+    if data_quality.get("confidenceCapReasons"):
+        return "degraded"
+    return "ready"
+
+
+def _contract_status(*, base: Mapping[str, Any], evidence_limits: Sequence[str]) -> dict[str, Any]:
+    if int(base.get("scoringDriverCount") or 0) < _MIN_BASE_SCORING_DRIVERS:
+        return _contract_status_payload(
+            state="unavailable",
+            label="Scenario unavailable",
+            message="Scenario lab needs at least three score-grade market drivers before comparing scenarios.",
+        )
+    if _base_evidence_state(base) == "degraded" or list(evidence_limits) != [_GENERIC_EVIDENCE_LIMIT]:
+        return _contract_status_payload(
+            state="degraded",
+            label="Scenario constrained by evidence gaps",
+            message="Scenario comparison is available, but incomplete evidence keeps the result observation-only.",
+        )
+    return _contract_status_payload(
+        state="available",
+        label="Scenario ready",
+        message="Scenario comparison is available as an observation-only research output.",
+    )
+
+
+def _contract_status_payload(*, state: str, label: str, message: str) -> dict[str, Any]:
+    return {
+        "state": state,
+        "label": label,
+        "message": message,
+        "observationOnly": OBSERVATION_ONLY,
+        "decisionGrade": DECISION_GRADE,
+    }
+
+
+def _unavailable_payload(base: Mapping[str, Any], scenario: Mapping[str, Any]) -> dict[str, Any]:
+    scenario_regime = {
+        "regime": "lowConfidence",
+        "confidence": "low",
+        "confidenceScore": 0.0,
+        "status": "unavailable",
+    }
+    scenario_summary = ["Scenario lab is unavailable because base score-grade regime evidence is missing."]
+    evidence_limits = ["Base regime evidence is missing or below the minimum driver coverage for scenario analysis."]
     return {
         "schemaVersion": SCHEMA_VERSION,
+        "contractStatus": _contract_status(base=base, evidence_limits=evidence_limits),
+        "observationOnly": OBSERVATION_ONLY,
+        "decisionGrade": DECISION_GRADE,
+        "selectedScenario": _selected_scenario(scenario),
+        "scenarioPresets": _scenario_presets(),
+        "baseMarketContext": _base_market_context(base),
         "baseRegime": {
             "regime": base["regime"],
             "confidence": base["confidence"],
             "confidenceScore": base["confidenceScore"],
         },
-        "scenarioRegime": {
-            "regime": "lowConfidence",
-            "confidence": "low",
-            "confidenceScore": 0.0,
-            "status": "unavailable",
+        "scenarioRegime": scenario_regime,
+        "scenarioOutput": {
+            "scenarioRegime": scenario_regime,
+            "confidenceDelta": 0.0,
+            "driverDeltas": {},
+            "changedDrivers": [],
+            "summary": scenario_summary,
         },
         "confidenceDelta": 0.0,
         "driverDeltas": {},
         "changedDrivers": [],
-        "scenarioSummary": ["Scenario lab is unavailable because base score-grade regime evidence is missing."],
+        "scenarioSummary": scenario_summary,
+        "confirmInvalidateContext": {
+            "confirm": [],
+            "invalidate": [],
+        },
         "whatWouldConfirm": [],
         "whatWouldInvalidate": [],
-        "evidenceLimits": [
-            "Base regime evidence is missing or below the minimum driver coverage for scenario analysis."
-        ],
+        "evidenceLimits": evidence_limits,
         "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
     }
 
