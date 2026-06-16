@@ -30,6 +30,14 @@ class _FakeDailyIntelligenceService:
             },
             "whatChanged": ["Regime observation updated."],
             "topResearchPriorities": [],
+            "sectionLinks": [
+                {
+                    "label": "Research Radar",
+                    "route": "/research/radar",
+                    "section": "topResearchPriorities",
+                    "reason": "research_queue_origin",
+                }
+            ],
             "scannerHighlights": [],
             "watchlistHighlights": [],
             "portfolioStructureHighlights": [],
@@ -69,6 +77,14 @@ def test_daily_intelligence_endpoint_uses_optional_user_context(monkeypatch) -> 
     assert payload["schemaVersion"] == "daily_intelligence_briefing_v1"
     assert payload["observationOnly"] is True
     assert payload["decisionGrade"] is False
+    assert payload["sectionLinks"] == [
+        {
+            "label": "Research Radar",
+            "route": "/research/radar",
+            "section": "topResearchPriorities",
+            "reason": "research_queue_origin",
+        }
+    ]
     assert fake_service.calls == [
         {
             "actor": {"actor_type": "anonymous", "role": "anonymous", "display_name": "Anonymous"},

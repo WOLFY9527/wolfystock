@@ -110,6 +110,26 @@ describe('research IA pages', () => {
         invalidationObservations: ['若广度明显收窄，当前观察需要重估。'],
       },
       whatChanged: ['研究队列更偏向相对强弱延续。'],
+      sectionLinks: [
+        {
+          label: 'Research Radar',
+          route: '/research/radar',
+          section: 'topResearchPriorities',
+          reason: 'research_queue_origin',
+        },
+        {
+          label: 'Scanner',
+          route: '/scanner',
+          section: 'scannerHighlights',
+          reason: 'scanner_candidates_origin',
+        },
+        {
+          label: 'Watchlist',
+          route: '/watchlist',
+          section: 'watchlistHighlights',
+          reason: 'watchlist_research_context',
+        },
+      ],
       topResearchPriorities: [
         {
           label: 'ALFA research queue',
@@ -119,6 +139,20 @@ describe('research IA pages', () => {
           observations: ['相对强弱改善。'],
           whatToVerify: ['确认跟随性。'],
           evidenceGaps: ['themeBreadth'],
+          evidenceLinks: [
+            {
+              label: 'Research Radar',
+              route: '/research/radar',
+              section: 'topResearchPriorities',
+              reason: 'research_queue_origin',
+            },
+            {
+              label: 'Stock Structure',
+              route: '/stocks/ALFA/structure-decision',
+              section: 'topResearchPriorities',
+              reason: 'symbol_structure_detail',
+            },
+          ],
         },
       ],
       scannerHighlights: [
@@ -129,6 +163,20 @@ describe('research IA pages', () => {
           whatToVerify: ['确认跟随性。'],
           evidenceGaps: ['themeBreadth'],
           riskFlags: ['evidence_partial'],
+          evidenceLinks: [
+            {
+              label: 'Research Radar',
+              route: '/research/radar',
+              section: 'scannerHighlights',
+              reason: 'research_queue_origin',
+            },
+            {
+              label: 'Stock Structure',
+              route: '/stocks/ALFA/structure-decision',
+              section: 'scannerHighlights',
+              reason: 'symbol_structure_detail',
+            },
+          ],
         },
       ],
       watchlistHighlights: [],
@@ -170,6 +218,7 @@ describe('research IA pages', () => {
     expect(page).toHaveTextContent('研究优先级');
     expect(page).toHaveTextContent('扫描重点');
     expect(page).toHaveTextContent('ALFA');
+    expect(page).toHaveTextContent('查看证据');
     expect(page).toHaveTextContent('情景风险区块暂不可用');
     expect(page).toHaveTextContent('登录后可附加个人研究队列、观察列表和持仓语境');
     expect(page.textContent || '').not.toContain('scenario_risk_read_model_unavailable');
@@ -180,6 +229,9 @@ describe('research IA pages', () => {
     expect(page).toHaveTextContent('false');
     expect(page).toHaveTextContent('missing_contracts');
     expect(screen.getByRole('link', { name: '研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
+    expect(screen.getAllByRole('link', { name: '查看证据：研究雷达' }).some((link) => link.getAttribute('href') === '/zh/research/radar')).toBe(true);
+    expect(screen.getByRole('link', { name: '查看证据：扫描器' })).toHaveAttribute('href', '/zh/scanner');
+    expect(screen.getAllByRole('link', { name: '查看证据：结构详情' })[0]).toHaveAttribute('href', '/zh/stocks/ALFA/structure-decision');
     expect(screen.getByRole('link', { name: '情景实验室' })).toHaveAttribute('href', '/zh/scenario-lab');
     expect(page.textContent || '').not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议/);
   });
