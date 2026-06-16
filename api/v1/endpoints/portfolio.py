@@ -45,6 +45,7 @@ from api.v1.schemas.portfolio import (
     PortfolioScenarioRiskRequest,
     PortfolioScenarioRiskResponse,
     PortfolioSnapshotResponse,
+    PortfolioStructureReviewResponse,
     PortfolioTradeCreateRequest,
     PortfolioTradeListItem,
     PortfolioTradeListResponse,
@@ -62,6 +63,7 @@ from src.services.portfolio_service import (
     PortfolioOversellError,
     PortfolioService,
 )
+from src.services.portfolio_structure_review_service import PortfolioStructureReviewService
 from src.services.execution_log_service import ExecutionLogService
 from src.utils.security import sanitize_message
 
@@ -101,6 +103,10 @@ _IMPORT_ARTIFACT_SECRET_KEY_MARKERS = (
 
 def _get_portfolio_service(current_user: CurrentUser) -> PortfolioService:
     return PortfolioService(owner_id=current_user.user_id)
+
+
+def _get_portfolio_structure_review_service() -> PortfolioStructureReviewService:
+    return PortfolioStructureReviewService()
 
 
 def _actor(current_user: CurrentUser) -> dict:
@@ -1239,6 +1245,37 @@ def get_snapshot(
         raise _bad_request(exc)
     except Exception as exc:
         raise _internal_error("Get snapshot failed", exc)
+
+
+@router.get(
+    "/structure-review",
+    response_model=PortfolioStructureReviewResponse,
+    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Get read-only portfolio structure review",
+)
+def get_structure_review(
+    account_id: Optional[int] = Query(None, description="Optional account id, default returns all accounts"),
+    as_of: Optional[date] = Query(None, description="Cached snapshot date; default uses latest cached date"),
+    cost_method: str = Query("fifo", description="Cost method: fifo or avg"),
+    benchmark: Optional[str] = Query(None, description="Optional benchmark symbol for comparative structure context"),
+    max_items: Optional[int] = Query(None, ge=1, le=50, description="Maximum holdings to evaluate"),
+    current_user: CurrentUser = Depends(get_current_user),
+    review_service: PortfolioStructureReviewService = Depends(_get_portfolio_structure_review_service),
+) -> PortfolioStructureReviewResponse:
+    try:
+        payload = review_service.build_review(
+            account_id=account_id,
+            as_of=as_of,
+            cost_method=cost_method,
+            benchmark=benchmark,
+            max_items=max_items,
+            owner_id=current_user.user_id,
+        )
+        return PortfolioStructureReviewResponse(**payload)
+    except ValueError as exc:
+        raise _bad_request(exc)
+    except Exception as exc:
+        raise _internal_error("Get portfolio structure review failed", exc)
 
 
 @router.get(
