@@ -7,11 +7,12 @@ import ResearchRadarPage from '../ResearchRadarPage';
 import ScenarioLabPage from '../ScenarioLabPage';
 import StockStructureDecisionEntryPage from '../StockStructureDecisionEntryPage';
 
-const { languageState, getDecisionCockpitMock, getDailyIntelligenceMock, getResearchRadarMock } = vi.hoisted(() => ({
+const { languageState, getDecisionCockpitMock, getDailyIntelligenceMock, getResearchRadarMock, runScenarioLabMock } = vi.hoisted(() => ({
   languageState: { value: 'zh' as 'zh' | 'en' },
   getDecisionCockpitMock: vi.fn(),
   getDailyIntelligenceMock: vi.fn(),
   getResearchRadarMock: vi.fn(),
+  runScenarioLabMock: vi.fn(),
 }));
 
 vi.mock('../../contexts/UiLanguageContext', () => ({
@@ -36,6 +37,12 @@ vi.mock('../../api/dailyIntelligence', () => ({
 vi.mock('../../api/researchRadar', () => ({
   researchRadarApi: {
     getResearchRadar: (...args: unknown[]) => getResearchRadarMock(...args),
+  },
+}));
+
+vi.mock('../../api/scenarioLab', () => ({
+  scenarioLabApi: {
+    runScenarioLab: (...args: unknown[]) => runScenarioLabMock(...args),
   },
 }));
 
@@ -332,15 +339,180 @@ describe('research IA pages', () => {
     expect(page.textContent || '').not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议/);
   });
 
-  it('renders Scenario Lab as a static placeholder with explicit non-decision-grade state', () => {
+  it('renders Scenario Lab as a compact research workflow backed by the scenario contract', async () => {
+    getDecisionCockpitMock.mockResolvedValue({
+      schemaVersion: 'market_decision_cockpit.v1',
+      generatedAt: '2026-06-15T09:30:00Z',
+      marketRegimeDecision: {
+        regime: 'riskOn',
+        confidence: 'medium',
+        confidenceScore: 0.68,
+        driverScores: {
+          dealerGamma: { score: 0, evidenceState: 'unavailable' },
+          breadthParticipation: { score: 58, evidenceState: 'score_grade' },
+          volatilityStructure: { score: 72, evidenceState: 'score_grade' },
+          ratesDollar: { score: 34, evidenceState: 'score_grade' },
+          liquidityCredit: { score: 65, evidenceState: 'score_grade' },
+          crossAssetRisk: { score: 28, evidenceState: 'score_grade' },
+          sectorThemeRotation: { score: 52, evidenceState: 'score_grade' },
+          eventCatalyst: { score: 0, evidenceState: 'unavailable' },
+        },
+      },
+      researchQueuePreview: {
+        topCandidates: [],
+        queueQuality: 'mixed',
+        evidenceGaps: [],
+        previewOnly: true,
+      },
+      optionsStructureStatus: {
+        gammaEvidenceStatus: 'unavailable',
+        observationOnly: true,
+        decisionGrade: false,
+        missingEvidence: [],
+        blockedReasonCodes: [],
+      },
+      cockpitSummary: {
+        whatChanged: [],
+        whyItMatters: [],
+        whatToWatch: [],
+        confidenceLimits: [],
+      },
+      noAdviceDisclosure: 'Research context only.',
+      dataQuality: { status: 'partial' },
+    });
+    runScenarioLabMock.mockResolvedValue({
+      schemaVersion: 'market_scenario_lab_engine.v1',
+      baseRegime: {
+        regime: 'riskOn',
+        confidence: 'medium',
+        confidenceScore: 0.68,
+      },
+      scenarioRegime: {
+        regime: 'mixed',
+        confidence: 'low',
+        confidenceScore: 0.43,
+      },
+      confidenceDelta: -0.25,
+      driverDeltas: {
+        dealerGamma: 0,
+        breadthParticipation: -75,
+        volatilityStructure: -145,
+        ratesDollar: 0,
+        liquidityCredit: 0,
+        crossAssetRisk: -40,
+        sectorThemeRotation: 0,
+        eventCatalyst: 0,
+      },
+      changedDrivers: ['breadthParticipation', 'volatilityStructure', 'crossAssetRisk'],
+      scenarioSummary: [
+        'Breadth participation weakens quickly under the selected stress.',
+        'Volatility structure flips into a defensive posture.',
+      ],
+      whatWouldConfirm: [
+        'Score-grade evidence would need to show the stressed drivers moving together in the scenario direction.',
+      ],
+      whatWouldInvalidate: [
+        'The scenario frame weakens if score-grade evidence does not move with the selected shocks.',
+      ],
+      evidenceLimits: [
+        'Gamma evidence status is unavailable, so gamma-sensitive conclusions remain capped.',
+      ],
+      noAdviceDisclosure: 'Research planning only; not a personalized decision basis.',
+    });
+
     renderRoute(<ScenarioLabPage />, '/zh/scenario-lab');
 
-    const page = screen.getByTestId('scenario-lab-page');
-    expect(page).toHaveTextContent('只读情景工作台占位入口');
-    expect(page).toHaveTextContent('decisionGrade=false');
-    expect(page).toHaveTextContent('observationOnly=true');
-    expect(screen.getByText('预留给只读情景对照；当前占位页不调用后端契约。')).toBeInTheDocument();
+    const page = await screen.findByTestId('scenario-lab-page');
+    expect(page).toHaveTextContent('研究情景工作台');
+    expect(page).toHaveTextContent('波动冲击');
+    expect(page).toHaveTextContent('基准状态');
+    expect(page).toHaveTextContent('情景输出');
+    expect(page).toHaveTextContent('Breadth participation weakens quickly under the selected stress.');
+    expect(screen.getByText('Gamma evidence status is unavailable, so gamma-sensitive conclusions remain capped.')).toBeInTheDocument();
+    expect(page).toHaveTextContent('仅观察');
+    expect(page).toHaveTextContent('非决策级');
     expect(screen.getByRole('link', { name: '决策驾驶舱' })).toHaveAttribute('href', '/zh/market/decision-cockpit');
+    expect(screen.getByRole('button', { name: '波动冲击' })).toBeInTheDocument();
+    await waitFor(() => expect(runScenarioLabMock).toHaveBeenCalledWith(expect.objectContaining({
+      scenarioName: 'volatilitySpike',
+      baseRegime: expect.objectContaining({
+        regime: 'riskOn',
+        confidence: 'medium',
+      }),
+    })));
+    expect(page.textContent || '').not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议/);
+    expect(page.textContent || '').not.toMatch(/raw|debug|provider|schema/i);
+  });
+
+  it('renders Scenario Lab with an unavailable scenario state when base evidence is insufficient', async () => {
+    getDecisionCockpitMock.mockResolvedValue({
+      schemaVersion: 'market_decision_cockpit.v1',
+      generatedAt: '2026-06-15T09:30:00Z',
+      marketRegimeDecision: {
+        regime: 'lowConfidence',
+        confidence: 'low',
+        driverScores: {
+          breadthParticipation: { score: 0, evidenceState: 'unavailable' },
+          volatilityStructure: { score: 0, evidenceState: 'unavailable' },
+        },
+      },
+      researchQueuePreview: {
+        topCandidates: [],
+        queueQuality: 'thin',
+        evidenceGaps: [],
+        previewOnly: true,
+      },
+      optionsStructureStatus: {
+        gammaEvidenceStatus: 'unavailable',
+        observationOnly: true,
+        decisionGrade: false,
+        missingEvidence: [],
+        blockedReasonCodes: [],
+      },
+      cockpitSummary: {
+        whatChanged: [],
+        whyItMatters: [],
+        whatToWatch: [],
+        confidenceLimits: [],
+      },
+      noAdviceDisclosure: 'Research context only.',
+      dataQuality: { status: 'degraded' },
+    });
+    runScenarioLabMock.mockResolvedValue({
+      schemaVersion: 'market_scenario_lab_engine.v1',
+      baseRegime: {
+        regime: 'lowConfidence',
+        confidence: 'low',
+        confidenceScore: 0,
+      },
+      scenarioRegime: {
+        regime: 'lowConfidence',
+        confidence: 'low',
+        confidenceScore: 0,
+        status: 'unavailable',
+      },
+      confidenceDelta: 0,
+      driverDeltas: {},
+      changedDrivers: [],
+      scenarioSummary: [
+        'Scenario lab is unavailable because base score-grade regime evidence is missing.',
+      ],
+      whatWouldConfirm: [],
+      whatWouldInvalidate: [],
+      evidenceLimits: [
+        'Base regime evidence is missing or below the minimum driver coverage for scenario analysis.',
+      ],
+      noAdviceDisclosure: 'Research planning only; not a personalized decision basis.',
+    });
+
+    renderRoute(<ScenarioLabPage />, '/zh/scenario-lab?scenario=gammaUnavailable');
+
+    const page = await screen.findByTestId('scenario-lab-page');
+    expect(page).toHaveTextContent('当前情景暂不可生成');
+    expect(page).toHaveTextContent('Base regime evidence is missing or below the minimum driver coverage for scenario analysis.');
+    await waitFor(() => expect(runScenarioLabMock).toHaveBeenCalledWith(expect.objectContaining({
+      scenarioName: 'gammaUnavailable',
+    })));
     expect(page.textContent || '').not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议/);
   });
 });
