@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -41,10 +42,20 @@ FORBIDDEN_IMPORT_PREFIXES = (
     "src.services.market_rotation_radar_service",
     "src.auth",
 )
+INTERNAL_CODE_RE = re.compile(r"[a-z][a-z0-9]*_[a-z0-9_]+|[a-zA-Z]+:[a-zA-Z0-9_.-]+|=")
 
 
 def _serialized(payload: object) -> str:
     return json.dumps(payload, ensure_ascii=False, sort_keys=True).lower()
+
+
+def _assert_consumer_issues_safe(issues: object, raw_codes: tuple[str, ...]) -> None:
+    serialized = _serialized(issues)
+    for raw_code in raw_codes:
+        if INTERNAL_CODE_RE.search(raw_code) or raw_code != raw_code.lower():
+            assert raw_code.lower() not in serialized
+    assert INTERNAL_CODE_RE.search(serialized) is None
+    assert not any(term.lower() in serialized for term in FORBIDDEN_PUBLIC_TERMS)
 
 
 def _fixed_now() -> datetime:
@@ -140,6 +151,46 @@ def test_empty_or_missing_candidates_fail_closed_with_degraded_queue() -> None:
     assert payload["evidenceGaps"] == ["scannerCandidates"]
     assert payload["marketContextFit"] == "unavailable"
     assert payload["aggregateSummary"]["queueQuality"] == "degraded"
+    assert payload["consumerIssues"]
+    assert payload["dataQuality"]["consumerIssues"]
+
+
+def test_low_evidence_queue_keeps_raw_codes_separate_from_consumer_issues() -> None:
+    payload = ResearchRadarService(now=_fixed_now).build_radar(
+        candidates=[
+            {
+                "ticker": "THIN",
+                "relativeStrength": 35,
+                "volumeExpansion": 0.5,
+                "trendStructure": "weak",
+                "avgDollarVolume": 1000,
+                "evidenceQuality": {
+                    "state": "missing",
+                    "score": 10,
+                    "missing": ["fundamentals", "news", "catalyst", "freshness"],
+                },
+            }
+        ]
+    )
+
+    item = payload["researchQueue"][0]
+    assert item["researchBias"] == "avoidLowEvidence"
+    assert {"low_liquidity", "missing_evidence"}.issubset(set(item["riskFlags"]))
+    assert item["evidenceGaps"] == ["fundamentals", "news", "catalyst", "freshness"]
+    assert item["consumerIssues"]
+    assert payload["consumerIssues"]
+    _assert_consumer_issues_safe(
+        item["consumerIssues"],
+        (
+            "avoidLowEvidence",
+            "low_liquidity",
+            "missing_evidence",
+            "fundamentals",
+            "news",
+            "catalyst",
+            "freshness",
+        ),
+    )
 
 
 class _FakeScannerRepository:

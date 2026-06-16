@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
@@ -23,6 +24,21 @@ from src.services.market_overview_service import (
     get_freshness_status,
 )
 from src.services.official_macro_transport import MacroObservation
+
+
+INTERNAL_CODE_RE = re.compile(r"[a-z][a-z0-9]*_[a-z0-9_]+|[a-zA-Z]+:[a-zA-Z0-9_.-]+|=")
+FORBIDDEN_ADVICE_RE = re.compile(
+    r"\b(buy|sell|hold|recommendation|target|stop|position\s*sizing)\b|买入|卖出|持有|目标价|止损|仓位",
+    re.IGNORECASE,
+)
+
+
+def _assert_consumer_issues_safe(issues: object, raw_codes: tuple[str, ...]) -> None:
+    serialized = json.dumps(issues, ensure_ascii=False).lower()
+    for raw_code in raw_codes:
+        assert raw_code.lower() not in serialized
+    assert INTERNAL_CODE_RE.search(serialized) is None
+    assert FORBIDDEN_ADVICE_RE.search(serialized) is None
 
 
 def _regime_ready_temperature_inputs(*, proxy_dxy: bool = True, observation_only_btc: bool = True) -> dict:
@@ -486,6 +502,11 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         self.assertGreater(payload["excludedInputCount"], 0)
         self.assertFalse(payload["isReliable"])
         self.assertEqual(payload["evidenceSnapshot"]["degradationReason"], "provider_unavailable")
+        self.assertTrue(payload["consumerIssues"])
+        _assert_consumer_issues_safe(
+            payload["consumerIssues"],
+            ("freshness_blocked:fallback", "insufficient_reliable_inputs", "provider_unavailable"),
+        )
         self.assertEqual(set(payload["scores"].keys()), {"overall", "usRiskAppetite", "cnMoneyEffect", "macroPressure", "liquidity"})
         for score in payload["scores"].values():
             self.assertGreaterEqual(score["value"], 0)

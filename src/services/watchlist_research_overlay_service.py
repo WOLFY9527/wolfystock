@@ -7,6 +7,7 @@ import re
 from collections import Counter
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
+from src.services.consumer_issue_labels import build_consumer_issues
 from src.services.watchlist_service import WatchlistService
 
 
@@ -46,6 +47,12 @@ class WatchlistResearchOverlayService:
             "aggregateSummary": aggregate_summary,
             "missingEvidence": missing_evidence,
             "dataQuality": data_quality,
+            "consumerIssues": build_consumer_issues(
+                missing_evidence,
+                data_quality,
+                [item.get("riskFlags") for item in items],
+                [item.get("evidenceGaps") for item in items],
+            ),
             "noAdviceDisclosure": WATCHLIST_RESEARCH_OVERLAY_NO_ADVICE_DISCLOSURE,
         }
 
@@ -64,7 +71,9 @@ class WatchlistResearchOverlayService:
                 "unavailableCount": 1,
                 "missingEvidenceCount": 1,
                 "failClosed": True,
+                "consumerIssues": build_consumer_issues([reason]),
             },
+            "consumerIssues": build_consumer_issues([reason]),
             "noAdviceDisclosure": WATCHLIST_RESEARCH_OVERLAY_NO_ADVICE_DISCLOSURE,
         }
 
@@ -97,6 +106,7 @@ class WatchlistResearchOverlayService:
             "whatToVerify": what_to_verify,
             "riskFlags": risk_flags,
             "evidenceGaps": evidence_gaps,
+            "consumerIssues": build_consumer_issues(evidence_gaps, risk_flags, freshness_state),
             "freshness": {
                 "state": freshness_state,
                 "lastReviewedAt": cls._text(item.get("last_reviewed_at")),
@@ -265,6 +275,7 @@ class WatchlistResearchOverlayService:
             "unavailableCount": unavailable_count,
             "missingEvidenceCount": missing_evidence_count,
             "failClosed": state != "ready" or missing_evidence_count > 0,
+            "consumerIssues": build_consumer_issues(cls._missing_evidence(items), state),
         }
 
     @classmethod

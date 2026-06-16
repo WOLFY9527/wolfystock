@@ -90,6 +90,14 @@ class _FakePortfolioStructureReviewService:
                 "readOnly": True,
                 "failClosed": False,
             },
+            "consumerIssues": [
+                {
+                    "label": "Evidence needs review",
+                    "message": "Some quality checks are not fully cleared yet.",
+                    "severity": "info",
+                    "category": "evidence",
+                }
+            ],
             "noAdviceDisclosure": "Observation-only research context; not personalized financial advice and not an instruction.",
         }
 
@@ -122,6 +130,7 @@ def test_portfolio_structure_review_endpoint_returns_read_only_projection() -> N
     assert payload["consumerSummary"] == "Structure review available"
     assert payload["drilldownSymbols"] == ["AAPL"]
     assert payload["dataQuality"]["readOnly"] is True
+    assert payload["consumerIssues"][0]["label"] == "Evidence needs review"
     assert fake_service.calls == [
         {
             "account_id": 7,

@@ -330,6 +330,10 @@ def test_structure_review_fails_closed_when_cached_holdings_are_unavailable() ->
     assert {"kind": "cached_portfolio_holdings", "message": "Cached portfolio holdings are unavailable."} in payload[
         "missingEvidence"
     ]
+    assert payload["consumerIssues"]
+    serialized_issues = json.dumps(payload["consumerIssues"], ensure_ascii=False).lower()
+    assert "cached_portfolio_holdings" not in serialized_issues
+    assert not any(re.search(pattern, serialized_issues) for pattern in FORBIDDEN_RESEARCH_TOKENS)
     assert structure_service.calls == []
     assert repo.write_calls == []
 
@@ -369,6 +373,14 @@ def test_structure_review_fails_closed_for_missing_security_metadata() -> None:
                 {
                     "kind": "security_metadata",
                     "message": "Ticker, market, or currency metadata is missing for this cached holding.",
+                }
+            ],
+            "consumerIssues": [
+                {
+                    "label": "Evidence needs review",
+                    "message": "Some quality checks are not fully cleared yet.",
+                    "severity": "info",
+                    "category": "evidence",
                 }
             ],
         }

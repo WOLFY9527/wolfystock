@@ -158,6 +158,7 @@ def test_market_scenario_lab_accepts_base_regime_and_named_scenario_without_muta
         "whatWouldConfirm",
         "whatWouldInvalidate",
         "evidenceLimits",
+        "consumerIssues",
         "noAdviceDisclosure",
     ]
     assert payload["schemaVersion"] == "market_scenario_lab_engine.v1"
@@ -207,6 +208,7 @@ def test_market_scenario_lab_accepts_base_regime_and_named_scenario_without_muta
         "crossAssetRisk",
     ]
     assert payload["noAdviceDisclosure"] == "Research planning only; not a personalized decision basis."
+    assert payload["consumerIssues"]
 
     serialized = _serialized_values(payload)
     for forbidden in FORBIDDEN_PUBLIC_TERMS:

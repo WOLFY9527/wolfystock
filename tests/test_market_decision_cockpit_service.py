@@ -70,6 +70,7 @@ NARRATIVE_KEYS = (
     "noAdviceDisclosure",
 )
 ROUTE_RE = re.compile(r"^/[A-Za-z0-9][A-Za-z0-9/_-]*(?:\?[A-Za-z0-9=&._%-]+)?$")
+INTERNAL_CODE_RE = re.compile(r"[a-z][a-z0-9]*_[a-z0-9_]+|[a-zA-Z]+:[a-zA-Z0-9_.-]+|=")
 
 
 def _item(
@@ -194,7 +195,7 @@ def _assert_no_forbidden_public_terms(payload: object) -> None:
             assert forbidden not in serialized
 
 
-def _assert_consumer_safe_cockpit_narrative(payload: Mapping[str, Any]) -> None:
+def _assert_consumer_safe_cockpit_narrative(payload: dict[str, Any]) -> None:
     for key in NARRATIVE_KEYS:
         assert key in payload
     narrative = {key: payload[key] for key in NARRATIVE_KEYS}
@@ -208,6 +209,18 @@ def _assert_consumer_safe_cockpit_narrative(payload: Mapping[str, Any]) -> None:
         assert not target["route"].startswith("/api/")
     assert payload["observationOnly"] is True
     assert payload["decisionGrade"] is False
+
+
+def _assert_consumer_issues_safe(issues: object, raw_codes: tuple[str, ...]) -> None:
+    serialized = json.dumps(issues, ensure_ascii=False).lower()
+    for raw_code in raw_codes:
+        assert raw_code.lower() not in serialized
+    assert INTERNAL_CODE_RE.search(serialized) is None
+    for forbidden in FORBIDDEN_PUBLIC_TERMS:
+        if forbidden in FORBIDDEN_PUBLIC_WORD_TERMS:
+            assert re.search(rf"\b{re.escape(forbidden)}\b", serialized) is None
+        else:
+            assert forbidden not in serialized
 
 
 def test_cockpit_uses_regime_engine_as_primary_judgment_and_shapes_safe_aggregate() -> None:
@@ -290,12 +303,20 @@ def test_cockpit_uses_regime_engine_as_primary_judgment_and_shapes_safe_aggregat
     assert options["decisionGrade"] is False
     assert "option_chain_unavailable" in options["blockedReasonCodes"]
     assert "missing_spot_reference" in options["blockedReasonCodes"]
+    assert "consumerIssues" in options
+    _assert_consumer_issues_safe(
+        options["consumerIssues"],
+        ("option_chain_unavailable", "missing_spot_reference", "observation_only_not_decision_grade"),
+    )
 
     assert payload["cockpitSummary"]["whatChanged"]
     assert payload["cockpitSummary"]["whyItMatters"]
     assert payload["cockpitSummary"]["whatToWatch"]
     assert payload["cockpitSummary"]["confidenceLimits"]
     assert payload["dataQuality"]["status"] == "degraded"
+    assert payload["consumerIssues"]
+    assert payload["dataQuality"]["consumerIssues"]
+    assert "Options gamma unavailable" in {issue["label"] for issue in payload["consumerIssues"]}
 
     _assert_no_forbidden_public_terms(payload)
     _assert_consumer_safe_cockpit_narrative(payload)
@@ -338,6 +359,13 @@ def test_missing_inputs_fail_closed_with_empty_research_preview_and_blocked_opti
     assert payload["driverAttribution"]["topPositiveDrivers"] == []
     assert payload["driverAttribution"]["topNegativeDrivers"] == []
     assert payload["driverAttribution"]["unavailableDrivers"]
+    assert payload["researchQueuePreview"]["consumerIssues"]
+    assert payload["optionsStructureStatus"]["consumerIssues"]
+    assert payload["consumerIssues"]
+    _assert_consumer_issues_safe(
+        payload["consumerIssues"],
+        ("research_candidates_unavailable", "option_chain_unavailable", "missing_contracts"),
+    )
 
 
 def test_driver_attribution_surfaces_conflicting_positive_and_negative_drivers() -> None:

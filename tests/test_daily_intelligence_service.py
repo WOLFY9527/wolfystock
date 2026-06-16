@@ -33,6 +33,11 @@ FORBIDDEN_RAW_TOKENS = (
 )
 FORBIDDEN_ADVICE_WORDS = ("buy", "sell", "hold", "recommendation", "target", "stop")
 ROUTE_RE = re.compile(r"^/[A-Za-z0-9][A-Za-z0-9/_-]*(?:\?[A-Za-z0-9=&._%-]+)?$")
+INTERNAL_CODE_RE = re.compile(r"[a-z][a-z0-9]*_[a-z0-9_]+|[a-zA-Z]+:[a-zA-Z0-9_.-]+|=")
+FORBIDDEN_ADVICE_RE = re.compile(
+    r"\b(buy|sell|hold|recommendation|target|stop|position\s*sizing)\b|买入|卖出|持有|目标价|止损|仓位",
+    re.IGNORECASE,
+)
 
 
 def _serialized_narrative_values(payload: object) -> str:
@@ -83,6 +88,14 @@ def _assert_consumer_safe_narrative(payload: dict[str, Any]) -> None:
     for word in FORBIDDEN_ADVICE_WORDS:
         assert re.search(rf"\b{re.escape(word)}\b", serialized_lower) is None
     assert "position sizing" not in serialized_lower
+
+
+def _assert_consumer_issues_safe(issues: object, raw_codes: tuple[str, ...]) -> None:
+    serialized = json.dumps(issues, ensure_ascii=False).lower()
+    for raw_code in raw_codes:
+        assert raw_code.lower() not in serialized
+    assert INTERNAL_CODE_RE.search(serialized) is None
+    assert FORBIDDEN_ADVICE_RE.search(serialized) is None
 
 
 class _FakeMarketOverviewService:
@@ -289,6 +302,18 @@ def test_build_briefing_projects_required_contract_and_degrades_scenario_risks()
         assert ROUTE_RE.fullmatch(target["route"])
         assert not target["route"].startswith("/api/")
     _assert_consumer_safe_narrative(payload)
+    assert payload["consumerIssues"]
+    _assert_consumer_issues_safe(
+        payload["consumerIssues"],
+        (
+            "scannerCandidates",
+            "themeBreadth",
+            "local_ohlcv_evidence",
+            "cached_portfolio_holdings",
+            "theme_or_sector_exposure",
+            "scenario_risk_read_model_unavailable",
+        ),
+    )
 
 
 def test_build_briefing_does_not_invent_evidence_links_when_owner_context_is_missing() -> None:

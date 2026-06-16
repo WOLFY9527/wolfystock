@@ -59,6 +59,14 @@ class _FakeDailyIntelligenceService:
                     "reason": "Research radar queue context.",
                 }
             ],
+            "consumerIssues": [
+                {
+                    "label": "Evidence needs review",
+                    "message": "Some quality checks are not fully cleared yet.",
+                    "severity": "info",
+                    "category": "evidence",
+                }
+            ],
             "noAdviceDisclosure": "Observation-only research briefing; not personalized financial advice.",
             "observationOnly": True,
             "decisionGrade": False,
@@ -93,6 +101,7 @@ def test_daily_intelligence_endpoint_uses_optional_user_context(monkeypatch) -> 
     assert payload["schemaVersion"] == "daily_intelligence_briefing_v1"
     assert payload["observationOnly"] is True
     assert payload["decisionGrade"] is False
+    assert payload["consumerIssues"][0]["label"] == "Evidence needs review"
     assert payload["sectionLinks"] == [
         {
             "label": "Research Radar",

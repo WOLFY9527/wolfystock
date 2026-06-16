@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from src.services.consumer_issue_labels import build_consumer_issues
 from src.services.options_market_structure_observation import (
     GEX_FORMULA,
     GEX_FORMULA_ID,
@@ -164,6 +165,7 @@ def build_options_chain_gamma_observation(
     )
     observation["methodology"] = methodology
 
+    consumer_issues = build_consumer_issues(blocked_reason_codes, missing_evidence, data_quality_labels)
     return {
         "adapterName": ADAPTER_NAME,
         "adapterVersion": ADAPTER_VERSION,
@@ -180,6 +182,7 @@ def build_options_chain_gamma_observation(
         "missingEvidence": missing_evidence,
         "blockedReasonCodes": blocked_reason_codes,
         "dataQualityLabels": data_quality_labels,
+        "consumerIssues": consumer_issues,
         "methodology": methodology,
         "rights": {
             "providerAuthorityVerified": flags["provider_authority_verified"],

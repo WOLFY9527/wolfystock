@@ -490,6 +490,7 @@ class PortfolioStructureReviewHolding(BaseModel):
     riskFlags: List[str] = Field(default_factory=list)
     researchNotes: Dict[str, List[str]] = Field(default_factory=dict)
     missingEvidence: List[Dict[str, str]] = Field(default_factory=list)
+    consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
 
 
 class PortfolioStructureReviewResponse(BaseModel):
@@ -509,6 +510,7 @@ class PortfolioStructureReviewResponse(BaseModel):
     consumerMessage: str
     drilldownSymbols: List[str] = Field(default_factory=list)
     dataQuality: Dict[str, Any] = Field(default_factory=dict)
+    consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
     noAdviceDisclosure: str
 
 

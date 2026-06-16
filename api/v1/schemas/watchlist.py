@@ -289,6 +289,7 @@ class WatchlistResearchOverlayItemResponse(BaseModel):
     whatToVerify: List[str] = Field(default_factory=list)
     riskFlags: List[str] = Field(default_factory=list)
     evidenceGaps: List[str] = Field(default_factory=list)
+    consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
     freshness: WatchlistResearchOverlayFreshnessResponse
     themeOrSector: Optional[str] = None
 
@@ -301,6 +302,7 @@ class WatchlistResearchOverlayDataQualityResponse(BaseModel):
     unavailableCount: int = 0
     missingEvidenceCount: int = 0
     failClosed: bool = True
+    consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
 
 
 class WatchlistResearchOverlayResponse(BaseModel):
@@ -309,4 +311,5 @@ class WatchlistResearchOverlayResponse(BaseModel):
     aggregateSummary: Dict[str, Dict[str, int]] = Field(default_factory=dict)
     missingEvidence: List[str] = Field(default_factory=list)
     dataQuality: WatchlistResearchOverlayDataQualityResponse
+    consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
     noAdviceDisclosure: str

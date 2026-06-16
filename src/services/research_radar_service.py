@@ -14,6 +14,7 @@ from src.services.market_scanner_candidate_evidence import (
 )
 from src.services.market_scanner_candidate_summary import build_scanner_candidate_research_summary_frame
 from src.services.research_radar_candidate_engine import build_research_radar_candidate_queue
+from src.services.consumer_issue_labels import build_consumer_issues
 
 
 RESEARCH_RADAR_API_SCHEMA_VERSION = "research_radar_api_v1"
@@ -142,6 +143,13 @@ class ResearchRadarService:
             candidate_count=len(candidate_payloads),
         )
         data_quality = self._data_quality(queue=queue, evidence_gaps=evidence_gaps)
+        consumer_issues = build_consumer_issues(
+            evidence_gaps,
+            data_quality,
+            [item.get("researchBias") for item in queue],
+            [item.get("riskFlags") for item in queue],
+            [item.get("evidenceGaps") for item in queue],
+        )
 
         return {
             "schemaVersion": RESEARCH_RADAR_API_SCHEMA_VERSION,
@@ -150,6 +158,7 @@ class ResearchRadarService:
             "aggregateSummary": aggregate_summary,
             "evidenceGaps": evidence_gaps,
             "marketContextFit": market_context_fit,
+            "consumerIssues": consumer_issues,
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
             "dataQuality": data_quality,
         }
@@ -163,6 +172,12 @@ class ResearchRadarService:
         explanation = _mapping(item.get("explanation"))
         driver_scores = _mapping(item.get("driverScores"))
         evidence_quality = _candidate_evidence_quality(source_candidate, driver_scores)
+        consumer_issues = build_consumer_issues(
+            item.get("researchBias"),
+            explanation.get("evidenceGaps"),
+            item.get("riskFlags"),
+            evidence_quality.get("missingEvidence"),
+        )
         return {
             "symbol": symbol,
             "ticker": symbol,
@@ -177,6 +192,7 @@ class ResearchRadarService:
             "duplicateEvidenceMerged": int(item.get("duplicateEvidenceMerged") or 0),
             "riskFlags": _safe_text_list(item.get("riskFlags")),
             "evidenceQuality": evidence_quality,
+            "consumerIssues": consumer_issues,
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
         }
 
@@ -218,6 +234,7 @@ class ResearchRadarService:
                 "availableCandidateCount": 0,
                 "reliableCandidateCount": 0,
                 "missingEvidence": list(evidence_gaps),
+                "consumerIssues": build_consumer_issues(evidence_gaps),
             }
 
         quality_payloads = [_mapping(item.get("evidenceQuality")) for item in queue]
@@ -235,6 +252,7 @@ class ResearchRadarService:
             "availableCandidateCount": len(queue),
             "reliableCandidateCount": reliable_count,
             "missingEvidence": list(evidence_gaps),
+            "consumerIssues": build_consumer_issues(evidence_gaps),
         }
 
 
