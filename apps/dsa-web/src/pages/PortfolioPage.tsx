@@ -41,6 +41,7 @@ import {
 import { translate } from '../i18n/core';
 import { normalizePortfolioRiskEvidence } from '../utils/evidenceDisplay';
 import { toDateInputValue } from '../utils/format';
+import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import {
   inferSettlementCurrency,
   LEGACY_PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY,
@@ -68,6 +69,7 @@ import type {
   PortfolioPositionItem,
   PortfolioSide,
   PortfolioSnapshotResponse,
+  PortfolioStructureReviewResponse,
   PortfolioTradeListItem,
   PortfolioTradeUpdateRequest,
 } from '../types/portfolio';
@@ -927,6 +929,78 @@ function formatPercent(value: number | undefined | null): string {
   })}%`;
 }
 
+function normalizeStructureReviewToken(value: string | null | undefined): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+function structureReviewChipVariant(value: string | null | undefined): 'neutral' | 'success' | 'caution' | 'danger' {
+  const token = normalizeStructureReviewToken(value);
+  if (!token) return 'neutral';
+  if (['available', 'high', 'strong', 'breakout', 'trend', 'confirmed'].includes(token)) return 'success';
+  if (['partial', 'mixed', 'medium'].includes(token)) return 'caution';
+  if (['unavailable', 'low', 'blocked', 'degraded', 'lowconfidence'].includes(token)) return 'danger';
+  return 'neutral';
+}
+
+function structureReviewDataStatusLabel(value: string | null | undefined, language: PortfolioLanguage): string {
+  const token = normalizeStructureReviewToken(value);
+  if (token === 'available') {
+    return language === 'zh' ? '结构已覆盖' : 'Structure coverage ready';
+  }
+  if (token === 'partial' || token === 'mixed') {
+    return language === 'zh' ? '需补证据' : 'Evidence gaps pending';
+  }
+  if (token === 'unavailable') {
+    return language === 'zh' ? '结构暂不可用' : 'Structure coverage unavailable';
+  }
+  return language === 'zh' ? '结构待确认' : 'Structure review pending';
+}
+
+function structureReviewEvidenceStatusLabel(value: string | null | undefined, language: PortfolioLanguage): string {
+  const token = normalizeStructureReviewToken(value);
+  if (token === 'available') {
+    return language === 'zh' ? '证据覆盖可用' : 'Evidence coverage ready';
+  }
+  if (token === 'partial' || token === 'mixed') {
+    return language === 'zh' ? '证据仍然偏薄' : 'Evidence still thin';
+  }
+  if (token === 'unavailable') {
+    return language === 'zh' ? '证据暂不可用' : 'Evidence unavailable';
+  }
+  return language === 'zh' ? '证据待确认' : 'Evidence pending';
+}
+
+function hasStructureReviewTicker(value: string | null | undefined): boolean {
+  const token = String(value || '').trim().toUpperCase();
+  return Boolean(token) && token !== 'UNKNOWN' && token !== '--' && token !== 'N/A';
+}
+
+function sanitizeStructureReviewMessage(value: string | null | undefined, language: PortfolioLanguage): string | null {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const normalized = trimmed.toLowerCase();
+  if (normalized.includes('cached holdings are partially available')) {
+    return language === 'zh'
+      ? '当前持仓覆盖不完整，结构审查仅展示可用部分。'
+      : 'Holding coverage is partial for structure review.';
+  }
+  if (normalized.includes('security metadata is unavailable for this cached holding')) {
+    return language === 'zh'
+      ? '该持仓的证券元数据暂不可用。'
+      : 'Security metadata is unavailable for this holding.';
+  }
+  if (normalized.includes('ticker, market, or currency metadata is missing for this cached holding')) {
+    return language === 'zh'
+      ? '该持仓缺少代码、市场或币种元数据。'
+      : 'Ticker, market, or currency metadata is missing for this holding.';
+  }
+
+  return trimmed.replace(/\bcached\s+/gi, '');
+}
+
 function getFxRateForDisplay(
   fxRows: PortfolioFxRateItem[],
   fromCurrency: string | undefined | null,
@@ -1360,6 +1434,8 @@ const PortfolioPage: React.FC = () => {
   const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
   const shouldGuardA11y = shouldApplySafariA11yGuard();
   const { language, t } = useI18n();
+  const routeLocale = typeof window !== 'undefined' ? parseLocaleFromPathname(window.location.pathname) : null;
+  const localize = useCallback((path: string) => (routeLocale ? buildLocalizedPath(path, routeLocale) : path), [routeLocale]);
   const copy = getPortfolioCopy(t, language);
   const riskFallbackMessage = copy.riskFallback;
 
@@ -1383,6 +1459,7 @@ const PortfolioPage: React.FC = () => {
   const [costMethod, setCostMethod] = useState<PortfolioCostMethod>('fifo');
   const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>(() => readPortfolioDisplayCurrency());
   const [snapshot, setSnapshot] = useState<PortfolioSnapshotResponse | null>(null);
+  const [structureReview, setStructureReview] = useState<PortfolioStructureReviewResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [fxRefreshing, setFxRefreshing] = useState(false);
   const [fxRefreshFeedback, setFxRefreshFeedback] = useState<FxRefreshFeedback | null>(null);
@@ -1653,6 +1730,7 @@ const PortfolioPage: React.FC = () => {
   const loadSnapshotAndRisk = useCallback(async () => {
     setIsLoading(true);
     setRiskWarning(null);
+    setStructureReview(null);
     try {
       const snapshotData = await portfolioApi.getSnapshot({
         accountId: queryAccountId,
@@ -1661,17 +1739,28 @@ const PortfolioPage: React.FC = () => {
       setSnapshot(snapshotData);
       setError(null);
 
-      try {
-        await portfolioApi.getRisk({
+      const [riskResult, structureReviewResult] = await Promise.allSettled([
+        portfolioApi.getRisk({
           accountId: queryAccountId,
           costMethod,
-        });
-      } catch (riskErr) {
-        const parsed = getParsedApiError(riskErr);
+        }),
+        portfolioApi.getStructureReview({
+          accountId: queryAccountId,
+          costMethod,
+        }),
+      ]);
+
+      if (riskResult.status === 'rejected') {
+        const parsed = getParsedApiError(riskResult.reason);
         setRiskWarning(parsed.message || riskFallbackMessage);
+      }
+
+      if (structureReviewResult.status === 'fulfilled') {
+        setStructureReview(structureReviewResult.value);
       }
     } catch (err) {
       setSnapshot(null);
+      setStructureReview(null);
       setError(getParsedApiError(err));
     } finally {
       setIsLoading(false);
@@ -2649,6 +2738,40 @@ const PortfolioPage: React.FC = () => {
       }
       : null,
   ]).slice(0, 3);
+  const structureReviewHoldings = structureReview?.holdingsStructure ?? [];
+  const structureReviewExposure = structureReview?.exposureByThemeOrSector?.[0] ?? null;
+  const structureReviewLargestHolding = structureReview?.aggregateSummary?.largestHolding ?? null;
+  const structureReviewStateEntries = Object.entries(structureReview?.countsByStructureState ?? {})
+    .filter(([, count]) => typeof count === 'number' && count > 0)
+    .sort((left, right) => right[1] - left[1]);
+  const structureReviewGapMessages = Array.from(new Set([
+    ...(structureReview?.missingEvidence ?? []).map((item) => item.message),
+    ...structureReviewHoldings.flatMap((holding) => [
+      ...holding.riskFlags,
+      ...holding.researchNotes.needsMoreEvidence,
+      ...holding.missingEvidence.map((item) => item.message),
+    ]),
+  ]
+    .map((item) => sanitizeStructureReviewMessage(item, language))
+    .filter((item): item is string => Boolean(item)))).slice(0, 6);
+  const structureReviewStatusText = structureReviewDataStatusLabel(structureReview?.dataQuality.status, language);
+  const structureReviewEvidenceText = structureReviewEvidenceStatusLabel(
+    structureReview?.dataQuality.structureEvidenceStatus ?? structureReview?.dataQuality.status,
+    language,
+  );
+  const structureReviewIntro = language === 'zh'
+    ? '研究工作流：先看结构状态，再补证据，再进入个股详情。'
+    : 'Research workflow: review structure state, close evidence gaps, then open stock detail.';
+  const structureReviewUnavailableTitle = language === 'zh' ? '结构审查暂不可用' : 'Structure review unavailable';
+  const structureReviewUnavailableBody = language === 'zh'
+    ? '当前保留账务、现金与盈亏视图；结构研究视角会在只读审查恢复后显示。'
+    : 'Accounting, cash, and P&L views remain available. The structure research view appears again once the read-only review recovers.';
+  const structureReviewEmptyTitle = language === 'zh' ? '等待首笔持仓' : 'Awaiting first holding';
+  const structureReviewEmptyBody = language === 'zh'
+    ? '保存首笔持仓后，这里会展示结构状态、证据缺口与个股结构详情入口。'
+    : 'After the first holding is saved, this section will show structure state, evidence gaps, and stock-level structure detail links.';
+  const structureReviewContextLabel = language === 'zh' ? '只读研究上下文' : 'Read-only research context';
+  const structureReviewDetailLabel = language === 'zh' ? '查看结构详情' : 'Open structure detail';
   const scenarioRiskPositions = useMemo<PortfolioScenarioRiskVisiblePosition[]>(
     () => positionRows.map((row) => ({
       symbol: row.symbol,
@@ -3559,6 +3682,116 @@ const PortfolioPage: React.FC = () => {
                         ? '压力情景入口会在持仓出现后启用，并只基于真实可见持仓做观察性估算。'
                         : 'Scenario entry becomes available after holdings exist and only runs observational estimates on visible real positions.'}
                     </TerminalNotice>
+                  )}
+                </TerminalPanel>
+
+                <TerminalPanel as="section" data-testid="portfolio-structure-review-panel" className="min-w-0 flex flex-col gap-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">{language === 'zh' ? '组合结构审查' : 'Portfolio structure review'}</h2>
+                      <p className="mt-1 text-sm text-white/45">{structureReviewIntro}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {structureReview ? (
+                        <>
+                          <TerminalChip variant={structureReviewChipVariant(structureReview?.dataQuality.status)}>{structureReviewStatusText}</TerminalChip>
+                          <TerminalChip variant={structureReviewChipVariant(structureReview?.dataQuality.structureEvidenceStatus ?? structureReview?.dataQuality.status)}>{structureReviewEvidenceText}</TerminalChip>
+                          <TerminalChip variant="info">{structureReviewContextLabel}</TerminalChip>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {structureReview ? (
+                    <>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '主题 / 行业暴露' : 'Theme / sector exposure'}</div>
+                          <div className="mt-2 text-sm text-white">{structureReviewExposure?.label || '--'}</div>
+                          <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(structureReviewExposure?.percent)}</div>
+                        </div>
+                        <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '最大持仓线索' : 'Largest holding cue'}</div>
+                          <div className="mt-2 text-sm text-white">{structureReviewLargestHolding?.ticker || '--'}</div>
+                          <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(structureReviewLargestHolding?.percent)}</div>
+                        </div>
+                      </div>
+
+                      {structureReviewStateEntries.length ? (
+                        <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '结构状态分布' : 'Structure states'}</div>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {structureReviewStateEntries.map(([state, count]) => (
+                              <TerminalChip key={`${state}-${count}`} variant={structureReviewChipVariant(state)}>
+                                {state} · {count}
+                              </TerminalChip>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div className="space-y-2">
+                        {structureReviewHoldings.slice(0, 4).map((holding) => {
+                          const detailPath = hasStructureReviewTicker(holding.ticker)
+                            ? localize(`/stocks/${encodeURIComponent(holding.ticker)}/structure-decision`)
+                            : null;
+                          const primaryGap = sanitizeStructureReviewMessage(
+                            holding.researchNotes.needsMoreEvidence[0]
+                              || holding.missingEvidence[0]?.message
+                              || holding.riskFlags[0],
+                            language,
+                          )
+                            || '--';
+
+                          return (
+                            <div key={`${holding.ticker}-${holding.structureState}`} className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="font-mono text-sm text-white">{holding.ticker}</div>
+                                  <div className="mt-1 text-xs text-white/45">{holding.structureState} · {holding.confidence}</div>
+                                </div>
+                                {detailPath ? (
+                                  <a
+                                    href={detailPath}
+                                    className="text-xs text-cyan-200 transition-colors hover:text-cyan-100"
+                                  >
+                                    {structureReviewDetailLabel}
+                                  </a>
+                                ) : null}
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                <TerminalChip variant={structureReviewChipVariant(holding.evidenceQuality.status)}>{structureReviewDataStatusLabel(holding.evidenceQuality.status, language)}</TerminalChip>
+                                <TerminalChip variant={structureReviewChipVariant(holding.structureState)}>{holding.structureState}</TerminalChip>
+                              </div>
+                              <p className="mt-2 text-xs leading-5 text-white/48">{primaryGap}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '证据缺口' : 'Evidence gaps'}</div>
+                        {structureReviewGapMessages.length ? (
+                          <ul className="mt-2 space-y-1 text-xs leading-5 text-white/48">
+                            {structureReviewGapMessages.map((message) => (
+                              <li key={message}>{message}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="mt-2 text-xs leading-5 text-white/48">
+                            {language === 'zh' ? '当前未返回额外证据缺口。' : 'No additional evidence gaps are returned right now.'}
+                          </p>
+                        )}
+                      </div>
+                    </>
+                  ) : hasHoldings ? (
+                    <TerminalEmptyState title={structureReviewUnavailableTitle}>
+                      {structureReviewUnavailableBody}
+                    </TerminalEmptyState>
+                  ) : (
+                    <TerminalEmptyState title={structureReviewEmptyTitle}>
+                      {structureReviewEmptyBody}
+                    </TerminalEmptyState>
                   )}
                 </TerminalPanel>
 
