@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import quote
@@ -15,7 +16,43 @@ from src.services.watchlist_research_overlay_service import WatchlistResearchOve
 
 
 DAILY_INTELLIGENCE_SERVICE_SCHEMA_VERSION = "daily_intelligence_briefing_v1"
+DAILY_INTELLIGENCE_NO_ADVICE_DISCLOSURE = (
+    "Observation-only research briefing; not personalized financial advice."
+)
 _SCENARIO_RISK_UNAVAILABLE_REASON = "scenario_risk_read_model_unavailable"
+_SAFE_REASON_LABELS = {
+    "owner_context_missing": "Signed-in owner context is unavailable.",
+    "research_radar_unavailable": "Research radar context is unavailable.",
+    "scannerCandidates": "Scanner candidate evidence is thin.",
+    "watchlist_unavailable": "Watchlist context is unavailable.",
+    "watchlist_research_context": "Watchlist research context is unavailable.",
+    "portfolio_structure_review_unavailable": "Portfolio structure review is unavailable.",
+    "cached_portfolio_holdings": "Cached portfolio holdings are unavailable.",
+    "theme_or_sector_exposure": "Theme or sector exposure details are unavailable.",
+    _SCENARIO_RISK_UNAVAILABLE_REASON: "Scenario risk read model is unavailable for this briefing.",
+    "research_queue_origin": "Research radar queue context.",
+    "scanner_candidates_origin": "Scanner candidate context.",
+    "symbol_structure_detail": "Symbol structure detail.",
+    "portfolio_structure_context": "Portfolio structure context.",
+    "degraded_state": "Degraded input state.",
+    "themeBreadth": "Theme breadth evidence is incomplete.",
+    "evidence_partial": "Evidence is partial.",
+    "local_ohlcv_evidence": "Local OHLCV evidence is incomplete.",
+    "cached_or_stale_evidence": "Evidence may be cached or stale.",
+    "concentrated_exposure": "Concentrated exposure.",
+}
+_REGIME_LABELS = {
+    "riskOn": "Risk-on observation",
+    "riskOff": "Risk-off observation",
+    "lowConfidence": "Low-confidence observation",
+    "mixed": "Mixed-regime observation",
+    "rangeBound": "Range-bound observation",
+}
+_CONFIDENCE_LABELS = {
+    "low": "low",
+    "medium": "moderate",
+    "high": "high",
+}
 
 
 class DailyIntelligenceService:
@@ -87,6 +124,11 @@ class DailyIntelligenceService:
         scanner_highlights = self._scanner_highlights(radar_payload)
         watchlist_highlights = self._watchlist_highlights(watchlist_payload)
         portfolio_highlights = self._portfolio_highlights(portfolio_payload)
+        section_links = self._section_links(
+            radar_payload=radar_payload,
+            watchlist_payload=watchlist_payload,
+            portfolio_payload=portfolio_payload,
+        )
 
         return {
             "schemaVersion": DAILY_INTELLIGENCE_SERVICE_SCHEMA_VERSION,
@@ -95,27 +137,26 @@ class DailyIntelligenceService:
             "sessionLabel": self._session_label(generated_at),
             "marketRegimeSummary": market_regime_summary,
             "whatChanged": what_changed,
-            "sectionLinks": self._section_links(
-                radar_payload=radar_payload,
-                watchlist_payload=watchlist_payload,
-                portfolio_payload=portfolio_payload,
-            ),
+            "sectionLinks": section_links,
             "topResearchPriorities": top_research_priorities,
             "scannerHighlights": scanner_highlights,
             "watchlistHighlights": watchlist_highlights,
+            "portfolioHighlights": portfolio_highlights,
             "portfolioStructureHighlights": portfolio_highlights,
             "scenarioRisks": [
                 {
-                    "label": "Scenario risk section unavailable",
-                    "source": "degraded_state",
+                    "label": "Scenario risk coverage",
+                    "source": "Daily Intelligence",
                     "observations": [
-                        "A stored owner-scoped scenario read model is not available in this aggregation path."
+                        "Scenario risk read model is unavailable for this briefing."
                     ],
-                    "evidenceGaps": [_SCENARIO_RISK_UNAVAILABLE_REASON],
+                    "evidenceGaps": [_safe_reason_phrase(_SCENARIO_RISK_UNAVAILABLE_REASON)],
                 }
             ],
-            "evidenceGaps": _dedupe(evidence_gaps),
-            "degradedInputs": degraded_inputs,
+            "evidenceGaps": _safe_phrase_list(evidence_gaps),
+            "degradedInputs": _safe_degraded_inputs(degraded_inputs),
+            "drilldownTargets": section_links,
+            "noAdviceDisclosure": DAILY_INTELLIGENCE_NO_ADVICE_DISCLOSURE,
             "observationOnly": True,
             "decisionGrade": False,
         }
@@ -263,13 +304,14 @@ class DailyIntelligenceService:
         explanation = _mapping(regime.get("explanation"))
         regime_name = _text(regime.get("regime")) or "lowConfidence"
         confidence = _text(regime.get("confidence")) or "low"
-        summary = _first_text(explanation.get("whyThisRegime")) or f"Current regime observation is {regime_name}."
+        regime_label = _regime_label(regime_name)
+        summary = _first_text(explanation.get("whyThisRegime")) or f"Current regime observation is {regime_label}."
         return {
-            "regime": regime_name,
-            "confidence": confidence,
-            "summary": summary,
-            "supportingObservations": _safe_text_list(explanation.get("whatConfirmsIt")),
-            "invalidationObservations": _safe_text_list(explanation.get("whatInvalidatesIt")),
+            "regime": regime_label,
+            "confidence": _confidence_label(confidence),
+            "summary": _safe_public_text(summary),
+            "supportingObservations": _safe_public_list(explanation.get("whatConfirmsIt")),
+            "invalidationObservations": _safe_public_list(explanation.get("whatInvalidatesIt")),
         }
 
     def _what_changed(self, briefing: Mapping[str, Any]) -> list[str]:
@@ -280,11 +322,11 @@ class DailyIntelligenceService:
             title = _text(payload.get("title"))
             message = _text(payload.get("message"))
             if title and message:
-                messages.append(f"{title}: {message}")
+                messages.append(_safe_public_text(f"{title}: {message}"))
             elif title:
-                messages.append(title)
+                messages.append(_safe_public_text(title))
             elif message:
-                messages.append(message)
+                messages.append(_safe_public_text(message))
         return messages
 
     def _top_research_priorities(self, radar_payload: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -296,12 +338,12 @@ class DailyIntelligenceService:
             items.append(
                 {
                     "label": f"{ticker or 'Unknown'} research queue",
-                    "source": "research_radar",
+                    "source": "Research Radar",
                     "priority": _text(payload.get("priority")) or None,
                     "ticker": ticker,
-                    "observations": _safe_text_list(payload.get("whyOnRadar")),
-                    "whatToVerify": _safe_text_list(payload.get("whatToVerify")),
-                    "evidenceGaps": _safe_text_list(payload.get("evidenceGaps")),
+                    "observations": _safe_public_list(payload.get("whyOnRadar")),
+                    "whatToVerify": _safe_public_list(payload.get("whatToVerify")),
+                    "evidenceGaps": _safe_phrase_list(_safe_text_list(payload.get("evidenceGaps"))),
                     "evidenceLinks": self._item_links(
                         section="topResearchPriorities",
                         ticker=ticker,
@@ -323,10 +365,10 @@ class DailyIntelligenceService:
                 {
                     "ticker": ticker,
                     "priority": _text(payload.get("priority")) or "medium",
-                    "observations": _safe_text_list(payload.get("whyOnRadar")),
-                    "whatToVerify": _safe_text_list(payload.get("whatToVerify")),
-                    "evidenceGaps": _safe_text_list(payload.get("evidenceGaps")),
-                    "riskFlags": _safe_text_list(payload.get("riskFlags")),
+                    "observations": _safe_public_list(payload.get("whyOnRadar")),
+                    "whatToVerify": _safe_public_list(payload.get("whatToVerify")),
+                    "evidenceGaps": _safe_phrase_list(_safe_text_list(payload.get("evidenceGaps"))),
+                    "riskFlags": _safe_phrase_list(_safe_text_list(payload.get("riskFlags"))),
                     "evidenceLinks": self._item_links(
                         section="scannerHighlights",
                         ticker=ticker,
@@ -347,12 +389,12 @@ class DailyIntelligenceService:
             highlights.append(
                 {
                     "ticker": ticker,
-                    "structureState": _text(payload.get("structureState")) or "unavailable",
-                    "researchPriority": _text(payload.get("researchPriority")) or None,
-                    "whyWatching": _text(payload.get("whyWatching")) or None,
-                    "whatToVerify": _safe_text_list(payload.get("whatToVerify")),
-                    "evidenceGaps": _safe_text_list(payload.get("evidenceGaps")),
-                    "riskFlags": _safe_text_list(payload.get("riskFlags")),
+                    "structureState": _safe_reason_phrase(_text(payload.get("structureState")) or "unavailable"),
+                    "researchPriority": _confidence_label(_text(payload.get("researchPriority"))) or None,
+                    "whyWatching": _safe_public_text(payload.get("whyWatching")) or None,
+                    "whatToVerify": _safe_public_list(payload.get("whatToVerify")),
+                    "evidenceGaps": _safe_phrase_list(_safe_text_list(payload.get("evidenceGaps"))),
+                    "riskFlags": _safe_phrase_list(_safe_text_list(payload.get("riskFlags"))),
                     "evidenceLinks": self._item_links(
                         section="watchlistHighlights",
                         ticker=ticker,
@@ -374,11 +416,14 @@ class DailyIntelligenceService:
             highlights.append(
                 {
                     "ticker": ticker,
-                    "structureState": _text(payload.get("structureState")) or "unavailable",
-                    "confidence": _text(payload.get("confidence")) or "low",
-                    "watchNext": _safe_text_list(notes.get("watchNext")),
-                    "riskFlags": _safe_text_list(payload.get("riskFlags")) or _safe_text_list(notes.get("riskFlags")),
-                    "missingEvidence": _missing_evidence_codes(payload.get("missingEvidence")),
+                    "structureState": _safe_reason_phrase(_text(payload.get("structureState")) or "unavailable"),
+                    "confidence": _confidence_label(_text(payload.get("confidence")) or "low"),
+                    "watchNext": _safe_public_list(notes.get("watchNext")),
+                    "riskFlags": (
+                        _safe_phrase_list(_safe_text_list(payload.get("riskFlags")))
+                        or _safe_phrase_list(_safe_text_list(notes.get("riskFlags")))
+                    ),
+                    "missingEvidence": _safe_phrase_list(_missing_evidence_codes(payload.get("missingEvidence"))),
                     "evidenceLinks": self._item_links(
                         section="portfolioStructureHighlights",
                         ticker=ticker,
@@ -462,7 +507,7 @@ class DailyIntelligenceService:
             "label": label,
             "route": route,
             "section": section,
-            "reason": reason,
+            "reason": _safe_reason_phrase(reason),
         }
 
     @staticmethod
@@ -474,7 +519,7 @@ class DailyIntelligenceService:
             "label": "Stock Structure",
             "route": f"/stocks/{quote(symbol, safe='')}/structure-decision",
             "section": section,
-            "reason": "symbol_structure_detail",
+            "reason": _safe_reason_phrase("symbol_structure_detail"),
         }
 
     @staticmethod
@@ -527,6 +572,70 @@ def _first_text(value: Any) -> str | None:
     for item in _safe_text_list(value):
         return item
     return None
+
+
+def _regime_label(value: Any) -> str:
+    text = _text(value)
+    if not text:
+        return "Low-confidence observation"
+    return _REGIME_LABELS.get(text, f"{_humanize_code(text)} observation")
+
+
+def _confidence_label(value: Any) -> str:
+    text = _text(value)
+    if not text:
+        return ""
+    return _CONFIDENCE_LABELS.get(text.lower(), _humanize_code(text))
+
+
+def _safe_public_text(value: Any) -> str:
+    text = _text(value)
+    if not text:
+        return ""
+    for raw, replacement in {
+        "riskOn": "Risk-on observation",
+        "riskOff": "Risk-off observation",
+        "lowConfidence": "Low-confidence observation",
+        "research_radar": "Research Radar",
+    }.items():
+        text = text.replace(raw, replacement)
+    return text
+
+
+def _safe_public_list(value: Any) -> list[str]:
+    return _dedupe([text for item in _safe_text_list(value) if (text := _safe_public_text(item))])
+
+
+def _safe_reason_phrase(value: Any) -> str:
+    text = _text(value)
+    if not text:
+        return ""
+    return _SAFE_REASON_LABELS.get(text, _humanize_code(text))
+
+
+def _safe_phrase_list(values: Sequence[str]) -> list[str]:
+    return _dedupe([text for value in values if (text := _safe_reason_phrase(value))])
+
+
+def _safe_degraded_inputs(values: Sequence[Mapping[str, str]]) -> list[dict[str, str]]:
+    result: list[dict[str, str]] = []
+    for item in values:
+        section = _text(item.get("section"))
+        status = _text(item.get("status"))
+        reason = _safe_reason_phrase(item.get("reason"))
+        if not section or not status or not reason:
+            continue
+        entry = {"section": section, "status": status, "reason": reason}
+        if entry not in result:
+            result.append(entry)
+    return result
+
+
+def _humanize_code(value: str) -> str:
+    text = value.replace("_", " ").replace(":", " ").replace("-", " ")
+    text = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", text)
+    text = " ".join(text.split())
+    return text[:1].upper() + text[1:] if text else ""
 
 
 def _missing_evidence_codes(value: Any) -> list[str]:

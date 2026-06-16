@@ -92,11 +92,14 @@ class DailyIntelligenceBriefingResponse(BaseModel):
     topResearchPriorities: List[DailyIntelligencePriorityItemResponse] = Field(default_factory=list)
     scannerHighlights: List[DailyIntelligenceScannerHighlightResponse] = Field(default_factory=list)
     watchlistHighlights: List[DailyIntelligenceWatchlistHighlightResponse] = Field(default_factory=list)
+    portfolioHighlights: List[DailyIntelligencePortfolioStructureHighlightResponse] = Field(default_factory=list)
     portfolioStructureHighlights: List[DailyIntelligencePortfolioStructureHighlightResponse] = Field(
         default_factory=list
     )
     scenarioRisks: List[DailyIntelligenceScenarioRiskResponse] = Field(default_factory=list)
     evidenceGaps: List[str] = Field(default_factory=list)
     degradedInputs: List[DailyIntelligenceDegradedInputResponse | Dict[str, Any]] = Field(default_factory=list)
+    drilldownTargets: List[DailyIntelligenceEvidenceLinkResponse] = Field(default_factory=list)
+    noAdviceDisclosure: str
     observationOnly: Literal[True] = True
     decisionGrade: Literal[False] = False

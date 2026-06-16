@@ -22,9 +22,9 @@ class _FakeDailyIntelligenceService:
             "briefingDate": "2026-06-15",
             "sessionLabel": "pre-market",
             "marketRegimeSummary": {
-                "regime": "riskOn",
-                "confidence": "medium",
-                "summary": "Current regime observation is riskOn.",
+                "regime": "Risk-on observation",
+                "confidence": "moderate",
+                "summary": "Current regime observation is Risk-on observation.",
                 "supportingObservations": ["Breadth remains constructive."],
                 "invalidationObservations": ["Evidence weakens if breadth narrows materially."],
             },
@@ -35,15 +35,31 @@ class _FakeDailyIntelligenceService:
                     "label": "Research Radar",
                     "route": "/research/radar",
                     "section": "topResearchPriorities",
-                    "reason": "research_queue_origin",
+                    "reason": "Research radar queue context.",
                 }
             ],
             "scannerHighlights": [],
             "watchlistHighlights": [],
+            "portfolioHighlights": [],
             "portfolioStructureHighlights": [],
             "scenarioRisks": [],
-            "evidenceGaps": ["scenario_risk_read_model_unavailable"],
-            "degradedInputs": [{"section": "scenarioRisks", "status": "unavailable", "reason": "scenario_risk_read_model_unavailable"}],
+            "evidenceGaps": ["Scenario risk read model is unavailable for this briefing."],
+            "degradedInputs": [
+                {
+                    "section": "scenarioRisks",
+                    "status": "unavailable",
+                    "reason": "Scenario risk read model is unavailable for this briefing.",
+                }
+            ],
+            "drilldownTargets": [
+                {
+                    "label": "Research Radar",
+                    "route": "/research/radar",
+                    "section": "topResearchPriorities",
+                    "reason": "Research radar queue context.",
+                }
+            ],
+            "noAdviceDisclosure": "Observation-only research briefing; not personalized financial advice.",
             "observationOnly": True,
             "decisionGrade": False,
         }
@@ -82,9 +98,12 @@ def test_daily_intelligence_endpoint_uses_optional_user_context(monkeypatch) -> 
             "label": "Research Radar",
             "route": "/research/radar",
             "section": "topResearchPriorities",
-            "reason": "research_queue_origin",
+            "reason": "Research radar queue context.",
         }
     ]
+    assert payload["portfolioHighlights"] == []
+    assert payload["drilldownTargets"][0]["route"] == "/research/radar"
+    assert payload["noAdviceDisclosure"] == "Observation-only research briefing; not personalized financial advice."
     assert fake_service.calls == [
         {
             "actor": {"actor_type": "anonymous", "role": "anonymous", "display_name": "Anonymous"},

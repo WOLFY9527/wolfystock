@@ -43,6 +43,33 @@ FORBIDDEN_IMPORT_PREFIXES = (
     "src.auth",
 )
 FORBIDDEN_PUBLIC_WORD_TERMS = {"buy", "sell", "hold", "position", "target", "stop", "guaranteed"}
+FORBIDDEN_RAW_NARRATIVE_TOKENS = (
+    "riskOn",
+    "lowConfidence",
+    "market_regime_low_confidence",
+    "research_candidates_unavailable",
+    "option_chain_unavailable",
+    "options_observation_only",
+    "historical_baseline_unavailable",
+    "dealerGamma:unavailable",
+    "live_gex_not_implemented_v1",
+    "observation_only_not_decision_grade",
+    "missing_spot_reference",
+)
+NARRATIVE_KEYS = (
+    "marketRegimeSummary",
+    "whatChanged",
+    "topResearchPriorities",
+    "scannerHighlights",
+    "watchlistHighlights",
+    "portfolioHighlights",
+    "scenarioRisks",
+    "evidenceGaps",
+    "degradedInputs",
+    "drilldownTargets",
+    "noAdviceDisclosure",
+)
+ROUTE_RE = re.compile(r"^/[A-Za-z0-9][A-Za-z0-9/_-]*(?:\?[A-Za-z0-9=&._%-]+)?$")
 
 
 def _item(
@@ -167,6 +194,22 @@ def _assert_no_forbidden_public_terms(payload: object) -> None:
             assert forbidden not in serialized
 
 
+def _assert_consumer_safe_cockpit_narrative(payload: Mapping[str, Any]) -> None:
+    for key in NARRATIVE_KEYS:
+        assert key in payload
+    narrative = {key: payload[key] for key in NARRATIVE_KEYS}
+    serialized = _serialized_values(narrative)
+    for token in FORBIDDEN_RAW_NARRATIVE_TOKENS:
+        assert token not in serialized
+    assert re.search(r"\b[a-z]+(?:_[a-z0-9]+)+\b", serialized) is None
+    assert re.search(r"\b[a-z][a-z0-9]+:[a-z0-9_]+\b", serialized) is None
+    for target in payload["drilldownTargets"]:
+        assert ROUTE_RE.fullmatch(target["route"])
+        assert not target["route"].startswith("/api/")
+    assert payload["observationOnly"] is True
+    assert payload["decisionGrade"] is False
+
+
 def test_cockpit_uses_regime_engine_as_primary_judgment_and_shapes_safe_aggregate() -> None:
     payload = build_market_decision_cockpit(
         market_inputs=_regime_ready_inputs(),
@@ -177,6 +220,9 @@ def test_cockpit_uses_regime_engine_as_primary_judgment_and_shapes_safe_aggregat
     assert payload["schemaVersion"] == "market_decision_cockpit.v1"
     assert payload["generatedAt"] == "2026-06-15T00:00:00+00:00"
     assert payload["noAdviceDisclosure"]
+    assert payload["observationOnly"] is True
+    assert payload["decisionGrade"] is False
+    assert payload["marketRegimeSummary"]["regime"] == "Risk-on observation"
 
     decision = payload["marketRegimeDecision"]
     assert decision["regime"] == "riskOn"
@@ -217,10 +263,12 @@ def test_cockpit_uses_regime_engine_as_primary_judgment_and_shapes_safe_aggregat
     assert watch_trigger["currentEvidence"]
 
     what_changed = payload["whatChanged"]
-    assert what_changed["status"] == "degraded"
-    assert what_changed["basis"] == "current_snapshot_only"
-    assert "historical_baseline_unavailable" in what_changed["unavailableDrivers"]
-    assert any(item["field"] == "generatedAt" for item in what_changed["observations"])
+    assert isinstance(what_changed, list)
+    assert what_changed == [
+        "Current regime observation is Risk-on observation with high confidence.",
+        "Research queue quality is mixed.",
+        "Options structure evidence is unavailable for this cockpit snapshot.",
+    ]
 
     readiness = payload["cockpitReadiness"]
     assert readiness["status"] == "degraded"
@@ -250,6 +298,7 @@ def test_cockpit_uses_regime_engine_as_primary_judgment_and_shapes_safe_aggregat
     assert payload["dataQuality"]["status"] == "degraded"
 
     _assert_no_forbidden_public_terms(payload)
+    _assert_consumer_safe_cockpit_narrative(payload)
 
 
 def test_missing_inputs_fail_closed_with_empty_research_preview_and_blocked_options() -> None:
@@ -281,7 +330,11 @@ def test_missing_inputs_fail_closed_with_empty_research_preview_and_blocked_opti
         ],
     }
     assert payload["confidenceDiagnostics"]["missingEvidenceImpact"]
-    assert payload["whatChanged"]["status"] == "degraded"
+    assert payload["whatChanged"] == [
+        "Current regime observation is Low-confidence observation with low confidence.",
+        "Research queue quality is thin.",
+        "Options structure evidence is unavailable for this cockpit snapshot.",
+    ]
     assert payload["driverAttribution"]["topPositiveDrivers"] == []
     assert payload["driverAttribution"]["topNegativeDrivers"] == []
     assert payload["driverAttribution"]["unavailableDrivers"]
@@ -355,11 +408,7 @@ def test_driver_attribution_surfaces_conflicting_positive_and_negative_drivers()
             "currentEvidence": ["volatility pressure is elevated"],
         }
     ]
-    assert payload["whatChanged"]["observations"][0] == {
-        "field": "marketRegimeDecision.updatedAt",
-        "value": "2026-06-14T21:00:00+00:00",
-        "interpretation": "Current payload timestamp is available; no historical baseline is inferred.",
-    }
+    assert payload["whatChanged"][0] == "Current regime observation is Mixed-regime observation with low confidence."
 
 
 def test_options_evidence_remains_observation_only_even_when_contract_inputs_are_complete() -> None:
