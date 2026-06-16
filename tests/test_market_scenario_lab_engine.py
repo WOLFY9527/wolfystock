@@ -6,6 +6,7 @@ from __future__ import annotations
 import ast
 import copy
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +36,7 @@ FORBIDDEN_PUBLIC_TERMS = (
     "目标价",
     "止损",
 )
+INTERNAL_LOOKING_TOKEN = re.compile(r"\b[a-z]+(?:_[a-z0-9]+){1,}\b")
 FORBIDDEN_IMPORT_PREFIXES = (
     "data_provider",
     "src.providers",
@@ -141,6 +143,25 @@ def _serialized_values(payload: object) -> str:
     return json.dumps(values, ensure_ascii=False, sort_keys=True).lower()
 
 
+def _consumer_label_values(payload: object) -> list[str]:
+    values: list[str] = []
+
+    def visit(value: object) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                normalized_key = str(key).lower()
+                if isinstance(item, str) and ("label" in normalized_key or "message" in normalized_key):
+                    values.append(item)
+                visit(item)
+            return
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                visit(item)
+
+    visit(payload)
+    return values
+
+
 def test_volatility_spike_scenario_reclassifies_base_decision_without_mutating_input() -> None:
     base = _base_decision()
     original = copy.deepcopy(base)
@@ -153,21 +174,61 @@ def test_volatility_spike_scenario_reclassifies_base_decision_without_mutating_i
     assert base == original
     assert list(payload.keys()) == [
         "schemaVersion",
+        "contractStatus",
+        "observationOnly",
+        "decisionGrade",
+        "selectedScenario",
+        "scenarioPresets",
+        "baseMarketContext",
         "baseRegime",
         "scenarioRegime",
+        "scenarioOutput",
         "confidenceDelta",
         "driverDeltas",
         "changedDrivers",
         "scenarioSummary",
+        "confirmInvalidateContext",
         "whatWouldConfirm",
         "whatWouldInvalidate",
         "evidenceLimits",
         "noAdviceDisclosure",
     ]
     assert payload["schemaVersion"] == "market_scenario_lab_engine.v1"
+    assert payload["contractStatus"] == {
+        "state": "degraded",
+        "label": "Scenario constrained by evidence gaps",
+        "message": "Scenario comparison is available, but incomplete evidence keeps the result observation-only.",
+        "observationOnly": True,
+        "decisionGrade": False,
+    }
+    assert payload["observationOnly"] is True
+    assert payload["decisionGrade"] is False
+    assert payload["selectedScenario"] == {
+        "name": "volatilitySpike",
+        "label": "Volatility stress observation",
+        "description": "Stress volatility and breadth inputs to compare research-context sensitivity.",
+    }
+    assert {item["name"] for item in payload["scenarioPresets"]} == {
+        "volatilitySpike",
+        "breadthBreakdown",
+        "ratesUpDollarUp",
+        "liquidityStress",
+        "riskOnConfirmation",
+        "gammaUnavailable",
+    }
+    assert payload["baseMarketContext"] == {
+        "source": "decisionCockpitInput",
+        "label": "Decision Cockpit market context",
+        "message": "Base regime context was supplied by the request and is treated as observation-only evidence.",
+        "evidenceState": "degraded",
+        "scoringDriverCount": 6,
+    }
     assert payload["baseRegime"] == {"regime": "riskOn", "confidence": "medium", "confidenceScore": 0.68}
     assert payload["scenarioRegime"]["regime"] in {"mixed", "riskOff", "downsideAccelerationRisk"}
     assert payload["scenarioRegime"]["confidence"] in {"low", "medium"}
+    assert payload["scenarioOutput"]["scenarioRegime"] == payload["scenarioRegime"]
+    assert payload["scenarioOutput"]["confidenceDelta"] == payload["confidenceDelta"]
+    assert payload["scenarioOutput"]["changedDrivers"] == payload["changedDrivers"]
     assert payload["confidenceDelta"] < 0
     assert payload["driverDeltas"]["volatilityStructure"] < 0
     assert payload["driverDeltas"]["breadthParticipation"] <= 0
@@ -178,11 +239,19 @@ def test_volatility_spike_scenario_reclassifies_base_decision_without_mutating_i
         "The scenario read weakens when volatility pressure and breadth deterioration are applied.",
     ]
     assert "Dealer gamma evidence is unavailable in the base read." in payload["evidenceLimits"]
+    assert "dealer_gamma_unavailable_caps_volatility_compression" not in payload["evidenceLimits"]
+    assert all(not INTERNAL_LOOKING_TOKEN.search(item) for item in payload["evidenceLimits"])
     assert payload["noAdviceDisclosure"] == "Research planning only; not a personalized decision basis."
+    assert payload["confirmInvalidateContext"] == {
+        "confirm": payload["whatWouldConfirm"],
+        "invalidate": payload["whatWouldInvalidate"],
+    }
 
     serialized = _serialized_values(payload)
     for forbidden in FORBIDDEN_PUBLIC_TERMS:
         assert forbidden not in serialized
+    for label in _consumer_label_values(payload):
+        assert not INTERNAL_LOOKING_TOKEN.search(label)
 
 
 def test_explicit_overrides_and_gamma_unavailable_surface_changed_drivers_and_limits() -> None:
@@ -213,6 +282,7 @@ def test_explicit_overrides_and_gamma_unavailable_surface_changed_drivers_and_li
     assert "Gamma evidence status is unavailable, so gamma-sensitive conclusions remain capped." in payload[
         "evidenceLimits"
     ]
+    assert payload["contractStatus"]["state"] == "degraded"
     assert payload["whatWouldConfirm"] == [
         "Score-grade evidence would need to show the stressed drivers moving together in the scenario direction.",
         "The scenario frame would need current breadth, volatility, rates-dollar, liquidity, and cross-asset inputs.",
@@ -236,6 +306,16 @@ def test_missing_base_evidence_returns_degraded_unavailable_payload() -> None:
         "confidenceScore": 0.0,
         "status": "unavailable",
     }
+    assert payload["contractStatus"] == {
+        "state": "unavailable",
+        "label": "Scenario unavailable",
+        "message": "Scenario lab needs at least three score-grade market drivers before comparing scenarios.",
+        "observationOnly": True,
+        "decisionGrade": False,
+    }
+    assert payload["observationOnly"] is True
+    assert payload["decisionGrade"] is False
+    assert payload["selectedScenario"]["name"] == "riskOnConfirmation"
     assert payload["confidenceDelta"] == 0.0
     assert payload["driverDeltas"] == {}
     assert payload["changedDrivers"] == []
@@ -245,6 +325,9 @@ def test_missing_base_evidence_returns_degraded_unavailable_payload() -> None:
     assert payload["evidenceLimits"] == [
         "Base regime evidence is missing or below the minimum driver coverage for scenario analysis."
     ]
+    assert payload["confirmInvalidateContext"] == {"confirm": [], "invalidate": []}
+    for label in _consumer_label_values(payload):
+        assert not INTERNAL_LOOKING_TOKEN.search(label)
 
 
 def test_normalized_driver_scores_can_be_used_without_base_decision_payload() -> None:
@@ -287,6 +370,9 @@ def test_all_public_named_scenarios_return_research_planning_payloads() -> None:
         )
 
         assert payload["schemaVersion"] == "market_scenario_lab_engine.v1"
+        assert payload["observationOnly"] is True
+        assert payload["decisionGrade"] is False
+        assert payload["selectedScenario"]["name"] == scenario_name
         assert payload["baseRegime"]["regime"] == "riskOn"
         assert payload["scenarioRegime"]["regime"]
         assert payload["noAdviceDisclosure"] == "Research planning only; not a personalized decision basis."

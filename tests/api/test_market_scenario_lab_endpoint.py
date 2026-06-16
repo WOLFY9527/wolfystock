@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from typing import Any
 
 from fastapi import FastAPI
@@ -39,6 +40,7 @@ FORBIDDEN_PUBLIC_TERMS = (
     "目标价",
     "止损",
 )
+INTERNAL_LOOKING_TOKEN = re.compile(r"\b[a-z]+(?:_[a-z0-9]+){1,}\b")
 
 
 def _client() -> TestClient:
@@ -92,6 +94,25 @@ def _serialized_values(payload: object) -> str:
     return json.dumps(values, ensure_ascii=False, sort_keys=True).lower()
 
 
+def _consumer_label_values(payload: object) -> list[str]:
+    values: list[str] = []
+
+    def visit(value: object) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                normalized_key = str(key).lower()
+                if isinstance(item, str) and ("label" in normalized_key or "message" in normalized_key):
+                    values.append(item)
+                visit(item)
+            return
+        if isinstance(value, list):
+            for item in value:
+                visit(item)
+
+    visit(payload)
+    return values
+
+
 def test_market_scenario_lab_route_is_exposed() -> None:
     app = FastAPI()
     app.include_router(market.router, prefix="/api/v1/market")
@@ -120,20 +141,64 @@ def test_market_scenario_lab_accepts_base_regime_and_named_scenario_without_muta
     payload = response.json()
     assert list(payload.keys()) == [
         "schemaVersion",
+        "contractStatus",
+        "observationOnly",
+        "decisionGrade",
+        "selectedScenario",
+        "scenarioPresets",
+        "baseMarketContext",
         "baseRegime",
         "scenarioRegime",
+        "scenarioOutput",
         "confidenceDelta",
         "driverDeltas",
         "changedDrivers",
         "scenarioSummary",
+        "confirmInvalidateContext",
         "whatWouldConfirm",
         "whatWouldInvalidate",
         "evidenceLimits",
         "noAdviceDisclosure",
     ]
     assert payload["schemaVersion"] == "market_scenario_lab_engine.v1"
+    assert payload["contractStatus"] == {
+        "state": "degraded",
+        "label": "Scenario constrained by evidence gaps",
+        "message": "Scenario comparison is available, but incomplete evidence keeps the result observation-only.",
+        "observationOnly": True,
+        "decisionGrade": False,
+    }
+    assert payload["observationOnly"] is True
+    assert payload["decisionGrade"] is False
+    assert payload["selectedScenario"] == {
+        "name": "volatilitySpike",
+        "label": "Volatility stress observation",
+        "description": "Stress volatility and breadth inputs to compare research-context sensitivity.",
+    }
+    assert {item["name"] for item in payload["scenarioPresets"]} == {
+        "volatilitySpike",
+        "breadthBreakdown",
+        "ratesUpDollarUp",
+        "liquidityStress",
+        "riskOnConfirmation",
+        "gammaUnavailable",
+    }
+    assert payload["baseMarketContext"] == {
+        "source": "decisionCockpitInput",
+        "label": "Decision Cockpit market context",
+        "message": "Base regime context was supplied by the request and is treated as observation-only evidence.",
+        "evidenceState": "degraded",
+        "scoringDriverCount": 6,
+    }
     assert payload["baseRegime"]["regime"] == "riskOn"
     assert payload["scenarioRegime"]["regime"] in {"mixed", "riskOff", "downsideAccelerationRisk"}
+    assert payload["scenarioOutput"]["scenarioRegime"] == payload["scenarioRegime"]
+    assert payload["scenarioOutput"]["confidenceDelta"] == payload["confidenceDelta"]
+    assert payload["scenarioOutput"]["driverDeltas"] == payload["driverDeltas"]
+    assert payload["confirmInvalidateContext"] == {
+        "confirm": payload["whatWouldConfirm"],
+        "invalidate": payload["whatWouldInvalidate"],
+    }
     assert payload["confidenceDelta"] < 0
     assert payload["driverDeltas"]["volatilityStructure"] < 0
     assert payload["changedDrivers"] == [
@@ -146,6 +211,8 @@ def test_market_scenario_lab_accepts_base_regime_and_named_scenario_without_muta
     serialized = _serialized_values(payload)
     for forbidden in FORBIDDEN_PUBLIC_TERMS:
         assert forbidden not in serialized
+    for label in _consumer_label_values(payload):
+        assert not INTERNAL_LOOKING_TOKEN.search(label)
 
 
 def test_market_scenario_lab_accepts_normalized_driver_scores_and_overrides() -> None:
@@ -180,6 +247,8 @@ def test_market_scenario_lab_accepts_normalized_driver_scores_and_overrides() ->
     assert "Gamma evidence status is unavailable, so gamma-sensitive conclusions remain capped." in payload[
         "evidenceLimits"
     ]
+    assert "dealer_gamma_unavailable_caps_volatility_compression" not in payload["evidenceLimits"]
+    assert all(not INTERNAL_LOOKING_TOKEN.search(item) for item in payload["evidenceLimits"])
 
 
 def test_market_scenario_lab_fails_closed_when_required_base_evidence_is_missing() -> None:
@@ -197,6 +266,16 @@ def test_market_scenario_lab_fails_closed_when_required_base_evidence_is_missing
         "confidenceScore": 0.0,
         "status": "unavailable",
     }
+    assert payload["contractStatus"] == {
+        "state": "unavailable",
+        "label": "Scenario unavailable",
+        "message": "Scenario lab needs at least three score-grade market drivers before comparing scenarios.",
+        "observationOnly": True,
+        "decisionGrade": False,
+    }
+    assert payload["observationOnly"] is True
+    assert payload["decisionGrade"] is False
+    assert payload["selectedScenario"]["name"] == "liquidityStress"
     assert payload["driverDeltas"] == {}
     assert payload["changedDrivers"] == []
     assert payload["scenarioSummary"] == [
@@ -205,6 +284,8 @@ def test_market_scenario_lab_fails_closed_when_required_base_evidence_is_missing
     assert payload["evidenceLimits"] == [
         "Base regime evidence is missing or below the minimum driver coverage for scenario analysis."
     ]
+    for label in _consumer_label_values(payload):
+        assert not INTERNAL_LOOKING_TOKEN.search(label)
 
 
 def test_market_scenario_lab_rejects_unsupported_named_scenario() -> None:
