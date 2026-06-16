@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 from contextlib import ExitStack
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
 import pytest
@@ -400,8 +401,9 @@ def test_temperature_score_inputs_add_source_authority_diagnostics() -> None:
 
 def test_temperature_inputs_preserve_official_macro_authority_metadata_after_rates_volatility_merge() -> None:
     service = MarketOverviewService()
-    today = "2026-05-20"
-    previous = "2026-05-19"
+    current = datetime.now(timezone(timedelta(hours=8)))
+    today = current.date().isoformat()
+    previous = (current - timedelta(days=1)).date().isoformat()
     official_points = {
         "VIXCLS": [
             MacroObservation("VIXCLS", 18.4, today, today, "fred:VIXCLS", "official_public", "daily_close"),

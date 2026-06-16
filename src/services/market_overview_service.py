@@ -118,6 +118,8 @@ CN_TZ = timezone(timedelta(hours=8))
 US_EASTERN_TZ = ZoneInfo("America/New_York")
 FALLBACK_WARNING = "备用示例数据，不代表当前行情"
 INSUFFICIENT_MARKET_DATA_WARNING = "当前真实数据不足，市场温度仅供界面演示"
+MARKET_OVERVIEW_BRIEFING_SCHEMA_VERSION = "market_overview_briefing_v1"
+MARKET_OVERVIEW_BRIEFING_NO_ADVICE_DISCLOSURE = "仅供市场结构观察与研究整理，不用于个性化决策或执行。"
 MARKET_RESEARCH_READINESS_REQUIRED_EVIDENCE = ("macro", "liquidity", "technical")
 OFFICIAL_MACRO_UNAVAILABLE_WARNING = "部分官方宏观指标暂不可用"
 OFFICIAL_DAILY_FRESHNESS_POLICY_ID = "official_daily_us_weekday_t_plus_1"
@@ -316,6 +318,182 @@ def project_market_overview_consumer_evidence_snapshot(raw_snapshot: Any) -> Dic
         projection["providerHealth"] = None
     projection["dataQuality"] = build_consumer_data_quality_state(raw_snapshot)
     return projection
+
+
+def _market_briefing_quality_seed(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    freshness_payload = payload.get("sourceFreshnessEvidence")
+    if isinstance(freshness_payload, Mapping):
+        seed = {
+            "freshness": freshness_payload.get("freshness"),
+            "isFallback": freshness_payload.get("isFallback"),
+            "isPartial": freshness_payload.get("isPartial"),
+            "isUnavailable": freshness_payload.get("isUnavailable"),
+        }
+        if freshness_payload.get("isStale") is not None:
+            seed["isStale"] = freshness_payload.get("isStale")
+        return seed
+    return {
+        "freshness": payload.get("freshness"),
+        "isFallback": payload.get("isFallback"),
+        "isStale": payload.get("isStale"),
+        "isPartial": payload.get("isPartial"),
+        "isUnavailable": payload.get("isUnavailable"),
+    }
+
+
+def _market_briefing_data_quality_summary(state: str) -> str:
+    summaries = {
+        "ready": "当前摘要可用于市场结构观察。",
+        "delayed": "部分输入存在延迟，当前摘要仅保留观察用途。",
+        "cached": "部分输入来自缓存或最近可用数据，当前摘要仅保留结构观察。",
+        "partial": "关键输入仍不完整，当前摘要仅保留结构观察。",
+        "no_evidence": "当前缺少足够输入，摘要仅保留结构观察。",
+        "unavailable": "新鲜输入暂不可用，摘要仅保留结构观察。",
+    }
+    return summaries.get(state, "当前摘要仅保留市场结构观察。")
+
+
+def _market_briefing_freshness_status(seed: Mapping[str, Any]) -> Dict[str, str]:
+    state = str(seed.get("freshness") or "").strip().lower() or "unknown"
+    labels = {
+        "live": "更新正常",
+        "fresh": "更新正常",
+        "cached": "使用缓存",
+        "delayed": "更新延迟",
+        "stale": "数据过期",
+        "partial": "部分输入缺失",
+        "fallback": "已降级到最近可用输入",
+        "mock": "当前输入不可用",
+        "synthetic": "当前输入不可用",
+        "unavailable": "新鲜输入暂不可用",
+        "error": "新鲜输入暂不可用",
+        "unknown": "输入状态待确认",
+    }
+    messages = {
+        "live": "主要输入已按当前节奏更新，可继续做结构观察。",
+        "fresh": "主要输入已按当前节奏更新，可继续做结构观察。",
+        "cached": "部分摘要来自缓存输入，请把结论视为结构观察。",
+        "delayed": "部分输入存在延迟，请先把摘要视为观察线索。",
+        "stale": "部分输入已经过期，请等待更新后再加强判断。",
+        "partial": "关键输入仍不完整，请先把摘要视为观察线索。",
+        "fallback": "当前摘要使用最近可用输入维持结构观察，不代表实时状态。",
+        "mock": "当前缺少可用新鲜输入，请等待后续更新。",
+        "synthetic": "当前缺少可用新鲜输入，请等待后续更新。",
+        "unavailable": "新鲜输入暂不可用，请等待后续更新。",
+        "error": "当前无法确认新鲜输入，请等待后续更新。",
+        "unknown": "当前输入状态仍在确认中，请保持观察。",
+    }
+    return {
+        "state": state,
+        "label": labels.get(state, "输入状态待确认"),
+        "message": messages.get(state, "当前输入状态仍在确认中，请保持观察。"),
+    }
+
+
+def _market_briefing_section_keys(payload: Mapping[str, Any]) -> List[str]:
+    items = payload.get("items") if isinstance(payload.get("items"), list) else []
+    if not items:
+        return []
+    if payload.get("isReliable"):
+        defaults = [
+            "usRiskAppetite",
+            "cnMoneyEffect",
+            "macroPressure",
+            "liquidity",
+            "riskWatch",
+        ]
+    else:
+        defaults = [
+            "marketReadiness",
+            "fallbackUsage",
+            "nextWatch",
+        ]
+    if len(items) <= len(defaults):
+        return defaults[: len(items)]
+    return [*defaults, *[f"summarySection{index}" for index in range(len(defaults) + 1, len(items) + 1)]]
+
+
+def _market_briefing_degraded_inputs(
+    payload: Mapping[str, Any],
+    *,
+    data_quality_state: str,
+    freshness_status: Mapping[str, str],
+) -> List[Dict[str, str]]:
+    degraded: List[Dict[str, str]] = []
+    if data_quality_state != "ready":
+        status = "unavailable" if data_quality_state in {"unavailable", "no_evidence"} else "degraded"
+        degraded.append(
+            {
+                "section": "marketSummary",
+                "status": status,
+                "label": "摘要输入需要复核" if status == "degraded" else "摘要输入暂不可用",
+                "message": _market_briefing_data_quality_summary(data_quality_state),
+            }
+        )
+    fallback_count = int(payload.get("fallbackInputCount") or 0)
+    if fallback_count > 0:
+        degraded.append(
+            {
+                "section": "recentInputs",
+                "status": "degraded",
+                "label": "最近可用输入仍在使用",
+                "message": "部分摘要仍依赖缓存或最近可用输入，请把结论视为结构观察。",
+            }
+        )
+    if payload.get("temperatureAvailable") is False:
+        degraded.append(
+            {
+                "section": "temperatureConclusion",
+                "status": "unavailable",
+                "label": "更强方向判断已收敛",
+                "message": "当前缺少足够可靠证据，因此不提升为更强的市场方向判断。",
+            }
+        )
+    if not degraded and freshness_status.get("state") in {"delayed", "stale", "partial", "fallback", "unavailable", "error"}:
+        degraded.append(
+            {
+                "section": "inputFreshness",
+                "status": "degraded",
+                "label": "输入时效需要复核",
+                "message": str(freshness_status.get("message") or "当前输入时效需要复核。"),
+            }
+        )
+    return degraded
+
+
+def _with_market_briefing_typed_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
+    quality_seed = _market_briefing_quality_seed(payload)
+    data_quality = build_consumer_data_quality_state(quality_seed)
+    freshness_status = _market_briefing_freshness_status(quality_seed)
+    section_keys = _market_briefing_section_keys(payload)
+    items = payload.get("items") if isinstance(payload.get("items"), list) else []
+    payload["schemaVersion"] = MARKET_OVERVIEW_BRIEFING_SCHEMA_VERSION
+    payload["marketSummarySections"] = [
+        {
+            "key": section_keys[index] if index < len(section_keys) else f"summarySection{index + 1}",
+            "title": str(item.get("title") or ""),
+            "message": str(item.get("message") or ""),
+            "severity": str(item.get("severity") or "neutral"),
+            "category": str(item.get("category") or "risk"),
+            **({"confidence": float(item.get("confidence"))} if item.get("confidence") is not None else {}),
+        }
+        for index, item in enumerate(items)
+        if isinstance(item, Mapping)
+    ]
+    payload["dataQuality"] = {
+        **data_quality,
+        "summary": _market_briefing_data_quality_summary(str(data_quality.get("state") or "no_evidence")),
+    }
+    payload["freshnessStatus"] = freshness_status
+    payload["degradedInputs"] = _market_briefing_degraded_inputs(
+        payload,
+        data_quality_state=str(data_quality.get("state") or "no_evidence"),
+        freshness_status=freshness_status,
+    )
+    payload["noAdviceDisclosure"] = MARKET_OVERVIEW_BRIEFING_NO_ADVICE_DISCLOSURE
+    payload["observationOnly"] = True
+    payload["decisionGrade"] = False
+    return payload
 
 CONFIDENCE_BY_FRESHNESS = {
     "live": 1.0,
@@ -1378,6 +1556,7 @@ class MarketOverviewService:
         payload = self._with_market_meta(payload, self._category_for_cache_key("market_briefing"))
         payload["providerHealth"] = self._provider_health(payload, "market_briefing", duration_ms=int((time.monotonic() - started_at) * 1000), error_summary=_compact_error_summary(payload.get("lastError")))
         payload = self._with_evidence_snapshot(payload, self._category_for_cache_key("market_briefing"))
+        payload = _with_market_briefing_typed_contract(payload)
         payload = self._with_consumer_issues(payload)
         return payload
 
