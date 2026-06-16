@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from api.deps import CurrentUser, get_optional_current_user, require_admin_capability
 from api.v1.schemas.daily_intelligence import DailyIntelligenceBriefingResponse
 from api.v1.errors import safe_api_error
+from api.v1.schemas.market_briefing import MarketOverviewBriefingResponse
 from api.v1.schemas.market_scenario_lab import MarketScenarioLabRequest, MarketScenarioLabResponse
 from api.v1.schemas.market_rotation import MarketRotationRadarResponse
 from api.v1.schemas.market_temperature import MarketTemperatureConsumedSubsetResponse
@@ -228,7 +229,12 @@ def post_scenario_lab(request: MarketScenarioLabRequest):
         ) from exc
 
 
-@router.get("/market-briefing", summary="Get rule-based market briefing")
+@router.get(
+    "/market-briefing",
+    response_model=MarketOverviewBriefingResponse,
+    response_model_exclude_none=True,
+    summary="Get rule-based market briefing",
+)
 def get_market_briefing(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
     return MarketOverviewService().get_market_briefing(actor=_actor(current_user))
 

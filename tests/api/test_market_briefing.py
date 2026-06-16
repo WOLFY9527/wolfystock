@@ -4,11 +4,22 @@
 from __future__ import annotations
 
 import copy
+import json
+import re
 import unittest
 from unittest.mock import MagicMock, patch
 
+from fastapi import FastAPI
+
 from api.v1.endpoints import market
 from src.services.market_overview_service import MarketOverviewService
+
+
+INTERNAL_CODE_RE = re.compile(r"[a-z][a-z0-9]*_[a-z0-9_]+|[a-zA-Z]+:[a-zA-Z0-9_.-]+|=")
+FORBIDDEN_ADVICE_RE = re.compile(
+    r"\b(buy|sell|hold|recommendation|target|stop|position\s*sizing)\b|买入|卖出|持有|目标价|止损|仓位",
+    re.IGNORECASE,
+)
 
 
 class MarketBriefingApiTestCase(unittest.TestCase):
@@ -40,6 +51,30 @@ class MarketBriefingApiTestCase(unittest.TestCase):
             self.assertTrue(item["message"])
             self.assertTrue(item["category"])
 
+    def test_market_briefing_openapi_exposes_typed_response_contract(self) -> None:
+        app = FastAPI()
+        app.include_router(market.router, prefix="/api/v1/market")
+
+        schema = app.openapi()
+        response_schema = (
+            schema["paths"]["/api/v1/market/market-briefing"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+        )
+
+        self.assertEqual(response_schema["$ref"], "#/components/schemas/MarketOverviewBriefingResponse")
+        properties = schema["components"]["schemas"]["MarketOverviewBriefingResponse"]["properties"]
+        for field_name in (
+            "schemaVersion",
+            "marketSummarySections",
+            "dataQuality",
+            "freshnessStatus",
+            "consumerIssues",
+            "degradedInputs",
+            "noAdviceDisclosure",
+            "observationOnly",
+            "decisionGrade",
+        ):
+            self.assertIn(field_name, properties)
+
     def test_get_market_briefing_falls_back_when_inputs_fail(self) -> None:
         service = MarketOverviewService()
         with patch.object(service, "_build_market_temperature_inputs", side_effect=RuntimeError("provider down")):
@@ -55,6 +90,15 @@ class MarketBriefingApiTestCase(unittest.TestCase):
         self.assertEqual(payload["disabledReason"], "insufficient_reliable_inputs")
         self.assertEqual(payload["unavailableReason"], "insufficient_reliable_inputs")
         self.assertFalse(payload["conclusionAllowed"])
+        self.assertEqual(payload["schemaVersion"], "market_overview_briefing_v1")
+        self.assertTrue(payload["observationOnly"])
+        self.assertFalse(payload["decisionGrade"])
+        self.assertTrue(payload["consumerIssues"])
+        self.assertTrue(payload["degradedInputs"])
+        self.assertIn(payload["dataQuality"]["state"], {"cached", "partial", "unavailable"})
+        self.assertIn(payload["freshnessStatus"]["state"], {"fallback", "partial", "unavailable"})
+        self.assertTrue(payload["noAdviceDisclosure"])
+        self.assertGreaterEqual(len(payload["marketSummarySections"]), 3)
         for item in payload["items"]:
             self.assertIn(item["severity"], {"neutral", "warning", "risk"})
             self.assertNotEqual(item["severity"], "positive")
@@ -162,6 +206,39 @@ class MarketBriefingApiTestCase(unittest.TestCase):
         self.assertGreater(payload["confidence"], 0.25)
         self.assertEqual(payload["warning"], "部分解读已排除备用数据。")
         self.assertFalse(any(item["severity"] == "risk" for item in payload["items"][:-1]))
+        self.assertEqual(payload["schemaVersion"], "market_overview_briefing_v1")
+        self.assertTrue(payload["observationOnly"])
+        self.assertFalse(payload["decisionGrade"])
+        self.assertTrue(payload["consumerIssues"])
+        self.assertTrue(payload["degradedInputs"])
+        self.assertGreaterEqual(len(payload["marketSummarySections"]), 3)
+
+    def test_market_briefing_typed_consumer_fields_do_not_echo_raw_freshness_tokens(self) -> None:
+        service = MarketOverviewService()
+        with patch.object(service, "_build_market_temperature_inputs", side_effect=RuntimeError("provider down")):
+            payload = service.get_market_briefing()
+
+        consumer_projection = {
+            "marketSummarySections": payload["marketSummarySections"],
+            "dataQuality": payload["dataQuality"],
+            "freshnessStatus": payload["freshnessStatus"],
+            "consumerIssues": payload["consumerIssues"],
+            "degradedInputs": payload["degradedInputs"],
+            "noAdviceDisclosure": payload["noAdviceDisclosure"],
+        }
+        serialized = json.dumps(consumer_projection, ensure_ascii=False).lower()
+
+        for raw_token in (
+            "freshness=unavailable",
+            "freshness=partial",
+            "freshness_blocked:fallback",
+            "freshness_blocked:unavailable",
+            "insufficient_reliable_inputs",
+            "provider_unavailable",
+        ):
+            self.assertNotIn(raw_token, serialized)
+        self.assertIsNone(INTERNAL_CODE_RE.search(serialized))
+        self.assertIsNone(FORBIDDEN_ADVICE_RE.search(serialized))
 
     def test_get_market_briefing_adds_source_authority_diagnostics_for_non_authoritative_inputs(self) -> None:
         service = MarketOverviewService()
