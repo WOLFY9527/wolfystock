@@ -43,6 +43,7 @@ import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../component
 import { cn } from '../utils/cn';
 import { normalizeOptionsEvidence } from '../utils/evidenceDisplay';
 import { formatNumber, formatPercent } from '../utils/format';
+import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 
 type LoadState = {
   loading: boolean;
@@ -191,6 +192,10 @@ function limitationLabel(value: string): string {
   if (value === 'risk_profile_conservative') return '风险偏好：保守';
   if (value === 'risk_profile_balanced') return '风险偏好：均衡';
   if (value === 'risk_profile_aggressive') return '风险偏好：进取';
+  const safeLabel = sanitizeUserFacingDataIssue(value, 'zh');
+  if (safeLabel !== value) {
+    return safeLabel === '数据不足，结论仅供观察' ? '部分外部数据暂不可用' : safeLabel;
+  }
   return '部分外部数据暂不可用';
 }
 
@@ -441,6 +446,8 @@ function scenarioMissingEvidenceLabel(value: string): string {
   if (value === 'bid ask') return '双边报价待补证';
   if (value === 'volume') return '成交量待补证';
   if (value === 'open interest') return '持仓量待补证';
+  const safeLabel = sanitizeUserFacingDataIssue(value, 'zh');
+  if (safeLabel !== value) return safeLabel;
   return '证据待补充';
 }
 
@@ -2198,6 +2205,7 @@ const RiskBoundaryPanel: React.FC<{
   const dataWarnings = [
     ...asArray(decision?.dataQuality?.blockingReasons),
     ...asArray(decision?.dataQuality?.warnings),
+    ...asArray(decision?.failClosedReasonCodes),
     ...asArray(chain?.limitations),
     ...asArray(chain?.metadata?.limitations),
   ];

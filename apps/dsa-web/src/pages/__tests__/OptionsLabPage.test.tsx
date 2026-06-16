@@ -1165,6 +1165,141 @@ describe('OptionsLabPage', () => {
     expect(summary.textContent || '').not.toContain('wide_bid_ask_spread');
   });
 
+  it('maps internal scenario and readiness reason codes into consumer-safe copy', async () => {
+    mockHappyPath(buildOptionsResearchReadiness({
+      blockingReasons: [
+        'provider_authority_missing',
+        'methodology_approval_missing',
+        'avoidLowEvidence',
+      ],
+    }));
+    vi.mocked(optionsLabApi.compareStrategies).mockResolvedValueOnce(withOptionsReadiness({
+      symbol: 'TEM',
+      underlying: {
+        price: 52.34,
+        source: 'fixture',
+        freshness: 'mock',
+      },
+      assumptions: {
+        direction: 'bullish',
+        targetPrice: 65,
+        targetDate: '2026-08-21',
+        maxPremium: 1000,
+        riskProfile: 'balanced',
+        strategies: ['long_call', 'bull_call_spread'],
+        contractMultiplier: 100,
+      },
+      strategies: [],
+      limitations: ['analytical_only_not_advice'],
+      optionsConsumerScenarioFrame: buildScenarioEvidenceFrame({
+        frameState: 'blocked',
+        missingEvidence: [
+          'provider_authority_missing',
+          'redistribution_rights_missing',
+          'insufficient_usable_contracts',
+          'missing_spot_reference',
+        ],
+        nextEvidenceNeeded: ['补充 provider authority 与 live chain 证据'],
+      }),
+      metadata: {
+        readOnly: true,
+      },
+    }, buildOptionsResearchReadiness({
+      blockingReasons: [
+        'provider_authority_missing',
+        'methodology_approval_missing',
+        'avoidLowEvidence',
+      ],
+    })));
+    vi.mocked(optionsLabApi.evaluateDecision).mockResolvedValueOnce(withOptionsReadiness({
+      symbol: 'TEM',
+      strategy: 'bull_call_spread',
+      dataQuality: {
+        dataQualityScore: 22,
+        dataQualityTier: 'insufficient',
+        blockingReasons: ['avoidLowEvidence', 'methodology_approval_missing'],
+        sourceType: 'synthetic',
+        asOfAgeMinutes: 0,
+      },
+      liquidity: {
+        liquidityScore: 40,
+        spreadPct: 18,
+        liquidityWarnings: ['wide_bid_ask_spread'],
+      },
+      ivGreeks: {
+        ivReadiness: 30,
+        ivRankStatus: 'unavailable',
+        ivRank: null,
+        ivPercentile: null,
+        warnings: ['missing_greeks'],
+      },
+      ivRank: null,
+      ivPercentile: null,
+      ivRankStatus: 'unavailable',
+      decisionGrade: false,
+      gateDecision: 'blocked',
+      failClosedReasonCodes: [
+        'observation_only_not_decision_grade',
+        'option_chain_unavailable',
+      ],
+      dataQualityGates: {
+        decisionGrade: false,
+        tier: 'insufficient',
+      },
+      liquidityGates: {
+        passed: false,
+        liquidityScore: 40,
+      },
+      expectedMove: {
+        expectedMoveAbs: null,
+        expectedMovePct: null,
+        expectedMoveSource: 'unavailable',
+        expectedMoveWarnings: [],
+      },
+      optimizer: {
+        preferredStrategyKey: null,
+        optimizerLabel: '数据不足，禁止判断',
+        noTradeReason: 'data_quality_not_decision_grade',
+        alternatives: [],
+      },
+      rankedAlternatives: [],
+    }, buildOptionsResearchReadiness({
+      blockingReasons: [
+        'provider_authority_missing',
+        'methodology_approval_missing',
+        'avoidLowEvidence',
+      ],
+    })));
+
+    renderPage();
+
+    const scenario = await screen.findByTestId('options-lab-scenario-evidence');
+    const riskBoundary = await screen.findByTestId('options-lab-risk-boundary-panel');
+
+    expect(scenario).toHaveTextContent('当前来源授权信息不足，先保持观察。');
+    expect(scenario).toHaveTextContent('当前数据使用权限未确认，先保持观察。');
+    expect(scenario).toHaveTextContent('可用合约不足，暂不形成判断。');
+    expect(scenario).toHaveTextContent('缺少标的现价参考，暂不形成判断。');
+    expect(riskBoundary).toHaveTextContent('当前证据质量偏弱，先保持观察。');
+    expect(riskBoundary).toHaveTextContent('当前方法学确认未完成，先保持观察。');
+    expect(riskBoundary).toHaveTextContent('当前仅达到观察级，暂不形成判断。');
+
+    await act(async () => {
+      within(riskBoundary).getByRole('button', { name: /展开 更多限制/ }).click();
+    });
+    expect(riskBoundary).toHaveTextContent('期权链数据暂不可用。');
+
+    const text = `${scenario.textContent || ''} ${riskBoundary.textContent || ''}`;
+    expect(text).not.toContain('provider_authority_missing');
+    expect(text).not.toContain('redistribution_rights_missing');
+    expect(text).not.toContain('insufficient_usable_contracts');
+    expect(text).not.toContain('missing_spot_reference');
+    expect(text).not.toContain('avoidLowEvidence');
+    expect(text).not.toContain('methodology_approval_missing');
+    expect(text).not.toContain('observation_only_not_decision_grade');
+    expect(text).not.toContain('option_chain_unavailable');
+  });
+
   it('fails closed when additive readiness is missing', async () => {
     renderPage();
 
