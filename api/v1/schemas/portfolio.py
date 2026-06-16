@@ -502,6 +502,12 @@ class PortfolioStructureReviewResponse(BaseModel):
     weakestEvidence: List[Dict[str, Any]] = Field(default_factory=list)
     commonRiskFlags: List[Dict[str, Any]] = Field(default_factory=list)
     missingEvidence: List[Dict[str, str]] = Field(default_factory=list)
+    readOnly: bool
+    failClosed: bool
+    consumerState: Literal["AVAILABLE", "PARTIAL", "UNAVAILABLE"]
+    consumerSummary: str
+    consumerMessage: str
+    drilldownSymbols: List[str] = Field(default_factory=list)
     dataQuality: Dict[str, Any] = Field(default_factory=dict)
     noAdviceDisclosure: str
 

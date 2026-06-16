@@ -99,6 +99,9 @@ class PortfolioStructureReviewService:
             missing_evidence=missing_evidence,
             batch_payload=batch_payload,
         )
+        read_only = True
+        fail_closed = bool(data_quality.get("failClosed"))
+        consumer_state = _consumer_state(data_quality)
 
         return {
             "schemaVersion": PORTFOLIO_STRUCTURE_REVIEW_SCHEMA_VERSION,
@@ -118,6 +121,12 @@ class PortfolioStructureReviewService:
             "weakestEvidence": _weakest_evidence(holdings_structure, batch_payload),
             "commonRiskFlags": _common_risk_flags(holdings_structure, batch_payload),
             "missingEvidence": _dedupe_missing(missing_evidence),
+            "readOnly": read_only,
+            "failClosed": fail_closed,
+            "consumerState": consumer_state,
+            "consumerSummary": _consumer_summary(consumer_state),
+            "consumerMessage": _consumer_message(consumer_state),
+            "drilldownSymbols": _drilldown_symbols(holdings_structure),
             "dataQuality": data_quality,
             "noAdviceDisclosure": str(batch_payload.get("noAdviceDisclosure") or NO_ADVICE_DISCLOSURE),
         }
@@ -471,6 +480,43 @@ def _extract_theme_or_sector_exposure(payload: Mapping[str, Any]) -> list[dict[s
     if sector_status == "unavailable" or not rows:
         return []
     return _safe_dict_rows(rows)
+
+
+def _consumer_state(data_quality: Mapping[str, Any]) -> str:
+    status = str(data_quality.get("status") or "unavailable").strip().lower()
+    if status == "available":
+        return "AVAILABLE"
+    if status == "partial":
+        return "PARTIAL"
+    return "UNAVAILABLE"
+
+
+def _consumer_summary(consumer_state: str) -> str:
+    if consumer_state == "AVAILABLE":
+        return "Structure review available"
+    if consumer_state == "PARTIAL":
+        return "Structure review partially available"
+    return "Structure review unavailable"
+
+
+def _consumer_message(consumer_state: str) -> str:
+    if consumer_state == "AVAILABLE":
+        return "Cached holdings and available structure evidence are shown in read-only mode."
+    if consumer_state == "PARTIAL":
+        return "Some holdings are missing metadata or structure evidence, so this review remains partial and read-only."
+    return "Cached holdings or structure evidence are unavailable, so this panel remains fail-closed."
+
+
+def _drilldown_symbols(holdings_structure: Sequence[Mapping[str, Any]]) -> list[str]:
+    symbols: list[str] = []
+    seen: set[str] = set()
+    for item in holdings_structure:
+        ticker = str(item.get("ticker") or "").strip().upper()
+        if not ticker or ticker == "UNKNOWN" or ticker in seen:
+            continue
+        seen.add(ticker)
+        symbols.append(ticker)
+    return symbols
 
 
 def _parse_snapshot_payload(raw: Any) -> dict[str, Any]:

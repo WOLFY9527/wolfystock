@@ -287,6 +287,14 @@ def test_structure_review_uses_cached_holdings_and_batch_structure_without_portf
     assert [item["ticker"] for item in payload["holdingsStructure"]] == ["AAPL", "MSFT"]
     assert payload["holdingsStructure"][0]["evidenceQuality"] == {"score": 92, "status": "available"}
     assert payload["weakestEvidence"][0]["ticker"] == "MSFT"
+    assert payload["readOnly"] is True
+    assert payload["failClosed"] is False
+    assert payload["consumerState"] == "PARTIAL"
+    assert payload["consumerSummary"] == "Structure review partially available"
+    assert payload["consumerMessage"] == (
+        "Some holdings are missing metadata or structure evidence, so this review remains partial and read-only."
+    )
+    assert payload["drilldownSymbols"] == ["AAPL", "MSFT"]
     assert payload["dataQuality"]["status"] == "partial"
     assert payload["dataQuality"]["holdingMetadataStatus"] == "available"
     assert payload["dataQuality"]["readOnly"] is True
@@ -308,6 +316,14 @@ def test_structure_review_fails_closed_when_cached_holdings_are_unavailable() ->
     assert payload["aggregateSummary"]["holdingCount"] == 0
     assert payload["holdingsStructure"] == []
     assert payload["countsByStructureState"] == {}
+    assert payload["readOnly"] is True
+    assert payload["failClosed"] is True
+    assert payload["consumerState"] == "UNAVAILABLE"
+    assert payload["consumerSummary"] == "Structure review unavailable"
+    assert payload["consumerMessage"] == (
+        "Cached holdings or structure evidence are unavailable, so this panel remains fail-closed."
+    )
+    assert payload["drilldownSymbols"] == []
     assert payload["dataQuality"]["status"] == "unavailable"
     assert payload["dataQuality"]["holdingMetadataStatus"] == "unavailable"
     assert payload["dataQuality"]["failClosed"] is True
@@ -357,6 +373,10 @@ def test_structure_review_fails_closed_for_missing_security_metadata() -> None:
             ],
         }
     ]
+    assert payload["readOnly"] is True
+    assert payload["failClosed"] is True
+    assert payload["consumerState"] == "UNAVAILABLE"
+    assert payload["consumerSummary"] == "Structure review unavailable"
     assert payload["dataQuality"]["status"] == "unavailable"
     assert payload["dataQuality"]["holdingMetadataStatus"] == "unavailable"
     assert structure_service.calls == []

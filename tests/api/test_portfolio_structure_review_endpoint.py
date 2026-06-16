@@ -77,6 +77,12 @@ class _FakePortfolioStructureReviewService:
             "weakestEvidence": [{"ticker": "AAPL", "status": "available", "usableBars": 55, "evidenceQuality": 75}],
             "commonRiskFlags": [],
             "missingEvidence": [],
+            "readOnly": True,
+            "failClosed": False,
+            "consumerState": "AVAILABLE",
+            "consumerSummary": "Structure review available",
+            "consumerMessage": "Cached holdings and available structure evidence are shown in read-only mode.",
+            "drilldownSymbols": ["AAPL"],
             "dataQuality": {
                 "status": "available",
                 "holdingMetadataStatus": "available",
@@ -110,6 +116,11 @@ def test_portfolio_structure_review_endpoint_returns_read_only_projection() -> N
     assert payload["schemaVersion"] == PORTFOLIO_STRUCTURE_REVIEW_SCHEMA_VERSION
     assert payload["aggregateSummary"]["holdingCount"] == 1
     assert payload["holdingsStructure"][0]["ticker"] == "AAPL"
+    assert payload["readOnly"] is True
+    assert payload["failClosed"] is False
+    assert payload["consumerState"] == "AVAILABLE"
+    assert payload["consumerSummary"] == "Structure review available"
+    assert payload["drilldownSymbols"] == ["AAPL"]
     assert payload["dataQuality"]["readOnly"] is True
     assert fake_service.calls == [
         {
