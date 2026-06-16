@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
 from api.deps import CurrentUser, get_optional_current_user, require_admin_capability
+from api.v1.schemas.daily_intelligence import DailyIntelligenceBriefingResponse
 from api.v1.errors import safe_api_error
 from api.v1.schemas.market_scenario_lab import MarketScenarioLabRequest, MarketScenarioLabResponse
 from api.v1.schemas.market_rotation import MarketRotationRadarResponse
@@ -24,6 +25,7 @@ from src.services.market_overview_service import MarketOverviewService
 from src.services.market_rotation_radar_service import MarketRotationRadarService
 from src.services.provider_fit_advisor_service import build_provider_fit_advisor_snapshot
 from src.services.rotation_radar_quote_provider import get_rotation_radar_quote_provider
+from src.services.daily_intelligence_service import DailyIntelligenceService
 
 router = APIRouter()
 _MAX_DATA_READINESS_SYMBOLS = 8
@@ -183,6 +185,26 @@ def get_regime_decision(current_user: Optional[CurrentUser] = Depends(get_option
 @router.get("/decision-cockpit", summary="Get market decision cockpit aggregate")
 def get_decision_cockpit(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
     return MarketDecisionCockpitService().get_decision_cockpit(actor=_actor(current_user))
+
+
+@router.get(
+    "/daily-intelligence",
+    response_model=DailyIntelligenceBriefingResponse,
+    response_model_exclude_none=True,
+    summary="Get daily intelligence briefing aggregate",
+)
+def get_daily_intelligence(
+    market: Optional[str] = Query(None, description="Optional scanner market filter"),
+    profile: Optional[str] = Query(None, description="Optional scanner profile filter"),
+    current_user: Optional[CurrentUser] = Depends(get_optional_current_user),
+):
+    owner_id = current_user.user_id if current_user is not None and hasattr(current_user, "user_id") else None
+    return DailyIntelligenceService().build_briefing(
+        actor=_actor(current_user),
+        owner_id=owner_id,
+        market=market,
+        profile=profile,
+    )
 
 
 @router.post(
