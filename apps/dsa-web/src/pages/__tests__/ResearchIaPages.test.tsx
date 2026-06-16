@@ -135,8 +135,8 @@ describe('research IA pages', () => {
 
     const page = await screen.findByTestId('research-radar-page');
     expect(page).toHaveTextContent('承接市场结构的研究队列');
-    expect(page).toHaveTextContent('ALFA');
-    expect(page).toHaveTextContent('相对强弱改善');
+    expect(await within(page).findByText('ALFA')).toBeInTheDocument();
+    expect(await within(page).findByText('相对强弱改善')).toBeInTheDocument();
     expect(within(page).getByRole('link', { name: '打开结构面板' })).toHaveAttribute('href', '/zh/stocks/ALFA/structure-decision');
     await waitFor(() => expect(getResearchRadarMock).toHaveBeenCalledWith({ market: 'us', profile: undefined, limit: 5 }));
     expect(page.textContent || '').not.toMatch(/raw|debug|provider|schema/i);
