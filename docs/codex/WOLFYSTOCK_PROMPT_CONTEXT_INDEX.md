@@ -18,6 +18,8 @@ Read and obey:
 Use:
 
 - `WOLFYSTOCK_CODEX_TASK_TEMPLATES.md`
+- `WOLFYSTOCK_SURFACE_MAP.md`
+- `WOLFYSTOCK_CODEX_DISCOVERY_PROTOCOL.md`
 
 Task labels stay outside the code block:
 
@@ -32,6 +34,22 @@ or:
 ```
 
 ## Task Type Index
+
+### Surface-Aware Discovery
+
+When a prompt names a product surface, use:
+
+- `WOLFYSTOCK_SURFACE_MAP.md` for stable endpoint/schema/service/client/page/test lookup
+- `WOLFYSTOCK_CODEX_DISCOVERY_PROTOCOL.md` for inspection order, stop rules, and guard-doc routing
+
+This lets future prompts stay compact and specify only:
+
+- `Surface`
+- `Change type`
+- `Goal`
+- `Contract delta`
+- `Validation profile`
+- `Commit`
 
 ### Read-only architecture / triage
 

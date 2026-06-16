@@ -1,0 +1,36 @@
+# WolfyStock Surface Map
+
+Purpose: keep future Codex prompts short by moving stable surface-to-file discovery into one durable reference.
+
+Use this file when the task prompt gives only a `Surface` plus a small delta. If a path below is not confidently wired in the current branch, it is marked `discover`.
+
+Related docs:
+
+- `docs/codex/WOLFYSTOCK_CODEX_DISCOVERY_PROTOCOL.md`
+- `docs/codex/WOLFYSTOCK_CODEX_EXECUTION_POLICY.md`
+- `docs/codex/WOLFYSTOCK_CODEX_VALIDATION_MATRIX.md`
+- `docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md`
+- `docs/codex/NO_ADVICE_REGRESSION_GUARDS.md`
+
+## Surface Map
+
+| Surface | Backend endpoint | Backend schema | Backend service | Backend tests | Frontend API client | Frontend page/component | Frontend tests |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Daily Intelligence | `api/v1/endpoints/market.py` -> `GET /api/v1/market/daily-intelligence` | `api/v1/schemas/daily_intelligence.py` | `src/services/daily_intelligence_service.py` | `tests/api/test_daily_intelligence_endpoint.py`, `tests/test_daily_intelligence_service.py` | `apps/dsa-web/src/api/dailyIntelligence.ts` | `apps/dsa-web/src/pages/MarketDecisionCockpitPage.tsx` | `apps/dsa-web/src/api/__tests__/dailyIntelligence.test.ts`, `apps/dsa-web/src/pages/__tests__/ResearchIaPages.test.tsx` |
+| Market Decision Cockpit | `api/v1/endpoints/market.py` -> `GET /api/v1/market/decision-cockpit` | `discover` | `src/services/market_decision_cockpit_service.py` | `tests/api/test_market_decision_cockpit_endpoint.py`, `tests/test_market_decision_cockpit_service.py` | `apps/dsa-web/src/api/marketDecisionCockpit.ts` | `apps/dsa-web/src/pages/MarketDecisionCockpitPage.tsx` | `apps/dsa-web/src/api/__tests__/marketDecisionCockpit.test.ts`, `apps/dsa-web/src/pages/__tests__/ResearchIaPages.test.tsx` |
+| Market Overview / Briefing | `api/v1/endpoints/market.py` -> `GET /api/v1/market/temperature`, `GET /api/v1/market/market-briefing`; `api/v1/endpoints/market_overview.py` -> `GET /api/v1/market-overview/{indices,volatility,sentiment,funds-flow,macro}` | `api/v1/schemas/market_temperature.py`, `discover` for market-briefing and panel DTOs | `src/services/market_overview_service.py` | `tests/api/test_market_temperature.py`, `tests/api/test_market_briefing.py`, `tests/test_market_overview_snapshot.py`, `tests/test_market_overview_evidence_snapshot.py` | `apps/dsa-web/src/api/market.ts`, `apps/dsa-web/src/api/marketOverview.ts` | `apps/dsa-web/src/pages/MarketOverviewPage.tsx`, `apps/dsa-web/src/pages/HomeBentoDashboardPage.tsx` | `apps/dsa-web/src/pages/__tests__/MarketOverviewPage.test.tsx`, `apps/dsa-web/src/api/__tests__/market.test.ts`, `apps/dsa-web/src/api/__tests__/marketOverview.test.ts` |
+| Research Radar | `api/v1/endpoints/research.py` -> `GET /api/v1/research/radar` | `discover` | `src/services/research_radar_service.py` | `tests/api/test_research_radar_endpoint.py`, `tests/test_research_radar_service.py`, `tests/test_research_radar_candidate_engine.py` | `apps/dsa-web/src/api/researchRadar.ts` | `apps/dsa-web/src/pages/ResearchRadarPage.tsx` | `apps/dsa-web/src/api/__tests__/researchRadar.test.ts`, `apps/dsa-web/src/pages/__tests__/ResearchIaPages.test.tsx` |
+| Scanner Research Overlay | `api/v1/endpoints/scanner.py` -> `GET /api/v1/scanner/runs/{run_id}/research-overlay` | `api/v1/schemas/scanner.py` | `src/services/scanner_research_overlay_service.py` | `tests/api/test_scanner_research_overlay_endpoint.py`, `tests/test_scanner_research_overlay_service.py` | `discover` | `apps/dsa-web/src/pages/UserScannerPage.tsx`, `apps/dsa-web/src/pages/ScannerSurfacePage.tsx`, `apps/dsa-web/src/components/scanner/ScannerCandidateResearchSummary.tsx` | `apps/dsa-web/src/pages/__tests__/UserScannerPage.test.tsx`, `apps/dsa-web/src/pages/__tests__/ScannerSurfacePage.test.tsx` |
+| Watchlist Research Overlay | `api/v1/endpoints/watchlist.py` -> `GET /api/v1/watchlist/research-overlay` | `api/v1/schemas/watchlist.py` | `src/services/watchlist_research_overlay_service.py` | `tests/api/test_watchlist_research_overlay_endpoint.py`, `tests/test_watchlist_research_overlay_service.py` | `discover` | `apps/dsa-web/src/pages/WatchlistPage.tsx` | `apps/dsa-web/src/pages/__tests__/WatchlistPage.test.tsx`, `apps/dsa-web/src/api/__tests__/watchlist.test.ts` |
+| Portfolio Structure Review | `api/v1/endpoints/portfolio.py` -> `GET /api/v1/portfolio/structure-review` | `api/v1/schemas/portfolio.py` | `src/services/portfolio_structure_review_service.py` | `tests/api/test_portfolio_structure_review_endpoint.py`, `tests/test_portfolio_structure_review_service.py` | `discover` | `apps/dsa-web/src/pages/PortfolioPage.tsx` | `apps/dsa-web/src/pages/__tests__/PortfolioPage.test.tsx` |
+| Stock Structure Decision | `api/v1/endpoints/stocks.py` -> `GET /api/v1/stocks/{stock_code}/structure-decision` | `api/v1/schemas/stocks.py` | `src/services/stock_structure_decision_service.py` | `tests/api/test_stock_structure_decision_endpoint.py`, `tests/test_stock_structure_decision_service.py`, `tests/test_stock_structure_decision_engine.py` | `apps/dsa-web/src/api/stocks.ts` | `apps/dsa-web/src/pages/StockStructureDecisionPage.tsx`, `apps/dsa-web/src/pages/StockStructureDecisionEntryPage.tsx` | `apps/dsa-web/src/api/__tests__/stocks.test.ts`, `apps/dsa-web/src/pages/__tests__/ResearchIaPages.test.tsx` |
+| Scenario Lab | `api/v1/endpoints/market.py` -> `POST /api/v1/market/scenario-lab` | `api/v1/schemas/market_scenario_lab.py` | `src/services/market_scenario_lab_engine.py` | `tests/api/test_market_scenario_lab_endpoint.py`, `tests/test_market_scenario_lab_engine.py` | `discover` | `apps/dsa-web/src/pages/ScenarioLabPage.tsx` | `apps/dsa-web/src/pages/__tests__/ResearchIaPages.test.tsx` |
+| Options / Gamma Observation | `api/v1/endpoints/options.py` -> read-only options lab routes; `discover` for any future dedicated gamma-only route | `api/v1/schemas/options.py` | `src/services/options_lab_service.py`, `src/services/options_market_structure_observation.py`, `src/services/options_chain_gamma_observation_adapter.py` | `tests/api/test_options_lab.py`, `tests/test_options_market_structure_observation.py`, `tests/test_options_chain_gamma_observation_adapter.py`, `tests/test_options_gamma_methodology_contract.py` | `apps/dsa-web/src/api/optionsLab.ts` | `apps/dsa-web/src/pages/OptionsLabPage.tsx`, `apps/dsa-web/src/components/options/OptionsReadinessGateSummary.tsx` | `apps/dsa-web/src/pages/__tests__/OptionsLabPage.test.tsx`, `apps/dsa-web/src/api/__tests__/optionsLab.test.ts` |
+
+## Discovery Notes
+
+- `discover` means the surface exists, but this branch does not expose one stable single-file mapping worth hard-coding here yet.
+- If a surface has both a read-only overlay endpoint and an older page-level client path, inspect the overlay path first when the prompt explicitly says `Overlay`.
+- For Market Overview, prefer the additive `temperature` and `market-briefing` chain before editing older panel-only endpoints.
+- For Portfolio, separate `structure-review` from `/api/v1/portfolio/scenario-risk`; they are adjacent but distinct read models.
+- For Options, preserve observation-only and no-advice boundaries; use the guard docs instead of inventing new wording rules here.
