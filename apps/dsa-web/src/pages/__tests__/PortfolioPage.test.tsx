@@ -31,6 +31,7 @@ const {
   getAccounts,
   getSnapshot,
   getRisk,
+  getStructureReview,
   projectScenarioRisk,
   refreshFxRate,
   listBrokerConnections,
@@ -54,6 +55,7 @@ const {
   getAccounts: vi.fn(),
   getSnapshot: vi.fn(),
   getRisk: vi.fn(),
+  getStructureReview: vi.fn(),
   projectScenarioRisk: vi.fn(),
   refreshFxRate: vi.fn(),
   listBrokerConnections: vi.fn(),
@@ -80,6 +82,7 @@ vi.mock('../../api/portfolio', () => ({
     getAccounts,
     getSnapshot,
     getRisk,
+    getStructureReview,
     projectScenarioRisk,
     refreshFxRate,
     listBrokerConnections,
@@ -298,6 +301,89 @@ function makeSnapshot(options: {
   };
 }
 
+function makeStructureReview(options: {
+  status?: 'available' | 'partial' | 'unavailable';
+  holdingState?: string;
+  includeSymbolLink?: boolean;
+} = {}) {
+  return {
+    schemaVersion: 'portfolio_structure_review_v1',
+    aggregateSummary: {
+      asOf: '2026-06-15',
+      accountCount: 1,
+      holdingCount: 2,
+      evaluatedCount: 2,
+      largestHolding: { ticker: 'AAPL', percent: 60 },
+    },
+    exposureByThemeOrSector: [
+      {
+        key: 'ai_infrastructure',
+        label: 'AI Infrastructure',
+        marketValue: 1500,
+        percent: 75,
+        holdingCount: 2,
+      },
+    ],
+    countsByStructureState: {
+      [options.holdingState ?? 'mixed']: 1,
+      lowConfidence: 1,
+    },
+    holdingsStructure: [
+      {
+        ticker: 'AAPL',
+        structureState: options.holdingState ?? 'mixed',
+        confidence: 'medium',
+        evidenceQuality: { score: 74, status: options.status ?? 'partial' },
+        riskFlags: ['Evidence still thin'],
+        researchNotes: {
+          watchNext: ['Wait for cleaner follow-through confirmation.'],
+          needsMoreEvidence: ['Daily structure evidence needs more bars.'],
+          riskFlags: ['Crowded theme sensitivity remains elevated.'],
+        },
+        missingEvidence: [
+          { kind: 'daily_ohlcv', message: 'Daily structure evidence needs more bars.' },
+        ],
+        ...(options.includeSymbolLink === false ? {} : { structureDecisionRoute: '/stocks/AAPL/structure-decision' }),
+      },
+      {
+        ticker: 'UNKNOWN',
+        structureState: 'lowConfidence',
+        confidence: 'low',
+        evidenceQuality: { score: 0, status: 'unavailable' },
+        riskFlags: ['Security metadata is unavailable for this cached holding.'],
+        researchNotes: {
+          watchNext: [],
+          needsMoreEvidence: ['Security metadata is required before structure evidence can be reviewed.'],
+          riskFlags: ['Security metadata is unavailable for this cached holding.'],
+        },
+        missingEvidence: [
+          { kind: 'security_metadata', message: 'Ticker, market, or currency metadata is missing for this cached holding.' },
+        ],
+      },
+    ],
+    strongestStructures: [
+      { ticker: 'AAPL', structureState: options.holdingState ?? 'mixed', score: 74 },
+    ],
+    weakestEvidence: [
+      { ticker: 'UNKNOWN', status: 'unavailable', usableBars: 0, evidenceQuality: 0 },
+    ],
+    commonRiskFlags: [
+      { flag: 'Evidence still thin', count: 1, tickers: ['AAPL'] },
+    ],
+    missingEvidence: [
+      { kind: 'cached_portfolio_holdings', message: 'Cached holdings are partially available for structure review.' },
+    ],
+    dataQuality: {
+      status: options.status ?? 'partial',
+      holdingMetadataStatus: 'partial',
+      structureEvidenceStatus: options.status ?? 'partial',
+      readOnly: true,
+      failClosed: options.status === 'unavailable',
+    },
+    noAdviceDisclosure: 'Observation-only research context; not personalized financial advice and not an instruction.',
+  };
+}
+
 function makeRisk() {
   return {
     asOf: '2026-03-19',
@@ -398,6 +484,7 @@ describe('PortfolioPage FX refresh', () => {
     getAccounts.mockResolvedValue(makeAccounts());
     getSnapshot.mockImplementation(async ({ accountId }: { accountId?: number } = {}) => makeSnapshot({ accountId, fxStale: true }));
     getRisk.mockResolvedValue(makeRisk());
+    getStructureReview.mockResolvedValue(makeStructureReview());
     projectScenarioRisk.mockResolvedValue({
       readModelType: 'portfolio_scenario_risk_advisory_v1',
       advisoryOnly: true,
@@ -879,6 +966,43 @@ describe('PortfolioPage FX refresh', () => {
     expect(risk).toHaveTextContent('主币种');
     expect(risk).toHaveTextContent('主市场');
     expect(risk).toHaveTextContent('最大持仓偏高');
+  });
+
+  it('renders a consumer-safe portfolio structure review section with evidence gaps and structure detail links', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true, fxStale: false }));
+    getStructureReview.mockResolvedValue(makeStructureReview({ status: 'partial', holdingState: 'mixed' }));
+
+    render(
+      <UiLanguageProvider>
+        <PortfolioPage />
+      </UiLanguageProvider>,
+    );
+
+    await waitForInitialLoad();
+    await waitFor(() => expect(getStructureReview).toHaveBeenCalledTimes(1));
+
+    expect(getStructureReview).toHaveBeenCalledWith({
+      accountId: undefined,
+      costMethod: 'fifo',
+    });
+
+    const section = screen.getByTestId('portfolio-structure-review-panel');
+    expect(section).toHaveTextContent('组合结构审查');
+    expect(section).toHaveTextContent('研究工作流');
+    expect(section).toHaveTextContent('AI Infrastructure');
+    expect(section).toHaveTextContent('75.0%');
+    expect(section).toHaveTextContent('mixed');
+    expect(section).toHaveTextContent('需补证据');
+    expect(section).toHaveTextContent('证据仍然偏薄');
+    expect(section).toHaveTextContent('Daily structure evidence needs more bars.');
+    expect(section).toHaveTextContent('该持仓的证券元数据暂不可用。');
+    expect(section).toHaveTextContent('只读研究上下文');
+
+    const detailLink = within(section).getByRole('link', { name: '查看结构详情' });
+    expect(detailLink).toHaveAttribute('href', '/stocks/AAPL/structure-decision');
+
+    expect(section.textContent || '').not.toMatch(/schemaVersion|readOnly|failClosed|provider|debug|raw|trace|structureDecisionRoute/i);
+    expect(section.textContent || '').not.toMatch(/买入|卖出|下单|交易建议|投资建议|buy|sell|target price|stop loss|position sizing/i);
   });
 
   it('renders the bounded scenario risk panel and sends only advisory scenario payload fields', async () => {

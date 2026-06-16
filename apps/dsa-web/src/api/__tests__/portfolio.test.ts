@@ -305,6 +305,102 @@ describe('portfolioApi scenario risk adapter', () => {
     });
   });
 
+
+  it('loads the portfolio structure review projection through the typed client and strips raw payload keys', async () => {
+    const { portfolioApi } = await import('../portfolio');
+
+    get.mockResolvedValueOnce({
+      data: {
+        schema_version: 'portfolio_structure_review_v1',
+        aggregate_summary: {
+          as_of: '2026-06-15',
+          account_count: 1,
+          holding_count: 2,
+          evaluated_count: 2,
+          largest_holding: { ticker: 'AAPL', percent: 60 },
+        },
+        exposure_by_theme_or_sector: [
+          { key: 'ai', label: 'AI Infrastructure', market_value: 1500, percent: 75, holding_count: 2 },
+        ],
+        counts_by_structure_state: { breakout: 1, mixed: 1 },
+        holdings_structure: [
+          {
+            ticker: 'AAPL',
+            structure_state: 'breakout',
+            confidence: 'high',
+            evidence_quality: { score: 92, status: 'available' },
+            risk_flags: ['coverage_gap'],
+            research_notes: { watch_next: ['observe'], needs_more_evidence: [], risk_flags: [] },
+            missing_evidence: [{ kind: 'daily_ohlcv', message: 'Daily OHLCV evidence is unavailable.' }],
+            structure_decision_route: '/stocks/AAPL/structure-decision',
+            debug_trace: 'collapsed',
+          },
+          {
+            ticker: 'MSFT',
+            structure_state: 'mixed',
+            confidence: 'medium',
+            evidence_quality: { score: 52, status: 'partial' },
+            risk_flags: [],
+            research_notes: { watch_next: [], needs_more_evidence: ['Need more bars'], risk_flags: [] },
+            missing_evidence: [],
+          },
+        ],
+        strongest_structures: [{ ticker: 'AAPL', structure_state: 'breakout', score: 92 }],
+        weakest_evidence: [{ ticker: 'MSFT', status: 'partial', usable_bars: 22, evidence_quality: 52 }],
+        common_risk_flags: [{ flag: 'coverage_gap', count: 1, tickers: ['AAPL'] }],
+        missing_evidence: [{ kind: 'cached_portfolio_holdings', message: 'Cached portfolio holdings are unavailable.' }],
+        data_quality: {
+          status: 'partial',
+          holding_metadata_status: 'available',
+          structure_evidence_status: 'available',
+          read_only: true,
+          fail_closed: false,
+          provider: 'backend-debug',
+        },
+        no_advice_disclosure: 'Observation-only research context; not personalized financial advice and not an instruction.',
+      },
+    });
+
+    const payload = await portfolioApi.getStructureReview({
+      accountId: 7,
+      asOf: '2026-06-15',
+      costMethod: 'fifo',
+      benchmark: 'SPY',
+      maxItems: 5,
+    });
+
+    expect(get).toHaveBeenCalledWith('/api/v1/portfolio/structure-review', {
+      params: {
+        account_id: 7,
+        as_of: '2026-06-15',
+        cost_method: 'fifo',
+        benchmark: 'SPY',
+        max_items: 5,
+      },
+    });
+    expect(payload.schemaVersion).toBe('portfolio_structure_review_v1');
+    expect(payload.holdingsStructure[0]).toMatchObject({
+      ticker: 'AAPL',
+      structureState: 'breakout',
+      confidence: 'high',
+      evidenceQuality: { score: 92, status: 'available' },
+      riskFlags: ['coverage_gap'],
+      researchNotes: { watchNext: ['observe'], needsMoreEvidence: [], riskFlags: [] },
+      missingEvidence: [{ kind: 'daily_ohlcv', message: 'Daily OHLCV evidence is unavailable.' }],
+    });
+    expect(payload.dataQuality).toMatchObject({
+      status: 'partial',
+      holdingMetadataStatus: 'available',
+      structureEvidenceStatus: 'available',
+      readOnly: true,
+      failClosed: false,
+    });
+
+    const keys = new Set(walkKeys(payload));
+    for (const forbiddenKey of ['schema_version', 'aggregate_summary', 'exposure_by_theme_or_sector', 'counts_by_structure_state', 'holdings_structure', 'strongest_structures', 'weakest_evidence', 'common_risk_flags', 'missing_evidence', 'no_advice_disclosure', 'provider', 'debug_trace']) {
+      expect(keys.has(forbiddenKey)).toBe(false);
+    }
+  });
   it('normalizes scenario risk response to consumer-safe advisory fields only', async () => {
     const { portfolioApi } = await import('../portfolio');
 

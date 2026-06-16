@@ -33,6 +33,11 @@ import type {
   PortfolioScenarioRiskScenarioResult,
   PortfolioScenarioRiskShockValueInput,
   PortfolioSnapshotResponse,
+  PortfolioStructureReviewDataQuality,
+  PortfolioStructureReviewHolding,
+  PortfolioStructureReviewMissingEvidenceItem,
+  PortfolioStructureReviewResearchNotes,
+  PortfolioStructureReviewResponse,
   PortfolioTradeCreateRequest,
   PortfolioTradeListResponse,
   PortfolioTradeListItem,
@@ -48,6 +53,11 @@ type SnapshotQuery = {
 type FxRefreshQuery = {
   accountId?: number;
   asOf?: string;
+};
+
+type StructureReviewQuery = SnapshotQuery & {
+  benchmark?: string;
+  maxItems?: number;
 };
 
 type FxRateQuery = {
@@ -99,6 +109,17 @@ function buildFxRefreshParams(query: FxRefreshQuery): Record<string, string | nu
   }
   if (query.asOf) {
     params.as_of = query.asOf;
+  }
+  return params;
+}
+
+function buildStructureReviewParams(query: StructureReviewQuery): Record<string, string | number> {
+  const params = buildSnapshotParams(query);
+  if (query.benchmark) {
+    params.benchmark = query.benchmark;
+  }
+  if (query.maxItems != null) {
+    params.max_items = query.maxItems;
   }
   return params;
 }
@@ -159,6 +180,132 @@ function pickStringArray(value: unknown): string[] | undefined {
     return undefined;
   }
   return value.filter((item): item is string => typeof item === 'string');
+}
+
+const STRUCTURE_REVIEW_FORBIDDEN_KEYS = new Set(['provider', 'debugTrace', 'structureDecisionRoute']);
+
+function stripStructureReviewUnsafeKeys<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((entry) => stripStructureReviewUnsafeKeys(entry)) as T;
+  }
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, entry]) => {
+      if (STRUCTURE_REVIEW_FORBIDDEN_KEYS.has(key)) {
+        return [];
+      }
+      return [[key, stripStructureReviewUnsafeKeys(entry)]];
+    }),
+  ) as T;
+}
+
+function normalizeStructureReviewResearchNotes(value: unknown): PortfolioStructureReviewResearchNotes {
+  const data = isRecord(value) ? value : {};
+  return {
+    watchNext: pickStringArray(data.watchNext) ?? [],
+    needsMoreEvidence: pickStringArray(data.needsMoreEvidence) ?? [],
+    riskFlags: pickStringArray(data.riskFlags) ?? [],
+  };
+}
+
+function normalizeStructureReviewMissingEvidence(value: unknown): PortfolioStructureReviewMissingEvidenceItem[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) {
+      return [];
+    }
+
+    const kind = pickString(entry.kind);
+    const message = pickString(entry.message);
+    if (!kind || !message) {
+      return [];
+    }
+
+    return [{ kind, message }];
+  });
+}
+
+function normalizeStructureReviewHolding(value: unknown): PortfolioStructureReviewHolding[] {
+  if (!isRecord(value)) {
+    return [];
+  }
+
+  const ticker = pickString(value.ticker);
+  const structureState = pickString(value.structureState);
+  const confidence = pickString(value.confidence);
+  if (!ticker || !structureState || !confidence) {
+    return [];
+  }
+
+  return [{
+    ticker,
+    structureState,
+    confidence: confidence === 'high' || confidence === 'medium' || confidence === 'low' ? confidence : 'low',
+    evidenceQuality: isRecord(value.evidenceQuality)
+      ? stripStructureReviewUnsafeKeys(value.evidenceQuality)
+      : {},
+    riskFlags: pickStringArray(value.riskFlags) ?? [],
+    researchNotes: normalizeStructureReviewResearchNotes(value.researchNotes),
+    missingEvidence: normalizeStructureReviewMissingEvidence(value.missingEvidence),
+  }];
+}
+
+function normalizeStructureReviewDataQuality(value: unknown): PortfolioStructureReviewDataQuality {
+  const data = isRecord(value) ? value : {};
+  return Object.fromEntries(
+    Object.entries({
+      status: pickString(data.status),
+      holdingMetadataStatus: pickString(data.holdingMetadataStatus),
+      structureEvidenceStatus: pickString(data.structureEvidenceStatus),
+      readOnly: pickBoolean(data.readOnly),
+      failClosed: pickBoolean(data.failClosed),
+    }).filter(([, entry]) => entry !== undefined),
+  ) as PortfolioStructureReviewDataQuality;
+}
+
+function normalizeStructureReviewResponse(data: unknown): PortfolioStructureReviewResponse {
+  const camelized = toCamelCase<Record<string, unknown>>(data);
+  const normalized = isRecord(camelized)
+    ? stripStructureReviewUnsafeKeys(camelized)
+    : {};
+
+  return {
+    schemaVersion: pickString(normalized.schemaVersion) ?? '',
+    aggregateSummary: isRecord(normalized.aggregateSummary)
+      ? stripStructureReviewUnsafeKeys(normalized.aggregateSummary)
+      : {},
+    exposureByThemeOrSector: Array.isArray(normalized.exposureByThemeOrSector)
+      ? normalized.exposureByThemeOrSector.filter(isRecord).map((entry) => stripStructureReviewUnsafeKeys(entry))
+      : [],
+    countsByStructureState: isRecord(normalized.countsByStructureState)
+      ? Object.fromEntries(
+        Object.entries(normalized.countsByStructureState).flatMap(([key, entry]) => (
+          typeof entry === 'number' && Number.isFinite(entry) ? [[key, entry]] : []
+        )),
+      )
+      : {},
+    holdingsStructure: Array.isArray(normalized.holdingsStructure)
+      ? normalized.holdingsStructure.flatMap((entry) => normalizeStructureReviewHolding(entry))
+      : [],
+    strongestStructures: Array.isArray(normalized.strongestStructures)
+      ? normalized.strongestStructures.filter(isRecord).map((entry) => stripStructureReviewUnsafeKeys(entry))
+      : [],
+    weakestEvidence: Array.isArray(normalized.weakestEvidence)
+      ? normalized.weakestEvidence.filter(isRecord).map((entry) => stripStructureReviewUnsafeKeys(entry))
+      : [],
+    commonRiskFlags: Array.isArray(normalized.commonRiskFlags)
+      ? normalized.commonRiskFlags.filter(isRecord).map((entry) => stripStructureReviewUnsafeKeys(entry))
+      : [],
+    missingEvidence: normalizeStructureReviewMissingEvidence(normalized.missingEvidence),
+    dataQuality: normalizeStructureReviewDataQuality(normalized.dataQuality),
+    noAdviceDisclosure: pickString(normalized.noAdviceDisclosure) ?? '',
+  };
 }
 
 function normalizeScenarioRiskShockValue(value: unknown): number | PortfolioScenarioRiskShockValueInput | undefined {
@@ -498,6 +645,13 @@ export const portfolioApi = {
       params: buildSnapshotParams(query),
     });
     return toCamelCase<PortfolioSnapshotResponse>(response.data);
+  },
+
+  async getStructureReview(query: StructureReviewQuery = {}): Promise<PortfolioStructureReviewResponse> {
+    const response = await apiClient.get<Record<string, unknown>>('/api/v1/portfolio/structure-review', {
+      params: buildStructureReviewParams(query),
+    });
+    return normalizeStructureReviewResponse(response.data);
   },
 
   async getRisk(query: SnapshotQuery = {}): Promise<PortfolioRiskResponse> {

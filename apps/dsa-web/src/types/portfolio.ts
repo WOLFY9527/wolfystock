@@ -672,6 +672,98 @@ export interface PortfolioFxRefreshResponse {
   errorCount: number;
 }
 
+export interface PortfolioStructureReviewLargestHolding {
+  ticker?: string | null;
+  percent?: number | null;
+}
+
+export interface PortfolioStructureReviewAggregateSummary {
+  asOf?: string | null;
+  accountCount?: number | null;
+  holdingCount?: number | null;
+  evaluatedCount?: number | null;
+  largestHolding?: PortfolioStructureReviewLargestHolding | null;
+}
+
+export interface PortfolioStructureReviewExposureItem {
+  key?: string | null;
+  label?: string | null;
+  marketValue?: number | null;
+  percent?: number | null;
+  holdingCount?: number | null;
+}
+
+export interface PortfolioStructureReviewEvidenceQuality {
+  score?: number | null;
+  status?: string | null;
+}
+
+export interface PortfolioStructureReviewResearchNotes {
+  watchNext: string[];
+  needsMoreEvidence: string[];
+  riskFlags: string[];
+}
+
+export interface PortfolioStructureReviewMissingEvidenceItem {
+  kind: string;
+  message: string;
+}
+
+export interface PortfolioStructureReviewHolding {
+  ticker: string;
+  structureState: string;
+  confidence: 'high' | 'medium' | 'low';
+  evidenceQuality: PortfolioStructureReviewEvidenceQuality;
+  riskFlags: string[];
+  researchNotes: PortfolioStructureReviewResearchNotes;
+  missingEvidence: PortfolioStructureReviewMissingEvidenceItem[];
+}
+
+export interface PortfolioStructureReviewStateCountMap {
+  [state: string]: number;
+}
+
+export interface PortfolioStructureReviewStrongestStructureItem {
+  ticker?: string | null;
+  structureState?: string | null;
+  score?: number | null;
+}
+
+export interface PortfolioStructureReviewWeakestEvidenceItem {
+  ticker?: string | null;
+  status?: string | null;
+  usableBars?: number | null;
+  evidenceQuality?: number | null;
+}
+
+export interface PortfolioStructureReviewCommonRiskFlagItem {
+  flag?: string | null;
+  count?: number | null;
+  tickers?: string[];
+}
+
+export interface PortfolioStructureReviewDataQuality {
+  status?: string | null;
+  holdingMetadataStatus?: string | null;
+  structureEvidenceStatus?: string | null;
+  readOnly?: boolean | null;
+  failClosed?: boolean | null;
+}
+
+export interface PortfolioStructureReviewResponse {
+  schemaVersion: string;
+  aggregateSummary: PortfolioStructureReviewAggregateSummary;
+  exposureByThemeOrSector: PortfolioStructureReviewExposureItem[];
+  countsByStructureState: PortfolioStructureReviewStateCountMap;
+  holdingsStructure: PortfolioStructureReviewHolding[];
+  strongestStructures: PortfolioStructureReviewStrongestStructureItem[];
+  weakestEvidence: PortfolioStructureReviewWeakestEvidenceItem[];
+  commonRiskFlags: PortfolioStructureReviewCommonRiskFlagItem[];
+  missingEvidence: PortfolioStructureReviewMissingEvidenceItem[];
+  dataQuality: PortfolioStructureReviewDataQuality;
+  noAdviceDisclosure: string;
+}
+
 export interface PortfolioScenarioRiskPositionInput {
   symbol: string;
   weight?: number | null;
