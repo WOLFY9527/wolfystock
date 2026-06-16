@@ -4,12 +4,36 @@
 from __future__ import annotations
 
 import copy
+import json
+import re
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.deps import CurrentUser, get_current_user, get_database_manager
 from api.v1.router import router as api_v1_router
+
+
+INTERNAL_CODE_RE = re.compile(r"[a-z][a-z0-9]*_[a-z0-9_]+|[a-zA-Z]+:[a-zA-Z0-9_.-]+|=")
+
+
+def _serialized_values(payload: object) -> str:
+    values: list[str] = []
+
+    def visit(value: object) -> None:
+        if isinstance(value, str):
+            values.append(value)
+            return
+        if isinstance(value, dict):
+            for item in value.values():
+                visit(item)
+            return
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                visit(item)
+
+    visit(payload)
+    return json.dumps(values, ensure_ascii=False).lower()
 
 
 DETAIL_PAYLOAD = {
@@ -118,14 +142,34 @@ def test_get_scanner_research_overlay_returns_additive_projection_without_mutati
     payload = response.json()
     assert {
         "schemaVersion",
+        "overlayState",
+        "researchSummary",
         "items",
         "aggregateSummary",
         "queueDiversity",
         "dataQuality",
         "missingEvidence",
+        "evidenceGaps",
+        "riskObservations",
+        "drilldownTargets",
         "noAdviceDisclosure",
+        "observationOnly",
+        "decisionGrade",
     }.issubset(payload)
+    assert payload["overlayState"] == "available"
+    assert payload["observationOnly"] is True
+    assert payload["decisionGrade"] is False
     assert payload["items"][0]["ticker"] == "ALFA"
+    assert payload["items"][0]["overlayState"] == "available"
+    assert payload["items"][0]["researchSummary"]
+    assert payload["items"][0]["drilldownTargets"] == [
+        {
+            "label": "Stock Structure",
+            "route": "/stocks/ALFA/structure-decision",
+            "section": "scannerOverlay",
+            "reason": "Open ticker-specific structure context for follow-up research.",
+        }
+    ]
     assert payload["items"][0]["originalScannerCandidateState"] == {
         "ticker": "ALFA",
         "rank": 1,
@@ -136,6 +180,16 @@ def test_get_scanner_research_overlay_returns_additive_projection_without_mutati
     }
     assert payload["items"][0]["researchPriority"] == "high"
     assert payload["items"][0]["whyThisMattersToday"]
+    serialized = _serialized_values(
+        {
+            "researchSummary": payload["researchSummary"],
+            "items": payload["items"],
+            "consumerIssues": payload["consumerIssues"],
+            "riskObservations": payload["riskObservations"],
+            "evidenceGaps": payload["evidenceGaps"],
+        }
+    )
+    assert INTERNAL_CODE_RE.search(serialized) is None
     assert _FakeScannerService.calls == [{"run_id": 42, "scope": "user"}]
     assert source_payload == DETAIL_PAYLOAD
 

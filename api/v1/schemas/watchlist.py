@@ -280,15 +280,26 @@ class WatchlistResearchOverlayFreshnessResponse(BaseModel):
     ohlcvState: str
 
 
+class WatchlistResearchOverlayDrilldownTargetResponse(BaseModel):
+    label: str
+    route: str
+    section: str
+    reason: str
+
+
 class WatchlistResearchOverlayItemResponse(BaseModel):
     ticker: str
+    overlayState: str
+    researchSummary: str
     structureState: Optional[str] = None
     researchPriority: Optional[str] = None
     whyWatching: Optional[str] = None
     whyOnRadar: Optional[str] = None
     whatToVerify: List[str] = Field(default_factory=list)
     riskFlags: List[str] = Field(default_factory=list)
+    riskObservations: List[str] = Field(default_factory=list)
     evidenceGaps: List[str] = Field(default_factory=list)
+    drilldownTargets: List[WatchlistResearchOverlayDrilldownTargetResponse] = Field(default_factory=list)
     consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
     freshness: WatchlistResearchOverlayFreshnessResponse
     themeOrSector: Optional[str] = None
@@ -307,9 +318,16 @@ class WatchlistResearchOverlayDataQualityResponse(BaseModel):
 
 class WatchlistResearchOverlayResponse(BaseModel):
     schemaVersion: Literal["watchlist_research_overlay_v1"] = "watchlist_research_overlay_v1"
+    overlayState: str
+    researchSummary: str
     items: List[WatchlistResearchOverlayItemResponse] = Field(default_factory=list)
     aggregateSummary: Dict[str, Dict[str, int]] = Field(default_factory=dict)
     missingEvidence: List[str] = Field(default_factory=list)
+    evidenceGaps: List[str] = Field(default_factory=list)
+    riskObservations: List[str] = Field(default_factory=list)
+    drilldownTargets: List[WatchlistResearchOverlayDrilldownTargetResponse] = Field(default_factory=list)
     dataQuality: WatchlistResearchOverlayDataQualityResponse
     consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
     noAdviceDisclosure: str
+    observationOnly: Literal[True] = True
+    decisionGrade: Literal[False] = False

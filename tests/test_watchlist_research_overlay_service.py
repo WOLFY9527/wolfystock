@@ -40,6 +40,51 @@ FORBIDDEN_OVERLAY_TEXT = (
     "仓位",
 )
 
+RAW_INTERNAL_CODES = (
+    "watchlist_research_context",
+    "local_ohlcv_evidence",
+    "watchlist_data_unavailable",
+    "fresh_evidence",
+    "scanner_score_evidence",
+    "score_grade_not_allowed",
+    "watchlist_unavailable",
+    "cached_or_stale_evidence",
+    "insufficient_research_evidence",
+    "missing_local_ohlcv",
+    "scanner_data_unavailable",
+)
+
+
+def _issue_text(entries: list[dict[str, str]]) -> str:
+    return " ".join(
+        f"{entry.get('label', '')} {entry.get('message', '')}".strip()
+        for entry in entries
+        if isinstance(entry, dict)
+    )
+
+
+def _text_list(entries: list[str]) -> str:
+    return " ".join(str(entry or "").strip() for entry in entries if str(entry or "").strip())
+
+
+def _serialized_values(value: object) -> str:
+    values: list[str] = []
+
+    def visit(item: object) -> None:
+        if isinstance(item, str):
+            values.append(item)
+            return
+        if isinstance(item, dict):
+            for nested in item.values():
+                visit(nested)
+            return
+        if isinstance(item, (list, tuple)):
+            for nested in item:
+                visit(nested)
+
+    visit(value)
+    return json.dumps(values, ensure_ascii=False).lower()
+
 
 class WatchlistResearchOverlayServiceTestCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -167,6 +212,12 @@ class WatchlistResearchOverlayServiceTestCase(unittest.TestCase):
         self.assertEqual(payload["schemaVersion"], "watchlist_research_overlay_v1")
         self.assertEqual(len(payload["items"]), 2)
         self.assertTrue(payload["noAdviceDisclosure"])
+        self.assertEqual(payload["overlayState"], "degraded")
+        self.assertTrue(payload["observationOnly"])
+        self.assertFalse(payload["decisionGrade"])
+        self.assertTrue(payload["researchSummary"])
+        self.assertTrue(payload["evidenceGaps"])
+        self.assertTrue(payload["riskObservations"])
         self.assertEqual(payload["aggregateSummary"]["byThemeOrSector"]["ai_infra"], 1)
         self.assertEqual(payload["aggregateSummary"]["byEvidenceQuality"]["stale_or_cached"], 1)
         self.assertEqual(payload["aggregateSummary"]["byEvidenceQuality"]["no_evidence"], 1)
@@ -175,21 +226,65 @@ class WatchlistResearchOverlayServiceTestCase(unittest.TestCase):
 
         nvda = next(item for item in payload["items"] if item["ticker"] == "NVDA")
         self.assertEqual(nvda["structureState"], "structure_changed")
+        self.assertEqual(nvda["overlayState"], "degraded")
         self.assertEqual(nvda["researchPriority"], "medium")
         self.assertIn("Volume structure improved", nvda["whyWatching"])
+        self.assertIn("Volume structure improved", nvda["researchSummary"])
         self.assertTrue(
             any("Verify local OHLCV coverage" in check for check in nvda["whatToVerify"])
         )
-        self.assertIn("cached_or_stale_evidence", nvda["riskFlags"])
-        self.assertIn("score_grade_not_allowed", nvda["evidenceGaps"])
+        self.assertIn(
+            "Some inputs rely on fallback or delayed evidence, so keep the read cautious.",
+            nvda["riskFlags"],
+        )
+        self.assertIn(
+            "Evidence quality is not cleared for a stronger score-grade conclusion.",
+            nvda["evidenceGaps"],
+        )
         self.assertEqual(nvda["freshness"]["state"], "stale_or_cached")
+        self.assertEqual(
+            nvda["drilldownTargets"],
+            [
+                {
+                    "label": "Stock Structure",
+                    "route": "/stocks/NVDA/structure-decision",
+                    "section": "watchlistResearchOverlay",
+                    "reason": "Open symbol structure detail.",
+                }
+            ],
+        )
+        self.assertTrue(nvda["riskObservations"])
 
         msft = next(item for item in payload["items"] if item["ticker"] == "MSFT")
+        self.assertEqual(msft["overlayState"], "degraded")
         self.assertIsNone(msft["researchPriority"])
-        self.assertIn("local_ohlcv_evidence", msft["evidenceGaps"])
-        self.assertIn("local_ohlcv_evidence", payload["missingEvidence"])
+        self.assertIn("Local price-history evidence is not available for this read.", msft["evidenceGaps"])
+        self.assertIn("Local price-history evidence is not available for this read.", payload["missingEvidence"])
+        self.assertEqual(
+            msft["drilldownTargets"],
+            [
+                {
+                    "label": "Stock Structure",
+                    "route": "/stocks/MSFT/structure-decision",
+                    "section": "watchlistResearchOverlay",
+                    "reason": "Open symbol structure detail.",
+                }
+            ],
+        )
 
-        serialized = json.dumps(payload, ensure_ascii=False).lower()
+        for text in (
+            payload["researchSummary"],
+            nvda["researchSummary"],
+            _issue_text(payload["consumerIssues"]),
+            _text_list(payload["evidenceGaps"]),
+            _text_list(payload["riskObservations"]),
+            _text_list(nvda["riskObservations"]),
+        ):
+            lowered = text.lower()
+            for raw_code in RAW_INTERNAL_CODES:
+                self.assertNotIn(raw_code.lower(), lowered)
+
+        serialized = _serialized_values(payload)
         for forbidden in FORBIDDEN_OVERLAY_TEXT:
             self.assertNotIn(forbidden.lower(), serialized)
 
@@ -203,9 +298,25 @@ class WatchlistResearchOverlayServiceTestCase(unittest.TestCase):
         ).build_overlay(owner_id="user-1")
 
         self.assertEqual(payload["items"], [])
+        self.assertEqual(payload["overlayState"], "unavailable")
+        self.assertTrue(payload["observationOnly"])
+        self.assertFalse(payload["decisionGrade"])
+        self.assertTrue(payload["researchSummary"])
+        self.assertEqual(payload["evidenceGaps"], ["Some quality checks are not fully cleared yet."])
+        self.assertEqual(payload["riskObservations"], ["Some quality checks are not fully cleared yet."])
         self.assertEqual(payload["dataQuality"]["state"], "unavailable")
         self.assertTrue(payload["dataQuality"]["failClosed"])
-        self.assertIn("watchlist_unavailable", payload["missingEvidence"])
+        self.assertEqual(payload["missingEvidence"], ["Some quality checks are not fully cleared yet."])
+        combined_issue_text = " ".join(
+            [
+                payload["researchSummary"],
+                _issue_text(payload["consumerIssues"]),
+                _text_list(payload["evidenceGaps"]),
+                _text_list(payload["riskObservations"]),
+            ]
+        ).lower()
+        for raw_code in RAW_INTERNAL_CODES:
+            self.assertNotIn(raw_code.lower(), combined_issue_text)
 
 
 if __name__ == "__main__":
