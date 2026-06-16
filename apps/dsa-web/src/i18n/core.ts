@@ -6,6 +6,10 @@ const RESOURCES = {
   zh: {
     nav: {
       home: '首页',
+      marketDecisionCockpit: '决策驾驶舱',
+      researchRadar: '研究雷达',
+      stockStructure: '个股结构',
+      scenarioLab: '情景实验室',
       scanner: '扫描器',
       portfolio: '持仓',
       marketOverview: '市场总览',
@@ -3001,6 +3005,10 @@ const RESOURCES = {
   en: {
     nav: {
       home: 'Home',
+      marketDecisionCockpit: 'Decision Cockpit',
+      researchRadar: 'Research Radar',
+      stockStructure: 'Stock Structure',
+      scenarioLab: 'Scenario Lab',
       scanner: 'Scanner',
       portfolio: 'Holdings',
       marketOverview: 'Market Overview',

@@ -134,8 +134,16 @@ vi.mock('../pages/StockStructureDecisionPage', () => ({
   default: () => <div>stock-structure-decision-page</div>,
 }));
 
+vi.mock('../pages/StockStructureDecisionEntryPage', () => ({
+  default: () => <div>stock-structure-entry-page</div>,
+}));
+
 vi.mock('../pages/ResearchRadarPage', () => ({
   default: () => <div>research-radar-page</div>,
+}));
+
+vi.mock('../pages/ScenarioLabPage', () => ({
+  default: () => <div>scenario-lab-page</div>,
 }));
 
 vi.mock('../pages/BacktestPage', () => ({
@@ -239,6 +247,23 @@ function renderAtWithLocationProbe(path: string) {
       <AppContent />
     </MemoryRouter>,
   );
+}
+
+function mockSignedInConsumer() {
+  useAuthMock.mockReturnValue({
+    authEnabled: true,
+    loggedIn: true,
+    isLoading: false,
+    loadError: null,
+    refreshStatus: vi.fn(),
+  });
+  useProductSurfaceMock.mockReturnValue({
+    isGuest: false,
+    isAdmin: false,
+    isAdminMode: false,
+    adminCapabilities: noCapabilities,
+    ...noCapabilities,
+  });
 }
 
 function mockSignedInAdminWithCapabilities(adminCapabilities: AdminCapabilityFlags) {
@@ -487,6 +512,7 @@ describe('AppContent route flows', () => {
   it.each([
     ['/portfolio', 'auth-guard:Portfolio'],
     ['/research/radar', 'auth-guard:Research Radar'],
+    ['/scenario-lab', 'auth-guard:Scenario Lab'],
     ['/watchlist', 'auth-guard:Watchlist'],
     ['/backtest', 'auth-guard:Backtest'],
   ])(
@@ -517,12 +543,52 @@ describe('AppContent route flows', () => {
     expect(screen.queryByText('auth-guard:Market Decision Cockpit')).not.toBeInTheDocument();
   });
 
+  it.each([
+    ['/zh/market/decision-cockpit', 'market-decision-cockpit-page'],
+    ['/en/market/decision-cockpit', 'market-decision-cockpit-page'],
+    ['/zh/research/radar', 'research-radar-page'],
+    ['/en/research/radar', 'research-radar-page'],
+    ['/zh/scenario-lab', 'scenario-lab-page'],
+    ['/en/scenario-lab', 'scenario-lab-page'],
+  ])('renders the localized core research IA route %s for signed-in users', async (path, expectedText) => {
+    mockSignedInConsumer();
+
+    renderAtWithLocationProbe(path);
+
+    expect(await screen.findByText(expectedText)).toBeInTheDocument();
+    expect(screen.getByTestId('location-path')).toHaveTextContent(path);
+    expect(screen.queryByText(/auth-guard:/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Decision Desk' })).not.toBeInTheDocument();
+  });
+
   it('opens the stock structure route for guest sessions without a paywall', async () => {
     renderAtWithLocationProbe('/stocks/AAPL/structure-decision');
 
     expect(await screen.findByText('stock-structure-decision-page')).toBeInTheDocument();
     expect(screen.getByTestId('location-path')).toHaveTextContent('/stocks/AAPL/structure-decision');
     expect(screen.queryByText('auth-guard:Stock Structure Panel')).not.toBeInTheDocument();
+  });
+
+  it('opens the stock structure entry route for guest sessions without a paywall', async () => {
+    renderAtWithLocationProbe('/stocks/structure-decision');
+
+    expect(await screen.findByText('stock-structure-entry-page')).toBeInTheDocument();
+    expect(screen.getByTestId('location-path')).toHaveTextContent('/stocks/structure-decision');
+    expect(screen.queryByText('auth-guard:Stock Structure Panel')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['/zh/stocks/structure-decision', 'stock-structure-entry-page'],
+    ['/en/stocks/structure-decision', 'stock-structure-entry-page'],
+    ['/zh/stocks/AAPL/structure-decision', 'stock-structure-decision-page'],
+    ['/en/stocks/AAPL/structure-decision', 'stock-structure-decision-page'],
+  ])('renders localized Stock Structure Decision route %s without exposing a legacy decision desk', async (path, expectedText) => {
+    renderAtWithLocationProbe(path);
+
+    expect(await screen.findByText(expectedText)).toBeInTheDocument();
+    expect(screen.getByTestId('location-path')).toHaveTextContent(path);
+    expect(screen.queryByText('auth-guard:Stock Structure Panel')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Decision Desk' })).not.toBeInTheDocument();
   });
 
   it('redirects /market to the market overview surface instead of silently falling back to Home', async () => {
@@ -1293,7 +1359,8 @@ describe('AppContent route flows', () => {
     renderAt('/zh/market/rotation-radar');
 
     expect(await screen.findByText('market-rotation-radar-page')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '轮动雷达' })).toHaveAttribute('href', '/zh/market/rotation-radar');
+    expect(screen.queryByRole('link', { name: '轮动雷达' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '市场总览' })).toHaveAttribute('href', '/zh/market-overview');
   });
 
   it('renders the localized liquidity monitor route', async () => {
@@ -1302,7 +1369,8 @@ describe('AppContent route flows', () => {
     renderAt('/zh/market/liquidity-monitor');
 
     expect(await screen.findByText('liquidity-monitor-page')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '流动性监测' })).toHaveAttribute('href', '/zh/market/liquidity-monitor');
+    expect(screen.queryByRole('link', { name: '流动性监测' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '市场总览' })).toHaveAttribute('href', '/zh/market-overview');
   });
 
   it('renders the rule backtest compare workbench route for signed-in users', async () => {

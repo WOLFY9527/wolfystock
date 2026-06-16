@@ -17,7 +17,6 @@ import {
   FileCheck2,
   Gauge,
   Globe,
-  Home,
   LogIn,
   LogOut,
   Radar,
@@ -26,7 +25,6 @@ import {
   ShieldCheck,
   TestTubeDiagonal,
   UsersRound,
-  Waves,
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -102,15 +100,15 @@ const BrandWordmark: React.FC<{
 );
 
 const NAV_ITEMS: NavItem[] = [
-  { key: 'home', labelKey: 'nav.home', to: '/', icon: Home },
-  { key: 'scanner', labelKey: 'nav.scanner', to: '/scanner', icon: Radar },
-  { key: 'portfolio', labelKey: 'nav.portfolio', to: '/portfolio', icon: BriefcaseBusiness },
+  { key: 'decision-cockpit', labelKey: 'nav.marketDecisionCockpit', to: '/market/decision-cockpit', icon: Gauge },
   { key: 'market-overview', labelKey: 'nav.marketOverview', to: '/market-overview', icon: Activity },
-  { key: 'liquidity-monitor', labelKey: 'nav.liquidityMonitor', to: '/market/liquidity-monitor', icon: Gauge },
-  { key: 'rotation-radar', labelKey: 'nav.rotationRadar', to: '/market/rotation-radar', icon: Waves },
+  { key: 'research-radar', labelKey: 'nav.researchRadar', to: '/research/radar', icon: Radar },
+  { key: 'stock-structure', labelKey: 'nav.stockStructure', to: '/stocks/structure-decision', icon: BarChart3 },
+  { key: 'scanner', labelKey: 'nav.scanner', to: '/scanner', icon: Radar },
   { key: 'watchlist', labelKey: 'nav.watchlist', to: '/watchlist', icon: ListChecks },
-  { key: 'backtest', labelKey: 'nav.backtest', to: '/backtest', icon: TestTubeDiagonal },
-  { key: 'options-lab', labelKey: 'nav.optionsLab', to: '/options-lab', icon: FlaskConical },
+  { key: 'portfolio', labelKey: 'nav.portfolio', to: '/portfolio', icon: BriefcaseBusiness },
+  { key: 'options-lab', labelKey: 'nav.optionsLab', to: '/options-lab', icon: TestTubeDiagonal },
+  { key: 'scenario-lab', labelKey: 'nav.scenarioLab', to: '/scenario-lab', icon: FlaskConical },
 ];
 
 const HEADER_UTILITY_TEXT_CLASS = 'px-2.5 py-1 text-[11px] font-medium text-white/42 transition-colors hover:text-white/78';
