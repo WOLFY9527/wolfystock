@@ -35,6 +35,17 @@ FORBIDDEN_PUBLIC_TERMS = (
     "止损",
     "仓位",
 )
+FORBIDDEN_INTERNAL_TOKENS = (
+    "candidateevidenceframe",
+    "candidateresearchreadiness",
+    "candidateresearchsummaryframe",
+    "insufficient_candidate_evidence",
+    "delayed_evidence",
+    "stale_evidence",
+    "fallback_evidence",
+    "evidence_gaps_present",
+    "scannercandidates",
+)
 FORBIDDEN_IMPORT_PREFIXES = (
     "data_provider",
     "src.providers",
@@ -51,6 +62,25 @@ def _fixed_now() -> datetime:
 
 def _serialized(payload: object) -> str:
     return json.dumps(payload, ensure_ascii=False, sort_keys=True).lower()
+
+
+def _serialized_values(payload: object) -> str:
+    values: list[str] = []
+
+    def visit(value: object) -> None:
+        if isinstance(value, str):
+            values.append(value)
+            return
+        if isinstance(value, dict):
+            for item in value.values():
+                visit(item)
+            return
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                visit(item)
+
+    visit(payload)
+    return json.dumps(values, ensure_ascii=False, sort_keys=True).lower()
 
 
 def _candidate(
@@ -127,7 +157,7 @@ def test_build_overlay_preserves_candidate_order_and_projects_required_contract(
             rank=2,
             score=74.0,
             boards=["Robotics"],
-            missing_evidence=["fundamentals"],
+            missing_evidence=["fundamentals", "candidateResearchReadiness"],
             freshness="delayed",
         ),
     ]
@@ -155,22 +185,61 @@ def test_build_overlay_preserves_candidate_order_and_projects_required_contract(
     assert payload["market"] == "us"
     assert payload["profile"] == "us_preopen_v1"
     assert payload["noAdviceDisclosure"] == SCANNER_RESEARCH_OVERLAY_NO_ADVICE_DISCLOSURE
+    assert payload["overlayState"] == "degraded"
+    assert payload["observationOnly"] is True
+    assert payload["decisionGrade"] is False
+    assert payload["researchSummary"]
+    assert payload["riskObservations"]
+    assert payload["evidenceGaps"] == [
+        "Fundamental evidence is missing.",
+        "Research readiness evidence is missing.",
+    ]
     assert [item["ticker"] for item in payload["items"]] == ["ALFA", "BETA"]
     assert [item["originalScannerCandidateState"]["rank"] for item in payload["items"]] == [1, 2]
+    assert [item["originalScannerCandidateState"]["score"] for item in payload["items"]] == [82.0, 74.0]
+    assert payload["items"][0]["overlayState"] == "available"
+    assert payload["items"][0]["researchSummary"]
+    assert payload["items"][0]["drilldownTargets"] == [
+        {
+            "label": "Stock Structure",
+            "route": "/stocks/ALFA/structure-decision",
+            "section": "scannerOverlay",
+            "reason": "Open ticker-specific structure context for follow-up research.",
+        }
+    ]
     assert payload["items"][0]["researchPriority"] == "high"
     assert payload["items"][0]["regimeFit"]["state"] == "aligned"
     assert payload["items"][0]["themeAlignment"]["themes"] == ["AI Infrastructure"]
     assert payload["items"][0]["whyThisMattersToday"]
     assert payload["items"][0]["whatToVerify"]
-    assert payload["items"][1]["evidenceGaps"] == ["fundamentals"]
+    assert payload["items"][1]["overlayState"] == "degraded"
+    assert payload["items"][1]["evidenceGaps"] == [
+        "Fundamental evidence is missing.",
+        "Research readiness evidence is missing.",
+    ]
+    assert "Some inputs rely on fallback or delayed evidence, so keep the read cautious." in payload["items"][1]["riskObservations"]
+    assert payload["items"][1]["drilldownTargets"] == [
+        {
+            "label": "Stock Structure",
+            "route": "/stocks/BETA/structure-decision",
+            "section": "scannerOverlay",
+            "reason": "Open ticker-specific structure context for follow-up research.",
+        }
+    ]
     assert payload["aggregateSummary"]["candidateCount"] == 2
     assert payload["aggregateSummary"]["priorityCounts"]["high"] == 1
     assert payload["queueDiversity"]["themeCount"] == 2
     assert payload["dataQuality"]["status"] == "partial"
-    assert payload["missingEvidence"] == ["fundamentals"]
+    assert payload["missingEvidence"] == [
+        "Fundamental evidence is missing.",
+        "Research readiness evidence is missing.",
+    ]
+    assert payload["drilldownTargets"][0]["route"] == "/stocks/ALFA/structure-decision"
 
-    leaked = [term for term in FORBIDDEN_PUBLIC_TERMS if term in _serialized(payload)]
+    leaked = [term for term in FORBIDDEN_PUBLIC_TERMS if term in _serialized_values(payload)]
     assert leaked == []
+    internal_leaks = [term for term in FORBIDDEN_INTERNAL_TOKENS if term in _serialized_values(payload)]
+    assert internal_leaks == []
 
 
 def test_build_overlay_fails_closed_when_candidate_evidence_is_insufficient() -> None:
@@ -188,15 +257,20 @@ def test_build_overlay_fails_closed_when_candidate_evidence_is_insufficient() ->
         ],
     )
 
+    assert payload["overlayState"] == "degraded"
+    assert payload["items"][0]["overlayState"] == "degraded"
     assert payload["items"][0]["researchPriority"] == "insufficient_evidence"
+    assert payload["items"][0]["researchSummary"] == "Core scanner evidence is unavailable, so this candidate stays in evidence review only."
     assert payload["items"][0]["regimeFit"]["state"] == "insufficient_evidence"
     assert payload["items"][0]["themeAlignment"]["state"] == "insufficient_evidence"
     assert payload["items"][0]["evidenceQuality"]["status"] == "insufficient"
     assert payload["items"][0]["whyThisMattersToday"] == []
     assert payload["items"][0]["whatToVerify"]
-    assert payload["items"][0]["riskFlags"] == ["insufficient_candidate_evidence"]
+    assert payload["items"][0]["riskFlags"] == ["Evidence coverage is too thin for a stronger research read."]
+    assert payload["items"][0]["riskObservations"] == ["Evidence coverage is too thin for a stronger research read."]
     assert payload["dataQuality"]["status"] == "degraded"
-    assert "candidateEvidenceFrame" in payload["missingEvidence"]
+    assert "Core scanner evidence is unavailable." in payload["missingEvidence"]
+    assert payload["items"][0]["evidenceGaps"] == ["Core scanner evidence is unavailable."]
 
 
 def test_build_overlay_empty_input_returns_degraded_read_only_payload() -> None:
@@ -206,10 +280,39 @@ def test_build_overlay_empty_input_returns_degraded_read_only_payload() -> None:
     )
 
     assert payload["items"] == []
+    assert payload["overlayState"] == "unavailable"
     assert payload["aggregateSummary"]["candidateCount"] == 0
     assert payload["dataQuality"]["status"] == "degraded"
-    assert payload["missingEvidence"] == ["scannerCandidates"]
+    assert payload["missingEvidence"] == ["Scanner candidates are unavailable for this overlay."]
+    assert payload["evidenceGaps"] == ["Scanner candidates are unavailable for this overlay."]
+    assert payload["drilldownTargets"] == []
     assert payload["queueDiversity"]["status"] == "unavailable"
+
+
+def test_build_overlay_filters_unsafe_consumer_copy_from_summary_and_checks() -> None:
+    candidate = _candidate(symbol="GAMMA", rank=3, score=79.0)
+    candidate["reason_summary"] = "Buy after breakout once the setup confirms."
+    candidate["candidateResearchSummaryFrame"]["primaryResearchReason"] = "Set a target after scanner confirmation."
+    candidate["watch_context"] = ["Use a stop loss if the move fails."]
+    candidate["risk_notes"] = ["Position sizing should wait for more evidence."]
+
+    payload = ScannerResearchOverlayService(now=_fixed_now).build_overlay(
+        run={"id": 45, "market": "us", "profile": "us_preopen_v1"},
+        candidates=[candidate],
+    )
+
+    consumer_blob = _serialized(
+        {
+            "researchSummary": payload["researchSummary"],
+            "itemResearchSummary": payload["items"][0]["researchSummary"],
+            "whyThisMattersToday": payload["items"][0]["whyThisMattersToday"],
+            "whatToVerify": payload["items"][0]["whatToVerify"],
+            "riskObservations": payload["items"][0]["riskObservations"],
+            "consumerIssues": payload["consumerIssues"],
+        }
+    )
+    leaked = [term for term in FORBIDDEN_PUBLIC_TERMS if term in consumer_blob]
+    assert leaked == []
 
 
 def test_scanner_research_overlay_service_has_no_runtime_or_persistence_imports() -> None:

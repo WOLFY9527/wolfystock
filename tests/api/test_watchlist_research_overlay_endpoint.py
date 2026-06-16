@@ -161,15 +161,25 @@ class WatchlistResearchOverlayEndpointTestCase(unittest.TestCase):
         )
         self.assertEqual(add_resp.status_code, 200)
         before_alerts = self._alert_counts()
+        items_before = self.client.get("/api/v1/watchlist/items").json()
 
         response = self.client.get("/api/v1/watchlist/research-overlay")
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["schemaVersion"], "watchlist_research_overlay_v1")
+        self.assertEqual(payload["overlayState"], "degraded")
+        self.assertTrue(payload["observationOnly"])
+        self.assertFalse(payload["decisionGrade"])
+        self.assertTrue(payload["researchSummary"])
         self.assertEqual([item["ticker"] for item in payload["items"]], ["NVDA"])
         self.assertEqual(payload["aggregateSummary"]["byThemeOrSector"], {"ai_infra": 1})
+        self.assertEqual(
+            payload["items"][0]["drilldownTargets"][0]["route"],
+            "/stocks/NVDA/structure-decision",
+        )
         self.assertEqual(self._alert_counts(), before_alerts)
+        self.assertEqual(self.client.get("/api/v1/watchlist/items").json(), items_before)
 
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-2", "bob")
         other_response = self.client.get("/api/v1/watchlist/research-overlay")

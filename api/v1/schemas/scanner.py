@@ -801,8 +801,17 @@ class ScannerResearchOverlayEvidenceQuality(BaseModel):
     missingEvidence: List[str] = Field(default_factory=list)
 
 
+class ScannerResearchOverlayDrilldownTarget(BaseModel):
+    label: str
+    route: str
+    section: str
+    reason: str
+
+
 class ScannerResearchOverlayItem(BaseModel):
     ticker: str
+    overlayState: str
+    researchSummary: str
     originalScannerCandidateState: ScannerResearchOverlayOriginalState
     researchPriority: str
     regimeFit: ScannerResearchOverlayFitFrame
@@ -811,7 +820,9 @@ class ScannerResearchOverlayItem(BaseModel):
     whyThisMattersToday: List[str] = Field(default_factory=list)
     whatToVerify: List[str] = Field(default_factory=list)
     riskFlags: List[str] = Field(default_factory=list)
+    riskObservations: List[str] = Field(default_factory=list)
     evidenceGaps: List[str] = Field(default_factory=list)
+    drilldownTargets: List[ScannerResearchOverlayDrilldownTarget] = Field(default_factory=list)
     consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
     noAdviceDisclosure: str
 
@@ -830,13 +841,20 @@ class ScannerResearchOverlayResponse(BaseModel):
     runId: Optional[int] = None
     market: str = ""
     profile: str = ""
+    overlayState: str
+    researchSummary: str
     items: List[ScannerResearchOverlayItem] = Field(default_factory=list)
     aggregateSummary: Dict[str, Any] = Field(default_factory=dict)
     queueDiversity: Dict[str, Any] = Field(default_factory=dict)
     dataQuality: ScannerResearchOverlayDataQuality
     missingEvidence: List[str] = Field(default_factory=list)
+    evidenceGaps: List[str] = Field(default_factory=list)
+    riskObservations: List[str] = Field(default_factory=list)
+    drilldownTargets: List[ScannerResearchOverlayDrilldownTarget] = Field(default_factory=list)
     consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
     noAdviceDisclosure: str
+    observationOnly: Literal[True] = True
+    decisionGrade: Literal[False] = False
 
 
 class ScannerRunHistoryItem(BaseModel):

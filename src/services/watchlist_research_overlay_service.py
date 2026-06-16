@@ -6,6 +6,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 from typing import Any, Dict, Iterable, List, Mapping, Optional
+from urllib.parse import quote
 
 from src.services.consumer_issue_labels import build_consumer_issues
 from src.services.watchlist_service import WatchlistService
@@ -39,30 +40,63 @@ class WatchlistResearchOverlayService:
 
         items = [self._project_item(item) for item in watchlist_items]
         aggregate_summary = self._build_aggregate_summary(items)
-        missing_evidence = self._missing_evidence(items)
+        raw_missing_evidence = self._raw_missing_evidence(items)
+        missing_evidence = self._issue_messages(raw_missing_evidence)
         data_quality = self._build_data_quality(items, watchlist_unavailable=False)
+        overlay_state = self._overlay_state(
+            has_items=bool(items),
+            data_quality_state=self._text(data_quality.get("state")) or "no_evidence",
+        )
+        consumer_issues = build_consumer_issues(
+            raw_missing_evidence,
+            data_quality,
+            [item.get("_rawRiskFlags") for item in items],
+            [item.get("_rawEvidenceGaps") for item in items],
+        )
         return {
             "schemaVersion": WATCHLIST_RESEARCH_OVERLAY_SCHEMA_VERSION,
+            "overlayState": overlay_state,
+            "researchSummary": self._overlay_summary(
+                overlay_state=overlay_state,
+                item_count=len(items),
+                missing_evidence=missing_evidence,
+            ),
             "items": items,
             "aggregateSummary": aggregate_summary,
             "missingEvidence": missing_evidence,
-            "dataQuality": data_quality,
-            "consumerIssues": build_consumer_issues(
-                missing_evidence,
-                data_quality,
-                [item.get("riskFlags") for item in items],
-                [item.get("evidenceGaps") for item in items],
+            "evidenceGaps": missing_evidence,
+            "riskObservations": self._issue_messages(
+                [
+                    raw_missing_evidence,
+                    [item.get("_rawRiskFlags") for item in items],
+                    data_quality.get("state"),
+                ]
             ),
+            "drilldownTargets": self._dedupe_links(
+                target
+                for item in items
+                for target in list(item.get("drilldownTargets") or [])
+            ),
+            "dataQuality": data_quality,
+            "consumerIssues": consumer_issues,
             "noAdviceDisclosure": WATCHLIST_RESEARCH_OVERLAY_NO_ADVICE_DISCLOSURE,
+            "observationOnly": True,
+            "decisionGrade": False,
         }
 
     @classmethod
     def _fail_closed(cls, reason: str) -> Dict[str, Any]:
+        missing_evidence = cls._issue_messages([reason])
         return {
             "schemaVersion": WATCHLIST_RESEARCH_OVERLAY_SCHEMA_VERSION,
+            "overlayState": "unavailable",
+            "researchSummary": "Watchlist research data is unavailable, so this overlay remains read-only.",
             "items": [],
             "aggregateSummary": cls._empty_aggregate_summary(),
-            "missingEvidence": [reason],
+            "missingEvidence": missing_evidence,
+            "evidenceGaps": missing_evidence,
+            "riskObservations": cls._issue_messages([reason]),
+            "drilldownTargets": [],
             "dataQuality": {
                 "state": "unavailable",
                 "itemCount": 0,
@@ -75,6 +109,8 @@ class WatchlistResearchOverlayService:
             },
             "consumerIssues": build_consumer_issues([reason]),
             "noAdviceDisclosure": WATCHLIST_RESEARCH_OVERLAY_NO_ADVICE_DISCLOSURE,
+            "observationOnly": True,
+            "decisionGrade": False,
         }
 
     @classmethod
@@ -84,10 +120,10 @@ class WatchlistResearchOverlayService:
         scanner = intelligence.get("scanner") if isinstance(intelligence.get("scanner"), Mapping) else {}
         lineage = scanner.get("scanner_lineage_v1") if isinstance(scanner.get("scanner_lineage_v1"), Mapping) else {}
         freshness_state = cls._quality_state(item)
-        evidence_gaps = cls._evidence_gaps(item, scanner, lineage)
-        risk_flags = cls._risk_flags(freshness_state, evidence_gaps, scanner)
-        structure_state = cls._structure_state(item, freshness_state, evidence_gaps)
-        research_priority = cls._research_priority(structure_state, freshness_state, evidence_gaps)
+        raw_evidence_gaps = cls._evidence_gaps(item, scanner, lineage)
+        raw_risk_flags = cls._risk_flags(freshness_state, raw_evidence_gaps, scanner)
+        structure_state = cls._structure_state(item, freshness_state, raw_evidence_gaps)
+        research_priority = cls._research_priority(structure_state, freshness_state, raw_evidence_gaps)
         why_watching = cls._first_safe_text(
             lineage.get("research_reason"),
             item.get("score_reason"),
@@ -95,24 +131,38 @@ class WatchlistResearchOverlayService:
             item.get("notes"),
         )
         why_on_radar = cls._first_safe_text(item.get("score_reason"), lineage.get("research_reason"))
-        what_to_verify = cls._what_to_verify(lineage, evidence_gaps)
+        what_to_verify = cls._what_to_verify(lineage, raw_evidence_gaps)
+        consumer_issues = build_consumer_issues(raw_evidence_gaps, raw_risk_flags, freshness_state)
+        evidence_gaps = cls._issue_messages(raw_evidence_gaps)
+        risk_flags = cls._risk_messages(raw_risk_flags)
+        overlay_state = cls._item_overlay_state(freshness_state)
 
         return {
             "ticker": ticker,
+            "overlayState": overlay_state,
+            "researchSummary": cls._research_summary(
+                overlay_state=overlay_state,
+                why_watching=why_watching,
+                consumer_issues=consumer_issues,
+            ),
             "structureState": structure_state,
             "researchPriority": research_priority,
             "whyWatching": why_watching,
             "whyOnRadar": why_on_radar,
             "whatToVerify": what_to_verify,
             "riskFlags": risk_flags,
+            "riskObservations": risk_flags,
             "evidenceGaps": evidence_gaps,
-            "consumerIssues": build_consumer_issues(evidence_gaps, risk_flags, freshness_state),
+            "drilldownTargets": cls._drilldown_targets(ticker),
+            "consumerIssues": consumer_issues,
             "freshness": {
                 "state": freshness_state,
                 "lastReviewedAt": cls._text(item.get("last_reviewed_at")),
                 "ohlcvState": cls._ohlcv_state(scanner),
             },
             "themeOrSector": cls._theme_or_sector(item, scanner),
+            "_rawEvidenceGaps": raw_evidence_gaps,
+            "_rawRiskFlags": raw_risk_flags,
         }
 
     @classmethod
@@ -210,6 +260,14 @@ class WatchlistResearchOverlayService:
                 checks.append("Add or refresh research context.")
         return cls._unique_text(checks)
 
+    @staticmethod
+    def _item_overlay_state(freshness_state: str) -> str:
+        if freshness_state == "ready":
+            return "available"
+        if freshness_state == "unavailable":
+            return "unavailable"
+        return "degraded"
+
     @classmethod
     def _theme_or_sector(cls, item: Mapping[str, Any], scanner: Mapping[str, Any]) -> Optional[str]:
         return cls._safe_text(item.get("theme_id")) or cls._safe_text(scanner.get("theme_label")) or cls._safe_text(scanner.get("theme"))
@@ -244,10 +302,10 @@ class WatchlistResearchOverlayService:
         }
 
     @classmethod
-    def _missing_evidence(cls, items: List[Dict[str, Any]]) -> List[str]:
+    def _raw_missing_evidence(cls, items: List[Dict[str, Any]]) -> List[str]:
         gaps: List[str] = []
         for item in items:
-            gaps.extend(str(gap) for gap in item.get("evidenceGaps") or [])
+            gaps.extend(str(gap) for gap in item.get("_rawEvidenceGaps") or [])
         return cls._unique(gaps)
 
     @classmethod
@@ -266,7 +324,8 @@ class WatchlistResearchOverlayService:
                 state = "partial" if any(value in _DEGRADED_QUALITY for value in states) else "ready"
         ready_count = sum(1 for item in items if (item.get("freshness") or {}).get("state") == "ready")
         unavailable_count = sum(1 for item in items if (item.get("freshness") or {}).get("state") == "unavailable")
-        missing_evidence_count = len(cls._missing_evidence(items))
+        raw_missing_evidence = cls._raw_missing_evidence(items)
+        missing_evidence_count = len(raw_missing_evidence)
         return {
             "state": state,
             "itemCount": len(items),
@@ -275,8 +334,99 @@ class WatchlistResearchOverlayService:
             "unavailableCount": unavailable_count,
             "missingEvidenceCount": missing_evidence_count,
             "failClosed": state != "ready" or missing_evidence_count > 0,
-            "consumerIssues": build_consumer_issues(cls._missing_evidence(items), state),
+            "consumerIssues": build_consumer_issues(raw_missing_evidence, state),
         }
+
+    @classmethod
+    def _overlay_state(cls, *, has_items: bool, data_quality_state: str) -> str:
+        if not has_items:
+            return "unavailable"
+        if data_quality_state == "ready":
+            return "available"
+        if data_quality_state == "unavailable":
+            return "unavailable"
+        return "degraded"
+
+    @classmethod
+    def _overlay_summary(
+        cls,
+        *,
+        overlay_state: str,
+        item_count: int,
+        missing_evidence: List[str],
+    ) -> str:
+        if overlay_state == "unavailable":
+            return "Watchlist research data is unavailable, so this overlay stays read-only."
+        if overlay_state == "degraded":
+            if missing_evidence:
+                return f"{item_count} watchlist entries remain observation-only because supporting evidence is incomplete."
+            return "Watchlist entries remain observation-only until supporting evidence is refreshed."
+        return f"{item_count} watchlist entries are ready for follow-up research review."
+
+    @classmethod
+    def _research_summary(
+        cls,
+        *,
+        overlay_state: str,
+        why_watching: Optional[str],
+        consumer_issues: List[Dict[str, str]],
+    ) -> str:
+        if why_watching:
+            return why_watching
+        if overlay_state == "unavailable":
+            return "This watchlist entry is unavailable for follow-up research right now."
+        issue_message = next((issue.get("message") for issue in consumer_issues if cls._safe_text(issue.get("message"))), None)
+        if issue_message:
+            return str(issue_message)
+        if overlay_state == "degraded":
+            return "Supporting evidence still needs review before confidence can improve."
+        return "Current watchlist evidence supports follow-up research review."
+
+    @classmethod
+    def _issue_messages(cls, values: Any) -> List[str]:
+        return cls._unique_text(
+            issue.get("message")
+            for issue in build_consumer_issues(values)
+            if cls._safe_text(issue.get("message"))
+        )
+
+    @classmethod
+    def _risk_messages(cls, raw_flags: Iterable[str]) -> List[str]:
+        return cls._issue_messages(list(raw_flags))
+
+    @staticmethod
+    def _drilldown_targets(ticker: str) -> List[Dict[str, str]]:
+        symbol = str(ticker or "").strip()
+        if not symbol:
+            return []
+        return [
+            {
+                "label": "Stock Structure",
+                "route": f"/stocks/{quote(symbol, safe='')}/structure-decision",
+                "section": "watchlistResearchOverlay",
+                "reason": "Open symbol structure detail.",
+            }
+        ]
+
+    @classmethod
+    def _dedupe_links(cls, values: Iterable[Mapping[str, str]]) -> List[Dict[str, str]]:
+        result: List[Dict[str, str]] = []
+        seen: set[tuple[str, str, str, str]] = set()
+        for item in values:
+            label = cls._text(item.get("label"))
+            route = cls._text(item.get("route"))
+            section = cls._text(item.get("section"))
+            reason = cls._text(item.get("reason"))
+            if not label or not route or not section:
+                continue
+            key = (label, route, section, reason or "")
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(
+                {"label": label, "route": route, "section": section, "reason": reason or ""}
+            )
+        return result
 
     @classmethod
     def _first_safe_text(cls, *values: Any) -> Optional[str]:
