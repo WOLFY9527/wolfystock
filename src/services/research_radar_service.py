@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterable, Mapping, Sequence
+from urllib.parse import quote
 
 from src.multi_user import OWNERSHIP_SCOPE_USER
 from src.services.market_scanner_candidate_evidence import (
@@ -14,13 +15,186 @@ from src.services.market_scanner_candidate_evidence import (
 )
 from src.services.market_scanner_candidate_summary import build_scanner_candidate_research_summary_frame
 from src.services.research_radar_candidate_engine import build_research_radar_candidate_queue
-from src.services.consumer_issue_labels import build_consumer_issues
 
 
 RESEARCH_RADAR_API_SCHEMA_VERSION = "research_radar_api_v1"
 NO_ADVICE_DISCLOSURE = "Research-only queue; verify evidence gaps before further review."
 _MISSING_SCANNER_CANDIDATES = "scannerCandidates"
 _PRIORITIES = ("high", "medium", "low")
+_OBSERVATION_ONLY = True
+_DECISION_GRADE = False
+
+_DEFAULT_CONSUMER_DESCRIPTOR = {
+    "label": "Evidence needs review",
+    "message": "Some quality checks are not fully cleared yet.",
+    "severity": "info",
+    "category": "evidence",
+}
+
+_RESEARCH_BIAS_DESCRIPTORS = {
+    "avoidlowevidence": {
+        "label": "Low-evidence filter active",
+        "message": "The queue is keeping this item cautious until evidence improves.",
+        "severity": "warning",
+        "category": "research",
+    },
+    "strengthcontinuation": {
+        "label": "Strength observation",
+        "message": "Relative strength and structure are visible enough for research follow-up.",
+        "severity": "info",
+        "category": "research",
+    },
+    "volatilityrisk": {
+        "label": "Volatility risk needs review",
+        "message": "Volatility may limit confidence until the setup stabilizes.",
+        "severity": "warning",
+        "category": "risk",
+    },
+    "pullbackwatch": {
+        "label": "Pullback structure watch",
+        "message": "The item needs follow-up around its pullback structure.",
+        "severity": "info",
+        "category": "research",
+    },
+    "eventdriven": {
+        "label": "Event-driven observation",
+        "message": "Event context is visible and needs confirmation.",
+        "severity": "info",
+        "category": "events",
+    },
+    "breakoutwatch": {
+        "label": "Breakout structure watch",
+        "message": "Structure and participation need continued verification.",
+        "severity": "info",
+        "category": "research",
+    },
+    "mixed": {
+        "label": "Mixed evidence profile",
+        "message": "Drivers are mixed, so the item remains in research review.",
+        "severity": "info",
+        "category": "research",
+    },
+}
+
+_RISK_FLAG_DESCRIPTORS = {
+    "low_liquidity": {
+        "label": "Liquidity is limited",
+        "message": "Liquidity evidence is limited for this item.",
+        "severity": "warning",
+        "category": "liquidity",
+    },
+    "missing_evidence": {
+        "label": "Evidence missing",
+        "message": "Required evidence is missing.",
+        "severity": "warning",
+        "category": "evidence",
+    },
+    "low_evidence_quality": {
+        "label": "Evidence quality is limited",
+        "message": "Evidence quality is not strong enough for a higher-confidence read.",
+        "severity": "warning",
+        "category": "evidence",
+    },
+    "theme_regime_conflict": {
+        "label": "Market backdrop conflict",
+        "message": "Theme context conflicts with the current market backdrop.",
+        "severity": "warning",
+        "category": "market",
+    },
+    "mixed_regime": {
+        "label": "Mixed market backdrop",
+        "message": "The market backdrop is mixed, so confidence remains capped.",
+        "severity": "info",
+        "category": "market",
+    },
+    "theme_concentration": {
+        "label": "Theme concentration",
+        "message": "Similar theme entries are limiting queue diversity.",
+        "severity": "info",
+        "category": "research",
+    },
+    "extreme_extension": {
+        "label": "Extended structure",
+        "message": "The structure appears extended and needs follow-up.",
+        "severity": "warning",
+        "category": "risk",
+    },
+    "elevated_volatility": {
+        "label": "Volatility elevated",
+        "message": "Volatility is elevated and needs follow-up.",
+        "severity": "warning",
+        "category": "risk",
+    },
+}
+
+_EVIDENCE_GAP_DESCRIPTORS = {
+    "fundamentals": {
+        "label": "Company evidence missing",
+        "message": "Company-level evidence is missing.",
+        "severity": "info",
+        "category": "evidence",
+    },
+    "news": {
+        "label": "Media context missing",
+        "message": "Media context is missing.",
+        "severity": "info",
+        "category": "evidence",
+    },
+    "catalyst": {
+        "label": "Event context missing",
+        "message": "Event context is missing.",
+        "severity": "info",
+        "category": "events",
+    },
+    "freshness": {
+        "label": "Recency check missing",
+        "message": "A recency check is missing.",
+        "severity": "info",
+        "category": "recency",
+    },
+    "themebreadth": {
+        "label": "Theme breadth needs review",
+        "message": "Theme breadth needs more confirmation.",
+        "severity": "info",
+        "category": "evidence",
+    },
+    "scannercandidates": {
+        "label": "Research candidates unavailable",
+        "message": "Research candidates are not available for this payload.",
+        "severity": "warning",
+        "category": "research",
+    },
+    "staleevidence": {
+        "label": "Recency check needs review",
+        "message": "Evidence recency needs review.",
+        "severity": "warning",
+        "category": "recency",
+    },
+    "fallbackevidence": {
+        "label": "Fallback evidence present",
+        "message": "Some evidence uses fallback context.",
+        "severity": "warning",
+        "category": "evidence",
+    },
+    "proxyevidence": {
+        "label": "Proxy evidence present",
+        "message": "Some evidence uses proxy context.",
+        "severity": "warning",
+        "category": "evidence",
+    },
+    "sampleonlyevidence": {
+        "label": "Sample-only evidence present",
+        "message": "Some evidence is sample-only.",
+        "severity": "warning",
+        "category": "evidence",
+    },
+    "evidencequality": {
+        "label": "Evidence quality needs review",
+        "message": "Evidence quality needs review.",
+        "severity": "warning",
+        "category": "evidence",
+    },
+}
 
 
 class ResearchRadarService:
@@ -114,23 +288,24 @@ class ResearchRadarService:
             self._project_queue_item(item, by_symbol.get(_symbol_from(item), {}))
             for item in list(engine_payload.get("researchQueue") or [])
         ]
-        evidence_gaps = _dedupe(
+        evidence_gaps_raw = _dedupe(
             [
                 *list(engine_summary.get("evidenceGaps") or []),
                 *[
                     gap
                     for item in queue
-                    for gap in list(_mapping(item.get("evidenceQuality")).get("missingEvidence") or [])
+                    for gap in list(_mapping(item.get("evidenceQuality")).get("missingEvidenceRaw") or [])
                 ],
                 *[
                     gap
                     for item in queue
-                    for gap in list(item.get("evidenceGaps") or [])
+                    for gap in list(item.get("evidenceGapsRaw") or [])
                 ],
             ]
         )
         if not queue:
-            evidence_gaps = [_MISSING_SCANNER_CANDIDATES]
+            evidence_gaps_raw = [_MISSING_SCANNER_CANDIDATES]
+        evidence_gaps = _descriptor_labels(_evidence_gap_descriptors(evidence_gaps_raw))
 
         market_context_fit = _text(engine_summary.get("marketContextFit")) or "neutral"
         if not queue and not _mapping(market_regime_context):
@@ -142,13 +317,21 @@ class ResearchRadarService:
             source=source,
             candidate_count=len(candidate_payloads),
         )
-        data_quality = self._data_quality(queue=queue, evidence_gaps=evidence_gaps)
-        consumer_issues = build_consumer_issues(
-            evidence_gaps,
-            data_quality,
-            [item.get("researchBias") for item in queue],
-            [item.get("riskFlags") for item in queue],
-            [item.get("evidenceGaps") for item in queue],
+        data_quality = self._data_quality(queue=queue, evidence_gaps_raw=evidence_gaps_raw)
+        consumer_issues = _dedupe_descriptors(
+            [
+                *list(data_quality.get("consumerIssues") or []),
+                *[
+                    issue
+                    for item in queue
+                    for issue in list(item.get("consumerIssues") or [])
+                ],
+            ]
+        )
+        drilldown_targets = _dedupe_drilldown_targets(
+            target
+            for item in queue
+            for target in list(item.get("drilldownTargets") or [])
         )
 
         return {
@@ -157,10 +340,14 @@ class ResearchRadarService:
             "researchQueue": queue,
             "aggregateSummary": aggregate_summary,
             "evidenceGaps": evidence_gaps,
+            "evidenceGapsRaw": evidence_gaps_raw,
             "marketContextFit": market_context_fit,
+            "drilldownTargets": drilldown_targets,
             "consumerIssues": consumer_issues,
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
             "dataQuality": data_quality,
+            "observationOnly": _OBSERVATION_ONLY,
+            "decisionGrade": _DECISION_GRADE,
         }
 
     def _project_queue_item(
@@ -172,28 +359,51 @@ class ResearchRadarService:
         explanation = _mapping(item.get("explanation"))
         driver_scores = _mapping(item.get("driverScores"))
         evidence_quality = _candidate_evidence_quality(source_candidate, driver_scores)
-        consumer_issues = build_consumer_issues(
-            item.get("researchBias"),
-            explanation.get("evidenceGaps"),
-            item.get("riskFlags"),
-            evidence_quality.get("missingEvidence"),
+        research_bias_raw = _text(item.get("researchBias")) or "mixed"
+        research_bias = _research_bias_descriptor(research_bias_raw)
+        evidence_gaps_raw = _safe_text_list(explanation.get("evidenceGaps"))
+        evidence_gap_descriptors = _evidence_gap_descriptors(evidence_gaps_raw)
+        risk_flags_raw = _safe_text_list(item.get("riskFlags"))
+        risk_flag_descriptors = _risk_flag_descriptors(risk_flags_raw)
+        evidence_quality["missingEvidenceRaw"] = _safe_text_list(evidence_quality.get("missingEvidence"))
+        evidence_quality["missingEvidence"] = _descriptor_labels(
+            _evidence_gap_descriptors(evidence_quality["missingEvidenceRaw"])
         )
+        consumer_issues = _dedupe_descriptors(
+            [
+                research_bias,
+                *evidence_gap_descriptors,
+                *risk_flag_descriptors,
+                *_evidence_gap_descriptors(evidence_quality.get("missingEvidenceRaw") or []),
+            ]
+        )
+        drilldown_targets = _drilldown_targets(symbol)
         return {
             "symbol": symbol,
             "ticker": symbol,
             "priority": _priority(item.get("priority")),
-            "researchBias": _text(item.get("researchBias")) or "mixed",
+            "researchBias": research_bias["label"],
+            "researchBiasRaw": research_bias_raw,
+            "researchBiasLabel": research_bias["label"],
+            "researchBiasMessage": research_bias["message"],
             "driverScores": dict(driver_scores),
             "whyOnRadar": _safe_text_list(explanation.get("whyOnRadar")),
             "whatToVerify": _safe_text_list(explanation.get("whatToVerify")),
             "whyNotHigherPriority": _safe_text_list(explanation.get("whyNotHigherPriority")),
-            "evidenceGaps": _safe_text_list(explanation.get("evidenceGaps")),
+            "evidenceGaps": _descriptor_labels(evidence_gap_descriptors),
+            "evidenceGapsRaw": evidence_gaps_raw,
+            "consumerEvidenceGaps": evidence_gap_descriptors,
             "invalidationObservations": _safe_text_list(explanation.get("invalidationObservations")),
             "duplicateEvidenceMerged": int(item.get("duplicateEvidenceMerged") or 0),
-            "riskFlags": _safe_text_list(item.get("riskFlags")),
+            "riskFlags": _descriptor_labels(risk_flag_descriptors),
+            "riskFlagsRaw": risk_flags_raw,
+            "riskFlagLabels": _descriptor_labels(risk_flag_descriptors),
             "evidenceQuality": evidence_quality,
             "consumerIssues": consumer_issues,
+            "drilldownTargets": drilldown_targets,
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
+            "observationOnly": _OBSERVATION_ONLY,
+            "decisionGrade": _DECISION_GRADE,
         }
 
     def _aggregate_summary(
@@ -226,15 +436,17 @@ class ResearchRadarService:
     def _data_quality(
         *,
         queue: Sequence[Mapping[str, Any]],
-        evidence_gaps: Sequence[str],
+        evidence_gaps_raw: Sequence[str],
     ) -> dict[str, Any]:
+        evidence_gaps = _descriptor_labels(_evidence_gap_descriptors(evidence_gaps_raw))
         if not queue:
             return {
                 "status": "degraded",
                 "availableCandidateCount": 0,
                 "reliableCandidateCount": 0,
                 "missingEvidence": list(evidence_gaps),
-                "consumerIssues": build_consumer_issues(evidence_gaps),
+                "missingEvidenceRaw": list(evidence_gaps_raw),
+                "consumerIssues": _evidence_gap_descriptors(evidence_gaps_raw),
             }
 
         quality_payloads = [_mapping(item.get("evidenceQuality")) for item in queue]
@@ -252,8 +464,87 @@ class ResearchRadarService:
             "availableCandidateCount": len(queue),
             "reliableCandidateCount": reliable_count,
             "missingEvidence": list(evidence_gaps),
-            "consumerIssues": build_consumer_issues(evidence_gaps),
+            "missingEvidenceRaw": list(evidence_gaps_raw),
+            "consumerIssues": _evidence_gap_descriptors(evidence_gaps_raw),
         }
+
+
+def _research_bias_descriptor(value: Any) -> dict[str, str]:
+    return _descriptor_for(value, _RESEARCH_BIAS_DESCRIPTORS)
+
+
+def _risk_flag_descriptors(values: Sequence[str]) -> list[dict[str, str]]:
+    return _dedupe_descriptors(_descriptor_for(value, _RISK_FLAG_DESCRIPTORS) for value in values)
+
+
+def _evidence_gap_descriptors(values: Sequence[str]) -> list[dict[str, str]]:
+    return _dedupe_descriptors(_descriptor_for(value, _EVIDENCE_GAP_DESCRIPTORS) for value in values)
+
+
+def _descriptor_for(value: Any, mapping: Mapping[str, Mapping[str, str]]) -> dict[str, str]:
+    raw = _text(value)
+    key = raw.lower()
+    descriptor = mapping.get(key) or mapping.get(_compact_descriptor_key(raw)) or _DEFAULT_CONSUMER_DESCRIPTOR
+    return dict(descriptor)
+
+
+def _compact_descriptor_key(value: Any) -> str:
+    return "".join(ch for ch in _text(value).lower() if ch.isalnum())
+
+
+def _descriptor_labels(descriptors: Sequence[Mapping[str, str]]) -> list[str]:
+    return _dedupe(str(descriptor.get("label") or "") for descriptor in descriptors)
+
+
+def _dedupe_descriptors(descriptors: Iterable[Mapping[str, str]]) -> list[dict[str, str]]:
+    result: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    for descriptor in descriptors:
+        item = {
+            "label": _text(descriptor.get("label")) or _DEFAULT_CONSUMER_DESCRIPTOR["label"],
+            "message": _text(descriptor.get("message")) or _DEFAULT_CONSUMER_DESCRIPTOR["message"],
+            "severity": _text(descriptor.get("severity")) or _DEFAULT_CONSUMER_DESCRIPTOR["severity"],
+            "category": _text(descriptor.get("category")) or _DEFAULT_CONSUMER_DESCRIPTOR["category"],
+        }
+        key = (item["label"], item["message"], item["severity"], item["category"])
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
+    return result
+
+
+def _drilldown_targets(symbol: str) -> list[dict[str, str]]:
+    if not symbol:
+        return []
+    encoded_symbol = quote(symbol, safe="")
+    return [
+        {
+            "label": "Structure detail",
+            "route": f"/stocks/{encoded_symbol}/structure-decision",
+            "reason": "Open the structure workspace for this ticker.",
+        }
+    ]
+
+
+def _dedupe_drilldown_targets(targets: Iterable[Mapping[str, Any]]) -> list[dict[str, str]]:
+    result: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for target in targets:
+        label = _text(target.get("label"))
+        route = _text(target.get("route"))
+        reason = _text(target.get("reason"))
+        if not label or not route:
+            continue
+        key = (label, route, reason)
+        if key in seen:
+            continue
+        seen.add(key)
+        item = {"label": label, "route": route}
+        if reason:
+            item["reason"] = reason
+        result.append(item)
+    return result
 
 
 def _scanner_candidate_to_engine_input(candidate: Any) -> dict[str, Any]:
