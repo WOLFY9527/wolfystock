@@ -94,6 +94,7 @@ def _weak_history() -> list[dict[str, Any]]:
 def _assert_required_contract(payload: dict[str, Any]) -> None:
     assert payload["schemaVersion"] == STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION
     assert payload["ticker"] == "AAPL"
+    assert payload["symbol"] == "AAPL"
     assert payload["structureState"] in {
         "uptrend",
         "breakout",
@@ -123,9 +124,18 @@ def _assert_required_contract(payload: dict[str, Any]) -> None:
         "keyLevels",
     }
     assert set(payload["researchNotes"]) == {"watchNext", "needsMoreEvidence", "riskFlags"}
+    assert isinstance(payload["keyLevels"], list)
+    assert isinstance(payload["evidenceNotes"], list)
+    assert isinstance(payload["riskObservations"], list)
+    assert isinstance(payload["evidenceGaps"], list)
     assert "dataQuality" in payload
     assert "missingEvidence" in payload
+    assert "degradedInputs" in payload
+    assert "consumerIssues" in payload
     assert payload["noAdviceDisclosure"]
+    assert payload["observationOnly"] is True
+    assert payload["decisionGrade"] is False
+    assert "drilldownLinks" in payload
 
 
 def test_service_builds_observation_only_structure_decision_from_daily_ohlcv() -> None:
@@ -160,6 +170,18 @@ def test_service_builds_observation_only_structure_decision_from_daily_ohlcv() -
             "message": "Benchmark OHLCV is not included in this endpoint yet, so relative-strength evidence is neutral.",
         }
     ]
+    assert "Breakout quality is supported by a close above the recent range and stronger volume." in payload["evidenceNotes"]
+    assert payload["riskObservations"]
+    assert "Benchmark OHLCV is not included in this endpoint yet, so relative-strength evidence is neutral." in payload["evidenceGaps"]
+    assert "Benchmark OHLCV would improve relative-strength evidence." in payload["evidenceGaps"]
+    assert payload["degradedInputs"] == [
+        {
+            "section": "comparativeContext",
+            "status": "degraded",
+            "reason": "benchmark_ohlcv_unavailable",
+        }
+    ]
+    assert payload["drilldownLinks"] == []
 
 
 def test_service_fails_closed_when_ohlcv_history_is_unavailable() -> None:
@@ -191,6 +213,17 @@ def test_service_fails_closed_when_ohlcv_history_is_unavailable() -> None:
         "kind": "daily_ohlcv",
         "message": "Daily OHLCV history is unavailable, so the structure state is low confidence.",
     } in payload["missingEvidence"]
+    assert payload["consumerIssues"][0]["label"] == "Structure evidence unavailable"
+    consumer_copy = json.dumps(
+        {
+            "consumerIssues": payload["consumerIssues"],
+            "evidenceGaps": payload["evidenceGaps"],
+            "drilldownLinks": payload["drilldownLinks"],
+        },
+        ensure_ascii=False,
+    ).lower()
+    assert "history_unavailable" not in consumer_copy
+    assert "daily_ohlcv" not in consumer_copy
 
 
 def test_service_fails_closed_when_history_lookup_raises() -> None:
@@ -205,6 +238,57 @@ def test_service_fails_closed_when_history_lookup_raises() -> None:
     assert payload["dataQuality"]["source"] == "unavailable"
     assert payload["dataQuality"]["reason"] == "history_lookup_failed"
     assert payload["missingEvidence"][0]["kind"] == "daily_ohlcv"
+    assert payload["consumerIssues"][0]["label"] == "Structure evidence unavailable"
+
+
+def test_service_fails_closed_before_history_lookup_for_invalid_symbol_format() -> None:
+    fake_history = _FakeHistoryService(
+        {
+            "stock_code": "AAPL",
+            "period": "daily",
+            "data": _trend_breakout_history(),
+            "source": "local_db",
+            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 55},
+        }
+    )
+
+    payload = StockStructureDecisionService(history_service=fake_history).get_structure_decision("AAPL<script>")
+
+    assert fake_history.calls == []
+    assert payload["structureState"] == "lowConfidence"
+    assert payload["dataQuality"]["reason"] == "invalid_format"
+    assert payload["consumerIssues"][0]["label"] == "Symbol needs review"
+    assert payload["consumerIssues"][0]["message"] == "Enter a supported stock symbol format."
+    assert payload["degradedInputs"][0]["section"] == "symbol"
+
+
+def test_service_adds_safe_drilldown_context_when_requested() -> None:
+    fake_history = _FakeHistoryService(
+        {
+            "stock_code": "AAPL",
+            "period": "daily",
+            "data": _trend_breakout_history(),
+            "source": "local_db",
+            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 55},
+        }
+    )
+
+    payload = StockStructureDecisionService(history_service=fake_history).get_structure_decision(
+        "AAPL",
+        context_source="researchRadar",
+        context_section="scannerHighlights",
+        context_reason="scanner_candidates_origin",
+    )
+
+    assert payload["sourceContext"] == {
+        "source": "researchRadar",
+        "label": "Research Radar",
+        "route": "/research/radar",
+        "section": "scannerHighlights",
+        "reason": "Scanner candidate context.",
+    }
+    assert payload["drilldownLinks"] == [payload["sourceContext"]]
+    assert payload["consumerIssues"][0]["label"] != "Research context unavailable"
 
 
 def test_service_output_avoids_recommendation_or_trading_instruction_language() -> None:
@@ -274,6 +358,8 @@ def test_batch_structure_decisions_are_bounded_and_stably_ordered() -> None:
     assert [entry["rank"] for entry in relative_strength["ranking"]] == [1, 2]
     assert payload["missingEvidence"] == []
     assert payload["dataQuality"]["status"] == "available"
+    assert all(item["observationOnly"] is True for item in payload["items"])
+    assert all(item["decisionGrade"] is False for item in payload["items"])
 
 
 def test_batch_structure_decisions_mark_comparative_context_unavailable_without_benchmark() -> None:

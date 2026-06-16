@@ -460,9 +460,19 @@ def get_stock_evidence(stock_code: str) -> StockEvidenceResponse:
     summary="获取股票结构判断",
     description="返回 Stock Structure Decision Engine 的观察型结构判断；不构成交易建议。",
 )
-def get_stock_structure_decision(stock_code: str) -> StockStructureDecisionResponse:
+def get_stock_structure_decision(
+    stock_code: str,
+    context_source: Optional[str] = Query(None, alias="contextSource", description="可选来源上下文：researchRadar / watchlist / portfolio"),
+    context_section: Optional[str] = Query(None, alias="contextSection", description="可选来源区段"),
+    context_reason: Optional[str] = Query(None, alias="contextReason", description="可选来源原因提示"),
+) -> StockStructureDecisionResponse:
     try:
-        payload = StockStructureDecisionService().get_structure_decision(stock_code)
+        payload = StockStructureDecisionService().get_structure_decision(
+            stock_code,
+            context_source=context_source,
+            context_section=context_section,
+            context_reason=context_reason,
+        )
         return StockStructureDecisionResponse.model_validate(payload)
     except Exception as e:
         logger.error("获取股票结构判断失败: %s", e, exc_info=True)

@@ -37,11 +37,25 @@ FORBIDDEN_ADVICE_TOKENS = (
 class _FakeStructureDecisionService:
     def __init__(self, payload: dict[str, Any]) -> None:
         self.payload = payload
-        self.calls: list[str] = []
+        self.calls: list[dict[str, Any]] = []
         self.batch_calls: list[dict[str, Any]] = []
 
-    def get_structure_decision(self, ticker: str) -> dict[str, Any]:
-        self.calls.append(ticker)
+    def get_structure_decision(
+        self,
+        ticker: str,
+        *,
+        context_source: str | None = None,
+        context_section: str | None = None,
+        context_reason: str | None = None,
+    ) -> dict[str, Any]:
+        self.calls.append(
+            {
+                "ticker": ticker,
+                "context_source": context_source,
+                "context_section": context_section,
+                "context_reason": context_reason,
+            }
+        )
         return self.payload
 
     def get_structure_decisions_batch(
@@ -105,6 +119,7 @@ def _payload(
     return {
         "schemaVersion": STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION,
         "ticker": ticker,
+        "symbol": ticker,
         "structureState": structure_state,
         "confidence": confidence,
         "componentScores": {
@@ -128,6 +143,13 @@ def _payload(
             "needsMoreEvidence": [],
             "riskFlags": ["No dominant risk flag from deterministic OHLCV components."],
         },
+        "keyLevels": [{"kind": "recentRangeHigh", "value": 131.2, "description": "Upper observation from recent highs."}],
+        "evidenceNotes": ["Breakout quality is supported by a close above the recent range and stronger volume."],
+        "riskObservations": [
+            "No dominant risk flag from deterministic OHLCV components.",
+            "More complete OHLCV evidence may change the structure description.",
+        ],
+        "evidenceGaps": [item["message"] for item in (missing_evidence or [])],
         "dataQuality": {
             "status": data_status,
             "source": "local_db" if data_status == "available" else "unavailable",
@@ -138,7 +160,27 @@ def _payload(
             "reason": "history_available" if data_status == "available" else "history_unavailable",
         },
         "missingEvidence": missing_evidence or [],
+        "degradedInputs": (
+            []
+            if data_status == "available"
+            else [{"section": "structureEvidence", "status": "unavailable", "reason": "history_unavailable"}]
+        ),
+        "consumerIssues": (
+            []
+            if data_status == "available"
+            else [
+                {
+                    "label": "Structure evidence unavailable",
+                    "message": "Daily structure evidence is not available for this symbol yet.",
+                    "severity": "warning",
+                    "category": "evidence",
+                }
+            ]
+        ),
         "noAdviceDisclosure": "Observation-only research context; not personalized financial advice and not an instruction.",
+        "observationOnly": True,
+        "decisionGrade": False,
+        "drilldownLinks": [],
     }
 
 
@@ -155,18 +197,35 @@ def test_structure_decision_endpoint_returns_required_contract(monkeypatch) -> N
 
     assert response.status_code == 200
     payload = response.json()
-    assert fake_service.calls == ["AAPL"]
+    assert fake_service.calls == [
+        {
+            "ticker": "AAPL",
+            "context_source": None,
+            "context_section": None,
+            "context_reason": None,
+        }
+    ]
     assert payload["schemaVersion"] == STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION
     assert payload["ticker"] == "AAPL"
+    assert payload["symbol"] == "AAPL"
     for key in (
         "structureState",
         "confidence",
         "componentScores",
         "explanation",
         "researchNotes",
+        "keyLevels",
+        "evidenceNotes",
+        "riskObservations",
+        "evidenceGaps",
         "dataQuality",
         "missingEvidence",
+        "degradedInputs",
+        "consumerIssues",
         "noAdviceDisclosure",
+        "observationOnly",
+        "decisionGrade",
+        "drilldownLinks",
     ):
         assert key in payload
 
@@ -200,9 +259,75 @@ def test_structure_decision_endpoint_returns_low_confidence_unavailable_payload(
     assert payload["confidence"] == "low"
     assert payload["dataQuality"]["status"] == "unavailable"
     assert payload["missingEvidence"][0]["kind"] == "daily_ohlcv"
+    assert payload["consumerIssues"][0]["label"] == "Structure evidence unavailable"
+    assert payload["degradedInputs"][0]["section"] == "structureEvidence"
+    consumer_copy = json.dumps(
+        {
+            "consumerIssues": payload["consumerIssues"],
+            "evidenceGaps": payload["evidenceGaps"],
+            "drilldownLinks": payload["drilldownLinks"],
+        },
+        ensure_ascii=False,
+    ).lower()
+    assert "history_unavailable" not in consumer_copy
+    assert "daily_ohlcv" not in consumer_copy
     serialized = json.dumps(payload, ensure_ascii=False).lower()
     for forbidden in FORBIDDEN_ADVICE_TOKENS:
         assert forbidden not in serialized
+
+
+def test_structure_decision_endpoint_keeps_drilldown_targets_on_safe_allowlist(monkeypatch) -> None:
+    fake_service = _FakeStructureDecisionService(
+        {
+            **_payload(),
+            "sourceContext": {
+                "source": "researchRadar",
+                "label": "Research Radar",
+                "route": "/research/radar",
+                "section": "scannerHighlights",
+                "reason": "Scanner candidate context.",
+            },
+            "drilldownLinks": [
+                {
+                    "source": "researchRadar",
+                    "label": "Research Radar",
+                    "route": "/research/radar",
+                    "section": "scannerHighlights",
+                    "reason": "Scanner candidate context.",
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(
+        stocks_endpoint,
+        "StockStructureDecisionService",
+        lambda: fake_service,
+        raising=False,
+    )
+
+    response = _client().get(
+        "/api/v1/stocks/AAPL/structure-decision",
+        params={
+            "contextSource": "researchRadar",
+            "contextSection": "scannerHighlights",
+            "contextReason": "scanner_candidates_origin",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert fake_service.calls == [
+        {
+            "ticker": "AAPL",
+            "context_source": "researchRadar",
+            "context_section": "scannerHighlights",
+            "context_reason": "scanner_candidates_origin",
+        }
+    ]
+    assert payload["sourceContext"]["route"] == "/research/radar"
+    assert payload["drilldownLinks"][0]["route"] == "/research/radar"
+    assert payload["drilldownLinks"][0]["label"] == "Research Radar"
+    assert payload["drilldownLinks"][0]["reason"] == "Scanner candidate context."
 
 
 def test_structure_decision_batch_endpoint_returns_comparative_contract(monkeypatch) -> None:
@@ -265,18 +390,29 @@ def test_structure_decision_openapi_locks_required_response_fields() -> None:
     assert response_schema["required"] == [
         "schemaVersion",
         "ticker",
+        "symbol",
         "structureState",
         "confidence",
         "componentScores",
         "explanation",
         "researchNotes",
+        "keyLevels",
+        "evidenceNotes",
+        "riskObservations",
+        "evidenceGaps",
         "dataQuality",
         "missingEvidence",
+        "degradedInputs",
+        "consumerIssues",
         "noAdviceDisclosure",
+        "observationOnly",
+        "decisionGrade",
+        "drilldownLinks",
     ]
     properties = response_schema["properties"]
     assert properties["schemaVersion"]["type"] == "string"
     assert properties["ticker"]["type"] == "string"
+    assert properties["symbol"]["type"] == "string"
     assert properties["structureState"]["type"] == "string"
     assert properties["componentScores"]["additionalProperties"]["type"] == "integer"
 

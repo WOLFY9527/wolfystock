@@ -7,12 +7,14 @@ import logging
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from src.services.consumer_issue_labels import build_consumer_issues
 from src.services.stock_service import StockService
 from src.services.stock_structure_decision_engine import (
     MIN_REQUIRED_BARS,
     NO_ADVICE_DISCLOSURE,
     build_stock_structure_decision,
 )
+from src.utils.symbol_validation import validate_consumer_symbol_precheck
 
 
 logger = logging.getLogger(__name__)
@@ -21,6 +23,67 @@ STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION = "stock_structure_decision_api_v1"
 DEFAULT_STRUCTURE_DECISION_HISTORY_DAYS = 90
 DEFAULT_STRUCTURE_DECISION_BATCH_MAX_ITEMS = 25
 MAX_STRUCTURE_DECISION_BATCH_ITEMS = 50
+_SOURCE_CONTEXT_SPECS = {
+    "researchRadar": {
+        "label": "Research Radar",
+        "route": "/research/radar",
+        "defaultSection": "topResearchPriorities",
+        "defaultReason": "Research radar queue context.",
+        "sectionReasons": {
+            "topResearchPriorities": "Research radar queue context.",
+            "scannerHighlights": "Scanner candidate context.",
+        },
+    },
+    "watchlist": {
+        "label": "Watchlist",
+        "route": "/watchlist",
+        "defaultSection": "watchlistHighlights",
+        "defaultReason": "Watchlist research context.",
+        "sectionReasons": {
+            "watchlistHighlights": "Watchlist research context.",
+        },
+    },
+    "portfolio": {
+        "label": "Portfolio",
+        "route": "/portfolio",
+        "defaultSection": "portfolioStructureHighlights",
+        "defaultReason": "Portfolio structure context.",
+        "sectionReasons": {
+            "portfolioStructureHighlights": "Portfolio structure context.",
+        },
+    },
+}
+_SOURCE_CONTEXT_ALIASES = {
+    "researchradar": "researchRadar",
+    "research_radar": "researchRadar",
+    "research-radar": "researchRadar",
+    "watchlist": "watchlist",
+    "portfolio": "portfolio",
+}
+_SOURCE_CONTEXT_ERROR = {
+    "label": "Research context unavailable",
+    "message": "The requested research context could not be attached to this structure read.",
+    "severity": "info",
+    "category": "research",
+}
+_SYMBOL_REVIEW_ISSUE = {
+    "label": "Symbol needs review",
+    "message": "Review the symbol format before using this structure panel.",
+    "severity": "warning",
+    "category": "symbol",
+}
+_STRUCTURE_UNAVAILABLE_ISSUE = {
+    "label": "Structure evidence unavailable",
+    "message": "Daily structure evidence is not available for this symbol yet.",
+    "severity": "warning",
+    "category": "evidence",
+}
+_STRUCTURE_PARTIAL_ISSUE = {
+    "label": "Structure evidence incomplete",
+    "message": "Daily structure evidence is incomplete, so confidence remains bounded.",
+    "severity": "info",
+    "category": "evidence",
+}
 
 
 class StockStructureDecisionService:
@@ -29,9 +92,34 @@ class StockStructureDecisionService:
     def __init__(self, history_service: Any | None = None) -> None:
         self.history_service = history_service or StockService()
 
-    def get_structure_decision(self, ticker: str) -> dict[str, Any]:
-        normalized_ticker = _normalize_ticker(ticker)
-        return self._build_structure_decision(normalized_ticker)
+    def get_structure_decision(
+        self,
+        ticker: str,
+        *,
+        context_source: str | None = None,
+        context_section: str | None = None,
+        context_reason: str | None = None,
+    ) -> dict[str, Any]:
+        precheck = validate_consumer_symbol_precheck(ticker)
+        normalized_ticker = precheck.normalized_symbol or _normalize_ticker(ticker)
+        if not precheck.can_lookup:
+            return _finalize_structure_contract(
+                _precheck_fail_closed_payload(normalized_ticker, precheck),
+                source_context=None,
+                source_context_issue=None,
+                symbol_issue=precheck.message,
+            )
+
+        return _finalize_structure_contract(
+            self._build_structure_decision(normalized_ticker),
+            source_context=_build_source_context(
+                context_source=context_source,
+                context_section=context_section,
+                context_reason=context_reason,
+            ),
+            source_context_issue=_source_context_issue(context_source=context_source, context_section=context_section),
+            symbol_issue=None,
+        )
 
     def get_structure_decisions_batch(
         self,
@@ -144,7 +232,7 @@ class StockStructureDecisionService:
                     "reason": "benchmark_ohlcv_unavailable",
                 }
             )
-        return payload
+        return _finalize_structure_contract(payload)
 
     def _load_daily_history(self, ticker: str) -> dict[str, Any]:
         try:
@@ -166,6 +254,286 @@ class StockStructureDecisionService:
                 },
             }
         return payload if isinstance(payload, dict) else {}
+
+
+def _finalize_structure_contract(
+    payload: Mapping[str, Any],
+    *,
+    source_context: Mapping[str, str] | None = None,
+    source_context_issue: str | None = None,
+    symbol_issue: str | None = None,
+) -> dict[str, Any]:
+    explanation = payload.get("explanation")
+    explanation = explanation if isinstance(explanation, Mapping) else {}
+    research_notes = payload.get("researchNotes")
+    research_notes = research_notes if isinstance(research_notes, Mapping) else {}
+    missing_evidence = payload.get("missingEvidence")
+    missing_evidence = missing_evidence if isinstance(missing_evidence, list) else []
+    data_quality = payload.get("dataQuality")
+    data_quality = data_quality if isinstance(data_quality, Mapping) else {}
+
+    evidence_notes = _safe_text_list(explanation.get("whatConfirmsIt"))
+    key_levels = _safe_mapping_list(explanation.get("keyLevels"))
+    risk_observations = _dedupe(
+        [
+            *_safe_text_list(research_notes.get("riskFlags")),
+            *_safe_text_list(explanation.get("whatInvalidatesIt")),
+        ]
+    )
+    evidence_gaps = _dedupe(
+        [
+            *[str(item.get("message") or "").strip() for item in missing_evidence if isinstance(item, Mapping)],
+            *_safe_text_list(research_notes.get("needsMoreEvidence")),
+        ]
+    )
+    degraded_inputs = _build_degraded_inputs(
+        data_quality=data_quality,
+        missing_evidence=missing_evidence,
+        source_context_issue=source_context_issue,
+        symbol_issue=symbol_issue,
+    )
+    consumer_issues = _build_detail_consumer_issues(
+        data_quality=data_quality,
+        missing_evidence=missing_evidence,
+        risk_observations=risk_observations,
+        needs_more_evidence=_safe_text_list(research_notes.get("needsMoreEvidence")),
+        source_context_issue=source_context_issue,
+        symbol_issue=symbol_issue,
+    )
+
+    result = dict(payload)
+    result.update(
+        {
+            "symbol": str(payload.get("ticker") or ""),
+            "keyLevels": key_levels,
+            "evidenceNotes": evidence_notes,
+            "riskObservations": risk_observations,
+            "evidenceGaps": evidence_gaps,
+            "degradedInputs": degraded_inputs,
+            "consumerIssues": consumer_issues,
+            "observationOnly": True,
+            "decisionGrade": False,
+            "drilldownLinks": [dict(source_context)] if source_context is not None else [],
+        }
+    )
+    if source_context is not None:
+        result["sourceContext"] = dict(source_context)
+    return result
+
+
+def _precheck_fail_closed_payload(ticker: str, precheck: Any) -> dict[str, Any]:
+    engine_result = build_stock_structure_decision([])
+    return {
+        "schemaVersion": STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION,
+        "ticker": ticker,
+        "structureState": engine_result.get("structureState", "lowConfidence"),
+        "confidence": engine_result.get("confidence", "low"),
+        "componentScores": engine_result.get("componentScores", {}),
+        "explanation": engine_result.get("explanation", {}),
+        "researchNotes": engine_result.get("researchNotes", {}),
+        "dataQuality": {
+            "status": "unavailable",
+            "source": "unavailable",
+            "period": "daily",
+            "requestedDays": DEFAULT_STRUCTURE_DECISION_HISTORY_DAYS,
+            "observedBars": 0,
+            "usableBars": 0,
+            "reason": str(getattr(precheck, "status", "") or "symbol_review_required"),
+        },
+        "missingEvidence": [
+            {
+                "kind": "symbol_validation",
+                "message": str(getattr(precheck, "message", "") or "Review the symbol before retrying this structure read."),
+            }
+        ],
+        "noAdviceDisclosure": engine_result.get("noAdviceDisclosure") or NO_ADVICE_DISCLOSURE,
+    }
+
+
+def _normalize_context_source(value: str | None) -> str | None:
+    text = _safe_text(value)
+    if not text:
+        return None
+    return _SOURCE_CONTEXT_ALIASES.get(text.lower())
+
+
+def _build_source_context(
+    *,
+    context_source: str | None,
+    context_section: str | None,
+    context_reason: str | None,
+) -> dict[str, str] | None:
+    normalized_source = _normalize_context_source(context_source)
+    if normalized_source is None:
+        return None
+    spec = _SOURCE_CONTEXT_SPECS.get(normalized_source)
+    if spec is None:
+        return None
+    normalized_section = _safe_text(context_section) or str(spec["defaultSection"])
+    section_reasons = spec["sectionReasons"]
+    if normalized_section not in section_reasons:
+        return None
+    del context_reason
+    return {
+        "source": normalized_source,
+        "label": str(spec["label"]),
+        "route": str(spec["route"]),
+        "section": normalized_section,
+        "reason": str(section_reasons[normalized_section]),
+    }
+
+
+def _source_context_issue(*, context_source: str | None, context_section: str | None) -> str | None:
+    if not _safe_text(context_source):
+        return None
+    normalized_source = _normalize_context_source(context_source)
+    if normalized_source is None:
+        return "source_context_unsupported"
+    spec = _SOURCE_CONTEXT_SPECS.get(normalized_source)
+    if spec is None:
+        return "source_context_unsupported"
+    normalized_section = _safe_text(context_section) or str(spec["defaultSection"])
+    if normalized_section not in spec["sectionReasons"]:
+        return "source_context_unsupported"
+    return None
+
+
+def _safe_text_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        text = _safe_text(value)
+        return [text] if text else []
+    if not isinstance(value, Sequence) or isinstance(value, (bytes, bytearray)):
+        return []
+    items: list[str] = []
+    for item in value:
+        text = _safe_text(item)
+        if text:
+            items.append(text)
+    return _dedupe(items)
+
+
+def _safe_mapping_list(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, Sequence) or isinstance(value, (bytes, bytearray)):
+        return []
+    items: list[dict[str, Any]] = []
+    for item in value:
+        if isinstance(item, Mapping):
+            items.append(dict(item))
+    return items
+
+
+def _build_degraded_inputs(
+    *,
+    data_quality: Mapping[str, Any],
+    missing_evidence: Sequence[Mapping[str, Any]],
+    source_context_issue: str | None,
+    symbol_issue: str | None,
+) -> list[dict[str, str]]:
+    degraded: list[dict[str, str]] = []
+    if symbol_issue:
+        degraded.append(
+            {
+                "section": "symbol",
+                "status": "unavailable",
+                "reason": "symbol_review_required",
+            }
+        )
+    status = str(data_quality.get("status") or "")
+    reason = str(data_quality.get("reason") or "")
+    if status == "unavailable" and not symbol_issue:
+        degraded.append({"section": "structureEvidence", "status": "unavailable", "reason": reason or "history_unavailable"})
+    elif status in {"partial", "insufficient"} and not symbol_issue:
+        degraded.append({"section": "structureEvidence", "status": "degraded", "reason": reason or "history_partial"})
+
+    if any(str(item.get("kind") or "") == "benchmark_ohlcv" for item in missing_evidence):
+        degraded.append(
+            {
+                "section": "comparativeContext",
+                "status": "degraded",
+                "reason": "benchmark_ohlcv_unavailable",
+            }
+        )
+
+    if source_context_issue:
+        degraded.append(
+            {
+                "section": "sourceContext",
+                "status": "degraded",
+                "reason": source_context_issue,
+            }
+        )
+
+    return degraded
+
+
+def _build_detail_consumer_issues(
+    *,
+    data_quality: Mapping[str, Any],
+    missing_evidence: Sequence[Mapping[str, Any]],
+    risk_observations: Sequence[str],
+    needs_more_evidence: Sequence[str],
+    source_context_issue: str | None,
+    symbol_issue: str | None,
+) -> list[dict[str, str]]:
+    issues: list[dict[str, str]] = []
+    status = str(data_quality.get("status") or "")
+    if symbol_issue:
+        issues.append(dict(_SYMBOL_REVIEW_ISSUE))
+        issues[-1]["message"] = symbol_issue
+    elif status == "unavailable":
+        issues.append(dict(_STRUCTURE_UNAVAILABLE_ISSUE))
+    elif status in {"partial", "insufficient"}:
+        issues.append(dict(_STRUCTURE_PARTIAL_ISSUE))
+
+    if source_context_issue:
+        issues.append(dict(_SOURCE_CONTEXT_ERROR))
+
+    issue_codes = [str(item.get("kind") or "") for item in missing_evidence if isinstance(item, Mapping)]
+    issue_codes.extend(_normalise_issue_codes(risk_observations))
+    issue_codes.extend(_normalise_issue_codes(needs_more_evidence))
+    if issue_codes:
+        issues.extend(build_consumer_issues(issue_codes))
+    return _dedupe_issues(issues)
+
+
+def _normalise_issue_codes(values: Sequence[str]) -> list[str]:
+    normalized: list[str] = []
+    for value in values:
+        text = _safe_text(value)
+        if not text:
+            continue
+        normalized.append(text)
+    return normalized
+
+
+def _dedupe(values: Sequence[Any]) -> list[Any]:
+    result: list[Any] = []
+    seen: set[str] = set()
+    for value in values:
+        key = _safe_text(value)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(value)
+    return result
+
+
+def _dedupe_issues(issues: Sequence[Mapping[str, str]]) -> list[dict[str, str]]:
+    result: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    for issue in issues:
+        item = {
+            "label": str(issue.get("label") or ""),
+            "message": str(issue.get("message") or ""),
+            "severity": str(issue.get("severity") or ""),
+            "category": str(issue.get("category") or ""),
+        }
+        key = (item["label"], item["message"], item["severity"], item["category"])
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
+    return result
 
 
 def _normalize_ticker(ticker: str) -> str:
