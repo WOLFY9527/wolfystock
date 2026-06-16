@@ -15,23 +15,13 @@ from src.services.research_radar_service import (
     RESEARCH_RADAR_API_SCHEMA_VERSION,
     ResearchRadarService,
 )
+from src.services.research_radar_candidate_engine import build_research_radar_candidate_queue
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FORBIDDEN_PUBLIC_TERMS = (
-    "buy",
-    "sell",
-    "position",
-    "target",
-    "stop",
-    "recommendation",
-    "下单",
-    "买入",
-    "卖出",
-    "止损",
-    "止盈",
-    "目标",
-    "仓位",
+FORBIDDEN_PUBLIC_RE = re.compile(
+    r"\b(buy|sell|hold|recommendation|target|stop|position\s*siz(?:e|ing))\b|下单|买入|卖出|止损|止盈|目标|仓位",
+    re.IGNORECASE,
 )
 FORBIDDEN_IMPORT_PREFIXES = (
     "data_provider",
@@ -49,13 +39,37 @@ def _serialized(payload: object) -> str:
     return json.dumps(payload, ensure_ascii=False, sort_keys=True).lower()
 
 
+def _string_values(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        result: list[str] = []
+        for nested in value.values():
+            result.extend(_string_values(nested))
+        return result
+    if isinstance(value, (list, tuple)):
+        result = []
+        for nested in value:
+            result.extend(_string_values(nested))
+        return result
+    return []
+
+
 def _assert_consumer_issues_safe(issues: object, raw_codes: tuple[str, ...]) -> None:
     serialized = _serialized(issues)
     for raw_code in raw_codes:
         if INTERNAL_CODE_RE.search(raw_code) or raw_code != raw_code.lower():
             assert raw_code.lower() not in serialized
     assert INTERNAL_CODE_RE.search(serialized) is None
-    assert not any(term.lower() in serialized for term in FORBIDDEN_PUBLIC_TERMS)
+    assert FORBIDDEN_PUBLIC_RE.search(serialized) is None
+
+
+def _assert_display_ready_fields_safe(value: object, raw_codes: tuple[str, ...]) -> None:
+    serialized = _serialized(value)
+    for raw_code in raw_codes:
+        assert raw_code.lower() not in serialized
+    assert INTERNAL_CODE_RE.search(serialized) is None
+    assert FORBIDDEN_PUBLIC_RE.search(serialized) is None
 
 
 def _fixed_now() -> datetime:
@@ -69,15 +83,24 @@ def _assert_required_top_level_shape(payload: dict[str, Any]) -> None:
         "researchQueue",
         "aggregateSummary",
         "evidenceGaps",
+        "evidenceGapsRaw",
         "marketContextFit",
+        "drilldownTargets",
         "noAdviceDisclosure",
         "dataQuality",
+        "consumerIssues",
+        "observationOnly",
+        "decisionGrade",
     }.issubset(payload)
     assert payload["schemaVersion"] == RESEARCH_RADAR_API_SCHEMA_VERSION
     assert payload["generatedAt"] == "2026-06-15T09:30:00+00:00"
     assert payload["noAdviceDisclosure"]
+    assert payload["observationOnly"] is True
+    assert payload["decisionGrade"] is False
     assert isinstance(payload["researchQueue"], list)
     assert isinstance(payload["evidenceGaps"], list)
+    assert isinstance(payload["evidenceGapsRaw"], list)
+    assert isinstance(payload["drilldownTargets"], list)
 
 
 def test_build_radar_projects_engine_output_to_required_api_contract() -> None:
@@ -122,11 +145,27 @@ def test_build_radar_projects_engine_output_to_required_api_contract() -> None:
         "invalidationObservations",
         "duplicateEvidenceMerged",
         "riskFlags",
+        "riskFlagsRaw",
+        "riskFlagLabels",
+        "researchBiasRaw",
+        "researchBiasLabel",
+        "researchBiasMessage",
+        "evidenceGapsRaw",
+        "consumerEvidenceGaps",
+        "drilldownTargets",
         "evidenceQuality",
+        "consumerIssues",
+        "noAdviceDisclosure",
+        "observationOnly",
+        "decisionGrade",
     }.issubset(item)
     assert item["symbol"] == "ALFA"
     assert item["ticker"] == "ALFA"
     assert item["priority"] == "high"
+    assert item["researchBiasRaw"] == "eventDriven"
+    assert item["researchBias"] == item["researchBiasLabel"]
+    assert item["researchBiasLabel"] == "Event-driven observation"
+    assert item["researchBiasMessage"]
     assert item["evidenceQuality"]["status"] == "complete"
     assert item["whyOnRadar"]
     assert item["whatToVerify"]
@@ -134,11 +173,20 @@ def test_build_radar_projects_engine_output_to_required_api_contract() -> None:
     assert isinstance(item["evidenceGaps"], list)
     assert item["duplicateEvidenceMerged"] == 0
     assert item["invalidationObservations"]
+    assert item["drilldownTargets"] == [
+        {
+            "label": "Structure detail",
+            "route": "/stocks/ALFA/structure-decision",
+            "reason": "Open the structure workspace for this ticker.",
+        }
+    ]
+    assert payload["drilldownTargets"] == item["drilldownTargets"]
+    assert item["observationOnly"] is True
+    assert item["decisionGrade"] is False
     assert payload["aggregateSummary"]["duplicateEvidenceMerged"] == 0
     assert payload["aggregateSummary"]["queueDiversity"]["status"] in {"thin", "mixed", "diversified", "concentrated"}
 
-    leaked = [term for term in FORBIDDEN_PUBLIC_TERMS if term.lower() in _serialized(payload)]
-    assert leaked == []
+    assert FORBIDDEN_PUBLIC_RE.search(" ".join(_string_values(payload))) is None
 
 
 def test_empty_or_missing_candidates_fail_closed_with_degraded_queue() -> None:
@@ -147,8 +195,10 @@ def test_empty_or_missing_candidates_fail_closed_with_degraded_queue() -> None:
     _assert_required_top_level_shape(payload)
     assert payload["researchQueue"] == []
     assert payload["dataQuality"]["status"] == "degraded"
-    assert payload["dataQuality"]["missingEvidence"] == ["scannerCandidates"]
-    assert payload["evidenceGaps"] == ["scannerCandidates"]
+    assert payload["dataQuality"]["missingEvidence"] == ["Research candidates unavailable"]
+    assert payload["dataQuality"]["missingEvidenceRaw"] == ["scannerCandidates"]
+    assert payload["evidenceGaps"] == ["Research candidates unavailable"]
+    assert payload["evidenceGapsRaw"] == ["scannerCandidates"]
     assert payload["marketContextFit"] == "unavailable"
     assert payload["aggregateSummary"]["queueQuality"] == "degraded"
     assert payload["consumerIssues"]
@@ -174,22 +224,140 @@ def test_low_evidence_queue_keeps_raw_codes_separate_from_consumer_issues() -> N
     )
 
     item = payload["researchQueue"][0]
-    assert item["researchBias"] == "avoidLowEvidence"
-    assert {"low_liquidity", "missing_evidence"}.issubset(set(item["riskFlags"]))
-    assert item["evidenceGaps"] == ["fundamentals", "news", "catalyst", "freshness"]
+    raw_codes = (
+        "avoidLowEvidence",
+        "low_liquidity",
+        "missing_evidence",
+        "fundamentals",
+        "news",
+        "catalyst",
+        "freshness",
+    )
+    assert item["researchBiasRaw"] == "avoidLowEvidence"
+    assert item["researchBias"] == "Low-evidence filter active"
+    assert item["researchBiasLabel"] == "Low-evidence filter active"
+    assert item["researchBiasMessage"]
+    assert {"low_liquidity", "missing_evidence"}.issubset(set(item["riskFlagsRaw"]))
+    assert item["riskFlags"] == item["riskFlagLabels"]
+    assert "Liquidity is limited" in item["riskFlagLabels"]
+    assert "Evidence missing" in item["riskFlagLabels"]
+    assert item["evidenceGapsRaw"] == ["fundamentals", "news", "catalyst", "freshness"]
+    assert item["evidenceGaps"] == [
+        "Company evidence missing",
+        "Media context missing",
+        "Event context missing",
+        "Recency check missing",
+    ]
+    assert item["evidenceQuality"]["missingEvidenceRaw"] == ["fundamentals", "news", "catalyst", "freshness"]
+    assert item["evidenceQuality"]["missingEvidence"] == item["evidenceGaps"]
+    assert item["consumerEvidenceGaps"]
     assert item["consumerIssues"]
     assert payload["consumerIssues"]
-    _assert_consumer_issues_safe(
-        item["consumerIssues"],
-        (
-            "avoidLowEvidence",
-            "low_liquidity",
-            "missing_evidence",
-            "fundamentals",
-            "news",
-            "catalyst",
-            "freshness",
-        ),
+    _assert_display_ready_fields_safe(
+        {
+            "researchBias": item["researchBias"],
+            "researchBiasLabel": item["researchBiasLabel"],
+            "researchBiasMessage": item["researchBiasMessage"],
+            "riskFlags": item["riskFlags"],
+            "riskFlagLabels": item["riskFlagLabels"],
+            "evidenceGaps": item["evidenceGaps"],
+            "consumerEvidenceGaps": item["consumerEvidenceGaps"],
+            "evidenceQualityMissing": item["evidenceQuality"]["missingEvidence"],
+        },
+        raw_codes,
+    )
+    _assert_consumer_issues_safe(item["consumerIssues"], raw_codes)
+
+
+def test_research_radar_projection_does_not_change_ranking_or_scores_when_labeling_contract() -> None:
+    candidates = [
+        {
+            "ticker": "LOWQ",
+            "relativeStrength": 35,
+            "volumeExpansion": 0.5,
+            "trendStructure": "weak",
+            "avgDollarVolume": 1000,
+            "evidenceQuality": {"state": "missing", "score": 10, "missing": ["fundamentals"]},
+        },
+        {
+            "ticker": "HIGHQ",
+            "relativeStrength": 88,
+            "volumeExpansion": 1.8,
+            "trendStructure": "confirmed_uptrend",
+            "themes": ["AI Infrastructure"],
+            "eventCatalyst": {"state": "confirmed"},
+            "avgDollarVolume": 120_000_000,
+            "evidenceQuality": {"state": "complete", "score": 0.88},
+        },
+    ]
+    market_regime_context = {
+        "regime": "risk_on",
+        "favorableThemes": ["AI Infrastructure"],
+    }
+    theme_leadership_context = {
+        "dominantThemes": [{"name": "AI Infrastructure", "leadershipScore": 86}]
+    }
+    engine_payload = build_research_radar_candidate_queue(
+        candidates,
+        market_regime_context=market_regime_context,
+        theme_leadership_context=theme_leadership_context,
+    )
+    payload = ResearchRadarService(now=_fixed_now).build_radar(
+        candidates=candidates,
+        market_regime_context=market_regime_context,
+        theme_leadership_context=theme_leadership_context,
+    )
+    engine_queue = list(engine_payload["researchQueue"])
+
+    assert [item["symbol"] for item in payload["researchQueue"]] == [item["symbol"] for item in engine_queue]
+    assert [item["priority"] for item in payload["researchQueue"]] == [item["priority"] for item in engine_queue]
+    assert [item["driverScores"] for item in payload["researchQueue"]] == [
+        item["driverScores"] for item in engine_queue
+    ]
+    assert [item["researchBiasRaw"] for item in payload["researchQueue"]] == [
+        item["researchBias"] for item in engine_queue
+    ]
+    assert [item["riskFlagsRaw"] for item in payload["researchQueue"]] == [
+        item["riskFlags"] for item in engine_queue
+    ]
+    assert payload["aggregateSummary"]["duplicateEvidenceMerged"] == engine_payload["summary"]["duplicateEvidenceMerged"]
+    assert payload["marketContextFit"] == engine_payload["summary"]["marketContextFit"]
+
+
+def test_unknown_internal_gap_tokens_fall_back_to_generic_consumer_copy() -> None:
+    payload = ResearchRadarService(now=_fixed_now).build_radar(
+        candidates=[
+            {
+                "ticker": "UNK",
+                "relativeStrength": 45,
+                "volumeExpansion": 0.8,
+                "trendStructure": "mixed",
+                "avgDollarVolume": 5_000_000,
+                "evidenceQuality": {
+                    "state": "partial",
+                    "score": 50,
+                    "missing": ["provider_runtime:error=timeout", "source_authority_unknown"],
+                },
+            }
+        ]
+    )
+
+    item = payload["researchQueue"][0]
+    raw_codes = ("provider_runtime:error=timeout", "source_authority_unknown")
+    assert item["evidenceGapsRaw"] == list(raw_codes)
+    assert item["evidenceGaps"] == ["Evidence needs review"]
+    assert item["evidenceQuality"]["missingEvidenceRaw"] == list(raw_codes)
+    assert item["evidenceQuality"]["missingEvidence"] == ["Evidence needs review"]
+    _assert_display_ready_fields_safe(
+        {
+            "evidenceGaps": item["evidenceGaps"],
+            "consumerEvidenceGaps": item["consumerEvidenceGaps"],
+            "evidenceQualityMissing": item["evidenceQuality"]["missingEvidence"],
+            "consumerIssues": item["consumerIssues"],
+            "topLevelEvidenceGaps": payload["evidenceGaps"],
+            "dataQualityMissingEvidence": payload["dataQuality"]["missingEvidence"],
+        },
+        raw_codes,
     )
 
 

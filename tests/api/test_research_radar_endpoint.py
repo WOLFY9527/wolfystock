@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from api.deps import CurrentUser, get_current_user, get_database_manager
@@ -45,16 +46,35 @@ class _FakeResearchRadarService:
                     "symbol": "ALFA",
                     "ticker": "ALFA",
                     "priority": "medium",
-                    "researchBias": "strengthContinuation",
+                    "researchBias": "Strength observation",
+                    "researchBiasRaw": "strengthContinuation",
+                    "researchBiasLabel": "Strength observation",
+                    "researchBiasMessage": "Relative strength and structure are visible enough for research follow-up.",
                     "driverScores": {"relativeStrength": 70},
                     "whyOnRadar": ["Relative strength is above the research threshold."],
                     "whatToVerify": ["Verify relative strength persists versus the benchmark."],
                     "whyNotHigherPriority": ["Evidence quality is below the strong research threshold."],
-                    "evidenceGaps": ["themeBreadth"],
+                    "evidenceGaps": ["Theme breadth needs review"],
+                    "evidenceGapsRaw": ["themeBreadth"],
                     "invalidationObservations": ["Relative strength fades below benchmark behavior."],
                     "duplicateEvidenceMerged": 1,
                     "riskFlags": [],
-                    "evidenceQuality": {"status": "partial", "score": 54},
+                    "riskFlagsRaw": [],
+                    "riskFlagLabels": [],
+                    "consumerEvidenceGaps": [
+                        {
+                            "label": "Theme breadth needs review",
+                            "message": "Theme breadth needs more confirmation.",
+                            "severity": "info",
+                            "category": "evidence",
+                        }
+                    ],
+                    "evidenceQuality": {
+                        "status": "partial",
+                        "score": 54,
+                        "missingEvidence": ["Theme breadth needs review"],
+                        "missingEvidenceRaw": ["themeBreadth"],
+                    },
                     "consumerIssues": [
                         {
                             "label": "Evidence needs review",
@@ -63,6 +83,16 @@ class _FakeResearchRadarService:
                             "category": "evidence",
                         }
                     ],
+                    "drilldownTargets": [
+                        {
+                            "label": "Structure detail",
+                            "route": "/stocks/ALFA/structure-decision",
+                            "reason": "Open the structure workspace for this ticker.",
+                        }
+                    ],
+                    "noAdviceDisclosure": "Research-only queue; verify evidence gaps before further review.",
+                    "observationOnly": True,
+                    "decisionGrade": False,
                 }
             ],
             "aggregateSummary": {
@@ -71,8 +101,16 @@ class _FakeResearchRadarService:
                 "duplicateEvidenceMerged": 1,
                 "queueDiversity": {"status": "mixed"},
             },
-            "evidenceGaps": [],
+            "evidenceGaps": ["Theme breadth needs review"],
+            "evidenceGapsRaw": ["themeBreadth"],
             "marketContextFit": "neutral",
+            "drilldownTargets": [
+                {
+                    "label": "Structure detail",
+                    "route": "/stocks/ALFA/structure-decision",
+                    "reason": "Open the structure workspace for this ticker.",
+                }
+            ],
             "consumerIssues": [
                 {
                     "label": "Evidence needs review",
@@ -84,7 +122,8 @@ class _FakeResearchRadarService:
             "noAdviceDisclosure": "Research-only queue; verify evidence gaps before further review.",
             "dataQuality": {
                 "status": "partial",
-                "missingEvidence": [],
+                "missingEvidence": ["Theme breadth needs review"],
+                "missingEvidenceRaw": ["themeBreadth"],
                 "consumerIssues": [
                     {
                         "label": "Evidence needs review",
@@ -94,6 +133,8 @@ class _FakeResearchRadarService:
                     }
                 ],
             },
+            "observationOnly": True,
+            "decisionGrade": False,
         }
 
 
@@ -124,20 +165,30 @@ def test_get_research_radar_endpoint_is_registered_and_returns_contract(monkeypa
         "researchQueue",
         "aggregateSummary",
         "evidenceGaps",
+        "evidenceGapsRaw",
         "marketContextFit",
+        "drilldownTargets",
         "consumerIssues",
         "noAdviceDisclosure",
         "dataQuality",
+        "observationOnly",
+        "decisionGrade",
     }.issubset(payload)
     assert payload["researchQueue"][0]["symbol"] == "ALFA"
+    assert payload["researchQueue"][0]["researchBias"] == "Strength observation"
+    assert payload["researchQueue"][0]["researchBiasRaw"] == "strengthContinuation"
     assert payload["researchQueue"][0]["whyNotHigherPriority"] == [
         "Evidence quality is below the strong research threshold."
     ]
-    assert payload["researchQueue"][0]["evidenceGaps"] == ["themeBreadth"]
+    assert payload["researchQueue"][0]["evidenceGaps"] == ["Theme breadth needs review"]
+    assert payload["researchQueue"][0]["evidenceGapsRaw"] == ["themeBreadth"]
     assert payload["researchQueue"][0]["consumerIssues"][0]["label"] == "Evidence needs review"
+    assert payload["researchQueue"][0]["drilldownTargets"][0]["route"] == "/stocks/ALFA/structure-decision"
     assert payload["consumerIssues"][0]["label"] == "Evidence needs review"
     assert payload["researchQueue"][0]["duplicateEvidenceMerged"] == 1
     assert payload["aggregateSummary"]["duplicateEvidenceMerged"] == 1
+    assert payload["observationOnly"] is True
+    assert payload["decisionGrade"] is False
     assert _FakeResearchRadarService.calls == [
         {
             "market": "us",
@@ -147,6 +198,17 @@ def test_get_research_radar_endpoint_is_registered_and_returns_contract(monkeypa
             "hasScannerRepository": True,
         }
     ]
+
+
+def test_get_research_radar_endpoint_uses_typed_response_model() -> None:
+    route = next(
+        route
+        for route in api_v1_router.routes
+        if isinstance(route, APIRoute) and route.path == "/api/v1/research/radar" and "GET" in route.methods
+    )
+
+    assert route.response_model is not None
+    assert route.response_model.__name__ == "ResearchRadarResponse"
 
 
 def test_get_research_radar_endpoint_clamps_limit_and_passes_optional_filters(monkeypatch) -> None:
