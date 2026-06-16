@@ -451,6 +451,7 @@ function DailyIntelligenceBriefingSection({
       riskFlags?: string[];
       watchNext?: string[];
       missingEvidence?: string[];
+      evidenceLinks?: DailyIntelligenceEvidenceLink[];
     }>,
     section: 'scannerHighlights' | 'watchlistHighlights' | 'portfolioStructureHighlights',
   ) => {

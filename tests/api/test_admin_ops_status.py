@@ -270,6 +270,63 @@ def test_admin_ops_status_includes_build_provenance_contract(app: FastAPI, tmp_p
     _assert_no_sensitive_markers(payload)
 
 
+@pytest.mark.parametrize(
+    ("freshness_status", "stale", "comparison_basis", "reason_code"),
+    [
+        ("fresh", False, "backend_commit_timestamp", "frontend_build_not_older_than_backend_commit"),
+        ("stale", True, "backend_commit_timestamp", "frontend_build_older_than_backend_commit"),
+        ("unknown", None, None, "backend_commit_timestamp_unavailable"),
+    ],
+)
+def test_admin_ops_status_projects_exact_build_provenance_freshness(
+    app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+    freshness_status: str,
+    stale: bool | None,
+    comparison_basis: str | None,
+    reason_code: str,
+) -> None:
+    def _build_provenance(_self, *, app_state=None):
+        return {
+            "contract": "admin_build_provenance_v1",
+            "readOnly": True,
+            "noExternalCalls": True,
+            "runtimeBehaviorChanged": False,
+            "consumerVisible": False,
+            "backendGitSha": "e2a90b4bd5fd1f84a1e44abde7f2b23da6a16590",
+            "backendBranch": "main",
+            "backendCommitTimestamp": "2026-06-16T11:47:00+00:00",
+            "backendRuntimeStartedAt": "2026-06-16T12:01:00+00:00",
+            "frontendMainAssetFilename": "index-CKPdXr8Q.js",
+            "frontendMainAssetHash": "CKPdXr8Q",
+            "frontendAssetManifestHash": "f" * 64,
+            "frontendAssetManifestSource": "static_asset_inventory",
+            "frontendStaticBuildTimestamp": "2026-06-16T12:05:00+00:00",
+            "staticAssetMode": "static_dist",
+            "staticAssetRootProvenance": "repo_static_dir",
+            "staticAssetRootLabel": "static",
+            "staticAssetRootExists": True,
+            "staticIndexPresent": True,
+            "freshnessStatus": freshness_status,
+            "comparisonBasis": comparison_basis,
+            "stale": stale,
+            "reasonCodes": [reason_code],
+        }
+
+    monkeypatch.setattr("src.services.admin_ops_status_service.BuildProvenanceService.build", _build_provenance)
+
+    with _client(app, _ops_admin) as client:
+        response = client.get("/api/v1/admin/ops/status")
+
+    assert response.status_code == 200
+    provenance = response.json()["buildProvenance"]
+    assert provenance["freshnessStatus"] == freshness_status
+    assert provenance["stale"] is stale
+    assert provenance["comparisonBasis"] == comparison_basis
+    assert provenance["reasonCodes"] == [reason_code]
+    _assert_no_sensitive_markers(response.json())
+
+
 def test_admin_ops_status_projects_bounded_admin_diagnostics(app: FastAPI) -> None:
     app.state.task_queue = _TaskQueueFixture()
 

@@ -63,6 +63,7 @@ export type DailyIntelligenceScenarioRisk = {
   source?: string | null;
   observations?: string[];
   evidenceGaps?: string[];
+  evidenceLinks?: DailyIntelligenceEvidenceLink[];
 };
 
 export type DailyIntelligenceDegradedInput = {
