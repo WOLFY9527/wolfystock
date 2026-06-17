@@ -418,6 +418,62 @@ class StockStructureDecisionComparativeContext(BaseModel):
     reason: Optional[str] = Field(None, description="不可用原因码")
 
 
+class StockSymbolCompareConfidenceCap(BaseModel):
+    """多股票比较证据包的置信上限。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    value: int = Field(..., ge=0, le=100, description="比较观察置信上限")
+    reason_codes: List[str] = Field(default_factory=list, alias="reasonCodes", description="置信上限原因码")
+    policy_version: str = Field(..., alias="policyVersion", description="置信上限策略版本")
+
+
+class StockSymbolCompareObservationBoundary(BaseModel):
+    """多股票比较证据包的观察边界。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    observation_only: Literal[True] = Field(..., alias="observationOnly", description="仅观察")
+    decision_grade: Literal[False] = Field(..., alias="decisionGrade", description="不输出决策等级")
+    ranking_allowed: Literal[False] = Field(..., alias="rankingAllowed", description="不输出排名")
+    advice_allowed: Literal[False] = Field(..., alias="adviceAllowed", description="不输出建议")
+
+
+class StockSymbolCompareEvidencePacket(BaseModel):
+    """多股票比较证据包，仅描述覆盖、分歧、缺口与数据质量。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    compared_symbols: List[str] = Field(..., alias="comparedSymbols", description="参与比较的股票代码")
+    shared_evidence: List[Dict[str, Any]] = Field(..., alias="sharedEvidence", description="多股票共同具备的证据")
+    divergent_evidence: List[Dict[str, Any]] = Field(..., alias="divergentEvidence", description="多股票之间的证据分歧")
+    missing_evidence_by_symbol: Dict[str, List[StockStructureDecisionMissingEvidence]] = Field(
+        ...,
+        alias="missingEvidenceBySymbol",
+        description="按股票分组的缺失比较证据",
+    )
+    freshness_by_symbol: Dict[str, Dict[str, Any]] = Field(
+        ...,
+        alias="freshnessBySymbol",
+        description="按股票分组的本地证据新鲜度/覆盖摘要",
+    )
+    confidence_cap: StockSymbolCompareConfidenceCap = Field(
+        ...,
+        alias="confidenceCap",
+        description="比较观察的置信上限",
+    )
+    observation_boundary: StockSymbolCompareObservationBoundary = Field(
+        ...,
+        alias="observationBoundary",
+        description="观察边界",
+    )
+    research_next_steps: List[str] = Field(
+        ...,
+        alias="researchNextSteps",
+        description="补齐比较证据的下一步",
+    )
+
+
 class StockStructureDecisionDegradedInput(BaseModel):
     """结构判断中的降级输入说明。"""
 
@@ -532,4 +588,9 @@ class StockStructureDecisionBatchResponse(BaseModel):
         description="批量层面的缺失证据列表",
     )
     data_quality: Dict[str, Any] = Field(..., alias="dataQuality", description="批量层面的数据质量摘要")
+    symbol_compare_evidence_packet: StockSymbolCompareEvidencePacket = Field(
+        ...,
+        alias="symbolCompareEvidencePacket",
+        description="多股票比较证据包；仅描述证据覆盖、分歧和数据质量",
+    )
     no_advice_disclosure: str = Field(..., alias="noAdviceDisclosure", description="非个性化建议披露")

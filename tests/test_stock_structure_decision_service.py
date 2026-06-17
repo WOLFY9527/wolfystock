@@ -358,6 +358,48 @@ def test_batch_structure_decisions_are_bounded_and_stably_ordered() -> None:
     assert [entry["rank"] for entry in relative_strength["ranking"]] == [1, 2]
     assert payload["missingEvidence"] == []
     assert payload["dataQuality"]["status"] == "available"
+    compare_packet = payload["symbolCompareEvidencePacket"]
+    assert compare_packet["comparedSymbols"] == ["MSFT", "AAPL"]
+    assert compare_packet["sharedEvidence"] == [
+        {
+            "kind": "daily_ohlcv",
+            "symbols": ["MSFT", "AAPL"],
+            "status": "available",
+            "period": "daily",
+            "source": "local_db",
+            "usableBarsMin": 55,
+            "usableBarsMax": 55,
+        },
+        {
+            "kind": "benchmark_ohlcv",
+            "symbols": ["MSFT", "AAPL"],
+            "status": "available",
+            "benchmark": "SPY",
+        },
+    ]
+    assert compare_packet["divergentEvidence"]
+    assert {
+        "kind": "structure_state",
+        "symbols": ["MSFT", "AAPL"],
+        "values": {"MSFT": "mixed", "AAPL": "breakout"},
+    } in compare_packet["divergentEvidence"]
+    assert compare_packet["missingEvidenceBySymbol"] == {"MSFT": [], "AAPL": []}
+    assert compare_packet["freshnessBySymbol"] == {
+        "MSFT": {"status": "available", "source": "local_db", "period": "daily", "usableBars": 55},
+        "AAPL": {"status": "available", "source": "local_db", "period": "daily", "usableBars": 55},
+    }
+    assert compare_packet["confidenceCap"] == {
+        "value": 100,
+        "reasonCodes": [],
+        "policyVersion": "symbol_compare_evidence_packet_v1",
+    }
+    assert compare_packet["observationBoundary"] == {
+        "observationOnly": True,
+        "decisionGrade": False,
+        "rankingAllowed": False,
+        "adviceAllowed": False,
+    }
+    assert compare_packet["researchNextSteps"] == []
     assert all(item["observationOnly"] is True for item in payload["items"])
     assert all(item["decisionGrade"] is False for item in payload["items"])
 
@@ -408,6 +450,42 @@ def test_batch_structure_decisions_mark_comparative_context_unavailable_without_
         },
     ]
     assert payload["dataQuality"]["status"] == "partial"
+    compare_packet = payload["symbolCompareEvidencePacket"]
+    assert compare_packet["comparedSymbols"] == ["AAPL", "MSFT"]
+    assert compare_packet["sharedEvidence"] == []
+    assert compare_packet["missingEvidenceBySymbol"] == {
+        "AAPL": [
+            {
+                "kind": "benchmark_ohlcv",
+                "message": "Benchmark OHLCV is unavailable, so cross-symbol relative evidence is not available.",
+            }
+        ],
+        "MSFT": [
+            {
+                "kind": "daily_ohlcv",
+                "message": "Daily OHLCV history is unavailable, so this symbol cannot contribute complete comparison evidence.",
+            },
+            {
+                "kind": "benchmark_ohlcv",
+                "message": "Benchmark OHLCV is unavailable, so cross-symbol relative evidence is not available.",
+            },
+        ],
+    }
+    assert compare_packet["freshnessBySymbol"]["MSFT"] == {
+        "status": "unavailable",
+        "source": "unavailable",
+        "period": "daily",
+        "usableBars": 0,
+    }
+    assert compare_packet["confidenceCap"]["value"] == 35
+    assert compare_packet["confidenceCap"]["reasonCodes"] == [
+        "symbol_evidence_unavailable",
+        "benchmark_ohlcv_unavailable",
+    ]
+    assert compare_packet["researchNextSteps"] == [
+        "Add daily OHLCV evidence for MSFT before using divergence observations.",
+        "Add benchmark OHLCV evidence to enable cross-symbol relative context.",
+    ]
 
 
 def test_batch_structure_decision_output_avoids_recommendation_or_trading_instruction_language() -> None:
@@ -438,3 +516,9 @@ def test_batch_structure_decision_output_avoids_recommendation_or_trading_instru
     for forbidden in FORBIDDEN_ADVICE_TOKENS:
         assert forbidden not in serialized
     assert "not personalized financial advice" in serialized
+    assert "winner" not in serialized
+    assert "loser" not in serialized
+    assert "best" not in serialized
+    compare_serialized = json.dumps(payload["symbolCompareEvidencePacket"], ensure_ascii=False).lower()
+    assert '"rank":' not in compare_serialized
+    assert "relativestrength" not in compare_serialized

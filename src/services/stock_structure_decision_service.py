@@ -20,6 +20,7 @@ from src.utils.symbol_validation import validate_consumer_symbol_precheck
 logger = logging.getLogger(__name__)
 
 STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION = "stock_structure_decision_api_v1"
+SYMBOL_COMPARE_EVIDENCE_PACKET_VERSION = "symbol_compare_evidence_packet_v1"
 DEFAULT_STRUCTURE_DECISION_HISTORY_DAYS = 90
 DEFAULT_STRUCTURE_DECISION_BATCH_MAX_ITEMS = 25
 MAX_STRUCTURE_DECISION_BATCH_ITEMS = 50
@@ -181,6 +182,10 @@ class StockStructureDecisionService:
             "aggregateSummary": aggregate_summary,
             "missingEvidence": _batch_missing_evidence(items, benchmark_available),
             "dataQuality": _batch_data_quality(items),
+            "symbolCompareEvidencePacket": _build_symbol_compare_evidence_packet(
+                items,
+                benchmark_ticker=benchmark_ticker if benchmark_available else None,
+            ),
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
         }
 
@@ -518,6 +523,12 @@ def _dedupe(values: Sequence[Any]) -> list[Any]:
     return result
 
 
+def _append_unique(values: list[str], value: str) -> None:
+    text = _safe_text(value)
+    if text and text not in values:
+        values.append(text)
+
+
 def _dedupe_issues(issues: Sequence[Mapping[str, str]]) -> list[dict[str, str]]:
     result: list[dict[str, str]] = []
     seen: set[tuple[str, str, str, str]] = set()
@@ -800,6 +811,230 @@ def _relative_strength_summary(
     }
 
 
+def _build_symbol_compare_evidence_packet(
+    items: Sequence[Mapping[str, Any]],
+    *,
+    benchmark_ticker: str | None,
+) -> dict[str, Any]:
+    compared_symbols = [str(item.get("ticker") or "") for item in items if str(item.get("ticker") or "")]
+    missing_by_symbol = {
+        symbol: _symbol_compare_missing_evidence(item, benchmark_ticker)
+        for symbol, item in zip(compared_symbols, items)
+    }
+    packet = {
+        "comparedSymbols": compared_symbols,
+        "sharedEvidence": _symbol_compare_shared_evidence(items, compared_symbols, benchmark_ticker),
+        "divergentEvidence": _symbol_compare_divergent_evidence(items, compared_symbols),
+        "missingEvidenceBySymbol": missing_by_symbol,
+        "freshnessBySymbol": {
+            symbol: _symbol_compare_freshness(item)
+            for symbol, item in zip(compared_symbols, items)
+        },
+        "confidenceCap": _symbol_compare_confidence_cap(items, benchmark_ticker),
+        "observationBoundary": {
+            "observationOnly": True,
+            "decisionGrade": False,
+            "rankingAllowed": False,
+            "adviceAllowed": False,
+        },
+        "researchNextSteps": _symbol_compare_next_steps(items, compared_symbols, benchmark_ticker, missing_by_symbol),
+    }
+    return packet
+
+
+def _symbol_compare_shared_evidence(
+    items: Sequence[Mapping[str, Any]],
+    compared_symbols: Sequence[str],
+    benchmark_ticker: str | None,
+) -> list[dict[str, Any]]:
+    if not items:
+        return []
+
+    shared: list[dict[str, Any]] = []
+    data_qualities = [_mapping(item.get("dataQuality")) for item in items]
+    if all(
+        str(quality.get("status") or "") in {"available", "partial"}
+        and int(quality.get("usableBars") or 0) >= MIN_REQUIRED_BARS
+        for quality in data_qualities
+    ):
+        sources = {str(quality.get("source") or "unavailable") for quality in data_qualities}
+        shared.append(
+            {
+                "kind": "daily_ohlcv",
+                "symbols": list(compared_symbols),
+                "status": "available",
+                "period": "daily",
+                "source": sources.pop() if len(sources) == 1 else "mixed",
+                "usableBarsMin": min(int(quality.get("usableBars") or 0) for quality in data_qualities),
+                "usableBarsMax": max(int(quality.get("usableBars") or 0) for quality in data_qualities),
+            }
+        )
+
+    if benchmark_ticker:
+        shared.append(
+            {
+                "kind": "benchmark_ohlcv",
+                "symbols": list(compared_symbols),
+                "status": "available",
+                "benchmark": benchmark_ticker,
+            }
+        )
+    return shared
+
+
+def _symbol_compare_divergent_evidence(
+    items: Sequence[Mapping[str, Any]],
+    compared_symbols: Sequence[str],
+) -> list[dict[str, Any]]:
+    divergent: list[dict[str, Any]] = []
+    _append_divergence(
+        divergent,
+        kind="structure_state",
+        symbols=compared_symbols,
+        values={str(item.get("ticker") or ""): str(item.get("structureState") or "lowConfidence") for item in items},
+    )
+    _append_divergence(
+        divergent,
+        kind="confidence",
+        symbols=compared_symbols,
+        values={str(item.get("ticker") or ""): str(item.get("confidence") or "low") for item in items},
+    )
+    _append_divergence(
+        divergent,
+        kind="data_quality_status",
+        symbols=compared_symbols,
+        values={
+            str(item.get("ticker") or ""): str(_mapping(item.get("dataQuality")).get("status") or "unavailable")
+            for item in items
+        },
+    )
+    risk_values: dict[str, list[str]] = {}
+    for item in items:
+        symbol = str(item.get("ticker") or "")
+        risk_values[symbol] = _safe_text_list(_mapping(item.get("researchNotes")).get("riskFlags"))
+    if len({_stable_value(value) for value in risk_values.values()}) > 1:
+        divergent.append({"kind": "risk_observations", "symbols": list(compared_symbols), "values": risk_values})
+    return divergent
+
+
+def _append_divergence(
+    divergent: list[dict[str, Any]],
+    *,
+    kind: str,
+    symbols: Sequence[str],
+    values: Mapping[str, Any],
+) -> None:
+    if len({_stable_value(value) for value in values.values()}) <= 1:
+        return
+    divergent.append({"kind": kind, "symbols": list(symbols), "values": dict(values)})
+
+
+def _symbol_compare_missing_evidence(
+    item: Mapping[str, Any],
+    benchmark_ticker: str | None,
+) -> list[dict[str, str]]:
+    missing: list[dict[str, str]] = []
+    data_quality = _mapping(item.get("dataQuality"))
+    status = str(data_quality.get("status") or "unavailable")
+    usable_bars = int(data_quality.get("usableBars") or 0)
+    observed_bars = int(data_quality.get("observedBars") or 0)
+    if status == "unavailable":
+        missing.append(
+            {
+                "kind": "daily_ohlcv",
+                "message": "Daily OHLCV history is unavailable, so this symbol cannot contribute complete comparison evidence.",
+            }
+        )
+    elif usable_bars < MIN_REQUIRED_BARS:
+        missing.append(
+            {
+                "kind": "sufficient_daily_ohlcv_history",
+                "message": "More valid daily OHLCV rows are needed before this symbol can be compared with confidence.",
+            }
+        )
+    elif usable_bars < observed_bars:
+        missing.append(
+            {
+                "kind": "valid_daily_ohlcv_rows",
+                "message": "Some daily OHLCV rows are incomplete or invalid for this symbol.",
+            }
+        )
+
+    if not benchmark_ticker:
+        missing.append(
+            {
+                "kind": "benchmark_ohlcv",
+                "message": "Benchmark OHLCV is unavailable, so cross-symbol relative evidence is not available.",
+            }
+        )
+    return missing
+
+
+def _symbol_compare_freshness(item: Mapping[str, Any]) -> dict[str, Any]:
+    data_quality = _mapping(item.get("dataQuality"))
+    return {
+        "status": str(data_quality.get("status") or "unavailable"),
+        "source": str(data_quality.get("source") or "unavailable"),
+        "period": str(data_quality.get("period") or "daily"),
+        "usableBars": int(data_quality.get("usableBars") or 0),
+    }
+
+
+def _symbol_compare_confidence_cap(
+    items: Sequence[Mapping[str, Any]],
+    benchmark_ticker: str | None,
+) -> dict[str, Any]:
+    value = 100
+    reasons: list[str] = []
+    if not items:
+        value = min(value, 35)
+        _append_unique(reasons, "comparison_symbols_missing")
+
+    for item in items:
+        data_quality = _mapping(item.get("dataQuality"))
+        status = str(data_quality.get("status") or "unavailable")
+        usable_bars = int(data_quality.get("usableBars") or 0)
+        if status == "unavailable":
+            value = min(value, 35)
+            _append_unique(reasons, "symbol_evidence_unavailable")
+        elif usable_bars < MIN_REQUIRED_BARS:
+            value = min(value, 45)
+            _append_unique(reasons, "symbol_evidence_insufficient")
+        elif status == "partial":
+            value = min(value, 70)
+            _append_unique(reasons, "symbol_evidence_partial")
+    if not benchmark_ticker:
+        value = min(value, 75)
+        _append_unique(reasons, "benchmark_ohlcv_unavailable")
+    return {
+        "value": value,
+        "reasonCodes": reasons,
+        "policyVersion": SYMBOL_COMPARE_EVIDENCE_PACKET_VERSION,
+    }
+
+
+def _symbol_compare_next_steps(
+    items: Sequence[Mapping[str, Any]],
+    compared_symbols: Sequence[str],
+    benchmark_ticker: str | None,
+    missing_by_symbol: Mapping[str, Sequence[Mapping[str, str]]],
+) -> list[str]:
+    steps: list[str] = []
+    for symbol, item in zip(compared_symbols, items):
+        data_quality = _mapping(item.get("dataQuality"))
+        status = str(data_quality.get("status") or "unavailable")
+        usable_bars = int(data_quality.get("usableBars") or 0)
+        if status == "unavailable":
+            _append_unique(steps, f"Add daily OHLCV evidence for {symbol} before using divergence observations.")
+        elif usable_bars < MIN_REQUIRED_BARS:
+            _append_unique(steps, f"Add more valid daily OHLCV rows for {symbol}.")
+        elif any(str(item.get("kind") or "") == "valid_daily_ohlcv_rows" for item in missing_by_symbol.get(symbol, [])):
+            _append_unique(steps, f"Review incomplete daily OHLCV rows for {symbol}.")
+    if not benchmark_ticker:
+        _append_unique(steps, "Add benchmark OHLCV evidence to enable cross-symbol relative context.")
+    return steps
+
+
 def _dominant_observation_score(item: Mapping[str, Any]) -> int:
     scores = item.get("componentScores")
     scores = scores if isinstance(scores, Mapping) else {}
@@ -898,6 +1133,18 @@ def _count_usable_ohlcv_bars(bars: Sequence[Mapping[str, Any]]) -> int:
             continue
         count += 1
     return count
+
+
+def _mapping(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _stable_value(value: Any) -> str:
+    if isinstance(value, Mapping):
+        return str(sorted((str(key), _stable_value(item)) for key, item in value.items()))
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return str([_stable_value(item) for item in value])
+    return str(value)
 
 
 def _to_float(value: Any) -> float | None:

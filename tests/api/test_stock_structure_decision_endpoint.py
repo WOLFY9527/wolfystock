@@ -98,6 +98,44 @@ class _FakeStructureDecisionService:
                 "insufficientCount": 0,
                 "unavailableCount": 0,
             },
+            "symbolCompareEvidencePacket": {
+                "comparedSymbols": ["MSFT", "AAPL"],
+                "sharedEvidence": [
+                    {
+                        "kind": "daily_ohlcv",
+                        "symbols": ["MSFT", "AAPL"],
+                        "status": "available",
+                        "period": "daily",
+                        "source": "local_db",
+                        "usableBarsMin": 55,
+                        "usableBarsMax": 55,
+                    }
+                ],
+                "divergentEvidence": [
+                    {
+                        "kind": "structure_state",
+                        "symbols": ["MSFT", "AAPL"],
+                        "values": {"MSFT": "mixed", "AAPL": "breakout"},
+                    }
+                ],
+                "missingEvidenceBySymbol": {"MSFT": [], "AAPL": []},
+                "freshnessBySymbol": {
+                    "MSFT": {"status": "available", "source": "local_db", "period": "daily", "usableBars": 55},
+                    "AAPL": {"status": "available", "source": "local_db", "period": "daily", "usableBars": 55},
+                },
+                "confidenceCap": {
+                    "value": 100,
+                    "reasonCodes": [],
+                    "policyVersion": "symbol_compare_evidence_packet_v1",
+                },
+                "observationBoundary": {
+                    "observationOnly": True,
+                    "decisionGrade": False,
+                    "rankingAllowed": False,
+                    "adviceAllowed": False,
+                },
+                "researchNextSteps": [],
+            },
             "noAdviceDisclosure": "Observation-only research context; not personalized financial advice and not an instruction.",
         }
 
@@ -359,10 +397,21 @@ def test_structure_decision_batch_endpoint_returns_comparative_contract(monkeypa
     assert payload["aggregateSummary"]["relativeStrength"]["benchmark"] == "SPY"
     assert "missingEvidence" in payload
     assert "dataQuality" in payload
+    assert payload["symbolCompareEvidencePacket"]["comparedSymbols"] == ["MSFT", "AAPL"]
+    assert payload["symbolCompareEvidencePacket"]["observationBoundary"] == {
+        "observationOnly": True,
+        "decisionGrade": False,
+        "rankingAllowed": False,
+        "adviceAllowed": False,
+    }
+    assert payload["symbolCompareEvidencePacket"]["confidenceCap"]["value"] == 100
     assert payload["noAdviceDisclosure"]
     serialized = json.dumps(payload, ensure_ascii=False).lower()
     for forbidden in FORBIDDEN_ADVICE_TOKENS:
         assert forbidden not in serialized
+    assert "winner" not in serialized
+    assert "loser" not in serialized
+    assert "best" not in serialized
 
 
 def test_structure_decision_batch_endpoint_rejects_empty_stock_codes(monkeypatch) -> None:
@@ -423,5 +472,19 @@ def test_structure_decision_openapi_locks_required_response_fields() -> None:
         "aggregateSummary",
         "missingEvidence",
         "dataQuality",
+        "symbolCompareEvidencePacket",
         "noAdviceDisclosure",
+    ]
+    compare_schema = schema["StockStructureDecisionBatchResponse"]["properties"]["symbolCompareEvidencePacket"]
+    assert compare_schema["$ref"].endswith("StockSymbolCompareEvidencePacket")
+    compare_packet_schema = schema["StockSymbolCompareEvidencePacket"]
+    assert compare_packet_schema["required"] == [
+        "comparedSymbols",
+        "sharedEvidence",
+        "divergentEvidence",
+        "missingEvidenceBySymbol",
+        "freshnessBySymbol",
+        "confidenceCap",
+        "observationBoundary",
+        "researchNextSteps",
     ]
