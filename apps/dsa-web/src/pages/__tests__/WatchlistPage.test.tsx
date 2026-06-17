@@ -6,12 +6,13 @@ import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import type { WatchlistItem, WatchlistScannerLineageV1 } from '../../types/watchlist';
 import type { RuleBacktestRunResponse } from '../../types/backtest';
 
-const { listWatchlistItems, addWatchlistItem, removeWatchlistItem, refreshScores, getRefreshStatus, runRuleBacktest, analyzeAsync, useProductSurfaceMock } = vi.hoisted(() => ({
+const { listWatchlistItems, addWatchlistItem, removeWatchlistItem, refreshScores, getRefreshStatus, getResearchOverlay, runRuleBacktest, analyzeAsync, useProductSurfaceMock } = vi.hoisted(() => ({
   listWatchlistItems: vi.fn(),
   addWatchlistItem: vi.fn(),
   removeWatchlistItem: vi.fn(),
   refreshScores: vi.fn(),
   getRefreshStatus: vi.fn(),
+  getResearchOverlay: vi.fn(),
   runRuleBacktest: vi.fn(),
   analyzeAsync: vi.fn(),
   useProductSurfaceMock: vi.fn(),
@@ -30,6 +31,7 @@ vi.mock('../../api/watchlist', () => ({
     removeWatchlistItem,
     refreshScores,
     getRefreshStatus,
+    getResearchOverlay,
   },
 }));
 
@@ -313,6 +315,14 @@ describe('WatchlistPage', () => {
       maxSymbols: 250,
       running: false,
     });
+    getResearchOverlay.mockResolvedValue({
+      schemaVersion: 'watchlist_research_overlay_v1',
+      overlayState: 'ready',
+      researchSummary: 'Saved symbols are ready for observation.',
+      researchPriorityQueue: [],
+      observationOnly: true,
+      decisionGrade: false,
+    });
     runRuleBacktest.mockResolvedValue(makeRuleBacktestRun());
     analyzeAsync.mockResolvedValue({ taskId: 'task-1' });
     listRules.mockImplementation(() => new Promise(() => {}));
@@ -469,6 +479,88 @@ describe('WatchlistPage', () => {
     expect(band).toHaveTextContent('当前信号置信度较低，仅供观察。');
     expect(band).not.toHaveTextContent(/fallback|proxy|备用\/代理|备用数据|代理证据|reasonFamilies|sourceAuthorityAllowed|scoreContributionAllowed/i);
     expect(band).not.toHaveTextContent(/买入|卖出|加仓|减仓|buy|sell|recommend(?:ation)?/i);
+  });
+
+  it('renders a compact research queue from the watchlist overlay without changing saved rows', async () => {
+    getResearchOverlay.mockResolvedValue({
+      schemaVersion: 'watchlist_research_overlay_v1',
+      overlayState: 'degraded',
+      researchSummary: 'Some saved symbols need evidence review.',
+      researchPriorityQueue: [
+        {
+          symbol: 'MSFT',
+          priorityTier: 'attention',
+          priorityReasonSafeLabel: 'Missing evidence needs review.',
+          evidenceAge: { state: 'no_evidence', lastReviewedAt: null },
+          missingEvidence: ['Price-history evidence'],
+          suggestedResearchPath: [
+            {
+              label: 'Stock Structure',
+              route: '/stocks/MSFT/structure-decision',
+              section: 'watchlistResearchOverlay',
+              reason: 'Open symbol structure detail.',
+            },
+          ],
+          observationOnly: true,
+        },
+        {
+          symbol: 'NVDA',
+          priorityTier: 'follow_up',
+          priorityReasonSafeLabel: 'Evidence needs refresh.',
+          evidenceAge: { state: 'stale_or_cached', lastReviewedAt: '2026-05-01T12:30:00Z' },
+          missingEvidence: ['Supporting evidence'],
+          suggestedResearchPath: [
+            {
+              label: 'Stock Structure',
+              route: '/stocks/NVDA/structure-decision',
+              section: 'watchlistResearchOverlay',
+              reason: 'Review structure detail.',
+            },
+          ],
+          observationOnly: true,
+        },
+      ],
+      observationOnly: true,
+      decisionGrade: false,
+    });
+
+    renderWatchlist();
+
+    await screen.findByTestId('watchlist-row-NVDA');
+    const queue = await screen.findByTestId('watchlist-research-queue');
+    expect(queue).toHaveTextContent('研究队列');
+    expect(queue).toHaveTextContent('MSFT');
+    expect(queue).toHaveTextContent('attention');
+    expect(queue).toHaveTextContent('Missing evidence needs review.');
+    expect(queue).toHaveTextContent('证据缺口');
+    expect(queue).toHaveTextContent('Price-history evidence');
+    expect(queue).toHaveTextContent('Stock Structure');
+    expect(queue).toHaveTextContent('Open symbol structure detail.');
+    expect(queue).toHaveTextContent('仅作观察');
+    expect(queue).toHaveTextContent('NVDA');
+    expect(queue).toHaveTextContent('follow_up');
+    expect(queue).not.toHaveTextContent(/buy|sell|hold|recommend(?:ation)?|target|stop|position sizing|买入|卖出|持有|目标价|止损|仓位/i);
+    expect(queue).not.toHaveTextContent(/sourceAuthorityAllowed|scoreContributionAllowed|provider|raw|debug|runtime|schemaVersion|observationOnly/i);
+
+    const rowIds = Array.from(document.querySelectorAll('article[data-testid^="watchlist-row-"]'))
+      .map((row) => row.getAttribute('data-testid'));
+    expect(rowIds).toEqual(['watchlist-row-NVDA', 'watchlist-row-TSM', 'watchlist-row-600519']);
+    expect(addWatchlistItem).not.toHaveBeenCalled();
+    expect(removeWatchlistItem).not.toHaveBeenCalled();
+    expect(refreshScores).not.toHaveBeenCalled();
+    expect(runRuleBacktest).not.toHaveBeenCalled();
+    expect(analyzeAsync).not.toHaveBeenCalled();
+  });
+
+  it('shows a neutral research queue state when the overlay queue is empty', async () => {
+    renderWatchlist();
+
+    await screen.findByTestId('watchlist-row-NVDA');
+    const queue = await screen.findByTestId('watchlist-research-queue');
+    expect(queue).toHaveTextContent('研究队列');
+    expect(queue).toHaveTextContent('暂无需要跟进的研究队列');
+    expect(queue).toHaveTextContent('继续保持观察，不会自动创建任务或更改观察列表。');
+    expect(queue).not.toHaveTextContent(/error|failed|错误|失败|买入|卖出|交易|下单|recommend/i);
   });
 
   it('renders a watchlist conclusion band needs-refresh state when no fresh item is available', async () => {

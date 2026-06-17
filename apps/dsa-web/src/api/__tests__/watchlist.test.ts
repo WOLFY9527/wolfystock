@@ -153,4 +153,88 @@ describe('watchlistApi investor signal normalization', () => {
     expect(exposure).not.toHaveProperty('rawReasonCodes');
     expect(exposure).not.toHaveProperty('debug');
   });
+
+  it('fetches the watchlist research overlay and keeps the priority queue consumer-safe', async () => {
+    const { watchlistApi } = await import('../watchlist');
+    get.mockResolvedValueOnce({
+      data: {
+        schema_version: 'watchlist_research_overlay_v1',
+        overlay_state: 'degraded',
+        research_summary: 'Some saved symbols need evidence review.',
+        research_priority_queue: [
+          {
+            symbol: 'MSFT',
+            priority_tier: 'attention',
+            priority_reason_safe_label: 'Missing evidence needs review.',
+            evidence_age: {
+              state: 'no_evidence',
+              last_reviewed_at: null,
+              raw_provider_state: 'provider_timeout',
+            },
+            missing_evidence: ['Price-history evidence', ''],
+            suggested_research_path: [
+              {
+                label: 'Stock Structure',
+                route: '/stocks/MSFT/structure-decision',
+                section: 'watchlistResearchOverlay',
+                reason: 'Open symbol structure detail.',
+                provider_route: 'hidden',
+              },
+            ],
+            observation_only: true,
+            raw_provider_payload: { hidden: true },
+            provider_route: 'hidden',
+            source_authority_allowed: false,
+            score_contribution_allowed: false,
+            debug: { enabled: true },
+          },
+          {
+            symbol: 'BAD',
+            priority_tier: 'urgent_review',
+            priority_reason_safe_label: 'Should be dropped.',
+            evidence_age: { state: 'ready' },
+            observation_only: true,
+          },
+        ],
+        observation_only: true,
+        decision_grade: false,
+        data_quality: {
+          state: 'partial',
+          item_count: 2,
+        },
+      },
+    });
+
+    const payload = await watchlistApi.getResearchOverlay();
+
+    expect(get).toHaveBeenCalledWith('/api/v1/watchlist/research-overlay');
+    expect(payload.researchPriorityQueue).toEqual([
+      {
+        symbol: 'MSFT',
+        priorityTier: 'attention',
+        priorityReasonSafeLabel: 'Missing evidence needs review.',
+        evidenceAge: {
+          state: 'no_evidence',
+          lastReviewedAt: null,
+        },
+        missingEvidence: ['Price-history evidence'],
+        suggestedResearchPath: [
+          {
+            label: 'Stock Structure',
+            route: '/stocks/MSFT/structure-decision',
+            section: 'watchlistResearchOverlay',
+            reason: 'Open symbol structure detail.',
+          },
+        ],
+        observationOnly: true,
+      },
+    ]);
+    expect(payload.researchPriorityQueue[0]).not.toHaveProperty('rawProviderPayload');
+    expect(payload.researchPriorityQueue[0]).not.toHaveProperty('providerRoute');
+    expect(payload.researchPriorityQueue[0]).not.toHaveProperty('sourceAuthorityAllowed');
+    expect(payload.researchPriorityQueue[0]).not.toHaveProperty('scoreContributionAllowed');
+    expect(payload.researchPriorityQueue[0]).not.toHaveProperty('debug');
+    expect(payload.researchPriorityQueue[0].evidenceAge).not.toHaveProperty('rawProviderState');
+    expect(payload.researchPriorityQueue[0].suggestedResearchPath[0]).not.toHaveProperty('providerRoute');
+  });
 });
