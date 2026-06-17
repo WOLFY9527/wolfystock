@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import src.auth as auth
 from pathlib import Path
 
 import pytest
@@ -170,7 +171,19 @@ def test_admin_mission_control_default_disabled_does_not_aggregate_ops_status(
     _assert_no_sensitive_markers(payload)
 
 
-def test_admin_mission_control_requires_admin_with_ops_logs_read(app: FastAPI) -> None:
+def test_admin_mission_control_requires_admin_with_ops_logs_read(
+    app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ADMIN_AUTH_ENABLED", "true")
+    auth._auth_enabled = None
+    with TestClient(app) as client:
+        anonymous = client.get("/api/v1/admin/mission-control")
+    assert anonymous.status_code == 401
+    assert anonymous.json()["detail"]["error"] == "unauthorized"
+    _assert_no_sensitive_markers(anonymous.json())
+    auth._auth_enabled = None
+
     with _client(app, _regular_user) as client:
         regular = client.get("/api/v1/admin/mission-control")
     assert regular.status_code == 403
@@ -239,6 +252,9 @@ def test_admin_mission_control_enabled_returns_all_readiness_domains(
         assert item["noExternalCalls"] is True
         assert item["liveEnforcement"] is False
         assert item["runtimeBehaviorChanged"] is False
+        assert item["evidenceRefs"] == []
+        assert item["blockerRefs"] == []
+        assert item["approvalRefs"] == []
         assert "landedFoundation" in item["posture"]
         assert "evidenceToolingExists" in item["posture"]
         assert "realOperatorEvidenceMissing" in item["posture"]
@@ -246,8 +262,11 @@ def test_admin_mission_control_enabled_returns_all_readiness_domains(
         assert "publicLaunchNoGo" in item["posture"]
 
     assert domains["quota_cost"]["opsStatus"]["summary"]["reserveConsumeReleaseCalled"] is False
+    assert domains["quota_cost"]["opsStatus"]["summary"]["reservationCreated"] is False
     assert domains["storage_restore"]["opsStatus"]["summary"]["cleanupMutation"] is False
+    assert domains["storage_restore"]["opsStatus"]["summary"]["schemaMutation"] is False
     assert domains["ws2_async"]["opsStatus"]["summary"]["mode"] == "process_local"
+    assert domains["ws2_async"]["opsStatus"]["summary"]["warningTextIncluded"] is False
     _assert_no_sensitive_markers(payload)
 
 
@@ -304,7 +323,7 @@ def test_admin_mission_control_degrades_ops_snapshot_without_raw_exception(
 ) -> None:
     monkeypatch.setenv("WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED", "true")
 
-    def _raise_raw_failure(self, *, app_state=None):
+    def _raise_raw_failure(self, *, app_state=None, include_section_summaries=False):
         raise RuntimeError("raw exception raw-owner-user-id raw-session-id access-token traceback provider-payload-secret")
 
     monkeypatch.setattr(

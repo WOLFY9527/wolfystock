@@ -134,7 +134,13 @@ class AdminOpsStatusService:
         "://",
     )
 
-    def build_status(self, *, app_state: object | None = None) -> Dict[str, Any]:
+    def build_status(
+        self,
+        *,
+        app_state: object | None = None,
+        include_section_summaries: bool = False,
+    ) -> Dict[str, Any]:
+        """Build the public bounded snapshot, with opt-in typed summaries for internal admin projections."""
         generated_at = datetime.now()
         generated_at_iso = generated_at.isoformat()
         provider_status = self._safe_source(self._build_provider_status_summary)
@@ -167,6 +173,7 @@ class AdminOpsStatusService:
                 configured=bool(provider_status.get("available")),
                 last_checked_at=generated_at_iso if provider_status.get("available") else None,
                 message=self._provider_status_message(provider_status),
+                include_summary=include_section_summaries,
             ),
             "quotaCostAdvisoryStatusSummary": self._project_section(
                 service="quota_cost",
@@ -174,6 +181,7 @@ class AdminOpsStatusService:
                 configured=bool(quota_status.get("available")),
                 last_checked_at=generated_at_iso if quota_status.get("available") else None,
                 message=self._quota_status_message(quota_status),
+                include_summary=include_section_summaries,
             ),
             "storageReadinessSummary": self._project_section(
                 service="storage",
@@ -181,6 +189,7 @@ class AdminOpsStatusService:
                 configured=bool(storage_status.get("available")),
                 last_checked_at=generated_at_iso if storage_status.get("available") else None,
                 message=self._storage_status_message(storage_status),
+                include_summary=include_section_summaries,
             ),
             "taskQueueStatusSummary": self._project_section(
                 service="task_queue",
@@ -188,6 +197,7 @@ class AdminOpsStatusService:
                 configured=getattr(app_state, "task_queue", None) is not None,
                 last_checked_at=generated_at_iso if task_queue_status.get("available") else None,
                 message=self._task_queue_status_message(task_queue_status),
+                include_summary=include_section_summaries,
             ),
             "adminLogEvidenceSummary": self._project_section(
                 service="admin_logs",
@@ -195,6 +205,7 @@ class AdminOpsStatusService:
                 configured=bool(admin_log_status.get("available")),
                 last_checked_at=generated_at_iso if admin_log_status.get("available") else None,
                 message=self._admin_log_status_message(admin_log_status),
+                include_summary=include_section_summaries,
             ),
             "runtimeLogSinkSummary": self._project_runtime_log_sink_section(
                 snapshot=runtime_log_sink_status,
@@ -228,6 +239,7 @@ class AdminOpsStatusService:
         configured: bool,
         last_checked_at: str | None,
         message: str,
+        include_summary: bool = False,
     ) -> Dict[str, Any]:
         section = cls._section(
             available=bool(snapshot.get("available", False)),
@@ -239,7 +251,7 @@ class AdminOpsStatusService:
             label="bounded_admin_diagnostic",
             reasonCode=snapshot.get("reasonCode"),
             dataSources=[],
-            summary={},
+            summary=dict(snapshot.get("summary") or {}) if include_summary else {},
             limitations=[],
         )
         return section
