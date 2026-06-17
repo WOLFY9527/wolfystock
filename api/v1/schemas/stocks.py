@@ -273,6 +273,32 @@ class StockEvidencePacketResponse(BaseModel):
     )
 
 
+class SymbolEvidenceReadinessResponse(BaseModel):
+    """单股票证据就绪度包。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    symbol_evidence_readiness: Literal[True] = Field(
+        ...,
+        alias="symbolEvidenceReadiness",
+        description="标识该对象为单股票证据就绪度包",
+    )
+    symbol: str = Field(..., description="归一化股票代码")
+    readiness_tier: Literal["sufficient", "partial", "insufficient"] = Field(
+        ...,
+        alias="readinessTier",
+        description="证据是否足够继续研究",
+    )
+    evidence_used: List[str] = Field(default_factory=list, alias="evidenceUsed", description="已使用的证据族")
+    evidence_missing: List[str] = Field(default_factory=list, alias="evidenceMissing", description="缺失或不完整的证据族")
+    stale_inputs: List[str] = Field(default_factory=list, alias="staleInputs", description="带有过期/延迟标记的输入")
+    conflicting_evidence: List[str] = Field(default_factory=list, alias="conflictingEvidence", description="显式冲突证据族")
+    data_quality_notes: List[str] = Field(default_factory=list, alias="dataQualityNotes", description="证据质量说明")
+    suggested_research_path: List[str] = Field(default_factory=list, alias="suggestedResearchPath", description="下一步研究路径")
+    observation_only: Literal[True] = Field(..., alias="observationOnly", description="仅观察，不输出交易动作")
+    no_advice_disclosure: str = Field(..., alias="noAdviceDisclosure", description="非个性化建议披露")
+
+
 _STOCK_EVIDENCE_ITEM_METADATA_SCHEMA = {
     "type": "object",
     "additionalProperties": True,
@@ -331,6 +357,11 @@ class StockEvidenceItemResponse(BaseModel):
         None,
         alias="stockEvidencePacket",
         description="现有 stock evidence packet 投影",
+    )
+    symbol_evidence_readiness: Optional[SymbolEvidenceReadinessResponse] = Field(
+        None,
+        alias="symbolEvidenceReadiness",
+        description="单股票证据就绪度包",
     )
 
 
