@@ -8,6 +8,7 @@ financial advice.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, Mapping, Sequence
 
 from src.services.consumer_issue_labels import build_consumer_issues
@@ -72,36 +73,206 @@ _NAMED_SCENARIOS: dict[str, dict[str, int]] = {
     },
     "gammaUnavailable": {},
 }
-_SCENARIO_PRESETS: tuple[dict[str, str], ...] = (
+_COMMON_INPUT_ASSUMPTIONS: tuple[str, ...] = (
+    "Uses market context supplied with the request.",
+    "Compares deterministic driver changes without fetching fresh market data.",
+    "Keeps the result as an observation-only research view.",
+)
+_DEFAULT_LINKED_SURFACES: tuple[dict[str, str], ...] = (
     {
+        "label": "Market Decision Cockpit",
+        "route": "/market/decision-cockpit",
+        "section": "marketContext",
+        "reason": "Review the base market context.",
+    },
+    {
+        "label": "Market Overview",
+        "route": "/market-overview",
+        "section": "marketContext",
+        "reason": "Review broader market observations.",
+    },
+    {
+        "label": "Scenario Lab",
+        "route": "/scenario-lab",
+        "section": "scenarioPreset",
+        "reason": "Review bounded scenario assumptions.",
+    },
+)
+_AVAILABLE_CONFIRM_INVALIDATE_CONTEXT: dict[str, Any] = {
+    "status": "available",
+    "message": "Scenario comparison includes confirm and invalidate context for research review.",
+    "confirm": [
+        "Fresh score-grade observations move together with the selected scenario drivers.",
+        "Broader market context remains consistent with the scenario assumptions.",
+    ],
+    "invalidate": [
+        "Key observations remain unavailable, stale, or proxy-only.",
+        "Broader market context moves against the selected scenario assumptions.",
+    ],
+}
+_UNAVAILABLE_CONFIRM_INVALIDATE_CONTEXT: dict[str, Any] = {
+    "status": "unavailable",
+    "message": (
+        "Confirm and invalidate context is unavailable until base score-grade evidence reaches minimum coverage."
+    ),
+    "confirm": [],
+    "invalidate": [],
+}
+_SCENARIO_PRESETS: tuple[dict[str, Any], ...] = (
+    {
+        "presetId": "volatilitySpike",
         "name": "volatilitySpike",
         "label": "Volatility stress observation",
+        "category": "Volatility stress",
         "description": "Stress volatility and breadth inputs to compare research-context sensitivity.",
+        "inputAssumptions": [
+            *_COMMON_INPUT_ASSUMPTIONS,
+            "Applies pressure to volatility, breadth, and cross-asset drivers.",
+        ],
+        "expectedDriverImpacts": [
+            {"driver": "Volatility structure", "direction": "pressure", "magnitude": "high"},
+            {"driver": "Breadth participation", "direction": "pressure", "magnitude": "medium"},
+            {"driver": "Cross-asset risk", "direction": "pressure", "magnitude": "low"},
+        ],
+        "evidenceLimits": [
+            "Gamma evidence may cap confidence when it is unavailable.",
+            "Breadth and volatility observations need fresh confirmation before the frame can strengthen.",
+        ],
+        "confirmInvalidateContext": _AVAILABLE_CONFIRM_INVALIDATE_CONTEXT,
+        "linkedSurfaces": _DEFAULT_LINKED_SURFACES,
+        "consumerIssues": [],
+        "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
+        "observationOnly": OBSERVATION_ONLY,
+        "decisionGrade": DECISION_GRADE,
     },
     {
+        "presetId": "breadthBreakdown",
         "name": "breadthBreakdown",
         "label": "Breadth deterioration observation",
+        "category": "Breadth stress",
         "description": "Stress market breadth inputs to compare research-context resilience.",
+        "inputAssumptions": [
+            *_COMMON_INPUT_ASSUMPTIONS,
+            "Applies pressure to participation, liquidity, and cross-asset drivers.",
+        ],
+        "expectedDriverImpacts": [
+            {"driver": "Breadth participation", "direction": "pressure", "magnitude": "high"},
+            {"driver": "Liquidity and credit", "direction": "pressure", "magnitude": "low"},
+            {"driver": "Cross-asset risk", "direction": "pressure", "magnitude": "low"},
+        ],
+        "evidenceLimits": [
+            "Breadth observations can be sample-limited.",
+            "Liquidity context may remain incomplete when only request evidence is supplied.",
+        ],
+        "confirmInvalidateContext": _AVAILABLE_CONFIRM_INVALIDATE_CONTEXT,
+        "linkedSurfaces": _DEFAULT_LINKED_SURFACES,
+        "consumerIssues": [],
+        "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
+        "observationOnly": OBSERVATION_ONLY,
+        "decisionGrade": DECISION_GRADE,
     },
     {
+        "presetId": "ratesUpDollarUp",
         "name": "ratesUpDollarUp",
         "label": "Rates and dollar stress observation",
+        "category": "Macro stress",
         "description": "Stress rates-dollar inputs to compare macro-pressure sensitivity.",
+        "inputAssumptions": [
+            *_COMMON_INPUT_ASSUMPTIONS,
+            "Applies pressure to rates, dollar, liquidity, and cross-asset drivers.",
+        ],
+        "expectedDriverImpacts": [
+            {"driver": "Rates and dollar", "direction": "pressure", "magnitude": "high"},
+            {"driver": "Liquidity and credit", "direction": "pressure", "magnitude": "low"},
+            {"driver": "Cross-asset risk", "direction": "pressure", "magnitude": "low"},
+        ],
+        "evidenceLimits": [
+            "Macro observations may lag intraday market context.",
+            "Liquidity context may remain incomplete when only request evidence is supplied.",
+        ],
+        "confirmInvalidateContext": _AVAILABLE_CONFIRM_INVALIDATE_CONTEXT,
+        "linkedSurfaces": _DEFAULT_LINKED_SURFACES,
+        "consumerIssues": [],
+        "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
+        "observationOnly": OBSERVATION_ONLY,
+        "decisionGrade": DECISION_GRADE,
     },
     {
+        "presetId": "liquidityStress",
         "name": "liquidityStress",
         "label": "Liquidity stress observation",
+        "category": "Liquidity stress",
         "description": "Stress liquidity and cross-asset inputs to compare evidence limits.",
+        "inputAssumptions": [
+            *_COMMON_INPUT_ASSUMPTIONS,
+            "Applies pressure to liquidity, cross-asset, and volatility drivers.",
+        ],
+        "expectedDriverImpacts": [
+            {"driver": "Liquidity and credit", "direction": "pressure", "magnitude": "high"},
+            {"driver": "Cross-asset risk", "direction": "pressure", "magnitude": "medium"},
+            {"driver": "Volatility structure", "direction": "pressure", "magnitude": "low"},
+        ],
+        "evidenceLimits": [
+            "Liquidity observations may be partial when request evidence is limited.",
+            "Cross-asset context needs confirmation from the broader market view.",
+        ],
+        "confirmInvalidateContext": _AVAILABLE_CONFIRM_INVALIDATE_CONTEXT,
+        "linkedSurfaces": _DEFAULT_LINKED_SURFACES,
+        "consumerIssues": [],
+        "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
+        "observationOnly": OBSERVATION_ONLY,
+        "decisionGrade": DECISION_GRADE,
     },
     {
+        "presetId": "riskOnConfirmation",
         "name": "riskOnConfirmation",
         "label": "Risk-on confirmation observation",
+        "category": "Confirmation",
         "description": "Lift multiple score-grade drivers to compare what would support a stronger frame.",
+        "inputAssumptions": [
+            *_COMMON_INPUT_ASSUMPTIONS,
+            "Applies supportive changes across breadth, volatility, macro, liquidity, and rotation drivers.",
+        ],
+        "expectedDriverImpacts": [
+            {"driver": "Breadth participation", "direction": "supportive", "magnitude": "medium"},
+            {"driver": "Volatility structure", "direction": "supportive", "magnitude": "low"},
+            {"driver": "Liquidity and credit", "direction": "supportive", "magnitude": "medium"},
+            {"driver": "Sector theme rotation", "direction": "supportive", "magnitude": "low"},
+        ],
+        "evidenceLimits": [
+            "Supportive context still needs multiple score-grade observations.",
+            "Unavailable gamma evidence keeps confidence capped.",
+        ],
+        "confirmInvalidateContext": _AVAILABLE_CONFIRM_INVALIDATE_CONTEXT,
+        "linkedSurfaces": _DEFAULT_LINKED_SURFACES,
+        "consumerIssues": [],
+        "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
+        "observationOnly": OBSERVATION_ONLY,
+        "decisionGrade": DECISION_GRADE,
     },
     {
+        "presetId": "gammaUnavailable",
         "name": "gammaUnavailable",
         "label": "Gamma evidence gap observation",
+        "category": "Evidence gap",
         "description": "Keep gamma evidence unavailable to compare capped scenario output.",
+        "inputAssumptions": [
+            *_COMMON_INPUT_ASSUMPTIONS,
+            "Treats gamma context as unavailable and does not infer missing option-chain evidence.",
+        ],
+        "expectedDriverImpacts": [
+            {"driver": "Dealer gamma", "direction": "unchanged", "magnitude": "low"},
+        ],
+        "evidenceLimits": [
+            "Gamma evidence is unavailable, so gamma-sensitive conclusions remain capped.",
+            "The preset does not infer option-chain context from other market inputs.",
+        ],
+        "confirmInvalidateContext": _UNAVAILABLE_CONFIRM_INVALIDATE_CONTEXT,
+        "linkedSurfaces": _DEFAULT_LINKED_SURFACES,
+        "consumerIssues": build_consumer_issues(["live_gex_not_implemented_v1"]),
+        "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
+        "observationOnly": OBSERVATION_ONLY,
+        "decisionGrade": DECISION_GRADE,
     },
 )
 _SCENARIO_PRESETS_BY_NAME = {preset["name"]: preset for preset in _SCENARIO_PRESETS}
@@ -158,6 +329,12 @@ class MarketScenarioLabEngine:
             "The scenario frame weakens if score-grade evidence does not move with the selected shocks.",
             "The scenario frame weakens if key drivers are proxy-only, stale, blocked, or observation-only.",
         ]
+        confirm_invalidate_context = _confirm_invalidate_context(
+            status="available",
+            message="Scenario comparison includes confirm and invalidate context for research review.",
+            confirm=confirm_context,
+            invalidate=invalidate_context,
+        )
         evidence_limits = _evidence_limits(base, scenario_input)
         consumer_issues = build_consumer_issues(
             base.get("missingEvidence"),
@@ -190,10 +367,7 @@ class MarketScenarioLabEngine:
             "driverDeltas": driver_deltas,
             "changedDrivers": changed_drivers,
             "scenarioSummary": scenario_summary,
-            "confirmInvalidateContext": {
-                "confirm": confirm_context,
-                "invalidate": invalidate_context,
-            },
+            "confirmInvalidateContext": confirm_invalidate_context,
             "whatWouldConfirm": confirm_context,
             "whatWouldInvalidate": invalidate_context,
             "evidenceLimits": evidence_limits,
@@ -286,7 +460,7 @@ def _scenario_mapping(scenario: Mapping[str, Any] | str | None) -> Mapping[str, 
 
 
 def _scenario_name(scenario: Mapping[str, Any]) -> str:
-    return str(scenario.get("name") or scenario.get("scenarioName") or "").strip()
+    return str(scenario.get("presetId") or scenario.get("name") or scenario.get("scenarioName") or "").strip()
 
 
 def _scenario_deltas(scenario: Mapping[str, Any]) -> dict[str, int]:
@@ -434,19 +608,39 @@ def _gamma_status(scenario: Mapping[str, Any], base: Mapping[str, Any]) -> str:
     return "available"
 
 
-def _scenario_presets() -> list[dict[str, str]]:
-    return [dict(preset) for preset in _SCENARIO_PRESETS]
+def _scenario_presets() -> list[dict[str, Any]]:
+    return [deepcopy(preset) for preset in _SCENARIO_PRESETS]
 
 
-def _selected_scenario(scenario: Mapping[str, Any]) -> dict[str, str]:
+def _selected_scenario(scenario: Mapping[str, Any]) -> dict[str, Any]:
     name = _scenario_name(scenario) or "customScenario"
     preset = _SCENARIO_PRESETS_BY_NAME.get(name)
     if preset is not None:
-        return dict(preset)
+        return deepcopy(preset)
+    return _custom_scenario_preset()
+
+
+def _custom_scenario_preset() -> dict[str, Any]:
     return {
+        "presetId": "customScenario",
         "name": "customScenario",
         "label": "Custom scenario observation",
+        "category": "Custom",
         "description": "Compare caller-supplied driver adjustments against the base research context.",
+        "inputAssumptions": [
+            *_COMMON_INPUT_ASSUMPTIONS,
+            "Uses caller-supplied driver adjustments for the comparison.",
+        ],
+        "expectedDriverImpacts": [],
+        "evidenceLimits": [
+            "Custom scenarios depend on the supplied driver adjustments and base market context.",
+        ],
+        "confirmInvalidateContext": deepcopy(_AVAILABLE_CONFIRM_INVALIDATE_CONTEXT),
+        "linkedSurfaces": deepcopy(_DEFAULT_LINKED_SURFACES),
+        "consumerIssues": [],
+        "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
+        "observationOnly": OBSERVATION_ONLY,
+        "decisionGrade": DECISION_GRADE,
     }
 
 
@@ -551,15 +745,35 @@ def _unavailable_payload(base: Mapping[str, Any], scenario: Mapping[str, Any]) -
         "driverDeltas": {},
         "changedDrivers": [],
         "scenarioSummary": scenario_summary,
-        "confirmInvalidateContext": {
-            "confirm": [],
-            "invalidate": [],
-        },
+        "confirmInvalidateContext": _confirm_invalidate_context(
+            status="unavailable",
+            message=(
+                "Confirm and invalidate context is unavailable until base score-grade evidence reaches minimum "
+                "coverage."
+            ),
+            confirm=[],
+            invalidate=[],
+        ),
         "whatWouldConfirm": [],
         "whatWouldInvalidate": [],
         "evidenceLimits": evidence_limits,
         "consumerIssues": build_consumer_issues(base.get("missingEvidence"), base.get("dataQuality")),
         "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
+    }
+
+
+def _confirm_invalidate_context(
+    *,
+    status: str,
+    message: str,
+    confirm: Sequence[str],
+    invalidate: Sequence[str],
+) -> dict[str, Any]:
+    return {
+        "status": status,
+        "message": message,
+        "confirm": list(confirm),
+        "invalidate": list(invalidate),
     }
 
 
