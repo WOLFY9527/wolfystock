@@ -27,6 +27,14 @@ from src.config import Config
 from src.storage import DatabaseManager
 
 
+def _reset_public_limiter_state_if_available() -> None:
+    try:
+        from api.middlewares.public_abuse_limiter import reset_public_api_abuse_limiter_state
+    except ModuleNotFoundError:
+        return
+    reset_public_api_abuse_limiter_state()
+
+
 _ADMIN_DIAGNOSTIC_CAMEL_BOUNDARY_RE = re.compile(r"(?<!^)(?=[A-Z])")
 _SNAPSHOT_SCHEMA_VERSION = "portfolio_snapshot_consumer_v1"
 _RISK_SCHEMA_VERSION = "portfolio_risk_consumer_v1"
@@ -43,6 +51,16 @@ _SAFETY_ENVELOPE_FIELDS = {
     "degradedInputs",
     "dataQuality",
     "freshnessStatus",
+}
+_EXPOSURE_RESEARCH_CONTEXT_FIELDS = {
+    "dominantExposure",
+    "concentrationContext",
+    "currencyContext",
+    "marketContext",
+    "staleInputs",
+    "evidenceGaps",
+    "observationBoundary",
+    "researchNextSteps",
 }
 
 
@@ -92,6 +110,8 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
             os.environ.pop("ADMIN_AUTH_ENABLED", None)
         else:
             os.environ["ADMIN_AUTH_ENABLED"] = self._previous_admin_auth_enabled
+        _reset_auth_globals()
+        _reset_public_limiter_state_if_available()
         self.temp_dir.cleanup()
 
     def _save_close(self, symbol: str, on_date: date, close: float) -> None:
@@ -169,6 +189,54 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
             self.assertNotIn(forbidden, envelope_text.lower())
         self._assert_no_admin_diagnostic_keys(payload)
 
+    def _assert_exposure_research_context(
+        self,
+        payload: dict,
+        *,
+        expected_symbol: str | None = None,
+    ) -> None:
+        self.assertIn("exposureResearchContext", payload)
+        context = payload["exposureResearchContext"]
+        self.assertIsInstance(context, dict)
+        self.assertTrue(_EXPOSURE_RESEARCH_CONTEXT_FIELDS.issubset(context.keys()))
+        self.assertEqual(context["evidenceGaps"], payload["evidenceGaps"])
+        self.assertIsInstance(context["staleInputs"], list)
+        self.assertIsInstance(context["researchNextSteps"], list)
+        self.assertGreaterEqual(len(context["researchNextSteps"]), 1)
+        boundary = context["observationBoundary"]
+        self.assertTrue(boundary["observationOnly"])
+        self.assertFalse(boundary["decisionGrade"])
+        self.assertFalse(boundary["accountingMutation"])
+        self.assertFalse(boundary["portfolioMutation"])
+        self.assertFalse(boundary["providerRoutingChanged"])
+        self.assertFalse(boundary["externalProviderCallsAdded"])
+        self.assertEqual(boundary["adviceBoundary"], "no_advice")
+        self.assertIn("not personalized financial advice", boundary["message"].lower())
+        dominant = context["dominantExposure"]
+        self.assertIn(dominant["type"], {"position", "currency", "market", "none"})
+        if expected_symbol is not None:
+            self.assertEqual(dominant["type"], "position")
+            self.assertEqual(dominant["symbol"], expected_symbol)
+        self.assertIn("state", context["concentrationContext"])
+        self.assertIn("fxFreshnessState", context["currencyContext"])
+        self.assertIn("benchmarkMappingState", context["marketContext"])
+
+        context_text = self._json_text(context)
+        for forbidden in (
+            "buy now",
+            "sell now",
+            "place order",
+            "submit order",
+            "trade recommendation",
+            "investment advice",
+            "target price",
+            "position sizing",
+            "raw_payload",
+            "debug",
+            "traceback",
+        ):
+            self.assertNotIn(forbidden, context_text.lower())
+
     def test_snapshot_endpoint_exposes_optional_diagnostics_fields(self) -> None:
         create_resp = self.client.post(
             "/api/v1/portfolio/accounts",
@@ -220,6 +288,7 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
             schema_version=_SNAPSHOT_SCHEMA_VERSION,
             freshness_status="ready",
         )
+        self._assert_exposure_research_context(payload, expected_symbol="600519")
 
         cached_response = self.client.get(
             "/api/v1/portfolio/snapshot",
@@ -233,6 +302,7 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
             schema_version=_SNAPSHOT_SCHEMA_VERSION,
             freshness_status="stale_or_cached",
         )
+        self._assert_exposure_research_context(cached_payload, expected_symbol="600519")
         self.assertTrue(
             any(item.get("section") == "freshness" for item in cached_payload["degradedInputs"]),
             cached_payload["degradedInputs"],
@@ -297,6 +367,7 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
             schema_version=_RISK_SCHEMA_VERSION,
             freshness_status="provider_unavailable",
         )
+        self._assert_exposure_research_context(payload, expected_symbol="AAPL")
 
     def test_risk_endpoint_provider_lookup_failure_stays_bounded_and_contract_compatible(self) -> None:
         create_resp = self.client.post(
@@ -372,6 +443,7 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
             schema_version=_RISK_SCHEMA_VERSION,
             freshness_status="ready",
         )
+        self._assert_exposure_research_context(payload, expected_symbol="600519")
 
 
 if __name__ == "__main__":
