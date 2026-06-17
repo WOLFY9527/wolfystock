@@ -17,6 +17,24 @@ export type ResearchRadarItem = {
   } | null;
 };
 
+export type ResearchRadarOnboardingGuidance = {
+  title?: string | null;
+  summary?: string | null;
+  conditionsDetected?: string[];
+};
+
+export type ResearchRadarEmptyStateAction = {
+  label?: string | null;
+  route?: string | null;
+  description?: string | null;
+};
+
+export type ResearchRadarSuggestedResearchEntrypoint = {
+  surface?: string | null;
+  route?: string | null;
+  description?: string | null;
+};
+
 export type ResearchRadarResponse = {
   schemaVersion: string;
   generatedAt?: string | null;
@@ -37,7 +55,18 @@ export type ResearchRadarResponse = {
     status?: string | null;
     missingEvidence?: string[];
   } | null;
+  onboardingGuidance?: ResearchRadarOnboardingGuidance | null;
+  emptyStateActions: ResearchRadarEmptyStateAction[];
+  starterResearchWorkflow: string[];
+  firstRunChecklist: string[];
+  suggestedResearchEntrypoints: ResearchRadarSuggestedResearchEntrypoint[];
 };
+
+function normalizeStringList(payload: unknown): string[] {
+  return Array.isArray(payload)
+    ? payload.map((item) => String(item ?? '').trim()).filter(Boolean)
+    : [];
+}
 
 function normalizeResearchRadarResponse(payload: unknown): ResearchRadarResponse {
   const normalized = toCamelCase<ResearchRadarResponse>(payload);
@@ -54,6 +83,27 @@ function normalizeResearchRadarResponse(payload: unknown): ResearchRadarResponse
     marketContextFit: normalized.marketContextFit ?? null,
     noAdviceDisclosure: normalized.noAdviceDisclosure ?? null,
     dataQuality: normalized.dataQuality ?? null,
+    onboardingGuidance: normalized.onboardingGuidance ? {
+      title: normalized.onboardingGuidance.title ?? null,
+      summary: normalized.onboardingGuidance.summary ?? null,
+      conditionsDetected: normalizeStringList(normalized.onboardingGuidance.conditionsDetected),
+    } : null,
+    emptyStateActions: Array.isArray(normalized.emptyStateActions)
+      ? normalized.emptyStateActions.map((item) => ({
+        label: item?.label ?? null,
+        route: item?.route ?? null,
+        description: item?.description ?? null,
+      }))
+      : [],
+    starterResearchWorkflow: normalizeStringList(normalized.starterResearchWorkflow),
+    firstRunChecklist: normalizeStringList(normalized.firstRunChecklist),
+    suggestedResearchEntrypoints: Array.isArray(normalized.suggestedResearchEntrypoints)
+      ? normalized.suggestedResearchEntrypoints.map((item) => ({
+        surface: item?.surface ?? null,
+        route: item?.route ?? null,
+        description: item?.description ?? null,
+      }))
+      : [],
   };
 }
 

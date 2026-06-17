@@ -16,6 +16,24 @@ export type DailyIntelligenceEvidenceLink = {
   reason?: string | null;
 };
 
+export type DailyIntelligenceOnboardingGuidance = {
+  title?: string | null;
+  summary?: string | null;
+  conditionsDetected?: string[];
+};
+
+export type DailyIntelligenceEmptyStateAction = {
+  label?: string | null;
+  route?: string | null;
+  description?: string | null;
+};
+
+export type DailyIntelligenceSuggestedResearchEntrypoint = {
+  surface?: string | null;
+  route?: string | null;
+  description?: string | null;
+};
+
 export type DailyIntelligencePriorityItem = {
   label?: string | null;
   source?: string | null;
@@ -87,6 +105,11 @@ export type DailyIntelligenceResponse = {
   scenarioRisks: DailyIntelligenceScenarioRisk[];
   evidenceGaps: string[];
   degradedInputs: DailyIntelligenceDegradedInput[];
+  onboardingGuidance?: DailyIntelligenceOnboardingGuidance | null;
+  emptyStateActions: DailyIntelligenceEmptyStateAction[];
+  starterResearchWorkflow: string[];
+  firstRunChecklist: string[];
+  suggestedResearchEntrypoints: DailyIntelligenceSuggestedResearchEntrypoint[];
   observationOnly: boolean;
   decisionGrade: boolean;
 };
@@ -100,6 +123,45 @@ function normalizeEvidenceLinks(payload: unknown): DailyIntelligenceEvidenceLink
     route: item?.route ?? null,
     section: item?.section ?? null,
     reason: item?.reason ?? null,
+  }));
+}
+
+function normalizeStringList(payload: unknown): string[] {
+  return Array.isArray(payload)
+    ? payload.map((item) => String(item ?? '').trim()).filter(Boolean)
+    : [];
+}
+
+function normalizeOnboardingGuidance(payload: DailyIntelligenceOnboardingGuidance | null | undefined): DailyIntelligenceOnboardingGuidance | null {
+  if (!payload) {
+    return null;
+  }
+  return {
+    title: payload.title ?? null,
+    summary: payload.summary ?? null,
+    conditionsDetected: normalizeStringList(payload.conditionsDetected),
+  };
+}
+
+function normalizeEmptyStateActions(payload: unknown): DailyIntelligenceEmptyStateAction[] {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+  return payload.map((item) => ({
+    label: item?.label ?? null,
+    route: item?.route ?? null,
+    description: item?.description ?? null,
+  }));
+}
+
+function normalizeSuggestedResearchEntrypoints(payload: unknown): DailyIntelligenceSuggestedResearchEntrypoint[] {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+  return payload.map((item) => ({
+    surface: item?.surface ?? null,
+    route: item?.route ?? null,
+    description: item?.description ?? null,
   }));
 }
 
@@ -153,6 +215,11 @@ function normalizeDailyIntelligenceResponse(payload: unknown): DailyIntelligence
         reason: item?.reason ?? null,
       }))
       : [],
+    onboardingGuidance: normalizeOnboardingGuidance(normalized.onboardingGuidance),
+    emptyStateActions: normalizeEmptyStateActions(normalized.emptyStateActions),
+    starterResearchWorkflow: normalizeStringList(normalized.starterResearchWorkflow),
+    firstRunChecklist: normalizeStringList(normalized.firstRunChecklist),
+    suggestedResearchEntrypoints: normalizeSuggestedResearchEntrypoints(normalized.suggestedResearchEntrypoints),
     observationOnly: normalized.observationOnly !== false,
     decisionGrade: normalized.decisionGrade === true,
   };

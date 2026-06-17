@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
+import { ConsumerOnboardingCtaPanel } from '../components/common/ConsumerOnboardingCtaPanel';
 import {
   ConsoleBoard,
   ConsoleContextRail,
@@ -92,6 +93,7 @@ export default function ResearchRadarPage() {
   }, [load]);
 
   const queueItems = useMemo(() => data?.researchQueue ?? [], [data?.researchQueue]);
+  const showOnboardingCta = Boolean(data && (queueItems.length === 0 || data.emptyStateActions.length || data.starterResearchWorkflow.length));
   const firstItemScores = useMemo(
     () => Object.entries(queueItems[0]?.driverScores ?? {})
       .sort(([, left], [, right]) => (right ?? 0) - (left ?? 0))
@@ -213,6 +215,20 @@ export default function ResearchRadarPage() {
                   ]}
                 />
                 <div className="grid gap-3 p-3 md:grid-cols-2">
+                  {showOnboardingCta && data ? (
+                    <ConsumerOnboardingCtaPanel
+                      data-testid="research-radar-onboarding-cta"
+                      language={locale}
+                      title={locale === 'en' ? 'Start the loop before the radar queue fills' : '先完成研究循环，再回到雷达队列'}
+                      guidance={data.onboardingGuidance}
+                      actions={data.emptyStateActions}
+                      starterResearchWorkflow={data.starterResearchWorkflow}
+                      firstRunChecklist={data.firstRunChecklist}
+                      suggestedResearchEntrypoints={data.suggestedResearchEntrypoints}
+                      radarLabel={locale === 'en' ? 'Return to Research Radar' : '回到研究雷达'}
+                      className="md:col-span-2"
+                    />
+                  ) : null}
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Queue' : '队列'} title={locale === 'en' ? 'Research queue' : '研究队列'}>
                     {queueItems.length ? (
                       <div className="space-y-3">

@@ -15,6 +15,7 @@ import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { watchlistApi } from '../api/watchlist';
 import { ConsumerProtectedFrame, ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
+import { ConsumerOnboardingCtaPanel } from '../components/common/ConsumerOnboardingCtaPanel';
 import { Input } from '../components/common/Input';
 import { Select } from '../components/common/Select';
 import {
@@ -2444,6 +2445,47 @@ const WatchlistPage: React.FC = () => {
                     <p className="text-[11px] text-white/45">{copy.emptyHelp}</p>
                     <p className="text-[11px] text-white/45">{copy.emptyScannerHelp}</p>
                     </div>
+
+                    {isWatchlistEmptyWorkspace ? (
+                      <ConsumerOnboardingCtaPanel
+                        data-testid="watchlist-empty-onboarding-cta"
+                        language={language}
+                        title={language === 'en' ? 'Start with market context or one user-chosen symbol' : '先看市场语境，再选择一个你想观察的代码'}
+                        actions={[
+                          {
+                            route: '/market-overview',
+                            description: language === 'en'
+                              ? 'Read the broad market context before choosing a symbol.'
+                              : '先阅读市场背景，再决定是否继续进入标的研究。',
+                          },
+                          {
+                            route: '/scanner',
+                            description: language === 'en'
+                              ? 'Run scanner only when you want a fresh candidate set.'
+                              : '需要候选集合时，由你手动运行扫描。',
+                          },
+                          {
+                            route: '/watchlist',
+                            description: language === 'en'
+                              ? 'Use the input below to research one symbol before saving it.'
+                              : '用下方输入框先研究一个代码，确认后再保存观察。',
+                          },
+                          {
+                            route: '/research/radar',
+                            description: language === 'en'
+                              ? 'Review the radar after scanner or watchlist activity.'
+                              : '扫描或观察列表有活动后，再回到研究雷达。',
+                          },
+                        ]}
+                        starterResearchWorkflow={language === 'en'
+                          ? ['Open Market Overview.', 'Research one symbol here.', 'Run Scanner if you need candidates.', 'Return to Research Radar after activity.']
+                          : ['打开市场概览。', '在这里研究一个你选择的代码。', '需要候选集合时再运行 Scanner。', '有活动后回到研究雷达。']}
+                        firstRunChecklist={language === 'en'
+                          ? ['No symbol is saved automatically.', 'No seeded watchlist item is created.', 'Scanner and account actions stay user-triggered.']
+                          : ['不会自动保存代码。', '不会创建预置观察标的。', '扫描和账户动作都保持用户触发。']}
+                        radarLabel={language === 'en' ? 'Review Research Radar' : '查看研究雷达'}
+                      />
+                    ) : null}
 
                     {isWatchlistEmptyWorkspace ? (
                       <div

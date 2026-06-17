@@ -209,6 +209,55 @@ describe('research IA pages', () => {
           reason: 'owner_context_missing',
         },
       ],
+      onboardingGuidance: {
+        title: 'Start a research loop',
+        summary: 'Use Market Overview, Watchlist, Scanner, and Research Radar to build an observation-only research loop.',
+        conditionsDetected: ['No watchlist items were found.', 'No portfolio holdings were found.'],
+      },
+      emptyStateActions: [
+        {
+          label: 'Start with Market Overview',
+          route: '/market-overview',
+          description: 'Read the market context first.',
+        },
+        {
+          label: 'Run Scanner',
+          route: '/scanner',
+          description: 'Create a research candidate set.',
+        },
+        {
+          label: 'Add Watchlist Symbol',
+          route: '/watchlist',
+          description: 'Choose one symbol to observe.',
+        },
+        {
+          label: 'Review Research Radar',
+          route: '/research/radar',
+          description: 'Review the queue after scanner or watchlist activity.',
+        },
+      ],
+      starterResearchWorkflow: [
+        'Open Market Overview to set broad context.',
+        'Run Scanner to create a candidate queue.',
+        'Choose one watchlist symbol only when you want to observe it.',
+      ],
+      firstRunChecklist: [
+        'Market Overview checked for context.',
+        'Scanner run reviewed.',
+        'Watchlist symbol chosen by the user.',
+      ],
+      suggestedResearchEntrypoints: [
+        {
+          surface: 'Market Overview',
+          route: '/market-overview',
+          description: 'Start with broad context.',
+        },
+        {
+          surface: 'Research Radar',
+          route: '/research/radar',
+          description: 'Review after scanner/watchlist activity.',
+        },
+      ],
       observationOnly: true,
       decisionGrade: false,
     });
@@ -249,6 +298,17 @@ describe('research IA pages', () => {
     expect(screen.getByRole('link', { name: '查看证据：扫描器' })).toHaveAttribute('href', '/zh/scanner');
     expect(screen.getAllByRole('link', { name: '查看证据：结构详情' })[0]).toHaveAttribute('href', '/zh/stocks/ALFA/structure-decision');
     expect(screen.getByRole('link', { name: '情景实验室' })).toHaveAttribute('href', '/zh/scenario-lab');
+    const onboardingPanel = within(page).getByTestId('daily-intelligence-onboarding-cta');
+    expect(onboardingPanel).toHaveTextContent('首次研究路径');
+    expect(onboardingPanel).toHaveTextContent('先看市场概览');
+    expect(onboardingPanel).toHaveTextContent('运行 Scanner');
+    expect(onboardingPanel).toHaveTextContent('选择观察标的');
+    expect(onboardingPanel).toHaveTextContent('查看研究雷达');
+    expect(onboardingPanel).toHaveTextContent('Market Overview checked for context.');
+    expect(within(onboardingPanel).getByRole('link', { name: '先看市场概览' })).toHaveAttribute('href', '/zh/market-overview');
+    expect(within(onboardingPanel).getByRole('link', { name: '运行 Scanner' })).toHaveAttribute('href', '/zh/scanner');
+    expect(within(onboardingPanel).getByRole('link', { name: '选择观察标的' })).toHaveAttribute('href', '/zh/watchlist');
+    expect(within(onboardingPanel).getByRole('link', { name: '查看研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
     expect(page.textContent || '').not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议/);
   });
 
@@ -322,6 +382,34 @@ describe('research IA pages', () => {
       },
       evidenceGaps: [],
       marketContextFit: 'neutral',
+      onboardingGuidance: {
+        title: 'Start a research loop',
+        summary: 'Use Market Overview, Watchlist, Scanner, and Research Radar to build an observation-only research loop.',
+        conditionsDetected: ['Research Radar has no queue items yet.'],
+      },
+      emptyStateActions: [
+        {
+          label: 'Start with Market Overview',
+          route: '/market-overview',
+          description: 'Read market context first.',
+        },
+        {
+          label: 'Run Scanner',
+          route: '/scanner',
+          description: 'Create candidates before reviewing the radar.',
+        },
+        {
+          label: 'Add Watchlist Symbol',
+          route: '/watchlist',
+          description: 'Choose a symbol to observe.',
+        },
+      ],
+      starterResearchWorkflow: ['Open Market Overview.', 'Run Scanner.', 'Return to Research Radar.'],
+      firstRunChecklist: ['Market context reviewed.', 'Scanner activity reviewed.'],
+      suggestedResearchEntrypoints: [
+        { surface: 'Market Overview', route: '/market-overview', description: 'Start with broad context.' },
+        { surface: 'Scanner', route: '/scanner', description: 'Build a candidate queue.' },
+      ],
       noAdviceDisclosure: '仅供研究队列观察。',
       dataQuality: { status: 'partial' },
     });
@@ -335,6 +423,62 @@ describe('research IA pages', () => {
     expect(within(page).getByRole('link', { name: '打开结构面板' })).toHaveAttribute('href', '/zh/stocks/ALFA/structure-decision');
     await waitFor(() => expect(getResearchRadarMock).toHaveBeenCalledWith({ market: 'us', profile: undefined, limit: 5 }));
     expect(page.textContent || '').not.toMatch(/raw|debug|provider|schema/i);
+  });
+
+  it('renders Research Radar onboarding CTAs when the queue is empty', async () => {
+    getResearchRadarMock.mockResolvedValue({
+      schemaVersion: 'research_radar_api_v1',
+      generatedAt: '2026-06-15T09:30:00Z',
+      researchQueue: [],
+      aggregateSummary: {
+        queueQuality: 'thin',
+        priorityCounts: {},
+      },
+      evidenceGaps: [],
+      marketContextFit: 'neutral',
+      onboardingGuidance: {
+        title: 'Start a research loop',
+        summary: 'provider_timeout',
+        conditionsDetected: ['sourceRefs', 'reasonCodes'],
+      },
+      emptyStateActions: [
+        { label: 'Start with Market Overview', route: '/market-overview', description: 'Read market context first.' },
+        { label: 'Run Scanner', route: '/scanner', description: 'Create a candidate set.' },
+        { label: 'Add Watchlist Symbol', route: '/watchlist', description: 'fundamentals.eps' },
+        { label: 'Review Research Radar', route: '/research/radar', description: 'Return after activity.' },
+      ],
+      starterResearchWorkflow: ['Open Market Overview.', 'Run Scanner.', 'Choose one watchlist symbol.', 'Return to Research Radar.'],
+      firstRunChecklist: ['Market context reviewed.', 'news'],
+      suggestedResearchEntrypoints: [
+        { surface: 'Market Overview', route: '/market-overview', description: 'Start with broad context.' },
+        { surface: 'Scanner', route: '/scanner', description: 'Build a candidate queue.' },
+      ],
+      noAdviceDisclosure: '仅供研究队列观察。',
+      dataQuality: { status: 'partial' },
+    });
+
+    renderRoute(<ResearchRadarPage />, '/zh/research/radar');
+
+    const page = await screen.findByTestId('research-radar-page');
+    const onboardingPanel = within(page).getByTestId('research-radar-onboarding-cta');
+    expect(onboardingPanel).toHaveTextContent('先完成研究循环，再回到雷达队列');
+    expect(onboardingPanel).toHaveTextContent('先看市场概览');
+    expect(onboardingPanel).toHaveTextContent('运行 Scanner');
+    expect(onboardingPanel).toHaveTextContent('选择观察标的');
+    expect(onboardingPanel).toHaveTextContent('回到研究雷达');
+    expect(onboardingPanel).toHaveTextContent('Market context reviewed.');
+    expect(onboardingPanel).toHaveTextContent('部分外部数据暂不可用');
+    expect(onboardingPanel).toHaveTextContent('部分来源细节已折叠。');
+    expect(onboardingPanel).toHaveTextContent('部分诊断细节已折叠。');
+    expect(onboardingPanel).toHaveTextContent('基本面数据缺失');
+    expect(onboardingPanel).toHaveTextContent('新闻数据暂缺');
+    expect(within(onboardingPanel).getByRole('link', { name: '先看市场概览' })).toHaveAttribute('href', '/zh/market-overview');
+    expect(within(onboardingPanel).getByRole('link', { name: '运行 Scanner' })).toHaveAttribute('href', '/zh/scanner');
+    expect(within(onboardingPanel).getByRole('link', { name: '选择观察标的' })).toHaveAttribute('href', '/zh/watchlist');
+    expect(within(onboardingPanel).getByRole('link', { name: '回到研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
+    expect(onboardingPanel.textContent || '').not.toMatch(/sourceRefs|reasonCodes|fundamentals\.eps|provider_timeout|\bnews\b/i);
+    expect(page.textContent || '').not.toMatch(/undefined|null|NaN/);
+    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommendation|target price|stop loss|position sizing/i);
   });
 
   it('renders the Stock Structure entry as an empty state without calling a stock API', () => {
