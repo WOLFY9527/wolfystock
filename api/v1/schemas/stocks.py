@@ -494,6 +494,60 @@ class StockStructureDecisionSourceContext(BaseModel):
     reason: str = Field(..., description="来源上下文原因码")
 
 
+class StockPeerCorrelationPeerGroup(BaseModel):
+    """同业/相关性快照中的本地 peer group 摘要。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    status: Literal["available", "unavailable"] = Field(..., description="peer group 可用性")
+    label: Optional[str] = Field(None, description="本地 peer group 标签")
+    symbols: List[str] = Field(default_factory=list, description="本地确认的 peer symbols")
+
+
+class StockPeerCorrelationEvidence(BaseModel):
+    """单个 peer 的相关性观察。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    symbol: str = Field(..., description="peer symbol")
+    correlation: Optional[float] = Field(None, description="重叠收益序列相关性")
+    overlap_days: int = Field(..., alias="overlapDays", description="可比较的重叠日期数量")
+    symbol_return_pct: Optional[float] = Field(None, alias="symbolReturnPct", description="研究 symbol 区间涨跌幅")
+    peer_return_pct: Optional[float] = Field(None, alias="peerReturnPct", description="peer 区间涨跌幅")
+    spread_pct: Optional[float] = Field(None, alias="spreadPct", description="区间涨跌幅差值")
+    state: Literal["aligned", "diverging", "insufficient_evidence"] = Field(..., description="单 peer 观察状态")
+    summary: str = Field(..., description="面向研究使用的简短观察")
+
+
+class StockPeerCorrelationSnapshot(BaseModel):
+    """单股票同业/相关性快照。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    symbol: str = Field(..., description="研究 symbol")
+    peer_group: StockPeerCorrelationPeerGroup = Field(..., alias="peerGroup", description="本地 peer group 摘要")
+    correlation_state: Literal["aligned", "diverging", "insufficient_evidence"] = Field(
+        ...,
+        alias="correlationState",
+        description="同业相关性观察状态",
+    )
+    peer_evidence: List[StockPeerCorrelationEvidence] = Field(
+        default_factory=list,
+        alias="peerEvidence",
+        description="同业相关性证据",
+    )
+    divergence_evidence: List[StockPeerCorrelationEvidence] = Field(
+        default_factory=list,
+        alias="divergenceEvidence",
+        description="背离证据",
+    )
+    stale_inputs: List[str] = Field(default_factory=list, alias="staleInputs", description="过期或日期不一致的输入说明")
+    missing_inputs: List[str] = Field(default_factory=list, alias="missingInputs", description="缺失输入说明")
+    confidence_cap: Literal["low", "medium", "high"] = Field(..., alias="confidenceCap", description="该快照最高可用置信上限")
+    observation_boundary: str = Field(..., alias="observationBoundary", description="观察边界说明")
+    research_next_steps: List[str] = Field(default_factory=list, alias="researchNextSteps", description="下一步研究路径")
+
+
 class StockStructureDecisionResponse(BaseModel):
     """单股票结构判断响应。"""
 
@@ -521,6 +575,11 @@ class StockStructureDecisionResponse(BaseModel):
         ...,
         alias="degradedInputs",
         description="降级输入说明",
+    )
+    peer_correlation_snapshot: StockPeerCorrelationSnapshot = Field(
+        ...,
+        alias="peerCorrelationSnapshot",
+        description="本地同业/相关性快照",
     )
     consumer_issues: List[Dict[str, str]] = Field(
         ...,
