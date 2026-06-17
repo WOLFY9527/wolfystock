@@ -1,9 +1,14 @@
 # -*- coding: utf-8 -*-
 """Scanner API schema coverage for backward-compatible diagnostics."""
 
+from __future__ import annotations
+
+import json
+
 from api.v1.schemas.scanner import (
     ScannerConsumerDiagnosticsMetadata,
     ScannerEvidencePacketMetadata,
+    ScannerCandidateResponse,
     ScannerRunDetailResponse,
     ScannerScoreExplainabilityMetadata,
 )
@@ -246,6 +251,175 @@ def test_scanner_run_response_accepts_additive_candidate_evidence_and_readiness_
         (item.symbol, item.rank, item.score, item.raw_score, item.final_score)
         for item in response.selected
     ]
+
+
+def test_scanner_candidate_research_packet_summarizes_why_and_limits_without_ranking_drift() -> None:
+    response = ScannerRunDetailResponse(
+        id=41,
+        market="us",
+        profile="us_preopen_v1",
+        status="completed",
+        universe_name="us_liquid",
+        shortlist_size=2,
+        universe_size=5,
+        preselected_size=5,
+        evaluated_size=5,
+        shortlist=[
+            {
+                "symbol": "NVDA",
+                "name": "NVIDIA",
+                "rank": 1,
+                "score": 82.0,
+                "raw_score": 87.0,
+                "final_score": 82.0,
+                "reason_summary": "趋势与量能支持继续研究。",
+                "reasons": ["20 日趋势改善", "相对成交活跃"],
+                "risk_notes": ["基本面与新闻催化证据仍有限"],
+                "key_metrics": [{"label": "20日动量", "value": "+8.2%"}],
+                "feature_signals": [{"label": "趋势", "value": "18.0 / 20"}],
+                "candidateResearchReadiness": {
+                    "readinessState": "insufficient",
+                    "missingEvidence": ["fundamentals", "news"],
+                    "nextEvidenceNeeded": ["补充基本面证据"],
+                    "consumerActionBoundary": "no_advice",
+                    "debugRef": "scanner:candidate:NVDA",
+                },
+                "candidateResearchSummaryFrame": {
+                    "primaryResearchReason": "趋势与量能支持继续研究。",
+                    "evidenceHighlights": ["Technicals available", "Liquidity available"],
+                    "missingEvidence": ["fundamentals", "news"],
+                    "blockingReasons": ["missing_required_evidence"],
+                    "nextResearchStep": "补充基本面证据",
+                    "debugRef": "scanner:candidate_summary:NVDA",
+                },
+                "consumerDiagnostics": {
+                    "reasonLabel": "已进入本轮观察名单",
+                    "dataQualityState": "partial",
+                    "freshnessState": "delayed",
+                    "missingEvidence": ["fundamentals", "news"],
+                    "warningFlags": ["需人工复核"],
+                },
+            },
+            {
+                "symbol": "MSFT",
+                "name": "Microsoft",
+                "rank": 2,
+                "score": 79.0,
+                "raw_score": 79.0,
+                "final_score": 79.0,
+                "reason_summary": "趋势结构稳定。",
+                "reasons": ["趋势稳定"],
+            },
+        ],
+        selected=[
+            {
+                "symbol": "NVDA",
+                "name": "NVIDIA",
+                "rank": 1,
+                "score": 82.0,
+                "raw_score": 87.0,
+                "final_score": 82.0,
+                "reason_summary": "趋势与量能支持继续研究。",
+                "reasons": ["20 日趋势改善", "相对成交活跃"],
+                "candidateResearchSummaryFrame": {
+                    "primaryResearchReason": "趋势与量能支持继续研究。",
+                    "evidenceHighlights": ["Technicals available", "Liquidity available"],
+                    "missingEvidence": ["fundamentals", "news"],
+                    "nextResearchStep": "补充基本面证据",
+                },
+                "candidateResearchReadiness": {
+                    "readinessState": "insufficient",
+                    "missingEvidence": ["fundamentals", "news"],
+                    "nextEvidenceNeeded": ["补充基本面证据"],
+                    "consumerActionBoundary": "no_advice",
+                },
+                "consumerDiagnostics": {
+                    "reasonLabel": "已进入本轮观察名单",
+                    "dataQualityState": "partial",
+                    "freshnessState": "delayed",
+                    "missingEvidence": ["fundamentals", "news"],
+                    "warningFlags": ["需人工复核"],
+                },
+            }
+        ],
+    )
+
+    serialized = response.model_dump()
+
+    assert [(item["symbol"], item["rank"], item["score"]) for item in serialized["shortlist"]] == [
+        ("NVDA", 1, 82.0),
+        ("MSFT", 2, 79.0),
+    ]
+    packet = serialized["shortlist"][0]["candidateResearchPacket"]
+    assert packet == serialized["selected"][0]["candidateResearchPacket"]
+    assert packet["whySurfaced"] == "趋势与量能支持继续研究。"
+    assert packet["primaryEvidence"] == ["Technicals available", "Liquidity available"]
+    assert "fundamentals" in packet["limitingEvidence"]
+    assert "news" in packet["limitingEvidence"]
+    assert packet["dataQualityNotes"]
+    assert packet["rejectedOrLimitedReasonSafeLabel"] == "已进入本轮观察名单"
+    assert packet["researchNextStep"] == "补充基本面证据"
+    assert packet["observationOnly"] is True
+
+
+def test_scanner_candidate_research_packet_is_bounded_and_no_advice() -> None:
+    candidate = ScannerCandidateResponse(
+        symbol="SAFE",
+        name="Safe Candidate",
+        rank=3,
+        score=40.0,
+        raw_score=81.0,
+        final_score=40.0,
+        reason_summary="fallback_source provider_timeout _blocked request_id=abc should not leak",
+        reasons=["buy now", "relative volume improved"],
+        risk_notes=["rawProviderPayload hidden", "需补充成交确认"],
+        candidateResearchReadiness={
+            "readinessState": "_gate_failed",
+            "missingEvidence": ["raw_provider_error", "history_depth", "_blocked"],
+            "nextEvidenceNeeded": ["place order", "补充历史行情覆盖"],
+        },
+        candidateResearchSummaryFrame={
+            "primaryResearchReason": "raw diagnostics provider_timeout requestId=abc",
+            "evidenceHighlights": ["trace_id=abc", "趋势结构改善"],
+            "missingEvidence": ["raw_payload", "成交覆盖不足"],
+            "blockingReasons": ["_gate", "provider_error"],
+            "nextResearchStep": "buy now",
+        },
+        consumerDiagnostics={
+            "reasonLabel": "raw_provider_error",
+            "nextEvidence": "等待更多历史行情覆盖后再复核。",
+            "dataQualityState": "partial",
+        },
+        diagnostics={
+            "rawProviderPayload": {"secret": "hidden"},
+            "requestId": "abc",
+            "provider_timeout": True,
+        },
+    )
+
+    packet = candidate.model_dump()["candidateResearchPacket"]
+    serialized_text = json.dumps(packet, ensure_ascii=False).lower()
+
+    assert packet["whySurfaced"] == "relative volume improved"
+    assert packet["primaryEvidence"] == ["趋势结构改善"]
+    assert packet["limitingEvidence"] == ["成交覆盖不足"]
+    assert packet["rejectedOrLimitedReasonSafeLabel"] == "证据有限，需补充研究"
+    assert packet["researchNextStep"] == "等待更多历史行情覆盖后再复核。"
+    assert packet["observationOnly"] is True
+    for forbidden in (
+        "buy now",
+        "place order",
+        "rawproviderpayload",
+        "raw_payload",
+        "raw_provider",
+        "provider_timeout",
+        "request_id",
+        "requestid",
+        "_blocked",
+        "_gate",
+        "secret",
+    ):
+        assert forbidden not in serialized_text
 
 
 def test_scanner_run_response_locks_score_explainability_metadata_without_score_order_drift() -> None:

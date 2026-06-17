@@ -169,6 +169,10 @@ def test_scanner_candidate_golden_fixture_matches_public_candidate_contract() ->
     assert not ({"rank", "score", "selection_order", "selected_symbols"} & set(ai_payload))
     assert candidate["rank"] == 1
     assert candidate["score"] > 0
+    assert candidate["candidateResearchPacket"]["observationOnly"] is True
+    assert candidate["candidateResearchPacket"]["whySurfaced"]
+    assert candidate["candidateResearchPacket"]["primaryEvidence"]
+    assert candidate["candidateResearchPacket"]["researchNextStep"]
 
     _assert_no_sensitive_public_payload(candidate)
     _assert_fixture_source_labels_are_honest(candidate)
