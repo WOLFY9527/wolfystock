@@ -143,6 +143,7 @@ function makeSnapshot(options: {
   fxStale?: boolean;
   accountCount?: number;
   includePosition?: boolean;
+  exposureResearchContext?: Record<string, unknown> | null;
   valuationLineageState?: string | null;
   positionOverrides?: Record<string, unknown>;
   fxRates?: Array<{
@@ -233,6 +234,7 @@ function makeSnapshot(options: {
     feeTotal: 0,
     taxTotal: 0,
     fxStale: options.fxStale ?? true,
+    ...(options.exposureResearchContext !== undefined ? { exposureResearchContext: options.exposureResearchContext } : {}),
     ...(options.valuationLineageState !== undefined ? { valuationLineageState: options.valuationLineageState } : {}),
     fxRates: options.fxRates ?? [
       {
@@ -298,6 +300,80 @@ function makeSnapshot(options: {
         positions,
       },
     ],
+  };
+}
+
+function makeExposureResearchContext(overrides: Record<string, unknown> = {}) {
+  return {
+    dominantExposure: {
+      type: 'position',
+      symbol: 'AAPL',
+      label: 'AAPL',
+      market: 'us',
+      currency: 'USD',
+      marketValue: 1600,
+      weightPct: 42,
+      fxStatus: 'live',
+      source: 'snapshot_analytics',
+    },
+    concentrationContext: {
+      state: 'elevated',
+      topWeightPct: 42,
+      alert: true,
+      holdingCount: 1,
+      accountCount: 1,
+      dominantType: 'position',
+      dominantLabel: 'AAPL',
+      warningCodes: ['single_position_gt_30'],
+    },
+    currencyContext: {
+      state: 'limited',
+      baseCurrency: 'CNY',
+      fxFreshnessState: 'stale',
+      largestCurrency: {
+        currency: 'USD',
+        label: 'USD',
+        weightPct: 66,
+        fxStatus: 'stale',
+        provider: 'hidden-provider',
+      },
+      stalePairs: ['USD/CNY'],
+    },
+    marketContext: {
+      state: 'limited',
+      largestMarket: {
+        market: 'us',
+        label: 'US',
+        weightPct: 66,
+      },
+      marketBreakdown: [
+        { market: 'us', weightPct: 66, positionCount: 1, rawPayload: 'hidden' },
+      ],
+      benchmarkMappingState: 'unmapped',
+      factorMappingState: 'unmapped',
+      sectorContextState: 'unavailable',
+    },
+    staleInputs: [
+      { input: 'fx_freshness', status: 'stale', reason: 'aggregate_currency_context_limited' },
+      { input: 'benchmark_mapping', status: 'limited', reason: 'mapping_unavailable' },
+    ],
+    evidenceGaps: ['fx_freshness', 'benchmark_mapping', 'factor_mapping'],
+    observationBoundary: {
+      observationOnly: true,
+      decisionGrade: false,
+      accountingMutation: false,
+      portfolioMutation: false,
+      providerRoutingChanged: false,
+      externalProviderCallsAdded: false,
+      adviceBoundary: 'no_advice',
+      message: 'Observation-only portfolio research context; not personalized financial advice and not an instruction.',
+    },
+    researchNextSteps: [
+      { topic: 'dominant_exposure', check: 'Review latest research evidence for AAPL and its market context.' },
+      { topic: 'currency_context', check: 'Verify FX and valuation freshness before using aggregate currency context.' },
+      { topic: 'comparative_context', check: 'Map benchmark and factor evidence before using comparative research context.' },
+    ],
+    ...overrides,
   };
 }
 
@@ -1562,6 +1638,62 @@ describe('PortfolioPage FX refresh', () => {
     expect(body.textContent || '').not.toMatch(
       /sourceAuthority|reasonCode|provider|cache|debug|backend|raw|sourceRefs|execution|readiness|rebalance|reduce|increase|position[- ]?sizing|stop|target|买入|卖出|下单|调仓/i,
     );
+  });
+
+  it('renders bounded exposure research context only when the snapshot provides it', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({
+      includePosition: true,
+      fxStale: true,
+      exposureResearchContext: makeExposureResearchContext(),
+    }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const riskCard = screen.getByTestId('portfolio-risk-card');
+    const context = within(riskCard).getByTestId('portfolio-exposure-research-context');
+    expect(context).toHaveTextContent('暴露研究背景');
+    expect(context).toHaveTextContent('仅供观察');
+    expect(context).toHaveTextContent('主导暴露');
+    expect(context).toHaveTextContent('AAPL');
+    expect(context).toHaveTextContent('42.0%');
+    expect(context).toHaveTextContent('集中度背景');
+    expect(context).toHaveTextContent('集中度较高');
+    expect(context).toHaveTextContent('币种背景');
+    expect(context).toHaveTextContent('USD');
+    expect(context).toHaveTextContent('汇率可能延迟');
+    expect(context).toHaveTextContent('市场背景');
+    expect(context).toHaveTextContent('美股');
+    expect(context).toHaveTextContent('输入新鲜度');
+    expect(within(context).getByTestId('portfolio-exposure-research-stale-inputs')).toHaveTextContent('汇率新鲜度');
+    expect(within(context).getByTestId('portfolio-exposure-research-stale-inputs')).toHaveTextContent('比较参考');
+    expect(within(context).getByTestId('portfolio-exposure-research-evidence-gaps')).toHaveTextContent('汇率新鲜度需复核');
+    expect(within(context).getByTestId('portfolio-exposure-research-evidence-gaps')).toHaveTextContent('比较参考待映射');
+    expect(within(context).getByTestId('portfolio-exposure-research-evidence-gaps')).toHaveTextContent('因子参考待映射');
+    expect(within(context).getByTestId('portfolio-exposure-research-next-steps')).toHaveTextContent('AAPL：复核主导暴露对应的研究证据与市场背景');
+    expect(within(context).getByTestId('portfolio-exposure-research-next-steps')).toHaveTextContent('核对汇率与估值新鲜度');
+    expect(within(context).getByTestId('portfolio-exposure-research-boundary')).toHaveTextContent('仅供观察，不改动账务或组合数据');
+    expect(riskCard).toContainElement(context);
+    expect(Boolean(screen.getByTestId('portfolio-risk-exposure-summary').compareDocumentPosition(context) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(context.compareDocumentPosition(screen.getByTestId('portfolio-scenario-risk-disclosure')) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(context.textContent || '').not.toMatch(
+      /sourceAuthority|warningCodes|providerRoutingChanged|externalProviderCallsAdded|provider|cache|debug|backend|raw|schema|trace|sourceRef|buy|sell|target|stop|position[- ]?sizing|买入|卖出|下单|仓位建议|持仓建议/i,
+    );
+  });
+
+  it('gracefully skips exposure research context when the snapshot omits it', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true, fxStale: false }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    expect(screen.queryByTestId('portfolio-exposure-research-context')).not.toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-summary-market-value-card')).toHaveTextContent('CNY 2,000.00');
+    expect(screen.getByTestId('portfolio-pnl-summary')).toHaveTextContent('+CNY 220.00');
+    expect(screen.getByTestId('portfolio-summary-cash-card')).toHaveTextContent('CNY 1,000.00');
+    expect(screen.getByTestId('portfolio-current-holdings-panel')).toHaveTextContent('AAPL');
   });
 
   it('renders compact portfolio evidence chips without exposing raw sync or authority internals', async () => {

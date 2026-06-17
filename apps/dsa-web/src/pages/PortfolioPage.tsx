@@ -20,6 +20,7 @@ import {
   PortfolioScenarioRiskPanel,
   type PortfolioScenarioRiskVisiblePosition,
 } from '../components/portfolio/PortfolioScenarioRiskPanel';
+import { PortfolioExposureResearchContextPanel } from '../components/portfolio/PortfolioExposureResearchContextPanel';
 import { PortfolioTrustStrip, type PortfolioTrustChipItem } from '../components/portfolio/PortfolioTrustStrip';
 import {
   TerminalButton,
@@ -3716,6 +3717,10 @@ const PortfolioPage: React.FC = () => {
                       ) : null}
                     </div>
                   </TerminalDisclosure>
+                  <PortfolioExposureResearchContextPanel
+                    context={snapshot?.exposureResearchContext}
+                    language={language}
+                  />
                   {hasHoldings ? (
                     <PortfolioScenarioRiskPanel
                       snapshotAsOf={snapshot?.asOf}
