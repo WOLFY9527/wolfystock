@@ -38,6 +38,8 @@ from api.security_headers import apply_security_headers
 from api.v1.schemas.common import HealthResponse
 from src.storage import get_db
 from src.auth import is_auth_enabled, is_production_mode
+from src.config import get_config
+from src.logging_config import ensure_runtime_file_logging
 from src.services.system_config_service import SystemConfigService
 from src.services.crypto_realtime_service import get_crypto_realtime_service, should_auto_start_crypto_realtime
 from src.services.task_queue import get_task_queue
@@ -49,10 +51,34 @@ _ROOT_SWAGGER_PATH = "/docs"
 _ROOT_SWAGGER_OAUTH2_REDIRECT_PATH = "/docs/oauth2-redirect"
 _ROOT_REDOC_PATH = "/redoc"
 _SAFE_PUBLIC_READINESS_STATES = {"ready", "degraded", "unavailable", "maintenance", "unknown"}
+_RUNTIME_LOGGING_CONFIGURED = False
 
 
 def _iso_now() -> str:
     return datetime.now().isoformat()
+
+
+def _ensure_api_runtime_file_logging_once() -> dict[str, Any]:
+    """Ensure direct ``uvicorn api.app:app`` local runs also write dated API logs."""
+    global _RUNTIME_LOGGING_CONFIGURED
+    if _RUNTIME_LOGGING_CONFIGURED:
+        return {"status": "already_checked"}
+    _RUNTIME_LOGGING_CONFIGURED = True
+    if is_production_mode():
+        return {"status": "skipped", "reasonCode": "production_runtime_logging_managed_externally"}
+    try:
+        config = get_config()
+        level_name = str(getattr(config, "log_level", "INFO") or "INFO").upper()
+        level = getattr(logging, level_name, logging.INFO)
+        return ensure_runtime_file_logging(
+            log_prefix="api_server",
+            log_dir=str(getattr(config, "log_dir", "./logs") or "./logs"),
+            level=level,
+            extra_quiet_loggers=["uvicorn", "fastapi"],
+        )
+    except Exception:
+        logger.warning("Runtime API file logging sink could not be initialized.", exc_info=False)
+        return {"status": "unavailable", "reasonCode": "runtime_file_logging_init_failed"}
 
 
 def _add_security_headers(app: FastAPI) -> None:
@@ -492,4 +518,5 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
 
 
 # 默认应用实例（供 uvicorn 直接使用）
+_ensure_api_runtime_file_logging_once()
 app = create_app()
