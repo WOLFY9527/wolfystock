@@ -97,6 +97,12 @@ const DIRECT_LABEL_MAP: Record<string, string | null> = {
   'fx 汇率已过期': 'FX 汇率已过期',
   'FX 汇率缺失': 'FX 汇率缺失',
   'fx 汇率缺失': 'FX 汇率缺失',
+  sourceRefs: null,
+  source_refs: null,
+  sourceRef: null,
+  source_ref: null,
+  reasonCodes: null,
+  reason_codes: null,
   '基准映射暂缺': '基准映射暂缺',
   '因子映射暂缺': '因子映射暂缺',
   fallback: '备用数据',
@@ -117,6 +123,8 @@ const DIRECT_LABEL_MAP: Record<string, string | null> = {
   proxy_quote_missing: '部分外部数据暂不可用',
   proxy_stale: '数据已过期',
   proxy_windows_missing: '部分外部数据暂不可用',
+  fx_fallback_1_to_1: '汇率数据暂不可用',
+  price_fallback: '价格数据暂不可完整确认',
   fx_rate_stale: 'FX 汇率已过期',
   fx_rate_missing: 'FX 汇率缺失',
   benchmark_mapping_missing: '基准映射暂缺',
@@ -134,6 +142,9 @@ const HIDDEN_USER_PATTERNS = [
   /\bdebug\b/i,
   /\bschema\b/i,
   /\btrace\b/i,
+  /^(?:source_?refs?|source_?ref|reason_?codes?|reason_?code)$/i,
+  /\bruntime\b/i,
+  /\bcache\b/i,
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -268,6 +279,12 @@ function mapKnownLabel(value?: string | null): string | null {
   }
   if (normalized.includes('provider_timeout') || normalized.includes('provider') || normalized.includes('timeout')) {
     return '部分外部数据暂不可用';
+  }
+  if (normalized.includes('fx_fallback') || (normalized.includes('fx') && normalized.includes('unavailable'))) {
+    return '汇率数据暂不可用';
+  }
+  if (normalized.includes('price_fallback')) {
+    return '价格数据暂不可完整确认';
   }
   if (normalized.includes('history') || normalized.includes('not_enough_history')) {
     return '历史数据不足';

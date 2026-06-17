@@ -63,6 +63,30 @@ const EXACT_REASON_LABELS: Record<string, { zh: string; en: string }> = {
     zh: '当前证据质量偏弱，先保持观察。',
     en: 'Evidence quality is currently limited. Observe only for now.',
   },
+  source_refs: {
+    zh: '部分来源细节已折叠。',
+    en: 'Some source details are collapsed.',
+  },
+  sourcerefs: {
+    zh: '部分来源细节已折叠。',
+    en: 'Some source details are collapsed.',
+  },
+  reason_codes: {
+    zh: '部分诊断细节已折叠。',
+    en: 'Some diagnostic details are collapsed.',
+  },
+  reasoncodes: {
+    zh: '部分诊断细节已折叠。',
+    en: 'Some diagnostic details are collapsed.',
+  },
+  fx_fallback_1_to_1: {
+    zh: '汇率数据暂不可用',
+    en: 'FX data unavailable',
+  },
+  price_fallback: {
+    zh: '价格数据暂不可完整确认',
+    en: 'Price evidence limited',
+  },
 };
 
 function exactReasonLabel(normalized: string, locale: UserFacingIssueLocale): string | null {
@@ -73,9 +97,11 @@ function looksLikeInternalIssue(value?: string | null): boolean {
   const raw = String(value || '').trim();
   if (!raw) return false;
   const lowered = raw.toLowerCase();
-  return /[:=]/.test(raw)
+  const normalized = normalizeIssue(raw);
+  return /[.:=]/.test(raw)
     || /\b[a-z0-9]+_[a-z0-9_]+\b/.test(lowered)
-    || /\b(?:provider|authority|freshness|schema|debug|trace|diagnostic|runtime|cache|raw|reason|score|observationonly|decisiongrade|contract|gamma|gex|methodology|redistribution|fallback|proxy|unavailable|insufficient|missing)\b/.test(lowered);
+    || /\b(?:provider|authority|freshness|schema|debug|trace|diagnostic|runtime|cache|raw|reason|score|observationonly|decisiongrade|contract|gamma|gex|methodology|redistribution|fallback|proxy|unavailable|insufficient|missing|quote|realtime|snapshot|data|failed|error|news|fundamental|fundamentals|fx|price)\b/.test(lowered)
+    || /(?:source_?refs?|reason_?codes?)/.test(normalized);
 }
 
 function mapInternalReasonToUserMessage(
@@ -110,6 +136,15 @@ function mapInternalReasonToUserMessage(
   }
   if (normalized.includes('not_enough_history') || normalized.includes('history')) {
     return isEnglish ? 'Historical data insufficient' : '历史数据不足';
+  }
+  if (normalized.includes('fx_fallback') || (normalized.includes('fx') && (normalized.includes('unavailable') || normalized.includes('missing') || normalized.includes('fallback')))) {
+    return isEnglish ? 'FX data unavailable' : '汇率数据暂不可用';
+  }
+  if (normalized.includes('price_fallback') || (normalized.includes('price') && normalized.includes('fallback'))) {
+    return isEnglish ? 'Price evidence limited' : '价格数据暂不可完整确认';
+  }
+  if (normalized.includes('quote') || normalized.includes('realtime') || normalized.includes('snapshot')) {
+    return isEnglish ? 'Realtime missing' : '实时缺失';
   }
   if (normalized.includes('freshness') || normalized.includes('fallback') || normalized.includes('proxy')) {
     return isEnglish ? 'Delayed or proxy data in use' : '当前以延迟或替代数据为主，先保持观察。';
