@@ -211,6 +211,8 @@ class WatchlistResearchOverlayServiceTestCase(unittest.TestCase):
         self.assertEqual(self._count_alert_rows(), (0, 0))
         self.assertEqual(payload["schemaVersion"], "watchlist_research_overlay_v1")
         self.assertEqual(len(payload["items"]), 2)
+        self.assertFalse(any("_rawEvidenceGaps" in item for item in payload["items"]))
+        self.assertFalse(any("_rawRiskFlags" in item for item in payload["items"]))
         self.assertTrue(payload["noAdviceDisclosure"])
         self.assertEqual(payload["overlayState"], "degraded")
         self.assertTrue(payload["observationOnly"])
@@ -233,10 +235,8 @@ class WatchlistResearchOverlayServiceTestCase(unittest.TestCase):
         self.assertTrue(
             any("Verify local OHLCV coverage" in check for check in nvda["whatToVerify"])
         )
-        self.assertIn(
-            "Some inputs rely on fallback or delayed evidence, so keep the read cautious.",
-            nvda["riskFlags"],
-        )
+        self.assertTrue(nvda["riskFlags"])
+        self.assertFalse(any(raw in " ".join(nvda["riskFlags"]) for raw in RAW_INTERNAL_CODES))
         self.assertIn(
             "Evidence quality is not cleared for a stronger score-grade conclusion.",
             nvda["evidenceGaps"],
@@ -288,6 +288,118 @@ class WatchlistResearchOverlayServiceTestCase(unittest.TestCase):
         for forbidden in FORBIDDEN_OVERLAY_TEXT:
             self.assertNotIn(forbidden.lower(), serialized)
 
+    def test_overlay_projects_bounded_research_priority_queue(self) -> None:
+        stale_run_id = self._save_scanner_candidate(symbol="NVDA")
+        large_move_run_id = self._save_scanner_candidate(
+            symbol="AVGO",
+            diagnostics={
+                "history": {
+                    "source": "local_us_parquet_dir",
+                    "latest_trade_date": "2026-05-03",
+                },
+                "candidateResearchSummaryFrame": {
+                    "primaryResearchReason": "Large move is visible in stored evidence.",
+                    "researchNextStep": "Review structure detail and supporting evidence.",
+                },
+            },
+        )
+        self.watchlist_service.add_item(
+            owner_id="user-1",
+            symbol="NVDA",
+            market="us",
+            scanner_run_id=stale_run_id,
+            scanner_rank=2,
+            scanner_score=71.5,
+            theme_id="ai_infra",
+            notes="Track structural change and missing evidence.",
+        )
+        self.watchlist_service.add_item(
+            owner_id="user-1",
+            symbol="MSFT",
+            market="us",
+        )
+        self.watchlist_service.add_item(
+            owner_id="user-1",
+            symbol="AVGO",
+            market="us",
+            scanner_run_id=large_move_run_id,
+            scanner_rank=1,
+            scanner_score=88.0,
+            theme_id="semis",
+        )
+
+        before_alerts = self._count_alert_rows()
+
+        payload = WatchlistResearchOverlayService(
+            watchlist_service=self.watchlist_service
+        ).build_overlay(owner_id="user-1")
+
+        self.assertEqual(self._count_alert_rows(), before_alerts)
+        queue = payload["researchPriorityQueue"]
+        self.assertGreaterEqual(len(queue), 3)
+        self.assertLessEqual(len(queue), 5)
+        self.assertEqual(queue[0]["symbol"], "MSFT")
+        self.assertEqual(queue[0]["priorityTier"], "attention")
+        self.assertEqual(
+            {entry["symbol"]: entry["priorityTier"] for entry in queue},
+            {"MSFT": "attention", "NVDA": "follow_up", "AVGO": "follow_up"},
+        )
+        self.assertTrue(all(entry["observationOnly"] is True for entry in queue))
+        self.assertTrue(all(isinstance(entry["suggestedResearchPath"], list) for entry in queue))
+        self.assertTrue(all(entry["suggestedResearchPath"] for entry in queue))
+
+        msft = queue[0]
+        self.assertIn("Missing", msft["priorityReasonSafeLabel"])
+        self.assertIn("Price-history evidence", msft["missingEvidence"])
+        self.assertEqual(msft["evidenceAge"]["state"], "no_evidence")
+        self.assertIsNone(msft["evidenceAge"]["lastReviewedAt"])
+
+        queue_by_symbol = {entry["symbol"]: entry for entry in queue}
+        nvda = queue_by_symbol["NVDA"]
+        self.assertIn("Evidence needs refresh", nvda["priorityReasonSafeLabel"])
+        self.assertIn("Cached or delayed evidence", nvda["missingEvidence"])
+        self.assertEqual(nvda["evidenceAge"]["state"], "stale_or_cached")
+        self.assertTrue(nvda["evidenceAge"]["lastReviewedAt"])
+
+        avgo = queue_by_symbol["AVGO"]
+        self.assertEqual(avgo["priorityReasonSafeLabel"], "Large move needs evidence review.")
+        self.assertEqual(avgo["evidenceAge"]["state"], "stale_or_cached")
+
+        monitor_queue = WatchlistResearchOverlayService._build_research_priority_queue(
+            [
+                {
+                    "ticker": "READY",
+                    "whatToVerify": ["Review supporting evidence."],
+                    "drilldownTargets": [
+                        {
+                            "label": "Stock Structure",
+                            "route": "/stocks/READY/structure-decision",
+                            "section": "watchlistResearchOverlay",
+                            "reason": "Open symbol structure detail.",
+                        }
+                    ],
+                    "freshness": {
+                        "state": "ready",
+                        "lastReviewedAt": "2026-05-04T09:30:00",
+                        "ohlcvState": "ready",
+                    },
+                    "_rawEvidenceGaps": [],
+                    "_rawRiskFlags": [],
+                }
+            ]
+        )
+        self.assertEqual(monitor_queue[0]["priorityTier"], "monitor")
+        self.assertEqual(
+            monitor_queue[0]["priorityReasonSafeLabel"],
+            "Research context is ready for follow-up.",
+        )
+
+        serialized_queue = _serialized_values(queue)
+        for raw_code in RAW_INTERNAL_CODES:
+            self.assertNotIn(raw_code.lower(), serialized_queue)
+        for forbidden in FORBIDDEN_OVERLAY_TEXT:
+            self.assertNotIn(forbidden.lower(), serialized_queue)
+
     def test_overlay_fails_closed_when_watchlist_read_fails(self) -> None:
         class BrokenWatchlistService:
             def list_items(self, owner_id: str) -> list[dict]:  # noqa: ARG002
@@ -298,6 +410,7 @@ class WatchlistResearchOverlayServiceTestCase(unittest.TestCase):
         ).build_overlay(owner_id="user-1")
 
         self.assertEqual(payload["items"], [])
+        self.assertEqual(payload["researchPriorityQueue"], [])
         self.assertEqual(payload["overlayState"], "unavailable")
         self.assertTrue(payload["observationOnly"])
         self.assertFalse(payload["decisionGrade"])
