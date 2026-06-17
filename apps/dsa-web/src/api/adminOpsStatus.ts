@@ -63,6 +63,13 @@ export interface AdminOpsCockpitDomain {
   blockerRefs: string[];
   safeNextActions: string[];
   limitations: string[];
+  priorityRank: number;
+  priorityTier: string;
+  impactLevel: string;
+  recommendedNextAction: string;
+  blockingReasonSummary: string;
+  ownerSurface: string;
+  remediationSurface: string;
   followUpProposals: AdminOpsCockpitFollowUpProposal[];
 }
 
@@ -75,6 +82,19 @@ export interface AdminOpsCockpitBlocker {
   affectedDomains: string[];
   evidenceRefs: string[];
   nextAction: string;
+}
+
+export interface AdminOpsCockpitMaintenanceQueueItem {
+  domainKey: string;
+  label: string;
+  status: string;
+  priorityRank: number;
+  priorityTier: string;
+  impactLevel: string;
+  recommendedNextAction: string;
+  blockingReasonSummary: string;
+  ownerSurface: string;
+  remediationSurface: string;
 }
 
 export interface AdminOpsLaunchCockpit {
@@ -90,9 +110,11 @@ export interface AdminOpsLaunchCockpit {
   summaryCounts: Record<string, number>;
   unsafeActionStates: Record<string, boolean>;
   domains: AdminOpsCockpitDomain[];
+  recommendedMaintenanceQueue: AdminOpsCockpitMaintenanceQueueItem[];
   blockers: AdminOpsCockpitBlocker[];
   safeNextActions: string[];
   limitations: string[];
+  prioritySummary: Record<string, number>;
 }
 
 export interface AdminOpsStatusResponse {
@@ -157,9 +179,32 @@ function normalizeDomain(payload: Record<string, unknown>): AdminOpsCockpitDomai
     blockerRefs: arrayOfStrings(normalized.blockerRefs),
     safeNextActions: arrayOfStrings(normalized.safeNextActions),
     limitations: arrayOfStrings(normalized.limitations),
+    priorityRank: Number(normalized.priorityRank || 0),
+    priorityTier: String(normalized.priorityTier || 'watch'),
+    impactLevel: String(normalized.impactLevel || 'low'),
+    recommendedNextAction: String(normalized.recommendedNextAction || ''),
+    blockingReasonSummary: String(normalized.blockingReasonSummary || ''),
+    ownerSurface: String(normalized.ownerSurface || 'admin_maintenance'),
+    remediationSurface: String(normalized.remediationSurface || normalized.detailRoute || '/admin'),
     followUpProposals: Array.isArray(normalized.followUpProposals)
       ? normalized.followUpProposals.map((item) => normalizeProposal(item as unknown as Record<string, unknown>))
       : [],
+  };
+}
+
+function normalizeQueueItem(payload: Record<string, unknown>): AdminOpsCockpitMaintenanceQueueItem {
+  const normalized = toCamelCase<AdminOpsCockpitMaintenanceQueueItem>(payload);
+  return {
+    domainKey: String(normalized.domainKey || ''),
+    label: String(normalized.label || ''),
+    status: String(normalized.status || ''),
+    priorityRank: Number(normalized.priorityRank || 0),
+    priorityTier: String(normalized.priorityTier || 'watch'),
+    impactLevel: String(normalized.impactLevel || 'low'),
+    recommendedNextAction: String(normalized.recommendedNextAction || ''),
+    blockingReasonSummary: String(normalized.blockingReasonSummary || ''),
+    ownerSurface: String(normalized.ownerSurface || 'admin_maintenance'),
+    remediationSurface: String(normalized.remediationSurface || '/admin'),
   };
 }
 
@@ -198,11 +243,17 @@ function normalizeLaunchCockpit(payload: Record<string, unknown> | undefined): A
     domains: Array.isArray(normalized.domains)
       ? normalized.domains.map((item) => normalizeDomain(item as unknown as Record<string, unknown>))
       : [],
+    recommendedMaintenanceQueue: Array.isArray(normalized.recommendedMaintenanceQueue)
+      ? normalized.recommendedMaintenanceQueue.map((item) => normalizeQueueItem(item as unknown as Record<string, unknown>))
+      : [],
     blockers: Array.isArray(normalized.blockers)
       ? normalized.blockers.map((item) => normalizeBlocker(item as unknown as Record<string, unknown>))
       : [],
     safeNextActions: arrayOfStrings(normalized.safeNextActions),
     limitations: arrayOfStrings(normalized.limitations),
+    prioritySummary: normalized.prioritySummary && typeof normalized.prioritySummary === 'object'
+      ? Object.fromEntries(Object.entries(normalized.prioritySummary).map(([key, value]) => [key, Number(value || 0)]))
+      : {},
   };
 }
 

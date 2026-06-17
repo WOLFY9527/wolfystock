@@ -40,6 +40,19 @@ describe('adminOpsStatusApi', () => {
             quota_live_blocking_enabled: false,
             notification_send_enabled: false,
           },
+          recommended_maintenance_queue: [
+            {
+              domain_key: 'quota_cost',
+              label: 'Quota / Cost',
+              priority_rank: 1,
+              priority_tier: 'critical',
+              impact_level: 'critical',
+              recommended_next_action: 'Review bounded quota evidence without creating reservations.',
+              blocking_reason_summary: 'Live quota enforcement remains approval-gated.',
+              owner_surface: 'cost_controls',
+              remediation_surface: '/admin/cost-observability',
+            },
+          ],
           domains: [
             {
               domain_key: 'quota_cost',
@@ -60,6 +73,13 @@ describe('adminOpsStatusApi', () => {
               blocker_refs: ['docs/audits/public-launch-gap-register.md#costquota'],
               safe_next_actions: ['Review only'],
               limitations: ['live_route_enforcement_missing'],
+              priority_rank: 1,
+              priority_tier: 'critical',
+              impact_level: 'critical',
+              recommended_next_action: 'Review bounded quota evidence without creating reservations.',
+              blocking_reason_summary: 'Live quota enforcement remains approval-gated.',
+              owner_surface: 'cost_controls',
+              remediation_surface: '/admin/cost-observability',
               follow_up_proposals: [
                 {
                   proposal_key: 'quota_route_pilot_approval',
@@ -103,6 +123,19 @@ describe('adminOpsStatusApi', () => {
       publicLaunchNoGo: true,
       liveEnforcement: false,
       evidenceRefs: ['scripts/quota_reserve_release_operator_evidence_check.py'],
+      priorityRank: 1,
+      priorityTier: 'critical',
+      impactLevel: 'critical',
+      recommendedNextAction: 'Review bounded quota evidence without creating reservations.',
+      blockingReasonSummary: 'Live quota enforcement remains approval-gated.',
+      ownerSurface: 'cost_controls',
+      remediationSurface: '/admin/cost-observability',
+    }));
+    expect(result.launchCockpit.recommendedMaintenanceQueue[0]).toEqual(expect.objectContaining({
+      domainKey: 'quota_cost',
+      priorityRank: 1,
+      priorityTier: 'critical',
+      recommendedNextAction: 'Review bounded quota evidence without creating reservations.',
     }));
     expect(result.launchCockpit.domains[0].followUpProposals[0].approvalNeeded).toBe(true);
     expect(result.launchCockpit.blockers[0].blockerKey).toBe('public_launch_no_go');

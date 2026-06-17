@@ -78,6 +78,13 @@ class AdminOpsCockpitDomain(_AdminOpsStatusModel):
     blocker_refs: List[str] = Field(default_factory=list, alias="blockerRefs")
     safe_next_actions: List[str] = Field(default_factory=list, alias="safeNextActions")
     limitations: List[str] = Field(default_factory=list)
+    priority_rank: int = Field(default=0, alias="priorityRank")
+    priority_tier: str = Field(default="watch", alias="priorityTier")
+    impact_level: str = Field(default="low", alias="impactLevel")
+    recommended_next_action: str = Field(default="", alias="recommendedNextAction")
+    blocking_reason_summary: str = Field(default="", alias="blockingReasonSummary")
+    owner_surface: str = Field(default="admin_maintenance", alias="ownerSurface")
+    remediation_surface: str = Field(default="/admin", alias="remediationSurface")
     follow_up_proposals: List[AdminOpsCockpitFollowUpProposal] = Field(
         default_factory=list,
         alias="followUpProposals",
@@ -93,6 +100,19 @@ class AdminOpsCockpitBlocker(_AdminOpsStatusModel):
     affected_domains: List[str] = Field(default_factory=list, alias="affectedDomains")
     evidence_refs: List[str] = Field(default_factory=list, alias="evidenceRefs")
     next_action: str = Field(alias="nextAction")
+
+
+class AdminOpsCockpitMaintenanceQueueItem(_AdminOpsStatusModel):
+    domain_key: str = Field(alias="domainKey")
+    label: str
+    status: str
+    priority_rank: int = Field(alias="priorityRank")
+    priority_tier: str = Field(alias="priorityTier")
+    impact_level: str = Field(alias="impactLevel")
+    recommended_next_action: str = Field(alias="recommendedNextAction")
+    blocking_reason_summary: str = Field(alias="blockingReasonSummary")
+    owner_surface: str = Field(alias="ownerSurface")
+    remediation_surface: str = Field(alias="remediationSurface")
 
 
 class AdminOpsLaunchCockpit(_AdminOpsStatusModel):
@@ -111,9 +131,14 @@ class AdminOpsLaunchCockpit(_AdminOpsStatusModel):
     summary_counts: Dict[str, int] = Field(default_factory=dict, alias="summaryCounts")
     unsafe_action_states: Dict[str, bool] = Field(default_factory=dict, alias="unsafeActionStates")
     domains: List[AdminOpsCockpitDomain] = Field(default_factory=list)
+    recommended_maintenance_queue: List[AdminOpsCockpitMaintenanceQueueItem] = Field(
+        default_factory=list,
+        alias="recommendedMaintenanceQueue",
+    )
     blockers: List[AdminOpsCockpitBlocker] = Field(default_factory=list)
     safe_next_actions: List[str] = Field(default_factory=list, alias="safeNextActions")
     limitations: List[str] = Field(default_factory=list)
+    priority_summary: Dict[str, int] = Field(default_factory=dict, alias="prioritySummary")
 
 
 class AdminBuildProvenance(_AdminOpsStatusModel):

@@ -27,6 +27,89 @@ class AdminOpsStatusService:
     """Aggregate existing admin evidence without changing runtime behavior."""
 
     _HEALTHY_PROVIDER_STATES = frozenset({"closed", "healthy", "ok"})
+    _LAUNCH_COCKPIT_PRIORITY_PROFILES = {
+        "security_rbac_mfa": {
+            "sortOrder": 10,
+            "priorityTier": "critical",
+            "impactLevel": "critical",
+            "ownerSurface": "security_access_control",
+            "remediationSurface": "/admin/users",
+            "recommendedNextAction": "Review sanitized MFA/RBAC operator evidence before changing access posture.",
+            "blockingReasonSummary": "Access-control launch gate lacks staged operator evidence.",
+        },
+        "storage_restore": {
+            "sortOrder": 20,
+            "priorityTier": "critical",
+            "impactLevel": "critical",
+            "ownerSurface": "data_integrity_recovery",
+            "remediationSurface": "/admin/evidence-workflow",
+            "recommendedNextAction": "Review storage readiness and restore acceptance evidence without running migrations or cleanup.",
+            "blockingReasonSummary": "Restore and PITR acceptance evidence is missing for data recovery readiness.",
+        },
+        "ws2_async": {
+            "sortOrder": 30,
+            "priorityTier": "high",
+            "impactLevel": "high",
+            "ownerSurface": "runtime_operations",
+            "remediationSurface": "/admin/evidence-workflow",
+            "recommendedNextAction": "Record process-local runtime limitations and verify durable polling acceptance evidence.",
+            "blockingReasonSummary": "Runtime topology remains limited until multi-instance acceptance evidence is recorded.",
+        },
+        "portfolio_backtest": {
+            "sortOrder": 40,
+            "priorityTier": "high",
+            "impactLevel": "high",
+            "ownerSurface": "research_safety",
+            "remediationSurface": "/admin/evidence-workflow",
+            "recommendedNextAction": "Review stored-first portfolio/backtest safety evidence and owner-isolation proof.",
+            "blockingReasonSummary": "Portfolio/backtest safety proof is incomplete for research-loop readiness.",
+        },
+        "provider_reliability": {
+            "sortOrder": 50,
+            "priorityTier": "high",
+            "impactLevel": "high",
+            "ownerSurface": "provider_reliability",
+            "remediationSurface": "/admin/provider-circuits",
+            "recommendedNextAction": "Inspect provider SLA diagnostics and entitlement evidence without changing provider order or fallback.",
+            "blockingReasonSummary": "Provider reliability is diagnostic-only and live-data entitlement evidence is incomplete.",
+        },
+        "quota_cost": {
+            "sortOrder": 60,
+            "priorityTier": "high",
+            "impactLevel": "high",
+            "ownerSurface": "cost_controls",
+            "remediationSurface": "/admin/cost-observability",
+            "recommendedNextAction": "Inspect cost observability and quota evidence without creating reservations or live blocking.",
+            "blockingReasonSummary": "Quota/cost controls remain advisory; live route enforcement is approval-gated.",
+        },
+        "route_classification": {
+            "sortOrder": 70,
+            "priorityTier": "medium",
+            "impactLevel": "medium",
+            "ownerSurface": "route_inventory",
+            "remediationSurface": "/admin/evidence-workflow",
+            "recommendedNextAction": "Compare route inventory with admin capability expectations and keep release approval external.",
+            "blockingReasonSummary": "Route inventory is present but manual release review remains external.",
+        },
+        "notifications": {
+            "sortOrder": 80,
+            "priorityTier": "medium",
+            "impactLevel": "medium",
+            "ownerSurface": "notification_operations",
+            "remediationSurface": "/admin/notifications",
+            "recommendedNextAction": "Review channel coverage and event evidence without sending notifications.",
+            "blockingReasonSummary": "Delivery rehearsal evidence is missing and sends remain disabled.",
+        },
+        "frontend_private_beta_safety": {
+            "sortOrder": 90,
+            "priorityTier": "watch",
+            "impactLevel": "low",
+            "ownerSurface": "frontend_private_beta",
+            "remediationSurface": "/settings/system",
+            "recommendedNextAction": "Run bounded admin cockpit smoke with mocked data before private-beta review.",
+            "blockingReasonSummary": "Private-beta browser evidence is pending; public launch approval remains external.",
+        },
+    }
     _SENSITIVE_TEXT_MARKERS = (
         "traceback",
         "exception",
@@ -204,6 +287,19 @@ class AdminOpsStatusService:
             return build_unknown_provenance(reason_code="build_provenance_unavailable")
 
     def _project_launch_cockpit(self, snapshot: Dict[str, Any], *, generated_at: str) -> Dict[str, Any]:
+        raw_domains = [
+            item
+            for item in list(snapshot.get("domains") or [])
+            if isinstance(item, dict)
+        ]
+        ranked_domains = self._rank_launch_cockpit_domains(raw_domains)
+        projected_domains = [
+            self._project_launch_cockpit_domain(item)
+            for item in ranked_domains
+        ]
+        priority_counts = self._launch_cockpit_priority_counts(projected_domains)
+        summary_counts = dict(snapshot.get("summaryCounts") or {})
+        summary_counts.update(priority_counts)
         return {
             "contract": str(snapshot.get("contract") or "admin_ops_launch_cockpit_v1"),
             "status": "no_go" if bool(snapshot.get("publicLaunchNoGo", True)) else "advisory",
@@ -217,15 +313,15 @@ class AdminOpsStatusService:
             "liveEnforcement": False,
             "runtimeBehaviorChanged": False,
             "approvalRequired": bool(snapshot.get("approvalRequired", True)),
-            "summaryCounts": dict(snapshot.get("summaryCounts") or {}),
+            "summaryCounts": summary_counts,
             "unsafeActionStates": {
                 str(key): bool(value)
                 for key, value in dict(snapshot.get("unsafeActionStates") or {}).items()
             },
-            "domains": [
-                self._project_launch_cockpit_domain(item)
-                for item in list(snapshot.get("domains") or [])
-                if isinstance(item, dict)
+            "domains": projected_domains,
+            "recommendedMaintenanceQueue": [
+                self._project_launch_cockpit_queue_item(item)
+                for item in projected_domains
             ],
             "blockers": [
                 self._project_launch_cockpit_blocker(item)
@@ -237,6 +333,7 @@ class AdminOpsStatusService:
                 fallback=["Review bounded admin evidence and keep public launch blocked."],
             ),
             "limitations": ["bounded_admin_projection", "no_raw_internal_references"],
+            "prioritySummary": priority_counts,
         }
 
     def _fallback_launch_cockpit(self) -> Dict[str, Any]:
@@ -256,6 +353,7 @@ class AdminOpsStatusService:
             "summaryCounts": {},
             "unsafeActionStates": {},
             "domains": [],
+            "recommendedMaintenanceQueue": [],
             "blockers": [
                 {
                     "blockerKey": "public_launch_no_go",
@@ -270,6 +368,7 @@ class AdminOpsStatusService:
             ],
             "safeNextActions": ["Use existing admin evidence surfaces until the bounded snapshot is available."],
             "limitations": ["bounded_snapshot_unavailable"],
+            "prioritySummary": {},
         }
 
     def _project_launch_cockpit_domain(self, snapshot: Dict[str, Any]) -> Dict[str, Any]:
@@ -298,7 +397,99 @@ class AdminOpsStatusService:
             "blockerRefs": [],
             "safeNextActions": self._sanitize_messages(snapshot.get("safeNextActions")),
             "limitations": [],
+            "priorityRank": int(snapshot.get("priorityRank") or 0),
+            "priorityTier": str(snapshot.get("priorityTier") or "watch"),
+            "impactLevel": str(snapshot.get("impactLevel") or "low"),
+            "recommendedNextAction": self._safe_message(
+                snapshot.get("recommendedNextAction"),
+                fallback="Review bounded admin evidence before changing launch posture.",
+            ),
+            "blockingReasonSummary": self._safe_message(
+                snapshot.get("blockingReasonSummary"),
+                fallback="Bounded admin evidence remains incomplete for launch review.",
+            ),
+            "ownerSurface": str(snapshot.get("ownerSurface") or "admin_maintenance"),
+            "remediationSurface": self._safe_internal_route(snapshot.get("remediationSurface") or snapshot.get("detailRoute")),
             "followUpProposals": [],
+        }
+
+    def _rank_launch_cockpit_domains(self, domains: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
+        ranked_domains: list[Dict[str, Any]] = []
+        for domain in domains:
+            domain_key = str(domain.get("domainKey") or "")
+            profile = self._LAUNCH_COCKPIT_PRIORITY_PROFILES.get(domain_key, {})
+            sort_order = int(profile.get("sortOrder") or 1000)
+            ranked_domain = dict(domain)
+            ranked_domain.update(
+                {
+                    "prioritySortOrder": sort_order,
+                    "priorityTier": profile.get("priorityTier", "watch"),
+                    "impactLevel": profile.get("impactLevel", "low"),
+                    "recommendedNextAction": profile.get(
+                        "recommendedNextAction",
+                        "Review bounded admin evidence before changing launch posture.",
+                    ),
+                    "blockingReasonSummary": profile.get(
+                        "blockingReasonSummary",
+                        "Bounded admin evidence remains incomplete for launch review.",
+                    ),
+                    "ownerSurface": profile.get("ownerSurface", "admin_maintenance"),
+                    "remediationSurface": profile.get(
+                        "remediationSurface",
+                        domain.get("detailRoute") or "/admin",
+                    ),
+                }
+            )
+            ranked_domains.append(ranked_domain)
+
+        ranked_domains.sort(
+            key=lambda item: (
+                int(item.get("prioritySortOrder") or 1000),
+                str(item.get("domainKey") or ""),
+            )
+        )
+        for rank, domain in enumerate(ranked_domains, start=1):
+            domain["priorityRank"] = rank
+        return ranked_domains
+
+    @staticmethod
+    def _launch_cockpit_priority_counts(domains: list[Dict[str, Any]]) -> Dict[str, int]:
+        counts = {
+            "criticalPriorityCount": 0,
+            "highPriorityCount": 0,
+            "mediumPriorityCount": 0,
+            "watchPriorityCount": 0,
+        }
+        for domain in domains:
+            tier = str(domain.get("priorityTier") or "watch")
+            if tier == "critical":
+                counts["criticalPriorityCount"] += 1
+            elif tier == "high":
+                counts["highPriorityCount"] += 1
+            elif tier == "medium":
+                counts["mediumPriorityCount"] += 1
+            else:
+                counts["watchPriorityCount"] += 1
+        return counts
+
+    def _project_launch_cockpit_queue_item(self, domain: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "domainKey": str(domain.get("domainKey") or ""),
+            "label": str(domain.get("label") or ""),
+            "status": str(domain.get("status") or "unknown"),
+            "priorityRank": int(domain.get("priorityRank") or 0),
+            "priorityTier": str(domain.get("priorityTier") or "watch"),
+            "impactLevel": str(domain.get("impactLevel") or "low"),
+            "recommendedNextAction": self._safe_message(
+                domain.get("recommendedNextAction"),
+                fallback="Review bounded admin evidence before changing launch posture.",
+            ),
+            "blockingReasonSummary": self._safe_message(
+                domain.get("blockingReasonSummary"),
+                fallback="Bounded admin evidence remains incomplete for launch review.",
+            ),
+            "ownerSurface": str(domain.get("ownerSurface") or "admin_maintenance"),
+            "remediationSurface": self._safe_internal_route(domain.get("remediationSurface") or domain.get("detailRoute")),
         }
 
     def _project_launch_cockpit_blocker(self, snapshot: Dict[str, Any]) -> Dict[str, Any]:
