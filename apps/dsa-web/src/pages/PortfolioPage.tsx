@@ -8,6 +8,7 @@ import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import { Button } from '../components/common/Button';
 import { Checkbox } from '../components/common/Checkbox';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
+import { ConsumerOnboardingCtaPanel } from '../components/common/ConsumerOnboardingCtaPanel';
 import { Drawer } from '../components/common/Drawer';
 import { Input } from '../components/common/Input';
 import { PillBadge } from '../components/common/PillBadge';
@@ -3308,6 +3309,51 @@ const PortfolioPage: React.FC = () => {
               ) : (
                 <div data-testid="portfolio-empty-onboarding-row" className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
                   <TerminalPanel as="section" data-testid="portfolio-empty-workflow-column" className="min-w-0 flex flex-col gap-4 border-white/[0.08] bg-white/[0.035]">
+                    <ConsumerOnboardingCtaPanel
+                      data-testid="portfolio-empty-onboarding-cta"
+                      language={language}
+                      title={language === 'zh' ? '先完成研究上下文，只有需要组合跟踪时再创建账户' : 'Build research context first; create an account only when portfolio tracking is intentional'}
+                      actions={[
+                        {
+                          route: '/market-overview',
+                          description: language === 'zh'
+                            ? '先阅读市场背景，再决定是否需要组合跟踪。'
+                            : 'Read market context before deciding whether portfolio tracking is needed.',
+                        },
+                        {
+                          route: '/scanner',
+                          description: language === 'zh'
+                            ? '需要候选集合时，由你手动运行扫描。'
+                            : 'Run scanner only when you want a candidate set.',
+                        },
+                        {
+                          route: '/watchlist',
+                          description: language === 'zh'
+                            ? '先保存你明确想持续观察的代码。'
+                            : 'Save only symbols you intentionally want to keep observing.',
+                        },
+                        {
+                          route: '/research/radar',
+                          description: language === 'zh'
+                            ? '扫描或观察列表有活动后，再查看研究队列。'
+                            : 'Review the queue after scanner or watchlist activity.',
+                        },
+                        {
+                          route: '/portfolio',
+                          description: language === 'zh'
+                            ? '只有明确想记录持仓、现金与组合表现时才创建账户。'
+                            : 'Create an account only when you want to track holdings, cash, and portfolio performance.',
+                        },
+                      ]}
+                      starterResearchWorkflow={language === 'zh'
+                        ? ['打开市场概览。', '运行 Scanner 或选择观察标的。', '有研究活动后查看研究雷达。', '需要组合跟踪时再创建账户。']
+                        : ['Open Market Overview.', 'Run Scanner or choose a watchlist symbol.', 'Review Research Radar after activity.', 'Create an account only when tracking a portfolio.']}
+                      firstRunChecklist={language === 'zh'
+                        ? ['不会自动创建账户。', '不会生成示例持仓。', '不会改写持仓、现金或外部同步状态。']
+                        : ['No account is created automatically.', 'No sample holdings are generated.', 'Holdings, cash, and external sync stay unchanged.']}
+                      radarLabel={language === 'zh' ? '查看研究雷达' : 'Review Research Radar'}
+                      portfolioLabel={language === 'zh' ? '进入账户创建区' : 'Open account setup'}
+                    />
                     <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">{language === 'zh' ? '首次配置路径' : 'First-use setup path'}</h2>

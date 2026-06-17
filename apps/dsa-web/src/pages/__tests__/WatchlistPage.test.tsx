@@ -1931,6 +1931,16 @@ describe('WatchlistPage', () => {
     expect(researchPath).toHaveTextContent('首选研究路径');
     expect(researchPath).toHaveTextContent('手动研究代码');
     expect(researchPath).toHaveTextContent('首选路径：先启动一个个股研究任务，不会把代码加入观察名单。');
+    const onboardingPanel = within(emptyState).getByTestId('watchlist-empty-onboarding-cta');
+    expect(onboardingPanel).toHaveTextContent('先看市场概览');
+    expect(onboardingPanel).toHaveTextContent('运行 Scanner');
+    expect(onboardingPanel).toHaveTextContent('选择观察标的');
+    expect(onboardingPanel).toHaveTextContent('查看研究雷达');
+    expect(within(onboardingPanel).getByRole('link', { name: '先看市场概览' })).toHaveAttribute('href', '/zh/market-overview');
+    expect(within(onboardingPanel).getByRole('link', { name: '运行 Scanner' })).toHaveAttribute('href', '/zh/scanner');
+    expect(within(onboardingPanel).getByRole('link', { name: '选择观察标的' })).toHaveAttribute('href', '/zh/watchlist');
+    expect(within(onboardingPanel).getByRole('link', { name: '查看研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
+    expect(onboardingPanel).toHaveTextContent('不会自动保存代码。');
     expect(within(emptyState).getByLabelText('手动研究代码')).toBeInTheDocument();
     expect(emptyState).not.toHaveTextContent(/数据不足，禁止判断|买入|卖出|下单|交易|券商|broker/i);
     expect(within(headerStrip).queryByRole('button', { name: /打开扫描器|Open Scanner/i })).not.toBeInTheDocument();
@@ -1965,6 +1975,8 @@ describe('WatchlistPage', () => {
       expect(screen.getByTestId('location')).toHaveTextContent('/zh?symbol=TSLA');
     });
     expect(listWatchlistItems).toHaveBeenCalledTimes(1);
+    expect(addWatchlistItem).not.toHaveBeenCalled();
+    expect(refreshScores).not.toHaveBeenCalled();
   });
 
   it('keeps batch actions and auto refresh in compact product-labeled rows', async () => {
