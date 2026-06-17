@@ -2648,7 +2648,7 @@ describe('MarketOverviewPage', () => {
     expect(marketIntelligenceReasonLabel('avoidLowEvidence', 'zh')).toBe('当前证据质量偏弱，先保持观察。');
   });
 
-  it('copies a market overview summary from the current visible state', async () => {
+  it('copies a market intelligence evidence snapshot from the current visible state', async () => {
     render(createElement(MarketOverviewPage));
 
     const exportButton = await screen.findByTestId('market-overview-export-summary');
@@ -2657,10 +2657,17 @@ describe('MarketOverviewPage', () => {
 
     await waitFor(() => expect(writeTextMock).toHaveBeenCalledTimes(1));
     const copiedText = String(writeTextMock.mock.calls[0]?.[0] || '');
-    expect(copiedText).toContain('市场总览 | 全部');
-    expect(copiedText).toContain('市场温度：偏暖（62）');
-    expect(copiedText).toContain('数据质量：延迟可用');
-    expect(copiedText).toContain('市场解读：美股风险偏好偏暖');
+    expect(copiedText).toContain('# Market Intelligence Evidence Snapshot | 全部');
+    expect(copiedText).toContain('## Market regime observation');
+    expect(copiedText).toContain('## Evidence used');
+    expect(copiedText).toContain('## Evidence gaps');
+    expect(copiedText).toContain('## Data freshness');
+    expect(copiedText).toContain('## Research next steps');
+    expect(copiedText).toContain('## No-advice disclosure');
+    expect(copiedText).toContain('## Generated timestamp');
+    expect(copiedText).toContain('- 市场温度: 偏暖 (62)');
+    expect(copiedText).toContain('- 数据质量: 延迟可用');
+    expect(copiedText).not.toMatch(/provider_timeout|sourceAuthorityAllowed|scoreContributionAllowed|raw|debug|trace|schema|MarketCache|buy|sell|target price|position sizing|买入|卖出|目标价|止损|仓位/i);
     expect(await screen.findByText('已复制摘要')).toBeInTheDocument();
   });
 

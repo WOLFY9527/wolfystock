@@ -58,7 +58,12 @@ import { TerminalChip, TerminalGrid, TerminalPanel } from '../terminal/TerminalP
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
 import type { OfficialMacroAuthorityRecord } from '../common/officialMacroAuthorityDiagnosticsData';
-import { buildMarketDirectionalSummary, marketIntelligenceReasonLabel } from '../../utils/marketIntelligenceGuidance';
+import {
+  buildMarketDirectionalSummary,
+  marketIntelligenceReasonLabel,
+  type MarketDirectionalSummary,
+} from '../../utils/marketIntelligenceGuidance';
+import { buildMarketIntelligenceEvidenceMarkdown } from '../../utils/marketIntelligenceEvidenceExport';
 
 const MARKET_OVERVIEW_GRID_FALLBACK_MIN_MS = 120;
 
@@ -995,14 +1000,7 @@ function heroToneClass(item: MarketOverviewItem | undefined): string {
     : 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.36)]';
 }
 
-function formatCoverageSummaryLine(label: string, summary: Record<CardCoverageKind, number>, language: 'zh' | 'en'): string {
-  if (language === 'en') {
-    return `Coverage (${label}): AVAILABLE ${summary.real} | PARTIAL ${summary.mixed} | DELAYED ${summary.fallback}`;
-  }
-  return `${label}数据覆盖：可用 ${summary.real} | 部分可用 ${summary.mixed} | 延迟可用 ${summary.fallback}`;
-}
-
-function buildMarketOverviewSummaryText(params: {
+function buildMarketOverviewEvidenceSnapshotMarkdown(params: {
   activeCategoryLabel: string;
   coverageSummary: Record<CardCoverageKind, number>;
   dataQuality: DataQualitySummary;
@@ -1010,6 +1008,11 @@ function buildMarketOverviewSummaryText(params: {
   language: 'zh' | 'en';
   temperature: MarketTemperatureResponse;
   briefing: MarketBriefingResponse;
+  regimeSynthesis: MarketRegimeSynthesisHeaderView;
+  directionalSummary: MarketDirectionalSummary;
+  decisionSemantics?: MarketOverviewDecisionSemanticsView;
+  dataState: MarketOverviewDataStateStripView;
+  localSnapshotSavedAt?: string;
 }): string {
   const {
     activeCategoryLabel,
@@ -1019,42 +1022,86 @@ function buildMarketOverviewSummaryText(params: {
     language,
     temperature,
     briefing,
+    regimeSynthesis,
+    directionalSummary,
+    decisionSemantics,
+    dataState,
+    localSnapshotSavedAt,
   } = params;
+  const heroEvidence = heroAnchors.slice(0, 3).map((anchor) => {
+    const displayLabel = anchor.item
+      ? resolveMarketOverviewDisplayLabel(anchor.item, language)
+      : { primary: anchor.label, secondary: anchor.key };
+    return {
+      label: displayLabel.primary,
+      meta: `${formatHeroValue(anchor.item?.value)} (${formatHeroChange(anchor.item?.changePct)})`,
+    };
+  });
+  const briefingEvidence = briefing.items.slice(0, 2).map((item) => ({
+    label: item.title,
+    meta: item.message,
+  }));
+  const synthesisEvidence = [
+    ...regimeSynthesis.topDrivers,
+    ...regimeSynthesis.counterEvidence,
+  ].slice(0, 3).map((item) => ({
+    label: item.label,
+    meta: item.meta,
+  }));
+  const missingPillars = decisionSemantics?.directionReadiness?.missingPillars.map((pillar) => pillar.reasonCode || pillar.label) ?? [];
+  const dataGaps = [
+    ...regimeSynthesis.dataGaps.map((item) => item.meta || item.label),
+    ...(decisionSemantics?.dataGaps.map((item) => item.meta || item.label) ?? []),
+    ...missingPillars,
+    dataState.hasUnavailable ? 'Some evidence is still unavailable.' : '',
+    dataState.hasFallback ? 'Some data is delayed or partial.' : '',
+  ];
+  const nextSteps = [
+    ...directionalSummary.watchItems,
+    ...(decisionSemantics?.invalidationTriggers.map((item) => item.meta || item.label) ?? []),
+    ...(decisionSemantics?.confirmationSignals.map((item) => item.meta || item.label) ?? []),
+  ];
+  const freshnessLabel = dataState.isRefreshing
+    ? 'Refresh in progress'
+    : dataState.hasUnavailable
+      ? 'Some evidence unavailable'
+      : dataState.staleCount > 0 || dataState.hasFallback
+        ? 'Delayed or partial data'
+        : 'Loaded evidence current';
 
-  const heroLine = heroAnchors
-    .slice(0, 3)
-    .map((anchor) => {
-      const displayLabel = anchor.item
-        ? resolveMarketOverviewDisplayLabel(anchor.item, language)
-        : { primary: anchor.label, secondary: anchor.key };
-      return `${displayLabel.primary} ${formatHeroValue(anchor.item?.value)} (${formatHeroChange(anchor.item?.changePct)})`;
-    })
-    .join(' | ');
-
-  const briefingLine = briefing.items
-    .slice(0, 3)
-    .map((item) => `${item.title}: ${item.message}`)
-    .join(language === 'en' ? ' | ' : '；');
-
-  const lines = language === 'en'
-    ? [
-      `Market Overview | ${activeCategoryLabel}`,
-      `Market temperature: ${temperature.scores.overall.label} (${temperature.scores.overall.value})`,
-      `Data quality: ${dataQuality.status}`,
-      formatCoverageSummaryLine(activeCategoryLabel, coverageSummary, language),
-      `Cross asset snapshot: ${heroLine}`,
-      `Briefing: ${briefingLine}`,
-    ]
-    : [
-      `市场总览 | ${activeCategoryLabel}`,
-      `市场温度：${temperature.scores.overall.label}（${temperature.scores.overall.value}）`,
-      `数据质量：${dataQuality.status}`,
-      formatCoverageSummaryLine(activeCategoryLabel, coverageSummary, language),
-      `跨资产快照：${heroLine}`,
-      `市场解读：${briefingLine}`,
-    ];
-
-  return lines.join('\n');
+  return buildMarketIntelligenceEvidenceMarkdown({
+    title: `Market Intelligence Evidence Snapshot | ${activeCategoryLabel}`,
+    locale: 'en',
+    generatedAt: new Date(),
+    regimeObservation: {
+      title: regimeSynthesis.title || directionalSummary.currentLabel,
+      summary: regimeSynthesis.summary || directionalSummary.currentLabel,
+      confidenceLabel: `${regimeSynthesis.confidenceLabel}${regimeSynthesis.confidenceValueText ? ` · ${regimeSynthesis.confidenceValueText}` : ''}`,
+    },
+    evidenceUsed: [
+      {
+        label: language === 'en' ? 'Market temperature' : '市场温度',
+        meta: `${temperature.scores.overall.label} (${formatNumber(temperature.scores.overall.value, 0)})`,
+      },
+      {
+        label: language === 'en' ? 'Data quality' : '数据质量',
+        meta: `${dataQuality.status} · ${activeCategoryLabel}: available ${coverageSummary.real}, partial ${coverageSummary.mixed}, delayed ${coverageSummary.fallback}`,
+      },
+      ...heroEvidence,
+      ...briefingEvidence,
+      ...synthesisEvidence,
+    ],
+    evidenceGaps: dataGaps,
+    dataFreshness: {
+      label: freshnessLabel,
+      asOf: temperature.asOf || briefing.asOf || temperature.updatedAt || briefing.updatedAt || localSnapshotSavedAt,
+      notes: [
+        dataState.updatedAtLabel ? `Last local snapshot: ${dataState.updatedAtLabel}` : '',
+        dataState.needsRefresh ? 'Refresh may be needed before using this as a stronger research read.' : '',
+      ],
+    },
+    researchNextSteps: nextSteps,
+  });
 }
 
 function formatNumber(value: number | null | undefined, digits = 2): string {
@@ -2274,15 +2321,6 @@ function useMarketOverviewWorkbenchModel({
   const dataQuality = summarizeDataQuality(panels);
   const coverageSummary = summarizeCardCoverage(panels, CATEGORY_CARDS[activeCategory]);
   const activeCategoryLabel = categoryTabs.find((tab) => tab.key === activeCategory)?.label || '';
-  const exportSummaryText = buildMarketOverviewSummaryText({
-    activeCategoryLabel,
-    coverageSummary,
-    dataQuality,
-    heroAnchors,
-    language,
-    temperature: panels.temperature,
-    briefing: panels.briefing,
-  });
   const activeRows = CATEGORY_LAYOUT[activeCategory];
 
   const globalIndicesCard = (
@@ -2826,6 +2864,20 @@ function useMarketOverviewWorkbenchModel({
     fallbackInputCount: panels.temperature.fallbackInputCount ?? 0,
     excludedInputCount: panels.temperature.excludedInputCount ?? 0,
   };
+  const exportSummaryText = buildMarketOverviewEvidenceSnapshotMarkdown({
+    activeCategoryLabel,
+    coverageSummary,
+    dataQuality,
+    heroAnchors,
+    language,
+    temperature: panels.temperature,
+    briefing: panels.briefing,
+    regimeSynthesis: regimeSynthesisView,
+    directionalSummary: directionalSummaryView,
+    decisionSemantics: decisionSemanticsView,
+    dataState: dataStateView,
+    localSnapshotSavedAt,
+  });
   const briefingSummary: MarketOverviewBriefingSummaryView = {
     confidenceLabel: confidenceLabel(panels.briefing.confidence),
     toneClass: panels.briefing.isReliable === false || panels.briefing.isFallback ? 'text-amber-200' : 'text-white',
