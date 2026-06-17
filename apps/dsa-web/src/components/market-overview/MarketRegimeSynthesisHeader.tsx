@@ -5,6 +5,15 @@ import { SynthesisEvidenceColumn, type SynthesisEvidenceItem } from '../common/S
 
 export type MarketRegimeSynthesisEvidenceView = SynthesisEvidenceItem;
 
+export type MarketRegimeSynthesisEvidenceFamilyView = {
+  key: string;
+  label: string;
+  stateLabel: string;
+  stateVariant: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
+  summary: string;
+  freshnessLabel?: string;
+};
+
 export type MarketRegimeSynthesisHeaderView = {
   state: 'ready' | 'insufficient' | 'missing';
   title: string;
@@ -19,6 +28,15 @@ export type MarketRegimeSynthesisHeaderView = {
   topDrivers: MarketRegimeSynthesisEvidenceView[];
   counterEvidence: MarketRegimeSynthesisEvidenceView[];
   dataGaps: MarketRegimeSynthesisEvidenceView[];
+  postureLabel?: string;
+  freshnessLabel?: string;
+  confidenceCapLabel?: string;
+  confidenceCapValueText?: string;
+  evidenceFamilies?: MarketRegimeSynthesisEvidenceFamilyView[];
+  supportiveEvidence?: MarketRegimeSynthesisEvidenceView[];
+  contradictoryEvidence?: MarketRegimeSynthesisEvidenceView[];
+  missingEvidence?: MarketRegimeSynthesisEvidenceView[];
+  researchNextSteps?: MarketRegimeSynthesisEvidenceView[];
   notInvestmentAdvice?: boolean;
 };
 
