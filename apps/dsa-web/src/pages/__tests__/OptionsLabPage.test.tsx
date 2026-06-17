@@ -306,6 +306,54 @@ function mockHappyPath(readiness?: OptionsResearchReadiness | null) {
       noExternalCallsInTests: true,
       limitations: ['mocked_frontend_shell'],
     },
+    optionsStructureSignalPacket: {
+      gammaCoverageState: 'covered',
+      ivCoverageState: 'covered',
+      skewObservation: {
+        state: 'observed',
+        callAverageIv: 0.54,
+        putAverageIv: 0.57,
+        callPutIvSpread: -0.03,
+        contractCount: 2,
+      },
+      liquidityObservation: {
+        state: 'partial',
+        contractCount: 2,
+        contractsWithBidAsk: 2,
+        wideSpreadCount: 0,
+        thinLiquidityCount: 1,
+        minimumOpenInterest: 2900,
+        minimumVolume: 410,
+      },
+      expirationCoverage: {
+        state: 'single_expiration',
+        expirationCount: 1,
+        nearestDte: 44,
+        contractsByExpiration: [
+          { expiration: '2026-06-19', contractCount: 2 },
+        ],
+      },
+      missingGreeks: [],
+      staleOrDemoBoundary: {
+        state: 'demo_or_stale',
+        sourceFreshness: 'mock',
+        fixtureBacked: true,
+        syntheticData: true,
+        forceRefreshIgnored: false,
+      },
+      observationBoundary: {
+        researchOnly: true,
+        decisionGrade: false,
+        executionSupported: false,
+        orderPlacement: false,
+        brokerExecution: false,
+        portfolioMutation: false,
+      },
+      researchNextSteps: [
+        'Confirm non-demo chain freshness before elevating confidence.',
+        'Review thin-liquidity rows before comparing structures.',
+      ],
+    },
   }, readiness));
   vi.mocked(optionsLabApi.compareStrategies).mockResolvedValue(withOptionsReadiness({
     symbol: 'TEM',
@@ -904,6 +952,32 @@ describe('OptionsLabPage', () => {
     expect(within(section).getByText('不连接外部执行通道')).toBeInTheDocument();
     expect(within(section).getByText('不改动投资组合')).toBeInTheDocument();
     expect(within(section).queryByText(/best contract|AI recommends you buy|buy now|sell now/i)).not.toBeInTheDocument();
+  });
+
+  it('renders the observation-only options structure signal packet without raw action language', async () => {
+    renderPage();
+
+    const section = await screen.findByTestId('options-lab-structure-signal-packet');
+    expect(within(section).getAllByText('结构信号包').length).toBeGreaterThan(0);
+    expect(within(section).getByText('Gamma 覆盖')).toBeInTheDocument();
+    expect(within(section).getAllByText('已覆盖').length).toBeGreaterThanOrEqual(2);
+    expect(within(section).getByText('IV 覆盖')).toBeInTheDocument();
+    expect(within(section).getByText('偏斜观察')).toBeInTheDocument();
+    expect(within(section).getByText('Call / Put IV 差 -3.0%')).toBeInTheDocument();
+    expect(within(section).getByText('流动性观察')).toBeInTheDocument();
+    expect(within(section).getByText('部分可观察')).toBeInTheDocument();
+    expect(within(section).getByText('到期覆盖')).toBeInTheDocument();
+    expect(within(section).getByText('单一到期日')).toBeInTheDocument();
+    expect(within(section).getByText('演示/延迟边界')).toBeInTheDocument();
+    expect(within(section).getByText('不形成可用于判断的结论')).toBeInTheDocument();
+    expect(within(section).getByText('下一步补证')).toBeInTheDocument();
+    expect(within(section).getByText('确认非演示链路新鲜度')).toBeInTheDocument();
+    expect(within(section).getByText('复核低流动性合约行')).toBeInTheDocument();
+    expect(within(section).getAllByText('仅供研究观察').length).toBeGreaterThan(0);
+    expect(within(section).getAllByText('不触发执行').length).toBeGreaterThan(0);
+    expect(within(section).getByText('不连接外部执行通道')).toBeInTheDocument();
+    expect(within(section).queryByText(/buy|sell|trade|best contract|target price|stop loss|position sizing/i)).not.toBeInTheDocument();
+    expect(within(section).queryByText(/gammaCoverageState|ivCoverageState|demo_or_stale|synthetic_options_lab_fixture|schemaVersion/i)).not.toBeInTheDocument();
   });
 
   it('shows compact missing-data states when payoff or IV inputs are unavailable', async () => {

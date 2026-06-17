@@ -96,6 +96,54 @@ export type OptionsChainResponse = {
   metadata: OptionsLabMetadata;
   optionsReadiness?: OptionsResearchReadiness | null;
   optionsResearchReadiness?: OptionsResearchReadiness | null;
+  optionsStructureSignalPacket?: OptionsStructureSignalPacket | null;
+};
+
+export type OptionsStructureSignalPacket = {
+  gammaCoverageState: 'covered' | 'partial' | 'missing' | string;
+  ivCoverageState: 'covered' | 'partial' | 'missing' | string;
+  skewObservation: {
+    state: 'observed' | 'insufficient' | string;
+    callAverageIv?: number | null;
+    putAverageIv?: number | null;
+    callPutIvSpread?: number | null;
+    contractCount?: number | null;
+  };
+  liquidityObservation: {
+    state: 'complete' | 'partial' | 'missing' | string;
+    contractCount?: number | null;
+    contractsWithBidAsk?: number | null;
+    wideSpreadCount?: number | null;
+    thinLiquidityCount?: number | null;
+    minimumOpenInterest?: number | null;
+    minimumVolume?: number | null;
+  };
+  expirationCoverage: {
+    state: 'single_expiration' | 'multi_expiration' | 'missing' | string;
+    expirationCount?: number | null;
+    nearestDte?: number | null;
+    contractsByExpiration?: Array<{
+      expiration: string;
+      contractCount: number;
+    }> | null;
+  };
+  missingGreeks: string[];
+  staleOrDemoBoundary: {
+    state: 'live' | 'demo_or_stale' | string;
+    sourceFreshness?: string | null;
+    fixtureBacked?: boolean | null;
+    syntheticData?: boolean | null;
+    forceRefreshIgnored?: boolean | null;
+  };
+  observationBoundary: {
+    researchOnly?: boolean | null;
+    decisionGrade?: boolean | null;
+    executionSupported?: boolean | null;
+    orderPlacement?: boolean | null;
+    brokerExecution?: boolean | null;
+    portfolioMutation?: boolean | null;
+  };
+  researchNextSteps: string[];
 };
 
 export type OptionsStrategyCompareRequest = {

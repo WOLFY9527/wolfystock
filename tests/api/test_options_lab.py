@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.v1.endpoints import options
+from api.v1.schemas.options import OptionChainResponse, OptionContract, OptionGreeks, OptionsMetadata
 from src.services.market_data_source_registry import project_source_provenance
 from src.services.options_lab_domain_models import (
     AnalyzeCandidateModel,
@@ -462,6 +463,196 @@ def test_chain_endpoint_filters_side_expiration_liquidity_and_spread() -> None:
         assert provenance["freshnessLabel"] != "实时"
     finally:
         client.close()
+
+
+def test_chain_endpoint_includes_observation_only_structure_signal_packet() -> None:
+    client = _client()
+    try:
+        response = client.get(
+            "/api/v1/options/underlyings/TEM/chain",
+            params={"expiration": "2026-06-19", "includeGreeks": "true", "forceRefresh": "true"},
+        )
+        assert response.status_code == 200
+        payload = response.json()
+
+        packet = payload["optionsStructureSignalPacket"]
+        assert set(packet.keys()) == {
+            "gammaCoverageState",
+            "ivCoverageState",
+            "skewObservation",
+            "liquidityObservation",
+            "expirationCoverage",
+            "missingGreeks",
+            "staleOrDemoBoundary",
+            "observationBoundary",
+            "researchNextSteps",
+        }
+        assert packet["gammaCoverageState"] == "covered"
+        assert packet["ivCoverageState"] == "covered"
+        assert packet["skewObservation"] == {
+            "state": "observed",
+            "callAverageIv": 0.6867,
+            "putAverageIv": 0.655,
+            "callPutIvSpread": 0.0317,
+            "contractCount": 5,
+        }
+        assert packet["liquidityObservation"] == {
+            "state": "partial",
+            "contractCount": 5,
+            "contractsWithBidAsk": 5,
+            "wideSpreadCount": 1,
+            "thinLiquidityCount": 1,
+            "minimumOpenInterest": 40,
+            "minimumVolume": 8,
+        }
+        assert packet["expirationCoverage"] == {
+            "state": "single_expiration",
+            "expirationCount": 1,
+            "nearestDte": 44,
+            "contractsByExpiration": [{"expiration": "2026-06-19", "contractCount": 5}],
+        }
+        assert packet["missingGreeks"] == []
+        assert packet["staleOrDemoBoundary"] == {
+            "state": "demo_or_stale",
+            "sourceFreshness": "synthetic_delayed",
+            "fixtureBacked": True,
+            "syntheticData": True,
+            "forceRefreshIgnored": True,
+        }
+        assert packet["observationBoundary"] == {
+            "researchOnly": True,
+            "decisionGrade": False,
+            "executionSupported": False,
+            "orderPlacement": False,
+            "brokerExecution": False,
+            "portfolioMutation": False,
+        }
+        assert packet["researchNextSteps"] == [
+            "Confirm non-demo chain freshness before elevating confidence.",
+            "Review thin-liquidity rows before comparing structures.",
+        ]
+        _assert_no_execution_implication_fields(payload)
+        _assert_no_safety_leaks(payload)
+    finally:
+        client.close()
+
+
+def test_structure_signal_packet_respects_fixture_metadata_over_live_text_hints() -> None:
+    payload = OptionChainResponse(
+        symbol="TEM",
+        market="US",
+        underlying={"price": 52.4, "freshness": "live"},
+        expiration="2026-06-19",
+        calls=[
+            OptionContract(
+                symbol="TEM",
+                contractSymbol="TEM260619C00055000",
+                side="call",
+                expiration="2026-06-19",
+                strike=55,
+                bid=4.1,
+                ask=4.3,
+                volume=100,
+                openInterest=500,
+                impliedVolatility=0.62,
+                greeks=OptionGreeks(delta=0.51, gamma=0.03, theta=-0.02, vega=0.12),
+                dte=44,
+                asOf="2026-05-06T13:45:00Z",
+                source="authorized_live_feed",
+                freshness="live",
+            ),
+        ],
+        puts=[
+            OptionContract(
+                symbol="TEM",
+                contractSymbol="TEM260619P00050000",
+                side="put",
+                expiration="2026-06-19",
+                strike=50,
+                bid=3.2,
+                ask=3.4,
+                volume=120,
+                openInterest=600,
+                impliedVolatility=0.66,
+                greeks=OptionGreeks(delta=-0.42, gamma=0.03, theta=-0.02, vega=0.11),
+                dte=44,
+                asOf="2026-05-06T13:45:00Z",
+                source="authorized_live_feed",
+                freshness="live",
+            ),
+        ],
+        filtersApplied={},
+        chainAsOf="2026-05-06T13:45:00Z",
+        source="authorized_live_feed",
+        metadata=OptionsMetadata(
+            fixtureBacked=True,
+            syntheticData=True,
+            forceRefreshIgnored=True,
+            providerName="authorized_live_feed",
+        ),
+    ).model_dump(by_alias=True)
+
+    boundary = payload["optionsStructureSignalPacket"]["staleOrDemoBoundary"]
+    assert boundary == {
+        "state": "demo_or_stale",
+        "sourceFreshness": "synthetic_delayed",
+        "fixtureBacked": True,
+        "syntheticData": True,
+        "forceRefreshIgnored": True,
+    }
+
+
+def test_structure_signal_packet_marks_missing_bid_ask_liquidity_partial() -> None:
+    payload = OptionChainResponse(
+        symbol="TEM",
+        market="US",
+        underlying={"price": 52.4, "freshness": "synthetic_delayed"},
+        expiration="2026-06-19",
+        calls=[
+            OptionContract(
+                symbol="TEM",
+                contractSymbol="TEM260619C00055000",
+                side="call",
+                expiration="2026-06-19",
+                strike=55,
+                volume=500,
+                openInterest=500,
+                impliedVolatility=0.62,
+                greeks=OptionGreeks(delta=0.51, gamma=0.03, theta=-0.02, vega=0.12),
+                dte=44,
+                asOf="2026-05-06T13:45:00Z",
+                source="synthetic_fixture",
+                freshness="synthetic_delayed",
+            ),
+        ],
+        puts=[
+            OptionContract(
+                symbol="TEM",
+                contractSymbol="TEM260619P00050000",
+                side="put",
+                expiration="2026-06-19",
+                strike=50,
+                volume=520,
+                openInterest=530,
+                impliedVolatility=0.66,
+                greeks=OptionGreeks(delta=-0.42, gamma=0.03, theta=-0.02, vega=0.11),
+                dte=44,
+                asOf="2026-05-06T13:45:00Z",
+                source="synthetic_fixture",
+                freshness="synthetic_delayed",
+            ),
+        ],
+        filtersApplied={},
+        chainAsOf="2026-05-06T13:45:00Z",
+        source="synthetic_fixture",
+        metadata=OptionsMetadata(),
+    ).model_dump(by_alias=True)
+
+    liquidity = payload["optionsStructureSignalPacket"]["liquidityObservation"]
+    assert liquidity["contractsWithBidAsk"] == 0
+    assert liquidity["thinLiquidityCount"] == 0
+    assert liquidity["wideSpreadCount"] == 0
+    assert liquidity["state"] == "partial"
 
 
 def test_nvda_fixture_underlying_summary_expirations_and_chain_are_observation_only() -> None:

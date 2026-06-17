@@ -192,6 +192,10 @@ class OptionChainResponse(_OptionsModel):
         default=None,
         alias="optionsResearchReadiness",
     )
+    options_structure_signal_packet: Optional[OptionsStructureSignalPacket] = Field(
+        default=None,
+        alias="optionsStructureSignalPacket",
+    )
 
     @model_validator(mode="after")
     def _populate_options_readiness(self) -> "OptionChainResponse":
@@ -208,6 +212,13 @@ class OptionChainResponse(_OptionsModel):
             existing_alias=self.options_research_readiness,
             computed=computed,
         )
+        if self.options_structure_signal_packet is None:
+            self.options_structure_signal_packet = _build_options_structure_signal_packet(
+                metadata=self.metadata,
+                contracts=contracts,
+                source_hint=self.source,
+                freshness_hint=str(self.underlying.get("freshness") or ""),
+            )
         return self
 
 
@@ -224,6 +235,11 @@ OptionsExpectedMoveSource = Literal["straddle_mid", "iv_dte", "unavailable"]
 OptionsReadinessState = Literal["live_usable", "delayed_usable", "insufficient", "blocked"]
 OptionsProviderAuthority = Literal["scoreGradeAllowed", "observationOnly", "unavailable"]
 OptionsScenarioCoverage = Literal["missing_chain_data", "single_contract", "strategy_compare_ready"]
+OptionsStructureCoverageState = Literal["covered", "partial", "missing"]
+OptionsStructureSkewState = Literal["observed", "insufficient"]
+OptionsStructureLiquidityState = Literal["complete", "partial", "missing"]
+OptionsStructureExpirationState = Literal["single_expiration", "multi_expiration", "missing"]
+OptionsStructureBoundaryState = Literal["live", "demo_or_stale"]
 
 _READY_FRESHNESS_VALUES = {"fresh", "live", "realtime", "real_time", "real-time"}
 _DELAYED_FRESHNESS_VALUES = {"delayed", "cached", "stale", "delayed_usable"}
@@ -287,6 +303,68 @@ class OptionsConsumerScenarioFrame(_OptionsModel):
     next_evidence_needed: List[str] = Field(default_factory=list, alias="nextEvidenceNeeded")
     no_trading_boundary: OptionsNoTradingBoundary = Field(alias="noTradingBoundary")
     debug_ref: str = Field(alias="debugRef")
+
+
+class OptionsSkewObservation(_OptionsModel):
+    state: OptionsStructureSkewState
+    call_average_iv: Optional[float] = Field(default=None, alias="callAverageIv")
+    put_average_iv: Optional[float] = Field(default=None, alias="putAverageIv")
+    call_put_iv_spread: Optional[float] = Field(default=None, alias="callPutIvSpread")
+    contract_count: int = Field(default=0, alias="contractCount")
+
+
+class OptionsLiquidityObservation(_OptionsModel):
+    state: OptionsStructureLiquidityState
+    contract_count: int = Field(alias="contractCount")
+    contracts_with_bid_ask: int = Field(alias="contractsWithBidAsk")
+    wide_spread_count: int = Field(alias="wideSpreadCount")
+    thin_liquidity_count: int = Field(alias="thinLiquidityCount")
+    minimum_open_interest: Optional[int] = Field(default=None, alias="minimumOpenInterest")
+    minimum_volume: Optional[int] = Field(default=None, alias="minimumVolume")
+
+
+class OptionsExpirationCoverageBucket(_OptionsModel):
+    expiration: str
+    contract_count: int = Field(alias="contractCount")
+
+
+class OptionsExpirationCoverage(_OptionsModel):
+    state: OptionsStructureExpirationState
+    expiration_count: int = Field(alias="expirationCount")
+    nearest_dte: Optional[int] = Field(default=None, alias="nearestDte")
+    contracts_by_expiration: List[OptionsExpirationCoverageBucket] = Field(
+        default_factory=list,
+        alias="contractsByExpiration",
+    )
+
+
+class OptionsStaleOrDemoBoundary(_OptionsModel):
+    state: OptionsStructureBoundaryState
+    source_freshness: str = Field(alias="sourceFreshness")
+    fixture_backed: bool = Field(alias="fixtureBacked")
+    synthetic_data: bool = Field(alias="syntheticData")
+    force_refresh_ignored: bool = Field(alias="forceRefreshIgnored")
+
+
+class OptionsObservationBoundary(_OptionsModel):
+    research_only: bool = Field(default=True, alias="researchOnly")
+    decision_grade: bool = Field(default=False, alias="decisionGrade")
+    execution_supported: bool = Field(default=False, alias="executionSupported")
+    order_placement: bool = Field(default=False, alias="orderPlacement")
+    broker_execution: bool = Field(default=False, alias="brokerExecution")
+    portfolio_mutation: bool = Field(default=False, alias="portfolioMutation")
+
+
+class OptionsStructureSignalPacket(_OptionsModel):
+    gamma_coverage_state: OptionsStructureCoverageState = Field(alias="gammaCoverageState")
+    iv_coverage_state: OptionsStructureCoverageState = Field(alias="ivCoverageState")
+    skew_observation: OptionsSkewObservation = Field(alias="skewObservation")
+    liquidity_observation: OptionsLiquidityObservation = Field(alias="liquidityObservation")
+    expiration_coverage: OptionsExpirationCoverage = Field(alias="expirationCoverage")
+    missing_greeks: List[str] = Field(default_factory=list, alias="missingGreeks")
+    stale_or_demo_boundary: OptionsStaleOrDemoBoundary = Field(alias="staleOrDemoBoundary")
+    observation_boundary: OptionsObservationBoundary = Field(alias="observationBoundary")
+    research_next_steps: List[str] = Field(default_factory=list, alias="researchNextSteps")
 
 
 def _dedupe_codes(values: List[str]) -> List[str]:
@@ -593,6 +671,174 @@ def _ensure_readiness_aliases(
 ) -> tuple[OptionsResearchReadiness, OptionsResearchReadiness]:
     readiness = existing_readiness or existing_alias or computed
     return readiness, readiness
+
+
+def _structure_gamma_state(contracts: List["OptionContract"]) -> OptionsStructureCoverageState:
+    if not contracts:
+        return "missing"
+    if any(contract.greeks is None or contract.greeks.gamma is None for contract in contracts):
+        return "partial"
+    return "covered"
+
+
+def _structure_iv_state(contracts: List["OptionContract"]) -> OptionsStructureCoverageState:
+    if not contracts:
+        return "missing"
+    if any(contract.implied_volatility is None for contract in contracts):
+        return "partial"
+    return "covered"
+
+
+def _structure_skew_observation(contracts: List["OptionContract"]) -> OptionsSkewObservation:
+    observable = [contract for contract in contracts if contract.implied_volatility is not None]
+    if not observable:
+        return OptionsSkewObservation(state="insufficient", contractCount=0)
+    call_values = [float(contract.implied_volatility) for contract in observable if contract.side == "call"]
+    put_values = [float(contract.implied_volatility) for contract in observable if contract.side == "put"]
+    if not call_values or not put_values:
+        return OptionsSkewObservation(state="insufficient", contractCount=len(observable))
+    call_average = round(sum(call_values) / len(call_values), 4)
+    put_average = round(sum(put_values) / len(put_values), 4)
+    return OptionsSkewObservation(
+        state="observed",
+        callAverageIv=call_average,
+        putAverageIv=put_average,
+        callPutIvSpread=round(call_average - put_average, 4),
+        contractCount=len(observable),
+    )
+
+
+def _structure_liquidity_observation(contracts: List["OptionContract"]) -> OptionsLiquidityObservation:
+    if not contracts:
+        return OptionsLiquidityObservation(
+            state="missing",
+            contractCount=0,
+            contractsWithBidAsk=0,
+            wideSpreadCount=0,
+            thinLiquidityCount=0,
+            minimumOpenInterest=None,
+            minimumVolume=None,
+        )
+    contracts_with_bid_ask = [
+        contract for contract in contracts if contract.bid is not None and contract.ask is not None
+    ]
+    wide_spread_count = sum(1 for contract in contracts if contract.spread_pct is not None and float(contract.spread_pct) > 25)
+    thin_liquidity_count = sum(
+        1
+        for contract in contracts
+        if (contract.volume is None or int(contract.volume) < 50)
+        or (contract.open_interest is None or int(contract.open_interest) < 100)
+    )
+    open_interests = [int(contract.open_interest) for contract in contracts if contract.open_interest is not None]
+    volumes = [int(contract.volume) for contract in contracts if contract.volume is not None]
+    is_complete = (
+        len(contracts_with_bid_ask) == len(contracts)
+        and thin_liquidity_count == 0
+        and wide_spread_count == 0
+    )
+    return OptionsLiquidityObservation(
+        state="complete" if is_complete else "partial",
+        contractCount=len(contracts),
+        contractsWithBidAsk=len(contracts_with_bid_ask),
+        wideSpreadCount=wide_spread_count,
+        thinLiquidityCount=thin_liquidity_count,
+        minimumOpenInterest=min(open_interests) if open_interests else None,
+        minimumVolume=min(volumes) if volumes else None,
+    )
+
+
+def _structure_expiration_coverage(contracts: List["OptionContract"]) -> OptionsExpirationCoverage:
+    if not contracts:
+        return OptionsExpirationCoverage(
+            state="missing",
+            expirationCount=0,
+            nearestDte=None,
+            contractsByExpiration=[],
+        )
+    buckets: Dict[str, int] = {}
+    for contract in contracts:
+        expiration = str(contract.expiration or "")
+        if not expiration:
+            continue
+        buckets[expiration] = buckets.get(expiration, 0) + 1
+    return OptionsExpirationCoverage(
+        state="single_expiration" if len(buckets) <= 1 else "multi_expiration",
+        expirationCount=len(buckets),
+        nearestDte=min((int(contract.dte) for contract in contracts if int(contract.dte) > 0), default=None),
+        contractsByExpiration=[
+            OptionsExpirationCoverageBucket(expiration=expiration, contractCount=count)
+            for expiration, count in sorted(buckets.items())
+        ],
+    )
+
+
+def _structure_boundary_from_metadata(
+    metadata: Optional["OptionsMetadata"],
+    source_hint: str = "",
+    freshness_hint: str = "",
+) -> OptionsStaleOrDemoBoundary:
+    source_text = _source_text(source_hint, freshness_hint, getattr(metadata, "provider_name", ""))
+    if metadata is not None and (metadata.fixture_backed or metadata.synthetic_data):
+        source_freshness = "synthetic_delayed"
+    elif any(marker in source_text for marker in _FIXTURE_SOURCE_MARKERS):
+        source_freshness = "synthetic_delayed"
+    elif any(marker in source_text for marker in _DELAYED_FRESHNESS_VALUES):
+        source_freshness = "delayed"
+    else:
+        source_freshness = "live"
+    return OptionsStaleOrDemoBoundary(
+        state="demo_or_stale" if source_freshness != "live" else "live",
+        sourceFreshness=source_freshness,
+        fixtureBacked=bool(metadata.fixture_backed) if metadata is not None else True,
+        syntheticData=bool(metadata.synthetic_data) if metadata is not None else True,
+        forceRefreshIgnored=bool(metadata.force_refresh_ignored) if metadata is not None else False,
+    )
+
+
+def _structure_observation_boundary(metadata: Optional["OptionsMetadata"]) -> OptionsObservationBoundary:
+    return OptionsObservationBoundary(
+        researchOnly=True,
+        decisionGrade=False,
+        executionSupported=bool(metadata.execution_supported) if metadata is not None else False,
+        orderPlacement=bool(metadata.no_order_placement is False) if metadata is not None else False,
+        brokerExecution=bool(metadata.no_broker_connection is False) if metadata is not None else False,
+        portfolioMutation=bool(metadata.no_portfolio_mutation is False) if metadata is not None else False,
+    )
+
+
+def _build_options_structure_signal_packet(
+    *,
+    metadata: Optional["OptionsMetadata"],
+    contracts: List["OptionContract"],
+    source_hint: str = "",
+    freshness_hint: str = "",
+) -> OptionsStructureSignalPacket:
+    return OptionsStructureSignalPacket(
+        gammaCoverageState=_structure_gamma_state(contracts),
+        ivCoverageState=_structure_iv_state(contracts),
+        skewObservation=_structure_skew_observation(contracts),
+        liquidityObservation=_structure_liquidity_observation(contracts),
+        expirationCoverage=_structure_expiration_coverage(contracts),
+        missingGreeks=sorted(
+            {
+                contract.contract_symbol
+                for contract in contracts
+                if contract.greeks is None or any(
+                    getattr(contract.greeks, name) is None for name in ("delta", "gamma", "theta", "vega")
+                )
+            }
+        ),
+        staleOrDemoBoundary=_structure_boundary_from_metadata(
+            metadata,
+            source_hint=source_hint,
+            freshness_hint=freshness_hint,
+        ),
+        observationBoundary=_structure_observation_boundary(metadata),
+        researchNextSteps=[
+            "Confirm non-demo chain freshness before elevating confidence.",
+            "Review thin-liquidity rows before comparing structures.",
+        ],
+    )
 
 
 def _build_contract_response_readiness(
