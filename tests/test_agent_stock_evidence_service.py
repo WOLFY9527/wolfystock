@@ -288,6 +288,14 @@ def test_stock_evidence_omits_packet_when_projector_fails_without_breaking_paylo
     assert item["fundamental"]["status"] == "missing"
     assert item["news"] == {"status": "unknown", "latestHeadline": None, "provider": None}
     assert "stockEvidencePacket" not in item
+    readiness = item["symbolEvidenceReadiness"]
+    assert readiness["symbolEvidenceReadiness"] is True
+    assert readiness["symbol"] == "AAPL"
+    assert readiness["readinessTier"] == "insufficient"
+    assert readiness["evidenceUsed"] == []
+    assert readiness["evidenceMissing"] == ["quote", "technical", "fundamental", "news"]
+    assert readiness["observationOnly"] is True
+    assert "financial advice" in readiness["noAdviceDisclosure"]
 
 
 def test_stock_evidence_accepts_injected_projected_sec_records_without_mutating_other_fields() -> None:
