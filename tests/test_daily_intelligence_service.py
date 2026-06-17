@@ -83,8 +83,14 @@ def _assert_consumer_safe_narrative(payload: dict[str, Any]) -> None:
             "evidenceConflicts",
             "degradedSurfaceSummary",
             "nextObservationSteps",
+            "onboardingGuidance",
+            "emptyStateActions",
+            "starterResearchWorkflow",
+            "firstRunChecklist",
+            "suggestedResearchEntrypoints",
             "noAdviceDisclosure",
         )
+        if key in payload
     }
     serialized = _serialized_narrative_values(narrative)
     serialized_lower = serialized.lower()
@@ -205,6 +211,71 @@ class _FakePortfolioStructureReviewService:
         }
 
 
+class _EmptyResearchRadarService:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def build_from_latest_scanner_run(self, **kwargs: object) -> dict[str, object]:
+        self.calls.append(kwargs)
+        return {
+            "researchQueue": [],
+            "evidenceGaps": ["scannerCandidates"],
+            "aggregateSummary": {"queueCount": 0, "queueQuality": "degraded"},
+        }
+
+
+class _ThinResearchRadarService:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def build_from_latest_scanner_run(self, **kwargs: object) -> dict[str, object]:
+        self.calls.append(kwargs)
+        return {
+            "researchQueue": [
+                {
+                    "symbol": "THIN",
+                    "ticker": "THIN",
+                    "priority": "low",
+                    "whyOnRadar": ["Research evidence is visible but limited."],
+                    "whatToVerify": ["Verify core evidence before expanding research."],
+                    "evidenceGaps": [],
+                    "riskFlags": [],
+                }
+            ],
+            "aggregateSummary": {"queueCount": 1, "queueQuality": "thin"},
+            "evidenceGaps": [],
+        }
+
+
+class _EmptyWatchlistOverlayService:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+        self.mutations: list[dict[str, object]] = []
+
+    def build_overlay(self, *, owner_id: str) -> dict[str, Any]:
+        self.calls.append({"owner_id": owner_id})
+        return {"items": [], "missingEvidence": ["watchlist_research_context"]}
+
+    def add_item(self, **kwargs: object) -> None:
+        self.mutations.append(kwargs)
+
+
+class _EmptyPortfolioStructureReviewService:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+        self.mutations: list[dict[str, object]] = []
+
+    def build_review(self, *, owner_id: str, max_items: int | None = None, **kwargs: object) -> dict[str, Any]:
+        self.calls.append({"owner_id": owner_id, "max_items": max_items, **kwargs})
+        return {
+            "holdingsStructure": [],
+            "missingEvidence": ["cached_portfolio_holdings"],
+        }
+
+    def add_holding(self, **kwargs: object) -> None:
+        self.mutations.append(kwargs)
+
+
 def test_build_briefing_projects_required_contract_and_degrades_scenario_risks() -> None:
     service = DailyIntelligenceService(
         market_overview_service=_FakeMarketOverviewService(),
@@ -230,6 +301,11 @@ def test_build_briefing_projects_required_contract_and_degrades_scenario_risks()
     assert payload["whatChanged"]
     assert payload["noAdviceDisclosure"] == "Observation-only research briefing; not personalized financial advice."
     assert payload["topResearchPriorities"][0]["ticker"] == "ALFA"
+    assert payload["onboardingGuidance"] is None
+    assert payload["emptyStateActions"] == []
+    assert payload["starterResearchWorkflow"] == []
+    assert payload["firstRunChecklist"] == []
+    assert payload["suggestedResearchEntrypoints"] == []
     assert payload["topResearchPriorities"][0]["evidenceLinks"] == [
         {
             "label": "Research Radar",
@@ -370,6 +446,104 @@ def test_build_briefing_projects_required_contract_and_degrades_scenario_risks()
             "scenario_risk_read_model_unavailable",
         ),
     )
+
+
+def test_empty_consumer_briefing_adds_first_run_onboarding_without_mutating_user_data() -> None:
+    radar_service = _EmptyResearchRadarService()
+    watchlist_service = _EmptyWatchlistOverlayService()
+    portfolio_service = _EmptyPortfolioStructureReviewService()
+    service = DailyIntelligenceService(
+        market_overview_service=_FakeMarketOverviewService(),
+        research_radar_service=radar_service,
+        watchlist_overlay_service=watchlist_service,
+        portfolio_structure_review_service=portfolio_service,
+        now=lambda: datetime(2026, 6, 15, 9, 30, tzinfo=timezone.utc),
+    )
+
+    payload = service.build_briefing(
+        actor={"actor_type": "user"},
+        owner_id="user-1",
+        market="us",
+        profile="us_preopen_v1",
+    )
+
+    assert payload["topResearchPriorities"] == []
+    assert payload["scannerHighlights"] == []
+    assert payload["watchlistHighlights"] == []
+    assert payload["portfolioStructureHighlights"] == []
+    assert payload["onboardingGuidance"]["title"] == "Start a research loop"
+    assert payload["onboardingGuidance"]["summary"]
+    assert payload["onboardingGuidance"]["conditionsDetected"] == [
+        "No watchlist items were found.",
+        "No portfolio holdings were found.",
+        "Research Radar has no queue items yet.",
+        "Scanner and watchlist highlights are empty.",
+    ]
+    assert [action["route"] for action in payload["emptyStateActions"]] == [
+        "/market-overview",
+        "/watchlist",
+        "/scanner",
+        "/research/radar",
+    ]
+    assert payload["starterResearchWorkflow"] == [
+        "Open Market Overview to set broad context.",
+        "Create one watchlist item for a symbol you already want to observe.",
+        "Run scanner to generate research candidates for review.",
+        "Return to Research Radar after adding watchlist context.",
+    ]
+    assert payload["firstRunChecklist"] == [
+        "Market Overview checked for context.",
+        "First watchlist item created by the user.",
+        "Scanner run completed by the user.",
+        "Research Radar reviewed again after watchlist context exists.",
+    ]
+    assert [entrypoint["surface"] for entrypoint in payload["suggestedResearchEntrypoints"]] == [
+        "Market Overview",
+        "Watchlist",
+        "Scanner",
+        "Research Radar",
+    ]
+    assert radar_service.calls == [
+        {"market": "us", "profile": "us_preopen_v1", "owner_id": "user-1", "limit": 10}
+    ]
+    assert watchlist_service.calls == [{"owner_id": "user-1"}]
+    assert watchlist_service.mutations == []
+    assert portfolio_service.calls == [{"owner_id": "user-1", "max_items": 5}]
+    assert portfolio_service.mutations == []
+    _assert_consumer_safe_narrative(payload)
+
+
+def test_thin_consumer_briefing_keeps_research_queue_and_adds_first_run_guidance() -> None:
+    radar_service = _ThinResearchRadarService()
+    service = DailyIntelligenceService(
+        market_overview_service=_FakeMarketOverviewService(),
+        research_radar_service=radar_service,
+        watchlist_overlay_service=_EmptyWatchlistOverlayService(),
+        portfolio_structure_review_service=_EmptyPortfolioStructureReviewService(),
+        now=lambda: datetime(2026, 6, 15, 9, 30, tzinfo=timezone.utc),
+    )
+
+    payload = service.build_briefing(
+        actor={"actor_type": "user"},
+        owner_id="user-1",
+        market="us",
+        profile="us_preopen_v1",
+    )
+
+    assert [item["ticker"] for item in payload["topResearchPriorities"]] == ["THIN"]
+    assert [item["ticker"] for item in payload["scannerHighlights"]] == ["THIN"]
+    assert payload["watchlistHighlights"] == []
+    assert payload["portfolioStructureHighlights"] == []
+    assert payload["onboardingGuidance"]["conditionsDetected"] == [
+        "No watchlist items were found.",
+        "No portfolio holdings were found.",
+        "Research Radar queue is thin.",
+    ]
+    assert payload["emptyStateActions"]
+    assert payload["starterResearchWorkflow"]
+    assert payload["firstRunChecklist"]
+    assert payload["suggestedResearchEntrypoints"]
+    _assert_consumer_safe_narrative(payload)
 
 
 def test_build_briefing_does_not_invent_evidence_links_when_owner_context_is_missing() -> None:

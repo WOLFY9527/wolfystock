@@ -113,6 +113,24 @@ class DailyIntelligenceDegradedSurfaceSummaryResponse(BaseModel):
     drilldownTargets: List[DailyIntelligenceEvidenceLinkResponse] = Field(default_factory=list)
 
 
+class DailyIntelligenceOnboardingGuidanceResponse(BaseModel):
+    title: str
+    summary: str
+    conditionsDetected: List[str] = Field(default_factory=list)
+
+
+class DailyIntelligenceEmptyStateActionResponse(BaseModel):
+    label: str
+    route: str
+    description: str
+
+
+class DailyIntelligenceSuggestedResearchEntrypointResponse(BaseModel):
+    surface: str
+    route: str
+    description: str
+
+
 class DailyIntelligenceBriefingResponse(BaseModel):
     schemaVersion: Literal["daily_intelligence_briefing_v1"] = DAILY_INTELLIGENCE_SCHEMA_VERSION
     generatedAt: str
@@ -139,6 +157,13 @@ class DailyIntelligenceBriefingResponse(BaseModel):
     evidenceConflicts: List[DailyIntelligenceEvidenceConflictResponse] = Field(default_factory=list)
     degradedSurfaceSummary: List[DailyIntelligenceDegradedSurfaceSummaryResponse] = Field(default_factory=list)
     nextObservationSteps: List[str] = Field(default_factory=list)
+    onboardingGuidance: Optional[DailyIntelligenceOnboardingGuidanceResponse] = None
+    emptyStateActions: List[DailyIntelligenceEmptyStateActionResponse] = Field(default_factory=list)
+    starterResearchWorkflow: List[str] = Field(default_factory=list)
+    firstRunChecklist: List[str] = Field(default_factory=list)
+    suggestedResearchEntrypoints: List[DailyIntelligenceSuggestedResearchEntrypointResponse] = Field(
+        default_factory=list
+    )
     consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
     noAdviceDisclosure: str
     observationOnly: Literal[True] = True

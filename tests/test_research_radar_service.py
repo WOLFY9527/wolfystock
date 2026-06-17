@@ -89,6 +89,11 @@ def _assert_required_top_level_shape(payload: dict[str, Any]) -> None:
         "noAdviceDisclosure",
         "dataQuality",
         "consumerIssues",
+        "onboardingGuidance",
+        "emptyStateActions",
+        "starterResearchWorkflow",
+        "firstRunChecklist",
+        "suggestedResearchEntrypoints",
         "observationOnly",
         "decisionGrade",
     }.issubset(payload)
@@ -395,6 +400,44 @@ class _FakeScannerRepository:
         return list(self.candidates if run_id == 8 else [])
 
 
+class _AdminOnlyScannerRepository:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, object]]] = []
+        self.mutations: list[tuple[str, dict[str, object]]] = []
+        self.admin_run = SimpleNamespace(id=99, status="completed", market="us", profile="us_preopen_v1")
+        self.admin_candidate = SimpleNamespace(
+            symbol="ADMIN",
+            name="Admin Candidate",
+            rank=1,
+            score=99.0,
+            quality_hint="complete",
+            reason_summary="Admin-only candidate must not leak.",
+            reasons_json="[]",
+            key_metrics_json="[]",
+            feature_signals_json="[]",
+            risk_notes_json="[]",
+            watch_context_json="[]",
+            boards_json="[]",
+            diagnostics_json="{}",
+        )
+
+    def get_recent_runs(self, **kwargs: object) -> list[object]:
+        self.calls.append(("get_recent_runs", dict(kwargs)))
+        if kwargs.get("include_all_owners") is True:
+            return [self.admin_run]
+        return []
+
+    def get_candidates_for_run(self, run_id: int) -> list[object]:
+        self.calls.append(("get_candidates_for_run", {"run_id": run_id}))
+        return [self.admin_candidate] if run_id == 99 else []
+
+    def create_run(self, **kwargs: object) -> None:
+        self.mutations.append(("create_run", dict(kwargs)))
+
+    def save_candidate(self, **kwargs: object) -> None:
+        self.mutations.append(("save_candidate", dict(kwargs)))
+
+
 def test_latest_scanner_reader_is_read_only_and_uses_user_scope() -> None:
     repo = _FakeScannerRepository()
 
@@ -419,6 +462,139 @@ def test_latest_scanner_reader_is_read_only_and_uses_user_scope() -> None:
     )
     assert repo.calls[1] == ("get_candidates_for_run", {"run_id": 8})
     assert payload["aggregateSummary"]["source"]["scannerRunId"] == 8
+
+
+def test_empty_consumer_radar_adds_onboarding_without_admin_leak_or_mutation() -> None:
+    repo = _AdminOnlyScannerRepository()
+
+    payload = ResearchRadarService(scanner_repository=repo, now=_fixed_now).build_from_latest_scanner_run(
+        market="us",
+        profile="us_preopen_v1",
+        owner_id="user-1",
+        limit=5,
+    )
+
+    _assert_required_top_level_shape(payload)
+    assert payload["researchQueue"] == []
+    assert payload["aggregateSummary"]["queueCount"] == 0
+    assert payload["aggregateSummary"]["source"]["scannerRunId"] is None
+    assert payload["onboardingGuidance"]["title"] == "Start a research loop"
+    assert payload["onboardingGuidance"]["conditionsDetected"] == [
+        "Research Radar has no queue items yet.",
+        "No scanner candidates were found for this user scope.",
+    ]
+    assert [action["route"] for action in payload["emptyStateActions"]] == [
+        "/market-overview",
+        "/watchlist",
+        "/scanner",
+        "/research/radar",
+    ]
+    assert payload["starterResearchWorkflow"] == [
+        "Open Market Overview to set broad context.",
+        "Create one watchlist item for a symbol you already want to observe.",
+        "Run scanner to generate research candidates for review.",
+        "Return to Research Radar after adding watchlist context.",
+    ]
+    assert payload["firstRunChecklist"] == [
+        "Market Overview checked for context.",
+        "First watchlist item created by the user.",
+        "Scanner run completed by the user.",
+        "Research Radar reviewed again after watchlist context exists.",
+    ]
+    assert [entrypoint["surface"] for entrypoint in payload["suggestedResearchEntrypoints"]] == [
+        "Market Overview",
+        "Watchlist",
+        "Scanner",
+        "Research Radar",
+    ]
+    assert repo.calls == [
+        (
+            "get_recent_runs",
+            {
+                "market": "us",
+                "profile": "us_preopen_v1",
+                "limit": 5,
+                "scope": "user",
+                "owner_id": "user-1",
+                "include_all_owners": False,
+            },
+        )
+    ]
+    assert repo.mutations == []
+    serialized = _serialized(payload)
+    assert "admin" not in serialized
+    assert "scannercandidates" not in _serialized(payload["onboardingGuidance"])
+    _assert_display_ready_fields_safe(
+        {
+            "onboardingGuidance": payload["onboardingGuidance"],
+            "emptyStateActions": payload["emptyStateActions"],
+            "starterResearchWorkflow": payload["starterResearchWorkflow"],
+            "firstRunChecklist": payload["firstRunChecklist"],
+            "suggestedResearchEntrypoints": payload["suggestedResearchEntrypoints"],
+        },
+        ("scannerCandidates", "admin_only_candidate"),
+    )
+
+
+def test_populated_consumer_radar_keeps_normal_queue_without_onboarding_fallback() -> None:
+    payload = ResearchRadarService(now=_fixed_now).build_radar(
+        candidates=[
+            {
+                "ticker": "ALFA",
+                "relativeStrength": 88,
+                "volumeExpansion": 1.8,
+                "trendStructure": "confirmed_uptrend",
+                "themes": ["AI Infrastructure"],
+                "eventCatalyst": {"state": "confirmed"},
+                "avgDollarVolume": 120_000_000,
+                "evidenceQuality": {"state": "complete", "score": 0.88},
+            }
+        ],
+        market_regime_context={
+            "regime": "risk_on",
+            "favorableThemes": ["AI Infrastructure"],
+        },
+    )
+
+    assert [item["symbol"] for item in payload["researchQueue"]] == ["ALFA"]
+    assert payload["onboardingGuidance"] is None
+    assert payload["emptyStateActions"] == []
+    assert payload["starterResearchWorkflow"] == []
+    assert payload["firstRunChecklist"] == []
+    assert payload["suggestedResearchEntrypoints"] == []
+
+
+def test_thin_consumer_radar_keeps_queue_and_adds_onboarding_next_steps() -> None:
+    payload = ResearchRadarService(now=_fixed_now).build_radar(
+        candidates=[
+            {
+                "ticker": "THIN",
+                "relativeStrength": 60,
+                "volumeExpansion": 1.1,
+                "trendStructure": "mixed",
+                "avgDollarVolume": 50_000_000,
+                "evidenceQuality": {"state": "complete", "score": 70},
+            }
+        ]
+    )
+
+    assert [item["symbol"] for item in payload["researchQueue"]] == ["THIN"]
+    assert payload["aggregateSummary"]["queueQuality"] == "thin"
+    assert payload["onboardingGuidance"]["conditionsDetected"] == ["Research Radar queue is thin."]
+    assert payload["emptyStateActions"]
+    assert payload["starterResearchWorkflow"]
+    assert payload["firstRunChecklist"]
+    assert payload["suggestedResearchEntrypoints"]
+    _assert_display_ready_fields_safe(
+        {
+            "onboardingGuidance": payload["onboardingGuidance"],
+            "emptyStateActions": payload["emptyStateActions"],
+            "starterResearchWorkflow": payload["starterResearchWorkflow"],
+            "firstRunChecklist": payload["firstRunChecklist"],
+            "suggestedResearchEntrypoints": payload["suggestedResearchEntrypoints"],
+        },
+        ("queueQuality", "low_evidence"),
+    )
 
 
 def test_research_radar_service_has_no_protected_runtime_imports() -> None:

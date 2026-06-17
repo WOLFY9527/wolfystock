@@ -28,6 +28,24 @@ class ResearchRadarDrilldownTargetResponse(_ResearchRadarModel):
     reason: str | None = None
 
 
+class ResearchRadarOnboardingGuidanceResponse(_ResearchRadarModel):
+    title: str
+    summary: str
+    conditionsDetected: list[str] = Field(default_factory=list)
+
+
+class ResearchRadarEmptyStateActionResponse(_ResearchRadarModel):
+    label: str
+    route: str
+    description: str
+
+
+class ResearchRadarSuggestedResearchEntrypointResponse(_ResearchRadarModel):
+    surface: str
+    route: str
+    description: str
+
+
 class ResearchRadarEvidenceQualityResponse(_ResearchRadarModel):
     status: str
     score: int | float | None = None
@@ -93,6 +111,13 @@ class ResearchRadarResponse(_ResearchRadarModel):
     marketContextFit: str
     drilldownTargets: list[ResearchRadarDrilldownTargetResponse] = Field(default_factory=list)
     consumerIssues: list[ResearchRadarConsumerIssueResponse] = Field(default_factory=list)
+    onboardingGuidance: ResearchRadarOnboardingGuidanceResponse | None = None
+    emptyStateActions: list[ResearchRadarEmptyStateActionResponse] = Field(default_factory=list)
+    starterResearchWorkflow: list[str] = Field(default_factory=list)
+    firstRunChecklist: list[str] = Field(default_factory=list)
+    suggestedResearchEntrypoints: list[ResearchRadarSuggestedResearchEntrypointResponse] = Field(
+        default_factory=list
+    )
     noAdviceDisclosure: str
     dataQuality: ResearchRadarDataQualityResponse
     observationOnly: Literal[True] = True
@@ -106,6 +131,9 @@ __all__ = [
     "ResearchRadarDataQualityResponse",
     "ResearchRadarDrilldownTargetResponse",
     "ResearchRadarEvidenceQualityResponse",
+    "ResearchRadarEmptyStateActionResponse",
+    "ResearchRadarOnboardingGuidanceResponse",
     "ResearchRadarQueueItemResponse",
     "ResearchRadarResponse",
+    "ResearchRadarSuggestedResearchEntrypointResponse",
 ]
