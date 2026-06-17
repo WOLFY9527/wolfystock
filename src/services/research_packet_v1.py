@@ -8,6 +8,7 @@ imports belong here.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from typing import Any
@@ -137,6 +138,11 @@ _FORBIDDEN_TEXT_MARKERS = (
     "traceback",
     "tushare",
     "unofficial_proxy",
+)
+_FORBIDDEN_ACTION_TEXT_RE = re.compile(
+    r"\b(?:buy|sell|hold|recommend(?:ation|ed)?|target(?: price)?|stop(?: loss)?|position[-\s]?sizing)\b|"
+    r"买入|卖出|持有|推荐|交易建议|投资建议|目标价|止损|止盈|仓位|下单|立即交易|必买|稳赚|保证收益",
+    re.IGNORECASE,
 )
 _SAFE_ID_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-:.#")
 
@@ -749,8 +755,7 @@ def _safe_ref(value: Any) -> str:
     text = str(value or "").strip()
     if not text:
         return ""
-    lowered = text.lower()
-    if any(marker in lowered for marker in _FORBIDDEN_TEXT_MARKERS):
+    if _has_forbidden_consumer_text(text):
         return ""
     compact = "".join(char for char in text if char in _SAFE_ID_CHARS)
     return compact[:64]
@@ -762,12 +767,19 @@ def _safe_consumer_text(value: Any, *, limit: int) -> str:
     text = " ".join(str(value).strip().split())
     if not text:
         return ""
-    lowered = text.lower().replace("_", "")
-    if any(marker.replace("_", "") in lowered for marker in _FORBIDDEN_TEXT_MARKERS):
+    if _has_forbidden_consumer_text(text):
         return ""
     if "{" in text or "}" in text or "[" in text or "]" in text:
         return ""
     return text[:limit].rstrip()
+
+
+def _has_forbidden_consumer_text(text: str) -> bool:
+    lowered = text.lower()
+    squashed = lowered.replace("_", "")
+    if any(marker in lowered or marker.replace("_", "") in squashed for marker in _FORBIDDEN_TEXT_MARKERS):
+        return True
+    return _FORBIDDEN_ACTION_TEXT_RE.search(text) is not None
 
 
 def _optional_text(value: Any) -> str | None:

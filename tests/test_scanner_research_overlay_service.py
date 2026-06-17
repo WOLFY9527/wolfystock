@@ -15,6 +15,10 @@ from src.services.scanner_research_overlay_service import (
     SCANNER_RESEARCH_OVERLAY_NO_ADVICE_DISCLOSURE,
     ScannerResearchOverlayService,
 )
+from tests.helpers.packet_redaction_fuzzer import (
+    assert_packet_output_redacted,
+    redaction_fuzzer_strings,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -355,10 +359,13 @@ def test_build_overlay_empty_input_returns_degraded_read_only_payload() -> None:
 
 def test_build_overlay_filters_unsafe_consumer_copy_from_summary_and_checks() -> None:
     candidate = _candidate(symbol="GAMMA", rank=3, score=79.0)
-    candidate["reason_summary"] = "Buy after breakout once the setup confirms."
-    candidate["candidateResearchSummaryFrame"]["primaryResearchReason"] = "Set a target after scanner confirmation."
-    candidate["watch_context"] = ["Use a stop loss if the move fails."]
-    candidate["risk_notes"] = ["Position sizing should wait for more evidence."]
+    fuzzer_text = " ".join(redaction_fuzzer_strings())
+    candidate["reason_summary"] = f"Buy after breakout once the setup confirms. {fuzzer_text}"
+    candidate["candidateResearchSummaryFrame"]["primaryResearchReason"] = (
+        f"Set a target after scanner confirmation. {fuzzer_text}"
+    )
+    candidate["watch_context"] = [f"Use a stop loss if the move fails. {fuzzer_text}"]
+    candidate["risk_notes"] = [f"Position sizing should wait for more evidence. {fuzzer_text}"]
 
     payload = ScannerResearchOverlayService(now=_fixed_now).build_overlay(
         run={"id": 45, "market": "us", "profile": "us_preopen_v1"},
@@ -377,6 +384,17 @@ def test_build_overlay_filters_unsafe_consumer_copy_from_summary_and_checks() ->
     )
     leaked = [term for term in FORBIDDEN_PUBLIC_TERMS if term in consumer_blob]
     assert leaked == []
+    assert_packet_output_redacted(
+        {
+            "researchSummary": payload["researchSummary"],
+            "itemResearchSummary": payload["items"][0]["researchSummary"],
+            "whyThisMattersToday": payload["items"][0]["whyThisMattersToday"],
+            "whatToVerify": payload["items"][0]["whatToVerify"],
+            "riskObservations": payload["items"][0]["riskObservations"],
+            "consumerIssues": payload["consumerIssues"],
+        },
+        surface="scanner_research_overlay.consumer_visible",
+    )
 
 
 def test_scanner_research_overlay_service_has_no_runtime_or_persistence_imports() -> None:

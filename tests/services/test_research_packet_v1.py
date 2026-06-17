@@ -14,6 +14,12 @@ from typing import Any
 
 import pytest
 
+from tests.helpers.packet_redaction_fuzzer import (
+    assert_packet_output_redacted,
+    redaction_fuzzer_payload,
+    redaction_fuzzer_strings,
+)
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HELPER_PATH = REPO_ROOT / "src/services/research_packet_v1.py"
@@ -399,6 +405,15 @@ def _base_sidecars(**overrides: Any) -> dict[str, Any]:
     return payload
 
 
+def _consumer_visible_packet_payload(packet: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "consumerProjection": packet["consumerProjection"],
+        "evidenceCitations": packet["evidenceCitations"],
+        "lanes": packet["lanes"],
+        "dataCoverageRows": packet["dataCoverageRows"],
+    }
+
+
 def test_helper_does_not_import_protected_runtime_domains() -> None:
     imported_modules = _helper_imports()
     static_violations = {
@@ -516,6 +531,71 @@ def test_consumer_projection_redacts_raw_internal_and_advice_vocabulary() -> Non
     assert "sourcetype" not in serialized_rows
     assert "sourceauthorityallowed" not in serialized_rows
     assert "scorecontributionallowed" not in serialized_rows
+
+
+def test_consumer_visible_projection_redacts_shared_fuzzer_payloads() -> None:
+    helper = _load_helper_module()
+    sidecars = _base_sidecars()
+    fuzzer_payload = redaction_fuzzer_payload()
+    fuzzer_strings = redaction_fuzzer_strings()
+
+    sidecars["researchReadiness"]["blockingReasons"] = [
+        "provider_timeout",
+        "cache_refresh_pending",
+        "debug_trace_unavailable",
+    ]
+    sidecars["researchReadiness"]["nextEvidenceNeeded"] = fuzzer_strings[:3]
+    sidecars["singleStockEvidencePacket"]["domains"]["news"]["missingReasons"] = [
+        "provider_timeout",
+        "raw_schema_trace",
+    ]
+    sidecars["singleStockEvidencePacket"]["domains"]["news"]["nextEvidenceNeeded"] = fuzzer_strings[3:6]
+    sidecars["evidenceCitationFrame"]["citedEvidence"].append(
+        {
+            "id": "fuzzer-citation",
+            "domain": "news",
+            "label": "provider cache debug trace",
+            "summary": fuzzer_payload["rawJsonDump"],
+            "sourceId": "DebugProvider",
+            "providerAuthority": "scoreGradeAllowed",
+            "freshness": "fresh",
+            "asOf": "2026-06-08",
+        }
+    )
+    sidecars["sourceProvenanceFrame"].append(
+        {
+            "contractVersion": "source_provenance_v1",
+            "sourceId": "raw-provider-trace",
+            "sourceLabel": "RawProvider",
+            "evidenceDomain": "news",
+            "sourceTier": "public_proxy",
+            "fallbackOrProxy": True,
+            "limitations": fuzzer_strings,
+            "nextEvidenceNeeded": fuzzer_strings,
+            "debugRef": "trace:raw:requestId=REQ-123",
+        }
+    )
+    sidecars["dataCoverageRows"].append(
+        {
+            "surfaceId": "single_stock",
+            "fieldKey": "news_context",
+            "evidenceFamily": "news",
+            "freshnessState": "fresh",
+            "rightToDisplay": "granted",
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "providerId": "debug-provider",
+            "sourceType": "public_proxy",
+            "rawPayload": fuzzer_payload,
+        }
+    )
+
+    packet = helper.build_research_packet_v1(sidecars)
+
+    assert_packet_output_redacted(
+        _consumer_visible_packet_payload(packet),
+        surface="research_packet_v1.consumer_visible",
+    )
 
 
 def test_output_is_deterministic_json_safe_and_does_not_mutate_inputs() -> None:
