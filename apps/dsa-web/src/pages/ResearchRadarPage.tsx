@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import { ConsumerOnboardingCtaPanel } from '../components/common/ConsumerOnboardingCtaPanel';
+import { ConsumerResearchEmptyState } from '../components/common/ConsumerResearchEmptyState';
+import { buildConsumerResearchEmptyState } from '../components/common/researchEmptyStateModel';
 import {
   ConsoleBoard,
   ConsoleContextRail,
@@ -12,7 +14,7 @@ import {
 } from '../components/linear/LinearPrimitives';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { StatusBadge } from '../components/ui/StatusBadge';
-import { TerminalButton, TerminalChip, TerminalEmptyState } from '../components/terminal/TerminalPrimitives';
+import { TerminalButton, TerminalChip } from '../components/terminal/TerminalPrimitives';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
 import { researchRadarApi, type ResearchRadarResponse } from '../api/researchRadar';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -172,9 +174,11 @@ export default function ResearchRadarPage() {
             ) : null}
             {loading && !data ? (
               <div className="p-4 md:p-5">
-                <TerminalEmptyState title={locale === 'en' ? 'Loading research radar' : '正在整理研究雷达'}>
-                  {locale === 'en' ? 'The page is waiting for queue items, evidence gaps, and queue quality.' : '正在等待队列条目、证据缺口与队列质量。'}
-                </TerminalEmptyState>
+                <ConsumerResearchEmptyState
+                  data-testid="research-radar-loading-empty-state"
+                  locale={locale}
+                  state={buildConsumerResearchEmptyState('loading', locale)}
+                />
               </div>
             ) : null}
             {data ? (
@@ -267,9 +271,11 @@ export default function ResearchRadarPage() {
                         ))}
                       </div>
                     ) : (
-                      <TerminalEmptyState title={locale === 'en' ? 'Queue unavailable' : '队列暂不可用'}>
-                        {locale === 'en' ? 'Use this region for queue order, priority, and next verification steps.' : '这里用于展示队列顺序、优先级与下一步验证事项。'}
-                      </TerminalEmptyState>
+                      <ConsumerResearchEmptyState
+                        data-testid="research-radar-queue-empty-state"
+                        locale={locale}
+                        state={buildConsumerResearchEmptyState('noQueueItems', locale)}
+                      />
                     )}
                   </RoughSectionCard>
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Lead item' : '队首条目'} title={locale === 'en' ? 'Driver scores' : '驱动评分'}>
