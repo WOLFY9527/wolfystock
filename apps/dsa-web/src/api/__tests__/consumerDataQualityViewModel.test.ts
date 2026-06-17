@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  createConsumerDataQualityGlossaryEntry,
   createConsumerDataQualityViewModel,
 } from '../consumerDataQualityViewModel';
 
@@ -235,5 +236,17 @@ describe('createConsumerDataQualityViewModel', () => {
     const moduleExports = await import('../consumerDataQualityViewModel');
 
     expect(Object.keys(moduleExports).filter((key) => key.toLowerCase().includes('admin'))).toEqual([]);
+  });
+
+  it('re-exports the consumer data quality glossary without raw-token leakage', () => {
+    const entry = createConsumerDataQualityGlossaryEntry('scoreContributionAllowed=false');
+
+    expect(entry).toEqual({
+      safeLabel: '评分暂不启用',
+      shortExplanation: '当前信息未进入评分口径，不能提升结论强度。',
+      severity: 'warning',
+      observationOnly: true,
+    });
+    expect(JSON.stringify(entry)).not.toMatch(/scoreContributionAllowed|reasonCodes|sourceRefs|provider|debug|runtime|cache/i);
   });
 });
