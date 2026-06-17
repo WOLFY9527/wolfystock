@@ -15,6 +15,7 @@ import {
 import ScannerCandidateResearchSummary, {
   type ScannerCandidateResearchSummaryFrame,
 } from './ScannerCandidateResearchSummary';
+import ScannerCandidateResearchPacket from './ScannerCandidateResearchPacket';
 import type { SourceProvenanceSummary } from '../../types/analysis';
 import type { NormalizedEvidenceSummary } from '../../utils/evidenceDisplay';
 import type { ResearchReadinessV1 } from '../../types/researchReadiness';
@@ -22,6 +23,7 @@ import type {
   InvestorSignalContract,
   ScannerCandidate,
   ScannerCandidateDiagnostic,
+  ScannerCandidateResearchPacket as ScannerCandidateResearchPacketModel,
   ScannerLabeledValue,
 } from '../../types/scanner';
 import type { ScannerBacktestItem } from './scannerBacktestShared';
@@ -44,6 +46,7 @@ type ScannerCandidateWithEvidence = ScannerCandidate & {
   candidateEvidenceFrame?: CandidateEvidenceFrame | null;
   candidateResearchReadiness?: ResearchReadinessV1 | null;
   candidateResearchSummaryFrame?: ScannerCandidateResearchSummaryFrame | null;
+  candidateResearchPacket?: ScannerCandidateResearchPacketModel | null;
   candidateSourceProvenanceFrame?: SourceProvenanceSummary | null;
 };
 
@@ -369,6 +372,16 @@ export function ScannerCandidateDetailPanel({
           />
         </BoardDetailSection>
       ) : null}
+      {candidateWithEvidence.candidateResearchPacket ? (
+        <div className="md:col-span-2">
+          <ScannerCandidateResearchPacket
+            packet={candidateWithEvidence.candidateResearchPacket}
+            language={language}
+            variant="detail"
+            testId={`scanner-result-detail-research-packet-${candidateIdentity}`}
+          />
+        </div>
+      ) : null}
       {outcomeItems.length ? (
         <BoardDetailSection title={language === 'en' ? 'Realized outcome' : '实际表现'}>
           <div className="flex flex-wrap gap-2">
@@ -475,6 +488,7 @@ export function ScannerCandidateDiagnosticRow({
   candidateEvidenceFrame,
   candidateResearchReadiness,
   candidateResearchSummaryFrame,
+  candidateResearchPacket,
   candidateSourceProvenanceFrame,
   scoreLabel,
   scoreDelta,
@@ -517,6 +531,7 @@ export function ScannerCandidateDiagnosticRow({
   candidateEvidenceFrame?: CandidateEvidenceFrame | null;
   candidateResearchReadiness?: ResearchReadinessV1 | null;
   candidateResearchSummaryFrame?: ScannerCandidateResearchSummaryFrame | null;
+  candidateResearchPacket?: ScannerCandidateResearchPacketModel | null;
   candidateSourceProvenanceFrame?: SourceProvenanceSummary | null;
   scoreLabel: string;
   scoreDelta?: string | null;
@@ -592,7 +607,14 @@ export function ScannerCandidateDiagnosticRow({
             <div className="min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Key reason' : '关键原因'}</p>
               <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-white/68" title={keyReason}>{keyReason}</p>
-              {candidateResearchSummaryFrame ? (
+              {candidateResearchPacket ? (
+                <ScannerCandidateResearchPacket
+                  packet={candidateResearchPacket}
+                  language={language}
+                  variant="row"
+                  testId={`scanner-candidate-research-packet-row-${candidate.symbol}`}
+                />
+              ) : candidateResearchSummaryFrame ? (
                 <ScannerCandidateResearchSummary
                   frame={candidateResearchSummaryFrame}
                   language={language}
@@ -655,7 +677,14 @@ export function ScannerCandidateDiagnosticRow({
             </div>
             <div className="grid gap-1.5 text-xs text-white/66">
               <p title={keyReason}>{keyReason}</p>
-              {candidateResearchSummaryFrame ? (
+              {candidateResearchPacket ? (
+                <ScannerCandidateResearchPacket
+                  packet={candidateResearchPacket}
+                  language={language}
+                  variant="row"
+                  testId={`scanner-candidate-research-packet-mobile-row-${candidate.symbol}`}
+                />
+              ) : candidateResearchSummaryFrame ? (
                 <ScannerCandidateResearchSummary
                   frame={candidateResearchSummaryFrame}
                   language={language}

@@ -34,6 +34,7 @@ import { ScannerCandidateEvidenceStrip } from '../components/scanner/ScannerCand
 import ScannerCandidateResearchSummary, {
   type ScannerCandidateResearchSummaryFrame,
 } from '../components/scanner/ScannerCandidateResearchSummary';
+import ScannerCandidateResearchPacket from '../components/scanner/ScannerCandidateResearchPacket';
 import {
   AdvancedDisclosure,
   FieldChip,
@@ -80,6 +81,7 @@ import {
 import type { SourceProvenanceSummary } from '../types/analysis';
 import type {
   ScannerCandidate,
+  ScannerCandidateResearchPacket as ScannerCandidateResearchPacketModel,
   ScannerCandidateDiagnostic,
   ScannerCandidateDiagnosticStatus,
   ScannerCoverageSummary,
@@ -217,6 +219,7 @@ type ScannerCandidateWithEvidence = ScannerCandidate & {
   candidateEvidenceFrame?: CandidateEvidenceFrame | null;
   candidateResearchReadiness?: ResearchReadinessV1 | null;
   candidateResearchSummaryFrame?: ScannerCandidateResearchSummaryFrame | null;
+  candidateResearchPacket?: ScannerCandidateResearchPacketModel | null;
   candidateSourceProvenanceFrame?: SourceProvenanceSummary | null;
 };
 
@@ -3295,7 +3298,14 @@ const UserScannerPage: React.FC = () => {
           </div>
         ) : null}
 
-        {candidateWithEvidence.candidateResearchSummaryFrame ? (
+        {candidateWithEvidence.candidateResearchPacket ? (
+          <ScannerCandidateResearchPacket
+            packet={candidateWithEvidence.candidateResearchPacket}
+            language={language}
+            variant="detail"
+            testId={`scanner-inline-candidate-research-packet-${getCandidateIdentity(candidate)}`}
+          />
+        ) : candidateWithEvidence.candidateResearchSummaryFrame ? (
           <ScannerCandidateResearchSummary
             frame={candidateWithEvidence.candidateResearchSummaryFrame}
             language={language}
@@ -4316,6 +4326,7 @@ const UserScannerPage: React.FC = () => {
                                         candidateEvidenceFrame={sourceCandidateWithEvidence.candidateEvidenceFrame}
                                         candidateResearchReadiness={sourceCandidateWithEvidence.candidateResearchReadiness}
                                         candidateResearchSummaryFrame={sourceCandidateWithEvidence.candidateResearchSummaryFrame}
+                                        candidateResearchPacket={sourceCandidateWithEvidence.candidateResearchPacket}
                                         candidateSourceProvenanceFrame={sourceCandidateWithEvidence.candidateSourceProvenanceFrame}
                                         scoreLabel={candidate.score == null ? '--' : `${candidate.score}/100`}
                                         trustSources={[stripScannerConsumerTrustSource(sourceCandidate), stripScannerConsumerTrustSource(candidate)]}

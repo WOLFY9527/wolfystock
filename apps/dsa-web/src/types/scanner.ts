@@ -422,6 +422,16 @@ export interface ScannerCandidateResearchSummaryFrame {
   [key: string]: unknown;
 }
 
+export interface ScannerCandidateResearchPacket {
+  whySurfaced?: string | null;
+  primaryEvidence?: string[] | null;
+  limitingEvidence?: string[] | null;
+  dataQualityNotes?: string[] | null;
+  rejectedOrLimitedReasonSafeLabel?: string | null;
+  researchNextStep?: string | null;
+  observationOnly?: boolean | null;
+}
+
 export interface ScannerCandidate {
   symbol: string;
   name: string;
@@ -453,6 +463,7 @@ export interface ScannerCandidate {
   candidateEvidenceFrame?: ScannerCandidateEvidenceFrame | null;
   candidateResearchReadiness?: ResearchReadinessV1 | null;
   candidateResearchSummaryFrame?: ScannerCandidateResearchSummaryFrame | null;
+  candidateResearchPacket?: ScannerCandidateResearchPacket | null;
   candidateSourceProvenanceFrame?: SourceProvenanceSummary | null;
 }
 

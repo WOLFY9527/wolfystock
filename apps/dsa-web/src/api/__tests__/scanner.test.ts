@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
+  ScannerCandidateResearchPacket,
   ScannerEvidencePacket,
   ScannerRunDetail,
   ScannerScoreExplainability,
@@ -357,5 +358,139 @@ describe('scannerApi investor signal normalization', () => {
     expect(payload.shortlist[0].consumerDiagnostics?.dataQualityState).toBe('partial');
     expect(payload.shortlist[0].consumerDiagnostics?.freshnessState).toBe('fallback');
     expect(payload.shortlist[0].consumerDiagnostics?.missingEvidence).toEqual(['history_depth', 'quote_context']);
+  });
+
+  it('normalizes candidate research packets with bounded safe fields without changing rank order', async () => {
+    const { scannerApi } = await import('../scanner');
+    get.mockResolvedValueOnce({
+      data: {
+        id: 44,
+        market: 'us',
+        profile: 'us_preopen_v1',
+        status: 'completed',
+        universe_name: 'US pre-open',
+        shortlist_size: 2,
+        universe_size: 20,
+        preselected_size: 8,
+        evaluated_size: 5,
+        universe_notes: [],
+        scoring_notes: [],
+        universe_type: 'default',
+        requested_symbols_count: 0,
+        accepted_symbols_count: 0,
+        rejected_symbols: [],
+        diagnostics: {},
+        notification: {
+          attempted: false,
+          status: 'skipped',
+          channels: [],
+        },
+        comparison_to_previous: {
+          available: false,
+          new_count: 0,
+          retained_count: 0,
+          dropped_count: 0,
+          new_symbols: [],
+          retained_symbols: [],
+          dropped_symbols: [],
+        },
+        review_summary: {
+          available: false,
+          review_window_days: 5,
+          review_status: 'pending',
+          candidate_count: 2,
+          reviewed_count: 0,
+          pending_count: 2,
+          strong_count: 0,
+          mixed_count: 0,
+          weak_count: 0,
+        },
+        shortlist: [
+          {
+            symbol: 'NVDA',
+            name: 'NVIDIA',
+            rank: 1,
+            score: 82,
+            reasons: [],
+            key_metrics: [],
+            feature_signals: [],
+            risk_notes: [],
+            watch_context: [],
+            boards: [],
+            appeared_in_recent_runs: 1,
+            ai_interpretation: {
+              available: false,
+              status: 'unavailable',
+            },
+            realized_outcome: {
+              review_status: 'pending',
+              outcome_label: 'Pending',
+              thesis_match: 'unknown',
+              review_window_days: 5,
+            },
+            diagnostics: {},
+            candidate_research_packet: {
+              why_surfaced: 'Trend and liquidity evidence moved this symbol into follow-up review.',
+              primary_evidence: [
+                'Technicals available',
+                'Liquidity available',
+                'provider_timeout raw detail',
+                'buy now',
+              ],
+              limiting_evidence: ['Fundamentals pending', 'trace_id=req-raw-1'],
+              data_quality_notes: ['data quality: partial', 'debug_ref=scanner:nvda'],
+              rejected_or_limited_reason_safe_label: 'Ready for research review',
+              research_next_step: 'Refresh fundamentals before follow-up review.',
+              observation_only: true,
+              reason_codes: ['source_authority_missing'],
+              source_refs: ['debug-source'],
+              provider_diagnostics: { raw_payload: true },
+              debug_ref: 'scanner:nvda:debug',
+            },
+          },
+          {
+            symbol: 'MSFT',
+            name: 'Microsoft',
+            rank: 2,
+            score: 79,
+            reasons: [],
+            key_metrics: [],
+            feature_signals: [],
+            risk_notes: [],
+            watch_context: [],
+            boards: [],
+            appeared_in_recent_runs: 1,
+            ai_interpretation: {
+              available: false,
+              status: 'unavailable',
+            },
+            realized_outcome: {
+              review_status: 'pending',
+              outcome_label: 'Pending',
+              thesis_match: 'unknown',
+              review_window_days: 5,
+            },
+            diagnostics: {},
+          },
+        ],
+      },
+    });
+
+    const payload: ScannerRunDetail = await scannerApi.getRun(44);
+    const packet: ScannerCandidateResearchPacket | null | undefined = payload.shortlist[0].candidateResearchPacket;
+
+    expect(payload.shortlist.map((item) => [item.symbol, item.rank, item.score])).toEqual([
+      ['NVDA', 1, 82],
+      ['MSFT', 2, 79],
+    ]);
+    expect(packet?.whySurfaced).toBe('Trend and liquidity evidence moved this symbol into follow-up review.');
+    expect(packet?.primaryEvidence).toEqual(['Technicals available', 'Liquidity available']);
+    expect(packet?.limitingEvidence).toEqual(['Fundamentals pending']);
+    expect(packet?.dataQualityNotes).toEqual(['data quality: partial']);
+    expect(packet?.rejectedOrLimitedReasonSafeLabel).toBe('Ready for research review');
+    expect(packet?.researchNextStep).toBe('Refresh fundamentals before follow-up review.');
+    expect(packet?.observationOnly).toBe(true);
+    expect(payload.shortlist[1].candidateResearchPacket).toBeUndefined();
+    expect(JSON.stringify(packet)).not.toMatch(/provider_timeout|reasonCodes|sourceRefs|providerDiagnostics|debugRef|trace_id|buy now|raw_payload/i);
   });
 });

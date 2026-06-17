@@ -1,6 +1,9 @@
 import apiClient from './index';
 import { toCamelCase } from './utils';
+import { consumerSafeReportText } from '../utils/homeReportIdentity';
 import type {
+  ScannerCandidate,
+  ScannerCandidateResearchPacket,
   ScannerOperationalStatus,
   ScannerStrategySimulationResult,
   ScannerThemeGenerateRequest,
@@ -10,6 +13,84 @@ import type {
   ScannerRunRequest,
   ScannerThemesResponse,
 } from '../types/scanner';
+
+const SCANNER_RESEARCH_PACKET_TEXT_LIMIT = 220;
+const SCANNER_RESEARCH_PACKET_LIST_LIMIT = 4;
+
+function scannerResearchPacketText(value: unknown): string | null {
+  const text = consumerSafeReportText(value, '').trim();
+  if (!text || text.length > SCANNER_RESEARCH_PACKET_TEXT_LIMIT) return null;
+  if (text === '--') return null;
+  return text;
+}
+
+function scannerResearchPacketList(value: unknown, limit = SCANNER_RESEARCH_PACKET_LIST_LIMIT): string[] {
+  if (!Array.isArray(value)) return [];
+  const result: string[] = [];
+  value.forEach((item) => {
+    const text = scannerResearchPacketText(item);
+    if (text && !result.includes(text) && result.length < limit) {
+      result.push(text);
+    }
+  });
+  return result;
+}
+
+function normalizeScannerResearchPacket(value: unknown): ScannerCandidateResearchPacket | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const packet = value as Partial<ScannerCandidateResearchPacket>;
+  const whySurfaced = scannerResearchPacketText(packet.whySurfaced);
+  const primaryEvidence = scannerResearchPacketList(packet.primaryEvidence, 4);
+  const limitingEvidence = scannerResearchPacketList(packet.limitingEvidence, 4);
+  const dataQualityNotes = scannerResearchPacketList(packet.dataQualityNotes, 4);
+  const rejectedOrLimitedReasonSafeLabel = scannerResearchPacketText(packet.rejectedOrLimitedReasonSafeLabel);
+  const researchNextStep = scannerResearchPacketText(packet.researchNextStep);
+  const hasContent = Boolean(
+    whySurfaced
+    || primaryEvidence.length
+    || limitingEvidence.length
+    || dataQualityNotes.length
+    || rejectedOrLimitedReasonSafeLabel
+    || researchNextStep,
+  );
+
+  if (!hasContent) return undefined;
+  return {
+    whySurfaced,
+    primaryEvidence,
+    limitingEvidence,
+    dataQualityNotes,
+    rejectedOrLimitedReasonSafeLabel,
+    researchNextStep,
+    observationOnly: packet.observationOnly === true,
+  };
+}
+
+function normalizeScannerCandidate(candidate: ScannerCandidate): ScannerCandidate {
+  const candidateResearchPacket = normalizeScannerResearchPacket(candidate.candidateResearchPacket);
+  if (!candidateResearchPacket) {
+    const rest = { ...candidate };
+    delete rest.candidateResearchPacket;
+    return rest;
+  }
+  return {
+    ...candidate,
+    candidateResearchPacket,
+  };
+}
+
+function normalizeScannerCandidates(candidates?: ScannerCandidate[]): ScannerCandidate[] | undefined {
+  return Array.isArray(candidates) ? candidates.map(normalizeScannerCandidate) : candidates;
+}
+
+function normalizeScannerRunDetail(payload: Record<string, unknown>): ScannerRunDetail {
+  const normalized = toCamelCase<ScannerRunDetail>(payload);
+  return {
+    ...normalized,
+    shortlist: normalizeScannerCandidates(normalized.shortlist) || [],
+    selected: normalizeScannerCandidates(normalized.selected),
+  };
+}
 
 export const scannerApi = {
   run: async (params: ScannerRunRequest = {}): Promise<ScannerRunDetail> => {
@@ -29,7 +110,7 @@ export const scannerApi = {
       requestData,
       { timeout: 120000 },
     );
-    return toCamelCase<ScannerRunDetail>(response.data);
+    return normalizeScannerRunDetail(response.data);
   },
 
   getThemes: async (params: { market?: string } = {}): Promise<ScannerThemesResponse> => {
@@ -87,7 +168,7 @@ export const scannerApi = {
     const response = await apiClient.get<Record<string, unknown>>(
       `/api/v1/scanner/runs/${encodeURIComponent(runId)}`,
     );
-    return toCamelCase<ScannerRunDetail>(response.data);
+    return normalizeScannerRunDetail(response.data);
   },
 
   getStrategySimulation: async (params: {
@@ -127,7 +208,7 @@ export const scannerApi = {
         },
       },
     );
-    return toCamelCase<ScannerRunDetail>(response.data);
+    return normalizeScannerRunDetail(response.data);
   },
 
   getRecentWatchlists: async (params: {

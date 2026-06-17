@@ -7,6 +7,7 @@ import { UiLanguageProvider, useI18n } from '../../contexts/UiLanguageContext';
 import { expectNoRawI18nKeys } from '../../test-utils/i18nRawKeySentinel';
 import type {
   ScannerCandidate,
+  ScannerCandidateResearchPacket,
   ScannerRunDetail,
   ScannerRunHistoryItem,
   ScannerRunHistoryResponse,
@@ -662,6 +663,23 @@ function makeCandidateResearchSummaryFrame(overrides: Record<string, unknown> = 
     nextResearchStep: 'Wait for more complete evidence.',
     noAdviceBoundary: true,
     debugRef: 'scanner:candidate_summary:NVDA',
+    ...overrides,
+  };
+}
+
+function makeCandidateResearchPacket(overrides: Partial<ScannerCandidateResearchPacket> & Record<string, unknown> = {}) {
+  return {
+    whySurfaced: '趋势与流动性线索使该标的进入本轮复核。',
+    primaryEvidence: ['技术面可用', '流动性可用'],
+    limitingEvidence: ['基本面证据待补', '新闻催化待补'],
+    dataQualityNotes: ['data quality: partial', 'freshness: delayed'],
+    rejectedOrLimitedReasonSafeLabel: '已进入本轮观察名单',
+    researchNextStep: '补充基本面与新闻催化证据后再复核。',
+    observationOnly: true,
+    sourceRefs: ['scanner:source:debug'],
+    reasonCodes: ['source_authority_missing'],
+    providerDiagnostics: { rawPayload: true },
+    debugRef: 'scanner:candidate_packet:NVDA',
     ...overrides,
   };
 }
@@ -1393,6 +1411,47 @@ describe('UserScannerPage', () => {
     expectNoRawI18nKeys(container);
   });
 
+  it('surfaces candidate research packets compactly without exposing raw diagnostics or changing ranking', async () => {
+    const nvda = makeCandidate({ symbol: 'NVDA', rank: 1, score: 94 });
+    (nvda as ScannerCandidate & Record<string, unknown>).candidateResearchPacket = makeCandidateResearchPacket();
+
+    getRun.mockResolvedValue(makeRunDetail({
+      shortlist: [
+        nvda,
+        makeCandidate({ symbol: 'AVGO', rank: 2, score: 88 }),
+        makeCandidate({ symbol: 'AMD', rank: 3, score: 76 }),
+      ],
+      selected: [nvda],
+    }));
+
+    const { container } = renderUserScannerPage();
+
+    const row = await screen.findByTestId('scanner-result-row-NVDA');
+    const rowPacket = within(row).getByTestId('scanner-candidate-research-packet-row-NVDA');
+    expect(rowPacket).toHaveTextContent('研究包');
+    expect(rowPacket).toHaveTextContent('趋势与流动性线索使该标的进入本轮复核。');
+    expect(rowPacket).toHaveTextContent('技术面可用');
+    expect(rowPacket).toHaveTextContent('基本面证据待补');
+    expect(rowPacket).toHaveTextContent('仅研究观察');
+
+    const detailPacket = await screen.findByTestId('scanner-inline-candidate-research-packet-NVDA');
+    expect(detailPacket).toHaveTextContent('研究包');
+    expect(detailPacket).toHaveTextContent('为什么出现');
+    expect(detailPacket).toHaveTextContent('主要证据');
+    expect(detailPacket).toHaveTextContent('限制因素');
+    expect(detailPacket).toHaveTextContent('数据质量');
+    expect(detailPacket).toHaveTextContent('下一步');
+    expect(detailPacket).toHaveTextContent('补充基本面与新闻催化证据后再复核。');
+    expect(detailPacket).toHaveTextContent('仅研究观察');
+    expect(detailPacket).not.toHaveTextContent(/sourceRefs|reasonCodes|providerDiagnostics|rawPayload|debugRef|source_authority_missing|scanner:source:debug/i);
+
+    expect(within(row).getAllByText('94/100').length).toBeGreaterThan(0);
+    expect(within(screen.getByTestId('scanner-result-row-AVGO')).getAllByText('88/100').length).toBeGreaterThan(0);
+    expect(orderedSymbolsFromRows()).toEqual(['NVDA', 'AVGO', 'AMD']);
+    expect(container).not.toHaveTextContent(/买入|卖出|下单|交易建议|投资建议|position sizing/i);
+    expectNoRawI18nKeys(container);
+  });
+
   it('renders candidate provenance additively inside evidence areas without changing row order or score labels', async () => {
     const nvda = makeCandidate({ symbol: 'NVDA', rank: 1, score: 94 });
     (nvda as ScannerCandidate & Record<string, unknown>).candidateEvidenceFrame = makeCandidateEvidenceFrame();
@@ -1434,6 +1493,8 @@ describe('UserScannerPage', () => {
     const row = await screen.findByTestId('scanner-result-row-NVDA');
     expect(within(row).getAllByText('94/100').length).toBeGreaterThan(0);
     expect(row).not.toHaveTextContent('待补');
+    expect(screen.queryByTestId('scanner-candidate-research-packet-row-NVDA')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('scanner-inline-candidate-research-packet-NVDA')).not.toBeInTheDocument();
     expect(screen.queryByText('证据覆盖')).not.toBeInTheDocument();
     expect(orderedSymbolsFromRows()).toEqual(['NVDA', 'AVGO', 'AMD']);
     expectNoRawI18nKeys(container);
