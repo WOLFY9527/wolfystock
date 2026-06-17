@@ -143,6 +143,13 @@ export type StockPeerCorrelationSnapshot = {
   researchNextSteps: string[];
 };
 
+export type StockStructureDecisionMissingEvidence = {
+  kind?: string | null;
+  code?: string | null;
+  field?: string | null;
+  message?: string | null;
+};
+
 export type StockStructureDecisionResponse = {
   schemaVersion: string;
   ticker: string;
@@ -169,13 +176,64 @@ export type StockStructureDecisionResponse = {
     usableBars?: number | null;
     reason?: string | null;
   };
-  missingEvidence: Array<{
-    kind?: string | null;
-    code?: string | null;
-    field?: string | null;
-    message?: string | null;
-  }>;
+  missingEvidence: StockStructureDecisionMissingEvidence[];
   peerCorrelationSnapshot?: StockPeerCorrelationSnapshot;
+  noAdviceDisclosure: string;
+};
+
+export type StockStructureDecisionBatchRequest = {
+  stockCodes: string[];
+  benchmark?: string;
+  maxItems?: number;
+};
+
+export type StockSymbolCompareEvidenceEntry = {
+  kind?: string | null;
+  symbols?: string[] | null;
+  status?: string | null;
+  period?: string | null;
+  usableBarsMin?: number | null;
+  usableBarsMax?: number | null;
+  benchmark?: string | null;
+  values?: Record<string, string | number | null | undefined> | null;
+  [key: string]: unknown;
+};
+
+export type StockSymbolCompareFreshness = {
+  status?: string | null;
+  period?: string | null;
+  usableBars?: number | null;
+  [key: string]: unknown;
+};
+
+export type StockSymbolCompareEvidencePacket = {
+  comparedSymbols: string[];
+  sharedEvidence: StockSymbolCompareEvidenceEntry[];
+  divergentEvidence: StockSymbolCompareEvidenceEntry[];
+  missingEvidenceBySymbol: Record<string, StockStructureDecisionMissingEvidence[]>;
+  freshnessBySymbol: Record<string, StockSymbolCompareFreshness>;
+  confidenceCap: {
+    value?: number | null;
+    [key: string]: unknown;
+  };
+  observationBoundary: {
+    observationOnly?: boolean | null;
+    decisionGrade?: boolean | null;
+    rankingAllowed?: boolean | null;
+    adviceAllowed?: boolean | null;
+  };
+  researchNextSteps: string[];
+};
+
+export type StockStructureDecisionBatchResponse = {
+  schemaVersion: string;
+  items: Array<StockStructureDecisionResponse & {
+    comparativeContext?: Record<string, unknown> | null;
+  }>;
+  aggregateSummary: Record<string, unknown>;
+  missingEvidence: StockStructureDecisionMissingEvidence[];
+  dataQuality: Record<string, unknown>;
+  symbolCompareEvidencePacket?: StockSymbolCompareEvidencePacket | null;
   noAdviceDisclosure: string;
 };
 
@@ -427,6 +485,139 @@ function normalizeStockStructureDecisionResponse(payload: unknown): StockStructu
   };
 }
 
+function firstField(record: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (key in record) return record[key];
+  }
+  return undefined;
+}
+
+function stringField(record: Record<string, unknown>, keys: string[]): string | null {
+  const value = firstField(record, keys);
+  return typeof value === 'string' ? value : null;
+}
+
+function numberField(record: Record<string, unknown>, keys: string[]): number | null {
+  const value = firstField(record, keys);
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function booleanField(record: Record<string, unknown>, keys: string[]): boolean | null {
+  const value = firstField(record, keys);
+  return typeof value === 'boolean' ? value : null;
+}
+
+function stringArrayField(record: Record<string, unknown>, keys: string[]): string[] {
+  const value = firstField(record, keys);
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.length > 0) : [];
+}
+
+function normalizeMissingEvidence(value: unknown): StockStructureDecisionMissingEvidence {
+  const record = isRecord(value) ? value : {};
+  return {
+    kind: stringField(record, ['kind']),
+    code: stringField(record, ['code']),
+    field: stringField(record, ['field']),
+    message: stringField(record, ['message']),
+  };
+}
+
+function normalizeCompareEvidenceEntry(value: unknown): StockSymbolCompareEvidenceEntry {
+  const record = isRecord(value) ? value : {};
+  const rawValues = firstField(record, ['values']);
+  const values = isRecord(rawValues)
+    ? Object.fromEntries(
+      Object.entries(rawValues).map(([symbol, item]) => [
+        symbol,
+        typeof item === 'string' || typeof item === 'number' || item === null ? item : String(item ?? ''),
+      ]),
+    )
+    : null;
+  return {
+    kind: stringField(record, ['kind']),
+    symbols: stringArrayField(record, ['symbols']),
+    status: stringField(record, ['status']),
+    period: stringField(record, ['period']),
+    usableBarsMin: numberField(record, ['usableBarsMin', 'usable_bars_min']),
+    usableBarsMax: numberField(record, ['usableBarsMax', 'usable_bars_max']),
+    benchmark: stringField(record, ['benchmark']),
+    values,
+  };
+}
+
+function normalizeMissingEvidenceBySymbol(value: unknown): Record<string, StockStructureDecisionMissingEvidence[]> {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).map(([symbol, entries]) => [
+      symbol,
+      Array.isArray(entries) ? entries.map(normalizeMissingEvidence) : [],
+    ]),
+  );
+}
+
+function normalizeFreshnessBySymbol(value: unknown): Record<string, StockSymbolCompareFreshness> {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).map(([symbol, item]) => {
+      const record = isRecord(item) ? item : {};
+      return [
+        symbol,
+        {
+          status: stringField(record, ['status']),
+          period: stringField(record, ['period']),
+          usableBars: numberField(record, ['usableBars', 'usable_bars']),
+        },
+      ];
+    }),
+  );
+}
+
+function normalizeSymbolCompareEvidencePacket(payload: unknown): StockSymbolCompareEvidencePacket | null {
+  if (!isRecord(payload)) return null;
+  const rawSharedEvidence = firstField(payload, ['sharedEvidence', 'shared_evidence']);
+  const rawDivergentEvidence = firstField(payload, ['divergentEvidence', 'divergent_evidence']);
+  const rawConfidenceCap = firstField(payload, ['confidenceCap', 'confidence_cap']);
+  const confidenceCapRecord = isRecord(rawConfidenceCap) ? rawConfidenceCap : {};
+  const rawObservationBoundary = firstField(payload, ['observationBoundary', 'observation_boundary']);
+  const observationBoundaryRecord = isRecord(rawObservationBoundary) ? rawObservationBoundary : {};
+  return {
+    comparedSymbols: stringArrayField(payload, ['comparedSymbols', 'compared_symbols']),
+    sharedEvidence: Array.isArray(rawSharedEvidence) ? rawSharedEvidence.map(normalizeCompareEvidenceEntry) : [],
+    divergentEvidence: Array.isArray(rawDivergentEvidence) ? rawDivergentEvidence.map(normalizeCompareEvidenceEntry) : [],
+    missingEvidenceBySymbol: normalizeMissingEvidenceBySymbol(firstField(payload, ['missingEvidenceBySymbol', 'missing_evidence_by_symbol'])),
+    freshnessBySymbol: normalizeFreshnessBySymbol(firstField(payload, ['freshnessBySymbol', 'freshness_by_symbol'])),
+    confidenceCap: {
+      value: numberField(confidenceCapRecord, ['value']),
+    },
+    observationBoundary: {
+      observationOnly: booleanField(observationBoundaryRecord, ['observationOnly', 'observation_only']),
+      decisionGrade: booleanField(observationBoundaryRecord, ['decisionGrade', 'decision_grade']),
+      rankingAllowed: booleanField(observationBoundaryRecord, ['rankingAllowed', 'ranking_allowed']),
+      adviceAllowed: booleanField(observationBoundaryRecord, ['adviceAllowed', 'advice_allowed']),
+    },
+    researchNextSteps: stringArrayField(payload, ['researchNextSteps', 'research_next_steps']),
+  };
+}
+
+function normalizeStockStructureDecisionBatchResponse(payload: unknown): StockStructureDecisionBatchResponse {
+  const normalized = toCamelCase<StockStructureDecisionBatchResponse>(payload);
+  const raw = isRecord(payload) ? payload : {};
+  return {
+    schemaVersion: normalized.schemaVersion,
+    items: Array.isArray(normalized.items)
+      ? normalized.items.map((item) => ({
+        ...normalizeStockStructureDecisionResponse(item),
+        comparativeContext: item.comparativeContext ?? null,
+      }))
+      : [],
+    aggregateSummary: normalized.aggregateSummary ?? {},
+    missingEvidence: normalized.missingEvidence ?? [],
+    dataQuality: normalized.dataQuality ?? {},
+    symbolCompareEvidencePacket: normalizeSymbolCompareEvidencePacket(firstField(raw, ['symbolCompareEvidencePacket', 'symbol_compare_evidence_packet'])),
+    noAdviceDisclosure: normalized.noAdviceDisclosure,
+  };
+}
+
 export const stocksApi = {
   async verifyTickerExists(stockCode: string): Promise<StockValidationResponse> {
     const response = await apiClient.get(`/api/v1/stocks/${encodeURIComponent(stockCode)}/validate`);
@@ -441,6 +632,16 @@ export const stocksApi = {
   async getStructureDecision(stockCode: string): Promise<StockStructureDecisionResponse> {
     const response = await apiClient.get(`/api/v1/stocks/${encodeURIComponent(stockCode)}/structure-decision`);
     return normalizeStockStructureDecisionResponse(response.data);
+  },
+
+  async getStructureDecisionsBatch(params: StockStructureDecisionBatchRequest): Promise<StockStructureDecisionBatchResponse> {
+    const payload = {
+      stockCodes: params.stockCodes,
+      benchmark: params.benchmark,
+      maxItems: params.maxItems,
+    };
+    const response = await apiClient.post('/api/v1/stocks/structure-decisions/batch', payload);
+    return normalizeStockStructureDecisionBatchResponse(response.data);
   },
 
   async getHistory(

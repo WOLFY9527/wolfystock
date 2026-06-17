@@ -240,4 +240,93 @@ describe('stocksApi', () => {
     });
     expect(JSON.stringify(payload.peerCorrelationSnapshot)).not.toMatch(/provider|raw|debug|trace|must-not-emit/i);
   });
+
+  it('calls the batch structure decision endpoint and preserves the compare evidence packet', async () => {
+    const { stocksApi } = await import('../stocks');
+
+    post.mockResolvedValueOnce({
+      data: {
+        schemaVersion: 'stock_structure_decision_batch_api_v1',
+        items: [],
+        aggregateSummary: {
+          requestedCount: 2,
+          evaluatedCount: 2,
+          truncated: false,
+        },
+        missingEvidence: [],
+        dataQuality: {
+          status: 'partial',
+        },
+        symbolCompareEvidencePacket: {
+          comparedSymbols: ['MSFT', 'AAPL'],
+          sharedEvidence: [
+            {
+              kind: 'daily_ohlcv',
+              symbols: ['MSFT', 'AAPL'],
+              status: 'available',
+              period: 'daily',
+              source: 'local_db',
+              usableBarsMin: 55,
+              usableBarsMax: 60,
+            },
+          ],
+          divergentEvidence: [
+            {
+              kind: 'structure_state',
+              symbols: ['MSFT', 'AAPL'],
+              values: {
+                MSFT: 'mixed',
+                AAPL: 'breakout',
+              },
+            },
+          ],
+          missingEvidenceBySymbol: {
+            MSFT: [{ kind: 'daily_ohlcv', message: 'Daily OHLCV history is unavailable.' }],
+            AAPL: [],
+          },
+          freshnessBySymbol: {
+            MSFT: { status: 'unavailable', source: 'local_db', period: 'daily', usableBars: 0 },
+            AAPL: { status: 'available', source: 'local_db', period: 'daily', usableBars: 60 },
+          },
+          confidenceCap: {
+            value: 35,
+            reasonCodes: ['symbol_evidence_unavailable'],
+            policyVersion: 'symbol_compare_evidence_packet_v1',
+          },
+          observationBoundary: {
+            observationOnly: true,
+            decisionGrade: false,
+            rankingAllowed: false,
+            adviceAllowed: false,
+          },
+          researchNextSteps: [
+            'Add daily OHLCV evidence for MSFT before using divergence observations.',
+          ],
+        },
+        noAdviceDisclosure: 'Observation-only research context.',
+      },
+    });
+
+    const payload = await stocksApi.getStructureDecisionsBatch({
+      stockCodes: ['MSFT', 'AAPL'],
+      benchmark: 'SPY',
+      maxItems: 2,
+    });
+
+    expect(post).toHaveBeenCalledWith('/api/v1/stocks/structure-decisions/batch', {
+      stockCodes: ['MSFT', 'AAPL'],
+      benchmark: 'SPY',
+      maxItems: 2,
+    });
+    expect(payload.symbolCompareEvidencePacket?.comparedSymbols).toEqual(['MSFT', 'AAPL']);
+    expect(payload.symbolCompareEvidencePacket?.sharedEvidence[0]?.usableBarsMin).toBe(55);
+    expect(payload.symbolCompareEvidencePacket?.divergentEvidence[0]?.values?.MSFT).toBe('mixed');
+    expect(payload.symbolCompareEvidencePacket?.missingEvidenceBySymbol.MSFT[0]?.kind).toBe('daily_ohlcv');
+    expect(payload.symbolCompareEvidencePacket?.freshnessBySymbol.AAPL?.usableBars).toBe(60);
+    expect(payload.symbolCompareEvidencePacket?.confidenceCap.value).toBe(35);
+    expect(payload.symbolCompareEvidencePacket?.observationBoundary.rankingAllowed).toBe(false);
+    expect(payload.symbolCompareEvidencePacket?.researchNextSteps).toEqual([
+      'Add daily OHLCV evidence for MSFT before using divergence observations.',
+    ]);
+  });
 });
