@@ -99,6 +99,33 @@ _IMPORT_ARTIFACT_SECRET_KEY_MARKERS = (
     "sessiontoken",
     "token",
 )
+_ADMIN_DIAGNOSTIC_CAMEL_BOUNDARY_RE = re.compile(r"(?<!^)(?=[A-Z])")
+
+
+def _is_admin_only_diagnostic_key(key: Any) -> bool:
+    text = str(key or "").strip()
+    if not text:
+        return False
+    normalized = text.replace("-", "_")
+    normalized_lower = normalized.lower()
+    if normalized_lower == "admin_diagnostics" or normalized_lower.startswith("admin_"):
+        return True
+    snake_key = _ADMIN_DIAGNOSTIC_CAMEL_BOUNDARY_RE.sub("_", text).replace("-", "_").lower()
+    return snake_key == "admin_diagnostics" or snake_key.startswith("admin_")
+
+
+def _redact_consumer_admin_diagnostics(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _redact_consumer_admin_diagnostics(child)
+            for key, child in value.items()
+            if not _is_admin_only_diagnostic_key(key)
+        }
+    if isinstance(value, list):
+        return [_redact_consumer_admin_diagnostics(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_consumer_admin_diagnostics(item) for item in value)
+    return value
 
 
 def _get_portfolio_service(current_user: CurrentUser) -> PortfolioService:
@@ -1240,7 +1267,7 @@ def get_snapshot(
             as_of=as_of,
             cost_method=cost_method,
         )
-        return PortfolioSnapshotResponse(**data)
+        return PortfolioSnapshotResponse(**_redact_consumer_admin_diagnostics(data))
     except ValueError as exc:
         raise _bad_request(exc)
     except Exception as exc:
@@ -1533,7 +1560,7 @@ def get_risk_report(
     service = PortfolioRiskService(portfolio_service=_get_portfolio_service(current_user))
     try:
         data = service.get_risk_report(account_id=account_id, as_of=as_of, cost_method=cost_method)
-        return PortfolioRiskResponse(**data)
+        return PortfolioRiskResponse(**_redact_consumer_admin_diagnostics(data))
     except ValueError as exc:
         raise _bad_request(exc)
     except Exception as exc:
