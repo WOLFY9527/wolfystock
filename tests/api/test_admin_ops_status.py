@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import src.auth as auth
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -13,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from api.deps import CurrentUser, get_current_user
 from api.v1 import api_v1_router
-from src.storage import DatabaseManager
+from src.storage import DatabaseManager, DurableTaskState, ExecutionLogEvent, ExecutionLogSession
 
 
 FORBIDDEN_RESPONSE_MARKERS = (
@@ -423,6 +424,85 @@ def test_admin_ops_status_reports_runtime_log_sink_without_sensitive_paths(
     assert str(tmp_path) not in _json_text(payload)
     assert "authorization" not in _json_text(payload)
     assert "raw-token" not in _json_text(payload)
+    _assert_no_sensitive_markers(payload)
+
+
+def test_admin_ops_status_exposes_db_retention_and_role_audit_without_sensitive_data(
+    app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = DatabaseManager.get_instance()
+    now = datetime.now()
+    old_started_at = now - timedelta(days=120)
+    with db.get_session() as session:
+        session.add(
+            ExecutionLogSession(
+                session_id="raw-session-id",
+                task_id="task-secret",
+                query_id="query-secret",
+                overall_status="completed",
+                started_at=old_started_at,
+                created_at=old_started_at,
+                updated_at=old_started_at,
+            )
+        )
+        session.add(
+            ExecutionLogEvent(
+                session_id="raw-session-id",
+                phase="api",
+                step="request",
+                target="provider.example",
+                status="completed",
+                event_at=old_started_at,
+                message="access-token provider-payload-secret",
+                detail_json='{"api_key": "secret"}',
+            )
+        )
+        session.add(
+            DurableTaskState(
+                task_id="raw-pending-task-id",
+                owner_user_id="raw-owner-user-id",
+                task_type="analysis",
+                status="pending",
+                created_at=old_started_at,
+                updated_at=old_started_at,
+            )
+        )
+        session.commit()
+
+    monkeypatch.setattr(
+        "src.services.admin_ops_status_service.AdminLogsRetentionService._storage_measurement",
+        lambda *_args, **_kwargs: {
+            "size_bytes": 689 * 1024 * 1024,
+            "measurement_scope": "sqlite_database_file",
+            "measurement_status": "available",
+            "measurement_reason": "/Users/example/stock_analysis.db?token=secret",
+        },
+    )
+
+    with _client(app, _ops_admin) as client:
+        response = client.get("/api/v1/admin/ops/status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["retentionPolicyStatus"]["readOnly"] is True
+    assert payload["retentionPolicyStatus"]["deleteAllowed"] is False
+    assert payload["retentionPolicyStatus"]["summary"]["executionLogPolicy"] == "preview_first_retention_cleanup"
+    assert payload["retentionPolicyStatus"]["summary"]["durableTaskRetentionPolicy"] == "not_configured"
+    assert payload["executionLogRetentionRisk"]["status"] == "warning"
+    assert payload["executionLogRetentionRisk"]["summary"]["logsOlderThanRetentionCountBucket"] == "1-9"
+    assert payload["executionLogRetentionRisk"]["summary"]["cleanupCalled"] is False
+    assert payload["dbSizeRisk"]["status"] == "warning"
+    assert payload["dbSizeRisk"]["summary"]["sizeBucket"] == "512mb_to_1gb"
+    assert payload["dbSizeRisk"]["summary"]["overSoftLimit"] is True
+    assert payload["adminRoleAssignmentStatus"]["status"] == "legacy_admin_fallback_active"
+    assert payload["adminRoleAssignmentStatus"]["summary"]["explicitAssignmentCountBucket"] == "0"
+    assert payload["adminRoleAssignmentStatus"]["summary"]["legacyAdminUserCountBucket"] == "1-9"
+    assert payload["durableTaskBacklogStatus"]["status"] == "warning"
+    assert payload["durableTaskBacklogStatus"]["summary"]["pendingBacklogCountBucket"] == "1-9"
+    assert payload["durableTaskBacklogStatus"]["summary"]["retentionPolicy"] == "not_configured"
+    assert payload["recommendedMaintenanceActions"]
+    assert all(isinstance(item, str) and item for item in payload["recommendedMaintenanceActions"])
     _assert_no_sensitive_markers(payload)
 
 
