@@ -59,4 +59,116 @@ describe('researchRadarApi', () => {
     expect(payload.aggregateSummary.source?.scannerRunId).toBe(8);
     expect(payload.marketContextFit).toBe('neutral');
   });
+
+  it('loads and normalizes the unified research queue hub', async () => {
+    const { researchRadarApi } = await import('../researchRadar');
+
+    get.mockResolvedValueOnce({
+      data: {
+        schema_version: 'research_queue_v1',
+        research_queue: [
+          {
+            queue_item_id: 'watchlist-MSFT-item-1',
+            source_surface: 'watchlist',
+            symbol: 'MSFT',
+            title: 'Watchlist evidence follow-up',
+            priority_tier: 'urgent_review',
+            why_queued: ['Missing evidence needs review.'],
+            evidence_used: ['Technicals available'],
+            evidence_gaps: ['Price-history evidence'],
+            freshness: { state: 'needs_review', last_reviewed_at: null },
+            suggested_research_path: [
+              {
+                label: 'Stock Structure',
+                route: '/stocks/MSFT/structure-decision',
+                section: 'watchlistResearchOverlay',
+                reason: 'Open symbol structure detail.',
+              },
+            ],
+            observation_only: true,
+          },
+        ],
+        aggregate_summary: {
+          item_count: 1,
+          limit: 4,
+          bounded: true,
+          by_source_surface: { watchlist: 1 },
+          by_priority_tier: { urgent_review: 1, follow_up: 0, monitor: 0 },
+        },
+        source_surfaces_aggregated: ['watchlist'],
+        evidence_gaps: ['Price-history evidence'],
+        data_quality: {
+          state: 'ready',
+          item_count: 1,
+          source_surfaces_available: ['watchlist'],
+          source_surfaces_expected: ['scanner', 'watchlist', 'market', 'manual_gap'],
+          fail_closed: true,
+        },
+        no_advice_disclosure: 'Research-only queue.',
+        observation_only: true,
+        decision_grade: false,
+      },
+    });
+
+    const payload = await researchRadarApi.getResearchQueue({ market: 'us', queueLimit: 4, scannerLimit: 7 });
+
+    expect(get).toHaveBeenCalledWith('/api/v1/research/queue', {
+      params: { market: 'us', scanner_limit: 7, queue_limit: 4 },
+    });
+    expect(payload.schemaVersion).toBe('research_queue_v1');
+    expect(payload.researchQueue[0]?.sourceSurface).toBe('watchlist');
+    expect(payload.researchQueue[0]?.freshness.state).toBe('needs_review');
+    expect(payload.aggregateSummary.bySourceSurface?.watchlist).toBe(1);
+    expect(payload.aggregateSummary.byPriorityTier?.urgent_review).toBe(1);
+    expect(payload.sourceSurfacesAggregated).toEqual(['watchlist']);
+    expect(payload.observationOnly).toBe(true);
+    expect(payload.decisionGrade).toBe(false);
+  });
+
+  it('rejects unified research queue responses with a missing or unexpected schema', async () => {
+    const { researchRadarApi } = await import('../researchRadar');
+
+    get.mockResolvedValueOnce({
+      data: {
+        research_queue: [],
+        aggregate_summary: { item_count: 0, limit: 10, bounded: false },
+        data_quality: { state: 'ready', item_count: 0, fail_closed: true },
+        no_advice_disclosure: 'Research-only queue.',
+        observation_only: true,
+        decision_grade: false,
+      },
+    });
+    await expect(researchRadarApi.getResearchQueue()).rejects.toThrow(/research queue schema/i);
+
+    get.mockResolvedValueOnce({
+      data: {
+        schema_version: 'debug_queue_v0',
+        research_queue: [],
+        aggregate_summary: { item_count: 0, limit: 10, bounded: false },
+        data_quality: { state: 'ready', item_count: 0, fail_closed: true },
+        no_advice_disclosure: 'Research-only queue.',
+        observation_only: true,
+        decision_grade: false,
+      },
+    });
+    await expect(researchRadarApi.getResearchQueue()).rejects.toThrow(/research queue schema/i);
+  });
+
+  it('rejects unified research queue responses that are not fail-closed observation-only payloads', async () => {
+    const { researchRadarApi } = await import('../researchRadar');
+
+    get.mockResolvedValueOnce({
+      data: {
+        schema_version: 'research_queue_v1',
+        research_queue: [],
+        aggregate_summary: { item_count: 0, limit: 10, bounded: false },
+        data_quality: { state: 'ready', item_count: 0, fail_closed: false },
+        no_advice_disclosure: 'Research-only queue.',
+        observation_only: false,
+        decision_grade: true,
+      },
+    });
+
+    await expect(researchRadarApi.getResearchQueue()).rejects.toThrow(/research queue boundary/i);
+  });
 });
