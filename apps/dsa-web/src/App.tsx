@@ -523,6 +523,9 @@ export const AppContent: React.FC = () => {
           <Route path="/admin/evidence" element={<Navigate to="/admin/evidence-workflow" replace />} />
           <Route path="/admin/costs" element={<Navigate to="/admin/cost-observability" replace />} />
           <Route path="/admin/ai" element={<Navigate to="/settings/system" replace />} />
+          <Route path="/admin/system-logs" element={<Navigate to="/admin/logs" replace />} />
+          <Route path="/cockpit" element={<Navigate to="/market/decision-cockpit" replace />} />
+          <Route path="/research-radar" element={<Navigate to="/research/radar" replace />} />
           <Route path="/liquidity" element={<Navigate to="/market/liquidity-monitor" replace />} />
           <Route path="/rotation" element={<Navigate to="/market/rotation-radar" replace />} />
           <Route path="/options" element={<Navigate to="/options-lab" replace />} />
@@ -569,6 +572,9 @@ export const AppContent: React.FC = () => {
           <Route path="admin/evidence" element={<Navigate to="../admin/evidence-workflow" replace />} />
           <Route path="admin/costs" element={<Navigate to="../admin/cost-observability" replace />} />
           <Route path="admin/ai" element={<Navigate to="../settings/system" replace />} />
+          <Route path="admin/system-logs" element={<Navigate to="../admin/logs" replace />} />
+          <Route path="cockpit" element={<Navigate to="../market/decision-cockpit" replace />} />
+          <Route path="research-radar" element={<Navigate to="../research/radar" replace />} />
           <Route path="liquidity" element={<Navigate to="../market/liquidity-monitor" replace />} />
           <Route path="rotation" element={<Navigate to="../market/rotation-radar" replace />} />
           <Route path="options" element={<Navigate to="../options-lab" replace />} />

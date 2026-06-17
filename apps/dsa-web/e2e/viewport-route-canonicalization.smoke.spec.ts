@@ -18,6 +18,11 @@ const productRoutes = [
   { path: '/zh/backtest/compare', canonical: '/zh/backtest/compare', marker: 'rule-backtest-compare-page' },
 ] as const;
 
+const productAliasRoutes = [
+  { path: '/zh/cockpit', canonical: '/zh/market/decision-cockpit', marker: 'market-decision-cockpit-page' },
+  { path: '/zh/research-radar', canonical: '/zh/research/radar', marker: 'research-radar-page' },
+] as const;
+
 async function fulfillJson(route: Route, payload: unknown, status = 200) {
   await route.fulfill({
     status,
@@ -106,6 +111,56 @@ function portfolioRiskPayload() {
       near_count: 0,
       items: [],
     },
+  };
+}
+
+function portfolioStructureReviewPayload() {
+  return {
+    schema_version: 'portfolio_structure_review_v1',
+    aggregate_summary: {
+      as_of: '2026-05-06',
+      account_count: 1,
+      holding_count: 1,
+      evaluated_count: 1,
+      largest_holding: { ticker: 'AAPL', percent: 100 },
+    },
+    exposure_by_theme_or_sector: [
+      {
+        key: 'technology',
+        label: 'Technology',
+        market_value: 600,
+        percent: 100,
+        holding_count: 1,
+      },
+    ],
+    counts_by_structure_state: { mixed: 1 },
+    holdings_structure: [
+      {
+        ticker: 'AAPL',
+        structure_state: 'mixed',
+        confidence: 'medium',
+        evidence_quality: { score: 70, status: 'partial' },
+        risk_flags: [],
+        research_notes: {
+          watch_next: ['Review structure after the next close.'],
+          needs_more_evidence: [],
+          risk_flags: [],
+        },
+        missing_evidence: [],
+      },
+    ],
+    strongest_structures: [],
+    weakest_evidence: [],
+    common_risk_flags: [],
+    missing_evidence: [],
+    data_quality: {
+      status: 'partial',
+      holding_metadata_status: 'available',
+      structure_evidence_status: 'partial',
+      read_only: true,
+      fail_closed: false,
+    },
+    no_advice_disclosure: 'Research context only.',
   };
 }
 
@@ -326,6 +381,146 @@ function optionsDecisionPayload(symbol: string) {
   };
 }
 
+function marketDecisionCockpitPayload() {
+  return {
+    schema_version: 'market_decision_cockpit.v1',
+    generated_at: '2026-06-15T09:30:00Z',
+    market_regime_decision: {
+      regime: 'risk_on',
+      confidence: 'medium',
+      driver_scores: {
+        breadth_participation: {
+          score: 62,
+          evidence_state: 'partial',
+          reasons: ['Breadth requires continued confirmation.'],
+        },
+      },
+      explanation: {
+        why_this_regime: ['Breadth participation is improving.'],
+        what_confirms_it: ['Cross-asset pressure remains contained.'],
+      },
+      invalidation_conditions: ['Breadth weakens quickly.'],
+      research_priorities: {
+        watch_today: ['Breadth participation'],
+        needs_more_evidence: ['Options chain coverage'],
+        investigate_next: ['Research queue'],
+      },
+    },
+    research_queue_preview: {
+      top_candidates: [
+        {
+          ticker: 'ALFA',
+          priority: 'high',
+          research_bias: 'strength_continuation',
+          why_on_radar: ['Relative strength is improving.'],
+        },
+      ],
+      queue_quality: 'mixed',
+      evidence_gaps: [],
+      preview_only: true,
+    },
+    options_structure_status: {
+      gamma_evidence_status: 'unavailable',
+      observation_only: true,
+      decision_grade: false,
+      missing_evidence: [],
+      blocked_reason_codes: [],
+    },
+    cockpit_summary: {
+      what_changed: ['Breadth improved.'],
+      what_to_watch: ['Follow-through confirmation.'],
+      confidence_limits: ['Options evidence unavailable.'],
+    },
+    no_advice_disclosure: 'Research context only.',
+    data_quality: { status: 'partial' },
+  };
+}
+
+function dailyIntelligencePayload() {
+  return {
+    schema_version: 'daily_intelligence_briefing_v1',
+    generated_at: '2026-06-15T09:30:00Z',
+    briefing_date: '2026-06-15',
+    session_label: 'pre_market',
+    market_regime_summary: {
+      regime: 'risk_on',
+      confidence: 'medium',
+      summary: 'Breadth and liquidity remain supportive for observation.',
+      supporting_observations: ['Breadth remains stable.'],
+      invalidation_observations: ['Breadth contraction would weaken the frame.'],
+    },
+    what_changed: ['Research queue leans toward relative strength follow-through.'],
+    section_links: [
+      {
+        label: 'Research Radar',
+        route: '/research/radar',
+        section: 'topResearchPriorities',
+        reason: 'research_queue_origin',
+      },
+      {
+        label: 'Scanner',
+        route: '/scanner',
+        section: 'scannerHighlights',
+        reason: 'scanner_candidates_origin',
+      },
+    ],
+    top_research_priorities: [
+      {
+        label: 'ALFA research queue',
+        source: 'research_radar',
+        priority: 'high',
+        ticker: 'ALFA',
+        observations: ['Relative strength is improving.'],
+        what_to_verify: ['Confirm follow-through.'],
+        evidence_gaps: [],
+        evidence_links: [
+          {
+            label: 'Research Radar',
+            route: '/research/radar',
+            section: 'topResearchPriorities',
+            reason: 'research_queue_origin',
+          },
+        ],
+      },
+    ],
+    scanner_highlights: [],
+    watchlist_highlights: [],
+    portfolio_structure_highlights: [],
+    scenario_risks: [],
+    evidence_gaps: [],
+    degraded_inputs: [],
+    observation_only: true,
+    decision_grade: false,
+  };
+}
+
+function researchRadarPayload() {
+  return {
+    schema_version: 'research_radar_api_v1',
+    generated_at: '2026-06-15T09:30:00Z',
+    research_queue: [
+      {
+        ticker: 'ALFA',
+        priority: 'medium',
+        research_bias: 'strength_continuation',
+        driver_scores: { relative_strength: 70 },
+        why_on_radar: ['Relative strength is improving.'],
+        what_to_verify: ['Confirm follow-through.'],
+        invalidation_observations: ['Strength fades.'],
+        risk_flags: [],
+      },
+    ],
+    aggregate_summary: {
+      queue_quality: 'mixed',
+      priority_counts: { medium: 1 },
+    },
+    evidence_gaps: [],
+    market_context_fit: 'neutral',
+    no_advice_disclosure: 'Research queue only.',
+    data_quality: { status: 'partial' },
+  };
+}
+
 function symbolFromOptionsRequest(route: Route) {
   const path = new URL(route.request().url()).pathname;
   return decodeURIComponent(path.split('/')[5] || 'TEM').toUpperCase();
@@ -337,11 +532,18 @@ async function installProductRouteApiMocks(page: Page) {
   await page.route('**/api/v1/portfolio/broker-connections**', (route) => fulfillJson(route, { connections: [] }));
   await page.route('**/api/v1/portfolio/trades**', (route) => fulfillJson(route, emptyPortfolioListPayload()));
   await page.route('**/api/v1/portfolio/risk**', (route) => fulfillJson(route, portfolioRiskPayload()));
+  await page.route('**/api/v1/portfolio/structure-review**', (route) => fulfillJson(route, portfolioStructureReviewPayload()));
   await page.route('**/api/v1/options/underlyings/*/summary', (route) => fulfillJson(route, optionsSummaryPayload(symbolFromOptionsRequest(route))));
   await page.route('**/api/v1/options/underlyings/*/expirations', (route) => fulfillJson(route, optionsExpirationsPayload(symbolFromOptionsRequest(route))));
   await page.route('**/api/v1/options/underlyings/*/chain**', (route) => fulfillJson(route, optionsChainPayload(symbolFromOptionsRequest(route))));
   await page.route('**/api/v1/options/strategies/compare', (route) => fulfillJson(route, optionsStrategyComparisonPayload('TEM')));
   await page.route('**/api/v1/options/decision/evaluate', (route) => fulfillJson(route, optionsDecisionPayload('TEM')));
+}
+
+async function installResearchIaMocks(page: Page) {
+  await page.route('**/api/v1/market/decision-cockpit**', (route) => fulfillJson(route, marketDecisionCockpitPayload()));
+  await page.route('**/api/v1/market/daily-intelligence**', (route) => fulfillJson(route, dailyIntelligencePayload()));
+  await page.route('**/api/v1/research/radar**', (route) => fulfillJson(route, researchRadarPayload()));
 }
 
 async function installLiquidityMonitorMock(page: Page) {
@@ -486,6 +688,125 @@ function marketProviderOperationsPayload() {
   };
 }
 
+function adminLogHealthSummary() {
+  return {
+    total_events: 1,
+    failed_events: 0,
+    warning_events: 0,
+    slow_events: 0,
+    failure_rate: 0,
+    status: 'ok',
+    failures_by_category: [],
+    failures_by_provider: [],
+    failures_by_reason: [],
+    top_recent_errors: [],
+    actor_breakdown: [{ key: 'admin', label: 'admin', count: 1 }],
+    latest_critical_error: null,
+  };
+}
+
+function adminLogBusinessEventsPayload() {
+  return {
+    total: 1,
+    limit: 20,
+    offset: 0,
+    has_more: false,
+    health_summary: adminLogHealthSummary(),
+    items: [
+      {
+        id: 'route-canonicalization-admin-log',
+        event: 'RouteCanonicalization',
+        category: 'ops',
+        type: 'admin_route_alias_smoke',
+        event_type: 'admin_route_alias_smoke',
+        status: 'success',
+        summary: 'Admin system logs alias smoke fixture',
+        actor_type: 'admin',
+        actor_label: 'playwright-admin',
+        context_label: 'admin-system-logs-alias',
+        provider: null,
+        source: 'playwright',
+        reason: null,
+        error_summary: null,
+        request_id: 'req-admin-system-logs-alias',
+        trace_id: 'trace-admin-system-logs-alias',
+        root_cause_summary: null,
+        step_trace_available: false,
+        started_at: '2026-06-05T00:00:00Z',
+        duration_ms: 12,
+        step_count: 1,
+        success_step_count: 1,
+        failed_step_count: 0,
+        skipped_step_count: 0,
+        unknown_step_count: 0,
+      },
+    ],
+  };
+}
+
+function adminLogStoragePayload() {
+  return {
+    total_log_count: 1,
+    total_event_count: 1,
+    oldest_log_timestamp: '2026-06-05T00:00:00Z',
+    newest_log_timestamp: '2026-06-05T00:00:00Z',
+    retention_days: 90,
+    minimum_retention_days: 7,
+    retention_cutoff: '2026-03-07T00:00:00Z',
+    logs_older_than_retention_count: 0,
+    storage_size_bytes: 512,
+    storage_size_label: '512 B',
+    storage_size_available: true,
+    measurement_scope: 'playwright_fixture',
+    measurement_status: 'available',
+    storage_soft_limit_bytes: 536870912,
+    storage_hard_limit_bytes: 1073741824,
+    capacity_cleanup_recommended: false,
+    auto_cleanup_enabled: false,
+    auto_cleanup_performed: false,
+    warning_threshold_count: 50000,
+    critical_threshold_count: 100000,
+    status: 'ok',
+    status_reasons: [],
+    recommended_cleanup_action: 'No cleanup needed.',
+  };
+}
+
+function adminLogSessionsPayload() {
+  return {
+    total: 1,
+    summary: {
+      error_count: 0,
+      warning_count: 0,
+      data_source_failure_count: 0,
+      slow_request_count: 0,
+      health_summary: adminLogHealthSummary(),
+    },
+    items: [
+      {
+        session_id: 'route-canonicalization-session',
+        code: 'ADMIN',
+        name: 'Admin system logs alias session',
+        overall_status: 'success',
+        truth_level: 'recorded',
+        started_at: '2026-06-05T00:00:00Z',
+        ended_at: '2026-06-05T00:00:00Z',
+        readable_summary: {
+          actor_display: 'playwright-admin',
+          actor_role: 'admin',
+          subsystem: 'ops',
+          operation_category: 'route_alias_smoke',
+          operation_type: 'system logs alias',
+          operation_target: 'admin logs',
+          operation_status: 'success',
+          top_failure_reason: null,
+          summary_paragraph: 'Admin system logs alias fixture.',
+        },
+      },
+    ],
+  };
+}
+
 function providerOperationsMatrixPayload() {
   return {
     generated_at: '2026-06-05T00:00:00Z',
@@ -578,15 +899,39 @@ async function installProviderOpsMocks(page: Page) {
   await page.route('**/api/v1/admin/market-providers/operations**', (route) => fulfillJson(route, marketProviderOperationsPayload()));
 }
 
+async function installAdminLogsMocks(page: Page) {
+  await page.route('**/api/v1/admin/logs**', async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (request.method() === 'POST') {
+      return fulfillJson(route, {
+        mode: 'retention',
+        dry_run: true,
+        matched_log_count: 0,
+        matched_event_count: 0,
+        deleted_log_count: 0,
+        deleted_event_count: 0,
+        additional_cleanup_needed: false,
+      });
+    }
+    if (path === '/api/v1/admin/logs/storage/summary') {
+      return fulfillJson(route, adminLogStoragePayload());
+    }
+    if (path === '/api/v1/admin/logs/sessions') {
+      return fulfillJson(route, adminLogSessionsPayload());
+    }
+    return fulfillJson(route, adminLogBusinessEventsPayload());
+  });
+}
+
 function expectCanonicalPath(page: Page, canonicalPath: string) {
   return appExpect.poll(() => new URL(page.url()).pathname).toBe(canonicalPath);
 }
 
 appTest.describe('viewport route canonicalization smoke', () => {
   for (const viewport of viewports) {
-    appTest(`keeps product canonical routes stable at ${viewport.size.width}px`, async ({ page }) => {
-      for (const routeCheck of productRoutes) {
-        await page.unrouteAll({ behavior: 'ignoreErrors' });
+    for (const routeCheck of productRoutes) {
+      appTest(`${routeCheck.path} stays canonical at ${viewport.size.width}px`, async ({ page }) => {
         await page.setViewportSize(viewport.size);
         await installSignedInProductSession(page);
         await installProductRouteApiMocks(page);
@@ -597,8 +942,28 @@ appTest.describe('viewport route canonicalization smoke', () => {
 
         await expectCanonicalPath(page, routeCheck.canonical);
         await appExpect(page.getByTestId(routeCheck.marker)).toBeVisible({ timeout: 15_000 });
-      }
-    });
+      });
+    }
+  }
+});
+
+appTest.describe('viewport route legacy alias canonicalization smoke', () => {
+  for (const viewport of viewports) {
+    for (const routeCheck of productAliasRoutes) {
+      appTest(`${routeCheck.path} redirects to ${routeCheck.canonical} at ${viewport.size.width}px`, async ({ page }) => {
+        await page.setViewportSize(viewport.size);
+        await installSignedInProductSession(page);
+        await installProductRouteApiMocks(page);
+        await installResearchIaMocks(page);
+
+        await page.goto(routeCheck.path);
+        await page.waitForLoadState('domcontentloaded');
+
+        await expectCanonicalPath(page, routeCheck.canonical);
+        await appExpect(page.getByTestId(routeCheck.marker)).toBeVisible({ timeout: 15_000 });
+        await appExpect(page.getByTestId('scenario-lab-page')).toHaveCount(0);
+      });
+    }
   }
 });
 
@@ -614,6 +979,18 @@ adminTest.describe('viewport route alias canonicalization smoke', () => {
 
       await adminExpect.poll(() => new URL(page.url()).pathname).toBe('/zh/admin/market-providers');
       await adminExpect(page.getByTestId('market-provider-operations-page')).toBeVisible({ timeout: 15_000 });
+    });
+
+    adminTest(`redirects admin system logs alias to logs workspace at ${viewport.size.width}px`, async ({ page }) => {
+      await page.setViewportSize(viewport.size);
+      await installAdminAuthHarness(page);
+      await installAdminLogsMocks(page);
+
+      await page.goto('/zh/admin/system-logs');
+      await page.waitForLoadState('domcontentloaded');
+
+      await adminExpect.poll(() => new URL(page.url()).pathname).toBe('/zh/admin/logs');
+      await adminExpect(page.getByTestId('admin-logs-workspace')).toBeVisible({ timeout: 15_000 });
     });
   }
 });
