@@ -1008,7 +1008,7 @@ function buildMarketOverviewEvidenceSnapshotMarkdown(params: {
   language: 'zh' | 'en';
   temperature: MarketTemperatureResponse;
   briefing: MarketBriefingResponse;
-  regimeSynthesis: MarketRegimeSynthesisHeaderView;
+  regimeSynthesis?: MarketRegimeSynthesisHeaderView;
   directionalSummary: MarketDirectionalSummary;
   decisionSemantics?: MarketOverviewDecisionSemanticsView;
   dataState: MarketOverviewDataStateStripView;
@@ -1042,15 +1042,15 @@ function buildMarketOverviewEvidenceSnapshotMarkdown(params: {
     meta: item.message,
   }));
   const synthesisEvidence = [
-    ...regimeSynthesis.topDrivers,
-    ...regimeSynthesis.counterEvidence,
+    ...(regimeSynthesis?.topDrivers || []),
+    ...(regimeSynthesis?.counterEvidence || []),
   ].slice(0, 3).map((item) => ({
     label: item.label,
     meta: item.meta,
   }));
   const missingPillars = decisionSemantics?.directionReadiness?.missingPillars.map((pillar) => pillar.reasonCode || pillar.label) ?? [];
   const dataGaps = [
-    ...regimeSynthesis.dataGaps.map((item) => item.meta || item.label),
+    ...(regimeSynthesis?.dataGaps || []).map((item) => item.meta || item.label),
     ...(decisionSemantics?.dataGaps.map((item) => item.meta || item.label) ?? []),
     ...missingPillars,
     dataState.hasUnavailable ? 'Some evidence is still unavailable.' : '',
@@ -1074,9 +1074,11 @@ function buildMarketOverviewEvidenceSnapshotMarkdown(params: {
     locale: 'en',
     generatedAt: new Date(),
     regimeObservation: {
-      title: regimeSynthesis.title || directionalSummary.currentLabel,
-      summary: regimeSynthesis.summary || directionalSummary.currentLabel,
-      confidenceLabel: `${regimeSynthesis.confidenceLabel}${regimeSynthesis.confidenceValueText ? ` · ${regimeSynthesis.confidenceValueText}` : ''}`,
+      title: regimeSynthesis?.title || directionalSummary.currentLabel,
+      summary: regimeSynthesis?.summary || directionalSummary.currentLabel,
+      confidenceLabel: regimeSynthesis
+        ? `${regimeSynthesis.confidenceLabel}${regimeSynthesis.confidenceValueText ? ` · ${regimeSynthesis.confidenceValueText}` : ''}`
+        : directionalSummary.confidenceLabel,
     },
     evidenceUsed: [
       {
@@ -1271,6 +1273,97 @@ function regimeLabel(regime?: string | null, language: 'zh' | 'en' = 'zh'): stri
   return labels[regime as keyof typeof labels] || (language === 'en' ? 'Market state pending' : '市场状态待确认');
 }
 
+function regimePostureLabel(posture?: string | null, language: 'zh' | 'en' = 'zh'): string {
+  const labels = language === 'en'
+    ? {
+      risk_supportive: 'Risk-supportive watch',
+      risk_defensive: 'Risk-defensive watch',
+      mixed_or_transition: 'Transition watch',
+      data_insufficient: 'Evidence insufficient',
+    }
+    : {
+      risk_supportive: '风险支持观察',
+      risk_defensive: '风险防御观察',
+      mixed_or_transition: '过渡观察',
+      data_insufficient: '证据不足',
+    };
+  if (!posture) {
+    return language === 'en' ? 'Transition watch' : '过渡观察';
+  }
+  return labels[posture as keyof typeof labels] || (language === 'en' ? 'Transition watch' : '过渡观察');
+}
+
+function regimeResearchFreshnessLabel(freshness?: string | null, language: 'zh' | 'en' = 'zh'): string {
+  const normalized = String(freshness || '').trim().toLowerCase();
+  if (!normalized) {
+    return language === 'en' ? 'Delayed available' : '延迟可用';
+  }
+  if (normalized === 'live' || normalized === 'fresh') {
+    return language === 'en' ? 'Available' : '可用';
+  }
+  if (normalized === 'cached' || normalized === 'delayed' || normalized === 'partial') {
+    return language === 'en' ? 'Delayed available' : '延迟可用';
+  }
+  if (normalized === 'stale') {
+    return language === 'en' ? 'Stale' : '过期';
+  }
+  if (normalized === 'fallback' || normalized === 'mock' || normalized === 'synthetic' || normalized === 'unavailable' || normalized === 'error') {
+    return language === 'en' ? 'Unavailable' : '暂不可用';
+  }
+  return language === 'en' ? 'Delayed available' : '延迟可用';
+}
+
+function regimeResearchFamilyStateLabel(state?: string | null, language: 'zh' | 'en' = 'zh'): string {
+  const normalized = String(state || '').trim().toLowerCase();
+  const labels = language === 'en'
+    ? {
+      supported: 'Supported',
+      missing: 'Missing',
+      discounted: 'Discounted',
+    }
+    : {
+      supported: '已支持',
+      missing: '待补',
+      discounted: '已折价',
+    };
+  if (!normalized) {
+    return language === 'en' ? 'Missing' : '待补';
+  }
+  return labels[normalized as keyof typeof labels] || (language === 'en' ? 'Missing' : '待补');
+}
+
+function regimeResearchFamilyStateVariant(state?: string | null): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
+  const normalized = String(state || '').trim().toLowerCase();
+  if (normalized === 'supported') {
+    return 'success';
+  }
+  if (normalized === 'discounted') {
+    return 'info';
+  }
+  return 'caution';
+}
+
+function regimeResearchNextStepLabel(key?: string | null, language: 'zh' | 'en' = 'zh'): string {
+  const normalized = String(key || '').trim().toLowerCase();
+  const labels = language === 'en'
+    ? {
+      fill_missing_evidence: 'Re-check missing evidence',
+      review_contradictions: 'Review contradictions',
+      respect_confidence_cap: 'Respect confidence cap',
+      monitor_persistence: 'Monitor persistence',
+    }
+    : {
+      fill_missing_evidence: '补齐缺失证据',
+      review_contradictions: '复核反证',
+      respect_confidence_cap: '保持置信上限',
+      monitor_persistence: '继续观察',
+    };
+  if (!normalized) {
+    return language === 'en' ? 'Continue observing' : '继续观察';
+  }
+  return labels[normalized as keyof typeof labels] || (language === 'en' ? 'Continue observing' : '继续观察');
+}
+
 function regimePillarLabel(pillar?: string | null, language: 'zh' | 'en' = 'zh'): string {
   const labels = language === 'en'
     ? {
@@ -1397,26 +1490,13 @@ function buildMarketRegimeSynthesisView(
   synthesis: MarketRegimeSynthesis | undefined,
   decisionReliable: boolean,
   language: 'zh' | 'en',
-): MarketRegimeSynthesisHeaderView {
+): MarketRegimeSynthesisHeaderView | undefined {
   if (!synthesis) {
-    return {
-      state: 'missing',
-      title: language === 'en' ? 'No synthesis conclusion returned' : '综合结论待返回',
-      summary: language === 'en'
-        ? 'The market temperature payload did not return a synthesis conclusion, so no market-state call is fabricated here.'
-        : '当前温度载荷未返回综合结论字段，不展示推断性市场结论。',
-      stateChipLabel: language === 'en' ? 'UNAVAILABLE' : '暂不可用',
-      stateChipVariant: 'neutral',
-      confidenceLabel: language === 'en' ? 'UNAVAILABLE' : '未返回',
-      confidenceValueText: '',
-      topDrivers: [],
-      counterEvidence: [],
-      dataGaps: [],
-      notInvestmentAdvice: false,
-    };
+    return undefined;
   }
 
   const confidenceValueText = formatPercent(synthesis.confidence);
+  const confidenceCapValueText = formatPercent(synthesis.confidenceCap?.value);
   const lowConfidence = (
     synthesis.primaryRegime === 'data_insufficient'
     || synthesis.confidenceLabel === 'insufficient'
@@ -1426,7 +1506,7 @@ function buildMarketRegimeSynthesisView(
   const evidenceQuality = synthesis.evidenceQuality || {};
   const scoringEvidenceCount = typeof evidenceQuality.scoringEvidenceCount === 'number'
     ? evidenceQuality.scoringEvidenceCount
-    : synthesis.topDrivers.length;
+    : (Array.isArray(synthesis.topDrivers) ? synthesis.topDrivers.length : 0);
   const scoringPillarCount = typeof evidenceQuality.scoringPillarCount === 'number'
     ? evidenceQuality.scoringPillarCount
     : undefined;
@@ -1435,7 +1515,15 @@ function buildMarketRegimeSynthesisView(
     : undefined;
   const dataGapCount = typeof evidenceQuality.dataGapCount === 'number'
     ? evidenceQuality.dataGapCount
-    : synthesis.dataGaps.length;
+    : (Array.isArray(synthesis.dataGaps) ? synthesis.dataGaps.length : 0);
+  const topDrivers = Array.isArray(synthesis.topDrivers) ? synthesis.topDrivers : [];
+  const counterEvidence = Array.isArray(synthesis.counterEvidence) ? synthesis.counterEvidence : [];
+  const dataGaps = Array.isArray(synthesis.dataGaps) ? synthesis.dataGaps : [];
+  const evidenceFamilies = Array.isArray(synthesis.evidenceFamilies) ? synthesis.evidenceFamilies : [];
+  const supportiveEvidence = Array.isArray(synthesis.supportiveEvidence) ? synthesis.supportiveEvidence : [];
+  const contradictoryEvidence = Array.isArray(synthesis.contradictoryEvidence) ? synthesis.contradictoryEvidence : [];
+  const missingEvidence = Array.isArray(synthesis.missingEvidence) ? synthesis.missingEvidence : [];
+  const researchNextSteps = Array.isArray(synthesis.researchNextSteps) ? synthesis.researchNextSteps : [];
 
   return {
     state: lowConfidence ? 'insufficient' : 'ready',
@@ -1447,8 +1535,8 @@ function buildMarketRegimeSynthesisView(
         ? 'Coverage or confidence is below threshold. Show explicit evidence, counter signals, and gaps without promoting a strong market-state call.'
         : '当前覆盖或置信度不足，只展示可验证驱动、反证和数据缺口，不升级为强结论。')
       : (language === 'en'
-        ? `Top drivers ${Math.min(synthesis.topDrivers.length, 3)} · counter evidence ${Math.min(synthesis.counterEvidence.length, 3)} · data gaps ${Math.min(dataGapCount, 3)}`
-        : `主要驱动 ${Math.min(synthesis.topDrivers.length, 3)} 项 · 反证 ${Math.min(synthesis.counterEvidence.length, 3)} 项 · 数据缺口 ${Math.min(dataGapCount, 3)} 项`),
+        ? `Top drivers ${Math.min(topDrivers.length, 3)} · counter evidence ${Math.min(counterEvidence.length, 3)} · data gaps ${Math.min(dataGapCount, 3)}`
+        : `主要驱动 ${Math.min(topDrivers.length, 3)} 项 · 反证 ${Math.min(counterEvidence.length, 3)} 项 · 数据缺口 ${Math.min(dataGapCount, 3)} 项`),
     stateChipLabel: lowConfidence
       ? (synthesis.primaryRegime === 'data_insufficient'
         ? (language === 'en' ? 'INSUFFICIENT' : '证据不足')
@@ -1466,9 +1554,34 @@ function buildMarketRegimeSynthesisView(
       scoringPillarCount != null ? `${language === 'en' ? 'Pillars' : '支柱'} ${scoringPillarCount}/9` : '',
       discountedEvidenceCount != null ? `${language === 'en' ? 'Discounted' : '折价'} ${discountedEvidenceCount}` : '',
     ].filter(Boolean).join(' · '),
-    topDrivers: buildRegimeEvidenceView(synthesis.topDrivers, 'driver', 3, language),
-    counterEvidence: buildRegimeEvidenceView(synthesis.counterEvidence, 'counter', 3, language),
-    dataGaps: buildRegimeEvidenceView(synthesis.dataGaps, 'gap', 3, language),
+    topDrivers: buildRegimeEvidenceView(topDrivers, 'driver', 3, language),
+    counterEvidence: buildRegimeEvidenceView(counterEvidence, 'counter', 3, language),
+    dataGaps: buildRegimeEvidenceView(dataGaps, 'gap', 3, language),
+    postureLabel: regimePostureLabel(synthesis.regimePosture, language),
+    freshnessLabel: regimeResearchFreshnessLabel(synthesis.freshness, language),
+    confidenceCapLabel: regimeConfidenceLabel(synthesis.confidenceCap?.label, synthesis.confidenceCap?.value),
+    confidenceCapValueText,
+    evidenceFamilies: evidenceFamilies.slice(0, 5).map((family) => ({
+      key: family.key,
+      label: marketOverviewConsumerSemanticsText(family.label, language === 'en' ? 'Evidence family' : '证据家族'),
+      stateLabel: regimeResearchFamilyStateLabel(family.state, language),
+      stateVariant: regimeResearchFamilyStateVariant(family.state),
+      summary: [
+        `${language === 'en' ? 'Evidence' : '证据'} ${family.evidenceCount}`,
+        family.supportiveCount ? `${language === 'en' ? 'Support' : '支持'} ${family.supportiveCount}` : '',
+        family.contradictoryCount ? `${language === 'en' ? 'Counter' : '反证'} ${family.contradictoryCount}` : '',
+        family.missingCount ? `${language === 'en' ? 'Missing' : '待补'} ${family.missingCount}` : '',
+      ].filter(Boolean).join(' · '),
+      freshnessLabel: regimeResearchFreshnessLabel(family.freshness, language),
+    })),
+    supportiveEvidence: buildRegimeEvidenceView(supportiveEvidence, 'driver', 3, language),
+    contradictoryEvidence: buildRegimeEvidenceView(contradictoryEvidence, 'counter', 3, language),
+    missingEvidence: buildRegimeEvidenceView(missingEvidence, 'gap', 3, language),
+    researchNextSteps: researchNextSteps.slice(0, 3).map((step) => ({
+      key: step.key,
+      label: regimeResearchNextStepLabel(step.key, language),
+      meta: marketOverviewConsumerSemanticsText(step.detail, language === 'en' ? 'Continue evidence review.' : '继续复核证据。'),
+    })),
     notInvestmentAdvice: Boolean(synthesis.notInvestmentAdvice),
   };
 }

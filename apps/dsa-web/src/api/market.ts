@@ -517,6 +517,7 @@ export type MarketTemperatureScore = {
 export type MarketRegimeSynthesisEvidenceItem = {
   key: string;
   label: string;
+  family?: string | null;
   pillar?: string | null;
   direction?: string | null;
   signal?: number | null;
@@ -534,10 +535,57 @@ export type MarketRegimeSynthesisEvidenceItem = {
   degradationReason?: string | null;
 };
 
+export type MarketRegimeSynthesisEvidenceFamily = {
+  key: string;
+  label: string;
+  state?: string | null;
+  pillars: string[];
+  evidenceCount: number;
+  supportiveCount: number;
+  contradictoryCount: number;
+  missingCount: number;
+  freshness?: string | null;
+  observationOnly?: boolean;
+};
+
+export type MarketRegimeSynthesisConfidenceCap = {
+  value?: number | null;
+  label?: string | null;
+  reasons: string[];
+};
+
+export type MarketRegimeSynthesisObservationBoundary = {
+  observationOnly?: boolean;
+  decisionGrade?: boolean;
+  sourceAuthorityAllowed?: boolean;
+  scoreContributionAllowed?: boolean;
+  consumerActionBoundary?: string | null;
+  notInvestmentAdvice?: boolean;
+  detail?: string | null;
+};
+
+export type MarketRegimeSynthesisResearchStep = {
+  key: string;
+  label: string;
+  detail?: string | null;
+};
+
 export type MarketRegimeSynthesis = {
+  contractVersion?: string | null;
   primaryRegime: string;
   secondaryRegimes: string[];
   regimeScores: Record<string, number>;
+  regimeLabel?: string | null;
+  regimePosture?: string | null;
+  evidenceFamilies: MarketRegimeSynthesisEvidenceFamily[];
+  supportiveEvidence: MarketRegimeSynthesisEvidenceItem[];
+  contradictoryEvidence: MarketRegimeSynthesisEvidenceItem[];
+  missingEvidence: MarketRegimeSynthesisEvidenceItem[];
+  confidenceCap?: MarketRegimeSynthesisConfidenceCap;
+  observationBoundary?: MarketRegimeSynthesisObservationBoundary;
+  researchNextSteps: MarketRegimeSynthesisResearchStep[];
+  generatedAt?: string | null;
+  freshness?: string | null;
   liquidityImpulse?: number | null;
   riskAppetite?: number | null;
   ratesPressure?: number | null;
@@ -782,7 +830,45 @@ function normalizeMarketTemperatureScore(score?: Partial<MarketTemperatureScore>
 function normalizeMarketRegimeEvidenceItem(
   item?: Partial<MarketRegimeSynthesisEvidenceItem> | null,
 ): MarketRegimeSynthesisEvidenceItem | null {
-  return normalizeMarketIntelligenceEvidenceItem<MarketRegimeSynthesisEvidenceItem>(item, { requireLabel: true });
+  return normalizeMarketIntelligenceEvidenceItem<MarketRegimeSynthesisEvidenceItem>(item, {
+    requireLabel: true,
+    additionalFields: (value) => ({
+      family: value.family,
+    }),
+  });
+}
+
+function normalizeMarketRegimeEvidenceFamily(
+  family?: Partial<MarketRegimeSynthesisEvidenceFamily> | null,
+): MarketRegimeSynthesisEvidenceFamily | null {
+  if (!family?.key || !family.label) {
+    return null;
+  }
+  return {
+    key: family.key,
+    label: family.label,
+    state: family.state,
+    pillars: Array.isArray(family.pillars) ? family.pillars.filter(Boolean) : [],
+    evidenceCount: typeof family.evidenceCount === 'number' ? family.evidenceCount : 0,
+    supportiveCount: typeof family.supportiveCount === 'number' ? family.supportiveCount : 0,
+    contradictoryCount: typeof family.contradictoryCount === 'number' ? family.contradictoryCount : 0,
+    missingCount: typeof family.missingCount === 'number' ? family.missingCount : 0,
+    freshness: family.freshness,
+    observationOnly: family.observationOnly,
+  };
+}
+
+function normalizeMarketRegimeResearchStep(
+  step?: Partial<MarketRegimeSynthesisResearchStep> | null,
+): MarketRegimeSynthesisResearchStep | null {
+  if (!step?.key || !step.label) {
+    return null;
+  }
+  return {
+    key: step.key,
+    label: step.label,
+    detail: step.detail,
+  };
 }
 
 function normalizeMarketRegimeSynthesis(
@@ -803,9 +889,35 @@ function normalizeMarketRegimeSynthesis(
   );
 
   return {
+    contractVersion: synthesis.contractVersion,
     primaryRegime: synthesis.primaryRegime,
     secondaryRegimes: Array.isArray(synthesis.secondaryRegimes) ? synthesis.secondaryRegimes.filter(Boolean) : [],
     regimeScores: synthesis.regimeScores || {},
+    regimeLabel: synthesis.regimeLabel,
+    regimePosture: synthesis.regimePosture,
+    evidenceFamilies: Array.isArray(synthesis.evidenceFamilies)
+      ? synthesis.evidenceFamilies
+        .map((family) => normalizeMarketRegimeEvidenceFamily(family))
+        .filter((family): family is MarketRegimeSynthesisEvidenceFamily => Boolean(family))
+      : [],
+    supportiveEvidence: normalizeEvidenceList(synthesis.supportiveEvidence),
+    contradictoryEvidence: normalizeEvidenceList(synthesis.contradictoryEvidence),
+    missingEvidence: normalizeEvidenceList(synthesis.missingEvidence),
+    confidenceCap: synthesis.confidenceCap
+      ? {
+        value: synthesis.confidenceCap.value,
+        label: synthesis.confidenceCap.label,
+        reasons: Array.isArray(synthesis.confidenceCap.reasons) ? synthesis.confidenceCap.reasons.filter(Boolean) : [],
+      }
+      : undefined,
+    observationBoundary: synthesis.observationBoundary ? { ...synthesis.observationBoundary } : undefined,
+    researchNextSteps: Array.isArray(synthesis.researchNextSteps)
+      ? synthesis.researchNextSteps
+        .map((step) => normalizeMarketRegimeResearchStep(step))
+        .filter((step): step is MarketRegimeSynthesisResearchStep => Boolean(step))
+      : [],
+    generatedAt: synthesis.generatedAt,
+    freshness: synthesis.freshness,
     liquidityImpulse: synthesis.liquidityImpulse,
     riskAppetite: synthesis.riskAppetite,
     ratesPressure: synthesis.ratesPressure,

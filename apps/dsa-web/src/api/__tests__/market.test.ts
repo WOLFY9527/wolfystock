@@ -227,6 +227,130 @@ describe('market temperature evidence normalization', () => {
     });
   });
 
+  it('preserves additive market regime synthesis research fields for the UI projection', () => {
+    const payload = marketModule.normalizeMarketTemperatureResponse({
+      source: 'computed',
+      updatedAt: '2026-06-16T10:00:00+08:00',
+      marketRegimeSynthesis: {
+        contractVersion: 'market_regime_synthesis_research_v1',
+        primaryRegime: 'risk_on_liquidity_expansion',
+        secondaryRegimes: ['goldilocks_soft_landing'],
+        regimeScores: { risk_on_liquidity_expansion: 0.72 },
+        regimeLabel: 'Risk-supportive liquidity expansion',
+        regimePosture: 'risk_supportive',
+        evidenceFamilies: [
+          {
+            key: 'marketOverview',
+            label: 'Market overview',
+            state: 'supported',
+            pillars: ['risk_appetite'],
+            evidenceCount: 2,
+            supportiveCount: 1,
+            contradictoryCount: 1,
+            missingCount: 0,
+            freshness: 'cached',
+            observationOnly: true,
+          },
+        ],
+        supportiveEvidence: [
+          {
+            key: 'indices:SPX',
+            label: 'SPX',
+            family: 'marketOverview',
+            pillar: 'risk_appetite',
+            direction: 'positive',
+            freshness: 'cached',
+            observationOnly: true,
+          },
+        ],
+        contradictoryEvidence: [
+          {
+            key: 'rates:US10Y',
+            label: 'US10Y',
+            family: 'marketOverview',
+            pillar: 'rates_pressure',
+            reason: 'contradictory_evidence',
+            observationOnly: true,
+          },
+        ],
+        missingEvidence: [
+          {
+            key: 'breadth:CN',
+            label: 'A股宽度',
+            family: 'breadth',
+            pillar: 'breadth_health',
+            reason: 'missing_evidence',
+            observationOnly: true,
+          },
+        ],
+        confidenceCap: {
+          value: 0.58,
+          label: 'medium',
+          reasons: ['contradictory_evidence'],
+        },
+        observationBoundary: {
+          observationOnly: true,
+          decisionGrade: false,
+          sourceAuthorityAllowed: false,
+          scoreContributionAllowed: false,
+          consumerActionBoundary: 'no_advice',
+          notInvestmentAdvice: true,
+          detail: 'Research synthesis only; evidence is not promoted into execution or personalized direction.',
+        },
+        researchNextSteps: [
+          {
+            key: 'review_contradictions',
+            label: 'Review contradictory evidence',
+            detail: 'Compare the conflicting families before treating one regime as dominant.',
+          },
+        ],
+        generatedAt: '2026-06-16T02:00:00Z',
+        freshness: 'cached',
+        topDrivers: [],
+        counterEvidence: [],
+        dataGaps: [],
+        narrativeBullets: [],
+      },
+      scores: {
+        overall: { value: 55, label: 'neutral', trend: 'stable', description: 'neutral' },
+        usRiskAppetite: { value: 55, label: 'neutral', trend: 'stable', description: 'neutral' },
+        cnMoneyEffect: { value: 55, label: 'neutral', trend: 'stable', description: 'neutral' },
+        macroPressure: { value: 55, label: 'neutral', trend: 'stable', description: 'neutral' },
+        liquidity: { value: 55, label: 'neutral', trend: 'stable', description: 'neutral' },
+      },
+    } as never);
+
+    expect(payload.marketRegimeSynthesis?.contractVersion).toBe('market_regime_synthesis_research_v1');
+    expect(payload.marketRegimeSynthesis?.regimeLabel).toBe('Risk-supportive liquidity expansion');
+    expect(payload.marketRegimeSynthesis?.regimePosture).toBe('risk_supportive');
+    expect(payload.marketRegimeSynthesis?.evidenceFamilies[0]).toMatchObject({
+      key: 'marketOverview',
+      state: 'supported',
+      freshness: 'cached',
+      observationOnly: true,
+    });
+    expect(payload.marketRegimeSynthesis?.supportiveEvidence[0]).toMatchObject({
+      key: 'indices:SPX',
+      label: 'SPX',
+      family: 'marketOverview',
+    });
+    expect(payload.marketRegimeSynthesis?.contradictoryEvidence[0].label).toBe('US10Y');
+    expect(payload.marketRegimeSynthesis?.missingEvidence[0].label).toBe('A股宽度');
+    expect(payload.marketRegimeSynthesis?.confidenceCap).toEqual({
+      value: 0.58,
+      label: 'medium',
+      reasons: ['contradictory_evidence'],
+    });
+    expect(payload.marketRegimeSynthesis?.observationBoundary).toMatchObject({
+      observationOnly: true,
+      decisionGrade: false,
+      consumerActionBoundary: 'no_advice',
+      notInvestmentAdvice: true,
+    });
+    expect(payload.marketRegimeSynthesis?.researchNextSteps[0].key).toBe('review_contradictions');
+    expect(payload.marketRegimeSynthesis?.freshness).toBe('cached');
+  });
+
   it('preserves market decision semantics without dropping boundaries or gaps', () => {
     const payload = marketModule.normalizeMarketTemperatureResponse({
       source: 'computed',

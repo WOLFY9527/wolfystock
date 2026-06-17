@@ -15,7 +15,7 @@ import { TrustDisclosureChips } from '../evidence/TrustDisclosureChips';
 import { marketIntelligenceReasonLabel, marketIntelligenceReasonLabels } from '../../utils/marketIntelligenceGuidance';
 
 type MarketOverviewDecisionDebugDetailsProps = {
-  regimeSynthesis: MarketRegimeSynthesisHeaderView;
+  regimeSynthesis?: MarketRegimeSynthesisHeaderView;
   temperatureSummary: MarketOverviewTemperatureSummaryView;
   briefingSummary: MarketOverviewBriefingSummaryView;
   dataState: MarketOverviewDataStateStripView;
@@ -247,9 +247,11 @@ export const MarketOverviewDecisionDebugDetails: React.FC<MarketOverviewDecision
 
   return (
     <div className="grid gap-3">
-      <div className="rounded-lg border border-white/[0.06] bg-black/10 p-3">
-        <MarketRegimeSynthesisHeader view={regimeSynthesis} />
-      </div>
+      {regimeSynthesis ? (
+        <div className="rounded-lg border border-white/[0.06] bg-black/10 p-3">
+          <MarketRegimeSynthesisHeader view={regimeSynthesis} />
+        </div>
+      ) : null}
       <MarketOverviewStatusStrip
         temperatureSummary={temperatureSummary}
         briefingSummary={briefingSummary}
