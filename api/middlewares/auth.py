@@ -15,6 +15,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from api.deps import resolve_current_user
 from api.middlewares.public_abuse_limiter import add_public_api_abuse_limiter
+from api.route_access_policy import is_public_baseline_read
 from api.security_headers import apply_security_headers
 from src.auth import COOKIE_NAME, is_auth_enabled, is_production_mode
 
@@ -36,10 +37,6 @@ EXEMPT_PATHS = frozenset({
     "/openapi.json",
 })
 
-PUBLIC_PREVIEW_GET_PATHS = frozenset({
-    "/api/v1/market/market-briefing",
-})
-
 UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 
@@ -48,7 +45,7 @@ def _path_exempt(path: str, method: str) -> bool:
     normalized = path.rstrip("/") or "/"
     if normalized in EXEMPT_PATHS:
         return True
-    return method.upper() == "GET" and normalized in PUBLIC_PREVIEW_GET_PATHS
+    return is_public_baseline_read(method, normalized)
 
 
 def _origin_from_value(value: str | None) -> str | None:

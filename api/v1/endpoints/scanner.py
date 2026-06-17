@@ -188,7 +188,9 @@ def run_market_scan(
 )
 def get_scanner_themes(
     market: Optional[str] = Query(None, description="市场过滤"),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> ScannerThemesResponse:
+    _ = current_user
     normalized_market = (market.strip().lower() if isinstance(market, str) else "") or None
     return ScannerThemesResponse(
         items=[_public_theme_payload(theme) for theme in list_scanner_themes(market=normalized_market)]
@@ -208,7 +210,10 @@ def get_scanner_themes(
 )
 def create_scanner_theme(
     request: ScannerThemeGenerateRequest,
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> ScannerThemeGenerationResponse:
+    _ = current_user
+
     def _operation() -> ScannerThemeGenerationResponse:
         theme, suggestions = create_ai_scanner_theme(
             theme_id=request.id,
