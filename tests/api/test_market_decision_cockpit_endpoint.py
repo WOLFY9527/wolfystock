@@ -62,6 +62,74 @@ def _payload() -> dict:
                 "reason": "Review the research queue.",
             }
         ],
+        "researchWorkflow": [
+            {
+                "surface": "Research Radar",
+                "status": "unavailable",
+                "summary": "Research candidates are unavailable.",
+                "drilldownTargets": [
+                    {
+                        "label": "Research Radar",
+                        "route": "/research/radar",
+                        "section": "topResearchPriorities",
+                        "reason": "Review the research queue.",
+                    }
+                ],
+            }
+        ],
+        "crossSurfaceEvidence": [
+            {
+                "surfaces": ["Market Overview", "Scenario Lab"],
+                "observation": "Scenario context can be reviewed against the current regime observation.",
+                "drilldownTargets": [
+                    {
+                        "label": "Scenario Lab",
+                        "route": "/scenario-lab",
+                        "section": "scenarioRisks",
+                        "reason": "Review bounded scenario changes.",
+                    }
+                ],
+            }
+        ],
+        "topResearchQuestions": [
+            {
+                "question": "Which scenario assumptions would change the current regime observation?",
+                "surface": "Scenario Lab",
+                "drilldownTargets": [
+                    {
+                        "label": "Scenario Lab",
+                        "route": "/scenario-lab",
+                        "section": "scenarioRisks",
+                        "reason": "Review bounded scenario changes.",
+                    }
+                ],
+            }
+        ],
+        "priorityDrilldowns": [
+            {
+                "label": "Research Radar",
+                "route": "/research/radar",
+                "section": "topResearchPriorities",
+                "reason": "Review the research queue.",
+            }
+        ],
+        "evidenceConflicts": [],
+        "degradedSurfaceSummary": [
+            {
+                "surface": "Research Radar",
+                "status": "unavailable",
+                "reason": "Research candidates are unavailable.",
+                "drilldownTargets": [
+                    {
+                        "label": "Research Radar",
+                        "route": "/research/radar",
+                        "section": "topResearchPriorities",
+                        "reason": "Review the research queue.",
+                    }
+                ],
+            }
+        ],
+        "nextObservationSteps": ["Review the research queue when candidate evidence is available."],
         "observationOnly": True,
         "decisionGrade": False,
         "researchQueuePreview": {
@@ -108,7 +176,7 @@ def _payload() -> dict:
                 "category": "options",
             }
         ],
-        "noAdviceDisclosure": "Decision support for research context only; not investment advice or trading instruction.",
+        "noAdviceDisclosure": "Observation-only market research; not personalized financial advice.",
         "dataQuality": {
             "status": "degraded",
             "reasonCodes": ["option_chain_unavailable"],
@@ -170,6 +238,13 @@ def test_market_decision_cockpit_endpoint_returns_service_payload(monkeypatch) -
     assert payload["watchlistHighlights"] == []
     assert payload["portfolioHighlights"] == []
     assert payload["drilldownTargets"][0]["route"] == "/research/radar"
+    assert payload["researchWorkflow"][0]["surface"] == "Research Radar"
+    assert payload["crossSurfaceEvidence"][0]["surfaces"] == ["Market Overview", "Scenario Lab"]
+    assert payload["topResearchQuestions"][0]["surface"] == "Scenario Lab"
+    assert payload["priorityDrilldowns"][0]["route"] == "/research/radar"
+    assert payload["evidenceConflicts"] == []
+    assert payload["degradedSurfaceSummary"][0]["surface"] == "Research Radar"
+    assert payload["nextObservationSteps"] == ["Review the research queue when candidate evidence is available."]
     assert payload["observationOnly"] is True
     assert payload["decisionGrade"] is False
     assert payload["consumerIssues"][0]["label"] == "Options chain unavailable"
