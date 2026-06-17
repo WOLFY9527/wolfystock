@@ -23,8 +23,8 @@ _MISSING_THEME_METADATA = "themeMetadata"
 _MISSING_THEME_CONTEXT = "themeContext"
 _THIN_THEME_CANDIDATES = "themeCandidateBreadth"
 _FORBIDDEN_TEXT_RE = re.compile(
-    r"\b(buy|sell|hold|recommendation|target|stop|position sizing)\b|"
-    r"买入|卖出|持有|目标价|止损|仓位",
+    r"\b(buy|sell|hold|recommend(?:ation|ed)?|target(?: price)?|stop(?: loss)?|position[-\s]?sizing)\b|"
+    r"买入|卖出|持有|推荐|交易建议|投资建议|目标价|止损|止盈|仓位|下单|立即交易|必买|稳赚|保证收益",
     re.IGNORECASE,
 )
 _INTERNAL_TOKEN_RE = re.compile(r"[a-z][a-z0-9]*_[a-z0-9_]+|[a-zA-Z]+:[a-zA-Z0-9_.-]+|=")
@@ -648,8 +648,8 @@ def _theme_alignment(
 
 def _why_this_matters_today(candidate: Mapping[str, Any], run: Mapping[str, Any]) -> list[str]:
     summary = _mapping(candidate.get("candidateResearchSummaryFrame"))
-    highlights = _text_list(summary.get("evidenceHighlights"))
-    reason = _text(summary.get("primaryResearchReason") or candidate.get("reason_summary"))
+    highlights = _safe_text_list(summary.get("evidenceHighlights"))
+    reason = _safe_public_text(summary.get("primaryResearchReason") or candidate.get("reason_summary"))
     result = []
     if reason:
         result.append(reason)
