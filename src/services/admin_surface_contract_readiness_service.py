@@ -49,6 +49,16 @@ _DEGRADED_STATE_FIELDS = frozenset(
     }
 )
 _CONSUMER_ISSUE_FIELDS = frozenset({"consumerIssues", "consumer_issues"})
+_COCKPIT_BOUNDARY_FIELDS = ("noAdviceDisclosure", "observationOnly", "decisionGrade")
+_COCKPIT_DEGRADED_FIELDS = ("degradedInputs", "degradedSurfaceSummary")
+_COCKPIT_SYNTHESIS_FIELDS = (
+    "researchWorkflow",
+    "crossSurfaceEvidence",
+    "topResearchQuestions",
+    "priorityDrilldowns",
+    "evidenceConflicts",
+    "nextObservationSteps",
+)
 
 
 @dataclass(frozen=True)
@@ -56,6 +66,16 @@ class RouteSpec:
     method: str
     path: str
     manual_fields: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class SurfaceContractSpec:
+    version: str | None = None
+    required_fields: tuple[str, ...] = ()
+    boundary_fields: tuple[str, ...] = ()
+    degraded_state_fields: tuple[str, ...] = ()
+    synthesis_fields: tuple[str, ...] = ()
+    allow_untyped_response_model: bool = False
 
 
 @dataclass(frozen=True)
@@ -67,6 +87,7 @@ class SurfaceSpec:
     schema_version_applicable: bool = True
     consumer_safe_issue_labels_status: str = "unknown"
     consumer_issue_fields_required: bool = False
+    contract: SurfaceContractSpec = SurfaceContractSpec()
     implementation_status: str = "implemented"
     notes: tuple[str, ...] = ()
 
@@ -109,10 +130,35 @@ class AdminSurfaceContractReadinessService:
                     "optionsStructureStatus",
                     "cockpitSummary",
                     "noAdviceDisclosure",
+                    "observationOnly",
+                    "decisionGrade",
+                    "consumerIssues",
+                    "degradedInputs",
+                    "researchWorkflow",
+                    "crossSurfaceEvidence",
+                    "topResearchQuestions",
+                    "priorityDrilldowns",
+                    "evidenceConflicts",
+                    "degradedSurfaceSummary",
+                    "nextObservationSteps",
                     "dataQuality",
                 ),
             ),
-            consumer_safe_issue_labels_status="raw_internal_codes_detected",
+            consumer_safe_issue_labels_status="present",
+            consumer_issue_fields_required=True,
+            contract=SurfaceContractSpec(
+                version="market_decision_cockpit.v1",
+                required_fields=(
+                    "schemaVersion",
+                    *_COCKPIT_BOUNDARY_FIELDS,
+                    "consumerIssues",
+                    *_COCKPIT_SYNTHESIS_FIELDS,
+                ),
+                boundary_fields=_COCKPIT_BOUNDARY_FIELDS,
+                degraded_state_fields=_COCKPIT_DEGRADED_FIELDS,
+                synthesis_fields=_COCKPIT_SYNTHESIS_FIELDS,
+                allow_untyped_response_model=True,
+            ),
             notes=("Current endpoint contract is exposed through an untyped dict payload.",),
         ),
         SurfaceSpec(
@@ -228,6 +274,7 @@ class AdminSurfaceContractReadinessService:
             schema_version_applicable=False,
             consumer_safe_issue_labels_status="present",
             implementation_status="fixture_only",
+            contract=SurfaceContractSpec(version="options_gamma_observation_contract_v1"),
             notes=("Options Lab remains a fixture-backed observation surface with fail-closed provider limits.",),
         ),
     )
@@ -272,14 +319,16 @@ class AdminSurfaceContractReadinessService:
             if not spec.schema_version_applicable
             else self._field_status(all_fields, _SCHEMA_VERSION_FIELDS)
         )
-        observation_boundary_status = self._field_status(all_fields, _OBSERVATION_BOUNDARY_FIELDS)
-        degraded_state_shape_status = self._field_status(all_fields, _DEGRADED_STATE_FIELDS)
+        observation_boundary_status = self._observation_boundary_status(fields=all_fields, contract=spec.contract)
+        degraded_state_shape_status = self._degraded_state_shape_status(fields=all_fields, contract=spec.contract)
         consumer_safe_issue_labels_status = spec.consumer_safe_issue_labels_status
         consumer_safe_issue_labels_status = self._consumer_issue_status(
             fields=all_fields,
             default_status=consumer_safe_issue_labels_status,
             required=spec.consumer_issue_fields_required,
         )
+        contract_status = self._contract_status(fields=all_fields, contract=spec.contract)
+        synthesis_contract_status = self._synthesis_contract_status(fields=all_fields, contract=spec.contract)
         implementation_status = self._implementation_status(spec, primary, related)
         gaps = self._surface_gaps(
             spec=spec,
@@ -289,6 +338,8 @@ class AdminSurfaceContractReadinessService:
             observation_boundary_status=observation_boundary_status,
             degraded_state_shape_status=degraded_state_shape_status,
             consumer_safe_issue_labels_status=consumer_safe_issue_labels_status,
+            contract_status=contract_status,
+            synthesis_contract_status=synthesis_contract_status,
             implementation_status=implementation_status,
         )
         status = self._surface_status(
@@ -305,10 +356,13 @@ class AdminSurfaceContractReadinessService:
             "primaryRoute": primary.to_dict(),
             "relatedRoutes": [snapshot.to_dict() for snapshot in related],
             "authRequirement": {"status": "known", "label": primary.auth_requirement},
+            "contract": spec.contract.version,
             "schemaVersionStatus": schema_version_status,
             "observationBoundaryStatus": observation_boundary_status,
             "degradedStateShapeStatus": degraded_state_shape_status,
             "consumerSafeIssueLabelsStatus": consumer_safe_issue_labels_status,
+            "contractStatus": contract_status,
+            "synthesisContractStatus": synthesis_contract_status,
             "implementationStatus": implementation_status,
             "gaps": gaps,
             "notes": list(spec.notes),
@@ -329,6 +383,20 @@ class AdminSurfaceContractReadinessService:
         return "missing"
 
     @staticmethod
+    def _observation_boundary_status(*, fields: Iterable[str], contract: SurfaceContractSpec) -> str:
+        fields_set = set(fields)
+        if contract.boundary_fields:
+            return "present" if set(contract.boundary_fields).issubset(fields_set) else "missing"
+        return "present" if any(field in _OBSERVATION_BOUNDARY_FIELDS for field in fields_set) else "missing"
+
+    @staticmethod
+    def _degraded_state_shape_status(*, fields: Iterable[str], contract: SurfaceContractSpec) -> str:
+        fields_set = set(fields)
+        if contract.degraded_state_fields:
+            return "present" if any(field in contract.degraded_state_fields for field in fields_set) else "missing"
+        return "present" if any(field in _DEGRADED_STATE_FIELDS for field in fields_set) else "missing"
+
+    @staticmethod
     def _consumer_issue_status(*, fields: Iterable[str], default_status: str, required: bool) -> str:
         fields_set = set(fields)
         if default_status == "raw_internal_codes_detected":
@@ -339,6 +407,30 @@ class AdminSurfaceContractReadinessService:
         if required:
             return "missing"
         return default_status
+
+    @staticmethod
+    def _contract_status(*, fields: Iterable[str], contract: SurfaceContractSpec) -> str:
+        if not contract.required_fields:
+            return "not_applicable"
+        fields_set = set(fields)
+        required = set(contract.required_fields)
+        has_required = required.issubset(fields_set)
+        has_degraded_state = not contract.degraded_state_fields or any(
+            field in fields_set for field in contract.degraded_state_fields
+        )
+        if has_required and has_degraded_state:
+            return "present"
+        return "missing"
+
+    @staticmethod
+    def _synthesis_contract_status(*, fields: Iterable[str], contract: SurfaceContractSpec) -> str:
+        if not contract.synthesis_fields:
+            return "not_applicable"
+        fields_set = set(fields)
+        required = set(contract.synthesis_fields)
+        if required.issubset(fields_set):
+            return "present"
+        return "missing"
 
     def _route_snapshot(self, spec: RouteSpec, routes: Sequence[APIRoute]) -> RouteSnapshot:
         route = self._find_route(routes, method=spec.method, path=spec.path)
@@ -417,7 +509,7 @@ class AdminSurfaceContractReadinessService:
             return "missing"
         if spec.implementation_status == "fixture_only":
             return "fixture_only"
-        if not primary.typed_contract:
+        if not primary.typed_contract and not spec.contract.allow_untyped_response_model:
             return "contract_untyped"
         if any(not route.typed_contract for route in related if route.exists):
             return "mixed_contract_variants"
@@ -433,6 +525,8 @@ class AdminSurfaceContractReadinessService:
         observation_boundary_status: str,
         degraded_state_shape_status: str,
         consumer_safe_issue_labels_status: str,
+        contract_status: str,
+        synthesis_contract_status: str,
         implementation_status: str,
     ) -> list[str]:
         gaps: list[str] = []
@@ -441,7 +535,7 @@ class AdminSurfaceContractReadinessService:
             return gaps
         if primary.auth_requirement == "unknown":
             gaps.append("auth_requirement_unknown")
-        if not primary.typed_contract:
+        if not primary.typed_contract and not spec.contract.allow_untyped_response_model:
             gaps.append("response_model_untyped")
         if any(not route.exists for route in related):
             gaps.append("related_route_missing")
@@ -457,6 +551,10 @@ class AdminSurfaceContractReadinessService:
             gaps.append("consumer_issue_labels_not_safe")
         elif consumer_safe_issue_labels_status == "missing":
             gaps.append("consumer_issue_labels_missing")
+        if contract_status == "missing":
+            gaps.append("contract_fields_missing")
+        if synthesis_contract_status == "missing":
+            gaps.append("cockpit_synthesis_fields_missing")
         if implementation_status == "fixture_only":
             gaps.append("fixture_only_contract")
         return gaps
@@ -473,7 +571,7 @@ class AdminSurfaceContractReadinessService:
             return "missing_contract"
         if implementation_status == "fixture_only":
             return "ready_fixture_only"
-        if "consumer_issue_labels_not_safe" in gaps:
+        if any(gap.endswith("_missing") or gap == "consumer_issue_labels_not_safe" for gap in gaps):
             return "degraded_contract"
         if "response_model_untyped" in gaps or "related_route_contract_untyped" in gaps:
             return "mixed_contract"

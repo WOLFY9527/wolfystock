@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -11,6 +12,9 @@ from fastapi.testclient import TestClient
 
 from api.deps import CurrentUser, get_current_user
 from api.v1 import api_v1_router
+from src.services.admin_surface_contract_readiness_service import (
+    AdminSurfaceContractReadinessService,
+)
 from src.storage import DatabaseManager
 
 
@@ -31,6 +35,28 @@ FORBIDDEN_RESPONSE_MARKERS = (
     "/users/",
     ".py",
     ".md",
+)
+COCKPIT_REQUIRED_CONTRACT_FIELDS = (
+    "schemaVersion",
+    "noAdviceDisclosure",
+    "observationOnly",
+    "decisionGrade",
+    "consumerIssues",
+    "degradedSurfaceSummary",
+    "researchWorkflow",
+    "crossSurfaceEvidence",
+    "topResearchQuestions",
+    "priorityDrilldowns",
+    "evidenceConflicts",
+    "nextObservationSteps",
+)
+COCKPIT_SYNTHESIS_FIELDS = (
+    "researchWorkflow",
+    "crossSurfaceEvidence",
+    "topResearchQuestions",
+    "priorityDrilldowns",
+    "evidenceConflicts",
+    "nextObservationSteps",
 )
 
 
@@ -97,6 +123,23 @@ def _surface_by_key(payload: dict, surface_key: str) -> dict:
     return next(item for item in payload["surfaces"] if item["surfaceKey"] == surface_key)
 
 
+def _readiness_payload_for_cockpit_fields(fields: tuple[str, ...]) -> dict:
+    app = FastAPI()
+    app.include_router(api_v1_router)
+    cockpit_spec = next(
+        spec
+        for spec in AdminSurfaceContractReadinessService._SURFACES
+        if spec.key == "market_decision_cockpit"
+    )
+    route_spec = replace(cockpit_spec.primary_route, manual_fields=fields)
+    service_cls = type(
+        "_SingleCockpitReadinessService",
+        (AdminSurfaceContractReadinessService,),
+        {"_SURFACES": (replace(cockpit_spec, primary_route=route_spec),)},
+    )
+    return service_cls().build_snapshot(routes=app.routes)
+
+
 def test_surface_readiness_requires_admin_with_ops_logs_read(tmp_path: Path) -> None:
     DatabaseManager.reset_instance()
     DatabaseManager(db_url=f"sqlite:///{tmp_path / 'admin-surface-readiness.sqlite'}")
@@ -151,12 +194,10 @@ def test_surface_readiness_returns_read_only_contract_truth_table(tmp_path: Path
     assert set(payload["summary"]["statusCounts"]) == {
         "ready",
         "ready_fixture_only",
-        "degraded_contract",
     }
     assert payload["summary"]["statusCounts"] == {
-        "ready": 8,
+        "ready": 9,
         "ready_fixture_only": 1,
-        "degraded_contract": 1,
     }
 
     surface_keys = {item["surfaceKey"] for item in payload["surfaces"]}
@@ -174,15 +215,17 @@ def test_surface_readiness_returns_read_only_contract_truth_table(tmp_path: Path
     }
 
     cockpit = _surface_by_key(payload, "market_decision_cockpit")
-    assert cockpit["status"] == "degraded_contract"
+    assert cockpit["status"] == "ready"
+    assert cockpit["contract"] == "market_decision_cockpit.v1"
     assert cockpit["primaryRoute"]["method"] == "GET"
     assert cockpit["primaryRoute"]["path"] == "/api/v1/market/decision-cockpit"
     assert cockpit["authRequirement"] == {"status": "known", "label": "optional_user"}
     assert cockpit["schemaVersionStatus"] == "present"
     assert cockpit["observationBoundaryStatus"] == "present"
     assert cockpit["degradedStateShapeStatus"] == "present"
-    assert cockpit["consumerSafeIssueLabelsStatus"] == "raw_internal_codes_detected"
-    assert "response_model_untyped" in cockpit["gaps"]
+    assert cockpit["consumerSafeIssueLabelsStatus"] == "present"
+    assert cockpit["synthesisContractStatus"] == "present"
+    assert cockpit["gaps"] == []
 
     radar = _surface_by_key(payload, "research_radar")
     assert radar["status"] == "ready"
@@ -222,6 +265,7 @@ def test_surface_readiness_returns_read_only_contract_truth_table(tmp_path: Path
 
     options = _surface_by_key(payload, "options_gamma_observation")
     assert options["status"] == "ready_fixture_only"
+    assert options["contract"] == "options_gamma_observation_contract_v1"
     assert options["implementationStatus"] == "fixture_only"
     assert options["consumerSafeIssueLabelsStatus"] in {"present", "unknown"}
 
@@ -232,3 +276,119 @@ def test_surface_readiness_returns_read_only_contract_truth_table(tmp_path: Path
 
     _assert_no_sensitive_markers(payload)
     DatabaseManager.reset_instance()
+
+
+def test_market_decision_cockpit_readiness_fails_closed_when_synthesis_contract_is_missing() -> None:
+    for missing_field in COCKPIT_SYNTHESIS_FIELDS:
+        fields = tuple(field for field in COCKPIT_REQUIRED_CONTRACT_FIELDS if field != missing_field)
+
+        payload = _readiness_payload_for_cockpit_fields(fields)
+        cockpit = _surface_by_key(payload, "market_decision_cockpit")
+
+        assert cockpit["status"] == "degraded_contract"
+        assert cockpit["contract"] == "market_decision_cockpit.v1"
+        assert cockpit["schemaVersionStatus"] == "present"
+        assert cockpit["observationBoundaryStatus"] == "present"
+        assert cockpit["consumerSafeIssueLabelsStatus"] == "present"
+        assert cockpit["synthesisContractStatus"] == "missing"
+        assert "cockpit_synthesis_fields_missing" in cockpit["gaps"]
+        assert payload["summary"]["statusCounts"] == {"degraded_contract": 1}
+
+
+def test_market_decision_cockpit_readiness_accepts_either_degraded_inputs_or_surface_summary() -> None:
+    fields_with_degraded_inputs = tuple(
+        "degradedInputs" if field == "degradedSurfaceSummary" else field
+        for field in COCKPIT_REQUIRED_CONTRACT_FIELDS
+    )
+
+    payload = _readiness_payload_for_cockpit_fields(fields_with_degraded_inputs)
+    cockpit = _surface_by_key(payload, "market_decision_cockpit")
+
+    assert cockpit["status"] == "ready"
+    assert cockpit["degradedStateShapeStatus"] == "present"
+    assert cockpit["contractStatus"] == "present"
+    assert cockpit["gaps"] == []
+
+
+def test_market_decision_cockpit_readiness_fails_closed_when_degraded_state_shape_is_missing() -> None:
+    fields_without_degraded_shape = tuple(
+        field
+        for field in COCKPIT_REQUIRED_CONTRACT_FIELDS
+        if field not in {"degradedInputs", "degradedSurfaceSummary"}
+    )
+
+    payload = _readiness_payload_for_cockpit_fields(fields_without_degraded_shape)
+    cockpit = _surface_by_key(payload, "market_decision_cockpit")
+
+    assert cockpit["status"] == "degraded_contract"
+    assert cockpit["degradedStateShapeStatus"] == "missing"
+    assert cockpit["contractStatus"] == "missing"
+    assert "degraded_state_shape_missing" in cockpit["gaps"]
+    assert "contract_fields_missing" in cockpit["gaps"]
+
+
+def test_market_decision_cockpit_readiness_fails_closed_when_no_advice_boundary_is_missing() -> None:
+    fields_without_no_advice = (
+        "schemaVersion",
+        "observationOnly",
+        "decisionGrade",
+        "consumerIssues",
+        "degradedSurfaceSummary",
+        "researchWorkflow",
+        "crossSurfaceEvidence",
+        "topResearchQuestions",
+        "priorityDrilldowns",
+        "evidenceConflicts",
+        "nextObservationSteps",
+    )
+
+    payload = _readiness_payload_for_cockpit_fields(fields_without_no_advice)
+    cockpit = _surface_by_key(payload, "market_decision_cockpit")
+
+    assert cockpit["status"] == "degraded_contract"
+    assert cockpit["contract"] == "market_decision_cockpit.v1"
+    assert cockpit["schemaVersionStatus"] == "present"
+    assert cockpit["observationBoundaryStatus"] == "missing"
+    assert cockpit["synthesisContractStatus"] == "present"
+    assert "observation_boundary_missing" in cockpit["gaps"]
+
+
+def test_market_decision_cockpit_readiness_fails_closed_when_observation_decision_boundary_is_missing() -> None:
+    for missing_field in ("observationOnly", "decisionGrade"):
+        fields = tuple(field for field in COCKPIT_REQUIRED_CONTRACT_FIELDS if field != missing_field)
+
+        payload = _readiness_payload_for_cockpit_fields(fields)
+        cockpit = _surface_by_key(payload, "market_decision_cockpit")
+
+        assert cockpit["status"] == "degraded_contract"
+        assert cockpit["contract"] == "market_decision_cockpit.v1"
+        assert cockpit["schemaVersionStatus"] == "present"
+        assert cockpit["observationBoundaryStatus"] == "missing"
+        assert cockpit["synthesisContractStatus"] == "present"
+        assert "observation_boundary_missing" in cockpit["gaps"]
+
+
+def test_market_decision_cockpit_readiness_fails_closed_when_schema_version_is_missing() -> None:
+    fields_without_schema_version = (
+        "noAdviceDisclosure",
+        "observationOnly",
+        "decisionGrade",
+        "consumerIssues",
+        "degradedSurfaceSummary",
+        "researchWorkflow",
+        "crossSurfaceEvidence",
+        "topResearchQuestions",
+        "priorityDrilldowns",
+        "evidenceConflicts",
+        "nextObservationSteps",
+    )
+
+    payload = _readiness_payload_for_cockpit_fields(fields_without_schema_version)
+    cockpit = _surface_by_key(payload, "market_decision_cockpit")
+
+    assert cockpit["status"] == "degraded_contract"
+    assert cockpit["contract"] == "market_decision_cockpit.v1"
+    assert cockpit["schemaVersionStatus"] == "missing"
+    assert cockpit["observationBoundaryStatus"] == "present"
+    assert cockpit["synthesisContractStatus"] == "present"
+    assert "schema_version_missing" in cockpit["gaps"]

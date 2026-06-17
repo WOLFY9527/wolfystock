@@ -28,10 +28,13 @@ class BackendSurfaceReadinessItem(_AdminSurfaceReadinessModel):
     primary_route: BackendSurfaceRouteSummary = Field(alias="primaryRoute")
     related_routes: List[BackendSurfaceRouteSummary] = Field(default_factory=list, alias="relatedRoutes")
     auth_requirement: Dict[str, str] = Field(alias="authRequirement")
+    contract: Optional[str] = None
     schema_version_status: str = Field(alias="schemaVersionStatus")
     observation_boundary_status: str = Field(alias="observationBoundaryStatus")
     degraded_state_shape_status: str = Field(alias="degradedStateShapeStatus")
     consumer_safe_issue_labels_status: str = Field(alias="consumerSafeIssueLabelsStatus")
+    contract_status: str = Field(default="not_applicable", alias="contractStatus")
+    synthesis_contract_status: str = Field(default="not_applicable", alias="synthesisContractStatus")
     implementation_status: str = Field(alias="implementationStatus")
     gaps: List[str] = Field(default_factory=list)
     notes: List[str] = Field(default_factory=list)
