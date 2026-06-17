@@ -9,6 +9,7 @@ other Market Intelligence surfaces.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import statistics
 from typing import Any, Mapping, Sequence
 
@@ -21,6 +22,8 @@ from src.services.market_regime_synthesis_service import (
     synthesize_market_regime,
 )
 
+
+MARKET_REGIME_RESEARCH_SYNTHESIS_VERSION = "market_regime_synthesis_research_v1"
 
 _PANEL_SYMBOL_PILLARS: dict[str, dict[str, str]] = {
     "futures": {
@@ -61,6 +64,83 @@ _PANEL_SYMBOL_PILLARS: dict[str, dict[str, str]] = {
         "BTC": "crypto_risk_beta",
         "ETH": "crypto_risk_beta",
     },
+}
+
+_RESEARCH_FAMILIES: tuple[dict[str, Any], ...] = (
+    {
+        "key": "marketOverview",
+        "label": "Market overview",
+        "pillars": (
+            "risk_appetite",
+            "rates_pressure",
+            "dollar_pressure",
+            "volatility_stress",
+            "crypto_risk_beta",
+            "china_risk_appetite",
+        ),
+    },
+    {
+        "key": "liquidity",
+        "label": "Liquidity",
+        "pillars": ("liquidity_impulse",),
+    },
+    {
+        "key": "rotation",
+        "label": "Rotation",
+        "pillars": ("rotation_leadership",),
+    },
+    {
+        "key": "breadth",
+        "label": "Breadth",
+        "pillars": ("breadth_health",),
+    },
+    {
+        "key": "riskRegime",
+        "label": "Risk regime",
+        "pillars": (),
+    },
+)
+
+_PILLAR_FAMILY: dict[str, str] = {
+    pillar: str(family["key"])
+    for family in _RESEARCH_FAMILIES
+    for pillar in family["pillars"]
+}
+
+_REGIME_LABELS = {
+    "risk_on_liquidity_expansion": "Risk-supportive liquidity expansion",
+    "risk_off_deleveraging": "Risk defensive deleveraging",
+    "rates_shock_duration_pressure": "Rates and duration pressure",
+    "dollar_squeeze": "Dollar squeeze pressure",
+    "credit_or_funding_stress": "Credit or funding stress",
+    "term_premium_or_inflation_scare": "Term premium or inflation pressure",
+    "goldilocks_soft_landing": "Soft-landing risk support",
+    "nacho_mega_cap_defensive_rotation": "Narrow leadership rotation",
+    "china_policy_divergence": "China policy divergence",
+    "data_insufficient": "Evidence insufficient",
+}
+
+_RISK_SUPPORTIVE_REGIMES = {
+    "risk_on_liquidity_expansion",
+    "goldilocks_soft_landing",
+}
+
+_RISK_DEFENSIVE_REGIMES = {
+    "risk_off_deleveraging",
+    "rates_shock_duration_pressure",
+    "dollar_squeeze",
+    "credit_or_funding_stress",
+    "term_premium_or_inflation_scare",
+}
+
+_SAFE_GAP_REASONS = {
+    "missing_scoring_evidence": "Evidence family has no score-contributing observation.",
+    "score_contribution_not_allowed": "Evidence remains observation-only.",
+    "freshness_unavailable": "Fresh evidence is unavailable.",
+    "degradation_unavailable_or_rejected": "Evidence quality is not sufficient for scoring.",
+    "missing_direction_or_magnitude": "Direction or magnitude is missing.",
+    "unknown_pillar": "Evidence family is not recognized.",
+    "unscorable": "Evidence is not score-contributing.",
 }
 
 
@@ -118,13 +198,280 @@ def synthesize_market_regime_from_temperature_inputs(inputs: Mapping[str, Any]):
 def build_market_regime_synthesis_payload(inputs: Mapping[str, Any]) -> dict[str, Any]:
     """Return the camelCase payload that backend callers can surface later."""
 
-    return synthesize_market_regime_from_temperature_inputs(inputs).to_dict()
+    evidence_items = build_market_regime_evidence_items(inputs)
+    payload = synthesize_market_regime(evidence_items).to_dict()
+    payload.update(_build_research_synthesis_contract(payload, evidence_items))
+    return payload
 
 
 def build_liquidity_impulse_synthesis_payload(inputs: Mapping[str, Any]) -> dict[str, Any]:
     """Project normalized temperature inputs into liquidity synthesis payload."""
 
     return synthesize_liquidity_impulse(_projected_liquidity_evidence_items(inputs)).to_dict()
+
+
+def _build_research_synthesis_contract(
+    payload: Mapping[str, Any],
+    evidence_items: Sequence[MarketRegimeEvidenceItem],
+) -> dict[str, Any]:
+    primary_regime = _text(payload.get("primaryRegime")) or "data_insufficient"
+    confidence = _bounded_unit(payload.get("confidence"))
+    evidence_quality = _mapping(payload.get("evidenceQuality"))
+    confidence_cap = _confidence_cap(payload, evidence_quality, confidence)
+    missing_evidence = _missing_evidence(payload)
+    supportive_evidence = _supportive_evidence(payload)
+    contradictory_evidence = _contradictory_evidence(payload)
+    return {
+        "contractVersion": MARKET_REGIME_RESEARCH_SYNTHESIS_VERSION,
+        "regimeLabel": _REGIME_LABELS.get(primary_regime, primary_regime),
+        "regimePosture": _regime_posture(primary_regime),
+        "evidenceFamilies": _evidence_families(
+            payload=payload,
+            evidence_items=evidence_items,
+            supportive_evidence=supportive_evidence,
+            contradictory_evidence=contradictory_evidence,
+            missing_evidence=missing_evidence,
+        ),
+        "supportiveEvidence": supportive_evidence,
+        "contradictoryEvidence": contradictory_evidence,
+        "missingEvidence": missing_evidence,
+        "confidenceCap": confidence_cap,
+        "observationBoundary": {
+            "observationOnly": True,
+            "decisionGrade": False,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "consumerActionBoundary": "no_advice",
+            "notInvestmentAdvice": True,
+            "detail": "Research synthesis only; evidence is not promoted into execution or personalized direction.",
+        },
+        "researchNextSteps": _research_next_steps(
+            missing_evidence=missing_evidence,
+            contradictory_evidence=contradictory_evidence,
+            confidence_cap=confidence_cap,
+        ),
+        "generatedAt": _utc_now_iso(),
+        "freshness": _research_freshness(payload, evidence_items),
+    }
+
+
+def _evidence_families(
+    *,
+    payload: Mapping[str, Any],
+    evidence_items: Sequence[MarketRegimeEvidenceItem],
+    supportive_evidence: Sequence[Mapping[str, Any]],
+    contradictory_evidence: Sequence[Mapping[str, Any]],
+    missing_evidence: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    evidence_count_by_family: dict[str, int] = {str(family["key"]): 0 for family in _RESEARCH_FAMILIES}
+    freshness_by_family: dict[str, list[str]] = {str(family["key"]): [] for family in _RESEARCH_FAMILIES}
+    for item in evidence_items:
+        family_key = _family_for_pillar(item.pillar or item.category)
+        evidence_count_by_family[family_key] = evidence_count_by_family.get(family_key, 0) + 1
+        if item.freshness:
+            freshness_by_family.setdefault(family_key, []).append(item.freshness)
+
+    supportive_count_by_family = _count_by_family(supportive_evidence)
+    contradictory_count_by_family = _count_by_family(contradictory_evidence)
+    missing_count_by_family = _count_by_family(missing_evidence)
+    covered = set(_sequence(_mapping(payload.get("evidenceQuality")).get("coveredPillars")))
+    missing = set(_sequence(_mapping(payload.get("evidenceQuality")).get("missingPillars")))
+
+    families: list[dict[str, Any]] = []
+    for family in _RESEARCH_FAMILIES:
+        key = str(family["key"])
+        pillars = tuple(str(pillar) for pillar in family["pillars"])
+        if key == "riskRegime":
+            state = "supported" if _text(payload.get("primaryRegime")) != "data_insufficient" else "missing"
+        elif any(pillar in covered for pillar in pillars):
+            state = "supported"
+        elif any(pillar in missing for pillar in pillars) or missing_count_by_family.get(key, 0):
+            state = "missing"
+        elif evidence_count_by_family.get(key, 0):
+            state = "discounted"
+        else:
+            state = "missing"
+        families.append(
+            {
+                "key": key,
+                "label": str(family["label"]),
+                "state": state,
+                "pillars": list(pillars),
+                "evidenceCount": evidence_count_by_family.get(key, 0),
+                "supportiveCount": supportive_count_by_family.get(key, 0),
+                "contradictoryCount": contradictory_count_by_family.get(key, 0),
+                "missingCount": missing_count_by_family.get(key, 0),
+                "freshness": _worst_freshness(freshness_by_family.get(key, [])),
+                "observationOnly": True,
+            }
+        )
+    return families
+
+
+def _supportive_evidence(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for raw in _sequence(payload.get("topDrivers"))[:6]:
+        if not isinstance(raw, Mapping):
+            continue
+        pillar = _text(raw.get("pillar"))
+        result.append(
+            {
+                "key": _text(raw.get("key")) or f"driver:{len(result) + 1}",
+                "label": _text(raw.get("label")) or "Evidence driver",
+                "family": _family_for_pillar(pillar),
+                "pillar": pillar or "unknown",
+                "direction": _safe_direction(raw.get("direction")),
+                "freshness": _safe_freshness(raw.get("freshness")),
+                "observationOnly": True,
+            }
+        )
+    return result
+
+
+def _contradictory_evidence(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for raw in _sequence(payload.get("counterEvidence"))[:6]:
+        if not isinstance(raw, Mapping):
+            continue
+        pillar = _text(raw.get("pillar"))
+        result.append(
+            {
+                "key": _text(raw.get("key")) or f"counter:{len(result) + 1}",
+                "label": _text(raw.get("label")) or "Contradictory evidence",
+                "family": _family_for_pillar(pillar),
+                "pillar": pillar or "unknown",
+                "reason": _safe_gap_reason(raw.get("reason")),
+                "observationOnly": True,
+            }
+        )
+    return result
+
+
+def _missing_evidence(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for raw in _sequence(payload.get("dataGaps")):
+        if not isinstance(raw, Mapping):
+            continue
+        pillar = _text(raw.get("pillar"))
+        key = _text(raw.get("key")) or f"missing:{pillar or len(result) + 1}"
+        if key in {item["key"] for item in result}:
+            continue
+        result.append(
+            {
+                "key": key,
+                "label": _text(raw.get("label")) or _missing_label(pillar),
+                "family": _family_for_pillar(pillar),
+                "pillar": pillar or "unknown",
+                "reason": _safe_gap_reason(raw.get("reason")),
+                "observationOnly": True,
+            }
+        )
+        if len(result) >= 12:
+            break
+    return result
+
+
+def _confidence_cap(
+    payload: Mapping[str, Any],
+    evidence_quality: Mapping[str, Any],
+    confidence: float,
+) -> dict[str, Any]:
+    cap = confidence
+    reasons: list[str] = []
+    if _int(evidence_quality.get("observationOnlyEvidenceCount")) > 0:
+        cap = min(cap, 0.55)
+        reasons.append("observation_only_evidence")
+    if _int(evidence_quality.get("scoreBlockedEvidenceCount")) > 0:
+        cap = min(cap, 0.45)
+        reasons.append("score_blocked_evidence")
+    if _int(evidence_quality.get("dataGapCount")) > 0:
+        cap = min(cap, 0.62)
+        reasons.append("missing_evidence")
+    if _int(evidence_quality.get("discountedEvidenceCount")) > 0:
+        cap = min(cap, 0.68)
+        reasons.append("discounted_evidence")
+    if payload.get("counterEvidence"):
+        cap = min(cap, 0.58)
+        reasons.append("contradictory_evidence")
+    if _text(payload.get("primaryRegime")) == "data_insufficient":
+        cap = min(cap, 0.35)
+        reasons.append("data_insufficient")
+    cap = round(max(0.0, min(confidence, cap)), 3)
+    return {
+        "value": cap,
+        "label": _confidence_label(cap),
+        "reasons": reasons or ["bounded_research_synthesis"],
+    }
+
+
+def _research_next_steps(
+    *,
+    missing_evidence: Sequence[Mapping[str, Any]],
+    contradictory_evidence: Sequence[Mapping[str, Any]],
+    confidence_cap: Mapping[str, Any],
+) -> list[dict[str, str]]:
+    steps: list[dict[str, str]] = []
+    if missing_evidence:
+        families = _unique_text(item.get("family") for item in missing_evidence)[:3]
+        steps.append(
+            {
+                "key": "fill_missing_evidence",
+                "label": "Fill missing evidence families",
+                "detail": "Re-check " + ", ".join(families) + " before raising confidence.",
+            }
+        )
+    if contradictory_evidence:
+        steps.append(
+            {
+                "key": "review_contradictions",
+                "label": "Review contradictory evidence",
+                "detail": "Compare the conflicting families before treating one regime as dominant.",
+            }
+        )
+    if confidence_cap.get("reasons"):
+        steps.append(
+            {
+                "key": "respect_confidence_cap",
+                "label": "Respect confidence cap",
+                "detail": "Keep the synthesis observational while cap reasons remain active.",
+            }
+        )
+    if not steps:
+        steps.append(
+            {
+                "key": "monitor_persistence",
+                "label": "Monitor persistence",
+                "detail": "Look for repeated confirmation across the same evidence families.",
+            }
+        )
+    return steps
+
+
+def _research_freshness(
+    payload: Mapping[str, Any],
+    evidence_items: Sequence[MarketRegimeEvidenceItem],
+) -> str:
+    return _worst_freshness(
+        [
+            payload.get("freshness"),
+            *[item.freshness for item in evidence_items],
+            *[
+                raw.get("freshness")
+                for raw in _sequence(payload.get("topDrivers"))
+                if isinstance(raw, Mapping)
+            ],
+        ]
+    )
+
+
+def _regime_posture(primary_regime: str) -> str:
+    if primary_regime in _RISK_SUPPORTIVE_REGIMES:
+        return "risk_supportive"
+    if primary_regime in _RISK_DEFENSIVE_REGIMES:
+        return "risk_defensive"
+    if primary_regime == "data_insufficient":
+        return "data_insufficient"
+    return "mixed_or_transition"
 
 
 def _change_driven_evidence(
@@ -476,6 +823,113 @@ def _liquidity_item_allowed(item: Mapping[str, Any]) -> bool:
     if _bool(item.get("observationOnly")):
         return False
     return True
+
+
+def _mapping(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _sequence(value: Any) -> tuple[Any, ...]:
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return tuple(value)
+    return ()
+
+
+def _family_for_pillar(pillar: Any) -> str:
+    normalized = _text(pillar)
+    if normalized in _PILLAR_FAMILY:
+        return _PILLAR_FAMILY[normalized]
+    if normalized.startswith("liquidity"):
+        return "liquidity"
+    if "rotation" in normalized:
+        return "rotation"
+    if "breadth" in normalized:
+        return "breadth"
+    if normalized:
+        return "marketOverview"
+    return "riskRegime"
+
+
+def _count_by_family(rows: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+    result: dict[str, int] = {}
+    for row in rows:
+        family = _text(row.get("family")) or "riskRegime"
+        result[family] = result.get(family, 0) + 1
+    return result
+
+
+def _bounded_unit(value: Any) -> float:
+    numeric = _optional_float(value)
+    if numeric is None:
+        return 0.0
+    return max(0.0, min(1.0, float(numeric)))
+
+
+def _int(value: Any) -> int:
+    numeric = _optional_float(value)
+    if numeric is None:
+        return 0
+    return int(numeric)
+
+
+def _confidence_label(value: float) -> str:
+    if value < 0.35:
+        return "insufficient"
+    if value < 0.55:
+        return "low"
+    if value < 0.74:
+        return "medium"
+    return "high"
+
+
+def _safe_freshness(value: Any) -> str:
+    freshness = _text(value).lower()
+    allowed = {
+        "live",
+        "fresh",
+        "cached",
+        "delayed",
+        "stale",
+        "partial",
+        "fallback",
+        "mock",
+        "synthetic",
+        "unavailable",
+        "error",
+        "unknown",
+    }
+    return freshness if freshness in allowed else "unknown"
+
+
+def _safe_direction(value: Any) -> str:
+    direction = _text(value).lower()
+    if direction in {"positive", "negative", "up", "down", "neutral"}:
+        return direction
+    return "neutral"
+
+
+def _safe_gap_reason(value: Any) -> str:
+    reason = _text(value)
+    return _SAFE_GAP_REASONS.get(reason, "Evidence needs more confirmation.")
+
+
+def _missing_label(pillar: str) -> str:
+    if not pillar:
+        return "Missing evidence"
+    return "Missing evidence for " + pillar.replace("_", " ")
+
+
+def _unique_text(values: Sequence[Any]) -> list[str]:
+    result: list[str] = []
+    for value in values:
+        text = _text(value)
+        if text and text not in result:
+            result.append(text)
+    return result
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _liquidity_direction_and_magnitude(

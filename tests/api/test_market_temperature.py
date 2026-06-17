@@ -550,9 +550,21 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         self.assertEqual(
             set(synthesis),
             {
+                "contractVersion",
                 "primaryRegime",
                 "secondaryRegimes",
                 "regimeScores",
+                "regimeLabel",
+                "regimePosture",
+                "evidenceFamilies",
+                "supportiveEvidence",
+                "contradictoryEvidence",
+                "missingEvidence",
+                "confidenceCap",
+                "observationBoundary",
+                "researchNextSteps",
+                "generatedAt",
+                "freshness",
                 "liquidityImpulse",
                 "riskAppetite",
                 "ratesPressure",
@@ -564,12 +576,12 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
                 "rotationQuality",
                 "confidence",
                 "confidenceLabel",
+                "notInvestmentAdvice",
                 "topDrivers",
                 "counterEvidence",
                 "dataGaps",
                 "narrativeBullets",
                 "evidenceQuality",
-                "notInvestmentAdvice",
             },
         )
         self.assertIsInstance(synthesis["secondaryRegimes"], list)
@@ -582,6 +594,58 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
 
         serialized = json.dumps(synthesis, ensure_ascii=False, sort_keys=True)
         for forbidden in ("rawPayload", "providerPayload", "raw_payload", "provider_payload"):
+            self.assertNotIn(forbidden, serialized)
+
+    def test_market_temperature_regime_synthesis_research_contract_is_observation_only(self) -> None:
+        service = MarketOverviewService()
+
+        with (
+            patch.object(
+                service,
+                "_build_market_temperature_inputs",
+                return_value=_regime_ready_temperature_inputs(proxy_dxy=True, observation_only_btc=True),
+            ),
+            patch.object(service, "_cached_payload", side_effect=lambda _cache_key, fetcher, _fallback_factory: fetcher()),
+        ):
+            payload = service.get_market_temperature()
+
+        synthesis = payload["marketRegimeSynthesis"]
+        self.assertEqual(synthesis["contractVersion"], "market_regime_synthesis_research_v1")
+        self.assertTrue(synthesis["regimeLabel"])
+        self.assertIn(synthesis["regimePosture"], {"risk_supportive", "risk_defensive", "mixed_or_transition", "data_insufficient"})
+        self.assertTrue(synthesis["generatedAt"])
+        self.assertIn(synthesis["freshness"], {"live", "fresh", "cached", "delayed", "stale", "partial", "fallback", "mock", "synthetic", "unavailable", "error", "unknown"})
+
+        family_keys = {family["key"] for family in synthesis["evidenceFamilies"]}
+        self.assertEqual(
+            family_keys,
+            {"marketOverview", "liquidity", "rotation", "breadth", "riskRegime"},
+        )
+        for family in synthesis["evidenceFamilies"]:
+            self.assertTrue(family["label"])
+            self.assertIn("state", family)
+            self.assertTrue(family["observationOnly"])
+
+        self.assertIsInstance(synthesis["supportiveEvidence"], list)
+        self.assertIsInstance(synthesis["contradictoryEvidence"], list)
+        self.assertTrue(synthesis["missingEvidence"])
+        self.assertTrue(synthesis["researchNextSteps"])
+        self.assertIn(synthesis["confidenceCap"]["label"], {"insufficient", "low", "medium", "high"})
+        self.assertLessEqual(synthesis["confidenceCap"]["value"], synthesis["confidence"])
+        self.assertGreaterEqual(synthesis["confidenceCap"]["value"], 0)
+        self.assertLessEqual(synthesis["confidenceCap"]["value"], 1)
+
+        boundary = synthesis["observationBoundary"]
+        self.assertTrue(boundary["observationOnly"])
+        self.assertFalse(boundary["decisionGrade"])
+        self.assertFalse(boundary["sourceAuthorityAllowed"])
+        self.assertFalse(boundary["scoreContributionAllowed"])
+        self.assertEqual(boundary["consumerActionBoundary"], "no_advice")
+        self.assertTrue(boundary["notInvestmentAdvice"])
+
+        serialized = json.dumps(synthesis, ensure_ascii=False, sort_keys=True)
+        self.assertIsNone(FORBIDDEN_ADVICE_RE.search(serialized))
+        for forbidden in ("rawPayload", "providerPayload", "raw_payload", "provider_payload", "providerBudget", "adminDiagnostics"):
             self.assertNotIn(forbidden, serialized)
 
     def test_market_temperature_exposes_additive_market_decision_semantics_payload(self) -> None:
