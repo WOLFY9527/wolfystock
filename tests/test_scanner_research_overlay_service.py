@@ -188,6 +188,20 @@ def test_build_overlay_preserves_candidate_order_and_projects_required_contract(
     assert payload["overlayState"] == "degraded"
     assert payload["observationOnly"] is True
     assert payload["decisionGrade"] is False
+    assert set(payload["themeLeadershipPacket"]) == {
+        "theme",
+        "leadershipState",
+        "leadingSymbols",
+        "laggingSymbols",
+        "breadthEvidence",
+        "concentrationEvidence",
+        "evidenceGaps",
+        "freshness",
+        "suggestedResearchPath",
+        "observationOnly",
+    }
+    assert payload["themeLeadershipPacket"]["observationOnly"] is True
+    assert payload["themeLeadershipPacket"]["theme"] == "AI Infrastructure"
     assert payload["researchSummary"]
     assert payload["riskObservations"]
     assert payload["evidenceGaps"] == [
@@ -217,7 +231,7 @@ def test_build_overlay_preserves_candidate_order_and_projects_required_contract(
         "Fundamental evidence is missing.",
         "Research readiness evidence is missing.",
     ]
-    assert "Some inputs rely on fallback or delayed evidence, so keep the read cautious." in payload["items"][1]["riskObservations"]
+    assert any("新鲜度" in item for item in payload["items"][1]["riskObservations"])
     assert payload["items"][1]["drilldownTargets"] == [
         {
             "label": "Stock Structure",
@@ -240,6 +254,51 @@ def test_build_overlay_preserves_candidate_order_and_projects_required_contract(
     assert leaked == []
     internal_leaks = [term for term in FORBIDDEN_INTERNAL_TOKENS if term in _serialized_values(payload)]
     assert internal_leaks == []
+
+
+def test_build_overlay_theme_leadership_packet_identifies_broadening_theme_universe() -> None:
+    candidates = [
+        _candidate(symbol="ALFA", rank=1, score=84.0, boards=["AI Infrastructure"]),
+        _candidate(symbol="BETA", rank=2, score=81.0, boards=["AI Infrastructure"]),
+        _candidate(symbol="GAMMA", rank=3, score=78.0, boards=["AI Infrastructure"]),
+        _candidate(symbol="DELTA", rank=4, score=75.0, boards=["AI Infrastructure"]),
+    ]
+    original = copy.deepcopy(candidates)
+
+    payload = ScannerResearchOverlayService(now=_fixed_now).build_overlay(
+        run={
+            "id": 46,
+            "market": "us",
+            "profile": "us_preopen_v1",
+            "scannerContextFrame": {
+                "themeFrame": {
+                    "state": "supportive",
+                    "freshness": "cached",
+                    "themes": [{"label": "AI Infrastructure", "state": "broadening"}],
+                },
+                "universePolicy": {
+                    "type": "theme",
+                    "label": "AI Infrastructure",
+                    "themeId": "ai_infrastructure",
+                },
+            },
+        },
+        candidates=candidates,
+    )
+
+    assert candidates == original
+    packet = payload["themeLeadershipPacket"]
+    assert packet["theme"] == "AI Infrastructure"
+    assert packet["leadershipState"] == "broadening"
+    assert packet["leadingSymbols"] == ["ALFA", "BETA", "GAMMA"]
+    assert packet["laggingSymbols"] == ["DELTA"]
+    assert packet["breadthEvidence"]["themeCandidateCount"] == 4
+    assert packet["breadthEvidence"]["participationPercent"] == 100.0
+    assert packet["concentrationEvidence"]["topSymbolScoreSharePercent"] < 30
+    assert packet["freshness"] == "cached"
+    assert packet["observationOnly"] is True
+    assert packet["suggestedResearchPath"]
+    assert "ai_infrastructure" not in _serialized_values(packet)
 
 
 def test_build_overlay_fails_closed_when_candidate_evidence_is_insufficient() -> None:
@@ -271,6 +330,8 @@ def test_build_overlay_fails_closed_when_candidate_evidence_is_insufficient() ->
     assert payload["dataQuality"]["status"] == "degraded"
     assert "Core scanner evidence is unavailable." in payload["missingEvidence"]
     assert payload["items"][0]["evidenceGaps"] == ["Core scanner evidence is unavailable."]
+    assert payload["themeLeadershipPacket"]["leadershipState"] == "insufficient_evidence"
+    assert payload["themeLeadershipPacket"]["observationOnly"] is True
 
 
 def test_build_overlay_empty_input_returns_degraded_read_only_payload() -> None:
@@ -287,6 +348,9 @@ def test_build_overlay_empty_input_returns_degraded_read_only_payload() -> None:
     assert payload["evidenceGaps"] == ["Scanner candidates are unavailable for this overlay."]
     assert payload["drilldownTargets"] == []
     assert payload["queueDiversity"]["status"] == "unavailable"
+    assert payload["themeLeadershipPacket"]["leadershipState"] == "insufficient_evidence"
+    assert payload["themeLeadershipPacket"]["leadingSymbols"] == []
+    assert payload["themeLeadershipPacket"]["laggingSymbols"] == []
 
 
 def test_build_overlay_filters_unsafe_consumer_copy_from_summary_and_checks() -> None:

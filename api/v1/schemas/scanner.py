@@ -980,6 +980,19 @@ class ScannerResearchOverlayItem(BaseModel):
     noAdviceDisclosure: str
 
 
+class ScannerResearchOverlayThemeLeadershipPacket(BaseModel):
+    theme: str = ""
+    leadershipState: Literal["broadening", "concentrated", "fading", "insufficient_evidence"] = "insufficient_evidence"
+    leadingSymbols: List[str] = Field(default_factory=list)
+    laggingSymbols: List[str] = Field(default_factory=list)
+    breadthEvidence: Dict[str, Any] = Field(default_factory=dict)
+    concentrationEvidence: Dict[str, Any] = Field(default_factory=dict)
+    evidenceGaps: List[str] = Field(default_factory=list)
+    freshness: str = "unknown"
+    suggestedResearchPath: List[str] = Field(default_factory=list)
+    observationOnly: Literal[True] = True
+
+
 class ScannerResearchOverlayDataQuality(BaseModel):
     status: str
     availableCandidateCount: int = 0
@@ -997,6 +1010,9 @@ class ScannerResearchOverlayResponse(BaseModel):
     overlayState: str
     researchSummary: str
     items: List[ScannerResearchOverlayItem] = Field(default_factory=list)
+    themeLeadershipPacket: ScannerResearchOverlayThemeLeadershipPacket = Field(
+        default_factory=ScannerResearchOverlayThemeLeadershipPacket
+    )
     aggregateSummary: Dict[str, Any] = Field(default_factory=dict)
     queueDiversity: Dict[str, Any] = Field(default_factory=dict)
     dataQuality: ScannerResearchOverlayDataQuality
