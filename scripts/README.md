@@ -131,6 +131,17 @@ relevant runbook context:
   roots/assets, build failures, stale local bundles, or mismatched admin
   `buildProvenance`. It is not a substitute for release/UAT browser evidence,
   operator evidence validation, or the normal CI gates.
+- `uat_runtime_smoke_pack.py`: local runtime smoke gate for a freshly built and
+  already running WolfyStock instance before human/browser UAT. Safe usage: run
+  `python3 scripts/uat_runtime_smoke_pack.py` after `uat_fresh_build_verifier.py`
+  to verify the served root bundle matches the expected local/admin
+  `buildProvenance`, smoke a small allowlisted set of public-safe routes, and
+  optionally validate live or captured admin `/api/v1/admin/ops/status` plus
+  `/api/v1/admin/ops/surface-readiness` responses. It fails closed on stale or
+  mismatched frontend bundles, unavailable runtime/public routes, unauthenticated
+  admin ops probes, or invalid readiness/build provenance payloads. It must not
+  be used to print cookies, bearer tokens, secrets, provider payloads, or as a
+  substitute for browser UAT evidence.
 - `production_config_readiness.py`, `launch_acceptance_evidence.py`,
   `incident_response_evidence.py`, `operator_evidence_template_pack.py`,
   `operator_evidence_schema_reference.py`, `operator_evidence_manifest_check.py`,
