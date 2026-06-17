@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends
 
 from api.deps import CurrentUser, get_optional_current_user
+from src.services.consumer_issue_labels import sanitize_consumer_reason_payload
 from src.services.market_overview_service import MarketOverviewService
 
 router = APIRouter()
@@ -43,7 +44,9 @@ def get_sentiment(current_user: Optional[CurrentUser] = Depends(get_optional_cur
 
 @router.get("/funds-flow", summary="Get funds flow indicators")
 def get_funds_flow(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
-    return MarketOverviewService().get_funds_flow(actor=_actor(current_user))
+    return sanitize_consumer_reason_payload(
+        MarketOverviewService().get_funds_flow(actor=_actor(current_user))
+    )
 
 
 @router.get("/macro", summary="Get macro indicators")

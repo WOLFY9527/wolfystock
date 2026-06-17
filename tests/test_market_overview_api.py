@@ -9,6 +9,16 @@ from unittest.mock import MagicMock, patch
 
 from api.v1.endpoints import market_overview
 
+FORBIDDEN_CONSUMER_REASON_TOKENS = (
+    "_blocked",
+    "_gate",
+    "freshness_blocked",
+    "proxy_or_sample_evidence_blocked",
+    "source_authority_or_score_gate_blocked",
+    "source_authority_blocked",
+    "score_gate",
+)
+
 
 class MarketOverviewApiTestCase(unittest.TestCase):
     @staticmethod
@@ -148,6 +158,31 @@ class MarketOverviewApiTestCase(unittest.TestCase):
         self.assertEqual(indices["items"][0]["asOf"], "2026-04-29T10:00:00")
         self.assertEqual(indices["items"][0]["freshness"], "delayed")
         self.assertFalse(indices["items"][0]["isFallback"])
+
+    def test_funds_flow_endpoint_redacts_consumer_evidence_reason_family_codes(self) -> None:
+        service = self._service()
+        service.get_funds_flow.return_value["consumerEvidenceSnapshot"] = {
+            "contractVersion": "market_overview_evidence.v1",
+            "freshness": "fallback",
+            "reasonFamilies": [
+                {
+                    "rawCode": "source_authority_blocked",
+                    "family": "source_authority_blocked",
+                    "scope": "score_gate",
+                    "sourceField": "sourceAuthorityAllowed",
+                }
+            ],
+        }
+        with patch("api.v1.endpoints.market_overview.MarketOverviewService", return_value=service):
+            funds_flow = market_overview.get_funds_flow()
+
+        serialized = json.dumps(funds_flow, ensure_ascii=False).lower()
+        for raw_token in FORBIDDEN_CONSUMER_REASON_TOKENS:
+            self.assertNotIn(raw_token, serialized)
+        self.assertEqual(
+            funds_flow["consumerEvidenceSnapshot"]["reasonFamilies"],
+            [{"label": "证据来源级别不足", "category": "evidence", "sourceField": "sourceAuthorityAllowed"}],
+        )
 
     def test_market_overview_consumer_evidence_snapshot_exposes_safe_data_quality(self) -> None:
         from src.services.market_overview_service import project_market_overview_consumer_evidence_snapshot

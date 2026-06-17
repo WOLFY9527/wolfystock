@@ -9,6 +9,16 @@ from fastapi.testclient import TestClient
 from api.deps import get_optional_current_user
 from api.v1.endpoints import market
 
+FORBIDDEN_CONSUMER_REASON_TOKENS = (
+    "_blocked",
+    "_gate",
+    "freshness_blocked",
+    "proxy_or_sample_evidence_blocked",
+    "source_authority_or_score_gate_blocked",
+    "source_authority_blocked",
+    "score_gate",
+)
+
 
 def _payload() -> dict:
     return {
@@ -201,6 +211,27 @@ class _FakeCockpitService:
         return _payload()
 
 
+class _RawReasonCockpitService:
+    def get_decision_cockpit(self, *, actor=None) -> dict:
+        payload = _payload()
+        payload["marketRegimeDecision"]["missingEvidence"] = [
+            "freshness_blocked:fallback",
+            "source_authority_or_score_gate_blocked",
+        ]
+        payload["marketRegimeDecision"]["driverScores"] = {
+            "breadthParticipation": {
+                "score": 0,
+                "evidenceState": "blocked",
+                "reasons": ["proxy_or_sample_evidence_blocked"],
+            }
+        }
+        payload["dataQuality"]["reasonCodes"] = [
+            "freshness_blocked:fallback",
+            "score_gate",
+        ]
+        return payload
+
+
 def test_market_decision_cockpit_route_is_exposed() -> None:
     app = FastAPI()
     app.include_router(market.router, prefix="/api/v1/market")
@@ -250,4 +281,26 @@ def test_market_decision_cockpit_endpoint_returns_service_payload(monkeypatch) -
     assert payload["consumerIssues"][0]["label"] == "Options chain unavailable"
     assert fake_service.calls == [
         {"actor": {"actor_type": "anonymous", "role": "anonymous", "display_name": "Anonymous"}}
+    ]
+
+
+def test_market_decision_cockpit_endpoint_redacts_raw_reason_codes(monkeypatch) -> None:
+    monkeypatch.setattr(market, "MarketDecisionCockpitService", lambda: _RawReasonCockpitService())
+    app = FastAPI()
+    app.include_router(market.router, prefix="/api/v1/market")
+    app.dependency_overrides[get_optional_current_user] = lambda: None
+
+    response = TestClient(app).get("/api/v1/market/decision-cockpit")
+
+    assert response.status_code == 200
+    payload = response.json()
+    serialized = response.text.lower()
+    for raw_token in FORBIDDEN_CONSUMER_REASON_TOKENS:
+        assert raw_token not in serialized
+    assert payload["marketRegimeDecision"]["missingEvidence"] == [
+        "数据新鲜度尚未确认，当前仅显示降级观察结果",
+        "当前数据源权威性或评分级别不足，暂不能形成可靠研究结论",
+    ]
+    assert payload["marketRegimeDecision"]["driverScores"]["breadthParticipation"]["reasons"] == [
+        "当前仅有样本或代理证据，暂不足以代表完整市场结构"
     ]

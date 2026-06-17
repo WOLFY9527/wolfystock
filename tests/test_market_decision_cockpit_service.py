@@ -56,6 +56,15 @@ FORBIDDEN_RAW_NARRATIVE_TOKENS = (
     "observation_only_not_decision_grade",
     "missing_spot_reference",
 )
+FORBIDDEN_CONSUMER_REASON_TOKENS = (
+    "_blocked",
+    "_gate",
+    "freshness_blocked",
+    "proxy_or_sample_evidence_blocked",
+    "source_authority_or_score_gate_blocked",
+    "source_authority_blocked",
+    "score_gate",
+)
 NARRATIVE_KEYS = (
     "marketRegimeSummary",
     "whatChanged",
@@ -257,6 +266,12 @@ def _assert_consumer_issues_safe(issues: object, raw_codes: tuple[str, ...]) -> 
             assert forbidden not in serialized
 
 
+def _assert_no_raw_consumer_reason_tokens(payload: object) -> None:
+    serialized = json.dumps(payload, ensure_ascii=False).lower()
+    for token in FORBIDDEN_CONSUMER_REASON_TOKENS:
+        assert token not in serialized
+
+
 def test_cockpit_uses_regime_engine_as_primary_judgment_and_shapes_safe_aggregate() -> None:
     payload = build_market_decision_cockpit(
         market_inputs=_regime_ready_inputs(),
@@ -295,7 +310,7 @@ def test_cockpit_uses_regime_engine_as_primary_judgment_and_shapes_safe_aggregat
     assert isinstance(attribution["topNegativeDrivers"], list)
     assert isinstance(attribution["conflictingDrivers"], list)
     assert attribution["unavailableDrivers"][0]["driver"] == "dealerGamma"
-    assert "live_gex_not_implemented_v1" in attribution["unavailableDrivers"][0]["reasonCodes"]
+    assert "Options gamma unavailable" in attribution["unavailableDrivers"][0]["reasonCodes"]
 
     diagnostics = payload["confidenceDiagnostics"]
     assert diagnostics["evidenceStrength"]["confidence"] == decision["confidence"]
@@ -335,8 +350,8 @@ def test_cockpit_uses_regime_engine_as_primary_judgment_and_shapes_safe_aggregat
     assert options["gammaEvidenceStatus"] == "unavailable"
     assert options["observationOnly"] is True
     assert options["decisionGrade"] is False
-    assert "option_chain_unavailable" in options["blockedReasonCodes"]
-    assert "missing_spot_reference" in options["blockedReasonCodes"]
+    assert "Options chain unavailable" in options["blockedReasonCodes"]
+    assert "Spot reference missing" in options["blockedReasonCodes"]
     assert "consumerIssues" in options
     _assert_consumer_issues_safe(
         options["consumerIssues"],
@@ -386,14 +401,15 @@ def test_missing_inputs_fail_closed_with_empty_research_preview_and_blocked_opti
     assert payload["researchQueuePreview"]["topCandidates"] == []
     assert payload["researchQueuePreview"]["degradedState"] == {
         "status": "empty",
-        "reasonCodes": ["research_candidates_unavailable"],
+        "reasonCodes": ["Research candidates unavailable"],
     }
     assert payload["optionsStructureStatus"]["gammaEvidenceStatus"] == "unavailable"
     assert payload["optionsStructureStatus"]["decisionGrade"] is False
     assert payload["dataQuality"]["status"] == "blocked"
-    assert "market_regime_low_confidence" in payload["dataQuality"]["reasonCodes"]
-    assert "research_candidates_unavailable" in payload["dataQuality"]["reasonCodes"]
-    assert "option_chain_unavailable" in payload["dataQuality"]["reasonCodes"]
+    assert "Research candidates unavailable" in payload["dataQuality"]["reasonCodes"]
+    assert "Options chain unavailable" in payload["dataQuality"]["reasonCodes"]
+    assert "research_candidates_unavailable" not in payload["dataQuality"]["reasonCodes"]
+    assert "option_chain_unavailable" not in payload["dataQuality"]["reasonCodes"]
     assert payload["cockpitReadiness"] == {
         "status": "insufficient",
         "reasons": [
@@ -423,6 +439,81 @@ def test_missing_inputs_fail_closed_with_empty_research_preview_and_blocked_opti
         payload["consumerIssues"],
         ("research_candidates_unavailable", "option_chain_unavailable", "missing_contracts"),
     )
+
+
+def test_cockpit_consumer_payload_redacts_raw_reason_codes_from_reason_fields() -> None:
+    payload = build_market_decision_cockpit(
+        market_regime_decision={
+            "regime": "lowConfidence",
+            "confidence": "low",
+            "confidenceScore": 0.24,
+            "driverScores": {
+                "breadthParticipation": {
+                    "score": 0,
+                    "evidenceState": "blocked",
+                    "reasons": [
+                        "freshness_blocked:fallback",
+                        "proxy_or_sample_evidence_blocked",
+                    ],
+                    "evidenceCount": 0,
+                    "observations": [],
+                },
+                "sectorThemeRotation": {
+                    "score": 0,
+                    "evidenceState": "blocked",
+                    "reasons": ["source_authority_or_score_gate_blocked"],
+                    "evidenceCount": 0,
+                    "observations": [],
+                },
+            },
+            "explanation": {
+                "whyThisRegime": ["lowConfidence selected from deterministic driver agreement."],
+                "whatConfirmsIt": [],
+                "whatInvalidatesIt": [],
+                "keyTriggerLevels": [],
+            },
+            "researchPriorities": {
+                "watchToday": [],
+                "needsMoreEvidence": [
+                    "freshness_blocked:fallback",
+                    "source_authority_or_score_gate_blocked",
+                ],
+                "investigateNext": [],
+            },
+            "dataQuality": {
+                "evidenceGrade": "limited",
+                "availableDriverCount": 0,
+                "scoringDriverCount": 0,
+                "blockedDriverCount": 2,
+                "missingDriverCount": 0,
+                "proxyEvidenceCount": 1,
+                "confidenceCapReasons": ["source_authority_or_score_gate_blocked"],
+            },
+            "missingEvidence": [
+                "freshness_blocked:fallback",
+                "proxy_or_sample_evidence_blocked",
+                "source_authority_or_score_gate_blocked",
+            ],
+            "updatedAt": "2026-06-14T21:00:00+00:00",
+        },
+        research_candidates=[],
+        generated_at="2026-06-15T00:00:00+00:00",
+    )
+
+    consumer_payload = {
+        "marketRegimeDecision": payload["marketRegimeDecision"],
+        "scenarioRisks": payload["scenarioRisks"],
+        "evidenceGaps": payload["evidenceGaps"],
+        "dataQuality": payload["dataQuality"],
+        "driverAttribution": payload["driverAttribution"],
+        "confidenceDiagnostics": payload["confidenceDiagnostics"],
+        "consumerIssues": payload["consumerIssues"],
+    }
+
+    _assert_no_raw_consumer_reason_tokens(consumer_payload)
+    assert "数据新鲜度尚未确认，当前仅显示降级观察结果" in payload["marketRegimeDecision"]["missingEvidence"]
+    assert "当前仅有样本或代理证据，暂不足以代表完整市场结构" in payload["marketRegimeDecision"]["missingEvidence"]
+    assert "当前数据源权威性或评分级别不足，暂不能形成可靠研究结论" in payload["marketRegimeDecision"]["missingEvidence"]
 
 
 def test_driver_attribution_surfaces_conflicting_positive_and_negative_drivers() -> None:
@@ -510,7 +601,7 @@ def test_options_evidence_remains_observation_only_even_when_contract_inputs_are
     assert options["gammaEvidenceStatus"] == "ready_observation"
     assert options["observationOnly"] is True
     assert options["decisionGrade"] is False
-    assert options["blockedReasonCodes"] == ["observation_only_not_decision_grade"]
+    assert options["blockedReasonCodes"] == ["Observation-only context"]
     assert options["missingEvidence"] == []
     assert payload["cockpitReadiness"] == {
         "status": "ready",

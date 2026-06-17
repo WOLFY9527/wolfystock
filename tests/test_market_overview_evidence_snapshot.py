@@ -355,9 +355,63 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
         assert projection["sourceAuthorityAllowed"] is False
         assert projection["scoreContributionAllowed"] is False
         assert projection["observationOnly"] is True
-        assert projection["reasonFamilies"] == [{"rawCode": "manual_gate", "family": "score_gate"}]
+        assert projection["reasonFamilies"] == [
+            {
+                "label": "评分门槛未满足",
+                "category": "evidence",
+            }
+        ]
         assert all(key not in projection for key in EVIDENCE_SNAPSHOT_ADMIN_KEYS)
         assert all(not key.endswith("InputCount") for key in projection)
+
+    def test_consumer_evidence_projection_redacts_raw_reason_family_codes(self) -> None:
+        raw_snapshot = {
+            "contractVersion": "market_overview_evidence.v1",
+            "freshness": "fallback",
+            "isFallback": True,
+            "isStale": False,
+            "isPartial": False,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "reasonFamilies": [
+                {
+                    "rawCode": "freshness_blocked:fallback",
+                    "family": "freshness_blocked",
+                    "scope": "freshness",
+                    "sourceField": "freshness",
+                },
+                {
+                    "rawCode": "source_authority_blocked",
+                    "family": "source_authority_blocked",
+                    "scope": "score_gate",
+                    "sourceField": "sourceAuthorityAllowed",
+                },
+            ],
+        }
+
+        projection = project_market_overview_consumer_evidence_snapshot(raw_snapshot)
+
+        assert projection["reasonFamilies"] == [
+            {
+                "label": "数据新鲜度尚未确认，当前仅显示降级观察结果",
+                "category": "freshness",
+                "sourceField": "freshness",
+            },
+            {
+                "label": "证据来源级别不足",
+                "category": "evidence",
+                "sourceField": "sourceAuthorityAllowed",
+            },
+        ]
+        serialized = json.dumps(projection, ensure_ascii=False).lower()
+        for raw_token in (
+            "_blocked",
+            "_gate",
+            "freshness_blocked",
+            "source_authority_blocked",
+            "score_gate",
+        ):
+            assert raw_token not in serialized
 
     def test_consumer_evidence_projection_preserves_degraded_states(self) -> None:
         degraded_cases = [

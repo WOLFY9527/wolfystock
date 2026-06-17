@@ -23,26 +23,38 @@ _GENERIC_ISSUE: ConsumerIssue = {
 
 _ISSUES: dict[str, ConsumerIssue] = {
     "freshness_blocked:fallback": {
-        "label": "Freshness is limited",
-        "message": "Some inputs rely on fallback or delayed evidence, so keep the read cautious.",
+        "label": "数据新鲜度尚未确认，当前仅显示降级观察结果",
+        "message": "数据新鲜度尚未确认，当前仅显示降级观察结果",
         "severity": "warning",
         "category": "freshness",
     },
     "freshness_blocked:unavailable": {
-        "label": "Fresh evidence unavailable",
-        "message": "Fresh source evidence is not available yet.",
+        "label": "数据新鲜度暂不可用，当前仅保留观察结果",
+        "message": "数据新鲜度暂不可用，当前仅保留观察结果",
         "severity": "warning",
         "category": "freshness",
     },
     "proxy_or_sample_evidence_blocked": {
-        "label": "Evidence quality is limited",
-        "message": "Some inputs are proxy or sample evidence, so confidence remains capped.",
+        "label": "当前仅有样本或代理证据，暂不足以代表完整市场结构",
+        "message": "当前仅有样本或代理证据，暂不足以代表完整市场结构",
         "severity": "warning",
         "category": "evidence",
     },
     "source_authority_or_score_gate_blocked": {
-        "label": "Source quality gate not cleared",
-        "message": "Some inputs are not cleared for score-grade conclusions.",
+        "label": "当前数据源权威性或评分级别不足，暂不能形成可靠研究结论",
+        "message": "当前数据源权威性或评分级别不足，暂不能形成可靠研究结论",
+        "severity": "warning",
+        "category": "evidence",
+    },
+    "source_authority_blocked": {
+        "label": "证据来源级别不足",
+        "message": "证据来源级别不足",
+        "severity": "warning",
+        "category": "evidence",
+    },
+    "score_gate": {
+        "label": "评分门槛未满足",
+        "message": "评分门槛未满足",
         "severity": "warning",
         "category": "evidence",
     },
@@ -450,6 +462,30 @@ def build_consumer_message(issues: Sequence[Mapping[str, str]] | None) -> str | 
     return "; ".join(labels) + "."
 
 
+def consumer_safe_reason_label(value: Any) -> str:
+    """Return a consumer-facing reason label without echoing raw codes."""
+
+    return _issue_for(str(value or ""))["label"]
+
+
+def sanitize_consumer_reason_payload(value: Any) -> Any:
+    """Redact raw reason codes from consumer-facing reason-like fields."""
+
+    if isinstance(value, Mapping):
+        if _looks_like_reason_family(value):
+            return _sanitize_reason_family(value)
+        sanitized: dict[str, Any] = {}
+        for key, nested in value.items():
+            if _is_reason_value_key(str(key)):
+                sanitized[str(key)] = _sanitize_reason_value(nested)
+            else:
+                sanitized[str(key)] = sanitize_consumer_reason_payload(nested)
+        return sanitized
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [sanitize_consumer_reason_payload(item) for item in value]
+    return value
+
+
 def _issue_for(token: str) -> ConsumerIssue:
     key = _normalized_key(token)
     alias = _ALIASES.get(key) or _ALIASES.get(str(token or "").strip())
@@ -529,4 +565,113 @@ def _dedupe(values: Sequence[str]) -> list[str]:
     return result
 
 
-__all__ = ["ConsumerIssue", "build_consumer_issues", "build_consumer_message"]
+def _is_reason_value_key(key: str) -> bool:
+    normalized = key.strip()
+    lowered = normalized.lower()
+    return (
+        lowered in {
+            "reason",
+            "reasons",
+            "reasoncode",
+            "reasoncodes",
+            "blockedreasoncodes",
+            "confidencecapreasons",
+            "confidencecaps",
+            "confidencepenalties",
+            "missingevidence",
+            "needsmoreevidence",
+            "evidencegaps",
+            "degradedinputs",
+            "degradationreason",
+            "capreason",
+            "unavailablereason",
+            "disabledreason",
+            "fallbackreason",
+            "sourceauthorityreason",
+            "excludereason",
+            "rawcode",
+            "family",
+            "scope",
+        }
+        or lowered.endswith("reason")
+        or lowered.endswith("reasons")
+        or lowered.endswith("reasoncodes")
+    )
+
+
+def _sanitize_reason_value(value: Any) -> Any:
+    if isinstance(value, str):
+        return _safe_reason_text(value)
+    if isinstance(value, Mapping):
+        return sanitize_consumer_reason_payload(value)
+    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray)):
+        return [_sanitize_reason_value(item) for item in value]
+    return value
+
+
+def _safe_reason_text(value: str) -> str:
+    issue = _issue_for(value)
+    if issue != _GENERIC_ISSUE:
+        return issue["label"]
+    if _looks_like_internal_reason_token(value):
+        return _GENERIC_ISSUE["label"]
+    return value
+
+
+def _looks_like_internal_reason_token(value: str) -> bool:
+    lowered = str(value or "").strip().lower()
+    return (
+        "_blocked" in lowered
+        or "_gate" in lowered
+        or lowered.startswith("freshness_blocked")
+        or lowered in {
+            "proxy_or_sample_evidence_blocked",
+            "source_authority_or_score_gate_blocked",
+            "source_authority_blocked",
+            "score_gate",
+        }
+    )
+
+
+def _looks_like_reason_family(value: Mapping[str, Any]) -> bool:
+    if "rawCode" in value:
+        return True
+    for key in ("family", "scope"):
+        token = str(value.get(key) or "").strip()
+        if not token:
+            continue
+        if _issue_for(token) != _GENERIC_ISSUE or _looks_like_internal_reason_token(token):
+            return True
+    return False
+
+
+def _sanitize_reason_family(value: Mapping[str, Any]) -> dict[str, Any]:
+    issue = _reason_family_issue(value)
+    result = {
+        "label": issue["label"],
+        "category": issue["category"],
+    }
+    source_field = str(value.get("sourceField") or "").strip()
+    if source_field:
+        result["sourceField"] = source_field
+    return result
+
+
+def _reason_family_issue(value: Mapping[str, Any]) -> ConsumerIssue:
+    for key in ("rawCode", "family", "scope"):
+        token = str(value.get(key) or "").strip()
+        if not token:
+            continue
+        issue = _issue_for(token)
+        if issue != _GENERIC_ISSUE:
+            return issue
+    return _GENERIC_ISSUE
+
+
+__all__ = [
+    "ConsumerIssue",
+    "build_consumer_issues",
+    "build_consumer_message",
+    "consumer_safe_reason_label",
+    "sanitize_consumer_reason_payload",
+]
