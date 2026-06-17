@@ -26,6 +26,14 @@ const response = {
       liveEnforcement: false,
       providerBehaviorChanged: false,
       marketCacheBehaviorChanged: false,
+      circuitStateCoverageStatus: 'states_present',
+      providerFailureSignalsPresent: true,
+      circuitStatesPresent: true,
+      circuitEventsPresent: true,
+      probeEventsPresent: true,
+      possibleUnwiredCircuitObservation: false,
+      recommendedNextAction: 'review_existing_circuit_state_rows',
+      diagnosticSignalSources: ['provider_circuit_states'],
       dataSources: ['provider_circuit_states'],
       redaction: ['metadata_omitted'],
       limit: 50,
@@ -197,6 +205,43 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     expect(within(summaryMetrics).getByText('2 拒绝')).toBeInTheDocument();
     expect(within(summaryMetrics).getByText('探测结果')).toBeInTheDocument();
     expect(within(summaryMetrics).getByText('1 正常')).toBeInTheDocument();
+  });
+
+  it('surfaces possible unwired circuit coverage when provider failures exist but circuit rows are empty', async () => {
+    getDiagnostics.mockResolvedValue({
+      ...response,
+      states: {
+        ...response.states,
+        metadata: {
+          ...response.states.metadata,
+          circuitStateCoverageStatus: 'possible_unwired',
+          providerFailureSignalsPresent: true,
+          circuitStatesPresent: false,
+          circuitEventsPresent: false,
+          probeEventsPresent: false,
+          possibleUnwiredCircuitObservation: true,
+          recommendedNextAction: 'provider_failures_observed_without_circuit_state_rows_review_circuit_wiring',
+          diagnosticSignalSources: ['execution_log_sessions', 'provider_quota_windows'],
+        },
+        items: [],
+      },
+      events: {
+        ...response.events,
+        items: [],
+      },
+      probeEvents: {
+        ...response.probeEvents,
+        items: [],
+      },
+    });
+
+    render(<AdminProviderCircuitDiagnosticsPage />);
+
+    const coverage = await screen.findByTestId('provider-circuit-coverage-diagnostics');
+    expect(within(coverage).getByText('熔断覆盖：可能未接线')).toBeInTheDocument();
+    expect(within(coverage).getByText('已观察到 provider failure 信号，但 provider_circuit_states 为空。')).toBeInTheDocument();
+    expect(within(coverage).getByText('下一步：核对 circuit 写入链路与 observer 接入状态')).toBeInTheDocument();
+    expect(within(coverage).getByText('信号来源：execution_log_sessions, provider_quota_windows')).toBeInTheDocument();
   });
 
   it('renders a compact ranked action list from degraded state, quota, SLA, and probe signals', async () => {

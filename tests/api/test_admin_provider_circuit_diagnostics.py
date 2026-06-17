@@ -217,6 +217,171 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
             self.assertFalse(metadata["providerBehaviorChanged"])
             self.assertFalse(metadata["marketCacheBehaviorChanged"])
 
+    def test_empty_circuit_states_with_provider_failure_signals_warns_about_possible_unwired_circuit(self) -> None:
+        self._as_provider_read_admin()
+        base = datetime.now() - timedelta(minutes=10)
+        self.db.update_provider_quota_window_counters(
+            provider="fmp",
+            provider_category="quote",
+            route_family="analysis",
+            window_type="hour",
+            window_start=base,
+            window_end=base + timedelta(hours=1),
+            request_delta=3,
+            failure_delta=1,
+            timeout_delta=1,
+            metadata={
+                "safe_label": "provider_failure_signal",
+                "raw_payload": "must-not-leak",
+                "url": "https://provider.example.test/raw?api_key=must-not-leak",
+            },
+        )
+
+        response = self.client.get("/api/v1/admin/providers/circuits")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["items"], [])
+        metadata = payload["metadata"]
+        self.assertEqual(metadata["circuitStateCoverageStatus"], "possible_unwired")
+        self.assertTrue(metadata["providerFailureSignalsPresent"])
+        self.assertFalse(metadata["circuitStatesPresent"])
+        self.assertFalse(metadata["circuitEventsPresent"])
+        self.assertFalse(metadata["probeEventsPresent"])
+        self.assertTrue(metadata["possibleUnwiredCircuitObservation"])
+        self.assertEqual(
+            metadata["recommendedNextAction"],
+            "provider_failures_observed_without_circuit_state_rows_review_circuit_wiring",
+        )
+        self.assertEqual(metadata["diagnosticSignalSources"], ["provider_quota_windows"])
+        self.assertTrue(metadata["readOnly"])
+        self.assertTrue(metadata["noExternalCalls"])
+        self.assertFalse(metadata["liveEnforcement"])
+        self.assertFalse(metadata["providerBehaviorChanged"])
+        self.assertFalse(metadata["marketCacheBehaviorChanged"])
+        text = self._json_text(payload).lower()
+        for forbidden in (
+            "must-not-leak",
+            "https://provider.example",
+            "api_key",
+            "raw_payload",
+            "owner_user_id",
+            "guest_bucket_hash",
+        ):
+            self.assertNotIn(forbidden, text)
+
+    def test_empty_circuit_states_with_admin_log_provider_failure_signals_warns_without_raw_log_payload(self) -> None:
+        self._as_provider_read_admin()
+        base = datetime.now() - timedelta(minutes=10)
+        self.db.create_execution_log_session(
+            session_id="scanner-provider-failure-1",
+            task_id="scanner_run",
+            code="us",
+            name="Scanner provider failure",
+            overall_status="partial",
+            truth_level="actual",
+            summary={
+                "scanner_run": {
+                    "provider_failure_count": 2,
+                    "provider_diagnostics": {
+                        "provider_failure_count": 2,
+                        "providers_used": ["fmp"],
+                        "raw_payload": "must-not-leak",
+                        "url": "https://provider.example.test/raw?token=must-not-leak",
+                    },
+                },
+            },
+            started_at=base,
+        )
+
+        response = self.client.get("/api/v1/admin/providers/circuits")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        metadata = payload["metadata"]
+        self.assertEqual(metadata["circuitStateCoverageStatus"], "possible_unwired")
+        self.assertTrue(metadata["providerFailureSignalsPresent"])
+        self.assertFalse(metadata["circuitStatesPresent"])
+        self.assertFalse(metadata["circuitEventsPresent"])
+        self.assertFalse(metadata["probeEventsPresent"])
+        self.assertTrue(metadata["possibleUnwiredCircuitObservation"])
+        self.assertIn("execution_log_sessions", metadata["diagnosticSignalSources"])
+        text = self._json_text(payload).lower()
+        for forbidden in (
+            "must-not-leak",
+            "provider.example.test",
+            "https://",
+            "token",
+            "raw_payload",
+        ):
+            self.assertNotIn(forbidden, text)
+
+    def test_empty_circuit_states_without_failure_signals_reports_idle_neutral_status(self) -> None:
+        self._as_provider_read_admin()
+
+        response = self.client.get("/api/v1/admin/providers/circuits")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["items"], [])
+        metadata = payload["metadata"]
+        self.assertEqual(metadata["circuitStateCoverageStatus"], "idle_no_signals")
+        self.assertFalse(metadata["providerFailureSignalsPresent"])
+        self.assertFalse(metadata["circuitStatesPresent"])
+        self.assertFalse(metadata["circuitEventsPresent"])
+        self.assertFalse(metadata["probeEventsPresent"])
+        self.assertFalse(metadata["possibleUnwiredCircuitObservation"])
+        self.assertEqual(metadata["recommendedNextAction"], "no_action_provider_circuit_infrastructure_idle")
+
+    def test_circuit_states_present_suppresses_possible_unwired_warning(self) -> None:
+        self._as_provider_read_admin()
+        base = datetime.now() - timedelta(minutes=10)
+        self.db.transition_provider_circuit_state(
+            provider="fmp",
+            provider_category="quote",
+            route_family="analysis",
+            to_state="closed",
+            reason_bucket="timeout",
+            now=base,
+        )
+        self.db.update_provider_quota_window_counters(
+            provider="fmp",
+            provider_category="quote",
+            route_family="analysis",
+            window_type="hour",
+            window_start=base,
+            window_end=base + timedelta(hours=1),
+            request_delta=3,
+            failure_delta=1,
+        )
+
+        response = self.client.get("/api/v1/admin/providers/circuits")
+
+        self.assertEqual(response.status_code, 200)
+        metadata = response.json()["metadata"]
+        self.assertEqual(metadata["circuitStateCoverageStatus"], "states_present")
+        self.assertTrue(metadata["providerFailureSignalsPresent"])
+        self.assertTrue(metadata["circuitStatesPresent"])
+        self.assertTrue(metadata["circuitEventsPresent"])
+        self.assertFalse(metadata["probeEventsPresent"])
+        self.assertFalse(metadata["possibleUnwiredCircuitObservation"])
+        self.assertEqual(metadata["recommendedNextAction"], "review_existing_circuit_state_rows")
+
+    def test_provider_circuit_diagnostics_auth_boundaries_remain_401_403_and_admin_200(self) -> None:
+        no_auth = self.client.get("/api/v1/admin/providers/circuits")
+        self.assertEqual(no_auth.status_code, 401)
+        self.assertEqual(no_auth.json()["detail"]["error"], "unauthorized")
+
+        self._as_user()
+        consumer = self.client.get("/api/v1/admin/providers/circuits")
+        self.assertEqual(consumer.status_code, 403)
+        self.assertEqual(consumer.json()["detail"]["error"], "admin_required")
+
+        self._as_provider_read_admin()
+        admin = self.client.get("/api/v1/admin/providers/circuits")
+        self.assertEqual(admin.status_code, 200)
+        self.assertIn("circuitStateCoverageStatus", admin.json()["metadata"])
+
     def test_non_admin_denied(self) -> None:
         self._as_user()
 

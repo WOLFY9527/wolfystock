@@ -16,6 +16,14 @@ export interface ProviderCircuitDiagnosticsMetadata {
   liveEnforcement: boolean;
   providerBehaviorChanged: boolean;
   marketCacheBehaviorChanged: boolean;
+  circuitStateCoverageStatus: string;
+  providerFailureSignalsPresent: boolean;
+  circuitStatesPresent: boolean;
+  circuitEventsPresent: boolean;
+  probeEventsPresent: boolean;
+  possibleUnwiredCircuitObservation: boolean;
+  recommendedNextAction: string;
+  diagnosticSignalSources: string[];
   dataSources: string[];
   limit: number;
   redaction: string[];
@@ -177,6 +185,14 @@ function normalizeMetadata(value?: Partial<ProviderCircuitDiagnosticsMetadata> |
     liveEnforcement: value?.liveEnforcement === true,
     providerBehaviorChanged: value?.providerBehaviorChanged === true,
     marketCacheBehaviorChanged: value?.marketCacheBehaviorChanged === true,
+    circuitStateCoverageStatus: String(value?.circuitStateCoverageStatus || 'unknown'),
+    providerFailureSignalsPresent: value?.providerFailureSignalsPresent === true,
+    circuitStatesPresent: value?.circuitStatesPresent === true,
+    circuitEventsPresent: value?.circuitEventsPresent === true,
+    probeEventsPresent: value?.probeEventsPresent === true,
+    possibleUnwiredCircuitObservation: value?.possibleUnwiredCircuitObservation === true,
+    recommendedNextAction: String(value?.recommendedNextAction || 'review_provider_circuit_diagnostics'),
+    diagnosticSignalSources: safeArray<string>(value?.diagnosticSignalSources),
     dataSources: safeArray<string>(value?.dataSources),
     limit: Number(value?.limit || 50),
     redaction: safeArray<string>(value?.redaction),
