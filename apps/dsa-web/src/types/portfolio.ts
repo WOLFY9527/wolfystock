@@ -373,6 +373,90 @@ export interface PortfolioRiskDiagnosticsResponseFields extends PortfolioRiskDia
   confidenceCap?: PortfolioRiskConfidenceCap | null;
 }
 
+export type PortfolioExposureResearchDominantType = 'position' | 'currency' | 'market' | 'none';
+
+export interface PortfolioExposureResearchDominantExposure {
+  type: PortfolioExposureResearchDominantType;
+  symbol?: string | null;
+  label?: string | null;
+  market?: string | null;
+  currency?: string | null;
+  marketValue?: number | null;
+  weightPct?: number | null;
+  fxStatus?: string | null;
+}
+
+export interface PortfolioExposureResearchConcentrationContext {
+  state?: string | null;
+  topWeightPct?: number | null;
+  alert?: boolean | null;
+  holdingCount?: number | null;
+  accountCount?: number | null;
+  dominantType?: string | null;
+  dominantLabel?: string | null;
+}
+
+export interface PortfolioExposureResearchCurrencyContext {
+  state?: string | null;
+  baseCurrency?: string | null;
+  fxFreshnessState?: string | null;
+  largestCurrency?: {
+    currency?: string | null;
+    label?: string | null;
+    weightPct?: number | null;
+    fxStatus?: string | null;
+  } | null;
+  stalePairs?: string[];
+}
+
+export interface PortfolioExposureResearchMarketContext {
+  state?: string | null;
+  largestMarket?: {
+    market?: string | null;
+    label?: string | null;
+    weightPct?: number | null;
+  } | null;
+  marketBreakdown?: Array<{
+    market?: string | null;
+    weightPct?: number | null;
+    positionCount?: number | null;
+  }>;
+  benchmarkMappingState?: string | null;
+  factorMappingState?: string | null;
+  sectorContextState?: string | null;
+}
+
+export interface PortfolioExposureResearchStaleInput {
+  input: string;
+  status?: string | null;
+  reason?: string | null;
+}
+
+export interface PortfolioExposureResearchObservationBoundary {
+  observationOnly?: boolean | null;
+  decisionGrade?: boolean | null;
+  accountingMutation?: boolean | null;
+  portfolioMutation?: boolean | null;
+  adviceBoundary?: string | null;
+  message?: string | null;
+}
+
+export interface PortfolioExposureResearchNextStep {
+  topic: string;
+  check?: string | null;
+}
+
+export interface PortfolioExposureResearchContext {
+  dominantExposure: PortfolioExposureResearchDominantExposure;
+  concentrationContext: PortfolioExposureResearchConcentrationContext;
+  currencyContext: PortfolioExposureResearchCurrencyContext;
+  marketContext: PortfolioExposureResearchMarketContext;
+  staleInputs: PortfolioExposureResearchStaleInput[];
+  evidenceGaps: string[];
+  observationBoundary: PortfolioExposureResearchObservationBoundary;
+  researchNextSteps: PortfolioExposureResearchNextStep[];
+}
+
 export interface PortfolioSnapshotResponse extends PortfolioEvidenceMetadata, PortfolioRiskDiagnosticsResponseFields {
   asOf: string;
   costMethod: PortfolioCostMethod;
@@ -388,6 +472,7 @@ export interface PortfolioSnapshotResponse extends PortfolioEvidenceMetadata, Po
   fxStale: boolean;
   fxRates?: PortfolioFxRateItem[];
   portfolioAttribution?: Record<string, unknown>;
+  exposureResearchContext?: PortfolioExposureResearchContext | null;
   analytics?: PortfolioAnalyticsSummary | null;
   accounts: PortfolioAccountSnapshot[];
 }
@@ -448,6 +533,7 @@ export interface PortfolioRiskResponse extends PortfolioEvidenceMetadata, Portfo
   drawdown: PortfolioDrawdownBlock;
   industryAttribution?: Record<string, unknown>;
   accountAttribution?: Record<string, unknown>;
+  exposureResearchContext?: PortfolioExposureResearchContext | null;
   stopLoss: {
     nearAlert: boolean;
     triggeredCount: number;

@@ -88,6 +88,70 @@ describe('portfolioApi scenario risk adapter', () => {
             debug_trace: 'collapsed',
           },
         },
+        exposure_research_context: {
+          dominant_exposure: {
+            type: 'position',
+            source: 'snapshot_analytics',
+            symbol: 'AAPL',
+            label: 'AAPL',
+            market: 'us',
+            currency: 'USD',
+            market_value: 1600,
+            weight_pct: 100,
+            fx_status: 'live',
+            raw_payload: 'hidden',
+          },
+          concentration_context: {
+            state: 'elevated',
+            top_weight_pct: 100,
+            alert: true,
+            holding_count: 1,
+            account_count: 1,
+            dominant_type: 'position',
+            dominant_label: 'AAPL',
+            warning_codes: ['single_position_gt_30'],
+          },
+          currency_context: {
+            state: 'limited',
+            base_currency: 'CNY',
+            fx_freshness_state: 'stale',
+            largest_currency: {
+              currency: 'USD',
+              label: 'USD',
+              weight_pct: 100,
+              fx_status: 'stale',
+              provider: 'hidden-provider',
+            },
+            stale_pairs: ['USD/CNY'],
+          },
+          market_context: {
+            state: 'limited',
+            largest_market: { market: 'us', label: 'US', weight_pct: 100 },
+            market_breakdown: [
+              { market: 'us', weight_pct: 100, position_count: 1, debug_trace: 'hidden' },
+            ],
+            benchmark_mapping_state: 'unmapped',
+            factor_mapping_state: 'unmapped',
+            sector_context_state: 'unavailable',
+          },
+          stale_inputs: [
+            { input: 'fx_freshness', status: 'stale', reason: 'aggregate_currency_context_limited', provider: 'hidden' },
+          ],
+          evidence_gaps: ['fx_freshness', 'benchmark_mapping'],
+          observation_boundary: {
+            observation_only: true,
+            decision_grade: false,
+            accounting_mutation: false,
+            portfolio_mutation: false,
+            provider_routing_changed: false,
+            external_provider_calls_added: false,
+            advice_boundary: 'no_advice',
+            message: 'Observation-only portfolio research context; not personalized financial advice and not an instruction.',
+          },
+          research_next_steps: [
+            { topic: 'dominant_exposure', check: 'Review latest research evidence for AAPL and its market context.', raw_payload: 'hidden' },
+          ],
+        },
         accounts: [
           {
             account_id: 1,
@@ -164,6 +228,62 @@ describe('portfolioApi scenario risk adapter', () => {
         debugTrace: 'collapsed',
       },
     });
+    expect(payload.exposureResearchContext).toEqual({
+      dominantExposure: {
+        type: 'position',
+        symbol: 'AAPL',
+        label: 'AAPL',
+        market: 'us',
+        currency: 'USD',
+        marketValue: 1600,
+        weightPct: 100,
+        fxStatus: 'live',
+      },
+      concentrationContext: {
+        state: 'elevated',
+        topWeightPct: 100,
+        alert: true,
+        holdingCount: 1,
+        accountCount: 1,
+        dominantType: 'position',
+        dominantLabel: 'AAPL',
+      },
+      currencyContext: {
+        state: 'limited',
+        baseCurrency: 'CNY',
+        fxFreshnessState: 'stale',
+        largestCurrency: {
+          currency: 'USD',
+          label: 'USD',
+          weightPct: 100,
+          fxStatus: 'stale',
+        },
+        stalePairs: ['USD/CNY'],
+      },
+      marketContext: {
+        state: 'limited',
+        largestMarket: { market: 'us', label: 'US', weightPct: 100 },
+        marketBreakdown: [{ market: 'us', weightPct: 100, positionCount: 1 }],
+        benchmarkMappingState: 'unmapped',
+        factorMappingState: 'unmapped',
+        sectorContextState: 'unavailable',
+      },
+      staleInputs: [{ input: 'fx_freshness', status: 'stale', reason: 'aggregate_currency_context_limited' }],
+      evidenceGaps: ['fx_freshness', 'benchmark_mapping'],
+      observationBoundary: {
+        observationOnly: true,
+        decisionGrade: false,
+        accountingMutation: false,
+        portfolioMutation: false,
+        adviceBoundary: 'no_advice',
+        message: 'Observation-only portfolio research context; not personalized financial advice and not an instruction.',
+      },
+      researchNextSteps: [{ topic: 'dominant_exposure', check: 'Review latest research evidence for AAPL and its market context.' }],
+    });
+    const contextKeys = new Set(walkKeys(payload.exposureResearchContext));
+    for (const forbiddenKey of ['source', 'warningCodes', 'providerRoutingChanged', 'externalProviderCallsAdded', 'rawPayload', 'debugTrace']) {
+      expect(contextKeys.has(forbiddenKey)).toBe(false);
+    }
     expect(payload.fxRates?.[0]).toEqual({
       fromCurrency: 'USD',
       toCurrency: 'CNY',
@@ -209,7 +329,82 @@ describe('portfolioApi scenario risk adapter', () => {
       'is_stale',
       'updated_at',
       'source_direction',
+      'dominant_exposure',
+      'concentration_context',
+      'currency_context',
+      'market_context',
+      'stale_inputs',
+      'observation_boundary',
+      'research_next_steps',
+      'warning_codes',
+      'provider_routing_changed',
+      'external_provider_calls_added',
+      'raw_payload',
     ]) {
+      expect(keys.has(forbiddenKey)).toBe(false);
+    }
+  });
+
+  it('normalizes portfolio risk exposure research context with the same bounded projection', async () => {
+    const { portfolioApi } = await import('../portfolio');
+
+    get.mockResolvedValueOnce({
+      data: {
+        as_of: '2026-03-19',
+        account_id: null,
+        cost_method: 'fifo',
+        currency: 'CNY',
+        thresholds: {},
+        concentration: { total_market_value: 2000, top_weight_pct: 55, alert: true, top_positions: [] },
+        sector_concentration: { total_market_value: 2000, top_weight_pct: 0, alert: false, top_sectors: [], coverage: {}, errors: [] },
+        drawdown: { series_points: 0, max_drawdown_pct: 0, current_drawdown_pct: 0, alert: false, fx_stale: false },
+        stop_loss: { near_alert: false, triggered_count: 0, near_count: 0, items: [] },
+        exposure_research_context: {
+          dominant_exposure: { type: 'currency', currency: 'USD', label: 'USD', weight_pct: 82, source: 'risk_debug' },
+          concentration_context: { state: 'elevated', top_weight_pct: 82, alert: true, warning_codes: ['single_currency_gt_80'] },
+          currency_context: { state: 'observable', base_currency: 'CNY', fx_freshness_state: 'current', stale_pairs: [] },
+          market_context: { state: 'observable', benchmark_mapping_state: 'mapped', factor_mapping_state: 'mapped' },
+          stale_inputs: [],
+          evidence_gaps: [],
+          observation_boundary: {
+            observation_only: true,
+            decision_grade: false,
+            accounting_mutation: false,
+            portfolio_mutation: false,
+            provider_routing_changed: false,
+            external_provider_calls_added: false,
+            advice_boundary: 'no_advice',
+            message: 'Observation-only portfolio research context; not personalized financial advice and not an instruction.',
+          },
+          research_next_steps: [{ topic: 'dominant_exposure', check: 'Review the largest exposure bucket before interpreting portfolio context.' }],
+        },
+      },
+    });
+
+    const payload = await portfolioApi.getRisk({ costMethod: 'fifo' });
+
+    expect(get).toHaveBeenCalledWith('/api/v1/portfolio/risk', {
+      params: { cost_method: 'fifo' },
+    });
+    expect(payload.exposureResearchContext).toMatchObject({
+      dominantExposure: { type: 'currency', currency: 'USD', label: 'USD', weightPct: 82 },
+      concentrationContext: { state: 'elevated', topWeightPct: 82, alert: true },
+      currencyContext: { state: 'observable', baseCurrency: 'CNY', fxFreshnessState: 'current', stalePairs: [] },
+      marketContext: { state: 'observable', benchmarkMappingState: 'mapped', factorMappingState: 'mapped' },
+      staleInputs: [],
+      evidenceGaps: [],
+      observationBoundary: {
+        observationOnly: true,
+        decisionGrade: false,
+        accountingMutation: false,
+        portfolioMutation: false,
+        adviceBoundary: 'no_advice',
+      },
+      researchNextSteps: [{ topic: 'dominant_exposure', check: 'Review the largest exposure bucket before interpreting portfolio context.' }],
+    });
+
+    const keys = new Set(walkKeys(payload.exposureResearchContext));
+    for (const forbiddenKey of ['source', 'warningCodes', 'providerRoutingChanged', 'externalProviderCallsAdded']) {
       expect(keys.has(forbiddenKey)).toBe(false);
     }
   });

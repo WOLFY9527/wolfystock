@@ -13,6 +13,7 @@ import type {
   PortfolioCostMethod,
   PortfolioDeleteResponse,
   PortfolioEventCreatedResponse,
+  PortfolioExposureResearchContext,
   PortfolioFxRefreshResponse,
   PortfolioLiveFxRateResponse,
   PortfolioImportBrokerListResponse,
@@ -267,6 +268,212 @@ function normalizeStructureReviewDataQuality(value: unknown): PortfolioStructure
       failClosed: pickBoolean(data.failClosed),
     }).filter(([, entry]) => entry !== undefined),
   ) as PortfolioStructureReviewDataQuality;
+}
+
+function normalizeStringRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
+}
+
+function normalizeNullableString(value: unknown): string | null | undefined {
+  return typeof value === 'string' ? value : value === null ? null : undefined;
+}
+
+function normalizeNullableNumber(value: unknown): number | null | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : value === null ? null : undefined;
+}
+
+function normalizeExposureResearchDominantExposure(value: unknown): PortfolioExposureResearchContext['dominantExposure'] {
+  const data = normalizeStringRecord(value);
+  const type = pickString(data.type);
+  const normalized: PortfolioExposureResearchContext['dominantExposure'] = {
+    type: type === 'position' || type === 'currency' || type === 'market' || type === 'none' ? type : 'none',
+  };
+  const symbol = normalizeNullableString(data.symbol);
+  const label = normalizeNullableString(data.label);
+  const market = normalizeNullableString(data.market);
+  const currency = normalizeNullableString(data.currency);
+  const marketValue = normalizeNullableNumber(data.marketValue);
+  const weightPct = normalizeNullableNumber(data.weightPct);
+  const fxStatus = normalizeNullableString(data.fxStatus);
+  if (symbol !== undefined) normalized.symbol = symbol;
+  if (label !== undefined) normalized.label = label;
+  if (market !== undefined) normalized.market = market;
+  if (currency !== undefined) normalized.currency = currency;
+  if (marketValue !== undefined) normalized.marketValue = marketValue;
+  if (weightPct !== undefined) normalized.weightPct = weightPct;
+  if (fxStatus !== undefined) normalized.fxStatus = fxStatus;
+  return normalized;
+}
+
+function normalizeExposureResearchConcentrationContext(value: unknown): PortfolioExposureResearchContext['concentrationContext'] {
+  const data = normalizeStringRecord(value);
+  return Object.fromEntries(
+    Object.entries({
+      state: normalizeNullableString(data.state),
+      topWeightPct: normalizeNullableNumber(data.topWeightPct),
+      alert: pickBoolean(data.alert),
+      holdingCount: normalizeNullableNumber(data.holdingCount),
+      accountCount: normalizeNullableNumber(data.accountCount),
+      dominantType: normalizeNullableString(data.dominantType),
+      dominantLabel: normalizeNullableString(data.dominantLabel),
+    }).filter(([, entry]) => entry !== undefined),
+  ) as PortfolioExposureResearchContext['concentrationContext'];
+}
+
+function normalizeExposureResearchCurrencyContext(value: unknown): PortfolioExposureResearchContext['currencyContext'] {
+  const data = normalizeStringRecord(value);
+  const largestCurrency = normalizeStringRecord(data.largestCurrency);
+  return Object.fromEntries(
+    Object.entries({
+      state: normalizeNullableString(data.state),
+      baseCurrency: normalizeNullableString(data.baseCurrency),
+      fxFreshnessState: normalizeNullableString(data.fxFreshnessState),
+      largestCurrency: Object.keys(largestCurrency).length
+        ? Object.fromEntries(
+          Object.entries({
+            currency: normalizeNullableString(largestCurrency.currency),
+            label: normalizeNullableString(largestCurrency.label),
+            weightPct: normalizeNullableNumber(largestCurrency.weightPct),
+            fxStatus: normalizeNullableString(largestCurrency.fxStatus),
+          }).filter(([, entry]) => entry !== undefined),
+        )
+        : null,
+      stalePairs: pickStringArray(data.stalePairs) ?? [],
+    }).filter(([, entry]) => entry !== undefined),
+  ) as PortfolioExposureResearchContext['currencyContext'];
+}
+
+function normalizeExposureResearchMarketContext(value: unknown): PortfolioExposureResearchContext['marketContext'] {
+  const data = normalizeStringRecord(value);
+  const largestMarket = normalizeStringRecord(data.largestMarket);
+  const marketBreakdown = Array.isArray(data.marketBreakdown)
+    ? data.marketBreakdown.flatMap((entry) => {
+      if (!isRecord(entry)) {
+        return [];
+      }
+      return [Object.fromEntries(
+        Object.entries({
+          market: normalizeNullableString(entry.market),
+          weightPct: normalizeNullableNumber(entry.weightPct),
+          positionCount: normalizeNullableNumber(entry.positionCount),
+        }).filter(([, item]) => item !== undefined),
+      )];
+    })
+    : [];
+
+  return Object.fromEntries(
+    Object.entries({
+      state: normalizeNullableString(data.state),
+      largestMarket: Object.keys(largestMarket).length
+        ? Object.fromEntries(
+          Object.entries({
+            market: normalizeNullableString(largestMarket.market),
+            label: normalizeNullableString(largestMarket.label),
+            weightPct: normalizeNullableNumber(largestMarket.weightPct),
+          }).filter(([, entry]) => entry !== undefined),
+        )
+        : null,
+      marketBreakdown,
+      benchmarkMappingState: normalizeNullableString(data.benchmarkMappingState),
+      factorMappingState: normalizeNullableString(data.factorMappingState),
+      sectorContextState: normalizeNullableString(data.sectorContextState),
+    }).filter(([, entry]) => entry !== undefined),
+  ) as PortfolioExposureResearchContext['marketContext'];
+}
+
+function normalizeExposureResearchStaleInputs(value: unknown): PortfolioExposureResearchContext['staleInputs'] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) {
+      return [];
+    }
+    const input = pickString(entry.input);
+    if (!input) {
+      return [];
+    }
+    const normalized: PortfolioExposureResearchContext['staleInputs'][number] = { input };
+    const status = normalizeNullableString(entry.status);
+    const reason = normalizeNullableString(entry.reason);
+    if (status !== undefined) normalized.status = status;
+    if (reason !== undefined) normalized.reason = reason;
+    return [normalized];
+  });
+}
+
+function normalizeExposureResearchNextSteps(value: unknown): PortfolioExposureResearchContext['researchNextSteps'] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) {
+      return [];
+    }
+    const topic = pickString(entry.topic);
+    if (!topic) {
+      return [];
+    }
+    const normalized: PortfolioExposureResearchContext['researchNextSteps'][number] = { topic };
+    const check = normalizeNullableString(entry.check);
+    if (check !== undefined) normalized.check = check;
+    return [normalized];
+  });
+}
+
+function normalizeExposureResearchObservationBoundary(value: unknown): PortfolioExposureResearchContext['observationBoundary'] {
+  const data = normalizeStringRecord(value);
+  return Object.fromEntries(
+    Object.entries({
+      observationOnly: pickBoolean(data.observationOnly),
+      decisionGrade: pickBoolean(data.decisionGrade),
+      accountingMutation: pickBoolean(data.accountingMutation),
+      portfolioMutation: pickBoolean(data.portfolioMutation),
+      adviceBoundary: normalizeNullableString(data.adviceBoundary),
+      message: normalizeNullableString(data.message),
+    }).filter(([, entry]) => entry !== undefined),
+  ) as PortfolioExposureResearchContext['observationBoundary'];
+}
+
+function normalizeExposureResearchContext(value: unknown): PortfolioExposureResearchContext | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  const data = toCamelCase<Record<string, unknown>>(value);
+  if (!isRecord(data)) {
+    return undefined;
+  }
+
+  return {
+    dominantExposure: normalizeExposureResearchDominantExposure(data.dominantExposure),
+    concentrationContext: normalizeExposureResearchConcentrationContext(data.concentrationContext),
+    currencyContext: normalizeExposureResearchCurrencyContext(data.currencyContext),
+    marketContext: normalizeExposureResearchMarketContext(data.marketContext),
+    staleInputs: normalizeExposureResearchStaleInputs(data.staleInputs),
+    evidenceGaps: pickStringArray(data.evidenceGaps) ?? [],
+    observationBoundary: normalizeExposureResearchObservationBoundary(data.observationBoundary),
+    researchNextSteps: normalizeExposureResearchNextSteps(data.researchNextSteps),
+  };
+}
+
+function normalizePortfolioSnapshotResponse(data: unknown): PortfolioSnapshotResponse {
+  const normalized = toCamelCase<PortfolioSnapshotResponse>(data);
+  return {
+    ...normalized,
+    exposureResearchContext: normalizeExposureResearchContext(
+      isRecord(normalized) ? normalized.exposureResearchContext : undefined,
+    ),
+  };
+}
+
+function normalizePortfolioRiskResponse(data: unknown): PortfolioRiskResponse {
+  const normalized = toCamelCase<PortfolioRiskResponse>(data);
+  return {
+    ...normalized,
+    exposureResearchContext: normalizeExposureResearchContext(
+      isRecord(normalized) ? normalized.exposureResearchContext : undefined,
+    ),
+  };
 }
 
 function normalizeStructureReviewResponse(data: unknown): PortfolioStructureReviewResponse {
@@ -644,7 +851,7 @@ export const portfolioApi = {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/portfolio/snapshot', {
       params: buildSnapshotParams(query),
     });
-    return toCamelCase<PortfolioSnapshotResponse>(response.data);
+    return normalizePortfolioSnapshotResponse(response.data);
   },
 
   async getStructureReview(query: StructureReviewQuery = {}): Promise<PortfolioStructureReviewResponse> {
@@ -658,7 +865,7 @@ export const portfolioApi = {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/portfolio/risk', {
       params: buildSnapshotParams(query),
     });
-    return toCamelCase<PortfolioRiskResponse>(response.data);
+    return normalizePortfolioRiskResponse(response.data);
   },
 
   async projectScenarioRisk(payload: PortfolioScenarioRiskRequest): Promise<PortfolioScenarioRiskResponse> {
