@@ -389,6 +389,26 @@ class PortfolioAnalyticsSummary(BaseModel):
 
 
 class PortfolioSnapshotResponse(BaseModel):
+    schemaVersion: Literal["portfolio_snapshot_consumer_v1"] = "portfolio_snapshot_consumer_v1"
+    noAdviceDisclosure: str = "Observation-only portfolio research context; not personalized financial advice and not an instruction."
+    observationOnly: Literal[True] = True
+    decisionGrade: Literal[False] = False
+    consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
+    evidenceGaps: List[str] = Field(default_factory=list)
+    degradedInputs: List[Dict[str, str]] = Field(default_factory=list)
+    dataQuality: Dict[str, Any] = Field(default_factory=dict)
+    freshnessStatus: Optional[
+        Literal[
+            "no_account",
+            "no_positions",
+            "data_unavailable",
+            "provider_unavailable",
+            "calculation_unavailable",
+            "stale_or_cached",
+            "ready",
+            "unknown",
+        ]
+    ] = None
     as_of: str
     cost_method: str
     currency: str
@@ -660,6 +680,26 @@ class PortfolioLiveFxRateResponse(BaseModel):
 
 
 class PortfolioRiskResponse(BaseModel):
+    schemaVersion: Literal["portfolio_risk_consumer_v1"] = "portfolio_risk_consumer_v1"
+    noAdviceDisclosure: str = "Observation-only portfolio research context; not personalized financial advice and not an instruction."
+    observationOnly: Literal[True] = True
+    decisionGrade: Literal[False] = False
+    consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
+    evidenceGaps: List[str] = Field(default_factory=list)
+    degradedInputs: List[Dict[str, str]] = Field(default_factory=list)
+    dataQuality: Dict[str, Any] = Field(default_factory=dict)
+    freshnessStatus: Optional[
+        Literal[
+            "no_account",
+            "no_positions",
+            "data_unavailable",
+            "provider_unavailable",
+            "calculation_unavailable",
+            "stale_or_cached",
+            "ready",
+            "unknown",
+        ]
+    ] = None
     as_of: str
     account_id: Optional[int] = None
     cost_method: str

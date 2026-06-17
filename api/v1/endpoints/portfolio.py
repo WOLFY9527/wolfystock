@@ -100,6 +100,11 @@ _IMPORT_ARTIFACT_SECRET_KEY_MARKERS = (
     "token",
 )
 _ADMIN_DIAGNOSTIC_CAMEL_BOUNDARY_RE = re.compile(r"(?<!^)(?=[A-Z])")
+PORTFOLIO_SNAPSHOT_CONSUMER_SCHEMA_VERSION = "portfolio_snapshot_consumer_v1"
+PORTFOLIO_RISK_CONSUMER_SCHEMA_VERSION = "portfolio_risk_consumer_v1"
+PORTFOLIO_CONSUMER_NO_ADVICE_DISCLOSURE = (
+    "Observation-only portfolio research context; not personalized financial advice and not an instruction."
+)
 
 
 def _is_admin_only_diagnostic_key(key: Any) -> bool:
@@ -126,6 +131,207 @@ def _redact_consumer_admin_diagnostics(value: Any) -> Any:
     if isinstance(value, tuple):
         return tuple(_redact_consumer_admin_diagnostics(item) for item in value)
     return value
+
+
+def _portfolio_consumer_safety_envelope(data: dict[str, Any], *, schema_version: str) -> dict[str, Any]:
+    payload = dict(data or {})
+    data_status = _safe_status(payload.get("data_status"), default="unknown")
+    calculation_status = _safe_status(payload.get("calculation_status"), default="unknown")
+    freshness_status = data_status
+    availability = payload.get("availability") if isinstance(payload.get("availability"), dict) else {}
+    metrics_ready = bool(availability.get("metrics_ready")) if availability else calculation_status == "ready"
+    evidence_gaps = _portfolio_consumer_evidence_gaps(payload, data_status=data_status)
+    degraded_inputs = _portfolio_consumer_degraded_inputs(
+        payload,
+        data_status=data_status,
+        calculation_status=calculation_status,
+        evidence_gaps=evidence_gaps,
+    )
+    payload.update(
+        {
+            "schemaVersion": schema_version,
+            "noAdviceDisclosure": PORTFOLIO_CONSUMER_NO_ADVICE_DISCLOSURE,
+            "observationOnly": True,
+            "decisionGrade": False,
+            "consumerIssues": _portfolio_consumer_issues(
+                data_status=data_status,
+                evidence_gaps=evidence_gaps,
+                degraded_inputs=degraded_inputs,
+            ),
+            "evidenceGaps": evidence_gaps,
+            "degradedInputs": degraded_inputs,
+            "dataQuality": {
+                "status": data_status,
+                "freshnessStatus": freshness_status,
+                "calculationStatus": calculation_status,
+                "reason": _safe_status(availability.get("reason"), default=data_status),
+                "metricsReady": metrics_ready,
+                "accountCount": _safe_int(availability.get("account_count", payload.get("account_count"))),
+                "positionCount": _safe_int(availability.get("position_count")),
+                "evidenceGapCount": len(evidence_gaps),
+                "degradedInputCount": len(degraded_inputs),
+                "observationOnly": True,
+                "decisionGrade": False,
+                "sourceAuthorityState": _safe_status(payload.get("sourceAuthorityState"), default="unknown"),
+                "fxFreshnessState": _safe_status(payload.get("fxFreshnessState"), default="unknown"),
+                "confidenceCapValue": _confidence_cap_value(payload),
+            },
+            "freshnessStatus": freshness_status,
+        }
+    )
+    return payload
+
+
+def _safe_status(value: Any, *, default: str) -> str:
+    text = str(value or "").strip().lower().replace(" ", "_")
+    return text or default
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _confidence_cap_value(payload: dict[str, Any]) -> Optional[int]:
+    confidence_cap = payload.get("confidenceCap")
+    if not isinstance(confidence_cap, dict):
+        return None
+    try:
+        return max(0, min(100, int(confidence_cap.get("value"))))
+    except (TypeError, ValueError):
+        return None
+
+
+def _portfolio_consumer_evidence_gaps(payload: dict[str, Any], *, data_status: str) -> list[str]:
+    gaps: list[str] = []
+    if data_status == "no_account":
+        _append_gap(gaps, "portfolio_account")
+    elif data_status == "no_positions":
+        _append_gap(gaps, "portfolio_positions")
+    elif data_status == "provider_unavailable":
+        _append_gap(gaps, "valuation_inputs")
+    elif data_status == "stale_or_cached":
+        _append_gap(gaps, "freshness")
+    elif data_status in {"data_unavailable", "calculation_unavailable"}:
+        _append_gap(gaps, "portfolio_metrics")
+
+    if _safe_status(payload.get("fxFreshnessState"), default="unknown") in {"stale", "unavailable"}:
+        _append_gap(gaps, "fx_freshness")
+    if _safe_status(payload.get("holdingsLineageState"), default="unknown") in {"missing", "partial"}:
+        _append_gap(gaps, "position_lineage")
+    if _safe_status(payload.get("cashLedgerCompletenessState"), default="unknown") in {"missing", "partial"}:
+        _append_gap(gaps, "cash_ledger")
+    if _safe_status(payload.get("benchmarkMappingState"), default="unknown") == "unmapped":
+        _append_gap(gaps, "benchmark_mapping")
+    if _safe_status(payload.get("factorMappingState"), default="unknown") == "unmapped":
+        _append_gap(gaps, "factor_mapping")
+    return gaps
+
+
+def _append_gap(gaps: list[str], value: str) -> None:
+    if value and value not in gaps:
+        gaps.append(value)
+
+
+def _portfolio_consumer_degraded_inputs(
+    payload: dict[str, Any],
+    *,
+    data_status: str,
+    calculation_status: str,
+    evidence_gaps: list[str],
+) -> list[dict[str, str]]:
+    degraded: list[dict[str, str]] = []
+    availability = payload.get("availability") if isinstance(payload.get("availability"), dict) else {}
+    reason = _safe_status(availability.get("reason"), default=data_status)
+    if data_status != "ready":
+        section, message = _portfolio_status_degraded_message(data_status)
+        degraded.append(
+            {
+                "section": section,
+                "status": data_status,
+                "reason": reason,
+                "message": message,
+            }
+        )
+    if calculation_status == "calculation_unavailable" and data_status not in {"no_account", "no_positions"}:
+        degraded.append(
+            {
+                "section": "calculation",
+                "status": calculation_status,
+                "reason": "metrics_unavailable",
+                "message": "Portfolio metrics are unavailable for this observation.",
+            }
+        )
+    for gap in evidence_gaps:
+        if gap in {"benchmark_mapping", "factor_mapping"}:
+            degraded.append(
+                {
+                    "section": gap,
+                    "status": "limited",
+                    "reason": "mapping_unavailable",
+                    "message": "Comparative research context is not mapped for this observation.",
+                }
+            )
+    return degraded
+
+
+def _portfolio_status_degraded_message(data_status: str) -> tuple[str, str]:
+    if data_status == "no_account":
+        return "portfolio_account", "Portfolio account evidence is not available for this observation."
+    if data_status == "no_positions":
+        return "portfolio_positions", "Portfolio position evidence is not available for this observation."
+    if data_status == "provider_unavailable":
+        return "valuation_inputs", "Some valuation inputs use existing fallback metadata."
+    if data_status == "stale_or_cached":
+        return "freshness", "Snapshot freshness is limited by cached or stale inputs."
+    return "portfolio_metrics", "Portfolio evidence is limited for this observation."
+
+
+def _portfolio_consumer_issues(
+    *,
+    data_status: str,
+    evidence_gaps: list[str],
+    degraded_inputs: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    if data_status in {"no_account", "no_positions", "data_unavailable", "calculation_unavailable"}:
+        return [
+            {
+                "label": "Evidence unavailable",
+                "message": "Portfolio evidence is not available for this observation.",
+                "severity": "warning",
+                "category": "evidence",
+            }
+        ]
+    if data_status == "stale_or_cached":
+        return [
+            {
+                "label": "Freshness is limited",
+                "message": "Some portfolio inputs rely on cached or stale evidence.",
+                "severity": "warning",
+                "category": "freshness",
+            }
+        ]
+    if data_status == "provider_unavailable":
+        return [
+            {
+                "label": "Evidence needs review",
+                "message": "Some valuation evidence is unavailable or uses fallback metadata.",
+                "severity": "warning",
+                "category": "evidence",
+            }
+        ]
+    if degraded_inputs or evidence_gaps:
+        return [
+            {
+                "label": "Research context limited",
+                "message": "Some comparative or freshness evidence is not fully mapped.",
+                "severity": "info",
+                "category": "evidence",
+            }
+        ]
+    return []
 
 
 def _get_portfolio_service(current_user: CurrentUser) -> PortfolioService:
@@ -1267,7 +1473,14 @@ def get_snapshot(
             as_of=as_of,
             cost_method=cost_method,
         )
-        return PortfolioSnapshotResponse(**_redact_consumer_admin_diagnostics(data))
+        return PortfolioSnapshotResponse(
+            **_redact_consumer_admin_diagnostics(
+                _portfolio_consumer_safety_envelope(
+                    data,
+                    schema_version=PORTFOLIO_SNAPSHOT_CONSUMER_SCHEMA_VERSION,
+                )
+            )
+        )
     except ValueError as exc:
         raise _bad_request(exc)
     except Exception as exc:
@@ -1560,7 +1773,14 @@ def get_risk_report(
     service = PortfolioRiskService(portfolio_service=_get_portfolio_service(current_user))
     try:
         data = service.get_risk_report(account_id=account_id, as_of=as_of, cost_method=cost_method)
-        return PortfolioRiskResponse(**_redact_consumer_admin_diagnostics(data))
+        return PortfolioRiskResponse(
+            **_redact_consumer_admin_diagnostics(
+                _portfolio_consumer_safety_envelope(
+                    data,
+                    schema_version=PORTFOLIO_RISK_CONSUMER_SCHEMA_VERSION,
+                )
+            )
+        )
     except ValueError as exc:
         raise _bad_request(exc)
     except Exception as exc:
