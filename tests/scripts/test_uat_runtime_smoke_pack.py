@@ -134,6 +134,8 @@ def test_probe_runtime_bundle_accepts_matching_root_asset_and_public_routes() ->
     assert report["checks"]["runtimeBundle"]["status"] == "PASS"
     assert report["checks"]["publicRoutes"]["status"] == "PASS"
     assert report["checks"]["publicRoutes"]["failingRoutes"] == []
+    assert report["checks"]["authenticatedRoutes"]["status"] == "PASS"
+    assert report["checks"]["authenticatedRoutes"]["failingRoutes"] == []
     output = json.dumps(report, ensure_ascii=False, sort_keys=True)
     assert "opaque-admin-session" not in output
 
@@ -149,8 +151,8 @@ def test_runtime_bundle_fails_when_served_asset_does_not_match_expected_bundle()
             ("GET", f"{base_url}/assets/index-Stale999.js"): _FakeResponse(200, text="console.log('stale');"),
             ("GET", f"{base_url}/api/health"): _FakeResponse(200, payload={"status": "ok"}),
             ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": False}),
-            ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
-            ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(200, payload={"themes": []}),
+            ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
+            ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
         }
     )
 
@@ -180,8 +182,8 @@ def test_partial_when_admin_status_json_is_present_but_surface_readiness_is_unve
             ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
             ("GET", f"{base_url}/api/health"): _FakeResponse(200, payload={"status": "ok"}),
             ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": False}),
-            ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
-            ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(200, payload={"themes": []}),
+            ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
+            ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
         }
     )
 
@@ -238,6 +240,145 @@ def test_fail_when_live_admin_status_returns_unauthorized() -> None:
     assert report["checks"]["adminOpsStatus"]["reasonCodes"] == ["admin_status_auth_required"]
 
 
+def test_unauthenticated_protected_routes_are_partial_not_fail() -> None:
+    base_url = "http://127.0.0.1:8000"
+    client = _FakeClient(
+        {
+            ("GET", f"{base_url}/"): _FakeResponse(
+                200,
+                text='<html><head><script type="module" crossorigin src="/assets/index-CKPdXr8Q.js"></script></head></html>',
+            ),
+            ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
+            ("GET", f"{base_url}/api/health"): _FakeResponse(200, payload={"status": "ok"}),
+            ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": False}),
+            ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
+            ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
+        }
+    )
+
+    report = smoke.run_runtime_smoke(
+        base_url=base_url,
+        client=client,
+        git_head="e2a90b4bd5fd1f84a1e44abde7f2b23da6a16590",
+        local_build_result=smoke.VerificationResult(ok=True, payload=_local_provenance()),
+        admin_status_payload=_admin_status_payload(),
+        surface_readiness_payload=_surface_readiness_payload(),
+        auth_headers=None,
+    )
+
+    assert report["summaryStatus"] == "PARTIAL"
+    assert report["exitCode"] == 1
+    assert report["checks"]["publicRoutes"]["status"] == "PASS"
+    assert report["checks"]["authenticatedRoutes"]["status"] == "PARTIAL"
+    assert report["checks"]["authenticatedRoutes"]["reasonCodes"] == ["authenticated_routes_auth_required"]
+    assert report["checks"]["authenticatedRoutes"]["failingRoutes"] == []
+    assert report["checks"]["authenticatedRoutes"]["authRequiredRoutes"] == [
+        {"method": "GET", "path": "/api/v1/market-overview/indices", "httpStatus": 401},
+        {"method": "GET", "path": "/api/v1/scanner/themes", "httpStatus": 401},
+    ]
+
+
+def test_true_public_route_failure_still_fails_smoke() -> None:
+    base_url = "http://127.0.0.1:8000"
+    client = _FakeClient(
+        {
+            ("GET", f"{base_url}/"): _FakeResponse(
+                200,
+                text='<html><head><script type="module" crossorigin src="/assets/index-CKPdXr8Q.js"></script></head></html>',
+            ),
+            ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
+            ("GET", f"{base_url}/api/health"): _FakeResponse(503, payload={"status": "down"}),
+            ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": False}),
+            ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
+            ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
+        }
+    )
+
+    report = smoke.run_runtime_smoke(
+        base_url=base_url,
+        client=client,
+        git_head="e2a90b4bd5fd1f84a1e44abde7f2b23da6a16590",
+        local_build_result=smoke.VerificationResult(ok=True, payload=_local_provenance()),
+        admin_status_payload=_admin_status_payload(),
+        surface_readiness_payload=_surface_readiness_payload(),
+        auth_headers=None,
+    )
+
+    assert report["summaryStatus"] == "FAIL"
+    assert report["checks"]["publicRoutes"]["status"] == "FAIL"
+    assert report["checks"]["publicRoutes"]["failingRoutes"] == [
+        {"method": "GET", "path": "/api/health", "httpStatus": 503}
+    ]
+    assert report["checks"]["authenticatedRoutes"]["status"] == "PARTIAL"
+
+
+def test_authenticated_routes_pass_with_supplied_auth_headers() -> None:
+    base_url = "http://127.0.0.1:8000"
+    client = _FakeClient(
+        {
+            ("GET", f"{base_url}/"): _FakeResponse(
+                200,
+                text='<html><head><script type="module" crossorigin src="/assets/index-CKPdXr8Q.js"></script></head></html>',
+            ),
+            ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
+            ("GET", f"{base_url}/api/health"): _FakeResponse(200, payload={"status": "ok"}),
+            ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": True}),
+            ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
+            ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(200, payload={"themes": []}),
+        }
+    )
+
+    report = smoke.run_runtime_smoke(
+        base_url=base_url,
+        client=client,
+        git_head="e2a90b4bd5fd1f84a1e44abde7f2b23da6a16590",
+        local_build_result=smoke.VerificationResult(ok=True, payload=_local_provenance()),
+        admin_status_payload=_admin_status_payload(),
+        surface_readiness_payload=_surface_readiness_payload(),
+        auth_headers={"Cookie": "opaque-admin-session"},
+    )
+
+    assert report["summaryStatus"] == "PASS"
+    assert report["checks"]["authenticatedRoutes"]["status"] == "PASS"
+    assert report["checks"]["authenticatedRoutes"]["checkedRoutes"] == [
+        {"method": "GET", "path": "/api/v1/market-overview/indices", "httpStatus": 200},
+        {"method": "GET", "path": "/api/v1/scanner/themes", "httpStatus": 200},
+    ]
+
+
+def test_authenticated_routes_fail_when_auth_supplied_but_route_unavailable() -> None:
+    base_url = "http://127.0.0.1:8000"
+    client = _FakeClient(
+        {
+            ("GET", f"{base_url}/"): _FakeResponse(
+                200,
+                text='<html><head><script type="module" crossorigin src="/assets/index-CKPdXr8Q.js"></script></head></html>',
+            ),
+            ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
+            ("GET", f"{base_url}/api/health"): _FakeResponse(200, payload={"status": "ok"}),
+            ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": True}),
+            ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(503, payload={"detail": "Unavailable"}),
+            ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(200, payload={"themes": []}),
+        }
+    )
+
+    report = smoke.run_runtime_smoke(
+        base_url=base_url,
+        client=client,
+        git_head="e2a90b4bd5fd1f84a1e44abde7f2b23da6a16590",
+        local_build_result=smoke.VerificationResult(ok=True, payload=_local_provenance()),
+        admin_status_payload=_admin_status_payload(),
+        surface_readiness_payload=_surface_readiness_payload(),
+        auth_headers={"Authorization": "Bearer opaque"},
+    )
+
+    assert report["summaryStatus"] == "FAIL"
+    assert report["checks"]["authenticatedRoutes"]["status"] == "FAIL"
+    assert report["checks"]["authenticatedRoutes"]["failingRoutes"] == [
+        {"method": "GET", "path": "/api/v1/market-overview/indices", "httpStatus": 503}
+    ]
+
+
 def test_verify_surface_readiness_payload_accepts_bounded_contract() -> None:
     result = smoke.verify_surface_readiness_payload(_surface_readiness_payload())
 
@@ -269,8 +410,8 @@ def test_main_supports_json_stdout_with_admin_status_file(monkeypatch, tmp_path:
                 ("GET", "http://127.0.0.1:8000/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="ok"),
                 ("GET", "http://127.0.0.1:8000/api/health"): _FakeResponse(200, payload={"status": "ok"}),
                 ("GET", "http://127.0.0.1:8000/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": False}),
-                ("GET", "http://127.0.0.1:8000/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
-                ("GET", "http://127.0.0.1:8000/api/v1/scanner/themes"): _FakeResponse(200, payload={"themes": []}),
+                ("GET", "http://127.0.0.1:8000/api/v1/market-overview/indices"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
+                ("GET", "http://127.0.0.1:8000/api/v1/scanner/themes"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
             }
         ),
     )
@@ -281,6 +422,36 @@ def test_main_supports_json_stdout_with_admin_status_file(monkeypatch, tmp_path:
     payload = json.loads(capsys.readouterr().out)
     assert payload["summaryStatus"] == "PARTIAL"
     assert payload["checks"]["adminOpsStatus"]["status"] == "PASS"
+    assert payload["checks"]["authenticatedRoutes"]["status"] == "PARTIAL"
+
+
+def test_parse_auth_headers_keeps_values_but_report_does_not_echo_them() -> None:
+    headers = smoke._parse_auth_headers(
+        [
+            "Authorization: Bearer opaque-token",
+            "Cookie: session=opaque-cookie",
+            "X-Admin-Password: secret-password",
+        ]
+    )
+
+    assert headers == {
+        "Authorization": "Bearer opaque-token",
+        "Cookie": "session=opaque-cookie",
+        "X-Admin-Password": "secret-password",
+    }
+
+    report = {
+        "checks": {
+            "authenticatedRoutes": {
+                "status": "PARTIAL",
+                "reasonCodes": ["authenticated_routes_auth_required"],
+            }
+        }
+    }
+    output = json.dumps(report, ensure_ascii=False, sort_keys=True)
+    assert "opaque-token" not in output
+    assert "opaque-cookie" not in output
+    assert "secret-password" not in output
 
 
 def test_base_url_rejects_embedded_credentials() -> None:
