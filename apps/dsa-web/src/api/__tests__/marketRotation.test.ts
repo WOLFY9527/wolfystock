@@ -378,6 +378,40 @@ describe('marketRotationApi', () => {
             breadth: { percent_up: 88, percent_outperforming_benchmark: 88 },
             synchronization: { same_direction_percent: 88 },
             leadership: { top_members: [{ symbol: 'APP', name: 'APP', change_percent: 5.1 }] },
+            theme_correlation_breadth_snapshot: {
+              contract_version: 'theme_correlation_breadth_snapshot_v1',
+              theme: { id: 'ai_applications', name: 'AI 应用', market: 'US' },
+              participation_state: 'broad_group',
+              leadership_concentration: {
+                state: 'balanced',
+                percent: 36,
+                broad_participation_percent: 64,
+                top_members: ['APP', 'PLTR'],
+              },
+              correlation_evidence: {
+                state: 'aligned',
+                same_direction_percent: 88,
+                above_vwap_percent: 82,
+                persistence_percent: 76,
+              },
+              breadth_evidence: {
+                state: 'broad',
+                observed_members: 3,
+                configured_members: 3,
+                coverage_percent: 100,
+                percent_up: 88,
+                percent_outperforming_benchmark: 88,
+              },
+              stale_inputs: [],
+              missing_inputs: [],
+              observation_boundary: {
+                scope: 'existing_theme_fields',
+                ranking_impact: 'none',
+                data_mutation: 'none',
+                data_fetches: 'none',
+              },
+              research_next_steps: ['Watch whether broad participation persists across the next observation window.'],
+            },
             theme_detail: { watchlist_safe: true, safe_action_label: '仅观察，不构成买卖建议' },
             members: [],
             no_advice_disclosure: '仅用于观察资金轮动迹象，非买卖建议。',
@@ -432,6 +466,40 @@ describe('marketRotationApi', () => {
     expect(payload.themes[0].persistenceEvidence?.label).toBe('跨时窗延续');
     expect(payload.themes[0].themeFlowSignal?.themeFlowState).toBe('leading');
     expect(payload.themes[0].themeFlowSignal?.freshness).toBe('cached');
+    expect(payload.themes[0].themeCorrelationBreadthSnapshot).toMatchObject({
+      participationState: 'broad_group',
+      leadershipConcentration: {
+        state: 'balanced',
+        percent: 36,
+        broadParticipationPercent: 64,
+        topMembers: ['APP', 'PLTR'],
+      },
+      correlationEvidence: {
+        state: 'aligned',
+        sameDirectionPercent: 88,
+        aboveVwapPercent: 82,
+        persistencePercent: 76,
+      },
+      breadthEvidence: {
+        state: 'broad',
+        observedMembers: 3,
+        configuredMembers: 3,
+        coveragePercent: 100,
+        percentUp: 88,
+        percentOutperformingBenchmark: 88,
+      },
+      staleInputs: [],
+      missingInputs: [],
+      observationBoundary: {
+        scope: 'existing_theme_fields',
+        rankingImpact: 'none',
+        dataMutation: 'none',
+        dataFetches: 'none',
+      },
+    });
+    expect(payload.themes[0].themeCorrelationBreadthSnapshot?.researchNextSteps).toEqual([
+      'Watch whether broad participation persists across the next observation window.',
+    ]);
     expect(payload.themes[0].alertCandidates?.[0].readOnly).toBe(true);
     expect(payload.themes[0].alertCandidates?.[0].sortExplanation).toContain('非买卖建议');
     expect(payload.summary.watchlistSignals[0].label).toBe('关注候选');
