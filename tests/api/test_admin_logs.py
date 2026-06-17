@@ -1436,6 +1436,158 @@ class AdminLogsApiTestCase(unittest.TestCase):
         for forbidden in ("secret", "traceback", "raw_response", "must-not-leak"):
             self.assertNotIn(forbidden, dumped)
 
+    def test_root_health_summary_classifies_provider_cache_security_and_internal_failures(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+
+            provider_id = service.start_execution(
+                category="data_source",
+                type="market_health",
+                event="binance:timeout",
+                summary="Binance provider timeout",
+                subject="Binance",
+                metadata={"provider": "binance"},
+                actor={"actor_type": "system"},
+            )
+            service.start_step(provider_id, "fetch_quote", "获取行情", category="data_source", provider="binance")
+            service.finish_step_failed(
+                provider_id,
+                "fetch_quote",
+                provider="binance",
+                error_type="ProviderTimeout",
+                error_message="provider timeout token=SECRET",
+                reason="timeout",
+                metadata={"raw_payload": {"token": "SECRET"}},
+            )
+            service.finish_execution(provider_id, status="failed")
+
+            cache_id = service.start_execution(
+                category="cache",
+                type="market_cache",
+                event="fallback:cache",
+                summary="Fallback cache served",
+                subject="MarketCache",
+                metadata={"provider": "local_cache"},
+                actor={"actor_type": "system"},
+            )
+            service.start_step(cache_id, "load_market_data", "加载行情", category="cache", provider="local_cache")
+            service.finish_step_failed(
+                cache_id,
+                "load_market_data",
+                provider="local_cache",
+                error_type="CacheFallback",
+                error_message="cache fallback served cookie=SECRET",
+                reason="fallback_served",
+                metadata={"request_body": {"cookie": "SECRET"}},
+            )
+            service.finish_execution(cache_id, status="partial")
+
+            security_id = service.record_admin_action(
+                action="admin_security.login_failed",
+                message="admin login failed Authorization: Bearer SECRET",
+                actor={"user_id": "admin-raw-id", "role": "admin", "actor_type": "admin"},
+                subsystem="security",
+                overall_status="failed",
+                detail={
+                    "category": "security",
+                    "level": "WARNING",
+                    "reason_code": "unauthorized",
+                    "request_body": {"password": "SECRET"},
+                    "traceback": "Traceback SECRET",
+                },
+            )
+
+            internal_id = service.start_execution(
+                category="api",
+                type="admin_logs",
+                event="InternalException",
+                summary="Internal application exception",
+                subject="Admin Logs",
+                actor={"actor_type": "system"},
+            )
+            service.start_step(internal_id, "build_summary", "Build summary", category="api")
+            service.finish_step_failed(
+                internal_id,
+                "build_summary",
+                error_type="ValueError",
+                error_message="unexpected failure session_id=SECRET",
+                reason="internal_exception",
+                metadata={"env": "SECRET", "password_hash": "SECRET"},
+            )
+            service.finish_execution(internal_id, status="failed")
+
+            unknown_id = service.start_execution(
+                category="system",
+                type="admin_logs",
+                event="UnclassifiedFailure",
+                summary="Unclassified failure",
+                subject="Admin Logs",
+                actor={"actor_type": "system"},
+            )
+            service.start_step(unknown_id, "unknown_step", "Unknown", category="system")
+            service.finish_step_failed(
+                unknown_id,
+                "unknown_step",
+                error_type="MysteryFailure",
+                error_message="mystery failure api_key=SECRET",
+                reason="mystery_failure",
+            )
+            service.finish_execution(unknown_id, status="failed")
+
+            payload = admin_logs.list_execution_logs_root(limit=10, _=_admin_user())
+
+        self.assertIsNotNone(payload.health_summary)
+        summary = payload.health_summary
+        assert summary is not None
+        self.assertEqual(summary.failed_events, 4)
+        self.assertEqual(summary.warning_events, 1)
+        self.assertEqual(summary.expectedExternalFailureCount, 2)
+        self.assertEqual(summary.providerFailureCount, 1)
+        self.assertEqual(summary.cacheFailureCount, 1)
+        self.assertEqual(summary.securityFailureCount, 1)
+        self.assertEqual(summary.internalApplicationFailureCount, 1)
+        self.assertEqual(summary.unknownFailureCount, 1)
+        self.assertEqual(
+            {bucket.key: bucket.count for bucket in summary.failureClassBreakdown},
+            {
+                "expected_external": 2,
+                "security": 1,
+                "internal_application": 1,
+                "unknown": 1,
+            },
+        )
+        self.assertEqual(summary.healthInterpretation, "internal_attention_required")
+        self.assertEqual(summary.recommendedNextAction, "investigate_internal_and_security_failures")
+
+        dumped = str(summary.model_dump())
+        classification_dump = str(
+            {
+                "failureClassBreakdown": summary.failureClassBreakdown,
+                "expectedExternalFailureCount": summary.expectedExternalFailureCount,
+                "providerFailureCount": summary.providerFailureCount,
+                "cacheFailureCount": summary.cacheFailureCount,
+                "securityFailureCount": summary.securityFailureCount,
+                "internalApplicationFailureCount": summary.internalApplicationFailureCount,
+                "unknownFailureCount": summary.unknownFailureCount,
+                "healthInterpretation": summary.healthInterpretation,
+                "recommendedNextAction": summary.recommendedNextAction,
+            }
+        )
+        for forbidden in (
+            "SECRET",
+            "raw_payload",
+            "request_body",
+            "Bearer",
+            "password_hash",
+            "Traceback",
+        ):
+            self.assertNotIn(forbidden, dumped)
+            self.assertNotIn(forbidden, classification_dump)
+        for forbidden in ("Authorization", "session_id", "env"):
+            self.assertNotIn(forbidden, classification_dump)
+        for forbidden in (provider_id, cache_id, security_id, internal_id, unknown_id):
+            self.assertNotIn(forbidden, classification_dump)
+
     def test_storage_summary_returns_retention_and_volume_counts(self) -> None:
         now = datetime.now()
         self._record_event(
@@ -2025,6 +2177,44 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(list_response.json()["detail"]["error"], "admin_required")
         self.assertEqual(detail_response.status_code, 403)
         self.assertEqual(detail_response.json()["detail"]["error"], "admin_required")
+
+    def test_business_event_list_requires_auth_and_admin_can_read_classification_fields(self) -> None:
+        no_auth_app = FastAPI()
+        no_auth_app.include_router(admin_logs.router, prefix="/api/v1/admin/logs")
+        no_auth_client = TestClient(no_auth_app)
+
+        no_auth_response = no_auth_client.get("/api/v1/admin/logs")
+
+        self.assertEqual(no_auth_response.status_code, 401)
+
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_execution(
+                category="data_source",
+                type="market_health",
+                event="binance:timeout",
+                summary="Binance provider timeout",
+                subject="Binance",
+                metadata={"provider": "binance"},
+                actor={"actor_type": "system"},
+            )
+            service.start_step(execution_id, "fetch_quote", "获取行情", category="data_source", provider="binance")
+            service.finish_step_failed(
+                execution_id,
+                "fetch_quote",
+                provider="binance",
+                error_type="ProviderTimeout",
+                error_message="provider timeout token=SECRET",
+                reason="timeout",
+            )
+            service.finish_execution(execution_id, status="failed")
+            payload = admin_logs.list_execution_logs_root(_=_admin_user_with_capabilities("ops:logs:read"))
+
+        self.assertIsNotNone(payload.health_summary)
+        assert payload.health_summary is not None
+        self.assertEqual(payload.health_summary.expectedExternalFailureCount, 1)
+        self.assertEqual(payload.health_summary.providerFailureCount, 1)
+        self.assertEqual(payload.health_summary.failureClassBreakdown[0].key, "expected_external")
 
     def test_data_missing_drilldown_requires_logs_read_capability(self) -> None:
         app = FastAPI()
