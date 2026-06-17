@@ -135,6 +135,39 @@ export interface WatchlistDeleteResponse {
   deleted: number;
 }
 
+export type WatchlistResearchPriorityTier = 'attention' | 'follow_up' | 'monitor';
+
+export interface WatchlistResearchPriorityEvidenceAge {
+  state: string;
+  lastReviewedAt?: string | null;
+}
+
+export interface WatchlistResearchOverlayDrilldownTarget {
+  label: string;
+  route: string;
+  section: string;
+  reason: string;
+}
+
+export interface WatchlistResearchPriorityQueueItem {
+  symbol: string;
+  priorityTier: WatchlistResearchPriorityTier;
+  priorityReasonSafeLabel: string;
+  evidenceAge: WatchlistResearchPriorityEvidenceAge;
+  missingEvidence: string[];
+  suggestedResearchPath: WatchlistResearchOverlayDrilldownTarget[];
+  observationOnly: true;
+}
+
+export interface WatchlistResearchOverlayResponse {
+  schemaVersion: string;
+  overlayState: string;
+  researchSummary: string;
+  researchPriorityQueue: WatchlistResearchPriorityQueueItem[];
+  observationOnly: true;
+  decisionGrade: false;
+}
+
 export interface WatchlistScoreRefreshRequest {
   market?: string;
   source?: 'scanner';

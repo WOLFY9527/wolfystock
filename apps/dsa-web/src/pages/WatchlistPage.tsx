@@ -41,10 +41,11 @@ import {
 import ResearchWorkspaceFlowPanel from '../components/research/ResearchWorkspaceFlowPanel';
 import UserAlertsRailPanel from '../components/user-alerts/UserAlertsRailPanel';
 import LeveragedEtfMapper from '../components/watchlist/LeveragedEtfMapper';
+import WatchlistResearchQueuePanel from '../components/watchlist/WatchlistResearchQueuePanel';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 import type { InvestorSignalContract } from '../types/scanner';
-import type { WatchlistCatalystExposure, WatchlistItem, WatchlistScannerLineageV1 } from '../types/watchlist';
+import type { WatchlistCatalystExposure, WatchlistItem, WatchlistResearchPriorityQueueItem, WatchlistScannerLineageV1 } from '../types/watchlist';
 import type { RuleBacktestRunResponse } from '../types/backtest';
 import { describeBooleanEnabled, describeDisplayStatus, type DisplayStatusTone } from '../utils/displayStatus';
 import { buildLocalizedPath } from '../utils/localeRouting';
@@ -1420,6 +1421,7 @@ const WatchlistPage: React.FC = () => {
   const copy = getCopy(language);
   const routeContext = useMemo(() => parseResearchWorkspaceSearch(routeSearch), [routeSearch]);
   const [items, setItems] = useState<WatchlistItem[]>([]);
+  const [researchPriorityQueue, setResearchPriorityQueue] = useState<WatchlistResearchPriorityQueueItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
@@ -1479,6 +1481,23 @@ const WatchlistPage: React.FC = () => {
       })
       .finally(() => {
         if (isMounted) setIsLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [isGuest]);
+
+  useEffect(() => {
+    if (isGuest) return;
+    let isMounted = true;
+    watchlistApi.getResearchOverlay()
+      .then((response) => {
+        if (!isMounted) return;
+        setResearchPriorityQueue(response.researchPriorityQueue || []);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setResearchPriorityQueue([]);
       });
     return () => {
       isMounted = false;
@@ -1714,6 +1733,7 @@ const WatchlistPage: React.FC = () => {
     try {
       await watchlistApi.removeWatchlistItem(item.id);
       setItems((current) => current.filter((row) => row.id !== item.id));
+      setResearchPriorityQueue((current) => current.filter((row) => row.symbol !== item.symbol));
       setNotice({ tone: 'success', message: copy.removed });
     } catch (err) {
       setNotice({ tone: 'danger', message: getParsedApiError(err).message });
@@ -1738,12 +1758,14 @@ const WatchlistPage: React.FC = () => {
   const handleRefreshIntelligence = useCallback(async () => {
     setNotice(null);
     try {
-      const [listResponse, statusResponse] = await Promise.all([
+      const [listResponse, statusResponse, overlayResponse] = await Promise.all([
         watchlistApi.listWatchlistItems(),
         watchlistApi.getRefreshStatus().catch(() => null),
+        watchlistApi.getResearchOverlay().catch(() => null),
       ]);
       setItems(listResponse.items || []);
       setRefreshStatus(statusResponse);
+      setResearchPriorityQueue(overlayResponse?.researchPriorityQueue || []);
     } catch (err) {
       setNotice({ tone: 'danger', message: getParsedApiError(err).message });
     }
@@ -1770,7 +1792,10 @@ const WatchlistPage: React.FC = () => {
         force: true,
         symbols: targets.flatMap((item) => (item.symbol ? [item.symbol] : [])),
       } : { force: true });
-      const listResponse = await watchlistApi.listWatchlistItems();
+      const [listResponse, overlayResponse] = await Promise.all([
+        watchlistApi.listWatchlistItems(),
+        watchlistApi.getResearchOverlay().catch(() => null),
+      ]);
       const failures = Object.fromEntries(
         (response.results || [])
           .flatMap((result) => (
@@ -1780,6 +1805,7 @@ const WatchlistPage: React.FC = () => {
           )),
       );
       setItems(listResponse.items || []);
+      setResearchPriorityQueue(overlayResponse?.researchPriorityQueue || []);
       setBatchFailures(failures);
       setBatchProgress({
         kind: 'scan',
@@ -2056,6 +2082,11 @@ const WatchlistPage: React.FC = () => {
           data-testid="watchlist-status-strip"
           ariaLabel="watchlist summary"
           items={statusItems}
+        />
+
+        <WatchlistResearchQueuePanel
+          queue={researchPriorityQueue}
+          language={language}
         />
 
         {watchlistWorkflowSymbol ? (

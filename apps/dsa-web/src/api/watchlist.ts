@@ -6,6 +6,11 @@ import type {
   WatchlistItem,
   WatchlistItemCreateRequest,
   WatchlistItemListResponse,
+  WatchlistResearchOverlayDrilldownTarget,
+  WatchlistResearchOverlayResponse,
+  WatchlistResearchPriorityEvidenceAge,
+  WatchlistResearchPriorityQueueItem,
+  WatchlistResearchPriorityTier,
   WatchlistScoreRefreshRequest,
   WatchlistScoreRefreshResponse,
   WatchlistScoreRefreshStatus,
@@ -33,6 +38,12 @@ const SAFE_CATALYST_REASON_CODES = new Set([
   'fundamental_snapshot_present',
   'official_macro_cache_status_present',
   'stored_news_catalyst_proxy',
+]);
+
+const SAFE_RESEARCH_PRIORITY_TIERS = new Set<WatchlistResearchPriorityTier>([
+  'attention',
+  'follow_up',
+  'monitor',
 ]);
 
 function normalizeOptionalText(value: unknown): string | null {
@@ -65,6 +76,50 @@ function normalizeOptionalStringList(value: unknown, allowList: Set<string>): st
 
 function normalizeOptionalBoolean(value: unknown): boolean | null {
   return typeof value === 'boolean' ? value : null;
+}
+
+function normalizeConsumerTextList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(
+    value
+      .map((entry) => normalizeOptionalText(entry))
+      .filter((entry): entry is string => Boolean(entry)),
+  ));
+}
+
+function normalizeResearchPriorityTier(value: unknown): WatchlistResearchPriorityTier | null {
+  const normalized = normalizeOptionalText(value)?.toLowerCase() ?? null;
+  return normalized && SAFE_RESEARCH_PRIORITY_TIERS.has(normalized as WatchlistResearchPriorityTier)
+    ? normalized as WatchlistResearchPriorityTier
+    : null;
+}
+
+function normalizeEvidenceAge(value: unknown): WatchlistResearchPriorityEvidenceAge | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const state = normalizeOptionalText(record.state);
+  if (!state) return null;
+  return {
+    state,
+    lastReviewedAt: normalizeOptionalText(record.lastReviewedAt),
+  };
+}
+
+function normalizeSuggestedResearchPath(value: unknown): WatchlistResearchOverlayDrilldownTarget[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return [];
+    const record = entry as Record<string, unknown>;
+    const label = normalizeOptionalText(record.label);
+    const route = normalizeOptionalText(record.route);
+    if (!label || !route) return [];
+    return [{
+      label,
+      route,
+      section: normalizeOptionalText(record.section) ?? '',
+      reason: normalizeOptionalText(record.reason) ?? '',
+    }];
+  });
 }
 
 function normalizeCatalystExposure(
@@ -116,6 +171,47 @@ function normalizeWatchlistItem(item: WatchlistItem): WatchlistItem {
   };
 }
 
+function normalizeResearchPriorityQueueItem(value: unknown): WatchlistResearchPriorityQueueItem | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const symbol = normalizeOptionalText(record.symbol)?.toUpperCase() ?? null;
+  const priorityTier = normalizeResearchPriorityTier(record.priorityTier);
+  const priorityReasonSafeLabel = normalizeOptionalText(record.priorityReasonSafeLabel);
+  const evidenceAge = normalizeEvidenceAge(record.evidenceAge);
+  if (!symbol || !priorityTier || !priorityReasonSafeLabel || !evidenceAge || record.observationOnly !== true) {
+    return null;
+  }
+
+  return {
+    symbol,
+    priorityTier,
+    priorityReasonSafeLabel,
+    evidenceAge,
+    missingEvidence: normalizeConsumerTextList(record.missingEvidence),
+    suggestedResearchPath: normalizeSuggestedResearchPath(record.suggestedResearchPath),
+    observationOnly: true,
+  };
+}
+
+function normalizeResearchOverlay(payload: unknown): WatchlistResearchOverlayResponse {
+  const normalized = toCamelCase<WatchlistResearchOverlayResponse>(payload);
+  const queue = Array.isArray(normalized.researchPriorityQueue)
+    ? normalized.researchPriorityQueue
+      .map((item) => normalizeResearchPriorityQueueItem(item))
+      .filter((item): item is WatchlistResearchPriorityQueueItem => Boolean(item))
+      .slice(0, 5)
+    : [];
+
+  return {
+    schemaVersion: normalizeOptionalText(normalized.schemaVersion) ?? 'watchlist_research_overlay_v1',
+    overlayState: normalizeOptionalText(normalized.overlayState) ?? 'unknown',
+    researchSummary: normalizeOptionalText(normalized.researchSummary) ?? '',
+    researchPriorityQueue: queue,
+    observationOnly: true,
+    decisionGrade: false,
+  };
+}
+
 export const watchlistApi = {
   async listWatchlistItems(): Promise<WatchlistItemListResponse> {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/watchlist/items');
@@ -161,5 +257,10 @@ export const watchlistApi = {
   async getRefreshStatus(): Promise<WatchlistScoreRefreshStatus> {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/watchlist/refresh-status');
     return toCamelCase<WatchlistScoreRefreshStatus>(response.data);
+  },
+
+  async getResearchOverlay(): Promise<WatchlistResearchOverlayResponse> {
+    const response = await apiClient.get<Record<string, unknown>>('/api/v1/watchlist/research-overlay');
+    return normalizeResearchOverlay(response.data);
   },
 };
