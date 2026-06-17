@@ -305,6 +305,51 @@ function actionReasonLabel(value?: string | null): string {
   return sanitized === '已脱敏' ? '已脱敏线索' : `${sanitized} 线索`;
 }
 
+function coverageStatusLabel(value?: string | null): string {
+  const labels: Record<string, string> = {
+    possible_unwired: '熔断覆盖：可能未接线',
+    idle_no_signals: '熔断覆盖：空闲 / 暂无故障信号',
+    states_present: '熔断覆盖：状态表已接入',
+    unknown: '熔断覆盖：状态未知',
+  };
+  return labels[String(value || 'unknown').toLowerCase()] || labels.unknown;
+}
+
+function coverageActionLabel(value?: string | null): string {
+  const labels: Record<string, string> = {
+    provider_failures_observed_without_circuit_state_rows_review_circuit_wiring: '下一步：核对 circuit 写入链路与 observer 接入状态',
+    no_action_provider_circuit_infrastructure_idle: '下一步：持续观察，无需立即处理',
+    review_existing_circuit_state_rows: '下一步：复核现有 circuit state rows',
+    review_provider_circuit_diagnostics: '下一步：复核 provider circuit diagnostics',
+  };
+  return labels[String(value || 'review_provider_circuit_diagnostics').toLowerCase()] || labels.review_provider_circuit_diagnostics;
+}
+
+function diagnosticSignalSourceLabel(value?: string | null): string {
+  const labels: Record<string, string> = {
+    execution_log_sessions: 'execution_log_sessions',
+    provider_quota_windows: 'provider_quota_windows',
+    provider_circuit_states: 'provider_circuit_states',
+    provider_circuit_events: 'provider_circuit_events',
+    provider_probe_events: 'provider_probe_events',
+  };
+  return labels[String(value || '').toLowerCase()] || '已脱敏';
+}
+
+function coverageNotice(metadata?: ProviderCircuitDiagnosticsBundle['states']['metadata'] | null): string {
+  if (!metadata) return '正在读取 provider circuit 覆盖诊断。';
+  if (metadata.possibleUnwiredCircuitObservation) {
+    return '已观察到 provider failure 信号，但 provider_circuit_states 为空。';
+  }
+  if (metadata.circuitStatesPresent) {
+    return 'provider_circuit_states 已存在状态行；如仍有故障信号，请复核当前状态与事件。';
+  }
+  if (!metadata.providerFailureSignalsPresent) {
+    return '当前没有 provider failure 信号，provider_circuit_states 为空可视为基础设施空闲。';
+  }
+  return '当前覆盖状态需要管理员复核。';
+}
+
 function buildOperationalSummary(data: ProviderCircuitDiagnosticsBundle | null): OperationalSummary {
   const states = data?.states.items || [];
   const quotaWindows = data?.quotaWindows.items || [];
@@ -848,6 +893,38 @@ const BoundaryPanel: React.FC<{ data?: ProviderCircuitDiagnosticsBundle | null }
   );
 };
 
+const CoverageDiagnosticsPanel: React.FC<{ data?: ProviderCircuitDiagnosticsBundle | null }> = ({ data }) => {
+  const metadata = data?.states.metadata;
+  const possibleUnwired = metadata?.possibleUnwiredCircuitObservation === true;
+  const hasStates = metadata?.circuitStatesPresent === true;
+  const tone: Tone = possibleUnwired ? 'warn' : hasStates ? 'good' : 'neutral';
+  const signalSources = metadata?.diagnosticSignalSources?.map(diagnosticSignalSourceLabel).join(', ') || '无';
+
+  return (
+    <TerminalPanel as="section" data-testid="provider-circuit-coverage-diagnostics" dense>
+      <TerminalSectionHeader
+        eyebrow="覆盖诊断"
+        title={coverageStatusLabel(metadata?.circuitStateCoverageStatus)}
+        action={<TerminalChip variant={chipVariant(tone)}>{possibleUnwired ? '需复核' : '观测'}</TerminalChip>}
+      />
+      <TerminalNotice variant={possibleUnwired ? 'caution' : 'neutral'} className="mt-4">
+        {coverageNotice(metadata)}
+      </TerminalNotice>
+      <div className="mt-4 grid grid-cols-1 gap-3 text-xs leading-5 text-white/54 md:grid-cols-3">
+        <p className="min-w-0">
+          {coverageActionLabel(metadata?.recommendedNextAction)}
+        </p>
+        <p className="min-w-0">
+          信号来源：{signalSources}
+        </p>
+        <p className="min-w-0">
+          状态 / 事件 / 探测：{boolLabel(metadata?.circuitStatesPresent)} / {boolLabel(metadata?.circuitEventsPresent)} / {boolLabel(metadata?.probeEventsPresent)}
+        </p>
+      </div>
+    </TerminalPanel>
+  );
+};
+
 const OperationalVerdictPanel: React.FC<{ verdict: OperationalVerdict; generatedAt?: string | null }> = ({ verdict, generatedAt }) => (
   <TerminalNestedBlock data-testid="provider-circuit-operational-verdict" className="min-w-0 xl:w-[420px]">
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1080,6 +1157,8 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
         </div>
 
         {isLoading && !data && !error ? <LoadingState /> : null}
+
+        <CoverageDiagnosticsPanel data={data} />
 
         <OperatorActionListPanel actions={operatorActions} isLoading={isLoading && !data && !error} />
 

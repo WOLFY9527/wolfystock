@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import asc, desc, select
+from sqlalchemy import asc, desc, func, select
 
 from api.deps import CurrentUser, require_admin_capability
 from api.v1.schemas.admin_provider_circuits import (
@@ -40,6 +40,7 @@ from src.storage import (
     ProviderCircuitState,
     ProviderProbeEvent,
     ProviderQuotaWindow,
+    ExecutionLogSession,
 )
 from src.utils.security import sanitize_message
 
@@ -72,6 +73,7 @@ _ADMIN_PROBE_REMAINING_PUBLIC_LAUNCH_NO_GO_ITEMS = [
     "target_environment_provider_sla_evidence_missing",
     "provider_entitlement_licensing_not_accepted",
 ]
+_PROVIDER_FAILURE_SIGNAL_LOOKBACK_DAYS = 7
 _SAFE_DIAGNOSTIC_REF_RE = re.compile(r"[^A-Za-z0-9_.:-]+")
 _UNSAFE_DIAGNOSTIC_TEXT_RE = re.compile(
     r"(https?://|[?&][a-z0-9_.:-]+=|"
@@ -128,13 +130,104 @@ def _parse_since(value: str | None) -> datetime | None:
         ) from exc
 
 
+def _nested_int_at(payload: Any, path: tuple[str, ...]) -> int:
+    current = payload
+    for key in path:
+        if not isinstance(current, dict):
+            return 0
+        current = current.get(key)
+    try:
+        return max(0, int(current or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _metadata(*, table: str, limit: int, filters: dict[str, Any]) -> ProviderCircuitDiagnosticsMetadata:
+    coverage = _provider_circuit_coverage_diagnostics()
     return ProviderCircuitDiagnosticsMetadata(
         limit=limit,
         dataSources=[table],
         redaction=_REDACTION_NOTES,
         filters={key: value for key, value in filters.items() if value not in (None, "")},
+        **coverage,
     )
+
+
+def _provider_circuit_coverage_diagnostics() -> dict[str, Any]:
+    since_dt = datetime.now() - timedelta(days=_PROVIDER_FAILURE_SIGNAL_LOOKBACK_DAYS)
+    db = DatabaseManager.get_instance()
+    signal_sources: set[str] = set()
+    with db.get_session() as session:
+        circuit_state_count = int(session.execute(select(func.count(ProviderCircuitState.id))).scalar() or 0)
+        circuit_event_count = int(session.execute(select(func.count(ProviderCircuitEvent.id))).scalar() or 0)
+        probe_event_count = int(session.execute(select(func.count(ProviderProbeEvent.id))).scalar() or 0)
+
+        quota_failure_count = int(
+            session.execute(
+                select(
+                    func.coalesce(
+                        func.sum(
+                            ProviderQuotaWindow.failure_count
+                            + ProviderQuotaWindow.timeout_count
+                            + ProviderQuotaWindow.provider_429_count
+                            + ProviderQuotaWindow.provider_403_count
+                        ),
+                        0,
+                    )
+                ).where(ProviderQuotaWindow.window_end >= since_dt)
+            ).scalar()
+            or 0
+        )
+        if quota_failure_count > 0:
+            signal_sources.add("provider_quota_windows")
+
+        recent_summaries = session.execute(
+            select(ExecutionLogSession.summary_json)
+            .where(
+                ExecutionLogSession.started_at >= since_dt,
+                ExecutionLogSession.summary_json.is_not(None),
+            )
+            .order_by(desc(ExecutionLogSession.started_at))
+            .limit(200)
+        ).scalars().all()
+
+    execution_log_failure_count = 0
+    for summary_json in recent_summaries:
+        summary = DatabaseManager._safe_json_loads(summary_json, {})
+        execution_log_failure_count += _nested_int_at(summary, ("scanner_run", "provider_failure_count"))
+        execution_log_failure_count += _nested_int_at(
+            summary,
+            ("scanner_run", "provider_diagnostics", "provider_failure_count"),
+        )
+    if execution_log_failure_count > 0:
+        signal_sources.add("execution_log_sessions")
+
+    circuit_states_present = circuit_state_count > 0
+    circuit_events_present = circuit_event_count > 0
+    probe_events_present = probe_event_count > 0
+    provider_failure_signals_present = bool(signal_sources)
+    possible_unwired = provider_failure_signals_present and not circuit_states_present
+
+    if circuit_states_present:
+        coverage_status = "states_present"
+        recommended_next_action = "review_existing_circuit_state_rows"
+    elif possible_unwired:
+        coverage_status = "possible_unwired"
+        recommended_next_action = "provider_failures_observed_without_circuit_state_rows_review_circuit_wiring"
+    else:
+        coverage_status = "idle_no_signals"
+        recommended_next_action = "no_action_provider_circuit_infrastructure_idle"
+
+    return {
+        "circuitStateCoverageStatus": coverage_status,
+        "providerFailureSignalsPresent": provider_failure_signals_present,
+        "circuitStatesPresent": circuit_states_present,
+        "circuitEventsPresent": circuit_events_present,
+        "probeEventsPresent": probe_events_present,
+        "possibleUnwiredCircuitObservation": possible_unwired,
+        "recommendedNextAction": recommended_next_action,
+        "diagnosticSignalSources": sorted(signal_sources),
+    }
 
 
 def _state_item(row: ProviderCircuitState) -> ProviderCircuitStateItem:
