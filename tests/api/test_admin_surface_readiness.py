@@ -151,8 +151,12 @@ def test_surface_readiness_returns_read_only_contract_truth_table(tmp_path: Path
     assert set(payload["summary"]["statusCounts"]) == {
         "ready",
         "ready_fixture_only",
-        "mixed_contract",
         "degraded_contract",
+    }
+    assert payload["summary"]["statusCounts"] == {
+        "ready": 8,
+        "ready_fixture_only": 1,
+        "degraded_contract": 1,
     }
 
     surface_keys = {item["surfaceKey"] for item in payload["surfaces"]}
@@ -181,20 +185,40 @@ def test_surface_readiness_returns_read_only_contract_truth_table(tmp_path: Path
     assert "response_model_untyped" in cockpit["gaps"]
 
     radar = _surface_by_key(payload, "research_radar")
-    assert radar["status"] == "degraded_contract"
+    assert radar["status"] == "ready"
     assert radar["primaryRoute"]["method"] == "GET"
     assert radar["primaryRoute"]["path"] == "/api/v1/research/radar"
     assert radar["authRequirement"] == {"status": "known", "label": "authenticated_user"}
     assert radar["schemaVersionStatus"] == "present"
     assert radar["observationBoundaryStatus"] == "present"
     assert radar["degradedStateShapeStatus"] == "present"
-    assert radar["consumerSafeIssueLabelsStatus"] == "raw_internal_codes_detected"
-    assert "response_model_untyped" in radar["gaps"]
+    assert radar["consumerSafeIssueLabelsStatus"] == "present"
+    assert radar["gaps"] == []
 
     market_overview = _surface_by_key(payload, "market_overview")
-    assert market_overview["status"] == "mixed_contract"
+    assert market_overview["status"] == "ready"
     assert market_overview["routeStatus"] == "all_present"
-    assert len(market_overview["relatedRoutes"]) >= 3
+    assert [item["path"] for item in market_overview["relatedRoutes"]] == [
+        "/api/v1/market/market-briefing"
+    ]
+
+    scanner = _surface_by_key(payload, "scanner")
+    assert scanner["status"] == "ready"
+    assert scanner["consumerSafeIssueLabelsStatus"] == "present"
+    assert scanner["observationBoundaryStatus"] == "present"
+    assert scanner["degradedStateShapeStatus"] == "present"
+
+    watchlist = _surface_by_key(payload, "watchlist")
+    assert watchlist["status"] == "ready"
+    assert watchlist["consumerSafeIssueLabelsStatus"] == "present"
+    assert watchlist["observationBoundaryStatus"] == "present"
+    assert watchlist["degradedStateShapeStatus"] == "present"
+
+    stock_structure = _surface_by_key(payload, "stock_structure_decision")
+    assert stock_structure["status"] == "ready"
+    assert stock_structure["consumerSafeIssueLabelsStatus"] == "present"
+    assert stock_structure["observationBoundaryStatus"] == "present"
+    assert stock_structure["degradedStateShapeStatus"] == "present"
 
     options = _surface_by_key(payload, "options_gamma_observation")
     assert options["status"] == "ready_fixture_only"

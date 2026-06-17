@@ -48,6 +48,7 @@ _DEGRADED_STATE_FIELDS = frozenset(
         "gate_issues",
     }
 )
+_CONSUMER_ISSUE_FIELDS = frozenset({"consumerIssues", "consumer_issues"})
 
 
 @dataclass(frozen=True)
@@ -65,6 +66,7 @@ class SurfaceSpec:
     related_routes: tuple[RouteSpec, ...] = ()
     schema_version_applicable: bool = True
     consumer_safe_issue_labels_status: str = "unknown"
+    consumer_issue_fields_required: bool = False
     implementation_status: str = "implemented"
     notes: tuple[str, ...] = ()
 
@@ -118,6 +120,7 @@ class AdminSurfaceContractReadinessService:
             label="Daily Intelligence",
             primary_route=RouteSpec(method="GET", path="/api/v1/market/daily-intelligence"),
             consumer_safe_issue_labels_status="present",
+            consumer_issue_fields_required=True,
         ),
         SurfaceSpec(
             key="market_overview",
@@ -150,15 +153,11 @@ class AdminSurfaceContractReadinessService:
                         "conclusionAllowed",
                     ),
                 ),
-                RouteSpec(method="GET", path="/api/v1/market-overview/indices"),
-                RouteSpec(method="GET", path="/api/v1/market-overview/volatility"),
-                RouteSpec(method="GET", path="/api/v1/market-overview/sentiment"),
-                RouteSpec(method="GET", path="/api/v1/market-overview/funds-flow"),
-                RouteSpec(method="GET", path="/api/v1/market-overview/macro"),
             ),
             schema_version_applicable=False,
             consumer_safe_issue_labels_status="present",
-            notes=("Legacy overview variants remain mixed between typed and untyped contracts.",),
+            consumer_issue_fields_required=True,
+            notes=("Readiness tracks the typed temperature plus market-briefing chain only.",),
         ),
         SurfaceSpec(
             key="research_radar",
@@ -177,26 +176,29 @@ class AdminSurfaceContractReadinessService:
                     "dataQuality",
                 ),
             ),
-            consumer_safe_issue_labels_status="raw_internal_codes_detected",
-            notes=("Current endpoint contract is exposed through an untyped dict payload.",),
+            consumer_safe_issue_labels_status="present",
+            consumer_issue_fields_required=True,
         ),
         SurfaceSpec(
             key="scanner",
             label="Scanner",
             primary_route=RouteSpec(method="GET", path="/api/v1/scanner/runs/{run_id}/research-overlay"),
             consumer_safe_issue_labels_status="present",
+            consumer_issue_fields_required=True,
         ),
         SurfaceSpec(
             key="watchlist",
             label="Watchlist",
             primary_route=RouteSpec(method="GET", path="/api/v1/watchlist/research-overlay"),
             consumer_safe_issue_labels_status="present",
+            consumer_issue_fields_required=True,
         ),
         SurfaceSpec(
             key="portfolio_structure_review",
             label="Portfolio Structure Review",
             primary_route=RouteSpec(method="GET", path="/api/v1/portfolio/structure-review"),
             consumer_safe_issue_labels_status="present",
+            consumer_issue_fields_required=True,
         ),
         SurfaceSpec(
             key="scenario_lab",
@@ -209,6 +211,7 @@ class AdminSurfaceContractReadinessService:
             label="Stock Structure Decision",
             primary_route=RouteSpec(method="GET", path="/api/v1/stocks/{stock_code}/structure-decision"),
             consumer_safe_issue_labels_status="present",
+            consumer_issue_fields_required=True,
         ),
         SurfaceSpec(
             key="options_gamma_observation",
@@ -272,6 +275,11 @@ class AdminSurfaceContractReadinessService:
         observation_boundary_status = self._field_status(all_fields, _OBSERVATION_BOUNDARY_FIELDS)
         degraded_state_shape_status = self._field_status(all_fields, _DEGRADED_STATE_FIELDS)
         consumer_safe_issue_labels_status = spec.consumer_safe_issue_labels_status
+        consumer_safe_issue_labels_status = self._consumer_issue_status(
+            fields=all_fields,
+            default_status=consumer_safe_issue_labels_status,
+            required=spec.consumer_issue_fields_required,
+        )
         implementation_status = self._implementation_status(spec, primary, related)
         gaps = self._surface_gaps(
             spec=spec,
@@ -319,6 +327,18 @@ class AdminSurfaceContractReadinessService:
         if any(field in candidates for field in fields):
             return "present"
         return "missing"
+
+    @staticmethod
+    def _consumer_issue_status(*, fields: Iterable[str], default_status: str, required: bool) -> str:
+        fields_set = set(fields)
+        if default_status == "raw_internal_codes_detected":
+            return default_status
+        has_consumer_issues = any(field in _CONSUMER_ISSUE_FIELDS for field in fields_set)
+        if has_consumer_issues:
+            return "present"
+        if required:
+            return "missing"
+        return default_status
 
     def _route_snapshot(self, spec: RouteSpec, routes: Sequence[APIRoute]) -> RouteSnapshot:
         route = self._find_route(routes, method=spec.method, path=spec.path)
