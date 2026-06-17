@@ -56,7 +56,7 @@
     },
     {
       "route_id": "research.member_surface",
-      "path_pattern": "^/api/v1/research/radar$",
+      "path_pattern": "^/api/v1/research/(?:radar|queue)$",
       "methods": ["GET"],
       "surface": "research",
       "auth_dependency_label": "authenticated_user",
@@ -508,6 +508,16 @@
       "capability_label": null,
       "no_go_marker": null,
       "transitional_note": null
+    },
+    {
+      "route_id": "research.queue",
+      "path": "/api/v1/research/queue",
+      "method": "GET",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": "Read-only queue aggregation from existing scanner and watchlist research signals."
     },
     {
       "route_id": "user_alerts.rule_dry_run",
