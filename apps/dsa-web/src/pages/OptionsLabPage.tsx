@@ -17,6 +17,7 @@ import {
   type OptionsExpiration,
   type OptionsExpirationsResponse,
   type OptionsRiskProfile,
+  type OptionsStructureSignalPacket,
   type OptionsStrategyCompareResponse,
   type OptionsStrategyComparison,
   type OptionsStrategyType,
@@ -494,6 +495,41 @@ function scenarioNextEvidenceLabel(value: string): string {
   if (value.includes('provider authority')) return '补齐授权链路与实时链路证据';
   if (value.includes('Greeks') || value.includes('IV')) return '补齐波动率与敏感度证据';
   if (value.includes('OI') || value.includes('成交量') || value.includes('价差')) return '补齐成交深度与更紧价差证据';
+  return '等待证据更新';
+}
+
+function structureCoverageLabel(value?: string | null): string {
+  if (value === 'covered') return '已覆盖';
+  if (value === 'partial') return '部分覆盖';
+  if (value === 'missing') return '待补证';
+  return '等待证据更新';
+}
+
+function structureLiquidityLabel(value?: string | null): string {
+  if (value === 'complete') return '覆盖较完整';
+  if (value === 'partial') return '部分可观察';
+  if (value === 'missing') return '待补证';
+  return '等待证据更新';
+}
+
+function structureExpirationLabel(value?: string | null): string {
+  if (value === 'single_expiration') return '单一到期日';
+  if (value === 'multi_expiration') return '多个到期日';
+  if (value === 'missing') return '待补证';
+  return '等待证据更新';
+}
+
+function structureBoundaryLabel(value?: string | null): string {
+  if (value === 'demo_or_stale') return '不形成可用于判断的结论';
+  if (value === 'live') return '仅供研究观察';
+  return '仅供研究观察';
+}
+
+function structureNextStepLabel(value: string): string {
+  const normalized = value.toLowerCase();
+  if (normalized.includes('non-demo') || normalized.includes('freshness')) return '确认非演示链路新鲜度';
+  if (normalized.includes('thin') || normalized.includes('liquidity')) return '复核低流动性合约行';
+  if (normalized.includes('greek') || normalized.includes('iv')) return '补齐 IV 与敏感度证据';
   return '等待证据更新';
 }
 
@@ -2162,6 +2198,103 @@ const ScenarioEvidencePanel: React.FC<{
   );
 };
 
+const StructureSignalPacketPanel: React.FC<{
+  packet?: OptionsStructureSignalPacket | null;
+  className?: string;
+}> = ({ packet, className }) => {
+  if (!packet) return null;
+
+  const nextSteps = [...new Set(asArray(packet.researchNextSteps).map(structureNextStepLabel))].slice(0, 3);
+  const missingGreeksCount = asArray(packet.missingGreeks).length;
+  const skewSpread = finiteNumber(packet.skewObservation?.callPutIvSpread);
+  const liquidity = packet.liquidityObservation;
+  const expiration = packet.expirationCoverage;
+  const metrics: CompactMetricListItem[] = [
+    {
+      label: 'Gamma 覆盖',
+      value: structureCoverageLabel(packet.gammaCoverageState),
+      tone: packet.gammaCoverageState === 'covered' ? 'text-[color:var(--wolfy-market-up)]' : 'text-amber-200',
+    },
+    {
+      label: 'IV 覆盖',
+      value: structureCoverageLabel(packet.ivCoverageState),
+      tone: packet.ivCoverageState === 'covered' ? 'text-[color:var(--wolfy-market-up)]' : 'text-amber-200',
+    },
+    {
+      label: '偏斜观察',
+      value: skewSpread == null ? '等待证据更新' : `Call / Put IV 差 ${ratio(skewSpread)}`,
+    },
+    {
+      label: '流动性观察',
+      value: structureLiquidityLabel(liquidity?.state),
+      tone: liquidity?.state === 'complete' ? 'text-[color:var(--wolfy-market-up)]' : 'text-amber-200',
+    },
+    {
+      label: '到期覆盖',
+      value: structureExpirationLabel(expiration?.state),
+    },
+    {
+      label: '演示/延迟边界',
+      value: structureBoundaryLabel(packet.staleOrDemoBoundary?.state),
+      tone: packet.staleOrDemoBoundary?.state === 'demo_or_stale' ? 'text-amber-200' : undefined,
+    },
+  ];
+
+  return (
+    <section className={cn(panelClass, className)} data-testid="options-lab-structure-signal-packet">
+      <SectionHeader eyebrow="结构观察" title="结构信号包" icon={Layers3}>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Pill tone="info">仅供研究观察</Pill>
+          <Pill tone="warn">不触发执行</Pill>
+        </div>
+      </SectionHeader>
+      <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+        基于当前已加载期权链汇总 Gamma、IV、偏斜、流动性与到期覆盖；只描述证据覆盖，不形成可用于判断的结论。
+      </p>
+      <div className="mt-5">
+        <CompactMetricList
+          title="结构信号包"
+          items={metrics}
+          testId="options-lab-structure-signal-metrics"
+          desktopColumnsClassName="lg:grid-cols-3"
+        />
+      </div>
+      <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+        <div className={cn(innerBlockClass, 'p-4')}>
+          <p className={labelClass}>覆盖摘要</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Pill tone="neutral">合约 {number(liquidity?.contractCount)}</Pill>
+            <Pill tone={Number(liquidity?.thinLiquidityCount || 0) > 0 ? 'warn' : 'good'}>
+              低流动性 {number(liquidity?.thinLiquidityCount)}
+            </Pill>
+            <Pill tone={missingGreeksCount > 0 ? 'warn' : 'good'}>
+              敏感度缺口 {number(missingGreeksCount)}
+            </Pill>
+            <Pill tone="neutral">最近 DTE {number(expiration?.nearestDte)}</Pill>
+          </div>
+        </div>
+        <div className={cn(innerBlockClass, 'p-4')}>
+          <p className={labelClass}>观察边界</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {packet.observationBoundary?.researchOnly ? <Pill tone="info">仅供研究观察</Pill> : null}
+            {packet.observationBoundary?.orderPlacement === false ? <Pill tone="warn">不触发执行</Pill> : null}
+            {packet.observationBoundary?.brokerExecution === false ? <Pill tone="warn">不连接外部执行通道</Pill> : null}
+            {packet.observationBoundary?.portfolioMutation === false ? <Pill tone="neutral">不改动投资组合</Pill> : null}
+          </div>
+        </div>
+      </div>
+      <div className={cn(innerBlockClass, 'mt-4 p-4')}>
+        <p className={labelClass}>下一步补证</p>
+        <div className="mt-2 space-y-1.5 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+          {nextSteps.length ? nextSteps.map((line) => (
+            <p key={line}>{line}</p>
+          )) : <p>当前先保留观察记录，等待证据更新。</p>}
+        </div>
+      </div>
+    </section>
+  );
+};
+
 const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: string | null; className?: string }> = ({ decisionState, emptyMessage, className }) => {
   const decision = decisionState.decision;
   const label = decisionStatusLabel(decision);
@@ -2944,6 +3077,10 @@ const OptionsLabPageContent: React.FC = () => {
                   chain={state.chain}
                   targetPrice={Number.isFinite(Number(targetPrice)) ? Number(targetPrice) : null}
                   className="xl:col-start-1 xl:row-start-3"
+                />
+                <StructureSignalPacketPanel
+                  packet={state.chain?.optionsStructureSignalPacket}
+                  className="xl:col-start-2 xl:row-start-3"
                 />
                 {scenarioEvidenceFrame ? (
                   <ScenarioEvidencePanel frame={scenarioEvidenceFrame} className="xl:col-start-1 xl:row-start-4" />

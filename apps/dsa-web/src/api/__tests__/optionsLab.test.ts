@@ -66,6 +66,113 @@ describe('optionsLabApi fixture fallback boundaries', () => {
     });
   });
 
+  it('normalizes the options structure signal packet on chain responses', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: {
+        symbol: 'TEM',
+        expiration: '2026-06-19',
+        underlying: null,
+        calls: [],
+        puts: [],
+        filters_applied: {},
+        chain_as_of: '2026-05-06T13:45:00Z',
+        source: 'synthetic_options_lab_fixture',
+        limitations: [],
+        metadata: {
+          read_only: true,
+          no_order_placement: true,
+          no_broker_connection: true,
+          no_portfolio_mutation: true,
+        },
+        options_structure_signal_packet: {
+          gamma_coverage_state: 'covered',
+          iv_coverage_state: 'covered',
+          skew_observation: {
+            state: 'observed',
+            call_average_iv: 0.62,
+            put_average_iv: 0.66,
+            call_put_iv_spread: -0.04,
+            contract_count: 4,
+          },
+          liquidity_observation: {
+            state: 'partial',
+            contract_count: 4,
+            contracts_with_bid_ask: 4,
+            wide_spread_count: 1,
+            thin_liquidity_count: 1,
+            minimum_open_interest: 40,
+            minimum_volume: 8,
+          },
+          expiration_coverage: {
+            state: 'single_expiration',
+            expiration_count: 1,
+            nearest_dte: 44,
+            contracts_by_expiration: [
+              { expiration: '2026-06-19', contract_count: 4 },
+            ],
+          },
+          missing_greeks: [],
+          stale_or_demo_boundary: {
+            state: 'demo_or_stale',
+            source_freshness: 'synthetic_delayed',
+            fixture_backed: true,
+            synthetic_data: true,
+            force_refresh_ignored: true,
+          },
+          observation_boundary: {
+            research_only: true,
+            decision_grade: false,
+            execution_supported: false,
+            order_placement: false,
+            broker_execution: false,
+            portfolio_mutation: false,
+          },
+          research_next_steps: [
+            'Confirm non-demo chain freshness before elevating confidence.',
+          ],
+        },
+      },
+    } as never);
+
+    await expect(optionsLabApi.getOptionChain('tem', '2026-06-19')).resolves.toMatchObject({
+      symbol: 'TEM',
+      optionsStructureSignalPacket: {
+        gammaCoverageState: 'covered',
+        ivCoverageState: 'covered',
+        skewObservation: {
+          callAverageIv: 0.62,
+          putAverageIv: 0.66,
+          callPutIvSpread: -0.04,
+        },
+        liquidityObservation: {
+          state: 'partial',
+          wideSpreadCount: 1,
+          thinLiquidityCount: 1,
+        },
+        expirationCoverage: {
+          nearestDte: 44,
+          contractsByExpiration: [
+            { expiration: '2026-06-19', contractCount: 4 },
+          ],
+        },
+        staleOrDemoBoundary: {
+          state: 'demo_or_stale',
+          forceRefreshIgnored: true,
+        },
+        observationBoundary: {
+          researchOnly: true,
+          executionSupported: false,
+          orderPlacement: false,
+          brokerExecution: false,
+          portfolioMutation: false,
+        },
+        researchNextSteps: [
+          'Confirm non-demo chain freshness before elevating confidence.',
+        ],
+      },
+    });
+  });
+
   it('posts decision evaluation and keeps network-error fallback demo-only', async () => {
     vi.mocked(apiClient.post).mockResolvedValueOnce({
       data: {
