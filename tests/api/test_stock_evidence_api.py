@@ -130,6 +130,51 @@ def test_stock_evidence_endpoint_serializes_fundamentals_summary(
     assert summary["sourceAuthorityAllowed"] is False
 
 
+def test_stock_evidence_endpoint_serializes_symbol_evidence_readiness(
+    monkeypatch,
+) -> None:
+    payload = _base_payload()
+    payload["items"][0]["symbolEvidenceReadiness"] = {
+        "symbolEvidenceReadiness": True,
+        "symbol": "AAPL",
+        "readinessTier": "partial",
+        "evidenceUsed": ["quote", "fundamental"],
+        "evidenceMissing": ["technical", "news"],
+        "staleInputs": ["quote"],
+        "conflictingEvidence": [],
+        "dataQualityNotes": [
+            "Some symbol evidence is present, but the packet is not complete enough for a clean research handoff.",
+        ],
+        "suggestedResearchPath": [
+            "Add recent OHLC or technical context.",
+            "Add recent news or filing context before catalyst review.",
+        ],
+        "observationOnly": True,
+        "noAdviceDisclosure": "Observation-only research readiness; not personalized financial advice or an instruction.",
+    }
+    fake_service = _FakeStockEvidenceService(payload)
+    monkeypatch.setattr(
+        stocks_endpoint,
+        "StockEvidenceService",
+        lambda: fake_service,
+        raising=False,
+    )
+
+    response = _client().get("/api/v1/stocks/AAPL/evidence")
+
+    assert response.status_code == 200
+    readiness = response.json()["items"][0]["symbolEvidenceReadiness"]
+    assert readiness["symbolEvidenceReadiness"] is True
+    assert readiness["symbol"] == "AAPL"
+    assert readiness["readinessTier"] == "partial"
+    assert readiness["evidenceUsed"] == ["quote", "fundamental"]
+    assert readiness["evidenceMissing"] == ["technical", "news"]
+    assert readiness["staleInputs"] == ["quote"]
+    assert readiness["conflictingEvidence"] == []
+    assert readiness["observationOnly"] is True
+    assert "financial advice" in readiness["noAdviceDisclosure"]
+
+
 def test_stock_evidence_endpoint_does_not_fabricate_missing_fundamentals_summary(
     monkeypatch,
 ) -> None:
@@ -169,6 +214,7 @@ def test_stock_evidence_openapi_locks_item_metadata_schema() -> None:
     schema = _client().get("/openapi.json").json()["components"]["schemas"]
 
     item_schema = schema["StockEvidenceItemResponse"]["properties"]
+    assert "symbolEvidenceReadiness" in item_schema
 
     for block_key in ("quote", "technical", "fundamental", "news", "secFilingEvidence"):
         metadata_schema = next(

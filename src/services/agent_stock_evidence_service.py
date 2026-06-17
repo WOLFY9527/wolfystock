@@ -26,6 +26,7 @@ from src.services.stock_evidence_quote_adapter import (
     StockEvidenceQuoteAdapter,
     build_quote_diagnostic_source_metadata,
 )
+from src.services.symbol_evidence_readiness import build_symbol_evidence_readiness
 
 
 EvidencePayload = Dict[str, Any]
@@ -354,6 +355,7 @@ class StockEvidenceService:
             "meta": {"generatedAt": _now_iso(), "source": "read_only_evidence_v2"},
         }
         self._attach_stock_evidence_packets(payload)
+        self._attach_symbol_evidence_readiness(payload)
         return payload
 
     def _attach_stock_evidence_packets(self, payload: EvidencePayload) -> None:
@@ -371,6 +373,23 @@ class StockEvidenceService:
             except Exception as exc:
                 logger.warning(
                     "Stock evidence packet projection failed for %s: %s",
+                    item.get("symbol") or "unknown",
+                    exc,
+                    exc_info=True,
+                )
+
+    def _attach_symbol_evidence_readiness(self, payload: EvidencePayload) -> None:
+        items = payload.get("items")
+        if not isinstance(items, list):
+            return
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            try:
+                item["symbolEvidenceReadiness"] = build_symbol_evidence_readiness(item)
+            except Exception as exc:
+                logger.warning(
+                    "Symbol evidence readiness projection failed for %s: %s",
                     item.get("symbol") or "unknown",
                     exc,
                     exc_info=True,

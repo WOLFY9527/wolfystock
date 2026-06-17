@@ -115,6 +115,16 @@ def test_stock_evidence_base_fields_are_preserved_with_packet_without_sec_sideca
     assert packet["schemaVersion"] == "stock_evidence_packet_v1"
     assert packet["symbol"] == "AAPL"
     assert packet["dataGaps"]
+    readiness = payload["items"][0]["symbolEvidenceReadiness"]
+    assert readiness["symbolEvidenceReadiness"] is True
+    assert readiness["symbol"] == "AAPL"
+    assert readiness["readinessTier"] == "insufficient"
+    assert readiness["evidenceUsed"] == []
+    assert readiness["evidenceMissing"] == ["quote", "technical", "fundamental", "news"]
+    assert readiness["staleInputs"] == []
+    assert readiness["conflictingEvidence"] == []
+    assert readiness["observationOnly"] is True
+    assert "financial advice" in readiness["noAdviceDisclosure"]
     assert "secFilingEvidence" not in payload["items"][0]
 
 
@@ -169,6 +179,9 @@ def test_stock_evidence_packet_includes_fundamentals_summary_from_analysis_histo
     item = payload["items"][0]
     summary = item["stockEvidencePacket"]["fundamentalsSummary"]
     assert item["fundamental"]["status"] == "available"
+    assert item["symbolEvidenceReadiness"]["readinessTier"] == "insufficient"
+    assert item["symbolEvidenceReadiness"]["evidenceUsed"] == ["fundamental"]
+    assert item["symbolEvidenceReadiness"]["evidenceMissing"] == ["quote", "technical", "news"]
     assert summary["source"] == "analysis_history"
     assert summary["freshness"] == "unknown"
     assert summary["period"] == "mixed"
