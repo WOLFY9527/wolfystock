@@ -14,7 +14,13 @@ import PeerCorrelationSnapshotBlock from '../components/common/PeerCorrelationSn
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { TerminalButton, TerminalChip, TerminalEmptyState } from '../components/terminal/TerminalPrimitives';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
-import { stocksApi, type StockStructureDecisionResponse } from '../api/stocks';
+import {
+  stocksApi,
+  type StockStructureDecisionResponse,
+  type StockSymbolCompareEvidenceEntry,
+  type StockSymbolCompareEvidencePacket,
+  type StockSymbolCompareFreshness,
+} from '../api/stocks';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import {
@@ -65,6 +71,210 @@ function toneFor(value: string | null | undefined): string {
   return 'info';
 }
 
+function symbolSegmentFromPathname(pathname: string): string {
+  const match = pathname.match(/\/stocks\/([^/?#]+)\/structure-decision/i);
+  if (!match?.[1]) return '';
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
+function parseStockStructureSymbols(value: string | null | undefined): string[] {
+  return [...new Set(String(value || '')
+    .split(/[,\s;|+]+/)
+    .map((item) => item.trim().toUpperCase())
+    .filter(Boolean))];
+}
+
+function parsePositiveInteger(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function evidenceKindLabel(kind: string | null | undefined, language: 'zh' | 'en'): string {
+  const normalized = String(kind || '').toLowerCase();
+  const labels: Record<string, { zh: string; en: string }> = {
+    daily_ohlcv: { zh: '日线数据', en: 'Daily OHLCV' },
+    benchmark_ohlcv: { zh: '基准日线数据', en: 'Benchmark OHLCV' },
+    structure_state: { zh: '结构状态', en: 'Structure state' },
+    data_quality: { zh: '数据质量', en: 'Data quality' },
+    relative_strength: { zh: '相对强弱证据', en: 'Relative strength evidence' },
+  };
+  const mapped = labels[normalized];
+  if (mapped) return mapped[language];
+  const readable = normalized.replace(/[_-]+/g, ' ').trim();
+  return readable || (language === 'en' ? 'Evidence' : '证据');
+}
+
+function statusLabel(status: string | null | undefined, language: 'zh' | 'en'): string {
+  const normalized = String(status || '').toLowerCase();
+  const labels: Record<string, { zh: string; en: string }> = {
+    available: { zh: '可用', en: 'available' },
+    partial: { zh: '部分可用', en: 'partial' },
+    unavailable: { zh: '不可用', en: 'unavailable' },
+    degraded: { zh: '降级', en: 'degraded' },
+  };
+  return labels[normalized]?.[language] ?? (status || '--');
+}
+
+function periodLabel(period: string | null | undefined, language: 'zh' | 'en'): string | null {
+  if (!period) return null;
+  const normalized = String(period).toLowerCase();
+  if (normalized === 'daily') return language === 'en' ? 'daily' : '日线';
+  if (normalized === 'weekly') return language === 'en' ? 'weekly' : '周线';
+  return String(period);
+}
+
+function barsRangeLabel(min: unknown, max: unknown, language: 'zh' | 'en'): string | null {
+  const minValue = Number(min);
+  const maxValue = Number(max);
+  const hasMin = Number.isFinite(minValue);
+  const hasMax = Number.isFinite(maxValue);
+  if (!hasMin && !hasMax) return null;
+  if (hasMin && hasMax && minValue !== maxValue) {
+    return language === 'en' ? `${minValue}-${maxValue} usable bars` : `${minValue}-${maxValue} 根可用`;
+  }
+  const value = hasMin ? minValue : maxValue;
+  return language === 'en' ? `${value} usable bars` : `${value} 根可用`;
+}
+
+function barsCountLabel(value: unknown, language: 'zh' | 'en'): string | null {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return language === 'en' ? `${numeric} bars` : `${numeric} 根`;
+}
+
+function sharedEvidenceMeta(item: StockSymbolCompareEvidenceEntry, language: 'zh' | 'en'): string {
+  return [
+    statusLabel(item.status, language),
+    periodLabel(item.period, language),
+    barsRangeLabel(item.usableBarsMin, item.usableBarsMax, language),
+  ].filter(Boolean).join(' · ');
+}
+
+function freshnessMeta(item: StockSymbolCompareFreshness | undefined, language: 'zh' | 'en'): string {
+  if (!item) return language === 'en' ? 'No freshness summary' : '暂无新鲜度摘要';
+  return [
+    statusLabel(item.status, language),
+    periodLabel(item.period, language),
+    barsCountLabel(item.usableBars, language),
+  ].filter(Boolean).join(' · ');
+}
+
+function evidenceValue(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '--';
+  return String(value);
+}
+
+function SymbolCompareEvidencePacketPanel({
+  packet,
+  language,
+}: {
+  packet: StockSymbolCompareEvidencePacket | null;
+  language: 'zh' | 'en';
+}) {
+  const comparedSymbols = (packet?.comparedSymbols ?? []).filter(Boolean);
+  if (!packet || comparedSymbols.length <= 1) return null;
+
+  const confidenceCapValue = packet.confidenceCap?.value;
+  const boundary = packet.observationBoundary ?? {};
+  const boundaryChips = [
+    boundary.observationOnly ? (language === 'en' ? 'Research observation only' : '仅研究观察') : null,
+    boundary.decisionGrade === false ? (language === 'en' ? 'Not decision grade' : '非判断等级') : null,
+    boundary.rankingAllowed === false ? (language === 'en' ? 'No ordering output' : '不排序') : null,
+    boundary.adviceAllowed === false ? (language === 'en' ? 'No action instruction' : '不生成行动指令') : null,
+  ].filter(Boolean) as string[];
+
+  return (
+    <div className="grid gap-3 border-t border-[color:var(--wolfy-divider)] p-3 md:grid-cols-2" data-testid="symbol-compare-evidence-packet">
+      <RoughSectionCard
+        className="md:col-span-2"
+        eyebrow={language === 'en' ? 'Evidence packet' : '证据包'}
+        title={language === 'en' ? 'Compare evidence packet' : '对比证据包'}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          {comparedSymbols.map((symbol) => (
+            <TerminalChip key={symbol} variant="info">{symbol}</TerminalChip>
+          ))}
+          <TerminalChip variant="caution">
+            {language === 'en'
+              ? `Confidence cap ${confidenceCapValue ?? '--'}`
+              : `置信上限 ${confidenceCapValue ?? '--'}`}
+          </TerminalChip>
+          {boundaryChips.map((label) => (
+            <TerminalChip key={label} variant="neutral">{label}</TerminalChip>
+          ))}
+        </div>
+      </RoughSectionCard>
+
+      <RoughSectionCard title={language === 'en' ? 'Shared evidence' : '共享证据'}>
+        <RoughBulletList
+          items={packet.sharedEvidence.map((item, index) => (
+            <span key={index}>
+              <span className="font-medium text-[color:var(--wolfy-text-primary)]">{evidenceKindLabel(item.kind, language)}</span>
+              <span className="ml-2 text-[color:var(--wolfy-text-muted)]">{sharedEvidenceMeta(item, language)}</span>
+            </span>
+          ))}
+          emptyText={language === 'en' ? 'No shared evidence is available across these symbols yet.' : '这些标的之间暂无共同证据。'}
+        />
+      </RoughSectionCard>
+
+      <RoughSectionCard title={language === 'en' ? 'Divergent evidence' : '分歧证据'}>
+        <RoughBulletList
+          items={packet.divergentEvidence.map((item, index) => {
+            const values = item.values ?? {};
+            const valueText = Object.entries(values)
+              .map(([symbol, value]) => `${symbol}: ${evidenceValue(value)}`)
+              .join(' · ');
+            return (
+              <span key={index}>
+                <span className="font-medium text-[color:var(--wolfy-text-primary)]">{evidenceKindLabel(item.kind, language)}</span>
+                {valueText ? <span className="ml-2 text-[color:var(--wolfy-text-muted)]">{valueText}</span> : null}
+              </span>
+            );
+          })}
+          emptyText={language === 'en' ? 'No divergence is available in this packet.' : '当前证据包暂无分歧观察。'}
+        />
+      </RoughSectionCard>
+
+      <RoughSectionCard title={language === 'en' ? 'Missing evidence' : '缺失证据'}>
+        <RoughKeyValueRows
+          rows={comparedSymbols.map((symbol) => {
+            const gaps = packet.missingEvidenceBySymbol[symbol] ?? [];
+            return {
+              key: `missing-${symbol}`,
+              label: symbol,
+              value: gaps.length
+                ? gaps.map((gap) => gap.message || evidenceKindLabel(gap.kind, language)).join('；')
+                : (language === 'en' ? 'No gap listed' : '暂无缺口'),
+            };
+          })}
+        />
+      </RoughSectionCard>
+
+      <RoughSectionCard title={language === 'en' ? 'Freshness by symbol' : '新鲜度'}>
+        <RoughKeyValueRows
+          rows={comparedSymbols.map((symbol) => ({
+            key: `freshness-${symbol}`,
+            label: symbol,
+            value: freshnessMeta(packet.freshnessBySymbol[symbol], language),
+          }))}
+        />
+      </RoughSectionCard>
+
+      <RoughSectionCard className="md:col-span-2" title={language === 'en' ? 'Next research steps' : '后续研究'}>
+        <RoughBulletList
+          items={packet.researchNextSteps}
+          emptyText={language === 'en' ? 'No additional research step is listed.' : '暂无额外后续研究项。'}
+        />
+      </RoughSectionCard>
+    </div>
+  );
+}
+
 export default function StockStructureDecisionPage() {
   const { language } = useI18n();
   const locale = language === 'en' ? 'en' : 'zh';
@@ -72,7 +282,19 @@ export default function StockStructureDecisionPage() {
   const location = useLocation();
   const routeLocale = parseLocaleFromPathname(location.pathname);
   const localize = useCallback((path: string) => (routeLocale ? buildLocalizedPath(path, routeLocale) : path), [routeLocale]);
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const symbolSegment = stockCode || symbolSegmentFromPathname(location.pathname);
+  const requestedSymbols = useMemo(
+    () => parseStockStructureSymbols(searchParams.get('symbols') || symbolSegment),
+    [searchParams, symbolSegment],
+  );
+  const benchmark = searchParams.get('benchmark')?.trim().toUpperCase() || undefined;
+  const maxItems = parsePositiveInteger(searchParams.get('maxItems'));
+  const isCompareRequest = requestedSymbols.length > 1;
+  const primarySymbol = requestedSymbols[0] || symbolSegment.toUpperCase();
+  const titleSymbol = isCompareRequest ? requestedSymbols.join(' / ') : primarySymbol;
   const [data, setData] = useState<StockStructureDecisionResponse | null>(null);
+  const [comparePacket, setComparePacket] = useState<StockSymbolCompareEvidencePacket | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
 
@@ -80,9 +302,21 @@ export default function StockStructureDecisionPage() {
     setLoading(true);
     setError(null);
     try {
-      const response = await stocksApi.getStructureDecision(stockCode);
-      setData(response);
+      if (isCompareRequest) {
+        const response = await stocksApi.getStructureDecisionsBatch({
+          stockCodes: requestedSymbols,
+          benchmark,
+          maxItems,
+        });
+        setData(response.items[0] ?? null);
+        setComparePacket(response.symbolCompareEvidencePacket ?? null);
+      } else {
+        const response = await stocksApi.getStructureDecision(primarySymbol);
+        setData(response);
+        setComparePacket(null);
+      }
     } catch (err) {
+      setComparePacket(null);
       setError(getParsedApiError(err) || createParsedApiError({
         title: locale === 'en' ? 'Structure panel unavailable' : '结构面板暂不可用',
         message: locale === 'en' ? 'Please retry after the stock structure API responds again.' : '请在个股结构接口恢复后重试。',
@@ -90,7 +324,7 @@ export default function StockStructureDecisionPage() {
     } finally {
       setLoading(false);
     }
-  }, [locale, stockCode]);
+  }, [benchmark, isCompareRequest, locale, maxItems, primarySymbol, requestedSymbols]);
 
   useEffect(() => {
     void load();
@@ -165,7 +399,7 @@ export default function StockStructureDecisionPage() {
           <ConsoleBoard className="min-h-0" data-testid="stock-structure-decision-page">
             <RoughSurfaceIntro
               eyebrow={locale === 'en' ? 'Stock structure panel' : '个股结构面板'}
-              title={locale === 'en' ? `${stockCode.toUpperCase()} structure workspace` : `${stockCode.toUpperCase()} 结构工作区`}
+              title={locale === 'en' ? `${titleSymbol} structure workspace` : `${titleSymbol} 结构工作区`}
               description={locale === 'en'
                 ? 'This panel keeps structure state, confidence, component scores, research notes, and evidence gaps together before the name moves into watchlist or portfolio context.'
                 : '这个面板把结构状态、置信度、组件评分、研究备注与证据缺口放在同一页，再决定是否沉淀到观察列表或组合上下文。'}
@@ -219,6 +453,7 @@ export default function StockStructureDecisionPage() {
                     },
                   ]}
                 />
+                <SymbolCompareEvidencePacketPanel packet={comparePacket} language={locale} />
                 <div className="grid gap-3 p-3 md:grid-cols-2">
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Scores' : '评分'} title={locale === 'en' ? 'Component scores' : '组件评分'}>
                     <RoughScoreRows

@@ -5,17 +5,26 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import MarketDecisionCockpitPage from '../MarketDecisionCockpitPage';
 import ResearchRadarPage from '../ResearchRadarPage';
 import ScenarioLabPage from '../ScenarioLabPage';
-import StockStructureDecisionEntryPage from '../StockStructureDecisionEntryPage';
 import StockStructureDecisionPage from '../StockStructureDecisionPage';
+import StockStructureDecisionEntryPage from '../StockStructureDecisionEntryPage';
 import { findConsumerRawLeakage } from '../../test-utils/consumerRawLeakageGuard';
 
-const { languageState, getDecisionCockpitMock, getDailyIntelligenceMock, getResearchRadarMock, runScenarioLabMock, getStructureDecisionMock } = vi.hoisted(() => ({
+const {
+  languageState,
+  getDecisionCockpitMock,
+  getDailyIntelligenceMock,
+  getResearchRadarMock,
+  getStructureDecisionMock,
+  getStructureDecisionsBatchMock,
+  runScenarioLabMock,
+} = vi.hoisted(() => ({
   languageState: { value: 'zh' as 'zh' | 'en' },
   getDecisionCockpitMock: vi.fn(),
   getDailyIntelligenceMock: vi.fn(),
   getResearchRadarMock: vi.fn(),
-  runScenarioLabMock: vi.fn(),
   getStructureDecisionMock: vi.fn(),
+  getStructureDecisionsBatchMock: vi.fn(),
+  runScenarioLabMock: vi.fn(),
 }));
 
 vi.mock('../../contexts/UiLanguageContext', () => ({
@@ -52,6 +61,7 @@ vi.mock('../../api/scenarioLab', () => ({
 vi.mock('../../api/stocks', () => ({
   stocksApi: {
     getStructureDecision: (...args: unknown[]) => getStructureDecisionMock(...args),
+    getStructureDecisionsBatch: (...args: unknown[]) => getStructureDecisionsBatchMock(...args),
   },
 }));
 
@@ -590,6 +600,165 @@ describe('research IA pages', () => {
     expect(snapshot).toHaveTextContent('Review whether peer alignment persists after the next close.');
     expect(page.textContent || '').not.toMatch(/raw|debug|provider|trace|sourceRef|reasonCode|requestId/i);
     expect(page.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommendation|target price|stop loss|position sizing/i);
+  });
+
+  it('renders a compact stock structure compare evidence packet for multiple symbols', async () => {
+    getStructureDecisionsBatchMock.mockResolvedValue({
+      schemaVersion: 'stock_structure_decision_batch_api_v1',
+      items: [
+        {
+          schemaVersion: 'stock_structure_decision_api_v1',
+          ticker: 'MSFT',
+          structureState: 'mixed',
+          confidence: 'low',
+          componentScores: { trend: 45 },
+          explanation: {
+            whyThisStructure: 'Price action is mixed.',
+            whatConfirmsIt: ['Needs follow-through.'],
+            whatInvalidatesIt: ['Breaks below the range.'],
+            keyLevels: [],
+          },
+          researchNotes: {
+            watchNext: ['Observe the next close.'],
+            needsMoreEvidence: [],
+            riskFlags: [],
+          },
+          dataQuality: {
+            status: 'partial',
+            period: 'daily',
+            usableBars: 20,
+          },
+          missingEvidence: [],
+          noAdviceDisclosure: 'Observation-only research context.',
+        },
+      ],
+      aggregateSummary: {
+        requestedCount: 2,
+        evaluatedCount: 2,
+        truncated: false,
+      },
+      missingEvidence: [],
+      dataQuality: { status: 'partial' },
+      symbolCompareEvidencePacket: {
+        comparedSymbols: ['MSFT', 'AAPL'],
+        sharedEvidence: [
+          {
+            kind: 'daily_ohlcv',
+            symbols: ['MSFT', 'AAPL'],
+            status: 'available',
+            period: 'daily',
+            source: 'local_db',
+            usableBarsMin: 55,
+            usableBarsMax: 60,
+          },
+        ],
+        divergentEvidence: [
+          {
+            kind: 'structure_state',
+            symbols: ['MSFT', 'AAPL'],
+            values: {
+              MSFT: 'mixed',
+              AAPL: 'breakout',
+            },
+          },
+        ],
+        missingEvidenceBySymbol: {
+          MSFT: [{ kind: 'daily_ohlcv', message: 'Daily OHLCV history is unavailable.' }],
+          AAPL: [],
+        },
+        freshnessBySymbol: {
+          MSFT: { status: 'unavailable', source: 'local_db', period: 'daily', usableBars: 0 },
+          AAPL: { status: 'available', source: 'local_db', period: 'daily', usableBars: 60 },
+        },
+        confidenceCap: {
+          value: 35,
+          reasonCodes: ['symbol_evidence_unavailable'],
+          policyVersion: 'symbol_compare_evidence_packet_v1',
+        },
+        observationBoundary: {
+          observationOnly: true,
+          decisionGrade: false,
+          rankingAllowed: false,
+          adviceAllowed: false,
+        },
+        researchNextSteps: [
+          'Add daily OHLCV evidence for MSFT before using divergence observations.',
+        ],
+      },
+      noAdviceDisclosure: 'Observation-only research context.',
+    });
+
+    renderRoute(<StockStructureDecisionPage />, '/zh/stocks/MSFT,AAPL/structure-decision?benchmark=SPY');
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const packet = await within(page).findByTestId('symbol-compare-evidence-packet');
+    expect(getStructureDecisionsBatchMock).toHaveBeenCalledWith({
+      stockCodes: ['MSFT', 'AAPL'],
+      benchmark: 'SPY',
+      maxItems: undefined,
+    });
+    expect(packet).toHaveTextContent('对比证据包');
+    expect(packet).toHaveTextContent('MSFT');
+    expect(packet).toHaveTextContent('AAPL');
+    expect(packet).toHaveTextContent('共享证据');
+    expect(packet).toHaveTextContent('日线数据');
+    expect(packet).toHaveTextContent('55-60 根可用');
+    expect(packet).toHaveTextContent('分歧证据');
+    expect(packet).toHaveTextContent('结构状态');
+    expect(packet).toHaveTextContent('MSFT: mixed');
+    expect(packet).toHaveTextContent('AAPL: breakout');
+    expect(packet).toHaveTextContent('缺失证据');
+    expect(packet).toHaveTextContent('MSFT');
+    expect(packet).toHaveTextContent('Daily OHLCV history is unavailable.');
+    expect(packet).toHaveTextContent('AAPL');
+    expect(packet).toHaveTextContent('暂无缺口');
+    expect(packet).toHaveTextContent('新鲜度');
+    expect(packet).toHaveTextContent('0 根');
+    expect(packet).toHaveTextContent('60 根');
+    expect(packet).toHaveTextContent('置信上限 35');
+    expect(packet).toHaveTextContent('仅研究观察');
+    expect(packet).toHaveTextContent('非判断等级');
+    expect(packet).toHaveTextContent('不排序');
+    expect(packet).toHaveTextContent('不生成行动指令');
+    expect(packet).toHaveTextContent('后续研究');
+    expect(packet).toHaveTextContent('Add daily OHLCV evidence for MSFT before using divergence observations.');
+    expect(packet.textContent || '').not.toMatch(/reasonCodes|policyVersion|local_db|sourceRef|requestId|trace|raw|debug|provider|schemaVersion/i);
+    expect(packet.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy now|sell now|hold|target price|stop loss|position sizing/i);
+  });
+
+  it('hides the stock structure compare evidence packet for a single symbol response', async () => {
+    getStructureDecisionMock.mockResolvedValue({
+      schemaVersion: 'stock_structure_decision_api_v1',
+      ticker: 'AAPL',
+      structureState: 'breakout',
+      confidence: 'high',
+      componentScores: { trend: 78 },
+      explanation: {
+        whyThisStructure: 'Price stayed above the recent range.',
+        whatConfirmsIt: ['Volume remained constructive.'],
+        whatInvalidatesIt: ['Closes fall back into the prior range.'],
+        keyLevels: [],
+      },
+      researchNotes: {
+        watchNext: ['Observe follow-through on the next close.'],
+        needsMoreEvidence: [],
+        riskFlags: [],
+      },
+      dataQuality: {
+        status: 'available',
+        period: 'daily',
+        usableBars: 55,
+      },
+      missingEvidence: [],
+      noAdviceDisclosure: 'Observation-only research context.',
+    });
+
+    renderRoute(<StockStructureDecisionPage />, '/zh/stocks/AAPL/structure-decision');
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    expect(page).toHaveTextContent('AAPL 结构工作区');
+    expect(getStructureDecisionMock).toHaveBeenCalledWith('AAPL');
+    expect(screen.queryByTestId('symbol-compare-evidence-packet')).not.toBeInTheDocument();
   });
 
   it('renders Scenario Lab as a compact research workflow backed by the scenario contract', async () => {
