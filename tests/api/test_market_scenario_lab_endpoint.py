@@ -201,6 +201,23 @@ def _assert_confirm_invalidate_context(context: dict[str, Any]) -> None:
         assert context["invalidate"] == []
 
 
+def _assert_fixture_response(payload: dict[str, Any], scenario_name: str) -> None:
+    assert payload["selectedScenario"]["presetId"] == scenario_name
+    assert payload["observationOnly"] is True
+    assert payload["decisionGrade"] is False
+    assert payload["sourceClass"] == "fixture"
+    assert payload["dataSourceClass"] == "fixture"
+    assert payload["baseMarketContext"]["source"] == "scenarioFixture"
+    assert payload["scenarioRegime"].get("status") != "unavailable"
+    assert payload["driverDeltas"]
+    assert payload["changedDrivers"]
+    assert any("sample fixture" in item.lower() for item in payload["evidenceLimits"])
+    serialized_issues = json.dumps(payload["consumerIssues"], ensure_ascii=False).lower()
+    assert "proxy_or_sample_evidence_present" not in serialized_issues
+    assert "sample" in serialized_issues
+    _assert_safe_consumer_text(payload)
+
+
 def _assert_preset_contract(preset: dict[str, Any]) -> None:
     assert set(preset) == EXPECTED_PRESET_KEYS
     assert preset["presetId"] == preset["name"]
@@ -392,6 +409,8 @@ def test_market_scenario_lab_fails_closed_when_required_base_evidence_is_missing
     assert payload["selectedScenario"]["name"] == "liquidityStress"
     assert payload["driverDeltas"] == {}
     assert payload["changedDrivers"] == []
+    assert "sourceClass" not in payload
+    assert "dataSourceClass" not in payload
     assert payload["scenarioSummary"] == [
         "Scenario lab is unavailable because base score-grade regime evidence is missing."
     ]
@@ -410,6 +429,38 @@ def test_market_scenario_lab_fails_closed_when_required_base_evidence_is_missing
     _assert_preset_contract(payload["selectedScenario"])
     for label in _consumer_label_values(payload):
         assert not INTERNAL_LOOKING_TOKEN.search(label)
+
+
+def test_market_scenario_lab_fixture_path_runs_volatility_spike_observation() -> None:
+    response = _client().post(
+        "/api/v1/market/scenario-lab",
+        json={
+            "scenarioName": "volatilitySpike",
+            "scenarioOverrides": {"dataSourceClass": "fixture"},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    _assert_fixture_response(payload, "volatilitySpike")
+    assert payload["confidenceDelta"] < 0
+    assert payload["driverDeltas"]["volatilityStructure"] < 0
+
+
+def test_market_scenario_lab_fixture_path_runs_risk_on_confirmation_observation() -> None:
+    response = _client().post(
+        "/api/v1/market/scenario-lab",
+        json={
+            "scenarioName": "riskOnConfirmation",
+            "scenarioOverrides": {"sourceClass": "sample"},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    _assert_fixture_response(payload, "riskOnConfirmation")
+    assert payload["driverDeltas"]["breadthParticipation"] > 0
+    assert payload["driverDeltas"]["liquidityCredit"] > 0
 
 
 def test_market_scenario_lab_rejects_unsupported_named_scenario() -> None:

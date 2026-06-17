@@ -198,6 +198,36 @@ def test_tem_chain_returns_calls_puts_and_safe_derived_fields() -> None:
     assert response.metadata.live_provider_enabled is False
 
 
+def test_nvda_fixture_summary_expirations_and_chain_are_observation_only() -> None:
+    service = _service()
+
+    summary = service.get_summary("NVDA", force_refresh=True)
+    expirations = service.get_expirations("nvda")
+    chain = service.get_chain("NVDA", expiration="2026-06-19", side="both", include_greeks=True)
+
+    assert summary.symbol == "NVDA"
+    assert summary.underlying["source"] == "synthetic_options_lab_fixture"
+    assert summary.options_availability["provider"] == "synthetic_fixture"
+    assert summary.metadata.fixture_backed is True
+    assert summary.metadata.synthetic_data is True
+    assert summary.metadata.live_provider_enabled is False
+    assert summary.metadata.no_external_calls is True
+    assert expirations.symbol == "NVDA"
+    assert [item.date for item in expirations.expirations] == ["2026-06-19", "2026-08-21"]
+    assert chain.symbol == "NVDA"
+    assert chain.calls
+    assert chain.puts
+    assert chain.calls[0].contract_symbol.startswith("NVDA")
+    assert chain.puts[0].contract_symbol.startswith("NVDA")
+    for payload in (summary, expirations, chain):
+        assert payload.metadata.fixture_backed is True
+        assert payload.metadata.live_provider_enabled is False
+        assert payload.metadata.no_order_placement is True
+        assert payload.metadata.no_broker_connection is True
+        assert payload.metadata.no_portfolio_mutation is True
+        assert payload.metadata.no_trading_recommendation is True
+
+
 def test_default_options_lab_provider_projects_to_synthetic_fixture_provenance() -> None:
     response = _service().get_chain("TEM", expiration="2026-06-19")
     provenance = project_source_provenance(

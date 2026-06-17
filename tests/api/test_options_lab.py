@@ -325,6 +325,8 @@ def test_summary_and_expirations_endpoint_mappers_preserve_alias_contracts() -> 
         "symbol": "TEM",
         "market": "us",
         "currency": "USD",
+        "observationOnly": True,
+        "decisionGrade": False,
         "underlying": {"symbol": "TEM", "price": 52.4},
         "optionsAvailability": {
             "supported": True,
@@ -384,6 +386,8 @@ def test_summary_and_expirations_endpoint_mappers_preserve_alias_contracts() -> 
     assert expirations_contract_only == {
         "symbol": "TEM",
         "market": "us",
+        "observationOnly": True,
+        "decisionGrade": False,
         "expirations": [
             {
                 "date": "2026-06-19",
@@ -456,6 +460,67 @@ def test_chain_endpoint_filters_side_expiration_liquidity_and_spread() -> None:
         assert provenance["sourceType"] == "synthetic_fixture"
         assert provenance["sourceLabel"] == "Synthetic Fixture"
         assert provenance["freshnessLabel"] != "实时"
+    finally:
+        client.close()
+
+
+def test_nvda_fixture_underlying_summary_expirations_and_chain_are_observation_only() -> None:
+    client = _client()
+    try:
+        summary = client.get("/api/v1/options/underlyings/NVDA/summary", params={"forceRefresh": "true"})
+        expirations = client.get("/api/v1/options/underlyings/nvda/expirations")
+        chain = client.get(
+            "/api/v1/options/underlyings/NVDA/chain",
+            params={"expiration": "2026-06-19", "includeGreeks": "true"},
+        )
+
+        assert summary.status_code == 200
+        assert expirations.status_code == 200
+        assert chain.status_code == 200
+
+        summary_payload = summary.json()
+        expirations_payload = expirations.json()
+        chain_payload = chain.json()
+        assert summary_payload["symbol"] == "NVDA"
+        assert summary_payload["observationOnly"] is True
+        assert summary_payload["decisionGrade"] is False
+        assert summary_payload["metadata"]["fixtureBacked"] is True
+        assert summary_payload["metadata"]["syntheticData"] is True
+        assert summary_payload["metadata"]["liveProviderEnabled"] is False
+        assert summary_payload["metadata"]["noExternalCalls"] is True
+        assert summary_payload["optionsReadiness"]["providerAuthority"] == "observationOnly"
+        assert summary_payload["optionsReadiness"]["decisionGrade"] is False
+        assert summary_payload["optionsReadiness"]["noTradingBoundary"] == {
+            "analyticalOnly": True,
+            "noBrokerExecution": True,
+            "noOrderPlacement": True,
+            "noPortfolioMutation": True,
+            "noTradingRecommendation": True,
+        }
+        assert expirations_payload["symbol"] == "NVDA"
+        assert expirations_payload["observationOnly"] is True
+        assert expirations_payload["decisionGrade"] is False
+        assert [item["date"] for item in expirations_payload["expirations"]] == [
+            "2026-06-19",
+            "2026-08-21",
+        ]
+        assert expirations_payload["optionsReadiness"]["providerAuthority"] == "observationOnly"
+        assert expirations_payload["optionsReadiness"]["decisionGrade"] is False
+        assert chain_payload["symbol"] == "NVDA"
+        assert chain_payload["observationOnly"] is True
+        assert chain_payload["decisionGrade"] is False
+        assert chain_payload["source"] == "synthetic_options_lab_fixture"
+        assert chain_payload["calls"]
+        assert chain_payload["puts"]
+        assert chain_payload["calls"][0]["contractSymbol"].startswith("NVDA")
+        assert chain_payload["puts"][0]["contractSymbol"].startswith("NVDA")
+        assert chain_payload["optionsReadiness"]["providerAuthority"] == "observationOnly"
+        assert chain_payload["optionsReadiness"]["decisionGrade"] is False
+        assert chain_payload["metadata"]["liveProviderEnabled"] is False
+        for payload in (summary_payload, expirations_payload, chain_payload):
+            _assert_consumer_safe_sandbox_metadata(payload)
+            _assert_no_execution_implication_fields(payload)
+            _assert_no_safety_leaks(payload)
     finally:
         client.close()
 

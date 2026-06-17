@@ -32,6 +32,7 @@ DRIVER_KEYS: tuple[str, ...] = (
 
 _SCORING_DRIVER_KEYS = tuple(key for key in DRIVER_KEYS if key != "dealerGamma")
 _MIN_BASE_SCORING_DRIVERS = 3
+_FIXTURE_SOURCE_CLASSES = {"fixture", "demo", "sample"}
 
 _SHOCK_TO_DRIVER: dict[str, str] = {
     "volatilityShock": "volatilityStructure",
@@ -290,6 +291,9 @@ class MarketScenarioLabEngine:
         scenario: Mapping[str, Any] | str | None = None,
     ) -> dict[str, Any]:
         scenario_input = _scenario_mapping(scenario)
+        fixture_source_class = _fixture_source_class(scenario_input)
+        if fixture_source_class and not base_decision and not driver_scores:
+            base_decision = _fixture_base_decision()
         base = _base_from_inputs(base_decision=base_decision, driver_scores=driver_scores)
         if base["scoringDriverCount"] < _MIN_BASE_SCORING_DRIVERS:
             return _unavailable_payload(base, scenario_input)
@@ -336,13 +340,21 @@ class MarketScenarioLabEngine:
             invalidate=invalidate_context,
         )
         evidence_limits = _evidence_limits(base, scenario_input)
+        if fixture_source_class:
+            evidence_limits = _dedupe(
+                [
+                    *evidence_limits,
+                    "Scenario uses a sample fixture for UAT observation; it is not live market evidence.",
+                ]
+            )
         consumer_issues = build_consumer_issues(
             base.get("missingEvidence"),
             base.get("dataQuality"),
             evidence_limits,
             scenario_input.get("gammaEvidenceStatus"),
+            "proxy_or_sample_evidence_present" if fixture_source_class else None,
         )
-        return {
+        payload = {
             "schemaVersion": SCHEMA_VERSION,
             "contractStatus": _contract_status(base=base, evidence_limits=evidence_limits),
             "observationOnly": OBSERVATION_ONLY,
@@ -374,6 +386,10 @@ class MarketScenarioLabEngine:
             "consumerIssues": consumer_issues,
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
         }
+        if fixture_source_class:
+            payload["sourceClass"] = "fixture"
+            payload["dataSourceClass"] = "fixture"
+        return payload
 
 
 def build_market_scenario_lab(
@@ -430,6 +446,8 @@ def _base_from_inputs(
 
 def _base_context_source(*, decision: Mapping[str, Any], driver_scores: Mapping[str, Any] | None) -> str:
     schema_version = str(decision.get("schemaVersion") or "")
+    if schema_version == "market_scenario_lab_fixture.v1":
+        return "scenarioFixture"
     if schema_version or decision.get("regime") or decision.get("driverScores"):
         return "decisionCockpitInput"
     if isinstance(driver_scores, Mapping) and driver_scores:
@@ -457,6 +475,46 @@ def _scenario_mapping(scenario: Mapping[str, Any] | str | None) -> Mapping[str, 
     if isinstance(scenario, str):
         return {"name": scenario}
     return {}
+
+
+def _fixture_source_class(scenario: Mapping[str, Any]) -> str | None:
+    for key in ("dataSourceClass", "sourceClass", "data_source_class", "source_class"):
+        value = str(scenario.get(key) or "").strip().lower()
+        if value in _FIXTURE_SOURCE_CLASSES:
+            return value
+    if scenario.get("fixtureMode") is True or scenario.get("demoMode") is True or scenario.get("sampleData") is True:
+        return "fixture"
+    return None
+
+
+def _fixture_base_decision() -> dict[str, Any]:
+    return {
+        "schemaVersion": "market_scenario_lab_fixture.v1",
+        "regime": "riskOn",
+        "confidence": "medium",
+        "confidenceScore": 0.62,
+        "driverScores": {
+            "dealerGamma": {"score": 0, "evidenceState": "unavailable"},
+            "breadthParticipation": {"score": 58, "evidenceState": "score_grade"},
+            "volatilityStructure": {"score": 54, "evidenceState": "score_grade"},
+            "ratesDollar": {"score": 28, "evidenceState": "score_grade"},
+            "liquidityCredit": {"score": 56, "evidenceState": "score_grade"},
+            "crossAssetRisk": {"score": 32, "evidenceState": "score_grade"},
+            "sectorThemeRotation": {"score": 42, "evidenceState": "score_grade"},
+            "eventCatalyst": {"score": 0, "evidenceState": "unavailable"},
+        },
+        "dataQuality": {
+            "availableDriverCount": 6,
+            "scoringDriverCount": 6,
+            "missingDriverCount": 2,
+            "confidenceCapReasons": ["scenario_fixture_sample_only"],
+        },
+        "missingEvidence": [
+            "dealerGamma:unavailable",
+            "eventCatalyst:unavailable",
+            "proxy_or_sample_evidence_present",
+        ],
+    }
 
 
 def _scenario_name(scenario: Mapping[str, Any]) -> str:
@@ -592,6 +650,8 @@ def _consumer_safe_confidence_limit(reason: Any) -> str:
     normalized = str(reason or "").strip().lower()
     if normalized == "dealer_gamma_unavailable_caps_volatility_compression":
         return "Dealer gamma evidence is unavailable, so volatility-compression confidence remains capped."
+    if normalized == "scenario_fixture_sample_only":
+        return "Scenario base context is a sample fixture for UAT observation."
     if not normalized:
         return ""
     return "The base read includes a data-quality confidence cap."
@@ -649,6 +709,7 @@ def _base_market_context(base: Mapping[str, Any]) -> dict[str, Any]:
     labels = {
         "decisionCockpitInput": "Decision Cockpit market context",
         "driverScoreInput": "Driver score context",
+        "scenarioFixture": "Scenario sample fixture",
         "requestInput": "Request market context",
     }
     messages = {
@@ -657,6 +718,9 @@ def _base_market_context(base: Mapping[str, Any]) -> dict[str, Any]:
         ),
         "driverScoreInput": (
             "Base driver scores were supplied by the request and are treated as observation-only evidence."
+        ),
+        "scenarioFixture": (
+            "Base regime context uses a bounded sample fixture for UAT observation and is not live market evidence."
         ),
         "requestInput": "Base market context was supplied by the request and is treated as observation-only evidence.",
     }

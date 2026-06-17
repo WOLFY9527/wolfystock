@@ -106,6 +106,8 @@ class OptionUnderlyingSummaryResponse(_OptionsModel):
     symbol: str
     market: str
     currency: str = "USD"
+    observation_only: bool = Field(default=True, alias="observationOnly")
+    decision_grade: bool = Field(default=False, alias="decisionGrade")
     underlying: Dict[str, Any]
     options_availability: Dict[str, Any] = Field(alias="optionsAvailability")
     as_of: str = Field(alias="asOf")
@@ -139,6 +141,8 @@ class OptionUnderlyingSummaryResponse(_OptionsModel):
 class OptionExpirationsResponse(_OptionsModel):
     symbol: str
     market: str
+    observation_only: bool = Field(default=True, alias="observationOnly")
+    decision_grade: bool = Field(default=False, alias="decisionGrade")
     expirations: List[OptionExpirationItem] = Field(default_factory=list)
     as_of: str = Field(alias="asOf")
     source: str
@@ -171,6 +175,8 @@ class OptionExpirationsResponse(_OptionsModel):
 class OptionChainResponse(_OptionsModel):
     symbol: str
     market: str
+    observation_only: bool = Field(default=True, alias="observationOnly")
+    decision_grade: bool = Field(default=False, alias="decisionGrade")
     underlying: Dict[str, Any]
     expiration: Optional[str] = None
     calls: List[OptionContract] = Field(default_factory=list)

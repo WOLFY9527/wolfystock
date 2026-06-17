@@ -450,6 +450,22 @@ class _FixtureOptionsProvider:
     data_quality_tier = "synthetic_demo_only"
     contract_warning = "synthetic_fixture_data"
     force_fixture_metadata = False
+    fixture_symbols = frozenset({"TEM", "NVDA"})
+    nvda_underlying = {
+        "price": 920.0,
+        "changePct": 1.15,
+        "asOf": "2026-05-06T13:45:00Z",
+        "source": "synthetic_options_lab_fixture",
+        "freshness": "synthetic_delayed",
+    }
+    nvda_strikes_by_tem_strike = {
+        45.0: 850.0,
+        50.0: 900.0,
+        55.0: 950.0,
+        60.0: 1000.0,
+        65.0: 1050.0,
+    }
+    nvda_price_scale = 18.0
     capabilities = OptionsProviderCapabilityMetadata(
         provider_name=provider_name,
         source_type="synthetic",
@@ -481,12 +497,14 @@ class _FixtureOptionsProvider:
 
     def _fixture_for_symbol(self, symbol: str) -> Dict[str, Any]:
         normalized = self._normalize_symbol(symbol)
-        if normalized != "TEM" or not self._is_us_equity_symbol(normalized):
+        if normalized not in self.fixture_symbols or not self._is_us_equity_symbol(normalized):
             raise OptionsProviderUnsupportedSymbol(normalized)
         with self.fixture_path.open("r", encoding="utf-8") as handle:
             fixture = json.load(handle)
-        if str(fixture.get("symbol") or "").upper() != normalized:
+        if str(fixture.get("symbol") or "").upper() != "TEM":
             raise OptionsProviderUnsupportedSymbol(normalized)
+        if normalized != "TEM":
+            fixture = self._remap_fixture_symbol(fixture, normalized)
         return self._decorate_fixture(fixture)
 
     def _decorate_fixture(self, fixture: Dict[str, Any]) -> Dict[str, Any]:
@@ -523,6 +541,37 @@ class _FixtureOptionsProvider:
                 warnings.append(self.contract_warning)
             contract["warnings"] = warnings
         return decorated
+
+    @classmethod
+    def _remap_fixture_symbol(cls, fixture: Dict[str, Any], symbol: str) -> Dict[str, Any]:
+        remapped = copy.deepcopy(fixture)
+        remapped["symbol"] = symbol
+        if symbol == "NVDA":
+            remapped["underlying"] = copy.deepcopy(cls.nvda_underlying)
+            for contract in remapped.get("contracts") or []:
+                old_strike = _float_or_none(contract.get("strike"))
+                new_strike = cls.nvda_strikes_by_tem_strike.get(float(old_strike or 0))
+                if new_strike is None:
+                    continue
+                contract["strike"] = new_strike
+                for key in ("bid", "ask", "last"):
+                    value = _float_or_none(contract.get(key))
+                    if value is not None:
+                        contract[key] = round(value * cls.nvda_price_scale, 2)
+                contract["contractSymbol"] = cls._occ_contract_symbol(
+                    symbol=symbol,
+                    expiration=str(contract.get("expiration") or ""),
+                    side=str(contract.get("side") or ""),
+                    strike=new_strike,
+                )
+        return remapped
+
+    @staticmethod
+    def _occ_contract_symbol(*, symbol: str, expiration: str, side: str, strike: float) -> str:
+        expiry = expiration.replace("-", "")[2:]
+        option_type = "P" if side.lower() == "put" else "C"
+        strike_code = f"{int(round(float(strike) * 1000)):08d}"
+        return f"{symbol}{expiry}{option_type}{strike_code}"
 
     @staticmethod
     def _normalize_symbol(symbol: str) -> str:
