@@ -30,6 +30,14 @@ from src.services.portfolio_service import PortfolioBusyError, PortfolioConflict
 from src.storage import DatabaseManager
 
 
+def _reset_public_limiter_state_if_available() -> None:
+    try:
+        from api.middlewares.public_abuse_limiter import reset_public_api_abuse_limiter_state
+    except ModuleNotFoundError:
+        return
+    reset_public_api_abuse_limiter_state()
+
+
 def _reset_auth_globals() -> None:
     auth._auth_enabled = None
     auth._session_secret = None
@@ -106,6 +114,8 @@ class PortfolioApiTestCase(unittest.TestCase):
             os.environ.pop("ADMIN_AUTH_ENABLED", None)
         else:
             os.environ["ADMIN_AUTH_ENABLED"] = self._previous_admin_auth_enabled
+        _reset_auth_globals()
+        _reset_public_limiter_state_if_available()
         self.temp_dir.cleanup()
 
     def _save_close(self, symbol: str, on_date: date, close: float) -> None:

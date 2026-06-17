@@ -160,6 +160,14 @@ def _portfolio_consumer_safety_envelope(data: dict[str, Any], *, schema_version:
             ),
             "evidenceGaps": evidence_gaps,
             "degradedInputs": degraded_inputs,
+            "exposureResearchContext": _portfolio_exposure_research_context(
+                payload,
+                evidence_gaps=evidence_gaps,
+                degraded_inputs=degraded_inputs,
+                data_status=data_status,
+                calculation_status=calculation_status,
+                freshness_status=freshness_status,
+            ),
             "dataQuality": {
                 "status": data_status,
                 "freshnessStatus": freshness_status,
@@ -194,6 +202,15 @@ def _safe_int(value: Any) -> int:
         return 0
 
 
+def _safe_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _confidence_cap_value(payload: dict[str, Any]) -> Optional[int]:
     confidence_cap = payload.get("confidenceCap")
     if not isinstance(confidence_cap, dict):
@@ -202,6 +219,10 @@ def _confidence_cap_value(payload: dict[str, Any]) -> Optional[int]:
         return max(0, min(100, int(confidence_cap.get("value"))))
     except (TypeError, ValueError):
         return None
+
+
+def _safe_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
 
 def _portfolio_consumer_evidence_gaps(payload: dict[str, Any], *, data_status: str) -> list[str]:
@@ -332,6 +353,316 @@ def _portfolio_consumer_issues(
             }
         ]
     return []
+
+
+def _portfolio_exposure_research_context(
+    payload: dict[str, Any],
+    *,
+    evidence_gaps: list[str],
+    degraded_inputs: list[dict[str, str]],
+    data_status: str,
+    calculation_status: str,
+    freshness_status: str,
+) -> dict[str, Any]:
+    return {
+        "dominantExposure": _portfolio_dominant_exposure(payload),
+        "concentrationContext": _portfolio_concentration_context(payload),
+        "currencyContext": _portfolio_currency_context(payload),
+        "marketContext": _portfolio_market_context(payload),
+        "staleInputs": _portfolio_stale_inputs(
+            payload,
+            degraded_inputs=degraded_inputs,
+            data_status=data_status,
+            calculation_status=calculation_status,
+            freshness_status=freshness_status,
+        ),
+        "evidenceGaps": list(evidence_gaps),
+        "observationBoundary": {
+            "observationOnly": True,
+            "decisionGrade": False,
+            "accountingMutation": False,
+            "portfolioMutation": False,
+            "providerRoutingChanged": False,
+            "externalProviderCallsAdded": False,
+            "adviceBoundary": "no_advice",
+            "message": PORTFOLIO_CONSUMER_NO_ADVICE_DISCLOSURE,
+        },
+        "researchNextSteps": _portfolio_research_next_steps(
+            payload,
+            evidence_gaps=evidence_gaps,
+            degraded_inputs=degraded_inputs,
+        ),
+    }
+
+
+def _portfolio_dominant_exposure(payload: dict[str, Any]) -> dict[str, Any]:
+    analytics_risk = _portfolio_analytics_risk(payload)
+    largest_position = _safe_dict(analytics_risk.get("largest_position"))
+    if largest_position:
+        return {
+            "type": "position",
+            "source": "snapshot_analytics",
+            "symbol": _uppercase_or_none(largest_position.get("symbol") or largest_position.get("key")),
+            "label": str(
+                largest_position.get("label") or largest_position.get("symbol") or "Largest position"
+            ),
+            "market": largest_position.get("market"),
+            "currency": largest_position.get("currency"),
+            "marketValue": _safe_float(largest_position.get("market_value")),
+            "weightPct": _safe_float(largest_position.get("percent")),
+            "fxStatus": largest_position.get("fx_status"),
+        }
+
+    concentration = _safe_dict(payload.get("concentration"))
+    top_positions = concentration.get("top_positions") if isinstance(concentration.get("top_positions"), list) else []
+    top_position = top_positions[0] if top_positions and isinstance(top_positions[0], dict) else {}
+    if top_position:
+        symbol = str(top_position.get("symbol") or "").upper()
+        return {
+            "type": "position",
+            "source": "risk_concentration",
+            "symbol": symbol or None,
+            "label": symbol or "Largest position",
+            "market": None,
+            "currency": payload.get("currency"),
+            "marketValue": _safe_float(top_position.get("market_value_base")),
+            "weightPct": _safe_float(top_position.get("weight_pct")),
+            "fxStatus": payload.get("fxFreshnessState"),
+        }
+
+    largest_currency = _safe_dict(analytics_risk.get("largest_currency"))
+    if largest_currency:
+        currency = str(largest_currency.get("currency") or largest_currency.get("key") or "").upper()
+        return {
+            "type": "currency",
+            "source": "snapshot_analytics",
+            "currency": currency or None,
+            "label": str(largest_currency.get("label") or currency or "Largest currency"),
+            "marketValue": _safe_float(largest_currency.get("market_value")),
+            "weightPct": _safe_float(largest_currency.get("percent")),
+            "fxStatus": largest_currency.get("fx_status"),
+        }
+
+    largest_market = _safe_dict(analytics_risk.get("largest_market"))
+    if largest_market:
+        market = str(largest_market.get("market") or largest_market.get("key") or "").lower()
+        return {
+            "type": "market",
+            "source": "snapshot_analytics",
+            "market": market or None,
+            "label": str(largest_market.get("label") or market.upper() or "Largest market"),
+            "marketValue": _safe_float(largest_market.get("market_value")),
+            "weightPct": _safe_float(largest_market.get("percent")),
+            "fxStatus": largest_market.get("fx_status"),
+        }
+
+    return {
+        "type": "none",
+        "source": "portfolio_snapshot",
+        "label": "No portfolio exposure available",
+        "weightPct": None,
+    }
+
+
+def _portfolio_analytics_risk(payload: dict[str, Any]) -> dict[str, Any]:
+    return _safe_dict(_safe_dict(payload.get("analytics")).get("risk"))
+
+
+def _uppercase_or_none(value: Any) -> Optional[str]:
+    text = str(value or "").strip().upper()
+    return text or None
+
+
+def _portfolio_concentration_context(payload: dict[str, Any]) -> dict[str, Any]:
+    analytics_risk = _portfolio_analytics_risk(payload)
+    concentration = _safe_dict(payload.get("concentration"))
+    dominant = _portfolio_dominant_exposure(payload)
+    top_weight = (
+        _safe_float(concentration.get("top_weight_pct"))
+        if concentration
+        else _safe_float(dominant.get("weightPct"))
+    )
+    warnings = list(analytics_risk.get("warnings") or []) if isinstance(analytics_risk.get("warnings"), list) else []
+    alert = bool(concentration.get("alert")) or any(str(item).startswith("single_") for item in warnings)
+    if top_weight is None:
+        state = "unavailable"
+    elif alert:
+        state = "elevated"
+    else:
+        state = "observable"
+    return {
+        "state": state,
+        "topWeightPct": top_weight,
+        "alert": alert,
+        "holdingCount": _safe_int(analytics_risk.get("holding_count")),
+        "accountCount": _safe_int(analytics_risk.get("account_count", payload.get("account_count"))),
+        "dominantType": dominant.get("type"),
+        "dominantLabel": dominant.get("label"),
+        "warningCodes": warnings,
+    }
+
+
+def _portfolio_currency_context(payload: dict[str, Any]) -> dict[str, Any]:
+    largest_currency = _safe_dict(_portfolio_analytics_risk(payload).get("largest_currency"))
+    fx_state = _safe_status(payload.get("fxFreshnessState"), default="unknown")
+    stale_pairs: list[str] = []
+    for item in payload.get("fx_rates") if isinstance(payload.get("fx_rates"), list) else []:
+        if not isinstance(item, dict) or not item.get("is_stale"):
+            continue
+        from_currency = str(item.get("from_currency") or "").upper()
+        to_currency = str(item.get("to_currency") or "").upper()
+        if from_currency and to_currency:
+            stale_pairs.append(f"{from_currency}/{to_currency}")
+    return {
+        "state": "limited" if fx_state in {"stale", "unavailable"} or stale_pairs else "observable",
+        "baseCurrency": payload.get("currency"),
+        "fxFreshnessState": fx_state,
+        "largestCurrency": {
+            "currency": largest_currency.get("currency") or largest_currency.get("key"),
+            "label": largest_currency.get("label"),
+            "weightPct": _safe_float(largest_currency.get("percent")),
+            "fxStatus": largest_currency.get("fx_status"),
+        }
+        if largest_currency
+        else None,
+        "stalePairs": stale_pairs,
+    }
+
+
+def _portfolio_market_context(payload: dict[str, Any]) -> dict[str, Any]:
+    analytics = _safe_dict(payload.get("analytics"))
+    analytics_exposure = _safe_dict(analytics.get("exposure"))
+    largest_market = _safe_dict(_portfolio_analytics_risk(payload).get("largest_market"))
+    market_breakdown = payload.get("market_breakdown") if isinstance(payload.get("market_breakdown"), list) else []
+    market_rows: list[dict[str, Any]] = []
+    for item in market_breakdown[:3]:
+        if not isinstance(item, dict):
+            continue
+        market_rows.append(
+            {
+                "market": item.get("market"),
+                "weightPct": _safe_float(item.get("weight_pct")),
+                "positionCount": _safe_int(item.get("position_count")),
+            }
+        )
+    benchmark_state = _safe_status(payload.get("benchmarkMappingState"), default="unknown")
+    factor_state = _safe_status(payload.get("factorMappingState"), default="unknown")
+    return {
+        "state": "limited" if benchmark_state == "unmapped" or factor_state == "unmapped" else "observable",
+        "largestMarket": {
+            "market": largest_market.get("market") or largest_market.get("key"),
+            "label": largest_market.get("label"),
+            "weightPct": _safe_float(largest_market.get("percent")),
+        }
+        if largest_market
+        else None,
+        "marketBreakdown": market_rows,
+        "benchmarkMappingState": benchmark_state,
+        "factorMappingState": factor_state,
+        "sectorContextState": _safe_status(analytics_exposure.get("sector_status"), default="unknown"),
+    }
+
+
+def _portfolio_stale_inputs(
+    payload: dict[str, Any],
+    *,
+    degraded_inputs: list[dict[str, str]],
+    data_status: str,
+    calculation_status: str,
+    freshness_status: str,
+) -> list[dict[str, str]]:
+    stale: list[dict[str, str]] = []
+    if data_status != "ready":
+        stale.append(
+            {
+                "input": "portfolio_snapshot",
+                "status": data_status,
+                "reason": freshness_status,
+            }
+        )
+    if calculation_status != "ready":
+        stale.append(
+            {
+                "input": "portfolio_metrics",
+                "status": calculation_status,
+                "reason": "calculation_limited",
+            }
+        )
+    fx_state = _safe_status(payload.get("fxFreshnessState"), default="unknown")
+    if fx_state in {"stale", "unavailable"}:
+        stale.append(
+            {
+                "input": "fx_freshness",
+                "status": fx_state,
+                "reason": "aggregate_currency_context_limited",
+            }
+        )
+    for item in degraded_inputs:
+        section = str(item.get("section") or "").strip()
+        if not section or any(existing["input"] == section for existing in stale):
+            continue
+        stale.append(
+            {
+                "input": section,
+                "status": str(item.get("status") or "limited"),
+                "reason": str(item.get("reason") or "evidence_limited"),
+            }
+        )
+    return stale
+
+
+def _portfolio_research_next_steps(
+    payload: dict[str, Any],
+    *,
+    evidence_gaps: list[str],
+    degraded_inputs: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    steps: list[dict[str, str]] = []
+    dominant = _portfolio_dominant_exposure(payload)
+    if dominant.get("type") == "position" and dominant.get("symbol"):
+        steps.append(
+            {
+                "topic": "dominant_exposure",
+                "check": f"Review latest research evidence for {dominant['symbol']} and its market context.",
+            }
+        )
+    elif dominant.get("type") in {"currency", "market"}:
+        steps.append(
+            {
+                "topic": "dominant_exposure",
+                "check": "Review the largest exposure bucket before interpreting portfolio context.",
+            }
+        )
+
+    if any(gap in evidence_gaps for gap in ("benchmark_mapping", "factor_mapping")):
+        steps.append(
+            {
+                "topic": "comparative_context",
+                "check": "Map benchmark and factor evidence before using comparative research context.",
+            }
+        )
+    if any(gap in evidence_gaps for gap in ("fx_freshness", "valuation_inputs")):
+        steps.append(
+            {
+                "topic": "currency_context",
+                "check": "Verify FX and valuation freshness before using aggregate currency context.",
+            }
+        )
+    if degraded_inputs:
+        steps.append(
+            {
+                "topic": "evidence_quality",
+                "check": "Review degraded inputs before expanding research conclusions.",
+            }
+        )
+    if not steps:
+        steps.append(
+            {
+                "topic": "market_context",
+                "check": "Review market regime, sector context, and data freshness before interpreting this snapshot.",
+            }
+        )
+    return steps
 
 
 def _get_portfolio_service(current_user: CurrentUser) -> PortfolioService:

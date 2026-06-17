@@ -396,6 +396,7 @@ class PortfolioSnapshotResponse(BaseModel):
     consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
     evidenceGaps: List[str] = Field(default_factory=list)
     degradedInputs: List[Dict[str, str]] = Field(default_factory=list)
+    exposureResearchContext: Optional[Dict[str, Any]] = None
     dataQuality: Dict[str, Any] = Field(default_factory=dict)
     freshnessStatus: Optional[
         Literal[
@@ -687,6 +688,7 @@ class PortfolioRiskResponse(BaseModel):
     consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
     evidenceGaps: List[str] = Field(default_factory=list)
     degradedInputs: List[Dict[str, str]] = Field(default_factory=list)
+    exposureResearchContext: Optional[Dict[str, Any]] = None
     dataQuality: Dict[str, Any] = Field(default_factory=dict)
     freshnessStatus: Optional[
         Literal[
