@@ -546,8 +546,12 @@ describe('AppContent route flows', () => {
   it.each([
     ['/zh/market/decision-cockpit', 'market-decision-cockpit-page'],
     ['/en/market/decision-cockpit', 'market-decision-cockpit-page'],
+    ['/zh/scanner', 'scanner-surface-page'],
+    ['/en/scanner', 'scanner-surface-page'],
     ['/zh/research/radar', 'research-radar-page'],
     ['/en/research/radar', 'research-radar-page'],
+    ['/zh/portfolio', 'portfolio-page'],
+    ['/en/portfolio', 'portfolio-page'],
     ['/zh/scenario-lab', 'scenario-lab-page'],
     ['/en/scenario-lab', 'scenario-lab-page'],
   ])('renders the localized core research IA route %s for signed-in users', async (path, expectedText) => {
@@ -559,6 +563,24 @@ describe('AppContent route flows', () => {
     expect(screen.getByTestId('location-path')).toHaveTextContent(path);
     expect(screen.queryByText(/auth-guard:/)).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Decision Desk' })).not.toBeInTheDocument();
+    if (path.includes('/scanner') || path.includes('/portfolio')) {
+      expect(screen.queryByText('scenario-lab-page')).not.toBeInTheDocument();
+    }
+  });
+
+  it.each([
+    ['/cockpit', '/market/decision-cockpit', 'market-decision-cockpit-page'],
+    ['/zh/cockpit', '/zh/market/decision-cockpit', 'market-decision-cockpit-page'],
+    ['/en/cockpit', '/en/market/decision-cockpit', 'market-decision-cockpit-page'],
+    ['/research-radar', '/research/radar', 'auth-guard:Research Radar'],
+    ['/zh/research-radar', '/zh/research/radar', 'auth-guard:研究雷达'],
+    ['/en/research-radar', '/en/research/radar', 'auth-guard:Research Radar'],
+  ])('redirects legacy research IA alias %s to canonical route %s', async (path, expectedPath, expectedText) => {
+    renderAtWithLocationProbe(path);
+
+    expect(await screen.findByText(expectedText)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(expectedPath));
+    expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
   });
 
   it('opens the stock structure route for guest sessions without a paywall', async () => {
@@ -635,18 +657,21 @@ describe('AppContent route flows', () => {
 
   it.each([
     ['/admin/system', '/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
+    ['/admin/system-logs', '/admin/logs', { ...noCapabilities, canReadOpsLogs: true }, 'admin-logs-page'],
     ['/admin/providers', '/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
     ['/admin/provider', '/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
     ['/admin/evidence', '/admin/evidence-workflow', { ...noCapabilities, canReadOpsLogs: true }, 'admin-evidence-workflow-page'],
     ['/admin/costs', '/admin/cost-observability', { ...noCapabilities, canReadCostObservability: true }, 'admin-cost-observability-page'],
     ['/admin/ai', '/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
     ['/zh/admin/system', '/zh/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
+    ['/zh/admin/system-logs', '/zh/admin/logs', { ...noCapabilities, canReadOpsLogs: true }, 'admin-logs-page'],
     ['/zh/admin/providers', '/zh/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
     ['/zh/admin/provider', '/zh/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
     ['/zh/admin/evidence', '/zh/admin/evidence-workflow', { ...noCapabilities, canReadOpsLogs: true }, 'admin-evidence-workflow-page'],
     ['/zh/admin/costs', '/zh/admin/cost-observability', { ...noCapabilities, canReadCostObservability: true }, 'admin-cost-observability-page'],
     ['/zh/admin/ai', '/zh/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
     ['/en/admin/system', '/en/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
+    ['/en/admin/system-logs', '/en/admin/logs', { ...noCapabilities, canReadOpsLogs: true }, 'admin-logs-page'],
     ['/en/admin/providers', '/en/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
     ['/en/admin/provider', '/en/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
     ['/en/admin/evidence', '/en/admin/evidence-workflow', { ...noCapabilities, canReadOpsLogs: true }, 'admin-evidence-workflow-page'],
@@ -730,6 +755,7 @@ describe('AppContent route flows', () => {
 
   it.each([
     ['/zh/admin/system', '/zh/settings/system'],
+    ['/zh/admin/system-logs', '/zh/admin/logs'],
     ['/zh/admin/providers', '/zh/admin/market-providers'],
     ['/zh/admin/provider', '/zh/admin/market-providers'],
     ['/zh/admin/evidence', '/zh/admin/evidence-workflow'],

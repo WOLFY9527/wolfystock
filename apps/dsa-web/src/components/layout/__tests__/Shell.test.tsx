@@ -192,6 +192,8 @@ describe('Shell', () => {
       ['options-lab', 'observe', '/options-lab', false],
       ['scenario-lab', 'observe', '/scenario-lab', false],
     ]);
+    expect(CONSUMER_NAV_ITEMS.find((item) => item.key === 'decision-cockpit')?.to).not.toBe('/cockpit');
+    expect(CONSUMER_NAV_ITEMS.find((item) => item.key === 'research-radar')?.to).not.toBe('/research-radar');
 
     for (const key of ['scanner', 'portfolio', 'scenario-lab'] as const) {
       expect(CONSUMER_NAV_ITEMS.find((item) => item.key === key)?.requiresAuth).not.toBe(true);
