@@ -16,10 +16,16 @@ import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../component
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { TerminalButton, TerminalChip } from '../components/terminal/TerminalPrimitives';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
-import { researchRadarApi, type ResearchRadarResponse } from '../api/researchRadar';
+import {
+  researchRadarApi,
+  type ResearchRadarResponse,
+  type UnifiedResearchQueueItem,
+  type UnifiedResearchQueueResponse,
+} from '../api/researchRadar';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import { formatDateTime } from '../utils/format';
+import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 import {
   RoughBulletList,
   RoughKeyValueRows,
@@ -54,6 +60,303 @@ function driverLabel(key: string, language: 'zh' | 'en') {
   return key.replace(/([a-z])([A-Z])/g, '$1 $2');
 }
 
+const RESEARCH_QUEUE_SOURCE_ORDER: UnifiedResearchQueueItem['sourceSurface'][] = ['watchlist', 'scanner', 'market', 'manual_gap'];
+const ADVICE_OR_TRADE_WORDS = /建议(买入|卖出|加仓|减仓|持有)|买入|卖出|下单|交易建议|投资建议|止损|止盈|目标价|仓位建议|\b(buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing|trade advice|investment advice)\b/i;
+const INTERNAL_DIAGNOSTIC_WORDS = /sourceRefs?|reasonCodes?|sourceRefId|request[_\s-]?id|trace[_\s-]?id|correlation[_\s-]?id|queueItemId|provider|cache|runtime|debug|raw|json|schemaVersion|admin|diagnostic|payload|backend snake_case|\b[a-z]+(?:_[a-z0-9]+)+\b/i;
+
+function safeResearchQueueText(value: string | null | undefined, locale: 'zh' | 'en', fallback?: string): string | null {
+  const raw = String(value || '').trim();
+  if (!raw) return fallback ?? null;
+  if (ADVICE_OR_TRADE_WORDS.test(raw)) {
+    return locale === 'en' ? 'Observation detail withheld.' : '观察细节已折叠。';
+  }
+  if (INTERNAL_DIAGNOSTIC_WORDS.test(raw)) {
+    return sanitizeUserFacingDataIssue(raw, locale);
+  }
+  return raw;
+}
+
+function safeResearchQueueList(values: string[] | null | undefined, locale: 'zh' | 'en', fallback: string): string[] {
+  const seen = new Set<string>();
+  const next: string[] = [];
+  for (const value of values ?? []) {
+    const safe = safeResearchQueueText(value, locale);
+    if (!safe || seen.has(safe)) continue;
+    seen.add(safe);
+    next.push(safe);
+  }
+  return next.length ? next : [fallback];
+}
+
+function sourceSurfaceLabel(surface: UnifiedResearchQueueItem['sourceSurface'], locale: 'zh' | 'en'): string {
+  const labels: Record<UnifiedResearchQueueItem['sourceSurface'], Record<'zh' | 'en', string>> = {
+    watchlist: { zh: 'Watchlist', en: 'Watchlist' },
+    scanner: { zh: 'Scanner', en: 'Scanner' },
+    market: { zh: 'Market', en: 'Market' },
+    manual_gap: { zh: 'Manual gap', en: 'Manual gap' },
+  };
+  return labels[surface]?.[locale] || surface;
+}
+
+function priorityTierLabel(priorityTier: UnifiedResearchQueueItem['priorityTier'], locale: 'zh' | 'en'): string {
+  if (locale === 'en') {
+    if (priorityTier === 'urgent_review') return 'Urgent review';
+    if (priorityTier === 'follow_up') return 'Follow up';
+    return 'Monitor';
+  }
+  if (priorityTier === 'urgent_review') return '紧急复核';
+  if (priorityTier === 'follow_up') return '持续跟进';
+  return '观察';
+}
+
+function priorityTierTone(priorityTier: UnifiedResearchQueueItem['priorityTier']): string {
+  if (priorityTier === 'urgent_review') return 'warning';
+  if (priorityTier === 'follow_up') return 'info';
+  return 'unknown';
+}
+
+function freshnessLabel(state: UnifiedResearchQueueItem['freshness']['state'], locale: 'zh' | 'en'): string {
+  if (locale === 'en') {
+    if (state === 'current') return 'Current';
+    if (state === 'needs_review') return 'Needs review';
+    if (state === 'unavailable') return 'Unavailable';
+    return 'Unconfirmed';
+  }
+  if (state === 'current') return '当前可用';
+  if (state === 'needs_review') return '需复核';
+  if (state === 'unavailable') return '暂不可用';
+  return '未确认';
+}
+
+function freshnessTone(state: UnifiedResearchQueueItem['freshness']['state']): string {
+  if (state === 'current') return 'success';
+  if (state === 'needs_review') return 'warning';
+  if (state === 'unavailable') return 'error';
+  return 'unknown';
+}
+
+function isUnifiedResearchQueueDisplaySafe(data: UnifiedResearchQueueResponse | null): data is UnifiedResearchQueueResponse {
+  return Boolean(
+    data
+    && data.schemaVersion === 'research_queue_v1'
+    && data.observationOnly === true
+    && data.decisionGrade === false
+    && data.dataQuality?.failClosed === true
+    && data.researchQueue.every((item) => item.observationOnly === true),
+  );
+}
+
+function safeResearchRoute(route: string | null | undefined): string | null {
+  const trimmed = String(route || '').trim();
+  if (!trimmed || !trimmed.startsWith('/') || trimmed.startsWith('/api/')) return null;
+  if (trimmed.includes('://') || trimmed.includes('..') || /[?#]/.test(trimmed)) return null;
+  const allowedConsumerRoutes = [
+    /^\/research\/radar$/,
+    /^\/scanner$/,
+    /^\/watchlist$/,
+    /^\/portfolio$/,
+    /^\/market-overview$/,
+    /^\/market\/decision-cockpit$/,
+    /^\/scenario-lab$/,
+    /^\/market\/scenario-lab$/,
+    /^\/stocks\/[^/?#]+\/structure-decision$/,
+  ];
+  if (!allowedConsumerRoutes.some((pattern) => pattern.test(trimmed))) return null;
+  return trimmed;
+}
+
+function groupResearchQueue(items: UnifiedResearchQueueItem[]) {
+  const groups = new Map<UnifiedResearchQueueItem['sourceSurface'], UnifiedResearchQueueItem[]>();
+  for (const surface of RESEARCH_QUEUE_SOURCE_ORDER) groups.set(surface, []);
+  for (const item of items) {
+    const current = groups.get(item.sourceSurface) ?? [];
+    current.push(item);
+    groups.set(item.sourceSurface, current);
+  }
+  return RESEARCH_QUEUE_SOURCE_ORDER
+    .map((surface) => ({ surface, items: groups.get(surface) ?? [] }))
+    .filter((group) => group.items.length > 0);
+}
+
+function ResearchQueueHubPanel({
+  data,
+  loading,
+  unavailable,
+  locale,
+  localize,
+}: {
+  data: UnifiedResearchQueueResponse | null;
+  loading: boolean;
+  unavailable: boolean;
+  locale: 'zh' | 'en';
+  localize: (path: string) => string;
+}) {
+  const items = data?.researchQueue ?? [];
+  const emptyCase = loading ? 'loading' : unavailable ? 'unavailableData' : 'noQueueItems';
+  const sourceGroups = groupResearchQueue(items);
+  const countLabel = locale === 'en'
+    ? `${data?.aggregateSummary.itemCount ?? items.length} queued`
+    : `${data?.aggregateSummary.itemCount ?? items.length} 个待复核`;
+
+  return (
+    <RoughSectionCard
+      data-testid="research-queue-hub"
+      className="md:col-span-2"
+      eyebrow={locale === 'en' ? 'Queue hub' : '队列中枢'}
+      title={locale === 'en' ? 'Cross-surface research queue' : '跨页面研究队列'}
+      action={<TerminalChip variant="neutral">{countLabel}</TerminalChip>}
+    >
+      <div className="space-y-3">
+        <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+          {locale === 'en'
+            ? 'Evidence-first follow-up across market, scanner, watchlist, and symbol research surfaces.'
+            : '按证据优先级汇总市场、Scanner、Watchlist 与标的研究入口的后续复核事项。'}
+        </p>
+
+        {items.length === 0 ? (
+          <ConsumerResearchEmptyState
+            data-testid="research-queue-hub-empty-state"
+            locale={locale}
+            state={buildConsumerResearchEmptyState(emptyCase, locale)}
+          />
+        ) : (
+          <div className="space-y-4">
+            {sourceGroups.map((group) => (
+              <section
+                key={group.surface}
+                data-testid={`research-queue-source-${group.surface.replaceAll('_', '-')}`}
+                className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 p-3"
+              >
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
+                      {sourceSurfaceLabel(group.surface, locale)}
+                    </h3>
+                    <p className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
+                      {locale === 'en' ? 'Grouped by source surface.' : '按来源页面分组。'}
+                    </p>
+                  </div>
+                  <TerminalChip variant="neutral" className="font-mono">{group.items.length}</TerminalChip>
+                </div>
+
+                <div className="mt-3 grid gap-3">
+                  {group.items.map((item, index) => {
+                    const safeTitle = safeResearchQueueText(item.title, locale, locale === 'en' ? 'Research item' : '研究条目');
+                    const whyQueued = safeResearchQueueList(
+                      item.whyQueued,
+                      locale,
+                      locale === 'en' ? 'Research follow-up is available.' : '可进行后续研究复核。',
+                    );
+                    const evidenceUsed = safeResearchQueueList(
+                      item.evidenceUsed,
+                      locale,
+                      locale === 'en' ? 'Evidence summary available.' : '已整理可用证据。',
+                    );
+                    const evidenceGaps = safeResearchQueueList(
+                      item.evidenceGaps,
+                      locale,
+                      locale === 'en' ? 'No explicit evidence gap.' : '暂无明确证据缺口。',
+                    );
+                    const reviewedAt = item.freshness.lastReviewedAt
+                      ? formatDateTime(item.freshness.lastReviewedAt, { locale: locale === 'en' ? 'en-US' : 'zh-CN' })
+                      : null;
+                    return (
+                      <article
+                        key={`${item.symbol || group.surface}-${index}`}
+                        data-testid={`research-queue-item-${item.symbol || index}`}
+                        className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3"
+                      >
+                        <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-mono text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{item.symbol || '--'}</div>
+                            <p className="mt-1 text-sm leading-5 text-[color:var(--wolfy-text-secondary)]">{safeTitle}</p>
+                          </div>
+                          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                            <StatusBadge status={priorityTierTone(item.priorityTier)} label={priorityTierLabel(item.priorityTier, locale)} size="sm" />
+                            <StatusBadge status={freshnessTone(item.freshness.state)} label={freshnessLabel(item.freshness.state, locale)} size="sm" />
+                            {item.observationOnly ? (
+                              <TerminalChip variant="neutral">
+                                {locale === 'en' ? 'Research only' : '仅作观察'}
+                              </TerminalChip>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                          <div>
+                            <p className="mb-2 text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">
+                              {locale === 'en' ? 'Why queued' : '入队原因'}
+                            </p>
+                            <RoughBulletList items={whyQueued} emptyText={locale === 'en' ? 'No reason available.' : '暂无原因。'} />
+                          </div>
+                          <div>
+                            <p className="mb-2 text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">
+                              {locale === 'en' ? 'Evidence used' : '已用证据'}
+                            </p>
+                            <RoughBulletList items={evidenceUsed} emptyText={locale === 'en' ? 'No evidence listed.' : '暂无证据。'} />
+                          </div>
+                          <div>
+                            <p className="mb-2 text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">
+                              {locale === 'en' ? 'Evidence gaps' : '证据缺口'}
+                            </p>
+                            <RoughBulletList items={evidenceGaps} emptyText={locale === 'en' ? 'No gap listed.' : '暂无缺口。'} />
+                          </div>
+                        </div>
+
+                        {reviewedAt ? (
+                          <p className="mt-3 text-xs text-[color:var(--wolfy-text-muted)]">
+                            {locale === 'en' ? 'Last reviewed ' : '上次复核 '}
+                            <span className="font-mono text-[color:var(--wolfy-text-secondary)]">{reviewedAt}</span>
+                          </p>
+                        ) : null}
+
+                        {item.suggestedResearchPath.length ? (
+                          <div className="mt-3 space-y-2">
+                            <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">
+                              {locale === 'en' ? 'Suggested research path' : '后续研究路径'}
+                            </p>
+                            {item.suggestedResearchPath.map((path, pathIndex) => {
+                              const safeLabel = safeResearchQueueText(path.label, locale, locale === 'en' ? 'Open research path' : '打开研究路径');
+                              const safeReason = safeResearchQueueText(path.reason, locale);
+                              const route = safeResearchRoute(path.route);
+                              if (!route) return null;
+                              const content = (
+                                <>
+                                  <span className="font-medium text-[color:var(--wolfy-text-primary)]">{safeLabel}</span>
+                                  {safeReason ? <span className="ml-2 text-[color:var(--wolfy-text-muted)]">{safeReason}</span> : null}
+                                </>
+                              );
+                              return (
+                                <Link
+                                  key={`${item.symbol}:path:${pathIndex}`}
+                                  to={localize(route)}
+                                  className="block rounded-md border border-[color:var(--wolfy-border-subtle)] bg-black/10 px-3 py-2 text-xs leading-5 transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+                                >
+                                  {content}
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
+
+        {data?.noAdviceDisclosure ? (
+          <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+            {safeResearchQueueText(data.noAdviceDisclosure, locale, locale === 'en' ? 'Research-only queue.' : '仅供研究队列观察。')}
+          </p>
+        ) : null}
+      </div>
+    </RoughSectionCard>
+  );
+}
+
 export default function ResearchRadarPage() {
   const { language } = useI18n();
   const locale = language === 'en' ? 'en' : 'zh';
@@ -62,6 +365,9 @@ export default function ResearchRadarPage() {
   const [searchParams] = useSearchParams();
   const localize = useCallback((path: string) => (routeLocale ? buildLocalizedPath(path, routeLocale) : path), [routeLocale]);
   const [data, setData] = useState<ResearchRadarResponse | null>(null);
+  const [unifiedQueue, setUnifiedQueue] = useState<UnifiedResearchQueueResponse | null>(null);
+  const [unifiedQueueLoading, setUnifiedQueueLoading] = useState(true);
+  const [unifiedQueueUnavailable, setUnifiedQueueUnavailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
 
@@ -72,21 +378,36 @@ export default function ResearchRadarPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setUnifiedQueueLoading(true);
+    setUnifiedQueueUnavailable(false);
     setError(null);
     try {
-      const response = await researchRadarApi.getResearchRadar({
-        market,
-        profile,
-        limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
-      });
+      const [response, queueResponse] = await Promise.all([
+        researchRadarApi.getResearchRadar({
+          market,
+          profile,
+          limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+        }),
+        researchRadarApi.getResearchQueue({
+          market,
+          profile,
+          queueLimit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+        }).catch(() => null),
+      ]);
+      const safeQueueResponse = isUnifiedResearchQueueDisplaySafe(queueResponse) ? queueResponse : null;
       setData(response);
+      setUnifiedQueue(safeQueueResponse);
+      setUnifiedQueueUnavailable(!safeQueueResponse);
     } catch (err) {
       setError(getParsedApiError(err) || createParsedApiError({
         title: locale === 'en' ? 'Research radar unavailable' : '研究雷达暂不可用',
         message: locale === 'en' ? 'Please retry after the queue API responds again.' : '请在队列接口恢复后重试。',
       }));
+      setUnifiedQueue(null);
+      setUnifiedQueueUnavailable(true);
     } finally {
       setLoading(false);
+      setUnifiedQueueLoading(false);
     }
   }, [locale, market, parsedLimit, profile]);
 
@@ -95,6 +416,7 @@ export default function ResearchRadarPage() {
   }, [load]);
 
   const queueItems = useMemo(() => data?.researchQueue ?? [], [data?.researchQueue]);
+  const unifiedQueueSize = unifiedQueue?.aggregateSummary.itemCount ?? unifiedQueue?.researchQueue.length ?? queueItems.length;
   const showOnboardingCta = Boolean(data && (queueItems.length === 0 || data.emptyStateActions.length || data.starterResearchWorkflow.length));
   const firstItemScores = useMemo(
     () => Object.entries(queueItems[0]?.driverScores ?? {})
@@ -209,7 +531,7 @@ export default function ResearchRadarPage() {
                     {
                       key: 'queue-size',
                       label: locale === 'en' ? 'Queue size' : '队列数量',
-                      value: queueItems.length,
+                      value: unifiedQueueSize,
                     },
                     {
                       key: 'market',
@@ -233,6 +555,13 @@ export default function ResearchRadarPage() {
                       className="md:col-span-2"
                     />
                   ) : null}
+                  <ResearchQueueHubPanel
+                    data={unifiedQueue}
+                    loading={unifiedQueueLoading}
+                    unavailable={unifiedQueueUnavailable}
+                    locale={locale}
+                    localize={localize}
+                  />
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Queue' : '队列'} title={locale === 'en' ? 'Research queue' : '研究队列'}>
                     {queueItems.length ? (
                       <div className="space-y-3">

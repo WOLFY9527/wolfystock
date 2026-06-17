@@ -14,6 +14,7 @@ const {
   getDecisionCockpitMock,
   getDailyIntelligenceMock,
   getResearchRadarMock,
+  getResearchQueueMock,
   getStructureDecisionMock,
   getStructureDecisionsBatchMock,
   runScenarioLabMock,
@@ -22,6 +23,7 @@ const {
   getDecisionCockpitMock: vi.fn(),
   getDailyIntelligenceMock: vi.fn(),
   getResearchRadarMock: vi.fn(),
+  getResearchQueueMock: vi.fn(),
   getStructureDecisionMock: vi.fn(),
   getStructureDecisionsBatchMock: vi.fn(),
   runScenarioLabMock: vi.fn(),
@@ -49,6 +51,7 @@ vi.mock('../../api/dailyIntelligence', () => ({
 vi.mock('../../api/researchRadar', () => ({
   researchRadarApi: {
     getResearchRadar: (...args: unknown[]) => getResearchRadarMock(...args),
+    getResearchQueue: (...args: unknown[]) => getResearchQueueMock(...args),
   },
 }));
 
@@ -79,10 +82,37 @@ const renderRoutePattern = (ui: React.ReactElement, path: string, pattern: strin
   </MemoryRouter>,
 );
 
+function makeEmptyUnifiedResearchQueue() {
+  return {
+    schemaVersion: 'research_queue_v1',
+    researchQueue: [],
+    aggregateSummary: {
+      itemCount: 0,
+      limit: 10,
+      bounded: false,
+      bySourceSurface: {},
+      byPriorityTier: { urgent_review: 0, follow_up: 0, monitor: 0 },
+    },
+    sourceSurfacesAggregated: [],
+    evidenceGaps: [],
+    dataQuality: {
+      state: 'no_evidence',
+      itemCount: 0,
+      sourceSurfacesAvailable: [],
+      sourceSurfacesExpected: ['scanner', 'watchlist', 'market', 'manual_gap'],
+      failClosed: true,
+    },
+    noAdviceDisclosure: 'Research-only queue.',
+    observationOnly: true,
+    decisionGrade: false,
+  };
+}
+
 describe('research IA pages', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     languageState.value = 'zh';
+    getResearchQueueMock.mockResolvedValue(makeEmptyUnifiedResearchQueue());
   });
 
   it('renders the market decision cockpit with a daily intelligence briefing and calm degraded notes', async () => {
@@ -440,16 +470,186 @@ describe('research IA pages', () => {
       noAdviceDisclosure: '仅供研究队列观察。',
       dataQuality: { status: 'partial' },
     });
+    getResearchQueueMock.mockResolvedValue({
+      schemaVersion: 'research_queue_v1',
+      researchQueue: [
+        {
+          queueItemId: 'watchlist-MSFT-item-1',
+          sourceSurface: 'watchlist',
+          symbol: 'MSFT',
+          title: 'Watchlist evidence follow-up',
+          priorityTier: 'urgent_review',
+          whyQueued: ['Missing evidence needs review.', 'provider_timeout'],
+          evidenceUsed: ['Technicals available', 'sourceRefs'],
+          evidenceGaps: ['Price-history evidence', 'reasonCodes'],
+          freshness: { state: 'needs_review', lastReviewedAt: null },
+          suggestedResearchPath: [
+            {
+              label: 'Stock Structure',
+              route: '/stocks/MSFT/structure-decision',
+              section: 'watchlistResearchOverlay',
+              reason: 'Open symbol structure detail.',
+            },
+            {
+              label: 'Admin Diagnostics',
+              route: '/admin/provider-operations',
+              section: 'adminDiagnostics',
+              reason: 'provider_runtime_trace',
+            },
+          ],
+          observationOnly: true,
+        },
+        {
+          queueItemId: 'scanner-ALFA-run-42-rank-1-item-1',
+          sourceSurface: 'scanner',
+          symbol: 'ALFA',
+          title: 'Scanner candidate review',
+          priorityTier: 'follow_up',
+          whyQueued: ['Scanner candidate is available for follow-up research review.'],
+          evidenceUsed: ['Technicals available', 'Liquidity available'],
+          evidenceGaps: [],
+          freshness: { state: 'current', lastReviewedAt: '2026-06-15T09:30:00+00:00' },
+          suggestedResearchPath: [
+            {
+              label: 'Stock Structure',
+              route: '/stocks/ALFA/structure-decision',
+              section: 'scannerResearchOverlay',
+              reason: 'Open symbol structure detail.',
+            },
+          ],
+          observationOnly: true,
+        },
+        {
+          queueItemId: 'market-VIX-item-1',
+          sourceSurface: 'market',
+          symbol: 'VIX',
+          title: 'Market volatility context',
+          priorityTier: 'monitor',
+          whyQueued: ['Cross-surface evidence should be reviewed before extending the queue.'],
+          evidenceUsed: ['Market context available'],
+          evidenceGaps: ['optional_news_timeout'],
+          freshness: { state: 'unknown', lastReviewedAt: null },
+          suggestedResearchPath: [],
+          observationOnly: true,
+        },
+      ],
+      aggregateSummary: {
+        itemCount: 3,
+        limit: 5,
+        bounded: false,
+        bySourceSurface: { watchlist: 1, scanner: 1, market: 1 },
+        byPriorityTier: { urgent_review: 1, follow_up: 1, monitor: 1 },
+      },
+      sourceSurfacesAggregated: ['watchlist', 'scanner', 'market'],
+      evidenceGaps: ['Price-history evidence', 'optional_news_timeout'],
+      dataQuality: {
+        state: 'ready',
+        itemCount: 3,
+        sourceSurfacesAvailable: ['watchlist', 'scanner', 'market'],
+        sourceSurfacesExpected: ['scanner', 'watchlist', 'market', 'manual_gap'],
+        failClosed: true,
+      },
+      noAdviceDisclosure: 'Research-only queue; verify evidence gaps before further review.',
+      observationOnly: true,
+      decisionGrade: false,
+    });
 
     renderRoute(<ResearchRadarPage />, '/zh/research/radar?market=us&limit=5');
 
     const page = await screen.findByTestId('research-radar-page');
     expect(page).toHaveTextContent('承接市场结构的研究队列');
-    expect(await within(page).findByText('ALFA')).toBeInTheDocument();
+    const hub = await within(page).findByTestId('research-queue-hub');
+    expect(hub).toHaveTextContent('跨页面研究队列');
+    expect(hub).toHaveTextContent('Watchlist');
+    expect(hub).toHaveTextContent('Scanner');
+    expect(hub).toHaveTextContent('Market');
+    const watchlistGroup = within(hub).getByTestId('research-queue-source-watchlist');
+    expect(watchlistGroup).toHaveTextContent('MSFT');
+    expect(watchlistGroup).toHaveTextContent('Watchlist evidence follow-up');
+    expect(watchlistGroup).toHaveTextContent('紧急复核');
+    expect(watchlistGroup).toHaveTextContent('Missing evidence needs review.');
+    expect(watchlistGroup).toHaveTextContent('Technicals available');
+    expect(watchlistGroup).toHaveTextContent('Price-history evidence');
+    expect(watchlistGroup).toHaveTextContent('需复核');
+    expect(watchlistGroup).toHaveTextContent('仅作观察');
+    expect(within(watchlistGroup).getByRole('link', { name: /Stock Structure/i })).toHaveAttribute('href', '/zh/stocks/MSFT/structure-decision');
+    expect(within(watchlistGroup).queryByRole('link', { name: /Admin Diagnostics/i })).not.toBeInTheDocument();
+    expect(watchlistGroup.textContent || '').not.toMatch(/Admin Diagnostics|adminDiagnostics|provider_runtime_trace|\/admin/i);
+    expect(within(hub).getByTestId('research-queue-source-scanner')).toHaveTextContent('ALFA');
+    expect(within(hub).getByTestId('research-queue-source-market')).toHaveTextContent('VIX');
+    expect((await within(page).findAllByText('ALFA')).length).toBeGreaterThan(0);
     expect(await within(page).findByText('相对强弱改善')).toBeInTheDocument();
     expect(within(page).getByRole('link', { name: '打开结构面板' })).toHaveAttribute('href', '/zh/stocks/ALFA/structure-decision');
     await waitFor(() => expect(getResearchRadarMock).toHaveBeenCalledWith({ market: 'us', profile: undefined, limit: 5 }));
-    expect(page.textContent || '').not.toMatch(/raw|debug|provider|schema/i);
+    await waitFor(() => expect(getResearchQueueMock).toHaveBeenCalledWith({ market: 'us', profile: undefined, queueLimit: 5 }));
+    expect(hub.textContent || '').not.toMatch(/sourceRefs|reasonCodes|provider_timeout|optional_news_timeout|queueItemId|request[_\s-]?id|trace[_\s-]?id|raw|debug|runtime|cache|schemaVersion/i);
+    expect(findConsumerRawLeakage(hub.textContent || '')).toEqual([]);
+    expect(hub.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing/i);
+  });
+
+  it('fails closed when the unified queue contract is not observation-only', async () => {
+    getResearchRadarMock.mockResolvedValue({
+      schemaVersion: 'research_radar_api_v1',
+      generatedAt: '2026-06-15T09:30:00Z',
+      researchQueue: [],
+      aggregateSummary: {
+        queueQuality: 'thin',
+        priorityCounts: {},
+      },
+      evidenceGaps: [],
+      marketContextFit: 'neutral',
+      onboardingGuidance: null,
+      emptyStateActions: [],
+      starterResearchWorkflow: [],
+      firstRunChecklist: [],
+      suggestedResearchEntrypoints: [],
+      noAdviceDisclosure: '仅供研究队列观察。',
+      dataQuality: { status: 'partial' },
+    });
+    getResearchQueueMock.mockResolvedValue({
+      schemaVersion: 'research_queue_v1',
+      researchQueue: [
+        {
+          queueItemId: 'unsafe-NVDA-item-1',
+          sourceSurface: 'scanner',
+          symbol: 'NVDA',
+          title: 'Unsafe decision grade queue',
+          priorityTier: 'urgent_review',
+          whyQueued: ['Unsafe queue should not render.'],
+          evidenceUsed: ['Technicals available'],
+          evidenceGaps: [],
+          freshness: { state: 'current', lastReviewedAt: null },
+          suggestedResearchPath: [],
+          observationOnly: false,
+        },
+      ],
+      aggregateSummary: {
+        itemCount: 1,
+        limit: 5,
+        bounded: false,
+        bySourceSurface: { scanner: 1 },
+        byPriorityTier: { urgent_review: 1, follow_up: 0, monitor: 0 },
+      },
+      sourceSurfacesAggregated: ['scanner'],
+      evidenceGaps: [],
+      dataQuality: {
+        state: 'ready',
+        itemCount: 1,
+        sourceSurfacesAvailable: ['scanner'],
+        sourceSurfacesExpected: ['scanner', 'watchlist', 'market', 'manual_gap'],
+        failClosed: false,
+      },
+      noAdviceDisclosure: 'Research-only queue.',
+      observationOnly: false,
+      decisionGrade: true,
+    });
+
+    renderRoute(<ResearchRadarPage />, '/zh/research/radar');
+
+    const page = await screen.findByTestId('research-radar-page');
+    const hubEmptyState = await within(page).findByTestId('research-queue-hub-empty-state');
+    expect(hubEmptyState).toHaveTextContent('数据暂不可用');
+    expect(page.textContent || '').not.toMatch(/NVDA|Unsafe decision grade queue|Unsafe queue should not render/i);
   });
 
   it('renders Research Radar onboarding CTAs when the queue is empty', async () => {
@@ -483,6 +683,7 @@ describe('research IA pages', () => {
       noAdviceDisclosure: '仅供研究队列观察。',
       dataQuality: { status: 'partial' },
     });
+    getResearchQueueMock.mockResolvedValue(makeEmptyUnifiedResearchQueue());
 
     renderRoute(<ResearchRadarPage />, '/zh/research/radar');
 
@@ -512,6 +713,37 @@ describe('research IA pages', () => {
     expect(onboardingPanel.textContent || '').not.toMatch(/sourceRefs|reasonCodes|fundamentals\.eps|provider_timeout|\bnews\b/i);
     expect(page.textContent || '').not.toMatch(/undefined|null|NaN/);
     expect(page.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommendation|target price|stop loss|position sizing/i);
+  });
+
+  it('keeps Research Radar visible when the unified research queue endpoint is unavailable', async () => {
+    getResearchRadarMock.mockResolvedValue({
+      schemaVersion: 'research_radar_api_v1',
+      generatedAt: '2026-06-15T09:30:00Z',
+      researchQueue: [],
+      aggregateSummary: {
+        queueQuality: 'thin',
+        priorityCounts: {},
+      },
+      evidenceGaps: [],
+      marketContextFit: 'neutral',
+      onboardingGuidance: null,
+      emptyStateActions: [],
+      starterResearchWorkflow: [],
+      firstRunChecklist: [],
+      suggestedResearchEntrypoints: [],
+      noAdviceDisclosure: '仅供研究队列观察。',
+      dataQuality: { status: 'partial' },
+    });
+    getResearchQueueMock.mockRejectedValue(new Error('404 provider_runtime_trace req-queue-123 raw payload'));
+
+    renderRoute(<ResearchRadarPage />, '/zh/research/radar');
+
+    const page = await screen.findByTestId('research-radar-page');
+    const hubEmptyState = await within(page).findByTestId('research-queue-hub-empty-state');
+    expect(page).toHaveTextContent('承接市场结构的研究队列');
+    expect(hubEmptyState).toHaveTextContent('数据暂不可用');
+    expect(hubEmptyState).toHaveTextContent('当前页面没有可展示的稳定研究资料，请稍后重试。');
+    expect(page.textContent || '').not.toMatch(/provider_runtime_trace|req-queue-123|raw payload|404/i);
   });
 
   it('renders the Stock Structure entry as an empty state without calling a stock API', () => {
