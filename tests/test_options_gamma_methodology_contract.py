@@ -21,6 +21,7 @@ from src.services.options_market_structure_observation import (
 
 def _complete_payload(**overrides):
     payload = {
+        "symbol": "TEST",
         "spot": 100,
         "asOf": "2026-06-15T14:00:00Z",
         "freshness": "fresh",
@@ -73,6 +74,43 @@ def test_complete_methodology_evidence_is_approved_and_observation_only() -> Non
     assert result.get("dataQuality", {}).get("observationSourceClass") == "live"
     assert result.get("dataQuality", {}).get("observationOnly") is True
     assert result.get("dataQuality", {}).get("decisionGrade") is False
+    assert result["structureDrilldowns"] == [
+        {
+            "label": "Stock Structure",
+            "route": "/stocks/TEST/structure-decision",
+            "section": "optionsGammaObservation",
+            "reason": "Open stock structure context for the same underlying.",
+        }
+    ]
+    assert result["scenarioDrilldowns"] == [
+        {
+            "label": "Scenario Lab",
+            "route": "/market/scenario-lab",
+            "section": "gammaObservation",
+            "reason": "Open scenario context with the current gamma evidence constraints.",
+        }
+    ]
+    assert result["methodologyLinks"] == [
+        {
+            "label": "Gamma readiness",
+            "route": "/options-lab",
+            "section": "gammaReadiness",
+            "reason": "Review why gamma evidence remains observation-only.",
+        },
+        {
+            "label": "Gamma methodology",
+            "route": "/options-lab",
+            "section": "gammaMethodology",
+            "reason": "Review the methodology limits behind this gamma observation.",
+        },
+    ]
+    assert result["evidenceLinkage"] == {
+        "status": "available",
+        "structureAvailable": True,
+        "scenarioAvailable": True,
+        "methodologyAvailable": True,
+        "message": "Linked structure, scenario, and methodology context is available for observation-only follow-up.",
+    }
 
     states = _requirement_states(result)
     assert states["openInterest"] == "satisfied"
@@ -174,6 +212,36 @@ def test_missing_option_records_are_unavailable_not_decision_grade() -> None:
     assert result.get("consumerIssues")
     assert result.get("blockedReasonDetails")
     assert result.get("evidenceLimits")
+    assert result["structureDrilldowns"] == []
+    assert result["scenarioDrilldowns"] == [
+        {
+            "label": "Scenario Lab",
+            "route": "/market/scenario-lab",
+            "section": "gammaObservation",
+            "reason": "Open scenario context with the current gamma evidence constraints.",
+        }
+    ]
+    assert result["methodologyLinks"] == [
+        {
+            "label": "Gamma readiness",
+            "route": "/options-lab",
+            "section": "gammaReadiness",
+            "reason": "Review why gamma evidence remains observation-only.",
+        },
+        {
+            "label": "Gamma methodology",
+            "route": "/options-lab",
+            "section": "gammaMethodology",
+            "reason": "Review the methodology limits behind this gamma observation.",
+        },
+    ]
+    assert result["evidenceLinkage"] == {
+        "status": "partial",
+        "structureAvailable": False,
+        "scenarioAvailable": True,
+        "methodologyAvailable": True,
+        "message": "Linked scenario and methodology context is available, but ticker-specific structure context is unavailable.",
+    }
     serialized_details = json.dumps(result.get("blockedReasonDetails"), ensure_ascii=False).lower()
     serialized_limits = json.dumps(result.get("evidenceLimits"), ensure_ascii=False).lower()
     assert "options_gamma_evidence_unavailable" not in serialized_details
@@ -230,6 +298,41 @@ def test_contract_copy_avoids_advice_and_real_inventory_claims() -> None:
     )
     assert all(re.search(pattern, serialized) is None for pattern in forbidden_patterns)
     assert "observation-only" in serialized
+
+
+def test_methodology_linkage_routes_are_allowlisted_and_consumer_safe() -> None:
+    result = assess_options_gamma_methodology_readiness(_complete_payload())
+
+    routes = {
+        *[item["route"] for item in result["structureDrilldowns"]],
+        *[item["route"] for item in result["scenarioDrilldowns"]],
+        *[item["route"] for item in result["methodologyLinks"]],
+    }
+    assert routes == {
+        "/stocks/TEST/structure-decision",
+        "/market/scenario-lab",
+        "/options-lab",
+    }
+    for route in routes:
+        assert route.startswith("/")
+        assert "://" not in route
+        assert "?" not in route
+        assert "#" not in route
+        assert ".." not in route
+
+    consumer_fields = json.dumps(
+        {
+            "structureDrilldowns": result["structureDrilldowns"],
+            "scenarioDrilldowns": result["scenarioDrilldowns"],
+            "methodologyLinks": result["methodologyLinks"],
+            "evidenceLinkage": result["evidenceLinkage"],
+        },
+        ensure_ascii=False,
+    ).lower()
+    assert "provider_rights_incomplete" not in consumer_fields
+    assert "formula_version_missing" not in consumer_fields
+    for forbidden in ("buy", "sell", "hold", "target", "stop", "recommendation", "position sizing"):
+        assert forbidden not in consumer_fields
 
 
 def test_contract_is_json_stable_and_deterministic() -> None:

@@ -18,6 +18,7 @@ from src.services.options_market_structure_observation import (
     build_options_gamma_observation_source_class,
     build_options_gamma_reason_details,
     build_options_market_structure_observation,
+    build_options_gamma_surface_linkage,
 )
 
 
@@ -139,6 +140,7 @@ def build_options_chain_gamma_observation(
         contracts,
         spot=spot,
         as_of=chain_as_of or None,
+        underlying_symbol=underlying or None,
         data_quality_label=data_quality_labels,
         **flags,
     )
@@ -193,6 +195,7 @@ def build_options_chain_gamma_observation(
         observation_source_class=observation_source_class,
         consumer_issues=consumer_issues,
     )
+    surface_linkage = build_options_gamma_surface_linkage(underlying_symbol=underlying or None)
     return {
         "schemaVersion": OPTIONS_CHAIN_GAMMA_OBSERVATION_SCHEMA_VERSION,
         "adapterName": ADAPTER_NAME,
@@ -224,6 +227,7 @@ def build_options_chain_gamma_observation(
         if status == "degraded"
         else [],
         "evidenceLimits": build_options_gamma_evidence_limits(consumer_issues),
+        **surface_linkage,
         "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
         "methodology": methodology,
         "rights": {

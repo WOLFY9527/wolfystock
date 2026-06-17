@@ -110,6 +110,44 @@ def test_complete_normalized_chain_produces_gex_gamma_observation() -> None:
     assert result.get("dataQuality", {}).get("observationSourceClass") == "live"
     assert result.get("dataQuality", {}).get("observationOnly") is True
     assert result.get("dataQuality", {}).get("decisionGrade") is False
+    assert result["structureDrilldowns"] == [
+        {
+            "label": "Stock Structure",
+            "route": "/stocks/TEST/structure-decision",
+            "section": "optionsGammaObservation",
+            "reason": "Open stock structure context for the same underlying.",
+        }
+    ]
+    assert result["scenarioDrilldowns"] == [
+        {
+            "label": "Scenario Lab",
+            "route": "/market/scenario-lab",
+            "section": "gammaObservation",
+            "reason": "Open scenario context with the current gamma evidence constraints.",
+        }
+    ]
+    assert result["methodologyLinks"] == [
+        {
+            "label": "Gamma readiness",
+            "route": "/options-lab",
+            "section": "gammaReadiness",
+            "reason": "Review why gamma evidence remains observation-only.",
+        },
+        {
+            "label": "Gamma methodology",
+            "route": "/options-lab",
+            "section": "gammaMethodology",
+            "reason": "Review the methodology limits behind this gamma observation.",
+        },
+    ]
+    assert result["evidenceLinkage"] == {
+        "status": "available",
+        "structureAvailable": True,
+        "scenarioAvailable": True,
+        "methodologyAvailable": True,
+        "message": "Linked structure, scenario, and methodology context is available for observation-only follow-up.",
+    }
+    assert result["observation"]["evidenceLinkage"] == result["evidenceLinkage"]
 
     methodology = result["methodology"]
     assert methodology["formula"] == GEX_FORMULA
@@ -151,6 +189,7 @@ def test_missing_gamma_blocks_without_fabricating_greeks() -> None:
     assert "missing_gamma" not in serialized_details
     assert "missing_gamma" not in serialized_limits
     assert all(not INTERNAL_LOOKING_TOKEN.search(item) for item in result["evidenceLimits"])
+    assert result["evidenceLinkage"]["status"] == "available"
 
 
 def test_missing_open_interest_blocks_without_fabricating_oi() -> None:
@@ -256,6 +295,16 @@ def test_source_classification_is_explicit_for_live_cached_fixture_demo_and_unkn
     assert result.get("dataQuality", {}).get("observationSourceClass") == expected
     assert result["observationOnly"] is True
     assert result["decisionGrade"] is False
+    assert result["structureDrilldowns"] == [
+        {
+            "label": "Stock Structure",
+            "route": "/stocks/TEST/structure-decision",
+            "section": "optionsGammaObservation",
+            "reason": "Open stock structure context for the same underlying.",
+        }
+    ]
+    assert result["scenarioDrilldowns"][0]["route"] == "/market/scenario-lab"
+    assert all(link["route"] == "/options-lab" for link in result["methodologyLinks"])
 
 
 def test_adapter_copy_avoids_advice_support_resistance_and_dealer_book_claims() -> None:
