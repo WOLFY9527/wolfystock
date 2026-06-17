@@ -60,7 +60,7 @@ import type {
 } from '../types/analysis';
 import type { PublicAnalysisPreviewResponse } from '../types/publicAnalysis';
 import type { ConsumerResearchReadinessView } from '../types/researchReadiness';
-import type { StockEvidenceFundamentalsSummary } from '../types/stockEvidence';
+import type { StockEvidenceFundamentalsSummary, SymbolEvidenceReadiness } from '../types/stockEvidence';
 import { purgeZombieDashboardStorage, useStockPoolStore } from '../stores/stockPoolStore';
 import {
   buildInstitutionalReportMarkdown,
@@ -2463,6 +2463,7 @@ function LinearObservationPanel({
   dashboard,
   dataQualityReport,
   fundamentalsSummary,
+  symbolEvidenceReadiness,
   isFundamentalsLoading,
   isGuest,
   guestPaywall,
@@ -2473,6 +2474,7 @@ function LinearObservationPanel({
   dashboard: DashboardPayload;
   dataQualityReport?: DataQualityReport;
   fundamentalsSummary: StockEvidenceFundamentalsSummary | null;
+  symbolEvidenceReadiness: SymbolEvidenceReadiness | null;
   isFundamentalsLoading: boolean;
   isGuest: boolean;
   guestPaywall?: React.ReactNode;
@@ -2535,6 +2537,7 @@ function LinearObservationPanel({
       <HomeFundamentalsSummaryBlock
         locale={locale}
         summary={fundamentalsSummary}
+        symbolEvidenceReadiness={symbolEvidenceReadiness}
         isLoading={isFundamentalsLoading}
         onOpenFundamentals={onOpenFundamentals}
       />
@@ -2684,14 +2687,205 @@ function buildHomeCatalystEvents(report: AnalysisReport | null | undefined, loca
   }).slice(0, 4);
 }
 
+const SYMBOL_READINESS_EVIDENCE_LABELS: Record<string, { zh: string; en: string }> = {
+  quote: { zh: '行情', en: 'Quote' },
+  price: { zh: '价格', en: 'Price' },
+  price_history: { zh: '价格历史', en: 'Price history' },
+  ohlc: { zh: '价格历史', en: 'Price history' },
+  technical: { zh: '技术面', en: 'Technicals' },
+  technicals: { zh: '技术面', en: 'Technicals' },
+  fundamental: { zh: '基本面', en: 'Fundamentals' },
+  fundamentals: { zh: '基本面', en: 'Fundamentals' },
+  earnings: { zh: '财报', en: 'Earnings' },
+  news: { zh: '新闻', en: 'News' },
+  catalyst: { zh: '催化', en: 'Catalysts' },
+  catalysts: { zh: '催化', en: 'Catalysts' },
+  sec_filing_evidence: { zh: '披露文件', en: 'Filings' },
+  filing: { zh: '披露文件', en: 'Filings' },
+  filings: { zh: '披露文件', en: 'Filings' },
+};
+
+function normalizeSymbolReadinessKey(value: string): string {
+  return String(value || '')
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase()
+    .replace(/[./\s-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function symbolReadinessTierLabel(locale: DashboardLocale, tier: SymbolEvidenceReadiness['readinessTier']): string {
+  const isEnglish = locale === 'en';
+  const labels: Record<SymbolEvidenceReadiness['readinessTier'], string> = {
+    sufficient: isEnglish ? 'Sufficient evidence' : '证据充分',
+    partial: isEnglish ? 'Partial evidence' : '部分证据',
+    insufficient: isEnglish ? 'Evidence insufficient' : '证据不足',
+  };
+  return labels[tier];
+}
+
+function symbolReadinessTierClass(tier: SymbolEvidenceReadiness['readinessTier']): string {
+  if (tier === 'sufficient') {
+    return 'border-emerald-300/20 bg-emerald-300/10 text-emerald-100';
+  }
+  if (tier === 'partial') {
+    return 'border-amber-300/20 bg-amber-300/10 text-amber-100';
+  }
+  return 'border-rose-300/20 bg-rose-300/10 text-rose-100';
+}
+
+function symbolReadinessEvidenceLabel(locale: DashboardLocale, value: string): string {
+  const key = normalizeSymbolReadinessKey(value);
+  if (!key) {
+    return locale === 'en' ? 'Evidence item' : '证据项';
+  }
+  if (key.includes('_vs_')) {
+    return key
+      .split('_vs_')
+      .map((item) => symbolReadinessEvidenceLabel(locale, item))
+      .join(locale === 'en' ? ' vs ' : '与');
+  }
+  return SYMBOL_READINESS_EVIDENCE_LABELS[key]?.[locale] || (locale === 'en' ? 'Evidence item' : '证据项');
+}
+
+function uniqueSymbolReadinessValues(values: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  values.forEach((value) => {
+    const text = String(value || '').trim();
+    if (!text || seen.has(text)) return;
+    seen.add(text);
+    result.push(text);
+  });
+  return result;
+}
+
+function symbolReadinessListText(
+  locale: DashboardLocale,
+  values: string[],
+  emptyLabel: string,
+): string {
+  const labels = uniqueSymbolReadinessValues(values)
+    .map((value) => symbolReadinessEvidenceLabel(locale, value));
+  return labels.length ? labels.join(locale === 'en' ? ' / ' : ' / ') : emptyLabel;
+}
+
+function safeSymbolReadinessText(
+  locale: DashboardLocale,
+  value: string,
+  fallback: string,
+): string {
+  const text = String(value || '').trim();
+  if (!text) {
+    return fallback;
+  }
+  const sanitized = HOME_RESEARCH_PACKET_UNSAFE_COPY_PATTERN.test(text)
+    ? sanitizeUserFacingDataIssue(text, locale)
+    : text;
+  if (HOME_RESEARCH_PACKET_UNSAFE_COPY_PATTERN.test(sanitized)) {
+    return fallback;
+  }
+  return sanitized;
+}
+
+function HomeSymbolEvidenceReadinessBlock({
+  locale,
+  readiness,
+}: {
+  locale: DashboardLocale;
+  readiness: SymbolEvidenceReadiness | null;
+}) {
+  if (!readiness) {
+    return null;
+  }
+
+  const isEnglish = locale === 'en';
+  const emptyLabel = isEnglish ? 'None' : '无';
+  const rowClassName = 'flex min-w-0 flex-col gap-1 rounded-[10px] border border-white/[0.05] bg-white/[0.018] px-3 py-2';
+  const labelClassName = 'text-[10px] uppercase tracking-[0.12em] text-white/36';
+  const valueClassName = 'text-xs leading-5 text-white/68';
+  const qualityNotes = uniqueSymbolReadinessValues(readiness.dataQualityNotes)
+    .map((note) => safeSymbolReadinessText(
+      locale,
+      note,
+      isEnglish ? 'Evidence quality is limited; keep this as research context.' : '证据质量仍受限制，当前仅作为研究语境。',
+    ));
+  const researchPath = uniqueSymbolReadinessValues(readiness.suggestedResearchPath)
+    .map((step) => safeSymbolReadinessText(
+      locale,
+      step,
+      isEnglish ? 'Review the remaining evidence before extending the thesis.' : '补齐剩余证据后再复核研究主线。',
+    ));
+  const disclosure = safeSymbolReadinessText(
+    locale,
+    readiness.noAdviceDisclosure,
+    isEnglish ? 'Observation-only research readiness; not personalized financial advice.' : '仅供研究观察，不构成投资建议。',
+  );
+
+  return (
+    <div
+      className="mt-3 rounded-[10px] border border-white/[0.06] bg-white/[0.018] px-3 py-3"
+      data-testid="home-symbol-evidence-readiness"
+    >
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/42">
+          {isEnglish ? 'Symbol research readiness' : '标的研究就绪度'}
+        </span>
+        <span className={cn('rounded-full border px-2.5 py-1 text-[10px] font-semibold', symbolReadinessTierClass(readiness.readinessTier))}>
+          {symbolReadinessTierLabel(locale, readiness.readinessTier)}
+        </span>
+        {readiness.observationOnly ? (
+          <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] font-semibold text-white/58">
+            {isEnglish ? 'Observe only' : '仅供观察'}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2">
+        <div className={rowClassName}>
+          <span className={labelClassName}>{isEnglish ? 'Evidence used: ' : '已用证据：'}</span>
+          <span className={valueClassName}>{symbolReadinessListText(locale, readiness.evidenceUsed, emptyLabel)}</span>
+        </div>
+        <div className={rowClassName}>
+          <span className={labelClassName}>{isEnglish ? 'Evidence needed: ' : '待补证据：'}</span>
+          <span className={valueClassName}>{symbolReadinessListText(locale, readiness.evidenceMissing, emptyLabel)}</span>
+        </div>
+        <div className={rowClassName}>
+          <span className={labelClassName}>{isEnglish ? 'Delayed inputs: ' : '延迟输入：'}</span>
+          <span className={valueClassName}>{symbolReadinessListText(locale, readiness.staleInputs, emptyLabel)}</span>
+        </div>
+        <div className={rowClassName}>
+          <span className={labelClassName}>{isEnglish ? 'Conflicting evidence: ' : '冲突证据：'}</span>
+          <span className={valueClassName}>{symbolReadinessListText(locale, readiness.conflictingEvidence, emptyLabel)}</span>
+        </div>
+      </div>
+
+      <div className="mt-3 space-y-1.5">
+        <p className="text-[11px] leading-5 text-white/56">
+          {isEnglish ? 'Quality notes: ' : '质量说明：'}
+          {qualityNotes.length ? qualityNotes.slice(0, 2).join(isEnglish ? ' · ' : '；') : (isEnglish ? 'No extra limitation noted.' : '暂无额外说明。')}
+        </p>
+        <p className="text-[11px] leading-5 text-white/56">
+          {isEnglish ? 'Research path: ' : '研究路径：'}
+          {researchPath.length ? researchPath.slice(0, 2).join(isEnglish ? ' · ' : '；') : (isEnglish ? 'Review available evidence together.' : '继续并排复核可用证据。')}
+        </p>
+        <p className="text-[11px] leading-5 text-white/48">{disclosure}</p>
+      </div>
+    </div>
+  );
+}
+
 function HomeFundamentalsSummaryBlock({
   locale,
   summary,
+  symbolEvidenceReadiness,
   isLoading,
   onOpenFundamentals,
 }: {
   locale: DashboardLocale;
   summary: StockEvidenceFundamentalsSummary | null;
+  symbolEvidenceReadiness: SymbolEvidenceReadiness | null;
   isLoading: boolean;
   onOpenFundamentals: () => void;
 }) {
@@ -2782,6 +2976,8 @@ function HomeFundamentalsSummaryBlock({
           <p className="mt-1 text-xs leading-[1.65] text-white/56">{partialNoticeCopy}</p>
         </div>
       )}
+
+      <HomeSymbolEvidenceReadinessBlock locale={locale} readiness={symbolEvidenceReadiness} />
 
       {hasObservableCoverage && !hasStableCoverage ? (
         <p className="mt-3 text-[11px] leading-5 text-white/46">{partialNoticeCopy}</p>
@@ -5671,6 +5867,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [mainCopyState, setMainCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [homeChartContext, setHomeChartContext] = useState<HomeCandlestickChartContext | null>(null);
   const [stockEvidenceFundamentals, setStockEvidenceFundamentals] = useState<StockEvidenceFundamentalsSummary | null>(null);
+  const [stockSymbolEvidenceReadiness, setStockSymbolEvidenceReadiness] = useState<SymbolEvidenceReadiness | null>(null);
   const [isStockEvidenceLoading, setStockEvidenceLoading] = useState(false);
   const routeTaskId = searchParams.get('task_id') || searchParams.get('taskId') || null;
   const routeSymbol = normalizeTickerQuery(searchParams.get('symbol') || undefined);
@@ -5898,6 +6095,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   useEffect(() => {
     if (isGuest || !activeEvidenceTicker) {
       setStockEvidenceFundamentals(null);
+      setStockSymbolEvidenceReadiness(null);
       setStockEvidenceLoading(false);
       return;
     }
@@ -5905,6 +6103,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     let isCancelled = false;
     setStockEvidenceLoading(true);
     setStockEvidenceFundamentals(null);
+    setStockSymbolEvidenceReadiness(null);
 
     void stockEvidenceApi.getStockEvidence(activeEvidenceTicker)
       .then((response) => {
@@ -5914,10 +6113,12 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         const matchedItem = response.items.find((item) => normalizeTickerQuery(item.symbol) === activeEvidenceTicker)
           || response.items[0];
         setStockEvidenceFundamentals(matchedItem?.stockEvidencePacket?.fundamentalsSummary ?? null);
+        setStockSymbolEvidenceReadiness(matchedItem?.symbolEvidenceReadiness ?? null);
       })
       .catch(() => {
         if (!isCancelled) {
           setStockEvidenceFundamentals(null);
+          setStockSymbolEvidenceReadiness(null);
         }
       })
       .finally(() => {
@@ -6602,6 +6803,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               dashboard={readyCopy}
               dataQualityReport={activeDataQualityReport}
               fundamentalsSummary={stockEvidenceFundamentals}
+              symbolEvidenceReadiness={stockSymbolEvidenceReadiness}
               isFundamentalsLoading={isStockEvidenceLoading}
               isGuest={Boolean(isGuest)}
               guestPaywall={guestPaywall}

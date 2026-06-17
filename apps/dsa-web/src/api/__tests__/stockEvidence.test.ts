@@ -60,6 +60,22 @@ describe('stockEvidenceApi', () => {
                 status: 'available',
               },
             },
+            symbol_evidence_readiness: {
+              symbol_evidence_readiness: true,
+              symbol: 'AAPL',
+              readiness_tier: 'partial',
+              evidence_used: ['quote', 'fundamental', ''],
+              evidence_missing: ['technical', 'news'],
+              stale_inputs: ['quote'],
+              conflicting_evidence: ['technical_vs_news'],
+              data_quality_notes: ['Core evidence is incomplete; keep the research context bounded.'],
+              suggested_research_path: ['Add recent OHLC or technical context.'],
+              observation_only: true,
+              no_advice_disclosure: 'Observation-only research readiness; not personalized financial advice or an instruction.',
+              raw_provider_payload: { redacted_id: 'must-not-emit-readiness' },
+              admin_diagnostics: { provider_route: 'must-not-emit-readiness' },
+              source_ref_id: 'must-not-emit-readiness',
+            },
           },
         ],
         meta: {
@@ -72,6 +88,7 @@ describe('stockEvidenceApi', () => {
     const payload = await stockEvidenceApi.getStockEvidence('BRK/B');
     const packet = payload.items[0].stockEvidencePacket;
     const summary = packet?.fundamentalsSummary;
+    const readiness = payload.items[0].symbolEvidenceReadiness;
 
     expect(get).toHaveBeenCalledWith('/api/v1/stocks/BRK%2FB/evidence');
     expect(payload.symbols).toEqual(['AAPL']);
@@ -103,6 +120,19 @@ describe('stockEvidenceApi', () => {
       scoreContributionAllowed: false,
       sourceAuthorityAllowed: false,
     });
+    expect(readiness).toEqual({
+      symbolEvidenceReadiness: true,
+      symbol: 'AAPL',
+      readinessTier: 'partial',
+      evidenceUsed: ['quote', 'fundamental'],
+      evidenceMissing: ['technical', 'news'],
+      staleInputs: ['quote'],
+      conflictingEvidence: ['technical_vs_news'],
+      dataQualityNotes: ['Core evidence is incomplete; keep the research context bounded.'],
+      suggestedResearchPath: ['Add recent OHLC or technical context.'],
+      observationOnly: true,
+      noAdviceDisclosure: 'Observation-only research readiness; not personalized financial advice or an instruction.',
+    });
 
     const serialized = JSON.stringify(summary);
     for (const forbiddenKey of [
@@ -120,6 +150,18 @@ describe('stockEvidenceApi', () => {
       expect(summary).not.toHaveProperty(forbiddenKey);
       expect(serialized).not.toContain(forbiddenKey);
       expect(serialized).not.toContain('must-not-emit');
+    }
+
+    const serializedReadiness = JSON.stringify(readiness);
+    for (const forbiddenKey of [
+      'rawProviderPayload',
+      'adminDiagnostics',
+      'sourceRefId',
+      'must-not-emit-readiness',
+    ]) {
+      expect(readiness).not.toHaveProperty(forbiddenKey);
+      expect(serializedReadiness).not.toContain(forbiddenKey);
+      expect(serializedReadiness).not.toContain('must-not-emit-readiness');
     }
   });
 
@@ -325,11 +367,19 @@ describe('stockEvidenceApi', () => {
             schemaVersion: 'stock_evidence_packet_v1',
             fundamentalsSummary: 'invalid-summary',
           },
+          symbolEvidenceReadiness: {
+            symbolEvidenceReadiness: true,
+            symbol: 'AAPL',
+            readinessTier: 'ranked',
+            observationOnly: true,
+            noAdviceDisclosure: 'invalid readiness tier should not be projected',
+          },
         },
       ],
     });
 
     expect(payload.items[0].stockEvidencePacket?.schemaVersion).toBe('stock_evidence_packet_v1');
     expect(payload.items[0].stockEvidencePacket).not.toHaveProperty('fundamentalsSummary');
+    expect(payload.items[0]).not.toHaveProperty('symbolEvidenceReadiness');
   });
 });

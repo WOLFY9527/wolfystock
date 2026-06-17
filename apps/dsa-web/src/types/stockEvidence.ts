@@ -24,6 +24,22 @@ export type StockEvidencePacket = Record<string, unknown> & {
   fundamentalsSummary?: StockEvidenceFundamentalsSummary;
 };
 
+export type SymbolEvidenceReadinessTier = 'sufficient' | 'partial' | 'insufficient';
+
+export interface SymbolEvidenceReadiness {
+  symbolEvidenceReadiness: true;
+  symbol: string;
+  readinessTier: SymbolEvidenceReadinessTier;
+  evidenceUsed: string[];
+  evidenceMissing: string[];
+  staleInputs: string[];
+  conflictingEvidence: string[];
+  dataQualityNotes: string[];
+  suggestedResearchPath: string[];
+  observationOnly: true;
+  noAdviceDisclosure: string;
+}
+
 export interface StockEvidenceItem {
   symbol: string;
   market?: string | null;
@@ -33,6 +49,7 @@ export interface StockEvidenceItem {
   news?: Record<string, unknown> | null;
   secFilingEvidence?: Record<string, unknown> | null;
   stockEvidencePacket?: StockEvidencePacket;
+  symbolEvidenceReadiness?: SymbolEvidenceReadiness;
 }
 
 export interface StockEvidenceMeta {

@@ -1,6 +1,8 @@
 import apiClient from './index';
 import { toCamelCase } from './utils';
 import type {
+  SymbolEvidenceReadiness,
+  SymbolEvidenceReadinessTier,
   StockEvidenceFundamentalsSummary,
   StockEvidenceItem,
   StockEvidenceMeta,
@@ -116,12 +118,55 @@ function normalizeStockEvidencePacket(payload: unknown): StockEvidencePacket | u
     : { ...rest };
 }
 
+function normalizeReadinessTier(value: unknown): SymbolEvidenceReadinessTier | null {
+  if (value === 'sufficient' || value === 'partial' || value === 'insufficient') {
+    return value;
+  }
+  return null;
+}
+
+function normalizeSymbolEvidenceReadiness(payload: unknown): SymbolEvidenceReadiness | undefined {
+  if (!isRecord(payload)) {
+    return undefined;
+  }
+
+  const readinessTier = normalizeReadinessTier(payload.readinessTier);
+  const symbol = typeof payload.symbol === 'string' ? payload.symbol.trim() : '';
+  const noAdviceDisclosure = typeof payload.noAdviceDisclosure === 'string'
+    ? payload.noAdviceDisclosure.trim()
+    : '';
+
+  if (
+    payload.symbolEvidenceReadiness !== true
+    || !symbol
+    || !readinessTier
+    || payload.observationOnly !== true
+    || !noAdviceDisclosure
+  ) {
+    return undefined;
+  }
+
+  return {
+    symbolEvidenceReadiness: true,
+    symbol,
+    readinessTier,
+    evidenceUsed: normalizeStringArray(payload.evidenceUsed),
+    evidenceMissing: normalizeStringArray(payload.evidenceMissing),
+    staleInputs: normalizeStringArray(payload.staleInputs),
+    conflictingEvidence: normalizeStringArray(payload.conflictingEvidence),
+    dataQualityNotes: normalizeStringArray(payload.dataQualityNotes),
+    suggestedResearchPath: normalizeStringArray(payload.suggestedResearchPath),
+    observationOnly: true,
+    noAdviceDisclosure,
+  };
+}
+
 function normalizeStockEvidenceItem(payload: unknown): StockEvidenceItem | null {
   if (!isRecord(payload) || typeof payload.symbol !== 'string' || payload.symbol.length === 0) {
     return null;
   }
 
-  return {
+  const item: StockEvidenceItem = {
     symbol: payload.symbol,
     market: typeof payload.market === 'string' ? payload.market : payload.market === null ? null : undefined,
     quote: normalizeOpaqueObject(payload.quote),
@@ -131,6 +176,13 @@ function normalizeStockEvidenceItem(payload: unknown): StockEvidenceItem | null 
     secFilingEvidence: normalizeOpaqueObject(payload.secFilingEvidence),
     stockEvidencePacket: normalizeStockEvidencePacket(payload.stockEvidencePacket),
   };
+
+  const symbolEvidenceReadiness = normalizeSymbolEvidenceReadiness(payload.symbolEvidenceReadiness);
+  if (symbolEvidenceReadiness) {
+    item.symbolEvidenceReadiness = symbolEvidenceReadiness;
+  }
+
+  return item;
 }
 
 function normalizeStockEvidenceMeta(payload: unknown): StockEvidenceMeta | undefined {
