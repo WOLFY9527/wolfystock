@@ -192,6 +192,7 @@ class RotationRadarThemeModel(BaseModel):
     evidence: List[str] = Field(default_factory=list)
     members: List[RotationRadarMemberModel] = Field(default_factory=list)
     rotationStateEvidence: Dict[str, Any] = Field(default_factory=dict)
+    themeCorrelationBreadthSnapshot: Dict[str, Any] = Field(default_factory=dict)
     themeFlowSignal: Dict[str, Any] = Field(default_factory=dict)
     noAdviceDisclosure: str
 
