@@ -31,6 +31,7 @@ import {
   type MarketRotationStage,
   type MarketRotationSummaryItem,
   type MarketRotationTheme,
+  type MarketRotationThemeCorrelationBreadthSnapshot,
 } from '../api/marketRotation';
 import { formatDateTime } from '../utils/format';
 import { cn } from '../utils/cn';
@@ -82,6 +83,48 @@ const THEME_FLOW_REASON_LABELS: Record<string, string> = {
   partial_source: '走势分化',
   source_authority_missing: '信号待确认',
   conflicting_signal_inputs: '强弱与扩散信号分化',
+};
+const THEME_PARTICIPATION_LABELS: Record<string, string> = {
+  broad_group: '广泛扩散',
+  leader_concentrated: '少数龙头集中',
+  mixed_or_partial: '分化观察',
+  insufficient_evidence: '证据不足',
+};
+const THEME_LEADERSHIP_LABELS: Record<string, string> = {
+  balanced: '分布均衡',
+  moderate: '中度集中',
+  concentrated: '龙头集中',
+  unknown: '集中度待补齐',
+};
+const THEME_CORRELATION_LABELS: Record<string, string> = {
+  aligned: '同步相关',
+  mixed: '相关性分化',
+  weak: '相关性偏弱',
+  missing: '同步证据待补齐',
+};
+const THEME_BREADTH_LABELS: Record<string, string> = {
+  broad: '广度扩散',
+  mixed: '广度分化',
+  thin: '广度偏窄',
+  missing: '广度待补齐',
+};
+const SNAPSHOT_INPUT_LABELS: Record<string, string> = {
+  fallback_source: '最近一次可用数据',
+  stale_source: '数据延迟',
+  partial_source: '部分样本待补齐',
+  breadth_percent_up: '上涨广度待补齐',
+  breadth_percent_outperforming_benchmark: '跑赢广度待补齐',
+  correlation_same_direction_percent: '成员同步待补齐',
+  correlation_above_vwap_percent: '均线同步待补齐',
+  leadership_concentration_percent: '龙头集中度待补齐',
+  market_runtime_evidence: '市场观察样本待补齐',
+};
+const SNAPSHOT_NEXT_STEP_LABELS: Record<string, string> = {
+  'Watch whether broad participation persists across the next observation window.': '继续观察广泛参与能否延续到下一观察窗口。',
+  'Compare top-member moves with the rest of the theme before drawing a group-level conclusion.': '先对比龙头成员与其余成员，再判断主题整体扩散。',
+  'Collect member-level breadth and synchronization evidence before classifying participation.': '补齐成员广度与同步证据后，再分类参与状态。',
+  'Refresh stale theme inputs before treating the snapshot as current.': '先等待数据更新，再把快照视为当前状态。',
+  'Review whether breadth, synchronization, and leadership remain consistent in the next snapshot.': '下一次快照继续复核广度、同步与龙头分布是否一致。',
 };
 const ROTATION_ENGLISH_COPY_REPLACEMENTS: Array<[RegExp, string]> = [
   [/\bAI Applications?\b/g, 'AI 应用'],
@@ -418,6 +461,118 @@ function themeFlowEvidenceLines(signal?: MarketRotationTheme['themeFlowSignal'] 
     sanitizeRotationText(signal?.breadthEvidence, '广度证据待补齐。'),
     sanitizeRotationText(signal?.relativeStrengthEvidence, '相对强弱证据待补齐。'),
   ];
+}
+
+function hasThemeCorrelationBreadthSnapshot(
+  snapshot?: MarketRotationThemeCorrelationBreadthSnapshot | null,
+): snapshot is MarketRotationThemeCorrelationBreadthSnapshot {
+  if (!snapshot || typeof snapshot !== 'object') {
+    return false;
+  }
+  return Boolean(
+    snapshot.participationState
+      || snapshot.leadershipConcentration
+      || snapshot.correlationEvidence
+      || snapshot.breadthEvidence,
+  );
+}
+
+function formatSnapshotState(
+  value: string | null | undefined,
+  labels: Record<string, string>,
+  fallback: string,
+): string {
+  const normalized = String(value || '').trim();
+  if (!normalized) {
+    return fallback;
+  }
+  return labels[normalized] || sanitizeRotationText(normalized, fallback);
+}
+
+function formatSnapshotPercent(value?: number | string | null): string {
+  if (!Number.isFinite(Number(value))) {
+    return '待补齐';
+  }
+  return `${Number(value).toFixed(1)}%`;
+}
+
+function formatSnapshotMemberCount(observed?: number | null, configured?: number | null): string {
+  const observedNumber = Number(observed);
+  const configuredNumber = Number(configured);
+  if (!Number.isFinite(observedNumber) || !Number.isFinite(configuredNumber) || configuredNumber <= 0) {
+    return '样本待补齐';
+  }
+  return `${Math.max(0, Math.round(observedNumber))}/${Math.max(0, Math.round(configuredNumber))} 个成员`;
+}
+
+function formatSnapshotInputLabel(value?: string | null): string {
+  const normalized = String(value || '').trim();
+  if (!normalized) {
+    return '';
+  }
+  const fallbackWindow = normalized.match(/^fallback_window:(.+)$/);
+  if (fallbackWindow?.[1]) {
+    return `${sanitizeRotationText(fallbackWindow[1], '该时窗')} 时窗数据待更新`;
+  }
+  return SNAPSHOT_INPUT_LABELS[normalized] || sanitizeRotationText(normalized, '数据项待补齐');
+}
+
+function formatSnapshotInputLabels(values?: string[] | null, fallback = '暂无'): string[] {
+  const seen = new Set<string>();
+  const labels: string[] = [];
+  for (const value of values || []) {
+    const label = formatSnapshotInputLabel(value);
+    if (!label || seen.has(label)) {
+      continue;
+    }
+    seen.add(label);
+    labels.push(label);
+  }
+  return labels.length ? labels : [fallback];
+}
+
+function formatSnapshotNextSteps(values?: string[] | null): string[] {
+  const seen = new Set<string>();
+  const labels: string[] = [];
+  for (const value of values || []) {
+    const raw = String(value || '').trim();
+    const label = SNAPSHOT_NEXT_STEP_LABELS[raw] || sanitizeRotationText(raw, '');
+    if (!label || seen.has(label)) {
+      continue;
+    }
+    seen.add(label);
+    labels.push(label);
+  }
+  return labels.length ? labels.slice(0, 3) : ['继续观察广度、同步与龙头分布是否发生变化。'];
+}
+
+function formatSnapshotBoundaryLabels(
+  boundary?: MarketRotationThemeCorrelationBreadthSnapshot['observationBoundary'] | null,
+): string[] {
+  if (!boundary || typeof boundary !== 'object') {
+    return ['仅作研究观察'];
+  }
+  const labels = [
+    boundary.scope === 'existing_theme_fields' ? '仅使用已展示主题字段' : '观察口径受限',
+    boundary.rankingImpact === 'none' ? '不改变排序' : null,
+    boundary.dataMutation === 'none' ? '不改动数据' : null,
+    boundary.dataFetches === 'none' ? '不新增取数' : null,
+  ].filter((label): label is string => Boolean(label));
+  return labels.length ? labels : ['仅作研究观察'];
+}
+
+function snapshotSummary(snapshot: MarketRotationThemeCorrelationBreadthSnapshot): string {
+  const participation = formatSnapshotState(snapshot.participationState, THEME_PARTICIPATION_LABELS, '参与状态待补齐');
+  const breadth = formatSnapshotState(snapshot.breadthEvidence?.state, THEME_BREADTH_LABELS, '广度待补齐');
+  const correlation = formatSnapshotState(snapshot.correlationEvidence?.state, THEME_CORRELATION_LABELS, '同步证据待补齐');
+  const staleCount = Array.isArray(snapshot.staleInputs) ? snapshot.staleInputs.length : 0;
+  const missingCount = Array.isArray(snapshot.missingInputs) ? snapshot.missingInputs.length : 0;
+  const dataState = missingCount > 0
+    ? `${missingCount} 项待补齐`
+    : staleCount > 0
+      ? `${staleCount} 项待更新`
+      : '输入完整';
+  return `${participation} · ${breadth} · ${correlation} · ${dataState}`;
 }
 
 function parseRotationMetric(value?: number | string | null): number | null {
@@ -1409,6 +1564,132 @@ const ConsumerDisclosure: React.FC<{
   );
 };
 
+const ThemeCorrelationBreadthSnapshotPanel: React.FC<{
+  snapshot?: MarketRotationThemeCorrelationBreadthSnapshot | null;
+}> = ({ snapshot }) => {
+  if (!hasThemeCorrelationBreadthSnapshot(snapshot)) {
+    return null;
+  }
+
+  const participationLabel = formatSnapshotState(
+    snapshot.participationState,
+    THEME_PARTICIPATION_LABELS,
+    '参与状态待补齐',
+  );
+  const leadershipLabel = formatSnapshotState(
+    snapshot.leadershipConcentration?.state,
+    THEME_LEADERSHIP_LABELS,
+    '集中度待补齐',
+  );
+  const correlationLabel = formatSnapshotState(
+    snapshot.correlationEvidence?.state,
+    THEME_CORRELATION_LABELS,
+    '同步证据待补齐',
+  );
+  const breadthLabel = formatSnapshotState(
+    snapshot.breadthEvidence?.state,
+    THEME_BREADTH_LABELS,
+    '广度待补齐',
+  );
+  const staleLabels = formatSnapshotInputLabels(snapshot.staleInputs, '暂无延迟项');
+  const missingLabels = formatSnapshotInputLabels(snapshot.missingInputs, '暂无缺口项');
+  const boundaryLabels = formatSnapshotBoundaryLabels(snapshot.observationBoundary);
+  const nextSteps = formatSnapshotNextSteps(snapshot.researchNextSteps);
+  const topMembers = (snapshot.leadershipConcentration?.topMembers || [])
+    .map((item) => sanitizeRotationText(item, '成员'))
+    .filter(Boolean)
+    .slice(0, 4);
+
+  return (
+    <ConsumerDisclosure
+      testId="rotation-theme-correlation-breadth-snapshot"
+      title="查看主题扩散快照"
+      summary={snapshotSummary(snapshot)}
+    >
+      <div className="grid gap-3 text-[11px] leading-5 text-white/56">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <TerminalChip variant={snapshot.participationState === 'broad_group' ? 'success' : snapshot.participationState === 'insufficient_evidence' ? 'caution' : 'info'}>
+            {participationLabel}
+          </TerminalChip>
+          <TerminalChip variant={snapshot.leadershipConcentration?.state === 'concentrated' ? 'caution' : 'neutral'}>
+            {leadershipLabel}
+          </TerminalChip>
+          <TerminalChip variant={snapshot.correlationEvidence?.state === 'aligned' ? 'success' : 'neutral'}>
+            {correlationLabel}
+          </TerminalChip>
+          <TerminalChip variant={snapshot.breadthEvidence?.state === 'broad' ? 'success' : 'neutral'}>
+            {breadthLabel}
+          </TerminalChip>
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="rounded-md border border-white/[0.05] bg-white/[0.02] px-2.5 py-2">
+            <p className="font-semibold text-white/74">龙头集中度</p>
+            <p className="mt-1">
+              {leadershipLabel} · {formatSnapshotPercent(snapshot.leadershipConcentration?.percent)}
+            </p>
+            <p className="mt-1 text-white/42">
+              广泛参与 {formatSnapshotPercent(snapshot.leadershipConcentration?.broadParticipationPercent)}
+            </p>
+            {topMembers.length ? (
+              <p className="mt-1 text-white/42">代表成员：{topMembers.join('、')}</p>
+            ) : null}
+          </div>
+          <div className="rounded-md border border-white/[0.05] bg-white/[0.02] px-2.5 py-2">
+            <p className="font-semibold text-white/74">同步相关</p>
+            <p className="mt-1">
+              成员同步 {formatSnapshotPercent(snapshot.correlationEvidence?.sameDirectionPercent)}
+            </p>
+            <p className="mt-1 text-white/42">
+              均线同步 {formatSnapshotPercent(snapshot.correlationEvidence?.aboveVwapPercent)}
+            </p>
+            <p className="mt-1 text-white/42">
+              持续性 {formatSnapshotPercent(snapshot.correlationEvidence?.persistencePercent)}
+            </p>
+          </div>
+          <div className="rounded-md border border-white/[0.05] bg-white/[0.02] px-2.5 py-2">
+            <p className="font-semibold text-white/74">广度证据</p>
+            <p className="mt-1">
+              {formatSnapshotMemberCount(snapshot.breadthEvidence?.observedMembers, snapshot.breadthEvidence?.configuredMembers)}
+            </p>
+            <p className="mt-1 text-white/42">
+              上涨广度 {formatSnapshotPercent(snapshot.breadthEvidence?.percentUp)}
+            </p>
+            <p className="mt-1 text-white/42">
+              跑赢广度 {formatSnapshotPercent(snapshot.breadthEvidence?.percentOutperformingBenchmark)}
+            </p>
+          </div>
+          <div className="rounded-md border border-white/[0.05] bg-white/[0.02] px-2.5 py-2">
+            <p className="font-semibold text-white/74">观察边界</p>
+            <div className="mt-1 flex min-w-0 flex-wrap gap-1.5">
+              {boundaryLabels.map((label) => <TerminalChip key={label}>{label}</TerminalChip>)}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-2">
+          <div>
+            <p className="font-semibold text-white/74">数据更新</p>
+            <p className="mt-1">{staleLabels.join('、')}</p>
+          </div>
+          <div>
+            <p className="font-semibold text-white/74">输入缺口</p>
+            <p className="mt-1">{missingLabels.join('、')}</p>
+          </div>
+          <div>
+            <p className="font-semibold text-white/74">继续观察</p>
+            <div className="mt-1 grid gap-1">
+              {nextSteps.map((step, index) => (
+                <p key={`snapshot-next-step-${index}`}>· {step}</p>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </ConsumerDisclosure>
+  );
+};
+
 const RotationFamilyRow: React.FC<{ view: RotationFamilyView }> = ({ view }) => {
   const signal = view.item.themeFlowSignal;
   const stateLabel = formatThemeFlowState(signal?.themeFlowState);
@@ -1926,6 +2207,12 @@ const ThemeDetailPanel: React.FC<{
               ) : null}
             </div>
           </ConsumerDisclosure>
+        </div>
+      ) : null}
+
+      {hasThemeCorrelationBreadthSnapshot(theme.themeCorrelationBreadthSnapshot) ? (
+        <div className="min-w-0 px-1 py-3">
+          <ThemeCorrelationBreadthSnapshotPanel snapshot={theme.themeCorrelationBreadthSnapshot} />
         </div>
       ) : null}
 

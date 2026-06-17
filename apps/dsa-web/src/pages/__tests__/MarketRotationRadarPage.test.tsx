@@ -49,6 +49,7 @@ type ThemeFlowSignalFixture = NonNullable<NonNullable<MarketRotationRadarRespons
   leadershipEvidence?: string | null;
 };
 type ObservationSummaryFixtureItem = MarketRotationSummaryItem & Partial<MarketRotationRadarResponse['themes'][number]>;
+type ThemeCorrelationBreadthSnapshotFixture = NonNullable<MarketRotationRadarResponse['themes'][number]['themeCorrelationBreadthSnapshot']>;
 
 function buildThemeFlowSignalFixture(
   overrides: Partial<ThemeFlowSignalFixture> = {},
@@ -62,6 +63,46 @@ function buildThemeFlowSignalFixture(
     leadershipEvidence: '龙头成员 APP、PLTR，集中度 36.0%。',
     breadthEvidence: '上涨广度 100.0% / 跑赢广度 100.0% ，3/3 成员有可用观察。',
     relativeStrengthEvidence: '相对 QQQ 强弱 +2.80% 。',
+    ...overrides,
+  };
+}
+
+function buildThemeCorrelationBreadthSnapshotFixture(
+  overrides: Partial<ThemeCorrelationBreadthSnapshotFixture> = {},
+): ThemeCorrelationBreadthSnapshotFixture {
+  return {
+    contractVersion: 'theme_correlation_breadth_snapshot_v1',
+    theme: { id: 'ai_applications', name: 'AI 应用', market: 'US' },
+    participationState: 'broad_group',
+    leadershipConcentration: {
+      state: 'balanced',
+      percent: 36,
+      broadParticipationPercent: 64,
+      topMembers: ['APP', 'PLTR'],
+    },
+    correlationEvidence: {
+      state: 'aligned',
+      sameDirectionPercent: 100,
+      aboveVwapPercent: 100,
+      persistencePercent: 100,
+    },
+    breadthEvidence: {
+      state: 'broad',
+      observedMembers: 3,
+      configuredMembers: 3,
+      coveragePercent: 100,
+      percentUp: 100,
+      percentOutperformingBenchmark: 100,
+    },
+    staleInputs: [],
+    missingInputs: [],
+    observationBoundary: {
+      scope: 'existing_theme_fields',
+      rankingImpact: 'none',
+      dataMutation: 'none',
+      dataFetches: 'none',
+    },
+    researchNextSteps: ['Watch whether broad participation persists across the next observation window.'],
     ...overrides,
   };
 }
@@ -274,6 +315,7 @@ const radarFixture = (): MarketRotationRadarResponse => ({
       sourceAuthorityAllowed: true,
       evidenceQuality: 'degraded_proxy',
       themeFlowSignal: buildThemeFlowSignalFixture(),
+      themeCorrelationBreadthSnapshot: buildThemeCorrelationBreadthSnapshotFixture(),
       dataGaps: ['true_flow_data_missing', 'flow_methodology_missing', 'benchmark_proxy_missing'],
       stage: 'confirmed_rotation',
       stageExplanation: '价格、量能、广度和同步性同时满足阈值。置信度 72%，3 个分钟级时窗可用。',
@@ -493,6 +535,29 @@ function radarUniverseFixture(): MarketRotationRadarResponse {
           { symbol: leaderSymbol, name: leaderSymbol, changePercent: 5.1 - index * 0.2, relativeStrengthVsBenchmark: 4.3 - index * 0.2, volumeRatio: 2.2, freshness: 'delayed', isFallback: false },
         ],
       },
+      themeCorrelationBreadthSnapshot: buildThemeCorrelationBreadthSnapshotFixture({
+        theme: { id: index === 0 ? 'ai_applications' : `theme_${index}`, name, market: 'US' },
+        leadershipConcentration: {
+          state: index > 7 ? 'concentrated' : 'balanced',
+          percent: Math.min(78, 28 + index * 4),
+          broadParticipationPercent: Math.max(18, 76 - index * 4),
+          topMembers: [leaderSymbol],
+        },
+        correlationEvidence: {
+          state: index > 7 ? 'mixed' : 'aligned',
+          sameDirectionPercent: Math.max(20, 94 - index * 6),
+          aboveVwapPercent: Math.max(20, 90 - index * 5),
+          persistencePercent: Math.max(20, 88 - index * 4),
+        },
+        breadthEvidence: {
+          state: index > 7 ? 'thin' : 'broad',
+          observedMembers: 3,
+          configuredMembers: 3,
+          coveragePercent: 100,
+          percentUp: Math.max(25, 96 - index * 5),
+          percentOutperformingBenchmark: Math.max(20, 92 - index * 5),
+        },
+      }),
       evidence: [`${name} 观察证据`, '成交额扩张迹象'],
       alertCandidates: index < 2 ? [
         {
@@ -1186,6 +1251,120 @@ describe('MarketRotationRadarPage', () => {
     expect(themeFlow).toHaveTextContent('信号待确认');
     expect(themeFlow.textContent || '').not.toMatch(consumerDiagnosticLeakPattern);
     expect(themeFlow.textContent || '').not.toMatch(forbiddenTradingActionPattern);
+  });
+
+  it('keeps theme correlation breadth snapshot compact, collapsible, and consumer-safe', async () => {
+    render(<MarketRotationRadarPage />);
+
+    const detail = await screen.findByTestId('rotation-theme-detail-panel');
+    const snapshot = within(detail).getByTestId('rotation-theme-correlation-breadth-snapshot');
+
+    expect(snapshot).toHaveAttribute('data-terminal-primitive', 'disclosure');
+    expect(within(snapshot).getByRole('button', { name: '展开 查看主题扩散快照' })).toHaveAttribute('aria-expanded', 'false');
+    expect(snapshot).toHaveTextContent('广泛扩散');
+    expect(snapshot).toHaveTextContent('广度扩散');
+    expect(snapshot).toHaveTextContent('同步相关');
+    expect(snapshot).not.toHaveTextContent('龙头集中度');
+    expect(snapshot).not.toHaveTextContent('observationBoundary');
+    expect(snapshot.textContent || '').not.toMatch(consumerDiagnosticLeakPattern);
+
+    fireEvent.click(within(snapshot).getByRole('button', { name: '展开 查看主题扩散快照' }));
+
+    expect(snapshot).toHaveTextContent('龙头集中度');
+    expect(snapshot).toHaveTextContent('分布均衡 · 28.0%');
+    expect(snapshot).toHaveTextContent('广泛参与 76.0%');
+    expect(snapshot).toHaveTextContent('代表成员：APP');
+    expect(snapshot).toHaveTextContent('同步相关');
+    expect(snapshot).toHaveTextContent('成员同步 94.0%');
+    expect(snapshot).toHaveTextContent('均线同步 90.0%');
+    expect(snapshot).toHaveTextContent('广度证据');
+    expect(snapshot).toHaveTextContent('3/3 个成员');
+    expect(snapshot).toHaveTextContent('上涨广度 96.0%');
+    expect(snapshot).toHaveTextContent('跑赢广度 92.0%');
+    expect(snapshot).toHaveTextContent('数据更新');
+    expect(snapshot).toHaveTextContent('暂无延迟项');
+    expect(snapshot).toHaveTextContent('输入缺口');
+    expect(snapshot).toHaveTextContent('暂无缺口项');
+    expect(snapshot).toHaveTextContent('观察边界');
+    expect(snapshot).toHaveTextContent('仅使用已展示主题字段');
+    expect(snapshot).toHaveTextContent('不改变排序');
+    expect(snapshot).toHaveTextContent('不改动数据');
+    expect(snapshot).toHaveTextContent('不新增取数');
+    expect(snapshot).toHaveTextContent('继续观察广泛参与能否延续到下一观察窗口。');
+    expect(snapshot.textContent || '').not.toMatch(/participationState|leadershipConcentration|correlationEvidence|breadthEvidence|staleInputs|missingInputs|observationBoundary|researchNextSteps|rankingImpact|dataMutation|dataFetches/);
+    expect(snapshot.textContent || '').not.toMatch(consumerDiagnosticLeakPattern);
+    expect(snapshot.textContent || '').not.toMatch(forbiddenTradingActionPattern);
+  });
+
+  it('maps stale and missing snapshot inputs without leaking raw tokens', async () => {
+    const fixture = radarUniverseFixture();
+    fixture.themes = fixture.themes.map((theme, index) => (
+      index === 0
+        ? {
+            ...theme,
+            themeCorrelationBreadthSnapshot: buildThemeCorrelationBreadthSnapshotFixture({
+              participationState: 'insufficient_evidence',
+              leadershipConcentration: {
+                state: 'unknown',
+                percent: null,
+                broadParticipationPercent: null,
+                topMembers: [],
+              },
+              correlationEvidence: {
+                state: 'missing',
+                sameDirectionPercent: null,
+                aboveVwapPercent: null,
+                persistencePercent: null,
+              },
+              breadthEvidence: {
+                state: 'missing',
+                observedMembers: 0,
+                configuredMembers: 3,
+                coveragePercent: 0,
+                percentUp: null,
+                percentOutperformingBenchmark: null,
+              },
+              staleInputs: ['fallback_source', 'fallback_window:5m', 'stale_source'],
+              missingInputs: ['breadth_percent_up', 'correlation_same_direction_percent', 'market_runtime_evidence'],
+              researchNextSteps: ['Collect member-level breadth and synchronization evidence before classifying participation.'],
+            }),
+          }
+        : theme
+    ));
+    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(fixture);
+
+    render(<MarketRotationRadarPage />);
+
+    const detail = await screen.findByTestId('rotation-theme-detail-panel');
+    const snapshot = within(detail).getByTestId('rotation-theme-correlation-breadth-snapshot');
+    fireEvent.click(within(snapshot).getByRole('button', { name: '展开 查看主题扩散快照' }));
+
+    expect(snapshot).toHaveTextContent('证据不足');
+    expect(snapshot).toHaveTextContent('最近一次可用数据');
+    expect(snapshot).toHaveTextContent('5m 时窗数据待更新');
+    expect(snapshot).toHaveTextContent('数据延迟');
+    expect(snapshot).toHaveTextContent('上涨广度待补齐');
+    expect(snapshot).toHaveTextContent('成员同步待补齐');
+    expect(snapshot).toHaveTextContent('市场观察样本待补齐');
+    expect(snapshot).toHaveTextContent('补齐成员广度与同步证据后，再分类参与状态。');
+    expect(snapshot.textContent || '').not.toMatch(/fallback_source|fallback_window|stale_source|breadth_percent_up|correlation_same_direction_percent|market_runtime_evidence/);
+    expect(snapshot.textContent || '').not.toMatch(consumerDiagnosticLeakPattern);
+    expect(snapshot.textContent || '').not.toMatch(forbiddenTradingActionPattern);
+  });
+
+  it('hides theme correlation breadth snapshot when the backend omits it', async () => {
+    const fixture = radarUniverseFixture();
+    fixture.themes = fixture.themes.map((theme) => ({
+      ...theme,
+      themeCorrelationBreadthSnapshot: null,
+    }));
+    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(fixture);
+
+    render(<MarketRotationRadarPage />);
+
+    const detail = await screen.findByTestId('rotation-theme-detail-panel');
+    expect(within(detail).queryByTestId('rotation-theme-correlation-breadth-snapshot')).not.toBeInTheDocument();
+    expect(detail.textContent || '').not.toMatch(/主题扩散快照|participationState|observationBoundary/);
   });
 
   it('does not emit duplicate React keys when theme flow evidence lines share visible text', async () => {

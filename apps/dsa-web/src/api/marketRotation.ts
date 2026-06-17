@@ -269,8 +269,49 @@ export type MarketRotationEtfLeadershipDiagnostics = {
   evidence: MarketRotationEtfLeadershipEvidence[];
 };
 
+export type MarketRotationThemeCorrelationBreadthSnapshot = {
+  contractVersion?: string;
+  theme?: {
+    id?: string | null;
+    name?: string | null;
+    market?: string | null;
+  };
+  participationState?: 'broad_group' | 'leader_concentrated' | 'mixed_or_partial' | 'insufficient_evidence' | string;
+  leadershipConcentration?: {
+    state?: 'balanced' | 'moderate' | 'concentrated' | 'unknown' | string;
+    percent?: number | null;
+    broadParticipationPercent?: number | null;
+    topMembers?: string[];
+  };
+  correlationEvidence?: {
+    state?: 'aligned' | 'mixed' | 'weak' | 'missing' | string;
+    sameDirectionPercent?: number | null;
+    aboveVwapPercent?: number | null;
+    persistencePercent?: number | null;
+  };
+  breadthEvidence?: {
+    state?: 'broad' | 'mixed' | 'thin' | 'missing' | string;
+    observedMembers?: number | null;
+    configuredMembers?: number | null;
+    coveragePercent?: number | null;
+    percentUp?: number | null;
+    percentOutperformingBenchmark?: number | null;
+  };
+  staleInputs?: string[];
+  missingInputs?: string[];
+  observationBoundary?: {
+    scope?: string;
+    rankingImpact?: string;
+    dataMutation?: string;
+    dataFetches?: string;
+    [key: string]: unknown;
+  };
+  researchNextSteps?: string[];
+};
+
 export type MarketRotationTheme = MarketRotationSummaryItem & {
   rotationStateEvidence?: Record<string, unknown> | null;
+  themeCorrelationBreadthSnapshot?: MarketRotationThemeCorrelationBreadthSnapshot | null;
   market?: string;
   taxonomyType?: string;
   englishName: string;
