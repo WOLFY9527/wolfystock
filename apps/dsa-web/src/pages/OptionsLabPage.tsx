@@ -115,7 +115,7 @@ const OPTIONS_NO_BROKER_COPY = '不连接外部执行通道';
 const OPTIONS_NO_PORTFOLIO_MUTATION_COPY = '不改动投资组合';
 const OPTIONS_OBSERVE_ONLY_COPY = '仅供观察，不作为结论依据';
 const OPTIONS_DEMO_BOUNDARY_COPY = '演示数据：当前数据延迟，仅用于界面与情景验证，不作为结论依据。';
-const OPTIONS_DEMO_GREEKS_PLACEHOLDER = '演示待补';
+const OPTIONS_DEMO_GREEKS_PLACEHOLDER = '敏感度暂未提供';
 const OPTIONS_DEMO_GREEKS_EXPLANATION = '演示链未提供真实敏感度数值，仅保留结构与风险边界。';
 
 const fieldShellClass = 'group flex min-h-[4rem] min-w-0 flex-col justify-center gap-1.5 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-input)_92%,transparent)] px-3 py-2 transition-colors focus-within:border-[color:var(--wolfy-accent)]';
@@ -380,8 +380,8 @@ const ReadinessGateStrip: React.FC<{
       )}
     >
       <div className="flex flex-wrap gap-2">
-        {chips.map((chip) => (
-          <Pill key={chip.label} tone={chip.tone}>{chip.label}</Pill>
+        {chips.map((chip, index) => (
+          <Pill key={`${chip.label}-${index}`} tone={chip.tone}>{chip.label}</Pill>
         ))}
       </div>
       {reasonSummaries.length ? (
@@ -407,6 +407,45 @@ function freshnessLabel(value?: string | null): string {
   if (value === 'synthetic_delayed') return '演示/延迟数据';
   if (value === 'fixture') return '浏览器验证数据';
   return value ? limitationLabel(value) : '--';
+}
+
+function marketLabel(value?: string | null): string {
+  if (!value?.trim()) return '市场待确认';
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'US') return 'US';
+  if (normalized === 'HK') return 'HK';
+  if (normalized === 'CN' || normalized === 'A') return 'A 股';
+  return normalized;
+}
+
+function sourceContextLabel(value?: string | null): string {
+  if (!value?.trim()) return '来源待确认';
+  const normalized = value.trim();
+  const lower = normalized.toLowerCase();
+  if (lower === 'fixture' || lower === 'mock' || lower.includes('fixture') || lower.includes('synthetic')) {
+    return '演示/延迟数据';
+  }
+  return limitationLabel(normalized);
+}
+
+function underlyingDisplayName(summary: OptionsUnderlyingSummaryResponse | null, chain: OptionsChainResponse | null): string {
+  const symbol = summary?.symbol || chain?.symbol || '--';
+  const underlying = recordValue(summary?.underlying) || recordValue(chain?.underlying);
+  const candidate = [underlying?.displayName, underlying?.name, underlying?.companyName]
+    .find((value): value is string => typeof value === 'string' && value.trim().length > 0);
+  return candidate ? `${symbol} · ${candidate.trim()}` : `${symbol} · 演示标的`;
+}
+
+function underlyingContextLine(summary: OptionsUnderlyingSummaryResponse | null, chain: OptionsChainResponse | null): string {
+  const market = marketLabel(summary?.market);
+  const source = sourceContextLabel(
+    summary?.metadata?.sourceLabel
+    || chain?.metadata?.sourceLabel
+    || summary?.underlying?.source
+    || chain?.underlying?.source
+    || chain?.source,
+  );
+  return `${market} · ${source}`;
 }
 
 function expectedMoveSourceLabel(value?: string | null): string {
@@ -585,6 +624,71 @@ function observationBoundaryCopy(decision?: OptionsDecisionResponse | null): str
   if (isDemoOrDelayedDecision(decision)) return OPTIONS_DEMO_BOUNDARY_COPY;
   return null;
 }
+
+function hasDemoOrStalePayload(
+  summary: OptionsUnderlyingSummaryResponse | null,
+  chain: OptionsChainResponse | null,
+  decision: OptionsDecisionResponse | null,
+): boolean {
+  const markers = [
+    summary?.underlying?.freshness,
+    summary?.underlying?.source,
+    summary?.metadata?.sourceLabel,
+    summary?.optionsAvailability?.provider,
+    ...asArray(summary?.metadata?.limitations),
+    chain?.underlying?.freshness,
+    chain?.underlying?.source,
+    chain?.source,
+    chain?.metadata?.sourceLabel,
+    ...asArray(chain?.limitations),
+    ...asArray(chain?.metadata?.limitations),
+    decision?.freshness?.freshness,
+    decision?.freshness?.source,
+    decision?.dataQuality?.dataQualityTier,
+    decision?.dataQuality?.sourceType,
+    ...(decision?.metadata?.fixtureBacked ? ['fixture'] : []),
+    ...(decision?.metadata?.syntheticData ? ['synthetic'] : []),
+  ]
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .map((value) => value.toLowerCase());
+
+  return markers.some((value) => (
+    value.includes('fixture')
+    || value.includes('mock')
+    || value.includes('synthetic')
+    || value.includes('demo')
+    || value.includes('stale')
+    || value.includes('delayed')
+    || value.includes('fallback')
+    || value.includes('cached')
+  ));
+}
+
+const DataQualityBanner: React.FC<{
+  availability: ConsumerAvailabilitySummary;
+  summary: OptionsUnderlyingSummaryResponse | null;
+  chain: OptionsChainResponse | null;
+  decision: OptionsDecisionResponse | null;
+}> = ({ availability, summary, chain, decision }) => {
+  if (!hasDemoOrStalePayload(summary, chain, decision)) return null;
+
+  return (
+    <div
+      data-testid="options-lab-data-quality-banner"
+      className="mt-4 rounded-lg border border-amber-300/25 bg-amber-300/[0.07] px-3 py-3"
+    >
+      <div className="flex flex-wrap gap-2">
+        <Pill tone="warn">仅供观察</Pill>
+        <Pill tone="warn">当前不是实时期权链</Pill>
+        <Pill tone="neutral">{availability.freshnessLabel}</Pill>
+        <Pill tone="risk">不形成可用于判断的结论</Pill>
+      </div>
+      <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+        当前显示演示、延迟或本地验证快照；可用于理解页面结构与情景边界，不用于真实判断或外部执行。
+      </p>
+    </div>
+  );
+};
 
 type ConsumerAvailabilityTone = 'neutral' | 'info' | 'warn' | 'risk' | 'good';
 type ConsumerAvailabilityStateKey = 'UPDATING' | 'PAUSED' | 'UNAVAILABLE' | 'INSUFFICIENT' | 'PARTIAL' | 'AVAILABLE';
@@ -1552,6 +1656,8 @@ const ProductHero: React.FC<{
   const summaryLine = heroSummaryLine(availability, decision, comparison, hasChainRows);
   const primaryTask = heroPrimaryTask(availability, decision, comparison, hasChainRows);
   const observationScope = heroObservationScope(hasChainRows, decision, comparison);
+  const displayName = underlyingDisplayName(summary, chain);
+  const contextLine = underlyingContextLine(summary, chain);
 
   return (
     <section
@@ -1576,12 +1682,19 @@ const ProductHero: React.FC<{
             testId="options-lab-readiness-gate-summary"
             className="mt-4"
           />
+          <DataQualityBanner
+            availability={availability}
+            summary={summary}
+            chain={chain}
+            decision={decision}
+          />
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <div className="min-w-0">
               <p className={labelClass}>当前标的</p>
               <p className="mt-1 text-lg font-semibold tracking-tight text-[color:var(--wolfy-text-primary)] md:text-xl">
-                {summary?.symbol || chain?.symbol || '--'}
+                {displayName}
               </p>
+              <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{contextLine}</p>
             </div>
             <span className="rounded-full border border-[color:color-mix(in_srgb,var(--wolfy-accent)_32%,transparent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_10%,transparent)] px-3 py-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">
               {decisionStatusLabel(decision)}

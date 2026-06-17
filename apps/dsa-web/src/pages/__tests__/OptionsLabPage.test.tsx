@@ -629,11 +629,19 @@ describe('OptionsLabPage', () => {
     expect(productHero).toHaveTextContent('情景分析台');
     await waitFor(() => {
       expect(productHero).toHaveTextContent('TEM');
+      expect(productHero).toHaveTextContent('TEM · 演示标的');
+      expect(productHero).toHaveTextContent('US · 演示/延迟数据');
       expect(productHero).toHaveTextContent(WAITING_STATE_LABEL);
       expect(productHero).toHaveTextContent('有限置信度');
       expect(productHero).toHaveTextContent('期权数据暂不可用，情景分析已暂停。');
       expect(productHero).toHaveTextContent('最后更新：');
     });
+    const dataQualityBanner = within(productHero).getByTestId('options-lab-data-quality-banner');
+    expect(dataQualityBanner).toHaveTextContent('仅供观察');
+    expect(dataQualityBanner).toHaveTextContent('当前不是实时期权链');
+    expect(dataQualityBanner).toHaveTextContent('最后更新：');
+    expect(dataQualityBanner).toHaveTextContent('不形成可用于判断的结论');
+    expect(dataQualityBanner.textContent || '').not.toMatch(/ready_fixture_only|missing_gamma|_blocked|_gate|undefined|null|NaN/i);
     expect(screen.getByTestId('options-lab-research-readiness-strip')).toHaveTextContent('研究就绪度');
     expect(screen.getByTestId('options-lab-research-readiness-strip')).toHaveTextContent(/研究结论受限|仅观察|等待证据更新/);
     expect(productHero).toHaveTextContent('当前主任务');
@@ -2671,11 +2679,13 @@ describe('OptionsLabPage', () => {
     const callCard = within(callsMobileList).getByTestId('options-lab-calls-table-mobile-card-TEM260619C00055000');
 
     expect(callCard).toHaveTextContent('Greeks');
-    expect(callCard).toHaveTextContent('演示待补');
+    expect(callCard).toHaveTextContent('敏感度暂未提供');
     expect(callCard).toHaveTextContent('演示链未提供真实敏感度数值');
+    expect(callCard).not.toHaveTextContent('演示待补');
     expect(within(callCard).queryByText(/^--$/)).not.toBeInTheDocument();
 
-    expect(callsDesktopTable).toHaveTextContent('演示待补');
+    expect(callsDesktopTable).toHaveTextContent('敏感度暂未提供');
+    expect(callsDesktopTable).not.toHaveTextContent('演示待补');
     expect(callsTable).toHaveTextContent('演示链未提供真实敏感度数值');
     expect(within(callsDesktopTable).queryByText(/^--$/)).not.toBeInTheDocument();
   });
