@@ -157,7 +157,8 @@ describe('evidenceDisplay', () => {
       '持仓来源待核验',
       '现金流水不完整',
       '部分外部数据暂不可用',
-      '备用数据',
+      '价格数据暂不可完整确认',
+      '汇率数据暂不可用',
     ]));
     expect(text).not.toMatch(/sourceRefs|provider|cache|runtime|debug|fx_fallback_1_to_1|price_fallback|reasonCodes/i);
     expect(normalized.adminReasonCodes).toEqual([]);
@@ -193,6 +194,7 @@ describe('evidenceDisplay', () => {
       '历史数据不足',
       '备用数据',
       '演示数据',
+      '试运行',
       '数据不足，结论仅供观察',
     ]));
   });

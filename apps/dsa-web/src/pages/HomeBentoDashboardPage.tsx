@@ -884,8 +884,8 @@ function DecisionTracePanel({
             data-testid="home-bento-decision-trace-data-note"
           >
             {quality.missingFields.length
-              ? quality.missingFields.map((item) => sanitizeUserFacingDataIssue(item, locale)).join('、')
-              : '数据：不足'}
+              ? `${locale === 'en' ? 'Data insufficient' : '数据不足'}：${quality.missingFields.map((item) => sanitizeUserFacingDataIssue(item, locale)).join(locale === 'en' ? ' / ' : '、')}`
+              : locale === 'en' ? 'Data: insufficient' : '数据：不足'}
           </div>
         ) : null}
       </div>

@@ -25,6 +25,17 @@ describe('userFacingDataIssues', () => {
     expect(text).not.toContain('alpha_router_rejected:missing_v2');
   });
 
+  it('maps consumer evidence internals without echoing raw source or diagnostic tokens', () => {
+    expect(sanitizeUserFacingDataIssue('news', 'zh')).toBe('新闻数据暂缺');
+    expect(sanitizeUserFacingDataIssue('fundamentals.eps', 'zh')).toBe('基本面数据缺失');
+    expect(sanitizeUserFacingDataIssue('sourceRefs', 'zh')).toBe('部分来源细节已折叠。');
+    expect(sanitizeUserFacingDataIssue('reason_codes', 'zh')).toBe('部分诊断细节已折叠。');
+    expect(sanitizeUserFacingDataIssue('fx_fallback_1_to_1', 'zh')).toBe('汇率数据暂不可用');
+    expect(sanitizeUserFacingDataIssue('price_fallback', 'zh')).toBe('价格数据暂不可完整确认');
+    expect(sanitizeUserFacingDataIssue('error quote', 'zh')).toBe('实时缺失');
+    expect(sanitizeUserFacingDataIssue('quote', 'en')).toBe('Realtime missing');
+  });
+
   it('preserves already human-readable consumer copy', () => {
     expect(sanitizeUserFacingDataIssue('研究结论仍在补证，请稍后再看。', 'zh')).toBe('研究结论仍在补证，请稍后再看。');
   });
