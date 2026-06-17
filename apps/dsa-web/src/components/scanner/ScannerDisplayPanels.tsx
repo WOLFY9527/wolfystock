@@ -7,6 +7,7 @@ import type {
   ScannerCandidate,
   ScannerCandidateDiagnostic,
   ScannerCandidateDiagnosticStatus,
+  ScannerCandidateResearchPacket as ScannerCandidateResearchPacketModel,
   ScannerLabeledValue,
 } from '../../types/scanner';
 import type { TrustDisclosureBucket } from '../../utils/trustDisclosure';
@@ -25,6 +26,7 @@ import {
 import ScannerCandidateResearchSummary, {
   type ScannerCandidateResearchSummaryFrame,
 } from './ScannerCandidateResearchSummary';
+import ScannerCandidateResearchPacket from './ScannerCandidateResearchPacket';
 import {
   FieldChip,
 } from './ScannerDisplayAtoms';
@@ -33,6 +35,7 @@ type ScannerCandidateWithEvidence = ScannerCandidate & {
   candidateEvidenceFrame?: CandidateEvidenceFrame | null;
   candidateResearchReadiness?: ResearchReadinessV1 | null;
   candidateResearchSummaryFrame?: ScannerCandidateResearchSummaryFrame | null;
+  candidateResearchPacket?: ScannerCandidateResearchPacketModel | null;
   candidateSourceProvenanceFrame?: SourceProvenanceSummary | null;
 };
 
@@ -631,7 +634,14 @@ export function ScannerWorkflowSummaryPanel({
             <FieldChip label={language === 'en' ? 'Rank' : '排名'} value={rankLabel} />
             <FieldChip label={language === 'en' ? 'Status' : '状态'} value={statusLabel} />
           </div>
-          {candidateWithEvidence.candidateResearchSummaryFrame ? (
+          {candidateWithEvidence.candidateResearchPacket ? (
+            <ScannerCandidateResearchPacket
+              packet={candidateWithEvidence.candidateResearchPacket}
+              language={language}
+              variant="row"
+              testId="scanner-workflow-candidate-research-packet"
+            />
+          ) : candidateWithEvidence.candidateResearchSummaryFrame ? (
             <ScannerCandidateResearchSummary
               frame={candidateWithEvidence.candidateResearchSummaryFrame}
               language={language}
