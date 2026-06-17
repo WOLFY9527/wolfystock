@@ -294,6 +294,19 @@ const defaultStockEvidenceResponse = {
   items: [
     {
       symbol: 'ORCL',
+      symbolEvidenceReadiness: {
+        symbolEvidenceReadiness: true,
+        symbol: 'ORCL',
+        readinessTier: 'partial',
+        evidenceUsed: ['quote', 'fundamental'],
+        evidenceMissing: ['technical', 'news'],
+        staleInputs: ['quote'],
+        conflictingEvidence: ['technical_vs_news'],
+        dataQualityNotes: ['部分证据仍需补齐，先保持研究观察。'],
+        suggestedResearchPath: ['补充近期技术与新闻证据后再复核研究主线。'],
+        observationOnly: true,
+        noAdviceDisclosure: '仅供研究观察，不构成投资建议。',
+      },
       stockEvidencePacket: {
         fundamentalsSummary: {
           marketCap: 512_300_000_000,
@@ -865,6 +878,7 @@ describe('HomeSurfacePage', () => {
     renderSurface();
 
     const fundamentalsSummary = await screen.findByTestId('home-stock-fundamentals-summary');
+    const symbolReadiness = await within(fundamentalsSummary).findByTestId('home-symbol-evidence-readiness');
     expect(await screen.findByText('Oracle Corporation')).toBeInTheDocument();
     expect(vi.mocked(stockEvidenceApi.getStockEvidence)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(stockEvidenceApi.getStockEvidence)).toHaveBeenCalledWith('ORCL');
@@ -877,9 +891,20 @@ describe('HomeSurfacePage', () => {
     expect(fundamentalsSummary).toHaveTextContent('仅供观察，不构成投资建议');
     expect(fundamentalsSummary).toHaveTextContent('31.7x');
     expect(fundamentalsSummary).toHaveTextContent('41.2%');
+    expect(symbolReadiness).toHaveTextContent('标的研究就绪度');
+    expect(symbolReadiness).toHaveTextContent('部分证据');
+    expect(symbolReadiness).toHaveTextContent('已用证据：行情 / 基本面');
+    expect(symbolReadiness).toHaveTextContent('待补证据：技术面 / 新闻');
+    expect(symbolReadiness).toHaveTextContent('延迟输入：行情');
+    expect(symbolReadiness).toHaveTextContent('冲突证据：技术面与新闻');
+    expect(symbolReadiness).toHaveTextContent('部分证据仍需补齐，先保持研究观察。');
+    expect(symbolReadiness).toHaveTextContent('补充近期技术与新闻证据后再复核研究主线。');
+    expect(symbolReadiness).toHaveTextContent('仅供研究观察，不构成投资建议。');
+    expect(symbolReadiness).toHaveTextContent('仅供观察');
 
     expect(within(fundamentalsSummary).queryByText(/observationOnly|scoreContributionAllowed|sourceAuthorityAllowed/i)).not.toBeInTheDocument();
-    expect(within(fundamentalsSummary).queryByText(/company_fundamentals_digest|stock_evidence|provider|admin/i)).not.toBeInTheDocument();
+    expect(within(fundamentalsSummary).queryByText(/company_fundamentals_digest|stock_evidence|provider|admin|raw|debug|sourceRefId/i)).not.toBeInTheDocument();
+    expect(symbolReadiness.textContent || '').not.toMatch(/buy|sell|hold|recommend|target price|stop loss|position sizing|买入|卖出|持有|推荐|目标价|止损|仓位建议/i);
   });
 
   it('renders a safe insufficient-data fundamentals state when the summary is missing or only partially available', async () => {
@@ -921,6 +946,7 @@ describe('HomeSurfacePage', () => {
     expect(fundamentalsSummary).toHaveTextContent('部分更新');
     expect(fundamentalsSummary).toHaveTextContent('仅作观察');
     expect(within(fundamentalsSummary).getByTestId('home-stock-fundamentals-metric-market-cap')).toHaveTextContent('512.3B');
+    expect(within(fundamentalsSummary).queryByTestId('home-symbol-evidence-readiness')).not.toBeInTheDocument();
     expect(fundamentalsSummary).not.toHaveTextContent(HOME_FUNDAMENTALS_FORBIDDEN_COPY_PATTERN);
   });
 
