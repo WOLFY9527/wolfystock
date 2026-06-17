@@ -6,6 +6,7 @@ import MarketDecisionCockpitPage from '../MarketDecisionCockpitPage';
 import ResearchRadarPage from '../ResearchRadarPage';
 import ScenarioLabPage from '../ScenarioLabPage';
 import StockStructureDecisionEntryPage from '../StockStructureDecisionEntryPage';
+import { findConsumerRawLeakage } from '../../test-utils/consumerRawLeakageGuard';
 
 const { languageState, getDecisionCockpitMock, getDailyIntelligenceMock, getResearchRadarMock, runScenarioLabMock } = vi.hoisted(() => ({
   languageState: { value: 'zh' as 'zh' | 'en' },
@@ -461,6 +462,7 @@ describe('research IA pages', () => {
 
     const page = await screen.findByTestId('research-radar-page');
     const onboardingPanel = within(page).getByTestId('research-radar-onboarding-cta');
+    const queueEmptyState = within(page).getByTestId('research-radar-queue-empty-state');
     expect(onboardingPanel).toHaveTextContent('先完成研究循环，再回到雷达队列');
     expect(onboardingPanel).toHaveTextContent('先看市场概览');
     expect(onboardingPanel).toHaveTextContent('运行 Scanner');
@@ -476,6 +478,11 @@ describe('research IA pages', () => {
     expect(within(onboardingPanel).getByRole('link', { name: '运行 Scanner' })).toHaveAttribute('href', '/zh/scanner');
     expect(within(onboardingPanel).getByRole('link', { name: '选择观察标的' })).toHaveAttribute('href', '/zh/watchlist');
     expect(within(onboardingPanel).getByRole('link', { name: '回到研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
+    expect(queueEmptyState).toHaveTextContent('暂无研究队列');
+    expect(queueEmptyState).toHaveTextContent('还没有进入队列的研究对象，先从上游研究入口整理线索。');
+    expect(queueEmptyState).toHaveTextContent('下一步研究：从市场概览、扫描器或观察列表开始。');
+    expect(queueEmptyState.textContent || '').not.toMatch(/request[_\s-]?id|trace[_\s-]?id|correlation[_\s-]?id|\breq-[a-z0-9-]{6,}\b/i);
+    expect(findConsumerRawLeakage(queueEmptyState.textContent || '')).toEqual([]);
     expect(onboardingPanel.textContent || '').not.toMatch(/sourceRefs|reasonCodes|fundamentals\.eps|provider_timeout|\bnews\b/i);
     expect(page.textContent || '').not.toMatch(/undefined|null|NaN/);
     expect(page.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommendation|target price|stop loss|position sizing/i);
