@@ -154,6 +154,28 @@ def _assert_no_sensitive_markers(payload: object) -> None:
         assert marker.lower() not in text
 
 
+def _assert_recommended_actions_are_safe(cockpit: dict) -> None:
+    recommended_payload = {
+        "domainActions": [
+            domain.get("recommendedNextAction")
+            for domain in cockpit.get("domains", [])
+        ],
+        "queueActions": [
+            item.get("recommendedNextAction")
+            for item in cockpit.get("recommendedMaintenanceQueue", [])
+        ],
+    }
+    text = _json_text(recommended_payload)
+    for marker in FORBIDDEN_RESPONSE_MARKERS + (
+        "admin_auth_enabled",
+        "wolfystock_",
+        ".env",
+        "$",
+        "=",
+    ):
+        assert marker.lower() not in text
+
+
 def _assert_bounded_section(payload: dict, key: str, *, expected_service: str) -> None:
     section = payload[key]
     assert section["service"] == expected_service
@@ -399,8 +421,29 @@ def test_admin_ops_status_includes_private_beta_launch_cockpit_no_go_view(app: F
     assert cockpit["summaryCounts"]["realEvidenceMissingCount"] >= 8
     assert cockpit["summaryCounts"]["approvalRequiredCount"] == len(domain_keys)
 
+    queue = cockpit["recommendedMaintenanceQueue"]
+    assert [item["priorityRank"] for item in queue] == list(range(1, len(queue) + 1))
+    assert [item["domainKey"] for item in queue][:3] == [
+        "security_rbac_mfa",
+        "storage_restore",
+        "ws2_async",
+    ]
+    assert queue[-1]["domainKey"] == "frontend_private_beta_safety"
+    assert all(item["recommendedNextAction"] for item in queue)
+    assert all(item["blockingReasonSummary"] for item in queue)
+
     by_domain = {item["domainKey"]: item for item in cockpit["domains"]}
+    assert [domain["priorityRank"] for domain in cockpit["domains"]] == list(
+        range(1, len(cockpit["domains"]) + 1)
+    )
     security = by_domain["security_rbac_mfa"]
+    assert security["priorityRank"] == 1
+    assert security["priorityTier"] == "critical"
+    assert security["impactLevel"] == "critical"
+    assert security["ownerSurface"] == "security_access_control"
+    assert security["remediationSurface"] == "/admin/users"
+    assert security["recommendedNextAction"]
+    assert security["blockingReasonSummary"]
     assert security["foundationLanded"] is True
     assert security["evidenceToolingPresent"] is True
     assert security["realOperatorEvidenceMissing"] is True
@@ -411,6 +454,15 @@ def test_admin_ops_status_includes_private_beta_launch_cockpit_no_go_view(app: F
     assert security["evidenceRefs"] == []
     assert security["blockerRefs"] == []
     assert security["detailRoute"] == "/admin/users"
+
+    storage = by_domain["storage_restore"]
+    ws2 = by_domain["ws2_async"]
+    frontend = by_domain["frontend_private_beta_safety"]
+    route = by_domain["route_classification"]
+    assert storage["priorityRank"] < frontend["priorityRank"]
+    assert ws2["priorityRank"] < frontend["priorityRank"]
+    assert security["priorityRank"] < route["priorityRank"]
+    assert frontend["priorityTier"] == "watch"
 
     quota = by_domain["quota_cost"]
     assert quota["safeNextActions"]
@@ -431,6 +483,7 @@ def test_admin_ops_status_includes_private_beta_launch_cockpit_no_go_view(app: F
     assert any(blocker["blockerKey"] == "public_launch_no_go" for blocker in blockers)
     assert all(blocker["publicLaunchNoGo"] is True for blocker in blockers)
     assert all(blocker["evidenceRefs"] == [] for blocker in blockers)
+    _assert_recommended_actions_are_safe(cockpit)
     _assert_no_sensitive_markers(payload)
 
 

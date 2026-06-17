@@ -59,31 +59,31 @@ function statusFixture(): AdminOpsStatusResponse {
         providerCircuitBlockingEnabled: false,
         notificationSendEnabled: false,
       },
-      domains: [
+      recommendedMaintenanceQueue: [
         {
           domainKey: 'security_rbac_mfa',
           label: 'Security / RBAC / MFA',
-          status: 'approval_required_no_go',
-          statusLabel: 'Foundation and tooling present; staged operator evidence missing',
-          detailRoute: '/admin/users',
-          foundationLanded: true,
-          evidenceToolingPresent: true,
-          realOperatorEvidenceMissing: true,
-          approvalRequired: true,
-          publicLaunchNoGo: true,
-          readOnly: true,
-          advisoryOnly: true,
-          noExternalCalls: true,
-          liveEnforcement: false,
-          runtimeBehaviorChanged: false,
-          providerRuntimeChanged: false,
-          externalActionsEnabled: false,
-          evidenceRefs: ['scripts/security_mfa_operator_evidence_check.py'],
-          blockerRefs: ['docs/audits/public-launch-gap-register.md#securityrbac'],
-          safeNextActions: ['Review route inventory and sanitized MFA/RBAC operator evidence.'],
-          limitations: ['real_staged_mfa_pilot_evidence_missing'],
-          followUpProposals: [],
+          priorityRank: 1,
+          priorityTier: 'critical',
+          impactLevel: 'critical',
+          recommendedNextAction: 'Review sanitized MFA/RBAC operator evidence before changing access posture.',
+          blockingReasonSummary: 'Staged operator evidence is missing for the access-control launch gate.',
+          ownerSurface: 'security_access_control',
+          remediationSurface: '/admin/users',
         },
+        {
+          domainKey: 'quota_cost',
+          label: 'Quota / Cost',
+          priorityRank: 2,
+          priorityTier: 'critical',
+          impactLevel: 'critical',
+          recommendedNextAction: 'Inspect cost observability and quota evidence without creating reservations.',
+          blockingReasonSummary: 'Quota enforcement remains approval-gated and real operator evidence is incomplete.',
+          ownerSurface: 'cost_controls',
+          remediationSurface: '/admin/cost-observability',
+        },
+      ],
+      domains: [
         {
           domainKey: 'quota_cost',
           label: 'Quota / Cost',
@@ -106,6 +106,13 @@ function statusFixture(): AdminOpsStatusResponse {
           blockerRefs: ['docs/audits/public-launch-gap-register.md#costquota'],
           safeNextActions: ['Inspect cost observability and quota evidence without creating reservations.'],
           limitations: ['live_route_enforcement_missing'],
+          priorityRank: 2,
+          priorityTier: 'critical',
+          impactLevel: 'critical',
+          recommendedNextAction: 'Inspect cost observability and quota evidence without creating reservations.',
+          blockingReasonSummary: 'Quota enforcement remains approval-gated and real operator evidence is incomplete.',
+          ownerSurface: 'cost_controls',
+          remediationSurface: '/admin/cost-observability',
           followUpProposals: [
             {
               proposalKey: 'quota_route_pilot_approval',
@@ -116,6 +123,37 @@ function statusFixture(): AdminOpsStatusResponse {
               validation: ['reserve/release lifecycle tests'],
             },
           ],
+        },
+        {
+          domainKey: 'security_rbac_mfa',
+          label: 'Security / RBAC / MFA',
+          status: 'approval_required_no_go',
+          statusLabel: 'Foundation and tooling present; staged operator evidence missing',
+          detailRoute: '/admin/users',
+          foundationLanded: true,
+          evidenceToolingPresent: true,
+          realOperatorEvidenceMissing: true,
+          approvalRequired: true,
+          publicLaunchNoGo: true,
+          readOnly: true,
+          advisoryOnly: true,
+          noExternalCalls: true,
+          liveEnforcement: false,
+          runtimeBehaviorChanged: false,
+          providerRuntimeChanged: false,
+          externalActionsEnabled: false,
+          evidenceRefs: ['scripts/security_mfa_operator_evidence_check.py'],
+          blockerRefs: ['docs/audits/public-launch-gap-register.md#securityrbac'],
+          safeNextActions: ['Review route inventory and sanitized MFA/RBAC operator evidence.'],
+          limitations: ['real_staged_mfa_pilot_evidence_missing'],
+          priorityRank: 1,
+          priorityTier: 'critical',
+          impactLevel: 'critical',
+          recommendedNextAction: 'Review sanitized MFA/RBAC operator evidence before changing access posture.',
+          blockingReasonSummary: 'Staged operator evidence is missing for the access-control launch gate.',
+          ownerSurface: 'security_access_control',
+          remediationSurface: '/admin/users',
+          followUpProposals: [],
         },
       ],
       blockers: [
@@ -132,6 +170,12 @@ function statusFixture(): AdminOpsStatusResponse {
       ],
       safeNextActions: ['Open domain detail pages for read-only evidence review.'],
       limitations: ['cockpit_does_not_approve_public_launch'],
+      prioritySummary: {
+        criticalPriorityCount: 2,
+        highPriorityCount: 0,
+        mediumPriorityCount: 0,
+        watchPriorityCount: 0,
+      },
     },
   };
 }
@@ -164,6 +208,15 @@ describe('AdminLaunchCockpitPage', () => {
     expect(page).toHaveTextContent('Security / RBAC / MFA');
     expect(page).toHaveTextContent('Quota / Cost');
     expect(within(domainGrid).getAllByTestId('admin-launch-cockpit-domain-card')).toHaveLength(2);
+    const cards = within(domainGrid).getAllByTestId('admin-launch-cockpit-domain-card');
+    expect(cards[0]).toHaveTextContent('#1');
+    expect(cards[0]).toHaveTextContent('Security / RBAC / MFA');
+    expect(cards[0]).toHaveTextContent('Review sanitized MFA/RBAC operator evidence before changing access posture.');
+    expect(cards[1]).toHaveTextContent('#2');
+    expect(cards[1]).toHaveTextContent('Quota / Cost');
+    const queue = screen.getByTestId('admin-launch-cockpit-maintenance-queue');
+    expect(within(queue).getAllByTestId('admin-launch-cockpit-queue-item')[0]).toHaveTextContent('Security / RBAC / MFA');
+    expect(within(queue).getAllByTestId('admin-launch-cockpit-queue-item')[1]).toHaveTextContent('Quota / Cost');
     expect(within(blockerPanel).getByText('Public launch remains NO-GO')).toBeInTheDocument();
     expect(page).toHaveTextContent('Foundation landed');
     expect(page).toHaveTextContent('Evidence tooling present');

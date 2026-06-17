@@ -2,7 +2,12 @@ import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Ban, CheckCircle2, FileText, ShieldAlert } from 'lucide-react';
-import { adminOpsStatusApi, type AdminOpsCockpitDomain, type AdminOpsStatusResponse } from '../api/adminOpsStatus';
+import {
+  adminOpsStatusApi,
+  type AdminOpsCockpitDomain,
+  type AdminOpsCockpitMaintenanceQueueItem,
+  type AdminOpsStatusResponse,
+} from '../api/adminOpsStatus';
 import AdminOpsL0OverviewStrip from '../components/admin/AdminOpsL0OverviewStrip';
 import {
   TerminalChip,
@@ -30,6 +35,13 @@ function domainStatusVariant(domain: AdminOpsCockpitDomain): React.ComponentProp
   if (domain.publicLaunchNoGo) return domain.realOperatorEvidenceMissing ? 'danger' : 'caution';
   if (domain.approvalRequired) return 'caution';
   return 'success';
+}
+
+function priorityVariant(priorityTier: string): React.ComponentProps<typeof TerminalChip>['variant'] {
+  if (priorityTier === 'critical') return 'danger';
+  if (priorityTier === 'high') return 'caution';
+  if (priorityTier === 'medium') return 'info';
+  return 'neutral';
 }
 
 function StatusBadgeRow({ domain }: { domain: AdminOpsCockpitDomain }) {
@@ -64,12 +76,22 @@ function DomainCard({ domain }: { domain: AdminOpsCockpitDomain }) {
           <h2 className="mt-1 text-base font-semibold text-white">{domain.label}</h2>
           <p className="mt-1 text-xs leading-5 text-white/58">{domain.statusLabel}</p>
         </div>
-        <TerminalChip variant={domainStatusVariant(domain)} className="shrink-0 justify-center">
-          {domain.publicLaunchNoGo ? 'NO-GO' : domain.status}
-        </TerminalChip>
+        <div className="flex shrink-0 flex-wrap gap-1.5 xl:justify-end">
+          <TerminalChip variant={priorityVariant(domain.priorityTier)}>#{domain.priorityRank}</TerminalChip>
+          <TerminalChip variant={priorityVariant(domain.priorityTier)}>{domain.priorityTier}</TerminalChip>
+          <TerminalChip variant={domainStatusVariant(domain)} className="justify-center">
+            {domain.publicLaunchNoGo ? 'NO-GO' : domain.status}
+          </TerminalChip>
+        </div>
       </div>
 
       <StatusBadgeRow domain={domain} />
+
+      <TerminalNestedBlock className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">Recommended next action</p>
+        <p className="mt-2 text-xs leading-5 text-white/72">{domain.recommendedNextAction}</p>
+        <p className="mt-1 text-[11px] leading-5 text-white/52">{domain.blockingReasonSummary}</p>
+      </TerminalNestedBlock>
 
       <div className="grid gap-3 lg:grid-cols-3">
         <TerminalNestedBlock className="min-w-0">
@@ -128,6 +150,39 @@ function DomainCard({ domain }: { domain: AdminOpsCockpitDomain }) {
   );
 }
 
+function MaintenanceQueue({ items }: { items: AdminOpsCockpitMaintenanceQueueItem[] }) {
+  if (items.length === 0) {
+    return null;
+  }
+
+  return (
+    <section data-testid="admin-launch-cockpit-maintenance-queue" className="space-y-3">
+      <div className="flex items-center gap-2">
+        <ShieldAlert className="size-4 text-amber-200" />
+        <h2 className="text-sm font-semibold text-white">Recommended maintenance queue</h2>
+      </div>
+      <div className="grid gap-3 lg:grid-cols-3">
+        {items.map((item) => (
+          <TerminalPanel
+            key={item.domainKey}
+            data-testid="admin-launch-cockpit-queue-item"
+            className="space-y-2"
+          >
+            <div className="flex flex-wrap items-center gap-1.5">
+              <TerminalChip variant={priorityVariant(item.priorityTier)}>#{item.priorityRank}</TerminalChip>
+              <TerminalChip variant={priorityVariant(item.priorityTier)}>{item.priorityTier}</TerminalChip>
+              <TerminalChip variant="neutral">{item.impactLevel}</TerminalChip>
+            </div>
+            <h3 className="text-sm font-semibold text-white">{item.label}</h3>
+            <p className="text-xs leading-5 text-white/66">{item.recommendedNextAction}</p>
+            <p className="text-[11px] leading-5 text-white/48">{item.blockingReasonSummary}</p>
+          </TerminalPanel>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 const AdminLaunchCockpitPage: React.FC = () => {
   const [snapshot, setSnapshot] = useState<AdminOpsStatusResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -163,11 +218,19 @@ const AdminLaunchCockpitPage: React.FC = () => {
   const generatedAt = snapshot?.generatedAt || 'not loaded';
   const sortedDomains = useMemo(
     () => [...(cockpit?.domains ?? [])].sort((left, right) => {
-      const leftScore = Number(left.publicLaunchNoGo) + Number(left.realOperatorEvidenceMissing);
-      const rightScore = Number(right.publicLaunchNoGo) + Number(right.realOperatorEvidenceMissing);
-      return rightScore - leftScore || left.label.localeCompare(right.label);
+      const leftRank = left.priorityRank || Number.MAX_SAFE_INTEGER;
+      const rightRank = right.priorityRank || Number.MAX_SAFE_INTEGER;
+      return leftRank - rightRank || left.label.localeCompare(right.label);
     }),
     [cockpit?.domains],
+  );
+  const maintenanceQueue = useMemo(
+    () => [...(cockpit?.recommendedMaintenanceQueue ?? [])].sort((left, right) => {
+      const leftRank = left.priorityRank || Number.MAX_SAFE_INTEGER;
+      const rightRank = right.priorityRank || Number.MAX_SAFE_INTEGER;
+      return leftRank - rightRank || left.label.localeCompare(right.label);
+    }),
+    [cockpit?.recommendedMaintenanceQueue],
   );
 
   return (
@@ -239,6 +302,8 @@ const AdminLaunchCockpitPage: React.FC = () => {
           ))}
         </div>
       </TerminalPanel>
+
+      <MaintenanceQueue items={maintenanceQueue} />
 
       <section data-testid="admin-launch-cockpit-blockers" className="space-y-3">
         <div className="flex items-center gap-2">
