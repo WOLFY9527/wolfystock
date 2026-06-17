@@ -7,15 +7,15 @@ import re
 from typing import Any
 
 _SENSITIVE_KEY_RE = re.compile(
-    r"(api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|session[-_]?(?:token|cookie)|cookie|token|authorization|bearer|credential|provider[-_]?credential|private[-_]?key|secret|password|dsn|database[-_]?url|connection[-_]?string)",
+    r"(api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|session[-_]?(?:token|cookie)|cookie|token|authorization|bearer|credential|provider[-_]?credential|private[-_]?key|secret|password|password[-_]?hash|dsn|database[-_]?url|connection[-_]?string)",
     re.IGNORECASE,
 )
 _QUERY_SECRET_RE = re.compile(
-    r"([?&](?:api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|session[-_]?(?:token|cookie)|cookie|token|authorization|secret|password|credential|provider[-_]?credential|private[-_]?key|dsn|database[-_]?url|connection[-_]?string)=)[^&#\s]+",
+    r"([?&](?:api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|session[-_]?(?:id|token|cookie)|cookie|token|authorization|secret|password|password[-_]?hash|credential|provider[-_]?credential|private[-_]?key|dsn|database[-_]?url|connection[-_]?string|raw[-_]?(?:payload|request|response)|request[-_]?body|env)=)[^&#\s]+",
     re.IGNORECASE,
 )
 _KV_SECRET_RE = re.compile(
-    r"\b(api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|session[-_]?(?:token|cookie)|cookie|token|authorization|secret|password|credential|provider[-_]?credential|private[-_]?key|dsn|database[-_]?url|connection[-_]?string)\b\s*[:=]\s*([^\s,;&]+)",
+    r"\b(api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|session[-_]?(?:id|token|cookie)|cookie|token|authorization|secret|password|password[-_]?hash|credential|provider[-_]?credential|private[-_]?key|dsn|database[-_]?url|connection[-_]?string|raw[-_]?(?:payload|request|response)|request[-_]?body|env)\b\s*[:=]\s*([^\s,;&]+)",
     re.IGNORECASE,
 )
 _AUTH_HEADER_RE = re.compile(r"\b(Authorization)\s*:\s*([^\r\n,;]+)", re.IGNORECASE)

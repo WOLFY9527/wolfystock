@@ -87,6 +87,15 @@ class AdminLogHealthSummaryModel(BaseModel):
     slow_events: int = 0
     failure_rate: float = 0
     status: str = "healthy"
+    failureClassBreakdown: List[AdminLogHealthBucketModel] = Field(default_factory=list)
+    expectedExternalFailureCount: int = 0
+    internalApplicationFailureCount: int = 0
+    securityFailureCount: int = 0
+    providerFailureCount: int = 0
+    cacheFailureCount: int = 0
+    unknownFailureCount: int = 0
+    healthInterpretation: str = "healthy"
+    recommendedNextAction: str = "none"
     failures_by_category: List[AdminLogHealthBucketModel] = Field(default_factory=list)
     failures_by_provider: List[AdminLogHealthBucketModel] = Field(default_factory=list)
     failures_by_reason: List[AdminLogHealthBucketModel] = Field(default_factory=list)

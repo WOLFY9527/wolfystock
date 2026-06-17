@@ -4149,6 +4149,7 @@ class ExecutionLogService:
         slow_events = sum(1 for item in items if ExecutionLogService._is_slow_business_event(item))
         failure_rate = round(len(failed_items) / total_events, 4) if total_events else 0
         unhealthy_items = failed_items or warning_items
+        classified = ExecutionLogService._classify_health_failures(failed_items + warning_items)
         status = "healthy"
         if failed_items and (failure_rate >= 0.5 or len(failed_items) >= 3):
             status = "failing"
@@ -4169,6 +4170,7 @@ class ExecutionLogService:
             "slow_events": slow_events,
             "failure_rate": failure_rate,
             "status": status,
+            **classified,
             "failures_by_category": ExecutionLogService._health_buckets(unhealthy_items, ["category", "feature"]),
             "failures_by_provider": ExecutionLogService._health_buckets(failed_items, ["provider", "source"]),
             "failures_by_reason": ExecutionLogService._health_buckets(unhealthy_items, ["reason"]),
@@ -4179,6 +4181,129 @@ class ExecutionLogService:
             "actor_breakdown": ExecutionLogService._health_buckets(items, ["actorType"]),
             "latest_critical_error": ExecutionLogService._top_error_payload(latest_critical) if latest_critical else None,
         }
+
+    @staticmethod
+    def _classify_health_failures(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+        class_counts: Dict[str, int] = {}
+        provider_count = 0
+        cache_count = 0
+        for item in items:
+            failure_class, external_kind = ExecutionLogService._failure_class_for_health_item(item)
+            class_counts[failure_class] = class_counts.get(failure_class, 0) + 1
+            if external_kind == "provider":
+                provider_count += 1
+            elif external_kind == "cache":
+                cache_count += 1
+
+        expected_external_count = int(class_counts.get("expected_external", 0))
+        security_count = int(class_counts.get("security", 0))
+        internal_count = int(class_counts.get("internal_application", 0))
+        unknown_count = int(class_counts.get("unknown", 0))
+        health_interpretation, recommended_next_action = ExecutionLogService._failure_health_guidance(
+            expected_external_count=expected_external_count,
+            internal_count=internal_count,
+            security_count=security_count,
+            unknown_count=unknown_count,
+        )
+        return {
+            "failureClassBreakdown": ExecutionLogService._failure_class_buckets(class_counts),
+            "expectedExternalFailureCount": expected_external_count,
+            "internalApplicationFailureCount": internal_count,
+            "securityFailureCount": security_count,
+            "providerFailureCount": provider_count,
+            "cacheFailureCount": cache_count,
+            "unknownFailureCount": unknown_count,
+            "healthInterpretation": health_interpretation,
+            "recommendedNextAction": recommended_next_action,
+        }
+
+    @staticmethod
+    def _failure_class_for_health_item(item: Dict[str, Any]) -> Tuple[str, Optional[str]]:
+        category = _as_str(item.get("category")).lower()
+        provider = _as_str(item.get("provider")).lower()
+        source = _as_str(item.get("source")).lower()
+        reason = _as_str(item.get("reason")).lower()
+        event = _as_str(item.get("event")).lower()
+        error_summary = _as_str(item.get("errorSummary") or item.get("rootCauseSummary")).lower()
+        status = _as_str(item.get("status")).lower()
+        text = " ".join(part for part in (category, provider, source, reason, event, error_summary, status) if part)
+
+        cache_markers = ("cache", "fallback", "stale", "swr", "cold_start")
+        provider_markers = (
+            "provider",
+            "data_source",
+            "upstream",
+            "external",
+            "binance",
+            "fmp",
+            "finnhub",
+            "alpaca",
+            "yahoo",
+            "akshare",
+            "alternative_me",
+            "newsapi",
+            "websocket",
+            "ws",
+            "rate_limited",
+            "timeout",
+            "missing_key",
+            "empty_result",
+        )
+        if category == "cache" or any(marker in text for marker in cache_markers):
+            return "expected_external", "cache"
+        if category in {"data_source", "market", "scanner"} or any(marker in text for marker in provider_markers):
+            return "expected_external", "provider"
+        if category in {"security", "auth"} or any(marker in text for marker in ("security", "auth", "login", "csrf", "forbidden", "unauthorized")):
+            return "security", None
+        if category in {"api", "frontend", "system", "scheduler", "analysis"} and any(
+            marker in text
+            for marker in (
+                "internal",
+                "exception",
+                "traceback",
+                "runtime",
+                "valueerror",
+                "typeerror",
+                "database",
+                "application",
+            )
+        ):
+            return "internal_application", None
+        return "unknown", None
+
+    @staticmethod
+    def _failure_class_buckets(class_counts: Dict[str, int]) -> List[Dict[str, Any]]:
+        labels = {
+            "expected_external": "Expected external/provider/cache",
+            "security": "Security/auth",
+            "internal_application": "Internal application",
+            "unknown": "Unknown",
+        }
+        return [
+            {"key": key, "label": labels.get(key) or key, "count": count}
+            for key, count in sorted(class_counts.items(), key=lambda entry: (-entry[1], entry[0]))
+            if count > 0
+        ]
+
+    @staticmethod
+    def _failure_health_guidance(
+        *,
+        expected_external_count: int,
+        internal_count: int,
+        security_count: int,
+        unknown_count: int,
+    ) -> Tuple[str, str]:
+        if internal_count:
+            if security_count:
+                return "internal_attention_required", "investigate_internal_and_security_failures"
+            return "internal_attention_required", "investigate_internal_failures"
+        if security_count:
+            return "security_attention_required", "review_security_failures"
+        if unknown_count:
+            return "unknown_failures_need_triage", "triage_unknown_failures"
+        if expected_external_count:
+            return "external_degradation_observed", "monitor_external_providers_and_cache"
+        return "healthy", "none"
 
     @staticmethod
     def _is_failed_business_event(item: Dict[str, Any]) -> bool:
