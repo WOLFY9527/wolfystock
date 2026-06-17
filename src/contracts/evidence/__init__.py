@@ -20,6 +20,10 @@ from src.contracts.evidence.packet import (
     coerce_ai_evidence_packet,
     evaluate_evidence_policy,
 )
+from src.contracts.evidence.provenance_ledger import (
+    EVIDENCE_PROVENANCE_LEDGER_VERSION,
+    build_evidence_provenance_ledger,
+)
 from src.contracts.evidence.validator import (
     AiEvidenceValidationIssue,
     AiEvidenceValidationResult,
@@ -44,6 +48,8 @@ __all__ = [
     "AiExplainableFact",
     "coerce_ai_evidence_packet",
     "evaluate_evidence_policy",
+    "EVIDENCE_PROVENANCE_LEDGER_VERSION",
+    "build_evidence_provenance_ledger",
     "AiEvidenceValidationIssue",
     "AiEvidenceValidationResult",
     "validate_ai_evidence_packet",
