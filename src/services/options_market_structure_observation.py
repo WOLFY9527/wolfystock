@@ -11,7 +11,9 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
+import re
 from typing import Any
+from urllib.parse import quote
 
 from src.services.consumer_issue_labels import build_consumer_issues, build_consumer_message
 
@@ -40,6 +42,7 @@ _DEMO_SOURCE_MARKERS = ("demo", "sample")
 _FIXTURE_SOURCE_MARKERS = ("fixture", "synthetic", "mock")
 _CACHED_SOURCE_MARKERS = ("cached", "cache", "stale", "delayed", "fallback", "proxy")
 _LIVE_SOURCE_MARKERS = ("live", "fresh", "realtime", "real-time", "real_time")
+_SAFE_UNDERLYING_SYMBOL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,23}$")
 _SOURCE_CLASS_ISSUES = {
     "demo": ["proxy_or_sample_evidence_present"],
     "fixture": ["proxy_or_sample_evidence_present"],
@@ -62,6 +65,7 @@ def build_options_market_structure_observation(
     *,
     spot: float | int | str | None,
     as_of: str | None = None,
+    underlying_symbol: str | None = None,
     data_quality_label: str | Sequence[str] | None = None,
     methodology_approved: bool = False,
     coverage_thresholds_defined: bool = False,
@@ -149,6 +153,7 @@ def build_options_market_structure_observation(
         observation_source_class=observation_source_class,
         consumer_issues=consumer_issues,
     )
+    surface_linkage = build_options_gamma_surface_linkage(underlying_symbol=underlying_symbol)
     return {
         "schemaVersion": OPTIONS_GAMMA_OBSERVATION_SCHEMA_VERSION,
         "contractName": OBSERVATION_CONTRACT_NAME,
@@ -176,6 +181,7 @@ def build_options_market_structure_observation(
         "blockedReasonDetails": blocked_reason_details if observation_state == "blocked" else [],
         "degradedReasonDetails": degraded_reason_details if observation_state == "degraded" else [],
         "evidenceLimits": build_options_gamma_evidence_limits(consumer_issues),
+        **surface_linkage,
         "methodology": {
             "formulaId": GEX_FORMULA_ID,
             "formula": GEX_FORMULA,
@@ -579,6 +585,49 @@ def build_options_gamma_evidence_limits(issues: Sequence[Mapping[str, str]]) -> 
     return _dedupe([str(issue.get("message") or "").strip() for issue in issues if issue.get("message")])
 
 
+def build_options_gamma_surface_linkage(*, underlying_symbol: str | None = None) -> dict[str, Any]:
+    structure_drilldowns = _structure_drilldowns(underlying_symbol)
+    scenario_drilldowns = [
+        {
+            "label": "Scenario Lab",
+            "route": "/market/scenario-lab",
+            "section": "gammaObservation",
+            "reason": "Open scenario context with the current gamma evidence constraints.",
+        }
+    ]
+    methodology_links = [
+        {
+            "label": "Gamma readiness",
+            "route": "/options-lab",
+            "section": "gammaReadiness",
+            "reason": "Review why gamma evidence remains observation-only.",
+        },
+        {
+            "label": "Gamma methodology",
+            "route": "/options-lab",
+            "section": "gammaMethodology",
+            "reason": "Review the methodology limits behind this gamma observation.",
+        },
+    ]
+    structure_available = bool(structure_drilldowns)
+    return {
+        "structureDrilldowns": structure_drilldowns,
+        "scenarioDrilldowns": scenario_drilldowns,
+        "methodologyLinks": methodology_links,
+        "evidenceLinkage": {
+            "status": "available" if structure_available else "partial",
+            "structureAvailable": structure_available,
+            "scenarioAvailable": True,
+            "methodologyAvailable": True,
+            "message": (
+                "Linked structure, scenario, and methodology context is available for observation-only follow-up."
+                if structure_available
+                else "Linked scenario and methodology context is available, but ticker-specific structure context is unavailable."
+            ),
+        },
+    }
+
+
 def _source_class_issue_tokens(source_class: str) -> list[str]:
     return list(_SOURCE_CLASS_ISSUES.get(source_class, []))
 
@@ -629,6 +678,27 @@ def _coerce_int(value: Any) -> int | None:
 
 def _text(value: Any) -> str:
     return str(value or "").strip()
+
+
+def _structure_drilldowns(underlying_symbol: str | None) -> list[dict[str, str]]:
+    normalized_symbol = _normalize_underlying_symbol(underlying_symbol)
+    if not normalized_symbol:
+        return []
+    return [
+        {
+            "label": "Stock Structure",
+            "route": f"/stocks/{quote(normalized_symbol, safe='')}/structure-decision",
+            "section": "optionsGammaObservation",
+            "reason": "Open stock structure context for the same underlying.",
+        }
+    ]
+
+
+def _normalize_underlying_symbol(value: Any) -> str | None:
+    symbol = _text(value).upper()
+    if not symbol or not _SAFE_UNDERLYING_SYMBOL_RE.fullmatch(symbol):
+        return None
+    return symbol
 
 
 def _source_class_texts(values: Sequence[Any]) -> list[str]:

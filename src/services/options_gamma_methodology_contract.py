@@ -14,6 +14,7 @@ from src.services.options_market_structure_observation import (
     build_options_gamma_evidence_limits,
     build_options_gamma_observation_source_class,
     build_options_gamma_reason_details,
+    build_options_gamma_surface_linkage,
 )
 
 
@@ -164,6 +165,9 @@ def assess_options_gamma_methodology_readiness(
         observation_source_class=observation_source_class,
         consumer_issues=consumer_issues,
     )
+    surface_linkage = build_options_gamma_surface_linkage(
+        underlying_symbol=_underlying_symbol(payload, contracts_value),
+    )
 
     return {
         "schemaVersion": OPTIONS_GAMMA_METHODOLOGY_SCHEMA_VERSION,
@@ -182,6 +186,7 @@ def assess_options_gamma_methodology_readiness(
         "blockedReasonDetails": build_options_gamma_reason_details(blocked) if blocked else [],
         "degradedReasonDetails": build_options_gamma_reason_details(degraded) if degraded else [],
         "evidenceLimits": build_options_gamma_evidence_limits(consumer_issues),
+        **surface_linkage,
         "noAdviceDisclosure": OPTIONS_GAMMA_NO_ADVICE_DISCLOSURE,
     }
 
@@ -372,6 +377,18 @@ def _first_contract_value(contracts: Sequence[Any], *names: str) -> Any:
         if value not in (None, ""):
             return value
     return None
+
+
+def _underlying_symbol(payload: Mapping[str, Any], contracts: Sequence[Any]) -> str | None:
+    symbol = _text(_get(payload, "symbol", "underlyingSymbol", "underlying_symbol"))
+    if symbol:
+        return symbol
+    underlying = _get(payload, "underlying")
+    if isinstance(underlying, Mapping):
+        nested_symbol = _text(_get(underlying, "symbol", "ticker"))
+        if nested_symbol:
+            return nested_symbol
+    return _text(_first_contract_value(contracts, "symbol")) or None
 
 
 def _sequence(value: Any) -> list[Any]:

@@ -65,6 +65,7 @@ def test_complete_normalized_contracts_emit_observation_only_gex_walls_flip_and_
         _complete_contracts(),
         spot=100.0,
         as_of="2026-06-15T13:45:00Z",
+        underlying_symbol="TEST",
         data_quality_label="live",
         methodology_approved=True,
         coverage_thresholds_defined=True,
@@ -114,6 +115,43 @@ def test_complete_normalized_contracts_emit_observation_only_gex_walls_flip_and_
     assert observation.get("dataQuality", {}).get("observationSourceClass") == "live"
     assert observation.get("dataQuality", {}).get("observationOnly") is True
     assert observation.get("dataQuality", {}).get("decisionGrade") is False
+    assert observation["structureDrilldowns"] == [
+        {
+            "label": "Stock Structure",
+            "route": "/stocks/TEST/structure-decision",
+            "section": "optionsGammaObservation",
+            "reason": "Open stock structure context for the same underlying.",
+        }
+    ]
+    assert observation["scenarioDrilldowns"] == [
+        {
+            "label": "Scenario Lab",
+            "route": "/market/scenario-lab",
+            "section": "gammaObservation",
+            "reason": "Open scenario context with the current gamma evidence constraints.",
+        }
+    ]
+    assert observation["methodologyLinks"] == [
+        {
+            "label": "Gamma readiness",
+            "route": "/options-lab",
+            "section": "gammaReadiness",
+            "reason": "Review why gamma evidence remains observation-only.",
+        },
+        {
+            "label": "Gamma methodology",
+            "route": "/options-lab",
+            "section": "gammaMethodology",
+            "reason": "Review the methodology limits behind this gamma observation.",
+        },
+    ]
+    assert observation["evidenceLinkage"] == {
+        "status": "available",
+        "structureAvailable": True,
+        "scenarioAvailable": True,
+        "methodologyAvailable": True,
+        "message": "Linked structure, scenario, and methodology context is available for observation-only follow-up.",
+    }
 
 
 def test_missing_core_prerequisites_fail_closed_without_gex_guessing() -> None:
@@ -160,6 +198,36 @@ def test_missing_core_prerequisites_fail_closed_without_gex_guessing() -> None:
     assert observation.get("dataQuality", {}).get("status") == "blocked"
     assert observation.get("blockedReasonDetails")
     assert observation.get("evidenceLimits")
+    assert observation["structureDrilldowns"] == []
+    assert observation["scenarioDrilldowns"] == [
+        {
+            "label": "Scenario Lab",
+            "route": "/market/scenario-lab",
+            "section": "gammaObservation",
+            "reason": "Open scenario context with the current gamma evidence constraints.",
+        }
+    ]
+    assert observation["methodologyLinks"] == [
+        {
+            "label": "Gamma readiness",
+            "route": "/options-lab",
+            "section": "gammaReadiness",
+            "reason": "Review why gamma evidence remains observation-only.",
+        },
+        {
+            "label": "Gamma methodology",
+            "route": "/options-lab",
+            "section": "gammaMethodology",
+            "reason": "Review the methodology limits behind this gamma observation.",
+        },
+    ]
+    assert observation["evidenceLinkage"] == {
+        "status": "partial",
+        "structureAvailable": False,
+        "scenarioAvailable": True,
+        "methodologyAvailable": True,
+        "message": "Linked scenario and methodology context is available, but ticker-specific structure context is unavailable.",
+    }
     serialized_issues = json.dumps(observation["consumerIssues"], ensure_ascii=False).lower()
     serialized_details = json.dumps(observation.get("blockedReasonDetails"), ensure_ascii=False).lower()
     serialized_limits = json.dumps(observation.get("evidenceLimits"), ensure_ascii=False).lower()
@@ -210,12 +278,13 @@ def test_fixture_source_class_is_explicit_and_keeps_observation_non_live() -> No
         )
     ]
 
-    observation = build_options_market_structure_observation(contracts, spot=100.0)
+    observation = build_options_market_structure_observation(contracts, spot=100.0, underlying_symbol="TEST")
 
     assert observation.get("observationSourceClass") == "fixture"
     assert observation.get("dataQuality", {}).get("observationSourceClass") == "fixture"
     assert observation["observationOnly"] is True
     assert observation["decisionGrade"] is False
+    assert observation["evidenceLinkage"]["status"] == "available"
 
 
 def test_existing_option_contract_schema_is_accepted_without_provider_runtime_coupling() -> None:
@@ -239,7 +308,12 @@ def test_existing_option_contract_schema_is_accepted_without_provider_runtime_co
         freshness="fresh",
     )
 
-    observation = build_options_market_structure_observation([contract], spot=50.0, data_quality_label="live")
+    observation = build_options_market_structure_observation(
+        [contract],
+        spot=50.0,
+        underlying_symbol="TEST",
+        data_quality_label="live",
+    )
 
     assert observation["coverage"]["usableContracts"] == 1
     assert observation["gexSummary"]["netGamma"] == pytest.approx(500.0)
@@ -247,7 +321,11 @@ def test_existing_option_contract_schema_is_accepted_without_provider_runtime_co
 
 
 def test_observation_copy_avoids_advice_support_resistance_and_inventory_claims() -> None:
-    observation = build_options_market_structure_observation(_complete_contracts(), spot=100.0)
+    observation = build_options_market_structure_observation(
+        _complete_contracts(),
+        spot=100.0,
+        underlying_symbol="TEST",
+    )
     serialized = json.dumps(observation, ensure_ascii=False).lower()
 
     for forbidden in (
@@ -267,3 +345,42 @@ def test_observation_copy_avoids_advice_support_resistance_and_inventory_claims(
         assert forbidden not in serialized
     assert "observation-only research context" in serialized
     assert "not personalized financial advice" in serialized
+
+
+def test_drilldown_routes_are_allowlisted_and_consumer_safe() -> None:
+    observation = build_options_market_structure_observation(
+        _complete_contracts(),
+        spot=100.0,
+        underlying_symbol="TEST",
+    )
+
+    routes = {
+        *[item["route"] for item in observation["structureDrilldowns"]],
+        *[item["route"] for item in observation["scenarioDrilldowns"]],
+        *[item["route"] for item in observation["methodologyLinks"]],
+    }
+    assert routes == {
+        "/stocks/TEST/structure-decision",
+        "/market/scenario-lab",
+        "/options-lab",
+    }
+    for route in routes:
+        assert route.startswith("/")
+        assert "://" not in route
+        assert "?" not in route
+        assert "#" not in route
+        assert ".." not in route
+
+    consumer_fields = json.dumps(
+        {
+            "structureDrilldowns": observation["structureDrilldowns"],
+            "scenarioDrilldowns": observation["scenarioDrilldowns"],
+            "methodologyLinks": observation["methodologyLinks"],
+            "evidenceLinkage": observation["evidenceLinkage"],
+        },
+        ensure_ascii=False,
+    ).lower()
+    assert "missing_gamma" not in consumer_fields
+    assert "observation_only_not_decision_grade" not in consumer_fields
+    for forbidden in ("buy", "sell", "hold", "target", "stop", "recommendation", "position sizing"):
+        assert forbidden not in consumer_fields
