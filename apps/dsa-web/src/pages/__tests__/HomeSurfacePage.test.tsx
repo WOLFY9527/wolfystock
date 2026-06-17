@@ -40,6 +40,7 @@ vi.mock('../../api/stocks', () => ({
   stocksApi: {
     verifyTickerExists: vi.fn(),
     getHistory: vi.fn(),
+    getStructureDecision: vi.fn(),
   },
 }));
 
@@ -338,6 +339,66 @@ const defaultStockEvidenceResponse = {
   },
 };
 
+const defaultPeerStructureDecisionResponse = {
+  schemaVersion: 'stock_structure_decision_api_v1',
+  ticker: 'ORCL',
+  structureState: 'range',
+  confidence: 'medium',
+  componentScores: {},
+  explanation: {
+    whyThisStructure: 'ORCL remains inside the recent range.',
+    whatConfirmsIt: [],
+    whatInvalidatesIt: [],
+    keyLevels: [],
+  },
+  researchNotes: {
+    watchNext: [],
+    needsMoreEvidence: [],
+    riskFlags: [],
+  },
+  dataQuality: {
+    status: 'available',
+    source: 'local_db',
+    period: 'daily',
+    requestedDays: 90,
+    observedBars: 60,
+    usableBars: 60,
+    reason: 'history_available',
+  },
+  missingEvidence: [],
+  noAdviceDisclosure: 'Observation-only research context.',
+  peerCorrelationSnapshot: {
+    symbol: 'ORCL',
+    peerGroup: {
+      status: 'available',
+      label: 'Cloud software',
+      symbols: ['MSFT', 'NVDA'],
+    },
+    correlationState: 'diverging',
+    peerEvidence: [
+      {
+        symbol: 'MSFT',
+        overlapDays: 22,
+        state: 'diverging',
+        summary: 'MSFT moved away from ORCL across the comparison window.',
+      },
+    ],
+    divergenceEvidence: [
+      {
+        symbol: 'MSFT',
+        overlapDays: 22,
+        state: 'diverging',
+        summary: 'MSFT diverged while ORCL weakened.',
+      },
+    ],
+    staleInputs: ['MSFT comparison window is stale.'],
+    missingInputs: ['NVDA peer history is unavailable.'],
+    confidenceCap: 'medium',
+    observationBoundary: 'Observation-only peer movement context; no personalized action instruction.',
+    researchNextSteps: ['Compare updated peer closes before extending the structure read.'],
+  },
+};
+
 const orclPartialEvidencePacket = {
   packetState: 'degraded',
   priceHistory: { status: 'available', label: '近期日线齐备' },
@@ -417,6 +478,7 @@ describe('HomeSurfacePage', () => {
       stockName: 'Tesla',
     });
     vi.mocked(stocksApi.getHistory).mockImplementation(pendingPromise);
+    vi.mocked(stocksApi.getStructureDecision).mockImplementation(pendingPromise);
     vi.mocked(analysisApi.analyzeAsync).mockResolvedValue({
       taskId: 'task-1',
       status: 'pending',
@@ -905,6 +967,43 @@ describe('HomeSurfacePage', () => {
     expect(within(fundamentalsSummary).queryByText(/observationOnly|scoreContributionAllowed|sourceAuthorityAllowed/i)).not.toBeInTheDocument();
     expect(within(fundamentalsSummary).queryByText(/company_fundamentals_digest|stock_evidence|provider|admin|raw|debug|sourceRefId/i)).not.toBeInTheDocument();
     expect(symbolReadiness.textContent || '').not.toMatch(/buy|sell|hold|recommend|target price|stop loss|position sizing|买入|卖出|持有|推荐|目标价|止损|仓位建议/i);
+  });
+
+  it('renders a compact peer-correlation research block for the active stock structure snapshot', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(stockEvidenceApi.getStockEvidence).mockResolvedValue(defaultStockEvidenceResponse);
+    vi.mocked(stocksApi.getStructureDecision).mockResolvedValue(defaultPeerStructureDecisionResponse);
+
+    renderSurface();
+
+    const peerBlock = await screen.findByTestId('home-peer-correlation-snapshot');
+    expect(vi.mocked(stocksApi.getStructureDecision)).toHaveBeenCalledWith('ORCL');
+    expect(peerBlock).toHaveTextContent('同业相关性');
+    expect(peerBlock).toHaveTextContent('diverging');
+    expect(peerBlock).toHaveTextContent('Cloud software');
+    expect(peerBlock).toHaveTextContent('MSFT moved away from ORCL across the comparison window.');
+    expect(peerBlock).toHaveTextContent('MSFT diverged while ORCL weakened.');
+    expect(peerBlock).toHaveTextContent('MSFT comparison window is stale.');
+    expect(peerBlock).toHaveTextContent('NVDA peer history is unavailable.');
+    expect(peerBlock).toHaveTextContent('medium');
+    expect(peerBlock).toHaveTextContent('Observation-only peer movement context; no personalized action instruction.');
+    expect(peerBlock).toHaveTextContent('Compare updated peer closes before extending the structure read.');
+    expect(peerBlock.textContent || '').not.toMatch(/provider|debug|raw|trace|sourceRef|reasonCode|buy|sell|hold|recommend|target price|stop loss|position sizing|买入|卖出|持有|推荐|目标价|止损|仓位建议/i);
+  });
+
+  it('hides the peer-correlation research block when the structure snapshot is absent', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(stockEvidenceApi.getStockEvidence).mockResolvedValue(defaultStockEvidenceResponse);
+    vi.mocked(stocksApi.getStructureDecision).mockResolvedValue({
+      ...defaultPeerStructureDecisionResponse,
+      peerCorrelationSnapshot: undefined,
+    });
+
+    renderSurface();
+
+    await screen.findByText('Oracle Corporation');
+    await waitFor(() => expect(vi.mocked(stocksApi.getStructureDecision)).toHaveBeenCalledWith('ORCL'));
+    expect(screen.queryByTestId('home-peer-correlation-snapshot')).not.toBeInTheDocument();
   });
 
   it('renders a safe insufficient-data fundamentals state when the summary is missing or only partially available', async () => {

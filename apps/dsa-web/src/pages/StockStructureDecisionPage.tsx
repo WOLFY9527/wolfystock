@@ -10,6 +10,7 @@ import {
   WolfyCommandBar,
 } from '../components/linear/LinearPrimitives';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
+import PeerCorrelationSnapshotBlock from '../components/common/PeerCorrelationSnapshotBlock';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { TerminalButton, TerminalChip, TerminalEmptyState } from '../components/terminal/TerminalPrimitives';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
@@ -267,6 +268,12 @@ export default function StockStructureDecisionPage() {
                       ]}
                     />
                   </RoughSectionCard>
+                  <PeerCorrelationSnapshotBlock
+                    snapshot={data.peerCorrelationSnapshot}
+                    locale={locale}
+                    testId="stock-structure-peer-correlation-snapshot"
+                    className="md:col-span-2"
+                  />
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Reference levels' : '参考位置'} title={locale === 'en' ? 'Key levels' : '关键位置'}>
                     <RoughKeyValueRows
                       rows={(data.explanation.keyLevels ?? []).map((level, index) => ({

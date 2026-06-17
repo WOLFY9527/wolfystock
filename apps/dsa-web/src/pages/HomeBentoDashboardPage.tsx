@@ -19,6 +19,7 @@ import {
 } from '../api/researchReadiness';
 import { normalizeReportQuality } from '../api/reportNormalizer';
 import { stockEvidenceApi } from '../api/stockEvidence';
+import { stocksApi, type StockPeerCorrelationSnapshot } from '../api/stocks';
 import { withFallback } from '../api/withFallback';
 import { DeepReportDrawer } from '../components/home-bento/DeepReportDrawer';
 import type { SignalTone } from '../components/home-bento/theme';
@@ -33,6 +34,7 @@ import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { Drawer } from '../components/common/Drawer';
 import ConsumerEvidenceCoverageStrip from '../components/common/ConsumerEvidenceCoverageStrip';
 import ConsumerEvidencePacketStrip from '../components/common/ConsumerEvidencePacketStrip';
+import PeerCorrelationSnapshotBlock from '../components/common/PeerCorrelationSnapshotBlock';
 import ConsumerResearchReadinessStrip from '../components/common/ConsumerResearchReadinessStrip';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useUiPreferences } from '../contexts/UiPreferencesContext';
@@ -2464,6 +2466,7 @@ function LinearObservationPanel({
   dataQualityReport,
   fundamentalsSummary,
   symbolEvidenceReadiness,
+  peerCorrelationSnapshot,
   isFundamentalsLoading,
   isGuest,
   guestPaywall,
@@ -2475,6 +2478,7 @@ function LinearObservationPanel({
   dataQualityReport?: DataQualityReport;
   fundamentalsSummary: StockEvidenceFundamentalsSummary | null;
   symbolEvidenceReadiness: SymbolEvidenceReadiness | null;
+  peerCorrelationSnapshot: StockPeerCorrelationSnapshot | null;
   isFundamentalsLoading: boolean;
   isGuest: boolean;
   guestPaywall?: React.ReactNode;
@@ -2540,6 +2544,13 @@ function LinearObservationPanel({
         symbolEvidenceReadiness={symbolEvidenceReadiness}
         isLoading={isFundamentalsLoading}
         onOpenFundamentals={onOpenFundamentals}
+      />
+
+      <PeerCorrelationSnapshotBlock
+        snapshot={peerCorrelationSnapshot}
+        locale={locale}
+        testId="home-peer-correlation-snapshot"
+        className={HOME_LOCAL_RAIL_CARD_CLASS}
       />
 
       <section
@@ -5868,6 +5879,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [homeChartContext, setHomeChartContext] = useState<HomeCandlestickChartContext | null>(null);
   const [stockEvidenceFundamentals, setStockEvidenceFundamentals] = useState<StockEvidenceFundamentalsSummary | null>(null);
   const [stockSymbolEvidenceReadiness, setStockSymbolEvidenceReadiness] = useState<SymbolEvidenceReadiness | null>(null);
+  const [stockPeerCorrelationSnapshot, setStockPeerCorrelationSnapshot] = useState<StockPeerCorrelationSnapshot | null>(null);
   const [isStockEvidenceLoading, setStockEvidenceLoading] = useState(false);
   const routeTaskId = searchParams.get('task_id') || searchParams.get('taskId') || null;
   const routeSymbol = normalizeTickerQuery(searchParams.get('symbol') || undefined);
@@ -6124,6 +6136,33 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       .finally(() => {
         if (!isCancelled) {
           setStockEvidenceLoading(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeEvidenceTicker, isGuest]);
+
+  useEffect(() => {
+    if (isGuest || !activeEvidenceTicker) {
+      setStockPeerCorrelationSnapshot(null);
+      return;
+    }
+
+    let isCancelled = false;
+    setStockPeerCorrelationSnapshot(null);
+
+    void stocksApi.getStructureDecision(activeEvidenceTicker)
+      .then((response) => {
+        if (isCancelled) {
+          return;
+        }
+        setStockPeerCorrelationSnapshot(response.peerCorrelationSnapshot ?? null);
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setStockPeerCorrelationSnapshot(null);
         }
       });
 
@@ -6804,6 +6843,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               dataQualityReport={activeDataQualityReport}
               fundamentalsSummary={stockEvidenceFundamentals}
               symbolEvidenceReadiness={stockSymbolEvidenceReadiness}
+              peerCorrelationSnapshot={stockPeerCorrelationSnapshot}
               isFundamentalsLoading={isStockEvidenceLoading}
               isGuest={Boolean(isGuest)}
               guestPaywall={guestPaywall}

@@ -109,6 +109,40 @@ export type StockStructureDecisionKeyLevel = {
   description?: string | null;
 };
 
+export type StockPeerCorrelationState = 'aligned' | 'diverging' | 'insufficient_evidence';
+
+export type StockPeerCorrelationConfidenceCap = 'low' | 'medium' | 'high';
+
+export type StockPeerCorrelationPeerGroup = {
+  status: 'available' | 'unavailable';
+  label?: string | null;
+  symbols: string[];
+};
+
+export type StockPeerCorrelationEvidence = {
+  symbol: string;
+  correlation?: number | null;
+  overlapDays: number;
+  symbolReturnPct?: number | null;
+  peerReturnPct?: number | null;
+  spreadPct?: number | null;
+  state: StockPeerCorrelationState;
+  summary: string;
+};
+
+export type StockPeerCorrelationSnapshot = {
+  symbol: string;
+  peerGroup: StockPeerCorrelationPeerGroup;
+  correlationState: StockPeerCorrelationState;
+  peerEvidence: StockPeerCorrelationEvidence[];
+  divergenceEvidence: StockPeerCorrelationEvidence[];
+  staleInputs: string[];
+  missingInputs: string[];
+  confidenceCap: StockPeerCorrelationConfidenceCap;
+  observationBoundary: string;
+  researchNextSteps: string[];
+};
+
 export type StockStructureDecisionResponse = {
   schemaVersion: string;
   ticker: string;
@@ -141,6 +175,7 @@ export type StockStructureDecisionResponse = {
     field?: string | null;
     message?: string | null;
   }>;
+  peerCorrelationSnapshot?: StockPeerCorrelationSnapshot;
   noAdviceDisclosure: string;
 };
 
@@ -243,6 +278,121 @@ function normalizeStockIntradayResponse(payload: unknown): StockIntradayResponse
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+}
+
+function normalizePeerCorrelationState(value: unknown): StockPeerCorrelationState | null {
+  return value === 'aligned' || value === 'diverging' || value === 'insufficient_evidence'
+    ? value
+    : null;
+}
+
+function normalizePeerCorrelationConfidenceCap(value: unknown): StockPeerCorrelationConfidenceCap | null {
+  return value === 'low' || value === 'medium' || value === 'high' ? value : null;
+}
+
+function normalizeOptionalNumber(value: unknown): number | null | undefined {
+  if (value === null) return null;
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function assignOptionalNumber<TKey extends keyof StockPeerCorrelationEvidence>(
+  target: StockPeerCorrelationEvidence,
+  key: TKey,
+  value: unknown,
+): void {
+  const normalized = normalizeOptionalNumber(value);
+  if (normalized !== undefined) {
+    target[key] = normalized as StockPeerCorrelationEvidence[TKey];
+  }
+}
+
+function normalizePeerCorrelationPeerGroup(value: unknown): StockPeerCorrelationPeerGroup | null {
+  if (!isRecord(value) || (value.status !== 'available' && value.status !== 'unavailable')) {
+    return null;
+  }
+
+  const group: StockPeerCorrelationPeerGroup = {
+    status: value.status,
+    symbols: normalizeStringArray(value.symbols),
+  };
+  if (typeof value.label === 'string' || value.label === null) {
+    group.label = value.label;
+  }
+  return group;
+}
+
+function normalizePeerCorrelationEvidenceItem(value: unknown): StockPeerCorrelationEvidence | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const symbol = typeof value.symbol === 'string' ? value.symbol.trim() : '';
+  const state = normalizePeerCorrelationState(value.state);
+  const summary = typeof value.summary === 'string' ? value.summary.trim() : '';
+  const overlapDays = typeof value.overlapDays === 'number' && Number.isFinite(value.overlapDays)
+    ? value.overlapDays
+    : null;
+  if (!symbol || !state || !summary || overlapDays === null) {
+    return null;
+  }
+
+  const evidence: StockPeerCorrelationEvidence = {
+    symbol,
+    overlapDays,
+    state,
+    summary,
+  };
+  assignOptionalNumber(evidence, 'correlation', value.correlation);
+  assignOptionalNumber(evidence, 'symbolReturnPct', value.symbolReturnPct);
+  assignOptionalNumber(evidence, 'peerReturnPct', value.peerReturnPct);
+  assignOptionalNumber(evidence, 'spreadPct', value.spreadPct);
+  return evidence;
+}
+
+function normalizePeerCorrelationEvidenceList(value: unknown): StockPeerCorrelationEvidence[] {
+  return Array.isArray(value)
+    ? value
+      .map((item) => normalizePeerCorrelationEvidenceItem(item))
+      .filter((item): item is StockPeerCorrelationEvidence => Boolean(item))
+    : [];
+}
+
+export function normalizePeerCorrelationSnapshot(value: unknown): StockPeerCorrelationSnapshot | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const symbol = typeof value.symbol === 'string' ? value.symbol.trim() : '';
+  const peerGroup = normalizePeerCorrelationPeerGroup(value.peerGroup);
+  const correlationState = normalizePeerCorrelationState(value.correlationState);
+  const confidenceCap = normalizePeerCorrelationConfidenceCap(value.confidenceCap);
+  const observationBoundary = typeof value.observationBoundary === 'string' ? value.observationBoundary.trim() : '';
+  if (!symbol || !peerGroup || !correlationState || !confidenceCap || !observationBoundary) {
+    return undefined;
+  }
+
+  return {
+    symbol,
+    peerGroup,
+    correlationState,
+    peerEvidence: normalizePeerCorrelationEvidenceList(value.peerEvidence),
+    divergenceEvidence: normalizePeerCorrelationEvidenceList(value.divergenceEvidence),
+    staleInputs: normalizeStringArray(value.staleInputs),
+    missingInputs: normalizeStringArray(value.missingInputs),
+    confidenceCap,
+    observationBoundary,
+    researchNextSteps: normalizeStringArray(value.researchNextSteps),
+  };
+}
+
 function normalizeStockStructureDecisionResponse(payload: unknown): StockStructureDecisionResponse {
   const normalized = toCamelCase<StockStructureDecisionResponse>(payload);
   return {
@@ -272,6 +422,7 @@ function normalizeStockStructureDecisionResponse(payload: unknown): StockStructu
       reason: normalized.dataQuality?.reason ?? null,
     },
     missingEvidence: normalized.missingEvidence ?? [],
+    peerCorrelationSnapshot: normalizePeerCorrelationSnapshot(normalized.peerCorrelationSnapshot),
     noAdviceDisclosure: normalized.noAdviceDisclosure,
   };
 }

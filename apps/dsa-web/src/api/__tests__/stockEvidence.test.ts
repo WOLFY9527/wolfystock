@@ -355,6 +355,99 @@ describe('stockEvidenceApi', () => {
     expect(packet).not.toHaveProperty('fundamentalsSummary');
   });
 
+  it('normalizes peerCorrelationSnapshot as a consumer-safe stock evidence packet field', async () => {
+    const { normalizeStockEvidenceResponse } = await import('../stockEvidence');
+
+    const payload = normalizeStockEvidenceResponse({
+      symbols: ['ORCL'],
+      items: [
+        {
+          symbol: 'ORCL',
+          stock_evidence_packet: {
+            schema_version: 'stock_evidence_packet_v1',
+            peer_correlation_snapshot: {
+              symbol: 'ORCL',
+              peer_group: {
+                status: 'available',
+                label: 'Cloud software',
+                symbols: ['MSFT', 'NVDA', ''],
+                raw_provider_payload: 'must-not-emit-peer-group',
+              },
+              correlation_state: 'diverging',
+              peer_evidence: [
+                {
+                  symbol: 'MSFT',
+                  correlation: 0.42,
+                  overlap_days: 22,
+                  symbol_return_pct: -2.4,
+                  peer_return_pct: 4.8,
+                  spread_pct: -7.2,
+                  state: 'diverging',
+                  summary: 'MSFT moved away from ORCL across the comparison window.',
+                  raw_provider_payload: 'must-not-emit-peer',
+                  reason_code: 'must-not-emit-peer',
+                },
+              ],
+              divergence_evidence: [
+                {
+                  symbol: 'MSFT',
+                  overlap_days: 22,
+                  state: 'diverging',
+                  summary: 'MSFT diverged while ORCL weakened.',
+                  trace_id: 'must-not-emit-divergence',
+                },
+              ],
+              stale_inputs: ['MSFT comparison window is stale.'],
+              missing_inputs: ['NVDA peer history is unavailable.'],
+              confidence_cap: 'medium',
+              observation_boundary: 'Observation-only peer movement context; no personalized action instruction.',
+              research_next_steps: ['Compare updated peer closes before extending the structure read.'],
+              provider_trace: 'must-not-emit-snapshot',
+            },
+          },
+        },
+      ],
+    });
+
+    const snapshot = payload.items[0].stockEvidencePacket?.peerCorrelationSnapshot;
+
+    expect(snapshot).toEqual({
+      symbol: 'ORCL',
+      peerGroup: {
+        status: 'available',
+        label: 'Cloud software',
+        symbols: ['MSFT', 'NVDA'],
+      },
+      correlationState: 'diverging',
+      peerEvidence: [
+        {
+          symbol: 'MSFT',
+          correlation: 0.42,
+          overlapDays: 22,
+          symbolReturnPct: -2.4,
+          peerReturnPct: 4.8,
+          spreadPct: -7.2,
+          state: 'diverging',
+          summary: 'MSFT moved away from ORCL across the comparison window.',
+        },
+      ],
+      divergenceEvidence: [
+        {
+          symbol: 'MSFT',
+          overlapDays: 22,
+          state: 'diverging',
+          summary: 'MSFT diverged while ORCL weakened.',
+        },
+      ],
+      staleInputs: ['MSFT comparison window is stale.'],
+      missingInputs: ['NVDA peer history is unavailable.'],
+      confidenceCap: 'medium',
+      observationBoundary: 'Observation-only peer movement context; no personalized action instruction.',
+      researchNextSteps: ['Compare updated peer closes before extending the structure read.'],
+    });
+    expect(JSON.stringify(snapshot)).not.toMatch(/provider|raw|debug|trace|reason_code|reasonCode|must-not-emit/i);
+  });
+
   it('drops invalid fundamentalsSummary payloads instead of fabricating a safe object', async () => {
     const { normalizeStockEvidenceResponse } = await import('../stockEvidence');
 

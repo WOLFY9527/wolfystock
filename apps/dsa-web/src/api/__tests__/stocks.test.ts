@@ -185,6 +185,36 @@ describe('stocksApi', () => {
             message: 'Need benchmark context.',
           },
         ],
+        peer_correlation_snapshot: {
+          symbol: 'AAPL',
+          peer_group: {
+            status: 'available',
+            label: 'Mega-cap technology',
+            symbols: ['MSFT', 'NVDA'],
+            debug_trace: 'must-not-emit-peer-group',
+          },
+          correlation_state: 'aligned',
+          peer_evidence: [
+            {
+              symbol: 'MSFT',
+              correlation: 0.61,
+              overlap_days: 24,
+              symbol_return_pct: 3.2,
+              peer_return_pct: 2.9,
+              spread_pct: 0.3,
+              state: 'aligned',
+              summary: 'MSFT moved with AAPL across the comparison window.',
+              provider_payload: 'must-not-emit-peer',
+            },
+          ],
+          divergence_evidence: [],
+          stale_inputs: [],
+          missing_inputs: [],
+          confidence_cap: 'medium',
+          observation_boundary: 'Observation-only peer movement context; no personalized action instruction.',
+          research_next_steps: ['Review whether peer alignment persists after the next close.'],
+          raw_payload: 'must-not-emit-snapshot',
+        },
         no_advice_disclosure: 'Observation-only research context.',
       },
     });
@@ -200,5 +230,14 @@ describe('stocksApi', () => {
     expect(payload.researchNotes.watchNext).toEqual(['Observe follow-through on the next close.']);
     expect(payload.dataQuality.usableBars).toBe(55);
     expect(payload.missingEvidence[0]?.kind).toBe('benchmark_context');
+    expect(payload.peerCorrelationSnapshot?.correlationState).toBe('aligned');
+    expect(payload.peerCorrelationSnapshot?.peerGroup.symbols).toEqual(['MSFT', 'NVDA']);
+    expect(payload.peerCorrelationSnapshot?.peerEvidence[0]).toMatchObject({
+      symbol: 'MSFT',
+      overlapDays: 24,
+      state: 'aligned',
+      summary: 'MSFT moved with AAPL across the comparison window.',
+    });
+    expect(JSON.stringify(payload.peerCorrelationSnapshot)).not.toMatch(/provider|raw|debug|trace|must-not-emit/i);
   });
 });
