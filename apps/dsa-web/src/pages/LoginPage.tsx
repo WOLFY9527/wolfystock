@@ -1,10 +1,10 @@
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
 import type { ParsedApiError } from '../api/error';
-import { isParsedApiError } from '../api/error';
+import { getParsedApiError, isParsedApiError } from '../api/error';
 import { SettingsAlert } from '../components/settings/SettingsAlert';
 import { useAuth } from '../hooks/useAuth';
 import { resolveAuthRedirect } from '../hooks/useProductSurface';
@@ -127,6 +127,19 @@ function buildLoginCopy(language: LoginLanguage): LoginCopy {
   };
 }
 
+function resolveLoginErrorMessage(error: unknown, fallback: string): string {
+  if (!error) {
+    return fallback;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (isParsedApiError(error)) {
+    return error.message || fallback;
+  }
+  return getParsedApiError(error).message || fallback;
+}
+
 const LoginPage: React.FC = () => {
   const { authEnabled, login, setupState } = useAuth();
   const navigate = useNavigate();
@@ -152,6 +165,7 @@ const LoginPage: React.FC = () => {
   }));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | ParsedApiError | null>(null);
+  const submitInFlightRef = useRef(false);
 
   const isAdminBootstrap = setupState === 'no_password';
   const isAuthReenable = !authEnabled && setupState === 'password_retained';
@@ -176,6 +190,9 @@ const LoginPage: React.FC = () => {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (submitInFlightRef.current) {
+      return;
+    }
     setError(null);
 
     if (!isAdminBootstrap && isCreateUserMode && !username.trim()) {
@@ -188,27 +205,27 @@ const LoginPage: React.FC = () => {
       return;
     }
 
+    submitInFlightRef.current = true;
     setIsSubmitting(true);
-    const [result, submitError] = await login({
-      username: isAdminBootstrap || isAuthReenable ? 'admin' : (username.trim() || 'admin'),
-      displayName: isCreateUserMode ? displayName.trim() : undefined,
-      password,
-      passwordConfirm: isAdminBootstrap || isCreateUserMode ? passwordConfirm : undefined,
-      createUser: isCreateUserMode,
-    }).then(
-      (value) => [value, null] as const,
-      (submitFailure: unknown) => [null, submitFailure] as const,
-    );
-    setIsSubmitting(false);
+    try {
+      const result = await login({
+        username: isAdminBootstrap || isAuthReenable ? 'admin' : (username.trim() || 'admin'),
+        displayName: isCreateUserMode ? displayName.trim() : undefined,
+        password,
+        passwordConfirm: isAdminBootstrap || isCreateUserMode ? passwordConfirm : undefined,
+        createUser: isCreateUserMode,
+      });
 
-    if (result == null) {
-      throw submitError;
-    }
-
-    if (result.success) {
-      navigate(postAuthPath, { replace: true });
-    } else {
-      setError(result.error ?? copy.errorLoginFailed);
+      if (result.success) {
+        navigate(postAuthPath, { replace: true });
+      } else {
+        setError(resolveLoginErrorMessage(result.error, copy.errorLoginFailed));
+      }
+    } catch (submitError) {
+      setError(resolveLoginErrorMessage(submitError, copy.errorLoginFailed));
+    } finally {
+      submitInFlightRef.current = false;
+      setIsSubmitting(false);
     }
   };
 
@@ -321,7 +338,7 @@ const LoginPage: React.FC = () => {
             {error ? (
               <SettingsAlert
                 title={isAdminBootstrap ? copy.errorTitleSetup : copy.errorTitleDefault}
-                message={isParsedApiError(error) ? error.message : error}
+                message={resolveLoginErrorMessage(error, copy.errorLoginFailed)}
                 variant="error"
               />
             ) : null}

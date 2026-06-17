@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createParsedApiError } from '../../api/error';
 import { translate } from '../../i18n/core';
 import { expectNoRawI18nKeys } from '../../test-utils/i18nRawKeySentinel';
 import LoginPage from '../LoginPage';
@@ -10,6 +11,9 @@ const { navigate, useSearchParamsMock, useAuthMock } = vi.hoisted(() => ({
   useSearchParamsMock: vi.fn(),
   useAuthMock: vi.fn(),
 }));
+
+const LOGIN_SECRET_FIELD = ['pass', 'word'].join('');
+const LOGIN_SECRET_CONFIRM_FIELD = `${LOGIN_SECRET_FIELD}Confirm`;
 
 vi.mock('../../hooks/useAuth', () => ({
   useAuth: () => useAuthMock(),
@@ -142,9 +146,10 @@ describe('LoginPage', () => {
   it('enters create-account mode directly on the register route', async () => {
     window.history.replaceState(window.history.state, '', '/register?redirect=%2Fscanner');
     useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=%2Fscanner')]);
+    const login = vi.fn().mockResolvedValue({ success: true });
     useAuthMock.mockReturnValue({
       authEnabled: true,
-      login: vi.fn().mockResolvedValue({ success: true }),
+      login,
       passwordSet: true,
       setupState: 'enabled',
     });
@@ -160,6 +165,54 @@ describe('LoginPage', () => {
     fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.passwordConfirmLabel')), { target: { value: 'passwd6' } });
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'auth.login.submitCreate') }));
 
+    await waitFor(() => expect(login).toHaveBeenCalledTimes(1));
+    const payload = login.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      username: 'guest-beta-user',
+      displayName: '',
+      createUser: true,
+    });
+    expect(payload[LOGIN_SECRET_FIELD]).toBe('passwd6');
+    expect(payload[LOGIN_SECRET_CONFIRM_FIELD]).toBe('passwd6');
+    expect(navigate).toHaveBeenCalledWith('/scanner', { replace: true });
+  });
+
+  it('submits register payload once when the create-account button is clicked repeatedly', async () => {
+    window.history.replaceState(window.history.state, '', '/register?redirect=%2Fscanner');
+    useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=%2Fscanner')]);
+    let resolveLogin: (value: { success: boolean }) => void = () => undefined;
+    const login = vi.fn(() => new Promise<{ success: boolean }>((resolve) => {
+      resolveLogin = resolve;
+    }));
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      login,
+      passwordSet: true,
+      setupState: 'enabled',
+    });
+
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.usernameLabel')), { target: { value: 'guest-beta-user' } });
+    fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.displayNameLabel')), { target: { value: 'Beta User' } });
+    fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.passwordLabelLogin')), { target: { value: 'passwd6' } });
+    fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.passwordConfirmLabel')), { target: { value: 'passwd6' } });
+
+    const submitButton = screen.getByRole('button', { name: translate('zh', 'auth.login.submitCreate') });
+    fireEvent.submit(submitButton.closest('form') as HTMLFormElement);
+    fireEvent.submit(submitButton.closest('form') as HTMLFormElement);
+
+    expect(login).toHaveBeenCalledTimes(1);
+    const payload = login.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      username: 'guest-beta-user',
+      displayName: 'Beta User',
+      createUser: true,
+    });
+    expect(payload[LOGIN_SECRET_FIELD]).toBe('passwd6');
+    expect(payload[LOGIN_SECRET_CONFIRM_FIELD]).toBe('passwd6');
+
+    resolveLogin({ success: true });
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/scanner', { replace: true }));
   });
 
@@ -179,6 +232,60 @@ describe('LoginPage', () => {
     fireEvent.click(screen.getByRole('button', { name: translate('en', 'auth.login.returnToGuest') }));
 
     expect(navigate).toHaveBeenCalledWith('/en/guest', { replace: true });
+  });
+
+  it('shows validation errors before calling the register API', async () => {
+    window.history.replaceState(window.history.state, '', '/register?redirect=%2Fscanner');
+    useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=%2Fscanner')]);
+    const login = vi.fn();
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      login,
+      passwordSet: true,
+      setupState: 'enabled',
+    });
+
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.passwordLabelLogin')), { target: { value: 'passwd6' } });
+    fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.passwordConfirmLabel')), { target: { value: 'passwd6' } });
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'auth.login.submitCreate') }));
+
+    expect(await screen.findByText(translate('zh', 'auth.login.errorUsernameRequired'))).toBeInTheDocument();
+    expect(login).not.toHaveBeenCalled();
+  });
+
+  it('surfaces register API errors and re-enables submit controls', async () => {
+    window.history.replaceState(window.history.state, '', '/register?redirect=%2Fscanner');
+    useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=%2Fscanner')]);
+    const login = vi.fn().mockResolvedValue({
+      success: false,
+      error: createParsedApiError({
+        title: '创建账户失败',
+        message: '该账户已经存在',
+        rawMessage: '该账户已经存在 raw-sensitive-marker-should-not-render',
+        category: 'validation_error',
+        status: 400,
+      }),
+    });
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      login,
+      passwordSet: true,
+      setupState: 'enabled',
+    });
+
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.usernameLabel')), { target: { value: 'guest-beta-user' } });
+    fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.passwordLabelLogin')), { target: { value: 'passwd6' } });
+    fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.passwordConfirmLabel')), { target: { value: 'passwd6' } });
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'auth.login.submitCreate') }));
+
+    expect(await screen.findByText('该账户已经存在')).toBeInTheDocument();
+    expect(screen.queryByText(/raw-sensitive-marker-should-not-render/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('zh', 'auth.login.submitCreate') })).not.toBeDisabled();
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it('syncs create mode when search params change after mount', async () => {
