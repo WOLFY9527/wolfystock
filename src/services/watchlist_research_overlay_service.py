@@ -17,12 +17,14 @@ WATCHLIST_RESEARCH_OVERLAY_NO_ADVICE_DISCLOSURE = (
     "Read-only research overlay for observation and evidence review; it does not create alerts "
     "or execution instructions."
 )
+WATCHLIST_RESEARCH_PRIORITY_QUEUE_LIMIT = 5
 
 _FORBIDDEN_TEXT_RE = re.compile(
     r"\b(buy|sell|hold|recommendation|target|stop|position sizing)\b|"
     r"买入|卖出|持有|目标价|止损|仓位",
     re.IGNORECASE,
 )
+_LARGE_MOVE_TEXT_RE = re.compile(r"\b(large|sharp|big)\s+(price\s+)?move\b", re.IGNORECASE)
 _DEGRADED_QUALITY = {"stale_or_cached", "no_evidence", "unavailable", "symbol_unknown", "unsupported_market"}
 
 
@@ -43,6 +45,7 @@ class WatchlistResearchOverlayService:
         raw_missing_evidence = self._raw_missing_evidence(items)
         missing_evidence = self._issue_messages(raw_missing_evidence)
         data_quality = self._build_data_quality(items, watchlist_unavailable=False)
+        research_priority_queue = self._build_research_priority_queue(items)
         overlay_state = self._overlay_state(
             has_items=bool(items),
             data_quality_state=self._text(data_quality.get("state")) or "no_evidence",
@@ -53,6 +56,9 @@ class WatchlistResearchOverlayService:
             [item.get("_rawRiskFlags") for item in items],
             [item.get("_rawEvidenceGaps") for item in items],
         )
+        for item in items:
+            item.pop("_rawEvidenceGaps", None)
+            item.pop("_rawRiskFlags", None)
         return {
             "schemaVersion": WATCHLIST_RESEARCH_OVERLAY_SCHEMA_VERSION,
             "overlayState": overlay_state,
@@ -62,6 +68,7 @@ class WatchlistResearchOverlayService:
                 missing_evidence=missing_evidence,
             ),
             "items": items,
+            "researchPriorityQueue": research_priority_queue,
             "aggregateSummary": aggregate_summary,
             "missingEvidence": missing_evidence,
             "evidenceGaps": missing_evidence,
@@ -92,6 +99,7 @@ class WatchlistResearchOverlayService:
             "overlayState": "unavailable",
             "researchSummary": "Watchlist research data is unavailable, so this overlay remains read-only.",
             "items": [],
+            "researchPriorityQueue": [],
             "aggregateSummary": cls._empty_aggregate_summary(),
             "missingEvidence": missing_evidence,
             "evidenceGaps": missing_evidence,
@@ -336,6 +344,189 @@ class WatchlistResearchOverlayService:
             "failClosed": state != "ready" or missing_evidence_count > 0,
             "consumerIssues": build_consumer_issues(raw_missing_evidence, state),
         }
+
+    @classmethod
+    def _build_research_priority_queue(cls, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        queue = [entry for item in items if (entry := cls._research_priority_queue_entry(item))]
+        return [
+            entry
+            for _rank, entry in sorted(
+                enumerate(queue),
+                key=lambda pair: (
+                    -cls._priority_score(pair[1]),
+                    cls._text(pair[1].get("symbol")) or "",
+                    pair[0],
+                ),
+            )
+        ][:WATCHLIST_RESEARCH_PRIORITY_QUEUE_LIMIT]
+
+    @classmethod
+    def _research_priority_queue_entry(cls, item: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+        symbol = cls._text(item.get("ticker"))
+        if not symbol:
+            return None
+        freshness = item.get("freshness") if isinstance(item.get("freshness"), Mapping) else {}
+        freshness_state = cls._text(freshness.get("state")) or "no_evidence"
+        raw_evidence_gaps = [str(gap) for gap in item.get("_rawEvidenceGaps") or []]
+        raw_risk_flags = [str(flag) for flag in item.get("_rawRiskFlags") or []]
+        missing_evidence = cls._priority_missing_evidence_labels(raw_evidence_gaps)
+        large_move_observed = cls._large_move_observed(item)
+        priority_tier = cls._priority_tier(
+            freshness_state=freshness_state,
+            raw_evidence_gaps=raw_evidence_gaps,
+            raw_risk_flags=raw_risk_flags,
+            large_move_observed=large_move_observed,
+        )
+        return {
+            "symbol": symbol,
+            "priorityTier": priority_tier,
+            "priorityReasonSafeLabel": cls._priority_reason_safe_label(
+                priority_tier=priority_tier,
+                freshness_state=freshness_state,
+                missing_evidence=missing_evidence,
+                large_move_observed=large_move_observed,
+            ),
+            "evidenceAge": {
+                "state": freshness_state,
+                "lastReviewedAt": cls._text(freshness.get("lastReviewedAt")),
+            },
+            "missingEvidence": missing_evidence,
+            "suggestedResearchPath": cls._suggested_research_path(item, missing_evidence),
+            "observationOnly": True,
+        }
+
+    @staticmethod
+    def _priority_tier(
+        *,
+        freshness_state: str,
+        raw_evidence_gaps: Iterable[str],
+        raw_risk_flags: Iterable[str],
+        large_move_observed: bool,
+    ) -> str:
+        gaps = set(raw_evidence_gaps)
+        flags = set(raw_risk_flags)
+        if freshness_state in {"no_evidence", "symbol_unknown", "unavailable", "unsupported_market"}:
+            return "attention"
+        if gaps.intersection({"watchlist_research_context", "local_ohlcv_evidence", "scanner_score_evidence"}):
+            return "attention"
+        if freshness_state == "stale_or_cached" or "fresh_evidence" in gaps:
+            return "follow_up"
+        if large_move_observed:
+            return "follow_up"
+        if flags:
+            return "follow_up"
+        return "monitor"
+
+    @staticmethod
+    def _priority_score(entry: Mapping[str, Any]) -> int:
+        tier_score = {
+            "attention": 300,
+            "follow_up": 200,
+            "monitor": 100,
+        }.get(str(entry.get("priorityTier") or ""), 0)
+        missing_count = len(entry.get("missingEvidence") or [])
+        state = str((entry.get("evidenceAge") or {}).get("state") or "")
+        stale_bonus = 20 if state == "stale_or_cached" else 0
+        return tier_score + min(missing_count, 5) * 10 + stale_bonus
+
+    @classmethod
+    def _priority_reason_safe_label(
+        cls,
+        *,
+        priority_tier: str,
+        freshness_state: str,
+        missing_evidence: List[str],
+        large_move_observed: bool,
+    ) -> str:
+        if priority_tier == "attention":
+            if missing_evidence:
+                return "Missing evidence needs review."
+            if freshness_state == "unavailable":
+                return "Research context is temporarily unavailable."
+            return "Research context needs attention."
+        if priority_tier == "follow_up":
+            if large_move_observed:
+                return "Large move needs evidence review."
+            if freshness_state == "stale_or_cached":
+                return "Evidence needs refresh before confidence can improve."
+            return "Research context has follow-up flags."
+        return "Research context is ready for follow-up."
+
+    @classmethod
+    def _large_move_observed(cls, item: Mapping[str, Any]) -> bool:
+        values = [
+            item.get("researchSummary"),
+            item.get("whyWatching"),
+            item.get("whyOnRadar"),
+            *list(item.get("whatToVerify") or []),
+        ]
+        return any(_LARGE_MOVE_TEXT_RE.search(text) for value in values if (text := cls._safe_text(value)))
+
+    @classmethod
+    def _priority_missing_evidence_labels(cls, raw_evidence_gaps: Iterable[str]) -> List[str]:
+        labels: List[str] = []
+        gaps = set(raw_evidence_gaps)
+        if "watchlist_research_context" in gaps:
+            labels.append("Research context")
+        if "local_ohlcv_evidence" in gaps:
+            labels.append("Price-history evidence")
+        if "scanner_score_evidence" in gaps:
+            labels.append("Scanner score evidence")
+        if "fresh_evidence" in gaps:
+            labels.append("Cached or delayed evidence")
+        if "score_grade_not_allowed" in gaps:
+            labels.append("Score-grade evidence")
+        if "watchlist_data_unavailable" in gaps:
+            labels.append("Watchlist research data")
+        return cls._unique_text(labels)
+
+    @classmethod
+    def _suggested_research_path(
+        cls,
+        item: Mapping[str, Any],
+        missing_evidence: List[str],
+    ) -> List[Dict[str, str]]:
+        symbol = cls._text(item.get("ticker")) or ""
+        path: List[Dict[str, str]] = []
+        if symbol:
+            path.extend(cls._drilldown_targets(symbol))
+        for label in missing_evidence[:2]:
+            if label == "Price-history evidence":
+                path.append(
+                    {
+                        "label": "Evidence Coverage",
+                        "route": f"/stocks/{quote(symbol, safe='')}/structure-decision" if symbol else "/watchlist",
+                        "section": "evidenceCoverage",
+                        "reason": "Review price-history coverage before follow-up research.",
+                    }
+                )
+            elif label == "Research context":
+                path.append(
+                    {
+                        "label": "Watchlist Context",
+                        "route": "/watchlist",
+                        "section": "researchContext",
+                        "reason": "Review why this symbol is on the watchlist.",
+                    }
+                )
+        what_to_verify = next(
+            (
+                cls._safe_text(value)
+                for value in list(item.get("whatToVerify") or [])
+                if cls._safe_text(value)
+            ),
+            None,
+        )
+        if what_to_verify and symbol:
+            path.append(
+                {
+                    "label": "Research Check",
+                    "route": f"/stocks/{quote(symbol, safe='')}/structure-decision",
+                    "section": "researchChecklist",
+                    "reason": what_to_verify,
+                }
+            )
+        return cls._dedupe_links(path)[:3]
 
     @classmethod
     def _overlay_state(cls, *, has_items: bool, data_quality_state: str) -> str:

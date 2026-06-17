@@ -280,11 +280,26 @@ class WatchlistResearchOverlayFreshnessResponse(BaseModel):
     ohlcvState: str
 
 
+class WatchlistResearchPriorityEvidenceAgeResponse(BaseModel):
+    state: str
+    lastReviewedAt: Optional[str] = None
+
+
 class WatchlistResearchOverlayDrilldownTargetResponse(BaseModel):
     label: str
     route: str
     section: str
     reason: str
+
+
+class WatchlistResearchPriorityQueueItemResponse(BaseModel):
+    symbol: str
+    priorityTier: Literal["attention", "follow_up", "monitor"]
+    priorityReasonSafeLabel: str
+    evidenceAge: WatchlistResearchPriorityEvidenceAgeResponse
+    missingEvidence: List[str] = Field(default_factory=list)
+    suggestedResearchPath: List[WatchlistResearchOverlayDrilldownTargetResponse] = Field(default_factory=list)
+    observationOnly: Literal[True] = True
 
 
 class WatchlistResearchOverlayItemResponse(BaseModel):
@@ -321,6 +336,7 @@ class WatchlistResearchOverlayResponse(BaseModel):
     overlayState: str
     researchSummary: str
     items: List[WatchlistResearchOverlayItemResponse] = Field(default_factory=list)
+    researchPriorityQueue: List[WatchlistResearchPriorityQueueItemResponse] = Field(default_factory=list, max_length=5)
     aggregateSummary: Dict[str, Dict[str, int]] = Field(default_factory=dict)
     missingEvidence: List[str] = Field(default_factory=list)
     evidenceGaps: List[str] = Field(default_factory=list)

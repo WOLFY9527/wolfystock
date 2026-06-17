@@ -173,6 +173,14 @@ class WatchlistResearchOverlayEndpointTestCase(unittest.TestCase):
         self.assertFalse(payload["decisionGrade"])
         self.assertTrue(payload["researchSummary"])
         self.assertEqual([item["ticker"] for item in payload["items"]], ["NVDA"])
+        self.assertEqual(len(payload["researchPriorityQueue"]), 1)
+        queue_item = payload["researchPriorityQueue"][0]
+        self.assertEqual(queue_item["symbol"], "NVDA")
+        self.assertEqual(queue_item["priorityTier"], "follow_up")
+        self.assertTrue(queue_item["priorityReasonSafeLabel"])
+        self.assertEqual(queue_item["evidenceAge"]["state"], "stale_or_cached")
+        self.assertTrue(queue_item["suggestedResearchPath"])
+        self.assertTrue(queue_item["observationOnly"])
         self.assertEqual(payload["aggregateSummary"]["byThemeOrSector"], {"ai_infra": 1})
         self.assertEqual(
             payload["items"][0]["drilldownTargets"][0]["route"],
