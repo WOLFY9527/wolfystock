@@ -9,6 +9,7 @@ import { TerminalChip, TerminalDisclosure } from '../terminal/TerminalPrimitives
 import { cn } from '../../utils/cn';
 import { MarketOverviewSparkline } from './marketOverviewPrimitives';
 import type { MarketRegimeSynthesisHeaderView } from './MarketRegimeSynthesisHeader';
+import { SynthesisEvidenceColumn } from '../common/SynthesisEvidenceColumn';
 import type { OfficialMacroAuthorityRecord } from '../common/officialMacroAuthorityDiagnosticsData';
 import type {
   MarketOverviewBriefingSummaryView,
@@ -103,7 +104,7 @@ export type MarketOverviewRegimeSummaryView = {
 type MarketOverviewWorkbenchTopSurfaceProps = {
   heading: React.ReactNode;
   directionalSummary: MarketDirectionalSummary;
-  regimeSynthesis: MarketRegimeSynthesisHeaderView;
+  regimeSynthesis?: MarketRegimeSynthesisHeaderView;
   regimeSummary?: MarketOverviewRegimeSummaryView;
   decisionText: string;
   decisionChips: MarketOverviewDecisionChipView[];
@@ -117,6 +118,7 @@ type MarketOverviewWorkbenchTopSurfaceProps = {
   activeCategory: MarketOverviewTab;
   onCategoryChange: (tab: MarketOverviewTab) => void;
   exportLabel: string;
+  exportDisabled: boolean;
   onExportSummary: () => void;
   heroAnchors: MarketOverviewHeroAnchorView[];
   showAdminDiagnostics?: boolean;
@@ -1028,8 +1030,113 @@ const MarketOverviewConclusionLayer: React.FC<{
   );
 };
 
+const MarketRegimeSynthesisResearchBlock: React.FC<{
+  view?: MarketRegimeSynthesisHeaderView;
+}> = ({ view }) => {
+  if (!view) {
+    return null;
+  }
+
+  const supportiveEvidence = (view.supportiveEvidence?.length ? view.supportiveEvidence : view.topDrivers).slice(0, 3);
+  const contradictoryEvidence = (view.contradictoryEvidence?.length ? view.contradictoryEvidence : view.counterEvidence).slice(0, 3);
+  const missingEvidence = (view.missingEvidence?.length ? view.missingEvidence : view.dataGaps).slice(0, 3);
+  const nextSteps = (view.researchNextSteps || []).slice(0, 3);
+
+  return (
+    <section
+      data-testid="market-regime-synthesis-research-block"
+      data-market-research-flow="regime-synthesis"
+      className="mt-4 min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3"
+    >
+      <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-white/48">市场状态综合</p>
+          <p className="mt-1 text-sm font-semibold leading-5 text-white/90">{view.title}</p>
+          <p className="mt-1 max-w-3xl text-[11px] leading-5 text-white/56">{view.summary}</p>
+        </div>
+        <div className="flex min-w-0 flex-wrap gap-1.5 lg:max-w-[46%] lg:justify-end">
+          <TerminalChip variant={view.stateChipVariant} className="px-2 py-1 text-[10px] font-semibold">
+            {view.postureLabel || view.stateChipLabel}
+          </TerminalChip>
+          <TerminalChip variant="neutral" className="px-2 py-1 text-[10px] font-semibold">
+            <span className="text-white/36">置信上限</span>
+            <span>{[view.confidenceCapLabel, view.confidenceCapValueText].filter(Boolean).join(' · ') || view.confidenceLabel}</span>
+          </TerminalChip>
+          {view.freshnessLabel ? (
+            <TerminalChip variant="neutral" className="px-2 py-1 text-[10px] font-semibold">
+              <span className="text-white/36">时效</span>
+              <span>{view.freshnessLabel}</span>
+            </TerminalChip>
+          ) : null}
+        </div>
+      </div>
+
+      {view.evidenceFamilies?.length ? (
+        <div className="mt-3 min-w-0">
+          <p className="text-[11px] font-medium text-white/48">证据家族</p>
+          <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+            {view.evidenceFamilies.slice(0, 5).map((family) => (
+              <TerminalChip
+                key={family.key}
+                variant={family.stateVariant}
+                className="px-2 py-1 text-[10px] font-semibold"
+              >
+                <span>{family.label}</span>
+                <span className="text-white/38">{family.stateLabel}</span>
+                {family.freshnessLabel ? <span className="text-white/32">{family.freshnessLabel}</span> : null}
+              </TerminalChip>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-3">
+        <SynthesisEvidenceColumn
+          testId="market-regime-synthesis-supportive-evidence"
+          title="支持证据"
+          emptyLabel="等待支持证据"
+          items={supportiveEvidence}
+          accentClassName="text-emerald-200"
+        />
+        <SynthesisEvidenceColumn
+          testId="market-regime-synthesis-contradictory-evidence"
+          title="反证"
+          emptyLabel="暂无反证"
+          items={contradictoryEvidence}
+          accentClassName="text-amber-200"
+        />
+        <SynthesisEvidenceColumn
+          testId="market-regime-synthesis-missing-evidence"
+          title="缺失证据"
+          emptyLabel="暂无显式缺口"
+          items={missingEvidence}
+          accentClassName="text-sky-200"
+        />
+      </div>
+
+      <div className="mt-3 min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2.5">
+        <p className="text-[11px] font-medium text-white/48">下一步研究</p>
+        <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+          {nextSteps.length ? nextSteps.map((step) => (
+            <span
+              key={step.key}
+              className="max-w-full rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1 text-[11px] leading-5 text-white/60"
+            >
+              <span className="font-semibold text-white/78">{step.label}</span>
+              {step.meta ? <span className="text-white/42"> · {step.meta}</span> : null}
+            </span>
+          )) : (
+            <span className="text-[11px] leading-5 text-white/38">继续观察同一证据家族是否延续确认</span>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+};
+
 const MarketOverviewDataNotesDisclosure: React.FC<{
   directionalSummary: MarketDirectionalSummary;
+  regimeSynthesis?: MarketRegimeSynthesisHeaderView;
   regimeSummary?: MarketOverviewRegimeSummaryView;
   decisionChips: MarketOverviewDecisionChipView[];
   supportingEvidence: MarketOverviewDecisionSemanticsLineView[];
@@ -1038,6 +1145,7 @@ const MarketOverviewDataNotesDisclosure: React.FC<{
   watchNext: MarketOverviewDecisionSemanticsLineView[];
 }> = ({
   directionalSummary,
+  regimeSynthesis,
   regimeSummary,
   decisionChips,
   supportingEvidence,
@@ -1053,6 +1161,7 @@ const MarketOverviewDataNotesDisclosure: React.FC<{
   >
     <MarketOverviewDirectionSummary summary={directionalSummary} />
     {regimeSummary ? <MarketOverviewRegimeSummaryBlock view={regimeSummary} /> : null}
+    <MarketRegimeSynthesisResearchBlock view={regimeSynthesis} />
     {decisionChips.length ? (
       <div data-testid="market-overview-decision-chip-details" className="mt-3 flex min-w-0 flex-wrap gap-2">
         {decisionChips.slice(0, 5).map((chip) => (
@@ -1112,7 +1221,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
   decisionChips: MarketOverviewDecisionChipView[];
   decisionReliable: boolean;
   dataState: MarketOverviewDataStateStripView;
-  regimeSynthesis: MarketRegimeSynthesisHeaderView;
+  regimeSynthesis?: MarketRegimeSynthesisHeaderView;
   regimeSummary?: MarketOverviewRegimeSummaryView;
   temperatureSummary: MarketOverviewTemperatureSummaryView;
   briefingSummary: MarketOverviewBriefingSummaryView;
@@ -1181,6 +1290,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
         />
         <MarketOverviewDataNotesDisclosure
           directionalSummary={directionalSummary}
+          regimeSynthesis={regimeSynthesis}
           regimeSummary={regimeSummary}
           decisionChips={decisionChips}
           supportingEvidence={supportingEvidence}
@@ -1237,8 +1347,9 @@ const MarketOverviewCategoryControls: React.FC<{
   activeCategory: MarketOverviewTab;
   onCategoryChange: (tab: MarketOverviewTab) => void;
   exportLabel: string;
+  exportDisabled: boolean;
   onExportSummary: () => void;
-}> = ({ categoryTabs, activeCategory, onCategoryChange, exportLabel, onExportSummary }) => (
+}> = ({ categoryTabs, activeCategory, onCategoryChange, exportLabel, exportDisabled, onExportSummary }) => (
   <div data-market-research-flow="controls">
     <div
       data-testid="market-overview-category-tabs"
@@ -1273,7 +1384,10 @@ const MarketOverviewCategoryControls: React.FC<{
       <button
         type="button"
         data-testid="market-overview-export-summary"
-        className="w-fit rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/62 transition hover:bg-white/[0.06] hover:text-white"
+        aria-label={exportLabel}
+        aria-live="polite"
+        disabled={exportDisabled}
+        className="w-fit rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/62 transition hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:border-white/[0.05] disabled:bg-white/[0.015] disabled:text-white/34 disabled:hover:bg-white/[0.015] disabled:hover:text-white/34"
         onClick={onExportSummary}
       >
         {exportLabel}
@@ -1299,6 +1413,7 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
   activeCategory,
   onCategoryChange,
   exportLabel,
+  exportDisabled,
   onExportSummary,
   heroAnchors,
   showAdminDiagnostics = false,
@@ -1329,6 +1444,7 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
                 activeCategory={activeCategory}
                 onCategoryChange={onCategoryChange}
                 exportLabel={exportLabel}
+                exportDisabled={exportDisabled}
                 onExportSummary={onExportSummary}
               />
             </div>

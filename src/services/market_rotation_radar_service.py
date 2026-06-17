@@ -44,6 +44,7 @@ from src.services.rotation_theme_registry import (
     list_rotation_theme_proxy_etfs,
 )
 from src.services.rotation_state_evidence import build_rotation_state_evidence
+from src.services.theme_correlation_breadth_snapshot import build_theme_correlation_breadth_snapshot
 
 
 NO_ADVICE_DISCLOSURE = "仅用于观察资金轮动迹象，非买卖建议。"
@@ -770,6 +771,7 @@ class MarketRotationRadarService:
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
         }
         payload["rotationStateEvidence"] = self._rotation_state_evidence(payload, generated_at)
+        payload["themeCorrelationBreadthSnapshot"] = self._theme_correlation_breadth_snapshot(payload)
         return payload
 
     def _load_quotes(self) -> QuoteLoadResult:
@@ -3190,6 +3192,7 @@ class MarketRotationRadarService:
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
         }
         payload["rotationStateEvidence"] = self._rotation_state_evidence(payload, generated_at)
+        payload["themeCorrelationBreadthSnapshot"] = self._theme_correlation_breadth_snapshot(payload)
         return payload
 
     def _fallback_theme(
@@ -3324,6 +3327,7 @@ class MarketRotationRadarService:
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
         }
         payload["rotationStateEvidence"] = self._rotation_state_evidence(payload, generated_at)
+        payload["themeCorrelationBreadthSnapshot"] = self._theme_correlation_breadth_snapshot(payload)
         return payload
 
     def _rotation_state_evidence(self, theme: Mapping[str, Any], generated_at: str) -> Dict[str, Any]:
@@ -3336,6 +3340,9 @@ class MarketRotationRadarService:
                 "asOf": theme.get("asOf") or generated_at,
             },
         )
+
+    def _theme_correlation_breadth_snapshot(self, theme: Mapping[str, Any]) -> Dict[str, Any]:
+        return build_theme_correlation_breadth_snapshot(theme)
 
     def _theme_definition(self, theme: ThemeBasket) -> Dict[str, Any]:
         return {

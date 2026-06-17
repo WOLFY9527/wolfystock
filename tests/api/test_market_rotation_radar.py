@@ -402,7 +402,12 @@ def test_market_rotation_radar_response_is_safe_and_read_only(monkeypatch: pytes
         assert all("missingProxySymbols" in theme for theme in payload["themes"])
         assert all("missingConstituentSymbols" in theme for theme in payload["themes"])
         assert all("rotationStateEvidence" in theme for theme in payload["themes"])
+        assert all("themeCorrelationBreadthSnapshot" in theme for theme in payload["themes"])
         assert all(theme["rotationStateEvidence"]["schemaVersion"] == "rotation_state_evidence_v1" for theme in payload["themes"])
+        assert all(
+            theme["themeCorrelationBreadthSnapshot"]["observationBoundary"]["rankingImpact"] == "none"
+            for theme in payload["themes"]
+        )
         assert all(theme["rotationStateEvidence"]["flowLanguageAllowed"] is False for theme in payload["themes"])
         assert all("signalType" in theme for theme in payload["themes"])
         assert all("flowEvidenceType" in theme for theme in payload["themes"])

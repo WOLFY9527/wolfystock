@@ -1021,12 +1021,109 @@ const insufficientMarketDecisionSemanticsPayload = () => ({
 });
 
 const regimeSynthesisPayload = () => ({
+  contractVersion: 'market_regime_synthesis_research_v1',
   primaryRegime: 'risk_on_liquidity_expansion',
   secondaryRegimes: ['goldilocks_soft_landing'],
   regimeScores: {
     risk_on_liquidity_expansion: 0.72,
     goldilocks_soft_landing: 0.44,
   },
+  regimeLabel: 'Risk-supportive liquidity expansion',
+  regimePosture: 'risk_supportive',
+  evidenceFamilies: [
+    {
+      key: 'marketOverview',
+      label: 'Market overview',
+      state: 'supported',
+      pillars: ['risk_appetite', 'rates_pressure', 'volatility_stress', 'crypto_risk_beta'],
+      evidenceCount: 5,
+      supportiveCount: 3,
+      contradictoryCount: 2,
+      missingCount: 0,
+      freshness: 'cached',
+      observationOnly: true,
+    },
+    {
+      key: 'breadth',
+      label: 'Breadth',
+      state: 'missing',
+      pillars: ['breadth_health'],
+      evidenceCount: 1,
+      supportiveCount: 0,
+      contradictoryCount: 0,
+      missingCount: 1,
+      freshness: 'unavailable',
+      observationOnly: true,
+    },
+  ],
+  supportiveEvidence: [
+    {
+      key: 'indices:SPX',
+      label: '标普500',
+      family: 'marketOverview',
+      pillar: 'risk_appetite',
+      direction: 'positive',
+      freshness: 'cached',
+      observationOnly: true,
+    },
+    {
+      key: 'volatility:VIX',
+      label: 'VIX',
+      family: 'marketOverview',
+      pillar: 'volatility_stress',
+      direction: 'negative',
+      freshness: 'cached',
+      observationOnly: true,
+    },
+  ],
+  contradictoryEvidence: [
+    {
+      key: 'rates:US10Y',
+      label: '美国10年期国债收益率',
+      family: 'marketOverview',
+      pillar: 'rates_pressure',
+      reason: 'contradictory_evidence',
+      observationOnly: true,
+    },
+  ],
+  missingEvidence: [
+    {
+      key: 'breadth:CN',
+      label: 'A股宽度',
+      family: 'breadth',
+      pillar: 'breadth_health',
+      reason: 'missing_evidence',
+      observationOnly: true,
+    },
+  ],
+  confidenceCap: {
+    value: 0.58,
+    label: 'medium',
+    reasons: ['contradictory_evidence', 'missing_evidence'],
+  },
+  observationBoundary: {
+    observationOnly: true,
+    decisionGrade: false,
+    sourceAuthorityAllowed: false,
+    scoreContributionAllowed: false,
+    consumerActionBoundary: 'no_advice',
+    notInvestmentAdvice: true,
+    detail: 'Research synthesis only; evidence is not promoted into execution or personalized direction.',
+  },
+  researchNextSteps: [
+    {
+      key: 'review_contradictions',
+      label: 'Review contradictory evidence',
+      detail: 'Compare the conflicting families before treating one regime as dominant.',
+    },
+    {
+      key: 'fill_missing_evidence',
+      label: 'Fill missing evidence families',
+      detail: 'Re-check breadth before raising confidence.',
+    },
+  ],
+  generatedAt: '2026-06-16T02:00:00Z',
+  freshness: 'cached',
   liquidityImpulse: 0.31,
   riskAppetite: 0.58,
   ratesPressure: -0.14,
@@ -2141,7 +2238,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-rail-signal-watch')).toHaveTextContent(/Bitcoin/);
     expect(screen.getByTestId('market-overview-rail-signal-watch')).toHaveTextContent(/Ethereum/);
     expect(screen.getByTestId('market-overview-card-cryptoCore')).toBeInTheDocument();
-    expect(screen.getByText(/复制摘要|已复制摘要/)).toBeInTheDocument();
+    expect(screen.getByText(/复制证据快照|证据快照已复制/)).toBeInTheDocument();
   });
 
   it('uses metric aliases for executive summary cards instead of rendering N/A for explicit backend values', async () => {
@@ -2228,8 +2325,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-command-chips').querySelectorAll('[data-terminal-primitive="chip"]').length).toBeGreaterThanOrEqual(3);
     expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/偏强观察|中性观察|偏弱观察|数据不足/);
     const details = expandMarketDecisionDetails();
-    expect(within(details).getByTestId('market-regime-synthesis-header')).toBeInTheDocument();
-    expect(within(details).getByTestId('market-regime-synthesis-title')).toHaveTextContent(/风险偏好修复 \/ 流动性扩张|综合结论待返回/);
+    expect(within(details).queryByTestId('market-regime-synthesis-header')).not.toBeInTheDocument();
     expect(within(details).getByTestId('market-temperature-strip')).toBeInTheDocument();
     expect(within(details).getByTestId('market-briefing-card')).toHaveTextContent(/主要指数走强，VIX 回落|当前关键数据不足/);
 
@@ -2277,7 +2373,8 @@ describe('MarketOverviewPage', () => {
     expect(shell.className).not.toContain('max-w-6xl');
     expect(screen.getByTestId('market-overview-category-tabs')).toHaveClass('w-full', 'flex', 'bg-white/[0.02]', 'backdrop-blur-md');
     expect(screen.getByTestId('market-overview-category-tabs')).toHaveClass('min-w-0');
-    expect(screen.getByTestId('market-overview-export-summary')).toHaveTextContent('复制摘要');
+    expect(screen.getByTestId('market-overview-export-summary')).toHaveTextContent('复制证据快照');
+    expect(screen.getByTestId('market-overview-export-summary')).not.toHaveTextContent('摘要');
     expect(screen.getByTestId('market-overview-category-tabs')).not.toHaveClass('sticky', 'top-0', 'z-20', '-mx-4');
     expect(screen.getByTestId('market-overview-top-stack')).toContainElement(screen.getByTestId('market-overview-category-tabs'));
     expect(screen.getByTestId('market-overview-top-stack').firstElementChild).toContainElement(screen.getByTestId('market-decision-semantics-strip'));
@@ -2653,6 +2750,8 @@ describe('MarketOverviewPage', () => {
 
     const exportButton = await screen.findByTestId('market-overview-export-summary');
     await waitFor(() => expect(screen.getByTestId('market-overview-top-verdict')).toHaveTextContent('偏强观察'));
+    expect(exportButton).toHaveTextContent('复制证据快照');
+    expect(exportButton).not.toHaveTextContent('摘要');
     fireEvent.click(exportButton);
 
     await waitFor(() => expect(writeTextMock).toHaveBeenCalledTimes(1));
@@ -2668,7 +2767,48 @@ describe('MarketOverviewPage', () => {
     expect(copiedText).toContain('- 市场温度: 偏暖 (62)');
     expect(copiedText).toContain('- 数据质量: 延迟可用');
     expect(copiedText).not.toMatch(/provider_timeout|sourceAuthorityAllowed|scoreContributionAllowed|raw|debug|trace|schema|MarketCache|buy|sell|target price|position sizing|买入|卖出|目标价|止损|仓位/i);
-    expect(await screen.findByText('已复制摘要')).toBeInTheDocument();
+    expect(await screen.findByText('证据快照已复制')).toBeInTheDocument();
+  });
+
+  it('shows a clear failure state when evidence snapshot copy fails', async () => {
+    writeTextMock.mockRejectedValueOnce(new Error('clipboard denied'));
+
+    render(createElement(MarketOverviewPage));
+
+    const exportButton = await screen.findByTestId('market-overview-export-summary');
+    await waitFor(() => expect(screen.getByTestId('market-overview-top-verdict')).toHaveTextContent('偏强观察'));
+    fireEvent.click(exportButton);
+
+    await waitFor(() => expect(writeTextMock).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('复制失败，请重试')).toBeInTheDocument();
+    expect(exportButton).not.toHaveTextContent('摘要');
+  });
+
+  it('shows a calm unavailable state when evidence snapshot copy inputs are missing', () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: undefined,
+    });
+
+    renderMarketOverviewWorkbench();
+
+    const exportButton = screen.getByTestId('market-overview-export-summary');
+    expect(exportButton).toBeDisabled();
+    expect(exportButton).toHaveTextContent('证据快照暂不可用');
+    expect(exportButton).toHaveAttribute('aria-label', '证据快照暂不可用');
+  });
+
+  it('resets copied feedback when switching evidence snapshot categories', async () => {
+    render(createElement(MarketOverviewPage));
+
+    const exportButton = await screen.findByTestId('market-overview-export-summary');
+    await waitFor(() => expect(screen.getByTestId('market-overview-top-verdict')).toHaveTextContent('偏强观察'));
+    fireEvent.click(exportButton);
+
+    expect(await screen.findByText('证据快照已复制')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '美股' }));
+
+    expect(screen.getByTestId('market-overview-export-summary')).toHaveTextContent('复制证据快照');
   });
 
   it('filters China indices out of the US core index card', async () => {
@@ -2961,6 +3101,24 @@ describe('MarketOverviewPage', () => {
     expect(readinessBand).toHaveTextContent(/偏强观察|中性观察|偏弱观察|数据不足/);
 
     const evidence = expandMarketEvidenceDetails();
+    const synthesisBlock = await within(evidence).findByTestId('market-regime-synthesis-research-block');
+    const synthesisText = synthesisBlock.textContent || '';
+    expect(synthesisBlock).toHaveTextContent('市场状态综合');
+    expect(synthesisBlock).toHaveTextContent('风险偏好修复 / 流动性扩张');
+    expect(synthesisBlock).toHaveTextContent('风险支持观察');
+    expect(synthesisBlock).toHaveTextContent('置信上限');
+    expect(synthesisBlock).toHaveTextContent('中 · 58%');
+    expect(synthesisBlock).toHaveTextContent('时效');
+    expect(synthesisBlock).toHaveTextContent('延迟可用');
+    expect(synthesisBlock).toHaveTextContent('证据家族');
+    expect(synthesisBlock).toHaveTextContent('支持证据');
+    expect(synthesisBlock).toHaveTextContent('反证');
+    expect(synthesisBlock).toHaveTextContent('缺失证据');
+    expect(synthesisBlock).toHaveTextContent('下一步研究');
+    expect(synthesisBlock).toHaveTextContent('复核反证');
+    expect(synthesisText).not.toMatch(/contractVersion|risk_supportive|marketOverview|confidenceCap|observationBoundary|no_advice|sourceAuthorityAllowed|scoreContributionAllowed|reason|debug|raw|provider|cache|runtime/i);
+    expect(synthesisText).not.toMatch(/买入|卖出|下单|交易建议|投资建议|target|stop|position|recommend|buy|sell/i);
+
     expect(evidence).toHaveTextContent('支持证据');
     expect(evidence).toHaveTextContent('反证 / 风险');
     expect(evidence).toHaveTextContent('缺失证据');
@@ -3070,7 +3228,7 @@ describe('MarketOverviewPage', () => {
     expect(text).not.toMatch(/买入|卖出|买卖|加仓|减仓|仓位|看多|看空|bullish|bearish|buy|sell|target|stop|recommend|add|reduce|position-size/i);
   });
 
-  it('shows a missing synthesis fallback when the temperature payload omits the additive field', async () => {
+  it('hides regime synthesis research blocks when the temperature payload omits the additive field', async () => {
     vi.mocked(marketApi.getTemperature).mockResolvedValueOnce({
       source: 'computed',
       sourceLabel: '系统计算',
@@ -3102,15 +3260,13 @@ describe('MarketOverviewPage', () => {
 
     expect(await screen.findByTestId('market-overview-shell')).toBeInTheDocument();
     const details = expandMarketDecisionDetails();
+    const evidence = expandMarketEvidenceDetails();
     expect(within(details).getByTestId('market-temperature-unreliable-summary')).toHaveTextContent('可靠输入不足，暂不生成综合判断');
     expect(within(details).getByTestId('market-overview-temperature-summary')).toHaveTextContent(/可靠输入不足|暂不判定/);
     expect(within(details).getByTestId('market-overview-temperature-summary')).not.toHaveTextContent('N/A');
     expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/数据不足|偏强观察|中性观察|偏弱观察/);
-    expect(within(details).getByTestId('market-regime-synthesis-title')).toHaveTextContent('综合结论待返回');
-    expect(within(details).getByTestId('market-regime-synthesis-state-chip')).toHaveTextContent('暂不可用');
-    expect(within(details).getByTestId('market-regime-synthesis-confidence-chip')).toHaveTextContent('未返回');
-    expect(within(details).queryByTestId('market-regime-synthesis-regime-chip')).not.toBeInTheDocument();
-    expect(within(details).getByTestId('market-regime-synthesis-top-drivers')).toHaveTextContent('暂无可展示驱动');
+    expect(within(details).queryByTestId('market-regime-synthesis-header')).not.toBeInTheDocument();
+    expect(within(evidence).queryByTestId('market-regime-synthesis-research-block')).not.toBeInTheDocument();
     expect(screen.queryByText(/raw|payload/i)).not.toBeInTheDocument();
   });
 
