@@ -41,6 +41,24 @@ _SCANNER_FORBIDDEN_CONSUMER_TEXT_RE = re.compile(
     r"https?://|api[_-]?key|secret|cookie|session_id|token",
     re.IGNORECASE,
 )
+_SCANNER_PACKET_FORBIDDEN_TEXT_RE = re.compile(
+    r"fallback|trustlevel|reasoncode|launchverdict|consumervisible|advisoryonly|"
+    r"liveenforcement|isfallback|isstale|ispartial|sourcetype|"
+    r"scorecontributionallowed|sourceauthorityallowed|raw[_ -]?(provider|payload|diagnostic|result|error)|"
+    r"provider[_ -]?(payload|timeout|error|diagnostic|trace)|request[_ -]?id|trace[_ -]?id|"
+    r"_blocked|_gate|debug|stack[_ -]?trace|traceback|context_snapshot|"
+    r"https?://|api[_-]?key|secret|cookie|session_id|token",
+    re.IGNORECASE,
+)
+_SCANNER_PACKET_ADVICE_TEXT_RE = re.compile(
+    r"建议(买入|卖出|加仓|减仓|持有)|买入|卖出|下单|立即交易|立即买入|"
+    r"交易建议|投资建议|止损|止盈|目标价|目标位|目标区间|仓位建议|必买|稳赚|保证收益|"
+    r"\b(buy now|sell now|place order|submit order|trade recommendation|trading advice|"
+    r"investment advice|recommended trade|strategy recommendation|ai recommends you buy|"
+    r"best contract|guaranteed return|guaranteed|take profit|stop loss|target price|"
+    r"position sizing|live trading|execution ready)\b",
+    re.IGNORECASE,
+)
 
 
 def _scanner_normalize_key(value: str) -> str:
@@ -93,6 +111,134 @@ def _scanner_sanitize_consumer_value(value: Any) -> Any:
             return None
         return value
     return value
+
+
+def _scanner_packet_safe_text(value: Any) -> Optional[str]:
+    if value is None or isinstance(value, (dict, list, tuple, set)):
+        return None
+    text = re.sub(r"\s+", " ", str(value or "").strip())
+    if not text:
+        return None
+    if _SCANNER_PACKET_FORBIDDEN_TEXT_RE.search(text):
+        return None
+    if _SCANNER_PACKET_ADVICE_TEXT_RE.search(text):
+        return None
+    return text
+
+
+def _scanner_packet_safe_list(values: Any, *, limit: int = 4) -> List[str]:
+    raw_items = values if isinstance(values, (list, tuple, set)) else [values]
+    result: List[str] = []
+    seen = set()
+    for item in raw_items:
+        text = _scanner_packet_safe_text(item)
+        if not text:
+            continue
+        key = text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(text)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _scanner_packet_first_safe(*values: Any) -> Optional[str]:
+    for value in values:
+        if isinstance(value, (list, tuple, set)):
+            text = _scanner_packet_first_safe(*value)
+        else:
+            text = _scanner_packet_safe_text(value)
+        if text:
+            return text
+    return None
+
+
+def _scanner_packet_labeled_values(values: Any) -> List[str]:
+    if not isinstance(values, list):
+        return []
+    result: List[str] = []
+    for item in values:
+        if not isinstance(item, dict):
+            continue
+        label = _scanner_packet_safe_text(item.get("label"))
+        item_value = _scanner_packet_safe_text(item.get("value"))
+        if label and item_value:
+            result.append(f"{label}: {item_value}")
+        elif label:
+            result.append(label)
+    return _scanner_packet_safe_list(result)
+
+
+def _build_scanner_candidate_research_packet(value: Any) -> Dict[str, Any]:
+    payload = value if isinstance(value, dict) else {}
+    summary_frame = payload.get("candidateResearchSummaryFrame")
+    if not isinstance(summary_frame, dict):
+        summary_frame = {}
+    readiness = payload.get("candidateResearchReadiness")
+    if not isinstance(readiness, dict):
+        readiness = {}
+    consumer_diagnostics = payload.get("consumerDiagnostics")
+    if not isinstance(consumer_diagnostics, dict):
+        consumer_diagnostics = {}
+
+    why_surfaced = _scanner_packet_first_safe(
+        summary_frame.get("primaryResearchReason"),
+        payload.get("reason_summary"),
+        payload.get("reasons"),
+    ) or "本轮扫描出现可复核的趋势、动量或流动性线索。"
+
+    primary_evidence = _scanner_packet_safe_list(summary_frame.get("evidenceHighlights"))
+    if not primary_evidence:
+        primary_evidence = _scanner_packet_safe_list(payload.get("reasons"), limit=3)
+    if not primary_evidence:
+        primary_evidence = _scanner_packet_labeled_values(payload.get("feature_signals"))
+    if not primary_evidence:
+        primary_evidence = _scanner_packet_labeled_values(payload.get("key_metrics"))
+
+    limiting_evidence = _scanner_packet_safe_list(summary_frame.get("missingEvidence"))
+    if not limiting_evidence:
+        limiting_evidence = _scanner_packet_safe_list(readiness.get("missingEvidence"))
+    if not limiting_evidence:
+        limiting_evidence = _scanner_packet_safe_list(consumer_diagnostics.get("missingEvidence"))
+    if not limiting_evidence:
+        limiting_evidence = _scanner_packet_safe_list(summary_frame.get("blockingReasons"))
+    if not limiting_evidence:
+        limiting_evidence = _scanner_packet_safe_list(payload.get("risk_notes"))
+
+    data_quality_notes: List[str] = []
+    for label, source in (
+        ("data quality", consumer_diagnostics.get("dataQualityState")),
+        ("freshness", consumer_diagnostics.get("freshnessState")),
+        ("readiness", readiness.get("readinessState")),
+    ):
+        safe_value = _scanner_packet_safe_text(source)
+        if safe_value:
+            data_quality_notes.append(f"{label}: {safe_value}")
+    data_quality_notes.extend(_scanner_packet_safe_list(consumer_diagnostics.get("warningFlags"), limit=2))
+    data_quality_notes.extend(_scanner_packet_safe_list(consumer_diagnostics.get("userFacingLabels"), limit=2))
+    data_quality_notes = _scanner_packet_safe_list(data_quality_notes, limit=4)
+
+    reason_label = _scanner_packet_first_safe(
+        consumer_diagnostics.get("reasonLabel"),
+        payload.get("quality_hint"),
+    ) or "证据有限，需补充研究"
+    research_next_step = _scanner_packet_first_safe(
+        summary_frame.get("nextResearchStep"),
+        consumer_diagnostics.get("nextEvidence"),
+        readiness.get("nextEvidenceNeeded"),
+    ) or "补充缺口证据后再复核。"
+
+    return {
+        "whySurfaced": why_surfaced,
+        "primaryEvidence": primary_evidence,
+        "limitingEvidence": limiting_evidence,
+        "dataQualityNotes": data_quality_notes,
+        "rejectedOrLimitedReasonSafeLabel": reason_label,
+        "researchNextStep": research_next_step,
+        "observationOnly": True,
+    }
 
 
 def _scanner_consumer_diagnostics_payload(value: Any) -> Dict[str, Any]:
@@ -659,6 +805,7 @@ class ScannerCandidateResponse(BaseModel):
     candidateResearchReadiness: Dict[str, Any] = Field(default_factory=dict)
     candidateResearchSummaryFrame: Dict[str, Any] = Field(default_factory=dict)
     candidateSourceProvenanceFrame: Dict[str, Any] = Field(default_factory=dict)
+    candidateResearchPacket: Dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("diagnostics")
     @classmethod
@@ -669,6 +816,12 @@ class ScannerCandidateResponse(BaseModel):
     @classmethod
     def _validate_consumer_diagnostics(cls, value: Dict[str, Any]) -> Dict[str, Any]:
         return _dump_metadata_model(ScannerConsumerDiagnosticsMetadata, value)
+
+    @model_validator(mode="after")
+    def _populate_candidate_research_packet(self) -> "ScannerCandidateResponse":
+        payload = self.model_dump(exclude={"candidateResearchPacket"})
+        self.candidateResearchPacket = _build_scanner_candidate_research_packet(payload)
+        return self
 
 
 class ScannerThemeDiagnosticsResponse(BaseModel):
