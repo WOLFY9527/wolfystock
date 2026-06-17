@@ -145,6 +145,7 @@ def test_get_scanner_research_overlay_returns_additive_projection_without_mutati
         "overlayState",
         "researchSummary",
         "items",
+        "themeLeadershipPacket",
         "aggregateSummary",
         "queueDiversity",
         "dataQuality",
@@ -180,6 +181,24 @@ def test_get_scanner_research_overlay_returns_additive_projection_without_mutati
     }
     assert payload["items"][0]["researchPriority"] == "high"
     assert payload["items"][0]["whyThisMattersToday"]
+    packet = payload["themeLeadershipPacket"]
+    assert set(packet) == {
+        "theme",
+        "leadershipState",
+        "leadingSymbols",
+        "laggingSymbols",
+        "breadthEvidence",
+        "concentrationEvidence",
+        "evidenceGaps",
+        "freshness",
+        "suggestedResearchPath",
+        "observationOnly",
+    }
+    assert packet["theme"] == "AI Infrastructure"
+    assert packet["leadershipState"] == "insufficient_evidence"
+    assert packet["leadingSymbols"] == ["ALFA"]
+    assert packet["observationOnly"] is True
+    assert packet["suggestedResearchPath"]
     serialized = _serialized_values(
         {
             "researchSummary": payload["researchSummary"],
