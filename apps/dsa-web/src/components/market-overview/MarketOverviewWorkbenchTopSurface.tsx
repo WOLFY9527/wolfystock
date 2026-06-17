@@ -118,6 +118,7 @@ type MarketOverviewWorkbenchTopSurfaceProps = {
   activeCategory: MarketOverviewTab;
   onCategoryChange: (tab: MarketOverviewTab) => void;
   exportLabel: string;
+  exportDisabled: boolean;
   onExportSummary: () => void;
   heroAnchors: MarketOverviewHeroAnchorView[];
   showAdminDiagnostics?: boolean;
@@ -1346,8 +1347,9 @@ const MarketOverviewCategoryControls: React.FC<{
   activeCategory: MarketOverviewTab;
   onCategoryChange: (tab: MarketOverviewTab) => void;
   exportLabel: string;
+  exportDisabled: boolean;
   onExportSummary: () => void;
-}> = ({ categoryTabs, activeCategory, onCategoryChange, exportLabel, onExportSummary }) => (
+}> = ({ categoryTabs, activeCategory, onCategoryChange, exportLabel, exportDisabled, onExportSummary }) => (
   <div data-market-research-flow="controls">
     <div
       data-testid="market-overview-category-tabs"
@@ -1382,7 +1384,10 @@ const MarketOverviewCategoryControls: React.FC<{
       <button
         type="button"
         data-testid="market-overview-export-summary"
-        className="w-fit rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/62 transition hover:bg-white/[0.06] hover:text-white"
+        aria-label={exportLabel}
+        aria-live="polite"
+        disabled={exportDisabled}
+        className="w-fit rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/62 transition hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:border-white/[0.05] disabled:bg-white/[0.015] disabled:text-white/34 disabled:hover:bg-white/[0.015] disabled:hover:text-white/34"
         onClick={onExportSummary}
       >
         {exportLabel}
@@ -1408,6 +1413,7 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
   activeCategory,
   onCategoryChange,
   exportLabel,
+  exportDisabled,
   onExportSummary,
   heroAnchors,
   showAdminDiagnostics = false,
@@ -1438,6 +1444,7 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
                 activeCategory={activeCategory}
                 onCategoryChange={onCategoryChange}
                 exportLabel={exportLabel}
+                exportDisabled={exportDisabled}
                 onExportSummary={onExportSummary}
               />
             </div>

@@ -115,6 +115,24 @@ type MarketOverviewSectionMeta = {
   title: string;
   detail: string;
 };
+type EvidenceSnapshotCopyState = 'idle' | 'copied' | 'failed';
+
+function evidenceSnapshotCopyLabel(
+  language: 'zh' | 'en',
+  state: EvidenceSnapshotCopyState,
+  isAvailable: boolean,
+): string {
+  if (!isAvailable) {
+    return language === 'en' ? 'Evidence snapshot unavailable' : '证据快照暂不可用';
+  }
+  if (state === 'copied') {
+    return language === 'en' ? 'Evidence snapshot copied' : '证据快照已复制';
+  }
+  if (state === 'failed') {
+    return language === 'en' ? 'Copy failed. Try again' : '复制失败，请重试';
+  }
+  return language === 'en' ? 'Copy evidence snapshot' : '复制证据快照';
+}
 type HeroAnchor = {
   key: string;
   label: string;
@@ -2419,7 +2437,7 @@ function useMarketOverviewWorkbenchModel({
 }: Omit<MarketOverviewWorkbenchProps, 'heading' | 'showAdminDiagnostics'>) {
   const { language, t } = useI18n();
   const [activeCategory, setActiveCategory] = useState<MarketOverviewTab>('all');
-  const [exportSummaryFeedback, setExportSummaryFeedback] = useState<string | null>(null);
+  const [exportSummaryFeedback, setExportSummaryFeedback] = useState<EvidenceSnapshotCopyState>('idle');
 
   const categoryTabs: MarketOverviewCategoryTabView[] = [
     { key: 'all', label: t('marketOverviewPage.categories.all') },
@@ -2428,6 +2446,12 @@ function useMarketOverviewWorkbenchModel({
     { key: 'global', label: t('marketOverviewPage.categories.macro') },
     { key: 'crypto', label: t('marketOverviewPage.categories.crypto') },
   ];
+  const handleCategoryChange = (tab: MarketOverviewTab) => {
+    if (tab !== activeCategory) {
+      setExportSummaryFeedback('idle');
+    }
+    setActiveCategory(tab);
+  };
 
   const activeTabConfig = MARKET_OVERVIEW_TAB_CONFIG[activeCategory];
   const heroAnchors = buildHeroAnchors(panels, activeTabConfig.pulse);
@@ -2886,12 +2910,6 @@ function useMarketOverviewWorkbenchModel({
     );
   };
 
-  const handleExportSummary = () => {
-    void navigator.clipboard.writeText(exportSummaryText).then(() => {
-      setExportSummaryFeedback(language === 'en' ? 'Summary copied' : '已复制摘要');
-    });
-  };
-
   const topLevelDataStatus = summarizeTopLevelDataStatus({
     activeCategory,
     panels,
@@ -2991,6 +3009,24 @@ function useMarketOverviewWorkbenchModel({
     dataState: dataStateView,
     localSnapshotSavedAt,
   });
+  const clipboardWriteText = typeof navigator === 'undefined'
+    ? null
+    : navigator.clipboard?.writeText?.bind(navigator.clipboard);
+  const canCopyEvidenceSnapshot = Boolean(clipboardWriteText && exportSummaryText.trim());
+
+  const handleExportSummary = () => {
+    if (!clipboardWriteText || !exportSummaryText.trim()) {
+      setExportSummaryFeedback('failed');
+      return;
+    }
+    void clipboardWriteText(exportSummaryText)
+      .then(() => {
+        setExportSummaryFeedback('copied');
+      })
+      .catch(() => {
+        setExportSummaryFeedback('failed');
+      });
+  };
   const briefingSummary: MarketOverviewBriefingSummaryView = {
     confidenceLabel: confidenceLabel(panels.briefing.confidence),
     toneClass: panels.briefing.isReliable === false || panels.briefing.isFallback ? 'text-amber-200' : 'text-white',
@@ -3067,9 +3103,10 @@ function useMarketOverviewWorkbenchModel({
     language,
     activeCategory,
     categoryTabs,
-    setActiveCategory,
+    setActiveCategory: handleCategoryChange,
     handleExportSummary,
-    exportLabel: exportSummaryFeedback || (language === 'en' ? 'Export' : '复制摘要'),
+    exportLabel: evidenceSnapshotCopyLabel(language, exportSummaryFeedback, canCopyEvidenceSnapshot),
+    exportDisabled: !canCopyEvidenceSnapshot,
     directionalSummaryView,
     regimeSynthesisView,
     regimeSummaryView,
@@ -3105,6 +3142,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     setActiveCategory,
     handleExportSummary,
     exportLabel,
+    exportDisabled,
     directionalSummaryView,
     regimeSynthesisView,
     regimeSummaryView,
@@ -3150,6 +3188,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
         activeCategory={activeCategory}
         onCategoryChange={setActiveCategory}
         exportLabel={exportLabel}
+        exportDisabled={exportDisabled}
         onExportSummary={handleExportSummary}
         heroAnchors={heroAnchorViews}
         showAdminDiagnostics={showAdminDiagnostics}

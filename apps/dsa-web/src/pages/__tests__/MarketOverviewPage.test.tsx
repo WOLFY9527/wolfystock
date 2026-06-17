@@ -2238,7 +2238,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-rail-signal-watch')).toHaveTextContent(/Bitcoin/);
     expect(screen.getByTestId('market-overview-rail-signal-watch')).toHaveTextContent(/Ethereum/);
     expect(screen.getByTestId('market-overview-card-cryptoCore')).toBeInTheDocument();
-    expect(screen.getByText(/复制摘要|已复制摘要/)).toBeInTheDocument();
+    expect(screen.getByText(/复制证据快照|证据快照已复制/)).toBeInTheDocument();
   });
 
   it('uses metric aliases for executive summary cards instead of rendering N/A for explicit backend values', async () => {
@@ -2373,7 +2373,8 @@ describe('MarketOverviewPage', () => {
     expect(shell.className).not.toContain('max-w-6xl');
     expect(screen.getByTestId('market-overview-category-tabs')).toHaveClass('w-full', 'flex', 'bg-white/[0.02]', 'backdrop-blur-md');
     expect(screen.getByTestId('market-overview-category-tabs')).toHaveClass('min-w-0');
-    expect(screen.getByTestId('market-overview-export-summary')).toHaveTextContent('复制摘要');
+    expect(screen.getByTestId('market-overview-export-summary')).toHaveTextContent('复制证据快照');
+    expect(screen.getByTestId('market-overview-export-summary')).not.toHaveTextContent('摘要');
     expect(screen.getByTestId('market-overview-category-tabs')).not.toHaveClass('sticky', 'top-0', 'z-20', '-mx-4');
     expect(screen.getByTestId('market-overview-top-stack')).toContainElement(screen.getByTestId('market-overview-category-tabs'));
     expect(screen.getByTestId('market-overview-top-stack').firstElementChild).toContainElement(screen.getByTestId('market-decision-semantics-strip'));
@@ -2749,6 +2750,8 @@ describe('MarketOverviewPage', () => {
 
     const exportButton = await screen.findByTestId('market-overview-export-summary');
     await waitFor(() => expect(screen.getByTestId('market-overview-top-verdict')).toHaveTextContent('偏强观察'));
+    expect(exportButton).toHaveTextContent('复制证据快照');
+    expect(exportButton).not.toHaveTextContent('摘要');
     fireEvent.click(exportButton);
 
     await waitFor(() => expect(writeTextMock).toHaveBeenCalledTimes(1));
@@ -2764,7 +2767,48 @@ describe('MarketOverviewPage', () => {
     expect(copiedText).toContain('- 市场温度: 偏暖 (62)');
     expect(copiedText).toContain('- 数据质量: 延迟可用');
     expect(copiedText).not.toMatch(/provider_timeout|sourceAuthorityAllowed|scoreContributionAllowed|raw|debug|trace|schema|MarketCache|buy|sell|target price|position sizing|买入|卖出|目标价|止损|仓位/i);
-    expect(await screen.findByText('已复制摘要')).toBeInTheDocument();
+    expect(await screen.findByText('证据快照已复制')).toBeInTheDocument();
+  });
+
+  it('shows a clear failure state when evidence snapshot copy fails', async () => {
+    writeTextMock.mockRejectedValueOnce(new Error('clipboard denied'));
+
+    render(createElement(MarketOverviewPage));
+
+    const exportButton = await screen.findByTestId('market-overview-export-summary');
+    await waitFor(() => expect(screen.getByTestId('market-overview-top-verdict')).toHaveTextContent('偏强观察'));
+    fireEvent.click(exportButton);
+
+    await waitFor(() => expect(writeTextMock).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('复制失败，请重试')).toBeInTheDocument();
+    expect(exportButton).not.toHaveTextContent('摘要');
+  });
+
+  it('shows a calm unavailable state when evidence snapshot copy inputs are missing', () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: undefined,
+    });
+
+    renderMarketOverviewWorkbench();
+
+    const exportButton = screen.getByTestId('market-overview-export-summary');
+    expect(exportButton).toBeDisabled();
+    expect(exportButton).toHaveTextContent('证据快照暂不可用');
+    expect(exportButton).toHaveAttribute('aria-label', '证据快照暂不可用');
+  });
+
+  it('resets copied feedback when switching evidence snapshot categories', async () => {
+    render(createElement(MarketOverviewPage));
+
+    const exportButton = await screen.findByTestId('market-overview-export-summary');
+    await waitFor(() => expect(screen.getByTestId('market-overview-top-verdict')).toHaveTextContent('偏强观察'));
+    fireEvent.click(exportButton);
+
+    expect(await screen.findByText('证据快照已复制')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '美股' }));
+
+    expect(screen.getByTestId('market-overview-export-summary')).toHaveTextContent('复制证据快照');
   });
 
   it('filters China indices out of the US core index card', async () => {
