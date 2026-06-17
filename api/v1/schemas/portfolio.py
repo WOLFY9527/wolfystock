@@ -493,6 +493,48 @@ class PortfolioStructureReviewHolding(BaseModel):
     consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
 
 
+class PortfolioStructureReviewLinkTarget(BaseModel):
+    label: str
+    route: str
+    section: str
+    reason: str
+
+
+class PortfolioStructureReviewDegradedLinkage(BaseModel):
+    surface: str
+    status: Literal["degraded", "unavailable"]
+    reason: str
+    message: str
+
+
+class PortfolioStructureReviewHoldingDrilldown(BaseModel):
+    ticker: str
+    structureLinks: List[PortfolioStructureReviewLinkTarget] = Field(default_factory=list)
+    radarLinks: List[PortfolioStructureReviewLinkTarget] = Field(default_factory=list)
+    watchlistLinks: List[PortfolioStructureReviewLinkTarget] = Field(default_factory=list)
+    scenarioLinks: List[PortfolioStructureReviewLinkTarget] = Field(default_factory=list)
+    evidenceLinkage: Literal["available", "degraded", "unavailable"]
+    degradedLinkage: List[PortfolioStructureReviewDegradedLinkage] = Field(default_factory=list)
+
+
+class PortfolioStructureReviewEvidenceLinkage(BaseModel):
+    status: Literal["available", "degraded", "unavailable"]
+    availableHoldings: int = 0
+    degradedHoldings: int = 0
+    unavailableHoldings: int = 0
+
+
+class PortfolioStructureReviewResearchLinkage(BaseModel):
+    status: Literal["available", "degraded", "unavailable"]
+    holdingDrilldowns: List[PortfolioStructureReviewHoldingDrilldown] = Field(default_factory=list)
+    structureLinks: List[PortfolioStructureReviewLinkTarget] = Field(default_factory=list)
+    radarLinks: List[PortfolioStructureReviewLinkTarget] = Field(default_factory=list)
+    watchlistLinks: List[PortfolioStructureReviewLinkTarget] = Field(default_factory=list)
+    scenarioLinks: List[PortfolioStructureReviewLinkTarget] = Field(default_factory=list)
+    evidenceLinkage: PortfolioStructureReviewEvidenceLinkage
+    degradedLinkage: List[PortfolioStructureReviewDegradedLinkage] = Field(default_factory=list)
+
+
 class PortfolioStructureReviewResponse(BaseModel):
     schemaVersion: str
     aggregateSummary: Dict[str, Any] = Field(default_factory=dict)
@@ -503,6 +545,7 @@ class PortfolioStructureReviewResponse(BaseModel):
     weakestEvidence: List[Dict[str, Any]] = Field(default_factory=list)
     commonRiskFlags: List[Dict[str, Any]] = Field(default_factory=list)
     missingEvidence: List[Dict[str, str]] = Field(default_factory=list)
+    researchLinkage: PortfolioStructureReviewResearchLinkage
     readOnly: bool
     failClosed: bool
     consumerState: Literal["AVAILABLE", "PARTIAL", "UNAVAILABLE"]

@@ -239,6 +239,26 @@ def _batch_payload() -> dict[str, Any]:
     }
 
 
+def _assert_route_safe_links(links: list[dict[str, Any]]) -> None:
+    allowed_routes = {
+        "/research/radar",
+        "/watchlist",
+        "/portfolio",
+        "/market/scenario-lab",
+    }
+    for link in links:
+        route = str(link.get("route") or "")
+        assert route
+        assert not route.startswith("http")
+        assert "://" not in route
+        assert ".." not in route
+        assert "?" not in route
+        if route.startswith("/stocks/"):
+            assert route.endswith("/structure-decision")
+        else:
+            assert route in allowed_routes
+
+
 def test_structure_review_uses_cached_holdings_and_batch_structure_without_portfolio_writes() -> None:
     review_date = date(2026, 6, 15)
     sector_payload = {
@@ -295,6 +315,36 @@ def test_structure_review_uses_cached_holdings_and_batch_structure_without_portf
         "Some holdings are missing metadata or structure evidence, so this review remains partial and read-only."
     )
     assert payload["drilldownSymbols"] == ["AAPL", "MSFT"]
+    assert payload["researchLinkage"]["status"] == "degraded"
+    assert [item["ticker"] for item in payload["researchLinkage"]["holdingDrilldowns"]] == ["AAPL", "MSFT"]
+    assert payload["researchLinkage"]["holdingDrilldowns"][0]["evidenceLinkage"] == "available"
+    assert payload["researchLinkage"]["holdingDrilldowns"][1]["evidenceLinkage"] == "unavailable"
+    _assert_route_safe_links(payload["researchLinkage"]["watchlistLinks"])
+    assert payload["researchLinkage"]["holdingDrilldowns"][1]["degradedLinkage"] == [
+        {
+            "surface": "stockStructure",
+            "status": "unavailable",
+            "reason": "Structure evidence unavailable.",
+            "message": "Structure evidence is unavailable for this cached holding.",
+        }
+    ]
+    _assert_route_safe_links(payload["researchLinkage"]["structureLinks"])
+    _assert_route_safe_links(payload["researchLinkage"]["radarLinks"])
+    _assert_route_safe_links(payload["researchLinkage"]["scenarioLinks"])
+    assert payload["researchLinkage"]["evidenceLinkage"] == {
+        "status": "degraded",
+        "availableHoldings": 1,
+        "degradedHoldings": 0,
+        "unavailableHoldings": 1,
+    }
+    assert payload["researchLinkage"]["degradedLinkage"] == [
+        {
+            "surface": "stockStructure",
+            "status": "unavailable",
+            "reason": "Structure evidence unavailable.",
+            "message": "Structure evidence is unavailable for at least one holding.",
+        }
+    ]
     assert payload["dataQuality"]["status"] == "partial"
     assert payload["dataQuality"]["holdingMetadataStatus"] == "available"
     assert payload["dataQuality"]["readOnly"] is True
@@ -324,6 +374,28 @@ def test_structure_review_fails_closed_when_cached_holdings_are_unavailable() ->
         "Cached holdings or structure evidence are unavailable, so this panel remains fail-closed."
     )
     assert payload["drilldownSymbols"] == []
+    assert payload["researchLinkage"] == {
+        "status": "unavailable",
+        "holdingDrilldowns": [],
+        "structureLinks": [],
+        "radarLinks": [],
+        "watchlistLinks": [],
+        "scenarioLinks": [],
+        "evidenceLinkage": {
+            "status": "unavailable",
+            "availableHoldings": 0,
+            "degradedHoldings": 0,
+            "unavailableHoldings": 0,
+        },
+        "degradedLinkage": [
+            {
+                "surface": "portfolioStructureReview",
+                "status": "unavailable",
+                "reason": "Portfolio holdings unavailable.",
+                "message": "Cached holdings are unavailable, so linkage stays bounded.",
+            }
+        ],
+    }
     assert payload["dataQuality"]["status"] == "unavailable"
     assert payload["dataQuality"]["holdingMetadataStatus"] == "unavailable"
     assert payload["dataQuality"]["failClosed"] is True
@@ -391,6 +463,15 @@ def test_structure_review_fails_closed_for_missing_security_metadata() -> None:
     assert payload["consumerSummary"] == "Structure review unavailable"
     assert payload["dataQuality"]["status"] == "unavailable"
     assert payload["dataQuality"]["holdingMetadataStatus"] == "unavailable"
+    assert payload["researchLinkage"]["status"] == "unavailable"
+    assert payload["researchLinkage"]["degradedLinkage"] == [
+        {
+            "surface": "portfolioStructureReview",
+            "status": "unavailable",
+            "reason": "Portfolio holdings unavailable.",
+            "message": "Cached holdings are unavailable, so linkage stays bounded.",
+        }
+    ]
     assert structure_service.calls == []
 
 
@@ -436,3 +517,5 @@ def test_structure_review_output_avoids_research_instruction_language() -> None:
     for pattern in FORBIDDEN_RESEARCH_TOKENS:
         assert re.search(pattern, serialized) is None, pattern
     assert "noAdviceDisclosure" in payload
+    assert "scanner_candidates_origin" not in serialized
+    assert "history_available" not in serialized

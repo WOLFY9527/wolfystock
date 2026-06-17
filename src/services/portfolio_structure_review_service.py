@@ -16,6 +16,16 @@ from src.services.stock_structure_decision_service import StockStructureDecision
 
 PORTFOLIO_STRUCTURE_REVIEW_SCHEMA_VERSION = "portfolio_structure_review_v1"
 DEFAULT_PORTFOLIO_STRUCTURE_REVIEW_COST_METHOD = "fifo"
+_PORTFOLIO_STRUCTURE_SECTION = "portfolioStructureReview"
+_RESEARCH_RADAR_SECTION = "topResearchPriorities"
+_WATCHLIST_SECTION = "watchlistHighlights"
+_SCENARIO_LAB_SECTION = "scenarioPresets"
+_SAFE_RESEARCH_ROUTES = {
+    "radar": "/research/radar",
+    "watchlist": "/watchlist",
+    "portfolio": "/portfolio",
+    "scenario": "/market/scenario-lab",
+}
 
 
 class PortfolioStructureReviewService:
@@ -103,6 +113,10 @@ class PortfolioStructureReviewService:
         read_only = True
         fail_closed = bool(data_quality.get("failClosed"))
         consumer_state = _consumer_state(data_quality)
+        research_linkage = _research_linkage(
+            holdings_structure=holdings_structure,
+            missing_evidence=missing_evidence,
+        )
 
         return {
             "schemaVersion": PORTFOLIO_STRUCTURE_REVIEW_SCHEMA_VERSION,
@@ -122,6 +136,7 @@ class PortfolioStructureReviewService:
             "weakestEvidence": _weakest_evidence(holdings_structure, batch_payload),
             "commonRiskFlags": _common_risk_flags(holdings_structure, batch_payload),
             "missingEvidence": _dedupe_missing(missing_evidence),
+            "researchLinkage": research_linkage,
             "readOnly": read_only,
             "failClosed": fail_closed,
             "consumerState": consumer_state,
@@ -529,6 +544,213 @@ def _drilldown_symbols(holdings_structure: Sequence[Mapping[str, Any]]) -> list[
         seen.add(ticker)
         symbols.append(ticker)
     return symbols
+
+
+def _research_linkage(
+    *,
+    holdings_structure: Sequence[Mapping[str, Any]],
+    missing_evidence: Sequence[Mapping[str, str]],
+) -> dict[str, Any]:
+    holding_drilldowns: list[dict[str, Any]] = []
+    structure_links: list[dict[str, str]] = []
+    radar_links: list[dict[str, str]] = []
+    watchlist_links: list[dict[str, str]] = []
+    scenario_links: list[dict[str, str]] = []
+    unavailable_holdings = 0
+    degraded_holdings = 0
+    available_holdings = 0
+
+    for item in holdings_structure:
+        ticker = str(item.get("ticker") or "").strip().upper()
+        if not ticker or ticker == "UNKNOWN":
+            continue
+
+        evidence_status = str(_safe_mapping(item.get("evidenceQuality")).get("status") or "unavailable").strip().lower()
+        if evidence_status == "available":
+            linkage_status = "available"
+            available_holdings += 1
+            degraded_linkage: list[dict[str, str]] = []
+        elif evidence_status in {"partial", "insufficient"}:
+            linkage_status = "degraded"
+            degraded_holdings += 1
+            degraded_linkage = [
+                _degraded_linkage(
+                    surface="stockStructure",
+                    status="degraded",
+                    reason="Structure evidence limited.",
+                    message="Structure evidence is limited for this cached holding.",
+                )
+            ]
+        else:
+            linkage_status = "unavailable"
+            unavailable_holdings += 1
+            degraded_linkage = [
+                _degraded_linkage(
+                    surface="stockStructure",
+                    status="unavailable",
+                    reason="Structure evidence unavailable.",
+                    message="Structure evidence is unavailable for this cached holding.",
+                )
+            ]
+
+        structure = _structure_link(ticker)
+        radar = _radar_link()
+        watchlist = _watchlist_link()
+        scenario = _scenario_link()
+        holding_drilldowns.append(
+            {
+                "ticker": ticker,
+                "structureLinks": [structure],
+                "radarLinks": [radar],
+                "watchlistLinks": [watchlist],
+                "scenarioLinks": [scenario],
+                "evidenceLinkage": linkage_status,
+                "degradedLinkage": degraded_linkage,
+            }
+        )
+        structure_links.append(structure)
+        radar_links.append(radar)
+        watchlist_links.append(watchlist)
+        scenario_links.append(scenario)
+
+    if holding_drilldowns:
+        if unavailable_holdings or degraded_holdings:
+            overall_status = "degraded"
+        else:
+            overall_status = "available"
+        degraded_linkage = []
+        if unavailable_holdings:
+            degraded_linkage.append(
+                _degraded_linkage(
+                    surface="stockStructure",
+                    status="unavailable",
+                    reason="Structure evidence unavailable.",
+                    message="Structure evidence is unavailable for at least one holding.",
+                )
+            )
+        elif degraded_holdings:
+            degraded_linkage.append(
+                _degraded_linkage(
+                    surface="stockStructure",
+                    status="degraded",
+                    reason="Structure evidence limited.",
+                    message="Structure evidence is limited for at least one holding.",
+                )
+            )
+    else:
+        overall_status = "unavailable"
+        degraded_linkage = [
+            _degraded_linkage(
+                surface="portfolioStructureReview",
+                status="unavailable",
+                reason="Portfolio holdings unavailable.",
+                message="Cached holdings are unavailable, so linkage stays bounded.",
+            )
+        ]
+
+    if not holding_drilldowns and any(str(item.get("kind") or "") == "security_metadata" for item in missing_evidence):
+        degraded_linkage = [
+            _degraded_linkage(
+                surface="portfolioStructureReview",
+                status="unavailable",
+                reason="Portfolio holdings unavailable.",
+                message="Cached holdings are unavailable, so linkage stays bounded.",
+            )
+        ]
+
+    return {
+        "status": overall_status,
+        "holdingDrilldowns": holding_drilldowns,
+        "structureLinks": _dedupe_link_targets(structure_links),
+        "radarLinks": _dedupe_link_targets(radar_links),
+        "watchlistLinks": _dedupe_link_targets(watchlist_links),
+        "scenarioLinks": _dedupe_link_targets(scenario_links),
+        "evidenceLinkage": {
+            "status": overall_status,
+            "availableHoldings": available_holdings,
+            "degradedHoldings": degraded_holdings,
+            "unavailableHoldings": unavailable_holdings,
+        },
+        "degradedLinkage": degraded_linkage,
+    }
+
+
+def _structure_link(ticker: str) -> dict[str, str]:
+    return {
+        "label": "Stock Structure",
+        "route": f"/stocks/{ticker}/structure-decision",
+        "section": _PORTFOLIO_STRUCTURE_SECTION,
+        "reason": "Open symbol structure detail.",
+    }
+
+
+def _radar_link() -> dict[str, str]:
+    return {
+        "label": "Research Radar",
+        "route": _SAFE_RESEARCH_ROUTES["radar"],
+        "section": _RESEARCH_RADAR_SECTION,
+        "reason": "Research radar queue context.",
+    }
+
+
+def _watchlist_link() -> dict[str, str]:
+    return {
+        "label": "Watchlist",
+        "route": _SAFE_RESEARCH_ROUTES["watchlist"],
+        "section": _WATCHLIST_SECTION,
+        "reason": "Watchlist research context.",
+    }
+
+
+def _scenario_link() -> dict[str, str]:
+    return {
+        "label": "Scenario Lab",
+        "route": _SAFE_RESEARCH_ROUTES["scenario"],
+        "section": _SCENARIO_LAB_SECTION,
+        "reason": "Compare scenario context for this holding.",
+    }
+
+
+def _degraded_linkage(*, surface: str, status: str, reason: str, message: str) -> dict[str, str]:
+    return {
+        "surface": surface,
+        "status": status,
+        "reason": reason,
+        "message": message,
+    }
+
+
+def _dedupe_link_targets(items: Sequence[Mapping[str, Any]]) -> list[dict[str, str]]:
+    result: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    for item in items:
+        label = str(item.get("label") or "").strip()
+        route = str(item.get("route") or "").strip()
+        section = str(item.get("section") or "").strip()
+        reason = str(item.get("reason") or "").strip()
+        if not label or not route or not section or not _is_safe_drilldown_route(route):
+            continue
+        key = (label, route, section, reason)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(
+            {
+                "label": label,
+                "route": route,
+                "section": section,
+                "reason": reason,
+            }
+        )
+    return result
+
+
+def _is_safe_drilldown_route(route: str) -> bool:
+    if not route.startswith("/") or "://" in route or ".." in route or "?" in route:
+        return False
+    if route.startswith("/stocks/") and route.endswith("/structure-decision"):
+        return True
+    return route in _SAFE_RESEARCH_ROUTES.values()
 
 
 def _parse_snapshot_payload(raw: Any) -> dict[str, Any]:

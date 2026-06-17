@@ -71,12 +71,94 @@ class _FakePortfolioStructureReviewService:
                     "riskFlags": [],
                     "researchNotes": {"watchNext": [], "needsMoreEvidence": [], "riskFlags": []},
                     "missingEvidence": [],
+                    "consumerIssues": [],
                 }
             ],
             "strongestStructures": [{"ticker": "AAPL", "structureState": "mixed", "score": 75}],
             "weakestEvidence": [{"ticker": "AAPL", "status": "available", "usableBars": 55, "evidenceQuality": 75}],
             "commonRiskFlags": [],
             "missingEvidence": [],
+            "researchLinkage": {
+                "status": "available",
+                "holdingDrilldowns": [
+                    {
+                        "ticker": "AAPL",
+                        "structureLinks": [
+                            {
+                                "label": "Stock Structure",
+                                "route": "/stocks/AAPL/structure-decision",
+                                "section": "portfolioStructureReview",
+                                "reason": "Open symbol structure detail.",
+                            }
+                        ],
+                        "radarLinks": [
+                            {
+                                "label": "Research Radar",
+                                "route": "/research/radar",
+                                "section": "topResearchPriorities",
+                                "reason": "Research radar queue context.",
+                            }
+                        ],
+                        "watchlistLinks": [
+                            {
+                                "label": "Watchlist",
+                                "route": "/watchlist",
+                                "section": "watchlistHighlights",
+                                "reason": "Watchlist research context.",
+                            }
+                        ],
+                        "scenarioLinks": [
+                            {
+                                "label": "Scenario Lab",
+                                "route": "/market/scenario-lab",
+                                "section": "scenarioPresets",
+                                "reason": "Compare scenario context for this holding.",
+                            }
+                        ],
+                        "evidenceLinkage": "available",
+                        "degradedLinkage": [],
+                    }
+                ],
+                "structureLinks": [
+                    {
+                        "label": "Stock Structure",
+                        "route": "/stocks/AAPL/structure-decision",
+                        "section": "portfolioStructureReview",
+                        "reason": "Open symbol structure detail.",
+                    }
+                ],
+                "radarLinks": [
+                    {
+                        "label": "Research Radar",
+                        "route": "/research/radar",
+                        "section": "topResearchPriorities",
+                        "reason": "Research radar queue context.",
+                    }
+                ],
+                "watchlistLinks": [
+                    {
+                        "label": "Watchlist",
+                        "route": "/watchlist",
+                        "section": "watchlistHighlights",
+                        "reason": "Watchlist research context.",
+                    }
+                ],
+                "scenarioLinks": [
+                    {
+                        "label": "Scenario Lab",
+                        "route": "/market/scenario-lab",
+                        "section": "scenarioPresets",
+                        "reason": "Compare scenario context for this holding.",
+                    }
+                ],
+                "evidenceLinkage": {
+                    "status": "available",
+                    "availableHoldings": 1,
+                    "degradedHoldings": 0,
+                    "unavailableHoldings": 0,
+                },
+                "degradedLinkage": [],
+            },
             "readOnly": True,
             "failClosed": False,
             "consumerState": "AVAILABLE",
@@ -129,6 +211,11 @@ def test_portfolio_structure_review_endpoint_returns_read_only_projection() -> N
     assert payload["consumerState"] == "AVAILABLE"
     assert payload["consumerSummary"] == "Structure review available"
     assert payload["drilldownSymbols"] == ["AAPL"]
+    assert payload["researchLinkage"]["holdingDrilldowns"][0]["ticker"] == "AAPL"
+    assert payload["researchLinkage"]["holdingDrilldowns"][0]["structureLinks"][0]["route"] == "/stocks/AAPL/structure-decision"
+    assert payload["researchLinkage"]["radarLinks"][0]["route"] == "/research/radar"
+    assert payload["researchLinkage"]["scenarioLinks"][0]["route"] == "/market/scenario-lab"
+    assert payload["researchLinkage"]["evidenceLinkage"]["status"] == "available"
     assert payload["dataQuality"]["readOnly"] is True
     assert payload["consumerIssues"][0]["label"] == "Evidence needs review"
     assert fake_service.calls == [
