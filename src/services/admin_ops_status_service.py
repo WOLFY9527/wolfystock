@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, Optional
 
 from sqlalchemy import func, select, text
 
+from src.logging_config import describe_runtime_file_logging
 from src.services.build_provenance_service import BuildProvenanceService, build_unknown_provenance
 from src.services.admin_logs_service import AdminLogsRetentionService
 from src.services.llm_cost_ledger_service import LlmCostLedgerService
@@ -141,6 +142,7 @@ class AdminOpsStatusService:
         storage_status = self._safe_source(self._build_storage_readiness_summary)
         task_queue_status = self._safe_source(lambda: self._build_task_queue_status_summary(app_state))
         admin_log_status = self._safe_source(self._build_admin_log_evidence_summary)
+        runtime_log_sink_status = self._safe_source(self._build_runtime_log_sink_summary)
         build_provenance = self._safe_build_provenance(app_state)
         return {
             "generatedAt": generated_at_iso,
@@ -194,6 +196,10 @@ class AdminOpsStatusService:
                 last_checked_at=generated_at_iso if admin_log_status.get("available") else None,
                 message=self._admin_log_status_message(admin_log_status),
             ),
+            "runtimeLogSinkSummary": self._project_runtime_log_sink_section(
+                snapshot=runtime_log_sink_status,
+                last_checked_at=generated_at_iso,
+            ),
             "buildProvenance": build_provenance,
             "launchCockpit": self._safe_launch_cockpit(generated_at_iso),
             "metadata": {
@@ -206,6 +212,7 @@ class AdminOpsStatusService:
                     "storage",
                     "task_queue",
                     "admin_logs",
+                    "runtime_log_sink",
                     "build_provenance",
                     "launch_readiness",
                 ],
@@ -271,6 +278,17 @@ class AdminOpsStatusService:
         if snapshot.get("available"):
             return "Admin log evidence snapshot available; raw identifiers and file paths are omitted."
         return "Admin log evidence snapshot unavailable."
+
+    @staticmethod
+    def _runtime_log_sink_status_message(snapshot: Dict[str, Any]) -> str:
+        status = str(snapshot.get("status") or "unavailable")
+        if status == "active":
+            return "Runtime API file log sink is active; path and log contents are omitted."
+        if status == "file_present_not_attached":
+            return "Runtime API log file exists, but no matching active file handler was observed."
+        if status == "missing":
+            return "Runtime API dated file log sink was not observed."
+        return "Runtime API file log sink snapshot unavailable."
 
     def _safe_launch_cockpit(self, generated_at: str) -> Dict[str, Any]:
         try:
@@ -580,6 +598,38 @@ class AdminOpsStatusService:
         section.update(overrides)
         return section
 
+    @classmethod
+    def _project_runtime_log_sink_section(
+        cls,
+        *,
+        snapshot: Dict[str, Any],
+        last_checked_at: str,
+    ) -> Dict[str, Any]:
+        summary = dict(snapshot.get("summary") or {})
+        return cls._section(
+            available=bool(snapshot.get("available", False)),
+            status=str(snapshot.get("status") or "unavailable"),
+            service="runtime_log_sink",
+            configured=snapshot.get("status") == "active",
+            lastCheckedAt=last_checked_at,
+            message=cls._runtime_log_sink_status_message(snapshot),
+            label="bounded_admin_diagnostic",
+            reasonCode=snapshot.get("reasonCode"),
+            dataSources=[],
+            summary={
+                "logPrefix": str(summary.get("logPrefix") or ""),
+                "fileName": str(summary.get("fileName") or ""),
+                "date": str(summary.get("date") or ""),
+                "fileExists": bool(summary.get("fileExists", False)),
+                "handlerAttached": bool(summary.get("handlerAttached", False)),
+                "alreadyConfigured": bool(summary.get("alreadyConfigured", False)),
+                "pathIncluded": False,
+                "contentsIncluded": False,
+                "sensitiveValuesIncluded": False,
+            },
+            limitations=["file_metadata_only", "no_log_content_read", "absolute_path_omitted"],
+        )
+
     @staticmethod
     def _count_bucket(value: int) -> str:
         count = max(0, int(value or 0))
@@ -779,6 +829,34 @@ class AdminOpsStatusService:
                 "cleanupCalled": False,
             },
             limitations=["admin_log_evidence_only", "cleanup_requires_separate_write_capability"],
+        )
+
+    def _build_runtime_log_sink_summary(self) -> Dict[str, Any]:
+        try:
+            from src.config import get_config
+
+            log_dir = str(get_config().log_dir or "./logs")
+        except Exception:
+            log_dir = "./logs"
+        sink = describe_runtime_file_logging(log_prefix="api_server", log_dir=log_dir)
+        status = str(sink.get("status") or "unavailable")
+        return self._section(
+            available=status in {"active", "file_present_not_attached", "missing"},
+            status=status,
+            reasonCode=sink.get("reasonCode"),
+            dataSources=["python_logging_handlers", "dated_runtime_log_file_metadata"],
+            summary={
+                "logPrefix": str(sink.get("logPrefix") or "api_server"),
+                "fileName": str(sink.get("fileName") or ""),
+                "date": str(sink.get("date") or ""),
+                "fileExists": bool(sink.get("fileExists", False)),
+                "handlerAttached": status == "active",
+                "alreadyConfigured": bool(sink.get("alreadyConfigured", False)),
+                "pathIncluded": False,
+                "contentsIncluded": False,
+                "sensitiveValuesIncluded": False,
+            },
+            limitations=["file_metadata_only", "no_log_content_read", "absolute_path_omitted"],
         )
 
     @staticmethod

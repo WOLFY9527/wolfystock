@@ -11,15 +11,40 @@
 """
 
 import logging
+import re
 import sys
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 
 LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(pathname)s:%(lineno)d | %(message)s"
 LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+REDACTED_TEXT = "<redacted>"
+
+_SENSITIVE_KEY_FRAGMENTS = (
+    "authorization",
+    "cookie",
+    "setcookie",
+    "token",
+    "sessionid",
+    "password",
+    "passwd",
+    "apikey",
+    "secret",
+    "credential",
+    "privatekey",
+)
+
+_SENSITIVE_TEXT_PATTERNS = (
+    re.compile(r"(?i)\b(authorization)\s*[:=]\s*(?:bearer\s+)?[^\s,;]+"),
+    re.compile(r"(?i)\b(cookie|set-cookie)\s*[:=]\s*[^\n]+"),
+    re.compile(
+        r"(?i)\b([a-z0-9_-]*(?:api[_-]?key|token|secret|password|session[_-]?id)[a-z0-9_-]*)\s*[:=]\s*[^,\s;]+"
+    ),
+    re.compile(r"(?i)\bbearer\s+[a-z0-9._~+/-]+=*"),
+)
 
 
 class RelativePathFormatter(logging.Formatter):
@@ -37,6 +62,149 @@ class RelativePathFormatter(logging.Formatter):
             # 如果无法转换为相对路径，保持原样
             pass
         return super().format(record)
+
+
+class RedactingRelativePathFormatter(RelativePathFormatter):
+    """Formatter that strips credential-like values before rendering records."""
+
+    def format(self, record):
+        original_msg = record.msg
+        original_args = record.args
+        try:
+            record.msg = redact_log_metadata(record.msg)
+            record.args = redact_log_metadata(record.args) if record.args else record.args
+            return super().format(record)
+        finally:
+            record.msg = original_msg
+            record.args = original_args
+
+    def formatException(self, exc_info):
+        return _redact_text(super().formatException(exc_info))
+
+
+def _normalized_key(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(value or "").lower())
+
+
+def _is_sensitive_key(value: Any) -> bool:
+    normalized = _normalized_key(value)
+    return any(fragment in normalized for fragment in _SENSITIVE_KEY_FRAGMENTS)
+
+
+def _redact_text(value: str) -> str:
+    text = str(value)
+    for pattern in _SENSITIVE_TEXT_PATTERNS:
+        text = pattern.sub(lambda match: f"{match.group(1) if match.groups() else 'value'}: {REDACTED_TEXT}", text)
+    return text
+
+
+def redact_log_metadata(value: Any) -> Any:
+    """Return a copy with credential-bearing keys and obvious inline tokens redacted."""
+    if isinstance(value, dict):
+        return {
+            key: REDACTED_TEXT if _is_sensitive_key(key) else redact_log_metadata(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [redact_log_metadata(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(redact_log_metadata(item) for item in value)
+    if isinstance(value, str):
+        return _redact_text(value)
+    return value
+
+
+def _today_string(today: Optional[str] = None) -> str:
+    if today:
+        return str(today)
+    return datetime.now().strftime("%Y%m%d")
+
+
+def _runtime_log_path(log_prefix: str, log_dir: str, today: Optional[str] = None) -> Path:
+    return Path(log_dir) / f"{log_prefix}_{_today_string(today)}.log"
+
+
+def _find_file_handler(target: Path) -> Optional[logging.FileHandler]:
+    target_resolved = target.resolve()
+    for handler in logging.getLogger().handlers:
+        if not isinstance(handler, logging.FileHandler):
+            continue
+        try:
+            handler_path = Path(str(handler.baseFilename)).resolve()
+        except Exception:
+            continue
+        if handler_path == target_resolved:
+            return handler
+    return None
+
+
+def describe_runtime_file_logging(
+    log_prefix: str = "api_server",
+    log_dir: str = "./logs",
+    today: Optional[str] = None,
+) -> dict[str, Any]:
+    """Describe the current dated runtime file sink without reading log contents."""
+    target = _runtime_log_path(log_prefix, log_dir, today)
+    attached = _find_file_handler(target) is not None
+    exists = target.exists()
+    status = "active" if attached else "file_present_not_attached" if exists else "missing"
+    reason_code = None
+    if status == "file_present_not_attached":
+        reason_code = "runtime_file_handler_missing"
+    elif status == "missing":
+        reason_code = "runtime_log_file_missing"
+    return {
+        "enabled": True,
+        "status": status,
+        "logPrefix": log_prefix,
+        "logDir": str(target.parent),
+        "path": str(target),
+        "fileName": target.name,
+        "date": _today_string(today),
+        "alreadyConfigured": attached,
+        "fileExists": exists,
+        "reasonCode": reason_code,
+    }
+
+
+def ensure_runtime_file_logging(
+    log_prefix: str = "api_server",
+    log_dir: str = "./logs",
+    level: int = logging.INFO,
+    today: Optional[str] = None,
+    max_bytes: int = 10 * 1024 * 1024,
+    backup_count: int = 5,
+    extra_quiet_loggers: Optional[List[str]] = None,
+) -> dict[str, Any]:
+    """Attach a dated file handler idempotently without replacing existing handlers."""
+    target = _runtime_log_path(log_prefix, log_dir, today)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    root_logger = logging.getLogger()
+    if root_logger.level == logging.NOTSET or root_logger.level > logging.DEBUG:
+        root_logger.setLevel(logging.DEBUG)
+
+    existing_handler = _find_file_handler(target)
+    if existing_handler is None:
+        project_root = Path.cwd()
+        handler = RotatingFileHandler(
+            target,
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+            encoding="utf-8",
+        )
+        handler.setLevel(level)
+        handler.setFormatter(RedactingRelativePathFormatter(LOG_FORMAT, LOG_DATE_FORMAT, relative_to=project_root))
+        root_logger.addHandler(handler)
+
+    quiet_loggers = DEFAULT_QUIET_LOGGERS.copy()
+    if extra_quiet_loggers:
+        quiet_loggers.extend(extra_quiet_loggers)
+    for logger_name in quiet_loggers:
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
+
+    result = describe_runtime_file_logging(log_prefix=log_prefix, log_dir=log_dir, today=today)
+    result["alreadyConfigured"] = existing_handler is not None
+    return result
 
 
 

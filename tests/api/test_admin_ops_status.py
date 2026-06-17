@@ -254,6 +254,11 @@ def test_admin_ops_status_returns_read_only_advisory_markers(app: FastAPI, monke
     assert payload["storageReadinessSummary"]["readOnly"] is True
     assert payload["taskQueueStatusSummary"]["noExternalCalls"] is True
     assert payload["adminLogEvidenceSummary"]["deleteAllowed"] is False
+    assert payload["runtimeLogSinkSummary"]["service"] == "runtime_log_sink"
+    assert payload["runtimeLogSinkSummary"]["readOnly"] is True
+    assert payload["runtimeLogSinkSummary"]["noExternalCalls"] is True
+    assert payload["runtimeLogSinkSummary"]["deleteAllowed"] is False
+    assert payload["runtimeLogSinkSummary"]["summary"]["sensitiveValuesIncluded"] is False
     assert payload["buildProvenance"]["readOnly"] is True
     assert payload["buildProvenance"]["noExternalCalls"] is True
     assert payload["buildProvenance"]["runtimeBehaviorChanged"] is False
@@ -363,6 +368,9 @@ def test_admin_ops_status_projects_bounded_admin_diagnostics(app: FastAPI) -> No
     _assert_bounded_section(payload, "storageReadinessSummary", expected_service="storage")
     _assert_bounded_section(payload, "taskQueueStatusSummary", expected_service="task_queue")
     _assert_bounded_section(payload, "adminLogEvidenceSummary", expected_service="admin_logs")
+    assert payload["runtimeLogSinkSummary"]["service"] == "runtime_log_sink"
+    assert payload["runtimeLogSinkSummary"]["readOnly"] is True
+    assert payload["runtimeLogSinkSummary"]["noExternalCalls"] is True
 
     cockpit = payload["launchCockpit"]
     assert cockpit["domains"]
@@ -371,6 +379,50 @@ def test_admin_ops_status_projects_bounded_admin_diagnostics(app: FastAPI) -> No
     assert all(not item for item in (domain["blockerRefs"] for domain in cockpit["domains"]))
     assert all(not item for item in (domain["followUpProposals"] for domain in cockpit["domains"]))
     assert all(not item for item in (blocker["evidenceRefs"] for blocker in cockpit["blockers"]))
+    _assert_no_sensitive_markers(payload)
+
+
+def test_admin_ops_status_reports_runtime_log_sink_without_sensitive_paths(
+    app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    app.state.task_queue = _TaskQueueFixture()
+    log_dir = tmp_path / "logs"
+    target = log_dir / "api_server_20260617.log"
+    log_dir.mkdir()
+    target.write_text("2026-06-17 | INFO | Authorization: Bearer raw-token\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "src.services.admin_ops_status_service.describe_runtime_file_logging",
+        lambda **_kwargs: {
+            "enabled": True,
+            "status": "active",
+            "logPrefix": "api_server",
+            "logDir": str(log_dir),
+            "path": str(target),
+            "fileName": target.name,
+            "date": "20260617",
+            "alreadyConfigured": True,
+            "reasonCode": None,
+        },
+    )
+
+    with _client(app, _ops_admin) as client:
+        response = client.get("/api/v1/admin/ops/status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    summary = payload["runtimeLogSinkSummary"]
+    assert summary["status"] == "active"
+    assert summary["configured"] is True
+    assert summary["summary"]["logPrefix"] == "api_server"
+    assert summary["summary"]["fileName"] == "api_server_20260617.log"
+    assert summary["summary"]["date"] == "20260617"
+    assert summary["summary"]["pathIncluded"] is False
+    assert summary["summary"]["sensitiveValuesIncluded"] is False
+    assert str(tmp_path) not in _json_text(payload)
+    assert "authorization" not in _json_text(payload)
+    assert "raw-token" not in _json_text(payload)
     _assert_no_sensitive_markers(payload)
 
 

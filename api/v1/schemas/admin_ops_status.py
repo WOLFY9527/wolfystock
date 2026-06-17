@@ -180,6 +180,7 @@ class AdminOpsStatusResponse(_AdminOpsStatusModel):
     storage_readiness_summary: AdminOpsStatusSection = Field(alias="storageReadinessSummary")
     task_queue_status_summary: AdminOpsStatusSection = Field(alias="taskQueueStatusSummary")
     admin_log_evidence_summary: AdminOpsStatusSection = Field(alias="adminLogEvidenceSummary")
+    runtime_log_sink_summary: AdminOpsStatusSection = Field(alias="runtimeLogSinkSummary")
     build_provenance: AdminBuildProvenance = Field(alias="buildProvenance")
     launch_cockpit: AdminOpsLaunchCockpit = Field(alias="launchCockpit")
     metadata: Dict[str, Any] = Field(default_factory=dict)
