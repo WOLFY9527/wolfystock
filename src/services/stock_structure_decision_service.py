@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Mapping, Sequence
+from datetime import date
 from typing import Any
 
 from src.services.consumer_issue_labels import build_consumer_issues
@@ -24,6 +26,14 @@ SYMBOL_COMPARE_EVIDENCE_PACKET_VERSION = "symbol_compare_evidence_packet_v1"
 DEFAULT_STRUCTURE_DECISION_HISTORY_DAYS = 90
 DEFAULT_STRUCTURE_DECISION_BATCH_MAX_ITEMS = 25
 MAX_STRUCTURE_DECISION_BATCH_ITEMS = 50
+PEER_CORRELATION_HISTORY_DAYS = 60
+PEER_CORRELATION_MAX_PEERS = 5
+PEER_CORRELATION_MIN_PEERS = 2
+PEER_CORRELATION_MIN_OVERLAP_DAYS = 6
+PEER_CORRELATION_ALIGNED_THRESHOLD = 0.6
+PEER_CORRELATION_DIVERGENCE_THRESHOLD = 0.25
+PEER_CORRELATION_SPREAD_DIVERGENCE_PCT = 8.0
+PEER_OBSERVATION_BOUNDARY = "Observation-only peer movement context; no personalized action instruction."
 _SOURCE_CONTEXT_SPECS = {
     "researchRadar": {
         "label": "Research Radar",
@@ -90,8 +100,9 @@ _STRUCTURE_PARTIAL_ISSUE = {
 class StockStructureDecisionService:
     """Build observation-only stock structure decisions from existing OHLCV access."""
 
-    def __init__(self, history_service: Any | None = None) -> None:
+    def __init__(self, history_service: Any | None = None, stock_repo: Any | None = None) -> None:
         self.history_service = history_service or StockService()
+        self.stock_repo = stock_repo
 
     def get_structure_decision(
         self,
@@ -219,6 +230,7 @@ class StockStructureDecisionService:
             "researchNotes": engine_result.get("researchNotes", {}),
             "dataQuality": data_quality,
             "missingEvidence": missing_evidence,
+            "peerCorrelationSnapshot": self._build_peer_correlation_snapshot(ticker),
             "noAdviceDisclosure": engine_result.get("noAdviceDisclosure") or NO_ADVICE_DISCLOSURE,
         }
         if include_comparative_context:
@@ -259,6 +271,88 @@ class StockStructureDecisionService:
                 },
             }
         return payload if isinstance(payload, dict) else {}
+
+    def _build_peer_correlation_snapshot(self, ticker: str) -> dict[str, Any]:
+        peer_group, group_missing = _load_local_peer_group(self.stock_repo, ticker)
+        missing_inputs = list(group_missing)
+        stale_inputs: list[str] = []
+        if peer_group["status"] != "available":
+            return _insufficient_peer_correlation_snapshot(
+                ticker,
+                peer_group=peer_group,
+                missing_inputs=missing_inputs,
+            )
+
+        peer_symbols = [
+            symbol
+            for symbol in _normalize_unique_tickers(peer_group.get("symbols", []))
+            if symbol != ticker
+        ][:PEER_CORRELATION_MAX_PEERS]
+        peer_group = {**peer_group, "symbols": peer_symbols}
+        if len(peer_symbols) < PEER_CORRELATION_MIN_PEERS:
+            missing_inputs.append("At least two locally verified peer symbols are needed for this snapshot.")
+            return _insufficient_peer_correlation_snapshot(
+                ticker,
+                peer_group=peer_group,
+                missing_inputs=missing_inputs,
+            )
+
+        target_series, target_latest = _load_local_close_series(self.stock_repo, ticker)
+        if len(target_series) < PEER_CORRELATION_MIN_OVERLAP_DAYS:
+            missing_inputs.append(f"Recent local daily OHLCV is incomplete for {ticker}.")
+            return _insufficient_peer_correlation_snapshot(
+                ticker,
+                peer_group=peer_group,
+                missing_inputs=missing_inputs,
+            )
+
+        peer_evidence: list[dict[str, Any]] = []
+        divergence_evidence: list[dict[str, Any]] = []
+        latest_by_symbol: dict[str, date | None] = {ticker: target_latest}
+        for peer_symbol in peer_symbols:
+            peer_series, peer_latest = _load_local_close_series(self.stock_repo, peer_symbol)
+            latest_by_symbol[peer_symbol] = peer_latest
+            evidence = _build_peer_evidence(
+                symbol=ticker,
+                peer_symbol=peer_symbol,
+                symbol_series=target_series,
+                peer_series=peer_series,
+            )
+            if evidence["state"] == "insufficient_evidence":
+                missing_inputs.append(f"Recent local daily OHLCV is incomplete for {peer_symbol}.")
+                continue
+            peer_evidence.append(evidence)
+            if evidence["state"] == "diverging":
+                divergence_evidence.append(evidence)
+
+        newest_date = max([value for value in latest_by_symbol.values() if value is not None], default=None)
+        if newest_date is not None:
+            stale_inputs.extend(
+                _stale_peer_inputs(
+                    ticker=ticker,
+                    target_latest=target_latest,
+                    peer_symbols=peer_symbols,
+                    latest_by_symbol=latest_by_symbol,
+                    newest_date=newest_date,
+                )
+            )
+
+        correlation_state = _peer_correlation_state(peer_evidence)
+        if not peer_evidence or correlation_state == "insufficient_evidence":
+            missing_inputs.append("Enough overlapping local peer OHLCV was not available for a bounded comparison.")
+
+        return {
+            "symbol": ticker,
+            "peerGroup": peer_group,
+            "correlationState": correlation_state,
+            "peerEvidence": peer_evidence,
+            "divergenceEvidence": divergence_evidence,
+            "staleInputs": _dedupe(stale_inputs),
+            "missingInputs": _dedupe(missing_inputs),
+            "confidenceCap": "medium" if correlation_state in {"aligned", "diverging"} else "low",
+            "observationBoundary": PEER_OBSERVATION_BOUNDARY,
+            "researchNextSteps": _peer_research_next_steps(correlation_state, missing_inputs),
+        }
 
 
 def _finalize_structure_contract(
@@ -306,6 +400,13 @@ def _finalize_structure_contract(
         symbol_issue=symbol_issue,
     )
 
+    peer_correlation_snapshot = payload.get("peerCorrelationSnapshot")
+    if not isinstance(peer_correlation_snapshot, Mapping):
+        peer_correlation_snapshot = _insufficient_peer_correlation_snapshot(
+            str(payload.get("ticker") or ""),
+            missing_inputs=["No verified local peer group metadata is available for this symbol."],
+        )
+
     result = dict(payload)
     result.update(
         {
@@ -315,6 +416,7 @@ def _finalize_structure_contract(
             "riskObservations": risk_observations,
             "evidenceGaps": evidence_gaps,
             "degradedInputs": degraded_inputs,
+            "peerCorrelationSnapshot": dict(peer_correlation_snapshot),
             "consumerIssues": consumer_issues,
             "observationOnly": True,
             "decisionGrade": False,
@@ -353,6 +455,273 @@ def _precheck_fail_closed_payload(ticker: str, precheck: Any) -> dict[str, Any]:
         ],
         "noAdviceDisclosure": engine_result.get("noAdviceDisclosure") or NO_ADVICE_DISCLOSURE,
     }
+
+
+def _insufficient_peer_correlation_snapshot(
+    ticker: str,
+    *,
+    peer_group: Mapping[str, Any] | None = None,
+    missing_inputs: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "symbol": ticker,
+        "peerGroup": dict(peer_group or {"status": "unavailable", "label": None, "symbols": []}),
+        "correlationState": "insufficient_evidence",
+        "peerEvidence": [],
+        "divergenceEvidence": [],
+        "staleInputs": [],
+        "missingInputs": _dedupe(list(missing_inputs or [])),
+        "confidenceCap": "low",
+        "observationBoundary": PEER_OBSERVATION_BOUNDARY,
+        "researchNextSteps": _peer_research_next_steps("insufficient_evidence", list(missing_inputs or [])),
+    }
+
+
+def _load_local_peer_group(stock_repo: Any, ticker: str) -> tuple[dict[str, Any], list[str]]:
+    getter = getattr(stock_repo, "get_local_peer_group", None)
+    if not callable(getter):
+        return _unavailable_peer_group(), [f"No verified local peer group metadata is available for {ticker}."]
+    try:
+        raw_group = getter(ticker)
+    except Exception as exc:
+        logger.warning("Local peer group lookup failed for %s: %s", ticker, exc)
+        return _unavailable_peer_group(), [f"Verified local peer group metadata could not be read for {ticker}."]
+    return _normalize_local_peer_group(raw_group, ticker)
+
+
+def _unavailable_peer_group() -> dict[str, Any]:
+    return {"status": "unavailable", "label": None, "symbols": []}
+
+
+def _normalize_local_peer_group(raw_group: Any, ticker: str) -> tuple[dict[str, Any], list[str]]:
+    label: str | None = None
+    raw_symbols: Any = None
+    if isinstance(raw_group, Mapping):
+        label = _safe_text(raw_group.get("label") or raw_group.get("name") or raw_group.get("peerGroup")) or None
+        raw_symbols = raw_group.get("symbols") or raw_group.get("peers")
+    elif isinstance(raw_group, Sequence) and not isinstance(raw_group, (str, bytes, bytearray)):
+        raw_symbols = raw_group
+
+    symbols = [
+        symbol
+        for symbol in _normalize_unique_tickers(list(raw_symbols or []))
+        if symbol != ticker
+    ][:PEER_CORRELATION_MAX_PEERS]
+    if not symbols:
+        return _unavailable_peer_group(), [f"No verified local peer symbols are available for {ticker}."]
+    return {"status": "available", "label": label, "symbols": symbols}, []
+
+
+def _load_local_close_series(stock_repo: Any, symbol: str) -> tuple[dict[date, float], date | None]:
+    getter = getattr(stock_repo, "get_recent_daily_rows", None)
+    if not callable(getter):
+        return {}, None
+    try:
+        rows = getter(code=symbol, limit=PEER_CORRELATION_HISTORY_DAYS)
+    except Exception as exc:
+        logger.warning("Local peer OHLCV lookup failed for %s: %s", symbol, exc)
+        return {}, None
+    series: dict[date, float] = {}
+    for row in rows or []:
+        row_date = _coerce_date(_row_value(row, "date"))
+        close = _coerce_float(_row_value(row, "close"))
+        if row_date is None or close is None or close <= 0:
+            continue
+        series[row_date] = close
+    latest = max(series) if series else None
+    return series, latest
+
+
+def _build_peer_evidence(
+    *,
+    symbol: str,
+    peer_symbol: str,
+    symbol_series: Mapping[date, float],
+    peer_series: Mapping[date, float],
+) -> dict[str, Any]:
+    overlap_dates = sorted(set(symbol_series).intersection(peer_series))
+    if len(overlap_dates) < PEER_CORRELATION_MIN_OVERLAP_DAYS:
+        return _insufficient_peer_evidence(peer_symbol, len(overlap_dates))
+
+    symbol_returns, peer_returns = _paired_returns(overlap_dates, symbol_series, peer_series)
+    if len(symbol_returns) < PEER_CORRELATION_MIN_OVERLAP_DAYS - 1:
+        return _insufficient_peer_evidence(peer_symbol, len(overlap_dates))
+
+    correlation = _pearson_correlation(symbol_returns, peer_returns)
+    symbol_return_pct = _window_return_pct(overlap_dates, symbol_series)
+    peer_return_pct = _window_return_pct(overlap_dates, peer_series)
+    spread_pct = None
+    if symbol_return_pct is not None and peer_return_pct is not None:
+        spread_pct = round(symbol_return_pct - peer_return_pct, 2)
+
+    state = _peer_evidence_state(correlation, spread_pct)
+    summary = _peer_evidence_summary(symbol, peer_symbol, state)
+    return {
+        "symbol": peer_symbol,
+        "correlation": round(correlation, 3) if correlation is not None else None,
+        "overlapDays": len(overlap_dates),
+        "symbolReturnPct": symbol_return_pct,
+        "peerReturnPct": peer_return_pct,
+        "spreadPct": spread_pct,
+        "state": state,
+        "summary": summary,
+    }
+
+
+def _insufficient_peer_evidence(peer_symbol: str, overlap_days: int) -> dict[str, Any]:
+    return {
+        "symbol": peer_symbol,
+        "correlation": None,
+        "overlapDays": overlap_days,
+        "symbolReturnPct": None,
+        "peerReturnPct": None,
+        "spreadPct": None,
+        "state": "insufficient_evidence",
+        "summary": f"Local overlapping OHLCV is insufficient for {peer_symbol}.",
+    }
+
+
+def _paired_returns(
+    overlap_dates: Sequence[date],
+    symbol_series: Mapping[date, float],
+    peer_series: Mapping[date, float],
+) -> tuple[list[float], list[float]]:
+    symbol_returns: list[float] = []
+    peer_returns: list[float] = []
+    for previous_date, current_date in zip(overlap_dates, overlap_dates[1:]):
+        previous_symbol = symbol_series.get(previous_date)
+        current_symbol = symbol_series.get(current_date)
+        previous_peer = peer_series.get(previous_date)
+        current_peer = peer_series.get(current_date)
+        if not previous_symbol or not current_symbol or not previous_peer or not current_peer:
+            continue
+        symbol_returns.append((current_symbol / previous_symbol) - 1.0)
+        peer_returns.append((current_peer / previous_peer) - 1.0)
+    return symbol_returns, peer_returns
+
+
+def _pearson_correlation(left: Sequence[float], right: Sequence[float]) -> float | None:
+    if len(left) != len(right) or len(left) < 2:
+        return None
+    left_mean = sum(left) / len(left)
+    right_mean = sum(right) / len(right)
+    numerator = sum(
+        (left_value - left_mean) * (right_value - right_mean)
+        for left_value, right_value in zip(left, right)
+    )
+    left_variance = sum((value - left_mean) ** 2 for value in left)
+    right_variance = sum((value - right_mean) ** 2 for value in right)
+    denominator = math.sqrt(left_variance * right_variance)
+    if denominator == 0:
+        return None
+    return numerator / denominator
+
+
+def _window_return_pct(overlap_dates: Sequence[date], series: Mapping[date, float]) -> float | None:
+    if len(overlap_dates) < 2:
+        return None
+    first = series.get(overlap_dates[0])
+    last = series.get(overlap_dates[-1])
+    if not first or not last:
+        return None
+    return round(((last / first) - 1.0) * 100.0, 2)
+
+
+def _peer_evidence_state(correlation: float | None, spread_pct: float | None) -> str:
+    if correlation is None:
+        return "insufficient_evidence"
+    spread_is_bounded = spread_pct is None or abs(spread_pct) < PEER_CORRELATION_SPREAD_DIVERGENCE_PCT
+    if correlation >= PEER_CORRELATION_ALIGNED_THRESHOLD and spread_is_bounded:
+        return "aligned"
+    if correlation <= PEER_CORRELATION_DIVERGENCE_THRESHOLD or (
+        spread_pct is not None and abs(spread_pct) >= PEER_CORRELATION_SPREAD_DIVERGENCE_PCT
+    ):
+        return "diverging"
+    return "insufficient_evidence"
+
+
+def _peer_evidence_summary(symbol: str, peer_symbol: str, state: str) -> str:
+    if state == "aligned":
+        return f"{symbol} moved with {peer_symbol} over the local overlap window."
+    if state == "diverging":
+        return f"{symbol} moved away from {peer_symbol} over the local overlap window."
+    return f"Local overlap was not enough to compare {symbol} with {peer_symbol}."
+
+
+def _peer_correlation_state(peer_evidence: Sequence[Mapping[str, Any]]) -> str:
+    if len(peer_evidence) < PEER_CORRELATION_MIN_PEERS:
+        return "insufficient_evidence"
+    aligned_count = sum(1 for item in peer_evidence if item.get("state") == "aligned")
+    diverging_count = sum(1 for item in peer_evidence if item.get("state") == "diverging")
+    majority = (len(peer_evidence) // 2) + 1
+    if diverging_count >= majority:
+        return "diverging"
+    if aligned_count >= majority:
+        return "aligned"
+    return "insufficient_evidence"
+
+
+def _stale_peer_inputs(
+    *,
+    ticker: str,
+    target_latest: date | None,
+    peer_symbols: Sequence[str],
+    latest_by_symbol: Mapping[str, date | None],
+    newest_date: date,
+) -> list[str]:
+    stale: list[str] = []
+    if target_latest is not None and target_latest < newest_date:
+        stale.append(f"Local daily OHLCV for {ticker} does not reach the newest peer date.")
+    for peer_symbol in peer_symbols:
+        peer_latest = latest_by_symbol.get(peer_symbol)
+        if peer_latest is not None and peer_latest < newest_date:
+            stale.append(f"Local daily OHLCV for {peer_symbol} does not reach the newest peer date.")
+    return stale
+
+
+def _peer_research_next_steps(correlation_state: str, missing_inputs: Sequence[str]) -> list[str]:
+    if missing_inputs or correlation_state == "insufficient_evidence":
+        return [
+            "Add verified local peer group metadata before interpreting peer movement.",
+            "Load recent local daily OHLCV for the symbol and at least two verified peers.",
+        ]
+    if correlation_state == "aligned":
+        return [
+            "Compare company-specific evidence against the peer movement context.",
+            "Refresh local peer OHLCV before reusing this observation window.",
+        ]
+    return [
+        "Check whether company-specific evidence explains the peer divergence.",
+        "Refresh local peer OHLCV before reusing this observation window.",
+    ]
+
+
+def _row_value(row: Any, key: str) -> Any:
+    if isinstance(row, Mapping):
+        return row.get(key)
+    return getattr(row, key, None)
+
+
+def _coerce_date(value: Any) -> date | None:
+    if isinstance(value, date):
+        return value
+    text = _safe_text(value)
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+
+
+def _coerce_float(value: Any) -> float | None:
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(result):
+        return None
+    return result
 
 
 def _normalize_context_source(value: str | None) -> str | None:

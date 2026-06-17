@@ -65,6 +65,27 @@ class _FakeMultiHistoryService:
         )
 
 
+class _FakePeerRepository:
+    def __init__(
+        self,
+        *,
+        peer_groups: dict[str, dict[str, Any]] | None = None,
+        rows: dict[str, list[dict[str, Any]]] | None = None,
+    ) -> None:
+        self.peer_groups = peer_groups or {}
+        self.rows = rows or {}
+        self.peer_group_calls: list[str] = []
+        self.daily_row_calls: list[dict[str, Any]] = []
+
+    def get_local_peer_group(self, symbol: str) -> dict[str, Any] | None:
+        self.peer_group_calls.append(symbol)
+        return self.peer_groups.get(symbol)
+
+    def get_recent_daily_rows(self, *, code: str, limit: int) -> list[dict[str, Any]]:
+        self.daily_row_calls.append({"code": code, "limit": limit})
+        return list(self.rows.get(code, []))[:limit]
+
+
 def _bar(index: int, close: float, *, volume: float = 1000.0, width: float = 1.0) -> dict[str, Any]:
     return {
         "date": f"2026-01-{index + 1:02d}",
@@ -89,6 +110,13 @@ def _flat_history() -> list[dict[str, Any]]:
 
 def _weak_history() -> list[dict[str, Any]]:
     return [_bar(index, 80 - index * 0.35, volume=1000.0 + index * 12, width=0.8) for index in range(55)]
+
+
+def _peer_rows(closes: list[float]) -> list[dict[str, Any]]:
+    return [
+        {"date": f"2026-02-{index + 1:02d}", "close": close}
+        for index, close in enumerate(closes)
+    ]
 
 
 def _assert_required_contract(payload: dict[str, Any]) -> None:
@@ -131,6 +159,18 @@ def _assert_required_contract(payload: dict[str, Any]) -> None:
     assert "dataQuality" in payload
     assert "missingEvidence" in payload
     assert "degradedInputs" in payload
+    assert "peerCorrelationSnapshot" in payload
+    peer_snapshot = payload["peerCorrelationSnapshot"]
+    assert peer_snapshot["symbol"] == payload["symbol"]
+    assert peer_snapshot["correlationState"] in {"aligned", "diverging", "insufficient_evidence"}
+    assert "peerGroup" in peer_snapshot
+    assert isinstance(peer_snapshot["peerEvidence"], list)
+    assert isinstance(peer_snapshot["divergenceEvidence"], list)
+    assert isinstance(peer_snapshot["staleInputs"], list)
+    assert isinstance(peer_snapshot["missingInputs"], list)
+    assert peer_snapshot["confidenceCap"] in {"low", "medium", "high"}
+    assert peer_snapshot["observationBoundary"]
+    assert isinstance(peer_snapshot["researchNextSteps"], list)
     assert "consumerIssues" in payload
     assert payload["noAdviceDisclosure"]
     assert payload["observationOnly"] is True
@@ -170,6 +210,10 @@ def test_service_builds_observation_only_structure_decision_from_daily_ohlcv() -
             "message": "Benchmark OHLCV is not included in this endpoint yet, so relative-strength evidence is neutral.",
         }
     ]
+    assert payload["peerCorrelationSnapshot"]["correlationState"] == "insufficient_evidence"
+    assert payload["peerCorrelationSnapshot"]["missingInputs"] == [
+        "No verified local peer group metadata is available for AAPL."
+    ]
     assert "Breakout quality is supported by a close above the recent range and stronger volume." in payload["evidenceNotes"]
     assert payload["riskObservations"]
     assert "Benchmark OHLCV is not included in this endpoint yet, so relative-strength evidence is neutral." in payload["evidenceGaps"]
@@ -182,6 +226,113 @@ def test_service_builds_observation_only_structure_decision_from_daily_ohlcv() -
         }
     ]
     assert payload["drilldownLinks"] == []
+
+
+def test_peer_correlation_snapshot_marks_aligned_when_local_peer_group_and_prices_match() -> None:
+    fake_history = _FakeHistoryService(
+        {
+            "stock_code": "AAPL",
+            "period": "daily",
+            "data": _trend_breakout_history(),
+            "source": "local_db",
+            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 55},
+        }
+    )
+    target = [100, 101, 102, 104, 107, 111, 116, 122]
+    fake_peer_repo = _FakePeerRepository(
+        peer_groups={"AAPL": {"label": "local verified software peers", "symbols": ["MSFT", "NVDA"]}},
+        rows={
+            "AAPL": _peer_rows(target),
+            "MSFT": _peer_rows([value * 1.5 for value in target]),
+            "NVDA": _peer_rows([value * 0.8 for value in target]),
+        },
+    )
+
+    payload = StockStructureDecisionService(
+        history_service=fake_history,
+        stock_repo=fake_peer_repo,
+    ).get_structure_decision("AAPL")
+
+    snapshot = payload["peerCorrelationSnapshot"]
+    assert snapshot["correlationState"] == "aligned"
+    assert snapshot["peerGroup"] == {
+        "status": "available",
+        "label": "local verified software peers",
+        "symbols": ["MSFT", "NVDA"],
+    }
+    assert [item["symbol"] for item in snapshot["peerEvidence"]] == ["MSFT", "NVDA"]
+    assert all(item["state"] == "aligned" for item in snapshot["peerEvidence"])
+    assert snapshot["divergenceEvidence"] == []
+    assert snapshot["missingInputs"] == []
+    assert snapshot["confidenceCap"] == "medium"
+    assert fake_history.calls == [{"stock_code": "AAPL", "period": "daily", "days": 90}]
+    assert fake_peer_repo.peer_group_calls == ["AAPL"]
+    assert [call["code"] for call in fake_peer_repo.daily_row_calls] == ["AAPL", "MSFT", "NVDA"]
+
+
+def test_peer_correlation_snapshot_marks_diverging_when_local_peers_move_away() -> None:
+    fake_history = _FakeHistoryService(
+        {
+            "stock_code": "AAPL",
+            "period": "daily",
+            "data": _trend_breakout_history(),
+            "source": "local_db",
+            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 55},
+        }
+    )
+    fake_peer_repo = _FakePeerRepository(
+        peer_groups={"AAPL": {"label": "local verified software peers", "symbols": ["MSFT", "NVDA"]}},
+        rows={
+            "AAPL": _peer_rows([100, 101, 102, 104, 107, 111, 116, 122]),
+            "MSFT": _peer_rows([200, 198, 196, 193, 190, 186, 181, 175]),
+            "NVDA": _peer_rows([70, 69, 68, 66, 64, 62, 59, 56]),
+        },
+    )
+
+    payload = StockStructureDecisionService(
+        history_service=fake_history,
+        stock_repo=fake_peer_repo,
+    ).get_structure_decision("AAPL")
+
+    snapshot = payload["peerCorrelationSnapshot"]
+    assert snapshot["correlationState"] == "diverging"
+    assert [item["symbol"] for item in snapshot["divergenceEvidence"]] == ["MSFT", "NVDA"]
+    assert all(item["state"] == "diverging" for item in snapshot["peerEvidence"])
+    assert snapshot["missingInputs"] == []
+    assert snapshot["confidenceCap"] == "medium"
+
+
+def test_peer_correlation_snapshot_fails_gracefully_when_peer_prices_are_missing() -> None:
+    fake_history = _FakeHistoryService(
+        {
+            "stock_code": "AAPL",
+            "period": "daily",
+            "data": _trend_breakout_history(),
+            "source": "local_db",
+            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 55},
+        }
+    )
+    fake_peer_repo = _FakePeerRepository(
+        peer_groups={"AAPL": {"label": "local verified software peers", "symbols": ["MSFT", "NVDA"]}},
+        rows={"AAPL": _peer_rows([100, 101, 102, 104, 107, 111, 116, 122])},
+    )
+
+    payload = StockStructureDecisionService(
+        history_service=fake_history,
+        stock_repo=fake_peer_repo,
+    ).get_structure_decision("AAPL")
+
+    snapshot = payload["peerCorrelationSnapshot"]
+    assert snapshot["correlationState"] == "insufficient_evidence"
+    assert snapshot["peerEvidence"] == []
+    assert snapshot["divergenceEvidence"] == []
+    assert "Recent local daily OHLCV is incomplete for MSFT." in snapshot["missingInputs"]
+    assert "Recent local daily OHLCV is incomplete for NVDA." in snapshot["missingInputs"]
+    assert (
+        "Enough overlapping local peer OHLCV was not available for a bounded comparison."
+        in snapshot["missingInputs"]
+    )
+    assert snapshot["confidenceCap"] == "low"
 
 
 def test_service_fails_closed_when_ohlcv_history_is_unavailable() -> None:

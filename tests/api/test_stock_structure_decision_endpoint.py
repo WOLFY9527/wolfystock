@@ -203,6 +203,21 @@ def _payload(
             if data_status == "available"
             else [{"section": "structureEvidence", "status": "unavailable", "reason": "history_unavailable"}]
         ),
+        "peerCorrelationSnapshot": {
+            "symbol": ticker,
+            "peerGroup": {"status": "unavailable", "label": None, "symbols": []},
+            "correlationState": "insufficient_evidence",
+            "peerEvidence": [],
+            "divergenceEvidence": [],
+            "staleInputs": [],
+            "missingInputs": ["No verified local peer group metadata is available for this symbol."],
+            "confidenceCap": "low",
+            "observationBoundary": "Observation-only peer movement context; no personalized action instruction.",
+            "researchNextSteps": [
+                "Add verified local peer group metadata before interpreting peer movement.",
+                "Load recent local daily OHLCV for the symbol and at least two verified peers.",
+            ],
+        },
         "consumerIssues": (
             []
             if data_status == "available"
@@ -259,6 +274,7 @@ def test_structure_decision_endpoint_returns_required_contract(monkeypatch) -> N
         "dataQuality",
         "missingEvidence",
         "degradedInputs",
+        "peerCorrelationSnapshot",
         "consumerIssues",
         "noAdviceDisclosure",
         "observationOnly",
@@ -452,6 +468,7 @@ def test_structure_decision_openapi_locks_required_response_fields() -> None:
         "dataQuality",
         "missingEvidence",
         "degradedInputs",
+        "peerCorrelationSnapshot",
         "consumerIssues",
         "noAdviceDisclosure",
         "observationOnly",
@@ -463,6 +480,7 @@ def test_structure_decision_openapi_locks_required_response_fields() -> None:
     assert properties["ticker"]["type"] == "string"
     assert properties["symbol"]["type"] == "string"
     assert properties["structureState"]["type"] == "string"
+    assert "StockPeerCorrelationSnapshot" in properties["peerCorrelationSnapshot"]["$ref"]
     assert properties["componentScores"]["additionalProperties"]["type"] == "integer"
 
     batch_schema = schema["StockStructureDecisionBatchResponse"]
