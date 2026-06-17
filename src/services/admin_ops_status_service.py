@@ -14,7 +14,12 @@ from src.services.admin_logs_service import AdminLogsRetentionService
 from src.services.llm_cost_ledger_service import LlmCostLedgerService
 from src.services.quota_policy_service import QuotaPolicyService
 from src.storage import (
+    AdminRole,
+    AdminRoleCapability,
+    AdminUserRole,
+    AppUser,
     DatabaseManager,
+    DurableTaskState,
     ExecutionLogEvent,
     ExecutionLogSession,
     ProviderCircuitEvent,
@@ -149,6 +154,11 @@ class AdminOpsStatusService:
         task_queue_status = self._safe_source(lambda: self._build_task_queue_status_summary(app_state))
         admin_log_status = self._safe_source(self._build_admin_log_evidence_summary)
         runtime_log_sink_status = self._safe_source(self._build_runtime_log_sink_summary)
+        retention_policy_status = self._safe_source(self._build_retention_policy_status)
+        execution_log_retention_risk = self._safe_source(self._build_execution_log_retention_risk)
+        db_size_risk = self._safe_source(self._build_db_size_risk)
+        admin_role_assignment_status = self._safe_source(self._build_admin_role_assignment_status)
+        durable_task_backlog_status = self._safe_source(self._build_durable_task_backlog_status)
         build_provenance = self._safe_build_provenance(app_state)
         return {
             "generatedAt": generated_at_iso,
@@ -211,6 +221,48 @@ class AdminOpsStatusService:
                 snapshot=runtime_log_sink_status,
                 last_checked_at=generated_at_iso,
             ),
+            "retentionPolicyStatus": self._project_maintenance_section(
+                service="retention_policy",
+                snapshot=retention_policy_status,
+                configured=bool(retention_policy_status.get("available")),
+                last_checked_at=generated_at_iso if retention_policy_status.get("available") else None,
+                message=self._retention_policy_status_message(retention_policy_status),
+            ),
+            "executionLogRetentionRisk": self._project_maintenance_section(
+                service="execution_log_retention",
+                snapshot=execution_log_retention_risk,
+                configured=bool(execution_log_retention_risk.get("available")),
+                last_checked_at=generated_at_iso if execution_log_retention_risk.get("available") else None,
+                message=self._execution_log_retention_risk_message(execution_log_retention_risk),
+            ),
+            "dbSizeRisk": self._project_maintenance_section(
+                service="db_size",
+                snapshot=db_size_risk,
+                configured=bool(db_size_risk.get("available")),
+                last_checked_at=generated_at_iso if db_size_risk.get("available") else None,
+                message=self._db_size_risk_message(db_size_risk),
+            ),
+            "adminRoleAssignmentStatus": self._project_maintenance_section(
+                service="admin_role_assignment",
+                snapshot=admin_role_assignment_status,
+                configured=bool(admin_role_assignment_status.get("available")),
+                last_checked_at=generated_at_iso if admin_role_assignment_status.get("available") else None,
+                message=self._admin_role_assignment_status_message(admin_role_assignment_status),
+            ),
+            "durableTaskBacklogStatus": self._project_maintenance_section(
+                service="durable_task_backlog",
+                snapshot=durable_task_backlog_status,
+                configured=bool(durable_task_backlog_status.get("available")),
+                last_checked_at=generated_at_iso if durable_task_backlog_status.get("available") else None,
+                message=self._durable_task_backlog_status_message(durable_task_backlog_status),
+            ),
+            "recommendedMaintenanceActions": self._recommended_maintenance_actions(
+                retention_policy_status=retention_policy_status,
+                execution_log_retention_risk=execution_log_retention_risk,
+                db_size_risk=db_size_risk,
+                admin_role_assignment_status=admin_role_assignment_status,
+                durable_task_backlog_status=durable_task_backlog_status,
+            ),
             "buildProvenance": build_provenance,
             "launchCockpit": self._safe_launch_cockpit(generated_at_iso),
             "metadata": {
@@ -224,6 +276,11 @@ class AdminOpsStatusService:
                     "task_queue",
                     "admin_logs",
                     "runtime_log_sink",
+                    "retention_policy",
+                    "execution_log_retention",
+                    "db_size",
+                    "admin_role_assignment",
+                    "durable_task_backlog",
                     "build_provenance",
                     "launch_readiness",
                 ],
@@ -255,6 +312,33 @@ class AdminOpsStatusService:
             limitations=[],
         )
         return section
+
+    @classmethod
+    def _project_maintenance_section(
+        cls,
+        *,
+        service: str,
+        snapshot: Dict[str, Any],
+        configured: bool,
+        last_checked_at: str | None,
+        message: str,
+    ) -> Dict[str, Any]:
+        raw_summary = snapshot.get("summary") if isinstance(snapshot.get("summary"), dict) else {}
+        raw_data_sources = snapshot.get("dataSources") if isinstance(snapshot.get("dataSources"), list) else []
+        raw_limitations = snapshot.get("limitations") if isinstance(snapshot.get("limitations"), list) else []
+        return cls._section(
+            available=bool(snapshot.get("available", False)),
+            status=str(snapshot.get("status") or "unavailable"),
+            service=service,
+            configured=bool(configured),
+            lastCheckedAt=last_checked_at,
+            message=message,
+            label="bounded_admin_maintenance_diagnostic",
+            reasonCode=snapshot.get("reasonCode"),
+            dataSources=[str(item) for item in raw_data_sources if str(item).strip()],
+            summary=dict(raw_summary),
+            limitations=[str(item) for item in raw_limitations if str(item).strip()],
+        )
 
     @staticmethod
     def _provider_status_message(snapshot: Dict[str, Any]) -> str:
@@ -301,6 +385,36 @@ class AdminOpsStatusService:
         if status == "missing":
             return "Runtime API dated file log sink was not observed."
         return "Runtime API file log sink snapshot unavailable."
+
+    @staticmethod
+    def _retention_policy_status_message(snapshot: Dict[str, Any]) -> str:
+        if snapshot.get("available"):
+            return "Retention policy status is advisory; cleanup requires a separate explicit admin action."
+        return "Retention policy status unavailable."
+
+    @staticmethod
+    def _execution_log_retention_risk_message(snapshot: Dict[str, Any]) -> str:
+        if snapshot.get("available"):
+            return "Execution log retention risk is summarized with bucketed counts; raw log rows are omitted."
+        return "Execution log retention risk unavailable."
+
+    @staticmethod
+    def _db_size_risk_message(snapshot: Dict[str, Any]) -> str:
+        if snapshot.get("available"):
+            return "Database size risk is summarized without exposing the database path."
+        return "Database size risk unavailable."
+
+    @staticmethod
+    def _admin_role_assignment_status_message(snapshot: Dict[str, Any]) -> str:
+        if snapshot.get("available"):
+            return "Admin role assignment status is summarized without user identifiers or credentials."
+        return "Admin role assignment status unavailable."
+
+    @staticmethod
+    def _durable_task_backlog_status_message(snapshot: Dict[str, Any]) -> str:
+        if snapshot.get("available"):
+            return "Durable task backlog status is summarized with bucketed counts; task identifiers are omitted."
+        return "Durable task backlog status unavailable."
 
     def _safe_launch_cockpit(self, generated_at: str) -> Dict[str, Any]:
         try:
@@ -656,6 +770,247 @@ class AdminOpsStatusService:
         if count <= 1000:
             return "101-1000"
         return "1000+"
+
+    @staticmethod
+    def _maintenance_count_bucket(value: int) -> str:
+        count = max(0, int(value or 0))
+        if count == 0:
+            return "0"
+        if count <= 9:
+            return "1-9"
+        if count <= 100:
+            return "10-100"
+        if count <= 1000:
+            return "101-1000"
+        return "1000+"
+
+    @staticmethod
+    def _size_bucket(value: int | None) -> str:
+        if value is None:
+            return "unavailable"
+        size = max(0, int(value))
+        mb = 1024 * 1024
+        gb = 1024 * mb
+        if size == 0:
+            return "0"
+        if size < 64 * mb:
+            return "under_64mb"
+        if size < 256 * mb:
+            return "64mb_to_256mb"
+        if size < 512 * mb:
+            return "256mb_to_512mb"
+        if size < gb:
+            return "512mb_to_1gb"
+        if size < 5 * gb:
+            return "1gb_to_5gb"
+        return "5gb_plus"
+
+    @staticmethod
+    def _unique_actions(values: list[str]) -> list[str]:
+        actions: list[str] = []
+        for value in values:
+            text = str(value or "").strip()
+            if text and text not in actions:
+                actions.append(text)
+        return actions
+
+    @staticmethod
+    def _pending_task_statuses() -> tuple[str, ...]:
+        return ("pending", "queued", "processing", "running", "waiting_retry")
+
+    def _build_retention_policy_status(self) -> Dict[str, Any]:
+        policy = AdminLogsRetentionService._policy()
+        return self._section(
+            available=True,
+            status="partial_policy",
+            dataSources=["admin_log_retention_policy", "db_retention_backup_restore_plan"],
+            summary={
+                "executionLogPolicy": "preview_first_retention_cleanup",
+                "executionLogRetentionDays": int(policy.retention_days),
+                "executionLogMinimumRetentionDays": int(policy.min_retention_days),
+                "durableTaskRetentionPolicy": "not_configured",
+                "adminRoleAssignmentRetentionPolicy": "not_applicable",
+                "cleanupCalled": False,
+                "migrationRun": False,
+                "deleteAllowed": False,
+            },
+            limitations=[
+                "execution_log_cleanup_requires_separate_write_capability",
+                "durable_task_lifecycle_retention_not_configured",
+                "admin_role_assignment_audit_is_status_only",
+            ],
+        )
+
+    def _build_execution_log_retention_risk(self) -> Dict[str, Any]:
+        db = DatabaseManager.get_instance()
+        policy = AdminLogsRetentionService._policy()
+        retention_cutoff = datetime.now() - timedelta(days=policy.retention_days)
+        with db.get_session() as session:
+            total_logs = int(session.execute(select(func.count(ExecutionLogSession.id))).scalar() or 0)
+            total_events = int(session.execute(select(func.count(ExecutionLogEvent.id))).scalar() or 0)
+            older_than_retention = int(
+                session.execute(
+                    select(func.count(ExecutionLogSession.id)).where(
+                        ExecutionLogSession.started_at < retention_cutoff
+                    )
+                ).scalar()
+                or 0
+            )
+            oldest = session.execute(select(func.min(ExecutionLogSession.started_at))).scalar()
+
+        status = "warning" if older_than_retention > 0 or total_logs >= policy.warning_threshold_count else "ok"
+        if total_logs >= policy.critical_threshold_count:
+            status = "critical"
+        return self._section(
+            available=True,
+            status=status,
+            dataSources=["execution_log_sessions", "execution_log_events", "admin_log_retention_policy"],
+            summary={
+                "sessionCountBucket": self._maintenance_count_bucket(total_logs),
+                "eventCountBucket": self._maintenance_count_bucket(total_events),
+                "logsOlderThanRetentionCountBucket": self._maintenance_count_bucket(older_than_retention),
+                "oldestLogPresent": oldest is not None,
+                "retentionDays": int(policy.retention_days),
+                "cleanupCalled": False,
+                "deleteAllowed": False,
+                "rawRowsIncluded": False,
+            },
+            limitations=["bounded_counts_only", "no_log_row_payloads", "cleanup_requires_separate_write_capability"],
+        )
+
+    def _build_db_size_risk(self) -> Dict[str, Any]:
+        policy = AdminLogsRetentionService._policy()
+        measurement = AdminLogsRetentionService()._storage_measurement()
+        storage_bytes = measurement.get("size_bytes")
+        size_value = int(storage_bytes) if storage_bytes is not None else None
+        over_hard = bool(size_value is not None and size_value >= policy.storage_hard_limit_bytes)
+        over_soft = bool(size_value is not None and size_value >= policy.storage_soft_limit_bytes)
+        measurement_status = str(measurement.get("measurement_status") or "unavailable")
+        if over_hard:
+            status = "critical"
+        elif over_soft or measurement_status != "available":
+            status = "warning"
+        else:
+            status = "ok"
+        return self._section(
+            available=True,
+            status=status,
+            reasonCode=None if measurement_status == "available" else "db_size_measurement_unavailable",
+            dataSources=["database_storage_measurement"],
+            summary={
+                "measurementStatus": measurement_status,
+                "measurementScope": str(measurement.get("measurement_scope") or "unavailable"),
+                "sizeBucket": self._size_bucket(size_value),
+                "overSoftLimit": over_soft,
+                "overHardLimit": over_hard,
+                "softLimitBucket": self._size_bucket(policy.storage_soft_limit_bytes),
+                "hardLimitBucket": self._size_bucket(policy.storage_hard_limit_bytes),
+                "databasePathIncluded": False,
+                "measurementReasonIncluded": False,
+            },
+            limitations=["no_database_path", "bounded_size_bucket_only", "no_vacuum_or_cleanup"],
+        )
+
+    def _build_admin_role_assignment_status(self) -> Dict[str, Any]:
+        db = DatabaseManager.get_instance()
+        with db.get_session() as session:
+            role_count = int(session.execute(select(func.count(AdminRole.role_key))).scalar() or 0)
+            capability_count = int(session.execute(select(func.count(AdminRoleCapability.id))).scalar() or 0)
+            assignment_count = int(session.execute(select(func.count(AdminUserRole.id))).scalar() or 0)
+            legacy_admin_count = int(
+                session.execute(
+                    select(func.count(AppUser.id)).where(
+                        AppUser.role == "admin",
+                        AppUser.is_active.is_(True),
+                    )
+                ).scalar()
+                or 0
+            )
+
+        if assignment_count == 0 and legacy_admin_count > 0:
+            status = "legacy_admin_fallback_active"
+        elif assignment_count > 0:
+            status = "explicit_assignments_present"
+        else:
+            status = "no_admin_assignments_observed"
+        return self._section(
+            available=True,
+            status=status,
+            dataSources=["admin_roles", "admin_role_capabilities", "admin_user_roles", "app_users"],
+            summary={
+                "adminRoleCountBucket": self._maintenance_count_bucket(role_count),
+                "adminCapabilityCountBucket": self._maintenance_count_bucket(capability_count),
+                "explicitAssignmentCountBucket": self._maintenance_count_bucket(assignment_count),
+                "legacyAdminUserCountBucket": self._maintenance_count_bucket(legacy_admin_count),
+                "coarseFallbackObserved": assignment_count == 0 and legacy_admin_count > 0,
+                "accessBehaviorChanged": False,
+                "userIdentifiersIncluded": False,
+                "credentialsIncluded": False,
+            },
+            limitations=["compatibility_status_only", "does_not_assign_roles", "does_not_change_auth_or_rbac_enforcement"],
+        )
+
+    def _build_durable_task_backlog_status(self) -> Dict[str, Any]:
+        db = DatabaseManager.get_instance()
+        pending_statuses = self._pending_task_statuses()
+        with db.get_session() as session:
+            total_tasks = int(session.execute(select(func.count(DurableTaskState.id))).scalar() or 0)
+            pending_count = int(
+                session.execute(
+                    select(func.count(DurableTaskState.id)).where(
+                        DurableTaskState.status.in_(pending_statuses)
+                    )
+                ).scalar()
+                or 0
+            )
+            oldest_pending = session.execute(
+                select(func.min(DurableTaskState.created_at)).where(
+                    DurableTaskState.status.in_(pending_statuses)
+                )
+            ).scalar()
+
+        status = "warning" if pending_count > 0 else "ok"
+        if pending_count >= 1000:
+            status = "critical"
+        return self._section(
+            available=True,
+            status=status,
+            dataSources=["durable_task_states"],
+            summary={
+                "totalTaskCountBucket": self._maintenance_count_bucket(total_tasks),
+                "pendingBacklogCountBucket": self._maintenance_count_bucket(pending_count),
+                "oldestPendingPresent": oldest_pending is not None,
+                "retentionPolicy": "not_configured",
+                "cleanupCalled": False,
+                "taskIdentifiersIncluded": False,
+                "ownerIdentifiersIncluded": False,
+            },
+            limitations=["bounded_counts_only", "does_not_claim_or_repair_tasks", "no_task_cleanup"],
+        )
+
+    def _recommended_maintenance_actions(
+        self,
+        *,
+        retention_policy_status: Dict[str, Any],
+        execution_log_retention_risk: Dict[str, Any],
+        db_size_risk: Dict[str, Any],
+        admin_role_assignment_status: Dict[str, Any],
+        durable_task_backlog_status: Dict[str, Any],
+    ) -> list[str]:
+        actions: list[str] = [
+            "Review DB retention policy acceptance before enabling any cleanup job.",
+        ]
+        if execution_log_retention_risk.get("status") in {"warning", "critical"}:
+            actions.append("Use the existing admin log cleanup preview before any explicit delete action.")
+        if db_size_risk.get("status") in {"warning", "critical"}:
+            actions.append("Plan a storage capacity review with backup/restore evidence before cleanup.")
+        if admin_role_assignment_status.get("status") == "legacy_admin_fallback_active":
+            actions.append("Record an admin role assignment migration plan before changing RBAC enforcement.")
+        if durable_task_backlog_status.get("status") in {"warning", "critical"}:
+            actions.append("Investigate durable task backlog health before adding retention or repair jobs.")
+        if retention_policy_status.get("status") != "ok":
+            actions.append("Keep retention diagnostics advisory until operator approval is captured.")
+        return self._unique_actions(actions)
 
     def _build_provider_status_summary(self) -> Dict[str, Any]:
         db = DatabaseManager.get_instance()

@@ -1663,6 +1663,7 @@ class ExecutionLogService:
         raw_response: Optional[Dict[str, Any]] = None,
         actor: Optional[Dict[str, Any]] = None,
     ) -> str:
+        actor_payload = self._resolve_actor(None, actor)
         raw = _sanitize_metadata(raw_response if isinstance(raw_response, dict) else {})
         event_name = _as_str(raw.get("event_name")) or panel_name
         normalized_status = "completed" if str(status).lower() == "success" else "failed"
@@ -1712,11 +1713,12 @@ class ExecutionLogService:
             "error_message": _masked_message(error_message),
             "raw_response": raw,
             "outcome": _outcome_from_status(normalized_status),
+            "actor_safe_label": actor_payload.get("username"),
         }
         summary = self._merge_summary(
             {"market_overview": detail, "log": {"level": level, "category": category, "event_name": event_name}},
             self._summary_meta(
-                actor=actor,
+                actor=actor_payload,
                 session_kind="user_activity",
                 subsystem=category,
                 action_name=event_name,
@@ -3392,6 +3394,12 @@ class ExecutionLogService:
             business_metadata.get("actor_type"),
             business_metadata.get("actorRole"),
         )
+        explicit_actor_label = _first_text(
+            business_metadata.get("actorSafeLabel"),
+            business_metadata.get("actor_safe_label"),
+            market_overview.get("actor_safe_label"),
+            top_detail.get("actor_safe_label"),
+        )
         actor_label = _first_text(
             meta.get("actor_display"),
             meta.get("actor_username"),
@@ -3593,7 +3601,7 @@ class ExecutionLogService:
         return {
             "eventType": event_type,
             "actorType": actor_type or "unknown",
-            "actorLabel": _safe_actor_label(actor_label, actor_type),
+            "actorLabel": explicit_actor_label or _safe_actor_label(actor_label, actor_type),
             "actorHash": actor_hash,
             "targetHash": target_hash,
             "level": level,
