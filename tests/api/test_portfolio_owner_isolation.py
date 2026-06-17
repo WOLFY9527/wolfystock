@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -32,6 +33,9 @@ from src.storage import (
     PortfolioDailySnapshot,
     PortfolioTrade,
 )
+
+
+_ADMIN_DIAGNOSTIC_CAMEL_BOUNDARY_RE = re.compile(r"(?<!^)(?=[A-Z])")
 
 
 def _reset_auth_globals() -> None:
@@ -176,6 +180,19 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
         ]
         for needle in forbidden:
             self.assertNotIn(needle, text)
+
+    def _assert_no_admin_diagnostics_keys(self, value: object) -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                self.assertNotEqual(key, "admin_diagnostics")
+                self.assertFalse(str(key).startswith("admin_"), key)
+                snake_key = _ADMIN_DIAGNOSTIC_CAMEL_BOUNDARY_RE.sub("_", str(key)).lower()
+                self.assertFalse(snake_key.startswith("admin_"), key)
+                self._assert_no_admin_diagnostics_keys(child)
+            return
+        if isinstance(value, list):
+            for item in value:
+                self._assert_no_admin_diagnostics_keys(item)
 
     def _create_account(self, client: TestClient, name: str) -> int:
         response = client.post(
@@ -477,10 +494,10 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
             self._assert_public_export_safe_text(
                 json.dumps(payload["riskDiagnostics"]["valuationLineage"], ensure_ascii=False, sort_keys=True)
             )
-        self.assertTrue(snapshot_payload["portfolioRiskEvidence"]["admin_diagnostics"]["sanitized_only"])
-        self.assertFalse(snapshot_payload["portfolioRiskEvidence"]["admin_diagnostics"]["raw_payload_stored"])
-        self.assertTrue(risk_payload["portfolioRiskEvidence"]["admin_diagnostics"]["sanitized_only"])
-        self.assertFalse(risk_payload["portfolioRiskEvidence"]["admin_diagnostics"]["raw_payload_stored"])
+        self.assertNotIn("admin_diagnostics", snapshot_payload["portfolioRiskEvidence"])
+        self._assert_no_admin_diagnostics_keys(snapshot_payload)
+        self.assertNotIn("admin_diagnostics", risk_payload["portfolioRiskEvidence"])
+        self._assert_no_admin_diagnostics_keys(risk_payload)
         self.assertEqual(
             [
                 (
@@ -511,6 +528,127 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
                 ("fx_snapshot", "fx_cache", "local", "fx_summary_only"),
             ],
         )
+        self.assertEqual(self._portfolio_counts(), before)
+
+    def test_consumer_snapshot_recursively_redacts_admin_only_diagnostic_fields(self) -> None:
+        account_id = self._create_account(self.alice_client, "Alice Redaction")
+        before = self._portfolio_counts()
+        service = MagicMock()
+        service.get_portfolio_snapshot.return_value = {
+            "as_of": "2026-01-03",
+            "cost_method": "fifo",
+            "currency": "USD",
+            "account_count": 1,
+            "total_cash": 1000.0,
+            "total_market_value": 1800.0,
+            "total_equity": 2800.0,
+            "realized_pnl": 5.0,
+            "unrealized_pnl": 300.0,
+            "fee_total": 0.0,
+            "tax_total": 0.0,
+            "fx_stale": False,
+            "portfolio_attribution": {
+                "safe_consumer_evidence": "kept",
+                "admin_debug_trace": {"raw_payload_stored": True},
+            },
+            "portfolioRiskEvidence": {
+                "limitation_labels": ["仅供风险观察"],
+                "source_refs": [
+                    {
+                        "source_ref_id": "portfolio_snapshot",
+                        "provider": "portfolio_snapshot",
+                        "source_class": "local",
+                        "sanitized_reason_code": "snapshot_summary_only",
+                    },
+                ],
+                "sourceAuthoritySummary": [
+                    {
+                        "state": "manual",
+                        "admin_diagnostics": {
+                            "raw_payload_stored": True,
+                            "sanitized_only": False,
+                            "disabled_claims": ["internal_claim"],
+                        },
+                    },
+                ],
+                "admin_diagnostics": {
+                    "raw_payload_stored": True,
+                    "sanitized_only": False,
+                    "disabled_claims": ["internal_claim"],
+                },
+            },
+            "riskDiagnostics": {
+                "sourceAuthority": {
+                    "state": "manual",
+                    "details": {
+                        "sourceAuthoritySummary": [
+                            {
+                                "state": "manual",
+                                "admin_diagnostics": {"raw_payload_stored": True},
+                            },
+                        ],
+                        "admin_internal": "must-not-leak",
+                    },
+                },
+                "adminOnlyDiagnostic": {"safe_camel_key_is_not_removed_by_prefix_rule": True},
+            },
+            "accounts": [
+                {
+                    "account_id": account_id,
+                    "account_name": "Alice Redaction",
+                    "broker": "Demo",
+                    "market": "us",
+                    "base_currency": "USD",
+                    "as_of": "2026-01-03",
+                    "cost_method": "fifo",
+                    "total_cash": 1000.0,
+                    "total_market_value": 1800.0,
+                    "total_equity": 2800.0,
+                    "realized_pnl": 5.0,
+                    "unrealized_pnl": 300.0,
+                    "fee_total": 0.0,
+                    "tax_total": 0.0,
+                    "fx_stale": False,
+                    "positions": [
+                        {
+                            "symbol": "AAPL",
+                            "market": "us",
+                            "currency": "USD",
+                            "quantity": 10.0,
+                            "avg_cost": 150.0,
+                            "total_cost": 1500.0,
+                            "last_price": 180.0,
+                            "market_value_base": 1800.0,
+                            "unrealized_pnl_base": 300.0,
+                            "valuation_currency": "USD",
+                            "admin_diagnostics": {"raw_payload_stored": True},
+                        },
+                    ],
+                },
+            ],
+        }
+
+        with patch("api.v1.endpoints.portfolio.PortfolioService", return_value=service):
+            response = self.alice_client.get(
+                "/api/v1/portfolio/snapshot",
+                params={"account_id": account_id, "as_of": "2026-01-03", "cost_method": "fifo"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["account_count"], 1)
+        self.assertEqual(payload["accounts"][0]["positions"][0]["symbol"], "AAPL")
+        self.assertEqual(payload["portfolio_attribution"]["safe_consumer_evidence"], "kept")
+        self.assertEqual(payload["portfolioRiskEvidence"]["limitation_labels"], ["仅供风险观察"])
+        self.assertEqual(payload["portfolioRiskEvidence"]["source_refs"][0]["source_ref_id"], "portfolio_snapshot")
+        self.assertEqual(payload["portfolioRiskEvidence"]["sourceAuthoritySummary"][0]["state"], "manual")
+        self.assertEqual(
+            payload["riskDiagnostics"]["sourceAuthority"]["details"]["sourceAuthoritySummary"][0]["state"],
+            "manual",
+        )
+        self._assert_no_admin_diagnostics_keys(payload)
+        self.assertNotIn("raw_payload_stored", self._json_text(response))
+        self.assertNotIn("disabled_claims", self._json_text(response))
         self.assertEqual(self._portfolio_counts(), before)
 
     def test_history_read_is_owner_scoped_and_read_only(self) -> None:

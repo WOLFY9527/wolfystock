@@ -40,6 +40,7 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
         self.data_dir = Path(self.temp_dir.name)
         self.env_path = self.data_dir / ".env"
         self.db_path = self.data_dir / "portfolio_api_diag.db"
+        self._previous_admin_auth_enabled = os.environ.get("ADMIN_AUTH_ENABLED")
         self.env_path.write_text(
             "\n".join(
                 [
@@ -55,6 +56,7 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
 
         os.environ["ENV_FILE"] = str(self.env_path)
         os.environ["DATABASE_PATH"] = str(self.db_path)
+        os.environ["ADMIN_AUTH_ENABLED"] = "false"
         Config.reset_instance()
         DatabaseManager.reset_instance()
         self.db = DatabaseManager.get_instance()
@@ -65,6 +67,10 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
         Config.reset_instance()
         os.environ.pop("ENV_FILE", None)
         os.environ.pop("DATABASE_PATH", None)
+        if self._previous_admin_auth_enabled is None:
+            os.environ.pop("ADMIN_AUTH_ENABLED", None)
+        else:
+            os.environ["ADMIN_AUTH_ENABLED"] = self._previous_admin_auth_enabled
         self.temp_dir.cleanup()
 
     def _save_close(self, symbol: str, on_date: date, close: float) -> None:
