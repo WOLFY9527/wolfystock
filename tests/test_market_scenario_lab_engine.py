@@ -250,6 +250,26 @@ def _assert_confirm_invalidate_context(context: dict[str, Any]) -> None:
         assert context["invalidate"] == []
 
 
+def _assert_fixture_payload(payload: dict[str, Any], scenario_name: str) -> None:
+    assert payload["selectedScenario"]["presetId"] == scenario_name
+    assert payload["observationOnly"] is True
+    assert payload["decisionGrade"] is False
+    assert payload["sourceClass"] == "fixture"
+    assert payload["dataSourceClass"] == "fixture"
+    assert payload["baseMarketContext"]["source"] == "scenarioFixture"
+    assert payload["baseMarketContext"]["evidenceState"] == "degraded"
+    assert payload["contractStatus"]["state"] == "degraded"
+    assert payload["scenarioRegime"].get("status") != "unavailable"
+    assert payload["driverDeltas"]
+    assert payload["changedDrivers"]
+    assert payload["noAdviceDisclosure"] == "Research planning only; not a personalized decision basis."
+    assert any("sample fixture" in item.lower() for item in payload["evidenceLimits"])
+    serialized_issues = json.dumps(payload["consumerIssues"], ensure_ascii=False).lower()
+    assert "proxy_or_sample_evidence_present" not in serialized_issues
+    assert "sample" in serialized_issues
+    _assert_safe_consumer_text(payload)
+
+
 def _assert_preset_contract(preset: dict[str, Any]) -> None:
     assert set(preset) == EXPECTED_PRESET_KEYS
     assert preset["presetId"] == preset["name"]
@@ -439,6 +459,8 @@ def test_missing_base_evidence_returns_degraded_unavailable_payload() -> None:
     assert payload["confidenceDelta"] == 0.0
     assert payload["driverDeltas"] == {}
     assert payload["changedDrivers"] == []
+    assert "sourceClass" not in payload
+    assert "dataSourceClass" not in payload
     assert payload["scenarioSummary"] == [
         "Scenario lab is unavailable because base score-grade regime evidence is missing."
     ]
@@ -457,6 +479,31 @@ def test_missing_base_evidence_returns_degraded_unavailable_payload() -> None:
     _assert_preset_contract(payload["selectedScenario"])
     for label in _consumer_label_values(payload):
         assert not INTERNAL_LOOKING_TOKEN.search(label)
+
+
+def test_fixture_path_runs_volatility_spike_without_weakening_real_gating() -> None:
+    payload = build_market_scenario_lab(
+        base_decision={},
+        scenario={"name": "volatilitySpike", "dataSourceClass": "fixture"},
+    )
+
+    _assert_fixture_payload(payload, "volatilitySpike")
+    assert payload["baseRegime"]["regime"] == "riskOn"
+    assert payload["confidenceDelta"] < 0
+    assert payload["driverDeltas"]["volatilityStructure"] < 0
+    assert "volatilityStructure" in payload["changedDrivers"]
+
+
+def test_fixture_path_runs_risk_on_confirmation_without_weakening_real_gating() -> None:
+    payload = build_market_scenario_lab(
+        base_decision={},
+        scenario={"name": "riskOnConfirmation", "sourceClass": "sample"},
+    )
+
+    _assert_fixture_payload(payload, "riskOnConfirmation")
+    assert payload["driverDeltas"]["breadthParticipation"] > 0
+    assert payload["driverDeltas"]["liquidityCredit"] > 0
+    assert "breadthParticipation" in payload["changedDrivers"]
 
 
 def test_normalized_driver_scores_can_be_used_without_base_decision_payload() -> None:

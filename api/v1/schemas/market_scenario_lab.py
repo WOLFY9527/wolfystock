@@ -160,6 +160,8 @@ class MarketScenarioLabResponse(_MarketScenarioLabModel):
     evidenceLimits: List[str]
     consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
     noAdviceDisclosure: str
+    sourceClass: str | None = None
+    dataSourceClass: str | None = None
 
 
 def _scenario_name_from_input(scenario: Any) -> str | None:
