@@ -81,6 +81,38 @@ class DailyIntelligenceDegradedInputResponse(BaseModel):
     reason: str
 
 
+class DailyIntelligenceResearchWorkflowStepResponse(BaseModel):
+    surface: str
+    status: Literal["available", "degraded", "unavailable"]
+    summary: str
+    drilldownTargets: List[DailyIntelligenceEvidenceLinkResponse] = Field(default_factory=list)
+
+
+class DailyIntelligenceCrossSurfaceEvidenceResponse(BaseModel):
+    surfaces: List[str] = Field(default_factory=list)
+    observation: str
+    drilldownTargets: List[DailyIntelligenceEvidenceLinkResponse] = Field(default_factory=list)
+
+
+class DailyIntelligenceTopResearchQuestionResponse(BaseModel):
+    question: str
+    surface: str
+    drilldownTargets: List[DailyIntelligenceEvidenceLinkResponse] = Field(default_factory=list)
+
+
+class DailyIntelligenceEvidenceConflictResponse(BaseModel):
+    surfaces: List[str] = Field(default_factory=list)
+    summary: str
+    drilldownTargets: List[DailyIntelligenceEvidenceLinkResponse] = Field(default_factory=list)
+
+
+class DailyIntelligenceDegradedSurfaceSummaryResponse(BaseModel):
+    surface: str
+    status: Literal["available", "degraded", "unavailable"]
+    reason: str
+    drilldownTargets: List[DailyIntelligenceEvidenceLinkResponse] = Field(default_factory=list)
+
+
 class DailyIntelligenceBriefingResponse(BaseModel):
     schemaVersion: Literal["daily_intelligence_briefing_v1"] = DAILY_INTELLIGENCE_SCHEMA_VERSION
     generatedAt: str
@@ -100,6 +132,13 @@ class DailyIntelligenceBriefingResponse(BaseModel):
     evidenceGaps: List[str] = Field(default_factory=list)
     degradedInputs: List[DailyIntelligenceDegradedInputResponse | Dict[str, Any]] = Field(default_factory=list)
     drilldownTargets: List[DailyIntelligenceEvidenceLinkResponse] = Field(default_factory=list)
+    researchWorkflow: List[DailyIntelligenceResearchWorkflowStepResponse] = Field(default_factory=list)
+    crossSurfaceEvidence: List[DailyIntelligenceCrossSurfaceEvidenceResponse] = Field(default_factory=list)
+    topResearchQuestions: List[DailyIntelligenceTopResearchQuestionResponse] = Field(default_factory=list)
+    priorityDrilldowns: List[DailyIntelligenceEvidenceLinkResponse] = Field(default_factory=list)
+    evidenceConflicts: List[DailyIntelligenceEvidenceConflictResponse] = Field(default_factory=list)
+    degradedSurfaceSummary: List[DailyIntelligenceDegradedSurfaceSummaryResponse] = Field(default_factory=list)
+    nextObservationSteps: List[str] = Field(default_factory=list)
     consumerIssues: List[Dict[str, str]] = Field(default_factory=list)
     noAdviceDisclosure: str
     observationOnly: Literal[True] = True

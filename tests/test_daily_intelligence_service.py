@@ -76,6 +76,13 @@ def _assert_consumer_safe_narrative(payload: dict[str, Any]) -> None:
             "evidenceGaps",
             "degradedInputs",
             "drilldownTargets",
+            "researchWorkflow",
+            "crossSurfaceEvidence",
+            "topResearchQuestions",
+            "priorityDrilldowns",
+            "evidenceConflicts",
+            "degradedSurfaceSummary",
+            "nextObservationSteps",
             "noAdviceDisclosure",
         )
     }
@@ -88,6 +95,24 @@ def _assert_consumer_safe_narrative(payload: dict[str, Any]) -> None:
     for word in FORBIDDEN_ADVICE_WORDS:
         assert re.search(rf"\b{re.escape(word)}\b", serialized_lower) is None
     assert "position sizing" not in serialized_lower
+
+
+def _assert_routes_safe(payload: object) -> None:
+    def visit(value: object) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key == "route":
+                    assert isinstance(item, str)
+                    assert ROUTE_RE.fullmatch(item)
+                    assert not item.startswith("/api/")
+                else:
+                    visit(item)
+            return
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                visit(item)
+
+    visit(payload)
 
 
 def _assert_consumer_issues_safe(issues: object, raw_codes: tuple[str, ...]) -> None:
@@ -189,7 +214,12 @@ def test_build_briefing_projects_required_contract_and_degrades_scenario_risks()
         now=lambda: datetime(2026, 6, 15, 9, 30, tzinfo=timezone.utc),
     )
 
-    payload = service.build_briefing(actor={"actor_type": "user"}, owner_id="user-1", market="us", profile="us_preopen_v1")
+    payload = service.build_briefing(
+        actor={"actor_type": "user"},
+        owner_id="user-1",
+        market="us",
+        profile="us_preopen_v1",
+    )
 
     assert payload["schemaVersion"] == "daily_intelligence_briefing_v1"
     assert payload["generatedAt"] == "2026-06-15T09:30:00+00:00"
@@ -262,6 +292,28 @@ def test_build_briefing_projects_required_contract_and_degrades_scenario_risks()
     ]
     assert payload["scenarioRisks"][0]["source"] == "Daily Intelligence"
     assert "Scenario risk read model is unavailable for this briefing." in payload["evidenceGaps"]
+    assert payload["researchWorkflow"]
+    assert {item["surface"] for item in payload["researchWorkflow"]} >= {
+        "Market Overview",
+        "Research Radar",
+        "Portfolio Structure Review",
+        "Scenario Lab",
+        "Stock Structure",
+        "Options / Gamma Observation",
+    }
+    assert payload["crossSurfaceEvidence"]
+    assert any(
+        set(item["surfaces"]) >= {"Market Overview", "Research Radar"}
+        for item in payload["crossSurfaceEvidence"]
+    )
+    assert payload["topResearchQuestions"]
+    assert any("structure verification" in item["question"].lower() for item in payload["topResearchQuestions"])
+    assert payload["priorityDrilldowns"]
+    assert any(target["route"] == "/research/radar" for target in payload["priorityDrilldowns"])
+    assert isinstance(payload["evidenceConflicts"], list)
+    assert any(item["surface"] == "Scenario Lab" for item in payload["degradedSurfaceSummary"])
+    assert any(item["surface"] == "Options / Gamma Observation" for item in payload["degradedSurfaceSummary"])
+    assert payload["nextObservationSteps"]
     assert payload["sectionLinks"] == [
         {
             "label": "Research Radar",
@@ -298,9 +350,13 @@ def test_build_briefing_projects_required_contract_and_degrades_scenario_risks()
     assert any(item["section"] == "watchlistHighlights" for item in payload["degradedInputs"]) is False
     assert not any(link["section"] == "scenarioRisks" for link in payload["sectionLinks"])
     assert payload["drilldownTargets"]
-    for target in payload["drilldownTargets"]:
-        assert ROUTE_RE.fullmatch(target["route"])
-        assert not target["route"].startswith("/api/")
+    _assert_routes_safe(payload["drilldownTargets"])
+    _assert_routes_safe(payload["researchWorkflow"])
+    _assert_routes_safe(payload["crossSurfaceEvidence"])
+    _assert_routes_safe(payload["topResearchQuestions"])
+    _assert_routes_safe(payload["priorityDrilldowns"])
+    _assert_routes_safe(payload["evidenceConflicts"])
+    _assert_routes_safe(payload["degradedSurfaceSummary"])
     _assert_consumer_safe_narrative(payload)
     assert payload["consumerIssues"]
     _assert_consumer_issues_safe(
@@ -325,7 +381,12 @@ def test_build_briefing_does_not_invent_evidence_links_when_owner_context_is_mis
         now=lambda: datetime(2026, 6, 15, 9, 30, tzinfo=timezone.utc),
     )
 
-    payload = service.build_briefing(actor={"actor_type": "anonymous"}, owner_id=None, market="us", profile="us_preopen_v1")
+    payload = service.build_briefing(
+        actor={"actor_type": "anonymous"},
+        owner_id=None,
+        market="us",
+        profile="us_preopen_v1",
+    )
 
     assert payload["topResearchPriorities"] == []
     assert payload["scannerHighlights"] == []
@@ -334,5 +395,12 @@ def test_build_briefing_does_not_invent_evidence_links_when_owner_context_is_mis
     assert payload["portfolioHighlights"] == []
     assert payload["sectionLinks"] == []
     assert payload["drilldownTargets"] == []
+    assert payload["priorityDrilldowns"] == []
+    assert any(item["surface"] == "Research Radar" for item in payload["degradedSurfaceSummary"])
+    assert any(item["surface"] == "Portfolio Structure Review" for item in payload["degradedSurfaceSummary"])
+    assert any(item["surface"] == "Options / Gamma Observation" for item in payload["degradedSurfaceSummary"])
+    assert payload["researchWorkflow"]
+    assert payload["topResearchQuestions"]
+    assert payload["nextObservationSteps"]
     assert payload["noAdviceDisclosure"] == "Observation-only research briefing; not personalized financial advice."
     _assert_consumer_safe_narrative(payload)

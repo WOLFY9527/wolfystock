@@ -99,6 +99,24 @@ class MarketDecisionCockpitService:
             research_preview,
             options_status,
         )
+        top_research_priorities = self._build_top_research_priorities(research_preview)
+        scanner_highlights = self._build_scanner_highlights(research_preview)
+        scenario_risks = self._build_scenario_risks(decision)
+        evidence_gaps = self._build_evidence_gaps(decision, research_preview, options_status, data_quality)
+        degraded_inputs = self._build_degraded_inputs(research_preview, options_status, data_quality)
+        drilldown_targets = self._build_drilldown_targets(research_preview)
+        driver_attribution = self._build_driver_attribution(decision)
+        synthesis = self._build_synthesis_contract(
+            decision=decision,
+            research_preview=research_preview,
+            options_status=options_status,
+            top_research_priorities=top_research_priorities,
+            scanner_highlights=scanner_highlights,
+            scenario_risks=scenario_risks,
+            degraded_inputs=degraded_inputs,
+            drilldown_targets=drilldown_targets,
+            driver_attribution=driver_attribution,
+        )
         consumer_issues = build_consumer_issues(
             data_quality,
             decision.get("missingEvidence"),
@@ -113,18 +131,25 @@ class MarketDecisionCockpitService:
             "marketRegimeDecision": decision,
             "marketRegimeSummary": self._build_market_regime_summary(decision),
             "whatChanged": what_changed,
-            "topResearchPriorities": self._build_top_research_priorities(research_preview),
-            "scannerHighlights": self._build_scanner_highlights(research_preview),
+            "topResearchPriorities": top_research_priorities,
+            "scannerHighlights": scanner_highlights,
             "watchlistHighlights": [],
             "portfolioHighlights": [],
-            "scenarioRisks": self._build_scenario_risks(decision),
-            "evidenceGaps": self._build_evidence_gaps(decision, research_preview, options_status, data_quality),
-            "degradedInputs": self._build_degraded_inputs(research_preview, options_status, data_quality),
-            "drilldownTargets": self._build_drilldown_targets(research_preview),
+            "scenarioRisks": scenario_risks,
+            "evidenceGaps": evidence_gaps,
+            "degradedInputs": degraded_inputs,
+            "drilldownTargets": drilldown_targets,
+            "researchWorkflow": synthesis["researchWorkflow"],
+            "crossSurfaceEvidence": synthesis["crossSurfaceEvidence"],
+            "topResearchQuestions": synthesis["topResearchQuestions"],
+            "priorityDrilldowns": synthesis["priorityDrilldowns"],
+            "evidenceConflicts": synthesis["evidenceConflicts"],
+            "degradedSurfaceSummary": synthesis["degradedSurfaceSummary"],
+            "nextObservationSteps": synthesis["nextObservationSteps"],
             "researchQueuePreview": research_preview,
             "optionsStructureStatus": options_status,
             "cockpitSummary": cockpit_summary,
-            "driverAttribution": self._build_driver_attribution(decision),
+            "driverAttribution": driver_attribution,
             "confidenceDiagnostics": self._build_confidence_diagnostics(
                 decision,
                 research_preview,
@@ -315,8 +340,12 @@ class MarketDecisionCockpitService:
                     "priority": _confidence_label(payload.get("priority") or ""),
                     "ticker": ticker,
                     "observations": _safe_public_list(explanation.get("whyOnRadar") or payload.get("whyOnRadar") or []),
-                    "whatToVerify": _safe_public_list(explanation.get("whatToVerify") or payload.get("whatToVerify") or []),
-                    "evidenceGaps": _safe_phrase_list(explanation.get("evidenceGaps") or payload.get("evidenceGaps") or []),
+                    "whatToVerify": _safe_public_list(
+                        explanation.get("whatToVerify") or payload.get("whatToVerify") or []
+                    ),
+                    "evidenceGaps": _safe_phrase_list(
+                        explanation.get("evidenceGaps") or payload.get("evidenceGaps") or []
+                    ),
                     "drilldownTargets": self._symbol_drilldowns(ticker),
                 }
             )
@@ -333,8 +362,12 @@ class MarketDecisionCockpitService:
                     "ticker": ticker,
                     "priority": _confidence_label(payload.get("priority") or ""),
                     "observations": _safe_public_list(explanation.get("whyOnRadar") or payload.get("whyOnRadar") or []),
-                    "whatToVerify": _safe_public_list(explanation.get("whatToVerify") or payload.get("whatToVerify") or []),
-                    "evidenceGaps": _safe_phrase_list(explanation.get("evidenceGaps") or payload.get("evidenceGaps") or []),
+                    "whatToVerify": _safe_public_list(
+                        explanation.get("whatToVerify") or payload.get("whatToVerify") or []
+                    ),
+                    "evidenceGaps": _safe_phrase_list(
+                        explanation.get("evidenceGaps") or payload.get("evidenceGaps") or []
+                    ),
                     "riskFlags": _safe_phrase_list(payload.get("riskFlags") or []),
                     "drilldownTargets": self._symbol_drilldowns(ticker),
                 }
@@ -351,7 +384,7 @@ class MarketDecisionCockpitService:
                 "drilldownTargets": [
                     {
                         "label": "Scenario Lab",
-                        "route": "/market/scenario-lab",
+                        "route": "/scenario-lab",
                         "section": "scenarioRisks",
                         "reason": "Review bounded scenario changes.",
                     }
@@ -461,7 +494,7 @@ class MarketDecisionCockpitService:
             },
             {
                 "label": "Scenario Lab",
-                "route": "/market/scenario-lab",
+                "route": "/scenario-lab",
                 "section": "scenarioRisks",
                 "reason": "Review bounded scenario changes.",
             },
@@ -484,6 +517,364 @@ class MarketDecisionCockpitService:
                 "reason": "Open symbol structure detail.",
             }
         ]
+
+    def _build_synthesis_contract(
+        self,
+        *,
+        decision: Mapping[str, Any],
+        research_preview: Mapping[str, Any],
+        options_status: Mapping[str, Any],
+        top_research_priorities: Sequence[Mapping[str, Any]],
+        scanner_highlights: Sequence[Mapping[str, Any]],
+        scenario_risks: Sequence[Mapping[str, Any]],
+        degraded_inputs: Sequence[Mapping[str, str]],
+        drilldown_targets: Sequence[Mapping[str, str]],
+        driver_attribution: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        priority_drilldowns = self._build_priority_drilldowns(drilldown_targets)
+        degraded_surface_summary = self._build_degraded_surface_summary(
+            research_preview=research_preview,
+            options_status=options_status,
+            degraded_inputs=degraded_inputs,
+            priority_drilldowns=priority_drilldowns,
+        )
+        return {
+            "researchWorkflow": self._build_research_workflow(
+                decision=decision,
+                research_preview=research_preview,
+                options_status=options_status,
+                top_research_priorities=top_research_priorities,
+                scanner_highlights=scanner_highlights,
+                scenario_risks=scenario_risks,
+                degraded_surface_summary=degraded_surface_summary,
+                priority_drilldowns=priority_drilldowns,
+            ),
+            "crossSurfaceEvidence": self._build_cross_surface_evidence(
+                top_research_priorities=top_research_priorities,
+                scenario_risks=scenario_risks,
+                options_status=options_status,
+                priority_drilldowns=priority_drilldowns,
+            ),
+            "topResearchQuestions": self._build_top_research_questions(
+                top_research_priorities=top_research_priorities,
+                options_status=options_status,
+                priority_drilldowns=priority_drilldowns,
+            ),
+            "priorityDrilldowns": priority_drilldowns,
+            "evidenceConflicts": self._build_evidence_conflicts(
+                driver_attribution=driver_attribution,
+                priority_drilldowns=priority_drilldowns,
+            ),
+            "degradedSurfaceSummary": degraded_surface_summary,
+            "nextObservationSteps": self._build_next_observation_steps(
+                top_research_priorities=top_research_priorities,
+                options_status=options_status,
+                priority_drilldowns=priority_drilldowns,
+            ),
+        }
+
+    def _build_research_workflow(
+        self,
+        *,
+        decision: Mapping[str, Any],
+        research_preview: Mapping[str, Any],
+        options_status: Mapping[str, Any],
+        top_research_priorities: Sequence[Mapping[str, Any]],
+        scanner_highlights: Sequence[Mapping[str, Any]],
+        scenario_risks: Sequence[Mapping[str, Any]],
+        degraded_surface_summary: Sequence[Mapping[str, Any]],
+        priority_drilldowns: Sequence[Mapping[str, str]],
+    ) -> list[dict[str, Any]]:
+        degraded_surfaces = {
+            str(item.get("surface") or ""): str(item.get("status") or "unavailable")
+            for item in degraded_surface_summary
+        }
+        stock_links = [link for link in priority_drilldowns if "structure-decision" in str(link.get("route") or "")]
+        regime_label = _regime_label(decision.get("regime") or "lowConfidence")
+        options_ready = options_status.get("gammaEvidenceStatus") != "unavailable"
+        return [
+            self._workflow_step(
+                surface="Market Overview",
+                status="available",
+                summary=f"{regime_label} is the starting context for this cockpit.",
+                drilldown_targets=[_surface_link("Market Overview", "/market-overview", "marketRegimeSummary")],
+            ),
+            self._workflow_step(
+                surface="Research Radar",
+                status=(
+                    "available"
+                    if top_research_priorities or scanner_highlights
+                    else degraded_surfaces.get("Research Radar", "unavailable")
+                ),
+                summary=(
+                    "Research Radar evidence is connected to the cockpit queue."
+                    if top_research_priorities or scanner_highlights
+                    else "Research Radar evidence is unavailable for this cockpit."
+                ),
+                drilldown_targets=[_surface_link("Research Radar", "/research/radar", "topResearchPriorities")],
+            ),
+            self._workflow_step(
+                surface="Portfolio Structure Review",
+                status=degraded_surfaces.get("Portfolio Structure Review", "unavailable"),
+                summary="Portfolio structure review remains a Daily Intelligence drilldown surface.",
+                drilldown_targets=[_surface_link("Portfolio", "/portfolio", "portfolioHighlights")],
+            ),
+            self._workflow_step(
+                surface="Scenario Lab",
+                status="available" if scenario_risks else "unavailable",
+                summary="Scenario Lab can review bounded changes against the current regime observation.",
+                drilldown_targets=[_surface_link("Scenario Lab", "/scenario-lab", "scenarioRisks")],
+            ),
+            self._workflow_step(
+                surface="Stock Structure",
+                status="available" if stock_links else degraded_surfaces.get("Stock Structure", "unavailable"),
+                summary=(
+                    "Stock Structure drilldowns are available for symbols in focus."
+                    if stock_links
+                    else "Stock Structure drilldowns need a symbol in focus."
+                ),
+                drilldown_targets=stock_links[:3]
+                or [_surface_link("Stock Structure", "/stocks/structure-decision", "topResearchPriorities")],
+            ),
+            self._workflow_step(
+                surface="Options / Gamma Observation",
+                status="available" if options_ready else "unavailable",
+                summary=(
+                    "Options and gamma evidence is available as observation-only context."
+                    if options_ready
+                    else "Options and gamma evidence is unavailable for this cockpit snapshot."
+                ),
+                drilldown_targets=[_surface_link("Options / Gamma", "/options-lab", "scenarioRisks")],
+            ),
+        ]
+
+    def _build_cross_surface_evidence(
+        self,
+        *,
+        top_research_priorities: Sequence[Mapping[str, Any]],
+        scenario_risks: Sequence[Mapping[str, Any]],
+        options_status: Mapping[str, Any],
+        priority_drilldowns: Sequence[Mapping[str, str]],
+    ) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        radar_links = [link for link in priority_drilldowns if str(link.get("route")) == "/research/radar"]
+        stock_links = [link for link in priority_drilldowns if "structure-decision" in str(link.get("route") or "")]
+        scenario_link = _surface_link("Scenario Lab", "/scenario-lab", "scenarioRisks")
+        options_link = _surface_link("Options / Gamma", "/options-lab", "scenarioRisks")
+        if top_research_priorities:
+            items.append(
+                {
+                    "surfaces": ["Market Overview", "Research Radar"],
+                    "observation": "Market context can be reviewed beside the active research queue.",
+                    "drilldownTargets": _dedupe_targets([*radar_links[:1], scenario_link]),
+                }
+            )
+        if stock_links:
+            items.append(
+                {
+                    "surfaces": ["Research Radar", "Stock Structure"],
+                    "observation": "Symbols in the research queue have structure drilldowns for verification.",
+                    "drilldownTargets": _dedupe_targets([*radar_links[:1], *stock_links[:2]]),
+                }
+            )
+        if scenario_risks:
+            items.append(
+                {
+                    "surfaces": ["Market Overview", "Scenario Lab"],
+                    "observation": "Scenario context can be reviewed against the current regime observation.",
+                    "drilldownTargets": [scenario_link],
+                }
+            )
+        if options_status.get("gammaEvidenceStatus") == "unavailable":
+            items.append(
+                {
+                    "surfaces": ["Scenario Lab", "Options / Gamma Observation"],
+                    "observation": "Options and gamma evidence is an explicit degraded input for scenario context.",
+                    "drilldownTargets": _dedupe_targets([scenario_link, options_link]),
+                }
+            )
+        return items
+
+    def _build_top_research_questions(
+        self,
+        *,
+        top_research_priorities: Sequence[Mapping[str, Any]],
+        options_status: Mapping[str, Any],
+        priority_drilldowns: Sequence[Mapping[str, str]],
+    ) -> list[dict[str, Any]]:
+        questions: list[dict[str, Any]] = []
+        radar_links = [link for link in priority_drilldowns if str(link.get("route")) == "/research/radar"]
+        stock_links = [link for link in priority_drilldowns if "structure-decision" in str(link.get("route") or "")]
+        if top_research_priorities:
+            questions.append(
+                {
+                    "question": "Which research queue items need structure verification first?",
+                    "surface": "Research Radar",
+                    "drilldownTargets": _dedupe_targets([*radar_links[:1], *stock_links[:2]]),
+                }
+            )
+        else:
+            questions.append(
+                {
+                    "question": "What evidence is needed before Research Radar can populate the queue?",
+                    "surface": "Research Radar",
+                    "drilldownTargets": [_surface_link("Research Radar", "/research/radar", "topResearchPriorities")],
+                }
+            )
+        questions.append(
+            {
+                "question": "Which scenario assumptions would change the current regime observation?",
+                "surface": "Scenario Lab",
+                "drilldownTargets": [_surface_link("Scenario Lab", "/scenario-lab", "scenarioRisks")],
+            }
+        )
+        if options_status.get("gammaEvidenceStatus") == "unavailable":
+            questions.append(
+                {
+                    "question": "Which options structure evidence is still unavailable for observation context?",
+                    "surface": "Options / Gamma Observation",
+                    "drilldownTargets": [_surface_link("Options / Gamma", "/options-lab", "scenarioRisks")],
+                }
+            )
+        return questions[:5]
+
+    def _build_priority_drilldowns(self, drilldown_targets: Sequence[Mapping[str, str]]) -> list[dict[str, str]]:
+        links = list(drilldown_targets)
+        links.extend(
+            [
+                _surface_link("Market Overview", "/market-overview", "marketRegimeSummary"),
+                _surface_link("Scenario Lab", "/scenario-lab", "scenarioRisks"),
+                _surface_link("Options / Gamma", "/options-lab", "scenarioRisks"),
+            ]
+        )
+        return _dedupe_targets(links)[:10]
+
+    def _build_evidence_conflicts(
+        self,
+        *,
+        driver_attribution: Mapping[str, Any],
+        priority_drilldowns: Sequence[Mapping[str, str]],
+    ) -> list[dict[str, Any]]:
+        conflicts: list[dict[str, Any]] = []
+        for item in list(driver_attribution.get("conflictingDrivers") or [])[:3]:
+            payload = _mapping(item)
+            condition = _safe_public_text(payload.get("condition"))
+            if not condition:
+                continue
+            conflicts.append(
+                {
+                    "surfaces": ["Market Overview", "Scenario Lab"],
+                    "summary": condition,
+                    "drilldownTargets": _dedupe_targets([
+                        _surface_link("Market Overview", "/market-overview", "marketRegimeSummary"),
+                        _surface_link("Scenario Lab", "/scenario-lab", "scenarioRisks"),
+                        *priority_drilldowns[:1],
+                    ]),
+                }
+            )
+        return conflicts
+
+    def _build_degraded_surface_summary(
+        self,
+        *,
+        research_preview: Mapping[str, Any],
+        options_status: Mapping[str, Any],
+        degraded_inputs: Sequence[Mapping[str, str]],
+        priority_drilldowns: Sequence[Mapping[str, str]],
+    ) -> list[dict[str, Any]]:
+        section_surface = {
+            "marketRegimeSummary": ("Market Overview", "/market-overview"),
+            "topResearchPriorities": ("Research Radar", "/research/radar"),
+            "scannerHighlights": ("Research Radar", "/research/radar"),
+            "watchlistHighlights": ("Watchlist", "/watchlist"),
+            "portfolioHighlights": ("Portfolio Structure Review", "/portfolio"),
+            "scenarioRisks": ("Scenario Lab", "/scenario-lab"),
+        }
+        items: list[dict[str, Any]] = []
+        for item in degraded_inputs:
+            section = str(item.get("section") or "").strip()
+            surface, route = section_surface.get(section, (_humanize_code(section), "/market/decision-cockpit"))
+            items.append(
+                {
+                    "surface": surface,
+                    "status": str(item.get("status") or "unavailable"),
+                    "reason": _safe_reason_phrase(item.get("reason")),
+                    "drilldownTargets": [_surface_link(surface, route, section or "degradedInputs")],
+                }
+            )
+        if not research_preview.get("topCandidates"):
+            items.append(
+                {
+                    "surface": "Research Radar",
+                    "status": "unavailable",
+                    "reason": _safe_reason_phrase(_RESEARCH_EMPTY_REASON),
+                    "drilldownTargets": [_surface_link("Research Radar", "/research/radar", "topResearchPriorities")],
+                }
+            )
+            items.append(
+                {
+                    "surface": "Stock Structure",
+                    "status": "unavailable",
+                    "reason": "Stock Structure drilldowns need a symbol in focus.",
+                    "drilldownTargets": [
+                        _surface_link("Stock Structure", "/stocks/structure-decision", "topResearchPriorities")
+                    ],
+                }
+            )
+        items.append(
+            {
+                "surface": "Portfolio Structure Review",
+                "status": "unavailable",
+                "reason": "Portfolio highlights are available from Daily Intelligence when owner context is present.",
+                "drilldownTargets": [_surface_link("Portfolio", "/portfolio", "portfolioHighlights")],
+            }
+        )
+        if options_status.get("gammaEvidenceStatus") == "unavailable":
+            items.append(
+                {
+                    "surface": "Options / Gamma Observation",
+                    "status": "unavailable",
+                    "reason": _safe_reason_phrase(_OPTION_CHAIN_EMPTY_REASON),
+                    "drilldownTargets": [_surface_link("Options / Gamma", "/options-lab", "scenarioRisks")],
+                }
+            )
+        return _dedupe_surface_summary(items, fallback_links=priority_drilldowns)
+
+    def _build_next_observation_steps(
+        self,
+        *,
+        top_research_priorities: Sequence[Mapping[str, Any]],
+        options_status: Mapping[str, Any],
+        priority_drilldowns: Sequence[Mapping[str, str]],
+    ) -> list[str]:
+        steps: list[str] = []
+        if top_research_priorities:
+            steps.append("Review Research Radar evidence with Stock Structure context.")
+        else:
+            steps.append("Review Research Radar once candidate evidence becomes available.")
+        if priority_drilldowns:
+            steps.append("Open priority drilldowns before expanding the research queue.")
+        steps.append("Use Scenario Lab to compare bounded regime assumptions.")
+        if options_status.get("gammaEvidenceStatus") == "unavailable":
+            steps.append("Keep Options/Gamma evidence in degraded observation review.")
+        else:
+            steps.append("Keep Options/Gamma evidence separate from decision-grade confidence.")
+        return _dedupe(steps)[:4]
+
+    @staticmethod
+    def _workflow_step(
+        *,
+        surface: str,
+        status: str,
+        summary: str,
+        drilldown_targets: Sequence[Mapping[str, str]],
+    ) -> dict[str, Any]:
+        return {
+            "surface": surface,
+            "status": status if status in {"available", "degraded", "unavailable"} else "unavailable",
+            "summary": _safe_public_text(summary),
+            "drilldownTargets": _dedupe_targets(drilldown_targets),
+        }
 
     def _build_data_quality(
         self,
@@ -864,6 +1255,46 @@ def _dedupe_targets(values: Sequence[Mapping[str, str]]) -> list[dict[str, str]]
             continue
         seen.add(key)
         result.append({"label": label, "route": route, "section": section, "reason": reason})
+    return result
+
+
+def _surface_link(label: str, route: str, section: str) -> dict[str, str]:
+    return {
+        "label": label,
+        "route": route,
+        "section": section,
+        "reason": f"Open {label} context.",
+    }
+
+
+def _dedupe_surface_summary(
+    values: Sequence[Mapping[str, Any]],
+    *,
+    fallback_links: Sequence[Mapping[str, str]],
+) -> list[dict[str, Any]]:
+    seen: set[tuple[str, str]] = set()
+    result: list[dict[str, Any]] = []
+    for item in values:
+        surface = str(item.get("surface") or "").strip()
+        status = str(item.get("status") or "unavailable").strip()
+        reason = _safe_reason_phrase(item.get("reason"))
+        if not surface or not reason:
+            continue
+        key = (surface, reason)
+        if key in seen:
+            continue
+        seen.add(key)
+        links = _dedupe_targets(item.get("drilldownTargets") or [])
+        if not links:
+            links = list(fallback_links[:1])
+        result.append(
+            {
+                "surface": surface,
+                "status": status if status in {"available", "degraded", "unavailable"} else "unavailable",
+                "reason": reason,
+                "drilldownTargets": links,
+            }
+        )
     return result
 
 

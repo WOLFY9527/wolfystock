@@ -67,6 +67,13 @@ NARRATIVE_KEYS = (
     "evidenceGaps",
     "degradedInputs",
     "drilldownTargets",
+    "researchWorkflow",
+    "crossSurfaceEvidence",
+    "topResearchQuestions",
+    "priorityDrilldowns",
+    "evidenceConflicts",
+    "degradedSurfaceSummary",
+    "nextObservationSteps",
     "noAdviceDisclosure",
 )
 ROUTE_RE = re.compile(r"^/[A-Za-z0-9][A-Za-z0-9/_-]*(?:\?[A-Za-z0-9=&._%-]+)?$")
@@ -207,8 +214,35 @@ def _assert_consumer_safe_cockpit_narrative(payload: dict[str, Any]) -> None:
     for target in payload["drilldownTargets"]:
         assert ROUTE_RE.fullmatch(target["route"])
         assert not target["route"].startswith("/api/")
+    for key in (
+        "researchWorkflow",
+        "crossSurfaceEvidence",
+        "topResearchQuestions",
+        "priorityDrilldowns",
+        "evidenceConflicts",
+        "degradedSurfaceSummary",
+    ):
+        _assert_routes_safe(payload[key])
     assert payload["observationOnly"] is True
     assert payload["decisionGrade"] is False
+
+
+def _assert_routes_safe(payload: object) -> None:
+    def visit(value: object) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key == "route":
+                    assert isinstance(item, str)
+                    assert ROUTE_RE.fullmatch(item)
+                    assert not item.startswith("/api/")
+                else:
+                    visit(item)
+            return
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                visit(item)
+
+    visit(payload)
 
 
 def _assert_consumer_issues_safe(issues: object, raw_codes: tuple[str, ...]) -> None:
@@ -317,6 +351,24 @@ def test_cockpit_uses_regime_engine_as_primary_judgment_and_shapes_safe_aggregat
     assert payload["consumerIssues"]
     assert payload["dataQuality"]["consumerIssues"]
     assert "Options gamma unavailable" in {issue["label"] for issue in payload["consumerIssues"]}
+    assert {item["surface"] for item in payload["researchWorkflow"]} >= {
+        "Market Overview",
+        "Research Radar",
+        "Portfolio Structure Review",
+        "Scenario Lab",
+        "Stock Structure",
+        "Options / Gamma Observation",
+    }
+    assert any(
+        set(item["surfaces"]) >= {"Market Overview", "Research Radar"}
+        for item in payload["crossSurfaceEvidence"]
+    )
+    assert any("structure verification" in item["question"].lower() for item in payload["topResearchQuestions"])
+    assert any(item["route"] == "/scenario-lab" for item in payload["priorityDrilldowns"])
+    assert isinstance(payload["evidenceConflicts"], list)
+    assert any(item["surface"] == "Portfolio Structure Review" for item in payload["degradedSurfaceSummary"])
+    assert any(item["surface"] == "Options / Gamma Observation" for item in payload["degradedSurfaceSummary"])
+    assert payload["nextObservationSteps"]
 
     _assert_no_forbidden_public_terms(payload)
     _assert_consumer_safe_cockpit_narrative(payload)
@@ -362,6 +414,11 @@ def test_missing_inputs_fail_closed_with_empty_research_preview_and_blocked_opti
     assert payload["researchQueuePreview"]["consumerIssues"]
     assert payload["optionsStructureStatus"]["consumerIssues"]
     assert payload["consumerIssues"]
+    assert payload["priorityDrilldowns"]
+    assert any(item["surface"] == "Research Radar" for item in payload["degradedSurfaceSummary"])
+    assert any(item["surface"] == "Stock Structure" for item in payload["degradedSurfaceSummary"])
+    assert any(item["surface"] == "Options / Gamma Observation" for item in payload["degradedSurfaceSummary"])
+    assert payload["topResearchQuestions"]
     _assert_consumer_issues_safe(
         payload["consumerIssues"],
         ("research_candidates_unavailable", "option_chain_unavailable", "missing_contracts"),

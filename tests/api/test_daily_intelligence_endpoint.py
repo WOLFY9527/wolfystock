@@ -59,6 +59,67 @@ class _FakeDailyIntelligenceService:
                     "reason": "Research radar queue context.",
                 }
             ],
+            "researchWorkflow": [
+                {
+                    "surface": "Research Radar",
+                    "status": "available",
+                    "summary": "Research queue evidence is available for observation.",
+                    "drilldownTargets": [
+                        {
+                            "label": "Research Radar",
+                            "route": "/research/radar",
+                            "section": "topResearchPriorities",
+                            "reason": "Research radar queue context.",
+                        }
+                    ],
+                }
+            ],
+            "crossSurfaceEvidence": [
+                {
+                    "surfaces": ["Market Overview", "Research Radar"],
+                    "observation": "Market context can be reviewed with the research queue.",
+                    "drilldownTargets": [
+                        {
+                            "label": "Research Radar",
+                            "route": "/research/radar",
+                            "section": "topResearchPriorities",
+                            "reason": "Research radar queue context.",
+                        }
+                    ],
+                }
+            ],
+            "topResearchQuestions": [
+                {
+                    "question": "Which research queue items need structure verification first?",
+                    "surface": "Research Radar",
+                    "drilldownTargets": [
+                        {
+                            "label": "Research Radar",
+                            "route": "/research/radar",
+                            "section": "topResearchPriorities",
+                            "reason": "Research radar queue context.",
+                        }
+                    ],
+                }
+            ],
+            "priorityDrilldowns": [
+                {
+                    "label": "Research Radar",
+                    "route": "/research/radar",
+                    "section": "topResearchPriorities",
+                    "reason": "Research radar queue context.",
+                }
+            ],
+            "evidenceConflicts": [],
+            "degradedSurfaceSummary": [
+                {
+                    "surface": "Scenario Lab",
+                    "status": "unavailable",
+                    "reason": "Scenario risk read model is unavailable for this briefing.",
+                    "drilldownTargets": [],
+                }
+            ],
+            "nextObservationSteps": ["Review research queue evidence with structure context."],
             "consumerIssues": [
                 {
                     "label": "Evidence needs review",
@@ -112,6 +173,13 @@ def test_daily_intelligence_endpoint_uses_optional_user_context(monkeypatch) -> 
     ]
     assert payload["portfolioHighlights"] == []
     assert payload["drilldownTargets"][0]["route"] == "/research/radar"
+    assert payload["researchWorkflow"][0]["surface"] == "Research Radar"
+    assert payload["crossSurfaceEvidence"][0]["surfaces"] == ["Market Overview", "Research Radar"]
+    assert payload["topResearchQuestions"][0]["question"].startswith("Which research queue")
+    assert payload["priorityDrilldowns"][0]["route"] == "/research/radar"
+    assert payload["evidenceConflicts"] == []
+    assert payload["degradedSurfaceSummary"][0]["surface"] == "Scenario Lab"
+    assert payload["nextObservationSteps"] == ["Review research queue evidence with structure context."]
     assert payload["noAdviceDisclosure"] == "Observation-only research briefing; not personalized financial advice."
     assert fake_service.calls == [
         {

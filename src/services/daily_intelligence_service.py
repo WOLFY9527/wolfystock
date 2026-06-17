@@ -130,6 +130,19 @@ class DailyIntelligenceService:
             watchlist_payload=watchlist_payload,
             portfolio_payload=portfolio_payload,
         )
+        scenario_risks = [
+            {
+                "label": "Scenario risk coverage",
+                "source": "Daily Intelligence",
+                "observations": [
+                    "Scenario risk read model is unavailable for this briefing."
+                ],
+                "evidenceGaps": [_safe_reason_phrase(_SCENARIO_RISK_UNAVAILABLE_REASON)],
+            }
+        ]
+        safe_evidence_gaps = _safe_phrase_list(evidence_gaps)
+        safe_degraded_inputs = _safe_degraded_inputs(degraded_inputs)
+        drilldown_targets = section_links
         consumer_issues = build_consumer_issues(
             evidence_gaps,
             degraded_inputs,
@@ -140,6 +153,16 @@ class DailyIntelligenceService:
             [item.get("riskFlags") for item in watchlist_highlights],
             [item.get("missingEvidence") for item in portfolio_highlights],
             [item.get("riskFlags") for item in portfolio_highlights],
+        )
+        synthesis = self._build_synthesis_contract(
+            market_regime_summary=market_regime_summary,
+            top_research_priorities=top_research_priorities,
+            scanner_highlights=scanner_highlights,
+            watchlist_highlights=watchlist_highlights,
+            portfolio_highlights=portfolio_highlights,
+            scenario_risks=scenario_risks,
+            degraded_inputs=safe_degraded_inputs,
+            drilldown_targets=drilldown_targets,
         )
 
         return {
@@ -155,19 +178,17 @@ class DailyIntelligenceService:
             "watchlistHighlights": watchlist_highlights,
             "portfolioHighlights": portfolio_highlights,
             "portfolioStructureHighlights": portfolio_highlights,
-            "scenarioRisks": [
-                {
-                    "label": "Scenario risk coverage",
-                    "source": "Daily Intelligence",
-                    "observations": [
-                        "Scenario risk read model is unavailable for this briefing."
-                    ],
-                    "evidenceGaps": [_safe_reason_phrase(_SCENARIO_RISK_UNAVAILABLE_REASON)],
-                }
-            ],
-            "evidenceGaps": _safe_phrase_list(evidence_gaps),
-            "degradedInputs": _safe_degraded_inputs(degraded_inputs),
-            "drilldownTargets": section_links,
+            "scenarioRisks": scenario_risks,
+            "evidenceGaps": safe_evidence_gaps,
+            "degradedInputs": safe_degraded_inputs,
+            "drilldownTargets": drilldown_targets,
+            "researchWorkflow": synthesis["researchWorkflow"],
+            "crossSurfaceEvidence": synthesis["crossSurfaceEvidence"],
+            "topResearchQuestions": synthesis["topResearchQuestions"],
+            "priorityDrilldowns": synthesis["priorityDrilldowns"],
+            "evidenceConflicts": synthesis["evidenceConflicts"],
+            "degradedSurfaceSummary": synthesis["degradedSurfaceSummary"],
+            "nextObservationSteps": synthesis["nextObservationSteps"],
             "consumerIssues": consumer_issues,
             "noAdviceDisclosure": DAILY_INTELLIGENCE_NO_ADVICE_DISCLOSURE,
             "observationOnly": True,
@@ -499,6 +520,388 @@ class DailyIntelligenceService:
             )
         return _dedupe_links(links)
 
+    def _build_synthesis_contract(
+        self,
+        *,
+        market_regime_summary: Mapping[str, Any],
+        top_research_priorities: Sequence[Mapping[str, Any]],
+        scanner_highlights: Sequence[Mapping[str, Any]],
+        watchlist_highlights: Sequence[Mapping[str, Any]],
+        portfolio_highlights: Sequence[Mapping[str, Any]],
+        scenario_risks: Sequence[Mapping[str, Any]],
+        degraded_inputs: Sequence[Mapping[str, str]],
+        drilldown_targets: Sequence[Mapping[str, str]],
+    ) -> dict[str, Any]:
+        priority_drilldowns = self._priority_drilldowns(
+            top_research_priorities=top_research_priorities,
+            scanner_highlights=scanner_highlights,
+            watchlist_highlights=watchlist_highlights,
+            portfolio_highlights=portfolio_highlights,
+            drilldown_targets=drilldown_targets,
+        )
+        degraded_surface_summary = self._degraded_surface_summary(
+            degraded_inputs=degraded_inputs,
+            top_research_priorities=top_research_priorities,
+            scanner_highlights=scanner_highlights,
+            portfolio_highlights=portfolio_highlights,
+            scenario_risks=scenario_risks,
+        )
+
+        return {
+            "researchWorkflow": self._research_workflow(
+                market_regime_summary=market_regime_summary,
+                top_research_priorities=top_research_priorities,
+                scanner_highlights=scanner_highlights,
+                watchlist_highlights=watchlist_highlights,
+                portfolio_highlights=portfolio_highlights,
+                scenario_risks=scenario_risks,
+                degraded_surface_summary=degraded_surface_summary,
+                priority_drilldowns=priority_drilldowns,
+            ),
+            "crossSurfaceEvidence": self._cross_surface_evidence(
+                top_research_priorities=top_research_priorities,
+                portfolio_highlights=portfolio_highlights,
+                scenario_risks=scenario_risks,
+                priority_drilldowns=priority_drilldowns,
+            ),
+            "topResearchQuestions": self._top_research_questions(
+                top_research_priorities=top_research_priorities,
+                portfolio_highlights=portfolio_highlights,
+                priority_drilldowns=priority_drilldowns,
+            ),
+            "priorityDrilldowns": priority_drilldowns,
+            "evidenceConflicts": [],
+            "degradedSurfaceSummary": degraded_surface_summary,
+            "nextObservationSteps": self._next_observation_steps(
+                top_research_priorities=top_research_priorities,
+                portfolio_highlights=portfolio_highlights,
+                priority_drilldowns=priority_drilldowns,
+            ),
+        }
+
+    def _research_workflow(
+        self,
+        *,
+        market_regime_summary: Mapping[str, Any],
+        top_research_priorities: Sequence[Mapping[str, Any]],
+        scanner_highlights: Sequence[Mapping[str, Any]],
+        watchlist_highlights: Sequence[Mapping[str, Any]],
+        portfolio_highlights: Sequence[Mapping[str, Any]],
+        scenario_risks: Sequence[Mapping[str, Any]],
+        degraded_surface_summary: Sequence[Mapping[str, Any]],
+        priority_drilldowns: Sequence[Mapping[str, str]],
+    ) -> list[dict[str, Any]]:
+        degraded_surfaces = {
+            str(item.get("surface") or ""): str(item.get("status") or "unavailable")
+            for item in degraded_surface_summary
+        }
+        stock_links = [link for link in priority_drilldowns if "structure-decision" in str(link.get("route") or "")]
+        regime_label = _text(market_regime_summary.get("regime")) or "Market regime observation"
+        steps = [
+            self._workflow_step(
+                surface="Market Overview",
+                status="available",
+                summary=f"{regime_label} is the starting context for this briefing.",
+                drilldown_targets=[self._surface_link("Market Overview", "/market-overview", "marketRegimeSummary")],
+            ),
+            self._workflow_step(
+                surface="Research Radar",
+                status=(
+                    "available"
+                    if top_research_priorities or scanner_highlights
+                    else degraded_surfaces.get("Research Radar", "unavailable")
+                ),
+                summary=(
+                    "Research Radar evidence is connected to the briefing queue."
+                    if top_research_priorities or scanner_highlights
+                    else "Research Radar evidence is unavailable for this briefing."
+                ),
+                drilldown_targets=[self._surface_link("Research Radar", "/research/radar", "topResearchPriorities")],
+            ),
+            self._workflow_step(
+                surface="Portfolio Structure Review",
+                status=(
+                    "available"
+                    if portfolio_highlights
+                    else degraded_surfaces.get("Portfolio Structure Review", "unavailable")
+                ),
+                summary=(
+                    "Portfolio structure observations are connected for owner context."
+                    if portfolio_highlights
+                    else "Portfolio structure observations need owner context or refreshed evidence."
+                ),
+                drilldown_targets=[self._surface_link("Portfolio", "/portfolio", "portfolioStructureHighlights")],
+            ),
+            self._workflow_step(
+                surface="Scenario Lab",
+                status="unavailable" if scenario_risks else "available",
+                summary="Scenario Lab is tracked as a degraded planning surface for this briefing.",
+                drilldown_targets=[self._surface_link("Scenario Lab", "/scenario-lab", "scenarioRisks")],
+            ),
+            self._workflow_step(
+                surface="Stock Structure",
+                status="available" if stock_links else degraded_surfaces.get("Stock Structure", "unavailable"),
+                summary=(
+                    "Stock Structure drilldowns are available for symbols in focus."
+                    if stock_links
+                    else "Stock Structure drilldowns need a symbol in focus."
+                ),
+                drilldown_targets=stock_links[:3]
+                or [
+                    self._surface_link(
+                        "Stock Structure",
+                        "/stocks/structure-decision",
+                        "topResearchPriorities",
+                    )
+                ],
+            ),
+            self._workflow_step(
+                surface="Options / Gamma Observation",
+                status="unavailable",
+                summary=(
+                    "Options and gamma evidence is marked unavailable until existing observation inputs are present."
+                ),
+                drilldown_targets=[self._surface_link("Options / Gamma", "/options-lab", "scenarioRisks")],
+            ),
+        ]
+        if watchlist_highlights:
+            steps.insert(
+                3,
+                self._workflow_step(
+                    surface="Watchlist",
+                    status="available",
+                    summary="Watchlist observations are connected for owner context.",
+                    drilldown_targets=[self._surface_link("Watchlist", "/watchlist", "watchlistHighlights")],
+                ),
+            )
+        return steps
+
+    def _cross_surface_evidence(
+        self,
+        *,
+        top_research_priorities: Sequence[Mapping[str, Any]],
+        portfolio_highlights: Sequence[Mapping[str, Any]],
+        scenario_risks: Sequence[Mapping[str, Any]],
+        priority_drilldowns: Sequence[Mapping[str, str]],
+    ) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        radar_links = [link for link in priority_drilldowns if str(link.get("route")) == "/research/radar"]
+        stock_links = [link for link in priority_drilldowns if "structure-decision" in str(link.get("route") or "")]
+        portfolio_links = [link for link in priority_drilldowns if str(link.get("route")) == "/portfolio"]
+        scenario_link = self._surface_link("Scenario Lab", "/scenario-lab", "scenarioRisks")
+        options_link = self._surface_link("Options / Gamma", "/options-lab", "scenarioRisks")
+
+        if top_research_priorities:
+            items.append(
+                {
+                    "surfaces": ["Market Overview", "Research Radar"],
+                    "observation": "Market context can be reviewed beside the active research queue.",
+                    "drilldownTargets": _dedupe_links([*radar_links[:1], scenario_link]),
+                }
+            )
+        if stock_links:
+            items.append(
+                {
+                    "surfaces": ["Research Radar", "Stock Structure"],
+                    "observation": "Symbols in the research queue have structure drilldowns for verification.",
+                    "drilldownTargets": _dedupe_links([*radar_links[:1], *stock_links[:2]]),
+                }
+            )
+        if portfolio_highlights:
+            items.append(
+                {
+                    "surfaces": ["Portfolio Structure Review", "Stock Structure"],
+                    "observation": "Portfolio structure observations can be checked against symbol structure detail.",
+                    "drilldownTargets": _dedupe_links([*portfolio_links[:1], *stock_links[:2]]),
+                }
+            )
+        if scenario_risks:
+            items.append(
+                {
+                    "surfaces": ["Scenario Lab", "Options / Gamma Observation"],
+                    "observation": "Scenario and options evidence are explicit degraded inputs for this briefing.",
+                    "drilldownTargets": _dedupe_links([scenario_link, options_link]),
+                }
+            )
+        return items
+
+    def _top_research_questions(
+        self,
+        *,
+        top_research_priorities: Sequence[Mapping[str, Any]],
+        portfolio_highlights: Sequence[Mapping[str, Any]],
+        priority_drilldowns: Sequence[Mapping[str, str]],
+    ) -> list[dict[str, Any]]:
+        questions: list[dict[str, Any]] = []
+        radar_links = [link for link in priority_drilldowns if str(link.get("route")) == "/research/radar"]
+        stock_links = [link for link in priority_drilldowns if "structure-decision" in str(link.get("route") or "")]
+        if top_research_priorities:
+            questions.append(
+                {
+                    "question": "Which research queue items need structure verification first?",
+                    "surface": "Research Radar",
+                    "drilldownTargets": _dedupe_links([*radar_links[:1], *stock_links[:2]]),
+                }
+            )
+        if portfolio_highlights:
+            questions.append(
+                {
+                    "question": "Which portfolio exposures need updated structure evidence?",
+                    "surface": "Portfolio Structure Review",
+                    "drilldownTargets": _dedupe_links([
+                        self._surface_link("Portfolio", "/portfolio", "portfolioStructureHighlights"),
+                        *stock_links[:2],
+                    ]),
+                }
+            )
+        questions.extend(
+            [
+                {
+                    "question": "Which scenario assumptions would change the current regime observation?",
+                    "surface": "Scenario Lab",
+                    "drilldownTargets": [self._surface_link("Scenario Lab", "/scenario-lab", "scenarioRisks")],
+                },
+                {
+                    "question": "Which options structure evidence is still unavailable for observation context?",
+                    "surface": "Options / Gamma Observation",
+                    "drilldownTargets": [self._surface_link("Options / Gamma", "/options-lab", "scenarioRisks")],
+                },
+            ]
+        )
+        return questions[:5]
+
+    def _priority_drilldowns(
+        self,
+        *,
+        top_research_priorities: Sequence[Mapping[str, Any]],
+        scanner_highlights: Sequence[Mapping[str, Any]],
+        watchlist_highlights: Sequence[Mapping[str, Any]],
+        portfolio_highlights: Sequence[Mapping[str, Any]],
+        drilldown_targets: Sequence[Mapping[str, str]],
+    ) -> list[dict[str, str]]:
+        if not drilldown_targets and not top_research_priorities and not scanner_highlights:
+            return []
+        links: list[Mapping[str, str]] = list(drilldown_targets)
+        for collection in (
+            top_research_priorities,
+            scanner_highlights,
+            watchlist_highlights,
+            portfolio_highlights,
+        ):
+            for item in collection:
+                links.extend(_mapping(item).get("evidenceLinks") or [])
+        links.append(self._surface_link("Scenario Lab", "/scenario-lab", "scenarioRisks"))
+        links.append(self._surface_link("Options / Gamma", "/options-lab", "scenarioRisks"))
+        return _dedupe_links(links)[:10]
+
+    def _degraded_surface_summary(
+        self,
+        *,
+        degraded_inputs: Sequence[Mapping[str, str]],
+        top_research_priorities: Sequence[Mapping[str, Any]],
+        scanner_highlights: Sequence[Mapping[str, Any]],
+        portfolio_highlights: Sequence[Mapping[str, Any]],
+        scenario_risks: Sequence[Mapping[str, Any]],
+    ) -> list[dict[str, Any]]:
+        section_surface = {
+            "topResearchPriorities": ("Research Radar", "/research/radar"),
+            "scannerHighlights": ("Research Radar", "/research/radar"),
+            "watchlistHighlights": ("Watchlist", "/watchlist"),
+            "portfolioHighlights": ("Portfolio Structure Review", "/portfolio"),
+            "portfolioStructureHighlights": ("Portfolio Structure Review", "/portfolio"),
+            "scenarioRisks": ("Scenario Lab", "/scenario-lab"),
+        }
+        items: list[dict[str, Any]] = []
+        for item in degraded_inputs:
+            section = _text(item.get("section"))
+            surface, route = section_surface.get(section, (_humanize_code(section), "/market/decision-cockpit"))
+            items.append(
+                {
+                    "surface": surface,
+                    "status": _text(item.get("status")) or "unavailable",
+                    "reason": _safe_reason_phrase(item.get("reason")),
+                    "drilldownTargets": [self._surface_link(surface, route, section or "degradedInputs")],
+                }
+            )
+        if not top_research_priorities and not scanner_highlights:
+            items.append(
+                {
+                    "surface": "Research Radar",
+                    "status": "unavailable",
+                    "reason": "Research Radar evidence is unavailable for this briefing.",
+                    "drilldownTargets": [
+                        self._surface_link("Research Radar", "/research/radar", "topResearchPriorities")
+                    ],
+                }
+            )
+        if not portfolio_highlights:
+            items.append(
+                {
+                    "surface": "Portfolio Structure Review",
+                    "status": "unavailable",
+                    "reason": "Portfolio structure observations need owner context or refreshed evidence.",
+                    "drilldownTargets": [self._surface_link("Portfolio", "/portfolio", "portfolioStructureHighlights")],
+                }
+            )
+        if scenario_risks:
+            items.append(
+                {
+                    "surface": "Scenario Lab",
+                    "status": "unavailable",
+                    "reason": "Scenario risk read model is unavailable for this briefing.",
+                    "drilldownTargets": [self._surface_link("Scenario Lab", "/scenario-lab", "scenarioRisks")],
+                }
+            )
+        items.append(
+            {
+                "surface": "Options / Gamma Observation",
+                "status": "unavailable",
+                "reason": "Options and gamma evidence is unavailable for this briefing.",
+                "drilldownTargets": [self._surface_link("Options / Gamma", "/options-lab", "scenarioRisks")],
+            }
+        )
+        return _dedupe_surface_summary(items)
+
+    def _next_observation_steps(
+        self,
+        *,
+        top_research_priorities: Sequence[Mapping[str, Any]],
+        portfolio_highlights: Sequence[Mapping[str, Any]],
+        priority_drilldowns: Sequence[Mapping[str, str]],
+    ) -> list[str]:
+        steps: list[str] = []
+        if top_research_priorities:
+            steps.append("Review Research Radar evidence with Stock Structure context.")
+        if portfolio_highlights:
+            steps.append("Compare portfolio structure observations with symbol structure detail.")
+        if priority_drilldowns:
+            steps.append("Open priority drilldowns before expanding the research queue.")
+        steps.append("Keep Scenario Lab and Options/Gamma evidence in observation-only review.")
+        return _dedupe(steps)[:4]
+
+    def _workflow_step(
+        self,
+        *,
+        surface: str,
+        status: str,
+        summary: str,
+        drilldown_targets: Sequence[Mapping[str, str]],
+    ) -> dict[str, Any]:
+        return {
+            "surface": surface,
+            "status": status if status in {"available", "degraded", "unavailable"} else "unavailable",
+            "summary": _safe_public_text(summary),
+            "drilldownTargets": _dedupe_links(drilldown_targets),
+        }
+
+    def _surface_link(self, label: str, route: str, section: str) -> dict[str, str]:
+        return self._evidence_link(
+            label=label,
+            route=route,
+            section=section,
+            reason=f"Open {label} context.",
+        )
+
     def _item_links(
         self,
         *,
@@ -700,6 +1103,30 @@ def _dedupe_links(values: Sequence[Mapping[str, str]]) -> list[dict[str, str]]:
                 "route": route,
                 "section": section,
                 "reason": reason,
+            }
+        )
+    return result
+
+
+def _dedupe_surface_summary(values: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[tuple[str, str]] = set()
+    result: list[dict[str, Any]] = []
+    for item in values:
+        surface = _text(item.get("surface"))
+        reason = _safe_reason_phrase(item.get("reason"))
+        status = _text(item.get("status")) or "unavailable"
+        if not surface or not reason:
+            continue
+        key = (surface, reason)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(
+            {
+                "surface": surface,
+                "status": status if status in {"available", "degraded", "unavailable"} else "unavailable",
+                "reason": reason,
+                "drilldownTargets": _dedupe_links(item.get("drilldownTargets") or []),
             }
         )
     return result
