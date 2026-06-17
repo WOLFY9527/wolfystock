@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Standalone contract models for homepage research queue prioritization."""
+"""Standalone contract models for homepage and unified research queues."""
 
 from __future__ import annotations
 
@@ -7,6 +7,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+
+UNIFIED_RESEARCH_QUEUE_RESPONSE_SCHEMA_VERSION = "research_queue_v1"
 
 ResearchQueueCategory = Literal[
     "market",
@@ -85,6 +87,64 @@ class ResearchQueueResponse(_ResearchQueueModel):
     noAdviceDisclosure: str
 
 
+class UnifiedResearchQueueFreshnessResponse(_ResearchQueueModel):
+    state: Literal["current", "needs_review", "unavailable", "unknown"]
+    lastReviewedAt: str | None = None
+
+
+class UnifiedResearchQueueSuggestedResearchPathResponse(_ResearchQueueModel):
+    label: str
+    route: str
+    section: str
+    reason: str
+
+
+class UnifiedResearchQueueItemResponse(_ResearchQueueModel):
+    queueItemId: str
+    sourceSurface: Literal["scanner", "watchlist", "market", "manual_gap"]
+    symbol: str
+    title: str
+    priorityTier: Literal["urgent_review", "follow_up", "monitor"]
+    whyQueued: list[str] = Field(default_factory=list)
+    evidenceUsed: list[str] = Field(default_factory=list)
+    evidenceGaps: list[str] = Field(default_factory=list)
+    freshness: UnifiedResearchQueueFreshnessResponse
+    suggestedResearchPath: list[UnifiedResearchQueueSuggestedResearchPathResponse] = Field(default_factory=list)
+    observationOnly: Literal[True] = True
+
+
+class UnifiedResearchQueueAggregateSummaryResponse(_ResearchQueueModel):
+    itemCount: int = 0
+    limit: int = 10
+    bounded: bool = False
+    bySourceSurface: dict[str, int] = Field(default_factory=dict)
+    byPriorityTier: dict[str, int] = Field(default_factory=dict)
+
+
+class UnifiedResearchQueueDataQualityResponse(_ResearchQueueModel):
+    state: Literal["ready", "no_evidence"]
+    itemCount: int = 0
+    sourceSurfacesAvailable: list[str] = Field(default_factory=list)
+    sourceSurfacesExpected: list[Literal["scanner", "watchlist", "market", "manual_gap"]] = Field(
+        default_factory=list
+    )
+    failClosed: bool = True
+
+
+class UnifiedResearchQueueResponse(_ResearchQueueModel):
+    schemaVersion: Literal["research_queue_v1"] = UNIFIED_RESEARCH_QUEUE_RESPONSE_SCHEMA_VERSION
+    researchQueue: list[UnifiedResearchQueueItemResponse] = Field(default_factory=list, max_length=10)
+    aggregateSummary: UnifiedResearchQueueAggregateSummaryResponse
+    sourceSurfacesAggregated: list[Literal["scanner", "watchlist", "market", "manual_gap"]] = Field(
+        default_factory=list
+    )
+    evidenceGaps: list[str] = Field(default_factory=list)
+    dataQuality: UnifiedResearchQueueDataQualityResponse
+    noAdviceDisclosure: str
+    observationOnly: Literal[True] = True
+    decisionGrade: Literal[False] = False
+
+
 __all__ = [
     "ResearchQueueBuildInputs",
     "ResearchQueueCategory",
@@ -95,4 +155,11 @@ __all__ = [
     "ResearchQueueResponse",
     "ResearchQueueSeedItem",
     "ResearchQueueTopLevelStatus",
+    "UNIFIED_RESEARCH_QUEUE_RESPONSE_SCHEMA_VERSION",
+    "UnifiedResearchQueueAggregateSummaryResponse",
+    "UnifiedResearchQueueDataQualityResponse",
+    "UnifiedResearchQueueFreshnessResponse",
+    "UnifiedResearchQueueItemResponse",
+    "UnifiedResearchQueueResponse",
+    "UnifiedResearchQueueSuggestedResearchPathResponse",
 ]

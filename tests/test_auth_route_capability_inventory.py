@@ -153,6 +153,7 @@ EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("POST", "/api/v1/agent/chat/stream"): "authenticated_member",
     ("POST", "/api/v1/agent/chat/send"): "admin_capability_required",
     ("GET", "/api/v1/research/radar"): "authenticated_member",
+    ("GET", "/api/v1/research/queue"): "authenticated_member",
     ("POST", "/api/v1/user-alerts/rules/{rule_id}/dry-run"): "authenticated_member",
     ("POST", "/api/v1/scanner/run"): "authenticated_member",
     ("GET", "/api/v1/scanner/runs"): "authenticated_member",
