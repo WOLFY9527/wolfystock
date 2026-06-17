@@ -35,6 +35,8 @@ INDEX_HASH_RE = re.compile(r"^index-(?P<hash>[A-Za-z0-9_-]+)\.js$")
 PUBLIC_ROUTE_SPECS: tuple[tuple[str, str], ...] = (
     ("GET", "/api/health"),
     ("GET", "/api/v1/auth/status"),
+)
+AUTHENTICATED_ROUTE_SPECS: tuple[tuple[str, str], ...] = (
     ("GET", "/api/v1/market-overview/indices"),
     ("GET", "/api/v1/scanner/themes"),
 )
@@ -164,6 +166,10 @@ def _fetch_json(
     return int(response.status_code), payload
 
 
+def _is_success_status(status_code: int) -> bool:
+    return 200 <= int(status_code) < 300
+
+
 def _verify_runtime_bundle(
     *,
     base_url: str,
@@ -216,13 +222,53 @@ def _verify_public_routes(*, base_url: str, client: Any) -> dict[str, Any]:
         response = client.request(method, _join_url(base_url, path))
         status_code = int(response.status_code)
         checked_routes.append({"method": method, "path": path, "httpStatus": status_code})
-        if status_code != 200:
+        if not _is_success_status(status_code):
             failing_routes.append({"method": method, "path": path, "httpStatus": status_code})
     return {
         "status": "PASS" if not failing_routes else "FAIL",
         "reasonCodes": [] if not failing_routes else ["public_route_unavailable"],
         "checkedRoutes": checked_routes,
         "failingRoutes": failing_routes,
+    }
+
+
+def _verify_authenticated_routes(
+    *,
+    base_url: str,
+    client: Any,
+    auth_headers: dict[str, str] | None,
+) -> dict[str, Any]:
+    checked_routes: list[dict[str, Any]] = []
+    failing_routes: list[dict[str, Any]] = []
+    auth_required_routes: list[dict[str, Any]] = []
+    for method, path in AUTHENTICATED_ROUTE_SPECS:
+        response = client.request(method, _join_url(base_url, path), headers=auth_headers or {})
+        status_code = int(response.status_code)
+        route_result = {"method": method, "path": path, "httpStatus": status_code}
+        checked_routes.append(route_result)
+        if _is_success_status(status_code):
+            continue
+        if not auth_headers and status_code in {401, 403}:
+            auth_required_routes.append(route_result)
+            continue
+        failing_routes.append(route_result)
+
+    if failing_routes:
+        status = "FAIL"
+        reason_codes = ["authenticated_route_unavailable"]
+    elif auth_required_routes:
+        status = "PARTIAL"
+        reason_codes = ["authenticated_routes_auth_required"]
+    else:
+        status = "PASS"
+        reason_codes = []
+
+    return {
+        "status": status,
+        "reasonCodes": reason_codes,
+        "checkedRoutes": checked_routes,
+        "failingRoutes": failing_routes,
+        "authRequiredRoutes": auth_required_routes,
     }
 
 
@@ -357,6 +403,12 @@ def run_runtime_smoke(
 
     runtime_bundle_check = {"status": "FAIL", "reasonCodes": ["local_build_unverified"]}
     public_routes_check = {"status": "FAIL", "reasonCodes": ["local_build_unverified"], "failingRoutes": []}
+    authenticated_routes_check = {
+        "status": "FAIL",
+        "reasonCodes": ["local_build_unverified"],
+        "failingRoutes": [],
+        "authRequiredRoutes": [],
+    }
     admin_check = {"status": "PARTIAL", "reasonCodes": ["admin_status_unverified"]}
     surface_check = {"status": "PARTIAL", "reasonCodes": ["surface_readiness_unverified"]}
 
@@ -367,6 +419,11 @@ def run_runtime_smoke(
             local_payload=local_build_result.payload,
         )
         public_routes_check = _verify_public_routes(base_url=base_url, client=client)
+        authenticated_routes_check = _verify_authenticated_routes(
+            base_url=base_url,
+            client=client,
+            auth_headers=auth_headers,
+        )
         admin_check = _evaluate_admin_status(
             client=client,
             base_url=base_url,
@@ -385,6 +442,7 @@ def run_runtime_smoke(
         "localBuild": local_build_check,
         "runtimeBundle": runtime_bundle_check,
         "publicRoutes": public_routes_check,
+        "authenticatedRoutes": authenticated_routes_check,
         "adminOpsStatus": admin_check,
         "surfaceReadiness": surface_check,
     }
@@ -419,7 +477,7 @@ def _print_human_summary(report: dict[str, Any]) -> None:
     print(f"UAT runtime smoke: {report['summaryStatus']}")
     print(f"Base URL: {report['baseUrl']}")
     print(f"Git HEAD: {report.get('gitHead') or 'unknown'}")
-    for key in ("localBuild", "runtimeBundle", "publicRoutes", "adminOpsStatus", "surfaceReadiness"):
+    for key in ("localBuild", "runtimeBundle", "publicRoutes", "authenticatedRoutes", "adminOpsStatus", "surfaceReadiness"):
         check = report["checks"][key]
         reason_codes = ", ".join(check.get("reasonCodes") or []) or "none"
         print(f"- {key}: {check['status']} ({reason_codes})")
