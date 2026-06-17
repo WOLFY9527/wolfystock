@@ -21,6 +21,62 @@ DAILY_INTELLIGENCE_NO_ADVICE_DISCLOSURE = (
     "Observation-only research briefing; not personalized financial advice."
 )
 _SCENARIO_RISK_UNAVAILABLE_REASON = "scenario_risk_read_model_unavailable"
+_STARTER_RESEARCH_WORKFLOW = [
+    "Open Market Overview to set broad context.",
+    "Create one watchlist item for a symbol you already want to observe.",
+    "Run scanner to generate research candidates for review.",
+    "Return to Research Radar after adding watchlist context.",
+]
+_FIRST_RUN_CHECKLIST = [
+    "Market Overview checked for context.",
+    "First watchlist item created by the user.",
+    "Scanner run completed by the user.",
+    "Research Radar reviewed again after watchlist context exists.",
+]
+_EMPTY_STATE_ACTIONS = [
+    {
+        "label": "Open Market Overview",
+        "route": "/market-overview",
+        "description": "Start with broad market context before choosing symbols to observe.",
+    },
+    {
+        "label": "Create first watchlist item",
+        "route": "/watchlist",
+        "description": "Add a symbol you already want to observe so research surfaces have user context.",
+    },
+    {
+        "label": "Run scanner",
+        "route": "/scanner",
+        "description": "Generate research candidates for observation and evidence review.",
+    },
+    {
+        "label": "Review Research Radar again",
+        "route": "/research/radar",
+        "description": "Return after watchlist or scanner context exists.",
+    },
+]
+_SUGGESTED_RESEARCH_ENTRYPOINTS = [
+    {
+        "surface": "Market Overview",
+        "route": "/market-overview",
+        "description": "Review broad context before adding symbols.",
+    },
+    {
+        "surface": "Watchlist",
+        "route": "/watchlist",
+        "description": "Create the first user-chosen symbol to observe.",
+    },
+    {
+        "surface": "Scanner",
+        "route": "/scanner",
+        "description": "Run scanner to produce user-scoped research candidates.",
+    },
+    {
+        "surface": "Research Radar",
+        "route": "/research/radar",
+        "description": "Recheck the queue after watchlist or scanner evidence exists.",
+    },
+]
 _SAFE_REASON_LABELS = {
     "owner_context_missing": "Signed-in owner context is unavailable.",
     "research_radar_unavailable": "Research radar context is unavailable.",
@@ -164,6 +220,15 @@ class DailyIntelligenceService:
             degraded_inputs=safe_degraded_inputs,
             drilldown_targets=drilldown_targets,
         )
+        onboarding_contract = self._empty_consumer_onboarding_contract(
+            radar_payload=radar_payload,
+            watchlist_payload=watchlist_payload,
+            portfolio_payload=portfolio_payload,
+            top_research_priorities=top_research_priorities,
+            scanner_highlights=scanner_highlights,
+            watchlist_highlights=watchlist_highlights,
+            portfolio_highlights=portfolio_highlights,
+        )
 
         return {
             "schemaVersion": DAILY_INTELLIGENCE_SERVICE_SCHEMA_VERSION,
@@ -189,6 +254,11 @@ class DailyIntelligenceService:
             "evidenceConflicts": synthesis["evidenceConflicts"],
             "degradedSurfaceSummary": synthesis["degradedSurfaceSummary"],
             "nextObservationSteps": synthesis["nextObservationSteps"],
+            "onboardingGuidance": onboarding_contract["onboardingGuidance"],
+            "emptyStateActions": onboarding_contract["emptyStateActions"],
+            "starterResearchWorkflow": onboarding_contract["starterResearchWorkflow"],
+            "firstRunChecklist": onboarding_contract["firstRunChecklist"],
+            "suggestedResearchEntrypoints": onboarding_contract["suggestedResearchEntrypoints"],
             "consumerIssues": consumer_issues,
             "noAdviceDisclosure": DAILY_INTELLIGENCE_NO_ADVICE_DISCLOSURE,
             "observationOnly": True,
@@ -519,6 +589,70 @@ class DailyIntelligenceService:
                 )
             )
         return _dedupe_links(links)
+
+    def _empty_consumer_onboarding_contract(
+        self,
+        *,
+        radar_payload: Mapping[str, Any],
+        watchlist_payload: Mapping[str, Any],
+        portfolio_payload: Mapping[str, Any],
+        top_research_priorities: Sequence[Mapping[str, Any]],
+        scanner_highlights: Sequence[Mapping[str, Any]],
+        watchlist_highlights: Sequence[Mapping[str, Any]],
+        portfolio_highlights: Sequence[Mapping[str, Any]],
+    ) -> dict[str, Any]:
+        has_watchlist_items = bool(list(watchlist_payload.get("items") or []))
+        has_portfolio_holdings = bool(list(portfolio_payload.get("holdingsStructure") or []))
+        has_research_queue = bool(list(radar_payload.get("researchQueue") or []))
+        queue_quality = _text(_mapping(radar_payload.get("aggregateSummary")).get("queueQuality")).lower()
+        has_thin_research_queue = queue_quality in {"thin", "low_evidence", "degraded"}
+        has_highlights = bool(
+            top_research_priorities
+            or scanner_highlights
+            or watchlist_highlights
+            or portfolio_highlights
+        )
+        scanner_watchlist_highlights_empty = not scanner_highlights and not watchlist_highlights
+        first_run_user_context = not has_watchlist_items and not has_portfolio_holdings
+        if (
+            has_watchlist_items
+            or has_portfolio_holdings
+            or (has_research_queue and not has_thin_research_queue)
+            or (has_highlights and not first_run_user_context)
+        ):
+            return {
+                "onboardingGuidance": None,
+                "emptyStateActions": [],
+                "starterResearchWorkflow": [],
+                "firstRunChecklist": [],
+                "suggestedResearchEntrypoints": [],
+            }
+
+        conditions = []
+        if not has_watchlist_items:
+            conditions.append("No watchlist items were found.")
+        if not has_portfolio_holdings:
+            conditions.append("No portfolio holdings were found.")
+        if not has_research_queue:
+            conditions.append("Research Radar has no queue items yet.")
+        elif has_thin_research_queue:
+            conditions.append("Research Radar queue is thin.")
+        if scanner_watchlist_highlights_empty:
+            conditions.append("Scanner and watchlist highlights are empty.")
+        return {
+            "onboardingGuidance": {
+                "title": "Start a research loop",
+                "summary": (
+                    "Use Market Overview, Watchlist, Scanner, and Research Radar to build an observation-only "
+                    "research loop."
+                ),
+                "conditionsDetected": conditions,
+            },
+            "emptyStateActions": [dict(item) for item in _EMPTY_STATE_ACTIONS],
+            "starterResearchWorkflow": list(_STARTER_RESEARCH_WORKFLOW),
+            "firstRunChecklist": list(_FIRST_RUN_CHECKLIST),
+            "suggestedResearchEntrypoints": [dict(item) for item in _SUGGESTED_RESEARCH_ENTRYPOINTS],
+        }
 
     def _build_synthesis_contract(
         self,

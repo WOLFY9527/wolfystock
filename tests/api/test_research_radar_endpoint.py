@@ -119,6 +119,11 @@ class _FakeResearchRadarService:
                     "category": "evidence",
                 }
             ],
+            "onboardingGuidance": None,
+            "emptyStateActions": [],
+            "starterResearchWorkflow": [],
+            "firstRunChecklist": [],
+            "suggestedResearchEntrypoints": [],
             "noAdviceDisclosure": "Research-only queue; verify evidence gaps before further review.",
             "dataQuality": {
                 "status": "partial",
@@ -169,6 +174,11 @@ def test_get_research_radar_endpoint_is_registered_and_returns_contract(monkeypa
         "marketContextFit",
         "drilldownTargets",
         "consumerIssues",
+        "onboardingGuidance",
+        "emptyStateActions",
+        "starterResearchWorkflow",
+        "firstRunChecklist",
+        "suggestedResearchEntrypoints",
         "noAdviceDisclosure",
         "dataQuality",
         "observationOnly",
@@ -185,6 +195,11 @@ def test_get_research_radar_endpoint_is_registered_and_returns_contract(monkeypa
     assert payload["researchQueue"][0]["consumerIssues"][0]["label"] == "Evidence needs review"
     assert payload["researchQueue"][0]["drilldownTargets"][0]["route"] == "/stocks/ALFA/structure-decision"
     assert payload["consumerIssues"][0]["label"] == "Evidence needs review"
+    assert payload["onboardingGuidance"] is None
+    assert payload["emptyStateActions"] == []
+    assert payload["starterResearchWorkflow"] == []
+    assert payload["firstRunChecklist"] == []
+    assert payload["suggestedResearchEntrypoints"] == []
     assert payload["researchQueue"][0]["duplicateEvidenceMerged"] == 1
     assert payload["aggregateSummary"]["duplicateEvidenceMerged"] == 1
     assert payload["observationOnly"] is True

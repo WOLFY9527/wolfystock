@@ -120,6 +120,27 @@ class _FakeDailyIntelligenceService:
                 }
             ],
             "nextObservationSteps": ["Review research queue evidence with structure context."],
+            "onboardingGuidance": {
+                "title": "Start a research loop",
+                "summary": "Use Market Overview, Watchlist, Scanner, and Research Radar to begin observation.",
+                "conditionsDetected": ["Research Radar has no queue items yet."],
+            },
+            "emptyStateActions": [
+                {
+                    "label": "Open Market Overview",
+                    "route": "/market-overview",
+                    "description": "Start with broad market context.",
+                }
+            ],
+            "starterResearchWorkflow": ["Open Market Overview to set broad context."],
+            "firstRunChecklist": ["Market Overview checked for context."],
+            "suggestedResearchEntrypoints": [
+                {
+                    "surface": "Market Overview",
+                    "route": "/market-overview",
+                    "description": "Review broad context before adding symbols.",
+                }
+            ],
             "consumerIssues": [
                 {
                     "label": "Evidence needs review",
@@ -180,6 +201,11 @@ def test_daily_intelligence_endpoint_uses_optional_user_context(monkeypatch) -> 
     assert payload["evidenceConflicts"] == []
     assert payload["degradedSurfaceSummary"][0]["surface"] == "Scenario Lab"
     assert payload["nextObservationSteps"] == ["Review research queue evidence with structure context."]
+    assert payload["onboardingGuidance"]["title"] == "Start a research loop"
+    assert payload["emptyStateActions"][0]["route"] == "/market-overview"
+    assert payload["starterResearchWorkflow"] == ["Open Market Overview to set broad context."]
+    assert payload["firstRunChecklist"] == ["Market Overview checked for context."]
+    assert payload["suggestedResearchEntrypoints"][0]["surface"] == "Market Overview"
     assert payload["noAdviceDisclosure"] == "Observation-only research briefing; not personalized financial advice."
     assert fake_service.calls == [
         {

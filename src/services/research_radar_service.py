@@ -23,6 +23,62 @@ _MISSING_SCANNER_CANDIDATES = "scannerCandidates"
 _PRIORITIES = ("high", "medium", "low")
 _OBSERVATION_ONLY = True
 _DECISION_GRADE = False
+_STARTER_RESEARCH_WORKFLOW = [
+    "Open Market Overview to set broad context.",
+    "Create one watchlist item for a symbol you already want to observe.",
+    "Run scanner to generate research candidates for review.",
+    "Return to Research Radar after adding watchlist context.",
+]
+_FIRST_RUN_CHECKLIST = [
+    "Market Overview checked for context.",
+    "First watchlist item created by the user.",
+    "Scanner run completed by the user.",
+    "Research Radar reviewed again after watchlist context exists.",
+]
+_EMPTY_STATE_ACTIONS = [
+    {
+        "label": "Open Market Overview",
+        "route": "/market-overview",
+        "description": "Start with broad market context before choosing symbols to observe.",
+    },
+    {
+        "label": "Create first watchlist item",
+        "route": "/watchlist",
+        "description": "Add a symbol you already want to observe so research surfaces have user context.",
+    },
+    {
+        "label": "Run scanner",
+        "route": "/scanner",
+        "description": "Generate research candidates for observation and evidence review.",
+    },
+    {
+        "label": "Review Research Radar again",
+        "route": "/research/radar",
+        "description": "Return after watchlist or scanner context exists.",
+    },
+]
+_SUGGESTED_RESEARCH_ENTRYPOINTS = [
+    {
+        "surface": "Market Overview",
+        "route": "/market-overview",
+        "description": "Review broad context before adding symbols.",
+    },
+    {
+        "surface": "Watchlist",
+        "route": "/watchlist",
+        "description": "Create the first user-chosen symbol to observe.",
+    },
+    {
+        "surface": "Scanner",
+        "route": "/scanner",
+        "description": "Run scanner to produce user-scoped research candidates.",
+    },
+    {
+        "surface": "Research Radar",
+        "route": "/research/radar",
+        "description": "Recheck the queue after watchlist or scanner evidence exists.",
+    },
+]
 
 _DEFAULT_CONSUMER_DESCRIPTOR = {
     "label": "Evidence needs review",
@@ -333,6 +389,11 @@ class ResearchRadarService:
             for item in queue
             for target in list(item.get("drilldownTargets") or [])
         )
+        onboarding_contract = _empty_consumer_onboarding_contract(
+            queue=queue,
+            candidate_count=len(candidate_payloads),
+            queue_quality=_text(aggregate_summary.get("queueQuality")),
+        )
 
         return {
             "schemaVersion": RESEARCH_RADAR_API_SCHEMA_VERSION,
@@ -344,6 +405,11 @@ class ResearchRadarService:
             "marketContextFit": market_context_fit,
             "drilldownTargets": drilldown_targets,
             "consumerIssues": consumer_issues,
+            "onboardingGuidance": onboarding_contract["onboardingGuidance"],
+            "emptyStateActions": onboarding_contract["emptyStateActions"],
+            "starterResearchWorkflow": onboarding_contract["starterResearchWorkflow"],
+            "firstRunChecklist": onboarding_contract["firstRunChecklist"],
+            "suggestedResearchEntrypoints": onboarding_contract["suggestedResearchEntrypoints"],
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
             "dataQuality": data_quality,
             "observationOnly": _OBSERVATION_ONLY,
@@ -545,6 +611,45 @@ def _dedupe_drilldown_targets(targets: Iterable[Mapping[str, Any]]) -> list[dict
             item["reason"] = reason
         result.append(item)
     return result
+
+
+def _empty_consumer_onboarding_contract(
+    *,
+    queue: Sequence[Mapping[str, Any]],
+    candidate_count: int,
+    queue_quality: str,
+) -> dict[str, Any]:
+    is_thin_queue = _text(queue_quality).lower() in {"thin", "low_evidence", "degraded"}
+    if queue and not is_thin_queue:
+        return {
+            "onboardingGuidance": None,
+            "emptyStateActions": [],
+            "starterResearchWorkflow": [],
+            "firstRunChecklist": [],
+            "suggestedResearchEntrypoints": [],
+        }
+
+    conditions = []
+    if queue:
+        conditions.append("Research Radar queue is thin.")
+    else:
+        conditions.append("Research Radar has no queue items yet.")
+    if candidate_count <= 0 and not queue:
+        conditions.append("No scanner candidates were found for this user scope.")
+    return {
+        "onboardingGuidance": {
+            "title": "Start a research loop",
+            "summary": (
+                "Use Market Overview, Watchlist, Scanner, and Research Radar to build an observation-only "
+                "research loop."
+            ),
+            "conditionsDetected": conditions,
+        },
+        "emptyStateActions": [dict(item) for item in _EMPTY_STATE_ACTIONS],
+        "starterResearchWorkflow": list(_STARTER_RESEARCH_WORKFLOW),
+        "firstRunChecklist": list(_FIRST_RUN_CHECKLIST),
+        "suggestedResearchEntrypoints": [dict(item) for item in _SUGGESTED_RESEARCH_ENTRYPOINTS],
+    }
 
 
 def _scanner_candidate_to_engine_input(candidate: Any) -> dict[str, Any]:
