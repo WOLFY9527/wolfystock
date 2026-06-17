@@ -5,12 +5,22 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from api.v1.endpoints import market, market_overview
 from src.services.market_data_source_registry import project_source_provenance
 from src.services.official_macro_transport import MacroObservation, OfficialMacroTransportError
 from src.services.market_overview_service import MarketOverviewService
+
+FORBIDDEN_CONSUMER_REASON_TOKENS = (
+    "_blocked",
+    "_gate",
+    "freshness_blocked",
+    "proxy_or_sample_evidence_blocked",
+    "source_authority_or_score_gate_blocked",
+    "source_authority_blocked",
+    "score_gate",
+)
 
 
 class MarketMacroCardsApiTestCase(unittest.TestCase):
@@ -28,6 +38,40 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
         self.assertIn("relativeStrength", first_item)
         self.assertIn("rank", first_item)
         self.assertIn(first_item["market"], {"CN", "HK", "US"})
+
+    def test_sector_rotation_endpoint_redacts_consumer_evidence_reason_family_codes(self) -> None:
+        raw_payload = {
+            "source": "computed",
+            "sourceLabel": "主题篮子计算",
+            "updatedAt": "2026-06-15T00:00:00+00:00",
+            "freshness": "fallback",
+            "items": [{"symbol": "AI", "label": "AI", "value": 42, "market": "US"}],
+            "consumerEvidenceSnapshot": {
+                "contractVersion": "market_overview_evidence.v1",
+                "freshness": "fallback",
+                "reasonFamilies": [
+                    {
+                        "rawCode": "source_authority_blocked",
+                        "family": "source_authority_blocked",
+                        "scope": "score_gate",
+                        "sourceField": "sourceAuthorityAllowed",
+                    }
+                ],
+            },
+        }
+        service = MagicMock()
+        service.get_sector_rotation.return_value = raw_payload
+
+        with patch("api.v1.endpoints.market.MarketOverviewService", return_value=service):
+            payload = market.get_sector_rotation()
+
+        serialized = str(payload).lower()
+        for raw_token in FORBIDDEN_CONSUMER_REASON_TOKENS:
+            self.assertNotIn(raw_token, serialized)
+        self.assertEqual(
+            payload["consumerEvidenceSnapshot"]["reasonFamilies"],
+            [{"label": "证据来源级别不足", "category": "evidence", "sourceField": "sourceAuthorityAllowed"}],
+        )
 
     def test_sector_rotation_endpoint_projects_rotation_radar_theme_order_and_scores(self) -> None:
         service = MarketOverviewService()

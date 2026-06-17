@@ -9,7 +9,12 @@ from typing import Any
 
 import pytest
 
-from src.services.consumer_issue_labels import build_consumer_issues, build_consumer_message
+from src.services.consumer_issue_labels import (
+    build_consumer_issues,
+    build_consumer_message,
+    consumer_safe_reason_label,
+    sanitize_consumer_reason_payload,
+)
 
 
 RAW_CODES = (
@@ -61,6 +66,15 @@ RAW_CODES = (
     "sign_convention_unsupported",
     "coverage_missing",
     "coverage_below_threshold",
+)
+RAW_REASON_TOKENS = (
+    "_blocked",
+    "_gate",
+    "freshness_blocked",
+    "proxy_or_sample_evidence_blocked",
+    "source_authority_or_score_gate_blocked",
+    "source_authority_blocked",
+    "score_gate",
 )
 FORBIDDEN_ADVICE_RE = re.compile(
     r"\b(buy|sell|hold|recommendation|target|stop|position\s*sizing)\b|买入|卖出|持有|目标价|止损|仓位",
@@ -199,3 +213,79 @@ def test_consumer_message_summarizes_safe_labels_without_advice_language() -> No
     assert message == "Option contracts missing; Liquidity is limited."
     assert FORBIDDEN_ADVICE_RE.search(message) is None
     assert INTERNAL_CODE_RE.search(message) is None
+
+
+def test_consumer_reason_label_maps_raw_gate_codes_to_safe_research_copy() -> None:
+    expected = {
+        "freshness_blocked:fallback": "数据新鲜度尚未确认，当前仅显示降级观察结果",
+        "proxy_or_sample_evidence_blocked": "当前仅有样本或代理证据，暂不足以代表完整市场结构",
+        "source_authority_or_score_gate_blocked": "当前数据源权威性或评分级别不足，暂不能形成可靠研究结论",
+        "source_authority_blocked": "证据来源级别不足",
+        "score_gate": "评分门槛未满足",
+    }
+
+    for raw_code, safe_label in expected.items():
+        assert consumer_safe_reason_label(raw_code) == safe_label
+        assert FORBIDDEN_ADVICE_RE.search(safe_label) is None
+        for raw_token in RAW_REASON_TOKENS:
+            assert raw_token not in safe_label
+
+
+def test_sanitize_consumer_reason_payload_redacts_nested_reason_like_fields_only() -> None:
+    payload = {
+        "missingEvidence": [
+            "freshness_blocked:fallback",
+            "source_authority_or_score_gate_blocked",
+        ],
+        "driverScores": {
+            "ratesDollar": {
+                "reasons": ["proxy_or_sample_evidence_blocked"],
+                "evidenceState": "blocked",
+            }
+        },
+        "dataQuality": {
+            "confidenceCapReasons": ["source_authority_or_score_gate_blocked"],
+            "evidenceGrade": "score_grade",
+        },
+        "evidenceSnapshot": {
+            "reasonFamilies": [
+                {
+                    "rawCode": "source_authority_blocked",
+                    "family": "source_authority_blocked",
+                    "scope": "score_gate",
+                    "sourceField": "sourceAuthorityAllowed",
+                }
+            ],
+            "sourceAuthorityAllowed": False,
+        },
+        "status": "blocked",
+    }
+
+    sanitized = sanitize_consumer_reason_payload(payload)
+
+    assert sanitized["missingEvidence"] == [
+        "数据新鲜度尚未确认，当前仅显示降级观察结果",
+        "当前数据源权威性或评分级别不足，暂不能形成可靠研究结论",
+    ]
+    assert sanitized["driverScores"]["ratesDollar"]["reasons"] == [
+        "当前仅有样本或代理证据，暂不足以代表完整市场结构"
+    ]
+    assert sanitized["driverScores"]["ratesDollar"]["evidenceState"] == "blocked"
+    assert sanitized["dataQuality"]["confidenceCapReasons"] == [
+        "当前数据源权威性或评分级别不足，暂不能形成可靠研究结论"
+    ]
+    assert sanitized["dataQuality"]["evidenceGrade"] == "score_grade"
+    assert sanitized["evidenceSnapshot"]["reasonFamilies"] == [
+        {
+            "label": "证据来源级别不足",
+            "category": "evidence",
+            "sourceField": "sourceAuthorityAllowed",
+        }
+    ]
+    assert sanitized["evidenceSnapshot"]["sourceAuthorityAllowed"] is False
+    assert sanitized["status"] == "blocked"
+
+    serialized = json.dumps(sanitized, ensure_ascii=False).lower()
+    for raw_token in RAW_REASON_TOKENS:
+        assert raw_token not in serialized
+    assert FORBIDDEN_ADVICE_RE.search(serialized) is None

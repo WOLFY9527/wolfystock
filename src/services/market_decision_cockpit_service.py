@@ -17,7 +17,7 @@ from src.services.market_overview_service import MarketOverviewService
 from src.services.market_regime_decision_engine import build_market_regime_decision
 from src.services.options_market_structure_observation import build_options_market_structure_observation
 from src.services.research_radar_candidate_engine import build_research_radar_candidate_queue
-from src.services.consumer_issue_labels import build_consumer_issues
+from src.services.consumer_issue_labels import build_consumer_issues, sanitize_consumer_reason_payload
 
 
 SCHEMA_VERSION = "market_decision_cockpit.v1"
@@ -125,7 +125,7 @@ class MarketDecisionCockpitService:
             options_status,
         )
 
-        return {
+        return sanitize_consumer_reason_payload({
             "schemaVersion": SCHEMA_VERSION,
             "generatedAt": generated_at,
             "marketRegimeDecision": decision,
@@ -169,7 +169,7 @@ class MarketDecisionCockpitService:
             "observationOnly": True,
             "decisionGrade": False,
             "dataQuality": data_quality,
-        }
+        })
 
     @staticmethod
     def _default_now_provider() -> str:
@@ -975,7 +975,7 @@ class MarketDecisionCockpitService:
             "evidenceStrength": evidence_strength,
             "missingEvidenceImpact": [
                 {
-                    "evidence": str(item),
+                    "evidence": _safe_missing_evidence_label(item),
                     "impact": _missing_evidence_impact(str(item)),
                 }
                 for item in _dedupe(missing_evidence or reason_codes)
@@ -1211,6 +1211,11 @@ def _safe_reason_phrase(value: Any) -> str:
     if not text:
         return ""
     return _SAFE_REASON_LABELS.get(text, _humanize_code(text))
+
+
+def _safe_missing_evidence_label(value: Any) -> str:
+    sanitized = sanitize_consumer_reason_payload({"reason": str(value or "")})
+    return str(_mapping(sanitized).get("reason") or "")
 
 
 def _safe_phrase_list(value: Any) -> list[str]:

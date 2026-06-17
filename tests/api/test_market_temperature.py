@@ -31,6 +31,15 @@ FORBIDDEN_ADVICE_RE = re.compile(
     r"\b(buy|sell|hold|recommendation|target|stop|position\s*sizing)\b|买入|卖出|持有|目标价|止损|仓位",
     re.IGNORECASE,
 )
+FORBIDDEN_CONSUMER_REASON_TOKENS = (
+    "_blocked",
+    "_gate",
+    "freshness_blocked",
+    "proxy_or_sample_evidence_blocked",
+    "source_authority_or_score_gate_blocked",
+    "source_authority_blocked",
+    "score_gate",
+)
 
 
 def _assert_consumer_issues_safe(issues: object, raw_codes: tuple[str, ...]) -> None:
@@ -642,6 +651,59 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         self.assertEqual(payload["driverScores"]["dealerGamma"]["evidenceState"], "unavailable")
         service.get_market_regime_decision.assert_called_once_with(
             actor={"actor_type": "anonymous", "role": "anonymous", "display_name": "Anonymous"}
+        )
+
+    def test_market_regime_decision_route_redacts_raw_reason_codes_for_consumers(self) -> None:
+        service = MagicMock()
+        service.get_market_regime_decision.return_value = {
+            "schemaVersion": "market_regime_decision_engine.v1",
+            "regime": "lowConfidence",
+            "confidence": "low",
+            "driverScores": {
+                "breadthParticipation": {
+                    "score": 0,
+                    "evidenceState": "blocked",
+                    "reasons": ["freshness_blocked:fallback"],
+                },
+                "sectorThemeRotation": {
+                    "score": 0,
+                    "evidenceState": "blocked",
+                    "reasons": ["source_authority_or_score_gate_blocked"],
+                },
+            },
+            "researchPriorities": {
+                "watchToday": [],
+                "needsMoreEvidence": [
+                    "proxy_or_sample_evidence_blocked",
+                    "source_authority_or_score_gate_blocked",
+                ],
+                "investigateNext": [],
+            },
+            "dataQuality": {
+                "confidenceCapReasons": ["source_authority_or_score_gate_blocked"],
+            },
+            "missingEvidence": [
+                "freshness_blocked:fallback",
+                "proxy_or_sample_evidence_blocked",
+            ],
+        }
+
+        with patch("api.v1.endpoints.market.MarketOverviewService", return_value=service):
+            payload = market.get_regime_decision()
+
+        serialized = json.dumps(payload, ensure_ascii=False).lower()
+        for raw_token in FORBIDDEN_CONSUMER_REASON_TOKENS:
+            self.assertNotIn(raw_token, serialized)
+        self.assertEqual(
+            payload["missingEvidence"],
+            [
+                "数据新鲜度尚未确认，当前仅显示降级观察结果",
+                "当前仅有样本或代理证据，暂不足以代表完整市场结构",
+            ],
+        )
+        self.assertEqual(
+            payload["driverScores"]["sectorThemeRotation"]["reasons"],
+            ["当前数据源权威性或评分级别不足，暂不能形成可靠研究结论"],
         )
 
     def test_market_temperature_research_readiness_additive_compatibility_preserves_existing_payload(self) -> None:
