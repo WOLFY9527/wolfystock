@@ -1,19 +1,21 @@
 import type React from 'react';
 import { render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import MarketDecisionCockpitPage from '../MarketDecisionCockpitPage';
 import ResearchRadarPage from '../ResearchRadarPage';
 import ScenarioLabPage from '../ScenarioLabPage';
 import StockStructureDecisionEntryPage from '../StockStructureDecisionEntryPage';
+import StockStructureDecisionPage from '../StockStructureDecisionPage';
 import { findConsumerRawLeakage } from '../../test-utils/consumerRawLeakageGuard';
 
-const { languageState, getDecisionCockpitMock, getDailyIntelligenceMock, getResearchRadarMock, runScenarioLabMock } = vi.hoisted(() => ({
+const { languageState, getDecisionCockpitMock, getDailyIntelligenceMock, getResearchRadarMock, runScenarioLabMock, getStructureDecisionMock } = vi.hoisted(() => ({
   languageState: { value: 'zh' as 'zh' | 'en' },
   getDecisionCockpitMock: vi.fn(),
   getDailyIntelligenceMock: vi.fn(),
   getResearchRadarMock: vi.fn(),
   runScenarioLabMock: vi.fn(),
+  getStructureDecisionMock: vi.fn(),
 }));
 
 vi.mock('../../contexts/UiLanguageContext', () => ({
@@ -47,9 +49,23 @@ vi.mock('../../api/scenarioLab', () => ({
   },
 }));
 
+vi.mock('../../api/stocks', () => ({
+  stocksApi: {
+    getStructureDecision: (...args: unknown[]) => getStructureDecisionMock(...args),
+  },
+}));
+
 const renderRoute = (ui: React.ReactElement, path: string) => render(
   <MemoryRouter initialEntries={[path]}>
     {ui}
+  </MemoryRouter>,
+);
+
+const renderRoutePattern = (ui: React.ReactElement, path: string, pattern: string) => render(
+  <MemoryRouter initialEntries={[path]}>
+    <Routes>
+      <Route path={pattern} element={ui} />
+    </Routes>
   </MemoryRouter>,
 );
 
@@ -497,6 +513,83 @@ describe('research IA pages', () => {
     expect(page).toHaveTextContent('不展示原始载荷');
     expect(screen.getByRole('link', { name: '研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
     expect(page.textContent || '').not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议/);
+  });
+
+  it('renders Stock Structure peer-correlation context without raw diagnostics', async () => {
+    getStructureDecisionMock.mockResolvedValue({
+      schemaVersion: 'stock_structure_decision_api_v1',
+      ticker: 'ORCL',
+      structureState: 'range',
+      confidence: 'medium',
+      componentScores: {
+        trend: 58,
+        relativeStrength: 52,
+      },
+      explanation: {
+        whyThisStructure: 'ORCL remains inside the recent range.',
+        whatConfirmsIt: ['Peer behavior remains bounded by current evidence.'],
+        whatInvalidatesIt: ['A decisive range failure would weaken this structure read.'],
+        keyLevels: [],
+      },
+      researchNotes: {
+        watchNext: ['Review the next close.'],
+        needsMoreEvidence: ['Need broader peer evidence.'],
+        riskFlags: [],
+      },
+      dataQuality: {
+        status: 'available',
+        source: 'local_db',
+        period: 'daily',
+        requestedDays: 90,
+        observedBars: 60,
+        usableBars: 60,
+        reason: 'history_available',
+      },
+      missingEvidence: [],
+      noAdviceDisclosure: 'Observation-only research context.',
+      peerCorrelationSnapshot: {
+        symbol: 'ORCL',
+        peerGroup: {
+          status: 'available',
+          label: 'Cloud software',
+          symbols: ['MSFT', 'NVDA'],
+        },
+        correlationState: 'aligned',
+        peerEvidence: [
+          {
+            symbol: 'MSFT',
+            overlapDays: 22,
+            state: 'aligned',
+            summary: 'MSFT moved with ORCL across the comparison window.',
+          },
+        ],
+        divergenceEvidence: [],
+        staleInputs: [],
+        missingInputs: ['NVDA peer history is unavailable.'],
+        confidenceCap: 'medium',
+        observationBoundary: 'Observation-only peer movement context; no personalized action instruction.',
+        researchNextSteps: ['Review whether peer alignment persists after the next close.'],
+      },
+    });
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/ORCL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const snapshot = await within(page).findByTestId('stock-structure-peer-correlation-snapshot');
+    expect(getStructureDecisionMock).toHaveBeenCalledWith('ORCL');
+    expect(snapshot).toHaveTextContent('同业相关性');
+    expect(snapshot).toHaveTextContent('aligned');
+    expect(snapshot).toHaveTextContent('Cloud software');
+    expect(snapshot).toHaveTextContent('MSFT moved with ORCL across the comparison window.');
+    expect(snapshot).toHaveTextContent('NVDA peer history is unavailable.');
+    expect(snapshot).toHaveTextContent('Observation-only peer movement context; no personalized action instruction.');
+    expect(snapshot).toHaveTextContent('Review whether peer alignment persists after the next close.');
+    expect(page.textContent || '').not.toMatch(/raw|debug|provider|trace|sourceRef|reasonCode|requestId/i);
+    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommendation|target price|stop loss|position sizing/i);
   });
 
   it('renders Scenario Lab as a compact research workflow backed by the scenario contract', async () => {

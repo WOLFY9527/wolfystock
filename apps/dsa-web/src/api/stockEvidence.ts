@@ -1,4 +1,5 @@
 import apiClient from './index';
+import { normalizePeerCorrelationSnapshot } from './stocks';
 import { toCamelCase } from './utils';
 import type {
   SymbolEvidenceReadiness,
@@ -110,12 +111,15 @@ function normalizeStockEvidencePacket(payload: unknown): StockEvidencePacket | u
     return undefined;
   }
 
-  const { fundamentalsSummary, ...rest } = payload;
+  const { fundamentalsSummary, peerCorrelationSnapshot, ...rest } = payload;
   const normalizedFundamentalsSummary = normalizeFundamentalsSummary(fundamentalsSummary);
+  const normalizedPeerCorrelationSnapshot = normalizePeerCorrelationSnapshot(peerCorrelationSnapshot);
 
-  return normalizedFundamentalsSummary
-    ? { ...rest, fundamentalsSummary: normalizedFundamentalsSummary }
-    : { ...rest };
+  return {
+    ...rest,
+    ...(normalizedFundamentalsSummary ? { fundamentalsSummary: normalizedFundamentalsSummary } : {}),
+    ...(normalizedPeerCorrelationSnapshot ? { peerCorrelationSnapshot: normalizedPeerCorrelationSnapshot } : {}),
+  };
 }
 
 function normalizeReadinessTier(value: unknown): SymbolEvidenceReadinessTier | null {
