@@ -12,8 +12,9 @@ from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from api.route_access_policy import is_public_baseline_read
 from api.security_headers import apply_security_headers
-from src.auth import COOKIE_NAME, get_client_ip, get_session_identity
+from src.auth import COOKIE_NAME, get_client_ip, get_session_identity, is_auth_enabled
 
 PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS_DEFAULT = 300
 PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES_DEFAULT = 12
@@ -26,6 +27,7 @@ PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS_MIN = 16
 PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS_MAX = 65536
 
 _TRACKED_FAILURE_STATUSES = frozenset({400, 401, 403, 405, 422})
+_AUTH_FAIL_CLOSED_STATUSES = frozenset({401, 403})
 _EXEMPT_PREFIXES = (
     "/api/v1/auth/",
     "/api/health",
@@ -134,7 +136,8 @@ def _is_exempt(path: str) -> bool:
 
 
 def _is_safe_read_bypass(method: str, path: str) -> bool:
-    return (method.upper(), _normalize_path(path)) in _SAFE_READ_BYPASS_ROUTES
+    normalized = _normalize_path(path)
+    return (method.upper(), normalized) in _SAFE_READ_BYPASS_ROUTES or is_public_baseline_read(method, normalized)
 
 
 def _has_valid_session_cookie(request: Request) -> bool:
@@ -214,6 +217,20 @@ def _rate_limited_response(request: Request) -> JSONResponse:
     return apply_security_headers(response, request)
 
 
+async def _call_next_and_record_public_failure(
+    request: Request,
+    call_next: Callable,
+    *,
+    key: str,
+    auth_enabled_for_request: bool,
+) -> Response:
+    response = await call_next(request)
+    auth_fail_closed = auth_enabled_for_request and response.status_code in _AUTH_FAIL_CLOSED_STATUSES
+    if response.status_code in _TRACKED_FAILURE_STATUSES and not auth_fail_closed:
+        _record_failure(key)
+    return response
+
+
 class PublicApiAbuseLimiterMiddleware(BaseHTTPMiddleware):
     """Throttle bursts of unauthenticated public API error responses."""
 
@@ -225,13 +242,25 @@ class PublicApiAbuseLimiterMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         key = _bucket_key(request)
+        auth_enabled_for_request = is_auth_enabled()
         if _bucket_limited(key) and not _is_safe_read_bypass(method, path):
+            if auth_enabled_for_request:
+                response = await _call_next_and_record_public_failure(
+                    request,
+                    call_next,
+                    key=key,
+                    auth_enabled_for_request=auth_enabled_for_request,
+                )
+                if response.status_code in _AUTH_FAIL_CLOSED_STATUSES:
+                    return response
             return _rate_limited_response(request)
 
-        response = await call_next(request)
-        if response.status_code in _TRACKED_FAILURE_STATUSES:
-            _record_failure(key)
-        return response
+        return await _call_next_and_record_public_failure(
+            request,
+            call_next,
+            key=key,
+            auth_enabled_for_request=auth_enabled_for_request,
+        )
 
 
 def add_public_api_abuse_limiter(app) -> None:

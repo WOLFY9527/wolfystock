@@ -8,6 +8,7 @@ import logging
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from fastapi import FastAPI
@@ -582,11 +583,24 @@ def test_auth_401_403_and_429_errors_and_logs_are_sanitized(
             json=sensitive_body,
             headers=sensitive_headers,
         )
-        limited = client.post(
+        repeated_unauthenticated = client.post(
             "/api/v1/admin/users/ordinary-user/disable",
             json=sensitive_body,
             headers=sensitive_headers,
         )
+        auth._auth_enabled = None
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=False):
+            public_failure = client.post(
+                "/api/v1/options/decision/evaluate",
+                content='{"symbol":"TEM"',
+                headers=sensitive_headers,
+            )
+            limited = client.post(
+                "/api/v1/options/decision/evaluate",
+                content='{"symbol":"TEM"',
+                headers=sensitive_headers,
+            )
+        auth._auth_enabled = None
         client.cookies.clear()
         _set_cookie_for_user(client, db, user_id="ordinary-user", role=ROLE_USER)
         forbidden = client.get(
@@ -598,7 +612,13 @@ def test_auth_401_403_and_429_errors_and_logs_are_sanitized(
             },
         )
 
-    assert [unauthenticated.status_code, limited.status_code, forbidden.status_code] == [401, 429, 403]
+    assert [
+        unauthenticated.status_code,
+        repeated_unauthenticated.status_code,
+        public_failure.status_code,
+        limited.status_code,
+        forbidden.status_code,
+    ] == [401, 401, 422, 429, 403]
     assert limited.json() == {
         "error": "rate_limited",
         "message": "Too many public API errors; retry later.",
@@ -606,9 +626,13 @@ def test_auth_401_403_and_429_errors_and_logs_are_sanitized(
     _assert_public_error_safe(
         caplog.text,
         unauthenticated.json(),
+        repeated_unauthenticated.json(),
+        public_failure.json(),
         limited.json(),
         forbidden.json(),
         dict(unauthenticated.headers),
+        dict(repeated_unauthenticated.headers),
+        dict(public_failure.headers),
         dict(limited.headers),
         dict(forbidden.headers),
     )

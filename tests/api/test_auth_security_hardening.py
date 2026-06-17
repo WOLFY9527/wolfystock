@@ -371,7 +371,7 @@ class AuthSecurityHardeningTestCase(unittest.TestCase):
                 },
             )
 
-        self.assertEqual([unauthenticated.status_code, limited.status_code], [401, 429])
+        self.assertEqual([unauthenticated.status_code, limited.status_code], [401, 401])
         self.assertEqual(login.status_code, 200)
         self.assertEqual(reauth.status_code, 200)
         self.assertEqual(authenticated.status_code, 200)

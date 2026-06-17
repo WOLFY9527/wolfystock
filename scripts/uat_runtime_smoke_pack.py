@@ -35,9 +35,13 @@ INDEX_HASH_RE = re.compile(r"^index-(?P<hash>[A-Za-z0-9_-]+)\.js$")
 PUBLIC_ROUTE_SPECS: tuple[tuple[str, str], ...] = (
     ("GET", "/api/health"),
     ("GET", "/api/v1/auth/status"),
+    ("GET", "/api/v1/market-overview/indices"),
+    ("GET", "/api/v1/stocks/AAPL/quote"),
+    ("GET", "/api/v1/stocks/AAPL/evidence"),
+    ("GET", "/api/v1/stocks/AAPL/structure-decision"),
 )
 AUTHENTICATED_ROUTE_SPECS: tuple[tuple[str, str], ...] = (
-    ("GET", "/api/v1/market-overview/indices"),
+    ("GET", "/api/v1/research/radar"),
     ("GET", "/api/v1/scanner/themes"),
 )
 
@@ -241,21 +245,51 @@ def _verify_authenticated_routes(
     checked_routes: list[dict[str, Any]] = []
     failing_routes: list[dict[str, Any]] = []
     auth_required_routes: list[dict[str, Any]] = []
+    publicly_available_routes: list[dict[str, Any]] = []
+    noauth_policy_mismatch_routes: list[dict[str, Any]] = []
     for method, path in AUTHENTICATED_ROUTE_SPECS:
-        response = client.request(method, _join_url(base_url, path), headers=auth_headers or {})
-        status_code = int(response.status_code)
-        route_result = {"method": method, "path": path, "httpStatus": status_code}
+        url = _join_url(base_url, path)
+        anonymous_response = client.request(method, url)
+        anonymous_status_code = int(anonymous_response.status_code)
+        route_result = {
+            "method": method,
+            "path": path,
+            "anonymousHttpStatus": anonymous_status_code,
+        }
+        anonymous_policy_mismatch = anonymous_status_code not in {401, 403}
+        if anonymous_policy_mismatch:
+            anonymous_route_result = {"method": method, "path": path, "httpStatus": anonymous_status_code}
+            noauth_policy_mismatch_routes.append(anonymous_route_result)
+            if _is_success_status(anonymous_status_code):
+                publicly_available_routes.append(anonymous_route_result)
+
+        if auth_headers:
+            response = client.request(method, url, headers=auth_headers)
+            status_code = int(response.status_code)
+            route_result["httpStatus"] = status_code
+        else:
+            status_code = anonymous_status_code
+            route_result["httpStatus"] = status_code
+
         checked_routes.append(route_result)
         if _is_success_status(status_code):
             continue
         if not auth_headers and status_code in {401, 403}:
             auth_required_routes.append(route_result)
             continue
+        if not auth_headers and anonymous_policy_mismatch:
+            continue
         failing_routes.append(route_result)
 
-    if failing_routes:
+    if noauth_policy_mismatch_routes or failing_routes:
         status = "FAIL"
-        reason_codes = ["authenticated_route_unavailable"]
+        reason_codes = []
+        if publicly_available_routes:
+            reason_codes.append("authenticated_route_publicly_available")
+        if noauth_policy_mismatch_routes and not publicly_available_routes:
+            reason_codes.append("authenticated_route_noauth_policy_mismatch")
+        if failing_routes:
+            reason_codes.append("authenticated_route_unavailable")
     elif auth_required_routes:
         status = "PARTIAL"
         reason_codes = ["authenticated_routes_auth_required"]
@@ -269,6 +303,8 @@ def _verify_authenticated_routes(
         "checkedRoutes": checked_routes,
         "failingRoutes": failing_routes,
         "authRequiredRoutes": auth_required_routes,
+        "publiclyAvailableRoutes": publicly_available_routes,
+        "noAuthPolicyMismatchRoutes": noauth_policy_mismatch_routes,
     }
 
 
@@ -408,6 +444,8 @@ def run_runtime_smoke(
         "reasonCodes": ["local_build_unverified"],
         "failingRoutes": [],
         "authRequiredRoutes": [],
+        "publiclyAvailableRoutes": [],
+        "noAuthPolicyMismatchRoutes": [],
     }
     admin_check = {"status": "PARTIAL", "reasonCodes": ["admin_status_unverified"]}
     surface_check = {"status": "PARTIAL", "reasonCodes": ["surface_readiness_unverified"]}

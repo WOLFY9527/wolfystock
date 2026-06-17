@@ -47,7 +47,7 @@
     },
     {
       "route_id": "scanner.member_surface",
-      "path_pattern": "^/api/v1/scanner/(?:run|runs|strategy-simulation|runs/\\{run_id\\}(?:/research-overlay)?)$",
+      "path_pattern": "^/api/v1/scanner/(?:run|runs|themes|strategy-simulation|runs/\\{run_id\\}(?:/research-overlay)?)$",
       "methods": ["GET", "POST"],
       "surface": "scanner",
       "auth_dependency_label": "authenticated_user",
@@ -613,21 +613,21 @@
       "route_id": "scanner.themes_get",
       "path": "/api/v1/scanner/themes",
       "method": "GET",
-      "surface_classification": "unclassified",
-      "auth_dependency_label": "public",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: decide whether scanner theme metadata is public-safe or member-only before broad public ingress.",
-      "transitional_note": "Listed explicitly so public scanner metadata is not silently treated as safe."
+      "no_go_marker": null,
+      "transitional_note": "Member-gated because ScannerSurfacePage shows a protected frame for guests and UserScannerPage loads themes only after authentication."
     },
     {
       "route_id": "scanner.themes_post",
       "path": "/api/v1/scanner/themes",
       "method": "POST",
-      "surface_classification": "unclassified",
-      "auth_dependency_label": "public",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: unsafe-method scanner theme generation route needs an explicit public-ingress decision.",
-      "transitional_note": "Listed explicitly so public scanner metadata is not silently treated as safe."
+      "no_go_marker": null,
+      "transitional_note": "Member-gated because custom scanner theme generation mutates the runtime theme registry and is not public ingress."
     },
     {
       "route_id": "usage.admin_summary",

@@ -9,6 +9,7 @@ import warnings
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
@@ -18,6 +19,7 @@ import src.auth as auth
 from api.middlewares.auth import add_auth_middleware
 from api.v1 import api_v1_router
 from api.v1.endpoints import options, scanner
+from src.services.stock_structure_decision_service import STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION
 
 
 ABUSE_REHEARSAL_SECRET_BODY = "raw-abuse-body-token"
@@ -180,6 +182,15 @@ def _limiter_snapshot() -> dict[str, object]:
     return get_public_api_abuse_limiter_snapshot()
 
 
+@pytest.fixture(autouse=True)
+def _isolate_public_api_abuse_limiter_state():
+    _reset_public_limiter_state_if_available()
+    try:
+        yield
+    finally:
+        _reset_public_limiter_state_if_available()
+
+
 def _prime_hot_public_bucket(client: TestClient, ip_address: str, *, auth_enabled: bool = False) -> None:
     with patch.object(auth, "_is_auth_enabled_from_env", return_value=auth_enabled):
         response = client.post(
@@ -238,6 +249,97 @@ def _liquidity_monitor_fallback_payload() -> dict[str, object]:
             "providerRuntimeChanged": False,
             "marketCacheMutation": False,
         },
+    }
+
+
+def _stock_quote_payload(symbol: str = "AAPL") -> dict[str, object]:
+    return {
+        "stock_code": symbol,
+        "stock_name": "Apple Inc.",
+        "current_price": 190.0,
+        "change": 0.0,
+        "change_percent": 0.0,
+        "source": "fixture",
+        "freshness": "delayed",
+        "isFallback": True,
+        "isSynthetic": True,
+    }
+
+
+def _stock_evidence_payload(symbol: str = "AAPL") -> dict[str, object]:
+    return {
+        "symbols": [symbol],
+        "items": [
+            {
+                "symbol": symbol,
+                "market": "US",
+                "quote": {"status": "unknown", "provider": "read_only_fixture"},
+                "technical": {"status": "missing", "provider": "stock_daily"},
+                "fundamental": {"status": "missing", "provider": "analysis_history"},
+                "news": {"status": "unknown", "latestHeadline": None, "provider": None},
+                "stockEvidencePacket": {
+                    "schemaVersion": "stock_evidence_packet_v1",
+                    "symbol": symbol,
+                    "notInvestmentAdvice": True,
+                    "observationOnly": True,
+                },
+            }
+        ],
+        "meta": {
+            "generatedAt": "2026-06-02T00:00:00Z",
+            "source": "read_only_evidence_v2",
+        },
+    }
+
+
+def _stock_structure_decision_payload(symbol: str = "AAPL") -> dict[str, object]:
+    return {
+        "schemaVersion": STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION,
+        "ticker": symbol,
+        "symbol": symbol,
+        "structureState": "range_watch",
+        "confidence": "low",
+        "componentScores": {
+            "trend": 50,
+            "relativeStrength": 50,
+            "volumePressure": 50,
+            "volatilityCompression": 50,
+            "breakoutQuality": 50,
+            "pullbackHealth": 50,
+            "riskExtension": 50,
+            "evidenceQuality": 50,
+        },
+        "explanation": {
+            "whyThisStructure": "Observation-only fixture structure context.",
+            "whatConfirmsIt": ["More evidence would confirm this observation."],
+            "whatInvalidatesIt": ["Different evidence would invalidate this observation."],
+            "keyLevels": [],
+        },
+        "researchNotes": {
+            "watchNext": ["Observe additional evidence."],
+            "needsMoreEvidence": [],
+            "riskFlags": [],
+        },
+        "keyLevels": [],
+        "evidenceNotes": ["Observation-only fixture evidence."],
+        "riskObservations": ["No action instruction is produced."],
+        "evidenceGaps": [],
+        "dataQuality": {
+            "status": "available",
+            "source": "fixture",
+            "period": "daily",
+            "requestedDays": 90,
+            "observedBars": 60,
+            "usableBars": 60,
+            "reason": "fixture_available",
+        },
+        "missingEvidence": [],
+        "degradedInputs": [],
+        "consumerIssues": [],
+        "noAdviceDisclosure": "Observation-only research context; not personalized financial advice and not an instruction.",
+        "observationOnly": True,
+        "decisionGrade": False,
+        "drilldownLinks": [],
     }
 
 
@@ -384,6 +486,122 @@ def test_market_briefing_public_preview_reaches_optional_user_endpoint_when_auth
         _reset_auth_globals()
 
 
+def test_market_briefing_public_preview_ignores_prior_public_error_burst_when_auth_enabled(monkeypatch) -> None:
+    _reset_auth_globals()
+    _reset_public_limiter_state_if_available()
+    monkeypatch.setenv("TRUST_X_FORWARDED_FOR", "true")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "1")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "300")
+    client = _auth_guarded_client()
+    ip_address = "203.0.113.217"
+    service = MagicMock()
+    service.get_market_briefing.return_value = {
+        "source": "fallback",
+        "updatedAt": "2026-06-09T00:00:00Z",
+        "items": [],
+        "isFallback": True,
+        "freshness": "fallback",
+    }
+    try:
+        _prime_hot_public_bucket(client, ip_address)
+        _reset_auth_globals()
+
+        with patch(
+            "api.v1.endpoints.market.MarketOverviewService",
+            return_value=service,
+        ), patch.object(
+            auth,
+            "_is_auth_enabled_from_env",
+            return_value=True,
+        ):
+            response = client.get(
+                "/api/v1/market/market-briefing",
+                headers={"X-Forwarded-For": ip_address},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["source"] == "fallback"
+        service.get_market_briefing.assert_called_once()
+    finally:
+        client.close()
+        _reset_public_limiter_state_if_available()
+        _reset_auth_globals()
+
+
+def test_unauthenticated_route_policy_matches_public_member_and_admin_surfaces(monkeypatch) -> None:
+    _reset_auth_globals()
+    _reset_public_limiter_state_if_available()
+    client = _auth_guarded_client()
+    market_service = MagicMock()
+    market_service.get_indices.return_value = {"items": [], "source": "fixture"}
+    market_service.get_volatility.return_value = {"items": [], "source": "fixture"}
+    market_service.get_sentiment.return_value = {"items": [], "source": "fixture"}
+    market_service.get_funds_flow.return_value = {"items": [], "source": "fixture"}
+    market_service.get_macro.return_value = {"items": [], "fallbackUsed": True, "source": "fixture"}
+    stock_service = MagicMock()
+    stock_service.get_realtime_quote.return_value = _stock_quote_payload("AAPL")
+    evidence_service = MagicMock()
+    evidence_service.get_stock_evidence.return_value = _stock_evidence_payload("AAPL")
+    structure_service = MagicMock()
+    structure_service.get_structure_decision.return_value = _stock_structure_decision_payload("AAPL")
+
+    try:
+        with patch(
+            "api.v1.endpoints.market_overview.MarketOverviewService",
+            return_value=market_service,
+        ), patch(
+            "api.v1.endpoints.stocks.StockService",
+            return_value=stock_service,
+        ), patch(
+            "api.v1.endpoints.stocks.StockEvidenceService",
+            return_value=evidence_service,
+        ), patch(
+            "api.v1.endpoints.stocks.StockStructureDecisionService",
+            return_value=structure_service,
+        ), patch.object(
+            auth,
+            "_is_auth_enabled_from_env",
+            return_value=True,
+        ):
+            public_responses = {
+                "/api/v1/market-overview/indices": client.get("/api/v1/market-overview/indices"),
+                "/api/v1/market-overview/volatility": client.get("/api/v1/market-overview/volatility"),
+                "/api/v1/market-overview/sentiment": client.get("/api/v1/market-overview/sentiment"),
+                "/api/v1/market-overview/funds-flow": client.get("/api/v1/market-overview/funds-flow"),
+                "/api/v1/market-overview/macro": client.get("/api/v1/market-overview/macro"),
+                "/api/v1/stocks/AAPL/quote": client.get("/api/v1/stocks/AAPL/quote"),
+                "/api/v1/stocks/AAPL/evidence": client.get("/api/v1/stocks/AAPL/evidence"),
+                "/api/v1/stocks/AAPL/structure-decision": client.get("/api/v1/stocks/AAPL/structure-decision"),
+            }
+            protected_responses = {
+                "/api/v1/research/radar": client.get("/api/v1/research/radar"),
+                "/api/v1/scanner/themes": client.get("/api/v1/scanner/themes"),
+                "/api/v1/admin/users": client.get("/api/v1/admin/users"),
+            }
+
+        assert {path: response.status_code for path, response in public_responses.items()} == {
+            "/api/v1/market-overview/indices": 200,
+            "/api/v1/market-overview/volatility": 200,
+            "/api/v1/market-overview/sentiment": 200,
+            "/api/v1/market-overview/funds-flow": 200,
+            "/api/v1/market-overview/macro": 200,
+            "/api/v1/stocks/AAPL/quote": 200,
+            "/api/v1/stocks/AAPL/evidence": 200,
+            "/api/v1/stocks/AAPL/structure-decision": 200,
+        }
+        assert {path: response.status_code for path, response in protected_responses.items()} == {
+            "/api/v1/research/radar": 401,
+            "/api/v1/scanner/themes": 401,
+            "/api/v1/admin/users": 401,
+        }
+        for response in (*public_responses.values(), *protected_responses.values()):
+            _assert_public_surface_safe(response.json())
+    finally:
+        client.close()
+        _reset_public_limiter_state_if_available()
+        _reset_auth_globals()
+
+
 def test_unauthenticated_admin_abuse_payloads_fail_closed_before_request_body_is_exposed() -> None:
     _reset_auth_globals()
     client = _auth_guarded_client()
@@ -427,6 +645,63 @@ def test_unauthenticated_admin_abuse_payloads_fail_closed_before_request_body_is
             _assert_public_surface_safe(response.json())
     finally:
         client.close()
+        _reset_auth_globals()
+
+
+def test_unauthenticated_admin_abuse_payloads_fail_closed_even_after_public_error_burst(monkeypatch) -> None:
+    _reset_auth_globals()
+    _reset_public_limiter_state_if_available()
+    monkeypatch.setenv("TRUST_X_FORWARDED_FOR", "true")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "1")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "300")
+    client = _auth_guarded_client()
+    ip_address = "203.0.113.218"
+    oversized_body = {
+        "reason": "abuse rehearsal",
+        "confirm": "DISABLE",
+        "token": ABUSE_REHEARSAL_SECRET_BODY,
+        "databaseDsn": ABUSE_REHEARSAL_DSN,
+        "debug": ABUSE_REHEARSAL_DEBUG_PAYLOAD,
+        "padding": "x" * 128_000,
+    }
+    try:
+        _prime_hot_public_bucket(client, ip_address)
+        _reset_auth_globals()
+
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
+            responses = [
+                client.post(
+                    "/api/v1/admin/users/bootstrap-admin/disable",
+                    json=oversized_body,
+                    headers={
+                        "Authorization": f"Bearer {ABUSE_REHEARSAL_BEARER}",
+                        "Cookie": f"dsa_session={ABUSE_REHEARSAL_COOKIE}",
+                        "X-Forwarded-For": ip_address,
+                    },
+                ),
+                client.post(
+                    "/api/v1/admin/users/bootstrap-admin/disable",
+                    content=(
+                        '{"reason":"malformed",'
+                        f'"token":"{ABUSE_REHEARSAL_SECRET_BODY}",'
+                        f'"databaseDsn":"{ABUSE_REHEARSAL_DSN}"'
+                    ),
+                    headers={
+                        "content-type": "application/json",
+                        "Authorization": f"Bearer {ABUSE_REHEARSAL_BEARER}",
+                        "Cookie": f"dsa_session={ABUSE_REHEARSAL_COOKIE}",
+                        "X-Forwarded-For": ip_address,
+                    },
+                ),
+            ]
+
+        assert [response.status_code for response in responses] == [401, 401]
+        for response in responses:
+            assert response.json() == {"error": "unauthorized", "message": "Login required"}
+            _assert_public_surface_safe(response.json())
+    finally:
+        client.close()
+        _reset_public_limiter_state_if_available()
         _reset_auth_globals()
 
 
@@ -513,12 +788,116 @@ def test_public_api_abuse_limiter_safe_market_read_allowlist_is_narrow() -> None
     assert limiter._SAFE_READ_BYPASS_ROUTES == expected
     for method, path in expected:
         assert limiter._is_safe_read_bypass(method, path)
+    for path in (
+        "/api/v1/market/market-briefing",
+        "/api/v1/market-overview/indices",
+        "/api/v1/market-overview/volatility",
+        "/api/v1/market-overview/sentiment",
+        "/api/v1/market-overview/funds-flow",
+        "/api/v1/market-overview/macro",
+        "/api/v1/stocks/AAPL/quote",
+        "/api/v1/stocks/AAPL/evidence",
+        "/api/v1/stocks/AAPL/structure-decision",
+    ):
+        assert limiter._is_safe_read_bypass("GET", path)
 
     assert not limiter._is_safe_read_bypass("POST", "/api/v1/market/rates")
+    assert not limiter._is_safe_read_bypass("POST", "/api/v1/stocks/AAPL/quote")
+    assert not limiter._is_safe_read_bypass("GET", "/api/v1/stocks/AAPL/history")
     assert not limiter._is_safe_read_bypass("GET", "/api/v1/market/sentiment")
     assert not limiter._is_safe_read_bypass("GET", "/api/v1/admin/users")
     assert not limiter._is_safe_read_bypass("GET", "/api/v1/options/underlyings/TEM/summary")
     assert DIAGNOSTIC_ROUTES_EXCLUDED_FROM_SAFE_BYPASS.isdisjoint(limiter._SAFE_READ_BYPASS_ROUTES)
+
+
+def test_hot_public_bucket_allows_public_route_policy_reads(monkeypatch) -> None:
+    _reset_auth_globals()
+    _reset_public_limiter_state_if_available()
+    monkeypatch.setenv("TRUST_X_FORWARDED_FOR", "true")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "1")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "300")
+    client = _auth_guarded_client()
+    ip_address = "203.0.113.216"
+    market_service = MagicMock()
+    market_service.get_indices.return_value = {"items": [], "source": "fixture"}
+    market_service.get_volatility.return_value = {"items": [], "source": "fixture"}
+    market_service.get_sentiment.return_value = {"items": [], "source": "fixture"}
+    market_service.get_funds_flow.return_value = {"items": [], "source": "fixture"}
+    market_service.get_macro.return_value = {"items": [], "fallbackUsed": True, "source": "fixture"}
+    stock_service = MagicMock()
+    stock_service.get_realtime_quote.return_value = _stock_quote_payload("AAPL")
+    evidence_service = MagicMock()
+    evidence_service.get_stock_evidence.return_value = _stock_evidence_payload("AAPL")
+    structure_service = MagicMock()
+    structure_service.get_structure_decision.return_value = _stock_structure_decision_payload("AAPL")
+    try:
+        _prime_hot_public_bucket(client, ip_address)
+        _reset_auth_globals()
+
+        with patch(
+            "api.v1.endpoints.market_overview.MarketOverviewService",
+            return_value=market_service,
+        ), patch(
+            "api.v1.endpoints.stocks.StockService",
+            return_value=stock_service,
+        ), patch(
+            "api.v1.endpoints.stocks.StockEvidenceService",
+            return_value=evidence_service,
+        ), patch(
+            "api.v1.endpoints.stocks.StockStructureDecisionService",
+            return_value=structure_service,
+        ), patch.object(
+            auth,
+            "_is_auth_enabled_from_env",
+            return_value=True,
+        ):
+            responses = {
+                "/api/v1/market-overview/indices": client.get(
+                    "/api/v1/market-overview/indices",
+                    headers={"X-Forwarded-For": ip_address},
+                ),
+                "/api/v1/market-overview/volatility": client.get(
+                    "/api/v1/market-overview/volatility",
+                    headers={"X-Forwarded-For": ip_address},
+                ),
+                "/api/v1/market-overview/sentiment": client.get(
+                    "/api/v1/market-overview/sentiment",
+                    headers={"X-Forwarded-For": ip_address},
+                ),
+                "/api/v1/market-overview/funds-flow": client.get(
+                    "/api/v1/market-overview/funds-flow",
+                    headers={"X-Forwarded-For": ip_address},
+                ),
+                "/api/v1/stocks/AAPL/quote": client.get(
+                    "/api/v1/stocks/AAPL/quote",
+                    headers={"X-Forwarded-For": ip_address},
+                ),
+                "/api/v1/stocks/AAPL/evidence": client.get(
+                    "/api/v1/stocks/AAPL/evidence",
+                    headers={"X-Forwarded-For": ip_address},
+                ),
+                "/api/v1/stocks/AAPL/structure-decision": client.get(
+                    "/api/v1/stocks/AAPL/structure-decision",
+                    headers={"X-Forwarded-For": ip_address},
+                ),
+            }
+
+        assert {path: response.status_code for path, response in responses.items()} == {
+            "/api/v1/market-overview/indices": 200,
+            "/api/v1/market-overview/volatility": 200,
+            "/api/v1/market-overview/sentiment": 200,
+            "/api/v1/market-overview/funds-flow": 200,
+            "/api/v1/stocks/AAPL/quote": 200,
+            "/api/v1/stocks/AAPL/evidence": 200,
+            "/api/v1/stocks/AAPL/structure-decision": 200,
+        }
+        assert _limiter_snapshot()["limitedBucketCount"] == 1
+        for response in responses.values():
+            _assert_public_surface_safe(response.json())
+    finally:
+        client.close()
+        _reset_public_limiter_state_if_available()
+        _reset_auth_globals()
 
 
 def test_hot_public_bucket_allows_safe_market_get_routes_to_serve_fallback_payloads(monkeypatch) -> None:
@@ -590,7 +969,7 @@ def test_hot_public_bucket_allows_safe_market_get_routes_to_serve_fallback_paylo
         _reset_auth_globals()
 
 
-def test_hot_public_bucket_still_limits_non_exempt_routes(monkeypatch) -> None:
+def test_hot_public_bucket_preserves_auth_fail_closed_and_limits_public_errors(monkeypatch) -> None:
     _reset_auth_globals()
     _reset_public_limiter_state_if_available()
     monkeypatch.setenv("TRUST_X_FORWARDED_FOR", "true")
@@ -600,6 +979,7 @@ def test_hot_public_bucket_still_limits_non_exempt_routes(monkeypatch) -> None:
     ip_address = "203.0.113.215"
     try:
         _prime_hot_public_bucket(client, ip_address)
+        _reset_auth_globals()
 
         with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
             admin_response = client.get(
@@ -607,19 +987,21 @@ def test_hot_public_bucket_still_limits_non_exempt_routes(monkeypatch) -> None:
                 headers={"X-Forwarded-For": ip_address},
             )
 
+        _reset_auth_globals()
         with patch.object(auth, "_is_auth_enabled_from_env", return_value=False):
             public_response = client.get(
                 "/api/v1/options/underlyings/TEM/summary",
                 headers={"X-Forwarded-For": ip_address},
             )
 
-        assert admin_response.status_code == 429
+        assert admin_response.status_code == 401
         assert public_response.status_code == 429
+        assert admin_response.json() == {"error": "unauthorized", "message": "Login required"}
+        assert public_response.json() == {
+            "error": "rate_limited",
+            "message": "Too many public API errors; retry later.",
+        }
         for response in (admin_response, public_response):
-            assert response.json() == {
-                "error": "rate_limited",
-                "message": "Too many public API errors; retry later.",
-            }
             _assert_public_surface_safe(response.json())
     finally:
         client.close()
@@ -750,7 +1132,7 @@ def test_public_unsupported_method_bursts_eventually_receive_sanitized_rate_limi
         _reset_auth_globals()
 
 
-def test_public_api_abuse_limiter_state_can_be_reset_for_tests(monkeypatch) -> None:
+def test_public_api_abuse_limiter_reset_does_not_mask_auth_fail_closed(monkeypatch) -> None:
     from api.middlewares.public_abuse_limiter import reset_public_api_abuse_limiter_state
 
     _reset_auth_globals()
@@ -791,7 +1173,8 @@ def test_public_api_abuse_limiter_state_can_be_reset_for_tests(monkeypatch) -> N
                 },
             )
 
-        assert [first.status_code, limited.status_code, after_reset.status_code] == [401, 429, 401]
+        assert [first.status_code, limited.status_code, after_reset.status_code] == [401, 401, 401]
+        assert _limiter_snapshot()["totalFailures"] == 0
         for response in (first, limited, after_reset):
             _assert_public_surface_safe(response.json())
     finally:
@@ -1068,7 +1451,7 @@ def test_public_api_abuse_limiter_env_values_are_bounded_and_safe(monkeypatch) -
     assert limiter._max_buckets() == limiter.PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS_DEFAULT
 
 
-def test_public_api_abuse_limiter_isolates_failure_buckets_per_client(monkeypatch) -> None:
+def test_public_api_abuse_limiter_keeps_auth_fail_closed_out_of_client_buckets(monkeypatch) -> None:
     _reset_auth_globals()
     _reset_public_limiter_state_if_available()
     monkeypatch.setenv("TRUST_X_FORWARDED_FOR", "true")
@@ -1097,8 +1480,8 @@ def test_public_api_abuse_limiter_isolates_failure_buckets_per_client(monkeypatc
             first_client_first_failure.status_code,
             first_client_limited.status_code,
             second_client_first_failure.status_code,
-        ] == [401, 429, 401]
-        assert first_client_limited.headers["Retry-After"] == "300"
+        ] == [401, 401, 401]
+        assert _limiter_snapshot()["totalFailures"] == 0
         for response in (first_client_first_failure, first_client_limited, second_client_first_failure):
             _assert_public_surface_safe(response.json())
     finally:
@@ -1658,31 +2041,25 @@ def test_options_live_provider_request_fails_closed_with_sanitized_error() -> No
         client.close()
 
 
-def test_scanner_public_theme_generation_does_not_echo_raw_prompt_or_secret_markers() -> None:
-    client = _scanner_client()
+def test_scanner_theme_generation_does_not_echo_raw_prompt_or_secret_markers() -> None:
     raw_prompt = (
         "Find White House policy stocks but never echo raw_prompt system prompt "
         "token=raw-secret-token password=raw-password-value api_key=raw-api-key-value "
         "cookie=raw-cookie-value Traceback provider_payload debug_schema guaranteed must buy 必买 下单 "
         "place order buy now sell now 立即买入 立即卖出"
     )
-    try:
-        response = client.post(
-            "/api/v1/scanner/themes",
-            json={
-                "id": "public_surface_prompt_guard",
-                "label": "Public Surface Prompt Guard",
-                "market": "us",
-                "prompt": raw_prompt,
-                "manual_symbols": ["MSFT"],
-            },
+    response = scanner.create_scanner_theme(
+        scanner.ScannerThemeGenerateRequest(
+            id="public_surface_prompt_guard",
+            label="Public Surface Prompt Guard",
+            market="us",
+            prompt=raw_prompt,
+            manual_symbols=["MSFT"],
         )
+    )
 
-        assert response.status_code == 200
-        payload = response.json()
-        assert payload["theme"]["source"] == "ai_generated"
-        assert payload["theme"]["requires_manual_maintenance"] is True
-        assert payload["suggestions"]
-        _assert_public_surface_safe(payload)
-    finally:
-        client.close()
+    payload = response.model_dump(mode="json", by_alias=True)
+    assert payload["theme"]["source"] == "ai_generated"
+    assert payload["theme"]["requires_manual_maintenance"] is True
+    assert payload["suggestions"]
+    _assert_public_surface_safe(payload)

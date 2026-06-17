@@ -23,12 +23,16 @@ class _FakeResponse:
 
 
 class _FakeClient:
-    def __init__(self, responses: dict[tuple[str, str], _FakeResponse]) -> None:
+    def __init__(self, responses: dict[tuple[str, ...], _FakeResponse]) -> None:
         self._responses = responses
         self.calls: list[tuple[str, str, dict[str, str]]] = []
 
     def request(self, method: str, url: str, headers: dict[str, str] | None = None) -> _FakeResponse:
-        self.calls.append((method, url, dict(headers or {})))
+        request_headers = dict(headers or {})
+        self.calls.append((method, url, request_headers))
+        auth_key = (method, url, "auth" if request_headers else "anonymous")
+        if auth_key in self._responses:
+            return self._responses[auth_key]
         key = (method, url)
         if key not in self._responses:
             raise AssertionError(f"unexpected request: {key}")
@@ -99,6 +103,24 @@ def _surface_readiness_payload() -> dict[str, object]:
     }
 
 
+def _route_responses(base_url: str) -> dict[tuple[str, ...], _FakeResponse]:
+    return {
+        ("GET", f"{base_url}/api/health"): _FakeResponse(200, payload={"status": "ok"}),
+        ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": False}),
+        ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
+        ("GET", f"{base_url}/api/v1/stocks/AAPL/quote"): _FakeResponse(200, payload={"stockCode": "AAPL"}),
+        ("GET", f"{base_url}/api/v1/stocks/AAPL/evidence"): _FakeResponse(200, payload={"items": []}),
+        (
+            "GET",
+            f"{base_url}/api/v1/stocks/AAPL/structure-decision",
+        ): _FakeResponse(200, payload={"schemaVersion": "stock_structure_decision_v1"}),
+        ("GET", f"{base_url}/api/v1/research/radar"): _FakeResponse(401, payload={"error": "unauthorized"}),
+        ("GET", f"{base_url}/api/v1/research/radar", "auth"): _FakeResponse(200, payload={"items": []}),
+        ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(401, payload={"error": "unauthorized"}),
+        ("GET", f"{base_url}/api/v1/scanner/themes", "auth"): _FakeResponse(200, payload={"themes": []}),
+    }
+
+
 def test_probe_runtime_bundle_accepts_matching_root_asset_and_public_routes() -> None:
     base_url = "http://127.0.0.1:8000"
     client = _FakeClient(
@@ -108,10 +130,7 @@ def test_probe_runtime_bundle_accepts_matching_root_asset_and_public_routes() ->
                 text='<html><head><script type="module" crossorigin src="/assets/index-CKPdXr8Q.js"></script></head></html>',
             ),
             ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
-            ("GET", f"{base_url}/api/health"): _FakeResponse(200, payload={"status": "ok"}),
-            ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": False}),
-            ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
-            ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(200, payload={"themes": []}),
+            **_route_responses(base_url),
             ("GET", f"{base_url}/api/v1/admin/ops/status"): _FakeResponse(200, payload=_admin_status_payload()),
             ("GET", f"{base_url}/api/v1/admin/ops/surface-readiness"): _FakeResponse(200, payload=_surface_readiness_payload()),
         }
@@ -136,6 +155,8 @@ def test_probe_runtime_bundle_accepts_matching_root_asset_and_public_routes() ->
     assert report["checks"]["publicRoutes"]["failingRoutes"] == []
     assert report["checks"]["authenticatedRoutes"]["status"] == "PASS"
     assert report["checks"]["authenticatedRoutes"]["failingRoutes"] == []
+    assert report["checks"]["authenticatedRoutes"]["publiclyAvailableRoutes"] == []
+    assert report["checks"]["authenticatedRoutes"]["noAuthPolicyMismatchRoutes"] == []
     output = json.dumps(report, ensure_ascii=False, sort_keys=True)
     assert "opaque-admin-session" not in output
 
@@ -149,10 +170,7 @@ def test_runtime_bundle_fails_when_served_asset_does_not_match_expected_bundle()
                 text='<html><head><script type="module" crossorigin src="/assets/index-Stale999.js"></script></head></html>',
             ),
             ("GET", f"{base_url}/assets/index-Stale999.js"): _FakeResponse(200, text="console.log('stale');"),
-            ("GET", f"{base_url}/api/health"): _FakeResponse(200, payload={"status": "ok"}),
-            ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": False}),
-            ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
-            ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
+            **_route_responses(base_url),
         }
     )
 
@@ -180,10 +198,7 @@ def test_partial_when_admin_status_json_is_present_but_surface_readiness_is_unve
                 text='<html><head><script type="module" crossorigin src="/assets/index-CKPdXr8Q.js"></script></head></html>',
             ),
             ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
-            ("GET", f"{base_url}/api/health"): _FakeResponse(200, payload={"status": "ok"}),
-            ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": False}),
-            ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
-            ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
+            **_route_responses(base_url),
         }
     )
 
@@ -213,10 +228,7 @@ def test_fail_when_live_admin_status_returns_unauthorized() -> None:
                 text='<html><head><script type="module" crossorigin src="/assets/index-CKPdXr8Q.js"></script></head></html>',
             ),
             ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
-            ("GET", f"{base_url}/api/health"): _FakeResponse(200, payload={"status": "ok"}),
-            ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": False}),
-            ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
-            ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(200, payload={"themes": []}),
+            **_route_responses(base_url),
             ("GET", f"{base_url}/api/v1/admin/ops/status"): _FakeResponse(401, payload={"error": "unauthorized"}),
             ("GET", f"{base_url}/api/v1/admin/ops/surface-readiness"): _FakeResponse(
                 401,
@@ -240,7 +252,7 @@ def test_fail_when_live_admin_status_returns_unauthorized() -> None:
     assert report["checks"]["adminOpsStatus"]["reasonCodes"] == ["admin_status_auth_required"]
 
 
-def test_unauthenticated_protected_routes_are_partial_not_fail() -> None:
+def test_unauthenticated_authenticated_routes_are_partial_not_fail() -> None:
     base_url = "http://127.0.0.1:8000"
     client = _FakeClient(
         {
@@ -251,7 +263,14 @@ def test_unauthenticated_protected_routes_are_partial_not_fail() -> None:
             ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
             ("GET", f"{base_url}/api/health"): _FakeResponse(200, payload={"status": "ok"}),
             ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": False}),
-            ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
+            ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
+            ("GET", f"{base_url}/api/v1/stocks/AAPL/quote"): _FakeResponse(200, payload={"stockCode": "AAPL"}),
+            ("GET", f"{base_url}/api/v1/stocks/AAPL/evidence"): _FakeResponse(200, payload={"items": []}),
+            (
+                "GET",
+                f"{base_url}/api/v1/stocks/AAPL/structure-decision",
+            ): _FakeResponse(200, payload={"schemaVersion": "stock_structure_decision_v1"}),
+            ("GET", f"{base_url}/api/v1/research/radar"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
             ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
         }
     )
@@ -273,9 +292,21 @@ def test_unauthenticated_protected_routes_are_partial_not_fail() -> None:
     assert report["checks"]["authenticatedRoutes"]["reasonCodes"] == ["authenticated_routes_auth_required"]
     assert report["checks"]["authenticatedRoutes"]["failingRoutes"] == []
     assert report["checks"]["authenticatedRoutes"]["authRequiredRoutes"] == [
-        {"method": "GET", "path": "/api/v1/market-overview/indices", "httpStatus": 401},
-        {"method": "GET", "path": "/api/v1/scanner/themes", "httpStatus": 401},
+        {
+            "method": "GET",
+            "path": "/api/v1/research/radar",
+            "anonymousHttpStatus": 401,
+            "httpStatus": 401,
+        },
+        {
+            "method": "GET",
+            "path": "/api/v1/scanner/themes",
+            "anonymousHttpStatus": 401,
+            "httpStatus": 401,
+        },
     ]
+    assert report["checks"]["authenticatedRoutes"]["publiclyAvailableRoutes"] == []
+    assert report["checks"]["authenticatedRoutes"]["noAuthPolicyMismatchRoutes"] == []
 
 
 def test_true_public_route_failure_still_fails_smoke() -> None:
@@ -289,7 +320,14 @@ def test_true_public_route_failure_still_fails_smoke() -> None:
             ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
             ("GET", f"{base_url}/api/health"): _FakeResponse(503, payload={"status": "down"}),
             ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": False}),
-            ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
+            ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
+            ("GET", f"{base_url}/api/v1/stocks/AAPL/quote"): _FakeResponse(200, payload={"stockCode": "AAPL"}),
+            ("GET", f"{base_url}/api/v1/stocks/AAPL/evidence"): _FakeResponse(200, payload={"items": []}),
+            (
+                "GET",
+                f"{base_url}/api/v1/stocks/AAPL/structure-decision",
+            ): _FakeResponse(200, payload={"schemaVersion": "stock_structure_decision_v1"}),
+            ("GET", f"{base_url}/api/v1/research/radar"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
             ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
         }
     )
@@ -324,7 +362,16 @@ def test_authenticated_routes_pass_with_supplied_auth_headers() -> None:
             ("GET", f"{base_url}/api/health"): _FakeResponse(200, payload={"status": "ok"}),
             ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": True}),
             ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
-            ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(200, payload={"themes": []}),
+            ("GET", f"{base_url}/api/v1/stocks/AAPL/quote"): _FakeResponse(200, payload={"stockCode": "AAPL"}),
+            ("GET", f"{base_url}/api/v1/stocks/AAPL/evidence"): _FakeResponse(200, payload={"items": []}),
+            (
+                "GET",
+                f"{base_url}/api/v1/stocks/AAPL/structure-decision",
+            ): _FakeResponse(200, payload={"schemaVersion": "stock_structure_decision_v1"}),
+            ("GET", f"{base_url}/api/v1/research/radar"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
+            ("GET", f"{base_url}/api/v1/research/radar", "auth"): _FakeResponse(200, payload={"items": []}),
+            ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
+            ("GET", f"{base_url}/api/v1/scanner/themes", "auth"): _FakeResponse(200, payload={"themes": []}),
         }
     )
 
@@ -341,8 +388,18 @@ def test_authenticated_routes_pass_with_supplied_auth_headers() -> None:
     assert report["summaryStatus"] == "PASS"
     assert report["checks"]["authenticatedRoutes"]["status"] == "PASS"
     assert report["checks"]["authenticatedRoutes"]["checkedRoutes"] == [
-        {"method": "GET", "path": "/api/v1/market-overview/indices", "httpStatus": 200},
-        {"method": "GET", "path": "/api/v1/scanner/themes", "httpStatus": 200},
+        {
+            "method": "GET",
+            "path": "/api/v1/research/radar",
+            "anonymousHttpStatus": 401,
+            "httpStatus": 200,
+        },
+        {
+            "method": "GET",
+            "path": "/api/v1/scanner/themes",
+            "anonymousHttpStatus": 401,
+            "httpStatus": 200,
+        },
     ]
 
 
@@ -357,8 +414,17 @@ def test_authenticated_routes_fail_when_auth_supplied_but_route_unavailable() ->
             ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
             ("GET", f"{base_url}/api/health"): _FakeResponse(200, payload={"status": "ok"}),
             ("GET", f"{base_url}/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": True}),
-            ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(503, payload={"detail": "Unavailable"}),
-            ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(200, payload={"themes": []}),
+            ("GET", f"{base_url}/api/v1/market-overview/indices"): _FakeResponse(200, payload={"items": []}),
+            ("GET", f"{base_url}/api/v1/stocks/AAPL/quote"): _FakeResponse(200, payload={"stockCode": "AAPL"}),
+            ("GET", f"{base_url}/api/v1/stocks/AAPL/evidence"): _FakeResponse(200, payload={"items": []}),
+            (
+                "GET",
+                f"{base_url}/api/v1/stocks/AAPL/structure-decision",
+            ): _FakeResponse(200, payload={"schemaVersion": "stock_structure_decision_v1"}),
+            ("GET", f"{base_url}/api/v1/research/radar"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
+            ("GET", f"{base_url}/api/v1/research/radar", "auth"): _FakeResponse(503, payload={"detail": "Unavailable"}),
+            ("GET", f"{base_url}/api/v1/scanner/themes"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
+            ("GET", f"{base_url}/api/v1/scanner/themes", "auth"): _FakeResponse(200, payload={"themes": []}),
         }
     )
 
@@ -375,7 +441,82 @@ def test_authenticated_routes_fail_when_auth_supplied_but_route_unavailable() ->
     assert report["summaryStatus"] == "FAIL"
     assert report["checks"]["authenticatedRoutes"]["status"] == "FAIL"
     assert report["checks"]["authenticatedRoutes"]["failingRoutes"] == [
-        {"method": "GET", "path": "/api/v1/market-overview/indices", "httpStatus": 503}
+        {
+            "method": "GET",
+            "path": "/api/v1/research/radar",
+            "anonymousHttpStatus": 401,
+            "httpStatus": 503,
+        }
+    ]
+
+
+def test_authenticated_routes_fail_when_noauth_request_is_publicly_available() -> None:
+    base_url = "http://127.0.0.1:8000"
+    client = _FakeClient(
+        {
+            ("GET", f"{base_url}/"): _FakeResponse(
+                200,
+                text='<html><head><script type="module" crossorigin src="/assets/index-CKPdXr8Q.js"></script></head></html>',
+            ),
+            ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
+            **_route_responses(base_url),
+            ("GET", f"{base_url}/api/v1/research/radar"): _FakeResponse(200, payload={"items": []}),
+        }
+    )
+
+    report = smoke.run_runtime_smoke(
+        base_url=base_url,
+        client=client,
+        git_head="e2a90b4bd5fd1f84a1e44abde7f2b23da6a16590",
+        local_build_result=smoke.VerificationResult(ok=True, payload=_local_provenance()),
+        admin_status_payload=_admin_status_payload(),
+        surface_readiness_payload=_surface_readiness_payload(),
+        auth_headers=None,
+    )
+
+    assert report["summaryStatus"] == "FAIL"
+    assert report["checks"]["authenticatedRoutes"]["status"] == "FAIL"
+    assert report["checks"]["authenticatedRoutes"]["reasonCodes"] == ["authenticated_route_publicly_available"]
+    assert report["checks"]["authenticatedRoutes"]["publiclyAvailableRoutes"] == [
+        {"method": "GET", "path": "/api/v1/research/radar", "httpStatus": 200}
+    ]
+    assert report["checks"]["authenticatedRoutes"]["noAuthPolicyMismatchRoutes"] == [
+        {"method": "GET", "path": "/api/v1/research/radar", "httpStatus": 200}
+    ]
+
+
+def test_authenticated_routes_fail_when_noauth_request_is_rate_limited() -> None:
+    base_url = "http://127.0.0.1:8000"
+    client = _FakeClient(
+        {
+            ("GET", f"{base_url}/"): _FakeResponse(
+                200,
+                text='<html><head><script type="module" crossorigin src="/assets/index-CKPdXr8Q.js"></script></head></html>',
+            ),
+            ("GET", f"{base_url}/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="console.log('ok');"),
+            **_route_responses(base_url),
+            ("GET", f"{base_url}/api/v1/research/radar"): _FakeResponse(429, payload={"error": "rate_limited"}),
+        }
+    )
+
+    report = smoke.run_runtime_smoke(
+        base_url=base_url,
+        client=client,
+        git_head="e2a90b4bd5fd1f84a1e44abde7f2b23da6a16590",
+        local_build_result=smoke.VerificationResult(ok=True, payload=_local_provenance()),
+        admin_status_payload=_admin_status_payload(),
+        surface_readiness_payload=_surface_readiness_payload(),
+        auth_headers=None,
+    )
+
+    assert report["summaryStatus"] == "FAIL"
+    assert report["checks"]["authenticatedRoutes"]["status"] == "FAIL"
+    assert report["checks"]["authenticatedRoutes"]["reasonCodes"] == [
+        "authenticated_route_noauth_policy_mismatch"
+    ]
+    assert report["checks"]["authenticatedRoutes"]["publiclyAvailableRoutes"] == []
+    assert report["checks"]["authenticatedRoutes"]["noAuthPolicyMismatchRoutes"] == [
+        {"method": "GET", "path": "/api/v1/research/radar", "httpStatus": 429}
     ]
 
 
@@ -408,10 +549,7 @@ def test_main_supports_json_stdout_with_admin_status_file(monkeypatch, tmp_path:
                     text='<html><head><script type="module" crossorigin src="/assets/index-CKPdXr8Q.js"></script></head></html>',
                 ),
                 ("GET", "http://127.0.0.1:8000/assets/index-CKPdXr8Q.js"): _FakeResponse(200, text="ok"),
-                ("GET", "http://127.0.0.1:8000/api/health"): _FakeResponse(200, payload={"status": "ok"}),
-                ("GET", "http://127.0.0.1:8000/api/v1/auth/status"): _FakeResponse(200, payload={"authenticated": False}),
-                ("GET", "http://127.0.0.1:8000/api/v1/market-overview/indices"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
-                ("GET", "http://127.0.0.1:8000/api/v1/scanner/themes"): _FakeResponse(401, payload={"detail": "Unauthorized"}),
+                **_route_responses("http://127.0.0.1:8000"),
             }
         ),
     )
