@@ -37,6 +37,35 @@ FORBIDDEN_PUBLIC_TERMS = (
     "止损",
 )
 INTERNAL_LOOKING_TOKEN = re.compile(r"\b[a-z]+(?:_[a-z0-9]+){1,}\b")
+EXPECTED_PRESET_IDS = [
+    "volatilitySpike",
+    "breadthBreakdown",
+    "ratesUpDollarUp",
+    "liquidityStress",
+    "riskOnConfirmation",
+    "gammaUnavailable",
+]
+EXPECTED_PRESET_KEYS = {
+    "presetId",
+    "name",
+    "label",
+    "category",
+    "description",
+    "inputAssumptions",
+    "expectedDriverImpacts",
+    "evidenceLimits",
+    "confirmInvalidateContext",
+    "linkedSurfaces",
+    "consumerIssues",
+    "noAdviceDisclosure",
+    "observationOnly",
+    "decisionGrade",
+}
+SAFE_DRILLDOWN_ROUTES = {
+    "/market/decision-cockpit",
+    "/market-overview",
+    "/scenario-lab",
+}
 FORBIDDEN_IMPORT_PREFIXES = (
     "data_provider",
     "src.providers",
@@ -162,6 +191,97 @@ def _consumer_label_values(payload: object) -> list[str]:
     return values
 
 
+def _consumer_text_values(payload: object) -> list[str]:
+    text_keys = {
+        "label",
+        "category",
+        "description",
+        "message",
+        "reason",
+        "driver",
+        "direction",
+        "magnitude",
+        "noAdviceDisclosure",
+    }
+    list_text_keys = {
+        "inputAssumptions",
+        "evidenceLimits",
+        "confirm",
+        "invalidate",
+        "scenarioSummary",
+        "whatWouldConfirm",
+        "whatWouldInvalidate",
+    }
+    values: list[str] = []
+
+    def visit(value: object, key: str = "") -> None:
+        if isinstance(value, dict):
+            for item_key, item in value.items():
+                visit(item, str(item_key))
+            return
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                visit(item, key)
+            return
+        if isinstance(value, str) and (key in text_keys or key in list_text_keys):
+            values.append(value)
+
+    visit(payload)
+    return values
+
+
+def _assert_safe_consumer_text(payload: object) -> None:
+    serialized = _serialized_values(payload)
+    for forbidden in FORBIDDEN_PUBLIC_TERMS:
+        assert forbidden not in serialized
+    for value in _consumer_text_values(payload):
+        assert not INTERNAL_LOOKING_TOKEN.search(value)
+
+
+def _assert_confirm_invalidate_context(context: dict[str, Any]) -> None:
+    assert set(context) == {"status", "message", "confirm", "invalidate"}
+    assert context["status"] in {"available", "unavailable"}
+    assert isinstance(context["message"], str)
+    if context["status"] == "available":
+        assert context["confirm"]
+        assert context["invalidate"]
+    else:
+        assert context["confirm"] == []
+        assert context["invalidate"] == []
+
+
+def _assert_preset_contract(preset: dict[str, Any]) -> None:
+    assert set(preset) == EXPECTED_PRESET_KEYS
+    assert preset["presetId"] == preset["name"]
+    assert preset["presetId"] in EXPECTED_PRESET_IDS
+    assert preset["label"]
+    assert preset["category"]
+    assert preset["description"]
+    assert preset["inputAssumptions"]
+    assert preset["evidenceLimits"]
+    assert preset["noAdviceDisclosure"] == "Research planning only; not a personalized decision basis."
+    assert preset["observationOnly"] is True
+    assert preset["decisionGrade"] is False
+    _assert_confirm_invalidate_context(preset["confirmInvalidateContext"])
+
+    for impact in preset["expectedDriverImpacts"]:
+        assert set(impact) == {"driver", "direction", "magnitude"}
+        assert impact["driver"]
+        assert impact["direction"] in {"pressure", "supportive", "unchanged"}
+        assert impact["magnitude"] in {"low", "medium", "high"}
+
+    assert preset["linkedSurfaces"]
+    for link in preset["linkedSurfaces"]:
+        assert set(link) == {"label", "route", "section", "reason"}
+        assert link["route"] in SAFE_DRILLDOWN_ROUTES
+        assert not link["route"].startswith("/api/")
+
+    for issue in preset["consumerIssues"]:
+        assert set(issue) == {"label", "message", "severity", "category"}
+
+    _assert_safe_consumer_text(preset)
+
+
 def test_volatility_spike_scenario_reclassifies_base_decision_without_mutating_input() -> None:
     base = _base_decision()
     original = copy.deepcopy(base)
@@ -204,19 +324,12 @@ def test_volatility_spike_scenario_reclassifies_base_decision_without_mutating_i
     }
     assert payload["observationOnly"] is True
     assert payload["decisionGrade"] is False
-    assert payload["selectedScenario"] == {
-        "name": "volatilitySpike",
-        "label": "Volatility stress observation",
-        "description": "Stress volatility and breadth inputs to compare research-context sensitivity.",
-    }
-    assert {item["name"] for item in payload["scenarioPresets"]} == {
-        "volatilitySpike",
-        "breadthBreakdown",
-        "ratesUpDollarUp",
-        "liquidityStress",
-        "riskOnConfirmation",
-        "gammaUnavailable",
-    }
+    assert payload["selectedScenario"]["presetId"] == "volatilitySpike"
+    assert payload["selectedScenario"]["label"] == "Volatility stress observation"
+    _assert_preset_contract(payload["selectedScenario"])
+    assert [item["presetId"] for item in payload["scenarioPresets"]] == EXPECTED_PRESET_IDS
+    for preset in payload["scenarioPresets"]:
+        _assert_preset_contract(preset)
     assert payload["baseMarketContext"] == {
         "source": "decisionCockpitInput",
         "label": "Decision Cockpit market context",
@@ -246,14 +359,11 @@ def test_volatility_spike_scenario_reclassifies_base_decision_without_mutating_i
     serialized_issues = json.dumps(payload["consumerIssues"], ensure_ascii=False).lower()
     assert "dealer_gamma_unavailable_caps_volatility_compression" not in serialized_issues
     assert payload["noAdviceDisclosure"] == "Research planning only; not a personalized decision basis."
-    assert payload["confirmInvalidateContext"] == {
-        "confirm": payload["whatWouldConfirm"],
-        "invalidate": payload["whatWouldInvalidate"],
-    }
+    assert payload["confirmInvalidateContext"]["status"] == "available"
+    assert payload["confirmInvalidateContext"]["confirm"] == payload["whatWouldConfirm"]
+    assert payload["confirmInvalidateContext"]["invalidate"] == payload["whatWouldInvalidate"]
 
-    serialized = _serialized_values(payload)
-    for forbidden in FORBIDDEN_PUBLIC_TERMS:
-        assert forbidden not in serialized
+    _assert_safe_consumer_text(payload)
     for label in _consumer_label_values(payload):
         assert not INTERNAL_LOOKING_TOKEN.search(label)
 
@@ -295,6 +405,12 @@ def test_explicit_overrides_and_gamma_unavailable_surface_changed_drivers_and_li
         "The scenario frame weakens if score-grade evidence does not move with the selected shocks.",
         "The scenario frame weakens if key drivers are proxy-only, stale, blocked, or observation-only.",
     ]
+    assert payload["confirmInvalidateContext"] == {
+        "status": "available",
+        "message": "Scenario comparison includes confirm and invalidate context for research review.",
+        "confirm": payload["whatWouldConfirm"],
+        "invalidate": payload["whatWouldInvalidate"],
+    }
 
 
 def test_missing_base_evidence_returns_degraded_unavailable_payload() -> None:
@@ -329,7 +445,16 @@ def test_missing_base_evidence_returns_degraded_unavailable_payload() -> None:
     assert payload["evidenceLimits"] == [
         "Base regime evidence is missing or below the minimum driver coverage for scenario analysis."
     ]
-    assert payload["confirmInvalidateContext"] == {"confirm": [], "invalidate": []}
+    assert payload["confirmInvalidateContext"] == {
+        "status": "unavailable",
+        "message": (
+            "Confirm and invalidate context is unavailable until base score-grade evidence reaches minimum coverage."
+        ),
+        "confirm": [],
+        "invalidate": [],
+    }
+    assert payload["selectedScenario"]["presetId"] == "riskOnConfirmation"
+    _assert_preset_contract(payload["selectedScenario"])
     for label in _consumer_label_values(payload):
         assert not INTERNAL_LOOKING_TOKEN.search(label)
 
@@ -358,16 +483,23 @@ def test_normalized_driver_scores_can_be_used_without_base_decision_payload() ->
 
 
 def test_all_public_named_scenarios_return_research_planning_payloads() -> None:
-    expected_names = {
-        "volatilitySpike",
-        "breadthBreakdown",
-        "ratesUpDollarUp",
-        "liquidityStress",
-        "riskOnConfirmation",
-        "gammaUnavailable",
-    }
+    first_payload = build_market_scenario_lab(
+        base_decision=_base_decision(),
+        scenario={"name": EXPECTED_PRESET_IDS[0]},
+    )
+    second_payload = build_market_scenario_lab(
+        base_decision=_base_decision(),
+        scenario={"name": EXPECTED_PRESET_IDS[0]},
+    )
+    assert first_payload["scenarioPresets"] == second_payload["scenarioPresets"]
+    first_payload["scenarioPresets"][0]["inputAssumptions"].append("mutated assumption")
+    third_payload = build_market_scenario_lab(
+        base_decision=_base_decision(),
+        scenario={"name": EXPECTED_PRESET_IDS[0]},
+    )
+    assert "mutated assumption" not in third_payload["scenarioPresets"][0]["inputAssumptions"]
 
-    for scenario_name in expected_names:
+    for scenario_name in EXPECTED_PRESET_IDS:
         payload = build_market_scenario_lab(
             base_decision=_base_decision(),
             scenario={"name": scenario_name},
@@ -376,14 +508,16 @@ def test_all_public_named_scenarios_return_research_planning_payloads() -> None:
         assert payload["schemaVersion"] == "market_scenario_lab_engine.v1"
         assert payload["observationOnly"] is True
         assert payload["decisionGrade"] is False
+        assert payload["selectedScenario"]["presetId"] == scenario_name
         assert payload["selectedScenario"]["name"] == scenario_name
+        assert payload["selectedScenario"]["observationOnly"] is True
+        assert payload["selectedScenario"]["decisionGrade"] is False
+        _assert_preset_contract(payload["selectedScenario"])
+        assert [item["presetId"] for item in payload["scenarioPresets"]] == EXPECTED_PRESET_IDS
         assert payload["baseRegime"]["regime"] == "riskOn"
         assert payload["scenarioRegime"]["regime"]
         assert payload["noAdviceDisclosure"] == "Research planning only; not a personalized decision basis."
-
-        serialized = _serialized_values(payload)
-        for forbidden in FORBIDDEN_PUBLIC_TERMS:
-            assert forbidden not in serialized
+        _assert_safe_consumer_text(payload)
 
 
 def test_service_does_not_import_protected_runtime_domains() -> None:

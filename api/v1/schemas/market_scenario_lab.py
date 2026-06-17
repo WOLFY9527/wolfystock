@@ -37,6 +37,10 @@ class MarketScenarioLabRequest(_MarketScenarioLabModel):
         default=None,
         validation_alias=AliasChoices("scenarioName", "scenario_name"),
     )
+    preset_id: MarketScenarioLabScenarioName | None = Field(
+        default=None,
+        validation_alias=AliasChoices("presetId", "preset_id"),
+    )
     scenario: Dict[str, Any] | MarketScenarioLabScenarioName | None = None
     scenario_overrides: Dict[str, Any] = Field(
         default_factory=dict,
@@ -58,6 +62,9 @@ class MarketScenarioLabRequest(_MarketScenarioLabModel):
             scenario["name"] = self.scenario
         if self.scenario_name:
             scenario["name"] = self.scenario_name
+        if self.preset_id:
+            scenario["presetId"] = self.preset_id
+            scenario["name"] = self.preset_id
         scenario.update(self.scenario_overrides)
         return scenario or None
 
@@ -79,12 +86,6 @@ class MarketScenarioLabContractStatus(_MarketScenarioLabModel):
     decisionGrade: bool
 
 
-class MarketScenarioLabScenarioPreset(_MarketScenarioLabModel):
-    name: str
-    label: str
-    description: str
-
-
 class MarketScenarioLabBaseContext(_MarketScenarioLabModel):
     source: str
     label: str
@@ -102,8 +103,40 @@ class MarketScenarioLabScenarioOutput(_MarketScenarioLabModel):
 
 
 class MarketScenarioLabConfirmInvalidateContext(_MarketScenarioLabModel):
+    status: Literal["available", "unavailable"]
+    message: str
     confirm: List[str]
     invalidate: List[str]
+
+
+class MarketScenarioLabExpectedDriverImpact(_MarketScenarioLabModel):
+    driver: str
+    direction: Literal["pressure", "supportive", "unchanged"]
+    magnitude: Literal["low", "medium", "high"]
+
+
+class MarketScenarioLabLinkedSurface(_MarketScenarioLabModel):
+    label: str
+    route: str
+    section: str
+    reason: str
+
+
+class MarketScenarioLabScenarioPreset(_MarketScenarioLabModel):
+    presetId: str
+    name: str
+    label: str
+    category: str
+    description: str
+    inputAssumptions: List[str]
+    expectedDriverImpacts: List[MarketScenarioLabExpectedDriverImpact]
+    evidenceLimits: List[str]
+    confirmInvalidateContext: MarketScenarioLabConfirmInvalidateContext
+    linkedSurfaces: List[MarketScenarioLabLinkedSurface]
+    consumerIssues: List[Dict[str, str]]
+    noAdviceDisclosure: str
+    observationOnly: bool
+    decisionGrade: bool
 
 
 class MarketScenarioLabResponse(_MarketScenarioLabModel):
@@ -133,7 +166,7 @@ def _scenario_name_from_input(scenario: Any) -> str | None:
     if isinstance(scenario, str):
         return scenario
     if isinstance(scenario, dict):
-        raw_name = scenario.get("name") or scenario.get("scenarioName")
+        raw_name = scenario.get("presetId") or scenario.get("name") or scenario.get("scenarioName")
         if raw_name is not None:
             return str(raw_name)
     return None
