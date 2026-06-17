@@ -436,7 +436,10 @@ class AdminMissionControlService:
 
     def _safe_ops_status(self, *, app_state: object | None) -> tuple[Dict[str, Any], bool, Optional[str]]:
         try:
-            return AdminOpsStatusService().build_status(app_state=app_state), True, None
+            return AdminOpsStatusService().build_status(
+                app_state=app_state,
+                include_section_summaries=True,
+            ), True, None
         except Exception:
             return {}, False, "source_unavailable"
 
@@ -453,6 +456,9 @@ class AdminMissionControlService:
                 "noExternalCalls": True,
                 "liveEnforcement": False,
                 "runtimeBehaviorChanged": False,
+                "evidenceRefs": [],
+                "blockerRefs": [],
+                "approvalRefs": [],
                 "opsStatus": ops_section,
             }
         )

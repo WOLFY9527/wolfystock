@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.v1.schemas.admin_ops_status import AdminOpsStatusSection
+
 
 class _AdminMissionControlModel(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -42,7 +44,7 @@ class AdminMissionControlDomainSlice(_AdminMissionControlModel):
     blocker_refs: List[AdminMissionControlSourceRef] = Field(default_factory=list, alias="blockerRefs")
     approval_refs: List[AdminMissionControlSourceRef] = Field(default_factory=list, alias="approvalRefs")
     linked_admin_routes: List[str] = Field(default_factory=list, alias="linkedAdminRoutes")
-    ops_status: Optional[Dict[str, Any]] = Field(default=None, alias="opsStatus")
+    ops_status: Optional[AdminOpsStatusSection] = Field(default=None, alias="opsStatus")
     limitations: List[str] = Field(default_factory=list)
 
 
