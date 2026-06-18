@@ -164,13 +164,16 @@ def test_get_research_radar_endpoint_is_registered_and_returns_contract(monkeypa
 
     assert response.status_code == 200, response.text
     payload = response.json()
+    assert "schemaVersion" not in payload
+    assert "researchBiasRaw" not in payload["researchQueue"][0]
+    assert "evidenceGapsRaw" not in payload
+    assert "evidenceGapsRaw" not in payload["researchQueue"][0]
+    assert "missingEvidenceRaw" not in payload["dataQuality"]
     assert {
-        "schemaVersion",
         "generatedAt",
         "researchQueue",
         "aggregateSummary",
         "evidenceGaps",
-        "evidenceGapsRaw",
         "marketContextFit",
         "drilldownTargets",
         "consumerIssues",
@@ -184,14 +187,19 @@ def test_get_research_radar_endpoint_is_registered_and_returns_contract(monkeypa
         "observationOnly",
         "decisionGrade",
     }.issubset(payload)
+    assert payload["consumerSafeSourceLabel"] == "部分数据源暂不可用"
+    assert payload["dataQualityState"] == "limited"
+    assert payload["freshnessState"] == "limited"
+    assert payload["observationBoundary"]
+    assert payload["researchNextSteps"]
     assert payload["researchQueue"][0]["symbol"] == "ALFA"
     assert payload["researchQueue"][0]["researchBias"] == "Strength observation"
-    assert payload["researchQueue"][0]["researchBiasRaw"] == "strengthContinuation"
+    assert "researchBiasRaw" not in payload["researchQueue"][0]
     assert payload["researchQueue"][0]["whyNotHigherPriority"] == [
         "Evidence quality is below the strong research threshold."
     ]
     assert payload["researchQueue"][0]["evidenceGaps"] == ["Theme breadth needs review"]
-    assert payload["researchQueue"][0]["evidenceGapsRaw"] == ["themeBreadth"]
+    assert "evidenceGapsRaw" not in payload["researchQueue"][0]
     assert payload["researchQueue"][0]["consumerIssues"][0]["label"] == "Evidence needs review"
     assert payload["researchQueue"][0]["drilldownTargets"][0]["route"] == "/stocks/ALFA/structure-decision"
     assert payload["consumerIssues"][0]["label"] == "Evidence needs review"

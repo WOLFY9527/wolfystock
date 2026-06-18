@@ -190,10 +190,13 @@ def test_stock_evidence_endpoint_does_not_fabricate_missing_fundamentals_summary
 
     assert response.status_code == 200
     packet = response.json()["items"][0]["stockEvidencePacket"]
-    assert packet["schemaVersion"] == "stock_evidence_packet_v1"
+    assert "schemaVersion" not in packet
     assert packet["symbol"] == "AAPL"
     assert packet["notInvestmentAdvice"] is True
     assert packet["observationOnly"] is True
+    assert packet["consumerSafeSourceLabel"] == "部分数据源暂不可用"
+    assert packet["dataQualityState"] == "limited"
+    assert packet["freshnessState"] == "limited"
     assert "fundamentalsSummary" not in packet
     _assert_no_forbidden_keys(
         packet,
@@ -330,25 +333,25 @@ def test_stock_evidence_endpoint_preserves_item_metadata_shape(
 
     assert response.status_code == 200
     item = response.json()["items"][0]
-    assert item["quote"]["providerId"] == "quote-primary"
-    assert item["quote"]["providerName"] == "Existing Quote Adapter"
-    assert item["quote"]["sourceType"] == "provider_runtime"
-    assert item["quote"]["sourceTier"] == "exchange_public"
+    assert "providerId" not in item["quote"]
+    assert "providerName" not in item["quote"]
+    assert "sourceType" not in item["quote"]
+    assert "sourceTier" not in item["quote"]
     assert item["quote"]["trustLevel"] == "usable_with_caution"
     assert item["quote"]["freshness"] == "delayed"
     assert item["quote"]["updatedAt"] == "2026-06-02T09:31:00Z"
     assert item["quote"]["asOf"] == "2026-06-02"
-    assert item["quote"]["degradationReason"] == "delayed_source"
+    assert item["quote"]["degradationReason"] == "Freshness is constrained for this observation."
     assert item["quote"]["isFallback"] is True
     assert item["quote"]["isStale"] is True
     assert item["quote"]["isPartial"] is True
     assert item["quote"]["isSynthetic"] is False
     assert item["quote"]["isUnavailable"] is False
-    assert item["quote"]["sourceConfidence"]["confidenceWeight"] == 0.7
+    assert "sourceConfidence" not in item["quote"]
     assert item["quote"]["observationOnly"] is True
     assert item["quote"]["scoreContributionAllowed"] is False
     assert item["quote"]["sourceAuthorityAllowed"] is False
-    assert item["quote"]["rawPayloadStored"] is False
+    assert "rawPayloadStored" not in item["quote"]
     assert item["quote"]["freshnessExpectation"] == "near_real_time_venue_scoped"
     assert item["quote"]["extraHistoricalField"] == {"kept": True}
     assert item["technical"]["missingFields"] == ["rsi14", "support"]
@@ -356,7 +359,7 @@ def test_stock_evidence_endpoint_preserves_item_metadata_shape(
     assert item["fundamental"]["missingFields"] == ["fcfTtm"]
     assert item["fundamental"]["extraFundamentalField"] == "preserved"
     assert item["news"]["isUnavailable"] is True
-    assert item["secFilingEvidence"]["sourceType"] == "official_filing"
+    assert "sourceType" not in item["secFilingEvidence"]
     assert item["secFilingEvidence"]["records"] == [{"form": "10-K", "filedAt": "2026-02-01"}]
     assert item["secFilingEvidence"]["extraSecField"] == "preserved"
 
@@ -376,10 +379,15 @@ def test_stock_evidence_endpoint_does_not_fabricate_item_metadata(
 
     assert response.status_code == 200
     item = response.json()["items"][0]
-    assert item["quote"] == {"status": "unknown", "provider": "realtime_quote"}
-    assert item["technical"] == {"status": "missing", "provider": "stock_daily"}
-    assert item["fundamental"] == {"status": "missing", "provider": "analysis_history"}
-    assert item["news"] == {"status": "unknown", "latestHeadline": None, "provider": None}
+    for block_key in ("quote", "technical", "fundamental", "news"):
+        assert "provider" not in item[block_key]
+        assert item[block_key]["consumerSafeSourceLabel"] == "部分数据源暂不可用"
+        assert item[block_key]["dataQualityState"] == "limited"
+    assert item["quote"]["status"] == "unknown"
+    assert item["technical"]["status"] == "missing"
+    assert item["fundamental"]["status"] == "missing"
+    assert item["news"]["status"] == "unknown"
+    assert "latestHeadline" not in item["news"]
 
 
 def test_stock_evidence_endpoint_filters_forbidden_fundamentals_fields(
@@ -592,9 +600,11 @@ def test_stock_evidence_endpoint_preserves_quote_diagnostic_metadata_and_readonl
     assert len(instances) == 1
     assert instances[0].calls == [["AAPL"]]
     quote = response.json()["items"][0]["quote"]
-    assert quote["provider"] == "alpaca"
+    assert "provider" not in quote
     assert quote["source"] == "alpaca"
-    assert quote["sourceType"] == "local_or_reported"
+    assert "sourceType" not in quote
+    assert quote["consumerSafeSourceLabel"] == "部分数据源暂不可用"
+    assert quote["dataQualityState"] == "limited"
     assert quote["freshness"] == "unknown"
     assert quote["asOf"] == "2026-05-13T08:30:00Z"
     assert quote["isFallback"] is False
@@ -605,9 +615,8 @@ def test_stock_evidence_endpoint_preserves_quote_diagnostic_metadata_and_readonl
     assert quote["observationOnly"] is True
     assert quote["scoreContributionAllowed"] is False
     assert quote["sourceAuthorityAllowed"] is False
-    assert quote["rawPayloadStored"] is False
-    assert quote["sourceConfidence"]["confidenceWeight"] == 0.3
-    assert quote["sourceConfidence"]["capReason"] == "freshness_not_proven"
+    assert "rawPayloadStored" not in quote
+    assert "sourceConfidence" not in quote
     for deferred_key in (
         "providerId",
         "sourceTier",
@@ -617,4 +626,3 @@ def test_stock_evidence_endpoint_preserves_quote_diagnostic_metadata_and_readonl
         "authorityGrant",
     ):
         assert deferred_key not in quote
-        assert deferred_key not in quote["sourceConfidence"]

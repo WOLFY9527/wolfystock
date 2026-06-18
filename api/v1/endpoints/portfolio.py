@@ -12,6 +12,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 
 from api.deps import CurrentUser, get_current_user
+from api.v1.consumer_safe_response import consumer_safe_json_response
 from api.v1.errors import safe_api_error
 from api.v1.schemas.common import ErrorResponse
 from api.v1.schemas.portfolio import (
@@ -1842,7 +1843,10 @@ def get_structure_review(
             max_items=max_items,
             owner_id=current_user.user_id,
         )
-        return PortfolioStructureReviewResponse(**payload)
+        return consumer_safe_json_response(
+            PortfolioStructureReviewResponse(**payload),
+            surface="portfolio-structure-review",
+        )
     except ValueError as exc:
         raise _bad_request(exc)
     except Exception as exc:

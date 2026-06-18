@@ -121,9 +121,14 @@ def test_get_research_queue_returns_bounded_unified_contract(monkeypatch) -> Non
 
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["schemaVersion"] == "research_queue_v1"
+    assert "schemaVersion" not in payload
     assert payload["observationOnly"] is True
     assert payload["decisionGrade"] is False
+    assert payload["consumerSafeSourceLabel"] == "部分数据源暂不可用"
+    assert payload["dataQualityState"] == "limited"
+    assert payload["freshnessState"] == "limited"
+    assert payload["observationBoundary"]
+    assert payload["researchNextSteps"]
     assert payload["sourceSurfacesAggregated"] == ["watchlist", "scanner"]
     assert payload["aggregateSummary"] == {
         "itemCount": 2,

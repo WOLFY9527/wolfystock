@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from api.v1.endpoints import options
 from api.v1.schemas.options import OptionChainResponse, OptionContract, OptionGreeks, OptionsMetadata
+from src.services.consumer_api_diagnostic_redaction import project_consumer_api_payload
 from src.services.market_data_source_registry import project_source_provenance
 from src.services.options_lab_domain_models import (
     AnalyzeCandidateModel,
@@ -107,6 +108,37 @@ def _assert_no_safety_leaks(payload) -> None:
         assert value not in text
 
 
+def _assert_no_consumer_diagnostic_leaks(payload) -> None:
+    text = _json_text(payload)
+    lowered = text.lower()
+    for marker in (
+        "debugRef",
+        "failClosedReasonCodes",
+        "providerAuthority",
+        "providerName",
+        "providerDecisionAuthority",
+        "recommendationAuthority",
+        "sourceType",
+        "sourceTier",
+        "sourceRef",
+        "rawPayload",
+        "schemaVersion",
+        "policyVersion",
+        "requestId",
+        "traceId",
+        "provider_adapter_contract_not_decision_grade",
+        "provider_authority_tier_observation_only",
+        "provider_fixture_not_decision_grade",
+        "provider_live_disabled",
+        "provider_tradeable_data_false",
+        "tradier_adapter_contract",
+        "delayed_fixture",
+        "synthetic_fixture",
+    ):
+        assert marker not in text
+        assert marker.lower() not in lowered
+
+
 def _assert_consumer_safe_sandbox_metadata(payload: dict) -> None:
     metadata = payload["metadata"]
     assert metadata["mode"] in {"sandbox", "educational"}
@@ -161,7 +193,6 @@ def _assert_consumer_scenario_frame_contract(frame: dict) -> None:
         "blockingReasons",
         "nextEvidenceNeeded",
         "noTradingBoundary",
-        "debugRef",
     }
     assert frame["contractVersion"] == "options-consumer-scenario-frame-v1"
     assert frame["underlying"]
@@ -183,7 +214,6 @@ def _assert_consumer_scenario_frame_contract(frame: dict) -> None:
         "noPortfolioMutation": True,
         "noTradingRecommendation": True,
     }
-    assert frame["debugRef"].startswith("options:")
 
 
 class _MockTradierHttpResponse:
@@ -1768,15 +1798,16 @@ def test_decision_endpoint_returns_safe_demo_only_contract_quality() -> None:
         assert payload["dataQualityGates"]["status"] == "blocked"
         assert payload["liquidityGates"]["status"] in {"blocked", "manual_review"}
         assert payload["gateIssues"]
-        assert payload["failClosedReasonCodes"]
-        assert "provider_fixture_not_decision_grade" in payload["failClosedReasonCodes"]
+        assert "failClosedReasonCodes" not in payload
+        assert payload["evidenceGaps"]
+        assert payload["researchNextSteps"]
         assert payload["optionsResearchReadiness"] == payload["optionsReadiness"]
         readiness = payload["optionsReadiness"]
         assert readiness["optionsResearchReady"] is False
         assert readiness["readinessState"] == "blocked"
         assert readiness["dataQualityTier"] == "synthetic_demo_only"
         assert readiness["decisionGrade"] is False
-        assert readiness["providerAuthority"] == "observationOnly"
+        assert "providerAuthority" not in readiness
         assert readiness["liquidityGate"] in {"blocked", "manual_review"}
         assert readiness["ivGreeksGate"] == "blocked"
         assert readiness["spreadGate"] in {"blocked", "manual_review"}
@@ -1788,8 +1819,9 @@ def test_decision_endpoint_returns_safe_demo_only_contract_quality() -> None:
             "noPortfolioMutation": True,
             "noTradingRecommendation": True,
         }
-        assert "provider_fixture_not_decision_grade" in readiness["blockingReasons"]
-        assert "补充 provider authority 与 live chain 证据" in readiness["nextEvidenceNeeded"]
+        assert "provider_fixture_not_decision_grade" not in readiness["blockingReasons"]
+        assert "Evidence is limited for this observation." in readiness["blockingReasons"]
+        assert "Evidence is limited for this observation." in readiness["nextEvidenceNeeded"]
         assert payload["metadata"]["noExternalCalls"] is True
         assert payload["metadata"]["readOnly"] is True
         assert payload["metadata"]["mode"] == "sandbox"
@@ -1914,30 +1946,29 @@ def test_decision_endpoint_tradier_live_provider_opt_in_uses_mocked_http_and_fai
         assert response.status_code == 200
         payload = response.json()
         assert request_mock.call_count == 3
-        assert payload["metadata"]["providerName"] == "tradier"
+        _assert_no_consumer_diagnostic_leaks(payload)
+        assert "providerName" not in payload["metadata"]
+        assert "providerCapabilities" not in payload["metadata"]
         assert payload["metadata"]["liveProviderEnabled"] is True
         assert payload["metadata"]["fixtureBacked"] is False
         assert payload["metadata"]["noExternalCalls"] is False
-        capabilities = payload["metadata"]["providerCapabilities"]
-        assert capabilities["providerName"] == "tradier"
-        assert capabilities["sourceType"] == "tradier_adapter_contract"
-        assert capabilities["liveEnabled"] is True
-        assert capabilities["tradeableData"] is False
-        assert capabilities.get("providerDecisionAuthority") is not True
-        assert capabilities.get("recommendationAuthority") is not True
         assert payload["decisionGrade"] is False
         assert payload["decisionLabel"] == "数据不足，禁止判断"
-        assert "provider_authority_tier_observation_only" in payload["failClosedReasonCodes"]
-        assert "provider_tradeable_data_false" in payload["failClosedReasonCodes"]
+        assert "failClosedReasonCodes" not in payload
+        assert payload["consumerSafeSourceLabel"] == "部分数据源暂不可用"
+        assert payload["evidenceGaps"] == ["evidence limited"]
+        assert payload["researchNextSteps"]
         readiness = payload["optionsReadiness"]
         assert payload["optionsResearchReadiness"] == readiness
         assert readiness["optionsResearchReady"] is False
         assert readiness["readinessState"] == "blocked"
         assert readiness["dataQualityTier"] == "insufficient"
-        assert readiness["providerAuthority"] == "observationOnly"
+        assert "providerAuthority" not in readiness
         assert readiness["decisionGrade"] is False
-        assert "provider_adapter_contract_not_decision_grade" in readiness["blockingReasons"]
-        assert "补充 provider authority 与 live chain 证据" in readiness["nextEvidenceNeeded"]
+        assert readiness["consumerSafeSourceLabel"] == "部分数据源暂不可用"
+        assert readiness["evidenceGaps"] == ["evidence limited"]
+        assert set(readiness["blockingReasons"]) == {"Evidence is limited for this observation."}
+        assert readiness["nextEvidenceNeeded"] == ["Evidence is limited for this observation."]
         assert payload["metadata"]["readOnly"] is True
         assert payload["metadata"]["mode"] == "educational"
         assert payload["metadata"]["dataStatus"] == "unavailable"
@@ -1972,13 +2003,17 @@ def test_decision_endpoint_delayed_fixture_keeps_tradeability_cap() -> None:
         )
         assert response.status_code == 200
         payload = response.json()
-        assert payload["metadata"]["providerName"] == "delayed_fixture"
-        assert payload["metadata"]["providerCapabilities"]["liveEnabled"] is False
+        _assert_no_consumer_diagnostic_leaks(payload)
+        assert "providerName" not in payload["metadata"]
+        assert "providerCapabilities" not in payload["metadata"]
         assert payload["dataQuality"]["dataQualityTier"] == "delayed_usable"
         assert payload["freshness"]["freshness"] == "delayed"
         assert payload["decisionLabel"] != "有条件可交易"
         assert payload["decisionGrade"] is False
-        assert "provider_fixture_not_decision_grade" in payload["failClosedReasonCodes"]
+        assert "failClosedReasonCodes" not in payload
+        assert payload["consumerSafeSourceLabel"] == "部分数据源暂不可用"
+        assert payload["evidenceGaps"] == ["evidence limited"]
+        assert payload["staleInputs"] == ["freshness constrained"]
         assert payload["gateDecision"] in {"数据不足，禁止判断", "仅观察", "需人工复核"}
         assert payload["metadata"]["readOnly"] is True
         assert payload["metadata"]["noOrderPlacement"] is True
@@ -1986,13 +2021,6 @@ def test_decision_endpoint_delayed_fixture_keeps_tradeability_cap() -> None:
         assert payload["metadata"]["noPortfolioMutation"] is True
         assert payload["metadata"]["noTradingRecommendation"] is True
         assert all(item["decisionLabel"] != "有条件可交易" for item in payload["rankedAlternatives"])
-        provenance = project_source_provenance(
-            source=payload["metadata"]["providerName"],
-            freshness=payload["freshness"]["freshness"],
-        )
-        assert provenance["sourceType"] == "delayed_fixture"
-        assert provenance["sourceLabel"] == "Delayed Fixture"
-        assert provenance["freshnessLabel"] == "延迟"
     finally:
         client.close()
 
@@ -2015,10 +2043,14 @@ def test_decision_endpoint_matches_service_alias_contract() -> None:
         expected_result = OptionsLabService(
             fixture_path=Path("tests/fixtures/options/tem_chain.json")
         ).evaluate_decision(request_payload)
-        expected_payload = options._map_decision_response(expected_result).model_dump(by_alias=True)
+        expected_payload = project_consumer_api_payload(
+            options._map_decision_response(expected_result),
+            surface="options-decision-evaluate",
+        )
         actual_payload = response.json()
 
         assert actual_payload == expected_payload
+        _assert_no_consumer_diagnostic_leaks(actual_payload)
         assert actual_payload["rankedAlternatives"] == actual_payload["optimizer"]["alternatives"]
     finally:
         client.close()
@@ -2052,16 +2084,21 @@ def test_decision_endpoint_no_trade_payload_matches_service_alias_contract(tmp_p
         assert response.status_code == 200
         expected_payload = options._map_decision_response(
             weak_service.evaluate_decision(request_payload)
-        ).model_dump(by_alias=True)
+        )
+        expected_payload = project_consumer_api_payload(
+            expected_payload,
+            surface="options-decision-evaluate",
+        )
         actual_payload = response.json()
 
         assert actual_payload == expected_payload
-        assert set(actual_payload["optimizer"].keys()) == {
+        _assert_no_consumer_diagnostic_leaks(actual_payload)
+        assert {
             "preferredStrategyKey",
             "optimizerLabel",
             "alternatives",
             "noTradeReason",
-        }
+        }.issubset(actual_payload["optimizer"])
         assert actual_payload["optimizer"]["preferredStrategyKey"] is None
         assert actual_payload["optimizer"]["noTradeReason"] is not None
         assert actual_payload["rankedAlternatives"] == actual_payload["optimizer"]["alternatives"]

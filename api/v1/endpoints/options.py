@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
+from api.v1.consumer_safe_response import consumer_safe_json_response
 from api.v1.schemas.options import (
     OptionChainResponse,
     OptionCandidateContract,
@@ -563,7 +564,10 @@ def analyze_options(request: OptionsAnalyzeRequest) -> OptionsAnalyzeResponse:
 )
 def evaluate_options_decision(request: OptionsDecisionRequest) -> OptionsDecisionResponse:
     try:
-        return _map_decision_response(_service().evaluate_decision(request))
+        return consumer_safe_json_response(
+            _map_decision_response(_service().evaluate_decision(request)),
+            surface="options-decision-evaluate",
+        )
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
     except OptionsLabProviderUnavailable as exc:

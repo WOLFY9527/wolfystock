@@ -16,6 +16,7 @@ from typing import Optional
 
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
 
+from api.v1.consumer_safe_response import consumer_safe_json_response
 from api.v1.schemas.stocks import (
     ExtractFromImageResponse,
     ExtractItem,
@@ -392,7 +393,11 @@ def get_stock_structure_decisions_batch(
             benchmark=request.benchmark,
             max_items=request.max_items,
         )
-        return StockStructureDecisionBatchResponse.model_validate(payload)
+        return consumer_safe_json_response(
+            StockStructureDecisionBatchResponse.model_validate(payload),
+            surface="stock-structure-decision-batch",
+            exclude_none=True,
+        )
     except Exception as e:
         logger.error("批量获取股票结构判断失败: %s", e, exc_info=True)
         raise HTTPException(
@@ -435,7 +440,11 @@ def get_stock_evidence(stock_code: str) -> StockEvidenceResponse:
                 },
             )
 
-        return StockEvidenceResponse.model_validate(payload)
+        return consumer_safe_json_response(
+            StockEvidenceResponse.model_validate(payload),
+            surface="stock-evidence",
+            exclude_none=True,
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -473,7 +482,11 @@ def get_stock_structure_decision(
             context_section=context_section,
             context_reason=context_reason,
         )
-        return StockStructureDecisionResponse.model_validate(payload)
+        return consumer_safe_json_response(
+            StockStructureDecisionResponse.model_validate(payload),
+            surface="stock-structure-decision",
+            exclude_none=True,
+        )
     except Exception as e:
         logger.error("获取股票结构判断失败: %s", e, exc_info=True)
         raise HTTPException(

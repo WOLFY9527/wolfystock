@@ -302,7 +302,6 @@ class OptionsConsumerScenarioFrame(_OptionsModel):
     blocking_reasons: List[str] = Field(default_factory=list, alias="blockingReasons")
     next_evidence_needed: List[str] = Field(default_factory=list, alias="nextEvidenceNeeded")
     no_trading_boundary: OptionsNoTradingBoundary = Field(alias="noTradingBoundary")
-    debug_ref: str = Field(alias="debugRef")
 
 
 class OptionsSkewObservation(_OptionsModel):
@@ -989,7 +988,6 @@ def _build_scenario_frame(
         blockingReasons=list(readiness.blocking_reasons if readiness is not None else []),
         nextEvidenceNeeded=list(readiness.next_evidence_needed if readiness is not None else []),
         noTradingBoundary=readiness.no_trading_boundary if readiness is not None else _no_trading_boundary(response.metadata),
-        debugRef="options:scenario",
     )
 
 
@@ -1045,7 +1043,6 @@ def _build_compare_frame(
         blockingReasons=list(readiness.blocking_reasons if readiness is not None else []),
         nextEvidenceNeeded=list(readiness.next_evidence_needed if readiness is not None else []),
         noTradingBoundary=readiness.no_trading_boundary if readiness is not None else _no_trading_boundary(response.metadata),
-        debugRef="options:strategies_compare",
     )
 
 
@@ -1107,7 +1104,6 @@ def _build_decision_frame(
         blockingReasons=list(readiness.blocking_reasons if readiness is not None else []),
         nextEvidenceNeeded=list(readiness.next_evidence_needed if readiness is not None else []),
         noTradingBoundary=readiness.no_trading_boundary if readiness is not None else _no_trading_boundary(response.metadata),
-        debugRef="options:decision_evaluate",
     )
 
 

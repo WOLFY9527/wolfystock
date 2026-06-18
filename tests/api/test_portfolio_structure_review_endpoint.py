@@ -203,7 +203,12 @@ def test_portfolio_structure_review_endpoint_returns_read_only_projection() -> N
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["schemaVersion"] == PORTFOLIO_STRUCTURE_REVIEW_SCHEMA_VERSION
+    assert "schemaVersion" not in payload
+    assert payload["consumerSafeSourceLabel"] == "部分数据源暂不可用"
+    assert payload["dataQualityState"] == "limited"
+    assert payload["freshnessState"] == "limited"
+    assert payload["observationBoundary"]
+    assert payload["researchNextSteps"]
     assert payload["aggregateSummary"]["holdingCount"] == 1
     assert payload["holdingsStructure"][0]["ticker"] == "AAPL"
     assert payload["readOnly"] is True
