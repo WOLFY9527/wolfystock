@@ -394,6 +394,8 @@ const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ child
     moduleName = language === 'en' ? 'Backtest' : '回测';
   } else if (routePathname.startsWith('/options-lab')) {
     moduleName = language === 'en' ? 'Options Lab' : '期权实验室';
+  } else if (routePathname.startsWith('/settings')) {
+    moduleName = language === 'en' ? 'Personal settings' : '个人设置';
   }
 
   if (!isGuest) {
@@ -452,7 +454,6 @@ const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }
 export const AppContent: React.FC = () => {
   const location = useLocation();
   const { authEnabled, loggedIn, isLoading, loadError, refreshStatus, setupState } = useAuth();
-  const { isGuest } = useProductSurface();
   const { language, setLanguage, t } = useI18n();
   const bootStartedAt = useRef<number>(0);
   const [showBootSplash, setShowBootSplash] = useState(true);
@@ -462,11 +463,7 @@ export const AppContent: React.FC = () => {
   const routePathname = stripLocalePrefix(location.pathname);
   const authBootstrapRouteKind = getAuthBootstrapRouteKind(routePathname);
   const localizedHomePath = routeLocale ? buildLocalizedPath('/', routeLocale) : '/';
-  const localizedGuestPath = routeLocale ? buildLocalizedPath('/guest', routeLocale) : '/guest';
   const guestHomeElement = loggedIn ? <Navigate to={localizedHomePath} replace /> : <GuestHomePage />;
-  const isGuestRestrictedPath = (
-    routePathname === '/settings'
-  );
 
   useEffect(() => {
     if (routeLocale) {
@@ -548,7 +545,7 @@ export const AppContent: React.FC = () => {
           <Route path="/options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />
           <Route path="/backtest/compare" element={<RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute>} />
           <Route path="/backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
-          <Route path="/settings" element={<PersonalSettingsPage />} />
+          <Route path="/settings" element={<RegisteredSurfaceRoute><PersonalSettingsPage /></RegisteredSurfaceRoute>} />
           <Route path="/settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
           <Route path="/admin/launch-cockpit" element={<AdminSurfaceRoute><AdminLaunchCockpitPage /></AdminSurfaceRoute>} />
           <Route path="/admin/mission-control" element={<AdminSurfaceRoute><AdminMissionControlPage /></AdminSurfaceRoute>} />
@@ -597,7 +594,7 @@ export const AppContent: React.FC = () => {
           <Route path="options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />
           <Route path="backtest/compare" element={<RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute>} />
           <Route path="backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
-          <Route path="settings" element={<PersonalSettingsPage />} />
+          <Route path="settings" element={<RegisteredSurfaceRoute><PersonalSettingsPage /></RegisteredSurfaceRoute>} />
           <Route path="settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
           <Route path="admin/launch-cockpit" element={<AdminSurfaceRoute><AdminLaunchCockpitPage /></AdminSurfaceRoute>} />
           <Route path="admin/mission-control" element={<AdminSurfaceRoute><AdminMissionControlPage /></AdminSurfaceRoute>} />
@@ -672,8 +669,6 @@ export const AppContent: React.FC = () => {
           </Suspense>
         );
       }
-    } else if (isGuest && isGuestRestrictedPath) {
-      content = <Navigate to={localizedGuestPath} replace />;
     } else {
       content = routeTree;
     }
