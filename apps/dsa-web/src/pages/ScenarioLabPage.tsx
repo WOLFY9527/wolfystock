@@ -25,6 +25,7 @@ import {
   normalizeConsumerStatusToken,
 } from '../utils/consumerStatusLabels';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
+import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 import {
   RoughBulletList,
   RoughKeyValueRows,
@@ -149,6 +150,39 @@ function scenarioDriverEvidenceStateLabel(value: string | null | undefined, loca
     return locale === 'en' ? 'Evidence prepared' : '证据已整理';
   }
   return mapConsumerStatusText(value, locale);
+}
+
+function sanitizeScenarioNarrativeText(value: string | null | undefined, locale: Locale): string {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return '';
+  }
+
+  const mapped = mapConsumerStatusText(raw, locale);
+  if (mapped !== raw) {
+    return mapped;
+  }
+
+  const sanitized = sanitizeUserFacingDataIssue(raw, locale);
+  if (sanitized !== raw) {
+    return sanitized;
+  }
+
+  return raw;
+}
+
+function sanitizeScenarioNarrativeList(values: string[] | null | undefined, locale: Locale): string[] {
+  const seen = new Set<string>();
+  const next: string[] = [];
+
+  for (const value of values ?? []) {
+    const safe = sanitizeScenarioNarrativeText(value, locale);
+    if (!safe || seen.has(safe)) continue;
+    seen.add(safe);
+    next.push(safe);
+  }
+
+  return next;
 }
 
 function statusTone(value: string | null | undefined): 'success' | 'caution' | 'danger' | 'info' {
@@ -366,13 +400,16 @@ export default function ScenarioLabPage() {
                 <RoughBulletList
                   items={scenarioUnavailable
                     ? [scenarioUnavailableCopy.evidenceFallback, scenarioUnavailableCopy.boundaryNote]
-                    : (scenarioResult?.evidenceLimits ?? []).map((item) => item)}
+                    : sanitizeScenarioNarrativeList(scenarioResult?.evidenceLimits ?? [], locale)}
                   emptyText={locale === 'en' ? 'No explicit evidence limit is attached.' : '当前没有额外证据限制。'}
                 />
               </RoughSectionCard>
               <RoughSectionCard eyebrow={locale === 'en' ? 'Disclosure' : '披露'} title={locale === 'en' ? 'Observation-only note' : '观察型说明'}>
                 <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-                  {scenarioResult?.noAdviceDisclosure || (locale === 'en' ? 'Research planning only.' : '仅供研究规划观察。')}
+                  {sanitizeScenarioNarrativeText(
+                    scenarioResult?.noAdviceDisclosure || (locale === 'en' ? 'Research planning only.' : '仅供研究规划观察。'),
+                    locale,
+                  )}
                 </p>
               </RoughSectionCard>
             </ConsoleContextRail>
@@ -530,27 +567,27 @@ export default function ScenarioLabPage() {
                         : '该情景当前没有可展示的驱动变化。'}
                     />
                   </RoughSectionCard>
-                  <RoughSectionCard eyebrow={locale === 'en' ? 'Generated scenario output' : '生成输出'} title={locale === 'en' ? 'What this scenario says' : '该情景给出的观察'}>
+                  <RoughSectionCard eyebrow={locale === 'en' ? 'Generated scenario output' : '生成输出'} title={locale === 'en' ? 'What this scenario says' : '该情景下的观察'}>
                     <RoughBulletList
                       items={scenarioUnavailable
                         ? [scenarioUnavailableCopy.summaryFallback]
-                        : (scenarioResult.scenarioSummary ?? []).map((item) => mapConsumerStatusText(item, locale))}
+                        : sanitizeScenarioNarrativeList(scenarioResult.scenarioSummary ?? [], locale)}
                       emptyText={locale === 'en' ? 'No scenario summary is available.' : '当前没有可展示的情景摘要。'}
                     />
                   </RoughSectionCard>
-                  <RoughSectionCard eyebrow={locale === 'en' ? 'Evidence and risk context' : '证据与风险语境'} title={locale === 'en' ? 'What confirms or invalidates it' : '什么会确认或失效'}>
+                  <RoughSectionCard eyebrow={locale === 'en' ? 'Evidence and risk context' : '证据与风险语境'} title={locale === 'en' ? 'What confirms or invalidates it' : '确认线索与失效信号'}>
                     <div className="space-y-3">
                       <div>
-                        <div className="mb-2 text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'What would confirm' : '确认条件'}</div>
+                        <div className="mb-2 text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'What would confirm' : '哪些线索会继续确认'}</div>
                         <RoughBulletList
-                          items={(scenarioResult.whatWouldConfirm ?? []).map((item) => mapConsumerStatusText(item, locale))}
+                          items={sanitizeScenarioNarrativeList(scenarioResult.whatWouldConfirm ?? [], locale)}
                           emptyText={locale === 'en' ? 'No explicit confirm path is attached.' : '当前没有额外确认条件。'}
                         />
                       </div>
                       <div>
-                        <div className="mb-2 text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'What would invalidate' : '失效条件'}</div>
+                        <div className="mb-2 text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'What would invalidate' : '哪些信号会削弱该情景'}</div>
                         <RoughBulletList
-                          items={(scenarioResult.whatWouldInvalidate ?? []).map((item) => mapConsumerStatusText(item, locale))}
+                          items={sanitizeScenarioNarrativeList(scenarioResult.whatWouldInvalidate ?? [], locale)}
                           emptyText={locale === 'en' ? 'No invalidation path is attached.' : '当前没有额外失效条件。'}
                         />
                       </div>
@@ -564,7 +601,7 @@ export default function ScenarioLabPage() {
                       emptyText={locale === 'en' ? 'No base driver score is available.' : '当前没有基准驱动评分。'}
                     />
                   </RoughSectionCard>
-                  <RoughSectionCard eyebrow={locale === 'en' ? 'Surface boundaries' : '页面边界'} title={locale === 'en' ? 'Keep it consumer-safe' : '保持 consumer-safe'}>
+                  <RoughSectionCard eyebrow={locale === 'en' ? 'Surface boundaries' : '页面边界'} title={locale === 'en' ? 'Keep it consumer-safe' : '保持观察边界'}>
                     <div className="flex flex-wrap gap-2">
                       <TerminalChip variant="info">{locale === 'en' ? 'Observation only' : '仅观察'}</TerminalChip>
                       <TerminalChip variant="info">{locale === 'en' ? 'No external action' : '不触发外部动作'}</TerminalChip>

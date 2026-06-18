@@ -1625,11 +1625,15 @@ describe('research IA pages', () => {
     expect(page).toHaveTextContent('波动冲击');
     expect(page).toHaveTextContent('基准状态');
     expect(page).toHaveTextContent('情景输出');
-    expect(page).toHaveTextContent('Breadth participation weakens quickly under the selected stress.');
+    expect(page).toHaveTextContent('所选压力情景下，市场广度会较快转弱。');
+    expect(page).toHaveTextContent('波动结构会转入偏防御状态。');
     expect(page).toHaveTextContent('数据暂不可用');
     expect(page).toHaveTextContent('证据已整理');
     expect(page).toHaveTextContent('需要更高质量证据共同确认受压驱动是否同向变化。');
     expect(page).toHaveTextContent('如果关键证据未随所选冲击同步变化，该情景框架会减弱。');
+    expect(page).toHaveTextContent('保持观察边界');
+    expect(screen.getByText('Gamma 相关证据暂不可用，因此相关结论需保持保守。')).toBeInTheDocument();
+    expect(screen.getByText('仅供研究规划观察，不构成个性化判断依据。')).toBeInTheDocument();
     expect(page).toHaveTextContent('仅观察');
     expect(page).toHaveTextContent('非决策级');
     expect(screen.getByRole('link', { name: '决策驾驶舱' })).toHaveAttribute('href', '/zh/market/decision-cockpit');
@@ -1643,7 +1647,8 @@ describe('research IA pages', () => {
     })));
     expect(page.textContent || '').not.toContain('评分等级');
     expect(page.textContent || '').not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议/);
-    expect(page.textContent || '').not.toMatch(/raw|debug|provider|schema|score-grade|score_grade|unavailable/i);
+    expect(page.textContent || '').not.toMatch(/raw|debug|provider|schema|score-grade|score_grade|unavailable|Breadth participation weakens quickly under the selected stress|Volatility structure flips into a defensive posture|Research planning only; not a personalized decision basis/i);
+    expect(findConsumerRawLeakage(page.textContent || '')).toEqual([]);
   });
 
   it('renders Scenario Lab with an unavailable scenario state when base evidence is insufficient', async () => {

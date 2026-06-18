@@ -43,6 +43,10 @@ const PHRASE_LABELS: Record<string, Record<ConsumerStatusLocale, string>> = {
   'score-grade evidence would need to show the stressed drivers moving together in the scenario direction': { zh: '需要更高质量证据共同确认受压驱动是否同向变化。', en: 'Higher-quality evidence is still needed to confirm whether the stressed drivers move together.' },
   'the scenario frame weakens if score-grade evidence does not move with the selected shocks': { zh: '如果关键证据未随所选冲击同步变化，该情景框架会减弱。', en: 'The scenario frame weakens if the key evidence does not move with the selected shocks.' },
   'gamma evidence status is unavailable, so gamma-sensitive conclusions remain capped': { zh: 'Gamma 相关证据暂不可用，因此相关结论需保持保守。', en: 'Gamma-related evidence is unavailable, so conclusions remain capped.' },
+  'breadth participation weakens quickly under the selected stress': { zh: '所选压力情景下，市场广度会较快转弱。', en: 'Breadth participation weakens quickly under the selected stress.' },
+  'volatility structure flips into a defensive posture': { zh: '波动结构会转入偏防御状态。', en: 'Volatility structure flips into a defensive posture.' },
+  'research planning only; not a personalized decision basis': { zh: '仅供研究规划观察，不构成个性化判断依据。', en: 'Research planning only; not a personalized decision basis.' },
+  'research planning only': { zh: '仅供研究规划观察。', en: 'Research planning only.' },
 };
 
 function normalizePhraseKey(value: string): string {
