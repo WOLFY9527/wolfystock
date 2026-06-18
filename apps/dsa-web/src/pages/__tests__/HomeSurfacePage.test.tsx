@@ -1960,6 +1960,16 @@ describe('HomeSurfacePage', () => {
     expect(strip).toHaveTextContent('估值 不适用');
     expect(strip).toHaveTextContent('补充基本面证据');
     expect(strip.textContent).not.toMatch(HOME_EVIDENCE_COVERAGE_INTERNAL_COPY_PATTERN);
+
+    const healthSummary = screen.getByTestId('home-data-health-summary');
+    expect(healthSummary).toHaveTextContent('数据健康');
+    expect(healthSummary).toHaveTextContent('个股证据');
+    expect(healthSummary).toHaveTextContent('降级');
+    expect(healthSummary).toHaveTextContent('个股证据决定结构解读是否完整。');
+    expect(healthSummary).toHaveTextContent('置信度受证据质量限制');
+    expect(healthSummary).toHaveTextContent('补齐缺口后再扩大结论范围。');
+    expect(healthSummary.textContent || '').not.toMatch(/provider|runtime|debug|schemaVersion|reasonCodes?|sourceRefs?|raw|payload|request|trace|cache/i);
+    expect(healthSummary.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位|buy|sell|hold|recommend|target price|stop loss|position sizing/i);
   });
 
   it('shows a bounded home evidence citation summary when citation evidence is present', async () => {

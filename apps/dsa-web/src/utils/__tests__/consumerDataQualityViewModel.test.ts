@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  createConsumerDataHealthSummary,
   createConsumerDataQualityViewModel,
 } from '../consumerDataQualityViewModel';
 
@@ -299,5 +300,84 @@ describe('createConsumerDataQualityViewModel', () => {
     const moduleExports = await import('../consumerDataQualityViewModel');
 
     expect(Object.keys(moduleExports).filter((key) => key.toLowerCase().includes('admin'))).toEqual([]);
+  });
+});
+
+describe('createConsumerDataHealthSummary', () => {
+  it('projects domain health into compact consumer-safe states', () => {
+    const summary = createConsumerDataHealthSummary({
+      locale: 'zh',
+      categories: [
+        {
+          category: 'marketBreadth',
+          quality: {
+            status: 'ready',
+            freshness: 'fresh',
+            confidence: 0.9,
+            sourceAuthorityAllowed: true,
+            scoreContributionAllowed: true,
+          },
+        },
+        {
+          category: 'themeRotation',
+          quality: {
+            status: 'partial',
+            freshness: 'fresh',
+            coverage: 0.64,
+            sourceAuthorityAllowed: true,
+            scoreContributionAllowed: true,
+          },
+        },
+        {
+          category: 'stockEvidence',
+          quality: {
+            status: 'available',
+            freshness: 'stale',
+            isStale: true,
+            confidence: 0.78,
+            sourceAuthorityAllowed: true,
+            scoreContributionAllowed: true,
+          },
+        },
+        {
+          category: 'peerComparison',
+          quality: {
+            status: 'degraded',
+            freshness: 'fresh',
+            providerDiagnostics: { raw_code: 'provider_timeout' },
+            reasonCodes: ['sourceRefs', 'provider_runtime_trace'],
+          },
+        },
+        {
+          category: 'portfolioExposure',
+          quality: {
+            status: 'missing',
+            isUnavailable: true,
+            raw_code: 'portfolio_accounting_debug_payload',
+          },
+        },
+      ],
+    });
+
+    expect(summary.overallState).toBe('unavailable');
+    expect(summary.items.map((item) => [item.category, item.state])).toEqual([
+      ['marketBreadth', 'healthy'],
+      ['themeRotation', 'partial'],
+      ['stockEvidence', 'stale'],
+      ['peerComparison', 'degraded'],
+      ['portfolioExposure', 'unavailable'],
+    ]);
+    expect(summary.items[0]).toMatchObject({
+      label: '市场广度',
+      whyItMatters: expect.stringContaining('参与度'),
+      confidenceEffect: expect.stringContaining('正常'),
+      nextResearchStep: expect.stringContaining('观察'),
+    });
+
+    const serialized = JSON.stringify(summary);
+    expect(serialized).toContain('同业比较');
+    expect(serialized).toContain('组合暴露');
+    expect(serialized).not.toMatch(/provider|runtime|debug|schemaVersion|reasonCodes?|sourceRefs?|raw|payload|request|trace|cache|portfolio_accounting/i);
+    expect(serialized).not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位|buy|sell|hold|recommend|target price|stop loss|position sizing/i);
   });
 });

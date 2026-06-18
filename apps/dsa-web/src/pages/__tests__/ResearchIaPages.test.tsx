@@ -589,6 +589,17 @@ describe('research IA pages', () => {
     expect(within(page).getByRole('link', { name: '打开结构面板' })).toHaveAttribute('href', '/zh/stocks/ALFA/structure-decision');
     await waitFor(() => expect(getResearchRadarMock).toHaveBeenCalledWith({ market: 'us', profile: undefined, limit: 5 }));
     await waitFor(() => expect(getResearchQueueMock).toHaveBeenCalledWith({ market: 'us', profile: undefined, queueLimit: 5 }));
+    const healthSummary = within(page).getByTestId('research-radar-data-health-summary');
+    expect(healthSummary).toHaveTextContent('数据健康');
+    expect(healthSummary).toHaveTextContent('市场广度');
+    expect(healthSummary).toHaveTextContent('个股证据');
+    expect(healthSummary).toHaveTextContent('研究队列时效');
+    expect(healthSummary).toHaveTextContent('部分可用');
+    expect(healthSummary).toHaveTextContent('已延迟');
+    expect(healthSummary).toHaveTextContent('队列时效影响后续复核顺序。');
+    expect(healthSummary.textContent || '').not.toMatch(/sourceRefs|reasonCodes|provider_timeout|optional_news_timeout|benchmark_missing|price_history_stale|provider_runtime_trace|queueItemId|request[_\s-]?id|trace[_\s-]?id|raw|debug|runtime|cache|schemaVersion/i);
+    expect(findConsumerRawLeakage(healthSummary.textContent || '')).toEqual([]);
+    expect(healthSummary.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing/i);
     expect(hub.textContent || '').not.toMatch(/sourceRefs|reasonCodes|provider_timeout|optional_news_timeout|benchmark_missing|price_history_stale|provider_runtime_trace|queueItemId|request[_\s-]?id|trace[_\s-]?id|raw|debug|runtime|cache|schemaVersion/i);
     expect(findConsumerRawLeakage(hub.textContent || '')).toEqual([]);
     expect(hub.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing/i);
