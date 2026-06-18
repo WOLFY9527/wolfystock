@@ -848,8 +848,51 @@ describe('research IA pages', () => {
     expect(snapshot).toHaveTextContent('NVDA peer history is unavailable.');
     expect(snapshot).toHaveTextContent('Observation-only peer movement context; no personalized action instruction.');
     expect(snapshot).toHaveTextContent('Review whether peer alignment persists after the next close.');
+    expect(within(page).getByRole('link', { name: '与 MSFT 对比证据' })).toHaveAttribute('href', '/zh/stocks/ORCL,MSFT/structure-decision');
     expect(page.textContent || '').not.toMatch(/raw|debug|provider|trace|sourceRef|reasonCode|requestId/i);
     expect(page.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommendation|target price|stop loss|position sizing/i);
+  });
+
+  it('renders a consumer-safe empty state when peer correlation evidence is missing', async () => {
+    getStructureDecisionMock.mockResolvedValue({
+      schemaVersion: 'stock_structure_decision_api_v1',
+      ticker: 'ADBE',
+      structureState: 'range',
+      confidence: 'medium',
+      componentScores: { trend: 52 },
+      explanation: {
+        whyThisStructure: 'ADBE remains range-bound.',
+        whatConfirmsIt: ['Needs a broader evidence window.'],
+        whatInvalidatesIt: ['A range failure would change the read.'],
+        keyLevels: [],
+      },
+      researchNotes: {
+        watchNext: ['Review the next close.'],
+        needsMoreEvidence: ['Need comparable peer structure evidence.'],
+        riskFlags: [],
+      },
+      dataQuality: {
+        status: 'partial',
+        period: 'daily',
+        usableBars: 44,
+      },
+      missingEvidence: [],
+      noAdviceDisclosure: 'Observation-only research context.',
+    });
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/ADBE/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const snapshot = await within(page).findByTestId('stock-structure-peer-correlation-snapshot');
+    expect(snapshot).toHaveTextContent('同业相关性证据暂未就绪');
+    expect(snapshot).toHaveTextContent('同业价格或结构证据仍缺失，暂时无法形成可比较的相关性观察。');
+    expect(snapshot).toHaveTextContent('先检查个股证据缺口，或补充可比较标的后再复核。');
+    expect(snapshot.textContent || '').not.toMatch(/raw|debug|provider|trace|sourceRef|reasonCode|requestId|schemaVersion/i);
+    expect(snapshot.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommendation|target price|stop loss|position sizing/i);
   });
 
   it('renders a compact stock structure compare evidence packet for multiple symbols', async () => {
@@ -981,7 +1024,7 @@ describe('research IA pages', () => {
     expect(packet.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy now|sell now|hold|target price|stop loss|position sizing/i);
   });
 
-  it('hides the stock structure compare evidence packet for a single symbol response', async () => {
+  it('renders a stock structure compare empty state for a single symbol response', async () => {
     getStructureDecisionMock.mockResolvedValue({
       schemaVersion: 'stock_structure_decision_api_v1',
       ticker: 'AAPL',
@@ -1013,7 +1056,89 @@ describe('research IA pages', () => {
     const page = await screen.findByTestId('stock-structure-decision-page');
     expect(page).toHaveTextContent('AAPL 结构工作区');
     expect(getStructureDecisionMock).toHaveBeenCalledWith('AAPL');
-    expect(screen.queryByTestId('symbol-compare-evidence-packet')).not.toBeInTheDocument();
+    const packet = await within(page).findByTestId('symbol-compare-evidence-packet');
+    expect(packet).toHaveTextContent('需要至少两个可比较标的');
+    expect(packet).toHaveTextContent('当前只有 AAPL，暂时不能形成标的间共享证据或分歧证据。');
+    expect(packet).toHaveTextContent('添加同业标的后再查看对比证据。');
+    expect(packet).not.toHaveTextContent('买入');
+    expect(packet).not.toHaveTextContent('卖出');
+    expect(packet).not.toHaveTextContent('持有');
+    expect(within(packet).queryByRole('link')).not.toBeInTheDocument();
+  });
+
+  it('redacts unsafe diagnostics from partially missing symbol compare evidence', async () => {
+    getStructureDecisionsBatchMock.mockResolvedValue({
+      schemaVersion: 'stock_structure_decision_batch_api_v1',
+      items: [
+        {
+          schemaVersion: 'stock_structure_decision_api_v1',
+          ticker: 'MSFT',
+          structureState: 'mixed',
+          confidence: 'low',
+          componentScores: { trend: 45 },
+          explanation: {
+            whyThisStructure: 'Price action is mixed.',
+            whatConfirmsIt: ['Needs follow-through.'],
+            whatInvalidatesIt: ['Breaks below the range.'],
+            keyLevels: [],
+          },
+          researchNotes: {
+            watchNext: ['Observe the next close.'],
+            needsMoreEvidence: [],
+            riskFlags: [],
+          },
+          dataQuality: {
+            status: 'partial',
+            period: 'daily',
+            usableBars: 20,
+          },
+          missingEvidence: [],
+          noAdviceDisclosure: 'Observation-only research context.',
+        },
+      ],
+      aggregateSummary: {
+        requestedCount: 2,
+        evaluatedCount: 2,
+        truncated: false,
+      },
+      missingEvidence: [],
+      dataQuality: { status: 'partial' },
+      symbolCompareEvidencePacket: {
+        comparedSymbols: ['MSFT', 'AAPL'],
+        sharedEvidence: [],
+        divergentEvidence: [],
+        missingEvidenceBySymbol: {
+          MSFT: [{ kind: 'provider_runtime', message: 'provider_timeout debugRef=req-raw-123 raw payload sourceRefId=src-1' }],
+          AAPL: [],
+        },
+        freshnessBySymbol: {
+          MSFT: { status: 'provider_timeout', period: 'daily', usableBars: 0 },
+          AAPL: { status: 'available', period: 'daily', usableBars: 60 },
+        },
+        confidenceCap: { value: 20 },
+        observationBoundary: {
+          observationOnly: true,
+          decisionGrade: false,
+          rankingAllowed: false,
+          adviceAllowed: false,
+        },
+        researchNextSteps: [
+          'Retry provider_runtime route before buy now.',
+        ],
+      },
+      noAdviceDisclosure: 'Observation-only research context.',
+    });
+
+    renderRoute(<StockStructureDecisionPage />, '/zh/stocks/MSFT,AAPL/structure-decision');
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const packet = await within(page).findByTestId('symbol-compare-evidence-packet');
+    expect(packet).toHaveTextContent('MSFT');
+    expect(packet).toHaveTextContent('AAPL');
+    expect(packet).toHaveTextContent('MSFT 的部分对比证据暂未就绪。');
+    expect(packet).toHaveTextContent('补齐可比较标的的基础证据后再复核。');
+    expect(findConsumerRawLeakage(packet.textContent || '')).toEqual([]);
+    expect(packet.textContent || '').not.toMatch(/provider|raw|debug|sourceRef|requestId|trace|schemaVersion|buy now|sell now|hold|target price|stop loss|position sizing/i);
   });
 
   it('renders Scenario Lab as a compact research workflow backed by the scenario contract', async () => {

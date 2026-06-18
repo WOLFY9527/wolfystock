@@ -16,6 +16,7 @@ import { TerminalButton, TerminalChip, TerminalEmptyState } from '../components/
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
 import {
   stocksApi,
+  type StockPeerCorrelationSnapshot,
   type StockStructureDecisionResponse,
   type StockSymbolCompareEvidenceEntry,
   type StockSymbolCompareEvidencePacket,
@@ -23,7 +24,9 @@ import {
 } from '../api/stocks';
 import { EvidenceGapExplanationList } from '../components/research/EvidenceGapExplanation';
 import { useI18n } from '../contexts/UiLanguageContext';
+import { cn } from '../utils/cn';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
+import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 import {
   RoughBulletList,
   RoughKeyValueRows,
@@ -42,6 +45,31 @@ const COMPONENT_LABELS = {
   riskExtension: { zh: '延展风险', en: 'Risk extension' },
   evidenceQuality: { zh: '证据质量', en: 'Evidence quality' },
 } as const;
+
+const CONSUMER_COPY_UNSAFE_PATTERN =
+  /\b(provider|debug|trace|raw|sourceRef|sourceRefId|reasonCode|requestId|cache|schemaVersion|runtime|payload|json|policyVersion|local_db|backend|buy now|sell now|hold|recommend(?:ation)?|target price|stop loss|position sizing)\b|买入|卖出|持有|推荐|目标价|止损|仓位建议/i;
+
+function looksUnsafeForConsumer(value: string | null | undefined): boolean {
+  const text = String(value || '').trim();
+  if (!text) return false;
+  return CONSUMER_COPY_UNSAFE_PATTERN.test(text) || /\b[a-z]+(?:_[a-z0-9]+)+\b/i.test(text);
+}
+
+function safeConsumerText(
+  value: string | number | null | undefined,
+  language: 'zh' | 'en',
+  fallback: string,
+): string {
+  const text = String(value ?? '').trim();
+  if (!text) return fallback;
+  if (!looksUnsafeForConsumer(text)) return text;
+  const sanitized = sanitizeUserFacingDataIssue(text, language);
+  return looksUnsafeForConsumer(sanitized) ? fallback : sanitized;
+}
+
+function compactUnique(values: string[]): string[] {
+  return values.filter((value, index, list) => value && list.indexOf(value) === index);
+}
 
 function localLabel(key: string, language: 'zh' | 'en'): string {
   const mapped = COMPONENT_LABELS[key as keyof typeof COMPONENT_LABELS];
@@ -106,6 +134,9 @@ function evidenceKindLabel(kind: string | null | undefined, language: 'zh' | 'en
   };
   const mapped = labels[normalized];
   if (mapped) return mapped[language];
+  if (looksUnsafeForConsumer(kind)) {
+    return language === 'en' ? 'Evidence' : '证据';
+  }
   const readable = normalized.replace(/[_-]+/g, ' ').trim();
   return readable || (language === 'en' ? 'Evidence' : '证据');
 }
@@ -118,7 +149,12 @@ function statusLabel(status: string | null | undefined, language: 'zh' | 'en'): 
     unavailable: { zh: '不可用', en: 'unavailable' },
     degraded: { zh: '降级', en: 'degraded' },
   };
-  return labels[normalized]?.[language] ?? (status || '--');
+  const mapped = labels[normalized]?.[language];
+  if (mapped) return mapped;
+  if (looksUnsafeForConsumer(status)) {
+    return language === 'en' ? 'not ready' : '暂未就绪';
+  }
+  return status || '--';
 }
 
 function periodLabel(period: string | null | undefined, language: 'zh' | 'en'): string | null {
@@ -165,20 +201,158 @@ function freshnessMeta(item: StockSymbolCompareFreshness | undefined, language: 
   ].filter(Boolean).join(' · ');
 }
 
-function evidenceValue(value: string | number | null | undefined): string {
-  if (value === null || value === undefined || value === '') return '--';
-  return String(value);
+function safeEvidenceValue(value: string | number | null | undefined, language: 'zh' | 'en'): string {
+  return safeConsumerText(value, language, language === 'en' ? 'Evidence unavailable' : '证据暂不可用');
+}
+
+function missingEvidenceCopy(
+  symbol: string,
+  gap: StockStructureDecisionResponse['missingEvidence'][number],
+  language: 'zh' | 'en',
+): string {
+  const fallback = language === 'en'
+    ? `${symbol} has missing compare evidence.`
+    : `${symbol} 的部分对比证据暂未就绪。`;
+  const raw = gap.message || gap.kind || gap.code || gap.field || '';
+  if (!raw) return fallback;
+  if (looksUnsafeForConsumer(raw)) return fallback;
+  return safeConsumerText(raw || evidenceKindLabel(gap.kind, language), language, fallback);
+}
+
+function safeResearchNextSteps(values: string[], language: 'zh' | 'en'): string[] {
+  const fallback = language === 'en'
+    ? 'Complete comparable-symbol evidence before reviewing the comparison again.'
+    : '补齐可比较标的的基础证据后再复核。';
+  return compactUnique(values.map((value) => (
+    looksUnsafeForConsumer(value) ? fallback : safeConsumerText(value, language, fallback)
+  ))).slice(0, 4);
+}
+
+function hasPeerCorrelationContent(snapshot: StockPeerCorrelationSnapshot | null | undefined): snapshot is StockPeerCorrelationSnapshot {
+  if (!snapshot) return false;
+  return Boolean(
+    snapshot.peerGroup.symbols.length
+      || snapshot.peerEvidence.length
+      || snapshot.divergenceEvidence.length
+      || snapshot.staleInputs.length
+      || snapshot.missingInputs.length
+      || snapshot.researchNextSteps.length,
+  );
+}
+
+function firstComparablePeerSymbol(
+  snapshot: StockPeerCorrelationSnapshot | null | undefined,
+  primarySymbol: string,
+): string | null {
+  if (!snapshot) return null;
+  const primary = primarySymbol.toUpperCase();
+  return snapshot.peerGroup.symbols
+    .map((symbol) => symbol.trim().toUpperCase())
+    .find((symbol) => symbol && symbol !== primary) ?? null;
+}
+
+function buildComparePath(symbols: string[]): string {
+  return `/stocks/${symbols.map((symbol) => encodeURIComponent(symbol)).join(',')}/structure-decision`;
+}
+
+function StockPeerCorrelationEmptyState({
+  language,
+  className,
+  testId,
+}: {
+  language: 'zh' | 'en';
+  className?: string;
+  testId: string;
+}) {
+  const isEnglish = language === 'en';
+  return (
+    <TerminalEmptyState
+      className={cn('md:col-span-2', className)}
+      data-testid={testId}
+      title={isEnglish ? 'Peer correlation evidence is not ready yet' : '同业相关性证据暂未就绪'}
+    >
+      <div className="space-y-1">
+        <p>
+          {isEnglish
+            ? 'Peer price or structure evidence is missing or insufficient, so a comparable correlation view is not available yet.'
+            : '同业价格或结构证据仍缺失，暂时无法形成可比较的相关性观察。'}
+        </p>
+        <p>
+          {isEnglish
+            ? 'Check the stock evidence gaps first, or add comparable symbols before reviewing again.'
+            : '先检查个股证据缺口，或补充可比较标的后再复核。'}
+        </p>
+      </div>
+    </TerminalEmptyState>
+  );
+}
+
+function CompareWithPeerLink({
+  language,
+  to,
+  peerSymbol,
+}: {
+  language: 'zh' | 'en';
+  to: string;
+  peerSymbol: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className="inline-flex w-fit max-w-full items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+    >
+      {language === 'en' ? `Compare evidence with ${peerSymbol}` : `与 ${peerSymbol} 对比证据`}
+    </Link>
+  );
 }
 
 function SymbolCompareEvidencePacketPanel({
   packet,
   language,
+  requestedSymbols,
 }: {
   packet: StockSymbolCompareEvidencePacket | null;
   language: 'zh' | 'en';
+  requestedSymbols: string[];
 }) {
-  const comparedSymbols = (packet?.comparedSymbols ?? []).filter(Boolean);
-  if (!packet || comparedSymbols.length <= 1) return null;
+  const comparedSymbols = (packet?.comparedSymbols?.length ? packet.comparedSymbols : requestedSymbols)
+    .map((symbol) => symbol.trim().toUpperCase())
+    .filter(Boolean);
+
+  if (!packet || comparedSymbols.length <= 1) {
+    const symbolLabel = comparedSymbols[0] ?? (language === 'en' ? 'one symbol' : '一个标的');
+    const isSingleSymbol = comparedSymbols.length <= 1;
+    return (
+      <div className="grid gap-3 border-t border-[color:var(--wolfy-divider)] p-3" data-testid="symbol-compare-evidence-packet">
+        <TerminalEmptyState
+          title={isSingleSymbol
+            ? (language === 'en' ? 'At least two comparable symbols are required' : '需要至少两个可比较标的')
+            : (language === 'en' ? 'Compare evidence is not ready yet' : '对比证据暂未就绪')}
+        >
+          <div className="space-y-1">
+            <p>
+              {isSingleSymbol
+                ? (language === 'en'
+                  ? `Only ${symbolLabel} is available, so shared evidence or divergence evidence cannot be formed yet.`
+                  : `当前只有 ${symbolLabel}，暂时不能形成标的间共享证据或分歧证据。`)
+                : (language === 'en'
+                  ? 'Shared evidence or divergence evidence is still missing for this symbol set.'
+                  : '这组标的的共享证据或分歧证据仍缺失。')}
+            </p>
+            <p>
+              {isSingleSymbol
+                ? (language === 'en'
+                  ? 'Add a comparable peer symbol before reviewing compare evidence.'
+                  : '添加同业标的后再查看对比证据。')
+                : (language === 'en'
+                  ? 'Check stock evidence gaps first, then review the comparison again.'
+                  : '先检查个股证据缺口，补齐可比较标的后再复核。')}
+            </p>
+          </div>
+        </TerminalEmptyState>
+      </div>
+    );
+  }
 
   const confidenceCapValue = packet.confidenceCap?.value;
   const boundary = packet.observationBoundary ?? {};
@@ -236,7 +410,7 @@ function SymbolCompareEvidencePacketPanel({
           items={packet.divergentEvidence.map((item, index) => {
             const values = item.values ?? {};
             const valueText = Object.entries(values)
-              .map(([symbol, value]) => `${symbol}: ${evidenceValue(value)}`)
+              .map(([symbol, value]) => `${symbol}: ${safeEvidenceValue(value, language)}`)
               .join(' · ');
             return (
               <span key={index}>
@@ -256,6 +430,11 @@ function SymbolCompareEvidencePacketPanel({
             return (
               <div key={`missing-${symbol}`} className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 px-3 py-2.5">
                 <div className="mb-2 font-mono text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{symbol}</div>
+                {gaps.length ? (
+                  <p className="mb-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+                    {gaps.map((gap) => missingEvidenceCopy(symbol, gap, language)).join(language === 'en' ? ' ' : '')}
+                  </p>
+                ) : null}
                 <EvidenceGapExplanationList
                   gaps={gaps}
                   locale={language}
@@ -280,7 +459,7 @@ function SymbolCompareEvidencePacketPanel({
 
       <RoughSectionCard className="md:col-span-2" title={language === 'en' ? 'Next research steps' : '后续研究'}>
         <RoughBulletList
-          items={packet.researchNextSteps}
+          items={safeResearchNextSteps(packet.researchNextSteps, language)}
           emptyText={language === 'en' ? 'No additional research step is listed.' : '暂无额外后续研究项。'}
         />
       </RoughSectionCard>
@@ -353,6 +532,13 @@ export default function StockStructureDecisionPage() {
       })),
     [data?.componentScores, locale],
   );
+  const comparablePeerSymbol = useMemo(
+    () => firstComparablePeerSymbol(data?.peerCorrelationSnapshot, data?.ticker || primarySymbol),
+    [data?.peerCorrelationSnapshot, data?.ticker, primarySymbol],
+  );
+  const compareWithPeerPath = data && comparablePeerSymbol && !isCompareRequest
+    ? localize(buildComparePath([data.ticker || primarySymbol, comparablePeerSymbol]))
+    : null;
 
   return (
     <ConsumerWorkspaceScope className="flex min-h-0 flex-1">
@@ -462,7 +648,11 @@ export default function StockStructureDecisionPage() {
                     },
                   ]}
                 />
-                <SymbolCompareEvidencePacketPanel packet={comparePacket} language={locale} />
+                <SymbolCompareEvidencePacketPanel
+                  packet={comparePacket}
+                  language={locale}
+                  requestedSymbols={requestedSymbols}
+                />
                 <div className="grid gap-3 p-3 md:grid-cols-2">
                   <RoughSectionCard
                     className="md:col-span-2"
@@ -525,12 +715,31 @@ export default function StockStructureDecisionPage() {
                       ]}
                     />
                   </RoughSectionCard>
-                  <PeerCorrelationSnapshotBlock
-                    snapshot={data.peerCorrelationSnapshot}
-                    locale={locale}
-                    testId="stock-structure-peer-correlation-snapshot"
-                    className="md:col-span-2"
-                  />
+                  {hasPeerCorrelationContent(data.peerCorrelationSnapshot) ? (
+                    <>
+                      <PeerCorrelationSnapshotBlock
+                        snapshot={data.peerCorrelationSnapshot}
+                        locale={locale}
+                        testId="stock-structure-peer-correlation-snapshot"
+                        className="md:col-span-2"
+                      />
+                      {compareWithPeerPath && comparablePeerSymbol ? (
+                        <div className="md:col-span-2">
+                          <CompareWithPeerLink
+                            language={locale}
+                            to={compareWithPeerPath}
+                            peerSymbol={comparablePeerSymbol}
+                          />
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <StockPeerCorrelationEmptyState
+                      language={locale}
+                      testId="stock-structure-peer-correlation-snapshot"
+                      className="md:col-span-2"
+                    />
+                  )}
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Reference levels' : '参考位置'} title={locale === 'en' ? 'Key levels' : '关键位置'}>
                     <RoughKeyValueRows
                       rows={(data.explanation.keyLevels ?? []).map((level, index) => ({
