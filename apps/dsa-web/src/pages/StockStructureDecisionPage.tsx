@@ -348,30 +348,53 @@ function StockStructureSymbolNotFoundState({
 
 function StockPeerCorrelationEmptyState({
   language,
+  localize,
   className,
   testId,
 }: {
   language: 'zh' | 'en';
+  localize: (path: string) => string;
   className?: string;
   testId: string;
 }) {
   const isEnglish = language === 'en';
   return (
     <TerminalEmptyState
-      className={cn('md:col-span-2', className)}
+      className={cn('items-start md:col-span-2 md:items-center', className)}
       data-testid={testId}
-      title={isEnglish ? 'Peer correlation evidence is not ready yet' : '同业相关性证据暂未就绪'}
+      title={isEnglish ? 'No peer evidence entries yet' : '暂无同业证据条目'}
+      action={(
+        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          <Link
+            to={localize('/stocks/structure-decision')}
+            className="inline-flex min-h-9 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+          >
+            {isEnglish ? 'Add compare symbol' : '添加对比标的'}
+          </Link>
+          <Link
+            to={localize('/research/radar')}
+            className="inline-flex min-h-9 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+          >
+            {isEnglish ? 'Back to Research Radar' : '返回研究雷达'}
+          </Link>
+        </div>
+      )}
     >
       <div className="space-y-1">
         <p>
           {isEnglish
-            ? 'Peer price or structure evidence is missing or insufficient, so a comparable correlation view is not available yet.'
-            : '同业价格或结构证据仍缺失，暂时无法形成可比较的相关性观察。'}
+            ? 'Comparable peer evidence is currently unavailable, so the page cannot form a structural difference view across peers yet.'
+            : '当前缺少可比较同业证据，因此无法形成同业结构差异观察。'}
         </p>
         <p>
           {isEnglish
-            ? 'Check the stock evidence gaps first, or add comparable symbols before reviewing again.'
-            : '先检查个股证据缺口，或补充可比较标的后再复核。'}
+            ? 'Add another symbol for structure comparison, or return to Research Radar and enter again from the existing research queue.'
+            : '可添加另一个标的进行结构对比，或返回研究雷达从现有研究队列进入。'}
+        </p>
+        <p>
+          {isEnglish
+            ? 'This does not rank symbols or imply any investment preference.'
+            : '这不表示当前标的优先于其他标的，也不形成投资偏好。'}
         </p>
       </div>
     </TerminalEmptyState>
@@ -865,6 +888,7 @@ export default function StockStructureDecisionPage() {
                   ) : (
                     <StockPeerCorrelationEmptyState
                       language={locale}
+                      localize={localize}
                       testId="stock-structure-peer-correlation-snapshot"
                       className="md:col-span-2"
                     />
