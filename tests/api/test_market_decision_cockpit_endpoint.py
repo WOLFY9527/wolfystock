@@ -257,7 +257,12 @@ def test_market_decision_cockpit_endpoint_returns_service_payload(monkeypatch) -
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["schemaVersion"] == "market_decision_cockpit.v1"
+    assert "schemaVersion" not in payload
+    assert payload["consumerSafeSourceLabel"] == "部分数据源暂不可用"
+    assert payload["dataQualityState"] == "limited"
+    assert payload["freshnessState"] == "limited"
+    assert payload["observationBoundary"]
+    assert payload["researchNextSteps"]
     assert payload["marketRegimeDecision"]["regime"] == "riskOn"
     assert payload["researchQueuePreview"]["previewOnly"] is True
     assert payload["optionsStructureStatus"]["observationOnly"] is True

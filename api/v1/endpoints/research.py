@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 
 from api.deps import CurrentUser, get_current_user, get_current_user_id, get_database_manager
+from api.v1.consumer_safe_response import consumer_safe_json_response
 from api.v1.schemas.research_queue import UnifiedResearchQueueResponse
 from api.v1.schemas.research_radar import ResearchRadarResponse
 from api.v1.schemas.scanner import ScannerRunDetailResponse, sanitize_scanner_consumer_payload
@@ -102,7 +103,10 @@ def get_research_radar(
         owner_id=get_current_user_id(current_user),
         limit=bounded_limit,
     )
-    return ResearchRadarResponse.model_validate(payload)
+    return consumer_safe_json_response(
+        ResearchRadarResponse.model_validate(payload),
+        surface="research-radar",
+    )
 
 
 @router.get(
@@ -137,4 +141,7 @@ def get_research_queue(
         watchlist_overlay=watchlist_overlay,
         limit=queue_limit,
     )
-    return UnifiedResearchQueueResponse.model_validate(payload)
+    return consumer_safe_json_response(
+        UnifiedResearchQueueResponse.model_validate(payload),
+        surface="research-queue",
+    )

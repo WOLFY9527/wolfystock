@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
 from api.deps import CurrentUser, get_optional_current_user, require_admin_capability
+from api.v1.consumer_safe_response import consumer_safe_json_response
 from api.v1.schemas.daily_intelligence import DailyIntelligenceBriefingResponse
 from api.v1.errors import safe_api_error
 from api.v1.schemas.market_briefing import MarketOverviewBriefingResponse
@@ -190,8 +191,11 @@ def get_regime_decision(current_user: Optional[CurrentUser] = Depends(get_option
 
 @router.get("/decision-cockpit", summary="Get market decision cockpit aggregate")
 def get_decision_cockpit(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
-    return sanitize_consumer_reason_payload(
-        MarketDecisionCockpitService().get_decision_cockpit(actor=_actor(current_user))
+    return consumer_safe_json_response(
+        sanitize_consumer_reason_payload(
+            MarketDecisionCockpitService().get_decision_cockpit(actor=_actor(current_user))
+        ),
+        surface="market-decision-cockpit",
     )
 
 
@@ -243,7 +247,10 @@ def post_scenario_lab(request: MarketScenarioLabRequest):
     summary="Get rule-based market briefing",
 )
 def get_market_briefing(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
-    return MarketOverviewService().get_market_briefing(actor=_actor(current_user))
+    model = MarketOverviewBriefingResponse.model_validate(
+        MarketOverviewService().get_market_briefing(actor=_actor(current_user))
+    )
+    return consumer_safe_json_response(model, surface="market-briefing", exclude_none=True)
 
 
 @router.get("/futures", summary="Get futures and premarket direction")

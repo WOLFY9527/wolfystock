@@ -258,7 +258,12 @@ def test_structure_decision_endpoint_returns_required_contract(monkeypatch) -> N
             "context_reason": None,
         }
     ]
-    assert payload["schemaVersion"] == STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION
+    assert "schemaVersion" not in payload
+    assert payload["consumerSafeSourceLabel"] == "部分数据源暂不可用"
+    assert payload["dataQualityState"] == "limited"
+    assert payload["freshnessState"] == "limited"
+    assert payload["observationBoundary"]
+    assert payload["researchNextSteps"]
     assert payload["ticker"] == "AAPL"
     assert payload["symbol"] == "AAPL"
     for key in (
@@ -403,7 +408,8 @@ def test_structure_decision_batch_endpoint_returns_comparative_contract(monkeypa
     assert fake_service.batch_calls == [
         {"tickers": ["msft", "aapl", "msft"], "benchmark": "spy", "max_items": 2}
     ]
-    assert payload["schemaVersion"] == STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION
+    assert "schemaVersion" not in payload
+    assert payload["consumerSafeSourceLabel"] == "部分数据源暂不可用"
     assert [item["ticker"] for item in payload["items"]] == ["MSFT", "AAPL"]
     assert payload["aggregateSummary"]["requestedCount"] == 3
     assert payload["aggregateSummary"]["evaluatedCount"] == 2
