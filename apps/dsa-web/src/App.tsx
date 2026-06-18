@@ -1,6 +1,7 @@
 import type React from 'react';
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { BrowserRouter as Router, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { AppErrorBoundary } from './components/common/AppErrorBoundary';
 import { BrandedLoadingScreen } from './components/common/BrandedLoadingScreen';
 import { ConsumerProtectedFrame } from './components/layout/ConsumerWorkspaceShell';
 import { Shell } from './components/layout/Shell';
@@ -734,13 +735,19 @@ const AppBody: React.FC = () => {
   const isPreviewRoute = isPreviewRoutePath(location.pathname);
 
   if (isPreviewRoute) {
-    return <PreviewRoutes />;
+    return (
+      <AppErrorBoundary>
+        <PreviewRoutes />
+      </AppErrorBoundary>
+    );
   }
 
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <AppErrorBoundary>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </AppErrorBoundary>
   );
 };
 
