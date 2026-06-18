@@ -2694,6 +2694,7 @@ describe('MarketOverviewPage', () => {
             'Rotation Non Scoring Or Taxonomy Only',
             'REAL',
             'MIXED',
+            'freshness=unavailable',
             'Sector ETF proxy 暂不可用',
           ],
         },
@@ -2720,17 +2721,13 @@ describe('MarketOverviewPage', () => {
     render(createElement(MarketOverviewPage));
 
     await waitFor(() => {
-      expect(document.body.textContent || '').toMatch(/部分可用|延迟可用|证据不足|仅供观察/);
+      expect(document.body.textContent || '').toMatch(/ETF 资金流指标|机构压力指标|行业广度指标|数据新鲜度暂不可用/);
     });
 
-    const footerTitles = screen.getAllByTestId('market-overview-footer-meta')
-      .map((node) => node.getAttribute('title') || '')
-      .join(' ');
-
-    const renderedCopy = `${document.body.textContent || ''} ${footerTitles}`;
-    expect(renderedCopy).toMatch(/ETF 资金流指标|机构压力指标|行业广度指标|部分可用|延迟可用|证据不足|仅供观察/);
+    const renderedCopy = document.body.textContent || '';
+    expect(renderedCopy).toMatch(/ETF 资金流指标|机构压力指标|行业广度指标|部分可用|延迟可用|证据不足|仅供观察|数据新鲜度暂不可用/);
     expect(renderedCopy).not.toMatch(
-      /PROVIDER ALTERNATIVE_ME|ETF flow proxy|Institutional pressure proxy|Industry breadth proxy|Rotation Non Scoring Or Taxonomy Only|Sector ETF proxy|Alternative\.me|Yahoo Finance|Binance Futures|YFINANCE|CBOE|BINANCE|REAL|MIXED|FALLBACK|provider|sourceTier|sourceLabel|reasonCode|diagnosticOnly|scoreContributionAllowed|sourceAuthorityAllowed|authorityGrant|raw|debug|backend|cache|schema|synthetic|mock|proxy|fallback/i,
+      /PROVIDER ALTERNATIVE_ME|ETF flow proxy|Institutional pressure proxy|Industry breadth proxy|Rotation Non Scoring Or Taxonomy Only|Sector ETF proxy|Alternative\.me|Yahoo Finance|Binance Futures|YFINANCE|CBOE|BINANCE|REAL|MIXED|FALLBACK|freshness=unavailable|provider|sourceTier|sourceLabel|reasonCode|diagnosticOnly|scoreContributionAllowed|sourceAuthorityAllowed|authorityGrant|raw|debug|backend|cache|schema|synthetic|mock|proxy|fallback/i,
     );
   });
 

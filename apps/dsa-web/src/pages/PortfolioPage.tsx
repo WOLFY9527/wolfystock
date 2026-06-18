@@ -900,6 +900,17 @@ function formatAccountMarketLabel(value: string, language: PortfolioLanguage): s
   return translate(language, `portfolio.marketLabel.${normalized}`);
 }
 
+function formatConsumerAccountLabel(value: string | null | undefined, language: PortfolioLanguage): string {
+  const text = String(value || '').trim();
+  if (!text) {
+    return language === 'zh' ? '组合账户' : 'Portfolio account';
+  }
+  if (/audit[-_\s]?trace[-_\s]?acct|internal|debug|trace|local_db|fixture/i.test(text)) {
+    return language === 'zh' ? '组合账户' : 'Portfolio account';
+  }
+  return text;
+}
+
 function isMissingMarketValue(value: string | undefined | null): boolean {
   const normalized = String(value || '').trim().toLowerCase();
   return !normalized || normalized === 'unknown' || normalized === 'unclassified' || normalized === '--' || normalized === 'n/a';
@@ -1362,7 +1373,7 @@ function AccountManagementPanel({
         {accounts.map((account) => (
           <div key={account.id} className="theme-panel-subtle rounded-[16px] px-4 py-3 text-sm text-secondary-text">
             <div className="flex items-center justify-between gap-3">
-              <span className="min-w-0 truncate text-foreground">{account.name}</span>
+              <span className="min-w-0 truncate text-foreground">{formatConsumerAccountLabel(account.name, language)}</span>
               <div className="flex shrink-0 items-center gap-2">
                 <span className="font-mono text-muted-text">#{account.id}</span>
                 <Button
@@ -1370,7 +1381,7 @@ function AccountManagementPanel({
                   variant="ghost"
                   className={PORTFOLIO_DANGER_GHOST_CLASS}
                   onClick={() => onDeleteAccount(account)}
-                  aria-label={language === 'en' ? `Delete ${account.name}` : `删除 ${account.name}`}
+                  aria-label={language === 'en' ? `Delete ${formatConsumerAccountLabel(account.name, language)}` : `删除 ${formatConsumerAccountLabel(account.name, language)}`}
                   title={copy.accountDeleteTitle}
                 >
                   <Trash2 className="size-4" aria-hidden="true" />
@@ -1881,13 +1892,13 @@ const PortfolioPage: React.FC = () => {
         rows.push({
           ...position,
           accountId: account.accountId,
-          accountName: account.accountName,
+          accountName: formatConsumerAccountLabel(account.accountName, language),
         });
       }
     }
     rows.sort((a, b) => Number(b.marketValueBase || 0) - Number(a.marketValueBase || 0));
     return rows;
-  }, [snapshot]);
+  }, [language, snapshot]);
 
   const handleTradeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2578,7 +2589,7 @@ const PortfolioPage: React.FC = () => {
   const exposureSummaryCashLabel = language === 'zh' ? '现金占比' : 'Cash percent';
   const topMarketAccountLabel = [
     topMarket ? formatExposureMarketLabel(topMarket, language) : null,
-    topAccount ? (topAccount.accountName || topAccount.label || topAccount.key) : null,
+    topAccount ? formatConsumerAccountLabel(topAccount.accountName || topAccount.label || topAccount.key, language) : null,
   ].filter(Boolean).join(' / ') || '--';
   const topMarketAccountPercent = [
     topMarket ? formatPercent(topMarket.percent) : null,
@@ -2779,10 +2790,10 @@ const PortfolioPage: React.FC = () => {
       symbol: row.symbol,
       marketValue: row.marketValueBase,
       marketValueBase: row.marketValueBase,
-      bucketLabel: row.accountName,
+      bucketLabel: formatConsumerAccountLabel(row.accountName, language),
       currency: row.currency || row.valuationCurrency || null,
     })),
-    [positionRows],
+    [language, positionRows],
   );
   const syncDataActionLabel = language === 'zh' ? '同步数据' : 'Sync data';
   const openManualLedger = (nextLeftTab: 'trade' | 'account' | 'sync' | 'fx', nextTradeType?: TradeFormType) => {
@@ -3206,7 +3217,7 @@ const PortfolioPage: React.FC = () => {
                       }}
                       options={[
                         { value: 'all', label: copy.allAccounts },
-                        ...activeAccounts.map((account) => ({ value: String(account.id), label: account.name })),
+                        ...activeAccounts.map((account) => ({ value: String(account.id), label: formatConsumerAccountLabel(account.name, language) })),
                       ]}
                       className={PORTFOLIO_SELECT_CLASS}
                       controlClassName="rounded-lg"
@@ -4078,7 +4089,7 @@ const PortfolioPage: React.FC = () => {
                   }}
                   options={[
                     { value: 'all', label: copy.allAccounts },
-                    ...writableAccounts.map((account) => ({ value: String(account.id), label: account.name })),
+                    ...writableAccounts.map((account) => ({ value: String(account.id), label: formatConsumerAccountLabel(account.name, language) })),
                   ]}
                   className={PORTFOLIO_SELECT_CLASS}
                   controlClassName="rounded-lg"
@@ -4215,7 +4226,7 @@ const PortfolioPage: React.FC = () => {
                   }}
                   onRefresh={() => void handleRefresh()}
                   onSubmit={handleCreateAccount}
-                  onDeleteAccount={(account) => setPendingAccountDelete({ id: account.id, name: account.name })}
+                  onDeleteAccount={(account) => setPendingAccountDelete({ id: account.id, name: formatConsumerAccountLabel(account.name, language) })}
                 />
               ) : null}
 
@@ -4365,7 +4376,7 @@ const PortfolioPage: React.FC = () => {
                   ...prev,
                   accountId: Number(value),
                 } : prev))}
-                options={writableAccounts.map((account) => ({ value: String(account.id), label: account.name }))}
+                options={writableAccounts.map((account) => ({ value: String(account.id), label: formatConsumerAccountLabel(account.name, language) }))}
               />
               <Input
                 label={copy.stockCode}

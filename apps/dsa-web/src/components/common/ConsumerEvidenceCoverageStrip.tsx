@@ -1,6 +1,7 @@
 import type React from 'react';
 import { TerminalChip } from '../terminal/TerminalPrimitives';
 import { cn } from '../../utils/cn';
+import { getConsumerStatusLabel } from '../../utils/consumerStatusLabels';
 import type {
   AnalysisEvidenceCoverageDomain,
   AnalysisEvidenceCoverageEntry,
@@ -89,6 +90,9 @@ function domainLabel(domain: AnalysisEvidenceCoverageDomain, locale: EvidenceCov
 }
 
 function statusLabel(status: string, locale: EvidenceCoverageLocale): string {
+  if (status === 'blocked' || status === 'pending') {
+    return getConsumerStatusLabel(status, locale) || STATUS_LABELS[status]?.[locale] || STATUS_LABELS.unknown[locale];
+  }
   return STATUS_LABELS[status]?.[locale] || STATUS_LABELS.unknown[locale];
 }
 

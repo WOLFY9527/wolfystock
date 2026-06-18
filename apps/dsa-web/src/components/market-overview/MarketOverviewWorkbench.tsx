@@ -57,6 +57,7 @@ import {
 import { TerminalChip, TerminalGrid, TerminalPanel } from '../terminal/TerminalPrimitives';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
+import { mapConsumerStatusText } from '../../utils/consumerStatusLabels';
 import type { OfficialMacroAuthorityRecord } from '../common/officialMacroAuthorityDiagnosticsData';
 import {
   buildMarketDirectionalSummary,
@@ -1086,6 +1087,7 @@ function buildMarketOverviewEvidenceSnapshotMarkdown(params: {
       : dataState.staleCount > 0 || dataState.hasFallback
         ? 'Delayed or partial data'
         : 'Loaded evidence current';
+  const consumerDataQualityLabel = mapConsumerStatusText(dataQuality.status, 'en');
 
   return buildMarketIntelligenceEvidenceMarkdown({
     title: `Market Intelligence Evidence Snapshot | ${activeCategoryLabel}`,
@@ -1105,7 +1107,7 @@ function buildMarketOverviewEvidenceSnapshotMarkdown(params: {
       },
       {
         label: language === 'en' ? 'Data quality' : '数据质量',
-        meta: `${dataQuality.status} · ${activeCategoryLabel}: available ${coverageSummary.real}, partial ${coverageSummary.mixed}, delayed ${coverageSummary.fallback}`,
+        meta: `${consumerDataQualityLabel} · ${activeCategoryLabel}: available ${coverageSummary.real}, partial ${coverageSummary.mixed}, delayed ${coverageSummary.fallback}`,
       },
       ...heroEvidence,
       ...briefingEvidence,
@@ -2192,7 +2194,7 @@ function buildMarketDecision(params: {
     crypto: `${describeDirectionalItem(btc, 'BTC 待确认')} · ${describeDirectionalItem(findPanelItem(panels.crypto, ['ETH']), 'ETH 待确认')} · 宏观风险${riskLabel}`,
   };
 
-  const qualityHint = dataQuality.hasConcern ? ` · ${dataQuality.status}` : '';
+  const qualityHint = dataQuality.hasConcern ? ` · ${mapConsumerStatusText(dataQuality.status, 'zh')}` : '';
   return {
     text: `${texts[activeCategory]}${qualityHint}`,
     chips,

@@ -19,6 +19,7 @@ import {
 } from '../api/marketDecisionCockpit';
 import { scenarioLabApi, type ScenarioLabResponse } from '../api/scenarioLab';
 import { useI18n } from '../contexts/UiLanguageContext';
+import { getConsumerStatusLabel, mapConsumerStatusText } from '../utils/consumerStatusLabels';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import {
   RoughBulletList,
@@ -94,6 +95,10 @@ function presetForKey(raw: string | null): ScenarioPreset {
 function humanizeToken(value: string | null | undefined): string {
   if (!value) {
     return '--';
+  }
+  const safe = getConsumerStatusLabel(value, 'zh');
+  if (safe) {
+    return safe;
   }
   return value.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ');
 }
@@ -247,7 +252,7 @@ export default function ScenarioLabPage() {
           key,
           label: labelForDriver(key, locale),
           value: typed.score ?? '--',
-          meta: typed.evidenceState ? humanizeToken(typed.evidenceState) : undefined,
+          meta: typed.evidenceState ? mapConsumerStatusText(typed.evidenceState, locale) : undefined,
         };
       }),
     [cockpit?.marketRegimeDecision?.driverScores, locale],
@@ -419,7 +424,8 @@ export default function ScenarioLabPage() {
                     : (locale === 'en' ? 'Projected research frame' : '情景后的研究框架')}>
                     {scenarioUnavailable ? (
                       <TerminalEmptyState title={locale === 'en' ? 'Base evidence is not ready' : '基准证据尚未就绪'}>
-                        {(scenarioResult.evidenceLimits[0] || scenarioResult.scenarioSummary[0])
+                        {(mapConsumerStatusText(scenarioResult.evidenceLimits[0], locale)
+                          || mapConsumerStatusText(scenarioResult.scenarioSummary[0], locale))
                           ?? (locale === 'en' ? 'The scenario needs more base evidence before it can be compared.' : '需要更多基准证据后才能进行情景对照。')}
                       </TerminalEmptyState>
                     ) : (
@@ -457,7 +463,7 @@ export default function ScenarioLabPage() {
                   </RoughSectionCard>
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Generated scenario output' : '生成输出'} title={locale === 'en' ? 'What this scenario says' : '该情景给出的观察'}>
                     <RoughBulletList
-                      items={(scenarioResult.scenarioSummary ?? []).map((item) => item)}
+                      items={(scenarioResult.scenarioSummary ?? []).map((item) => mapConsumerStatusText(item, locale))}
                       emptyText={locale === 'en' ? 'No scenario summary is available.' : '当前没有可展示的情景摘要。'}
                     />
                   </RoughSectionCard>
@@ -466,14 +472,14 @@ export default function ScenarioLabPage() {
                       <div>
                         <div className="mb-2 text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'What would confirm' : '确认条件'}</div>
                         <RoughBulletList
-                          items={(scenarioResult.whatWouldConfirm ?? []).map((item) => item)}
+                          items={(scenarioResult.whatWouldConfirm ?? []).map((item) => mapConsumerStatusText(item, locale))}
                           emptyText={locale === 'en' ? 'No explicit confirm path is attached.' : '当前没有额外确认条件。'}
                         />
                       </div>
                       <div>
                         <div className="mb-2 text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'What would invalidate' : '失效条件'}</div>
                         <RoughBulletList
-                          items={(scenarioResult.whatWouldInvalidate ?? []).map((item) => item)}
+                          items={(scenarioResult.whatWouldInvalidate ?? []).map((item) => mapConsumerStatusText(item, locale))}
                           emptyText={locale === 'en' ? 'No invalidation path is attached.' : '当前没有额外失效条件。'}
                         />
                       </div>
@@ -493,7 +499,7 @@ export default function ScenarioLabPage() {
                       <TerminalChip variant="info">{locale === 'en' ? 'No external action' : '不触发外部动作'}</TerminalChip>
                       <TerminalChip variant={statusTone(scenarioResult.scenarioRegime.status || scenarioResult.scenarioRegime.confidence)}>
                         {scenarioResult.scenarioRegime.status
-                          ? humanizeToken(scenarioResult.scenarioRegime.status)
+                          ? mapConsumerStatusText(scenarioResult.scenarioRegime.status, locale)
                           : localizedConfidence(scenarioResult.scenarioRegime.confidence, locale)}
                       </TerminalChip>
                     </div>

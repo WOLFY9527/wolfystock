@@ -40,6 +40,8 @@ const CONSUMER_SOURCE_LABEL_MAP: Record<string, string> = {
   'SINA + YAHOO FINANCE': '部分可用',
   'SINA + 备用数据': '部分可用',
   'NOT RETURNED': '待补数据',
+  'FRESHNESS=UNAVAILABLE': '数据新鲜度暂不可用',
+  'FRESHNESS UNAVAILABLE': '数据新鲜度暂不可用',
 };
 
 const CONSUMER_SOURCE_LABEL_RULES: Array<[RegExp, string]> = [
@@ -52,6 +54,7 @@ const CONSUMER_SOURCE_LABEL_RULES: Array<[RegExp, string]> = [
   [/local cache|recent cache|cache|fallback/gi, '延迟可用'],
   [/mock|synthetic/gi, '证据不足'],
   [/Rotation Non Scoring Or Taxonomy Only/gi, '轮动仅作分类参考'],
+  [/freshness\s*=\s*unavailable|freshness unavailable/gi, '数据新鲜度暂不可用'],
 ];
 
 const CONSUMER_TEXT_RULES: Array<[RegExp, string]> = [
