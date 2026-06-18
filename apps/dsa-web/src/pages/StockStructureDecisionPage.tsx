@@ -21,6 +21,7 @@ import {
   type StockSymbolCompareEvidencePacket,
   type StockSymbolCompareFreshness,
 } from '../api/stocks';
+import { EvidenceGapExplanationList } from '../components/research/EvidenceGapExplanation';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import {
@@ -208,6 +209,14 @@ function SymbolCompareEvidencePacketPanel({
             <TerminalChip key={label} variant="neutral">{label}</TerminalChip>
           ))}
         </div>
+        {confidenceCapValue != null ? (
+          <EvidenceGapExplanationList
+            className="mt-3"
+            gaps={['confidence_capped']}
+            locale={language}
+            title={language === 'en' ? 'Confidence impact' : '置信度影响'}
+          />
+        ) : null}
       </RoughSectionCard>
 
       <RoughSectionCard title={language === 'en' ? 'Shared evidence' : '共享证据'}>
@@ -241,18 +250,22 @@ function SymbolCompareEvidencePacketPanel({
       </RoughSectionCard>
 
       <RoughSectionCard title={language === 'en' ? 'Missing evidence' : '缺失证据'}>
-        <RoughKeyValueRows
-          rows={comparedSymbols.map((symbol) => {
+        <div className="grid gap-3">
+          {comparedSymbols.map((symbol) => {
             const gaps = packet.missingEvidenceBySymbol[symbol] ?? [];
-            return {
-              key: `missing-${symbol}`,
-              label: symbol,
-              value: gaps.length
-                ? gaps.map((gap) => gap.message || evidenceKindLabel(gap.kind, language)).join('；')
-                : (language === 'en' ? 'No gap listed' : '暂无缺口'),
-            };
+            return (
+              <div key={`missing-${symbol}`} className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 px-3 py-2.5">
+                <div className="mb-2 font-mono text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{symbol}</div>
+                <EvidenceGapExplanationList
+                  gaps={gaps}
+                  locale={language}
+                  title={language === 'en' ? 'Gap explanation' : '缺口解释'}
+                  emptyText={language === 'en' ? 'No gap listed' : '暂无缺口'}
+                />
+              </div>
+            );
           })}
-        />
+        </div>
       </RoughSectionCard>
 
       <RoughSectionCard title={language === 'en' ? 'Freshness by symbol' : '新鲜度'}>
@@ -377,16 +390,12 @@ export default function StockStructureDecisionPage() {
                 />
               </RoughSectionCard>
               <RoughSectionCard eyebrow={locale === 'en' ? 'Boundary' : '边界'} title={locale === 'en' ? 'Missing evidence' : '缺失证据'}>
-                <div className="flex flex-wrap gap-2">
-                  {(data?.missingEvidence ?? []).map((item, index) => (
-                    <TerminalChip key={`${item.kind || item.code || 'gap'}-${index}`} variant="caution">
-                      {item.message || item.kind || item.code || (locale === 'en' ? 'Evidence gap' : '证据缺口')}
-                    </TerminalChip>
-                  ))}
-                  {!(data?.missingEvidence ?? []).length ? (
-                    <TerminalChip variant="success">{locale === 'en' ? 'No explicit gap' : '暂无明确缺口'}</TerminalChip>
-                  ) : null}
-                </div>
+                <EvidenceGapExplanationList
+                  gaps={data?.missingEvidence ?? []}
+                  locale={locale}
+                  title={locale === 'en' ? 'Gap explanation' : '缺口解释'}
+                  emptyText={locale === 'en' ? 'No explicit gap' : '暂无明确缺口'}
+                />
               </RoughSectionCard>
               <RoughSectionCard eyebrow={locale === 'en' ? 'Disclosure' : '披露'} title={locale === 'en' ? 'Observation-only note' : '观察型说明'}>
                 <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
@@ -455,6 +464,19 @@ export default function StockStructureDecisionPage() {
                 />
                 <SymbolCompareEvidencePacketPanel packet={comparePacket} language={locale} />
                 <div className="grid gap-3 p-3 md:grid-cols-2">
+                  <RoughSectionCard
+                    className="md:col-span-2"
+                    eyebrow={locale === 'en' ? 'Boundary' : '边界'}
+                    title={locale === 'en' ? 'Evidence gap explanations' : '证据缺口解释'}
+                  >
+                    <EvidenceGapExplanationList
+                      data-testid="stock-structure-evidence-gap-explanations"
+                      gaps={data.missingEvidence ?? []}
+                      locale={locale}
+                      title={locale === 'en' ? 'Gap explanation' : '缺口解释'}
+                      emptyText={locale === 'en' ? 'No explicit gap' : '暂无明确缺口'}
+                    />
+                  </RoughSectionCard>
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Scores' : '评分'} title={locale === 'en' ? 'Component scores' : '组件评分'}>
                     <RoughScoreRows
                       items={scoreRows}

@@ -481,7 +481,7 @@ describe('research IA pages', () => {
           priorityTier: 'urgent_review',
           whyQueued: ['Missing evidence needs review.', 'provider_timeout'],
           evidenceUsed: ['Technicals available', 'sourceRefs'],
-          evidenceGaps: ['Price-history evidence', 'reasonCodes'],
+          evidenceGaps: ['benchmark_missing', 'reasonCodes'],
           freshness: { state: 'needs_review', lastReviewedAt: null },
           suggestedResearchPath: [
             {
@@ -527,7 +527,7 @@ describe('research IA pages', () => {
           priorityTier: 'monitor',
           whyQueued: ['Cross-surface evidence should be reviewed before extending the queue.'],
           evidenceUsed: ['Market context available'],
-          evidenceGaps: ['optional_news_timeout'],
+          evidenceGaps: ['price_history_stale', 'provider_runtime_trace'],
           freshness: { state: 'unknown', lastReviewedAt: null },
           suggestedResearchPath: [],
           observationOnly: true,
@@ -541,7 +541,7 @@ describe('research IA pages', () => {
         byPriorityTier: { urgent_review: 1, follow_up: 1, monitor: 1 },
       },
       sourceSurfacesAggregated: ['watchlist', 'scanner', 'market'],
-      evidenceGaps: ['Price-history evidence', 'optional_news_timeout'],
+      evidenceGaps: ['benchmark_missing', 'price_history_stale', 'provider_runtime_trace'],
       dataQuality: {
         state: 'ready',
         itemCount: 3,
@@ -569,20 +569,27 @@ describe('research IA pages', () => {
     expect(watchlistGroup).toHaveTextContent('紧急复核');
     expect(watchlistGroup).toHaveTextContent('Missing evidence needs review.');
     expect(watchlistGroup).toHaveTextContent('Technicals available');
-    expect(watchlistGroup).toHaveTextContent('Price-history evidence');
+    expect(watchlistGroup).toHaveTextContent('基准证据缺失');
+    expect(watchlistGroup).toHaveTextContent('缺少基准或指数参照时，相对强弱和结构延续性只能作为线索。');
+    expect(watchlistGroup).toHaveTextContent('先补充同周期基准表现，再比较标的与市场的相对变化。');
+    expect(watchlistGroup).toHaveTextContent('置信度受限：相对判断需要降级为观察线索。');
+    expect(watchlistGroup).toHaveTextContent('仅作观察，不构成操作结论。');
     expect(watchlistGroup).toHaveTextContent('需复核');
     expect(watchlistGroup).toHaveTextContent('仅作观察');
     expect(within(watchlistGroup).getByRole('link', { name: /Stock Structure/i })).toHaveAttribute('href', '/zh/stocks/MSFT/structure-decision');
     expect(within(watchlistGroup).queryByRole('link', { name: /Admin Diagnostics/i })).not.toBeInTheDocument();
     expect(watchlistGroup.textContent || '').not.toMatch(/Admin Diagnostics|adminDiagnostics|provider_runtime_trace|\/admin/i);
     expect(within(hub).getByTestId('research-queue-source-scanner')).toHaveTextContent('ALFA');
-    expect(within(hub).getByTestId('research-queue-source-market')).toHaveTextContent('VIX');
+    const marketGroup = within(hub).getByTestId('research-queue-source-market');
+    expect(marketGroup).toHaveTextContent('VIX');
+    expect(marketGroup).toHaveTextContent('价格历史时效有限');
+    expect(marketGroup).toHaveTextContent('部分证据暂不可用，因此当前结论只适合作为观察线索。');
     expect((await within(page).findAllByText('ALFA')).length).toBeGreaterThan(0);
     expect(await within(page).findByText('相对强弱改善')).toBeInTheDocument();
     expect(within(page).getByRole('link', { name: '打开结构面板' })).toHaveAttribute('href', '/zh/stocks/ALFA/structure-decision');
     await waitFor(() => expect(getResearchRadarMock).toHaveBeenCalledWith({ market: 'us', profile: undefined, limit: 5 }));
     await waitFor(() => expect(getResearchQueueMock).toHaveBeenCalledWith({ market: 'us', profile: undefined, queueLimit: 5 }));
-    expect(hub.textContent || '').not.toMatch(/sourceRefs|reasonCodes|provider_timeout|optional_news_timeout|queueItemId|request[_\s-]?id|trace[_\s-]?id|raw|debug|runtime|cache|schemaVersion/i);
+    expect(hub.textContent || '').not.toMatch(/sourceRefs|reasonCodes|provider_timeout|optional_news_timeout|benchmark_missing|price_history_stale|provider_runtime_trace|queueItemId|request[_\s-]?id|trace[_\s-]?id|raw|debug|runtime|cache|schemaVersion/i);
     expect(findConsumerRawLeakage(hub.textContent || '')).toEqual([]);
     expect(hub.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing/i);
   });
@@ -688,8 +695,8 @@ describe('research IA pages', () => {
     renderRoute(<ResearchRadarPage />, '/zh/research/radar');
 
     const page = await screen.findByTestId('research-radar-page');
-    const onboardingPanel = within(page).getByTestId('research-radar-onboarding-cta');
-    const queueEmptyState = within(page).getByTestId('research-radar-queue-empty-state');
+    const onboardingPanel = await within(page).findByTestId('research-radar-onboarding-cta');
+    const queueEmptyState = await within(page).findByTestId('research-radar-queue-empty-state');
     expect(onboardingPanel).toHaveTextContent('先完成研究循环，再回到雷达队列');
     expect(onboardingPanel).toHaveTextContent('先看市场概览');
     expect(onboardingPanel).toHaveTextContent('运行 Scanner');
@@ -787,7 +794,10 @@ describe('research IA pages', () => {
         usableBars: 60,
         reason: 'history_available',
       },
-      missingEvidence: [],
+      missingEvidence: [
+        { kind: 'peer_evidence_missing', message: 'provider_runtime_trace buy now target price raw payload' },
+        { code: 'confidence_capped', field: 'sourceRefs' },
+      ],
       noAdviceDisclosure: 'Observation-only research context.',
       peerCorrelationSnapshot: {
         symbol: 'ORCL',
@@ -822,7 +832,15 @@ describe('research IA pages', () => {
 
     const page = await screen.findByTestId('stock-structure-decision-page');
     const snapshot = await within(page).findByTestId('stock-structure-peer-correlation-snapshot');
+    const gapPanel = await within(page).findByTestId('stock-structure-evidence-gap-explanations');
     expect(getStructureDecisionMock).toHaveBeenCalledWith('ORCL');
+    expect(gapPanel).toHaveTextContent('同业证据缺失');
+    expect(gapPanel).toHaveTextContent('缺少同业对照时，个股结构更容易受到单一标的噪声影响。');
+    expect(gapPanel).toHaveTextContent('补充可比标的或行业篮子的同步走势，再复核结构是否仍成立。');
+    expect(gapPanel).toHaveTextContent('置信度受限：需要更多横向验证。');
+    expect(gapPanel).toHaveTextContent('置信度受到上限约束');
+    expect(gapPanel).toHaveTextContent('仅作观察，不构成操作结论。');
+    expect(gapPanel.textContent || '').not.toMatch(/provider_runtime_trace|buy now|target price|raw payload|confidence_capped|sourceRefs/i);
     expect(snapshot).toHaveTextContent('同业相关性');
     expect(snapshot).toHaveTextContent('aligned');
     expect(snapshot).toHaveTextContent('Cloud software');
@@ -869,7 +887,9 @@ describe('research IA pages', () => {
         evaluatedCount: 2,
         truncated: false,
       },
-      missingEvidence: [],
+      missingEvidence: [
+        { kind: 'fundamentals_missing', message: 'fundamentals_missing sourceRefs' },
+      ],
       dataQuality: { status: 'partial' },
       symbolCompareEvidencePacket: {
         comparedSymbols: ['MSFT', 'AAPL'],
@@ -895,17 +915,17 @@ describe('research IA pages', () => {
           },
         ],
         missingEvidenceBySymbol: {
-          MSFT: [{ kind: 'daily_ohlcv', message: 'Daily OHLCV history is unavailable.' }],
+          MSFT: [{ kind: 'price_history_stale', message: 'provider_runtime_trace raw payload' }],
           AAPL: [],
         },
         freshnessBySymbol: {
           MSFT: { status: 'unavailable', source: 'local_db', period: 'daily', usableBars: 0 },
           AAPL: { status: 'available', source: 'local_db', period: 'daily', usableBars: 60 },
         },
-        confidenceCap: {
-          value: 35,
-          reasonCodes: ['symbol_evidence_unavailable'],
-          policyVersion: 'symbol_compare_evidence_packet_v1',
+          confidenceCap: {
+            value: 35,
+            reasonCodes: ['symbol_evidence_unavailable'],
+            policyVersion: 'symbol_compare_evidence_packet_v1',
         },
         observationBoundary: {
           observationOnly: true,
@@ -941,7 +961,8 @@ describe('research IA pages', () => {
     expect(packet).toHaveTextContent('AAPL: breakout');
     expect(packet).toHaveTextContent('缺失证据');
     expect(packet).toHaveTextContent('MSFT');
-    expect(packet).toHaveTextContent('Daily OHLCV history is unavailable.');
+    expect(packet).toHaveTextContent('价格历史时效有限');
+    expect(packet).toHaveTextContent('先刷新或补齐价格历史，再复核结构信号是否仍一致。');
     expect(packet).toHaveTextContent('AAPL');
     expect(packet).toHaveTextContent('暂无缺口');
     expect(packet).toHaveTextContent('新鲜度');
@@ -952,9 +973,11 @@ describe('research IA pages', () => {
     expect(packet).toHaveTextContent('非判断等级');
     expect(packet).toHaveTextContent('不排序');
     expect(packet).toHaveTextContent('不生成行动指令');
+    expect(packet).toHaveTextContent('置信度受到上限约束');
+    expect(packet).toHaveTextContent('当前证据还不足以支撑更高置信度，只能作为研究观察。');
     expect(packet).toHaveTextContent('后续研究');
     expect(packet).toHaveTextContent('Add daily OHLCV evidence for MSFT before using divergence observations.');
-    expect(packet.textContent || '').not.toMatch(/reasonCodes|policyVersion|local_db|sourceRef|requestId|trace|raw|debug|provider|schemaVersion/i);
+    expect(packet.textContent || '').not.toMatch(/reasonCodes|policyVersion|local_db|sourceRef|requestId|trace|raw|debug|provider|schemaVersion|price_history_stale|symbol_evidence_unavailable/i);
     expect(packet.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy now|sell now|hold|target price|stop loss|position sizing/i);
   });
 

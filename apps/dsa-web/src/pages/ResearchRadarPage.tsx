@@ -4,6 +4,7 @@ import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import { ConsumerOnboardingCtaPanel } from '../components/common/ConsumerOnboardingCtaPanel';
 import { ConsumerResearchEmptyState } from '../components/common/ConsumerResearchEmptyState';
 import { buildConsumerResearchEmptyState } from '../components/common/researchEmptyStateModel';
+import { EvidenceGapExplanationList } from '../components/research/EvidenceGapExplanation';
 import {
   ConsoleBoard,
   ConsoleContextRail,
@@ -252,11 +253,6 @@ function ResearchQueueHubPanel({
                       locale,
                       locale === 'en' ? 'Evidence summary available.' : '已整理可用证据。',
                     );
-                    const evidenceGaps = safeResearchQueueList(
-                      item.evidenceGaps,
-                      locale,
-                      locale === 'en' ? 'No explicit evidence gap.' : '暂无明确证据缺口。',
-                    );
                     const reviewedAt = item.freshness.lastReviewedAt
                       ? formatDateTime(item.freshness.lastReviewedAt, { locale: locale === 'en' ? 'en-US' : 'zh-CN' })
                       : null;
@@ -299,7 +295,12 @@ function ResearchQueueHubPanel({
                             <p className="mb-2 text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">
                               {locale === 'en' ? 'Evidence gaps' : '证据缺口'}
                             </p>
-                            <RoughBulletList items={evidenceGaps} emptyText={locale === 'en' ? 'No gap listed.' : '暂无缺口。'} />
+                            <EvidenceGapExplanationList
+                              gaps={item.evidenceGaps}
+                              locale={locale}
+                              title={locale === 'en' ? 'Gap explanation' : '缺口解释'}
+                              emptyText={locale === 'en' ? 'No gap listed.' : '暂无缺口。'}
+                            />
                           </div>
                         </div>
 
@@ -459,8 +460,10 @@ export default function ResearchRadarPage() {
           rail={(
             <ConsoleContextRail className="flex flex-col gap-3 p-3">
               <RoughSectionCard eyebrow={locale === 'en' ? 'Aggregate' : '汇总'} title={locale === 'en' ? 'Evidence gaps' : '证据缺口'}>
-                <RoughBulletList
-                  items={(data?.evidenceGaps ?? []).map((item) => item)}
+                <EvidenceGapExplanationList
+                  gaps={data?.evidenceGaps ?? []}
+                  locale={locale}
+                  title={locale === 'en' ? 'Aggregate gap explanation' : '汇总缺口解释'}
                   emptyText={locale === 'en' ? 'No aggregate evidence gap.' : '暂无汇总证据缺口。'}
                 />
               </RoughSectionCard>
