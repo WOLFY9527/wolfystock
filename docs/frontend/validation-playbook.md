@@ -60,6 +60,13 @@ npm --prefix apps/dsa-web run typecheck
 npm --prefix apps/dsa-web run build:quiet
 ./scripts/release_secret_scan.sh --local-only
 
+# post-UAT-consumer-smoke
+npm --prefix apps/dsa-web run test:post-uat-consumer-smoke
+npm --prefix apps/dsa-web run lint:changed
+npm --prefix apps/dsa-web run typecheck
+git diff --check origin/main...HEAD
+git diff --check
+
 # backend-report
 python3 -m py_compile <changed_python_files>
 python3 -m pytest -q <focused_report_tests>
@@ -93,6 +100,12 @@ and release evidence must use the default full scan or
 `./scripts/release_secret_scan.sh --base-ref origin/main`. Use the
 `--files-from <path>` mode only when a caller already has a reviewed
 changed-file list.
+
+Use `test:post-uat-consumer-smoke` before UAT or a small beta candidate when
+you need the fast consumer-only regression slice. It intentionally stays in
+Vitest and covers the recent raw-diagnostic, no-advice, route/error fallback,
+and empty-state regression classes without pulling Playwright into the default
+path.
 
 ## Standard Playwright Invocation
 
