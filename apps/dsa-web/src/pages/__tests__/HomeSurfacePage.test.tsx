@@ -1955,8 +1955,8 @@ describe('HomeSurfacePage', () => {
     expect(strip).toHaveTextContent('技术面 可用');
     expect(strip).toHaveTextContent('基本面 降级');
     expect(strip).toHaveTextContent('新闻 缺失');
-    expect(strip).toHaveTextContent('催化 阻断');
-    expect(strip).toHaveTextContent('财报 待补');
+    expect(strip).toHaveTextContent('催化 当前无法分析');
+    expect(strip).toHaveTextContent('财报 正在等待数据确认');
     expect(strip).toHaveTextContent('估值 不适用');
     expect(strip).toHaveTextContent('补充基本面证据');
     expect(strip.textContent).not.toMatch(HOME_EVIDENCE_COVERAGE_INTERNAL_COPY_PATTERN);
@@ -2053,8 +2053,8 @@ describe('HomeSurfacePage', () => {
     expect(strip).toHaveTextContent('价格历史 可用');
     expect(strip).toHaveTextContent('技术面 可用');
     expect(strip).toHaveTextContent('基本面 降级');
-    expect(strip).toHaveTextContent('财报 待补');
-    expect(strip).toHaveTextContent('新闻 阻断');
+    expect(strip).toHaveTextContent('财报 正在等待数据确认');
+    expect(strip).toHaveTextContent('新闻 当前无法分析');
     expect(strip).toHaveTextContent('催化 降级');
     expect(strip).toHaveTextContent('估值 可用');
     expect(strip).toHaveTextContent('基本面/财报：2 项证据标签');

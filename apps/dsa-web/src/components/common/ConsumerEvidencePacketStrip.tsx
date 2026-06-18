@@ -1,6 +1,7 @@
 import type React from 'react';
 import { TerminalChip } from '../terminal/TerminalPrimitives';
 import { cn } from '../../utils/cn';
+import { getConsumerStatusLabel } from '../../utils/consumerStatusLabels';
 import type {
   SingleStockEvidencePacket,
   SingleStockEvidencePacketDomainEntry,
@@ -73,6 +74,9 @@ function statusVariant(status: string): React.ComponentProps<typeof TerminalChip
 }
 
 function statusLabel(status: string, locale: EvidencePacketLocale): string {
+  if (status === 'blocked' || status === 'pending') {
+    return getConsumerStatusLabel(status, locale) || STATUS_LABELS[status]?.[locale] || STATUS_LABELS.unknown[locale];
+  }
   return STATUS_LABELS[status]?.[locale] || STATUS_LABELS.unknown[locale];
 }
 

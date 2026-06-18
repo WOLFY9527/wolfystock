@@ -549,8 +549,8 @@ describe('research IA pages', () => {
           symbol: 'MSFT',
           title: 'Watchlist evidence follow-up',
           priorityTier: 'urgent_review',
-          whyQueued: ['Missing evidence needs review.', 'provider_timeout'],
-          evidenceUsed: ['Technicals available', 'sourceRefs'],
+          whyQueued: ['Evidence missing', 'Low-evidence filter active', 'provider_timeout'],
+          evidenceUsed: ['Evidence quality is acceptable', 'Relative strength is above the research threshold', 'sourceRefs'],
           evidenceGaps: ['benchmark_missing', 'reasonCodes'],
           freshness: { state: 'needs_review', lastReviewedAt: null },
           suggestedResearchPath: [
@@ -637,8 +637,10 @@ describe('research IA pages', () => {
     expect(watchlistGroup).toHaveTextContent('MSFT');
     expect(watchlistGroup).toHaveTextContent('Watchlist evidence follow-up');
     expect(watchlistGroup).toHaveTextContent('紧急复核');
-    expect(watchlistGroup).toHaveTextContent('Missing evidence needs review.');
-    expect(watchlistGroup).toHaveTextContent('Technicals available');
+    expect(watchlistGroup).toHaveTextContent('证据不足');
+    expect(watchlistGroup).toHaveTextContent('当前按低证据条件整理');
+    expect(watchlistGroup).toHaveTextContent('证据质量可供继续观察');
+    expect(watchlistGroup).toHaveTextContent('相对强弱已达到研究阈值');
     expect(watchlistGroup).toHaveTextContent('基准证据缺失');
     expect(watchlistGroup).toHaveTextContent('缺少基准或指数参照时，相对强弱和结构延续性只能作为线索。');
     expect(watchlistGroup).toHaveTextContent('先补充同周期基准表现，再比较标的与市场的相对变化。');
@@ -670,7 +672,7 @@ describe('research IA pages', () => {
     expect(healthSummary.textContent || '').not.toMatch(/sourceRefs|reasonCodes|provider_timeout|optional_news_timeout|benchmark_missing|price_history_stale|provider_runtime_trace|queueItemId|request[_\s-]?id|trace[_\s-]?id|raw|debug|runtime|cache|schemaVersion/i);
     expect(findConsumerRawLeakage(healthSummary.textContent || '')).toEqual([]);
     expect(healthSummary.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing/i);
-    expect(hub.textContent || '').not.toMatch(/sourceRefs|reasonCodes|provider_timeout|optional_news_timeout|benchmark_missing|price_history_stale|provider_runtime_trace|queueItemId|request[_\s-]?id|trace[_\s-]?id|raw|debug|runtime|cache|schemaVersion/i);
+    expect(hub.textContent || '').not.toMatch(/sourceRefs|reasonCodes|provider_timeout|optional_news_timeout|benchmark_missing|price_history_stale|provider_runtime_trace|queueItemId|request[_\s-]?id|trace[_\s-]?id|raw|debug|runtime|cache|schemaVersion|Evidence missing|Evidence quality is acceptable|Low-evidence filter active|Relative strength is above the research threshold/i);
     expect(findConsumerRawLeakage(hub.textContent || '')).toEqual([]);
     expect(hub.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing/i);
   });
@@ -1311,7 +1313,10 @@ describe('research IA pages', () => {
     expect(page).toHaveTextContent('基准状态');
     expect(page).toHaveTextContent('情景输出');
     expect(page).toHaveTextContent('Breadth participation weakens quickly under the selected stress.');
-    expect(screen.getByText('Gamma evidence status is unavailable, so gamma-sensitive conclusions remain capped.')).toBeInTheDocument();
+    expect(page).toHaveTextContent('数据暂不可用');
+    expect(page).toHaveTextContent('评分等级');
+    expect(page).toHaveTextContent('需要更高质量证据共同确认受压驱动是否同向变化。');
+    expect(page).toHaveTextContent('如果关键证据未随所选冲击同步变化，该情景框架会减弱。');
     expect(page).toHaveTextContent('仅观察');
     expect(page).toHaveTextContent('非决策级');
     expect(screen.getByRole('link', { name: '决策驾驶舱' })).toHaveAttribute('href', '/zh/market/decision-cockpit');
@@ -1324,7 +1329,7 @@ describe('research IA pages', () => {
       }),
     })));
     expect(page.textContent || '').not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议/);
-    expect(page.textContent || '').not.toMatch(/raw|debug|provider|schema/i);
+    expect(page.textContent || '').not.toMatch(/raw|debug|provider|schema|score-grade|score_grade|unavailable/i);
   });
 
   it('renders Scenario Lab with an unavailable scenario state when base evidence is insufficient', async () => {
@@ -1392,7 +1397,9 @@ describe('research IA pages', () => {
 
     const page = await screen.findByTestId('scenario-lab-page');
     expect(page).toHaveTextContent('当前情景暂不可生成');
-    expect(page).toHaveTextContent('Base regime evidence is missing or below the minimum driver coverage for scenario analysis.');
+    expect(page).toHaveTextContent('基准情景证据不足，当前无法生成情景结果。');
+    expect(page).toHaveTextContent('基准情景证据不足，暂不满足情景分析所需的最低驱动覆盖。');
+    expect(page.textContent || '').not.toMatch(/score-grade|score_grade|unavailable/i);
     await waitFor(() => expect(runScenarioLabMock).toHaveBeenCalledWith(expect.objectContaining({
       scenarioName: 'gammaUnavailable',
     })));

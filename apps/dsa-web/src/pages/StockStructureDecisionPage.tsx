@@ -25,6 +25,7 @@ import {
 import { EvidenceGapExplanationList } from '../components/research/EvidenceGapExplanation';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { cn } from '../utils/cn';
+import { getConsumerStatusLabel, mapConsumerStatusText } from '../utils/consumerStatusLabels';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 import {
@@ -142,6 +143,10 @@ function evidenceKindLabel(kind: string | null | undefined, language: 'zh' | 'en
 }
 
 function statusLabel(status: string | null | undefined, language: 'zh' | 'en'): string {
+  const consumerLabel = getConsumerStatusLabel(status, language);
+  if (consumerLabel) {
+    return consumerLabel;
+  }
   const normalized = String(status || '').toLowerCase();
   const labels: Record<string, { zh: string; en: string }> = {
     available: { zh: '可用', en: 'available' },
@@ -621,7 +626,7 @@ export default function StockStructureDecisionPage() {
                     },
                     {
                       label: locale === 'en' ? 'Data quality' : '数据质量',
-                      value: <StatusBadge status={toneFor(data.dataQuality.status)} label={data.dataQuality.status || '--'} size="sm" />,
+                      value: <StatusBadge status={toneFor(data.dataQuality.status)} label={statusLabel(data.dataQuality.status, locale)} size="sm" />,
                     },
                     {
                       label: locale === 'en' ? 'Period' : '周期',
@@ -710,7 +715,7 @@ export default function StockStructureDecisionPage() {
                         {
                           key: 'risk',
                           label: locale === 'en' ? 'Risk flags' : '风险标记',
-                          value: (data.researchNotes.riskFlags ?? []).join('；') || '--',
+                          value: (data.researchNotes.riskFlags ?? []).map((flag) => mapConsumerStatusText(flag, locale)).join('；') || '--',
                         },
                       ]}
                     />

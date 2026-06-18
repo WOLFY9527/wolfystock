@@ -25,6 +25,7 @@ import {
   type UnifiedResearchQueueResponse,
 } from '../api/researchRadar';
 import { useI18n } from '../contexts/UiLanguageContext';
+import { getConsumerStatusLabel, mapConsumerStatusText } from '../utils/consumerStatusLabels';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import { formatDateTime } from '../utils/format';
 import { createConsumerDataHealthSummary } from '../utils/consumerDataQualityViewModel';
@@ -70,6 +71,10 @@ const INTERNAL_DIAGNOSTIC_WORDS = /sourceRefs?|reasonCodes?|sourceRefId|request[
 function safeResearchQueueText(value: string | null | undefined, locale: 'zh' | 'en', fallback?: string): string | null {
   const raw = String(value || '').trim();
   if (!raw) return fallback ?? null;
+  const mapped = mapConsumerStatusText(raw, locale);
+  if (mapped !== raw) {
+    return mapped;
+  }
   if (ADVICE_OR_TRADE_WORDS.test(raw)) {
     return locale === 'en' ? 'Observation detail withheld.' : '观察细节已折叠。';
   }
@@ -116,6 +121,11 @@ function priorityTierTone(priorityTier: UnifiedResearchQueueItem['priorityTier']
   if (priorityTier === 'urgent_review') return 'warning';
   if (priorityTier === 'follow_up') return 'info';
   return 'unknown';
+}
+
+function consumerStatusValue(value: string | null | undefined, locale: 'zh' | 'en'): string {
+  const mapped = getConsumerStatusLabel(value, locale) || mapConsumerStatusText(value, locale);
+  return mapped || '--';
 }
 
 function freshnessLabel(state: UnifiedResearchQueueItem['freshness']['state'], locale: 'zh' | 'en'): string {
@@ -579,11 +589,11 @@ export default function ResearchRadarPage() {
                     },
                     {
                       label: locale === 'en' ? 'Data quality' : '数据质量',
-                      value: <StatusBadge status={toneFor(data.dataQuality?.status)} label={data.dataQuality?.status || '--'} size="sm" />,
+                      value: <StatusBadge status={toneFor(data.dataQuality?.status)} label={consumerStatusValue(data.dataQuality?.status, locale)} size="sm" />,
                     },
                     {
                       label: locale === 'en' ? 'Context fit' : '市场匹配',
-                      value: data.marketContextFit || '--',
+                      value: consumerStatusValue(data.marketContextFit, locale),
                     },
                   ]}
                 />
@@ -592,7 +602,7 @@ export default function ResearchRadarPage() {
                     {
                       key: 'queue-quality',
                       label: locale === 'en' ? 'Queue quality' : '队列质量',
-                      value: data.aggregateSummary.queueQuality || '--',
+                      value: consumerStatusValue(data.aggregateSummary.queueQuality, locale),
                     },
                     {
                       key: 'queue-size',
@@ -649,13 +659,13 @@ export default function ResearchRadarPage() {
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
                                 {item.priority ? <StatusBadge status={toneFor(item.priority)} label={item.priority} size="sm" /> : null}
-                                {item.researchBias ? <TerminalChip variant="info">{item.researchBias}</TerminalChip> : null}
+                                {item.researchBias ? <TerminalChip variant="info">{mapConsumerStatusText(item.researchBias, locale)}</TerminalChip> : null}
                               </div>
                             </div>
                             <div className="mt-3 flex flex-wrap gap-2">
                               {(item.riskFlags ?? []).length
                                 ? (item.riskFlags ?? []).map((flag, riskIndex) => (
-                                  <TerminalChip key={`${flag}-${riskIndex}`} variant="caution">{flag}</TerminalChip>
+                                  <TerminalChip key={`${flag}-${riskIndex}`} variant="caution">{mapConsumerStatusText(flag, locale)}</TerminalChip>
                                 ))
                                 : <TerminalChip variant="success">{locale === 'en' ? 'No explicit risk flag' : '暂无明确风险标记'}</TerminalChip>}
                             </div>

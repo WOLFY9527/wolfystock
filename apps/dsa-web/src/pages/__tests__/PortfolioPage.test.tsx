@@ -1097,6 +1097,30 @@ describe('PortfolioPage FX refresh', () => {
     expect(section.textContent || '').not.toMatch(/买入|卖出|下单|交易建议|投资建议|buy|sell|target price|stop loss|position sizing/i);
   });
 
+  it('replaces internal-looking account labels with a consumer-safe fallback while preserving portfolio rendering', async () => {
+    getAccounts.mockResolvedValue(makeAccounts([{ id: 1, name: 'audit-trace-acct' }]));
+    const snapshot = makeSnapshot({
+      includePosition: true,
+      fxStale: false,
+    });
+    snapshot.accounts[0].accountName = 'audit-trace-acct';
+    snapshot.analytics.exposure.byAccount[0].accountName = 'audit-trace-acct';
+    snapshot.portfolioAttribution.accountAttribution.topAccounts[0].accountName = 'audit-trace-acct';
+    getSnapshot.mockResolvedValue(snapshot);
+
+    render(
+      <UiLanguageProvider>
+        <PortfolioPage />
+      </UiLanguageProvider>,
+    );
+
+    await waitForInitialLoad();
+
+    const holdings = screen.getByTestId('portfolio-current-holdings-panel');
+    expect(holdings).toHaveTextContent('组合账户');
+    expect(holdings.textContent || '').not.toMatch(/audit-trace-acct/i);
+  });
+
   it('renders the bounded scenario risk panel and sends only advisory scenario payload fields', async () => {
     getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true, fxStale: false }));
 
