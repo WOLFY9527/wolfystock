@@ -112,6 +112,15 @@ export const formatDateTime = (value?: unknown, options: DateFormatOptions = {})
   hour12: false,
 });
 
+export const formatLongDate = (value?: unknown, options: DateFormatOptions = {}): string => formatDateLike(value, options, {
+  dateStyle: 'long',
+});
+
+export const formatLongDateTime = (value?: unknown, options: DateFormatOptions = {}): string => formatDateLike(value, options, {
+  dateStyle: 'long',
+  timeStyle: 'short',
+});
+
 export const formatNumber = (value?: unknown, digits = 2, options: NumberFormatOptions = {}): string =>
   formatNumberLike(value, { ...options, digits }, {
     minimumFractionDigits: digits,

@@ -31,6 +31,8 @@ const FAIL_CLOSED_READINESS: OptionsResearchReadiness = {
   nextEvidenceNeeded: ['补齐期权链、IV / Greeks 与流动性证据'],
 };
 
+const IV_GREEKS_LABEL = 'IV / 希腊值';
+
 type GateVariant = React.ComponentProps<typeof TerminalChip>['variant'];
 
 type GateItem = {
@@ -123,7 +125,7 @@ function summaryLine(readiness: OptionsResearchReadiness, rawReadiness?: Options
   );
   const parts: string[] = [];
   if (categories.has('authority') || readiness.providerAuthority !== 'scoreGradeAllowed') parts.push('授权');
-  if (categories.has('iv') || readiness.ivGreeksGate !== 'clear') parts.push('IV / Greeks');
+  if (categories.has('iv') || readiness.ivGreeksGate !== 'clear') parts.push(IV_GREEKS_LABEL);
   if (
     categories.has('liquidity')
     || categories.has('chain')
@@ -132,7 +134,7 @@ function summaryLine(readiness: OptionsResearchReadiness, rawReadiness?: Options
   ) parts.push('流动性');
   if (!parts.length && readiness.dataQualityTier !== 'live_usable') parts.push('数据完整性');
   if (parts.length === 3) {
-    return `当前仍受${parts[0]}、${parts[1]} 与${parts[2]}证据限制。`;
+    return `当前仍受${parts[0]}、${parts[1]}与${parts[2]}证据限制。`;
   }
   if (parts.length === 2) {
     return `当前仍受${parts[0]}与${parts[1]}证据限制。`;
@@ -143,7 +145,7 @@ function summaryLine(readiness: OptionsResearchReadiness, rawReadiness?: Options
 function humanizeNextEvidence(values: string[]): string {
   if (!values.length) return '下一步：继续保留只读观察边界。';
   if (values.some((value) => value.includes('期权链、IV / Greeks 与流动性证据'))) {
-    return '下一步：补齐期权链、IV / Greeks 与流动性证据。';
+    return `下一步：补齐期权链、${IV_GREEKS_LABEL}与流动性证据。`;
   }
   if (values.some((value) => value.includes('更高新鲜度'))) return '下一步：等待更高新鲜度链路。';
   const needsAuthority = values.some((value) => value.includes('provider authority') || value.includes('live chain'));
@@ -151,7 +153,7 @@ function humanizeNextEvidence(values: string[]): string {
   const needsLiquidity = values.some((value) => value.includes('OI/成交量') || value.includes('价差') || value.includes('流动性'));
   const items = uniqueStrings([
     needsAuthority ? '授权链路' : null,
-    needsIv ? 'IV / Greeks' : null,
+    needsIv ? IV_GREEKS_LABEL : null,
     needsLiquidity ? 'OI / 成交量与更紧价差' : null,
   ]);
   if (!items.length) return `下一步：${values[0].replace(/[。.]$/, '')}。`;
@@ -160,7 +162,7 @@ function humanizeNextEvidence(values: string[]): string {
 
 function disclosureReason(value: string): string {
   if (value.includes('provider') || value.includes('authority')) return '授权链路仍待验证';
-  if (value.includes('missing_iv') || value.includes('missing_greeks') || value.includes('greeks')) return 'IV / Greeks 仍不完整';
+  if (value.includes('missing_iv') || value.includes('missing_greeks') || value.includes('greeks')) return `${IV_GREEKS_LABEL}仍不完整`;
   if (value.includes('volume') || value.includes('open_interest')) return 'OI / 成交量证据不足';
   if (value.includes('spread')) return '买卖价差仍偏宽';
   if (value.includes('chain') || value.includes('contract') || value.includes('bid_ask')) return '期权链路仍不完整';
@@ -182,7 +184,7 @@ function buildGateItems(readiness: OptionsResearchReadiness): GateItem[] {
     { key: 'data-quality', label: '数据层级', value: dataQuality, variant: gateVariant(dataQuality) },
     { key: 'provider-authority', label: '授权级别', value: authority, variant: gateVariant(authority) },
     { key: 'liquidity', label: '流动性', value: liquidity, variant: gateVariant(liquidity) },
-    { key: 'iv-greeks', label: 'IV / Greeks', value: ivGreeks, variant: gateVariant(ivGreeks) },
+    { key: 'iv-greeks', label: IV_GREEKS_LABEL, value: ivGreeks, variant: gateVariant(ivGreeks) },
     { key: 'spread', label: '价差', value: spread, variant: gateVariant(spread) },
     { key: 'scenario-coverage', label: '情景覆盖', value: scenarioCoverage, variant: gateVariant(scenarioCoverage) },
     { key: 'decision-grade', label: '判断等级', value: decisionGrade, variant: gateVariant(decisionGrade) },

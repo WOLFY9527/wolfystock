@@ -577,7 +577,11 @@ describe('research IA pages', () => {
           priority: 'medium',
           researchBias: 'strengthContinuation',
           driverScores: { relativeStrength: 70 },
-          whyOnRadar: ['相对强弱改善'],
+          whyOnRadar: [
+            'Relative strength is above the research threshold',
+            'Evidence quality is acceptable',
+            'Evidence missing',
+          ],
           whatToVerify: ['观察延续性'],
           invalidationObservations: ['强弱回落'],
           riskFlags: [],
@@ -737,7 +741,7 @@ describe('research IA pages', () => {
     expect(marketGroup).toHaveTextContent('价格历史时效有限');
     expect(marketGroup).toHaveTextContent('部分证据暂不可用，因此当前结论只适合作为观察线索。');
     expect((await within(page).findAllByText('ALFA')).length).toBeGreaterThan(0);
-    expect(await within(page).findByText('相对强弱改善')).toBeInTheDocument();
+    expect(await within(page).findByText('相对强弱已达到研究阈值；证据质量可供继续观察；证据不足')).toBeInTheDocument();
     expect(within(page).getByRole('link', { name: '打开结构面板' })).toHaveAttribute('href', '/zh/stocks/ALFA/structure-decision');
     await waitFor(() => expect(getResearchRadarMock).toHaveBeenCalledWith({ market: 'us', profile: undefined, limit: 5 }));
     await waitFor(() => expect(getResearchQueueMock).toHaveBeenCalledWith({ market: 'us', profile: undefined, queueLimit: 5 }));
@@ -753,6 +757,7 @@ describe('research IA pages', () => {
     expect(findConsumerRawLeakage(healthSummary.textContent || '')).toEqual([]);
     expect(healthSummary.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing/i);
     expect(hub.textContent || '').not.toMatch(/sourceRefs|reasonCodes|provider_timeout|optional_news_timeout|benchmark_missing|price_history_stale|provider_runtime_trace|queueItemId|request[_\s-]?id|trace[_\s-]?id|raw|debug|runtime|cache|schemaVersion|Evidence missing|Evidence quality is acceptable|Low-evidence filter active|Relative strength is above the research threshold/i);
+    expect(page.textContent || '').not.toMatch(/Evidence missing|Evidence quality is acceptable|Low-evidence filter active|Relative strength is above the research threshold/i);
     expect(findConsumerRawLeakage(hub.textContent || '')).toEqual([]);
     expect(hub.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing/i);
   });

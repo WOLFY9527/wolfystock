@@ -654,11 +654,15 @@ export default function ResearchRadarPage() {
                               <div className="min-w-0">
                                 <div className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">{item.ticker || item.symbol || '--'}</div>
                                 <div className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
-                                  {(item.whyOnRadar ?? []).join('；') || (locale === 'en' ? 'Observation queue item.' : '观察队列条目。')}
+                                  {safeResearchQueueList(
+                                    item.whyOnRadar,
+                                    locale,
+                                    locale === 'en' ? 'Observation queue item.' : '观察队列条目。',
+                                  ).join(locale === 'en' ? '; ' : '；')}
                                 </div>
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
-                                {item.priority ? <StatusBadge status={toneFor(item.priority)} label={item.priority} size="sm" /> : null}
+                                {item.priority ? <StatusBadge status={toneFor(item.priority)} label={consumerStatusValue(item.priority, locale)} size="sm" /> : null}
                                 {item.researchBias ? <TerminalChip variant="info">{mapConsumerStatusText(item.researchBias, locale)}</TerminalChip> : null}
                               </div>
                             </div>

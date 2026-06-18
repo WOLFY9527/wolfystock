@@ -668,6 +668,9 @@ describe('OptionsLabPage', () => {
     expect(within(commandArea).getByLabelText('标的代码')).toHaveValue('TEM');
     expect(within(commandArea).getByRole('button', { name: '刷新情景' })).toHaveAttribute('data-terminal-primitive', 'button');
     expect(within(commandArea).getByLabelText('到期日')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(commandArea).getByRole('option', { name: '2026年6月19日 · 距到期 44 天' })).toBeInTheDocument();
+    });
     expect(within(commandArea).getByText('上行情景假设')).toBeInTheDocument();
     expect(within(commandArea).getByText('下行情景假设')).toBeInTheDocument();
     expect(within(commandArea).getByText('区间情景')).toBeInTheDocument();
@@ -682,14 +685,16 @@ describe('OptionsLabPage', () => {
       expect(productHero).toHaveTextContent(WAITING_STATE_LABEL);
       expect(productHero).toHaveTextContent('有限置信度');
       expect(productHero).toHaveTextContent('期权数据暂不可用，情景分析已暂停。');
-      expect(productHero).toHaveTextContent('最后更新：');
+      expect(productHero).toHaveTextContent('最后更新：2026年5月6日 17:45');
     });
     const dataQualityBanner = within(productHero).getByTestId('options-lab-data-quality-banner');
     expect(dataQualityBanner).toHaveTextContent('仅供观察');
     expect(dataQualityBanner).toHaveTextContent('当前不是实时期权链');
-    expect(dataQualityBanner).toHaveTextContent('最后更新：');
+    expect(dataQualityBanner).toHaveTextContent('最后更新：2026年5月6日 17:45');
     expect(dataQualityBanner).toHaveTextContent('不形成可用于判断的结论');
     expect(dataQualityBanner.textContent || '').not.toMatch(/ready_fixture_only|missing_gamma|_blocked|_gate|undefined|null|NaN/i);
+    expect(document.body.textContent || '').not.toContain('2026-05-06T09:45:00Z');
+    expect(document.body.textContent || '').not.toContain('2026-05-06T09:45:00-04:00');
     expect(screen.getByTestId('options-lab-research-readiness-strip')).toHaveTextContent('研究就绪度');
     expect(screen.getByTestId('options-lab-research-readiness-strip')).toHaveTextContent(/研究结论受限|仅观察|等待证据更新/);
     expect(productHero).toHaveTextContent('当前主任务');
@@ -732,10 +737,10 @@ describe('OptionsLabPage', () => {
     const section = await screen.findByTestId('options-lab-strategy-comparison');
     expect(within(section).getAllByText('观察结构样例').length).toBeGreaterThan(0);
     await waitFor(() => {
-      expect(within(section).getByText(/专业结构：看涨期权多头 · Call 多头/)).toBeInTheDocument();
-      expect(within(section).getByText(/专业结构：看跌期权多头 · Put 多头/)).toBeInTheDocument();
-      expect(within(section).getByText(/专业结构：牛市看涨价差 · Call 借方价差/)).toBeInTheDocument();
-      expect(within(section).getByText(/专业结构：熊市看跌价差 · Put 借方价差/)).toBeInTheDocument();
+      expect(within(section).getByText(/专业结构：看涨期权多头 · 看涨 Call 多头/)).toBeInTheDocument();
+      expect(within(section).getByText(/专业结构：看跌期权多头 · 看跌 Put 多头/)).toBeInTheDocument();
+      expect(within(section).getByText(/专业结构：牛市看涨价差 · 看涨 Call 借方价差/)).toBeInTheDocument();
+      expect(within(section).getByText(/专业结构：熊市看跌价差 · 看跌 Put 借方价差/)).toBeInTheDocument();
     });
     ['状态', '最大亏损', '情景上沿', '盈亏平衡', '假设价格下情景估算', '核心原因'].forEach((label) => {
       expect(within(section).getAllByText(label).length).toBeGreaterThan(0);
@@ -1229,15 +1234,15 @@ describe('OptionsLabPage', () => {
     expect(summary).toHaveTextContent('数据层级：演示/延迟');
     expect(summary).toHaveTextContent('判断等级：未通过');
     expect(summary).toHaveTextContent('执行边界：只读无执行');
-    expect(summary).toHaveTextContent('当前仍受授权、IV / Greeks 与流动性证据限制。');
-    expect(summary).toHaveTextContent('下一步：补齐授权链路、IV / Greeks、OI / 成交量与更紧价差证据。');
+    expect(summary).toHaveTextContent('当前仍受授权、IV / 希腊值与流动性证据限制。');
+    expect(summary).toHaveTextContent('下一步：补齐授权链路、IV / 希腊值、OI / 成交量与更紧价差证据。');
     expect(within(summary).getByRole('button', { name: /展开 完整门控与补证/ })).toHaveAttribute('aria-expanded', 'false');
     await act(async () => {
       within(summary).getByRole('button', { name: /展开 完整门控与补证/ }).click();
     });
     expect(summary).toHaveTextContent('授权级别：观察级');
     expect(summary).toHaveTextContent('流动性：人工复核');
-    expect(summary).toHaveTextContent('IV / Greeks：已阻断');
+    expect(summary).toHaveTextContent('IV / 希腊值：已阻断');
     expect(summary).toHaveTextContent('价差：人工复核');
     expect(summary).toHaveTextContent('情景覆盖：单合约');
     expect(summary.textContent || '').not.toContain('observationOnly');
@@ -1390,13 +1395,13 @@ describe('OptionsLabPage', () => {
     expect(summary).toHaveTextContent('判断等级：未通过');
     expect(summary).toHaveTextContent('执行边界：只读无执行');
     expect(summary).toHaveTextContent('当前缺少就绪度回执，先按证据不足处理。');
-    expect(summary).toHaveTextContent('下一步：补齐期权链、IV / Greeks 与流动性证据。');
+    expect(summary).toHaveTextContent('下一步：补齐期权链、IV / 希腊值与流动性证据。');
     await act(async () => {
       within(summary).getByRole('button', { name: /展开 完整门控与补证/ }).click();
     });
     expect(summary).toHaveTextContent('授权级别：待补证');
     expect(summary).toHaveTextContent('流动性：已阻断');
-    expect(summary).toHaveTextContent('IV / Greeks：已阻断');
+    expect(summary).toHaveTextContent('IV / 希腊值：已阻断');
     expect(summary).toHaveTextContent('价差：已阻断');
     expect(summary).toHaveTextContent('情景覆盖：缺少链路');
   });
@@ -1427,7 +1432,7 @@ describe('OptionsLabPage', () => {
     });
     expect(summary).toHaveTextContent('授权级别：授权链路');
     expect(summary).toHaveTextContent('流动性：已通过');
-    expect(summary).toHaveTextContent('IV / Greeks：人工复核');
+    expect(summary).toHaveTextContent('IV / 希腊值：人工复核');
     expect(summary).toHaveTextContent('价差：已通过');
     expect(summary).toHaveTextContent('情景覆盖：单合约');
     expect(summary.textContent || '').not.toContain('scoreGradeAllowed');
@@ -2338,7 +2343,7 @@ describe('OptionsLabPage', () => {
     expect((await screen.findAllByText('情景分析台')).length).toBeGreaterThan(0);
     const section = await screen.findByTestId('options-lab-strategy-comparison');
     await waitFor(() => {
-      expect(within(section).getByText(/专业结构：看涨期权多头 · Call 多头/)).toBeInTheDocument();
+      expect(within(section).getByText(/专业结构：看涨期权多头 · 看涨 Call 多头/)).toBeInTheDocument();
     });
     expect(document.body.textContent || '').not.toContain('TypeError');
     expect(document.body.textContent || '').not.toContain('stack');
@@ -2752,7 +2757,7 @@ describe('OptionsLabPage', () => {
     const callsMobileList = within(callsTable).getByTestId('options-lab-calls-table-mobile-list');
     const callCard = within(callsMobileList).getByTestId('options-lab-calls-table-mobile-card-TEM260619C00055000');
 
-    expect(callCard).toHaveTextContent('Greeks');
+    expect(callCard).toHaveTextContent('希腊值');
     expect(callCard).toHaveTextContent('敏感度暂未提供');
     expect(callCard).toHaveTextContent('演示链未提供真实敏感度数值');
     expect(callCard).not.toHaveTextContent('演示待补');

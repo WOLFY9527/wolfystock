@@ -43,7 +43,7 @@ import {
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { cn } from '../utils/cn';
 import { normalizeOptionsEvidence } from '../utils/evidenceDisplay';
-import { formatNumber, formatPercent } from '../utils/format';
+import { formatLongDate, formatLongDateTime, formatNumber, formatPercent } from '../utils/format';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 
 type LoadState = {
@@ -118,6 +118,7 @@ const OPTIONS_OBSERVE_ONLY_COPY = '仅供观察，不作为结论依据';
 const OPTIONS_DEMO_BOUNDARY_COPY = '演示数据：当前数据延迟，仅用于界面与情景验证，不作为结论依据。';
 const OPTIONS_DEMO_GREEKS_PLACEHOLDER = '敏感度暂未提供';
 const OPTIONS_DEMO_GREEKS_EXPLANATION = '演示链未提供真实敏感度数值，仅保留结构与风险边界。';
+const OPTIONS_IV_GREEKS_LABEL = 'IV / 希腊值';
 
 const fieldShellClass = 'group flex min-h-[4rem] min-w-0 flex-col justify-center gap-1.5 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-input)_92%,transparent)] px-3 py-2 transition-colors focus-within:border-[color:var(--wolfy-accent)]';
 const fieldClass = 'h-6 w-full border-0 bg-transparent p-0 font-mono text-sm text-[color:var(--wolfy-text-primary)] outline-none placeholder:text-[color:var(--wolfy-text-muted)]';
@@ -202,10 +203,10 @@ function limitationLabel(value: string): string {
 
 function strategyLabel(value: OptionsStrategyType): string {
   const labels: Record<OptionsStrategyType, string> = {
-    long_call: 'Call 多头',
-    long_put: 'Put 多头',
-    bull_call_spread: 'Call 借方价差',
-    bear_put_spread: 'Put 借方价差',
+    long_call: '看涨 Call 多头',
+    long_put: '看跌 Put 多头',
+    bull_call_spread: '看涨 Call 借方价差',
+    bear_put_spread: '看跌 Put 借方价差',
   };
   return labels[value];
 }
@@ -451,9 +452,19 @@ function underlyingContextLine(summary: OptionsUnderlyingSummaryResponse | null,
 
 function expectedMoveSourceLabel(value?: string | null): string {
   if (value === 'straddle_mid') return '平值跨式中间价';
-  if (value === 'iv_dte') return 'IV / DTE';
+  if (value === 'iv_dte') return 'IV / 剩余天数';
   if (value === 'unavailable') return '不可用';
   return '--';
+}
+
+function formatOptionsDate(value?: string | null): string {
+  const formatted = formatLongDate(value, { locale: 'zh-CN' });
+  return formatted === '--' ? '--' : formatted;
+}
+
+function formatOptionsDateTime(value?: string | null): string {
+  const formatted = formatLongDateTime(value, { locale: 'zh-CN' });
+  return formatted === '--' ? '--' : formatted;
 }
 
 function scenarioFrameStateLabel(value?: string | null): { label: string; tone: 'good' | 'warn' | 'risk' | 'info' } {
@@ -617,7 +628,7 @@ function buildScenarioEvidenceView(frame?: OptionsConsumerScenarioFrame | null):
     chainQuality: scenarioChainQualityLine(frame),
     gateChips: [
       { label: '流动性', value: scenarioGateLabel(frame.liquidityGate), tone: frame.liquidityGate === 'clear' ? 'good' : frame.liquidityGate === 'blocked' ? 'risk' : 'warn' },
-      { label: 'IV / Greeks', value: scenarioGateLabel(frame.ivGreeksGate), tone: frame.ivGreeksGate === 'clear' ? 'good' : frame.ivGreeksGate === 'blocked' ? 'risk' : 'warn' },
+      { label: OPTIONS_IV_GREEKS_LABEL, value: scenarioGateLabel(frame.ivGreeksGate), tone: frame.ivGreeksGate === 'clear' ? 'good' : frame.ivGreeksGate === 'blocked' ? 'risk' : 'warn' },
       { label: '价差', value: scenarioGateLabel(frame.spreadGate), tone: frame.spreadGate === 'clear' ? 'good' : frame.spreadGate === 'blocked' ? 'risk' : 'warn' },
     ],
     payoffLines,
@@ -740,7 +751,9 @@ type ConsumerAvailabilitySummary = {
 };
 
 function lastUpdatedLabel(value?: string | null): string {
-  return value ? `最后更新：${value}` : '等待更新';
+  if (!value) return '等待更新';
+  const formatted = formatOptionsDateTime(value);
+  return formatted === '--' ? '等待更新' : `最后更新：${formatted}`;
 }
 
 function consumerFreshnessLabel(
@@ -1543,7 +1556,7 @@ const AssumptionPanel: React.FC<{
                   <option value={selectedExpiration}>暂无可用到期日</option>
                 ) : expirations.map((expiration) => (
                   <option key={expiration.date} value={expiration.date}>
-                    {expiration.date} · {expiration.dte} DTE
+                    {formatOptionsDate(expiration.date)} · 距到期 {expiration.dte} 天
                   </option>
                 ))}
               </select>
@@ -1863,7 +1876,7 @@ const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId:
                         />
                       ))
                     ) : (
-                      <ChainMetric label="Greeks" value={OPTIONS_DEMO_GREEKS_PLACEHOLDER} className="col-span-2" />
+                      <ChainMetric label="希腊值" value={OPTIONS_DEMO_GREEKS_PLACEHOLDER} className="col-span-2" />
                     )}
                   </div>
                   {!hasGreekValue ? (
@@ -2270,7 +2283,7 @@ const StructureSignalPacketPanel: React.FC<{
             <Pill tone={missingGreeksCount > 0 ? 'warn' : 'good'}>
               敏感度缺口 {number(missingGreeksCount)}
             </Pill>
-            <Pill tone="neutral">最近 DTE {number(expiration?.nearestDte)}</Pill>
+            <Pill tone="neutral">最近距到期 {number(expiration?.nearestDte)} 天</Pill>
           </div>
         </div>
         <div className={cn(innerBlockClass, 'p-4')}>
@@ -2549,7 +2562,7 @@ function liquiditySensitivityNote(decision: OptionsDecisionResponse | null): str
     return '价差偏宽或成交深度不足时，名义上沿不等于实际可实现结果，先观察定义风险结构。';
   }
   if (hasSensitivity) {
-    return 'IV 分位或 Greeks 不完整时，只能看方向边界，不能把到期前收益当成稳定结论。';
+    return 'IV 分位或敏感度不完整时，只能看方向边界，不能把到期前收益当成稳定结论。';
   }
   return '优先同时看价差、OI、IV 与 Theta，再决定是否保留研究记录。';
 }
