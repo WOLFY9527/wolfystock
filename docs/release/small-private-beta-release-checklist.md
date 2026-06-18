@@ -164,16 +164,27 @@ Use before pushing a batch of related beta-hardening commits.
 
 - Require a clean tree.
 - Validate branch diff against `origin/main`.
+- Run `npm --prefix apps/dsa-web run test:post-uat-consumer-smoke` as the
+  default non-blocking consumer regression check before a small beta/UAT
+  candidate when the change touched consumer-safe copy, raw diagnostic
+  suppression, route/error fallback, or empty-state recovery.
 - Run all impacted route-family focused tests.
 - Add frontend typecheck/build when frontend source changed.
 - Escalate to `./scripts/ci_gate.sh` for backend auth/API, shared frontend
   infrastructure, workflow/lock changes, or protected-domain uncertainty.
+- Do not treat this smoke command as a replacement for full route evidence,
+  browser/UAT checks, or `./scripts/ci_gate.sh` when escalation conditions
+  apply.
 
 ### Release / UAT Gate
 
 Use for the private beta candidate itself.
 
 - Require a clean release candidate and recorded HEAD.
+- Run `npm --prefix apps/dsa-web run test:post-uat-consumer-smoke` before the
+  broader operator UAT sweep so the candidate gets a fast consumer-only
+  regression pass for raw leakage, no-advice wording, route/error fallback,
+  and empty-state recovery.
 - Run full release/UAT route evidence for guest, auth, product, and admin
   boundary.
 - Verify no raw leakage, no advice leakage, no console errors, no unexpected

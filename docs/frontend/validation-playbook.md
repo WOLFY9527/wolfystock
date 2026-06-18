@@ -107,6 +107,24 @@ Vitest and covers the recent raw-diagnostic, no-advice, route/error fallback,
 and empty-state regression classes without pulling Playwright into the default
 path.
 
+Use it as the default pre-beta/pre-UAT quick check for consumer-facing copy,
+route fallback, and safe-empty-state changes, or after a UAT-driven fix in that
+same surface area.
+
+What it covers:
+
+- raw diagnostic leakage in default-visible consumer UI;
+- no-advice / consumer-safe wording regressions;
+- route-level error and fallback copy regressions;
+- empty-state recovery copy and guardrail regressions.
+
+What it does not cover:
+
+- authenticated/admin flows or backend/API/provider behavior;
+- browser-only failures such as console errors, network failures, or viewport
+  overflow;
+- release-grade confidence for shared/high-risk frontend changes.
+
 ## Standard Playwright Invocation
 
 When frontend E2E validation is needed, run Playwright through the app-local
