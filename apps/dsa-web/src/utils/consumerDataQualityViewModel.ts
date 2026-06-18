@@ -38,6 +38,49 @@ export interface ConsumerDataQualityViewModel {
   isActionableForUser: boolean;
 }
 
+export type ConsumerDataHealthState =
+  | 'healthy'
+  | 'partial'
+  | 'stale'
+  | 'degraded'
+  | 'unavailable';
+
+export type ConsumerDataHealthCategory =
+  | 'marketBreadth'
+  | 'themeRotation'
+  | 'stockEvidence'
+  | 'peerComparison'
+  | 'portfolioExposure'
+  | 'optionsStructure'
+  | 'researchQueueFreshness';
+
+export type ConsumerDataHealthLocale = 'zh' | 'en';
+
+export interface ConsumerDataHealthSummaryInputItem {
+  category: ConsumerDataHealthCategory;
+  quality?: ConsumerDataQualityInput | null;
+}
+
+export interface ConsumerDataHealthSummaryInput {
+  locale?: ConsumerDataHealthLocale;
+  categories: ConsumerDataHealthSummaryInputItem[];
+}
+
+export interface ConsumerDataHealthSummaryItem {
+  category: ConsumerDataHealthCategory;
+  state: ConsumerDataHealthState;
+  label: string;
+  stateLabel: string;
+  whyItMatters: string;
+  confidenceEffect: string;
+  nextResearchStep: string;
+}
+
+export interface ConsumerDataHealthSummary {
+  overallState: ConsumerDataHealthState;
+  items: ConsumerDataHealthSummaryItem[];
+}
+
 type ConsumerDataQualityFacts = {
   asOf?: string;
   updatedAt?: string;
@@ -323,4 +366,210 @@ export function createConsumerDataQualityViewModel(
   }
 
   return viewModel;
+}
+
+type ConsumerDataHealthCategoryCopy = Record<
+  ConsumerDataHealthCategory,
+  Record<ConsumerDataHealthLocale, {
+    label: string;
+    whyItMatters: string;
+    nextStep: string;
+  }>
+>;
+
+const DATA_HEALTH_CATEGORY_COPY: ConsumerDataHealthCategoryCopy = {
+  marketBreadth: {
+    zh: {
+      label: '市场广度',
+      whyItMatters: '广度影响市场背景和参与度判断。',
+      nextStep: '继续观察广度参与是否稳定。',
+    },
+    en: {
+      label: 'Market breadth',
+      whyItMatters: 'Breadth shapes market context and participation reads.',
+      nextStep: 'Keep checking whether participation remains stable.',
+    },
+  },
+  themeRotation: {
+    zh: {
+      label: '主题轮动',
+      whyItMatters: '轮动质量影响主题延续性的解读。',
+      nextStep: '复核主题是否仍由多组证据支持。',
+    },
+    en: {
+      label: 'Theme rotation',
+      whyItMatters: 'Rotation quality affects how theme durability is interpreted.',
+      nextStep: 'Review whether themes remain supported by several evidence groups.',
+    },
+  },
+  stockEvidence: {
+    zh: {
+      label: '个股证据',
+      whyItMatters: '个股证据决定结构解读是否完整。',
+      nextStep: '补齐缺口后再扩大结论范围。',
+    },
+    en: {
+      label: 'Stock evidence',
+      whyItMatters: 'Stock evidence determines whether structure reads are complete.',
+      nextStep: 'Fill evidence gaps before widening the conclusion.',
+    },
+  },
+  peerComparison: {
+    zh: {
+      label: '同业比较',
+      whyItMatters: '同业证据帮助区分个股变化和板块同步。',
+      nextStep: '复核同业样本和对比窗口。',
+    },
+    en: {
+      label: 'Peer comparison',
+      whyItMatters: 'Peer evidence helps separate symbol-specific moves from group behavior.',
+      nextStep: 'Review peer samples and the comparison window.',
+    },
+  },
+  portfolioExposure: {
+    zh: {
+      label: '组合暴露',
+      whyItMatters: '组合暴露影响风险归因和集中度观察。',
+      nextStep: '等组合暴露证据恢复后再解读影响。',
+    },
+    en: {
+      label: 'Portfolio exposure',
+      whyItMatters: 'Portfolio exposure affects risk attribution and concentration reads.',
+      nextStep: 'Wait for exposure evidence before interpreting portfolio impact.',
+    },
+  },
+  optionsStructure: {
+    zh: {
+      label: '期权结构',
+      whyItMatters: '期权结构影响波动和 gamma 观察边界。',
+      nextStep: '仅在结构证据恢复后阅读期权语境。',
+    },
+    en: {
+      label: 'Options structure',
+      whyItMatters: 'Options structure affects volatility and gamma observation boundaries.',
+      nextStep: 'Read options context only after structure evidence recovers.',
+    },
+  },
+  researchQueueFreshness: {
+    zh: {
+      label: '研究队列时效',
+      whyItMatters: '队列时效影响后续复核顺序。',
+      nextStep: '先复核需要更新的研究条目。',
+    },
+    en: {
+      label: 'Research queue freshness',
+      whyItMatters: 'Queue freshness affects follow-up review order.',
+      nextStep: 'Review items that need updates first.',
+    },
+  },
+};
+
+const DATA_HEALTH_STATE_LABELS: Record<ConsumerDataHealthState, Record<ConsumerDataHealthLocale, string>> = {
+  healthy: { zh: '健康', en: 'Healthy' },
+  partial: { zh: '部分可用', en: 'Partial' },
+  stale: { zh: '已延迟', en: 'Stale' },
+  degraded: { zh: '降级', en: 'Degraded' },
+  unavailable: { zh: '不可用', en: 'Unavailable' },
+};
+
+const DATA_HEALTH_CONFIDENCE_EFFECT: Record<ConsumerDataHealthState, Record<ConsumerDataHealthLocale, string>> = {
+  healthy: {
+    zh: '置信度可按正常研究边界阅读。',
+    en: 'Confidence can be read within the normal research boundary.',
+  },
+  partial: {
+    zh: '置信度需要打折，避免过度精确解读。',
+    en: 'Confidence should be discounted; avoid over-precise reads.',
+  },
+  stale: {
+    zh: '置信度受时效影响，只适合观察趋势。',
+    en: 'Confidence is freshness-limited; use it for trend observation only.',
+  },
+  degraded: {
+    zh: '置信度受证据质量限制，需要交叉复核。',
+    en: 'Confidence is limited by evidence quality and needs cross-checking.',
+  },
+  unavailable: {
+    zh: '置信度不足，当前不应扩大结论。',
+    en: 'Confidence is insufficient; do not widen the conclusion.',
+  },
+};
+
+const HEALTH_STATE_RANK: Record<ConsumerDataHealthState, number> = {
+  healthy: 0,
+  partial: 1,
+  stale: 2,
+  degraded: 3,
+  unavailable: 4,
+};
+
+function resolveHealthState(view: ConsumerDataQualityViewModel): ConsumerDataHealthState {
+  if (view.status === 'UNAVAILABLE') return 'unavailable';
+  if (view.status === 'PARTIAL') {
+    return 'partial';
+  }
+  if (view.status === 'DELAYED' || view.freshnessCategory === 'STALE' || view.freshnessCategory === 'DELAYED') {
+    return 'stale';
+  }
+  if (
+    view.status === 'INSUFFICIENT'
+    || view.status === 'PAUSED'
+    || view.status === 'OBSERVATION_ONLY'
+    || view.status === 'UPDATING'
+    || view.confidenceCategory === 'LOW'
+    || view.confidenceCategory === 'LIMITED'
+  ) {
+    return 'degraded';
+  }
+  return 'healthy';
+}
+
+function compareHealthState(left: ConsumerDataHealthState, right: ConsumerDataHealthState): ConsumerDataHealthState {
+  return HEALTH_STATE_RANK[left] >= HEALTH_STATE_RANK[right] ? left : right;
+}
+
+function resolveHealthStateFromInput(
+  input: ConsumerDataQualityInput | null | undefined,
+  view: ConsumerDataQualityViewModel,
+): ConsumerDataHealthState {
+  const status = normalizeText(input?.status ?? input?.state);
+  const freshness = normalizeText(input?.freshness ?? input?.freshnessState);
+
+  if (['ready', 'available', 'healthy', 'current', 'complete'].includes(status)) {
+    return freshness === 'stale' || freshness === 'delayed' ? 'stale' : 'healthy';
+  }
+  if (['partial', 'mixed', 'thin'].includes(status)) return 'partial';
+  if (['stale', 'needs_review', 'delayed'].includes(status) || ['stale', 'delayed'].includes(freshness)) return 'stale';
+  if (['degraded', 'limited', 'updating', 'refreshing'].includes(status)) return 'degraded';
+  if (['unavailable', 'missing', 'blocked', 'no_evidence', 'empty', 'error'].includes(status)) return 'unavailable';
+
+  return resolveHealthState(view);
+}
+
+export function createConsumerDataHealthSummary(
+  input: ConsumerDataHealthSummaryInput,
+): ConsumerDataHealthSummary {
+  const locale = input.locale === 'en' ? 'en' : 'zh';
+  const items = input.categories.map((item) => {
+    const view = createConsumerDataQualityViewModel(item.quality ?? {});
+    const state = resolveHealthStateFromInput(item.quality, view);
+    const categoryCopy = DATA_HEALTH_CATEGORY_COPY[item.category][locale];
+    return {
+      category: item.category,
+      state,
+      label: categoryCopy.label,
+      stateLabel: DATA_HEALTH_STATE_LABELS[state][locale],
+      whyItMatters: categoryCopy.whyItMatters,
+      confidenceEffect: DATA_HEALTH_CONFIDENCE_EFFECT[state][locale],
+      nextResearchStep: categoryCopy.nextStep,
+    };
+  });
+
+  return {
+    overallState: items.reduce<ConsumerDataHealthState>(
+      (current, item) => compareHealthState(current, item.state),
+      'healthy',
+    ),
+    items,
+  };
 }

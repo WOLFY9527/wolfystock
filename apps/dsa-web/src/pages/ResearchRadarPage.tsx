@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
+import ConsumerDataHealthSummaryPanel from '../components/common/ConsumerDataHealthSummaryPanel';
 import { ConsumerOnboardingCtaPanel } from '../components/common/ConsumerOnboardingCtaPanel';
 import { ConsumerResearchEmptyState } from '../components/common/ConsumerResearchEmptyState';
 import { buildConsumerResearchEmptyState } from '../components/common/researchEmptyStateModel';
@@ -26,6 +27,7 @@ import {
 import { useI18n } from '../contexts/UiLanguageContext';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import { formatDateTime } from '../utils/format';
+import { createConsumerDataHealthSummary } from '../utils/consumerDataQualityViewModel';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 import {
   RoughBulletList,
@@ -145,6 +147,63 @@ function isUnifiedResearchQueueDisplaySafe(data: UnifiedResearchQueueResponse | 
     && data.dataQuality?.failClosed === true
     && data.researchQueue.every((item) => item.observationOnly === true),
   );
+}
+
+function dataHealthQualityFromStatus(value: string | null | undefined) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (['ready', 'available', 'healthy', 'current', 'complete'].includes(normalized)) {
+    return { status: 'ready', freshness: 'fresh' };
+  }
+  if (['partial', 'mixed', 'thin'].includes(normalized)) {
+    return { status: 'partial', isPartial: true };
+  }
+  if (['stale', 'needs_review', 'delayed'].includes(normalized)) {
+    return { status: 'stale', freshness: 'stale', isStale: true };
+  }
+  if (['unavailable', 'missing', 'blocked', 'no_evidence', 'empty', 'error'].includes(normalized)) {
+    return { status: 'missing', isUnavailable: true };
+  }
+  return { status: 'degraded' };
+}
+
+function buildResearchRadarDataHealthSummary({
+  data,
+  unifiedQueue,
+  locale,
+}: {
+  data: ResearchRadarResponse | null;
+  unifiedQueue: UnifiedResearchQueueResponse | null;
+  locale: 'zh' | 'en';
+}) {
+  const queueFreshnessStates = unifiedQueue?.researchQueue.map((item) => item.freshness.state) ?? [];
+  const queueFreshnessQuality = !unifiedQueue
+    ? { status: 'missing', isUnavailable: true }
+    : queueFreshnessStates.includes('unavailable')
+      ? { status: 'missing', isUnavailable: true }
+      : queueFreshnessStates.some((state) => state === 'needs_review' || state === 'unknown') || (unifiedQueue.evidenceGaps.length > 0)
+        ? { status: 'stale', freshness: 'stale', isStale: true }
+        : { status: 'ready', freshness: 'fresh' };
+  const stockEvidenceQuality = (unifiedQueue?.evidenceGaps.length ?? data?.evidenceGaps.length ?? 0) > 0
+    ? { status: 'partial', isPartial: true }
+    : dataHealthQualityFromStatus(data?.aggregateSummary.queueQuality || unifiedQueue?.dataQuality.state || data?.dataQuality?.status);
+
+  return createConsumerDataHealthSummary({
+    locale,
+    categories: [
+      {
+        category: 'marketBreadth',
+        quality: dataHealthQualityFromStatus(data?.dataQuality?.status),
+      },
+      {
+        category: 'stockEvidence',
+        quality: stockEvidenceQuality,
+      },
+      {
+        category: 'researchQueueFreshness',
+        quality: queueFreshnessQuality,
+      },
+    ],
+  });
 }
 
 function safeResearchRoute(route: string | null | undefined): string | null {
@@ -419,6 +478,10 @@ export default function ResearchRadarPage() {
   const queueItems = useMemo(() => data?.researchQueue ?? [], [data?.researchQueue]);
   const unifiedQueueSize = unifiedQueue?.aggregateSummary.itemCount ?? unifiedQueue?.researchQueue.length ?? queueItems.length;
   const showOnboardingCta = Boolean(data && (queueItems.length === 0 || data.emptyStateActions.length || data.starterResearchWorkflow.length));
+  const dataHealthSummary = useMemo(
+    () => buildResearchRadarDataHealthSummary({ data, unifiedQueue, locale }),
+    [data, unifiedQueue, locale],
+  );
   const firstItemScores = useMemo(
     () => Object.entries(queueItems[0]?.driverScores ?? {})
       .sort(([, left], [, right]) => (right ?? 0) - (left ?? 0))
@@ -543,6 +606,13 @@ export default function ResearchRadarPage() {
                     },
                   ]}
                 />
+                <div className="p-3 pb-0">
+                  <ConsumerDataHealthSummaryPanel
+                    summary={dataHealthSummary}
+                    title={locale === 'en' ? 'Data health' : '数据健康'}
+                    testId="research-radar-data-health-summary"
+                  />
+                </div>
                 <div className="grid gap-3 p-3 md:grid-cols-2">
                   {showOnboardingCta && data ? (
                     <ConsumerOnboardingCtaPanel

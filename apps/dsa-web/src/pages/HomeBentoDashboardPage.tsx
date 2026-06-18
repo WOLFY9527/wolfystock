@@ -32,6 +32,7 @@ import {
 import { Button } from '../components/common/Button';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { Drawer } from '../components/common/Drawer';
+import ConsumerDataHealthSummaryPanel from '../components/common/ConsumerDataHealthSummaryPanel';
 import ConsumerEvidenceCoverageStrip from '../components/common/ConsumerEvidenceCoverageStrip';
 import ConsumerEvidencePacketStrip from '../components/common/ConsumerEvidencePacketStrip';
 import PeerCorrelationSnapshotBlock from '../components/common/PeerCorrelationSnapshotBlock';
@@ -75,6 +76,7 @@ import {
 import { cn } from '../utils/cn';
 import { getToneColor } from '../utils/marketColors';
 import { createPublicAnalysisFallbackPreview } from '../utils/publicAnalysisFallback';
+import { createConsumerDataHealthSummary } from '../utils/consumerDataQualityViewModel';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import { resolveHomeDashboardSelection } from './homeDashboardSelection';
@@ -1536,6 +1538,54 @@ function homeResearchPacketEvidencePacketStatuses(packet?: SingleStockEvidencePa
   ].map(normalizeHomeResearchPacketStatus);
 }
 
+function hasHomeResearchPacketStatus(statuses: string[], values: string[]): boolean {
+  return statuses.some((status) => values.includes(status));
+}
+
+function buildHomeDataHealthSummary(
+  locale: DashboardLocale,
+  evidenceCoverageFrame: AnalysisEvidenceCoverageFrame | null,
+  evidencePacket?: SingleStockEvidencePacket | null,
+  dataQualityReport?: DataQualityReport,
+) {
+  const coverageStatuses = homeResearchPacketCoverageStatuses(evidenceCoverageFrame);
+  const packetStatuses = homeResearchPacketEvidencePacketStatuses(evidencePacket);
+  const statuses = [
+    ...coverageStatuses,
+    ...packetStatuses,
+    normalizeHomeResearchPacketStatus(dataQualityReport?.dataQualityTier),
+    normalizeHomeResearchPacketStatus(dataQualityReport?.enrichmentStatus),
+  ].filter(Boolean);
+  const noEvidence = !evidenceCoverageFrame && !evidencePacket && !dataQualityReport;
+  const staleEvidence = Boolean(dataQualityReport?.staleSources?.length)
+    || hasHomeResearchPacketStatus(statuses, ['stale', 'fallback']);
+  const partialEvidence = dataQualityReport?.dataQualityTier === 'partial'
+    || dataQualityReport?.enrichmentStatus === 'partial'
+    || dataQualityReport?.enrichmentStatus === 'pending';
+  const degradedEvidence = dataQualityReport?.requiredAvailable === false
+    || Boolean(dataQualityReport?.importantMissing?.length)
+    || hasHomeResearchPacketStatus(statuses, ['degraded', 'blocked', 'missing', 'pending', 'insufficient', 'waiting', 'observe_only', 'unknown']);
+  const quality = noEvidence
+    ? { status: 'missing', isUnavailable: true }
+    : staleEvidence
+      ? { status: 'stale', freshness: 'stale', isStale: true }
+      : degradedEvidence
+        ? { status: 'degraded' }
+        : partialEvidence
+          ? { status: 'partial', isPartial: true }
+          : { status: 'ready', freshness: 'fresh' };
+
+  return createConsumerDataHealthSummary({
+    locale,
+    categories: [
+      {
+        category: 'stockEvidence',
+        quality,
+      },
+    ],
+  });
+}
+
 function safeHomeResearchPacketNextEvidence(values: Array<string | undefined | null>): string | null {
   const seen = new Set<string>();
   for (const item of values) {
@@ -1794,6 +1844,12 @@ function HomeConclusionFirstConsole({
   const dataQualityLabel = dataQualityReport
     ? dataQualityTierLabel(dataQualityReport.dataQualityTier, locale)
     : (isEnglish ? 'Unconfirmed' : '未确认');
+  const dataHealthSummary = buildHomeDataHealthSummary(
+    locale,
+    evidenceCoverageFrame,
+    evidencePacket,
+    dataQualityReport,
+  );
   const scoreDisplayValue = displaySlotValue(
     dashboard.decision.heroValue,
     locale,
@@ -1840,6 +1896,12 @@ function HomeConclusionFirstConsole({
           locale={isEnglish ? 'en' : 'zh'}
           title={isEnglish ? 'Evidence coverage' : '证据覆盖'}
           testId="home-evidence-coverage-strip"
+          className="mb-4"
+        />
+        <ConsumerDataHealthSummaryPanel
+          summary={dataHealthSummary}
+          title={isEnglish ? 'Data health' : '数据健康'}
+          testId="home-data-health-summary"
           className="mb-4"
         />
         <ConsumerEvidencePacketStrip
