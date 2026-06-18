@@ -14,6 +14,7 @@
     "test": "vitest run",
     "test:related": "vitest related --run",
     "test:related:changed": "python3 ../../scripts/validation_changed_files.py --scope frontend-related --existing --relative-to apps/dsa-web --exec vitest related --run",
+    "test:post-uat-consumer-smoke": "bash ./scripts/run-post-uat-consumer-smoke.sh",
     "test:e2e": "playwright test",
     "test:smoke": "bash ./scripts/run-smoke.sh",
     "typecheck": "tsc -b --pretty false",
