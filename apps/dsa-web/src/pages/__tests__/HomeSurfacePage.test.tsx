@@ -1100,6 +1100,33 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-dashboard')).not.toHaveTextContent(/买入|卖出|下单|立即交易|必买|稳赚|保证收益|目标价|止损|建仓|加仓|减仓|小仓试错|第二笔|buy recommendation|sell recommendation|trading recommendation|probe size|start light|add only|guaranteed|AI recommends you buy/i);
   });
 
+  it('keeps a single first-read summary zone ahead of the collapsed research boundary details', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(stockEvidenceApi.getStockEvidence).mockResolvedValue(defaultStockEvidenceResponse);
+
+    renderSurface();
+
+    await screen.findByText('Oracle Corporation');
+
+    const firstReadSummary = screen.getByRole('region', { name: /首读摘要|first-read summary/i });
+    const trustStrip = screen.getByTestId('home-research-trust-strip');
+    const dashboardText = screen.getByTestId('home-bento-dashboard').textContent || '';
+
+    expect(within(firstReadSummary).getAllByText(/研究状态|Research state/i)).toHaveLength(1);
+    expect(within(firstReadSummary).getAllByText(/数据边界|Data boundary/i)).toHaveLength(1);
+    expect(within(firstReadSummary).getAllByText(/下一步研究重点|Next research focus/i)).toHaveLength(1);
+    expect(within(firstReadSummary).getAllByText(/下一跳入口|Where to click next/i)).toHaveLength(1);
+    expect(screen.getAllByText(/研究状态|Research state/i)).toHaveLength(1);
+    expect(screen.getAllByText(/数据边界|Data boundary/i)).toHaveLength(1);
+    expect(screen.getAllByText(/下一步研究重点|Next research focus/i)).toHaveLength(1);
+    expect(trustStrip).not.toHaveAttribute('open');
+    expect(firstReadSummary.compareDocumentPosition(trustStrip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(firstReadSummary).queryByText(/研究就绪度|Research readiness/i)).not.toBeInTheDocument();
+    expect(within(firstReadSummary).queryByText(/数据健康|Data health/i)).not.toBeInTheDocument();
+    expect(within(firstReadSummary).queryByText(/证据包摘要|Evidence packet/i)).not.toBeInTheDocument();
+    expect(dashboardText).not.toMatch(HOME_RESEARCH_PACKET_FORBIDDEN_COPY_PATTERN);
+  });
+
   it('keeps US equity key levels non-CNY and makes the right rail conclusion-first', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     vi.mocked(historyApi.getDetail).mockResolvedValue({

@@ -1941,9 +1941,10 @@ function HomeConclusionFirstConsole({
           </div>
         </div>
 
-        <div
+        <section
           className="mt-5 grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-4"
           data-testid="home-research-first-read-summary"
+          aria-label={isEnglish ? 'First-read summary' : '首读摘要'}
         >
           {[
             {
@@ -1981,7 +1982,7 @@ function HomeConclusionFirstConsole({
               <p className="mt-2 break-words text-[11px] leading-5 text-white/56">{item.detail}</p>
             </article>
           ))}
-        </div>
+        </section>
 
         <div
           className="mt-3 flex min-w-0 flex-wrap items-center gap-2"

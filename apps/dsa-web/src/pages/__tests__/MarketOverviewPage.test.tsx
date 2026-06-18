@@ -2591,6 +2591,36 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-main-grid').compareDocumentPosition(screen.getByTestId('market-overview-visual-evidence-strip'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
+  it('keeps a single first-read summary zone and leaves evidence details collapsed on the default surface', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: false,
+      canReadProviders: false,
+    });
+    render(createElement(MarketOverviewPage));
+
+    const decisionReadiness = await screen.findByTestId('market-overview-decision-readiness');
+    const firstReadSummary = screen.getByRole('region', { name: /首读摘要|first-read summary/i });
+    const evidenceDisclosure = screen.getByTestId('market-overview-evidence-disclosure');
+
+    expect(within(decisionReadiness).getByText('市场叙事')).toBeInTheDocument();
+    expect(within(firstReadSummary).getAllByText('当前市场状态')).toHaveLength(1);
+    expect(within(firstReadSummary).getAllByText('最强证据')).toHaveLength(1);
+    expect(within(firstReadSummary).getAllByText('数据边界')).toHaveLength(1);
+    expect(within(firstReadSummary).getAllByText('下一步研究')).toHaveLength(1);
+    expect(screen.getAllByText('当前市场状态')).toHaveLength(1);
+    expect(screen.getAllByText('最强证据')).toHaveLength(1);
+    expect(screen.getAllByText('数据边界')).toHaveLength(1);
+    expect(screen.getAllByText('下一步研究')).toHaveLength(1);
+    expect(evidenceDisclosure).not.toHaveAttribute('open');
+    expect(within(evidenceDisclosure).getByRole('button', { name: '展开 数据说明' })).toBeInTheDocument();
+    expect(firstReadSummary.compareDocumentPosition(evidenceDisclosure) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText('支持证据')).not.toBeInTheDocument();
+    expect(screen.queryByText('反证 / 风险')).not.toBeInTheDocument();
+    expect(screen.queryByText('缺失证据')).not.toBeInTheDocument();
+    expect(screen.queryByText('下一步观察')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('market-decision-debug-details')).not.toBeInTheDocument();
+  });
+
   it('renders each tab with deterministic row groups and the shared decision layer', async () => {
     render(createElement(MarketOverviewPage));
 

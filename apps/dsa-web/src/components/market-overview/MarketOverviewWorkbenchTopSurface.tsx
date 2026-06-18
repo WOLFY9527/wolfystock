@@ -1034,8 +1034,9 @@ const MarketOverviewConclusionLayer: React.FC<{
           <TerminalChip variant="neutral">置信度 {marketNarrativeCopy(confidenceSummary.value, '待确认')}</TerminalChip>
         </div>
       </div>
-      <div
+      <section
         data-testid="market-overview-summary-strip"
+        aria-label={routeLocale === 'en' ? 'First-read summary' : '首读摘要'}
         className="mt-4 grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4"
       >
         {narrativeFacts.map((fact) => (
@@ -1045,7 +1046,7 @@ const MarketOverviewConclusionLayer: React.FC<{
             <p className="mt-1 text-[11px] leading-5 text-white/50">{marketNarrativeCopy(fact.detail)}</p>
           </div>
         ))}
-      </div>
+      </section>
       <div
         data-testid="market-overview-quick-actions"
         className="mt-3 flex min-w-0 flex-wrap items-center gap-2"
