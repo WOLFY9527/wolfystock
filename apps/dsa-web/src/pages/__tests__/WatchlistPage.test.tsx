@@ -519,6 +519,22 @@ describe('WatchlistPage', () => {
           ],
           observationOnly: true,
         },
+        {
+          symbol: 'BABA',
+          priorityTier: 'monitor',
+          priorityReasonSafeLabel: 'Queue review pending from backend memo',
+          evidenceAge: { state: 'provider_trace_pending', lastReviewedAt: null },
+          missingEvidence: ['provider_runtime_trace', 'buy setup'],
+          suggestedResearchPath: [
+            {
+              label: 'queue_debug_path',
+              route: '/stocks/BABA/structure-decision',
+              section: 'watchlistResearchOverlay',
+              reason: 'provider_runtime_trace',
+            },
+          ],
+          observationOnly: true,
+        },
       ],
       observationOnly: true,
       decisionGrade: false,
@@ -543,8 +559,13 @@ describe('WatchlistPage', () => {
     expect(queue).toHaveTextContent('现有证据时效不足，建议先复核近期价格、同业与市场背景。');
     expect(queue).toHaveTextContent('同业、基本面或市场背景待补充');
     expect(queue).toHaveTextContent('查看个股结构，补做证据复核。');
+    expect(queue).toHaveTextContent('BABA');
+    expect(queue).toHaveTextContent('继续观察');
+    expect(queue).toHaveTextContent('当前条目的证据覆盖仍需复核。');
+    expect(queue).toHaveTextContent('证据待确认');
+    expect(queue).toHaveTextContent('部分外部数据暂不可用');
     expect(queue).not.toHaveTextContent(/buy|sell|hold|recommend(?:ation)?|target|stop|position sizing|买入|卖出|持有|目标价|止损|仓位/i);
-    expect(queue).not.toHaveTextContent(/Missing evidence needs review|evidence_missing|attention|follow_up|provider|source|runtime|debug|request[_\s-]?id|trace[_\s-]?id|schemaVersion|raw|internal|cache|observationOnly/i);
+    expect(queue).not.toHaveTextContent(/Missing evidence needs review|Queue review pending from backend memo|evidence_missing|attention|follow_up|provider|source|runtime|debug|request[_\s-]?id|trace[_\s-]?id|schemaVersion|raw|internal|cache|observationOnly|queue_debug_path/i);
 
     const rowIds = Array.from(document.querySelectorAll('article[data-testid^="watchlist-row-"]'))
       .map((row) => row.getAttribute('data-testid'));
@@ -1975,7 +1996,7 @@ describe('WatchlistPage', () => {
     fireEvent.click(within(row).getByRole('button', { name: '移除 NVDA' }));
 
     await waitFor(() => expect(removeWatchlistItem).toHaveBeenCalledWith(1));
-    expect(screen.queryByTestId('watchlist-row-NVDA')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByTestId('watchlist-row-NVDA')).not.toBeInTheDocument());
   });
 
   it('copies the symbol to the clipboard', async () => {
