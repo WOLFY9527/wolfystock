@@ -15,6 +15,7 @@ const {
   getDailyIntelligenceMock,
   getResearchRadarMock,
   getResearchQueueMock,
+  verifyTickerExistsMock,
   getStructureDecisionMock,
   getStructureDecisionsBatchMock,
   runScenarioLabMock,
@@ -24,6 +25,7 @@ const {
   getDailyIntelligenceMock: vi.fn(),
   getResearchRadarMock: vi.fn(),
   getResearchQueueMock: vi.fn(),
+  verifyTickerExistsMock: vi.fn(),
   getStructureDecisionMock: vi.fn(),
   getStructureDecisionsBatchMock: vi.fn(),
   runScenarioLabMock: vi.fn(),
@@ -63,6 +65,7 @@ vi.mock('../../api/scenarioLab', () => ({
 
 vi.mock('../../api/stocks', () => ({
   stocksApi: {
+    verifyTickerExists: (...args: unknown[]) => verifyTickerExistsMock(...args),
     getStructureDecision: (...args: unknown[]) => getStructureDecisionMock(...args),
     getStructureDecisionsBatch: (...args: unknown[]) => getStructureDecisionsBatchMock(...args),
   },
@@ -113,6 +116,16 @@ describe('research IA pages', () => {
     vi.clearAllMocks();
     languageState.value = 'zh';
     getResearchQueueMock.mockResolvedValue(makeEmptyUnifiedResearchQueue());
+    verifyTickerExistsMock.mockResolvedValue({
+      stockCode: 'AAPL',
+      normalizedSymbol: 'AAPL',
+      market: 'us',
+      status: 'valid',
+      valid: true,
+      exists: true,
+      stockName: 'Apple',
+      message: 'Symbol verified.',
+    });
   });
 
   it('renders the market decision cockpit with a daily intelligence briefing and calm degraded notes', async () => {
@@ -845,6 +858,206 @@ describe('research IA pages', () => {
     expect(page).toHaveTextContent('不展示原始载荷');
     expect(screen.getByRole('link', { name: '研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
     expect(page.textContent || '').not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议/);
+  });
+
+  it('renders a consumer-safe symbol-not-found state for an invalid single-symbol structure route', async () => {
+    verifyTickerExistsMock.mockResolvedValue({
+      stockCode: 'INVALID_SYMBOL_XXXX',
+      normalizedSymbol: 'INVALID_SYMBOL_XXXX',
+      market: null,
+      status: 'invalid_format',
+      valid: false,
+      exists: false,
+      stockName: null,
+      message: 'Enter a supported stock symbol format.',
+    });
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/INVALID_SYMBOL_XXXX/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const emptyState = await within(page).findByTestId('stock-structure-symbol-not-found-state');
+    expect(verifyTickerExistsMock).toHaveBeenCalledWith('INVALID_SYMBOL_XXXX');
+    expect(getStructureDecisionMock).not.toHaveBeenCalled();
+    expect(emptyState).toHaveTextContent('标的未找到');
+    expect(emptyState).toHaveTextContent('未找到该标的，请检查代码是否正确，或返回搜索重新选择。');
+    expect(emptyState).toHaveTextContent('这表示当前无法确认该标的存在，不等同于数据暂时不可用。');
+    expect(emptyState).toHaveTextContent('仅作研究观察，不生成投资结论。');
+    expect(within(emptyState).getByRole('link', { name: '返回研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
+    expect(within(emptyState).getByRole('link', { name: '返回观察列表' })).toHaveAttribute('href', '/zh/watchlist');
+    expect(within(emptyState).getByRole('link', { name: '返回首页' })).toHaveAttribute('href', '/zh');
+    expect(page.textContent || '').not.toMatch(/unavailable|lowConfidence|low_confidence|OHLCV|provider|runtime|debug|traceId|requestId|schemaVersion|policyVersion|raw|reasonCodes|internal|local_db|fallback_source|fixture|adapter/i);
+    expect(page.textContent || '').not.toMatch(/buy|sell|hold|recommend|target|stop|position size|买入|卖出|持有|推荐|目标价|止损|仓位建议|加仓|减仓/i);
+  });
+
+  it('renders the English symbol-not-found state without raw diagnostic labels', async () => {
+    languageState.value = 'en';
+    verifyTickerExistsMock.mockResolvedValue({
+      stockCode: 'INVALID_SYMBOL_XXXX',
+      normalizedSymbol: 'INVALID_SYMBOL_XXXX',
+      market: null,
+      status: 'invalid_format',
+      valid: false,
+      exists: false,
+      stockName: null,
+      message: 'Enter a supported stock symbol format.',
+    });
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/en/stocks/INVALID_SYMBOL_XXXX/structure-decision',
+      '/en/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const emptyState = await within(page).findByTestId('stock-structure-symbol-not-found-state');
+    expect(emptyState).toHaveTextContent('Symbol not found');
+    expect(emptyState).toHaveTextContent('INVALID_SYMBOL_XXXX was not found. Check the code, or return to search and choose again.');
+    expect(emptyState).toHaveTextContent('This means the symbol cannot currently be confirmed, which is different from data that is temporarily missing.');
+    expect(emptyState).toHaveTextContent('This is a research observation state only; no investment conclusion is being made.');
+    expect(within(emptyState).getByRole('link', { name: 'Back to Research Radar' })).toHaveAttribute('href', '/en/research/radar');
+    expect(page.textContent || '').not.toMatch(/unavailable|lowConfidence|low_confidence|OHLCV|provider|runtime|debug|traceId|requestId|schemaVersion|policyVersion|raw|reasonCodes|internal|local_db|fallback_source|fixture|adapter/i);
+    expect(page.textContent || '').not.toMatch(/buy|sell|hold|recommend|target|stop|position size|买入|卖出|持有|推荐|目标价|止损|仓位建议|加仓|减仓/i);
+  });
+
+  it('keeps supported but unverified symbols on the normal insufficient-evidence structure page', async () => {
+    verifyTickerExistsMock.mockResolvedValue({
+      stockCode: 'AAPL',
+      normalizedSymbol: 'AAPL',
+      market: 'us',
+      status: 'unknown',
+      valid: false,
+      exists: false,
+      stockName: null,
+      message: 'Symbol format is supported, but verification is not confirmed yet.',
+    });
+    getStructureDecisionMock.mockResolvedValue({
+      schemaVersion: 'stock_structure_decision_api_v1',
+      ticker: 'AAPL',
+      structureState: 'lowConfidence',
+      confidence: 'low',
+      componentScores: {},
+      explanation: {
+        whyThisStructure: 'Evidence remains limited.',
+        whatConfirmsIt: [],
+        whatInvalidatesIt: [],
+        keyLevels: [],
+      },
+      researchNotes: {
+        watchNext: [],
+        needsMoreEvidence: ['补齐更多有效日线数据后再复核。'],
+        riskFlags: ['low_confidence'],
+      },
+      dataQuality: {
+        status: 'unavailable',
+        period: 'daily',
+        usableBars: 0,
+      },
+      missingEvidence: [
+        { kind: 'daily_ohlcv', message: 'Daily OHLCV history is unavailable.' },
+      ],
+      noAdviceDisclosure: 'Observation-only research context.',
+    });
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    expect(verifyTickerExistsMock).toHaveBeenCalledWith('AAPL');
+    expect(getStructureDecisionMock).toHaveBeenCalledWith('AAPL');
+    expect(page).toHaveTextContent('AAPL 结构工作区');
+    expect(page).toHaveTextContent('证据不足');
+    expect(page).not.toHaveTextContent('标的未找到');
+    expect(within(page).queryByTestId('stock-structure-symbol-not-found-state')).not.toBeInTheDocument();
+  });
+
+  it('shows a per-symbol safe missing explanation in multi-symbol structure routes', async () => {
+    getStructureDecisionsBatchMock.mockResolvedValue({
+      schemaVersion: 'stock_structure_decision_batch_api_v1',
+      items: [
+        {
+          schemaVersion: 'stock_structure_decision_api_v1',
+          ticker: 'AAPL',
+          structureState: 'range',
+          confidence: 'medium',
+          componentScores: { trend: 58 },
+          explanation: {
+            whyThisStructure: 'AAPL remains range-bound.',
+            whatConfirmsIt: [],
+            whatInvalidatesIt: [],
+            keyLevels: [],
+          },
+          researchNotes: {
+            watchNext: [],
+            needsMoreEvidence: [],
+            riskFlags: [],
+          },
+          dataQuality: {
+            status: 'available',
+            period: 'daily',
+            usableBars: 60,
+          },
+          missingEvidence: [],
+          noAdviceDisclosure: 'Observation-only research context.',
+        },
+      ],
+      aggregateSummary: {
+        requestedCount: 2,
+        evaluatedCount: 1,
+        truncated: false,
+      },
+      missingEvidence: [],
+      dataQuality: { status: 'partial' },
+      symbolCompareEvidencePacket: {
+        comparedSymbols: ['AAPL'],
+        sharedEvidence: [],
+        divergentEvidence: [],
+        missingEvidenceBySymbol: {
+          AAPL: [],
+          INVALID_SYMBOL_XXXX: [
+            {
+              kind: 'symbol_validation',
+              message: 'Enter a supported stock symbol format. provider_runtime_trace raw payload reasonCodes buy now target price',
+            },
+          ],
+        },
+        freshnessBySymbol: {
+          AAPL: { status: 'available', period: 'daily', usableBars: 60 },
+        },
+        confidenceCap: { value: 25 },
+        observationBoundary: {
+          observationOnly: true,
+          decisionGrade: false,
+          rankingAllowed: false,
+          adviceAllowed: false,
+        },
+        researchNextSteps: [],
+      },
+      noAdviceDisclosure: 'Observation-only research context.',
+    });
+
+    renderRoute(<StockStructureDecisionPage />, '/zh/stocks/INVALID_SYMBOL_XXXX,AAPL/structure-decision');
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const packet = await within(page).findByTestId('symbol-compare-evidence-packet');
+    expect(getStructureDecisionsBatchMock).toHaveBeenCalledWith({
+      stockCodes: ['INVALID_SYMBOL_XXXX', 'AAPL'],
+      benchmark: undefined,
+      maxItems: undefined,
+    });
+    expect(packet).toHaveTextContent('AAPL');
+    expect(packet).toHaveTextContent('INVALID_SYMBOL_XXXX');
+    expect(packet).toHaveTextContent('标的未找到');
+    expect(packet).toHaveTextContent('未找到该标的，请检查代码是否正确，或返回搜索重新选择。');
+    expect(packet).toHaveTextContent('暂无缺口');
+    expect(packet.textContent || '').not.toMatch(/provider|runtime|trace|raw|reasonCodes|target price|buy now|schemaVersion|local_db|fallback_source|fixture|adapter/i);
+    expect(packet.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|加仓|减仓|buy|sell|hold|recommend|target|stop|position size/i);
   });
 
   it('renders Stock Structure peer-correlation context without raw diagnostics', async () => {

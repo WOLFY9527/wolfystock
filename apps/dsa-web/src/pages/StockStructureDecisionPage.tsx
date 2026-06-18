@@ -18,6 +18,7 @@ import {
   stocksApi,
   type StockPeerCorrelationSnapshot,
   type StockStructureDecisionResponse,
+  type StockValidationResponse,
   type StockSymbolCompareEvidenceEntry,
   type StockSymbolCompareEvidencePacket,
   type StockSymbolCompareFreshness,
@@ -215,6 +216,12 @@ function missingEvidenceCopy(
   gap: StockStructureDecisionResponse['missingEvidence'][number],
   language: 'zh' | 'en',
 ): string {
+  const gapKey = String(gap.kind || gap.code || gap.field || '').toLowerCase();
+  if (gapKey === 'symbol_validation' || gapKey === 'symbol_not_found' || gapKey === 'invalid_symbol') {
+    return language === 'en'
+      ? `${symbol} was not found. Check the code, or return to search and choose again.`
+      : '标的未找到。未找到该标的，请检查代码是否正确，或返回搜索重新选择。';
+  }
   const fallback = language === 'en'
     ? `${symbol} has missing compare evidence.`
     : `${symbol} 的部分对比证据暂未就绪。`;
@@ -258,6 +265,85 @@ function firstComparablePeerSymbol(
 
 function buildComparePath(symbols: string[]): string {
   return `/stocks/${symbols.map((symbol) => encodeURIComponent(symbol)).join(',')}/structure-decision`;
+}
+
+type SymbolNotFoundState = {
+  symbol: string;
+};
+
+function isSymbolNotFoundValidation(
+  validation: StockValidationResponse | null | undefined,
+): validation is StockValidationResponse {
+  if (!validation) return false;
+  if (validation.exists || validation.valid) return false;
+  return ['invalid_format', 'unsupported_market', 'ambiguous', 'not_found'].includes(String(validation.status || ''));
+}
+
+function StockStructureSymbolNotFoundState({
+  language,
+  symbol,
+  localize,
+}: {
+  language: 'zh' | 'en';
+  symbol: string;
+  localize: (path: string) => string;
+}) {
+  const isEnglish = language === 'en';
+  const actions = [
+    {
+      to: localize('/research/radar'),
+      label: isEnglish ? 'Back to Research Radar' : '返回研究雷达',
+    },
+    {
+      to: localize('/watchlist'),
+      label: isEnglish ? 'Back to watchlist' : '返回观察列表',
+    },
+    {
+      to: localize('/'),
+      label: isEnglish ? 'Back home' : '返回首页',
+    },
+  ];
+
+  return (
+    <div className="p-4 md:p-5">
+      <TerminalEmptyState
+        className="items-start md:items-center"
+        data-testid="stock-structure-symbol-not-found-state"
+        title={isEnglish ? 'Symbol not found' : '标的未找到'}
+        action={(
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+            {actions.map((action) => (
+              <Link
+                key={action.to}
+                to={action.to}
+                className="inline-flex min-h-9 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+              >
+                {action.label}
+              </Link>
+            ))}
+          </div>
+        )}
+      >
+        <div className="space-y-1">
+          <p>
+            {isEnglish
+              ? `${symbol || 'The symbol'} was not found. Check the code, or return to search and choose again.`
+              : '未找到该标的，请检查代码是否正确，或返回搜索重新选择。'}
+          </p>
+          <p>
+            {isEnglish
+              ? 'This means the symbol cannot currently be confirmed, which is different from data that is temporarily missing.'
+              : '这表示当前无法确认该标的存在，不等同于数据暂时不可用。'}
+          </p>
+          <p>
+            {isEnglish
+              ? 'This is a research observation state only; no investment conclusion is being made.'
+              : '仅作研究观察，不生成投资结论。'}
+          </p>
+        </div>
+      </TerminalEmptyState>
+    </div>
+  );
 }
 
 function StockPeerCorrelationEmptyState({
@@ -320,13 +406,19 @@ function SymbolCompareEvidencePacketPanel({
   language: 'zh' | 'en';
   requestedSymbols: string[];
 }) {
-  const comparedSymbols = (packet?.comparedSymbols?.length ? packet.comparedSymbols : requestedSymbols)
+  const comparedSymbols = (packet?.comparedSymbols ?? [])
     .map((symbol) => symbol.trim().toUpperCase())
     .filter(Boolean);
+  const displaySymbols = [...new Set([
+    ...requestedSymbols,
+    ...comparedSymbols,
+    ...Object.keys(packet?.missingEvidenceBySymbol ?? {}),
+    ...Object.keys(packet?.freshnessBySymbol ?? {}),
+  ].map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))];
 
-  if (!packet || comparedSymbols.length <= 1) {
-    const symbolLabel = comparedSymbols[0] ?? (language === 'en' ? 'one symbol' : '一个标的');
-    const isSingleSymbol = comparedSymbols.length <= 1;
+  if (!packet || displaySymbols.length <= 1) {
+    const symbolLabel = displaySymbols[0] ?? (language === 'en' ? 'one symbol' : '一个标的');
+    const isSingleSymbol = displaySymbols.length <= 1;
     return (
       <div className="grid gap-3 border-t border-[color:var(--wolfy-divider)] p-3" data-testid="symbol-compare-evidence-packet">
         <TerminalEmptyState
@@ -376,7 +468,7 @@ function SymbolCompareEvidencePacketPanel({
         title={language === 'en' ? 'Compare evidence packet' : '对比证据包'}
       >
         <div className="flex flex-wrap items-center gap-2">
-          {comparedSymbols.map((symbol) => (
+          {displaySymbols.map((symbol) => (
             <TerminalChip key={symbol} variant="info">{symbol}</TerminalChip>
           ))}
           <TerminalChip variant="caution">
@@ -430,7 +522,7 @@ function SymbolCompareEvidencePacketPanel({
 
       <RoughSectionCard title={language === 'en' ? 'Missing evidence' : '缺失证据'}>
         <div className="grid gap-3">
-          {comparedSymbols.map((symbol) => {
+          {displaySymbols.map((symbol) => {
             const gaps = packet.missingEvidenceBySymbol[symbol] ?? [];
             return (
               <div key={`missing-${symbol}`} className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 px-3 py-2.5">
@@ -454,7 +546,7 @@ function SymbolCompareEvidencePacketPanel({
 
       <RoughSectionCard title={language === 'en' ? 'Freshness by symbol' : '新鲜度'}>
         <RoughKeyValueRows
-          rows={comparedSymbols.map((symbol) => ({
+          rows={displaySymbols.map((symbol) => ({
             key: `freshness-${symbol}`,
             label: symbol,
             value: freshnessMeta(packet.freshnessBySymbol[symbol], language),
@@ -492,12 +584,14 @@ export default function StockStructureDecisionPage() {
   const titleSymbol = isCompareRequest ? requestedSymbols.join(' / ') : primarySymbol;
   const [data, setData] = useState<StockStructureDecisionResponse | null>(null);
   const [comparePacket, setComparePacket] = useState<StockSymbolCompareEvidencePacket | null>(null);
+  const [symbolNotFound, setSymbolNotFound] = useState<SymbolNotFoundState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setSymbolNotFound(null);
     try {
       if (isCompareRequest) {
         const response = await stocksApi.getStructureDecisionsBatch({
@@ -508,12 +602,27 @@ export default function StockStructureDecisionPage() {
         setData(response.items[0] ?? null);
         setComparePacket(response.symbolCompareEvidencePacket ?? null);
       } else {
+        let validation: StockValidationResponse | null = null;
+        try {
+          validation = await stocksApi.verifyTickerExists(primarySymbol);
+        } catch {
+          validation = null;
+        }
+        if (isSymbolNotFoundValidation(validation)) {
+          setData(null);
+          setComparePacket(null);
+          setSymbolNotFound({
+            symbol: validation.normalizedSymbol || validation.stockCode || primarySymbol,
+          });
+          return;
+        }
         const response = await stocksApi.getStructureDecision(primarySymbol);
         setData(response);
         setComparePacket(null);
       }
     } catch (err) {
       setComparePacket(null);
+      setSymbolNotFound(null);
       setError(getParsedApiError(err) || createParsedApiError({
         title: locale === 'en' ? 'Structure panel unavailable' : '结构面板暂不可用',
         message: locale === 'en' ? 'Please retry after the stock structure API responds again.' : '请在个股结构接口恢复后重试。',
@@ -544,6 +653,16 @@ export default function StockStructureDecisionPage() {
   const compareWithPeerPath = data && comparablePeerSymbol && !isCompareRequest
     ? localize(buildComparePath([data.ticker || primarySymbol, comparablePeerSymbol]))
     : null;
+  const introTitle = symbolNotFound
+    ? (locale === 'en' ? 'Symbol not found' : '标的未找到')
+    : (locale === 'en' ? `${titleSymbol} structure workspace` : `${titleSymbol} 结构工作区`);
+  const introDescription = symbolNotFound
+    ? (locale === 'en'
+      ? 'Check the code or return to a research entrypoint; this is different from evidence that is temporarily missing.'
+      : '请检查代码是否正确，或返回研究入口重新选择；这不同于证据暂时缺失。')
+    : (locale === 'en'
+      ? 'This panel keeps structure state, confidence, component scores, research notes, and evidence gaps together before the name moves into watchlist or portfolio context.'
+      : '这个面板把结构状态、置信度、组件评分、研究备注与证据缺口放在同一页，再决定是否沉淀到观察列表或组合上下文。');
 
   return (
     <ConsumerWorkspaceScope className="flex min-h-0 flex-1">
@@ -599,10 +718,8 @@ export default function StockStructureDecisionPage() {
           <ConsoleBoard className="min-h-0" data-testid="stock-structure-decision-page">
             <RoughSurfaceIntro
               eyebrow={locale === 'en' ? 'Stock structure panel' : '个股结构面板'}
-              title={locale === 'en' ? `${titleSymbol} structure workspace` : `${titleSymbol} 结构工作区`}
-              description={locale === 'en'
-                ? 'This panel keeps structure state, confidence, component scores, research notes, and evidence gaps together before the name moves into watchlist or portfolio context.'
-                : '这个面板把结构状态、置信度、组件评分、研究备注与证据缺口放在同一页，再决定是否沉淀到观察列表或组合上下文。'}
+              title={introTitle}
+              description={introDescription}
             />
             {error ? (
               <div className="p-4 md:p-5">
@@ -615,6 +732,13 @@ export default function StockStructureDecisionPage() {
                   {locale === 'en' ? 'The page is waiting for structure state, component scores, and evidence notes.' : '正在等待结构状态、组件评分与证据备注。'}
                 </TerminalEmptyState>
               </div>
+            ) : null}
+            {!loading && !error && symbolNotFound ? (
+              <StockStructureSymbolNotFoundState
+                language={locale}
+                symbol={symbolNotFound.symbol}
+                localize={localize}
+              />
             ) : null}
             {data ? (
               <>

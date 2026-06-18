@@ -268,6 +268,37 @@ describe('stocksApi', () => {
     expect(JSON.stringify(payload.peerCorrelationSnapshot)).not.toMatch(/provider|raw|debug|trace|must-not-emit/i);
   });
 
+  it('normalizes consumer-safe stock validation status fields', async () => {
+    const { stocksApi } = await import('../stocks');
+
+    get.mockResolvedValueOnce({
+      data: {
+        stock_code: 'INVALID_SYMBOL_XXXX',
+        normalized_symbol: 'INVALID_SYMBOL_XXXX',
+        market: null,
+        status: 'invalid_format',
+        valid: false,
+        exists: false,
+        stock_name: null,
+        message: 'Enter a supported stock symbol format.',
+      },
+    });
+
+    const payload = await stocksApi.verifyTickerExists('INVALID_SYMBOL_XXXX');
+
+    expect(get).toHaveBeenCalledWith('/api/v1/stocks/INVALID_SYMBOL_XXXX/validate');
+    expect(payload).toEqual({
+      stockCode: 'INVALID_SYMBOL_XXXX',
+      normalizedSymbol: 'INVALID_SYMBOL_XXXX',
+      market: null,
+      status: 'invalid_format',
+      valid: false,
+      exists: false,
+      stockName: null,
+      message: 'Enter a supported stock symbol format.',
+    });
+  });
+
   it('calls the batch structure decision endpoint and preserves the compare evidence packet', async () => {
     const { stocksApi } = await import('../stocks');
 
