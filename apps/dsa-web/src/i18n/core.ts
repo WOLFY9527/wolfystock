@@ -348,6 +348,7 @@ const RESOURCES = {
       apiError: {
         close: '关闭',
         details: '查看详情',
+        hiddenDetails: '详细技术信息已隐藏。',
         guidance: {
           localConnection1: '确认后端服务已启动且 Web 前端可访问 API。',
           localConnection2: '检查网络连通性或反向代理配置。',
@@ -358,6 +359,12 @@ const RESOURCES = {
           upstream1: '外部模型或数据源不可用，请稍后重试。',
           upstream2: '检查代理、DNS、API 配置或服务配额。',
           analysisConflict: '同一标的已有任务运行，请等待完成后重试。',
+          authRequired1: '请先登录，再重新进入刚才的页面。',
+          authRequired2: '如果登录后仍被拦截，请确认当前会话没有过期。',
+          adminUnlock1: '请先在系统设置中重新验证管理员密码。',
+          adminUnlock2: '验证完成后，再重试刚才的系统配置或日志操作。',
+          accessDenied1: '请返回当前角色允许访问的页面继续使用。',
+          accessDenied2: '如果你本应拥有权限，请切换到正确账户后再试。',
         },
       },
     },
@@ -2998,6 +3005,8 @@ const RESOURCES = {
     app: {
       loading: '加载中',
       loadingBrand: '正在加载 WolfyStock 研究工作区...',
+      errorBoundaryTitle: '页面暂时无法加载，请刷新或稍后重试。',
+      errorBoundaryBody: '界面渲染出现异常，详细技术信息已隐藏。你可以重试，或返回首页继续其他研究。',
       retry: '重试',
       workspaceEyebrow: '研究工作区',
     },
@@ -3347,6 +3356,7 @@ This memo is for research discussion and does not constitute investment advice.`
       apiError: {
         close: 'Close',
         details: 'View details',
+        hiddenDetails: 'Technical details are hidden.',
         guidance: {
           localConnection1: 'Verify backend service is active and API endpoint is reachable.',
           localConnection2: 'Verify network connectivity and reverse proxy settings.',
@@ -3357,6 +3367,12 @@ This memo is for research discussion and does not constitute investment advice.`
           upstream1: 'Upstream models/providers unavailable. Retry later.',
           upstream2: 'Check proxy, DNS, API key, or provider quota.',
           analysisConflict: 'Target analysis already active. Await completion.',
+          authRequired1: 'Sign in first, then reopen the page you were using.',
+          authRequired2: 'If access is still blocked after sign-in, verify the current session has not expired.',
+          adminUnlock1: 'Reconfirm the admin password in system settings first.',
+          adminUnlock2: 'After that succeeds, retry the system configuration or log action.',
+          accessDenied1: 'Return to a page allowed for the current role.',
+          accessDenied2: 'If you should have access, switch to the correct account and retry.',
         },
       },
     },
@@ -5997,6 +6013,8 @@ This memo is for research discussion and does not constitute investment advice.`
     app: {
       loading: 'Loading',
       loadingBrand: 'Loading the WolfyStock research workspace...',
+      errorBoundaryTitle: 'This page is temporarily unavailable. Refresh or try again shortly.',
+      errorBoundaryBody: 'A rendering error interrupted this screen. Technical details are hidden. Retry or return home to continue with other research.',
       retry: 'Retry',
       workspaceEyebrow: 'Research Workspace',
     },

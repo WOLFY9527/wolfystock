@@ -10,6 +10,7 @@ interface ApiErrorAlertProps {
   onAction?: () => void;
   dismissLabel?: string;
   onDismiss?: () => void;
+  allowDetails?: boolean;
 }
 
 function getErrorGuidance(
@@ -50,22 +51,22 @@ function getErrorGuidance(
 
   if (error.category === 'auth_required') {
     return [
-      '请先登录，再重新进入刚才的页面。',
-      '如果登录后仍被拦截，请确认当前会话没有过期。',
+      t('common.apiError.guidance.authRequired1'),
+      t('common.apiError.guidance.authRequired2'),
     ];
   }
 
   if (error.category === 'admin_unlock_required') {
     return [
-      '请先在系统设置中重新验证管理员密码。',
-      '验证完成后，再重试刚才的系统配置或日志操作。',
+      t('common.apiError.guidance.adminUnlock1'),
+      t('common.apiError.guidance.adminUnlock2'),
     ];
   }
 
   if (error.category === 'access_denied') {
     return [
-      '请返回当前角色允许访问的页面继续使用。',
-      '如果你本应拥有权限，请切换到正确账户后再试。',
+      t('common.apiError.guidance.accessDenied1'),
+      t('common.apiError.guidance.accessDenied2'),
     ];
   }
 
@@ -79,11 +80,13 @@ export const ApiErrorAlert: React.FC<ApiErrorAlertProps> = ({
   onAction,
   dismissLabel,
   onDismiss,
+  allowDetails = false,
 }) => {
   const { t } = useI18n();
-  const showDetails = error.rawMessage.trim() && error.rawMessage.trim() !== error.message.trim();
+  const hasHiddenDetails = error.rawMessage.trim() && error.rawMessage.trim() !== error.message.trim();
   const guidance = getErrorGuidance(error, t);
   const dismissText = dismissLabel || t('common.apiError.close');
+  const shouldRenderDetails = allowDetails && hasHiddenDetails;
 
   return (
     <SupportBanner
@@ -108,13 +111,17 @@ export const ApiErrorAlert: React.FC<ApiErrorAlertProps> = ({
       className={className}
       role="alert"
     >
-      {showDetails ? (
+      {shouldRenderDetails ? (
         <details className="theme-panel-subtle mt-3 rounded-[var(--cohere-radius-medium)] p-3">
           <summary className="label-uppercase cursor-pointer text-danger opacity-90">{t('common.apiError.details')}</summary>
           <pre className="mt-2 whitespace-pre-wrap break-words text-[11px] leading-5 text-danger opacity-85">
             {error.rawMessage}
           </pre>
         </details>
+      ) : hasHiddenDetails ? (
+        <p className="mt-3 text-xs leading-5 text-secondary-text">
+          {t('common.apiError.hiddenDetails')}
+        </p>
       ) : null}
       {guidance.length > 0 ? (
         <ul className="theme-panel-subtle mt-3 space-y-1.5 rounded-[var(--cohere-radius-medium)] p-3 text-[11px] leading-5 text-secondary-text">
