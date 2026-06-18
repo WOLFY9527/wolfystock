@@ -9,6 +9,8 @@ type DriverDescriptor = {
   label: string;
   score: number | null;
   state: DriverState;
+  evidenceLabel: string;
+  stateToken: string;
 };
 
 export type MarketDecisionCockpitNarrative = {
@@ -38,14 +40,21 @@ const REGIME_LABELS: Record<string, { zh: string; en: string }> = {
 };
 
 const EVIDENCE_STATE_LABELS: Record<string, { zh: string; en: string; state: DriverState }> = {
-  score_grade: { zh: '可评分证据', en: 'score-grade evidence', state: 'available' },
+  score_grade: { zh: '可评分证据', en: 'scored evidence', state: 'available' },
   available: { zh: '证据可用', en: 'evidence available', state: 'available' },
   ready: { zh: '证据可用', en: 'evidence available', state: 'available' },
   partial: { zh: '部分证据', en: 'partial evidence', state: 'partial' },
   mixed: { zh: '部分证据', en: 'partial evidence', state: 'partial' },
   thin: { zh: '证据偏薄', en: 'thin evidence', state: 'partial' },
-  unavailable: { zh: '证据暂不可用', en: 'evidence unavailable', state: 'missing' },
-  blocked: { zh: '证据暂不可用', en: 'evidence unavailable', state: 'missing' },
+  stale: { zh: '数据可能已过期', en: 'data may be stale', state: 'partial' },
+  proxy: { zh: '间接参考，证据强度受限', en: 'proxy reference; evidence strength is limited', state: 'partial' },
+  proxy_only: { zh: '间接参考，证据强度受限', en: 'proxy reference; evidence strength is limited', state: 'partial' },
+  pending: { zh: '正在等待数据确认', en: 'waiting for data confirmation', state: 'partial' },
+  pending_heavy: { zh: '正在等待数据确认', en: 'waiting for data confirmation', state: 'partial' },
+  low_confidence: { zh: '置信度较低', en: 'low confidence', state: 'partial' },
+  freshness_unavailable: { zh: '数据新鲜度暂不可用', en: 'data freshness is temporarily unavailable', state: 'missing' },
+  unavailable: { zh: '数据暂不可用', en: 'data temporarily unavailable', state: 'missing' },
+  blocked: { zh: '当前无法分析', en: 'analysis currently blocked', state: 'missing' },
   degraded: { zh: '证据暂不可用', en: 'evidence unavailable', state: 'missing' },
 };
 
@@ -54,7 +63,9 @@ function normalizeToken(value: string | null | undefined): string {
     .trim()
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
     .toLowerCase()
-    .replace(/[-\s]+/g, '_');
+    .replace(/[:=./\\\s-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
 }
 
 function driverLabel(key: string, locale: Locale): string {
@@ -99,6 +110,52 @@ export function getDriverEvidenceStateLabel(value: string | null | undefined, lo
     : (locale === 'en' ? 'partial evidence' : '部分证据');
 }
 
+export function getCockpitConsumerStatusLabel(value: string | null | undefined, locale: Locale): string {
+  const raw = String(value || '').trim();
+  const normalized = normalizeToken(raw);
+  const mapped = EVIDENCE_STATE_LABELS[normalized];
+  if (mapped) {
+    return mapped[locale];
+  }
+  if (!normalized) {
+    return locale === 'en' ? 'evidence pending confirmation' : '证据待确认';
+  }
+  if (normalized.includes('freshness') && normalized.includes('unavailable')) {
+    return locale === 'en' ? 'data freshness is temporarily unavailable' : '数据新鲜度暂不可用';
+  }
+  if (normalized.includes('proxy')) {
+    return locale === 'en' ? 'proxy reference; evidence strength is limited' : '间接参考，证据强度受限';
+  }
+  if (normalized.includes('pending')) {
+    return locale === 'en' ? 'waiting for data confirmation' : '正在等待数据确认';
+  }
+  if (normalized.includes('stale')) {
+    return locale === 'en' ? 'data may be stale' : '数据可能已过期';
+  }
+  if (normalized.includes('low_confidence')) {
+    return locale === 'en' ? 'low confidence' : '置信度较低';
+  }
+  if (normalized.includes('score_grade')) {
+    return locale === 'en' ? 'scored evidence' : '可评分证据';
+  }
+  if (normalized.includes('blocked')) {
+    return locale === 'en' ? 'analysis currently blocked' : '当前无法分析';
+  }
+  if (normalized.includes('unavailable') || normalized.includes('timeout')) {
+    return locale === 'en' ? 'data temporarily unavailable' : '数据暂不可用';
+  }
+  if (normalized.includes('degraded')) {
+    return locale === 'en' ? 'evidence quality limited' : '证据质量受限';
+  }
+  if (/(provider|runtime|schema|debug|trace|raw|reason|cache|diagnostic)/i.test(normalized)) {
+    return locale === 'en' ? 'evidence unavailable' : '证据暂不可用';
+  }
+  if (/[_=.-]/.test(raw)) {
+    return locale === 'en' ? 'evidence pending confirmation' : '证据待确认';
+  }
+  return raw;
+}
+
 function scoreValue(score: MarketDecisionCockpitDriverScore | undefined): number | null {
   return typeof score?.score === 'number' && Number.isFinite(score.score) ? score.score : null;
 }
@@ -115,6 +172,8 @@ function describeDrivers(
       label: driverLabel(key, locale),
       score: value,
       state: value != null && value > 0 && state === 'missing' ? 'partial' : state,
+      evidenceLabel: getDriverEvidenceStateLabel(score?.evidenceState, locale),
+      stateToken: normalizeToken(score?.evidenceState),
     };
   });
 }
@@ -126,8 +185,22 @@ function sortedAvailableDrivers(drivers: DriverDescriptor[]): DriverDescriptor[]
 }
 
 function sortedMissingDrivers(drivers: DriverDescriptor[]): DriverDescriptor[] {
+  const limitedStateTokens = new Set([
+    'stale',
+    'proxy',
+    'proxy_only',
+    'pending',
+    'pending_heavy',
+    'freshness_unavailable',
+    'degraded',
+    'blocked',
+    'unavailable',
+    'low_confidence',
+  ]);
   return drivers
-    .filter((driver) => driver.state === 'missing' || (driver.score ?? 0) <= 0)
+    .filter((driver) => driver.state === 'missing'
+      || (driver.score ?? 0) <= 0
+      || limitedStateTokens.has(driver.stateToken))
     .sort((left, right) => (right.score ?? 0) - (left.score ?? 0));
 }
 
@@ -147,6 +220,14 @@ function joinLabels(labels: string[], locale: Locale): string {
     return `${formatted[0]} and ${formatted[1]}`;
   }
   return `${formatted.slice(0, -1).join(', ')}, and ${formatted[formatted.length - 1]}`;
+}
+
+function joinStatusLabels(drivers: DriverDescriptor[], locale: Locale): string {
+  const labels = drivers
+    .map((driver) => driver.evidenceLabel)
+    .filter(Boolean)
+    .slice(0, 3);
+  return joinLabels(labels, locale);
 }
 
 function isLowConfidence(payload: MarketDecisionCockpitResponse): boolean {
@@ -171,20 +252,21 @@ export function buildMarketDecisionCockpitNarrative(
   const regime = regimeLabel(payload.marketRegimeDecision.regime, locale);
   const support = joinLabels(availableDrivers.map((driver) => driver.label), locale);
   const missing = joinLabels(missingDrivers.map((driver) => driver.label), locale);
+  const missingStatuses = joinStatusLabels(missingDrivers, locale);
 
   if (locale === 'en') {
     const opening = lowConfidence || missingMostDrivers
-      ? `The current market state remains in a ${regime} because most drivers lack score-grade evidence.`
+      ? `The current market state remains in a ${regime} because most drivers lack scored evidence.`
       : `The current market state reads as a ${regime} based on the available driver evidence.`;
     const supportSentence = availableDrivers.length
       ? `Available evidence mainly comes from ${support}.`
       : 'Available evidence is still too thin to name a dominant driver.';
     const missingSentence = missingDrivers.length
-      ? `Key missing or degraded drivers include ${missing}.`
+      ? `Key missing, stale, or degraded drivers include ${missing}; their visible states are ${missingStatuses}.`
       : 'No major driver is marked as missing in this snapshot.';
     const confidenceSentence = lowConfidence || missingDrivers.length
-      ? 'Use this result as a research priority signal, not a decision-grade conclusion.'
-      : 'Use this result as a research priority signal while monitoring whether the driver evidence remains aligned.';
+      ? 'Use this result as a research priority signal, not a decision-grade conclusion; next inspect Research Radar for related candidates and evidence gaps.'
+      : 'Use this result as a research priority signal while monitoring whether the driver evidence remains aligned; next inspect Research Radar for related candidates.';
     return { sentences: [opening, supportSentence, missingSentence, confidenceSentence] };
   }
 
@@ -195,10 +277,10 @@ export function buildMarketDecisionCockpitNarrative(
     ? `可用证据主要来自${support}。`
     : '当前可用证据仍偏薄，暂难归因到单一主导驱动。';
   const missingSentence = missingDrivers.length
-    ? `关键缺失或降级驱动包括${missing}。`
+    ? `关键缺失、过期或降级驱动包括${missing}；对应状态为${missingStatuses}。`
     : '当前快照没有标记主要缺失驱动。';
   const confidenceSentence = lowConfidence || missingDrivers.length
-    ? '因此该结果适合作为研究优先级线索，而不是决策级结论。'
-    : '因此该结果适合作为研究优先级线索，并继续观察驱动证据是否保持一致。';
+    ? '因此该结果适合作为研究优先级线索，而不是决策级结论；下一步先查看研究雷达中的相关候选和证据缺口。'
+    : '因此该结果适合作为研究优先级线索，并继续观察驱动证据是否保持一致；下一步先查看研究雷达中的相关候选。';
   return { sentences: [opening, supportSentence, missingSentence, confidenceSentence] };
 }

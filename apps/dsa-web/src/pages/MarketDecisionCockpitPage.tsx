@@ -26,6 +26,7 @@ import { formatDateTime } from '../utils/format';
 import { sanitizeUserFacingDataIssue, sanitizeUserFacingDataIssues } from '../utils/userFacingDataIssues';
 import {
   buildMarketDecisionCockpitNarrative,
+  getCockpitConsumerStatusLabel,
   getDriverEvidenceStateLabel,
 } from '../utils/marketDecisionCockpitNarrative';
 import {
@@ -269,7 +270,7 @@ function sanitizeCockpitDisplayItems(
     }
     const label = FORBIDDEN_CONSUMER_WORDING.test(raw)
       ? (language === 'en' ? 'Review after evidence is refreshed.' : '等待证据刷新后再复核。')
-      : sanitizeUserFacingDataIssue(raw, language);
+      : sanitizeCockpitStatusOrIssue(raw, language);
     if (!label || seen.has(label)) {
       return;
     }
@@ -277,6 +278,43 @@ function sanitizeCockpitDisplayItems(
     labels.push(label);
   });
   return labels;
+}
+
+function normalizeCockpitStatusToken(value: string | null | undefined): string {
+  return String(value || '')
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase()
+    .replace(/[:=./\\\s-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function isCockpitStatusToken(value: string | null | undefined): boolean {
+  const raw = String(value || '').trim();
+  if (!raw || /\s/.test(raw)) {
+    return false;
+  }
+  const normalized = normalizeCockpitStatusToken(raw);
+  return [
+    'unavailable',
+    'stale',
+    'proxy',
+    'proxy_only',
+    'pending',
+    'pending_heavy',
+    'blocked',
+    'low_confidence',
+    'score_grade',
+    'freshness_unavailable',
+    'degraded',
+  ].includes(normalized);
+}
+
+function sanitizeCockpitStatusOrIssue(value: string | null | undefined, language: 'zh' | 'en'): string {
+  return isCockpitStatusToken(value)
+    ? getCockpitConsumerStatusLabel(value, language)
+    : sanitizeUserFacingDataIssue(value, language);
 }
 
 function dailyEvidenceLinkLabel(label: string | null | undefined, language: 'zh' | 'en'): string {
@@ -861,6 +899,17 @@ export default function MarketDecisionCockpitPage() {
     () => (data ? buildMarketDecisionCockpitNarrative(data, locale) : null),
     [data, locale],
   );
+  const railChangeItems = useMemo(() => {
+    const items = sanitizeCockpitDisplayItems(cockpitSummary?.whatChanged ?? [], locale);
+    return items.length ? items : cockpitNarrative?.sentences.slice(0, 2) ?? [];
+  }, [cockpitNarrative?.sentences, cockpitSummary?.whatChanged, locale]);
+  const railBoundaryItems = useMemo(() => {
+    const items = sanitizeCockpitDisplayItems(cockpitSummary?.confidenceLimits ?? [], locale);
+    return items.length ? items : cockpitNarrative?.sentences.slice(2, 4) ?? [];
+  }, [cockpitNarrative?.sentences, cockpitSummary?.confidenceLimits, locale]);
+  const nextEvidenceItems = (priorities?.needsMoreEvidence?.length
+    ? priorities.needsMoreEvidence
+    : data?.researchQueuePreview.evidenceGaps) ?? [];
 
   return (
     <ConsumerWorkspaceScope className="flex min-h-0 flex-1">
@@ -899,13 +948,13 @@ export default function MarketDecisionCockpitPage() {
             <ConsoleContextRail className="flex flex-col gap-3 p-3">
               <RoughSectionCard eyebrow={locale === 'en' ? 'Summary' : '摘要'} title={locale === 'en' ? 'What changed' : '发生了什么'}>
                 <RoughBulletList
-                  items={sanitizeCockpitDisplayItems(cockpitSummary?.whatChanged ?? [], locale)}
+                  items={railChangeItems}
                   emptyText={locale === 'en' ? 'No change summary yet.' : '暂未整理变化摘要。'}
                 />
               </RoughSectionCard>
               <RoughSectionCard eyebrow={locale === 'en' ? 'Boundary' : '边界'} title={locale === 'en' ? 'Confidence limits' : '置信边界'}>
                 <RoughBulletList
-                  items={sanitizeCockpitDisplayItems(cockpitSummary?.confidenceLimits ?? [], locale)}
+                  items={railBoundaryItems}
                   emptyText={locale === 'en' ? 'No explicit confidence limit yet.' : '暂未整理明确的置信边界。'}
                 />
               </RoughSectionCard>
@@ -960,7 +1009,7 @@ export default function MarketDecisionCockpitPage() {
                     },
                     {
                       label: locale === 'en' ? 'Data quality' : '数据质量',
-                      value: <StatusBadge status={statusTone(data.dataQuality?.status)} label={humanizeEnum(data.dataQuality?.status, locale)} size="sm" />,
+                      value: <StatusBadge status={statusTone(data.dataQuality?.status)} label={getCockpitConsumerStatusLabel(data.dataQuality?.status, locale)} size="sm" />,
                     },
                     {
                       label: locale === 'en' ? 'Preview mode' : '预览模式',
@@ -983,7 +1032,7 @@ export default function MarketDecisionCockpitPage() {
                     {
                       key: 'queue',
                       label: locale === 'en' ? 'Queue quality' : '队列质量',
-                      value: humanizeEnum(data.researchQueuePreview.queueQuality, locale),
+                      value: getCockpitConsumerStatusLabel(data.researchQueuePreview.queueQuality, locale),
                     },
                   ]}
                 />
@@ -1040,7 +1089,7 @@ export default function MarketDecisionCockpitPage() {
                         {
                           key: 'evidence',
                           label: locale === 'en' ? 'Needs more evidence' : '待补证据',
-                          value: sanitizeCockpitDisplayItems(priorities?.needsMoreEvidence ?? data.researchQueuePreview.evidenceGaps ?? [], locale)
+                          value: sanitizeCockpitDisplayItems(nextEvidenceItems, locale)
                             .join('；') || '--',
                         },
                         {
@@ -1053,7 +1102,7 @@ export default function MarketDecisionCockpitPage() {
                   </RoughSectionCard>
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Options / gamma' : '期权 / Gamma'} title={locale === 'en' ? 'Observation-only status' : '仅观察状态'}>
                     {(() => {
-                      const blockedReasonLabels = sanitizeUserFacingDataIssues(optionsStatus?.blockedReasonCodes ?? [], locale);
+                      const blockedReasonLabels = sanitizeCockpitDisplayItems(optionsStatus?.blockedReasonCodes ?? [], locale);
                       const missingEvidenceLabels = consumerMissingEvidenceLabels(optionsStatus?.missingEvidence, locale);
                       return (
                         <>
@@ -1063,7 +1112,7 @@ export default function MarketDecisionCockpitPage() {
                                 key: 'gamma',
                                 label: locale === 'en' ? 'Gamma evidence' : 'Gamma 证据',
                                 value: optionsStatus?.gammaEvidenceStatus
-                                  ? sanitizeUserFacingDataIssue(optionsStatus.gammaEvidenceStatus, locale)
+                                  ? sanitizeCockpitStatusOrIssue(optionsStatus.gammaEvidenceStatus, locale)
                                   : '--',
                               },
                               {

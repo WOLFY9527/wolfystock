@@ -501,6 +501,72 @@ describe('research IA pages', () => {
     expect(findConsumerRawLeakage(narrative.textContent || '')).toEqual([]);
   });
 
+  it('keeps partial cockpit evidence narrative visible instead of placeholder-only side rail copy', async () => {
+    getDecisionCockpitMock.mockResolvedValue({
+      schemaVersion: 'market_decision_cockpit.v1',
+      generatedAt: '2026-06-15T09:30:00Z',
+      marketRegimeDecision: {
+        regime: 'neutral',
+        confidence: 'lowConfidence',
+        confidenceScore: 0.31,
+        driverScores: {
+          dealerGamma: { score: 0, evidenceState: 'proxy-only' },
+          breadthParticipation: { score: 49, evidenceState: 'stale' },
+          volatilityStructure: { score: 0, evidenceState: 'freshness=unavailable' },
+          liquidityCredit: { score: 22, evidenceState: 'pending' },
+        },
+        explanation: {
+          whyThisRegime: [],
+          whatConfirmsIt: [],
+          whatInvalidatesIt: [],
+        },
+        invalidationConditions: [],
+        researchPriorities: {
+          watchToday: [],
+          needsMoreEvidence: [],
+          investigateNext: [],
+        },
+      },
+      researchQueuePreview: {
+        topCandidates: [],
+        queueQuality: 'pending-heavy',
+        evidenceGaps: ['proxy-only', 'freshness=unavailable'],
+        previewOnly: true,
+      },
+      optionsStructureStatus: {
+        gammaEvidenceStatus: 'proxy-only',
+        observationOnly: true,
+        decisionGrade: false,
+        missingEvidence: [],
+        blockedReasonCodes: ['pending'],
+      },
+      cockpitSummary: {
+        whatChanged: [],
+        whyItMatters: [],
+        whatToWatch: [],
+        confidenceLimits: [],
+      },
+      noAdviceDisclosure: '仅供研究语境参考。',
+      dataQuality: { status: 'stale', reasonCodes: ['freshness=unavailable'] },
+    });
+    getDailyIntelligenceMock.mockRejectedValue(new Error('briefing unavailable'));
+
+    renderRoute(<MarketDecisionCockpitPage />, '/zh/market/decision-cockpit');
+
+    const page = await screen.findByTestId('market-decision-cockpit-page');
+    const narrative = await within(page).findByTestId('market-cockpit-narrative');
+
+    expect(narrative).toHaveTextContent('当前市场状态');
+    expect(page).toHaveTextContent('数据可能已过期');
+    expect(page).toHaveTextContent('间接参考，证据强度受限');
+    expect(page).toHaveTextContent('正在等待数据确认');
+    expect(page).toHaveTextContent('数据新鲜度暂不可用');
+    expect(page).not.toHaveTextContent('暂未整理变化摘要');
+    expect(page).not.toHaveTextContent('暂未整理明确的置信边界');
+    expect(page.textContent || '').not.toMatch(/proxy-only|pending-heavy|freshness=unavailable|score-grade|score_grade|provider|runtime|debug|traceId|requestId|schemaVersion/i);
+    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|加仓|减仓/i);
+  });
+
   it('renders Research Radar as the core queue and links queue rows to Stock Structure', async () => {
     getResearchRadarMock.mockResolvedValue({
       schemaVersion: 'research_radar_api_v1',
