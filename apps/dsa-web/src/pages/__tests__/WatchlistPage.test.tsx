@@ -530,17 +530,21 @@ describe('WatchlistPage', () => {
     const queue = await screen.findByTestId('watchlist-research-queue');
     expect(queue).toHaveTextContent('研究队列');
     expect(queue).toHaveTextContent('MSFT');
-    expect(queue).toHaveTextContent('attention');
-    expect(queue).toHaveTextContent('Missing evidence needs review.');
-    expect(queue).toHaveTextContent('证据缺口');
-    expect(queue).toHaveTextContent('Price-history evidence');
-    expect(queue).toHaveTextContent('Stock Structure');
-    expect(queue).toHaveTextContent('Open symbol structure detail.');
+    expect(queue).toHaveTextContent('建议复核');
+    expect(queue).toHaveTextContent('当前条目的证据覆盖不足，需补充同业、基本面或市场背景后再判断。');
+    expect(queue).toHaveTextContent('缺少关键证据');
+    expect(queue).toHaveTextContent('价格历史数据待补充');
+    expect(queue).toHaveTextContent('查看个股结构');
+    expect(queue).toHaveTextContent('先核对结构与证据缺口。');
     expect(queue).toHaveTextContent('仅作观察');
+    expect(queue).toHaveTextContent('仅作研究观察，不构成操作结论。');
     expect(queue).toHaveTextContent('NVDA');
-    expect(queue).toHaveTextContent('follow_up');
+    expect(queue).toHaveTextContent('持续跟进');
+    expect(queue).toHaveTextContent('现有证据时效不足，建议先复核近期价格、同业与市场背景。');
+    expect(queue).toHaveTextContent('同业、基本面或市场背景待补充');
+    expect(queue).toHaveTextContent('查看个股结构，补做证据复核。');
     expect(queue).not.toHaveTextContent(/buy|sell|hold|recommend(?:ation)?|target|stop|position sizing|买入|卖出|持有|目标价|止损|仓位/i);
-    expect(queue).not.toHaveTextContent(/sourceAuthorityAllowed|scoreContributionAllowed|provider|raw|debug|runtime|schemaVersion|observationOnly/i);
+    expect(queue).not.toHaveTextContent(/Missing evidence needs review|evidence_missing|attention|follow_up|provider|source|runtime|debug|request[_\s-]?id|trace[_\s-]?id|schemaVersion|raw|internal|cache|observationOnly/i);
 
     const rowIds = Array.from(document.querySelectorAll('article[data-testid^="watchlist-row-"]'))
       .map((row) => row.getAttribute('data-testid'));
