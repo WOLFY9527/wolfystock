@@ -2313,16 +2313,14 @@ describe('MarketOverviewPage', () => {
     expect(screen.queryByTestId('market-overview-research-readiness-strip')).not.toBeInTheDocument();
     const conclusion = screen.getByTestId('market-overview-decision-readiness');
     expect(conclusion).toHaveTextContent('市场叙事');
-    expect(conclusion).toHaveTextContent('现在市场发生了什么');
-    expect(conclusion).toHaveTextContent('为什么');
-    expect(conclusion).toHaveTextContent('证据覆盖 / 置信度');
-    expect(conclusion).toHaveTextContent('接下来观察什么');
-    expect(conclusion).toHaveTextContent('指数 / 宽度');
-    expect(conclusion).toHaveTextContent('波动率');
-    expect(conclusion).toHaveTextContent('利率 / 宏观');
-    expect(conclusion).toHaveTextContent('流动性');
-    expect(conclusion).toHaveTextContent('行业 / 轮动');
+    expect(conclusion).toHaveTextContent('当前市场状态');
+    expect(conclusion).toHaveTextContent('最强证据');
+    expect(conclusion).toHaveTextContent('数据边界');
+    expect(conclusion).toHaveTextContent('下一步研究');
     expect(screen.getByTestId('market-command-chips').querySelectorAll('[data-terminal-primitive="chip"]').length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByTestId('market-overview-quick-actions')).toHaveTextContent('Research Radar');
+    expect(screen.getByTestId('market-overview-quick-actions')).toHaveTextContent('Stock Structure');
+    expect(screen.getByTestId('market-overview-quick-actions')).toHaveTextContent('Market Overview');
     expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/偏强观察|中性观察|偏弱观察|数据不足/);
     const details = expandMarketDecisionDetails();
     expect(within(details).queryByTestId('market-regime-synthesis-header')).not.toBeInTheDocument();
@@ -2920,10 +2918,10 @@ describe('MarketOverviewPage', () => {
 
     const conclusion = await screen.findByTestId('market-overview-decision-readiness');
     expect(conclusion).toHaveTextContent('市场叙事');
-    expect(conclusion).toHaveTextContent('现在市场发生了什么');
-    expect(conclusion).toHaveTextContent('为什么');
-    expect(conclusion).toHaveTextContent('证据覆盖 / 置信度');
-    expect(conclusion).toHaveTextContent('接下来观察什么');
+    expect(conclusion).toHaveTextContent('当前市场状态');
+    expect(conclusion).toHaveTextContent('最强证据');
+    expect(conclusion).toHaveTextContent('数据边界');
+    expect(conclusion).toHaveTextContent('下一步研究');
     expect(conclusion.textContent || '').not.toMatch(/买入|卖出|买卖|target|stop|recommend/i);
     const evidenceDetails = expandMarketEvidenceDetails();
     await within(evidenceDetails).findByTestId('market-overview-direction-summary');
@@ -2947,10 +2945,10 @@ describe('MarketOverviewPage', () => {
 
     const readyBand = await screen.findByTestId('market-overview-decision-readiness');
     expect(readyBand).toHaveTextContent('市场叙事');
-    expect(readyBand).toHaveTextContent('现在市场发生了什么');
-    expect(readyBand).toHaveTextContent('证据覆盖 / 置信度');
-    expect(readyBand).toHaveTextContent('为什么');
-    expect(readyBand).toHaveTextContent('接下来观察什么');
+    expect(readyBand).toHaveTextContent('当前市场状态');
+    expect(readyBand).toHaveTextContent('最强证据');
+    expect(readyBand).toHaveTextContent('数据边界');
+    expect(readyBand).toHaveTextContent('下一步研究');
     expect(readyBand).toHaveTextContent('中等');
     expect(readyBand).toHaveTextContent(/偏强观察|中性观察|偏弱观察|数据不足/);
     expect(within(readyBand).queryByText('查看需配置的数据源')).not.toBeInTheDocument();
@@ -3012,8 +3010,8 @@ describe('MarketOverviewPage', () => {
     const observationBand = screen.getByTestId('market-overview-decision-readiness');
     expect(observationBand).toHaveTextContent(/偏强观察|中性观察|偏弱观察|数据不足/);
     expect(observationBand).toHaveTextContent('证据覆盖 / 置信度');
-    expect(observationBand).toHaveTextContent('为什么');
-    expect(observationBand).toHaveTextContent('下一观察');
+    expect(observationBand).toHaveTextContent('最强证据');
+    expect(observationBand).toHaveTextContent('下一步研究');
     expect(observationBand).toHaveTextContent('有限');
     expect(observationBand).toHaveTextContent('标普500');
     expect(observationBand).toHaveTextContent(/待补|缺少充分证据/);
@@ -3081,7 +3079,7 @@ describe('MarketOverviewPage', () => {
 
     expect(posturePanel).toHaveTextContent('市场叙事');
     expect(posturePanel).toHaveTextContent('数据说明');
-    expect(posturePanel).toHaveTextContent('为什么');
+    expect(posturePanel).toHaveTextContent('最强证据');
     expect(posturePanel).toHaveTextContent('证据覆盖 / 置信度');
     expect(posturePanel).not.toHaveTextContent('主要阻断原因');
     expect(posturePanel).not.toHaveTextContent('下一步需要的数据/配置');
@@ -3215,7 +3213,7 @@ describe('MarketOverviewPage', () => {
     expect(posturePanel).toHaveTextContent(/关键证据未补齐|关键证据仍待补齐|关键确认仍待补齐|信号置信度仍偏有限|评分待恢复|数据更新中/);
     expect(posturePanel).toHaveTextContent(/待补|待确认|更新中/);
     expect(posturePanel).toHaveTextContent(/研究观察用途，不构成交易或下单指令/);
-    expect(posturePanel).toHaveTextContent(/仍可观察|等待.*证据补齐|下一观察/);
+    expect(posturePanel).toHaveTextContent(/仍可观察|等待.*证据补齐|下一步研究/);
     expect(posturePanel).not.toHaveTextContent('missing_scoring_pillars');
     const readinessBand = screen.getByTestId('market-overview-decision-readiness');
     expect(readinessBand).toHaveTextContent(/数据不足|偏强观察|中性观察|偏弱观察/);
