@@ -143,6 +143,7 @@ describe('marketDecisionCockpitApi', () => {
     expect(narrative.sentences[1]).toContain('Volatility structure, breadth participation, and liquidity and credit');
     expect(narrative.sentences.join(' ')).toContain('research priority signal');
     expect(narrative.sentences.join(' ')).not.toMatch(/\b(buy|sell|hold|recommend|target|stop|position)\b/i);
+    expect(narrative.sentences.join(' ')).not.toMatch(/score-grade|score_grade/i);
   });
 
   it('explains mostly unavailable drivers and low confidence without raw enums', async () => {
@@ -199,6 +200,20 @@ describe('marketDecisionCockpitApi', () => {
     expect(getDriverEvidenceStateLabel('provider_timeout', 'zh')).toBe('证据暂不可用');
   });
 
+  it('maps cockpit raw status tokens into consumer-safe Chinese labels', async () => {
+    const { getDriverEvidenceStateLabel } = await import('../../utils/marketDecisionCockpitNarrative');
+
+    expect(getDriverEvidenceStateLabel('unavailable', 'zh')).toBe('数据暂不可用');
+    expect(getDriverEvidenceStateLabel('stale', 'zh')).toBe('数据可能已过期');
+    expect(getDriverEvidenceStateLabel('proxy', 'zh')).toBe('间接参考，证据强度受限');
+    expect(getDriverEvidenceStateLabel('proxy-only', 'zh')).toBe('间接参考，证据强度受限');
+    expect(getDriverEvidenceStateLabel('pending', 'zh')).toBe('正在等待数据确认');
+    expect(getDriverEvidenceStateLabel('blocked', 'zh')).toBe('当前无法分析');
+    expect(getDriverEvidenceStateLabel('lowConfidence', 'zh')).toBe('置信度较低');
+    expect(getDriverEvidenceStateLabel('score-grade', 'zh')).toBe('可评分证据');
+    expect(getDriverEvidenceStateLabel('freshness=unavailable', 'zh')).toBe('数据新鲜度暂不可用');
+  });
+
   it('suppresses mixed-language internal tokens and no-advice vocabulary', async () => {
     const { buildMarketDecisionCockpitNarrative } = await import('../../utils/marketDecisionCockpitNarrative');
 
@@ -245,7 +260,7 @@ describe('marketDecisionCockpitApi', () => {
     const joined = narrative.sentences.join(' ');
     expect(joined).toContain('Mixed-regime observation');
     expect(joined).toMatch(/rates and USD/i);
-    expect(joined).not.toMatch(/schemaVersion|provider_runtime_debug|score_grade|raw|debug|trace/i);
+    expect(joined).not.toMatch(/schemaVersion|provider_runtime_debug|score[-_]grade|raw|debug|trace/i);
     expect(joined).not.toMatch(/\b(buy|sell|hold|recommend|target|stop|position)\b/i);
   });
 });
