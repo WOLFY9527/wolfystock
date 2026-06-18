@@ -327,7 +327,7 @@ def test_cockpit_uses_regime_engine_as_primary_judgment_and_shapes_safe_aggregat
     what_changed = payload["whatChanged"]
     assert isinstance(what_changed, list)
     assert what_changed == [
-        "Current regime observation is Risk-on observation with high confidence.",
+        "Current regime observation is Risk-on observation with moderate confidence.",
         "Research queue quality is mixed.",
         "Options structure evidence is unavailable for this cockpit snapshot.",
     ]
@@ -514,6 +514,69 @@ def test_cockpit_consumer_payload_redacts_raw_reason_codes_from_reason_fields() 
     assert "数据新鲜度尚未确认，当前仅显示降级观察结果" in payload["marketRegimeDecision"]["missingEvidence"]
     assert "当前仅有样本或代理证据，暂不足以代表完整市场结构" in payload["marketRegimeDecision"]["missingEvidence"]
     assert "当前数据源权威性或评分级别不足，暂不能形成可靠研究结论" in payload["marketRegimeDecision"]["missingEvidence"]
+
+
+def test_high_regime_confidence_is_limited_when_critical_evidence_is_blocked() -> None:
+    payload = build_market_decision_cockpit(
+        market_regime_decision={
+            "regime": "riskOn",
+            "confidence": "high",
+            "confidenceScore": 0.91,
+            "driverScores": {
+                "breadthParticipation": {
+                    "score": 82,
+                    "evidenceState": "score_grade",
+                    "reasons": [],
+                    "evidenceCount": 3,
+                    "observations": ["Breadth evidence is supportive."],
+                },
+                "dealerGamma": {
+                    "score": 0,
+                    "evidenceState": "unavailable",
+                    "reasons": ["dealerGamma:unavailable"],
+                    "evidenceCount": 0,
+                    "observations": [],
+                },
+            },
+            "explanation": {
+                "whyThisRegime": ["riskOn selected from deterministic driver agreement."],
+                "whatConfirmsIt": ["Breadth participation is supportive."],
+                "whatInvalidatesIt": ["Options structure evidence remains unavailable."],
+                "keyTriggerLevels": [],
+            },
+            "researchPriorities": {
+                "watchToday": ["Breadth participation"],
+                "needsMoreEvidence": ["dealerGamma:unavailable"],
+                "investigateNext": [],
+            },
+            "dataQuality": {
+                "evidenceGrade": "limited",
+                "availableDriverCount": 3,
+                "scoringDriverCount": 3,
+                "blockedDriverCount": 0,
+                "missingDriverCount": 1,
+                "proxyEvidenceCount": 0,
+                "confidenceCapReasons": ["dealerGamma:unavailable"],
+            },
+            "missingEvidence": ["dealerGamma:unavailable"],
+            "updatedAt": "2026-06-14T21:00:00+00:00",
+        },
+        research_candidates=[_candidate()],
+        generated_at="2026-06-15T00:00:00+00:00",
+    )
+
+    assert payload["marketRegimeDecision"]["confidence"] == "high"
+    assert payload["marketRegimeSummary"]["rawConfidence"] == "high"
+    assert payload["marketRegimeSummary"]["confidence"] == "moderate"
+    assert payload["marketRegimeSummary"]["confidenceCap"] == {
+        "value": 60,
+        "label": "medium",
+        "reasons": ["critical evidence missing"],
+    }
+    assert payload["marketRegimeSummary"]["confidenceState"]["status"] == "evidence limited"
+    assert payload["confidenceDiagnostics"]["evidenceStrength"]["consumerConfidence"] == "medium"
+    assert payload["confidenceDiagnostics"]["evidenceStrength"]["rawConfidence"] == "high"
+    assert payload["whatChanged"][0] == "Current regime observation is Risk-on observation with moderate confidence."
 
 
 def test_driver_attribution_surfaces_conflicting_positive_and_negative_drivers() -> None:

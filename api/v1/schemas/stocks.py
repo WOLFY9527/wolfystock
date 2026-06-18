@@ -548,6 +548,32 @@ class StockPeerCorrelationSnapshot(BaseModel):
     research_next_steps: List[str] = Field(default_factory=list, alias="researchNextSteps", description="下一步研究路径")
 
 
+class StockStructureConfidenceCap(BaseModel):
+    """结构判断的消费端置信上限。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    value: int = Field(..., ge=0, le=100, description="消费端最高可展示置信分值")
+    label: Literal["high", "medium", "low"] = Field(..., description="消费端最高可展示置信标签")
+    reasons: List[str] = Field(default_factory=list, description="消费端安全的置信限制原因")
+
+
+class StockStructureConfidenceState(BaseModel):
+    """结构判断的消费端置信状态。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    status: Literal["ready", "evidence limited", "freshness constrained", "source quality limited"] = Field(
+        ...,
+        description="消费端置信状态",
+    )
+    label: Literal["high", "medium", "low"] = Field(..., description="消费端最终置信标签")
+    reasons: List[str] = Field(default_factory=list, description="消费端安全的状态原因")
+    freshness_constrained: bool = Field(..., alias="freshnessConstrained", description="是否受新鲜度限制")
+    source_quality_limited: bool = Field(..., alias="sourceQualityLimited", description="是否受来源质量限制")
+    thesis_blocked: bool = Field(..., alias="thesisBlocked", description="是否因 thesis eligibility 阻断")
+
+
 class StockStructureDecisionResponse(BaseModel):
     """单股票结构判断响应。"""
 
@@ -558,6 +584,16 @@ class StockStructureDecisionResponse(BaseModel):
     symbol: str = Field(..., description="显式归一化股票代码")
     structure_state: str = Field(..., alias="structureState", description="结构状态")
     confidence: Literal["high", "medium", "low"] = Field(..., description="结构判断置信度")
+    confidence_cap: Optional[StockStructureConfidenceCap] = Field(
+        None,
+        alias="confidenceCap",
+        description="由证据覆盖约束得到的消费端置信上限",
+    )
+    confidence_state: Optional[StockStructureConfidenceState] = Field(
+        None,
+        alias="confidenceState",
+        description="由证据覆盖约束得到的消费端置信状态",
+    )
     component_scores: Dict[str, int] = Field(..., alias="componentScores", description="组件分数")
     explanation: Dict[str, Any] = Field(..., description="结构说明")
     research_notes: Dict[str, List[str]] = Field(..., alias="researchNotes", description="研究观察备注")

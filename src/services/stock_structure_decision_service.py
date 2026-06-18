@@ -10,6 +10,7 @@ from datetime import date
 from typing import Any
 
 from src.services.consumer_issue_labels import build_consumer_issues
+from src.services.confidence_evidence_consistency import project_confidence_evidence_state
 from src.services.stock_service import StockService
 from src.services.stock_structure_decision_engine import (
     MIN_REQUIRED_BARS,
@@ -406,11 +407,25 @@ def _finalize_structure_contract(
             str(payload.get("ticker") or ""),
             missing_inputs=["No verified local peer group metadata is available for this symbol."],
         )
+    confidence_projection = project_confidence_evidence_state(
+        payload={
+            "confidence": payload.get("confidence"),
+            "evidenceGaps": evidence_gaps,
+            "missingEvidence": missing_evidence,
+            "degradedInputs": degraded_inputs,
+            "dataQuality": data_quality,
+            "peerCorrelationSnapshot": peer_correlation_snapshot,
+        }
+    )
 
     result = dict(payload)
     result.update(
         {
             "symbol": str(payload.get("ticker") or ""),
+            "rawConfidence": str(payload.get("confidence") or "low"),
+            "confidence": confidence_projection["consumerConfidence"],
+            "confidenceCap": confidence_projection["confidenceCap"],
+            "confidenceState": confidence_projection["confidenceState"],
             "keyLevels": key_levels,
             "evidenceNotes": evidence_notes,
             "riskObservations": risk_observations,
