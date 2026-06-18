@@ -20,6 +20,12 @@ const TOKEN_LABELS: Record<string, Record<ConsumerStatusLocale, string>> = {
   unknown: { zh: '状态暂不明确', en: 'State not yet clear' },
   evidence_partial: { zh: '部分证据可用', en: 'Partial evidence available' },
   thin: { zh: '部分证据可用', en: 'Partial evidence available' },
+  high: { zh: '高优先', en: 'High priority' },
+  medium: { zh: '中优先', en: 'Medium priority' },
+  low: { zh: '低优先', en: 'Low priority' },
+  strength_continuation: { zh: '强势延续观察', en: 'Strength continuation watch' },
+  breakout_watch: { zh: '突破观察', en: 'Breakout watch' },
+  event_driven: { zh: '事件驱动观察', en: 'Event-driven watch' },
 };
 
 const PHRASE_LABELS: Record<string, Record<ConsumerStatusLocale, string>> = {
