@@ -1619,7 +1619,7 @@ describe('research IA pages', () => {
     expect(page).toHaveTextContent('情景输出');
     expect(page).toHaveTextContent('Breadth participation weakens quickly under the selected stress.');
     expect(page).toHaveTextContent('数据暂不可用');
-    expect(page).toHaveTextContent('评分等级');
+    expect(page).toHaveTextContent('证据已整理');
     expect(page).toHaveTextContent('需要更高质量证据共同确认受压驱动是否同向变化。');
     expect(page).toHaveTextContent('如果关键证据未随所选冲击同步变化，该情景框架会减弱。');
     expect(page).toHaveTextContent('仅观察');
@@ -1633,6 +1633,7 @@ describe('research IA pages', () => {
         confidence: 'medium',
       }),
     })));
+    expect(page.textContent || '').not.toContain('评分等级');
     expect(page.textContent || '').not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议/);
     expect(page.textContent || '').not.toMatch(/raw|debug|provider|schema|score-grade|score_grade|unavailable/i);
   });
@@ -1702,12 +1703,16 @@ describe('research IA pages', () => {
 
     const page = await screen.findByTestId('scenario-lab-page');
     expect(page).toHaveTextContent('当前情景暂不可生成');
-    expect(page).toHaveTextContent('基准情景证据不足，当前无法生成情景结果。');
-    expect(page).toHaveTextContent('基准情景证据不足，暂不满足情景分析所需的最低驱动覆盖。');
-    expect(page.textContent || '').not.toMatch(/score-grade|score_grade|unavailable/i);
+    expect(page).toHaveTextContent('当前市场状态数据不完整，暂无法进行情景分析。');
+    expect(page).toHaveTextContent('建议先查看市场概览，确认市场状态、驱动证据和数据新鲜度。');
+    expect(page).toHaveTextContent('当前页面仅用于研究观察，不构成操作结论。');
+    expect(within(page).getByRole('link', { name: '查看市场概览' })).toHaveAttribute('href', '/zh/market-overview');
+    expect(within(page).getByRole('link', { name: '返回研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
+    expect(page.textContent || '').not.toMatch(/blocked|unavailable|score-grade|score_grade|driver coverage|base regime evidence is missing|provider|source|runtime|debug|requestId|traceId|schemaVersion|policyVersion|raw|internal|cache/i);
+    expect(findConsumerRawLeakage(page.textContent || '')).toEqual([]);
     await waitFor(() => expect(runScenarioLabMock).toHaveBeenCalledWith(expect.objectContaining({
       scenarioName: 'gammaUnavailable',
     })));
-    expect(page.textContent || '').not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议/);
+    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|加仓|减仓|buy|sell|hold|recommend|target|stop|position size/i);
   });
 });

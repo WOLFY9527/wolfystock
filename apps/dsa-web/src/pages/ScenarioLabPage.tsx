@@ -19,7 +19,11 @@ import {
 } from '../api/marketDecisionCockpit';
 import { scenarioLabApi, type ScenarioLabResponse } from '../api/scenarioLab';
 import { useI18n } from '../contexts/UiLanguageContext';
-import { getConsumerStatusLabel, mapConsumerStatusText } from '../utils/consumerStatusLabels';
+import {
+  getConsumerStatusLabel,
+  mapConsumerStatusText,
+  normalizeConsumerStatusToken,
+} from '../utils/consumerStatusLabels';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import {
   RoughBulletList,
@@ -88,6 +92,38 @@ const DRIVER_LABELS: Record<string, Record<Locale, string>> = {
   eventCatalyst: { zh: '事件催化', en: 'Event catalyst' },
 };
 
+const SCENARIO_UNAVAILABLE_COPY: Record<Locale, {
+  stateTitle: string;
+  stateBody: string;
+  nextStep: string;
+  boundaryNote: string;
+  summaryFallback: string;
+  evidenceFallback: string;
+  primaryCta: string;
+  secondaryCta: string;
+}> = {
+  zh: {
+    stateTitle: '当前市场状态数据不完整',
+    stateBody: '当前市场状态数据不完整，暂无法进行情景分析。',
+    nextStep: '建议先查看市场概览，确认市场状态、驱动证据和数据新鲜度。',
+    boundaryNote: '当前页面仅用于研究观察，不构成操作结论。',
+    summaryFallback: '等待市场状态数据补齐后，再返回情景实验室查看该情景的观察摘要。',
+    evidenceFallback: '当前先回到市场概览确认市场状态、驱动证据和数据新鲜度。',
+    primaryCta: '查看市场概览',
+    secondaryCta: '返回研究雷达',
+  },
+  en: {
+    stateTitle: 'Market state data is incomplete',
+    stateBody: 'The current market state data is incomplete, so scenario analysis is not available yet.',
+    nextStep: 'Open Market Overview first to confirm the market state, driver evidence, and data freshness.',
+    boundaryNote: 'This page is for research observation only; no investment conclusion is being made.',
+    summaryFallback: 'Return after the market state data is complete to review this scenario summary.',
+    evidenceFallback: 'Use Market Overview first to confirm the market state, driver evidence, and data freshness.',
+    primaryCta: 'Open Market Overview',
+    secondaryCta: 'Back to Research Radar',
+  },
+};
+
 function presetForKey(raw: string | null): ScenarioPreset {
   return SCENARIO_PRESETS.find((item) => item.key === raw || item.scenarioName === raw) ?? SCENARIO_PRESETS[0];
 }
@@ -105,6 +141,14 @@ function humanizeToken(value: string | null | undefined): string {
 
 function labelForDriver(key: string, locale: Locale): string {
   return DRIVER_LABELS[key]?.[locale] ?? humanizeToken(key);
+}
+
+function scenarioDriverEvidenceStateLabel(value: string | null | undefined, locale: Locale): string {
+  const normalized = normalizeConsumerStatusToken(value);
+  if (normalized === 'score_grade') {
+    return locale === 'en' ? 'Evidence prepared' : '证据已整理';
+  }
+  return mapConsumerStatusText(value, locale);
 }
 
 function statusTone(value: string | null | undefined): 'success' | 'caution' | 'danger' | 'info' {
@@ -252,13 +296,30 @@ export default function ScenarioLabPage() {
           key,
           label: labelForDriver(key, locale),
           value: typed.score ?? '--',
-          meta: typed.evidenceState ? mapConsumerStatusText(typed.evidenceState, locale) : undefined,
+          meta: typed.evidenceState ? scenarioDriverEvidenceStateLabel(typed.evidenceState, locale) : undefined,
         };
       }),
     [cockpit?.marketRegimeDecision?.driverScores, locale],
   );
 
   const scenarioUnavailable = scenarioResult?.scenarioRegime.status === 'unavailable' || !scenarioResult?.changedDrivers.length;
+  const scenarioUnavailableCopy = SCENARIO_UNAVAILABLE_COPY[locale];
+  const scenarioUnavailableActions = (
+    <div className="flex flex-col gap-2 sm:flex-row">
+      <Link
+        to={localize('/market-overview')}
+        className="inline-flex items-center justify-center rounded-md border border-[color:var(--wolfy-accent)] bg-[var(--wolfy-accent)] px-3 py-1.5 text-xs font-medium text-[#f7f8ff] transition-colors hover:bg-[#6f79dc]"
+      >
+        {scenarioUnavailableCopy.primaryCta}
+      </Link>
+      <Link
+        to={localize('/research/radar')}
+        className="inline-flex items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+      >
+        {scenarioUnavailableCopy.secondaryCta}
+      </Link>
+    </div>
+  );
   const selectedLabel = selectedPreset.label[locale];
 
   return (
@@ -303,7 +364,9 @@ export default function ScenarioLabPage() {
               </RoughSectionCard>
               <RoughSectionCard eyebrow={locale === 'en' ? 'Evidence limits' : '证据限制'} title={locale === 'en' ? 'Keep the surface bounded' : '保持边界'}>
                 <RoughBulletList
-                  items={(scenarioResult?.evidenceLimits ?? []).map((item) => item)}
+                  items={scenarioUnavailable
+                    ? [scenarioUnavailableCopy.evidenceFallback, scenarioUnavailableCopy.boundaryNote]
+                    : (scenarioResult?.evidenceLimits ?? []).map((item) => item)}
                   emptyText={locale === 'en' ? 'No explicit evidence limit is attached.' : '当前没有额外证据限制。'}
                 />
               </RoughSectionCard>
@@ -423,10 +486,16 @@ export default function ScenarioLabPage() {
                     ? (locale === 'en' ? 'Scenario is currently unavailable' : '当前情景暂不可生成')
                     : (locale === 'en' ? 'Projected research frame' : '情景后的研究框架')}>
                     {scenarioUnavailable ? (
-                      <TerminalEmptyState title={locale === 'en' ? 'Base evidence is not ready' : '基准证据尚未就绪'}>
-                        {(mapConsumerStatusText(scenarioResult.evidenceLimits[0], locale)
-                          || mapConsumerStatusText(scenarioResult.scenarioSummary[0], locale))
-                          ?? (locale === 'en' ? 'The scenario needs more base evidence before it can be compared.' : '需要更多基准证据后才能进行情景对照。')}
+                      <TerminalEmptyState
+                        title={scenarioUnavailableCopy.stateTitle}
+                        action={scenarioUnavailableActions}
+                        data-testid="scenario-lab-unavailable-state"
+                      >
+                        <div className="space-y-1">
+                          <p>{scenarioUnavailableCopy.stateBody}</p>
+                          <p>{scenarioUnavailableCopy.nextStep}</p>
+                          <p>{scenarioUnavailableCopy.boundaryNote}</p>
+                        </div>
                       </TerminalEmptyState>
                     ) : (
                       <RoughKeyValueRows
@@ -463,7 +532,9 @@ export default function ScenarioLabPage() {
                   </RoughSectionCard>
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Generated scenario output' : '生成输出'} title={locale === 'en' ? 'What this scenario says' : '该情景给出的观察'}>
                     <RoughBulletList
-                      items={(scenarioResult.scenarioSummary ?? []).map((item) => mapConsumerStatusText(item, locale))}
+                      items={scenarioUnavailable
+                        ? [scenarioUnavailableCopy.summaryFallback]
+                        : (scenarioResult.scenarioSummary ?? []).map((item) => mapConsumerStatusText(item, locale))}
                       emptyText={locale === 'en' ? 'No scenario summary is available.' : '当前没有可展示的情景摘要。'}
                     />
                   </RoughSectionCard>
