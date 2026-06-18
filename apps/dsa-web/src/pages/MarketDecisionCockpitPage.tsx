@@ -25,6 +25,10 @@ import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRout
 import { formatDateTime } from '../utils/format';
 import { sanitizeUserFacingDataIssue, sanitizeUserFacingDataIssues } from '../utils/userFacingDataIssues';
 import {
+  buildMarketDecisionCockpitNarrative,
+  getDriverEvidenceStateLabel,
+} from '../utils/marketDecisionCockpitNarrative';
+import {
   RoughBulletList,
   RoughKeyValueRows,
   RoughScoreRows,
@@ -98,6 +102,8 @@ const DAILY_EVIDENCE_LINK_LABELS = {
   'Stock Structure': { zh: '结构详情', en: 'Stock structure' },
   'Scenario Lab': { zh: '情景实验室', en: 'Scenario Lab' },
 } as const;
+
+const FORBIDDEN_CONSUMER_WORDING = /建议(买入|卖出|加仓|减仓|持有)|买入|卖出|下单|立即交易|立即买入|交易建议|投资建议|止损|止盈|目标价|目标位|目标区间|仓位建议|必买|稳赚|保证收益|\b(buy now|sell now|buy|sell|hold|place order|submit order|trade recommendation|trading advice|investment advice|recommended trade|strategy recommendation|ai recommends you buy|best contract|guaranteed return|guaranteed|take profit|stop loss|target price|target|stop|position sizing|live trading|execution ready)\b/i;
 
 function labelFromKey(
   key: string,
@@ -248,6 +254,29 @@ function dailyReasonLabel(reason: string | null | undefined, language: 'zh' | 'e
     return safeLabel;
   }
   return language === 'en' ? 'Some evidence still needs verification.' : '该部分证据仍待补充验证。';
+}
+
+function sanitizeCockpitDisplayItems(
+  items: Array<string | null | undefined>,
+  language: 'zh' | 'en',
+): string[] {
+  const seen = new Set<string>();
+  const labels: string[] = [];
+  items.forEach((item) => {
+    const raw = String(item || '').trim();
+    if (!raw) {
+      return;
+    }
+    const label = FORBIDDEN_CONSUMER_WORDING.test(raw)
+      ? (language === 'en' ? 'Review after evidence is refreshed.' : '等待证据刷新后再复核。')
+      : sanitizeUserFacingDataIssue(raw, language);
+    if (!label || seen.has(label)) {
+      return;
+    }
+    seen.add(label);
+    labels.push(label);
+  });
+  return labels;
 }
 
 function dailyEvidenceLinkLabel(label: string | null | undefined, language: 'zh' | 'en'): string {
@@ -804,20 +833,23 @@ export default function MarketDecisionCockpitPage() {
   }, [load]);
 
   const driverRows = useMemo(
-    () => sortDriverScores(data?.marketRegimeDecision.driverScores).map(([key, value]) => ({
-      key,
-      label: labelFromKey(key, locale),
-      value: value?.score ?? '--',
-      meta: value?.reasons?.join(' · ')
-        || (value?.evidenceState ? dailyReasonLabel(value.evidenceState, locale) : null)
-        || (locale === 'en' ? 'Observation signal' : '观察信号'),
-      badge: value?.evidenceState
-        ? {
-          label: humanizeEnum(value.evidenceState, locale),
-          variant: value.evidenceState === 'unavailable' ? ('caution' as const) : ('info' as const),
-        }
-        : undefined,
-    })),
+    () => sortDriverScores(data?.marketRegimeDecision.driverScores).map(([key, value]) => {
+      const evidenceLabel = value?.evidenceState ? getDriverEvidenceStateLabel(value.evidenceState, locale) : null;
+      const reasonLabels = sanitizeCockpitDisplayItems(value?.reasons ?? [], locale);
+      return {
+        key,
+        label: labelFromKey(key, locale),
+        value: value?.score ?? '--',
+        meta: [evidenceLabel, ...reasonLabels].filter(Boolean).join(locale === 'en' ? ' · ' : '；')
+          || (locale === 'en' ? 'Observation signal' : '观察信号'),
+        badge: evidenceLabel
+          ? {
+            label: evidenceLabel,
+            variant: value?.evidenceState === 'unavailable' ? ('caution' as const) : ('info' as const),
+          }
+          : undefined,
+      };
+    }),
     [data?.marketRegimeDecision.driverScores, locale],
   );
 
@@ -825,6 +857,10 @@ export default function MarketDecisionCockpitPage() {
   const cockpitSummary = data?.cockpitSummary;
   const priorities = data?.marketRegimeDecision.researchPriorities;
   const optionsStatus = data?.optionsStructureStatus;
+  const cockpitNarrative = useMemo(
+    () => (data ? buildMarketDecisionCockpitNarrative(data, locale) : null),
+    [data, locale],
+  );
 
   return (
     <ConsumerWorkspaceScope className="flex min-h-0 flex-1">
@@ -863,13 +899,13 @@ export default function MarketDecisionCockpitPage() {
             <ConsoleContextRail className="flex flex-col gap-3 p-3">
               <RoughSectionCard eyebrow={locale === 'en' ? 'Summary' : '摘要'} title={locale === 'en' ? 'What changed' : '发生了什么'}>
                 <RoughBulletList
-                  items={(cockpitSummary?.whatChanged ?? []).map((item) => item)}
+                  items={sanitizeCockpitDisplayItems(cockpitSummary?.whatChanged ?? [], locale)}
                   emptyText={locale === 'en' ? 'No change summary yet.' : '暂未整理变化摘要。'}
                 />
               </RoughSectionCard>
               <RoughSectionCard eyebrow={locale === 'en' ? 'Boundary' : '边界'} title={locale === 'en' ? 'Confidence limits' : '置信边界'}>
                 <RoughBulletList
-                  items={(cockpitSummary?.confidenceLimits ?? []).map((item) => item)}
+                  items={sanitizeCockpitDisplayItems(cockpitSummary?.confidenceLimits ?? [], locale)}
                   emptyText={locale === 'en' ? 'No explicit confidence limit yet.' : '暂未整理明确的置信边界。'}
                 />
               </RoughSectionCard>
@@ -951,6 +987,20 @@ export default function MarketDecisionCockpitPage() {
                     },
                   ]}
                 />
+                {cockpitNarrative ? (
+                  <div className="border-b border-[color:var(--wolfy-divider)] p-3">
+                    <RoughSectionCard
+                      eyebrow={locale === 'en' ? 'Narrative' : '叙事'}
+                      title={locale === 'en' ? 'Why this market state looks this way' : '为什么形成当前市场状态'}
+                      data-testid="market-cockpit-narrative"
+                    >
+                      <RoughBulletList
+                        items={cockpitNarrative.sentences}
+                        emptyText={locale === 'en' ? 'Narrative is not available yet.' : '暂未形成市场状态叙事。'}
+                      />
+                    </RoughSectionCard>
+                  </div>
+                ) : null}
                 <div className="grid gap-3 p-3 md:grid-cols-2">
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Drivers' : '驱动'} title={locale === 'en' ? 'Driver scores' : '驱动评分'}>
                     <RoughScoreRows
@@ -964,17 +1014,17 @@ export default function MarketDecisionCockpitPage() {
                         {
                           key: 'why',
                           label: locale === 'en' ? 'Why this regime' : '形成原因',
-                          value: (data.marketRegimeDecision.explanation?.whyThisRegime ?? []).join('；') || '--',
+                          value: sanitizeCockpitDisplayItems(data.marketRegimeDecision.explanation?.whyThisRegime ?? [], locale).join('；') || '--',
                         },
                         {
                           key: 'confirm',
                           label: locale === 'en' ? 'What confirms it' : '确认信号',
-                          value: (data.marketRegimeDecision.explanation?.whatConfirmsIt ?? []).join('；') || '--',
+                          value: sanitizeCockpitDisplayItems(data.marketRegimeDecision.explanation?.whatConfirmsIt ?? [], locale).join('；') || '--',
                         },
                         {
                           key: 'invalidate',
                           label: locale === 'en' ? 'What invalidates it' : '失效观察',
-                          value: (data.marketRegimeDecision.invalidationConditions ?? []).join('；') || '--',
+                          value: sanitizeCockpitDisplayItems(data.marketRegimeDecision.invalidationConditions ?? [], locale).join('；') || '--',
                         },
                       ]}
                     />
@@ -985,19 +1035,18 @@ export default function MarketDecisionCockpitPage() {
                         {
                           key: 'watch',
                           label: locale === 'en' ? 'What to watch' : '今日关注',
-                          value: (cockpitSummary?.whatToWatch ?? priorities?.watchToday ?? []).join('；') || '--',
+                          value: sanitizeCockpitDisplayItems(cockpitSummary?.whatToWatch ?? priorities?.watchToday ?? [], locale).join('；') || '--',
                         },
                         {
                           key: 'evidence',
                           label: locale === 'en' ? 'Needs more evidence' : '待补证据',
-                          value: (priorities?.needsMoreEvidence ?? data.researchQueuePreview.evidenceGaps ?? [])
-                            .map((item) => dailyReasonLabel(item, locale))
+                          value: sanitizeCockpitDisplayItems(priorities?.needsMoreEvidence ?? data.researchQueuePreview.evidenceGaps ?? [], locale)
                             .join('；') || '--',
                         },
                         {
                           key: 'next',
                           label: locale === 'en' ? 'Investigate next' : '下一步研究',
-                          value: (priorities?.investigateNext ?? []).join('；') || '--',
+                          value: sanitizeCockpitDisplayItems(priorities?.investigateNext ?? [], locale).join('；') || '--',
                         },
                       ]}
                     />
@@ -1058,7 +1107,7 @@ export default function MarketDecisionCockpitPage() {
                                   {candidate.ticker || candidate.symbol || '--'}
                                 </div>
                                 <div className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
-                                  {(candidate.whyOnRadar ?? []).join('；') || (locale === 'en' ? 'Research queue preview item.' : '研究队列预览条目。')}
+                                  {sanitizeCockpitDisplayItems(candidate.whyOnRadar ?? [], locale).join('；') || (locale === 'en' ? 'Research queue preview item.' : '研究队列预览条目。')}
                                 </div>
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
