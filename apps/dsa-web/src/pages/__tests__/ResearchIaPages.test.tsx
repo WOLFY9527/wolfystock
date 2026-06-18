@@ -1281,9 +1281,12 @@ describe('research IA pages', () => {
 
     const page = await screen.findByTestId('stock-structure-decision-page');
     const snapshot = await within(page).findByTestId('stock-structure-peer-correlation-snapshot');
-    expect(snapshot).toHaveTextContent('同业相关性证据暂未就绪');
-    expect(snapshot).toHaveTextContent('同业价格或结构证据仍缺失，暂时无法形成可比较的相关性观察。');
-    expect(snapshot).toHaveTextContent('先检查个股证据缺口，或补充可比较标的后再复核。');
+    expect(snapshot).toHaveTextContent('暂无同业证据条目');
+    expect(snapshot).toHaveTextContent('当前缺少可比较同业证据，因此无法形成同业结构差异观察。');
+    expect(snapshot).toHaveTextContent('可添加另一个标的进行结构对比，或返回研究雷达从现有研究队列进入。');
+    expect(snapshot).toHaveTextContent('这不表示当前标的优先于其他标的，也不形成投资偏好。');
+    expect(within(snapshot).getByRole('link', { name: '添加对比标的' })).toHaveAttribute('href', '/zh/stocks/structure-decision');
+    expect(within(snapshot).getByRole('link', { name: '返回研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
     expect(snapshot.textContent || '').not.toMatch(/raw|debug|provider|trace|sourceRef|reasonCode|requestId|schemaVersion/i);
     expect(snapshot.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommendation|target price|stop loss|position sizing/i);
   });
