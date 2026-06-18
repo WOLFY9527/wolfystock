@@ -207,6 +207,24 @@ describe('parseApiError', () => {
     });
   });
 
+  it('preserves parsed error shape while masking token-like values in raw text', () => {
+    const parsed = parseApiError({
+      response: {
+        status: 502,
+        data: {
+          title: 'provider runtime failure',
+          message: 'requestId=req-123 token=secret-value',
+          raw: 'traceId=trace-999 bearer secret-value',
+        },
+      },
+    });
+
+    expect(parsed.title).toBe('服务器暂时不可用');
+    expect(parsed.message).toBe('服务器暂时不可用，请稍后重试。');
+    expect(parsed.rawMessage).not.toContain('secret-value');
+    expect(parsed.rawMessage).toContain('token=***');
+  });
+
   it('uses fallbackMessage when no useful error payload exists', () => {
     expect(getApiErrorMessage(undefined, '自定义兜底')).toBe('自定义兜底');
     expect(parseApiError(undefined, '自定义兜底').message).toBe('自定义兜底');

@@ -1,7 +1,8 @@
 import type React from 'react';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createApiError, createParsedApiError } from '../../api/error';
 import MarketDecisionCockpitPage from '../MarketDecisionCockpitPage';
 import ResearchRadarPage from '../ResearchRadarPage';
 import ScenarioLabPage from '../ScenarioLabPage';
@@ -847,6 +848,31 @@ describe('research IA pages', () => {
     expect(hubEmptyState).toHaveTextContent('数据暂不可用');
     expect(hubEmptyState).toHaveTextContent('当前页面没有可展示的稳定研究资料，请稍后重试。');
     expect(page.textContent || '').not.toMatch(/provider_runtime_trace|req-queue-123|raw payload|404/i);
+  });
+
+  it('renders consumer-safe API error copy on Research Radar and keeps retry available', async () => {
+    languageState.value = 'en';
+    getResearchRadarMock.mockRejectedValue(
+      createApiError(createParsedApiError({
+        title: 'provider runtime failure',
+        message: 'requestId=req-123 traceId=trace-999 token=bearer-abc cache adapter internal raw debug',
+        rawMessage: 'provider stack trace requestId=req-123 traceId=trace-999 token=bearer-abc cache adapter internal raw debug',
+        category: 'unknown',
+      })),
+    );
+    getResearchQueueMock.mockResolvedValue(makeEmptyUnifiedResearchQueue());
+
+    renderRoute(<ResearchRadarPage />, '/en/research/radar');
+
+    const page = await screen.findByTestId('research-radar-page');
+    const alert = await within(page).findByRole('alert');
+    expect(within(alert).getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(alert.textContent || '').not.toMatch(/provider|runtime|requestId|traceId|token|bearer|cache|adapter|internal|raw|debug|stack/i);
+    expect(alert).toHaveTextContent('This request is temporarily unavailable.');
+    expect(alert).toHaveTextContent('Please try again shortly.');
+
+    fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(getResearchRadarMock).toHaveBeenCalledTimes(2));
   });
 
   it('renders the Stock Structure entry as an empty state without calling a stock API', () => {

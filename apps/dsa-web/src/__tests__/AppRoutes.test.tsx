@@ -1,17 +1,20 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App, { AppContent } from '../App';
 import { expectNoRawI18nKeys } from '../test-utils/i18nRawKeySentinel';
 import { isPreviewRoutePath } from '../utils/appRouteGuards';
 import type { AdminCapabilityFlags } from '../utils/adminCapabilities';
 
-const { useAuthMock, useProductSurfaceMock, setLanguageMock, languageState, previewReportPanelImportSpy } = vi.hoisted(() => ({
+const { useAuthMock, useProductSurfaceMock, setLanguageMock, languageState, previewReportPanelImportSpy, routeCrashState } = vi.hoisted(() => ({
   useAuthMock: vi.fn(),
   useProductSurfaceMock: vi.fn(),
   setLanguageMock: vi.fn(),
   languageState: { value: 'zh' as 'zh' | 'en' },
   previewReportPanelImportSpy: vi.fn(),
+  routeCrashState: {
+    marketOverview: false,
+  },
 }));
 
 const noCapabilities: AdminCapabilityFlags = {
@@ -40,6 +43,7 @@ const fullCapabilities: AdminCapabilityFlags = {
 
 vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => useAuthMock(),
+  AuthProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 vi.mock('../hooks/useProductSurface', () => ({
@@ -115,7 +119,12 @@ vi.mock('../pages/PortfolioPage', () => ({
 }));
 
 vi.mock('../pages/MarketOverviewPage', () => ({
-  default: () => <div>market-overview-page</div>,
+  default: () => {
+    if (routeCrashState.marketOverview) {
+      throw new Error('provider runtime failure requestId=req-123 token=bearer-abc stack trace');
+    }
+    return <div>market-overview-page</div>;
+  },
 }));
 
 vi.mock('../pages/MarketDecisionCockpitPage', () => ({
@@ -301,9 +310,14 @@ function mockAuthBootstrapLoadError(refreshStatus = vi.fn()) {
 }
 
 describe('AppContent route flows', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv('VITE_WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED', '');
+    routeCrashState.marketOverview = false;
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: false,
@@ -475,6 +489,24 @@ describe('AppContent route flows', () => {
     expect(await screen.findByTestId('preview-report-page')).toBeInTheDocument();
     expect(await screen.findByTestId('route-preview-standard-report')).toHaveTextContent('等待回踩确认');
     expect(previewReportPanelImportSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders a consumer-safe global error boundary on real route crashes', async () => {
+    languageState.value = 'en';
+    routeCrashState.marketOverview = true;
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    renderBrowserAppAt('/en/market-overview');
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('This page is temporarily unavailable. Refresh or try again shortly.');
+    expect(alert).toHaveTextContent('A rendering error interrupted this screen. Technical details are hidden. Retry or return home to continue with other research.');
+    expect(within(alert).getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(within(alert).getByRole('button', { name: 'Back to home' })).toBeInTheDocument();
+    expect(alert.textContent || '').not.toMatch(/provider|runtime|requestId|token|bearer|stack|trace|error:/i);
+
+    fireEvent.click(within(alert).getByRole('button', { name: 'Back to home' }));
+    expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
   });
 
   it('does not eagerly import the preview report panel on unrelated home routes', async () => {

@@ -1,6 +1,7 @@
 import type React from 'react';
 import type { ParsedApiError } from '../../api/error';
 import { useI18n } from '../../contexts/UiLanguageContext';
+import { getConsumerSafeApiErrorCopy } from '../../utils/consumerErrorCopy';
 import { SupportBanner } from './SupportSurface';
 
 interface ApiErrorAlertProps {
@@ -82,18 +83,22 @@ export const ApiErrorAlert: React.FC<ApiErrorAlertProps> = ({
   onDismiss,
   allowDetails = false,
 }) => {
-  const { t } = useI18n();
-  const hasHiddenDetails = error.rawMessage.trim() && error.rawMessage.trim() !== error.message.trim();
+  const { language, t } = useI18n();
+  const safeCopy = getConsumerSafeApiErrorCopy(error, {
+    language: language === 'en' ? 'en' : 'zh',
+    fallbackTitle: language === 'en' ? 'This request is temporarily unavailable.' : '当前请求暂不可用。',
+    fallbackMessage: language === 'en' ? 'Please try again shortly.' : '请稍后重试。',
+  });
   const guidance = getErrorGuidance(error, t);
   const dismissText = dismissLabel || t('common.apiError.close');
-  const shouldRenderDetails = allowDetails && hasHiddenDetails;
+  const shouldRenderDetails = allowDetails && safeCopy.rawMessage.trim().length > 0;
 
   return (
     <SupportBanner
       tone="danger"
       title={(
         <span className="flex items-start justify-between gap-3">
-          <span>{error.title}</span>
+          <span>{safeCopy.title}</span>
           {onDismiss ? (
             <button
               type="button"
@@ -105,7 +110,7 @@ export const ApiErrorAlert: React.FC<ApiErrorAlertProps> = ({
           ) : null}
         </span>
       )}
-      body={error.message}
+      body={safeCopy.message}
       titleClassName="text-danger"
       bodyClassName="text-danger opacity-90"
       className={className}
@@ -115,10 +120,10 @@ export const ApiErrorAlert: React.FC<ApiErrorAlertProps> = ({
         <details className="theme-panel-subtle mt-3 rounded-[var(--cohere-radius-medium)] p-3">
           <summary className="label-uppercase cursor-pointer text-danger opacity-90">{t('common.apiError.details')}</summary>
           <pre className="mt-2 whitespace-pre-wrap break-words text-[11px] leading-5 text-danger opacity-85">
-            {error.rawMessage}
+            {safeCopy.rawMessage}
           </pre>
         </details>
-      ) : hasHiddenDetails ? (
+      ) : safeCopy.hasHiddenDetails ? (
         <p className="mt-3 text-xs leading-5 text-secondary-text">
           {t('common.apiError.hiddenDetails')}
         </p>
