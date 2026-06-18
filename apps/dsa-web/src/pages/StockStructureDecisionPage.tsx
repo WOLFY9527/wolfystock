@@ -267,6 +267,15 @@ function buildComparePath(symbols: string[]): string {
   return `/stocks/${symbols.map((symbol) => encodeURIComponent(symbol)).join(',')}/structure-decision`;
 }
 
+function buildCompareEntryPath(symbol: string): string {
+  const params = new URLSearchParams();
+  if (symbol.trim()) {
+    params.set('symbols', symbol.trim().toUpperCase());
+  }
+  const query = params.toString();
+  return query ? `/stocks/structure-decision?${query}` : '/stocks/structure-decision';
+}
+
 type SymbolNotFoundState = {
   symbol: string;
 };
@@ -349,11 +358,13 @@ function StockStructureSymbolNotFoundState({
 function StockPeerCorrelationEmptyState({
   language,
   localize,
+  primarySymbol,
   className,
   testId,
 }: {
   language: 'zh' | 'en';
   localize: (path: string) => string;
+  primarySymbol: string;
   className?: string;
   testId: string;
 }) {
@@ -366,7 +377,7 @@ function StockPeerCorrelationEmptyState({
       action={(
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
           <Link
-            to={localize('/stocks/structure-decision')}
+            to={localize(buildCompareEntryPath(primarySymbol))}
             className="inline-flex min-h-9 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
           >
             {isEnglish ? 'Add compare symbol' : '添加对比标的'}
@@ -889,6 +900,7 @@ export default function StockStructureDecisionPage() {
                     <StockPeerCorrelationEmptyState
                       language={locale}
                       localize={localize}
+                      primarySymbol={data.ticker || primarySymbol}
                       testId="stock-structure-peer-correlation-snapshot"
                       className="md:col-span-2"
                     />

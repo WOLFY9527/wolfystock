@@ -947,14 +947,18 @@ describe('research IA pages', () => {
   });
 
   it('renders the Stock Structure entry as an empty state without calling a stock API', () => {
-    renderRoute(<StockStructureDecisionEntryPage />, '/zh/stocks/structure-decision');
+    renderRoute(<StockStructureDecisionEntryPage />, '/zh/stocks/structure-decision?symbols=AAPL');
 
     const page = screen.getByTestId('stock-structure-entry-page');
     expect(page).toHaveTextContent('个股结构从研究队列进入');
     expect(page).toHaveTextContent('入口不调用');
     expect(page).toHaveTextContent('不展示原始载荷');
+    expect(page).toHaveTextContent('已带入 AAPL');
+    expect(page).toHaveTextContent('输入或添加另一个标的后，可进行结构对比。');
+    expect(page).toHaveTextContent('对比仅展示结构差异和证据完整度，不给出买卖排序。');
     expect(screen.getByRole('link', { name: '研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
-    expect(page.textContent || '').not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议/);
+    expect(findConsumerRawLeakage(page.textContent || '')).toEqual([]);
+    expect(page.textContent || '').not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议|优先于其他标的|投资偏好/);
   });
 
   it('renders a consumer-safe symbol-not-found state for an invalid single-symbol structure route', async () => {
@@ -1285,7 +1289,7 @@ describe('research IA pages', () => {
     expect(snapshot).toHaveTextContent('当前缺少可比较同业证据，因此无法形成同业结构差异观察。');
     expect(snapshot).toHaveTextContent('可添加另一个标的进行结构对比，或返回研究雷达从现有研究队列进入。');
     expect(snapshot).toHaveTextContent('这不表示当前标的优先于其他标的，也不形成投资偏好。');
-    expect(within(snapshot).getByRole('link', { name: '添加对比标的' })).toHaveAttribute('href', '/zh/stocks/structure-decision');
+    expect(within(snapshot).getByRole('link', { name: '添加对比标的' })).toHaveAttribute('href', '/zh/stocks/structure-decision?symbols=ADBE');
     expect(within(snapshot).getByRole('link', { name: '返回研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
     expect(snapshot.textContent || '').not.toMatch(/raw|debug|provider|trace|sourceRef|reasonCode|requestId|schemaVersion/i);
     expect(snapshot.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommendation|target price|stop loss|position sizing/i);

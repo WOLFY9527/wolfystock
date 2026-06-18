@@ -12,12 +12,23 @@ import { useI18n } from '../contexts/UiLanguageContext';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import { RoughBulletList, RoughSectionCard, RoughSurfaceIntro } from './roughShellShared';
 
+function parseStockStructureSymbols(value: string | null | undefined): string[] {
+  return [...new Set(String(value || '')
+    .split(/[,\s;|+]+/)
+    .map((item) => item.trim().toUpperCase())
+    .filter(Boolean))];
+}
+
 export default function StockStructureDecisionEntryPage() {
   const { language } = useI18n();
   const locale = language === 'en' ? 'en' : 'zh';
   const location = useLocation();
   const routeLocale = parseLocaleFromPathname(location.pathname);
   const localize = (path: string) => (routeLocale ? buildLocalizedPath(path, routeLocale) : path);
+  const searchParams = new URLSearchParams(location.search);
+  const requestedSymbols = parseStockStructureSymbols(searchParams.get('symbols'));
+  const carriedSymbol = requestedSymbols[0] || '';
+  const hasCarriedSymbol = Boolean(carriedSymbol);
 
   return (
     <ConsumerWorkspaceScope className="flex min-h-0 flex-1">
@@ -65,7 +76,10 @@ export default function StockStructureDecisionEntryPage() {
                   items={[
                     locale === 'en' ? 'Use Research Radar queue rows when available.' : '优先从研究雷达队列条目进入。',
                     locale === 'en' ? 'Direct URL pattern: /stocks/{ticker}/structure-decision.' : '直接 URL 形态：/stocks/{ticker}/structure-decision。',
-                    locale === 'en' ? 'Missing or degraded OHLCV evidence stays visible on the detail page.' : 'K 线证据缺失或降级会在详情页可见。'
+                    locale === 'en' ? 'Missing or degraded OHLCV evidence stays visible on the detail page.' : 'K 线证据缺失或降级会在详情页可见。',
+                    locale === 'en'
+                      ? 'After entering or adding another symbol, compare mode focuses on structural differences and evidence completeness only.'
+                      : '输入或添加另一个标的后，可进行结构对比。',
                   ]}
                   emptyText=""
                 />
@@ -101,9 +115,22 @@ export default function StockStructureDecisionEntryPage() {
               </RoughSectionCard>
               <RoughSectionCard eyebrow={locale === 'en' ? 'Empty state' : '空状态'} title={locale === 'en' ? 'No ticker selected' : '尚未选择标的'}>
                 <TerminalEmptyState title={locale === 'en' ? 'Open Research Radar first' : '先打开研究雷达'}>
-                  {locale === 'en'
-                    ? 'When the radar returns queue rows, each ticker can deep-link into this structure workspace.'
-                    : '研究雷达返回队列后，每个标的都可以深链进入结构工作区。'}
+                  <div className="space-y-1">
+                    <p>
+                      {hasCarriedSymbol
+                        ? (locale === 'en'
+                          ? `${carriedSymbol} is already carried into this entry. Add another symbol to start a structure comparison.`
+                          : `已带入 ${carriedSymbol}。输入或添加另一个标的后，可进行结构对比。`)
+                        : (locale === 'en'
+                          ? 'When the radar returns queue rows, each ticker can deep-link into this structure workspace.'
+                          : '研究雷达返回队列后，每个标的都可以深链进入结构工作区。')}
+                    </p>
+                    <p>
+                      {locale === 'en'
+                        ? 'Compare mode shows structural differences and evidence completeness only. It does not rank symbols or provide trading advice.'
+                        : '对比仅展示结构差异和证据完整度，不给出买卖排序。'}
+                    </p>
+                  </div>
                 </TerminalEmptyState>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <TerminalChip variant="info">{locale === 'en' ? 'No raw payload' : '不展示原始载荷'}</TerminalChip>
