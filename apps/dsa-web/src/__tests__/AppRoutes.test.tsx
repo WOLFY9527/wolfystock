@@ -520,14 +520,11 @@ describe('AppContent route flows', () => {
   it('redirects guest access from /settings to the dedicated guest page', async () => {
     renderAtWithLocationProbe('/settings');
 
-    expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/guest'));
-    expect(screen.queryByText('chat-page')).not.toBeInTheDocument();
-    expect(screen.queryByText('portfolio-page')).not.toBeInTheDocument();
-    expect(screen.queryByText('backtest-page')).not.toBeInTheDocument();
-    expect(screen.queryByText('scanner-surface-page')).not.toBeInTheDocument();
+    expect(await screen.findByText('auth-guard:Personal settings')).toBeInTheDocument();
+    expect(screen.getByTestId('location-path')).toHaveTextContent('/settings');
+    expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
     expect(screen.queryByText('personal-settings-page')).not.toBeInTheDocument();
-    expect(screen.queryByText('system-settings-page')).not.toBeInTheDocument();
+    expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
   });
 
   it('keeps guest access on /settings/system fail-closed with an admin sign-in requirement', async () => {

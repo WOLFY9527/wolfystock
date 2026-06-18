@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { translate } from '../../../i18n/core';
 import { expectNoRawI18nKeys } from '../../../test-utils/i18nRawKeySentinel';
 import { AuthGuardOverlay } from '../AuthGuardOverlay';
 
@@ -11,6 +12,7 @@ const { languageState } = vi.hoisted(() => ({
 vi.mock('../../../contexts/UiLanguageContext', () => ({
   useI18n: () => ({
     language: languageState.value,
+    t: (key: string, vars?: Record<string, string | number | undefined>) => translate(languageState.value, key, vars),
   }),
 }));
 
@@ -38,7 +40,7 @@ describe('AuthGuardOverlay', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('dialog', { name: '登录后即可进入 市场总览' })).toHaveAttribute('aria-modal', 'true');
+    expect(screen.getByRole('dialog', { name: '需要登录' })).toHaveAttribute('aria-modal', 'true');
     expect(screen.getByTestId('auth-guard-overlay')).toHaveClass(
       'fixed',
       'inset-0',
@@ -60,11 +62,12 @@ describe('AuthGuardOverlay', () => {
       'border',
       'backdrop-blur-2xl',
     );
-    expect(screen.getByRole('heading', { name: '登录后即可进入 市场总览' })).toBeInTheDocument();
-    expect(screen.getByText('当前功能仅对已登录账户开放。登录后可继续使用个人工作区、历史复盘和进阶研究视图。')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '需要登录' })).toBeInTheDocument();
+    expect(screen.getByText('请先登录后继续访问该页面。')).toBeInTheDocument();
+    expect(screen.getByText('登录后可返回刚才的研究页面。')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '返回首页' })).toBeInTheDocument();
     expectNoRawI18nKeys(container);
-    fireEvent.click(screen.getByRole('button', { name: '登录或创建账户' }));
+    fireEvent.click(screen.getByRole('button', { name: '前往登录 市场总览' }));
     expect(navigate).toHaveBeenCalledWith('/zh/login?redirect=%2Fzh%2Fmarket-overview');
   });
 
@@ -95,12 +98,13 @@ describe('AuthGuardOverlay', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('heading', { name: 'Sign in to continue to Portfolio' })).toBeInTheDocument();
-    expect(screen.getByText('This route is available to signed-in accounts only. Sign in to continue with your saved workspace, historical review, and advanced research views.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sign in or create account' })).toHaveClass('bg-[var(--wolfy-accent)]', 'text-[#f7f8ff]');
+    expect(screen.getByRole('heading', { name: 'Sign-in required' })).toBeInTheDocument();
+    expect(screen.getByText('Sign in before continuing to this page.')).toBeInTheDocument();
+    expect(screen.getByText('After signing in, you can return to the research page you just opened.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Go to sign in Portfolio' })).toHaveClass('bg-[var(--wolfy-accent)]', 'text-[#f7f8ff]');
     expect(screen.getByRole('button', { name: 'Return home' })).toBeInTheDocument();
     expectNoRawI18nKeys(container);
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in or create account' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Go to sign in Portfolio' }));
     expect(navigate).toHaveBeenCalledWith('/en/login?redirect=%2Fen%2Fportfolio');
   });
 
@@ -117,7 +121,7 @@ describe('AuthGuardOverlay', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('button', { name: '登录或创建账户' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: '前往登录 市场总览' })).toHaveFocus();
   });
 
   it('wraps Tab and Shift+Tab inside the auth dialog instead of exposing protected backdrop controls', () => {
@@ -129,7 +133,7 @@ describe('AuthGuardOverlay', () => {
       </MemoryRouter>,
     );
 
-    const loginCta = screen.getByRole('button', { name: '登录或创建账户' });
+    const loginCta = screen.getByRole('button', { name: '前往登录 持仓管理' });
     const safeExitButton = screen.getByRole('button', { name: '返回首页' });
     expect(loginCta).toHaveFocus();
 
@@ -158,7 +162,7 @@ describe('AuthGuardOverlay', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('button', { name: '登录或创建账户' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: '前往登录 持仓管理' })).toHaveFocus();
 
     unmount();
 
@@ -174,13 +178,25 @@ describe('AuthGuardOverlay', () => {
 
     fireEvent.keyDown(document, { key: 'Escape' });
 
-    expect(screen.getByRole('dialog', { name: '登录后即可进入 持仓管理' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '需要登录' })).toBeInTheDocument();
     expect(navigate).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: '返回首页' }));
     expect(navigate).toHaveBeenCalledWith('/zh');
 
-    fireEvent.click(screen.getByRole('button', { name: '登录或创建账户' }));
+    fireEvent.click(screen.getByRole('button', { name: '前往登录 持仓管理' }));
     expect(navigate).toHaveBeenLastCalledWith('/zh/login?redirect=%2Fzh%2Fportfolio');
+  });
+
+  it('keeps the auth-required copy consumer-safe and free from raw auth or runtime terms', () => {
+    render(
+      <MemoryRouter initialEntries={['/zh/settings']}>
+        <AuthGuardOverlay moduleName="个人设置" />
+      </MemoryRouter>,
+    );
+
+    const overlayText = screen.getByTestId('auth-guard-card').textContent || '';
+    expect(overlayText).not.toMatch(/token|session|cookie|bearer|auth header|debug|provider|runtime|stack|Error:|requestId|traceId|schemaVersion|policyVersion|raw|internal|local_db|fallback_source|fixture|adapter|cache/i);
+    expect(overlayText).not.toMatch(/buy|sell|hold|recommend|target|stop|position size|买入|卖出|持有|推荐|目标价|止损|仓位建议|加仓|减仓/i);
   });
 });

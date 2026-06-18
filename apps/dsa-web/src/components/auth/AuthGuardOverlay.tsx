@@ -32,7 +32,7 @@ function getFocusableElements(container: HTMLElement | null): HTMLElement[] {
 export const AuthGuardOverlay: React.FC<AuthGuardOverlayProps> = ({ moduleName, children }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { language } = useI18n();
+  const { language, t } = useI18n();
   const titleId = useId();
   const bodyId = useId();
   const dialogRef = useRef<HTMLElement | null>(null);
@@ -45,11 +45,10 @@ export const AuthGuardOverlay: React.FC<AuthGuardOverlayProps> = ({ moduleName, 
     ? buildLocalizedPath(`/login?redirect=${encodeURIComponent(currentRoute)}`, routeLocale)
     : `/login?redirect=${encodeURIComponent(currentRoute)}`;
   const homePath = routeLocale ? buildLocalizedPath('/', routeLocale) : '/';
-  const title = language === 'en' ? `Sign in to continue to ${moduleName}` : `登录后即可进入 ${moduleName}`;
-  const body = language === 'en'
-    ? 'This route is available to signed-in accounts only. Sign in to continue with your saved workspace, historical review, and advanced research views.'
-    : '当前功能仅对已登录账户开放。登录后可继续使用个人工作区、历史复盘和进阶研究视图。';
-  const buttonLabel = language === 'en' ? 'Sign in or create account' : '登录或创建账户';
+  const title = t('common.authRequiredState.title');
+  const body = t('common.authRequiredState.body');
+  const followup = t('common.authRequiredState.followup');
+  const buttonLabel = t('common.authRequiredState.primaryAction');
   const safeExitLabel = language === 'en' ? 'Return home' : '返回首页';
 
   useEffect(() => {
@@ -168,12 +167,16 @@ export const AuthGuardOverlay: React.FC<AuthGuardOverlayProps> = ({ moduleName, 
           <Lock className="size-4" aria-hidden="true" />
         </div>
         <h2 id={titleId} className="text-base font-semibold text-[color:var(--wolfy-text-primary)]">{title}</h2>
-        <p id={bodyId} className="mx-auto mt-3 max-w-[22rem] text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{body}</p>
+        <div id={bodyId} className="mx-auto mt-3 max-w-[22rem] space-y-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+          <p>{body}</p>
+          <p>{followup}</p>
+        </div>
         <div className="mt-7 grid w-full gap-2 sm:grid-cols-2">
           <TerminalButton
             ref={loginButtonRef}
             variant="primary"
             className="h-11 w-full rounded-[10px] text-sm"
+            aria-label={`${buttonLabel} ${moduleName}`.trim()}
             onClick={() => navigate(loginPath)}
           >
             {buttonLabel}

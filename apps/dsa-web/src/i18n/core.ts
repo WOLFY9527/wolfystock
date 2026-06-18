@@ -344,6 +344,12 @@ const RESOURCES = {
       closeDrawer: '关闭抽屉',
       confirmationRequired: '需要确认',
       confirmAction: '确认操作',
+      authRequiredState: {
+        title: '需要登录',
+        body: '请先登录后继续访问该页面。',
+        followup: '登录后可返回刚才的研究页面。',
+        primaryAction: '前往登录',
+      },
       stockSearchPlaceholder: '输入股票代码或名称',
       apiError: {
         close: '关闭',
@@ -3352,6 +3358,12 @@ This memo is for research discussion and does not constitute investment advice.`
       closeDrawer: 'Close drawer',
       confirmationRequired: 'Confirmation required',
       confirmAction: 'Confirm action',
+      authRequiredState: {
+        title: 'Sign-in required',
+        body: 'Sign in before continuing to this page.',
+        followup: 'After signing in, you can return to the research page you just opened.',
+        primaryAction: 'Go to sign in',
+      },
       stockSearchPlaceholder: 'Enter a stock code or company name',
       apiError: {
         close: 'Close',
