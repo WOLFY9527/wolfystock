@@ -99,8 +99,13 @@ export type StockIntradayResponse = {
 
 export type StockValidationResponse = {
   stockCode: string;
+  normalizedSymbol?: string | null;
+  market?: string | null;
+  status?: 'valid' | 'invalid_format' | 'unsupported_market' | 'ambiguous' | 'not_found' | 'unavailable' | 'unknown' | string;
+  valid?: boolean;
   exists: boolean;
   stockName?: string | null;
+  message?: string;
 };
 
 export type StockStructureDecisionKeyLevel = {
