@@ -417,6 +417,76 @@ describe('research IA pages', () => {
     expect(page).toHaveTextContent('驱动评分');
   });
 
+  it('renders a compact consumer-safe cockpit narrative for blocked and low-confidence drivers', async () => {
+    getDecisionCockpitMock.mockResolvedValue({
+      schemaVersion: 'market_decision_cockpit.v1',
+      generatedAt: '2026-06-15T09:30:00Z',
+      marketRegimeDecision: {
+        regime: 'lowConfidence',
+        confidence: 'low',
+        confidenceScore: 0.18,
+        driverScores: {
+          dealerGamma: { score: 0, evidenceState: 'unavailable' },
+          breadthParticipation: { score: 0, evidenceState: 'blocked' },
+          volatilityStructure: { score: 0, evidenceState: 'provider_timeout', reasons: ['provider_runtime_debug'] },
+          ratesDollar: { score: 57, evidenceState: 'score_grade' },
+          liquidityCredit: { score: 31, evidenceState: 'partial' },
+          eventCatalyst: { score: 0, evidenceState: 'raw_backend_reason_code' },
+        },
+        explanation: {
+          whyThisRegime: ['low_confidence_internal_reason'],
+          whatConfirmsIt: ['ratesDollar score_grade evidence'],
+          whatInvalidatesIt: ['provider_timeout'],
+        },
+        invalidationConditions: ['provider_runtime_debug'],
+        researchPriorities: {
+          watchToday: ['buy now if score improves'],
+          needsMoreEvidence: ['provider_timeout', 'raw_backend_reason_code'],
+          investigateNext: ['sell stop target should never render'],
+        },
+      },
+      researchQueuePreview: {
+        topCandidates: [],
+        queueQuality: 'thin',
+        evidenceGaps: ['provider_timeout'],
+        previewOnly: true,
+      },
+      optionsStructureStatus: {
+        gammaEvidenceStatus: 'unavailable',
+        observationOnly: true,
+        decisionGrade: false,
+        missingEvidence: [{ code: 'missing_contracts' }],
+        blockedReasonCodes: ['option_chain_unavailable'],
+      },
+      cockpitSummary: {
+        whatChanged: [],
+        whyItMatters: [],
+        whatToWatch: ['buy now if score improves'],
+        confidenceLimits: ['provider_timeout'],
+      },
+      noAdviceDisclosure: '仅供研究语境参考。',
+      dataQuality: { status: 'degraded', reasonCodes: ['provider_timeout'] },
+    });
+    getDailyIntelligenceMock.mockRejectedValue(new Error('briefing unavailable'));
+
+    renderRoute(<MarketDecisionCockpitPage />, '/zh/market/decision-cockpit');
+
+    const page = await screen.findByTestId('market-decision-cockpit-page');
+    const narrative = await within(page).findByTestId('market-cockpit-narrative');
+    expect(narrative).toHaveTextContent('当前市场状态仍处于低置信观察区间');
+    expect(narrative).toHaveTextContent('多数驱动项缺少可评分证据');
+    expect(narrative).toHaveTextContent('可用证据主要来自利率与美元');
+    expect(narrative).toHaveTextContent('Gamma 观察、广度参与、波动结构');
+    expect(narrative).toHaveTextContent('研究优先级线索');
+    expect(page).toHaveTextContent('可评分证据');
+    expect(page).toHaveTextContent('证据暂不可用');
+    expect(narrative.textContent || '').not.toMatch(/provider_timeout|raw_backend_reason_code|score_grade|provider_runtime_debug|schema|debug|trace/i);
+    expect(narrative.textContent || '').not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议/);
+    expect(page.textContent || '').not.toMatch(/provider_timeout|raw_backend_reason_code|score_grade|provider_runtime_debug|low_confidence_internal_reason|schema|debug|trace/i);
+    expect(page.textContent || '').not.toMatch(/buy now|sell stop|买入|卖出|下单|目标价|止损|仓位建议/i);
+    expect(findConsumerRawLeakage(narrative.textContent || '')).toEqual([]);
+  });
+
   it('renders Research Radar as the core queue and links queue rows to Stock Structure', async () => {
     getResearchRadarMock.mockResolvedValue({
       schemaVersion: 'research_radar_api_v1',
