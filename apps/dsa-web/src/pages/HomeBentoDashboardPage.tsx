@@ -1829,6 +1829,7 @@ function HomeConclusionFirstConsole({
   confidenceVisual: ReturnType<typeof resolveConfidenceVisual>;
 }) {
   const isEnglish = locale === 'en';
+  const routeLocale = typeof window !== 'undefined' ? parseLocaleFromPathname(window.location.pathname) : null;
   const frameworkRows = buildResearchFrameworkRows(locale, dashboard, dataQualityReport);
   const currentConclusion = frameworkRows[0]?.value || thesisCopy;
   const supportCopy = buildSupportFactorCopy(locale, dashboard);
@@ -1858,6 +1859,37 @@ function HomeConclusionFirstConsole({
   const confidenceTone: 'neutral' | 'used' | 'warning' | 'missing' = dataQualityReport
     ? dataQualityChipTone(dataQualityReport)
     : 'neutral';
+  const primaryActionHref = routeLocale
+    ? buildLocalizedPath(`/stocks/${dashboard.ticker}/structure-decision`, routeLocale)
+    : `/stocks/${dashboard.ticker}/structure-decision`;
+  const quickActions = [
+    {
+      key: 'stock-structure',
+      label: isEnglish ? 'Stock Structure' : '结构面板',
+      href: primaryActionHref,
+      primary: true,
+      detail: isEnglish ? 'Open the current symbol structure view first.' : '优先打开当前标的结构面板。',
+    },
+    {
+      key: 'research-radar',
+      label: isEnglish ? 'Research Radar' : '研究雷达',
+      href: routeLocale ? buildLocalizedPath('/research/radar', routeLocale) : '/research/radar',
+      primary: false,
+    },
+    {
+      key: 'market-overview',
+      label: isEnglish ? 'Market Overview' : '市场总览',
+      href: routeLocale ? buildLocalizedPath('/market-overview', routeLocale) : '/market-overview',
+      primary: false,
+    },
+    {
+      key: 'options-lab',
+      label: isEnglish ? 'Options Lab' : '期权实验室',
+      href: routeLocale ? buildLocalizedPath('/options-lab', routeLocale) : '/options-lab',
+      primary: false,
+    },
+  ] as const;
+  const primaryAction = quickActions[0];
 
   return (
     <section
@@ -1885,54 +1917,6 @@ function HomeConclusionFirstConsole({
             {confidenceVisual.label}
           </TraceBadge>
         </div>
-        <ConsumerResearchReadinessStrip
-          readiness={researchReadiness}
-          title={isEnglish ? 'Research readiness' : '研究就绪度'}
-          testId="home-research-readiness-strip"
-          className="mb-4"
-        />
-        <ConsumerEvidenceCoverageStrip
-          frame={evidenceCoverageFrame}
-          locale={isEnglish ? 'en' : 'zh'}
-          title={isEnglish ? 'Evidence coverage' : '证据覆盖'}
-          testId="home-evidence-coverage-strip"
-          className="mb-4"
-        />
-        <ConsumerDataHealthSummaryPanel
-          summary={dataHealthSummary}
-          title={isEnglish ? 'Data health' : '数据健康'}
-          testId="home-data-health-summary"
-          className="mb-4"
-        />
-        <ConsumerEvidencePacketStrip
-          packet={evidencePacket}
-          locale={isEnglish ? 'en' : 'zh'}
-          title={isEnglish ? 'Evidence packet' : '证据包摘要'}
-          testId="home-evidence-packet-strip"
-          className="mb-4"
-        />
-        <div className="mb-4">
-          <HomeResearchPacketPanel
-            locale={locale}
-            report={report}
-            dataQualityReport={dataQualityReport}
-            researchReadiness={researchReadiness}
-            evidenceCoverageFrame={evidenceCoverageFrame}
-            evidenceCitationFrame={evidenceCitationFrame}
-            evidencePacket={evidencePacket}
-            sourceProvenanceEntries={sourceProvenanceEntries}
-          />
-        </div>
-        {sourceProvenanceEntries ? (
-          <div className="mb-4">
-            <HomeSourceProvenanceStrip locale={locale} entries={sourceProvenanceEntries} />
-          </div>
-        ) : null}
-        {evidenceCitationFrame ? (
-          <div className="mb-4">
-            <HomeEvidenceCitationSummary locale={locale} frame={evidenceCitationFrame} />
-          </div>
-        ) : null}
 
         <div className="min-w-0" data-testid="home-research-current-conclusion">
           <p className="text-[12px] font-semibold tracking-[0] text-white/52">
@@ -1957,7 +1941,69 @@ function HomeConclusionFirstConsole({
           </div>
         </div>
 
-        <div className="mt-5 grid min-w-0 gap-0 overflow-hidden rounded-[10px] border border-white/[0.07] md:grid-cols-3">
+        <div
+          className="mt-5 grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-4"
+          data-testid="home-research-first-read-summary"
+        >
+          {[
+            {
+              key: 'state',
+              label: isEnglish ? 'Research state' : '研究状态',
+              value: researchReadiness.verdictLabel,
+              detail: researchReadiness.summaryLine,
+            },
+            {
+              key: 'boundary',
+              label: isEnglish ? 'Data boundary' : '数据边界',
+              value: qualityPreview,
+              detail: qualityImpactCopy,
+            },
+            {
+              key: 'focus',
+              label: isEnglish ? 'Next research focus' : '下一步研究重点',
+              value: nextCopy,
+              detail: missingCopy,
+            },
+            {
+              key: 'next-click',
+              label: isEnglish ? 'Where to click next' : '下一跳入口',
+              value: primaryAction.label,
+              detail: primaryAction.detail,
+            },
+          ].map((item) => (
+            <article
+              key={item.key}
+              className="min-w-0 rounded-[10px] border border-white/[0.07] bg-white/[0.02] px-4 py-3"
+              data-testid={`home-research-first-read-${item.key}`}
+            >
+              <p className="text-[11px] font-semibold tracking-[0] text-white/42">{item.label}</p>
+              <p className="mt-2 break-words text-sm font-semibold leading-5 text-white/88">{item.value}</p>
+              <p className="mt-2 break-words text-[11px] leading-5 text-white/56">{item.detail}</p>
+            </article>
+          ))}
+        </div>
+
+        <div
+          className="mt-3 flex min-w-0 flex-wrap items-center gap-2"
+          data-testid="home-research-quick-actions"
+        >
+          {quickActions.map((action) => (
+            <Link
+              key={action.key}
+              to={action.href}
+              className={cn(
+                'inline-flex min-h-9 items-center rounded-full border px-3.5 py-1.5 text-xs font-semibold transition',
+                action.primary
+                  ? 'border-cyan-200/22 bg-cyan-300/[0.08] text-cyan-50 hover:border-cyan-200/35 hover:bg-cyan-300/[0.12]'
+                  : 'border-white/[0.08] bg-white/[0.03] text-white/68 hover:border-white/[0.12] hover:bg-white/[0.05] hover:text-white/84',
+              )}
+            >
+              {action.label}
+            </Link>
+          ))}
+        </div>
+
+        <div className="mt-3 grid min-w-0 gap-0 overflow-hidden rounded-[10px] border border-white/[0.07] md:grid-cols-3">
           <div className="min-w-0 border-b border-white/[0.07] px-4 py-3 md:border-b-0 md:border-r" data-testid="home-research-support-factors">
             <p className="text-[11px] font-semibold tracking-[0] text-white/42">{isEnglish ? 'Key support factors' : '关键支撑因素'}</p>
             <p className="mt-2 break-words text-xs font-semibold leading-[1.55] text-white/76">{supportCopy}</p>
@@ -2007,7 +2053,46 @@ function HomeConclusionFirstConsole({
             <span>{isEnglish ? 'View research boundary' : '查看研究边界'}</span>
             <span className="text-white/28 transition-transform group-open:rotate-180">{isEnglish ? '▾' : '▾'}</span>
           </summary>
-          <div className="mt-2.5 divide-y divide-white/[0.06] border-t border-white/[0.06] text-[11px]">
+          <div className="mt-2.5 space-y-4 border-t border-white/[0.06] pt-3 text-[11px]">
+            <ConsumerResearchReadinessStrip
+              readiness={researchReadiness}
+              title={isEnglish ? 'Research readiness' : '研究就绪度'}
+              testId="home-research-readiness-strip"
+            />
+            <ConsumerEvidenceCoverageStrip
+              frame={evidenceCoverageFrame}
+              locale={isEnglish ? 'en' : 'zh'}
+              title={isEnglish ? 'Evidence coverage' : '证据覆盖'}
+              testId="home-evidence-coverage-strip"
+            />
+            <ConsumerDataHealthSummaryPanel
+              summary={dataHealthSummary}
+              title={isEnglish ? 'Data health' : '数据健康'}
+              testId="home-data-health-summary"
+            />
+            <ConsumerEvidencePacketStrip
+              packet={evidencePacket}
+              locale={isEnglish ? 'en' : 'zh'}
+              title={isEnglish ? 'Evidence packet' : '证据包摘要'}
+              testId="home-evidence-packet-strip"
+            />
+            <HomeResearchPacketPanel
+              locale={locale}
+              report={report}
+              dataQualityReport={dataQualityReport}
+              researchReadiness={researchReadiness}
+              evidenceCoverageFrame={evidenceCoverageFrame}
+              evidenceCitationFrame={evidenceCitationFrame}
+              evidencePacket={evidencePacket}
+              sourceProvenanceEntries={sourceProvenanceEntries}
+            />
+            {sourceProvenanceEntries ? (
+              <HomeSourceProvenanceStrip locale={locale} entries={sourceProvenanceEntries} />
+            ) : null}
+            {evidenceCitationFrame ? (
+              <HomeEvidenceCitationSummary locale={locale} frame={evidenceCitationFrame} />
+            ) : null}
+            <div className="divide-y divide-white/[0.06] text-[11px]">
             <div className="flex min-w-0 items-start justify-between gap-4 py-2.5">
               <span className="shrink-0 text-white/36">{isEnglish ? 'Data state' : '数据状态'}</span>
               <span
@@ -2033,6 +2118,7 @@ function HomeConclusionFirstConsole({
                 <span className="min-w-0 break-words text-right text-white/60 whitespace-normal">{displaySlotValue(item.value, locale)}</span>
               </div>
             ))}
+            </div>
           </div>
         </details>
       </div>

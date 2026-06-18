@@ -1061,6 +1061,8 @@ describe('HomeSurfacePage', () => {
     const conclusionConsole = screen.getByTestId('home-research-conclusion-console');
     const judgmentGate = screen.getByTestId('home-research-judgment-gate');
     const conclusionBlock = screen.getByTestId('home-research-current-conclusion');
+    const firstReadSummary = screen.getByTestId('home-research-first-read-summary');
+    const quickActions = screen.getByTestId('home-research-quick-actions');
     const trustStrip = screen.getByTestId('home-research-trust-strip');
     const supportBlock = screen.getByTestId('home-research-support-factors');
     const riskBlock = screen.getByTestId('home-research-risk-boundaries');
@@ -1072,6 +1074,13 @@ describe('HomeSurfacePage', () => {
     expect(conclusionConsole).toHaveAttribute('data-visual-role', 'conclusion-research-console');
     expect(judgmentGate).toHaveTextContent(/仅观察|证据受限|可以形成研究判断/);
     expect(conclusionBlock).toHaveTextContent('当前结论');
+    expect(firstReadSummary).toHaveTextContent('研究状态');
+    expect(firstReadSummary).toHaveTextContent('数据边界');
+    expect(firstReadSummary).toHaveTextContent('下一步研究重点');
+    expect(firstReadSummary).toHaveTextContent('下一跳入口');
+    expect(quickActions).toHaveTextContent('结构面板');
+    expect(quickActions).toHaveTextContent('研究雷达');
+    expect(quickActions).toHaveTextContent('市场总览');
     expect(trustStrip).not.toHaveAttribute('open');
     expect(screen.getByTestId('home-research-boundary-disclosure')).toHaveTextContent('查看研究边界');
     expect(conclusionConsole).not.toHaveTextContent(/^可信度 \/ 数据质量$/m);

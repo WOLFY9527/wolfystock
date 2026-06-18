@@ -19,6 +19,7 @@ import type {
   MarketOverviewTemperatureSummaryView,
 } from './marketOverviewDecisionTypes';
 import { buildDataSourcesSetupHref, buildProviderOpsSetupHref } from '../../utils/productSetupSurface';
+import { buildLocalizedPath, parseLocaleFromPathname } from '../../utils/localeRouting';
 import {
   MARKET_DECISION_NOT_READY_NOTICE,
   decisionReadinessStateLabel,
@@ -891,6 +892,7 @@ const MarketOverviewConclusionLayer: React.FC<{
   regimeSummary?: MarketOverviewRegimeSummaryView;
   view?: MarketOverviewDecisionSemanticsView;
 }> = ({ testId, summary, statusSummary, dataState, directionalSummary, regimeSummary, view }) => {
+  const routeLocale = typeof window !== 'undefined' ? parseLocaleFromPathname(window.location.pathname) : null;
   const confidenceSummary = buildConsumerConfidenceSummary(summary, view);
   const verdict = buildMarketNarrativeVerdict({
     summary,
@@ -914,6 +916,17 @@ const MarketOverviewConclusionLayer: React.FC<{
     regimeSummary,
     view,
   });
+  const strongestEvidence = uniqueNarrativeStrings([
+    drivers.find((driver) => driver.status !== '待补')?.label,
+    directionalSummary.supportingDrivers[0],
+    regimeSummary?.drivers[0]?.label,
+  ], 2, '关键证据待补');
+  const dataBoundary = uniqueNarrativeStrings([
+    coverageLine,
+    summary.blockers[0],
+    view?.dataGaps[0]?.label,
+    regimeSummary?.blockers[0]?.label,
+  ], 2, '关键边界待确认');
   const observableNow = uniqueNarrativeStrings([
     stripCurrentMarketPrefix(directionalSummary.currentLabel),
     regimeSummary?.title,
@@ -928,31 +941,70 @@ const MarketOverviewConclusionLayer: React.FC<{
   const narrativeFacts = [
     {
       key: 'state',
-      label: '现在市场发生了什么',
+      label: '当前市场状态',
       value: observableNow.join(' / '),
       detail: verdict.headline,
     },
     {
-      key: 'confidence',
-      label: '证据覆盖 / 置信度',
-      value: coverageLine,
-      detail: marketNarrativeCopy(confidenceSummary.detail),
-    },
-    {
-      key: 'why',
-      label: '为什么',
-      value: drivers.filter((driver) => driver.status !== '待补').slice(0, 2).map((driver) => driver.label).join(' / ') || '关键证据待补',
+      key: 'strongest-evidence',
+      label: '最强证据',
+      value: strongestEvidence.join(' / '),
       detail: marketNarrativeCopy(verdict.detail),
     },
     {
+      key: 'boundary',
+      label: '数据边界',
+      value: dataBoundary.join(' / '),
+      detail: marketNarrativeCopy(confidenceSummary.detail),
+    },
+    {
       key: 'next',
-      label: '接下来观察什么',
+      label: '下一步研究',
       value: nextObservation,
       detail: summary.state === 'unavailable' || view?.insufficient
         ? `当前先看已返回主线；待补：${missingButObservable.join(' / ')}。`
         : '若下一项观察转弱或待补证据继续缺席，需要重新核对市场叙事。',
     },
   ];
+  const quickActions: Array<{
+    key: string;
+    label: string;
+    href: string;
+    primary: boolean;
+    current?: boolean;
+  }> = [
+    {
+      key: 'research-radar',
+      label: 'Research Radar',
+      href: routeLocale ? buildLocalizedPath('/research/radar', routeLocale) : '/research/radar',
+      primary: true,
+    },
+    {
+      key: 'stock-structure',
+      label: 'Stock Structure',
+      href: routeLocale ? buildLocalizedPath('/stocks/structure-decision', routeLocale) : '/stocks/structure-decision',
+      primary: false,
+    },
+    {
+      key: 'market-overview',
+      label: 'Market Overview',
+      href: routeLocale ? buildLocalizedPath('/market-overview', routeLocale) : '/market-overview',
+      primary: false,
+      current: true,
+    },
+    {
+      key: 'options-lab',
+      label: 'Options Lab',
+      href: routeLocale ? buildLocalizedPath('/options-lab', routeLocale) : '/options-lab',
+      primary: false,
+    },
+    {
+      key: 'portfolio',
+      label: 'Portfolio',
+      href: routeLocale ? buildLocalizedPath('/portfolio', routeLocale) : '/portfolio',
+      primary: false,
+    },
+  ] as const;
 
   return (
     <section
@@ -973,7 +1025,7 @@ const MarketOverviewConclusionLayer: React.FC<{
             {verdict.headline}
           </p>
           <p className="mt-2 max-w-3xl text-[11px] leading-5 text-white/42">
-            {coverageLine}
+            {marketNarrativeCopy(`证据覆盖 / 置信度：${coverageLine}`)}
           </p>
         </div>
         <div data-testid="market-command-chips" className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
@@ -995,33 +1047,32 @@ const MarketOverviewConclusionLayer: React.FC<{
         ))}
       </div>
       <div
-        data-testid="market-overview-key-drivers"
-        className="mt-3 grid min-w-0 grid-cols-1 gap-2 md:grid-cols-5"
+        data-testid="market-overview-quick-actions"
+        className="mt-3 flex min-w-0 flex-wrap items-center gap-2"
       >
-        {drivers.map((driver) => (
-          <div
-            key={driver.key}
-            data-testid={`market-overview-key-driver-${driver.key}`}
-            className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2.5"
-          >
-            <div className="flex min-w-0 items-center justify-between gap-2">
-              <p className="truncate text-[11px] font-semibold text-white/72">{driver.label}</p>
-              <TerminalChip variant={driver.variant} className="shrink-0 px-1.5 py-0.5 text-[9px]">
-                {driver.status}
-              </TerminalChip>
-            </div>
-            <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-white/48">
-              {driver.detail}
-            </p>
-          </div>
+        {quickActions.map((action) => (
+          action.current ? (
+            <span
+              key={action.key}
+              className="inline-flex min-h-9 items-center rounded-full border border-white/[0.08] bg-white/[0.03] px-3.5 py-1.5 text-xs font-semibold text-white/46"
+            >
+              {action.label}
+            </span>
+          ) : (
+            <a
+              key={action.key}
+              href={action.href}
+              className={cn(
+                'inline-flex min-h-9 items-center rounded-full border px-3.5 py-1.5 text-xs font-semibold transition',
+                action.primary
+                  ? 'border-cyan-200/22 bg-cyan-300/[0.08] text-cyan-50 hover:border-cyan-200/35 hover:bg-cyan-300/[0.12]'
+                  : 'border-white/[0.08] bg-white/[0.03] text-white/68 hover:border-white/[0.12] hover:bg-white/[0.05] hover:text-white/84',
+              )}
+            >
+              {action.label}
+            </a>
+          )
         ))}
-      </div>
-      <div
-        data-testid="market-overview-next-observation"
-        className="mt-3 flex min-w-0 flex-col gap-2 rounded-lg border border-cyan-200/12 bg-cyan-300/[0.035] px-3 py-2.5 md:flex-row md:items-center md:justify-between"
-      >
-        <p className="shrink-0 text-[11px] font-semibold text-cyan-100/78">下一观察</p>
-        <p className="min-w-0 text-[11px] leading-5 text-white/62">{nextObservation}</p>
       </div>
       <p className="mt-3 text-[11px] leading-5 text-white/38">
         研究观察用途，不构成交易或下单指令。
