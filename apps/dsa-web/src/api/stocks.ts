@@ -150,11 +150,28 @@ export type StockStructureDecisionMissingEvidence = {
   message?: string | null;
 };
 
+export type StockStructureConfidenceCap = {
+  value?: number | null;
+  label?: string | null;
+  reasons: string[];
+};
+
+export type StockStructureConfidenceState = {
+  status?: string | null;
+  label?: string | null;
+  reasons: string[];
+  freshnessConstrained?: boolean | null;
+  sourceQualityLimited?: boolean | null;
+  thesisBlocked?: boolean | null;
+};
+
 export type StockStructureDecisionResponse = {
   schemaVersion: string;
   ticker: string;
   structureState: string;
   confidence: string;
+  confidenceCap?: StockStructureConfidenceCap | null;
+  confidenceState?: StockStructureConfidenceState | null;
   componentScores: Record<string, number>;
   explanation: {
     whyThisStructure?: string | null;
@@ -458,6 +475,8 @@ function normalizeStockStructureDecisionResponse(payload: unknown): StockStructu
     ticker: normalized.ticker,
     structureState: normalized.structureState,
     confidence: normalized.confidence,
+    confidenceCap: normalizeStockStructureConfidenceCap(normalized.confidenceCap),
+    confidenceState: normalizeStockStructureConfidenceState(normalized.confidenceState),
     componentScores: normalized.componentScores ?? {},
     explanation: {
       whyThisStructure: normalized.explanation?.whyThisStructure ?? null,
@@ -482,6 +501,27 @@ function normalizeStockStructureDecisionResponse(payload: unknown): StockStructu
     missingEvidence: normalized.missingEvidence ?? [],
     peerCorrelationSnapshot: normalizePeerCorrelationSnapshot(normalized.peerCorrelationSnapshot),
     noAdviceDisclosure: normalized.noAdviceDisclosure,
+  };
+}
+
+function normalizeStockStructureConfidenceCap(value: unknown): StockStructureConfidenceCap | null {
+  if (!isRecord(value)) return null;
+  return {
+    value: numberField(value, ['value']),
+    label: stringField(value, ['label']),
+    reasons: stringArrayField(value, ['reasons', 'reasonCodes', 'reason_codes']),
+  };
+}
+
+function normalizeStockStructureConfidenceState(value: unknown): StockStructureConfidenceState | null {
+  if (!isRecord(value)) return null;
+  return {
+    status: stringField(value, ['status']),
+    label: stringField(value, ['label']),
+    reasons: stringArrayField(value, ['reasons', 'reasonCodes', 'reason_codes']),
+    freshnessConstrained: booleanField(value, ['freshnessConstrained', 'freshness_constrained']),
+    sourceQualityLimited: booleanField(value, ['sourceQualityLimited', 'source_quality_limited']),
+    thesisBlocked: booleanField(value, ['thesisBlocked', 'thesis_blocked']),
   };
 }
 

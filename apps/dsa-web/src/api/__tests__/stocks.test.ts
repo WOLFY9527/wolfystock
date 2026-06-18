@@ -148,7 +148,20 @@ describe('stocksApi', () => {
         schema_version: 'stock_structure_decision_api_v1',
         ticker: 'AAPL',
         structure_state: 'breakout',
-        confidence: 'high',
+        confidence: 'medium',
+        confidence_cap: {
+          value: 60,
+          label: 'medium',
+          reasons: ['critical evidence missing'],
+        },
+        confidence_state: {
+          status: 'evidence limited',
+          label: 'medium',
+          reasons: ['critical evidence missing'],
+          freshness_constrained: false,
+          source_quality_limited: false,
+          thesis_blocked: false,
+        },
         component_scores: {
           trend: 78,
           relative_strength: 71,
@@ -224,6 +237,20 @@ describe('stocksApi', () => {
     expect(get).toHaveBeenCalledWith('/api/v1/stocks/AAPL/structure-decision');
     expect(payload.ticker).toBe('AAPL');
     expect(payload.structureState).toBe('breakout');
+    expect(payload.confidence).toBe('medium');
+    expect(payload.confidenceCap).toEqual({
+      value: 60,
+      label: 'medium',
+      reasons: ['critical evidence missing'],
+    });
+    expect(payload.confidenceState).toEqual({
+      status: 'evidence limited',
+      label: 'medium',
+      reasons: ['critical evidence missing'],
+      freshnessConstrained: false,
+      sourceQualityLimited: false,
+      thesisBlocked: false,
+    });
     expect(payload.componentScores.trend).toBe(78);
     expect(payload.explanation.whatConfirmsIt).toEqual(['Volume remained constructive.']);
     expect(payload.explanation.keyLevels?.[0]?.kind).toBe('recent_range_high');

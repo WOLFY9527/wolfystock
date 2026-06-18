@@ -335,6 +335,52 @@ def test_structure_decision_endpoint_returns_low_confidence_unavailable_payload(
         assert forbidden not in serialized
 
 
+def test_structure_decision_endpoint_preserves_confidence_evidence_guard_fields(monkeypatch) -> None:
+    fake_service = _FakeStructureDecisionService(
+        {
+            **_payload(confidence="medium"),
+            "rawConfidence": "high",
+            "confidenceCap": {
+                "value": 60,
+                "label": "medium",
+                "reasons": ["critical evidence missing"],
+                "policyVersion": "confidence_evidence_consistency_v1",
+            },
+            "confidenceState": {
+                "status": "evidence limited",
+                "label": "medium",
+                "reasons": ["critical evidence missing"],
+                "freshnessConstrained": False,
+                "sourceQualityLimited": False,
+                "thesisBlocked": False,
+            },
+        }
+    )
+    monkeypatch.setattr(
+        stocks_endpoint,
+        "StockStructureDecisionService",
+        lambda: fake_service,
+        raising=False,
+    )
+
+    response = _client().get("/api/v1/stocks/AAPL/structure-decision")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["confidence"] == "medium"
+    assert "rawConfidence" not in payload
+    assert payload["confidenceCap"]["value"] == 60
+    assert payload["confidenceCap"]["label"] == "medium"
+    assert payload["confidenceCap"]["reasons"] == ["critical evidence missing"]
+    assert "policyVersion" not in payload["confidenceCap"]
+    assert payload["confidenceState"]["status"] == "evidence limited"
+    assert payload["confidenceState"]["label"] == "medium"
+    assert payload["confidenceState"]["reasons"] == ["critical evidence missing"]
+    assert payload["confidenceState"]["freshnessConstrained"] is False
+    assert payload["confidenceState"]["sourceQualityLimited"] is False
+    assert payload["confidenceState"]["thesisBlocked"] is False
+
+
 def test_structure_decision_endpoint_keeps_drilldown_targets_on_safe_allowlist(monkeypatch) -> None:
     fake_service = _FakeStructureDecisionService(
         {
@@ -486,6 +532,16 @@ def test_structure_decision_openapi_locks_required_response_fields() -> None:
     assert properties["ticker"]["type"] == "string"
     assert properties["symbol"]["type"] == "string"
     assert properties["structureState"]["type"] == "string"
+    assert "rawConfidence" not in properties
+    assert properties["confidenceCap"]["anyOf"][0]["$ref"].endswith("StockStructureConfidenceCap")
+    assert properties["confidenceState"]["anyOf"][0]["$ref"].endswith("StockStructureConfidenceState")
+    cap_schema = schema["StockStructureConfidenceCap"]["properties"]
+    state_schema = schema["StockStructureConfidenceState"]["properties"]
+    assert "policyVersion" not in cap_schema
+    assert "reasonCodes" not in cap_schema
+    assert "reasonCodes" not in state_schema
+    assert cap_schema["reasons"]["items"]["type"] == "string"
+    assert state_schema["reasons"]["items"]["type"] == "string"
     assert "StockPeerCorrelationSnapshot" in properties["peerCorrelationSnapshot"]["$ref"]
     assert properties["componentScores"]["additionalProperties"]["type"] == "integer"
 

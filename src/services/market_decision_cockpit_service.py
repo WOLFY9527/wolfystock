@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import quote
 
+from src.services.confidence_evidence_consistency import project_confidence_evidence_state
 from src.services.market_overview_service import MarketOverviewService
 from src.services.market_regime_decision_engine import build_market_regime_decision
 from src.services.options_market_structure_observation import build_options_market_structure_observation
@@ -319,9 +320,13 @@ class MarketDecisionCockpitService:
         explanation = _mapping(market_regime_decision.get("explanation"))
         regime_label = _regime_label(market_regime_decision.get("regime") or "lowConfidence")
         summary = _first_text(explanation.get("whyThisRegime")) or f"Current regime observation is {regime_label}."
+        confidence_projection = _market_regime_confidence_projection(market_regime_decision)
         return {
             "regime": regime_label,
-            "confidence": _confidence_label(market_regime_decision.get("confidence") or "low"),
+            "confidence": _confidence_label(confidence_projection["consumerConfidence"]),
+            "rawConfidence": str(market_regime_decision.get("confidence") or "low"),
+            "confidenceCap": _public_confidence_cap(confidence_projection["confidenceCap"]),
+            "confidenceState": confidence_projection["confidenceState"],
             "summary": _safe_public_text(summary),
             "supportingObservations": _safe_public_list(explanation.get("whatConfirmsIt") or []),
             "invalidationObservations": _safe_public_list(explanation.get("whatInvalidatesIt") or []),
@@ -957,8 +962,13 @@ class MarketDecisionCockpitService:
         regime_quality = _mapping(market_regime_decision.get("dataQuality"))
         missing_evidence = list(market_regime_decision.get("missingEvidence") or [])
         reason_codes = list(data_quality.get("reasonCodes") or [])
+        confidence_projection = _market_regime_confidence_projection(market_regime_decision)
         evidence_strength = {
             "confidence": market_regime_decision.get("confidence", "low"),
+            "rawConfidence": market_regime_decision.get("confidence", "low"),
+            "consumerConfidence": confidence_projection["consumerConfidence"],
+            "confidenceCap": confidence_projection["confidenceCap"],
+            "confidenceState": confidence_projection["confidenceState"],
             "confidenceScore": market_regime_decision.get("confidenceScore"),
             "regimeEvidenceGrade": regime_quality.get("evidenceGrade"),
             "availableDriverCount": int(regime_quality.get("availableDriverCount") or 0),
@@ -1055,7 +1065,8 @@ class MarketDecisionCockpitService:
         options_status: Mapping[str, Any],
     ) -> list[str]:
         regime_label = _regime_label(market_regime_decision.get("regime") or "lowConfidence")
-        confidence_label = _confidence_label(market_regime_decision.get("confidence") or "low")
+        confidence_projection = _market_regime_confidence_projection(market_regime_decision)
+        confidence_label = _confidence_label(confidence_projection["consumerConfidence"])
         queue_quality = _queue_quality_label(research_preview.get("queueQuality") or "thin")
         option_status = str(options_status.get("gammaEvidenceStatus") or "unavailable")
         option_sentence = (
@@ -1226,6 +1237,30 @@ def _safe_phrase_list(value: Any) -> list[str]:
     else:
         values = []
     return _dedupe([text for item in values if (text := _safe_reason_phrase(item))])
+
+
+def _market_regime_confidence_projection(market_regime_decision: Mapping[str, Any]) -> dict[str, Any]:
+    regime_quality = _mapping(market_regime_decision.get("dataQuality"))
+    missing_evidence = [
+        _safe_missing_evidence_label(item)
+        for item in list(market_regime_decision.get("missingEvidence") or [])
+        if _safe_missing_evidence_label(item)
+    ]
+    cap_reasons = _safe_phrase_list(regime_quality.get("confidenceCapReasons") or [])
+    return project_confidence_evidence_state(
+        raw_confidence_label=market_regime_decision.get("confidence"),
+        raw_confidence_score=market_regime_decision.get("confidenceScore"),
+        evidence_gaps=[*missing_evidence, *cap_reasons],
+        evidence_completeness=regime_quality.get("evidenceGrade"),
+    )
+
+
+def _public_confidence_cap(value: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "value": int(value.get("value") or 0),
+        "label": str(value.get("label") or "low"),
+        "reasons": list(value.get("reasons") or []),
+    }
 
 
 def _dedupe_degraded(values: Sequence[Mapping[str, str]]) -> list[dict[str, str]]:

@@ -228,6 +228,51 @@ def test_service_builds_observation_only_structure_decision_from_daily_ohlcv() -
     assert payload["drilldownLinks"] == []
 
 
+def test_service_caps_high_structure_confidence_when_critical_evidence_is_missing() -> None:
+    fake_history = _FakeMultiHistoryService(
+        {
+            "AAPL": {
+                "stock_code": "AAPL",
+                "period": "daily",
+                "data": _trend_breakout_history(),
+                "source": "local_db",
+                "diagnostics": {"status": "ok", "reason": "history_available", "rows": 55},
+            },
+            "SPY": {
+                "stock_code": "SPY",
+                "period": "daily",
+                "data": _flat_history(),
+                "source": "local_db",
+                "diagnostics": {"status": "ok", "reason": "history_available", "rows": 55},
+            },
+        }
+    )
+
+    batch = StockStructureDecisionService(history_service=fake_history).get_structure_decisions_batch(
+        ["AAPL"],
+        benchmark="SPY",
+    )
+    payload = batch["items"][0]
+
+    assert payload["structureState"] == "breakout"
+    assert payload["rawConfidence"] == "high"
+    assert payload["confidence"] == "medium"
+    assert payload["confidenceCap"] == {
+        "value": 60,
+        "label": "medium",
+        "reasons": ["critical evidence missing"],
+        "policyVersion": "confidence_evidence_consistency_v1",
+    }
+    assert payload["confidenceState"] == {
+        "status": "evidence limited",
+        "label": "medium",
+        "reasons": ["critical evidence missing"],
+        "freshnessConstrained": False,
+        "sourceQualityLimited": False,
+        "thesisBlocked": False,
+    }
+
+
 def test_peer_correlation_snapshot_marks_aligned_when_local_peer_group_and_prices_match() -> None:
     fake_history = _FakeHistoryService(
         {
