@@ -42,5 +42,8 @@ describe('consumerStatusLabels', () => {
     expect(mapConsumerStatusText('Relative strength is above the research threshold', 'zh')).toBe('相对强弱已达到研究阈值');
     expect(mapConsumerStatusText('Scenario lab is unavailable because base score-grade regime evidence is missing.', 'zh')).toBe('基准情景证据不足，当前无法生成情景结果。');
     expect(mapConsumerStatusText('Gamma evidence status is unavailable, so gamma-sensitive conclusions remain capped.', 'zh')).toBe('Gamma 相关证据暂不可用，因此相关结论需保持保守。');
+    expect(mapConsumerStatusText('Breadth participation weakens quickly under the selected stress.', 'zh')).toBe('所选压力情景下，市场广度会较快转弱。');
+    expect(mapConsumerStatusText('Volatility structure flips into a defensive posture.', 'zh')).toBe('波动结构会转入偏防御状态。');
+    expect(mapConsumerStatusText('Research planning only; not a personalized decision basis.', 'zh')).toBe('仅供研究规划观察，不构成个性化判断依据。');
   });
 });
