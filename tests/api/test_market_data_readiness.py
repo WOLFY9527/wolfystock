@@ -22,6 +22,51 @@ EXPECTED_CHECK_FIELDS = {
     "remediationHint",
     "affectsSurfaces",
 }
+EXPECTED_CONSUMER_READINESS_FIELDS = {
+    "surface",
+    "evidenceFamily",
+    "requiredInputs",
+    "fulfilledInputs",
+    "missingInputs",
+    "staleInputs",
+    "blockedInputs",
+    "observationOnlyInputs",
+    "scoreGradeInputs",
+    "readinessState",
+    "confidenceCapReason",
+    "sourceAuthorityReason",
+    "freshnessReason",
+    "nextDiagnostic",
+    "consumerSafeSummary",
+}
+FORBIDDEN_CONSUMER_READINESS_TERMS = {
+    "provider",
+    "cache",
+    "runtime",
+    "raw",
+    "debug",
+    "requestid",
+    "traceid",
+    "schema",
+    "marketcache",
+    "token",
+    "cookie",
+    "buy",
+    "sell",
+    "hold",
+    "recommend",
+    "target price",
+    "stop loss",
+    "position sizing",
+    "买入",
+    "卖出",
+    "持有",
+    "投资建议",
+    "交易建议",
+    "目标价",
+    "止损",
+    "仓位建议",
+}
 
 
 class _Payload:
@@ -105,6 +150,23 @@ def test_market_data_readiness_route_returns_read_only_diagnostic_payload(
     assert captured["representative_symbols"] == ()
 
     checks = payload["checks"]
+    matrix = payload["consumerEvidenceReadinessMatrix"]
+    rows = matrix["items"]
+
+    assert matrix["contractVersion"] == "consumer_evidence_readiness_matrix_v1"
+    assert matrix["diagnosticOnly"] is True
+    assert matrix["networkCallsEnabled"] is False
+    assert matrix["mutationEnabled"] is False
+    assert {
+        "market_overview",
+        "liquidity_monitor",
+        "rotation_radar",
+        "decision_cockpit",
+        "home_briefing",
+        "research_radar",
+    } <= {row["surface"] for row in rows}
+    assert all(set(row) == EXPECTED_CONSUMER_READINESS_FIELDS for row in rows)
+
     assert isinstance(checks, list)
     assert all(set(check) >= EXPECTED_CHECK_FIELDS for check in checks)
     assert any(check["id"] == "tushare_token" and check["secretConfigured"] is True for check in checks)
@@ -120,6 +182,10 @@ def test_market_data_readiness_route_returns_read_only_diagnostic_payload(
     assert secret not in serialized
     assert str(parquet_dir) not in serialized
     assert str(tmp_path) not in serialized
+
+    serialized_matrix = json.dumps(matrix, ensure_ascii=False).lower()
+    for term in FORBIDDEN_CONSUMER_READINESS_TERMS:
+        assert term not in serialized_matrix
 
     parquet_check = next(check for check in checks if check["id"] == "local_us_parquet_dir")
     assert parquet_check["details"]["pathConfigured"] is True

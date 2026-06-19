@@ -14,6 +14,66 @@ from src.services.market_data_readiness_diagnostics import build_market_data_rea
 
 
 ALL_OPTIONAL_MODULES = {"pyarrow", "fastparquet", "tushare", "pytdx", "akshare", "efinance"}
+EXPECTED_CONSUMER_MATRIX_FIELDS = {
+    "surface",
+    "evidenceFamily",
+    "requiredInputs",
+    "fulfilledInputs",
+    "missingInputs",
+    "staleInputs",
+    "blockedInputs",
+    "observationOnlyInputs",
+    "scoreGradeInputs",
+    "readinessState",
+    "confidenceCapReason",
+    "sourceAuthorityReason",
+    "freshnessReason",
+    "nextDiagnostic",
+    "consumerSafeSummary",
+}
+EXPECTED_CONSUMER_SURFACES = {
+    "market_overview",
+    "liquidity_monitor",
+    "rotation_radar",
+    "decision_cockpit",
+    "home_briefing",
+    "research_radar",
+}
+EXPECTED_READINESS_STATES = {
+    "score_grade",
+    "observation_only",
+    "blocked",
+    "missing",
+    "unavailable",
+}
+FORBIDDEN_CONSUMER_MATRIX_FRAGMENTS = {
+    "provider",
+    "cache",
+    "runtime",
+    "raw",
+    "debug",
+    "requestid",
+    "traceid",
+    "schema",
+    "marketcache",
+    "token",
+    "cookie",
+    "buy",
+    "sell",
+    "hold",
+    "recommend",
+    "target price",
+    "stop loss",
+    "position sizing",
+    "买入",
+    "卖出",
+    "持有",
+    "投资建议",
+    "交易建议",
+    "目标价",
+    "止损",
+    "仓位建议",
+}
 
 
 def _spec_finder_with(available_modules: set[str], seen: list[str] | None = None):
@@ -212,3 +272,99 @@ def test_diagnostics_stay_inert_without_network_or_provider_runtime_calls(tmp_pa
     assert payload["providerRuntimeCalled"] is False
     assert payload["networkCallsEnabled"] is False
     assert seen_modules == ["pyarrow", "fastparquet", "tushare", "pytdx", "akshare", "efinance"]
+
+
+def test_consumer_evidence_readiness_matrix_is_provider_free_and_covers_core_surfaces(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    parquet_dir = tmp_path / "us-parquet"
+    parquet_dir.mkdir()
+    seen_modules: list[str] = []
+
+    def _fail_socket(*args, **kwargs):
+        raise AssertionError("network call attempted")
+
+    def _fail_request(*args, **kwargs):
+        raise AssertionError("http request attempted")
+
+    monkeypatch.setattr(socket, "create_connection", _fail_socket)
+    monkeypatch.setattr(requests.sessions.Session, "request", _fail_request)
+
+    payload = build_market_data_readiness_diagnostics(
+        env={
+            "LOCAL_US_PARQUET_DIR": str(parquet_dir),
+            "TUSHARE_TOKEN": "configured",
+        },
+        spec_finder=_spec_finder_with(ALL_OPTIONAL_MODULES, seen_modules),
+    ).to_dict()
+
+    matrix = payload["consumerEvidenceReadinessMatrix"]
+    rows = matrix["items"]
+
+    assert matrix["contractVersion"] == "consumer_evidence_readiness_matrix_v1"
+    assert matrix["diagnosticOnly"] is True
+    assert matrix["networkCallsEnabled"] is False
+    assert matrix["mutationEnabled"] is False
+    assert all(set(row) == EXPECTED_CONSUMER_MATRIX_FIELDS for row in rows)
+    assert EXPECTED_CONSUMER_SURFACES <= {row["surface"] for row in rows}
+    assert EXPECTED_READINESS_STATES <= {row["readinessState"] for row in rows}
+    assert seen_modules == ["pyarrow", "fastparquet", "tushare", "pytdx", "akshare", "efinance"]
+
+
+def test_consumer_evidence_readiness_matrix_redacts_internal_diagnostics_and_advice_terms() -> None:
+    payload = build_market_data_readiness_diagnostics(
+        env={},
+        spec_finder=_spec_finder_with(set()),
+    ).to_dict()
+
+    matrix = payload["consumerEvidenceReadinessMatrix"]
+    serialized = json.dumps(matrix, ensure_ascii=False).lower()
+
+    for fragment in FORBIDDEN_CONSUMER_MATRIX_FRAGMENTS:
+        assert fragment not in serialized
+
+
+def test_consumer_evidence_readiness_matrix_states_are_deterministic_across_local_env(
+    tmp_path: Path,
+) -> None:
+    parquet_dir = tmp_path / "us-parquet"
+    parquet_dir.mkdir()
+
+    ready_env_payload = build_market_data_readiness_diagnostics(
+        env={
+            "LOCAL_US_PARQUET_DIR": str(parquet_dir),
+            "TUSHARE_TOKEN": "configured",
+        },
+        spec_finder=_spec_finder_with(ALL_OPTIONAL_MODULES),
+    ).to_dict()
+    missing_env_payload = build_market_data_readiness_diagnostics(
+        env={},
+        spec_finder=_spec_finder_with(set()),
+    ).to_dict()
+
+    def _states(payload: dict) -> list[tuple[str, str, str]]:
+        return [
+            (row["surface"], row["evidenceFamily"], row["readinessState"])
+            for row in payload["consumerEvidenceReadinessMatrix"]["items"]
+        ]
+
+    assert _states(ready_env_payload) == _states(missing_env_payload)
+
+
+def test_unavailable_consumer_evidence_does_not_produce_score_grade_judgment() -> None:
+    payload = build_market_data_readiness_diagnostics(
+        env={},
+        spec_finder=_spec_finder_with(set()),
+    ).to_dict()
+
+    unavailable_rows = [
+        row for row in payload["consumerEvidenceReadinessMatrix"]["items"]
+        if row["readinessState"] == "unavailable"
+    ]
+
+    assert unavailable_rows
+    for row in unavailable_rows:
+        assert row["scoreGradeInputs"] == []
+        assert row["fulfilledInputs"] == []
+        assert "score-grade conclusion" in row["consumerSafeSummary"]
