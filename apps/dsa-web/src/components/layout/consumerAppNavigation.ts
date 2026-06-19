@@ -20,7 +20,7 @@ export type ConsumerNavItem = {
   to: string;
   group: ConsumerNavGroupKey;
   /**
-   * Mirrors Shell nav visibility only. Route-level guest paywalls live in App.tsx.
+   * Mirrors route-level guest gating in App.tsx.
    */
   requiresAuth?: boolean;
 };
@@ -59,13 +59,13 @@ export const CONSUMER_NAV_GROUPS: Array<{
 export const CONSUMER_NAV_ITEMS: ConsumerNavItem[] = [
   { key: 'decision-cockpit', labelKey: 'nav.marketDecisionCockpit', to: '/market/decision-cockpit', group: 'cockpit', requiresAuth: false },
   { key: 'market-overview', labelKey: 'nav.marketOverview', to: '/market-overview', group: 'cockpit', requiresAuth: false },
-  { key: 'research-radar', labelKey: 'nav.researchRadar', to: '/research/radar', group: 'research', requiresAuth: false },
+  { key: 'research-radar', labelKey: 'nav.researchRadar', to: '/research/radar', group: 'research', requiresAuth: true },
   { key: 'stock-structure', labelKey: 'nav.stockStructure', to: '/stocks/structure-decision', group: 'research', requiresAuth: false },
-  { key: 'scanner', labelKey: 'nav.scanner', to: '/scanner', group: 'context', requiresAuth: false },
-  { key: 'watchlist', labelKey: 'nav.watchlist', to: '/watchlist', group: 'context', requiresAuth: false },
-  { key: 'portfolio', labelKey: 'nav.portfolio', to: '/portfolio', group: 'context', requiresAuth: false },
-  { key: 'options-lab', labelKey: 'nav.optionsLab', to: '/options-lab', group: 'observe', requiresAuth: false },
-  { key: 'scenario-lab', labelKey: 'nav.scenarioLab', to: '/scenario-lab', group: 'observe', requiresAuth: false },
+  { key: 'scanner', labelKey: 'nav.scanner', to: '/scanner', group: 'context', requiresAuth: true },
+  { key: 'watchlist', labelKey: 'nav.watchlist', to: '/watchlist', group: 'context', requiresAuth: true },
+  { key: 'portfolio', labelKey: 'nav.portfolio', to: '/portfolio', group: 'context', requiresAuth: true },
+  { key: 'options-lab', labelKey: 'nav.optionsLab', to: '/options-lab', group: 'observe', requiresAuth: true },
+  { key: 'scenario-lab', labelKey: 'nav.scenarioLab', to: '/scenario-lab', group: 'observe', requiresAuth: true },
 ];
 
 export const ROUTE_STORIES: ConsumerRouteStory[] = [

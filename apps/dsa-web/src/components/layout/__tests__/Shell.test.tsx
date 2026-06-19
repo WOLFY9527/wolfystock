@@ -184,20 +184,21 @@ describe('Shell', () => {
     expect(CONSUMER_NAV_ITEMS.map((item) => [item.key, item.group, item.to, item.requiresAuth === true])).toEqual([
       ['decision-cockpit', 'cockpit', '/market/decision-cockpit', false],
       ['market-overview', 'cockpit', '/market-overview', false],
-      ['research-radar', 'research', '/research/radar', false],
+      ['research-radar', 'research', '/research/radar', true],
       ['stock-structure', 'research', '/stocks/structure-decision', false],
-      ['scanner', 'context', '/scanner', false],
-      ['watchlist', 'context', '/watchlist', false],
-      ['portfolio', 'context', '/portfolio', false],
-      ['options-lab', 'observe', '/options-lab', false],
-      ['scenario-lab', 'observe', '/scenario-lab', false],
+      ['scanner', 'context', '/scanner', true],
+      ['watchlist', 'context', '/watchlist', true],
+      ['portfolio', 'context', '/portfolio', true],
+      ['options-lab', 'observe', '/options-lab', true],
+      ['scenario-lab', 'observe', '/scenario-lab', true],
     ]);
     expect(CONSUMER_NAV_ITEMS.find((item) => item.key === 'decision-cockpit')?.to).not.toBe('/cockpit');
     expect(CONSUMER_NAV_ITEMS.find((item) => item.key === 'research-radar')?.to).not.toBe('/research-radar');
-
-    for (const key of ['scanner', 'portfolio', 'scenario-lab'] as const) {
-      expect(CONSUMER_NAV_ITEMS.find((item) => item.key === key)?.requiresAuth).not.toBe(true);
-    }
+    expect(CONSUMER_NAV_ITEMS.filter((item) => item.requiresAuth !== true).map((item) => item.key)).toEqual([
+      'decision-cockpit',
+      'market-overview',
+      'stock-structure',
+    ]);
   });
 
   it('keeps dedicated guest route metadata separate from Home for base and localized paths', () => {

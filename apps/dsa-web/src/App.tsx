@@ -249,6 +249,7 @@ function isStockStructureDecisionPath(pathname: string): boolean {
 function isProtectedProductPath(pathname: string): boolean {
   return pathname === '/settings'
     || pathname === '/options'
+    || pathname === '/scanner'
     || isPathMatch(pathname, '/portfolio')
     || isPathMatch(pathname, '/research/radar')
     || isPathMatch(pathname, '/scenario-lab')
@@ -260,9 +261,6 @@ function isProtectedProductPath(pathname: string): boolean {
 function isPublicSafePath(pathname: string): boolean {
   return pathname === '/'
     || pathname === '/guest'
-    || pathname === '/scanner'
-    || pathname === '/guest/scanner'
-    || pathname === '/user/scanner'
     || pathname === '/market'
     || pathname === '/market-overview'
     || pathname === '/liquidity'
@@ -382,6 +380,8 @@ const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ child
 
   if (routePathname.startsWith('/portfolio')) {
     moduleName = language === 'en' ? 'Portfolio' : '持仓管理';
+  } else if (routePathname.startsWith('/scanner')) {
+    moduleName = language === 'en' ? 'Scanner' : '扫描器';
   } else if (routePathname.startsWith('/market-overview')) {
     moduleName = language === 'en' ? 'Market Overview' : '市场总览';
   } else if (routePathname.startsWith('/research/radar')) {
@@ -529,7 +529,7 @@ export const AppContent: React.FC = () => {
           <Route path="/options" element={<Navigate to="/options-lab" replace />} />
           <Route path="/" element={<HomeSurfacePage />} />
           <Route path="/guest" element={guestHomeElement} />
-          <Route path="/scanner" element={<ScannerSurfacePage />} />
+          <Route path="/scanner" element={<RegisteredSurfaceRoute><ScannerSurfacePage /></RegisteredSurfaceRoute>} />
           <Route path="/chat" element={<Navigate to="/market-overview" replace />} />
           <Route path="/portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
           <Route path="/market-overview" element={<MarketOverviewPage />} />
@@ -578,7 +578,7 @@ export const AppContent: React.FC = () => {
           <Route path="options" element={<Navigate to="../options-lab" replace />} />
           <Route index element={<HomeSurfacePage />} />
           <Route path="guest" element={guestHomeElement} />
-          <Route path="scanner" element={<ScannerSurfacePage />} />
+          <Route path="scanner" element={<RegisteredSurfaceRoute><ScannerSurfacePage /></RegisteredSurfaceRoute>} />
           <Route path="chat" element={<Navigate to="../market-overview" replace />} />
           <Route path="portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
           <Route path="market-overview" element={<MarketOverviewPage />} />
