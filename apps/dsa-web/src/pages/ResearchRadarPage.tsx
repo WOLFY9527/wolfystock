@@ -655,6 +655,7 @@ export default function ResearchRadarPage() {
               </RoughSectionCard>
               <RoughSectionCard eyebrow={locale === 'en' ? 'Queue state' : '队列状态'} title={locale === 'en' ? 'Priority counts' : '优先级计数'}>
                 <RoughKeyValueRows
+                  emptyText={locale === 'en' ? 'No priority count yet.' : '暂无优先级计数。'}
                   rows={Object.entries(data?.aggregateSummary.priorityCounts ?? {}).map(([key, value]) => ({
                     key,
                     label: priorityTierLabel(key as UnifiedResearchQueueItem['priorityTier'], locale),
