@@ -33,7 +33,6 @@ import {
   type MarketRotationTheme,
   type MarketRotationThemeCorrelationBreadthSnapshot,
 } from '../api/marketRotation';
-import { formatDateTime } from '../utils/format';
 import { cn } from '../utils/cn';
 import { decisionReadinessVariant, sanitizeMarketGuidanceCopy, type DecisionReadinessState, type DecisionReadinessSummary } from '../utils/marketIntelligenceGuidance';
 
@@ -219,7 +218,17 @@ function hasMomentumProxyInputs(theme: MarketRotationTheme): boolean {
 }
 
 function isTaxonomyOnlyTheme(theme?: MarketRotationTheme): boolean {
-  return Boolean(theme?.staticThemeOnly || theme?.dataQuality === 'taxonomy_only');
+  if (theme?.taxonomyOnly === false) {
+    return false;
+  }
+
+  return Boolean(
+    theme?.taxonomyOnly === true
+    || theme?.dataQuality === 'taxonomy_only'
+    || theme?.dataCoverage === 'taxonomy_only'
+    || theme?.source === 'local_taxonomy'
+    || theme?.sourceClass === 'local_taxonomy',
+  );
 }
 
 function normalizeSignalType(value?: string | null): MarketRotationSignalType | null {
@@ -593,7 +602,13 @@ function resolveRotationFamilyRollup(payload: MarketRotationRadarResponse): Mark
 function mapDataStateLabel(theme: DataStateFields): string {
   const candidate = theme as MarketRotationTheme;
   if (isTaxonomyOnlyTheme(candidate)) {
-    return candidate.confidenceLabel || '待行情确认';
+    return '观察资料不足';
+  }
+  if (
+    resolveSignalType(candidate) === 'insufficient_evidence'
+    || resolveEvidenceQuality(candidate) === 'insufficient'
+  ) {
+    return '观察资料不足';
   }
   if (theme.isFallback || theme.freshness === 'fallback') {
     return '最近一次可用';
@@ -884,10 +899,6 @@ function isThemeStale(theme: DataStateFields): boolean {
   return Boolean(theme.isStale || theme.freshness === 'stale');
 }
 
-function summaryTitle(items: MarketRotationSummaryItem[], fallback: string): string {
-  return items.length ? items.map((item) => item.name).join(' / ') : fallback;
-}
-
 function deriveTopThemes(themes: MarketRotationTheme[], limit = TOP_THEME_LIMIT): MarketRotationTheme[] {
   return themes.slice()
     .sort((a, b) => {
@@ -1064,16 +1075,13 @@ function derivePrimaryDisplayThemes(
   payload: MarketRotationRadarResponse,
   tiers = deriveRotationTiers(payload),
 ): MarketRotationTheme[] {
-  if (tiers.libraryMode) {
-    return resolveSummaryThemes(payload.themes || [], payload.summary.strongestThemes || []);
-  }
   if (tiers.confirmedLeaders.length) {
     return tiers.confirmedLeaders;
   }
   if (tiers.candidateThemes.length) {
     return tiers.candidateThemes;
   }
-  return resolveSummaryThemes(payload.themes || [], payload.summary.strongestThemes || []);
+  return [];
 }
 
 function primaryDisplayMode(tiers?: RotationTierView | null): RotationPrimaryDisplayMode {
@@ -1735,10 +1743,10 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
   const decisionSummary = buildRotationDecisionReadiness(payload);
   const capitalSummary = deriveCapitalRotationSummary(payload);
   const primaryThemes = derivePrimaryDisplayThemes(payload, tiers);
-  const selectedTheme = primaryThemes[0] || payload.themes[0];
+  const selectedTheme = primaryThemes[0];
   const topThemeTitle = tiers.libraryMode
-    ? summaryTitle(payload.summary.strongestThemes, '按主题分类浏览')
-    : themeNamesSummary(primaryThemes, '等待主题更新');
+    ? '主题分类参考'
+    : themeNamesSummary(primaryThemes, '观察资料不足');
   const surfaceState = decisionSummary.state === 'ready'
     ? '板块强弱可读'
     : decisionSummary.state === 'observe'
@@ -1752,7 +1760,7 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
         ? `${selectedTheme.name} 当前信号较完整，继续观察节奏与回落风险。`
         : decisionSummary.state === 'observe'
           ? `${selectedTheme.name} 仍在观察阶段，先看持续性、广度与量能是否继续同步。`
-          : `${selectedTheme.name} 当前数据不足，可先查看分类候选并等待数据更新。`,
+          : `${selectedTheme.name} 当前观察资料不足，可先查看分类候选并等待数据更新。`,
     )
     : guidance.detail;
   const heroCards = [
@@ -1768,14 +1776,14 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
       value: selectedTheme ? themeConsumerStateLabel(selectedTheme) : surfaceState,
       detail: selectedTheme
         ? (selectedTheme.riskExplanations?.length ? '保留主要弱点与走势分化。' : '当前以主题强弱和阶段变化为主。')
-        : guidance.detail,
+        : '当前未发现可进入头部展示的确认主题。',
     },
     {
       key: 'confidence',
       label: '数据状态',
       value: selectedTheme
         ? mapDataStateLabel(selectedTheme)
-        : formatDateTime(payload.generatedAt) || '待确认',
+        : '观察资料不足',
       detail: selectedTheme
         ? consumerFreshnessLabel(selectedTheme.freshness, selectedTheme.isFallback, isThemeStale(selectedTheme))
         : consumerFreshnessLabel(payload.freshness, payload.isFallback, payload.isStale),
@@ -1996,7 +2004,13 @@ const CommandBar: React.FC<{
 
 function themeConsumerStateLabel(theme: MarketRotationTheme): string {
   if (isTaxonomyOnlyTheme(theme)) {
-    return '分类浏览';
+    return '主题分类参考';
+  }
+  if (
+    resolveSignalType(theme) === 'insufficient_evidence'
+    || resolveEvidenceQuality(theme) === 'insufficient'
+  ) {
+    return '观察资料不足';
   }
   return formatThemeStage(theme.stage);
 }
