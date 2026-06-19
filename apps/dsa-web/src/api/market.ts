@@ -411,6 +411,40 @@ export type MarketDataReadinessCheck = {
   details?: Record<string, unknown>;
 };
 
+export type ConsumerEvidenceReadinessState =
+  | 'score_grade'
+  | 'observation_only'
+  | 'blocked'
+  | 'missing'
+  | 'unavailable'
+  | string;
+
+export type ConsumerEvidenceReadinessItem = {
+  surface: string;
+  evidenceFamily: string;
+  requiredInputs: string[];
+  fulfilledInputs: string[];
+  missingInputs: string[];
+  staleInputs: string[];
+  blockedInputs: string[];
+  observationOnlyInputs: string[];
+  scoreGradeInputs: string[];
+  readinessState: ConsumerEvidenceReadinessState;
+  confidenceCapReason: string;
+  sourceAuthorityReason: string;
+  freshnessReason: string;
+  nextDiagnostic: string;
+  consumerSafeSummary: string;
+};
+
+export type ConsumerEvidenceReadinessMatrix = {
+  contractVersion: string;
+  diagnosticOnly: boolean;
+  networkCallsEnabled: boolean;
+  mutationEnabled: boolean;
+  items: ConsumerEvidenceReadinessItem[];
+};
+
 export type MarketDataReadinessResponse = {
   readinessStatus: MarketDataReadinessStatus;
   diagnosticOnly: boolean;
@@ -418,6 +452,7 @@ export type MarketDataReadinessResponse = {
   networkCallsEnabled: boolean;
   representativeSymbols: string[];
   checks: MarketDataReadinessCheck[];
+  consumerEvidenceReadinessMatrix?: ConsumerEvidenceReadinessMatrix;
 };
 
 function normalizeReadinessSymbols(symbols?: string[] | string | null): string | undefined {
@@ -443,6 +478,7 @@ function normalizeReadinessSymbols(symbols?: string[] | string | null): string |
 
 function normalizeMarketDataReadinessPayload(rawPayload: Record<string, unknown>): MarketDataReadinessResponse {
   const payload = toCamelCase<MarketDataReadinessResponse>(rawPayload);
+  const matrix = payload.consumerEvidenceReadinessMatrix;
   return {
     readinessStatus: payload.readinessStatus || 'missing',
     diagnosticOnly: payload.diagnosticOnly !== false,
@@ -460,6 +496,31 @@ function normalizeMarketDataReadinessPayload(rawPayload: Record<string, unknown>
       ...(typeof check.secretConfigured === 'boolean' ? { secretConfigured: check.secretConfigured } : {}),
       ...(check.details && typeof check.details === 'object' ? { details: check.details } : {}),
     })) : [],
+    ...(matrix && Array.isArray(matrix.items) ? {
+      consumerEvidenceReadinessMatrix: {
+        contractVersion: matrix.contractVersion || 'consumer_evidence_readiness_matrix_v1',
+        diagnosticOnly: matrix.diagnosticOnly !== false,
+        networkCallsEnabled: matrix.networkCallsEnabled === true,
+        mutationEnabled: matrix.mutationEnabled === true,
+        items: matrix.items.map((item) => ({
+          surface: item.surface || 'unknown',
+          evidenceFamily: item.evidenceFamily || 'unknown',
+          requiredInputs: Array.isArray(item.requiredInputs) ? item.requiredInputs : [],
+          fulfilledInputs: Array.isArray(item.fulfilledInputs) ? item.fulfilledInputs : [],
+          missingInputs: Array.isArray(item.missingInputs) ? item.missingInputs : [],
+          staleInputs: Array.isArray(item.staleInputs) ? item.staleInputs : [],
+          blockedInputs: Array.isArray(item.blockedInputs) ? item.blockedInputs : [],
+          observationOnlyInputs: Array.isArray(item.observationOnlyInputs) ? item.observationOnlyInputs : [],
+          scoreGradeInputs: Array.isArray(item.scoreGradeInputs) ? item.scoreGradeInputs : [],
+          readinessState: item.readinessState || 'unavailable',
+          confidenceCapReason: item.confidenceCapReason || '',
+          sourceAuthorityReason: item.sourceAuthorityReason || '',
+          freshnessReason: item.freshnessReason || '',
+          nextDiagnostic: item.nextDiagnostic || '',
+          consumerSafeSummary: item.consumerSafeSummary || '',
+        })),
+      },
+    } : {}),
   };
 }
 

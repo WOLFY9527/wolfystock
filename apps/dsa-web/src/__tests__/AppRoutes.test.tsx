@@ -757,6 +757,7 @@ describe('AppContent route flows', () => {
     ['/zh/admin/system', '/zh/settings/system', '需要管理员登录', '/zh/login?redirect=%2Fzh%2Fsettings%2Fsystem'],
     ['/zh/admin/providers', '/zh/admin/market-providers', '需要管理员登录', '/zh/login?redirect=%2Fzh%2Fadmin%2Fmarket-providers'],
     ['/zh/admin/provider', '/zh/admin/market-providers', '需要管理员登录', '/zh/login?redirect=%2Fzh%2Fadmin%2Fmarket-providers'],
+    ['/zh/admin/market-providers?surface=market_overview', '/zh/admin/market-providers', '需要管理员登录', '/zh/login?redirect=%2Fzh%2Fadmin%2Fmarket-providers%3Fsurface%3Dmarket_overview'],
     ['/zh/admin/evidence', '/zh/admin/evidence-workflow', '需要管理员登录', '/zh/login?redirect=%2Fzh%2Fadmin%2Fevidence-workflow'],
     ['/zh/admin/costs', '/zh/admin/cost-observability', '需要管理员登录', '/zh/login?redirect=%2Fzh%2Fadmin%2Fcost-observability'],
     ['/zh/admin/ai', '/zh/settings/system', '需要管理员登录', '/zh/login?redirect=%2Fzh%2Fsettings%2Fsystem'],
@@ -783,6 +784,7 @@ describe('AppContent route flows', () => {
     ['/admin/system', '/settings/system', 'Admin Sign-in Required', '/login?redirect=%2Fsettings%2Fsystem'],
     ['/admin/provider', '/admin/market-providers', 'Admin Sign-in Required', '/login?redirect=%2Fadmin%2Fmarket-providers'],
     ['/admin/market-providers', '/admin/market-providers', 'Admin Sign-in Required', '/login?redirect=%2Fadmin%2Fmarket-providers'],
+    ['/admin/market-providers?surface=market_overview', '/admin/market-providers', 'Admin Sign-in Required', '/login?redirect=%2Fadmin%2Fmarket-providers%3Fsurface%3Dmarket_overview'],
   ])('keeps anonymous admin route %s fail-closed without rendering guest', async (path, expectedPath, statusLabel, loginHref) => {
     languageState.value = 'en';
     renderAtWithLocationProbe(path);

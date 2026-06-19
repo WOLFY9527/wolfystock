@@ -3141,7 +3141,7 @@ describe('MarketOverviewPage', () => {
     expect(synthesisBlock).toHaveTextContent('缺失证据');
     expect(synthesisBlock).toHaveTextContent('下一步研究');
     expect(synthesisBlock).toHaveTextContent('复核反证');
-    expect(synthesisText).not.toMatch(/contractVersion|risk_supportive|marketOverview|confidenceCap|observationBoundary|no_advice|sourceAuthorityAllowed|scoreContributionAllowed|reason|debug|raw|provider|cache|runtime/i);
+    expect(synthesisText).not.toMatch(/contractVersion|risk_supportive|marketOverview|confidenceCap|observationBoundary|no_advice|sourceAuthorityAllowed|scoreContributionAllowed|reason|debug|raw|provider|cache|runtime|confidenceCapReason|sourceAuthorityReason|freshnessReason|nextDiagnostic|consumerSafeSummary|scoreGradeInputs|blockedInputs|observationOnlyInputs/i);
     expect(synthesisText).not.toMatch(/买入|卖出|下单|交易建议|投资建议|target|stop|position|recommend|buy|sell/i);
 
     expect(evidence).toHaveTextContent('支持证据');

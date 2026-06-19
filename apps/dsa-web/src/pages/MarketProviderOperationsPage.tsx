@@ -1,7 +1,12 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { Activity, ExternalLink } from 'lucide-react';
-import { marketApi, type MarketDataReadinessCheck, type MarketDataReadinessResponse } from '../api/market';
+import {
+  marketApi,
+  type ConsumerEvidenceReadinessItem,
+  type MarketDataReadinessCheck,
+  type MarketDataReadinessResponse,
+} from '../api/market';
 import {
   marketProviderOperationsApi,
   type AdminLogDrillThrough,
@@ -77,6 +82,7 @@ const EMPTY_PROVIDER_CACHE_STATES: MarketProviderCacheState[] = [];
 const EMPTY_PROVIDER_EVENT_ROLLUPS: MarketProviderEventRollup[] = [];
 const EMPTY_PROVIDER_MATRIX_ROWS: ProviderOperationsMatrixRow[] = [];
 const EMPTY_READINESS_CHECKS: MarketDataReadinessCheck[] = [];
+const EMPTY_CONSUMER_EVIDENCE_ITEMS: ConsumerEvidenceReadinessItem[] = [];
 const PROVIDER_OPS_DIAGNOSTIC_SURFACE = '数据源运维 / 系统诊断';
 const SUMMARY_DEFAULTS: MarketProviderOperationsSummary = {
   totalItems: 0,
@@ -227,14 +233,148 @@ function readinessSeverityVariant(severity: string): 'neutral' | 'success' | 'ca
 function surfaceLabel(surface: string): string {
   return {
     market_overview: 'Market Overview',
+    decision_cockpit: 'Decision Cockpit',
+    home_briefing: 'Home Briefing',
     liquidity_monitor: 'Liquidity Monitor',
     rotation_radar: 'Rotation Radar',
+    research_radar: 'Research Radar',
     portfolio: 'Portfolio',
     watchlist: 'Watchlist',
     options_lab: 'Options Lab',
     stock_history: 'US parquet history',
   }[surface] || surface.replace(/_/g, ' ');
 }
+
+function consumerEvidenceRoute(surface: string): { href: string; label: string } | null {
+  switch (String(surface || '').toLowerCase()) {
+    case 'market_overview':
+      return { href: '/market-overview', label: '/market-overview' };
+    case 'decision_cockpit':
+      return { href: '/market/decision-cockpit', label: '/market/decision-cockpit' };
+    case 'home_briefing':
+      return { href: '/', label: '/' };
+    case 'liquidity_monitor':
+      return { href: '/market/liquidity-monitor', label: '/market/liquidity-monitor' };
+    case 'rotation_radar':
+      return { href: '/market/rotation-radar', label: '/market/rotation-radar' };
+    case 'research_radar':
+      return { href: '/research/radar', label: '/research/radar' };
+    case 'portfolio':
+      return { href: '/portfolio', label: '/portfolio' };
+    case 'watchlist':
+      return { href: '/watchlist', label: '/watchlist' };
+    case 'options_lab':
+      return { href: '/options-lab', label: '/options-lab' };
+    default:
+      return null;
+  }
+}
+
+function consumerEvidenceReadinessLabel(state: string): string {
+  return {
+    score_grade: '评分级',
+    observation_only: '仅观察',
+    blocked: '阻断',
+    missing: '缺失',
+    unavailable: '不可用',
+  }[String(state || '').toLowerCase()] || sanitizeCodeLabel(state, '未知');
+}
+
+function consumerEvidenceReadinessVariant(state: string): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
+  const normalized = String(state || '').toLowerCase();
+  if (normalized === 'score_grade') return 'success';
+  if (normalized === 'observation_only') return 'info';
+  if (normalized === 'blocked') return 'danger';
+  if (normalized === 'missing' || normalized === 'unavailable') return 'caution';
+  return 'neutral';
+}
+
+function consumerEvidenceItemKey(item: ConsumerEvidenceReadinessItem): string {
+  return item.surface.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+}
+
+const ConsumerEvidenceImpactMatrix: React.FC<{
+  items: ConsumerEvidenceReadinessItem[];
+  surfaceFocus: ProductSetupSurface | null;
+}> = ({ items, surfaceFocus }) => {
+  if (!items.length) return null;
+
+  const sortedItems = [...items].sort((left, right) => {
+    const leftFocused = surfaceFocus?.key === left.surface ? 0 : 1;
+    const rightFocused = surfaceFocus?.key === right.surface ? 0 : 1;
+    if (leftFocused !== rightFocused) return leftFocused - rightFocused;
+    return surfaceLabel(left.surface).localeCompare(surfaceLabel(right.surface));
+  });
+
+  return (
+    <TerminalNestedBlock data-testid="market-provider-consumer-evidence-matrix" className="mt-4 bg-black/10 px-3 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">admin 诊断视图</p>
+          <p className="mt-1 text-sm font-semibold text-white/82">消费者证据影响矩阵</p>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <TerminalChip variant="neutral">{formatNumber(sortedItems.length, 0)} 个 consumer surface</TerminalChip>
+          <TerminalChip variant="info">provider-free</TerminalChip>
+        </div>
+      </div>
+      <p className="mt-2 text-[11px] leading-5 text-white/48">
+        只读汇总现有 consumer evidence readiness 对各产品面的影响。这里显示的是 admin 诊断字段，consumer 页面应继续保留既有 bounded copy，不直接投射本矩阵原文。
+      </p>
+      <div className="mt-3 grid gap-2">
+        {sortedItems.map((item) => {
+          const route = consumerEvidenceRoute(item.surface);
+          const isFocused = surfaceFocus?.key === item.surface;
+          return (
+            <div
+              key={`${item.surface}:${item.evidenceFamily}`}
+              data-testid={`market-provider-consumer-evidence-row-${consumerEvidenceItemKey(item)}`}
+              className={cn(
+                'rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-3',
+                isFocused ? 'border-cyan-200/20 bg-cyan-300/[0.035]' : '',
+              )}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <TerminalChip variant={consumerEvidenceReadinessVariant(item.readinessState)}>
+                      {consumerEvidenceReadinessLabel(item.readinessState)}
+                    </TerminalChip>
+                    <p className="min-w-0 truncate text-xs font-semibold text-white/84">{surfaceLabel(item.surface)}</p>
+                  </div>
+                  <p className="mt-1 font-mono text-[11px] text-white/48">{sanitizeCodeLabel(item.evidenceFamily)}</p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <TerminalChip variant="caution">缺失 {formatNumber(item.missingInputs.length, 0)}</TerminalChip>
+                  <TerminalChip variant="danger">阻断 {formatNumber(item.blockedInputs.length, 0)}</TerminalChip>
+                  <TerminalChip variant="info">仅观察 {formatNumber(item.observationOnlyInputs.length, 0)}</TerminalChip>
+                  <TerminalChip variant="success">评分级 {formatNumber(item.scoreGradeInputs.length, 0)}</TerminalChip>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+                <div className="min-w-0 space-y-1.5 text-[11px] leading-5 text-white/58">
+                  <p><span className="text-white/36">置信原因：</span>{sanitizeOperatorText(item.confidenceCapReason)}</p>
+                  <p><span className="text-white/36">来源原因：</span>{sanitizeOperatorText(item.sourceAuthorityReason)}</p>
+                  <p><span className="text-white/36">时效原因：</span>{sanitizeOperatorText(item.freshnessReason)}</p>
+                </div>
+                <div className="min-w-0 space-y-1.5 text-[11px] leading-5 text-white/58">
+                  <p>
+                    <span className="text-white/36">受影响 consumer route：</span>
+                    {route ? (
+                      <a href={route.href} className="text-cyan-100/82 underline underline-offset-2">{route.label}</a>
+                    ) : '暂无映射'}
+                  </p>
+                  <p><span className="text-white/36">下一诊断：</span>{sanitizeOperatorText(item.nextDiagnostic)}</p>
+                  <p><span className="text-white/36">Consumer-safe summary：</span>{sanitizeOperatorText(item.consumerSafeSummary)}</p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </TerminalNestedBlock>
+  );
+};
 
 function formatReadableList(values: string[], empty = '暂无可展示项'): string {
   if (!values.length) return empty;
@@ -2118,10 +2258,12 @@ const MarketDataReadinessPanel: React.FC<{
   isLoading: boolean;
   error: ParsedApiError | null;
   symbolInput: string;
+  surfaceFocus: ProductSetupSurface | null;
   onSymbolInputChange: (value: string) => void;
   onSymbolSubmit: () => void;
-}> = ({ data, isLoading, error, symbolInput, onSymbolInputChange, onSymbolSubmit }) => {
+}> = ({ data, isLoading, error, symbolInput, surfaceFocus, onSymbolInputChange, onSymbolSubmit }) => {
   const checks = data?.checks ?? EMPTY_READINESS_CHECKS;
+  const consumerEvidenceItems = data?.consumerEvidenceReadinessMatrix?.items ?? EMPTY_CONSUMER_EVIDENCE_ITEMS;
   const groupedChecks: Array<(typeof READINESS_DIAGNOSTIC_GROUPS)[number] & { items: MarketDataReadinessCheck[] }> = [];
   for (const group of READINESS_DIAGNOSTIC_GROUPS) {
     const items = checks
@@ -2180,6 +2322,8 @@ const MarketDataReadinessPanel: React.FC<{
       <TerminalNotice variant="info" className="mt-4">
         这个面板只解释本地就绪诊断与缺口来源，不改写 Market Overview、Liquidity Monitor 或 Rotation Radar 的既有结论。
       </TerminalNotice>
+
+      <ConsumerEvidenceImpactMatrix items={consumerEvidenceItems} surfaceFocus={surfaceFocus} />
 
       {error ? <ApiErrorAlert error={error} className="mt-4" /> : null}
 
@@ -2557,6 +2701,7 @@ const MarketProviderOperationsPage: React.FC = () => {
               isLoading={isReadinessLoading}
               error={readinessError}
               symbolInput={readinessSymbolsInput}
+              surfaceFocus={surfaceFocus}
               onSymbolInputChange={setReadinessSymbolsInput}
               onSymbolSubmit={submitReadinessSymbols}
             />

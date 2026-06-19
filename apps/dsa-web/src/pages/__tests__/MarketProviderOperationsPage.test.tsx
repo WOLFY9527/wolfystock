@@ -203,6 +203,65 @@ const readinessPayload = {
   providerRuntimeCalled: false,
   networkCallsEnabled: false,
   representativeSymbols: ['AAPL', 'SPY', 'BTC-USD'],
+  consumerEvidenceReadinessMatrix: {
+    contractVersion: 'consumer_evidence_readiness_matrix_v1',
+    diagnosticOnly: true,
+    networkCallsEnabled: false,
+    mutationEnabled: false,
+    items: [
+      {
+        surface: 'market_overview',
+        evidenceFamily: 'market_regime',
+        requiredInputs: ['macro context', 'liquidity context', 'rotation context', 'market breadth context'],
+        fulfilledInputs: ['market overview read model'],
+        missingInputs: ['market breadth context'],
+        staleInputs: [],
+        blockedInputs: ['macro context'],
+        observationOnlyInputs: ['liquidity context', 'rotation context'],
+        scoreGradeInputs: ['market overview read model'],
+        readinessState: 'score_grade',
+        confidenceCapReason: 'Only the overview read model is score-grade; supporting families still cap confidence.',
+        sourceAuthorityReason: 'Supporting families need stronger display authority before they can lift the cap.',
+        freshnessReason: 'Freshness is measured by each existing market surface before this matrix is shown.',
+        nextDiagnostic: 'Compare overview evidence families against current safe surface snapshots.',
+        consumerSafeSummary: 'Market overview has one score-grade input, while supporting evidence remains capped or observational.',
+      },
+      {
+        surface: 'decision_cockpit',
+        evidenceFamily: 'decision_context',
+        requiredInputs: ['market overview', 'research radar', 'liquidity monitor', 'rotation radar', 'options observation'],
+        fulfilledInputs: ['market overview'],
+        missingInputs: ['research radar', 'options observation'],
+        staleInputs: [],
+        blockedInputs: ['liquidity monitor', 'rotation radar'],
+        observationOnlyInputs: ['market overview'],
+        scoreGradeInputs: [],
+        readinessState: 'missing',
+        confidenceCapReason: 'Cross-surface decision context is incomplete.',
+        sourceAuthorityReason: 'Downstream surfaces cannot be promoted while required evidence is missing or blocked.',
+        freshnessReason: 'Freshness remains unresolved until all required families are present.',
+        nextDiagnostic: 'Build a cockpit driver table from existing market and research read models.',
+        consumerSafeSummary: 'Decision cockpit is missing required cross-surface evidence and cannot make a strong market judgment.',
+      },
+      {
+        surface: 'research_radar',
+        evidenceFamily: 'research_prerequisites',
+        requiredInputs: ['completed scanner evidence', 'watchlist research context', 'candidate evidence quality'],
+        fulfilledInputs: ['consumer-safe research projection'],
+        missingInputs: ['completed scanner evidence', 'watchlist research context'],
+        staleInputs: [],
+        blockedInputs: [],
+        observationOnlyInputs: ['consumer-safe research projection'],
+        scoreGradeInputs: [],
+        readinessState: 'observation_only',
+        confidenceCapReason: 'Research radar is bounded to observation while prerequisite evidence is incomplete.',
+        sourceAuthorityReason: 'Research context stays consumer-safe and does not grant market conclusion authority.',
+        freshnessReason: 'Candidate freshness is resolved by the research read model when evidence exists.',
+        nextDiagnostic: 'Check scanner and watchlist prerequisites before expecting research evidence.',
+        consumerSafeSummary: 'Research radar can explain available observations but prerequisite evidence is incomplete.',
+      },
+    ],
+  },
   checks: [
     {
       id: 'tushare_token',
@@ -840,6 +899,43 @@ describe('MarketProviderOperationsPage', () => {
     expect(within(matrixDisclosure).getByRole('button', { name: '收起 L4 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）' })).toBeInTheDocument();
   });
 
+  it('renders a provider-free consumer evidence impact matrix with affected routes and next diagnostics', async () => {
+    getOperations.mockResolvedValue(populatedPayload);
+
+    render(<MarketProviderOperationsPage />);
+
+    const matrix = await screen.findByTestId('market-provider-consumer-evidence-matrix');
+    expect(matrix).toHaveTextContent('消费者证据影响矩阵');
+    expect(matrix).toHaveTextContent('admin 诊断视图');
+    expect(matrix).toHaveTextContent('Market Overview');
+    expect(matrix).toHaveTextContent('Decision Cockpit');
+    expect(matrix).toHaveTextContent('Research Radar');
+    expect(matrix).toHaveTextContent('market_regime');
+    expect(matrix).toHaveTextContent('decision_context');
+    expect(matrix).toHaveTextContent('research_prerequisites');
+    expect(matrix).toHaveTextContent('/market-overview');
+    expect(matrix).toHaveTextContent('/market/decision-cockpit');
+    expect(matrix).toHaveTextContent('/research/radar');
+    expect(matrix).toHaveTextContent('缺失 1');
+    expect(matrix).toHaveTextContent('阻断 1');
+    expect(matrix).toHaveTextContent('仅观察 2');
+    expect(matrix).toHaveTextContent('评分级 1');
+    expect(matrix).toHaveTextContent('Compare overview evidence families against current safe surface snapshots.');
+    expect(matrix).toHaveTextContent('Build a cockpit driver table from existing market and research read models.');
+    expect(matrix).toHaveTextContent('Check scanner and watchlist prerequisites before expecting research evidence.');
+    expect(matrix).toHaveTextContent('Market overview has one score-grade input, while supporting evidence remains capped or observational.');
+    expect(matrix).toHaveTextContent('Decision cockpit is missing required cross-surface evidence and cannot make a strong market judgment.');
+    expect(matrix).toHaveTextContent('Research radar can explain available observations but prerequisite evidence is incomplete.');
+    expect(matrix).not.toHaveTextContent('contractVersion');
+    expect(matrix).not.toHaveTextContent('mutationEnabled');
+    expect(matrix).not.toHaveTextContent('networkCallsEnabled');
+    expect(matrix).not.toHaveTextContent('providerRuntimeCalled');
+    expect(matrix).not.toHaveTextContent('https://');
+    expect(matrix).not.toHaveTextContent('token=');
+    expect(matrix).not.toHaveTextContent('/Users/example/provider');
+    expect(matrix).not.toHaveTextContent(/buy|sell|recommend|target|stop|position|买入|卖出|止损|目标价/i);
+  });
+
   it('keeps non-scoring setup copy conservative and leaves score eligibility to existing source gates', async () => {
     getOperations.mockResolvedValue(populatedPayload);
 
@@ -1082,7 +1178,7 @@ describe('MarketProviderOperationsPage', () => {
     render(<MarketProviderOperationsPage />);
 
     expect(await screen.findByRole('heading', { name: '数据源维护路线图' })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText('读取 provider operations matrix 失败')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByRole('alert').length).toBeGreaterThan(0));
   });
 
   it('keeps raw diagnostics collapsed by default and preserves compact empty states', async () => {
