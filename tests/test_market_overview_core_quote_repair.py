@@ -260,7 +260,12 @@ def test_vix_fred_transport_overlay_is_consumed_when_fresh_enough() -> None:
     assert vix["officialOverlayFailureReason"] is None
     assert vix["freshness"] == "delayed"
     assert vix["isStale"] is False
+    assert vix["sourceAuthorityAllowed"] is True
+    assert vix["scoreContributionAllowed"] is True
+    assert vix["sourceAuthorityReason"] is None
     assert vix["sourceFreshnessEvidence"]["freshness"] == "delayed"
+    assert vix["sourceFreshnessEvidence"]["freshnessPolicy"] == "official_daily_us_weekday_t_plus_1"
+    assert vix["sourceFreshnessEvidence"].get("externalProviderCalls") is not True
 
 
 def test_vix_yfinance_proxy_panel_and_item_cannot_claim_live_realtime() -> None:
@@ -305,6 +310,8 @@ def test_vix_yfinance_proxy_panel_and_item_cannot_claim_live_realtime() -> None:
     assert payload["freshness"] == "delayed"
     assert payload["freshness"] not in {"live", "fresh"}
     assert payload["evidenceSnapshot"]["freshness"] == "partial"
+    assert vix.get("sourceAuthorityAllowed") is not True
+    assert vix.get("scoreContributionAllowed") is not True
 
 
 def test_vix_stale_official_overlay_does_not_replace_delayed_proxy() -> None:
@@ -347,6 +354,8 @@ def test_vix_stale_official_overlay_does_not_replace_delayed_proxy() -> None:
     assert vix["officialOverlayAvailable"] is False
     assert vix["officialOverlayFailureReason"] == "stale_official_row"
     assert vix["activationHint"] == "official_overlay_stale_using_proxy"
+    assert vix.get("sourceAuthorityAllowed") is not True
+    assert vix.get("scoreContributionAllowed") is not True
 
 
 def test_vix_fred_cache_miss_reason_is_propagated_to_proxy_item() -> None:
