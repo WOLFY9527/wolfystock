@@ -46,8 +46,41 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
             "regime": "supportive",
             "confidence": 0.44,
             "includedIndicatorCount": 3,
-            "possibleIndicatorWeight": 43,
+            "possibleIndicatorWeight": 49,
             "includedIndicatorWeight": 19,
+        },
+        "coverageContract": {
+            "contractVersion": "liquidity_coverage_contract_v1",
+            "label": "Liquidity coverage contract",
+            "summary": "Coverage is measured as fulfilled required input slots. The score-weight budget is tracked separately.",
+            "denominatorKind": "required_inputs",
+            "denominatorLabel": "Required liquidity input slots",
+            "requiredFamilyCount": 1,
+            "requiredInputCount": 1,
+            "fulfilledInputCount": 1,
+            "missingInputCount": 0,
+            "scoreEligibleInputCount": 1,
+            "observationOnlyInputCount": 0,
+            "scoreWeightBudget": 49,
+            "scoreWeightIncluded": 19,
+            "families": [
+                {
+                    "indicatorId": "vix_pressure",
+                    "label": "VIX / 波动率压力",
+                    "requiredInputs": ["VIX"],
+                    "fulfilledInputs": ["VIX"],
+                    "missingInputs": [],
+                    "requiredInputCount": 1,
+                    "fulfilledInputCount": 1,
+                    "missingInputCount": 0,
+                    "scoreEligibleInputCount": 1,
+                    "observationOnlyInputCount": 0,
+                    "contributesToScore": True,
+                    "scoreContributionAllowed": True,
+                    "observationOnly": False,
+                    "proxyOnly": False,
+                }
+            ],
         },
         "freshness": {
             "status": "delayed",
@@ -98,6 +131,11 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
                     "requiredInputs": ["VIX"],
                     "fulfilledInputs": ["VIX"],
                     "missingInputs": [],
+                    "requiredInputCount": 1,
+                    "fulfilledInputCount": 1,
+                    "missingInputCount": 0,
+                    "scoreEligibleInputCount": 1,
+                    "observationOnlyInputCount": 0,
                     "requiredProviderClass": "official_public.vix_or_volatility",
                     "configuredProviderAvailable": True,
                     "realSourceAvailable": True,
@@ -200,6 +238,7 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
         "endpoint",
         "generatedAt",
         "score",
+        "coverageContract",
         "freshness",
         "indicators",
         "liquidityImpulseSynthesis",
@@ -210,6 +249,9 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
     }
     assert body["endpoint"] == "/api/v1/market/liquidity-monitor"
     assert body["score"]["regime"] == "supportive"
+    assert body["coverageContract"]["denominatorKind"] == "required_inputs"
+    assert body["coverageContract"]["requiredInputCount"] == 1
+    assert body["coverageContract"]["scoreWeightBudget"] == 49
     assert body["dataQuality"] == {"state": "delayed", "label": "数据延迟", "available": False}
     assert set(body["sourceMetadata"]) == {"externalProviderCalls", "providerRuntimeChanged", "marketCacheMutation"}
     assert body["sourceMetadata"]["externalProviderCalls"] is False
@@ -234,6 +276,8 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
     diagnostics = indicator["coverageDiagnostics"]
     assert "cacheBundleDiagnostics" not in diagnostics
     assert diagnostics["requiredProviderClass"] == "official_public.vix_or_volatility"
+    assert diagnostics["requiredInputCount"] == 1
+    assert diagnostics["scoreEligibleInputCount"] == 1
     assert diagnostics["realSourceAvailable"] is True
     assert diagnostics["scoreContributionAllowed"] is True
 
@@ -250,7 +294,7 @@ def test_liquidity_monitor_route_exposes_safe_data_quality_for_unavailable_score
             "regime": "unavailable",
             "confidence": 0.12,
             "includedIndicatorCount": 0,
-            "possibleIndicatorWeight": 43,
+            "possibleIndicatorWeight": 49,
             "includedIndicatorWeight": 0,
         },
         "freshness": {
@@ -310,7 +354,7 @@ def test_liquidity_monitor_route_preserves_evidence_input_authority_metadata() -
             "regime": "unavailable",
             "confidence": 0.2,
             "includedIndicatorCount": 0,
-            "possibleIndicatorWeight": 43,
+            "possibleIndicatorWeight": 49,
             "includedIndicatorWeight": 0,
         },
         "freshness": {
@@ -536,7 +580,7 @@ def test_liquidity_monitor_route_preserves_explicit_non_live_indicator_contracts
             "regime": "unavailable",
             "confidence": 0.25,
             "includedIndicatorCount": 1,
-            "possibleIndicatorWeight": 43,
+            "possibleIndicatorWeight": 49,
             "includedIndicatorWeight": 8,
         },
         "freshness": {

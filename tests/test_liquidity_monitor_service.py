@@ -371,6 +371,12 @@ def _activation(payload: Dict[str, Any], key: str) -> Dict[str, Any]:
     return _indicators_by_key(payload)[key]["coverageDiagnostics"]
 
 
+def _coverage_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
+    contract = payload.get("coverageContract")
+    assert isinstance(contract, dict)
+    return contract
+
+
 def _observation_evidence_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
     return payload["observationEvidenceSnapshot"]
 
@@ -382,6 +388,11 @@ def _capital_flow_signal(payload: Dict[str, Any]) -> Dict[str, Any]:
 def _assert_activation_fields(diagnostics: Dict[str, Any]) -> None:
     for field in (
         "indicatorId",
+        "requiredInputCount",
+        "fulfilledInputCount",
+        "missingInputCount",
+        "scoreEligibleInputCount",
+        "observationOnlyInputCount",
         "requiredProviderClass",
         "configuredProviderAvailable",
         "realSourceAvailable",
@@ -2373,6 +2384,95 @@ def test_liquidity_monitor_observation_evidence_snapshot_preserves_indicator_lev
             "capReason": "fallback_source",
         }
     ]
+
+
+def test_liquidity_coverage_contract_uses_required_input_denominator_and_family_counts(
+    isolated_db: DatabaseManager,
+) -> None:
+    del isolated_db
+    payload = _cache_only_liquidity_service_payload(_seed_official_cached_macro_rates_context)
+    contract = _coverage_contract(payload)
+    indicators = _indicators_by_key(payload)
+
+    assert contract["denominatorKind"] == "required_inputs"
+    assert contract["requiredFamilyCount"] == 12
+    assert contract["requiredInputCount"] == 39
+    assert contract["scoreWeightBudget"] == 49
+    assert contract["scoreWeightIncluded"] == payload["score"]["includedIndicatorWeight"]
+    assert payload["score"]["possibleIndicatorWeight"] == 49
+
+    families = {item["indicatorId"]: item for item in contract["families"]}
+    assert set(families) == set(indicators)
+    assert sum(item["requiredInputCount"] for item in families.values()) == contract["requiredInputCount"]
+    assert sum(item["fulfilledInputCount"] for item in families.values()) == contract["fulfilledInputCount"]
+    assert sum(item["missingInputCount"] for item in families.values()) == contract["missingInputCount"]
+    assert sum(item["scoreEligibleInputCount"] for item in families.values()) == contract["scoreEligibleInputCount"]
+    assert sum(item["observationOnlyInputCount"] for item in families.values()) == contract["observationOnlyInputCount"]
+
+    for key, indicator in indicators.items():
+        diagnostics = indicator["coverageDiagnostics"]
+        family = families[key]
+        assert diagnostics["requiredInputCount"] == len(diagnostics["requiredInputs"])
+        assert diagnostics["fulfilledInputCount"] == len(diagnostics["fulfilledInputs"])
+        assert diagnostics["missingInputCount"] == len(diagnostics["missingInputs"])
+        assert family["requiredInputCount"] == diagnostics["requiredInputCount"]
+        assert family["fulfilledInputCount"] == diagnostics["fulfilledInputCount"]
+        assert family["missingInputCount"] == diagnostics["missingInputCount"]
+        assert family["scoreEligibleInputCount"] == diagnostics["scoreEligibleInputCount"]
+        assert family["observationOnlyInputCount"] == diagnostics["observationOnlyInputCount"]
+
+
+def test_liquidity_coverage_contract_keeps_proxy_only_and_observation_families_out_of_score_grade(
+    isolated_db: DatabaseManager,
+) -> None:
+    del isolated_db
+    payload = _cache_only_liquidity_service_payload(_seed_mixed_official_proxy_context)
+    contract = _coverage_contract(payload)
+    indicators = _indicators_by_key(payload)
+
+    assert payload["score"]["includedIndicatorCount"] == 2
+    assert payload["score"]["regime"] == "unavailable"
+    assert contract["requiredInputCount"] == 39
+    assert 0 < contract["scoreEligibleInputCount"] < contract["requiredInputCount"]
+    assert contract["observationOnlyInputCount"] == 3
+
+    for key in ("cn_hk_flows", "cn_money_market_rates", "futures_premarket", "crypto_funding"):
+        diagnostics = indicators[key]["coverageDiagnostics"]
+        assert diagnostics["observationOnly"] is True
+        assert diagnostics["scoreContributionAllowed"] is False
+        assert diagnostics["scoreEligibleInputCount"] == 0
+        assert diagnostics["observationOnlyInputCount"] == diagnostics["fulfilledInputCount"]
+
+    for key in ("vix_pressure", "us_rates_pressure", "us_etf_flow_proxy", "us_breadth_proxy"):
+        diagnostics = indicators[key]["coverageDiagnostics"]
+        if diagnostics["proxyOnly"]:
+            assert diagnostics["scoreContributionAllowed"] is False
+            assert diagnostics["scoreEligibleInputCount"] == 0
+
+
+def test_liquidity_coverage_contract_has_safe_consumer_labels_without_advice_or_raw_terms(
+    isolated_db: DatabaseManager,
+) -> None:
+    del isolated_db
+    payload = _cache_only_liquidity_service_payload(_seed_provider_unavailable_stale_malformed_context)
+    contract = _coverage_contract(payload)
+
+    visible_text = "\n".join(
+        str(item)
+        for item in (
+            contract["label"],
+            contract["summary"],
+            contract["denominatorLabel"],
+            *(family["label"] for family in contract["families"]),
+        )
+    )
+    assert visible_text
+    assert not re.search(
+        r"raw|debug|provider|runtime|schema|requestId|traceId|cache|buy|sell|hold|recommend|target|stop|position[- ]?sizing|买入|卖出|持有|推荐|目标价|止损|仓位",
+        visible_text,
+        flags=re.IGNORECASE,
+    )
+
 
 def test_unavailable_when_fewer_than_three_reliable_indicators(isolated_db: DatabaseManager) -> None:
     service = _make_service()

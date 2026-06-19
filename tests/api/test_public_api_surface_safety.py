@@ -215,7 +215,7 @@ def _liquidity_monitor_fallback_payload() -> dict[str, object]:
             "regime": "unavailable",
             "confidence": 0.0,
             "includedIndicatorCount": 0,
-            "possibleIndicatorWeight": 43,
+            "possibleIndicatorWeight": 49,
             "includedIndicatorWeight": 0,
         },
         "freshness": {

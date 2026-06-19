@@ -26,8 +26,41 @@ describe('liquidityMonitorApi', () => {
           regime: 'supportive',
           confidence: 0.44,
           included_indicator_count: 3,
-          possible_indicator_weight: 43,
+          possible_indicator_weight: 49,
           included_indicator_weight: 19,
+        },
+        coverage_contract: {
+          contract_version: 'liquidity_coverage_contract_v1',
+          label: 'Liquidity coverage contract',
+          summary: 'Coverage is measured as fulfilled required input slots.',
+          denominator_kind: 'required_inputs',
+          denominator_label: 'Required liquidity input slots',
+          required_family_count: 12,
+          required_input_count: 39,
+          fulfilled_input_count: 7,
+          missing_input_count: 32,
+          score_eligible_input_count: 7,
+          observation_only_input_count: 0,
+          score_weight_budget: 49,
+          score_weight_included: 19,
+          families: [
+            {
+              indicator_id: 'vix_pressure',
+              label: 'VIX / 波动率压力',
+              required_inputs: ['VIX'],
+              fulfilled_inputs: ['VIX'],
+              missing_inputs: [],
+              required_input_count: 1,
+              fulfilled_input_count: 1,
+              missing_input_count: 0,
+              score_eligible_input_count: 1,
+              observation_only_input_count: 0,
+              contributes_to_score: true,
+              score_contribution_allowed: true,
+              observation_only: false,
+              proxy_only: false,
+            },
+          ],
         },
         freshness: {
           status: 'delayed',
@@ -116,6 +149,11 @@ describe('liquidityMonitorApi', () => {
               required_inputs: ['VIX'],
               fulfilled_inputs: ['VIX'],
               missing_inputs: [],
+              required_input_count: 1,
+              fulfilled_input_count: 1,
+              missing_input_count: 0,
+              score_eligible_input_count: 1,
+              observation_only_input_count: 0,
               required_provider_class: 'official_public.vix_or_volatility',
               configured_provider_available: true,
               real_source_available: true,
@@ -234,6 +272,13 @@ describe('liquidityMonitorApi', () => {
 
     expect(get).toHaveBeenCalledWith('/api/v1/market/liquidity-monitor');
     expect(payload.score.regime).toBe('supportive');
+    expect(payload.score.possibleIndicatorWeight).toBe(49);
+    expect(payload.coverageContract).toMatchObject({
+      denominatorKind: 'required_inputs',
+      requiredFamilyCount: 12,
+      requiredInputCount: 39,
+      scoreWeightBudget: 49,
+    });
     expect(payload.freshness.weakestIndicatorFreshness).toBe('delayed');
     expect(payload.indicators[0].includedInScore).toBe(true);
     expect(payload.indicators[0].evidence?.inputs[0]).toMatchObject({
@@ -250,6 +295,8 @@ describe('liquidityMonitorApi', () => {
     });
     expect(payload.indicators[0].coverageDiagnostics).toMatchObject({
       requiredProviderClass: 'official_public.vix_or_volatility',
+      requiredInputCount: 1,
+      scoreEligibleInputCount: 1,
       realSourceAvailable: true,
       scoreContributionAllowed: true,
       routeRejectedReasonCodes: [],
@@ -300,7 +347,7 @@ describe('liquidityMonitorApi', () => {
           regime: 'unavailable',
           confidence: 0.12,
           included_indicator_count: 0,
-          possible_indicator_weight: 43,
+          possible_indicator_weight: 49,
           included_indicator_weight: 0,
         },
         freshness: {

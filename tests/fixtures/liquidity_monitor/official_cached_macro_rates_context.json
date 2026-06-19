@@ -9,10 +9,328 @@
     "possibleIndicatorWeight": 49,
     "includedIndicatorWeight": 14
   },
+  "coverageContract": {
+    "contractVersion": "liquidity_coverage_contract_v1",
+    "label": "Liquidity coverage contract",
+    "summary": "Coverage is measured as fulfilled required input slots across liquidity families. The 49 score-weight budget is tracked separately.",
+    "denominatorKind": "required_inputs",
+    "denominatorLabel": "Required liquidity input slots",
+    "requiredFamilyCount": 12,
+    "requiredInputCount": 39,
+    "fulfilledInputCount": 8,
+    "missingInputCount": 31,
+    "scoreEligibleInputCount": 5,
+    "observationOnlyInputCount": 3,
+    "scoreWeightBudget": 49,
+    "scoreWeightIncluded": 14,
+    "families": [
+      {
+        "indicatorId": "crypto_spot_momentum",
+        "label": "Crypto 现货动量",
+        "requiredInputs": [
+          "BTC",
+          "ETH",
+          "BNB"
+        ],
+        "fulfilledInputs": [],
+        "missingInputs": [
+          "BTC",
+          "ETH",
+          "BNB"
+        ],
+        "requiredInputCount": 3,
+        "fulfilledInputCount": 0,
+        "missingInputCount": 3,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 0,
+        "contributesToScore": false,
+        "scoreContributionAllowed": false,
+        "observationOnly": false,
+        "proxyOnly": false
+      },
+      {
+        "indicatorId": "crypto_funding",
+        "label": "Crypto Funding",
+        "requiredInputs": [
+          "BTC_FUNDING",
+          "ETH_FUNDING"
+        ],
+        "fulfilledInputs": [],
+        "missingInputs": [
+          "BTC_FUNDING",
+          "ETH_FUNDING"
+        ],
+        "requiredInputCount": 2,
+        "fulfilledInputCount": 0,
+        "missingInputCount": 2,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 0,
+        "contributesToScore": false,
+        "scoreContributionAllowed": false,
+        "observationOnly": true,
+        "proxyOnly": false
+      },
+      {
+        "indicatorId": "vix_pressure",
+        "label": "VIX / 波动率压力",
+        "requiredInputs": [
+          "VIX"
+        ],
+        "fulfilledInputs": [
+          "VIX"
+        ],
+        "missingInputs": [],
+        "requiredInputCount": 1,
+        "fulfilledInputCount": 1,
+        "missingInputCount": 0,
+        "scoreEligibleInputCount": 1,
+        "observationOnlyInputCount": 0,
+        "contributesToScore": true,
+        "scoreContributionAllowed": true,
+        "observationOnly": false,
+        "proxyOnly": false
+      },
+      {
+        "indicatorId": "usd_pressure",
+        "label": "USD Pressure / 美元压力",
+        "requiredInputs": [
+          "USD_TWI"
+        ],
+        "fulfilledInputs": [],
+        "missingInputs": [
+          "USD_TWI"
+        ],
+        "requiredInputCount": 1,
+        "fulfilledInputCount": 0,
+        "missingInputCount": 1,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 0,
+        "contributesToScore": false,
+        "scoreContributionAllowed": false,
+        "observationOnly": false,
+        "proxyOnly": false
+      },
+      {
+        "indicatorId": "us_rates_pressure",
+        "label": "US Rates / 利率压力",
+        "requiredInputs": [
+          "US2Y",
+          "US10Y",
+          "US30Y",
+          "SOFR",
+          "US10Y2Y",
+          "US10Y3M"
+        ],
+        "fulfilledInputs": [
+          "US2Y",
+          "US10Y",
+          "US30Y",
+          "SOFR"
+        ],
+        "missingInputs": [
+          "US10Y2Y",
+          "US10Y3M"
+        ],
+        "requiredInputCount": 6,
+        "fulfilledInputCount": 4,
+        "missingInputCount": 2,
+        "scoreEligibleInputCount": 4,
+        "observationOnlyInputCount": 0,
+        "contributesToScore": true,
+        "scoreContributionAllowed": true,
+        "observationOnly": false,
+        "proxyOnly": false
+      },
+      {
+        "indicatorId": "fed_liquidity",
+        "label": "Fed Liquidity / 美联储流动性",
+        "requiredInputs": [
+          "FED_ASSETS",
+          "FED_RRP",
+          "TGA",
+          "RESERVES"
+        ],
+        "fulfilledInputs": [],
+        "missingInputs": [
+          "FED_ASSETS",
+          "FED_RRP",
+          "TGA",
+          "RESERVES"
+        ],
+        "requiredInputCount": 4,
+        "fulfilledInputCount": 0,
+        "missingInputCount": 4,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 0,
+        "contributesToScore": false,
+        "scoreContributionAllowed": false,
+        "observationOnly": false,
+        "proxyOnly": false
+      },
+      {
+        "indicatorId": "us_etf_flow_proxy",
+        "label": "US ETF 资金代理",
+        "requiredInputs": [
+          "ETF"
+        ],
+        "fulfilledInputs": [
+          "ETF"
+        ],
+        "missingInputs": [],
+        "requiredInputCount": 1,
+        "fulfilledInputCount": 1,
+        "missingInputCount": 0,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 1,
+        "contributesToScore": false,
+        "scoreContributionAllowed": false,
+        "observationOnly": false,
+        "proxyOnly": true
+      },
+      {
+        "indicatorId": "us_breadth_proxy",
+        "label": "US 广度代理",
+        "requiredInputs": [
+          "SECTORS_UP",
+          "SECTORS_DOWN",
+          "RSP_SPY",
+          "IWM_SPY",
+          "QQQ_SPY"
+        ],
+        "fulfilledInputs": [
+          "SECTORS_UP",
+          "SECTORS_DOWN"
+        ],
+        "missingInputs": [
+          "RSP_SPY",
+          "IWM_SPY",
+          "QQQ_SPY"
+        ],
+        "requiredInputCount": 5,
+        "fulfilledInputCount": 2,
+        "missingInputCount": 3,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 2,
+        "contributesToScore": false,
+        "scoreContributionAllowed": false,
+        "observationOnly": false,
+        "proxyOnly": true
+      },
+      {
+        "indicatorId": "cn_hk_index_context",
+        "label": "CN/HK 指数环境",
+        "requiredInputs": [
+          "000001.SH",
+          "399001.SZ",
+          "HSI.HK",
+          "HSTECH.HK",
+          "CN00Y"
+        ],
+        "fulfilledInputs": [],
+        "missingInputs": [
+          "000001.SH",
+          "399001.SZ",
+          "HSI.HK",
+          "HSTECH.HK",
+          "CN00Y"
+        ],
+        "requiredInputCount": 5,
+        "fulfilledInputCount": 0,
+        "missingInputCount": 5,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 0,
+        "contributesToScore": false,
+        "scoreContributionAllowed": false,
+        "observationOnly": true,
+        "proxyOnly": false
+      },
+      {
+        "indicatorId": "cn_hk_flows",
+        "label": "CN/HK 资金流",
+        "requiredInputs": [
+          "NORTHBOUND",
+          "SOUTHBOUND",
+          "CN_ETF",
+          "MARGIN_BALANCE",
+          "MAINLAND_MAIN"
+        ],
+        "fulfilledInputs": [],
+        "missingInputs": [
+          "NORTHBOUND",
+          "SOUTHBOUND",
+          "CN_ETF",
+          "MARGIN_BALANCE",
+          "MAINLAND_MAIN"
+        ],
+        "requiredInputCount": 5,
+        "fulfilledInputCount": 0,
+        "missingInputCount": 5,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 0,
+        "contributesToScore": false,
+        "scoreContributionAllowed": false,
+        "observationOnly": true,
+        "proxyOnly": false
+      },
+      {
+        "indicatorId": "cn_money_market_rates",
+        "label": "CN 货币市场利率",
+        "requiredInputs": [
+          "DR007",
+          "SHIBOR"
+        ],
+        "fulfilledInputs": [],
+        "missingInputs": [
+          "DR007",
+          "SHIBOR"
+        ],
+        "requiredInputCount": 2,
+        "fulfilledInputCount": 0,
+        "missingInputCount": 2,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 0,
+        "contributesToScore": false,
+        "scoreContributionAllowed": false,
+        "observationOnly": true,
+        "proxyOnly": false
+      },
+      {
+        "indicatorId": "futures_premarket",
+        "label": "期货 / 盘前方向",
+        "requiredInputs": [
+          "NQ",
+          "ES",
+          "YM",
+          "RTY"
+        ],
+        "fulfilledInputs": [],
+        "missingInputs": [
+          "NQ",
+          "ES",
+          "YM",
+          "RTY"
+        ],
+        "requiredInputCount": 4,
+        "fulfilledInputCount": 0,
+        "missingInputCount": 4,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 0,
+        "contributesToScore": false,
+        "scoreContributionAllowed": false,
+        "observationOnly": true,
+        "proxyOnly": false
+      }
+    ]
+  },
   "freshness": {
     "status": "delayed",
     "weakestIndicatorFreshness": "delayed",
     "latestAsOf": "2026-05-07T10:00:00+08:00"
+  },
+  "dataQuality": {
+    "state": "partial",
+    "label": "部分数据缺失",
+    "available": false
   },
   "indicators": [
     {
@@ -70,6 +388,11 @@
           "ETH",
           "BNB"
         ],
+        "requiredInputCount": 3,
+        "fulfilledInputCount": 0,
+        "missingInputCount": 3,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 0,
         "requiredProviderClass": "exchange_public.crypto_spot",
         "configuredProviderAvailable": true,
         "realSourceAvailable": false,
@@ -145,6 +468,11 @@
           "BTC_FUNDING",
           "ETH_FUNDING"
         ],
+        "requiredInputCount": 2,
+        "fulfilledInputCount": 0,
+        "missingInputCount": 2,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 0,
         "requiredProviderClass": "exchange_public.crypto_funding",
         "configuredProviderAvailable": true,
         "realSourceAvailable": false,
@@ -219,6 +547,11 @@
           "VIX"
         ],
         "missingInputs": [],
+        "requiredInputCount": 1,
+        "fulfilledInputCount": 1,
+        "missingInputCount": 0,
+        "scoreEligibleInputCount": 1,
+        "observationOnlyInputCount": 0,
         "requiredProviderClass": "official_public.vix_or_volatility",
         "configuredProviderAvailable": true,
         "realSourceAvailable": true,
@@ -303,6 +636,11 @@
         "missingInputs": [
           "USD_TWI"
         ],
+        "requiredInputCount": 1,
+        "fulfilledInputCount": 0,
+        "missingInputCount": 1,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 0,
         "requiredProviderClass": "official_public.usd_pressure",
         "configuredProviderAvailable": true,
         "realSourceAvailable": false,
@@ -431,6 +769,11 @@
           "US10Y2Y",
           "US10Y3M"
         ],
+        "requiredInputCount": 6,
+        "fulfilledInputCount": 4,
+        "missingInputCount": 2,
+        "scoreEligibleInputCount": 4,
+        "observationOnlyInputCount": 0,
         "requiredProviderClass": "official_public.us_treasury_curve",
         "configuredProviderAvailable": true,
         "realSourceAvailable": true,
@@ -511,6 +854,11 @@
           "TGA",
           "RESERVES"
         ],
+        "requiredInputCount": 4,
+        "fulfilledInputCount": 0,
+        "missingInputCount": 4,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 0,
         "requiredProviderClass": "official_public.fed_liquidity",
         "configuredProviderAvailable": true,
         "realSourceAvailable": false,
@@ -585,6 +933,11 @@
           "ETF"
         ],
         "missingInputs": [],
+        "requiredInputCount": 1,
+        "fulfilledInputCount": 1,
+        "missingInputCount": 0,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 1,
         "requiredProviderClass": "authorized.us_etf_flow",
         "configuredProviderAvailable": true,
         "realSourceAvailable": false,
@@ -704,6 +1057,11 @@
           "IWM_SPY",
           "QQQ_SPY"
         ],
+        "requiredInputCount": 5,
+        "fulfilledInputCount": 2,
+        "missingInputCount": 3,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 2,
         "requiredProviderClass": "official_or_authorized.us_market_breadth",
         "configuredProviderAvailable": true,
         "realSourceAvailable": false,
@@ -789,6 +1147,11 @@
           "HSTECH.HK",
           "CN00Y"
         ],
+        "requiredInputCount": 5,
+        "fulfilledInputCount": 0,
+        "missingInputCount": 5,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 0,
         "requiredProviderClass": "official_public.cn_hk_index_snapshot",
         "configuredProviderAvailable": true,
         "realSourceAvailable": false,
@@ -870,6 +1233,11 @@
           "MARGIN_BALANCE",
           "MAINLAND_MAIN"
         ],
+        "requiredInputCount": 5,
+        "fulfilledInputCount": 0,
+        "missingInputCount": 5,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 0,
         "requiredProviderClass": "authorized.cn_hk_connect_flow",
         "configuredProviderAvailable": true,
         "realSourceAvailable": false,
@@ -945,6 +1313,11 @@
           "DR007",
           "SHIBOR"
         ],
+        "requiredInputCount": 2,
+        "fulfilledInputCount": 0,
+        "missingInputCount": 2,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 0,
         "requiredProviderClass": "official_public.cn_money_market_rates",
         "configuredProviderAvailable": true,
         "realSourceAvailable": false,
@@ -1024,6 +1397,11 @@
           "YM",
           "RTY"
         ],
+        "requiredInputCount": 4,
+        "fulfilledInputCount": 0,
+        "missingInputCount": 4,
+        "scoreEligibleInputCount": 0,
+        "observationOnlyInputCount": 0,
         "requiredProviderClass": "exchange_or_broker_authorized.index_futures",
         "configuredProviderAvailable": true,
         "realSourceAvailable": false,
