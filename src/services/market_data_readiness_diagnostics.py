@@ -19,6 +19,7 @@ from src.services.provider_affected_surface_mapping import (
 )
 
 
+CONSUMER_EVIDENCE_READINESS_MATRIX_VERSION = "consumer_evidence_readiness_matrix_v1"
 _LOCAL_US_PARQUET_ENV_KEYS = ("LOCAL_US_PARQUET_DIR", "US_STOCK_PARQUET_DIR")
 _TUSHARE_TOKEN_ENV_KEYS = ("TUSHARE_TOKEN",)
 _PARQUET_ENGINES = ("pyarrow", "fastparquet")
@@ -63,9 +64,48 @@ class MarketDataReadinessCheck:
 
 
 @dataclass(frozen=True, slots=True)
+class ConsumerEvidenceReadinessSpec:
+    surface: str
+    evidence_family: str
+    required_inputs: tuple[str, ...]
+    fulfilled_inputs: tuple[str, ...] = ()
+    missing_inputs: tuple[str, ...] = ()
+    stale_inputs: tuple[str, ...] = ()
+    blocked_inputs: tuple[str, ...] = ()
+    observation_only_inputs: tuple[str, ...] = ()
+    score_grade_inputs: tuple[str, ...] = ()
+    readiness_state: str = "unavailable"
+    confidence_cap_reason: str = ""
+    source_authority_reason: str = ""
+    freshness_reason: str = ""
+    next_diagnostic: str = ""
+    consumer_safe_summary: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "surface": self.surface,
+            "evidenceFamily": self.evidence_family,
+            "requiredInputs": list(self.required_inputs),
+            "fulfilledInputs": list(self.fulfilled_inputs),
+            "missingInputs": list(self.missing_inputs),
+            "staleInputs": list(self.stale_inputs),
+            "blockedInputs": list(self.blocked_inputs),
+            "observationOnlyInputs": list(self.observation_only_inputs),
+            "scoreGradeInputs": list(self.score_grade_inputs),
+            "readinessState": self.readiness_state,
+            "confidenceCapReason": self.confidence_cap_reason,
+            "sourceAuthorityReason": self.source_authority_reason,
+            "freshnessReason": self.freshness_reason,
+            "nextDiagnostic": self.next_diagnostic,
+            "consumerSafeSummary": self.consumer_safe_summary,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class MarketDataReadinessDiagnostics:
     readiness_status: str
     checks: tuple[MarketDataReadinessCheck, ...]
+    consumer_evidence_readiness_matrix: tuple[ConsumerEvidenceReadinessSpec, ...]
     representative_symbols: tuple[str, ...] = ()
     diagnostic_only: bool = True
     provider_runtime_called: bool = False
@@ -79,6 +119,16 @@ class MarketDataReadinessDiagnostics:
             "networkCallsEnabled": self.network_calls_enabled,
             "representativeSymbols": list(self.representative_symbols),
             "checks": [check.to_dict() for check in self.checks],
+            "consumerEvidenceReadinessMatrix": {
+                "contractVersion": CONSUMER_EVIDENCE_READINESS_MATRIX_VERSION,
+                "diagnosticOnly": True,
+                "networkCallsEnabled": False,
+                "mutationEnabled": False,
+                "items": [
+                    row.to_dict()
+                    for row in self.consumer_evidence_readiness_matrix
+                ],
+            },
         }
 
 
@@ -106,7 +156,154 @@ def build_market_data_readiness_diagnostics(
     return MarketDataReadinessDiagnostics(
         readiness_status=_resolve_readiness_status(checks),
         checks=tuple(checks),
+        consumer_evidence_readiness_matrix=_build_consumer_evidence_readiness_matrix(),
         representative_symbols=normalized_symbols,
+    )
+
+
+def _build_consumer_evidence_readiness_matrix() -> tuple[ConsumerEvidenceReadinessSpec, ...]:
+    """Return static, consumer-safe readiness posture for market evidence surfaces."""
+
+    return (
+        ConsumerEvidenceReadinessSpec(
+            surface="market_overview",
+            evidence_family="market_regime",
+            required_inputs=(
+                "macro context",
+                "liquidity context",
+                "rotation context",
+                "market breadth context",
+            ),
+            fulfilled_inputs=("market overview read model",),
+            missing_inputs=("market breadth context",),
+            blocked_inputs=("macro context",),
+            observation_only_inputs=("liquidity context", "rotation context"),
+            score_grade_inputs=("market overview read model",),
+            readiness_state="score_grade",
+            confidence_cap_reason=(
+                "Only the overview read model is score-grade; supporting families still cap confidence."
+            ),
+            source_authority_reason="Supporting families need stronger display authority before they can lift the cap.",
+            freshness_reason="Freshness is measured by each existing market surface before this matrix is shown.",
+            next_diagnostic="Compare overview evidence families against current safe surface snapshots.",
+            consumer_safe_summary=(
+                "Market overview has one score-grade input, while supporting evidence remains capped or observational."
+            ),
+        ),
+        ConsumerEvidenceReadinessSpec(
+            surface="liquidity_monitor",
+            evidence_family="liquidity",
+            required_inputs=(
+                "rates pressure",
+                "credit stress",
+                "volatility stress",
+                "fund flow context",
+                "breadth confirmation",
+            ),
+            fulfilled_inputs=(),
+            missing_inputs=("rates pressure", "credit stress"),
+            stale_inputs=("volatility stress",),
+            blocked_inputs=("fund flow context",),
+            observation_only_inputs=("breadth confirmation",),
+            readiness_state="observation_only",
+            confidence_cap_reason="Reliable score-grade coverage is below the consumer conclusion minimum.",
+            source_authority_reason="Visible liquidity context is useful for observation but not conclusion authority.",
+            freshness_reason="At least one liquidity family is delayed or not refreshed enough for a stronger state.",
+            next_diagnostic="Review liquidity family coverage and freshness with the existing safe diagnostics.",
+            consumer_safe_summary=(
+                "Liquidity context is available for observation only and does not support a score-grade conclusion."
+            ),
+        ),
+        ConsumerEvidenceReadinessSpec(
+            surface="rotation_radar",
+            evidence_family="rotation",
+            required_inputs=(
+                "theme coverage",
+                "theme flow",
+                "constituent coverage",
+                "breadth confirmation",
+            ),
+            fulfilled_inputs=("taxonomy map",),
+            missing_inputs=("theme flow",),
+            blocked_inputs=("constituent coverage",),
+            observation_only_inputs=("taxonomy map", "breadth confirmation"),
+            readiness_state="blocked",
+            confidence_cap_reason=(
+                "Headline rotation ranking remains capped until theme coverage and flow evidence are stronger."
+            ),
+            source_authority_reason="Current consumer-safe rotation context cannot grant headline authority.",
+            freshness_reason="Theme-flow freshness is not sufficient for a stronger state.",
+            next_diagnostic="Inspect rotation consumer evidence counts and headline-lane exclusion reasons.",
+            consumer_safe_summary="Rotation radar can show observations, but headline ranking evidence is blocked.",
+        ),
+        ConsumerEvidenceReadinessSpec(
+            surface="decision_cockpit",
+            evidence_family="decision_context",
+            required_inputs=(
+                "market overview",
+                "research radar",
+                "liquidity monitor",
+                "rotation radar",
+                "options observation",
+            ),
+            fulfilled_inputs=("market overview",),
+            missing_inputs=("research radar", "options observation"),
+            blocked_inputs=("liquidity monitor", "rotation radar"),
+            observation_only_inputs=("market overview",),
+            readiness_state="missing",
+            confidence_cap_reason="Cross-surface decision context is incomplete.",
+            source_authority_reason=(
+                "Downstream surfaces cannot be promoted while required evidence is missing or blocked."
+            ),
+            freshness_reason="Freshness remains unresolved until all required families are present.",
+            next_diagnostic="Build a cockpit driver table from existing market and research read models.",
+            consumer_safe_summary=(
+                "Decision cockpit is missing required cross-surface evidence and cannot make a strong market judgment."
+            ),
+        ),
+        ConsumerEvidenceReadinessSpec(
+            surface="home_briefing",
+            evidence_family="home_market_briefing",
+            required_inputs=(
+                "market overview",
+                "liquidity context",
+                "rotation context",
+            ),
+            missing_inputs=("liquidity context", "rotation context"),
+            stale_inputs=("market overview",),
+            readiness_state="unavailable",
+            confidence_cap_reason=(
+                "Home briefing depends on upstream market context and cannot strengthen unavailable evidence."
+            ),
+            source_authority_reason="The public briefing shell is safe but does not grant source authority.",
+            freshness_reason="Upstream freshness is not ready enough for score-grade wording.",
+            next_diagnostic="Recheck Home after market overview, liquidity, and rotation evidence improve.",
+            consumer_safe_summary=(
+                "Home briefing is unavailable for score-grade conclusion until upstream evidence is ready."
+            ),
+        ),
+        ConsumerEvidenceReadinessSpec(
+            surface="research_radar",
+            evidence_family="research_prerequisites",
+            required_inputs=(
+                "completed scanner evidence",
+                "watchlist research context",
+                "candidate evidence quality",
+            ),
+            fulfilled_inputs=("consumer-safe research projection",),
+            missing_inputs=("completed scanner evidence", "watchlist research context"),
+            observation_only_inputs=("consumer-safe research projection",),
+            readiness_state="observation_only",
+            confidence_cap_reason="Research radar is bounded to observation while prerequisite evidence is incomplete.",
+            source_authority_reason=(
+                "Research context stays consumer-safe and does not grant market conclusion authority."
+            ),
+            freshness_reason="Candidate freshness is resolved by the research read model when evidence exists.",
+            next_diagnostic="Check scanner and watchlist prerequisites before expecting research evidence.",
+            consumer_safe_summary=(
+                "Research radar can explain available observations but prerequisite evidence is incomplete."
+            ),
+        ),
     )
 
 
