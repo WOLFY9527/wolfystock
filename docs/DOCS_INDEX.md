@@ -53,6 +53,12 @@ evidence, local artifacts, and older inherited guides.
 - [Admin And Ops Docs](./admin-ops/README.md): current admin/operator
   navigation.
 - [AI And LLM Docs](./ai-llm/README.md): current AI/LLM navigation.
+- [Product Audit Docs](./product-audit/README.md): current standalone
+  product-level diagnostic audits, including the T-1758 market-data P0
+  root-cause map.
+- [Data Reliability Docs](./data-reliability/README.md): current evidence
+  readiness matrix, data coverage contract, and provider source-confidence
+  contract.
 
 ## Current Authority
 
@@ -76,6 +82,11 @@ operator workflows.
 | Frontend design, route taxonomy, primitive policy | [Frontend Docs](./frontend/README.md) and [Frontend Visual System](./frontend/visual-system.md) |
 | Frontend validation | [Frontend Validation Playbook](./frontend/validation-playbook.md) |
 | Launch readiness | [Audit Index](./audits/README.md), [Public Launch Readiness Master](./audits/public-launch-readiness-master.md), and [Public Launch Gap Register](./audits/public-launch-gap-register.md) |
+| Market-data P0 root-cause map | [T-1758 Market Data P0 Root-cause Map](./product-audit/t1758-market-data-p0-root-cause-map.md) |
+| Evidence readiness stop/go | [Evidence Readiness Matrix](./data-reliability/evidence-readiness-matrix.md) |
+| Data coverage contract | [Data Coverage Matrix v1](./data-reliability/data-coverage-matrix-v1.md) |
+| Provider source-confidence contract | [Provider Source-Confidence Contract](./data-reliability/provider-source-confidence-contract.md) |
+| Market-data diagnostic lineage index | [Codex Docs — Canonical Project Index](./codex/README.md#canonical-project-documentation-index) |
 
 ## Module References
 
