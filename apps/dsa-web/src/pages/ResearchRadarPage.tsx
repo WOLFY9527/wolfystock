@@ -20,6 +20,7 @@ import { TerminalButton, TerminalChip } from '../components/terminal/TerminalPri
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
 import {
   researchRadarApi,
+  type ResearchRadarOnboardingGuidance,
   type ResearchRadarResponse,
   type UnifiedResearchQueueItem,
   type UnifiedResearchQueueResponse,
@@ -101,7 +102,7 @@ function sourceSurfaceLabel(surface: UnifiedResearchQueueItem['sourceSurface'], 
     watchlist: { zh: 'Watchlist', en: 'Watchlist' },
     scanner: { zh: 'Scanner', en: 'Scanner' },
     market: { zh: 'Market', en: 'Market' },
-    manual_gap: { zh: '补充研究', en: 'Supplementary research' },
+    manual_gap: { zh: '证据补缺', en: 'Evidence follow-up' },
   };
   return labels[surface]?.[locale] || (locale === 'en' ? 'Research' : '研究');
 }
@@ -246,6 +247,114 @@ function groupResearchQueue(items: UnifiedResearchQueueItem[]) {
   return RESEARCH_QUEUE_SOURCE_ORDER
     .map((surface) => ({ surface, items: groups.get(surface) ?? [] }))
     .filter((group) => group.items.length > 0);
+}
+
+function normalizeRadarGapKey(value: string | null | undefined): string {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[:=./\\\s-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function buildResearchRadarMissingEvidenceLabels(
+  gaps: string[],
+  locale: 'zh' | 'en',
+): string[] {
+  const seen = new Set<string>();
+  const labels: string[] = [];
+
+  gaps.forEach((gap) => {
+    const normalized = normalizeRadarGapKey(gap);
+    let label: string | null = null;
+    if (
+      normalized.includes('fundamental')
+      || normalized.includes('company')
+      || normalized.includes('issuer')
+      || normalized.includes('business_profile')
+      || normalized.includes('financial_summary')
+    ) {
+      label = locale === 'en' ? 'company context' : '公司资料';
+    } else if (normalized.includes('news') || normalized.includes('headline') || normalized.includes('media')) {
+      label = locale === 'en' ? 'media context' : '媒体语境';
+    } else if (normalized.includes('catalyst') || normalized.includes('event')) {
+      label = locale === 'en' ? 'event context' : '事件语境';
+    } else if (normalized.includes('freshness') || normalized.includes('recency') || normalized.includes('staleevidence') || normalized.includes('asof')) {
+      label = locale === 'en' ? 'recency checks' : '时效复核';
+    }
+    if (!label || seen.has(label)) return;
+    seen.add(label);
+    labels.push(label);
+  });
+
+  return labels;
+}
+
+function buildResearchRadarDerivedGuidance({
+  data,
+  unifiedQueue,
+  locale,
+}: {
+  data: ResearchRadarResponse | null;
+  unifiedQueue: UnifiedResearchQueueResponse | null;
+  locale: 'zh' | 'en';
+}): ResearchRadarOnboardingGuidance | null {
+  const safeSummary = safeResearchQueueText(data?.onboardingGuidance?.summary, locale);
+  const conditions = safeResearchQueueList(
+    data?.onboardingGuidance?.conditionsDetected,
+    locale,
+    locale === 'en' ? 'Research Radar remains observation-only for now.' : '当前研究雷达先保持观察边界。',
+  );
+  const availableSurfaces = new Set(unifiedQueue?.dataQuality?.sourceSurfacesAvailable ?? []);
+  const expectedSurfaces = unifiedQueue?.dataQuality?.sourceSurfacesExpected ?? [];
+  const missingEvidenceLabels = buildResearchRadarMissingEvidenceLabels([
+    ...(data?.evidenceGaps ?? []),
+    ...(unifiedQueue?.evidenceGaps ?? []),
+  ], locale);
+  const queueQuality = normalizeRadarGapKey(data?.aggregateSummary?.queueQuality || '');
+  const lowEvidenceActive = queueQuality === 'low_evidence' || queueQuality === 'thin'
+    || conditions.some((item) => normalizeRadarGapKey(item).includes('low_evidence'));
+
+  expectedSurfaces.forEach((surface) => {
+    if (surface === 'manual_gap' || availableSurfaces.has(surface)) return;
+    if (surface === 'scanner') {
+      conditions.push(locale === 'en' ? 'Scanner candidates have not been created yet.' : 'Scanner 候选尚未建立。');
+    } else if (surface === 'watchlist') {
+      conditions.push(locale === 'en' ? 'Watchlist context has not been added yet.' : '观察列表上下文尚未建立。');
+    } else if (surface === 'market') {
+      conditions.push(locale === 'en' ? 'Market context still needs review.' : '市场背景仍待补充。');
+    }
+  });
+
+  if (lowEvidenceActive) {
+    conditions.push(locale === 'en' ? 'Low-evidence filter is active.' : '当前按低证据条件整理。');
+  }
+
+  if (!safeSummary && !conditions.length && !data?.onboardingGuidance?.title) {
+    return null;
+  }
+
+  const dedupedConditions = Array.from(new Set(conditions));
+  const derivedSummary = safeSummary
+    || (
+      lowEvidenceActive && missingEvidenceLabels.length
+        ? (locale === 'en'
+          ? `This queue remains observation-only while ${missingEvidenceLabels.join(', ')} still need review.`
+          : `当前队列仍缺少${missingEvidenceLabels.join('、')}，因此先保持观察边界。`)
+        : (expectedSurfaces.some((surface) => surface !== 'manual_gap' && !availableSurfaces.has(surface))
+          ? (locale === 'en'
+            ? 'Upstream research prerequisites are still incomplete, so this queue remains observation-only.'
+            : '上游研究前置条件仍未补齐，因此当前队列先保持观察边界。')
+          : null)
+    );
+
+  return {
+    title: data?.onboardingGuidance?.title ?? null,
+    summary: derivedSummary,
+    conditionsDetected: dedupedConditions,
+  };
 }
 
 function ResearchQueueHubPanel({
@@ -492,6 +601,10 @@ export default function ResearchRadarPage() {
     () => buildResearchRadarDataHealthSummary({ data, unifiedQueue, locale }),
     [data, unifiedQueue, locale],
   );
+  const onboardingGuidance = useMemo(
+    () => buildResearchRadarDerivedGuidance({ data, unifiedQueue, locale }),
+    [data, unifiedQueue, locale],
+  );
   const firstItemScores = useMemo(
     () => Object.entries(queueItems[0]?.driverScores ?? {})
       .sort(([, left], [, right]) => (right ?? 0) - (left ?? 0))
@@ -629,7 +742,7 @@ export default function ResearchRadarPage() {
                       data-testid="research-radar-onboarding-cta"
                       language={locale}
                       title={locale === 'en' ? 'Start the loop before the radar queue fills' : '先完成研究循环，再回到雷达队列'}
-                      guidance={data.onboardingGuidance}
+                      guidance={onboardingGuidance}
                       actions={data.emptyStateActions}
                       starterResearchWorkflow={data.starterResearchWorkflow}
                       firstRunChecklist={data.firstRunChecklist}
