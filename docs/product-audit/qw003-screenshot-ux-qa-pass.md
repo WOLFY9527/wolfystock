@@ -503,6 +503,6 @@ Findings should be validated with live screenshots once the frontend dev server 
 **Protected domain touched:** No
 **Validation outputs:** `git diff --check origin/main...HEAD` PASS (exit 0); `git diff --check` PASS (exit 0); `scripts/release_secret_scan.sh --base-ref origin/main` PASS — no secrets found; `git rebase origin/main` — already up to date
 **Final base commit:** `e2a408c2`
-**Final commit hash:** `b0cc8652`
+**Final commit hash:** `76ef4ffe` (after rebase onto latest origin/main)
 **Final git status:** Clean (branch ahead of origin/main by 1 commit)
 **Rollback command:** `git reset --hard e2a408c2` (returns to pre-task state)
