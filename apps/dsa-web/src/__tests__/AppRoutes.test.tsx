@@ -114,6 +114,10 @@ vi.mock('../pages/ScannerSurfacePage', () => ({
   default: () => <div>scanner-surface-page</div>,
 }));
 
+vi.mock('../components/auth/AuthGuardOverlay', () => ({
+  AuthGuardOverlay: ({ moduleName }: { moduleName: string }) => <div>{`auth-guard:${moduleName}`}</div>,
+}));
+
 vi.mock('../pages/PortfolioPage', () => ({
   default: () => <div>portfolio-page</div>,
 }));
@@ -223,10 +227,6 @@ vi.mock('../pages/ResetPasswordPage', () => ({
   default: () => <div>reset-password-page</div>,
 }));
 
-vi.mock('../components/auth/AuthGuardOverlay', () => ({
-  AuthGuardOverlay: ({ moduleName }: { moduleName: string }) => <div>{`auth-guard:${moduleName}`}</div>,
-}));
-
 vi.mock('../pages/NotFoundPage', () => ({
   default: () => <div>not-found-page</div>,
 }));
@@ -257,6 +257,8 @@ function renderAtWithLocationProbe(path: string) {
     </MemoryRouter>,
   );
 }
+
+const publicMarketRouteSafetyPattern = /admin-|system-settings-page|personal-settings-page|portfolio-page|watchlist-page|provider|diagnostic|debug|raw|schemaVersion|requestId|traceId|token|cookie|bearer|\b(buy|sell|hold|recommend|target|stop|position size)\b|买入|卖出|持有|推荐|目标价|止损|仓位建议|加仓|减仓/i;
 
 function mockSignedInConsumer() {
   useAuthMock.mockReturnValue({
@@ -555,28 +557,42 @@ describe('AppContent route flows', () => {
     },
   );
 
-  it('opens the market overview read-only preview for guest sessions', async () => {
-    renderAtWithLocationProbe('/market-overview');
+  it.each([
+    ['/market-overview', 'market-overview-page'],
+    ['/market/decision-cockpit', 'market-decision-cockpit-page'],
+    ['/market/liquidity-monitor', 'liquidity-monitor-page'],
+    ['/market/rotation-radar', 'market-rotation-radar-page'],
+  ])('opens public market route %s for guest sessions without private/admin content', async (path, pageText) => {
+    renderAtWithLocationProbe(path);
 
-    expect(await screen.findByText('market-overview-page')).toBeInTheDocument();
-    expect(screen.getByTestId('location-path')).toHaveTextContent('/market-overview');
-    expect(screen.queryByText('auth-guard:Market Overview')).not.toBeInTheDocument();
+    expect(await screen.findByText(pageText)).toBeInTheDocument();
+    expect(screen.getByTestId('location-path')).toHaveTextContent(path);
+    expect(screen.queryByText(/auth-guard:/)).not.toBeInTheDocument();
     expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
+    expect(document.body.textContent || '').not.toMatch(publicMarketRouteSafetyPattern);
   });
 
-  it('opens the market decision cockpit route for guest sessions without a paywall', async () => {
-    renderAtWithLocationProbe('/market/decision-cockpit');
+  it.each([
+    ['/zh/market-overview', 'market-overview-page'],
+    ['/en/market-overview', 'market-overview-page'],
+    ['/zh/market/decision-cockpit', 'market-decision-cockpit-page'],
+    ['/en/market/decision-cockpit', 'market-decision-cockpit-page'],
+    ['/zh/market/liquidity-monitor', 'liquidity-monitor-page'],
+    ['/en/market/liquidity-monitor', 'liquidity-monitor-page'],
+    ['/zh/market/rotation-radar', 'market-rotation-radar-page'],
+    ['/en/market/rotation-radar', 'market-rotation-radar-page'],
+  ])('opens localized public market route %s for guest sessions', async (path, pageText) => {
+    renderAtWithLocationProbe(path);
 
-    expect(await screen.findByText('market-decision-cockpit-page')).toBeInTheDocument();
-    expect(screen.getByTestId('location-path')).toHaveTextContent('/market/decision-cockpit');
-    expect(screen.queryByText('auth-guard:Market Decision Cockpit')).not.toBeInTheDocument();
+    expect(await screen.findByText(pageText)).toBeInTheDocument();
+    expect(screen.getByTestId('location-path')).toHaveTextContent(path);
+    expect(screen.queryByText(/auth-guard:/)).not.toBeInTheDocument();
+    expect(document.body.textContent || '').not.toMatch(publicMarketRouteSafetyPattern);
   });
 
   it.each([
     ['/zh/market/decision-cockpit', 'market-decision-cockpit-page'],
     ['/en/market/decision-cockpit', 'market-decision-cockpit-page'],
-    ['/zh/scanner', 'scanner-surface-page'],
-    ['/en/scanner', 'scanner-surface-page'],
     ['/zh/research/radar', 'research-radar-page'],
     ['/en/research/radar', 'research-radar-page'],
     ['/zh/portfolio', 'portfolio-page'],
@@ -840,6 +856,18 @@ describe('AppContent route flows', () => {
     expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
   });
 
+  it.each([
+    ['/scanner', 'auth-guard:Scanner'],
+    ['/zh/scanner', 'auth-guard:扫描器'],
+    ['/en/scanner', 'auth-guard:Scanner'],
+  ])('keeps guest access on scanner workspace route %s protected', async (path, expectedGateText) => {
+    renderAtWithLocationProbe(path);
+
+    expect(await screen.findByText(expectedGateText)).toBeInTheDocument();
+    expect(screen.getByTestId('location-path')).toHaveTextContent(path);
+    expect(screen.queryByText('scanner-surface-page')).not.toBeInTheDocument();
+  });
+
   it('redirects legacy /chat guest access to the market overview surface', async () => {
     renderAtWithLocationProbe('/chat');
 
@@ -918,6 +946,7 @@ describe('AppContent route flows', () => {
 
   it.each([
     ['/options-lab', 'options-lab-page'],
+    ['/scanner', 'scanner-surface-page'],
     ['/market/liquidity-monitor', 'liquidity-monitor-page'],
     ['/market/rotation-radar', 'market-rotation-radar-page'],
   ])(
@@ -1515,14 +1544,16 @@ describe('AppContent route flows', () => {
   it('redirects legacy locale guest scanner path to the guest surface', async () => {
     renderAt('/en/guest/scanner');
 
-    expect(await screen.findByText('scanner-surface-page')).toBeInTheDocument();
+    expect(await screen.findByText('auth-guard:Scanner')).toBeInTheDocument();
+    expect(screen.queryByText('scanner-surface-page')).not.toBeInTheDocument();
     expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
   });
 
   it('redirects legacy locale user scanner path to the guest surface for guests', async () => {
     renderAt('/zh/user/scanner');
 
-    expect(await screen.findByText('scanner-surface-page')).toBeInTheDocument();
+    expect(await screen.findByText('auth-guard:扫描器')).toBeInTheDocument();
+    expect(screen.queryByText('scanner-surface-page')).not.toBeInTheDocument();
     expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
   });
 });
