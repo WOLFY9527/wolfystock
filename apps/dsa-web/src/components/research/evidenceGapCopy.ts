@@ -10,8 +10,11 @@ export type EvidenceGapInput = string | {
 
 export type EvidenceGapFamily =
   | 'benchmark'
+  | 'company'
   | 'peer'
-  | 'fundamentals'
+  | 'media'
+  | 'event'
+  | 'recency'
   | 'options'
   | 'breadth'
   | 'priceHistoryStale'
@@ -76,6 +79,24 @@ const COPY: Record<EvidenceGapFamily, Record<EvidenceGapExplanationLocale, Omit<
       observationBoundary: OBSERVATION_BOUNDARY.en,
     },
   },
+  company: {
+    zh: {
+      title: '公司证据缺失',
+      explanation: '缺少公司资料时，当前线索还不能和业务、盈利或估值背景互相验证。',
+      whyItMatters: '没有公司层面的公开资料，就难以判断当前变化更接近短期波动还是基本面驱动。',
+      suggestedResearchStep: '先补充主营业务、财务摘要或估值背景，再回来看当前线索是否仍成立。',
+      confidenceImpact: '置信度受限：公司语境未补齐前，只能保留为观察线索。',
+      observationBoundary: OBSERVATION_BOUNDARY.zh,
+    },
+    en: {
+      title: 'Company evidence missing',
+      explanation: 'Without company context, the current clue cannot be checked against business, earnings, or valuation background.',
+      whyItMatters: 'Public company context is needed to tell whether the move is still only short-term noise or part of a broader business story.',
+      suggestedResearchStep: 'Add business profile, financial summary, or valuation context, then review whether the clue still holds.',
+      confidenceImpact: 'Confidence is limited: keep this as an observation clue until company context is filled in.',
+      observationBoundary: OBSERVATION_BOUNDARY.en,
+    },
+  },
   peer: {
     zh: {
       title: '同业证据缺失',
@@ -94,21 +115,57 @@ const COPY: Record<EvidenceGapFamily, Record<EvidenceGapExplanationLocale, Omit<
       observationBoundary: OBSERVATION_BOUNDARY.en,
     },
   },
-  fundamentals: {
+  media: {
     zh: {
-      title: '基本面证据缺失',
-      explanation: '缺少基本面资料时，结构观察无法和盈利、估值或业务变化相互验证。',
-      whyItMatters: '价格结构需要基础资料辅助判断，否则容易只反映短期波动。',
-      suggestedResearchStep: '补充财务摘要、估值区间或业务催化，再复核结构线索。',
-      confidenceImpact: '置信度受限：结构线索不能升级为完整研究判断。',
+      title: '媒体语境缺失',
+      explanation: '缺少媒体或公开报道语境时，当前线索无法确认是否已有公开信息跟进。',
+      whyItMatters: '媒体语境能帮助判断市场是否已经看到同一条线索，或当前变化是否仍停留在早期观察阶段。',
+      suggestedResearchStep: '先补充公开报道或公告摘要，再复核当前线索是否仍需要跟进。',
+      confidenceImpact: '置信度受限：缺少媒体语境时，先保持观察边界。',
       observationBoundary: OBSERVATION_BOUNDARY.zh,
     },
     en: {
-      title: 'Fundamental evidence missing',
-      explanation: 'Without fundamentals, the structure observation cannot be checked against earnings, valuation, or business change.',
-      whyItMatters: 'Price structure needs base research context, otherwise it may only reflect short-term movement.',
-      suggestedResearchStep: 'Add financial summary, valuation context, or business catalysts, then review the structure clue.',
-      confidenceImpact: 'Confidence is limited: structure clues cannot become a complete research view.',
+      title: 'Media context missing',
+      explanation: 'Without media or public-report context, the current clue cannot show whether public information has already followed through.',
+      whyItMatters: 'Media context helps test whether the same clue is already visible in public reporting or still early-stage observation only.',
+      suggestedResearchStep: 'Add public reporting or announcement context, then review whether the clue still needs follow-up.',
+      confidenceImpact: 'Confidence is limited: stay within observation boundaries until media context is filled in.',
+      observationBoundary: OBSERVATION_BOUNDARY.en,
+    },
+  },
+  event: {
+    zh: {
+      title: '事件语境缺失',
+      explanation: '缺少事件线索时，当前变化无法和催化、日程或触发条件相互验证。',
+      whyItMatters: '事件语境能帮助判断当前线索是否有明确触发点，还是仅仅处于观察阶段。',
+      suggestedResearchStep: '先补充公告、财报、产品或行业事件，再复核当前线索是否延续。',
+      confidenceImpact: '置信度受限：事件语境未补齐前，只保留为观察线索。',
+      observationBoundary: OBSERVATION_BOUNDARY.zh,
+    },
+    en: {
+      title: 'Event context missing',
+      explanation: 'Without event context, the current move cannot be checked against catalysts, schedules, or trigger conditions.',
+      whyItMatters: 'Event context helps test whether the clue has a clear trigger or remains only an observation.',
+      suggestedResearchStep: 'Add filing, earnings, product, or industry event context, then review whether the clue continues.',
+      confidenceImpact: 'Confidence is limited: keep this as an observation clue until event context is filled in.',
+      observationBoundary: OBSERVATION_BOUNDARY.en,
+    },
+  },
+  recency: {
+    zh: {
+      title: '时效复核缺失',
+      explanation: '缺少时效复核时，页面还不能确认当前线索是否反映最新公开状态。',
+      whyItMatters: '没有最近一次更新时间或复核记录，就难以判断当前线索是否已经变化或失效。',
+      suggestedResearchStep: '先补做近期价格、公告或报道的时效复核，再比较当前线索是否仍成立。',
+      confidenceImpact: '置信度受限：时效复核完成前，只能保留为观察线索。',
+      observationBoundary: OBSERVATION_BOUNDARY.zh,
+    },
+    en: {
+      title: 'Recency check missing',
+      explanation: 'Without a recency review, the page cannot confirm whether the clue still reflects the latest public state.',
+      whyItMatters: 'Without a recent review or timestamp check, the clue may already have changed or gone stale.',
+      suggestedResearchStep: 'Review recent price, filing, or reporting freshness first, then compare whether the clue still holds.',
+      confidenceImpact: 'Confidence is limited: keep this as an observation clue until recency is checked.',
       observationBoundary: OBSERVATION_BOUNDARY.en,
     },
   },
@@ -261,8 +318,11 @@ const COPY: Record<EvidenceGapFamily, Record<EvidenceGapExplanationLocale, Omit<
 
 const FAMILY_TONE: Record<EvidenceGapFamily, EvidenceGapExplanationView['tone']> = {
   benchmark: 'caution',
+  company: 'caution',
   peer: 'caution',
-  fundamentals: 'caution',
+  media: 'caution',
+  event: 'caution',
+  recency: 'caution',
   options: 'caution',
   breadth: 'caution',
   priceHistoryStale: 'caution',
@@ -301,8 +361,17 @@ function normalizeGapFamily(input: EvidenceGapInput | null | undefined): Evidenc
   if (!normalized) return 'unknown';
   if (normalized.includes('confidence_cap') || normalized.includes('confidence_capped') || normalized.includes('capped')) return 'confidenceCapped';
   if (normalized.includes('benchmark') || normalized.includes('index_context')) return 'benchmark';
+  if (
+    normalized.includes('fundamental')
+    || normalized.includes('company')
+    || normalized.includes('issuer')
+    || normalized.includes('business_profile')
+    || normalized.includes('financial_summary')
+  ) return 'company';
   if (normalized.includes('peer') || normalized.includes('correlation') || normalized.includes('sector_basket')) return 'peer';
-  if (normalized.includes('fundamental') || normalized.includes('valuation')) return 'fundamentals';
+  if (normalized.includes('news') || normalized.includes('headline') || normalized.includes('media')) return 'media';
+  if (normalized.includes('catalyst') || normalized.includes('event')) return 'event';
+  if (normalized.includes('freshness') || normalized.includes('recency') || normalized.includes('staleevidence') || normalized.includes('asof')) return 'recency';
   if (normalized.includes('option') || normalized.includes('gamma') || normalized.includes('gex') || normalized.includes('contract')) return 'options';
   if (normalized.includes('breadth') || normalized.includes('participation')) return 'breadth';
   if ((normalized.includes('price') || normalized.includes('history') || normalized.includes('ohlcv')) && normalized.includes('stale')) return 'priceHistoryStale';

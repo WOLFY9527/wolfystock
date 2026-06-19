@@ -42,13 +42,17 @@ describe('EvidenceGapExplanation', () => {
   it('deduplicates repeated families and supports English copy', () => {
     const explanations = buildEvidenceGapExplanations([
       'fundamentals_missing',
-      'fundamental data missing',
-      'options_data_missing',
+      'company_profile_missing',
+      'media_context_missing',
+      'event_catalyst_missing',
+      'freshness_missing',
     ], 'en');
 
-    expect(explanations).toHaveLength(2);
-    expect(explanations[0]?.title).toBe('Fundamental evidence missing');
-    expect(explanations[1]?.title).toBe('Options data missing');
-    expect(JSON.stringify(explanations)).not.toMatch(/fundamentals_missing|options_data_missing/);
+    expect(explanations).toHaveLength(4);
+    expect(explanations[0]?.title).toBe('Company evidence missing');
+    expect(explanations[1]?.title).toBe('Media context missing');
+    expect(explanations[2]?.title).toBe('Event context missing');
+    expect(explanations[3]?.title).toBe('Recency check missing');
+    expect(JSON.stringify(explanations)).not.toMatch(/fundamentals_missing|company_profile_missing|media_context_missing|event_catalyst_missing|freshness_missing/);
   });
 });

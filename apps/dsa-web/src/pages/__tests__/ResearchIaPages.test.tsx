@@ -890,6 +890,115 @@ describe('research IA pages', () => {
     expect(page.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommendation|target price|stop loss|position sizing/i);
   });
 
+  it('renders evidence remediation guidance and safe prerequisite copy for low-evidence research radar gaps', async () => {
+    getResearchRadarMock.mockResolvedValue({
+      schemaVersion: 'research_radar_api_v1',
+      generatedAt: '2026-06-15T09:30:00Z',
+      researchQueue: [],
+      aggregateSummary: {
+        queueQuality: 'low_evidence',
+        priorityCounts: {},
+      },
+      evidenceGaps: ['fundamentals', 'news', 'catalyst', 'freshness'],
+      marketContextFit: 'neutral',
+      onboardingGuidance: {
+        title: 'Research loop needs more context',
+        summary: null,
+        conditionsDetected: [],
+      },
+      emptyStateActions: [
+        { label: 'Run Scanner', route: '/scanner', description: 'Create a candidate set.' },
+        { label: 'Add Watchlist Symbol', route: '/watchlist', description: 'Add a user-chosen observation symbol.' },
+      ],
+      starterResearchWorkflow: ['Run Scanner.', 'Choose one watchlist symbol.', 'Return to Research Radar.'],
+      firstRunChecklist: [],
+      suggestedResearchEntrypoints: [
+        { surface: 'Scanner', route: '/scanner', description: 'Build a candidate queue.' },
+        { surface: 'Watchlist', route: '/watchlist', description: 'Keep one symbol under review.' },
+      ],
+      noAdviceDisclosure: '仅供研究队列观察。',
+      dataQuality: { status: 'partial' },
+    });
+    getResearchQueueMock.mockResolvedValue({
+      schemaVersion: 'research_queue_v1',
+      researchQueue: [
+        {
+          queueItemId: 'manual-gap-TSLA-item-1',
+          sourceSurface: 'manual_gap',
+          symbol: 'TSLA',
+          title: 'Evidence remediation follow-up',
+          priorityTier: 'follow_up',
+          whyQueued: ['Low-evidence filter active'],
+          evidenceUsed: ['Evidence quality is acceptable'],
+          evidenceGaps: ['fundamentals', 'news', 'catalyst', 'freshness'],
+          freshness: { state: 'needs_review', lastReviewedAt: null },
+          suggestedResearchPath: [
+            {
+              label: 'Stock Structure',
+              route: '/stocks/TSLA/structure-decision',
+              section: 'researchRadar',
+              reason: 'Open symbol structure detail.',
+            },
+          ],
+          observationOnly: true,
+        },
+      ],
+      aggregateSummary: {
+        itemCount: 1,
+        limit: 5,
+        bounded: false,
+        bySourceSurface: { manual_gap: 1 },
+        byPriorityTier: { urgent_review: 0, follow_up: 1, monitor: 0 },
+      },
+      sourceSurfacesAggregated: ['manual_gap'],
+      evidenceGaps: ['fundamentals', 'news', 'catalyst', 'freshness'],
+      dataQuality: {
+        state: 'partial',
+        itemCount: 1,
+        sourceSurfacesAvailable: ['market'],
+        sourceSurfacesExpected: ['scanner', 'watchlist', 'market', 'manual_gap'],
+        failClosed: true,
+      },
+      noAdviceDisclosure: 'Research-only queue.',
+      observationOnly: true,
+      decisionGrade: false,
+    });
+
+    renderRoute(<ResearchRadarPage />, '/zh/research/radar');
+
+    const page = await screen.findByTestId('research-radar-page');
+    const onboardingPanel = await within(page).findByTestId('research-radar-onboarding-cta');
+    const gapRail = within(page).getByTestId('evidence-gap-explanation-list');
+    const hub = await within(page).findByTestId('research-queue-hub');
+    const manualGapGroup = within(hub).getByTestId('research-queue-source-manual-gap');
+
+    expect(onboardingPanel).toHaveTextContent('当前队列仍缺少公司资料、媒体语境、事件语境、时效复核，因此先保持观察边界。');
+    expect(onboardingPanel).toHaveTextContent('Scanner 候选尚未建立。');
+    expect(onboardingPanel).toHaveTextContent('观察列表上下文尚未建立。');
+    expect(onboardingPanel).toHaveTextContent('当前按低证据条件整理。');
+    expect(within(onboardingPanel).getByRole('link', { name: '运行 Scanner' })).toHaveAttribute('href', '/zh/scanner');
+    expect(within(onboardingPanel).getByRole('link', { name: '选择观察标的' })).toHaveAttribute('href', '/zh/watchlist');
+
+    expect(gapRail).toHaveTextContent('公司证据缺失');
+    expect(gapRail).toHaveTextContent('媒体语境缺失');
+    expect(gapRail).toHaveTextContent('事件语境缺失');
+    expect(gapRail).toHaveTextContent('时效复核缺失');
+    expect(gapRail).toHaveTextContent('先补充主营业务、财务摘要或估值背景，再回来看当前线索是否仍成立。');
+    expect(gapRail).toHaveTextContent('先补充公开报道或公告摘要，再复核当前线索是否仍需要跟进。');
+    expect(gapRail).toHaveTextContent('先补充公告、财报、产品或行业事件，再复核当前线索是否延续。');
+    expect(gapRail).toHaveTextContent('先补做近期价格、公告或报道的时效复核，再比较当前线索是否仍成立。');
+    expect(gapRail).toHaveTextContent('仅作观察，不构成操作结论。');
+
+    expect(manualGapGroup).toHaveTextContent('证据补缺');
+    expect(manualGapGroup.textContent || '').not.toMatch(/Manual gap|manual_gap/i);
+    expect(page.textContent || '').not.toMatch(/provider|raw|debug|trace|requestId|schemaVersion|manual_gap/i);
+    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing/i);
+    expect(getStructureDecisionMock).not.toHaveBeenCalled();
+    expect(verifyTickerExistsMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(getResearchRadarMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getResearchQueueMock).toHaveBeenCalledTimes(1));
+  });
+
   it('keeps Research Radar visible when the unified research queue endpoint is unavailable', async () => {
     getResearchRadarMock.mockResolvedValue({
       schemaVersion: 'research_radar_api_v1',
