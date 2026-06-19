@@ -89,6 +89,7 @@ export function RoughBulletList({
 
 export function RoughKeyValueRows({
   rows,
+  emptyText,
 }: {
   rows: Array<{
     key: React.Key;
@@ -96,9 +97,10 @@ export function RoughKeyValueRows({
     value: React.ReactNode;
     detail?: React.ReactNode;
   }>;
+  emptyText?: React.ReactNode;
 }) {
   if (!rows.length) {
-    return <TerminalEmptyState>暂无可展示条目。</TerminalEmptyState>;
+    return <TerminalEmptyState>{emptyText ?? '暂无可展示条目。'}</TerminalEmptyState>;
   }
 
   return (
