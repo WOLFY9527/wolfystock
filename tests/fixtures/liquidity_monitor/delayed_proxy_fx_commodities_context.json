@@ -705,7 +705,16 @@
             "isStale": false,
             "isPartial": false,
             "isUnavailable": false,
-            "confidenceWeight": 0.5
+            "confidenceWeight": 0.5,
+            "sourceAuthorityAllowed": false,
+            "scoreContributionAllowed": false,
+            "sourceAuthorityReason": "fallback_or_proxy_source",
+            "degradationReason": "fallback_or_proxy_source",
+            "routeRejectedReasonCodes": [
+              "official_us_rates_readiness_contract",
+              "fallback_or_proxy_source",
+              "missing_official_us_rates_row"
+            ]
           },
           {
             "key": "US30Y",
@@ -719,7 +728,16 @@
             "isStale": false,
             "isPartial": false,
             "isUnavailable": false,
-            "confidenceWeight": 0.5
+            "confidenceWeight": 0.5,
+            "sourceAuthorityAllowed": false,
+            "scoreContributionAllowed": false,
+            "sourceAuthorityReason": "fallback_or_proxy_source",
+            "degradationReason": "fallback_or_proxy_source",
+            "routeRejectedReasonCodes": [
+              "official_us_rates_readiness_contract",
+              "fallback_or_proxy_source",
+              "missing_official_us_rates_row"
+            ]
           }
         ]
       },
@@ -768,8 +786,13 @@
         "capReason": "partial_coverage",
         "degradationReason": "partial_coverage",
         "sourceAuthorityRouteRejected": false,
-        "routeRejectedReasonCodes": [],
-        "activationHint": "官方利率快照优先；没有 US2Y / US10Y / US30Y / SOFR 时只能退化为代理或不可用。；requiredProviderClass=official_public.us_treasury_curve；missingProviderReason=requires_official_public.us_treasury_curve；requiredRealSourceForScore=True；scoreExclusionReason=proxy_only_missing_real_source；proxyObservationOnlyReason=proxy_only_missing_real_source；缺少: US2Y, SOFR, US10Y2Y, US10Y3M；proxyOnly=True；scoreContributionAllowed=False；freshness=partial；cap=partial_coverage；score capped；source=yfinance_proxy"
+        "sourceAuthorityReason": "fallback_or_proxy_source",
+        "routeRejectedReasonCodes": [
+          "official_us_rates_readiness_contract",
+          "fallback_or_proxy_source",
+          "missing_official_us_rates_row"
+        ],
+        "activationHint": "官方利率快照优先；没有 US2Y / US10Y / US30Y / SOFR 时只能退化为代理或不可用。；requiredProviderClass=official_public.us_treasury_curve；missingProviderReason=requires_official_public.us_treasury_curve；requiredRealSourceForScore=True；scoreExclusionReason=proxy_only_missing_real_source；proxyObservationOnlyReason=proxy_only_missing_real_source；routeRejectedReasonCodes=official_us_rates_readiness_contract,fallback_or_proxy_source,missing_official_us_rates_row；缺少: US2Y, SOFR, US10Y2Y, US10Y3M；proxyOnly=True；scoreContributionAllowed=False；freshness=partial；cap=partial_coverage；score capped；source=yfinance_proxy"
       }
     },
     {

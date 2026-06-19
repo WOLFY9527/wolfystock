@@ -174,6 +174,8 @@ def test_market_data_readiness_route_returns_read_only_diagnostic_payload(
     assert {
         ("market_overview", "official_vix_volatility"),
         ("liquidity_monitor", "vix_pressure"),
+        ("market_overview", "official_macro_rates_liquidity_bundle"),
+        ("liquidity_monitor", "macro_rates_fed_liquidity_bundle"),
     } <= {
         (row["surface"], row["evidenceFamily"])
         for row in rows
@@ -188,6 +190,15 @@ def test_market_data_readiness_route_returns_read_only_diagnostic_payload(
     assert vix_overview["requiredInputs"] == ["VIXCLS official volatility close"]
     assert vix_overview["scoreGradeInputs"] == []
     assert vix_overview["readinessState"] == "missing"
+    macro_bundle = readiness_rows[("liquidity_monitor", "macro_rates_fed_liquidity_bundle")]
+    assert macro_bundle["requiredInputs"] == [
+        "Treasury daily rates",
+        "policy-rate daily rows",
+        "credit and USD pressure rows",
+        "Fed liquidity weekly rows",
+    ]
+    assert macro_bundle["scoreGradeInputs"] == []
+    assert macro_bundle["readinessState"] == "observation_only"
 
     assert isinstance(checks, list)
     assert all(set(check) >= EXPECTED_CHECK_FIELDS for check in checks)
