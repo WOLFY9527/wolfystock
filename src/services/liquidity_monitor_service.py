@@ -2629,6 +2629,15 @@ class LiquidityMonitorService:
     ) -> List[Dict[str, Any]]:
         if not components or not isinstance(cache_bundle, dict):
             return components
+        bundle_score_allowed = bool(
+            cache_bundle.get("scoreContributionAllowed")
+            or cache_bundle.get("readinessEligible")
+        )
+        bundle_level_reason = str(
+            cache_bundle.get("degradationReason")
+            or cache_bundle.get("sourceAuthorityReason")
+            or "official_macro_bundle_not_score_grade"
+        )
         blocked_reasons: dict[str, str] = {}
         for field, reason in (
             ("budgetBlockedSeries", "budget_exhausted"),
@@ -2641,7 +2650,36 @@ class LiquidityMonitorService:
             for series_id in cache_bundle.get(field) or []:
                 blocked_reasons[str(series_id)] = reason
         if not blocked_reasons:
-            return components
+            if bundle_score_allowed:
+                return components
+            return [
+                {
+                    **component,
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                    "sourceAuthorityReason": str(
+                        component.get("sourceAuthorityReason")
+                        or component.get("degradationReason")
+                        or bundle_level_reason
+                    ),
+                    "degradationReason": str(
+                        component.get("degradationReason")
+                        or component.get("sourceAuthorityReason")
+                        or bundle_level_reason
+                    ),
+                    "routeRejectedReasonCodes": list(
+                        dict.fromkeys(
+                            LiquidityMonitorService._normalized_reason_code_list(
+                                component.get("routeRejectedReasonCodes")
+                            )
+                            or [str(code) for code in cache_bundle.get("reasonCodes") or []]
+                        )
+                    ),
+                }
+                if series_resolver(component)
+                else component
+                for component in components
+            ]
 
         route_codes = [str(code) for code in cache_bundle.get("reasonCodes") or []]
         next_components: List[Dict[str, Any]] = []
@@ -3551,6 +3589,8 @@ class LiquidityMonitorService:
             score_exclusion_reason = self._usd_pressure_unavailable_reason(evidence)
         elif key == "fed_liquidity" and not real_source_available:
             score_exclusion_reason = "fed_liquidity_required_series_missing_or_stale"
+        elif key == "us_rates_pressure" and not real_source_available:
+            score_exclusion_reason = self._us_rates_unavailable_reason(evidence)
         elif key == "vix_pressure" and required_real_source_for_score and blocked_input_authority:
             score_exclusion_reason = blocked_input_reason or OFFICIAL_VIX_AUTHORITY_BLOCK_REASON
         elif required_real_source_for_score and missing_provider_reason and not proxy_score_allowlisted:
@@ -3696,6 +3736,29 @@ class LiquidityMonitorService:
                 if reason:
                     return reason
         return "usd_pressure_missing_series"
+
+    @staticmethod
+    def _us_rates_unavailable_reason(evidence: Dict[str, Any]) -> str:
+        generic_proxy_reasons = {"fallback_or_proxy_source", "liquidity_input_unavailable"}
+        cache_bundle = evidence.get("cacheBundleDiagnostics")
+        if isinstance(cache_bundle, dict):
+            reason = str(cache_bundle.get("degradationReason") or "").strip()
+            if reason and reason not in generic_proxy_reasons:
+                return reason
+        inputs = evidence.get("inputs")
+        if isinstance(inputs, list):
+            for item in inputs:
+                if not isinstance(item, dict):
+                    continue
+                reason = str(
+                    item.get("sourceAuthorityReason")
+                    or item.get("degradationReason")
+                    or item.get("capReason")
+                    or ""
+                ).strip()
+                if reason and reason not in generic_proxy_reasons:
+                    return reason
+        return "proxy_only_missing_real_source"
 
     def _liquidity_score_source_authority_route(
         self,
@@ -3885,6 +3948,16 @@ class LiquidityMonitorService:
                     for item in inputs
                 )
             )
+        if key == "us_rates_pressure":
+            cache_bundle = evidence.get("cacheBundleDiagnostics")
+            if isinstance(cache_bundle, dict):
+                return bool(cache_bundle.get("scoreContributionAllowed") or cache_bundle.get("readinessEligible"))
+            return self._indicator_required_inputs_have_real_source_authority(
+                evidence,
+                required_inputs={"US2Y", "US10Y", "US30Y"},
+                allowed_source_types={"official_public"},
+                allowed_source_tiers={"official_public"},
+            )
         if key == "us_etf_flow_proxy":
             return self._indicator_required_inputs_have_real_source_authority(
                 evidence,
@@ -3924,7 +3997,7 @@ class LiquidityMonitorService:
             )
         if key == "vix_pressure":
             return self._official_vix_evidence_has_score_authority(evidence)
-        if key in {"us_rates_pressure", "cn_hk_index_context"}:
+        if key == "cn_hk_index_context":
             return (
                 str(trust.get("sourceTier") or "") == "official_public"
                 and not self._indicator_has_proxy_input(panel, evidence)

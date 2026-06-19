@@ -8924,6 +8924,7 @@ class MarketOverviewService:
             return items
 
         cache_bundle = build_official_us_rates_cache_bundle(rate_rows)
+        bundle_ready = bool(cache_bundle.get("readinessEligible"))
         eligible_series = {str(series_id) for series_id in cache_bundle.get("eligibleSeries") or []}
         reason = str(cache_bundle.get("degradationReason") or "us_rates_readiness_not_eligible")
         route_codes = [str(code) for code in cache_bundle.get("reasonCodes") or []]
@@ -8933,7 +8934,7 @@ class MarketOverviewService:
             if series_id is None:
                 next_items.append(item)
                 continue
-            row_eligible = series_id in eligible_series
+            row_eligible = bundle_ready and series_id in eligible_series
             normalized = {
                 **item,
                 "cacheBundleDiagnostics": copy.deepcopy(cache_bundle),

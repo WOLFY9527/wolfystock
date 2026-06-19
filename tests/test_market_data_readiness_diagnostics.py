@@ -43,6 +43,10 @@ EXPECTED_VIX_READINESS_ROWS = {
     ("market_overview", "official_vix_volatility"),
     ("liquidity_monitor", "vix_pressure"),
 }
+EXPECTED_OFFICIAL_MACRO_BUNDLE_READINESS_ROWS = {
+    ("market_overview", "official_macro_rates_liquidity_bundle"),
+    ("liquidity_monitor", "macro_rates_fed_liquidity_bundle"),
+}
 EXPECTED_READINESS_STATES = {
     "score_grade",
     "observation_only",
@@ -326,6 +330,10 @@ def test_consumer_evidence_readiness_matrix_is_provider_free_and_covers_core_sur
         (row["surface"], row["evidenceFamily"])
         for row in rows
     }
+    assert EXPECTED_OFFICIAL_MACRO_BUNDLE_READINESS_ROWS <= {
+        (row["surface"], row["evidenceFamily"])
+        for row in rows
+    }
     assert EXPECTED_READINESS_STATES <= {row["readinessState"] for row in rows}
     assert seen_modules == ["pyarrow", "fastparquet", "tushare", "pytdx", "akshare", "efinance"]
 
@@ -356,6 +364,42 @@ def test_official_vix_readiness_rows_fail_closed_without_runtime_checks() -> Non
     assert liquidity_vix["observationOnlyInputs"] == ["proxy volatility context"]
     assert liquidity_vix["scoreGradeInputs"] == []
     assert liquidity_vix["readinessState"] == "observation_only"
+
+
+def test_official_macro_rates_fed_liquidity_readiness_rows_fail_closed_without_runtime_checks() -> None:
+    payload = build_market_data_readiness_diagnostics(
+        env={},
+        spec_finder=_spec_finder_with(set()),
+    ).to_dict()
+
+    rows = {
+        (row["surface"], row["evidenceFamily"]): row
+        for row in _matrix_rows(payload)
+    }
+    overview_bundle = rows[("market_overview", "official_macro_rates_liquidity_bundle")]
+    liquidity_bundle = rows[("liquidity_monitor", "macro_rates_fed_liquidity_bundle")]
+    expected_inputs = [
+        "Treasury daily rates",
+        "policy-rate daily rows",
+        "credit and USD pressure rows",
+        "Fed liquidity weekly rows",
+    ]
+
+    assert payload["diagnosticOnly"] is True
+    assert payload["providerRuntimeCalled"] is False
+    assert payload["networkCallsEnabled"] is False
+    assert overview_bundle["requiredInputs"] == expected_inputs
+    assert overview_bundle["missingInputs"] == expected_inputs
+    assert overview_bundle["scoreGradeInputs"] == []
+    assert overview_bundle["readinessState"] == "missing"
+    assert "partial" in overview_bundle["sourceAuthorityReason"].lower()
+    assert "daily policy" in overview_bundle["freshnessReason"].lower()
+    assert "weekly policy" in overview_bundle["freshnessReason"].lower()
+    assert liquidity_bundle["requiredInputs"] == expected_inputs
+    assert liquidity_bundle["missingInputs"] == expected_inputs
+    assert liquidity_bundle["observationOnlyInputs"] == ["proxy macro and rates context"]
+    assert liquidity_bundle["scoreGradeInputs"] == []
+    assert liquidity_bundle["readinessState"] == "observation_only"
 
 
 def test_consumer_evidence_readiness_matrix_redacts_internal_diagnostics_and_advice_terms() -> None:

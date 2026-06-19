@@ -127,6 +127,94 @@ def test_official_daily_rows_use_series_lag_policy_not_intraday_threshold() -> N
     assert "freshnessPolicy" not in proxy_freshness
 
 
+def test_market_temperature_us_rates_readiness_requires_complete_official_daily_bundle() -> None:
+    official_rows = [
+        {
+            "symbol": "US2Y",
+            "value": 4.62,
+            "changePercent": -0.22,
+            "source": "treasury",
+            "sourceId": "treasury:DGS2",
+            "sourceType": "official_public",
+            "freshness": "cached",
+            "officialSeriesId": "DGS2",
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "sourceFreshnessEvidence": {
+                "freshness": "cached",
+                "freshnessPolicy": "official_daily_us_weekday_t_plus_1",
+                "externalProviderCalls": False,
+            },
+        },
+        {
+            "symbol": "US10Y",
+            "value": 4.31,
+            "changePercent": -0.31,
+            "source": "treasury",
+            "sourceId": "treasury:DGS10",
+            "sourceType": "official_public",
+            "freshness": "cached",
+            "officialSeriesId": "DGS10",
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "sourceFreshnessEvidence": {
+                "freshness": "cached",
+                "freshnessPolicy": "official_daily_us_weekday_t_plus_1",
+                "externalProviderCalls": False,
+            },
+        },
+        {
+            "symbol": "US30Y",
+            "value": 4.58,
+            "changePercent": -0.18,
+            "source": "treasury",
+            "sourceId": "treasury:DGS30",
+            "sourceType": "official_public",
+            "freshness": "cached",
+            "officialSeriesId": "DGS30",
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "sourceFreshnessEvidence": {
+                "freshness": "cached",
+                "freshnessPolicy": "official_daily_us_weekday_t_plus_1",
+                "externalProviderCalls": False,
+            },
+        },
+    ]
+
+    complete = MarketOverviewService._with_official_us_rates_readiness_items(official_rows)
+    assert all(item["sourceAuthorityAllowed"] is True for item in complete)
+    assert all(item["scoreContributionAllowed"] is True for item in complete)
+    assert complete[0]["cacheBundleDiagnostics"]["readinessEligible"] is True
+    assert complete[0]["cacheBundleDiagnostics"]["scoreGradeEvidenceAllowed"] is True
+
+    partial = MarketOverviewService._with_official_us_rates_readiness_items(official_rows[:2])
+    assert all(item["sourceAuthorityAllowed"] is False for item in partial)
+    assert all(item["scoreContributionAllowed"] is False for item in partial)
+    assert partial[0]["cacheBundleDiagnostics"]["missingSeries"] == ["DGS30"]
+    assert partial[0]["cacheBundleDiagnostics"]["scoreGradeEvidenceAllowed"] is False
+
+    proxy_row = {
+        **official_rows[0],
+        "source": "yfinance_proxy",
+        "sourceId": "yfinance_proxy:DGS2",
+        "sourceType": "unofficial_proxy",
+        "freshness": "delayed",
+    }
+    proxy = MarketOverviewService._with_official_us_rates_readiness_items([proxy_row, *official_rows[1:]])
+    assert all(item["sourceAuthorityAllowed"] is False for item in proxy)
+    assert proxy[0]["cacheBundleDiagnostics"]["fallbackOrProxySeries"] == ["DGS2"]
+    assert proxy[0]["cacheBundleDiagnostics"]["scoreGradeEvidenceAllowed"] is False
+
+    stale = MarketOverviewService._with_official_us_rates_readiness_items([
+        {**official_rows[0], "freshness": "stale", "isStale": True},
+        *official_rows[1:],
+    ])
+    assert all(item["sourceAuthorityAllowed"] is False for item in stale)
+    assert stale[0]["cacheBundleDiagnostics"]["staleSeries"] == ["DGS2"]
+    assert stale[0]["cacheBundleDiagnostics"]["scoreGradeEvidenceAllowed"] is False
+
+
 def test_spx_configured_quote_carries_delayed_source_and_trust_metadata() -> None:
     service = MarketOverviewService()
     as_of = datetime.now(CN_TZ)

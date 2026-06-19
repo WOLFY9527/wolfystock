@@ -5273,7 +5273,128 @@ def test_us_rates_indicator_prefers_official_macro_cache_and_keeps_sofr_observat
     assert "Yahoo Finance" not in str(indicator["summary"])
 
 
-def test_us_rates_indicator_uses_official_macro_cache_when_rates_panel_is_unavailable(isolated_db: DatabaseManager) -> None:
+def test_us_rates_indicator_requires_complete_official_daily_bundle_before_score_grade(isolated_db: DatabaseManager) -> None:
+    service = _make_service()
+    official_as_of = "2026-05-12T16:15:00+08:00"
+    service.cache.set(
+        "rates",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "US2Y",
+                    "label": "US 2Y",
+                    "value": 4.62,
+                    "changePercent": -0.22,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS2",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "sourceTier": "official_public",
+                    "trustLevel": "reliable",
+                    "unit": "%",
+                    "freshness": "cached",
+                    "asOf": official_as_of,
+                    "updatedAt": official_as_of,
+                    "officialSeriesId": "DGS2",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "sourceFreshnessEvidence": {
+                        "freshness": "cached",
+                        "freshnessPolicy": "official_daily_us_weekday_t_plus_1",
+                        "externalProviderCalls": False,
+                        "isFallback": False,
+                        "isStale": False,
+                        "isUnavailable": False,
+                    },
+                },
+                {
+                    "symbol": "US10Y",
+                    "label": "US 10Y",
+                    "value": 4.31,
+                    "changePercent": -0.31,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS10",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "sourceTier": "official_public",
+                    "trustLevel": "reliable",
+                    "unit": "%",
+                    "freshness": "cached",
+                    "asOf": official_as_of,
+                    "updatedAt": official_as_of,
+                    "officialSeriesId": "DGS10",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "sourceFreshnessEvidence": {
+                        "freshness": "cached",
+                        "freshnessPolicy": "official_daily_us_weekday_t_plus_1",
+                        "externalProviderCalls": False,
+                        "isFallback": False,
+                        "isStale": False,
+                        "isUnavailable": False,
+                    },
+                },
+                {
+                    "symbol": "US30Y",
+                    "label": "US 30Y",
+                    "value": 4.58,
+                    "changePercent": -0.18,
+                    "source": "treasury",
+                    "sourceId": "treasury:DGS30",
+                    "sourceType": "official_public",
+                    "sourceLabel": "US Treasury",
+                    "sourceTier": "official_public",
+                    "trustLevel": "reliable",
+                    "unit": "%",
+                    "freshness": "cached",
+                    "asOf": official_as_of,
+                    "updatedAt": official_as_of,
+                    "officialSeriesId": "DGS30",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "sourceFreshnessEvidence": {
+                        "freshness": "cached",
+                        "freshnessPolicy": "official_daily_us_weekday_t_plus_1",
+                        "externalProviderCalls": False,
+                        "isFallback": False,
+                        "isStale": False,
+                        "isUnavailable": False,
+                    },
+                },
+            ],
+            updated_at=official_as_of,
+            as_of=official_as_of,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = {item["key"]: item for item in payload["indicators"]}["us_rates_pressure"]
+    diagnostics = indicator["coverageDiagnostics"]
+    inputs = {str(item.get("key")): item for item in indicator["evidence"]["inputs"]}
+    bundle = indicator["evidence"]["cacheBundleDiagnostics"]
+
+    assert indicator["includedInScore"] is True
+    assert indicator["scoreContribution"] == 4
+    assert diagnostics["realSourceAvailable"] is True
+    assert diagnostics["scoreContributionAllowed"] is True
+    assert diagnostics["sourceAuthorityReason"] is None
+    assert diagnostics["routeRejectedReasonCodes"] == []
+    assert bundle["readinessEligible"] is True
+    assert bundle["scoreGradeEvidenceAllowed"] is True
+    assert bundle["coverageRatio"] == 1.0
+    assert bundle["externalProviderCalls"] is False
+    freshness_policies = bundle["sourceFreshnessEvidence"]["freshnessPolicies"]
+    for series_id in ("DGS2", "DGS10", "DGS30"):
+        assert freshness_policies[series_id] == "official_daily_us_weekday_t_plus_1"
+    for key in ("US2Y", "US10Y", "US30Y"):
+        assert inputs[key]["sourceAuthorityAllowed"] is True
+        assert inputs[key]["scoreContributionAllowed"] is True
+
+
+def test_us_rates_indicator_keeps_partial_official_macro_cache_observation_only_when_rates_panel_is_unavailable(isolated_db: DatabaseManager) -> None:
     service = _make_service()
     official_as_of = "2026-05-12T16:15:00+08:00"
     service.cache.set(
@@ -5318,11 +5439,19 @@ def test_us_rates_indicator_uses_official_macro_cache_when_rates_panel_is_unavai
     payload = service.get_liquidity_monitor()
     indicator = {item["key"]: item for item in payload["indicators"]}["us_rates_pressure"]
 
-    assert indicator["includedInScore"] is True
+    assert indicator["includedInScore"] is False
     assert indicator["status"] == "partial"
     assert indicator["freshness"] == "cached"
-    assert indicator["scoreContribution"] == 4
+    assert indicator["scoreContribution"] == 0
     assert indicator["coverageDiagnostics"]["capReason"] == "partial_coverage"
+    assert indicator["coverageDiagnostics"]["realSourceAvailable"] is False
+    assert indicator["coverageDiagnostics"]["scoreContributionAllowed"] is False
+    assert indicator["coverageDiagnostics"]["scoreExclusionReason"] == "us_rates_required_series_missing_or_stale"
+    bundle = indicator["evidence"]["cacheBundleDiagnostics"]
+    assert bundle["readinessEligible"] is False
+    assert bundle["scoreGradeEvidenceAllowed"] is False
+    assert bundle["fulfilledSeries"] == ["DGS10", "DGS30"]
+    assert bundle["missingSeries"] == ["DGS2"]
     assert "US10Y" in str(indicator["summary"])
     assert "US30Y" in str(indicator["summary"])
     assert "US Treasury" in str(indicator["summary"])
@@ -6361,6 +6490,59 @@ def test_fed_liquidity_indicator_fails_closed_for_fallback_proxy_bundle(
     assert bundle["observationOnly"] is True
     assert bundle["scoreContributionAllowed"] is False
     assert bundle["externalProviderCalls"] is False
+
+
+def test_fed_liquidity_indicator_requires_explicit_authority_even_with_full_coverage(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    base_as_of = "2026-05-20T16:15:00+08:00"
+    items = [
+        _fed_liquidity_macro_item("FED_ASSETS", value=7485000.0, change_percent=0.13),
+        _fed_liquidity_macro_item(
+            "FED_RRP",
+            value=432.2,
+            change_percent=-5.01,
+            source_authority_allowed=False,
+            score_contribution_allowed=False,
+        ),
+        _fed_liquidity_macro_item("TGA", value=812000.0, change_percent=-1.69),
+        _fed_liquidity_macro_item("RESERVES", value=3260000.0, change_percent=0.62),
+    ]
+    items[1]["sourceAuthorityReason"] = "fed_liquidity_authority_not_explicit"
+    items[1]["routeRejectedReasonCodes"] = ["fed_liquidity_authority_not_explicit"]
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=items,
+            updated_at=base_as_of,
+            as_of=base_as_of,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["fed_liquidity"]
+    diagnostics = indicator["coverageDiagnostics"]
+    inputs = {str(item.get("key")): item for item in indicator["evidence"]["inputs"]}
+    bundle = diagnostics["cacheBundleDiagnostics"]
+
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert diagnostics["realSourceAvailable"] is False
+    assert diagnostics["scoreContributionAllowed"] is False
+    assert diagnostics["scoreExclusionReason"] == "fed_liquidity_required_series_missing_or_stale"
+    assert diagnostics["sourceAuthorityReason"] == "fed_liquidity_authority_not_explicit"
+    assert diagnostics["routeRejectedReasonCodes"] == ["fed_liquidity_authority_not_explicit"]
+    assert bundle["coverageRatio"] == 1.0
+    assert bundle["fulfilledSeries"] == ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"]
+    assert bundle["blockedSeries"] == ["RRPONTSYD"]
+    assert bundle["scoreContributionAllowed"] is False
+    assert bundle["observationOnly"] is True
+    assert inputs["FED_RRP"]["sourceAuthorityAllowed"] is False
+    assert inputs["FED_RRP"]["scoreContributionAllowed"] is False
 
 
 def test_usd_pressure_scores_when_official_trade_weighted_usd_is_fresh(

@@ -209,6 +209,38 @@ def _build_consumer_evidence_readiness_matrix() -> tuple[ConsumerEvidenceReadine
             ),
         ),
         ConsumerEvidenceReadinessSpec(
+            surface="market_overview",
+            evidence_family="official_macro_rates_liquidity_bundle",
+            required_inputs=(
+                "Treasury daily rates",
+                "policy-rate daily rows",
+                "credit and USD pressure rows",
+                "Fed liquidity weekly rows",
+            ),
+            missing_inputs=(
+                "Treasury daily rates",
+                "policy-rate daily rows",
+                "credit and USD pressure rows",
+                "Fed liquidity weekly rows",
+            ),
+            blocked_inputs=("coverage gate", "freshness gate", "source authority gate"),
+            score_grade_inputs=(),
+            readiness_state="missing",
+            confidence_cap_reason=(
+                "Macro, rates, and Fed liquidity stay capped until every required official family passes."
+            ),
+            source_authority_reason=(
+                "Partial, proxy, fallback, missing, or stale rows cannot grant market overview score authority."
+            ),
+            freshness_reason=(
+                "Treasury and policy-rate rows need the daily policy; Fed liquidity rows need the weekly policy."
+            ),
+            next_diagnostic="Inspect existing safe macro, rates, and liquidity evidence snapshots.",
+            consumer_safe_summary=(
+                "Market overview cannot promote the macro, rates, and Fed liquidity bundle until source authority, freshness, and coverage all pass."
+            ),
+        ),
+        ConsumerEvidenceReadinessSpec(
             surface="liquidity_monitor",
             evidence_family="liquidity",
             required_inputs=(
@@ -249,6 +281,39 @@ def _build_consumer_evidence_readiness_matrix() -> tuple[ConsumerEvidenceReadine
             next_diagnostic="Inspect existing safe liquidity volatility evidence before enabling scoring.",
             consumer_safe_summary=(
                 "Liquidity VIX pressure stays observational until official authority and freshness pass."
+            ),
+        ),
+        ConsumerEvidenceReadinessSpec(
+            surface="liquidity_monitor",
+            evidence_family="macro_rates_fed_liquidity_bundle",
+            required_inputs=(
+                "Treasury daily rates",
+                "policy-rate daily rows",
+                "credit and USD pressure rows",
+                "Fed liquidity weekly rows",
+            ),
+            missing_inputs=(
+                "Treasury daily rates",
+                "policy-rate daily rows",
+                "credit and USD pressure rows",
+                "Fed liquidity weekly rows",
+            ),
+            blocked_inputs=("coverage gate", "freshness gate", "source authority gate"),
+            observation_only_inputs=("proxy macro and rates context",),
+            score_grade_inputs=(),
+            readiness_state="observation_only",
+            confidence_cap_reason=(
+                "Liquidity score contribution requires full official coverage plus the correct daily and weekly freshness checks."
+            ),
+            source_authority_reason=(
+                "Proxy, fallback, partial, missing, or stale macro rows remain observation-only."
+            ),
+            freshness_reason=(
+                "Daily rates and weekly Fed liquidity freshness must both pass before score-grade use."
+            ),
+            next_diagnostic="Review liquidity family coverage diagnostics before enabling macro score contribution.",
+            consumer_safe_summary=(
+                "Liquidity monitor keeps macro, rates, and Fed liquidity observational until authority, freshness, and coverage are complete."
             ),
         ),
         ConsumerEvidenceReadinessSpec(
