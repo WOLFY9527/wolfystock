@@ -788,7 +788,7 @@ export default function StockStructureDecisionPage() {
                     },
                     {
                       label: locale === 'en' ? 'Period' : '周期',
-                      value: data.dataQuality.period || '--',
+                      value: periodLabel(data.dataQuality.period, locale) || '--',
                     },
                   ]}
                 />
@@ -797,7 +797,7 @@ export default function StockStructureDecisionPage() {
                     {
                       key: 'state',
                       label: locale === 'en' ? 'Structure state' : '结构状态',
-                      value: data.structureState,
+                      value: safeConsumerText(data.structureState, locale, locale === 'en' ? 'Under review' : '待确认'),
                     },
                     {
                       key: 'confidence',

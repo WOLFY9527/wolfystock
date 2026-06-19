@@ -101,9 +101,9 @@ function sourceSurfaceLabel(surface: UnifiedResearchQueueItem['sourceSurface'], 
     watchlist: { zh: 'Watchlist', en: 'Watchlist' },
     scanner: { zh: 'Scanner', en: 'Scanner' },
     market: { zh: 'Market', en: 'Market' },
-    manual_gap: { zh: 'Manual gap', en: 'Manual gap' },
+    manual_gap: { zh: '补充研究', en: 'Supplementary research' },
   };
-  return labels[surface]?.[locale] || surface;
+  return labels[surface]?.[locale] || (locale === 'en' ? 'Research' : '研究');
 }
 
 function priorityTierLabel(priorityTier: UnifiedResearchQueueItem['priorityTier'], locale: 'zh' | 'en'): string {
@@ -544,7 +544,7 @@ export default function ResearchRadarPage() {
                 <RoughKeyValueRows
                   rows={Object.entries(data?.aggregateSummary.priorityCounts ?? {}).map(([key, value]) => ({
                     key,
-                    label: key,
+                    label: priorityTierLabel(key as UnifiedResearchQueueItem['priorityTier'], locale),
                     value,
                   }))}
                 />
@@ -702,13 +702,13 @@ export default function ResearchRadarPage() {
                   </RoughSectionCard>
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Lead item' : '队首条目'} title={locale === 'en' ? 'What to verify' : '待验证事项'}>
                     <RoughBulletList
-                      items={(queueItems[0]?.whatToVerify ?? []).map((item) => item)}
+                      items={safeResearchQueueList(queueItems[0]?.whatToVerify, locale, locale === 'en' ? 'No verify item yet.' : '暂未整理验证事项。')}
                       emptyText={locale === 'en' ? 'No verify item yet.' : '暂未整理验证事项。'}
                     />
                   </RoughSectionCard>
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Lead item' : '队首条目'} title={locale === 'en' ? 'Invalidation observations' : '失效观察'}>
                     <RoughBulletList
-                      items={(queueItems[0]?.invalidationObservations ?? []).map((item) => item)}
+                      items={safeResearchQueueList(queueItems[0]?.invalidationObservations, locale, locale === 'en' ? 'No invalidation observation yet.' : '暂未整理失效观察。')}
                       emptyText={locale === 'en' ? 'No invalidation observation yet.' : '暂未整理失效观察。'}
                     />
                   </RoughSectionCard>
