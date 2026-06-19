@@ -30,3 +30,15 @@ broad repo search.
   - Consumer projection examples/fixtures.
 - `tests/test_pure_helper_import_boundaries.py`
   - Import-boundary guard for inert helper lanes.
+
+## Related Diagnostic Lineage
+
+This lane is part of the market-data diagnostic lineage
+(T-1758 → T-1761 → T-1762 → T-1763). For the broader root-cause context and
+cross-domain navigation, see:
+
+- [T-1758 Market Data P0 Root-cause Map](../product-audit/t1758-market-data-p0-root-cause-map.md):
+  canonical diagnosis of consumer evidence gaps across Market Overview,
+  Decision Cockpit, Liquidity, Rotation, Research Radar, and Home briefing.
+- [Codex Docs — Canonical Project Index](../codex/README.md#canonical-project-documentation-index):
+  full lineage table and cross-domain entry points.
