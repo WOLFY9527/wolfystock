@@ -59,7 +59,9 @@ EVIDENCE_FRESHNESS_ORDER = {**FRESHNESS_ORDER, "fresh": 0, "partial": 2.5, "synt
 RELIABLE_FRESHNESS = {"live", "cached", "delayed"}
 PROXY_SOURCE_TYPES = {"public_proxy", "proxy_public", "unofficial_proxy"}
 CAPITAL_FLOW_PARTIAL_SOURCE_TYPES = PROXY_SOURCE_TYPES | {"cache_snapshot", "unofficial_public_api", "authorized_licensed_feed"}
-POSSIBLE_WEIGHT = 49
+SCORE_WEIGHT_BUDGET = 49
+POSSIBLE_WEIGHT = SCORE_WEIGHT_BUDGET
+LIQUIDITY_COVERAGE_CONTRACT_VERSION = "liquidity_coverage_contract_v1"
 CRYPTO_FUNDING_BACKFILL_MAX_AGE = timedelta(hours=12)
 GOLD_SYMBOL_CANDIDATES = frozenset({"GLD", "GOLD", "GC=F", "XAUUSD", "XAU/USD"})
 OIL_SYMBOL_CANDIDATES = frozenset({"WTI", "CL=F", "BRENT", "USO", "OIL"})
@@ -374,6 +376,7 @@ class LiquidityMonitorService:
                 "possibleIndicatorWeight": POSSIBLE_WEIGHT,
                 "includedIndicatorWeight": included_weight,
             },
+            "coverageContract": self._build_coverage_contract(indicators, included_weight=included_weight),
             "freshness": freshness_summary,
             "dataQuality": build_consumer_data_quality_state(
                 {
@@ -3259,6 +3262,12 @@ class LiquidityMonitorService:
             and trust["trustLevel"] not in {"weak", "unavailable"}
             and (final_contribution != 0 or score_contribution == 0)
         )
+        score_eligible_input_count = self._indicator_score_eligible_input_count(
+            fulfilled_inputs=fulfilled_inputs,
+            inputs=inputs,
+            contributes_to_score=contributes_to_score,
+        )
+        observation_only_input_count = max(0, len(fulfilled_inputs) - score_eligible_input_count)
         degradation_reason = evidence.get("degradationReason")
         if not degradation_reason:
             degradation_reason = activation_cap_reason or (
@@ -3270,6 +3279,11 @@ class LiquidityMonitorService:
             "requiredInputs": list(required_inputs),
             "fulfilledInputs": fulfilled_inputs,
             "missingInputs": missing_inputs,
+            "requiredInputCount": len(required_inputs),
+            "fulfilledInputCount": len(fulfilled_inputs),
+            "missingInputCount": len(missing_inputs),
+            "scoreEligibleInputCount": score_eligible_input_count,
+            "observationOnlyInputCount": observation_only_input_count,
             "requiredProviderClass": activation["requiredProviderClass"],
             "configuredProviderAvailable": activation["configuredProviderAvailable"],
             "realSourceAvailable": activation["realSourceAvailable"],
@@ -3297,6 +3311,125 @@ class LiquidityMonitorService:
         if isinstance(cache_bundle, dict):
             diagnostics["cacheBundleDiagnostics"] = copy.deepcopy(cache_bundle)
         return diagnostics
+
+    @staticmethod
+    def _diagnostic_input_count(
+        diagnostics: Dict[str, Any],
+        count_key: str,
+        inputs_key: str,
+    ) -> int:
+        count = diagnostics.get(count_key)
+        if isinstance(count, bool):
+            return 0
+        if isinstance(count, (int, float)):
+            return max(0, int(count))
+        inputs = diagnostics.get(inputs_key)
+        return len(inputs) if isinstance(inputs, list) else 0
+
+    @staticmethod
+    def _score_eligible_input_count_from_diagnostics(diagnostics: Dict[str, Any]) -> int:
+        return LiquidityMonitorService._diagnostic_input_count(
+            diagnostics,
+            "scoreEligibleInputCount",
+            "fulfilledInputs",
+        )
+
+    def _build_coverage_contract(
+        self,
+        indicators: list[Dict[str, Any]],
+        *,
+        included_weight: int,
+    ) -> Dict[str, Any]:
+        families: list[Dict[str, Any]] = []
+        for indicator in indicators:
+            diagnostics = indicator.get("coverageDiagnostics")
+            if not isinstance(diagnostics, dict):
+                diagnostics = {}
+            required_inputs = list(diagnostics.get("requiredInputs") or [])
+            fulfilled_inputs = list(diagnostics.get("fulfilledInputs") or [])
+            missing_inputs = list(diagnostics.get("missingInputs") or [])
+            family = {
+                "indicatorId": str(diagnostics.get("indicatorId") or indicator.get("key") or ""),
+                "label": str(indicator.get("label") or diagnostics.get("indicatorName") or ""),
+                "requiredInputs": required_inputs,
+                "fulfilledInputs": fulfilled_inputs,
+                "missingInputs": missing_inputs,
+                "requiredInputCount": self._diagnostic_input_count(
+                    diagnostics,
+                    "requiredInputCount",
+                    "requiredInputs",
+                ),
+                "fulfilledInputCount": self._diagnostic_input_count(
+                    diagnostics,
+                    "fulfilledInputCount",
+                    "fulfilledInputs",
+                ),
+                "missingInputCount": self._diagnostic_input_count(
+                    diagnostics,
+                    "missingInputCount",
+                    "missingInputs",
+                ),
+                "scoreEligibleInputCount": self._score_eligible_input_count_from_diagnostics(diagnostics),
+                "observationOnlyInputCount": self._diagnostic_input_count(
+                    diagnostics,
+                    "observationOnlyInputCount",
+                    "fulfilledInputs",
+                ),
+                "contributesToScore": bool(diagnostics.get("contributesToScore")),
+                "scoreContributionAllowed": bool(diagnostics.get("scoreContributionAllowed")),
+                "observationOnly": bool(diagnostics.get("observationOnly")),
+                "proxyOnly": bool(diagnostics.get("proxyOnly")),
+            }
+            families.append(family)
+
+        required_input_count = sum(item["requiredInputCount"] for item in families)
+        fulfilled_input_count = sum(item["fulfilledInputCount"] for item in families)
+        missing_input_count = sum(item["missingInputCount"] for item in families)
+        score_eligible_input_count = sum(item["scoreEligibleInputCount"] for item in families)
+        observation_only_input_count = sum(item["observationOnlyInputCount"] for item in families)
+        return {
+            "contractVersion": LIQUIDITY_COVERAGE_CONTRACT_VERSION,
+            "label": "Liquidity coverage contract",
+            "summary": (
+                "Coverage is measured as fulfilled required input slots across "
+                "liquidity families. The 49 score-weight budget is tracked separately."
+            ),
+            "denominatorKind": "required_inputs",
+            "denominatorLabel": "Required liquidity input slots",
+            "requiredFamilyCount": len(families),
+            "requiredInputCount": required_input_count,
+            "fulfilledInputCount": fulfilled_input_count,
+            "missingInputCount": missing_input_count,
+            "scoreEligibleInputCount": score_eligible_input_count,
+            "observationOnlyInputCount": observation_only_input_count,
+            "scoreWeightBudget": SCORE_WEIGHT_BUDGET,
+            "scoreWeightIncluded": max(0, int(included_weight)),
+            "families": families,
+        }
+
+    def _indicator_score_eligible_input_count(
+        self,
+        *,
+        fulfilled_inputs: list[str],
+        inputs: list[Dict[str, Any]],
+        contributes_to_score: bool,
+    ) -> int:
+        if not contributes_to_score or not fulfilled_inputs:
+            return 0
+        fulfilled = set(fulfilled_inputs)
+        if not inputs:
+            return len(fulfilled)
+        eligible: set[str] = set()
+        for item in inputs:
+            input_key = self._indicator_input_key(item)
+            if input_key not in fulfilled:
+                continue
+            if not self._indicator_input_is_fulfilled(item):
+                continue
+            if item.get("sourceAuthorityAllowed") is False or item.get("scoreContributionAllowed") is False:
+                continue
+            eligible.add(input_key)
+        return len(eligible)
 
     def _indicator_provider_activation(
         self,

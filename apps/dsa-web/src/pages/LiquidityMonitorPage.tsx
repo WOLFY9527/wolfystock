@@ -129,6 +129,14 @@ function confidenceLabel(value?: number | null): string {
   return `${Math.round(value * 100)}%`;
 }
 
+function liquidityCoverageInputLabel(data: LiquidityMonitorResponse): string {
+  const contract = data.coverageContract;
+  if (!contract) {
+    return '待确认';
+  }
+  return `${contract.fulfilledInputCount} / ${contract.requiredInputCount}`;
+}
+
 function contributionLabel(indicator: LiquidityMonitorIndicator): string {
   const value = Number(indicator.scoreContribution || 0);
   if (!indicator.includedInScore) {
@@ -2270,8 +2278,9 @@ const LiquidityGuidancePanel: React.FC<{
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <TerminalMetric label="置信度" value={confidenceLabel(data.score.confidence)} valueClassName="text-2xl" />
                   <TerminalMetric label="最弱时效" value={FRESHNESS_LABELS[data.freshness.weakestIndicatorFreshness]} valueClassName="text-lg font-sans" />
+                  <TerminalMetric label="输入覆盖" value={liquidityCoverageInputLabel(data)} valueClassName="text-lg font-sans" />
                   <TerminalMetric label="计分指标" value={data.score.includedIndicatorCount} valueClassName="text-2xl" />
-                  <TerminalMetric label="计分权重" value={`${data.score.includedIndicatorWeight} / ${data.score.possibleIndicatorWeight}`} valueClassName="text-lg font-sans" />
+                  <TerminalMetric label="权重预算" value={`${data.score.includedIndicatorWeight} / ${data.score.possibleIndicatorWeight}`} valueClassName="text-lg font-sans" />
                 </div>
               </div>
             </TerminalPanel>

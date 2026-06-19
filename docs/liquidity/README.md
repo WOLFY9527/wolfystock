@@ -24,6 +24,18 @@ signal tables, source/risk rails, or liquidity-related freshness disclosure.
 
 - Liquidity Monitor indicator payloads may include additive
   `coverageDiagnostics` metadata.
+- Liquidity Monitor exposes additive `coverageContract` metadata as the
+  canonical coverage denominator. The denominator is required input slots,
+  currently 12 liquidity families and 39 named input slots from
+  `LIQUIDITY_INDICATOR_REQUIRED_INPUTS`.
+- The numeric value 49 is a separate score-weight budget exposed as
+  `score.possibleIndicatorWeight` and `coverageContract.scoreWeightBudget`.
+  It is not an indicator-family count and not the required-input denominator.
+  Any wording like "1 of 49 indicators" is stale; use required input coverage
+  for coverage copy and score-weight budget for scoring copy.
+- The coverage contract must report required, fulfilled, missing,
+  score-eligible, and observation-only input counts, plus missing inputs, for
+  each family. Top-level totals must equal the sum of family counts.
 - Liquidity Monitor may also expose additive `capitalFlowSignal` metadata to
   summarize where capital appears to be rotating across growth/AI/software/semis
   vs BTC/gold/oil/USD/rates/volatility.
@@ -49,8 +61,8 @@ signal tables, source/risk rails, or liquidity-related freshness disclosure.
 - Missing, stale, fallback, synthetic, or unavailable inputs must not appear
   live or contribute strong score.
 - `proxyOnly=true` with `realSourceAvailable=false` is observation-only by
-  default and must not contribute to the liquidity score unless an explicit
-  reviewed allowlist path is added with tests.
+  default and must not contribute to score-eligible input counts unless an
+  explicit reviewed allowlist path is added with tests.
 - CN/HK flow, money-market, futures, and proxy indicators must stay explicit
   about unavailable sources unless an existing configured and audited source
   provides real data.

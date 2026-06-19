@@ -133,6 +133,11 @@ class LiquidityMonitorCoverageDiagnostics(BaseModel):
     requiredInputs: list[str] = Field(default_factory=list)
     fulfilledInputs: list[str] = Field(default_factory=list)
     missingInputs: list[str] = Field(default_factory=list)
+    requiredInputCount: int = Field(default=0, ge=0)
+    fulfilledInputCount: int = Field(default=0, ge=0)
+    missingInputCount: int = Field(default=0, ge=0)
+    scoreEligibleInputCount: int = Field(default=0, ge=0)
+    observationOnlyInputCount: int = Field(default=0, ge=0)
     requiredProviderClass: Optional[str] = None
     configuredProviderAvailable: bool = False
     realSourceAvailable: bool = False
@@ -155,6 +160,40 @@ class LiquidityMonitorCoverageDiagnostics(BaseModel):
     sourceAuthorityReason: Optional[str] = None
     routeRejectedReasonCodes: list[str] = Field(default_factory=list)
     activationHint: Optional[str] = None
+
+
+class LiquidityMonitorCoverageFamily(BaseModel):
+    indicatorId: str
+    label: str
+    requiredInputs: list[str] = Field(default_factory=list)
+    fulfilledInputs: list[str] = Field(default_factory=list)
+    missingInputs: list[str] = Field(default_factory=list)
+    requiredInputCount: int = Field(ge=0)
+    fulfilledInputCount: int = Field(ge=0)
+    missingInputCount: int = Field(ge=0)
+    scoreEligibleInputCount: int = Field(ge=0)
+    observationOnlyInputCount: int = Field(ge=0)
+    contributesToScore: bool = False
+    scoreContributionAllowed: bool = False
+    observationOnly: bool = False
+    proxyOnly: bool = False
+
+
+class LiquidityMonitorCoverageContract(BaseModel):
+    contractVersion: str
+    label: str
+    summary: str
+    denominatorKind: Literal["required_inputs"]
+    denominatorLabel: str
+    requiredFamilyCount: int = Field(ge=0)
+    requiredInputCount: int = Field(ge=0)
+    fulfilledInputCount: int = Field(ge=0)
+    missingInputCount: int = Field(ge=0)
+    scoreEligibleInputCount: int = Field(ge=0)
+    observationOnlyInputCount: int = Field(ge=0)
+    scoreWeightBudget: int = Field(ge=0)
+    scoreWeightIncluded: int = Field(ge=0)
+    families: list[LiquidityMonitorCoverageFamily] = Field(default_factory=list)
 
 
 class LiquidityMonitorIndicator(BaseModel):
@@ -203,6 +242,7 @@ class LiquidityMonitorResponse(BaseModel):
     endpoint: str
     generatedAt: str
     score: LiquidityMonitorScore
+    coverageContract: LiquidityMonitorCoverageContract | None = None
     freshness: LiquidityMonitorFreshnessSummary
     dataQuality: ConsumerDataQuality
     indicators: list[LiquidityMonitorIndicator] = Field(default_factory=list)

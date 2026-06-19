@@ -34,8 +34,24 @@ const payload = {
     regime: 'supportive',
     confidence: 0.44,
     includedIndicatorCount: 3,
-    possibleIndicatorWeight: 43,
+    possibleIndicatorWeight: 49,
     includedIndicatorWeight: 19,
+  },
+  coverageContract: {
+    contractVersion: 'liquidity_coverage_contract_v1',
+    label: 'Liquidity coverage contract',
+    summary: 'Coverage is measured as fulfilled required input slots.',
+    denominatorKind: 'required_inputs',
+    denominatorLabel: 'Required liquidity input slots',
+    requiredFamilyCount: 12,
+    requiredInputCount: 39,
+    fulfilledInputCount: 7,
+    missingInputCount: 32,
+    scoreEligibleInputCount: 7,
+    observationOnlyInputCount: 0,
+    scoreWeightBudget: 49,
+    scoreWeightIncluded: 19,
+    families: [],
   },
   freshness: {
     status: 'delayed',
@@ -778,6 +794,10 @@ describe('LiquidityMonitorPage', () => {
     expect(within(details).getByTestId('liquidity-impulse-synthesis-dominant-drivers')).toHaveTextContent('美国利率压力');
     expect(within(details).getByTestId('liquidity-impulse-synthesis-counter-evidence')).toHaveTextContent('BTC 动量');
     expect(within(details).getByTestId('liquidity-impulse-synthesis-data-gaps')).toHaveTextContent('中港资金流');
+    expect(within(details).getByText('输入覆盖')).toBeInTheDocument();
+    expect(within(details).getByText('7 / 39')).toBeInTheDocument();
+    expect(within(details).getByText('权重预算')).toBeInTheDocument();
+    expect(within(details).getByText('19 / 49')).toBeInTheDocument();
   });
 
   it('uses mobile indicator cards while keeping the admin indicator table desktop-only', async () => {

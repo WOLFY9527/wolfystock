@@ -94,6 +94,11 @@ export interface LiquidityMonitorCoverageDiagnostics {
   requiredInputs: string[];
   fulfilledInputs: string[];
   missingInputs: string[];
+  requiredInputCount?: number;
+  fulfilledInputCount?: number;
+  missingInputCount?: number;
+  scoreEligibleInputCount?: number;
+  observationOnlyInputCount?: number;
   requiredProviderClass?: string | null;
   configuredProviderAvailable?: boolean;
   realSourceAvailable?: boolean;
@@ -116,6 +121,40 @@ export interface LiquidityMonitorCoverageDiagnostics {
   sourceAuthorityReason?: string | null;
   routeRejectedReasonCodes?: string[];
   activationHint?: string | null;
+}
+
+export interface LiquidityMonitorCoverageFamily {
+  indicatorId: string;
+  label: string;
+  requiredInputs: string[];
+  fulfilledInputs: string[];
+  missingInputs: string[];
+  requiredInputCount: number;
+  fulfilledInputCount: number;
+  missingInputCount: number;
+  scoreEligibleInputCount: number;
+  observationOnlyInputCount: number;
+  contributesToScore: boolean;
+  scoreContributionAllowed: boolean;
+  observationOnly: boolean;
+  proxyOnly: boolean;
+}
+
+export interface LiquidityMonitorCoverageContract {
+  contractVersion: string;
+  label: string;
+  summary: string;
+  denominatorKind: 'required_inputs';
+  denominatorLabel: string;
+  requiredFamilyCount: number;
+  requiredInputCount: number;
+  fulfilledInputCount: number;
+  missingInputCount: number;
+  scoreEligibleInputCount: number;
+  observationOnlyInputCount: number;
+  scoreWeightBudget: number;
+  scoreWeightIncluded: number;
+  families: LiquidityMonitorCoverageFamily[];
 }
 
 export interface LiquidityImpulseSynthesisEvidenceItem {
@@ -164,6 +203,7 @@ export interface LiquidityMonitorResponse {
   endpoint: string;
   generatedAt: string;
   score: LiquidityMonitorScore;
+  coverageContract?: LiquidityMonitorCoverageContract;
   freshness: LiquidityMonitorFreshnessSummary;
   indicators: LiquidityMonitorIndicator[];
   liquidityImpulseSynthesis?: LiquidityImpulseSynthesis;
@@ -258,6 +298,7 @@ function normalizeLiquidityMonitor(payload: Record<string, unknown>): LiquidityM
     endpoint: normalized.endpoint,
     generatedAt: normalized.generatedAt,
     score: normalized.score,
+    coverageContract: normalized.coverageContract,
     freshness: normalized.freshness,
     indicators: Array.isArray(normalized.indicators) ? normalized.indicators : [],
     liquidityImpulseSynthesis: normalizeLiquidityImpulseSynthesis(normalized.liquidityImpulseSynthesis),
