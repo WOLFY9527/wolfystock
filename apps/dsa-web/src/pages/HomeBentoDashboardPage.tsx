@@ -1223,9 +1223,15 @@ function resolveJudgmentGateCopy(
   locale: DashboardLocale,
   dashboard: DashboardPayload,
   dataQualityReport: DataQualityReport | undefined,
+  researchPacketStatus: HomeResearchPacketStatus,
 ): string {
   const isEnglish = locale === 'en';
-  if (!dataQualityReport || dataQualityReport.requiredAvailable === false || dataQualityReport.dataQualityTier === 'insufficient') {
+  if (
+    researchPacketStatus === 'INSUFFICIENT'
+    || !dataQualityReport
+    || dataQualityReport.requiredAvailable === false
+    || dataQualityReport.dataQualityTier === 'insufficient'
+  ) {
     return isEnglish ? 'Evidence insufficient' : '证据不足';
   }
   if (hasDataQualityGaps(dataQualityReport)) {
@@ -1468,6 +1474,10 @@ type HomeResearchPacketView = {
   asOfLabel: string | null;
   observationBoundary: string;
   nextEvidence: string;
+  judgmentBoundary: string;
+  availableNow: string;
+  missingEvidence: string;
+  nextRoutes: string;
 };
 
 const HOME_RESEARCH_PACKET_PRIMARY_COVERAGE_DOMAINS: AnalysisEvidenceCoverageDomain[] = [
@@ -1478,6 +1488,27 @@ const HOME_RESEARCH_PACKET_PRIMARY_COVERAGE_DOMAINS: AnalysisEvidenceCoverageDom
   'earnings',
   'valuation',
 ];
+
+const HOME_RESEARCH_PACKET_REQUIRED_DOMAINS: AnalysisEvidenceCoverageDomain[] = [
+  'priceHistory',
+  'technicals',
+  'fundamentals',
+  'news',
+  'catalysts',
+];
+
+const HOME_RESEARCH_PACKET_DOMAIN_LABELS: Record<AnalysisEvidenceCoverageDomain, Record<DashboardLocale, string>> = {
+  priceHistory: { zh: '行情与 K 线', en: 'Quote and candles' },
+  technicals: { zh: '技术面', en: 'Technicals' },
+  fundamentals: { zh: '基本面', en: 'Fundamentals' },
+  earnings: { zh: '财报', en: 'Earnings' },
+  news: { zh: '新闻', en: 'News' },
+  catalysts: { zh: '催化', en: 'Catalysts' },
+  sentiment: { zh: '情绪', en: 'Sentiment' },
+  valuation: { zh: '估值', en: 'Valuation' },
+  liquidityContext: { zh: '流动性', en: 'Liquidity' },
+  macroContext: { zh: '宏观', en: 'Macro' },
+};
 
 const HOME_RESEARCH_PACKET_UNSAFE_COPY_PATTERN =
   /provider|source|authority|freshness|fallback|cache|debug|diagnostic|trace|router|prompt|schema|raw|token|credential|stack|env|reason[_\s-]?codes?|one_sentence|stop_loss|standard_report|buy|sell|trade|order|broker|position|target|stop|entry|买入|卖出|下单|交易|建仓|加仓|减仓|止损|止盈|目标|仓位|小仓|第二笔/i;
@@ -1538,6 +1569,30 @@ function homeResearchPacketEvidencePacketStatuses(packet?: SingleStockEvidencePa
   ].map(normalizeHomeResearchPacketStatus);
 }
 
+function homeResearchPacketEvidenceDomainStatus(
+  packet: SingleStockEvidencePacket | null | undefined,
+  domain: AnalysisEvidenceCoverageDomain,
+): string | undefined {
+  switch (domain) {
+    case 'priceHistory':
+      return packet?.priceHistory?.status;
+    case 'technicals':
+      return packet?.technicals?.status;
+    case 'fundamentals':
+      return packet?.fundamentals?.status;
+    case 'earnings':
+      return packet?.earnings?.status;
+    case 'news':
+      return packet?.news?.status;
+    case 'catalysts':
+      return packet?.catalysts?.status;
+    case 'valuation':
+      return packet?.valuation?.status;
+    default:
+      return undefined;
+  }
+}
+
 function hasHomeResearchPacketStatus(statuses: string[], values: string[]): boolean {
   return statuses.some((status) => values.includes(status));
 }
@@ -1586,6 +1641,115 @@ function buildHomeDataHealthSummary(
   });
 }
 
+function homeResearchPacketDomainLabel(locale: DashboardLocale, domain: AnalysisEvidenceCoverageDomain): string {
+  return HOME_RESEARCH_PACKET_DOMAIN_LABELS[domain]?.[locale] || domain;
+}
+
+function appendUniqueHomeResearchPacketLabel(labels: string[], label: string, limit: number): void {
+  if (!label || labels.includes(label) || labels.length >= limit) return;
+  labels.push(label);
+}
+
+function collectHomeResearchPacketAvailableLabels(
+  locale: DashboardLocale,
+  evidenceCoverageFrame: AnalysisEvidenceCoverageFrame | null,
+  evidencePacket?: SingleStockEvidencePacket | null,
+): string[] {
+  const labels: string[] = [];
+  for (const domain of HOME_RESEARCH_PACKET_REQUIRED_DOMAINS) {
+    const coverageStatus = normalizeHomeResearchPacketStatus(evidenceCoverageFrame?.[domain]?.status);
+    const packetStatus = normalizeHomeResearchPacketStatus(homeResearchPacketEvidenceDomainStatus(evidencePacket, domain));
+    if (isHomeResearchPacketAvailableStatus(coverageStatus) || isHomeResearchPacketAvailableStatus(packetStatus)) {
+      appendUniqueHomeResearchPacketLabel(labels, homeResearchPacketDomainLabel(locale, domain), 4);
+    }
+  }
+  return labels;
+}
+
+function collectHomeResearchPacketMissingLabels(
+  locale: DashboardLocale,
+  evidenceCoverageFrame: AnalysisEvidenceCoverageFrame | null,
+  evidencePacket?: SingleStockEvidencePacket | null,
+  dataQualityReport?: DataQualityReport,
+): string[] {
+  const labels: string[] = [];
+  const hasDomainEvidence = Boolean(evidenceCoverageFrame || evidencePacket);
+  for (const domain of HOME_RESEARCH_PACKET_REQUIRED_DOMAINS) {
+    const coverageStatus = normalizeHomeResearchPacketStatus(evidenceCoverageFrame?.[domain]?.status);
+    const packetStatus = normalizeHomeResearchPacketStatus(homeResearchPacketEvidenceDomainStatus(evidencePacket, domain));
+    const unavailable = !hasDomainEvidence
+      || isHomeResearchPacketHardMissingStatus(coverageStatus)
+      || isHomeResearchPacketHardMissingStatus(packetStatus)
+      || (!evidenceCoverageFrame?.[domain] && !homeResearchPacketEvidenceDomainStatus(evidencePacket, domain));
+    if (unavailable) {
+      appendUniqueHomeResearchPacketLabel(labels, homeResearchPacketDomainLabel(locale, domain), 5);
+    }
+  }
+
+  for (const item of [
+    ...(dataQualityReport?.importantMissing || []),
+    ...(dataQualityReport?.optionalMissing || []),
+    ...(dataQualityReport?.pendingSources || []),
+    ...(dataQualityReport?.failedSources || []),
+    ...(dataQualityReport?.skippedSources || []),
+  ]) {
+    appendUniqueHomeResearchPacketLabel(labels, dataQualityFieldLabel(item, locale), 5);
+  }
+
+  return labels;
+}
+
+function buildHomeResearchPacketAvailableCopy(
+  locale: DashboardLocale,
+  labels: string[],
+  status: HomeResearchPacketStatus,
+): string {
+  const isEnglish = locale === 'en';
+  const routeCopy = isEnglish
+    ? 'first-read summary, Stock Structure, Research Radar, Market Overview, and Scenario Lab remain available.'
+    : '首读摘要、结构面板、研究雷达、市场总览与情景实验室仍可用。';
+  if (labels.length) {
+    return isEnglish
+      ? `${labels.join(' / ')} are confirmed; ${routeCopy}`
+      : `已确认：${labels.join('、')}；${routeCopy}`;
+  }
+  if (status === 'INSUFFICIENT') {
+    return routeCopy;
+  }
+  return isEnglish
+    ? `Available evidence remains limited; ${routeCopy}`
+    : `可用证据仍有限；${routeCopy}`;
+}
+
+function buildHomeResearchPacketMissingCopy(locale: DashboardLocale, labels: string[]): string {
+  const isEnglish = locale === 'en';
+  const fallback = isEnglish
+    ? ['Quote and candles', 'Fundamentals', 'News', 'Catalysts']
+    : ['行情与 K 线', '基本面', '新闻', '催化'];
+  const displayLabels = labels.length ? labels : fallback;
+  return isEnglish
+    ? `Missing evidence: ${displayLabels.join(' / ')}.`
+    : `待补证据：${displayLabels.join('、')}。`;
+}
+
+function buildHomeResearchPacketRouteCopy(locale: DashboardLocale): string {
+  return locale === 'en'
+    ? 'Next path: open Stock Structure, Research Radar, Market Overview, or Scenario Lab to inspect evidence boundaries.'
+    : '下一步路径：打开结构面板、研究雷达、市场总览或情景实验室，先检查证据边界。';
+}
+
+function buildHomeResearchPacketJudgmentBoundary(locale: DashboardLocale, status: HomeResearchPacketStatus): string {
+  const isEnglish = locale === 'en';
+  if (status === 'AVAILABLE') {
+    return isEnglish
+      ? 'Evidence is structured enough for observation; still keep conclusions bounded.'
+      : '证据结构可用于观察性阅读，结论仍需保持边界。';
+  }
+  return isEnglish
+    ? 'Current real evidence is insufficient; a strong market judgment is intentionally not generated.'
+    : '当前真实证据不足，系统有意不生成强市场判断。';
+}
+
 function safeHomeResearchPacketNextEvidence(values: Array<string | undefined | null>): string | null {
   const seen = new Set<string>();
   for (const item of values) {
@@ -1617,8 +1781,8 @@ function collectHomeResearchPacketNextEvidence(
     return safeValue;
   }
   return locale === 'en'
-    ? 'Wait for the complete research sidecars before reading.'
-    : '等待完整研究侧车后再阅读。';
+    ? 'Wait for complete research evidence before reading.'
+    : '等待完整研究证据后再阅读。';
 }
 
 function resolveHomeResearchPacketAsOf(
@@ -1715,6 +1879,8 @@ function buildHomeResearchPacketView({
       ? 'Research packet evidence is insufficient and should not be read as a complete research conclusion.'
       : '研究包证据不足，当前不能视为完整研究结论。',
   };
+  const availableLabels = collectHomeResearchPacketAvailableLabels(locale, evidenceCoverageFrame, evidencePacket);
+  const missingLabels = collectHomeResearchPacketMissingLabels(locale, evidenceCoverageFrame, evidencePacket, dataQualityReport);
 
   return {
     status,
@@ -1726,6 +1892,10 @@ function buildHomeResearchPacketView({
       ? 'Observation only, not investment advice.'
       : '仅作为研究观察，不构成投资建议。',
     nextEvidence: collectHomeResearchPacketNextEvidence(locale, evidenceCoverageFrame, evidenceCitationFrame),
+    judgmentBoundary: buildHomeResearchPacketJudgmentBoundary(locale, status),
+    availableNow: buildHomeResearchPacketAvailableCopy(locale, availableLabels, status),
+    missingEvidence: buildHomeResearchPacketMissingCopy(locale, missingLabels),
+    nextRoutes: buildHomeResearchPacketRouteCopy(locale),
   };
 }
 
@@ -1738,6 +1908,7 @@ function HomeResearchPacketPanel({
   evidenceCitationFrame,
   evidencePacket,
   sourceProvenanceEntries,
+  view: providedView,
 }: {
   locale: DashboardLocale;
   report?: AnalysisReport | null;
@@ -1747,9 +1918,10 @@ function HomeResearchPacketPanel({
   evidenceCitationFrame: AnalysisEvidenceCitationFrame | null;
   evidencePacket?: SingleStockEvidencePacket | null;
   sourceProvenanceEntries: SourceProvenanceEntry[] | null;
+  view?: HomeResearchPacketView;
 }) {
   const isEnglish = locale === 'en';
-  const view = buildHomeResearchPacketView({
+  const view = providedView || buildHomeResearchPacketView({
     locale,
     report,
     dataQualityReport,
@@ -1776,15 +1948,41 @@ function HomeResearchPacketPanel({
         {view.explanation}
       </p>
       <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2">
-        <div className="min-w-0 rounded-[7px] border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
-          <p className="text-[11px] font-semibold tracking-[0] text-white/42">
-            {isEnglish ? 'Observation boundary' : '观察边界'}
-          </p>
-          <p className="mt-1 min-w-0 break-words text-xs leading-5 text-white/64">
-            {view.observationBoundary}
-          </p>
-        </div>
-        <div className="min-w-0 rounded-[7px] border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
+        {[
+          {
+            key: 'boundary',
+            label: isEnglish ? 'Observation boundary' : '观察边界',
+            value: `${view.observationBoundary} ${view.judgmentBoundary}`,
+          },
+          {
+            key: 'available',
+            label: isEnglish ? 'Still available' : '仍可用',
+            value: view.availableNow,
+          },
+          {
+            key: 'missing',
+            label: isEnglish ? 'Missing evidence' : '待补证据',
+            value: view.missingEvidence,
+          },
+          {
+            key: 'routes',
+            label: isEnglish ? 'Next path' : '下一步路径',
+            value: view.nextRoutes,
+          },
+        ].map((item) => (
+          <div
+            key={item.key}
+            className="min-w-0 rounded-[7px] border border-white/[0.06] bg-white/[0.025] px-3 py-2.5"
+          >
+            <p className="text-[11px] font-semibold tracking-[0] text-white/42">
+              {item.label}
+            </p>
+            <p className="mt-1 min-w-0 break-words text-xs leading-5 text-white/64">
+              {item.value}
+            </p>
+          </div>
+        ))}
+        <div className="min-w-0 rounded-[7px] border border-white/[0.06] bg-white/[0.025] px-3 py-2.5 sm:col-span-2">
           <p className="text-[11px] font-semibold tracking-[0] text-white/42">
             {isEnglish ? 'Next evidence:' : '下一步证据：'}
           </p>
@@ -1841,7 +2039,6 @@ function HomeConclusionFirstConsole({
   const availableCopy = buildAvailableDataCopy(dataQualityReport, decisionTrace, locale);
   const missingCopy = buildMissingDataCopy(dataQualityReport, locale);
   const qualityImpactCopy = buildDataQualityImpactCopy(dataQualityReport, dashboard, locale);
-  const judgmentGateCopy = resolveJudgmentGateCopy(locale, dashboard, dataQualityReport);
   const dataQualityLabel = dataQualityReport
     ? dataQualityTierLabel(dataQualityReport.dataQualityTier, locale)
     : (isEnglish ? 'Unconfirmed' : '未确认');
@@ -1851,6 +2048,17 @@ function HomeConclusionFirstConsole({
     evidencePacket,
     dataQualityReport,
   );
+  const researchPacketView = buildHomeResearchPacketView({
+    locale,
+    report,
+    dataQualityReport,
+    researchReadiness,
+    evidenceCoverageFrame,
+    evidenceCitationFrame,
+    evidencePacket,
+    sourceProvenanceEntries,
+  });
+  const judgmentGateCopy = resolveJudgmentGateCopy(locale, dashboard, dataQualityReport, researchPacketView.status);
   const scoreDisplayValue = displaySlotValue(
     dashboard.decision.heroValue,
     locale,
@@ -1883,9 +2091,9 @@ function HomeConclusionFirstConsole({
       primary: false,
     },
     {
-      key: 'options-lab',
-      label: isEnglish ? 'Options Lab' : '期权实验室',
-      href: routeLocale ? buildLocalizedPath('/options-lab', routeLocale) : '/options-lab',
+      key: 'scenario-lab',
+      label: isEnglish ? 'Scenario Lab' : '情景实验室',
+      href: routeLocale ? buildLocalizedPath('/scenario-lab', routeLocale) : '/scenario-lab',
       primary: false,
     },
   ] as const;
@@ -1951,19 +2159,25 @@ function HomeConclusionFirstConsole({
               key: 'state',
               label: isEnglish ? 'Research state' : '研究状态',
               value: researchReadiness.verdictLabel,
-              detail: researchReadiness.summaryLine,
+              detail: researchPacketView.status === 'INSUFFICIENT'
+                ? researchPacketView.judgmentBoundary
+                : researchReadiness.summaryLine,
             },
             {
               key: 'boundary',
               label: isEnglish ? 'Data boundary' : '数据边界',
               value: qualityPreview,
-              detail: qualityImpactCopy,
+              detail: researchPacketView.status === 'AVAILABLE'
+                ? qualityImpactCopy
+                : researchPacketView.judgmentBoundary,
             },
             {
               key: 'focus',
               label: isEnglish ? 'Next research focus' : '下一步研究重点',
               value: nextCopy,
-              detail: missingCopy,
+              detail: researchPacketView.status === 'AVAILABLE'
+                ? missingCopy
+                : researchPacketView.missingEvidence,
             },
             {
               key: 'next-click',
@@ -2086,6 +2300,7 @@ function HomeConclusionFirstConsole({
               evidenceCitationFrame={evidenceCitationFrame}
               evidencePacket={evidencePacket}
               sourceProvenanceEntries={sourceProvenanceEntries}
+              view={researchPacketView}
             />
             {sourceProvenanceEntries ? (
               <HomeSourceProvenanceStrip locale={locale} entries={sourceProvenanceEntries} />

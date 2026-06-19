@@ -2345,12 +2345,47 @@ describe('HomeSurfacePage', () => {
     renderSurface();
     await screen.findByText('Oracle Corporation');
 
+    const dashboard = screen.getByTestId('home-bento-dashboard');
+    const firstReadSummary = screen.getByTestId('home-research-first-read-summary');
+    const boundaryCard = screen.getByTestId('home-research-first-read-boundary');
+    const focusCard = screen.getByTestId('home-research-first-read-focus');
+    const nextClickCard = screen.getByTestId('home-research-first-read-next-click');
+    const quickActions = screen.getByTestId('home-research-quick-actions');
+    const trustStrip = screen.getByTestId('home-research-trust-strip');
     const panel = screen.getByTestId('home-research-packet-panel');
+
+    expect(screen.getByTestId('home-research-judgment-gate')).toHaveTextContent('证据不足');
+    expect(firstReadSummary.compareDocumentPosition(trustStrip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByTestId('home-research-first-read-summary')).toHaveLength(1);
+    expect(boundaryCard).toHaveTextContent('不生成强市场判断');
+    expect(focusCard).toHaveTextContent('待补证据');
+    expect(focusCard).toHaveTextContent('行情与 K 线');
+    expect(focusCard).toHaveTextContent('基本面');
+    expect(focusCard).toHaveTextContent('新闻');
+    expect(focusCard).toHaveTextContent('催化');
+    expect(nextClickCard).toHaveTextContent('结构面板');
+    expect(quickActions).toHaveTextContent('结构面板');
+    expect(quickActions).toHaveTextContent('研究雷达');
+    expect(quickActions).toHaveTextContent('市场总览');
+    expect(quickActions).toHaveTextContent('情景实验室');
     expect(panel).toHaveTextContent('证据不足');
     expect(panel).toHaveTextContent('研究包证据不足，当前不能视为完整研究结论。');
-    expect(panel).toHaveTextContent('下一步证据：等待完整研究侧车后再阅读。');
+    expect(panel).toHaveTextContent('仍可用');
+    expect(panel).toHaveTextContent('首读摘要');
+    expect(panel).toHaveTextContent('结构面板');
+    expect(panel).toHaveTextContent('研究雷达');
+    expect(panel).toHaveTextContent('市场总览');
+    expect(panel).toHaveTextContent('情景实验室');
+    expect(panel).toHaveTextContent('待补证据');
+    expect(panel).toHaveTextContent('行情与 K 线');
+    expect(panel).toHaveTextContent('基本面');
+    expect(panel).toHaveTextContent('新闻');
+    expect(panel).toHaveTextContent('催化');
+    expect(panel).toHaveTextContent('下一步路径');
+    expect(panel).toHaveTextContent('下一步证据：等待完整研究证据后再阅读。');
     expect(panel).not.toHaveTextContent('INSUFFICIENT');
     expect(panel).not.toHaveTextContent('AVAILABLE');
+    expect(dashboard).not.toHaveTextContent(/可以形成研究判断|强市场判断已生成|买入|卖出|持有|推荐|目标价|止损|仓位|buy|sell|hold|recommend|target|stop|position sizing|requestId|traceId|provider|debug|schema|raw payload/i);
     expect(panel.textContent).not.toMatch(HOME_RESEARCH_PACKET_FORBIDDEN_COPY_PATTERN);
   });
 
