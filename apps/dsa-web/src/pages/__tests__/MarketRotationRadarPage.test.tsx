@@ -674,6 +674,161 @@ function taxonomyMarketFixture(market: 'CN' | 'HK' | 'CRYPTO'): MarketRotationRa
   return fixture;
 }
 
+function pollutedHeadlineQuarantineFixture(): MarketRotationRadarResponse {
+  const fixture = radarFixture();
+  const taxonomyTheme: MarketRotationRadarResponse['themes'][number] = {
+    ...fixture.themes[0],
+    id: 'taxonomy_polluted_headline',
+    name: '分类参考主题',
+    englishName: 'Taxonomy Polluted Headline',
+    focus: 'taxonomy_fallback provider cache raw_payload',
+    rotationScore: 96,
+    confidence: 0.92,
+    confidenceLabel: '待行情确认',
+    dataQuality: 'taxonomy_only',
+    dataCoverage: 'taxonomy_only',
+    staticThemeOnly: true,
+    taxonomyType: 'theme_cluster',
+    signalType: 'taxonomy_fallback',
+    flowEvidenceType: 'none',
+    flowLanguageAllowed: false,
+    sourceAuthorityAllowed: false,
+    evidenceQuality: 'taxonomy_only',
+    dataGaps: ['taxonomy_only', 'true_flow_data_missing', 'provider_timeout'],
+    rankEligible: false,
+    rankExclusionReason: 'taxonomy_only_observation',
+    taxonomyOnly: true,
+    observationOnly: true,
+    headlineEligible: false,
+    rankingLane: 'taxonomy',
+    scoreContributionAllowed: false,
+    sourceTier: 'static_fallback',
+    trustLevel: 'unavailable',
+    stage: 'confirmed_rotation',
+    stageExplanation: 'taxonomy_fallback insufficient_evidence provider cache debug trace',
+    riskLabels: ['stale_or_incomplete_windows'],
+    riskExplanations: ['provider runtime cache trace'],
+    relativeStrength: {},
+    benchmarkProxies: {},
+    proxyQuality: { label: 'fallback_static provider cache', coveragePercent: 0, availableProxyCount: 0, totalProxyCount: 0 },
+    timeWindows: {},
+    volume: { averageRelativeVolume: 1.8, availableMemberCount: 0, label: 'provider runtime' },
+    breadth: { observedMembers: 0, configuredMembers: 3, coveragePercent: 0, percentUp: null, percentOutperformingBenchmark: null },
+    synchronization: { sameDirectionPercent: null, aboveVwapPercent: null, persistencePercent: null, label: 'insufficient_evidence' },
+    leadership: { leadershipConcentrationPercent: null, broadParticipationPercent: null, topMembers: [] },
+    themeDetail: {
+      watchlistSafe: true,
+      safeActionLabel: '仅观察，不构成买卖建议',
+      mappedConcepts: ['分类参考'],
+      representativeLabels: ['分类样本'],
+      dataStateLabel: '待接入本地行情',
+      nextStep: '等待新的多时窗行情后，再确认主题是否形成稳定强弱。',
+      disclosure: '仅用于观察资金轮动迹象，非买卖建议。',
+    },
+    freshness: 'fallback',
+    isFallback: true,
+    isStale: false,
+    source: 'local_taxonomy',
+    sourceLabel: '静态主题库',
+    evidence: ['taxonomy_fallback provider cache raw_payload', 'insufficient_evidence'],
+    members: [],
+    alertCandidates: [],
+    themeFlowSignal: undefined,
+  };
+
+  const insufficientTheme: MarketRotationRadarResponse['themes'][number] = {
+    ...taxonomyTheme,
+    id: 'insufficient_polluted_headline',
+    name: '资料不足主题',
+    englishName: 'Insufficient Polluted Headline',
+    dataQuality: 'fallback_static',
+    staticThemeOnly: true,
+    taxonomyOnly: false,
+    signalType: 'insufficient_evidence',
+    evidenceQuality: 'insufficient',
+    dataGaps: ['true_flow_data_missing', 'source_authority_rejected'],
+    rankExclusionReason: 'fallback_static_source',
+    rankingLane: 'observation',
+    source: 'fallback',
+    sourceLabel: '备用数据',
+    stageExplanation: 'insufficient_evidence synthetic provider trace',
+  };
+
+  fixture.source = 'fallback';
+  fixture.sourceLabel = '备用数据';
+  fixture.freshness = 'fallback';
+  fixture.isFallback = true;
+  fixture.isStale = false;
+  fixture.summary = {
+    ...fixture.summary,
+    strongestThemes: [taxonomyTheme, insufficientTheme],
+    acceleratingThemes: [taxonomyTheme],
+    observationThemes: [],
+    taxonomyThemes: [taxonomyTheme],
+    headlineEligibleThemeCount: 0,
+    observationThemeCount: 1,
+    noHeadlineReason: 'taxonomy_fallback insufficient_evidence provider cache trace',
+    headlineWarning: 'fallback_static synthetic provider debug raw_payload',
+    watchlistSignals: [],
+  };
+  fixture.consumerEvidenceSnapshot = {
+    ...fixture.consumerEvidenceSnapshot,
+    headlineEligibleThemeCount: 0,
+    observationThemeCount: 1,
+    taxonomyThemeCount: 1,
+    scoreContributionAllowed: false,
+    reasonCodes: ['taxonomy_only', 'provider_timeout', 'synthetic_fixture'],
+    themes: [
+      {
+        id: taxonomyTheme.id,
+        name: taxonomyTheme.name,
+        rankEligible: false,
+        headlineEligible: false,
+        rankingLane: 'taxonomy',
+        observationOnly: true,
+        taxonomyOnly: true,
+        scoreContributionAllowed: false,
+        freshness: 'fallback',
+        isFallback: true,
+        isStale: false,
+        isPartial: false,
+        evidenceQuality: 'taxonomy_only',
+        dataGaps: ['taxonomy_only', 'true_flow_data_missing'],
+      },
+      {
+        id: insufficientTheme.id,
+        name: insufficientTheme.name,
+        rankEligible: false,
+        headlineEligible: false,
+        rankingLane: 'observation',
+        observationOnly: true,
+        taxonomyOnly: false,
+        scoreContributionAllowed: false,
+        freshness: 'fallback',
+        isFallback: true,
+        isStale: false,
+        isPartial: false,
+        evidenceQuality: 'insufficient',
+        dataGaps: ['true_flow_data_missing', 'source_authority_rejected'],
+      },
+    ],
+  };
+  fixture.themes = [taxonomyTheme, insufficientTheme];
+  fixture.etfLeadershipDiagnostics = {
+    enabled: false,
+    source: 'alpaca_etf_authority_spine',
+    asOf: '2026-05-07T09:45:00Z',
+    eligibleSymbols: [],
+    leadingSymbols: [],
+    laggingSymbols: [],
+    leadershipSpread: null,
+    confidenceLabel: 'disabled',
+    reasonCodes: ['provider_timeout'],
+    evidence: [],
+  };
+  return fixture;
+}
+
 function etfDisabledCandidateFixture(): MarketRotationRadarResponse {
   const fixture = radarFixture();
   fixture.etfLeadershipDiagnostics = {
@@ -1437,6 +1592,42 @@ describe('MarketRotationRadarPage', () => {
     expect(bodyText).not.toMatch(consumerMetadataLeakPattern);
     expect(bodyText).not.toMatch(forbiddenTradingActionPattern);
     expect(bodyText).not.toMatch(/决策级|decision[-\s]?grade/i);
+  });
+
+  it('quarantines taxonomy and insufficient evidence themes even when summary headline lanes are polluted', async () => {
+    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(pollutedHeadlineQuarantineFixture());
+
+    render(<MarketRotationRadarPage />);
+
+    const guidance = await screen.findByTestId('rotation-radar-guidance');
+    expect(guidance).toHaveTextContent('轮动方向待确认');
+    expect(guidance).toHaveTextContent('观察资料不足');
+    expect(guidance).not.toHaveTextContent('板块强弱：分类参考主题');
+    expect(guidance).not.toHaveTextContent('板块强弱：资料不足主题');
+
+    const visualUnavailable = screen.getByTestId('rotation-radar-visual-unavailable');
+    expect(visualUnavailable).toHaveTextContent('矩阵暂不可用');
+    expect(visualUnavailable).toHaveTextContent('轮动方向待确认');
+    expect(screen.queryByTestId('rotation-radar-visual-matrix')).not.toBeInTheDocument();
+
+    const leaderList = screen.getByTestId('rotation-radar-leader-list');
+    expect(leaderList).toHaveTextContent('信号待确认');
+    expect(leaderList).toHaveTextContent('轮动方向待确认');
+    expect(within(leaderList).queryByTestId('rotation-radar-leader-row-taxonomy_polluted_headline')).not.toBeInTheDocument();
+    expect(within(leaderList).queryByTestId('rotation-radar-leader-row-insufficient_polluted_headline')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('rotation-radar-insufficient-empty')).toHaveTextContent('轮动方向待确认');
+
+    const detail = screen.getByTestId('rotation-theme-detail-panel');
+    expect(detail).toHaveTextContent('分类参考主题');
+    expect(detail).toHaveTextContent('主题分类参考');
+    expect(detail).toHaveTextContent('分类浏览');
+    expect(detail).toHaveTextContent('观察资料不足');
+
+    const bodyText = document.body.textContent || '';
+    expect(bodyText).not.toMatch(/taxonomy_fallback|insufficient_evidence|fallback_static|synthetic_fixture|provider_timeout|sourceAuthorityAllowed|scoreContributionAllowed|raw_payload|debug|trace/i);
+    expect(bodyText).not.toMatch(consumerDiagnosticLeakPattern);
+    expect(bodyText).not.toMatch(consumerMetadataLeakPattern);
+    expect(bodyText).not.toMatch(forbiddenTradingActionPattern);
   });
 
   it('omits the theme flow disclosure cleanly when the selected theme has no investor signal', async () => {
