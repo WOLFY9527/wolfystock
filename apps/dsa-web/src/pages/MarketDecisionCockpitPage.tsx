@@ -168,7 +168,7 @@ function regimeLabel(value: string | null | undefined, language: 'zh' | 'en'): s
     case 'low_confidence':
       return language === 'en' ? 'Low-confidence observation' : '低置信观察';
     default:
-      return value || '--';
+      return sanitizeCockpitStatusOrIssue(value, language) || '--';
   }
 }
 
@@ -183,7 +183,7 @@ function sessionLabel(value: string | null | undefined, language: 'zh' | 'en'): 
     case 'after_hours':
       return language === 'en' ? 'After-hours' : '盘后';
     default:
-      return value || '--';
+      return sanitizeCockpitStatusOrIssue(value, language) || '--';
   }
 }
 
@@ -672,7 +672,7 @@ function DailyIntelligenceBriefingSection({
                   <div>
                     <div className="text-xs text-[color:var(--wolfy-text-secondary)]">{locale === 'en' ? 'Supporting observations' : '支持观察'}</div>
                     <RoughBulletList
-                      items={(briefing.marketRegimeSummary.supportingObservations ?? []).map((item) => item)}
+                      items={sanitizeCockpitDisplayItems(briefing.marketRegimeSummary.supportingObservations ?? [], locale)}
                       emptyText={locale === 'en' ? 'No supporting observations yet.' : '暂未补充支持观察。'}
                       className="mt-2"
                     />
@@ -680,7 +680,7 @@ function DailyIntelligenceBriefingSection({
                   <div>
                     <div className="text-xs text-[color:var(--wolfy-text-secondary)]">{locale === 'en' ? 'Invalidation observations' : '失效观察'}</div>
                     <RoughBulletList
-                      items={(briefing.marketRegimeSummary.invalidationObservations ?? []).map((item) => item)}
+                      items={sanitizeCockpitDisplayItems(briefing.marketRegimeSummary.invalidationObservations ?? [], locale)}
                       emptyText={locale === 'en' ? 'No invalidation observations yet.' : '暂未补充失效观察。'}
                       className="mt-2"
                     />
@@ -692,7 +692,7 @@ function DailyIntelligenceBriefingSection({
                 title={locale === 'en' ? 'What changed and why it is on today’s queue' : '今日变化与当日研究线索'}
               >
                 <RoughBulletList
-                  items={(briefing.whatChanged ?? []).map((item) => item)}
+                  items={sanitizeCockpitDisplayItems(briefing.whatChanged ?? [], locale)}
                   emptyText={emptyTextForSection('whatChanged')}
                 />
               </BriefingBlock>
