@@ -580,6 +580,7 @@ function SymbolCompareEvidencePacketPanel({
 
       <RoughSectionCard title={language === 'en' ? 'Freshness by symbol' : '新鲜度'}>
         <RoughKeyValueRows
+          emptyText={language === 'en' ? 'No freshness summary available yet.' : '暂无新鲜度摘要。'}
           rows={displaySymbols.map((symbol) => ({
             key: `freshness-${symbol}`,
             label: symbol,
@@ -838,6 +839,7 @@ export default function StockStructureDecisionPage() {
                   </RoughSectionCard>
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Structure logic' : '结构逻辑'} title={locale === 'en' ? 'Why this structure' : '结构解释'}>
                     <RoughKeyValueRows
+                      emptyText={locale === 'en' ? 'No structure explanation available yet.' : '暂无结构解释。'}
                       rows={[
                         {
                           key: 'why',
@@ -859,6 +861,7 @@ export default function StockStructureDecisionPage() {
                   </RoughSectionCard>
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Research notes' : '研究备注'} title={locale === 'en' ? 'What to verify next' : '下一步验证'}>
                     <RoughKeyValueRows
+                      emptyText={locale === 'en' ? 'No research note available yet.' : '暂无研究备注。'}
                       rows={[
                         {
                           key: 'watch',
@@ -907,6 +910,7 @@ export default function StockStructureDecisionPage() {
                   )}
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Reference levels' : '参考位置'} title={locale === 'en' ? 'Key levels' : '关键位置'}>
                     <RoughKeyValueRows
+                      emptyText={locale === 'en' ? 'No key level available yet.' : '暂无关键位置。'}
                       rows={(data.explanation.keyLevels ?? []).map((level, index) => ({
                         key: `${level.kind || 'level'}-${index}`,
                         label: level.kind || (locale === 'en' ? 'Level' : '位置'),

@@ -497,6 +497,7 @@ export default function ScenarioLabPage() {
                   </RoughSectionCard>
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Base context' : '基准状态'} title={locale === 'en' ? 'Current market frame' : '当前市场框架'}>
                     <RoughKeyValueRows
+                      emptyText={locale === 'en' ? 'No base context available yet.' : '暂无基准状态。'}
                       rows={[
                         {
                           key: 'regime',
@@ -536,6 +537,7 @@ export default function ScenarioLabPage() {
                       </TerminalEmptyState>
                     ) : (
                       <RoughKeyValueRows
+                        emptyText={locale === 'en' ? 'No scenario output available yet.' : '暂无情景输出。'}
                         rows={[
                           {
                             key: 'scenario-regime',
