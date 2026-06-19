@@ -611,8 +611,8 @@ function DailyIntelligenceBriefingSection({
         {!loading && error && !briefing ? (
           <TerminalEmptyState title={error.title || (locale === 'en' ? 'Daily briefing unavailable' : '日度简报暂不可用')}>
             {error.message || (locale === 'en'
-              ? 'Retry after the briefing endpoint responds again.'
-              : '请在简报接口恢复后重试。')}
+              ? 'Retry after the briefing data is available again.'
+              : '请在简报数据恢复后重试。')}
           </TerminalEmptyState>
         ) : null}
         {briefing ? (
@@ -667,7 +667,10 @@ function DailyIntelligenceBriefingSection({
                 eyebrow={dailySectionLabel('marketRegimeSummary', locale)}
                 title={locale === 'en' ? 'Regime evidence and invalidation' : '状态证据与失效观察'}
               >
-                <RoughKeyValueRows rows={summaryRows} />
+                <RoughKeyValueRows
+                  emptyText={locale === 'en' ? 'No briefing summary available yet.' : '暂无简报摘要。'}
+                  rows={summaryRows}
+                />
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
                   <div>
                     <div className="text-xs text-[color:var(--wolfy-text-secondary)]">{locale === 'en' ? 'Supporting observations' : '支持观察'}</div>
@@ -834,8 +837,8 @@ export default function MarketDecisionCockpitPage() {
         en: 'Market decision cockpit unavailable',
         zh: '市场决策驾驶舱暂不可用',
       }, {
-        en: 'Please retry after the API becomes available.',
-        zh: '请在接口恢复后重试。',
+        en: 'Please retry after the data becomes available.',
+        zh: '请在数据恢复后重试。',
       }));
     } finally {
       setLoading(false);
@@ -1059,6 +1062,7 @@ export default function MarketDecisionCockpitPage() {
                   </RoughSectionCard>
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Regime logic' : '状态逻辑'} title={locale === 'en' ? 'Why this regime' : '为什么形成当前状态'}>
                     <RoughKeyValueRows
+                      emptyText={locale === 'en' ? 'No regime explanation available yet.' : '暂无状态解释。'}
                       rows={[
                         {
                           key: 'why',
@@ -1080,6 +1084,7 @@ export default function MarketDecisionCockpitPage() {
                   </RoughSectionCard>
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Next steps' : '下一步'} title={locale === 'en' ? 'What to watch and verify' : '关注点与验证项'}>
                     <RoughKeyValueRows
+                      emptyText={locale === 'en' ? 'No next steps available yet.' : '暂无下一步关注点。'}
                       rows={[
                         {
                           key: 'watch',
@@ -1107,6 +1112,7 @@ export default function MarketDecisionCockpitPage() {
                       return (
                         <>
                           <RoughKeyValueRows
+                            emptyText={locale === 'en' ? 'No options observation data yet.' : '暂无期权观察数据。'}
                             rows={[
                               {
                                 key: 'gamma',
