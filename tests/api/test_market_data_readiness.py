@@ -49,6 +49,12 @@ FORBIDDEN_CONSUMER_READINESS_TERMS = {
     "traceid",
     "schema",
     "marketcache",
+    "fred",
+    "yfinance",
+    "providerclass",
+    "officialoverlay",
+    "cache_miss",
+    "stale_official_row",
     "token",
     "cookie",
     "buy",
@@ -165,7 +171,23 @@ def test_market_data_readiness_route_returns_read_only_diagnostic_payload(
         "home_briefing",
         "research_radar",
     } <= {row["surface"] for row in rows}
+    assert {
+        ("market_overview", "official_vix_volatility"),
+        ("liquidity_monitor", "vix_pressure"),
+    } <= {
+        (row["surface"], row["evidenceFamily"])
+        for row in rows
+    }
     assert all(set(row) == EXPECTED_CONSUMER_READINESS_FIELDS for row in rows)
+
+    readiness_rows = {
+        (row["surface"], row["evidenceFamily"]): row
+        for row in rows
+    }
+    vix_overview = readiness_rows[("market_overview", "official_vix_volatility")]
+    assert vix_overview["requiredInputs"] == ["VIXCLS official volatility close"]
+    assert vix_overview["scoreGradeInputs"] == []
+    assert vix_overview["readinessState"] == "missing"
 
     assert isinstance(checks, list)
     assert all(set(check) >= EXPECTED_CHECK_FIELDS for check in checks)

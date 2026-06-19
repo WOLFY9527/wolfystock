@@ -39,6 +39,10 @@ EXPECTED_CONSUMER_SURFACES = {
     "home_briefing",
     "research_radar",
 }
+EXPECTED_VIX_READINESS_ROWS = {
+    ("market_overview", "official_vix_volatility"),
+    ("liquidity_monitor", "vix_pressure"),
+}
 EXPECTED_READINESS_STATES = {
     "score_grade",
     "observation_only",
@@ -56,6 +60,12 @@ FORBIDDEN_CONSUMER_MATRIX_FRAGMENTS = {
     "traceid",
     "schema",
     "marketcache",
+    "fred",
+    "yfinance",
+    "providerclass",
+    "officialoverlay",
+    "cache_miss",
+    "stale_official_row",
     "token",
     "cookie",
     "buy",
@@ -87,6 +97,10 @@ def _spec_finder_with(available_modules: set[str], seen: list[str] | None = None
 
 def _find_check(payload: dict, check_id: str) -> dict:
     return next(check for check in payload["checks"] if check["id"] == check_id)
+
+
+def _matrix_rows(payload: dict) -> list[dict]:
+    return list(payload["consumerEvidenceReadinessMatrix"]["items"])
 
 
 def _assert_path_not_disclosed(payload: dict, path: Path) -> None:
@@ -308,8 +322,40 @@ def test_consumer_evidence_readiness_matrix_is_provider_free_and_covers_core_sur
     assert matrix["mutationEnabled"] is False
     assert all(set(row) == EXPECTED_CONSUMER_MATRIX_FIELDS for row in rows)
     assert EXPECTED_CONSUMER_SURFACES <= {row["surface"] for row in rows}
+    assert EXPECTED_VIX_READINESS_ROWS <= {
+        (row["surface"], row["evidenceFamily"])
+        for row in rows
+    }
     assert EXPECTED_READINESS_STATES <= {row["readinessState"] for row in rows}
     assert seen_modules == ["pyarrow", "fastparquet", "tushare", "pytdx", "akshare", "efinance"]
+
+
+def test_official_vix_readiness_rows_fail_closed_without_runtime_checks() -> None:
+    payload = build_market_data_readiness_diagnostics(
+        env={},
+        spec_finder=_spec_finder_with(set()),
+    ).to_dict()
+
+    rows = {
+        (row["surface"], row["evidenceFamily"]): row
+        for row in _matrix_rows(payload)
+    }
+    overview_vix = rows[("market_overview", "official_vix_volatility")]
+    liquidity_vix = rows[("liquidity_monitor", "vix_pressure")]
+
+    assert payload["diagnosticOnly"] is True
+    assert payload["providerRuntimeCalled"] is False
+    assert payload["networkCallsEnabled"] is False
+    assert overview_vix["requiredInputs"] == ["VIXCLS official volatility close"]
+    assert overview_vix["fulfilledInputs"] == []
+    assert overview_vix["scoreGradeInputs"] == []
+    assert overview_vix["readinessState"] == "missing"
+    assert "source authority" in overview_vix["sourceAuthorityReason"].lower()
+    assert "freshness" in overview_vix["freshnessReason"].lower()
+    assert liquidity_vix["requiredInputs"] == ["VIXCLS official volatility close"]
+    assert liquidity_vix["observationOnlyInputs"] == ["proxy volatility context"]
+    assert liquidity_vix["scoreGradeInputs"] == []
+    assert liquidity_vix["readinessState"] == "observation_only"
 
 
 def test_consumer_evidence_readiness_matrix_redacts_internal_diagnostics_and_advice_terms() -> None:

@@ -63,6 +63,9 @@ SCORE_WEIGHT_BUDGET = 49
 POSSIBLE_WEIGHT = SCORE_WEIGHT_BUDGET
 LIQUIDITY_COVERAGE_CONTRACT_VERSION = "liquidity_coverage_contract_v1"
 CRYPTO_FUNDING_BACKFILL_MAX_AGE = timedelta(hours=12)
+OFFICIAL_VIX_SERIES_ID = "VIXCLS"
+OFFICIAL_VIX_AUTHORITY_BLOCK_REASON = "official_vix_authority_not_explicit"
+OFFICIAL_VIX_FRESHNESS_BLOCK_REASON = "official_vix_freshness_not_explicit"
 GOLD_SYMBOL_CANDIDATES = frozenset({"GLD", "GOLD", "GC=F", "XAUUSD", "XAU/USD"})
 OIL_SYMBOL_CANDIDATES = frozenset({"WTI", "CL=F", "BRENT", "USO", "OIL"})
 CAPITAL_FLOW_FUNDS_FLOW_PROXY_ASSETS = (
@@ -1237,6 +1240,7 @@ class LiquidityMonitorService:
                 "freshness": self._item_freshness(item, panel),
             }
         )
+        item = self._vix_item_with_score_authority_gate(item, panel)
         change = self._change_value(item)
         value = self._numeric(item.get("value") or item.get("price"))
         contribution = 0
@@ -1281,6 +1285,70 @@ class LiquidityMonitorService:
                 expected_input_count=1,
             ),
         )
+
+    def _vix_item_with_score_authority_gate(self, item: Dict[str, Any], panel: PanelState) -> Dict[str, Any]:
+        if not self._is_official_vix_source(item, panel):
+            return item
+
+        block_reason = self._official_vix_score_block_reason(item, panel)
+        if not block_reason:
+            return item
+
+        gated = dict(item)
+        gated["sourceAuthorityAllowed"] = False
+        gated["scoreContributionAllowed"] = False
+        gated["sourceAuthorityReason"] = gated.get("sourceAuthorityReason") or block_reason
+        return gated
+
+    def _official_vix_score_block_reason(self, item: Dict[str, Any], panel: PanelState) -> str | None:
+        if self._official_vix_series_id(item) != OFFICIAL_VIX_SERIES_ID:
+            return OFFICIAL_VIX_AUTHORITY_BLOCK_REASON
+        if item.get("sourceAuthorityAllowed") is not True or item.get("scoreContributionAllowed") is not True:
+            return OFFICIAL_VIX_AUTHORITY_BLOCK_REASON
+        if self._item_freshness(item, panel) not in RELIABLE_FRESHNESS:
+            return OFFICIAL_VIX_FRESHNESS_BLOCK_REASON
+
+        freshness_evidence = item.get("sourceFreshnessEvidence")
+        if not isinstance(freshness_evidence, dict):
+            return OFFICIAL_VIX_FRESHNESS_BLOCK_REASON
+        evidence_freshness = str(freshness_evidence.get("freshness") or item.get("freshness") or "").lower()
+        if evidence_freshness not in RELIABLE_FRESHNESS:
+            return OFFICIAL_VIX_FRESHNESS_BLOCK_REASON
+        if bool(
+            item.get("isFallback")
+            or item.get("isStale")
+            or item.get("isUnavailable")
+            or freshness_evidence.get("isFallback")
+            or freshness_evidence.get("isStale")
+            or freshness_evidence.get("isUnavailable")
+        ):
+            return OFFICIAL_VIX_FRESHNESS_BLOCK_REASON
+        return None
+
+    def _is_official_vix_source(self, item: Dict[str, Any], panel: PanelState) -> bool:
+        if self._indicator_input_key(item) != "VIX":
+            return False
+        source = str(item.get("source") or panel.source or "").lower()
+        source_type = self._item_source_type(item, panel)
+        source_tier = str(item.get("sourceTier") or "").lower()
+        source_id = str(item.get("sourceId") or "").lower()
+        return bool(
+            source == "fred"
+            or source_type == "official_public"
+            or source_tier == "official_public"
+            or source_id.endswith(":vixcls")
+        )
+
+    @staticmethod
+    def _official_vix_series_id(item: Dict[str, Any]) -> str:
+        series_id = str(item.get("officialSeriesId") or "").strip().upper()
+        if series_id:
+            return series_id
+        source_id = str(item.get("sourceId") or "").strip().upper()
+        if source_id.endswith(":VIXCLS"):
+            return OFFICIAL_VIX_SERIES_ID
+        symbol = str(item.get("symbol") or item.get("key") or "").strip().upper()
+        return OFFICIAL_VIX_SERIES_ID if symbol == OFFICIAL_VIX_SERIES_ID else series_id
 
     def _usd_pressure_indicator(self, macro_panel: PanelState) -> Dict[str, Any]:
         official_components = self._extract_official_usd_pressure_components(macro_panel)
@@ -3468,6 +3536,8 @@ class LiquidityMonitorService:
         missing_provider_reason = None
         if required_provider_class and not real_source_available:
             missing_provider_reason = f"requires_{required_provider_class}"
+        if key == "vix_pressure" and blocked_input_authority:
+            missing_provider_reason = None
         if (
             key == "us_breadth_proxy"
             and isinstance(cache_bundle, dict)
@@ -3481,6 +3551,8 @@ class LiquidityMonitorService:
             score_exclusion_reason = self._usd_pressure_unavailable_reason(evidence)
         elif key == "fed_liquidity" and not real_source_available:
             score_exclusion_reason = "fed_liquidity_required_series_missing_or_stale"
+        elif key == "vix_pressure" and required_real_source_for_score and blocked_input_authority:
+            score_exclusion_reason = blocked_input_reason or OFFICIAL_VIX_AUTHORITY_BLOCK_REASON
         elif required_real_source_for_score and missing_provider_reason and not proxy_score_allowlisted:
             score_exclusion_reason = "proxy_only_missing_real_source"
         elif required_real_source_for_score and blocked_input_authority:
@@ -3850,12 +3922,33 @@ class LiquidityMonitorService:
                 allowed_source_types={"official_public"},
                 allowed_source_tiers={"official_public"},
             )
-        if key in {"vix_pressure", "us_rates_pressure", "cn_hk_index_context"}:
+        if key == "vix_pressure":
+            return self._official_vix_evidence_has_score_authority(evidence)
+        if key in {"us_rates_pressure", "cn_hk_index_context"}:
             return (
                 str(trust.get("sourceTier") or "") == "official_public"
                 and not self._indicator_has_proxy_input(panel, evidence)
             )
         return False
+
+    def _official_vix_evidence_has_score_authority(self, evidence: Dict[str, Any]) -> bool:
+        inputs = [item for item in evidence.get("inputs", []) if isinstance(item, dict)]
+        return any(self._official_vix_input_has_score_authority(item) for item in inputs)
+
+    def _official_vix_input_has_score_authority(self, item: Dict[str, Any]) -> bool:
+        source_type = str(item.get("sourceType") or "").lower()
+        source_tier = str(item.get("sourceTier") or "").lower()
+        return bool(
+            self._indicator_input_key(item) == "VIX"
+            and (source_type == "official_public" or source_tier == "official_public")
+            and self._official_vix_series_id(item) == OFFICIAL_VIX_SERIES_ID
+            and item.get("sourceAuthorityAllowed") is True
+            and item.get("scoreContributionAllowed") is True
+            and not item.get("isFallback")
+            and not item.get("isUnavailable")
+            and not item.get("isStale")
+            and str(item.get("freshness") or "") in RELIABLE_FRESHNESS
+        )
 
     def _indicator_required_inputs_have_real_source_authority(
         self,

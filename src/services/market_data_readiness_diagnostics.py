@@ -191,6 +191,24 @@ def _build_consumer_evidence_readiness_matrix() -> tuple[ConsumerEvidenceReadine
             ),
         ),
         ConsumerEvidenceReadinessSpec(
+            surface="market_overview",
+            evidence_family="official_vix_volatility",
+            required_inputs=("VIXCLS official volatility close",),
+            missing_inputs=("VIXCLS official volatility close",),
+            blocked_inputs=("source authority gate", "freshness gate"),
+            score_grade_inputs=(),
+            readiness_state="missing",
+            confidence_cap_reason=(
+                "Official VIX volatility has no score-grade input until authority and freshness both pass."
+            ),
+            source_authority_reason="The VIXCLS source authority gate must pass before market overview scoring.",
+            freshness_reason="The VIXCLS freshness gate must pass before the row can leave missing state.",
+            next_diagnostic="Inspect the existing safe market overview volatility evidence snapshot.",
+            consumer_safe_summary=(
+                "Official VIX volatility is visible only as a readiness boundary until authority and freshness pass."
+            ),
+        ),
+        ConsumerEvidenceReadinessSpec(
             surface="liquidity_monitor",
             evidence_family="liquidity",
             required_inputs=(
@@ -212,6 +230,25 @@ def _build_consumer_evidence_readiness_matrix() -> tuple[ConsumerEvidenceReadine
             next_diagnostic="Review liquidity family coverage and freshness with the existing safe diagnostics.",
             consumer_safe_summary=(
                 "Liquidity context is available for observation only and does not support a score-grade conclusion."
+            ),
+        ),
+        ConsumerEvidenceReadinessSpec(
+            surface="liquidity_monitor",
+            evidence_family="vix_pressure",
+            required_inputs=("VIXCLS official volatility close",),
+            missing_inputs=("VIXCLS official volatility close",),
+            blocked_inputs=("source authority gate", "freshness gate"),
+            observation_only_inputs=("proxy volatility context",),
+            score_grade_inputs=(),
+            readiness_state="observation_only",
+            confidence_cap_reason=(
+                "VIX pressure remains capped until official source authority and freshness both pass."
+            ),
+            source_authority_reason="Proxy volatility context cannot satisfy the VIXCLS source authority gate.",
+            freshness_reason="The VIXCLS freshness gate is required before liquidity scoring can use this family.",
+            next_diagnostic="Inspect existing safe liquidity volatility evidence before enabling scoring.",
+            consumer_safe_summary=(
+                "Liquidity VIX pressure stays observational until official authority and freshness pass."
             ),
         ),
         ConsumerEvidenceReadinessSpec(

@@ -166,6 +166,44 @@ def _cache_entry(
     return payload
 
 
+def _official_vix_item(
+    *,
+    value: float = 18.22,
+    change_percent: float = -4.66,
+    as_of: str = FROZEN_GOLDEN_NOW_ISO,
+    freshness: str = "cached",
+    symbol: str = "VIX",
+) -> Dict[str, Any]:
+    observation_date = as_of.split("T", 1)[0]
+    return {
+        "symbol": symbol,
+        "label": "VIX",
+        "value": value,
+        "changePercent": change_percent,
+        "source": "fred",
+        "sourceId": "fred:VIXCLS",
+        "sourceType": "official_public",
+        "sourceTier": "official_public",
+        "sourceLabel": "FRED VIXCLS",
+        "officialSeriesId": "VIXCLS",
+        "officialObservationDate": observation_date,
+        "officialAsOf": observation_date,
+        "sourceAuthorityAllowed": True,
+        "scoreContributionAllowed": True,
+        "freshness": freshness,
+        "asOf": as_of,
+        "updatedAt": as_of,
+        "sourceFreshnessEvidence": {
+            "freshness": freshness,
+            "freshnessPolicy": "official_daily_us_weekday_t_plus_1",
+            "externalProviderCalls": False,
+            "isFallback": False,
+            "isStale": False,
+            "isUnavailable": False,
+        },
+    }
+
+
 FED_LIQUIDITY_SERIES_BY_SYMBOL = {
     "FED_ASSETS": "WALCL",
     "FED_RRP": "RRPONTSYD",
@@ -489,18 +527,7 @@ def _seed_official_cached_macro_rates_context(
             source="mixed",
             freshness="cached",
             items=[
-                {
-                    "symbol": "VIX",
-                    "label": "VIX",
-                    "value": 18.22,
-                    "changePercent": -4.66,
-                    "source": "fred",
-                    "sourceId": "fred:VIXCLS",
-                    "sourceType": "official_public",
-                    "sourceLabel": "FRED VIXCLS",
-                    "asOf": FROZEN_GOLDEN_NOW_ISO,
-                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
-                },
+                _official_vix_item(),
                 {
                     "symbol": "US2Y",
                     "label": "US 2Y",
@@ -607,18 +634,7 @@ def _seed_mixed_official_proxy_context(
             source="mixed",
             freshness="cached",
             items=[
-                {
-                    "symbol": "VIX",
-                    "label": "VIX",
-                    "value": 18.22,
-                    "changePercent": -4.66,
-                    "source": "fred",
-                    "sourceId": "fred:VIXCLS",
-                    "sourceType": "official_public",
-                    "sourceLabel": "FRED VIXCLS",
-                    "asOf": FROZEN_GOLDEN_NOW_ISO,
-                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
-                },
+                _official_vix_item(),
                 {
                     "symbol": "US2Y",
                     "label": "US 2Y",
@@ -767,18 +783,7 @@ def _seed_credit_stress_observation_only_context(
             source="mixed",
             freshness="cached",
             items=[
-                {
-                    "symbol": "VIX",
-                    "label": "VIX",
-                    "value": 18.22,
-                    "changePercent": -4.66,
-                    "source": "fred",
-                    "sourceId": "fred:VIXCLS",
-                    "sourceType": "official_public",
-                    "sourceLabel": "FRED VIXCLS",
-                    "asOf": FROZEN_GOLDEN_NOW_ISO,
-                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
-                },
+                _official_vix_item(),
                 {
                     "symbol": "US2Y",
                     "label": "US 2Y",
@@ -1185,15 +1190,7 @@ def test_default_liquidity_monitor_read_scores_authorized_fresh_cached_evidence_
             source="fred",
             freshness="cached",
             items=[
-                {
-                    "symbol": "VIX",
-                    "label": "VIX",
-                    "value": 15.2,
-                    "changePercent": -2.5,
-                    "source": "fred",
-                    "sourceType": "official_public",
-                    "sourceLabel": "FRED VIXCLS",
-                }
+                _official_vix_item(value=15.2, change_percent=-2.5, as_of=now)
             ],
             updated_at=now,
             as_of=now,
@@ -1245,18 +1242,7 @@ def test_persistent_raw_macro_snapshot_prefers_official_vix_without_proxy_fetch(
             updated_at=FROZEN_GOLDEN_NOW_ISO,
             as_of=FROZEN_GOLDEN_NOW_ISO,
             items=[
-                {
-                    "symbol": "VIXCLS",
-                    "label": "VIX",
-                    "value": 18.22,
-                    "changePercent": -4.66,
-                    "source": "fred",
-                    "sourceId": "fred:VIXCLS",
-                    "sourceType": "official_public",
-                    "sourceLabel": "FRED VIXCLS",
-                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
-                    "asOf": FROZEN_GOLDEN_NOW_ISO,
-                }
+                _official_vix_item(symbol="VIXCLS", as_of=FROZEN_GOLDEN_NOW_ISO, freshness="delayed")
             ],
         ),
     )
@@ -1309,18 +1295,7 @@ def test_persistent_raw_volatility_snapshot_prefers_official_vix_without_proxy_f
             updated_at=FROZEN_GOLDEN_NOW_ISO,
             as_of=FROZEN_GOLDEN_NOW_ISO,
             items=[
-                {
-                    "symbol": "VIX",
-                    "label": "VIX",
-                    "value": 16.8,
-                    "changePercent": -3.2,
-                    "source": "fred",
-                    "sourceId": "fred:VIXCLS",
-                    "sourceType": "official_public",
-                    "sourceLabel": "FRED VIXCLS",
-                    "updatedAt": FROZEN_GOLDEN_NOW_ISO,
-                    "asOf": FROZEN_GOLDEN_NOW_ISO,
-                }
+                _official_vix_item(value=16.8, change_percent=-3.2, as_of=FROZEN_GOLDEN_NOW_ISO, freshness="delayed")
             ],
         ),
     )
@@ -3041,6 +3016,14 @@ def test_liquidity_api_facing_evidence_preserves_official_macro_authority_metada
                         "officialSeriesId": "VIXCLS",
                         "officialObservationDate": official_observation_date,
                         "officialAsOf": official_observation_date,
+                        "sourceFreshnessEvidence": {
+                            "freshness": "cached",
+                            "freshnessPolicy": "official_daily_us_weekday_t_plus_1",
+                            "externalProviderCalls": False,
+                            "isFallback": False,
+                            "isStale": False,
+                            "isUnavailable": False,
+                        },
                     },
                     {
                         "symbol": "US2Y",
@@ -4103,15 +4086,7 @@ def test_score_assembly_ignores_blocked_cache_snapshot_etf_flow(
             source="fred",
             freshness="cached",
             items=[
-                {
-                    "symbol": "VIX",
-                    "label": "VIX",
-                    "value": 15.2,
-                    "changePercent": -2.5,
-                    "source": "fred",
-                    "sourceType": "official_public",
-                    "sourceLabel": "FRED VIXCLS",
-                }
+                _official_vix_item(value=15.2, change_percent=-2.5, as_of=now)
             ],
             updated_at=now,
             as_of=now,
@@ -4890,7 +4865,21 @@ def test_vix_indicator_prefers_official_macro_cache_over_yfinance_proxy(isolated
                     "source": "fred",
                     "sourceId": "fred:VIXCLS",
                     "sourceType": "official_public",
+                    "sourceTier": "official_public",
                     "sourceLabel": "FRED VIXCLS",
+                    "officialSeriesId": "VIXCLS",
+                    "officialObservationDate": "2026-05-12",
+                    "officialAsOf": "2026-05-12",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "sourceFreshnessEvidence": {
+                        "freshness": "delayed",
+                        "freshnessPolicy": "official_daily_us_weekday_t_plus_1",
+                        "externalProviderCalls": False,
+                        "isFallback": False,
+                        "isStale": False,
+                        "isUnavailable": False,
+                    },
                     "asOf": official_as_of,
                     "updatedAt": official_as_of,
                 }
@@ -4910,6 +4899,61 @@ def test_vix_indicator_prefers_official_macro_cache_over_yfinance_proxy(isolated
     assert "FRED VIXCLS" in str(indicator["summary"])
     assert "official_public" in str(indicator["summary"])
     assert "Yahoo Finance" not in str(indicator["summary"])
+    assert indicator["coverageDiagnostics"]["realSourceAvailable"] is True
+    assert indicator["coverageDiagnostics"]["scoreContributionAllowed"] is True
+    assert indicator["evidence"]["inputs"][0]["officialSeriesId"] == "VIXCLS"
+    assert indicator["evidence"]["inputs"][0]["sourceAuthorityAllowed"] is True
+    assert indicator["evidence"]["inputs"][0]["scoreContributionAllowed"] is True
+
+
+def test_vix_indicator_requires_explicit_official_vix_authority_before_score_grade(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    official_as_of = "2026-05-12T16:15:00+08:00"
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 18.22,
+                    "changePercent": -4.66,
+                    "source": "fred",
+                    "sourceId": "fred:VIXCLS",
+                    "sourceType": "official_public",
+                    "sourceTier": "official_public",
+                    "sourceLabel": "FRED VIXCLS",
+                    "officialSeriesId": "VIXCLS",
+                    "officialObservationDate": "2026-05-12",
+                    "officialAsOf": "2026-05-12",
+                    "asOf": official_as_of,
+                    "updatedAt": official_as_of,
+                }
+            ],
+            updated_at=official_as_of,
+            as_of=official_as_of,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = {item["key"]: item for item in payload["indicators"]}["vix_pressure"]
+    diagnostics = indicator["coverageDiagnostics"]
+    evidence_input = indicator["evidence"]["inputs"][0]
+
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
+    assert diagnostics["realSourceAvailable"] is False
+    assert diagnostics["scoreContributionAllowed"] is False
+    assert diagnostics["scoreExclusionReason"] == "official_vix_authority_not_explicit"
+    assert diagnostics["sourceAuthorityReason"] == "official_vix_authority_not_explicit"
+    assert evidence_input["sourceAuthorityAllowed"] is False
+    assert evidence_input["scoreContributionAllowed"] is False
+    assert evidence_input["sourceAuthorityReason"] == "official_vix_authority_not_explicit"
 
 
 def test_vix_indicator_ignores_malformed_official_macro_cache_and_keeps_cached_proxy_truthful(
