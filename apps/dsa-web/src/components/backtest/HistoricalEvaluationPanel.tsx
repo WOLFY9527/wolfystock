@@ -557,7 +557,7 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
           </Disclosure>
 
           <Disclosure summary="查看执行假设">
-            <AssumptionList assumptions={historicalAssumptions || undefined} emptyText="运行一次历史分析评估后，这里会显示固定执行假设。" />
+            <AssumptionList assumptions={historicalAssumptions || undefined} emptyText="暂无执行假设" />
           </Disclosure>
         </section>
 

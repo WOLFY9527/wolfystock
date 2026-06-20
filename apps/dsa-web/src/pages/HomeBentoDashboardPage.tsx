@@ -181,8 +181,8 @@ function sanitizeHomeConsumerActionCopy(locale: DashboardLocale, raw: string): s
     return value;
   }
   return locale === 'en'
-    ? 'This remains observation-only; watch the key range behavior and wait for clearer confirming data.'
-    : '当前仅供观察，关注关键区间表现，并等待更明确数据确认。';
+    ? 'Observation only'
+    : '当前仅供观察';
 }
 
 function homeEvidenceCitationDomainLabel(locale: DashboardLocale, domain: string | undefined): string {
@@ -657,7 +657,7 @@ function localizeTraceLimitation(value: string, locale: DashboardLocale): string
     return '基本面数据缺失';
   }
   if (/not investment advice/i.test(text)) {
-    return 'AI 洞察仅供参考，不构成投资建议。';
+    return '仅供参考';
   }
   return '存在数据覆盖限制';
 }
@@ -1151,13 +1151,13 @@ function buildDataQualityImpactCopy(
   const positiveTechnical = hasPositiveTechnicalEvidence(dashboard);
   if (!report) {
     return isEnglish
-      ? 'Quality evidence is not structured, so the view stays observation-only.'
-      : '缺少结构化质量报告，当前结论保持仅观察。';
+      ? 'Evidence incomplete'
+      : '证据待完善';
   }
   if (report.requiredAvailable === false) {
     return isEnglish
-      ? 'Key quote or candle evidence is missing; keep the conclusion observation-only.'
-      : '关键行情或 K 线缺失，当前结论只能保持仅观察。';
+      ? 'Key data missing'
+      : '关键数据缺失';
   }
   if (hasDataQualityGaps(report)) {
     return positiveTechnical
@@ -1191,10 +1191,10 @@ function buildResearchFrameworkRows(
       label: isEnglish ? 'Current conclusion' : '当前结论',
       value: isEnglish
         ? positiveTechnical && hasGaps
-          ? `${stanceLabel}: technical evidence is constructive, but incomplete evidence keeps this observation-only.`
+          ? `${stanceLabel}`
           : `${stanceLabel}: keep the conclusion bounded by the available evidence.`
         : positiveTechnical && hasGaps
-          ? `${stanceLabel}：技术证据偏强，但新闻/基本面覆盖不完整，不能升格为行动结论。`
+          ? `${stanceLabel}`
           : `${stanceLabel}：当前只表达研究观察，仍需后续证据复核。`,
     },
     {
@@ -1873,8 +1873,8 @@ function buildHomeResearchPacketView({
       ? 'The current research packet can be read for observation.'
       : '当前研究包可用于观察性阅读。',
     PARTIAL: isEnglish
-      ? 'Some evidence still needs confirmation; keep this as observation-only.'
-      : '部分证据仍需补齐，当前只保留观察性阅读。',
+      ? 'Some evidence pending'
+      : '待确认',
     INSUFFICIENT: isEnglish
       ? 'Research packet evidence is insufficient and should not be read as a complete research conclusion.'
       : '研究包证据不足，当前不能视为完整研究结论。',
@@ -1889,8 +1889,8 @@ function buildHomeResearchPacketView({
     explanation: explanationByStatus[status],
     asOfLabel: resolveHomeResearchPacketAsOf(locale, report, dataQualityReport),
     observationBoundary: isEnglish
-      ? 'Observation only, not investment advice.'
-      : '仅作为研究观察，不构成投资建议。',
+      ? 'Observation only'
+      : '仅供观察',
     nextEvidence: collectHomeResearchPacketNextEvidence(locale, evidenceCoverageFrame, evidenceCitationFrame),
     judgmentBoundary: buildHomeResearchPacketJudgmentBoundary(locale, status),
     availableNow: buildHomeResearchPacketAvailableCopy(locale, availableLabels, status),
@@ -2619,7 +2619,7 @@ function buildChartConclusionCopy(locale: DashboardLocale, signals: DashboardSig
   if (locale === 'en') {
     if (hasBullishSignal) {
       return hasMissingSignal
-        ? 'Chart conclusion: technical evidence is constructive, but missing metrics keep the view observational.'
+        ? 'Chart conclusion: evidence constructive, gaps remain'
         : 'Chart conclusion: technical structure is constructive; confirm it with follow-up evidence.';
     }
     return 'Chart conclusion: price structure still needs more evidence.';
@@ -3184,7 +3184,7 @@ function HomeSymbolEvidenceReadinessBlock({
     .map((note) => safeSymbolReadinessText(
       locale,
       note,
-      isEnglish ? 'Evidence quality is limited; keep this as research context.' : '证据质量仍受限制，当前仅作为研究语境。',
+      isEnglish ? 'Evidence limited' : '证据受限',
     ));
   const researchPath = uniqueSymbolReadinessValues(readiness.suggestedResearchPath)
     .map((step) => safeSymbolReadinessText(
@@ -3195,7 +3195,7 @@ function HomeSymbolEvidenceReadinessBlock({
   const disclosure = safeSymbolReadinessText(
     locale,
     readiness.noAdviceDisclosure,
-    isEnglish ? 'Observation-only research readiness; not personalized financial advice.' : '仅供研究观察，不构成投资建议。',
+    isEnglish ? 'Research observation' : '研究观察',
   );
 
   return (
@@ -3279,10 +3279,10 @@ function HomeFundamentalsSummaryBlock({
   const guidanceCopy = isLoading
     ? (isEnglish ? 'Preparing a bounded fundamentals snapshot.' : '正在整理受限基本面摘要。')
     : hasStableCoverage
-      ? (isEnglish ? 'Observation only, not investment advice.' : '仅供观察，不构成投资建议。')
+      ? (isEnglish ? 'Observation only' : '仅供观察')
       : hasObservableCoverage
-        ? (isEnglish ? 'A partial fundamentals summary is available; keep it observation-only.' : '已整理部分基本面摘要，当前仅作观察。')
-        : (isEnglish ? 'Stable fundamentals summary unavailable; keep this as observation-only.' : '暂无稳定基本面摘要，当前仅作观察。');
+        ? (isEnglish ? 'Partial coverage' : '部分可用')
+        : (isEnglish ? 'Insufficient data' : '数据不足');
   const stateCopy = isLoading
     ? (isEnglish ? 'Preparing summary' : '摘要整理中')
     : hasStableCoverage
@@ -3863,7 +3863,7 @@ function buildTechnicalInsightFallback(
 
   if (locale === 'en') {
     if (tone === 'bearish' || hasBearishMa) {
-      return 'Trend tape is losing sponsorship: moving-average pressure remains overhead, so the setup should stay observation-only until downside pressure is re-evaluated.';
+      return 'Trend tape under pressure; observation only.';
     }
     if (tone === 'bullish' || hasBullishMa) {
       return hasOverbought
@@ -4515,7 +4515,7 @@ const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardVarian
           { label: 'Upper Watch Zone', value: '183.00', tone: 'bullish' },
           { label: 'Invalidation Line', value: '159.20', tone: 'bearish' },
         ],
-        positionBody: 'Wait for follow-through volume confirmation. Otherwise keep the setup observation-only and avoid upgrading the conclusion during a news-driven retrace.',
+        positionBody: 'Awaiting volume confirmation.',
       },
       tech: {
         ...CONTENT.en.tech,
@@ -5449,8 +5449,8 @@ function buildStrategyMetricDetails(locale: DashboardLocale, label: string, valu
 
   if (key === '价格观察' || key === 'priceobservation') {
     return isEnglish
-      ? `Treat ${value} as a price observation that still needs confirmation before it becomes useful research context.`
-      : `${value} 仅表示价格观察仍需确认，当前只作为研究上下文。`;
+      ? `${value} — price observation, pending confirmation.`
+      : `${value} — 价格观察，待确认`;
   }
 
   if (key === '上行情景' || key === 'upsidescenario') {
@@ -5461,14 +5461,14 @@ function buildStrategyMetricDetails(locale: DashboardLocale, label: string, valu
 
   if (key === '风险边界' || key === 'riskboundary') {
     return isEnglish
-      ? `${value} marks a risk boundary for rechecking the research context while evidence remains incomplete.`
-      : `${value} 仅表示风险边界需要复核，证据不完整时保持观察。`;
+      ? `${value} — risk boundary, evidence incomplete.`
+      : `${value} — 风险边界，证据待补齐`;
   }
 
   if (key === '观察区间' || key === '建仓区间' || key === 'entryzone' || key === 'watchzone') {
     return isEnglish
-      ? `Use ${value} as the preferred observation band. Treat it as a readiness condition, not an instruction.`
-      : `以 ${value} 作为优先观察带，只有当日内结构维持有序、没有失控放量时，才提高关注级别。`;
+      ? `${value} — observation band`
+      : `${value} — 观察带`;
   }
 
   if (key === '上方观察区' || key === '目标位' || key === 'target') {

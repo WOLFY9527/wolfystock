@@ -163,12 +163,12 @@ export const RuleRunComparisonPanel: React.FC<{
   subtitle: string;
   items: RuleComparisonItem[];
   emptyText?: string;
-}> = ({ title, subtitle, items, emptyText = '至少选择两条已完成运行后，这里会显示 side-by-side comparison。' }) => {
+}> = ({ title, subtitle, items, emptyText = '选择至少两条运行以比较' }) => {
   const { language } = useI18n();
   if (items.length <= 1) {
     return (
       <Card title={title} subtitle={subtitle} className="product-section-card product-section-card--backtest-secondary">
-        <div className="product-empty-state product-empty-state--compact">{items.length <= 1 && emptyText === '至少选择两条已完成运行后，这里会显示 side-by-side comparison。' && language === 'en' ? 'Select at least two completed runs to see the side-by-side comparison here.' : emptyText}</div>
+        <div className="product-empty-state product-empty-state--compact">{items.length <= 1 && emptyText === '选择至少两条运行以比较' && language === 'en' ? 'Select at least two runs to compare' : emptyText}</div>
       </Card>
     );
   }

@@ -1496,7 +1496,7 @@ const RuleBacktestComparePage: React.FC = () => {
                 <section id="compare-summary" className="space-y-3">
                   <div>
                     <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">比较摘要</p>
-                    <h2 className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">先看整体上下文，再决定是否相信单项领先</h2>
+                    <h2 className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">查看整体上下文</h2>
                   </div>
                   <nav aria-label="比较区块导航" className="flex flex-wrap gap-2">
                     {COMPARE_SECTION_LINKS.map((item) => (

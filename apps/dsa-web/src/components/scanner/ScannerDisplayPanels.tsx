@@ -436,8 +436,8 @@ export function ScannerHistoryFallbackPanel({
         </h3>
         <p className="mt-0.5 text-[11px] text-white/42">
           {language === 'en'
-            ? 'Use the latest run summary before changing scope or waiting for the next scan.'
-            : '先看最近一次扫描摘要，再决定调整范围或等待下一次扫描。'}
+            ? 'Review latest scan summary'
+            : '查看最近扫描摘要'}
         </p>
       </div>
       {summaries.length ? (

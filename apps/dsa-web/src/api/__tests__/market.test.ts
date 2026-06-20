@@ -79,7 +79,7 @@ describe('market temperature evidence normalization', () => {
     expect(panel.sourceLabel).toBe('延迟可用');
     expect(panel.warning).toBe('已使用最近一次可用数据，不代表当前实时行情');
     expect(panel.items[0].sourceLabel).toBe('延迟可用');
-    expect(panel.items[0].warning).toBe('当前关键数据不足，暂不形成方向判断。');
+    expect(panel.items[0].warning).toBe('数据待补');
     expect(panel.items[0].hoverDetails).toEqual(['最近可用数据仅保留市场结构观察']);
   });
 

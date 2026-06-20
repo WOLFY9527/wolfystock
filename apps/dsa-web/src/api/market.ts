@@ -60,6 +60,7 @@ const CONSUMER_SOURCE_LABEL_RULES: Array<[RegExp, string]> = [
 const CONSUMER_TEXT_RULES: Array<[RegExp, string]> = [
   [/当前真实数据不足/g, '当前关键数据不足'],
   [/市场温度仅供界面演示/g, '暂不形成方向判断'],
+  [/当前关键数据不足[，,]\s*暂不形成方向判断。?/g, '数据待补'],
   [/备用示例数据仅用于保持界面结构/g, '最近可用数据仅保留市场结构观察'],
   [/备用示例数据，不代表当前行情/g, '已使用最近一次可用数据，不代表当前实时行情'],
   [/等待真实行情源/g, '等待数据恢复'],
@@ -881,7 +882,7 @@ const DEFAULT_MARKET_TEMPERATURE_SCORE: MarketTemperatureScore = {
   value: 50,
   label: '数据不足',
   trend: 'stable',
-  description: '当前关键数据不足，暂不形成方向判断。',
+  description: '数据待补',
 };
 
 function normalizeMarketTemperatureScore(score?: Partial<MarketTemperatureScore>): MarketTemperatureScore {

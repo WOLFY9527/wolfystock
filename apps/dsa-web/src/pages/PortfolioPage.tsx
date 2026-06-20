@@ -2402,8 +2402,8 @@ const PortfolioPage: React.FC = () => {
   const viewFullHistoryLabel = language === 'zh' ? '查看全部历史' : 'View full history';
   const hideFullHistoryLabel = language === 'zh' ? '收起完整历史' : 'Hide full history';
   const portfolioEmptyStateGuidance = language === 'zh'
-    ? '完成第一笔持仓或导入后，这里会显示真实持仓、估值与数据状态。'
-    : 'Once your first holding or import is saved, this area will show real holdings, valuation, and data status.';
+    ? '添加持仓后显示'
+    : 'Displays after adding holdings';
   const formatConvertedDisplay = (value: number, nativeCurrency: string) => {
     if (nativeCurrency === displayCurrency) {
       return null;
@@ -2873,7 +2873,7 @@ const PortfolioPage: React.FC = () => {
     ? (language === 'zh'
       ? `${accountStateSummary} · ${positionRows.length} 项持仓`
       : `${accountStateSummary} · ${positionRows.length} holdings`)
-    : (language === 'zh' ? '完成首笔持仓或导入后，这里会显示真实台账。' : 'The real ledger appears here after the first holding or import is saved.');
+    : (language === 'zh' ? '添加持仓后显示' : 'The real ledger appears after first holding is saved.');
   const valuationSnapshotNote = hasHoldings
     ? summarizePortfolioPriceAsOf(positionRows, language)?.label
       || (language === 'zh' ? '价格快照待确认' : 'Price snapshot pending')
@@ -2893,12 +2893,12 @@ const PortfolioPage: React.FC = () => {
       : 'Once the account is ready, you can add holdings, import records, and review risk and evidence.')
     : !hasHoldings
       ? (language === 'zh'
-        ? '当前组合仍为空；数据不足，暂不形成结论。建议先添加持仓或导入历史记录，再查看风险与数据说明。'
-        : 'The portfolio is still empty. Evidence is not yet sufficient to form a conclusion. Add holdings or import records first, then review risk and evidence.')
+        ? '组合为空，请添加持仓'
+        : 'Portfolio empty, add holdings')
       : hasFxUnavailable
         ? (language === 'zh'
-          ? '部分汇率或折算暂不可用，先查看估值说明，再决定是否同步或刷新。'
-          : 'Some FX or conversion data is unavailable. Review valuation notes before syncing or refreshing.')
+          ? '部分汇率暂不可用'
+          : 'Some FX data unavailable')
         : hasHistory
           ? (language === 'zh'
             ? '近期活动已保留在下方时间线，可继续核对风险与持仓集中度。'
@@ -3329,8 +3329,8 @@ const PortfolioPage: React.FC = () => {
                         {
                           route: '/market-overview',
                           description: language === 'zh'
-                            ? '先阅读市场背景，再决定是否需要组合跟踪。'
-                            : 'Read market context before deciding whether portfolio tracking is needed.',
+                            ? '研究记录'
+                            : 'Research record',
                         },
                         {
                           route: '/scanner',
@@ -3417,8 +3417,8 @@ const PortfolioPage: React.FC = () => {
                         <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">{language === 'zh' ? '功能预览 / 示例结构' : 'Feature preview / sample structure'}</h2>
                         <p className="mt-2 text-sm leading-6 text-white/52">
                           {language === 'zh'
-                            ? '以下仅展示工作区结构与信息层级，不会写入账户、生成示例持仓，也不会给出投资建议。'
-                            : 'This shows only the workspace structure and information hierarchy. It does not write to the account, generate sample holdings, or provide investment advice.'}
+                            ? '展示模式'
+                            : 'Demo mode'}
                         </p>
                       </div>
                       <TerminalChip variant="neutral">{language === 'zh' ? '非持久预览' : 'Non-persistent preview'}</TerminalChip>

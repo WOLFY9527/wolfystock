@@ -46,7 +46,7 @@ const WORKFLOW_STEPS: Array<{
 const SAFE_COPY = {
   zh: {
     title: '研究工作流',
-    summary: '只读串联候选、观察、组合、回测与情景上下文；不会写入组合、发送提醒或形成个性化建议。',
+    summary: '只读研究上下文',
     known: '已知证据',
     missing: '待补证据',
     state: '证据状态',
@@ -64,7 +64,7 @@ const SAFE_COPY = {
   },
   en: {
     title: 'Research workflow',
-    summary: 'Read-only links across idea, observation, exposure, validation, and scenario context; no portfolio writes, alert sends, or personalized advice.',
+    summary: 'Read-only research context',
     known: 'Known evidence',
     missing: 'Missing evidence',
     state: 'Evidence state',

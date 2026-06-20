@@ -129,8 +129,8 @@ function ResultStatePanel({
     )
     : (
       language === 'en'
-        ? 'WolfyStock is still assembling this research simulation result. Equity, drawdown, and risk visuals will appear after the run finishes.'
-        : 'WolfyStock 正在整理本次研究型模拟结果。待运行完成后，这里会显示权益、回撤与风险可视化。'
+        ? 'Assembling results'
+        : '正在整理结果'
     );
   const chips = [
     { key: 'status', label: language === 'en' ? 'Status' : '状态', value: String(run.status || '--') },
