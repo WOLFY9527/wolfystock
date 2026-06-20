@@ -1614,6 +1614,13 @@ def _quote_metadata(
         configured_attempt=configured_attempt,
         provider_diagnostics=provider_diagnostics,
     )
+    alpaca_quote_authority_readiness = _alpaca_quote_authority_readiness(
+        requested_symbols=requested_symbols,
+        configured_attempt=configured_attempt,
+        yfinance_attempt=yfinance_attempt,
+        provider_diagnostics=provider_diagnostics,
+        source_authority=source_authority,
+    )
     return {
         "status": status,
         "quoteMode": quote_mode,
@@ -1647,7 +1654,9 @@ def _quote_metadata(
             **provider_diagnostics,
             **source_authority,
             "etfAuthoritySpine": etf_authority_spine,
+            "alpacaQuoteAuthorityReadiness": alpaca_quote_authority_readiness,
         },
+        "alpacaQuoteAuthorityReadiness": alpaca_quote_authority_readiness,
         "noExternalCalls": False,
         "failedSymbols": _bounded_unique_symbols(list(failed_symbol_reasons)),
         "failedSymbolCount": failed_symbol_count,
@@ -1747,6 +1756,211 @@ def _configured_activation_authority_reason(provider_diagnostics: Mapping[str, A
         return None
     reason = str(activation.get("reason") or "").strip()
     return reason or "alpaca_activation_gate_failed"
+
+
+def _alpaca_quote_authority_readiness(
+    *,
+    requested_symbols: Sequence[str],
+    configured_attempt: _ProviderAttempt,
+    yfinance_attempt: _ProviderAttempt,
+    provider_diagnostics: Mapping[str, Any],
+    source_authority: Mapping[str, Any],
+) -> Dict[str, Any]:
+    probe_symbols = _alpaca_quote_authority_probe_symbols(
+        requested_symbols=requested_symbols,
+        configured_attempt=configured_attempt,
+    )
+    configured_symbols = {
+        symbol
+        for symbol in probe_symbols
+        if _is_configured_alpaca_quote(configured_attempt.quotes.get(symbol))
+    }
+    missing_symbols = [symbol for symbol in probe_symbols if symbol not in configured_symbols]
+    total_count = len(probe_symbols)
+    covered_count = len(configured_symbols)
+    coverage_ratio = round(covered_count / total_count, 4) if total_count else 0.0
+    freshest_as_of = _freshest_as_of_for_symbols(configured_attempt.quotes, configured_symbols)
+    provider_configured = bool(provider_diagnostics.get("credentialsPresent"))
+    fallback_used = bool(yfinance_attempt.quotes)
+    blocker_bucket = _alpaca_quote_authority_blocker_bucket(
+        provider_configured=provider_configured,
+        fallback_used=fallback_used,
+        covered_count=covered_count,
+        missing_symbols=missing_symbols,
+        provider_diagnostics=provider_diagnostics,
+    )
+    authority_state = _alpaca_quote_authority_state(
+        provider_configured=provider_configured,
+        covered_count=covered_count,
+        missing_symbols=missing_symbols,
+        source_authority_allowed=bool(source_authority.get("sourceAuthorityAllowed")),
+        blocker_bucket=blocker_bucket,
+    )
+    score_contribution_allowed = bool(
+        authority_state == "authorized"
+        and source_authority.get("scoreContributionAllowed")
+        and covered_count == total_count
+        and total_count > 0
+        and not fallback_used
+    )
+    return {
+        "providerConfigured": provider_configured,
+        "dataFeed": _alpaca_quote_authority_data_feed(
+            provider_configured=provider_configured,
+            provider_diagnostics=provider_diagnostics,
+        ),
+        "probeSymbols": list(probe_symbols),
+        "quoteCoverage": {
+            "covered": covered_count,
+            "total": total_count,
+            "ratio": coverage_ratio,
+            "missingSymbols": missing_symbols,
+        },
+        "freshestAsOf": freshest_as_of,
+        "sourceAuthority": authority_state,
+        "fallbackUsed": fallback_used,
+        "blockerBucket": blocker_bucket,
+        "consumerSummary": _alpaca_quote_authority_consumer_summary(
+            authority_state=authority_state,
+            fallback_used=fallback_used,
+        ),
+        "nextDataAction": _alpaca_quote_authority_next_data_action(blocker_bucket),
+        "scoreContributionAllowed": score_contribution_allowed,
+    }
+
+
+def _alpaca_quote_authority_probe_symbols(
+    *,
+    requested_symbols: Sequence[str],
+    configured_attempt: _ProviderAttempt,
+) -> tuple[str, ...]:
+    metadata_symbols = _as_string_sequence(configured_attempt.metadata.get("stableActivationProbeSymbols"))
+    if metadata_symbols:
+        return tuple(_bounded_unique_symbols(metadata_symbols))
+    requested = {
+        str(symbol).strip().upper()
+        for symbol in requested_symbols
+        if str(symbol).strip()
+    }
+    etf_symbols = [symbol for symbol in _ROTATION_RADAR_AUTHORITY_ETF_UNIVERSE if symbol in requested]
+    if etf_symbols:
+        return tuple(_bounded_unique_symbols(etf_symbols))
+    return _configured_provider_stable_probe_symbols(
+        requested_symbols,
+        max_probe_symbols=_ALPACA_MAX_PROBE_SYMBOLS,
+    )
+
+
+def _is_configured_alpaca_quote(quote: Any) -> bool:
+    return bool(
+        isinstance(quote, Mapping)
+        and str(quote.get("source") or "").strip().lower() == _CONFIGURED_SOURCE
+        and str(quote.get("sourceTier") or "").strip().lower() == _CONFIGURED_SOURCE_TIER
+        and not bool(quote.get("isFallback"))
+    )
+
+
+def _freshest_as_of_for_symbols(
+    quotes: Mapping[str, Dict[str, Any]],
+    symbols: Iterable[str],
+) -> Optional[str]:
+    candidates = [
+        str(quotes[symbol].get("asOf"))
+        for symbol in symbols
+        if isinstance(quotes.get(symbol), Mapping) and quotes[symbol].get("asOf")
+    ]
+    return max(candidates) if candidates else None
+
+
+def _alpaca_quote_authority_data_feed(
+    *,
+    provider_configured: bool,
+    provider_diagnostics: Mapping[str, Any],
+) -> str:
+    if not provider_configured:
+        return "unknown"
+    feed = str(
+        provider_diagnostics.get("configuredProviderFeed")
+        or provider_diagnostics.get("feed")
+        or ""
+    ).strip().lower()
+    return feed or "unknown"
+
+
+def _alpaca_quote_authority_blocker_bucket(
+    *,
+    provider_configured: bool,
+    fallback_used: bool,
+    covered_count: int,
+    missing_symbols: Sequence[str],
+    provider_diagnostics: Mapping[str, Any],
+) -> str:
+    if not provider_configured:
+        return "fallback_only" if fallback_used else "credentials"
+    if covered_count <= 0:
+        blocker = str(
+            provider_diagnostics.get("activationBlocker")
+            or provider_diagnostics.get("dominantProviderBlocker")
+            or ""
+        ).strip()
+        if blocker in {"auth", "entitlement", "provider_timeout", "timeout", "network_unreachable"}:
+            return blocker
+        return "quote_coverage"
+    if missing_symbols:
+        return "symbol_coverage"
+    blocker = str(
+        provider_diagnostics.get("activationBlocker")
+        or provider_diagnostics.get("dominantProviderBlocker")
+        or ""
+    ).strip()
+    return blocker or "none"
+
+
+def _alpaca_quote_authority_state(
+    *,
+    provider_configured: bool,
+    covered_count: int,
+    missing_symbols: Sequence[str],
+    source_authority_allowed: bool,
+    blocker_bucket: str,
+) -> str:
+    if not provider_configured:
+        return "unavailable"
+    if covered_count <= 0:
+        return "partial"
+    if source_authority_allowed and not missing_symbols and blocker_bucket == "none":
+        return "authorized"
+    return "partial"
+
+
+def _alpaca_quote_authority_consumer_summary(
+    *,
+    authority_state: str,
+    fallback_used: bool,
+) -> str:
+    if fallback_used and authority_state != "authorized":
+        return "Fallback proxy quote evidence is available only for observation-only context."
+    if authority_state == "authorized":
+        return "Alpaca ETF/index quote coverage is available for bounded market evidence."
+    if authority_state == "partial":
+        return "Alpaca ETF/index quote coverage is incomplete for bounded market evidence."
+    if authority_state == "unavailable":
+        return "Alpaca ETF/index quote authority is unavailable until configured coverage is present."
+    return "Alpaca ETF/index quote authority state is unknown for the bounded probe."
+
+
+def _alpaca_quote_authority_next_data_action(blocker_bucket: str) -> str:
+    if blocker_bucket == "credentials":
+        return "Configure Alpaca market-data credentials and confirm feed entitlement for the bounded ETF probe."
+    if blocker_bucket == "fallback_only":
+        return "Connect Alpaca quote coverage before using ETF proxy evidence for scoring."
+    if blocker_bucket == "symbol_coverage":
+        return "Fill missing Alpaca ETF quote coverage before score-grade evidence is enabled."
+    if blocker_bucket in {"auth", "entitlement", "quote_coverage"}:
+        return "Validate Alpaca feed entitlement and symbol coverage for the bounded ETF probe."
+    if blocker_bucket in {"provider_timeout", "timeout", "network_unreachable"}:
+        return "Stabilize the Alpaca quote probe before using ETF proxy evidence for scoring."
+    return "Continue monitoring freshness and coverage for the bounded ETF probe."
 
 
 def _provider_activation_diagnostics(

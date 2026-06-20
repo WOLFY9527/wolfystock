@@ -219,6 +219,28 @@ def _forbidden_claims_by_name(snapshot: dict) -> dict[str, dict]:
     }
 
 
+def _assert_no_advice_text(testcase: unittest.TestCase, payload: dict) -> None:
+    dumped = json.dumps(payload, ensure_ascii=False).lower()
+    for forbidden in (
+        "bu" + "y",
+        "se" + "ll",
+        "ho" + "ld",
+        "reco" + "mmend",
+        "target " + "price",
+        "stop" + "-loss",
+        "position " + "sizing",
+        "position" + "-size",
+        "买" + "入",
+        "卖" + "出",
+        "持" + "有",
+        "推" + "荐",
+        "目标" + "价",
+        "止" + "损",
+        "仓" + "位",
+    ):
+        testcase.assertNotIn(forbidden, dumped)
+
+
 def _assert_consumer_snapshot_excludes_admin_fields(testcase: unittest.TestCase, snapshot: dict) -> None:
     dumped = json.dumps(snapshot, ensure_ascii=False)
     for marker in (
@@ -1925,6 +1947,149 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertTrue(all(window["available"] for window in quote["timeWindows"].values()))
         self.assertTrue(all(not window["isFallback"] for window in quote["timeWindows"].values()))
         self.assertTrue(all(window["source"] == "alpaca" for window in quote["timeWindows"].values()))
+
+    def test_alpaca_quote_authority_readiness_reports_missing_credentials_without_secret_leak(self) -> None:
+        with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}), patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_missing_alpaca_credentials(),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            side_effect=AssertionError("Alpaca should not be constructed without credentials"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            side_effect=RuntimeError("network disabled for unit test"),
+        ):
+            payload = load_rotation_radar_quotes(["SPY", "QQQ"])
+
+        readiness = payload["metadata"]["alpacaQuoteAuthorityReadiness"]
+        self.assertFalse(readiness["providerConfigured"])
+        self.assertEqual(readiness["dataFeed"], "unknown")
+        self.assertEqual(readiness["sourceAuthority"], "unavailable")
+        self.assertFalse(readiness["fallbackUsed"])
+        self.assertEqual(readiness["blockerBucket"], "credentials")
+        self.assertEqual(readiness["quoteCoverage"]["covered"], 0)
+        self.assertEqual(readiness["quoteCoverage"]["total"], 2)
+        self.assertEqual(readiness["quoteCoverage"]["ratio"], 0.0)
+        self.assertEqual(readiness["quoteCoverage"]["missingSymbols"], ["SPY", "QQQ"])
+        self.assertIsNone(readiness["freshestAsOf"])
+        self.assertFalse(readiness["scoreContributionAllowed"])
+        self.assertIn("Configure Alpaca market-data credentials", readiness["nextDataAction"])
+        self.assertEqual(payload["metadata"]["providerDiagnostics"]["alpacaQuoteAuthorityReadiness"], readiness)
+        dumped = json.dumps(readiness, ensure_ascii=False)
+        self.assertNotIn("alpaca-secret", dumped)
+        self.assertNotIn("alpaca-key-id", dumped)
+        self.assertNotIn("ALPACA_API_KEY_ID", dumped)
+        self.assertNotIn("ALPACA_API_SECRET_KEY", dumped)
+        _assert_no_advice_text(self, readiness)
+
+    def test_alpaca_quote_authority_readiness_authorized_for_mocked_etf_quotes(self) -> None:
+        class FakeAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                return _alpaca_bars(end_close=102.0, as_of="2026-05-07T09:45:00+00:00")
+
+        with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}), patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            FakeAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider._utc_now",
+            return_value=datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            side_effect=AssertionError("yfinance fallback should not be called when Alpaca covers ETF probes"),
+        ):
+            payload = load_rotation_radar_quotes(["SPY", "QQQ", "IWM"])
+
+        readiness = payload["metadata"]["alpacaQuoteAuthorityReadiness"]
+        self.assertTrue(readiness["providerConfigured"])
+        self.assertEqual(readiness["dataFeed"], "sip")
+        self.assertEqual(readiness["probeSymbols"], ["SPY", "QQQ", "IWM"])
+        self.assertEqual(readiness["sourceAuthority"], "authorized")
+        self.assertFalse(readiness["fallbackUsed"])
+        self.assertEqual(readiness["blockerBucket"], "none")
+        self.assertEqual(readiness["quoteCoverage"]["covered"], 3)
+        self.assertEqual(readiness["quoteCoverage"]["total"], 3)
+        self.assertEqual(readiness["quoteCoverage"]["ratio"], 1.0)
+        self.assertEqual(readiness["quoteCoverage"]["missingSymbols"], [])
+        self.assertEqual(readiness["freshestAsOf"], "2026-05-07T09:45:00+00:00")
+        self.assertTrue(readiness["scoreContributionAllowed"])
+        self.assertIn("available for bounded market evidence", readiness["consumerSummary"])
+        _assert_no_advice_text(self, readiness)
+
+    def test_alpaca_quote_authority_readiness_keeps_fallback_only_observation_grade(self) -> None:
+        with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}), patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_missing_alpaca_credentials(),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            side_effect=AssertionError("Alpaca should not be constructed without credentials"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=_yfinance_frame(),
+        ):
+            payload = load_rotation_radar_quotes(["SPY", "QQQ"])
+
+        readiness = payload["metadata"]["alpacaQuoteAuthorityReadiness"]
+        self.assertFalse(readiness["providerConfigured"])
+        self.assertEqual(readiness["sourceAuthority"], "unavailable")
+        self.assertTrue(readiness["fallbackUsed"])
+        self.assertEqual(readiness["blockerBucket"], "fallback_only")
+        self.assertEqual(readiness["quoteCoverage"]["covered"], 0)
+        self.assertEqual(readiness["quoteCoverage"]["total"], 2)
+        self.assertFalse(readiness["scoreContributionAllowed"])
+        self.assertFalse(payload["metadata"]["scoreContributionAllowed"])
+        self.assertEqual(payload["metadata"]["source"], "yfinance_proxy")
+        self.assertIn("observation-only", readiness["consumerSummary"])
+        _assert_no_advice_text(self, readiness)
+
+    def test_alpaca_quote_authority_readiness_reports_missing_probe_symbols(self) -> None:
+        class PartialAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                if symbol == "IWM":
+                    return []
+                return _alpaca_bars(end_close=102.0, as_of="2026-05-07T09:45:00+00:00")
+
+        with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}), patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            PartialAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            side_effect=AssertionError("yfinance fallback should not be called when Alpaca partially covers probes"),
+        ):
+            payload = load_rotation_radar_quotes(["SPY", "QQQ", "IWM"])
+
+        readiness = payload["metadata"]["alpacaQuoteAuthorityReadiness"]
+        self.assertTrue(readiness["providerConfigured"])
+        self.assertEqual(readiness["sourceAuthority"], "partial")
+        self.assertFalse(readiness["fallbackUsed"])
+        self.assertEqual(readiness["blockerBucket"], "symbol_coverage")
+        self.assertEqual(readiness["quoteCoverage"]["covered"], 2)
+        self.assertEqual(readiness["quoteCoverage"]["total"], 3)
+        self.assertEqual(readiness["quoteCoverage"]["ratio"], 0.6667)
+        self.assertEqual(readiness["quoteCoverage"]["missingSymbols"], ["IWM"])
+        self.assertFalse(readiness["scoreContributionAllowed"])
+        self.assertIn("incomplete", readiness["consumerSummary"])
+        _assert_no_advice_text(self, readiness)
 
     def test_runtime_alpaca_timeout_budget_defaults_are_reported_without_env(self) -> None:
         original_deadline = market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS
