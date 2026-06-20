@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApiError, createParsedApiError } from '../../api/error';
 import UserScannerPage from '../UserScannerPage';
+import { ScannerResultHistorySummary } from '../../components/scanner/ScannerDisplayPanels';
 import { UiLanguageProvider, useI18n } from '../../contexts/UiLanguageContext';
 import { expectNoRawI18nKeys } from '../../test-utils/i18nRawKeySentinel';
 import type {
@@ -1698,6 +1699,9 @@ describe('UserScannerPage', () => {
     expect(statusStrip).toHaveTextContent('等待可用数据');
     expect(statusStrip).toHaveTextContent('候选集未产出');
     expect(statusStrip).not.toHaveTextContent(/0\s*\/\s*0\s*\/\s*0/);
+    expect(screen.getByTestId('scanner-summary-counters')).toHaveTextContent('候选集');
+    expect(screen.getByTestId('scanner-summary-counters')).toHaveTextContent('未产出');
+    expect(screen.getByTestId('scanner-summary-counters')).not.toHaveTextContent(/\b0\b/);
     expect(screen.getByTestId('scanner-summary-rail-counts')).toHaveTextContent('未产出');
     expect(screen.getByTestId('scanner-summary-rail-counts')).not.toHaveTextContent(/\b0\b/);
     expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent('候选表暂不展示');
@@ -1804,6 +1808,46 @@ describe('UserScannerPage', () => {
     expect(currentSummary).toHaveTextContent('3');
 
     ['最近扫描', '上次扫描'].forEach((title) => {
+      const summary = within(resultHistory).getByTestId(`scanner-run-summary-${title}`);
+      expect(summary).toHaveTextContent('暂不可用');
+      expect(summary).toHaveTextContent('候选集尚未产出');
+      expect(summary).toHaveTextContent('运行数据不足或暂不可用');
+      expect(summary).not.toHaveTextContent(/0ms|候选数量\s*0|淘汰数量\s*0|失败数量\s*0|完成/);
+    });
+    expect(resultHistory).not.toHaveTextContent(/0ms|0\s*\/\s*0\s*\/\s*0/);
+  });
+
+  it('marks all three scan summary cards unavailable for pseudo-complete zero-count summaries', () => {
+    const unavailableSummary = (title: string) => ({
+      title,
+      statusLabel: '暂不可用',
+      bestCandidate: '尚未产出',
+      candidateCount: 0,
+      rejectedCount: 0,
+      failedCount: 0,
+      dataStatusLabel: '运行数据暂不可用',
+      durationLabel: '--',
+      runTimeLabel: '04/22 08:30',
+      errorSummary: null,
+      unavailable: true,
+      unavailableTitle: '候选集尚未产出',
+      unavailableBody: '运行数据不足或暂不可用。下一步：重新运行扫描、查看历史，或打开 Watchlist / Market Overview。',
+    });
+
+    render(
+      <ScannerResultHistorySummary
+        currentSummary={unavailableSummary('本次扫描')}
+        recentSummary={unavailableSummary('最近扫描')}
+        previousSummary={unavailableSummary('上次扫描')}
+        comparisonItems={[]}
+        hasHistory
+        language="zh"
+      />,
+    );
+
+    const resultHistory = screen.getByTestId('scanner-result-history-summary');
+
+    ['本次扫描', '最近扫描', '上次扫描'].forEach((title) => {
       const summary = within(resultHistory).getByTestId(`scanner-run-summary-${title}`);
       expect(summary).toHaveTextContent('暂不可用');
       expect(summary).toHaveTextContent('候选集尚未产出');

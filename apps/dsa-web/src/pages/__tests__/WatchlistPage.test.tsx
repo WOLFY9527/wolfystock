@@ -493,7 +493,7 @@ describe('WatchlistPage', () => {
           priorityTier: 'attention',
           priorityReasonSafeLabel: 'Missing evidence needs review.',
           evidenceAge: { state: 'no_evidence', lastReviewedAt: null },
-          missingEvidence: ['Price-history evidence'],
+          missingEvidence: ['Price-history evidence', 'Scanner score evidence'],
           suggestedResearchPath: [
             {
               label: 'Stock Structure',
@@ -548,16 +548,17 @@ describe('WatchlistPage', () => {
     expect(queue).toHaveTextContent('后续研究');
     expect(queue).toHaveTextContent('MSFT');
     expect(queue).toHaveTextContent('建议复核');
-    expect(queue).toHaveTextContent('当前条目的证据覆盖不足，需补充同业、基本面或市场背景后再判断。');
+    expect(queue).toHaveTextContent('研究上下文待补');
     expect(queue).toHaveTextContent('缺少关键证据');
-    expect(queue).toHaveTextContent('价格历史数据待补充');
+    expect(queue).toHaveTextContent('价格与历史数据待补');
+    expect(queue).toHaveTextContent('扫描评分待更新');
     expect(queue).toHaveTextContent('查看个股结构');
-    expect(queue).toHaveTextContent('待核对：价格历史数据待补充');
+    expect(queue).toHaveTextContent('待核对：价格与历史数据待补、扫描评分待更新');
     expect(queue).toHaveTextContent('先核对结构与资料完整性。');
     expect(queue).toHaveTextContent('NVDA');
     expect(queue).toHaveTextContent('持续跟进');
     expect(queue).toHaveTextContent('现有证据时效不足，建议先复核近期价格、同业与市场背景。');
-    expect(queue).toHaveTextContent('同业、基本面或市场背景待补充');
+    expect(queue).toHaveTextContent('研究上下文待补');
     expect(queue).toHaveTextContent('查看个股结构，补做资料核对。');
     expect(queue).toHaveTextContent('BABA');
     expect(queue).toHaveTextContent('继续观察');
@@ -566,7 +567,7 @@ describe('WatchlistPage', () => {
     expect(queue).toHaveTextContent('部分外部数据暂不可用');
     expect(queue).not.toHaveTextContent(/证据缺口|仅作研究观察|不构成操作结论/);
     expect(queue).not.toHaveTextContent(/buy|sell|hold|recommend(?:ation)?|target|stop|position sizing|买入|卖出|持有|目标价|止损|仓位/i);
-    expect(queue).not.toHaveTextContent(/Missing evidence needs review|Queue review pending from backend memo|evidence_missing|attention|follow_up|provider|source|runtime|debug|request[_\s-]?id|trace[_\s-]?id|schemaVersion|raw|internal|cache|observationOnly|queue_debug_path/i);
+    expect(queue).not.toHaveTextContent(/Missing evidence needs review|Price-history evidence|Scanner score evidence|Queue review pending from backend memo|evidence_missing|attention|follow_up|provider|source|runtime|debug|request[_\s-]?id|trace[_\s-]?id|schemaVersion|raw|internal|cache|observationOnly|queue_debug_path/i);
 
     const rowIds = Array.from(document.querySelectorAll('article[data-testid^="watchlist-row-"]'))
       .map((row) => row.getAttribute('data-testid'));
@@ -807,7 +808,7 @@ describe('WatchlistPage', () => {
           priorityTier: 'attention',
           priorityReasonSafeLabel: 'Missing evidence needs review.',
           evidenceAge: { state: 'no_evidence', lastReviewedAt: null },
-          missingEvidence: ['provider_runtime_trace', 'insufficient_evidence'],
+          missingEvidence: ['Price-history evidence', 'Scanner score evidence', 'Supporting evidence', 'provider_runtime_trace', 'insufficient_evidence'],
           suggestedResearchPath: [
             {
               label: 'Stock Structure',
@@ -833,10 +834,15 @@ describe('WatchlistPage', () => {
     expect(row).toHaveTextContent(/更新 05\/01/);
     expect(row).toHaveTextContent('研究待复核');
     expect(row).toHaveTextContent('下一步 查看个股结构');
+    const queue = await screen.findByTestId('watchlist-research-queue');
+    expect(queue).toHaveTextContent('研究上下文待补');
+    expect(queue).toHaveTextContent('价格与历史数据待补');
+    expect(queue).toHaveTextContent('扫描评分待更新');
     expect(within(row).getByRole('button', { name: '查看个股结构 600519' })).toBeInTheDocument();
     expect(within(row).getByRole('button', { name: '打开扫描器 600519' })).toBeInTheDocument();
     expect(row).not.toHaveTextContent('--');
-    expect(primaryRegion).not.toHaveTextContent(/证据缺口|Missing evidence needs review|provider|cache|runtime|schema|requestId|traceId|fallback|proxy|sourceAuthority|score-grade|observation-only|insufficient_evidence/i);
+    expect(primaryRegion).not.toHaveTextContent(/证据缺口|Missing evidence needs review|Price-history evidence|Scanner score evidence|provider|cache|runtime|schema|requestId|traceId|fallback|proxy|sourceAuthority|score-grade|observation-only|insufficient_evidence/i);
+    expect(queue).not.toHaveTextContent(/Missing evidence needs review|Price-history evidence|Scanner score evidence|provider|cache|runtime|schema|requestId|traceId|fallback|proxy|sourceAuthority|score-grade|observation-only|insufficient_evidence/i);
     expect(primaryRegion).not.toHaveTextContent(/买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓|buy|sell|hold|target price|stop-loss|position sizing/i);
 
     fireEvent.click(within(row).getByRole('button', { name: '查看个股结构 600519' }));

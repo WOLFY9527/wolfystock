@@ -60,8 +60,8 @@ describe('StockStructureDecisionPage', () => {
     getStructureDecisionMock.mockResolvedValue({
       schemaVersion: 'stock_structure_decision_api_v1',
       ticker: 'ORCL',
-      structureState: 'distribution',
-      confidence: 'medium',
+      structureState: 'breakdown',
+      confidence: 'low',
       componentScores: {
         trend: 58,
         relativeStrength: 52,
@@ -110,7 +110,7 @@ describe('StockStructureDecisionPage', () => {
         divergenceEvidence: [],
         staleInputs: ['freshness=unavailable'],
         missingInputs: ['NVDA peer history is unavailable.', 'insufficient_evidence'],
-        confidenceCap: 'medium',
+        confidenceCap: 'low',
         observationBoundary: 'Observation-only peer movement context; no personalized action instruction.',
         researchNextSteps: ['Review whether peer alignment persists after the next close.'],
       },
@@ -125,14 +125,26 @@ describe('StockStructureDecisionPage', () => {
     const page = await screen.findByTestId('stock-structure-decision-page');
     const snapshot = await within(page).findByTestId('stock-structure-peer-correlation-snapshot');
     expect(getStructureDecisionMock).toHaveBeenCalledWith('ORCL');
-    expect(page).toHaveTextContent('派发压力');
+    expect(page).toHaveTextContent('结构走弱');
+    expect(page).toHaveTextContent('可用');
+    expect(page).toHaveTextContent('日线');
+    expect(page).toHaveTextContent(/置信度\s*低/);
     expect(snapshot).toHaveTextContent('同业证据不足');
+    expect(snapshot).toHaveTextContent('置信上限 低');
     expect(snapshot).toHaveTextContent('数据新鲜度暂不可确认');
     expect(snapshot).toHaveTextContent('NVDA 同业历史数据暂缺。');
     expect(snapshot).toHaveTextContent('仅供同业走势观察，不构成个性化行动指令。');
     expect(snapshot).toHaveTextContent('下一个收盘后复核同业同步是否延续。');
-    expect(findConsumerRawLeakage(page.textContent || '')).toEqual([]);
-    expect(page.textContent || '').not.toMatch(/insufficient_evidence|freshness=unavailable|\bdistribution\b|observation-only/i);
+    expect(findConsumerRawLeakage(page.textContent || '', {
+      extraForbiddenPatterns: [
+        /\binsufficient_evidence\b/i,
+        /\bbreakdown\b/i,
+        /\bavailable\b/i,
+        /\bdaily\b/i,
+        /\blow\b/i,
+      ],
+    })).toEqual([]);
+    expect(page.textContent || '').not.toMatch(/insufficient_evidence|freshness=unavailable|\bbreakdown\b|\bavailable\b|\bdaily\b|\blow\b|observation-only/i);
     expect(page.textContent || '').not.toMatch(/provider|cache|runtime|schema|requestId|traceId|fallback|proxy|sourceAuthority|score-grade|raw|debug/i);
     expect(page.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓|buy|sell|hold|target price|stop loss|position sizing/i);
   });

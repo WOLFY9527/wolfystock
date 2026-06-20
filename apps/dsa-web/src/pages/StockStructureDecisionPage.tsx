@@ -109,6 +109,12 @@ function confidenceLabel(value: string, language: 'zh' | 'en') {
   }
 }
 
+function confidenceCapLabel(value: unknown, language: 'zh' | 'en'): string {
+  if (value == null || value === '') return '--';
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return confidenceLabel(String(value), language);
+}
+
 function toneFor(value: string | null | undefined): string {
   const normalized = String(value || '').toLowerCase();
   if (['available', 'high', 'ready', 'complete', 'breakout'].includes(normalized)) return 'success';
@@ -165,10 +171,10 @@ function statusLabel(status: string | null | undefined, language: 'zh' | 'en'): 
   }
   const normalized = String(status || '').toLowerCase();
   const labels: Record<string, { zh: string; en: string }> = {
-    available: { zh: '可用', en: 'available' },
-    partial: { zh: '部分可用', en: 'partial' },
-    unavailable: { zh: '不可用', en: 'unavailable' },
-    degraded: { zh: '降级', en: 'degraded' },
+    available: { zh: '可用', en: 'Available' },
+    partial: { zh: '部分可用', en: 'Partial' },
+    unavailable: { zh: '不可用', en: 'Unavailable' },
+    degraded: { zh: '降级', en: 'Degraded' },
   };
   const mapped = labels[normalized]?.[language];
   if (mapped) return mapped;
@@ -193,6 +199,7 @@ function stockStructureStateLabel(value: string | null | undefined, language: 'z
   if (!token) return null;
   const labels: Record<string, { zh: string; en: string }> = {
     accumulation: { zh: '吸筹阶段', en: 'Accumulation phase' },
+    breakdown: { zh: '结构走弱', en: 'Structure under pressure' },
     breakout: { zh: '突破观察', en: 'Breakout watch' },
     distribution: { zh: '派发压力', en: 'Distribution pressure' },
     low_confidence: { zh: '证据不足', en: 'Evidence insufficient' },
@@ -211,8 +218,8 @@ function stockStructureStateLabel(value: string | null | undefined, language: 'z
 function periodLabel(period: string | null | undefined, language: 'zh' | 'en'): string | null {
   if (!period) return null;
   const normalized = String(period).toLowerCase();
-  if (normalized === 'daily') return language === 'en' ? 'daily' : '日线';
-  if (normalized === 'weekly') return language === 'en' ? 'weekly' : '周线';
+  if (normalized === 'daily') return language === 'en' ? 'Daily' : '日线';
+  if (normalized === 'weekly') return language === 'en' ? 'Weekly' : '周线';
   return String(period);
 }
 
@@ -721,8 +728,8 @@ function SymbolCompareEvidencePacketPanel({
           ))}
           <TerminalChip variant="caution">
             {language === 'en'
-              ? `Confidence cap ${confidenceCapValue ?? '--'}`
-              : `置信上限 ${confidenceCapValue ?? '--'}`}
+              ? `Confidence cap ${confidenceCapLabel(confidenceCapValue, language)}`
+              : `置信上限 ${confidenceCapLabel(confidenceCapValue, language)}`}
           </TerminalChip>
           {boundaryChips.map((label) => (
             <TerminalChip key={label} variant="neutral">{label}</TerminalChip>

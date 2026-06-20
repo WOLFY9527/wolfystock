@@ -7,7 +7,7 @@ describe('researchQueueConsumerCopy', () => {
       priorityTier: 'attention',
       priorityReason: 'Missing evidence needs review.',
       evidenceState: 'no_evidence',
-      missingEvidence: ['Price-history evidence'],
+      missingEvidence: ['Price-history evidence', 'Scanner score evidence', 'Supporting evidence'],
       suggestedResearchPath: [
         {
           label: 'Stock Structure',
@@ -21,8 +21,8 @@ describe('researchQueueConsumerCopy', () => {
       priorityTierLabel: '建议复核',
       priorityVariant: 'caution',
       evidenceStateLabel: '缺少关键证据',
-      priorityReason: '当前条目的证据覆盖不足，需补充同业、基本面或市场背景后再判断。',
-      missingEvidence: ['价格历史数据待补充'],
+      priorityReason: '研究上下文待补',
+      missingEvidence: ['价格与历史数据待补', '扫描评分待更新', '研究上下文待补'],
       suggestedResearchPath: [
         {
           label: '查看个股结构',

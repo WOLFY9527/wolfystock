@@ -4186,7 +4186,12 @@ const UserScannerPage: React.FC = () => {
                       <div className="flex min-w-0 flex-row flex-wrap items-center justify-end gap-2">
                         {runDetail ? (
                           <div data-testid="scanner-summary-counters" className="flex flex-wrap items-center gap-1.5 text-[11px] text-white/42">
-                            {[
+                            {scannerHasPseudoEmptyRun ? (
+                              <span className="inline-flex items-baseline gap-1 rounded-md border border-amber-300/15 bg-amber-300/[0.045] px-2 py-0.5">
+                                <span className="text-white/36">{language === 'en' ? 'Candidate set' : '候选集'}</span>
+                                <span className="font-mono text-amber-100/88">{language === 'en' ? 'Not produced' : '未产出'}</span>
+                              </span>
+                            ) : ([
                               [language === 'en' ? 'Evaluated' : '已评估', runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize],
                               [language === 'en' ? 'Selected' : '入选', runDetail.summary?.selectedCount ?? shortlistCount],
                               [language === 'en' ? 'Rejected' : '淘汰', runDetail.summary?.rejectedCount ?? 0],
@@ -4196,7 +4201,7 @@ const UserScannerPage: React.FC = () => {
                                 <span className="text-white/36">{label}</span>
                                 <span className="font-mono text-white/78">{value}</span>
                               </span>
-                            ))}
+                            )))}
                           </div>
                         ) : null}
                         <div data-testid="scanner-more-actions" className="relative min-w-0">
