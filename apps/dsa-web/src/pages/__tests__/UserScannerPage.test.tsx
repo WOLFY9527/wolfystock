@@ -837,6 +837,22 @@ function makeHistoryItem(overrides: Partial<ScannerRunHistoryItem> = {}): Scanne
   };
 }
 
+function makePseudoResultHistoryItem(overrides: Partial<ScannerRunHistoryItem> = {}): ScannerRunHistoryItem {
+  return makeHistoryItem({
+    status: 'completed',
+    runAt: '2026-04-22T08:30:00',
+    completedAt: '2026-04-22T08:30:00',
+    shortlistSize: 0,
+    universeSize: 0,
+    preselectedSize: 0,
+    evaluatedSize: 0,
+    headline: null,
+    topSymbols: [],
+    failureReason: null,
+    ...overrides,
+  });
+}
+
 function makeHistoryResponse(items: ScannerRunHistoryItem[] = [makeHistoryItem()]): ScannerRunHistoryResponse {
   return {
     total: items.length,
@@ -1678,12 +1694,123 @@ describe('UserScannerPage', () => {
     const band = await screen.findByTestId('scanner-conclusion-band');
     expect(band).toHaveTextContent('扫描器尚未产出候选集');
     expect(band).toHaveTextContent('同参数重试');
-    expect(screen.getByTestId('scanner-status-strip')).toHaveTextContent('等待可用数据');
+    const statusStrip = screen.getByTestId('scanner-status-strip');
+    expect(statusStrip).toHaveTextContent('等待可用数据');
+    expect(statusStrip).toHaveTextContent('候选集未产出');
+    expect(statusStrip).not.toHaveTextContent(/0\s*\/\s*0\s*\/\s*0/);
+    expect(screen.getByTestId('scanner-summary-rail-counts')).toHaveTextContent('未产出');
+    expect(screen.getByTestId('scanner-summary-rail-counts')).not.toHaveTextContent(/\b0\b/);
     expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent('候选表暂不展示');
     expect(screen.queryByTestId('scanner-empty-history-fallback')).not.toBeInTheDocument();
     expect(screen.queryByTestId('scanner-empty-success-preview')).not.toBeInTheDocument();
     expect(container).not.toHaveTextContent(/0ms|已验证|Verified|provider|fallback|cache|runtime|schema|requestId|traceId|observation-only|Low-evidence filter active|evidence families/i);
     expect(container).not.toHaveTextContent(/买入|卖出|下单|交易建议|投资建议|止损|目标价|position sizing|target price|stop loss|buy now|sell now/i);
+  });
+
+  it('labels zero-count latest and previous summaries as unavailable instead of completed 0ms cards', async () => {
+    const currentNoCandidateRun = makeCryptoDiagnosticsRun({
+      id: 11,
+      shortlist: [],
+      selected: [],
+      summary: {
+        universeCount: 11,
+        submittedCount: 11,
+        evaluatedCount: 3,
+        selectedCount: 0,
+        rejectedCount: 3,
+        dataFailedCount: 0,
+        skippedCount: 0,
+        errorCount: 0,
+        limitedByResultCap: false,
+      },
+      candidates: [
+        {
+          symbol: 'MARA',
+          name: 'MARA Holdings',
+          rank: 1,
+          status: 'rejected',
+          score: 55,
+          provider: 'alpaca',
+          reason: 'below liquidity threshold',
+          failedRules: ['below_liquidity_threshold'],
+          missingFields: [],
+          metrics: {},
+        },
+      ],
+    });
+    const previousPseudoRun = makeRunDetail({
+      id: 10,
+      status: 'completed',
+      runAt: '2026-04-22T08:30:00',
+      completedAt: '2026-04-22T08:30:00',
+      universeSize: 0,
+      preselectedSize: 0,
+      evaluatedSize: 0,
+      shortlistSize: 0,
+      sourceSummary: null,
+      headline: null,
+      universeNotes: [],
+      scoringNotes: [],
+      diagnostics: {},
+      summary: {
+        universeCount: 0,
+        submittedCount: 0,
+        evaluatedCount: 0,
+        selectedCount: 0,
+        rejectedCount: 0,
+        dataFailedCount: 0,
+        skippedCount: 0,
+        errorCount: 0,
+        limitedByResultCap: false,
+      },
+      selected: [],
+      candidates: [],
+      shortlist: [],
+    });
+    getRuns.mockResolvedValue(makeHistoryResponse([
+      makePseudoResultHistoryItem({
+        id: 11,
+        market: 'us',
+        profile: 'us_preopen_v1',
+        profileLabel: 'US Pre-open Scanner v1',
+        universeType: 'theme',
+        themeId: 'crypto_miners',
+        themeLabel: '加密矿企',
+      }),
+      makePseudoResultHistoryItem({
+        id: 10,
+        market: 'us',
+        profile: 'us_preopen_v1',
+        profileLabel: 'US Pre-open Scanner v1',
+        universeType: 'theme',
+        themeId: 'crypto_miners',
+        themeLabel: '加密矿企',
+      }),
+    ]));
+    getRun.mockImplementation(async (runId: number) => (runId === 10 ? previousPseudoRun : currentNoCandidateRun));
+
+    renderUserScannerPage();
+
+    const comparisonDisclosure = await screen.findByTestId('scanner-run-comparison-strip');
+    fireEvent.click(within(comparisonDisclosure).getByRole('button', { name: /展开 比较记录|Expand Comparison records/i }));
+    const resultHistory = await within(comparisonDisclosure).findByTestId('scanner-result-history-summary');
+    await waitFor(() => {
+      expect(within(resultHistory).getByTestId('scanner-run-summary-上次扫描')).toBeInTheDocument();
+    });
+
+    const currentSummary = within(resultHistory).getByTestId('scanner-run-summary-本次扫描');
+    expect(currentSummary).toHaveTextContent('无候选');
+    expect(currentSummary).toHaveTextContent('淘汰数量');
+    expect(currentSummary).toHaveTextContent('3');
+
+    ['最近扫描', '上次扫描'].forEach((title) => {
+      const summary = within(resultHistory).getByTestId(`scanner-run-summary-${title}`);
+      expect(summary).toHaveTextContent('暂不可用');
+      expect(summary).toHaveTextContent('候选集尚未产出');
+      expect(summary).toHaveTextContent('运行数据不足或暂不可用');
+      expect(summary).not.toHaveTextContent(/0ms|候选数量\s*0|淘汰数量\s*0|失败数量\s*0|完成/);
+    });
+    expect(resultHistory).not.toHaveTextContent(/0ms|0\s*\/\s*0\s*\/\s*0/);
   });
 
   it('keeps completed-empty classification when history facts arrive before run detail', async () => {
@@ -1762,13 +1889,13 @@ describe('UserScannerPage', () => {
     expect(nextSteps).toHaveTextContent('可选保存路径');
     expect(nextSteps).toHaveTextContent('Market Overview');
     expect(nextSteps).toHaveTextContent('不代表市场没有机会');
-    expect(nextSteps).toHaveTextContent('功能预览');
-    expect(nextSteps).toHaveTextContent('示例预览');
-    expect(nextSteps).toHaveTextContent('候选摘要');
-    expect(nextSteps).toHaveTextContent('观察依据');
     expect(nextSteps).toHaveTextContent('先研究单个代码，不改官方入选，也不触发持久化。');
     expect(nextSteps).toHaveTextContent('不会写入观察名单');
-    expect(nextSteps).toHaveTextContent('不会进入官方排名或导出数据');
+    expect(nextSteps).not.toHaveTextContent('功能预览');
+    expect(nextSteps).not.toHaveTextContent('示例预览');
+    expect(nextSteps).not.toHaveTextContent('预览候选');
+    expect(within(nextSteps).queryByTestId('scanner-empty-success-preview')).not.toBeInTheDocument();
+    expect(within(nextSteps).queryByTestId('scanner-next-step-preview')).not.toBeInTheDocument();
     expect(within(nextSteps).getByRole('link', { name: /打开 Watchlist/i })).toHaveAttribute('href', '/zh/watchlist');
     expect(within(nextSteps).getByRole('link', { name: /打开 Market Overview/i })).toHaveAttribute('href', '/zh/market-overview');
     const runFacts = await screen.findByTestId('scanner-run-facts');
@@ -1807,7 +1934,7 @@ describe('UserScannerPage', () => {
     });
   });
 
-  it('exposes a safe limited preview and manual symbol handoff from no-candidate states', async () => {
+  it('keeps manual symbol handoff from no-candidate states without preview handoff', async () => {
     getRun.mockResolvedValue(makeCryptoDiagnosticsRun({
       shortlist: [],
       selected: [],
@@ -1851,13 +1978,10 @@ describe('UserScannerPage', () => {
 
     const nextSteps = await screen.findByTestId('scanner-workflow-next-steps');
     expect(within(nextSteps).getByTestId('scanner-primary-research-path')).toHaveTextContent('首选研究路径');
-    expect(nextSteps).toHaveTextContent('预览候选 1');
-    expect(nextSteps).toHaveTextContent('预览不会改变官方入选或评分');
-    expect(within(nextSteps).getByTestId('scanner-empty-success-preview')).toHaveTextContent('演示样例');
-    expect(within(nextSteps).getByTestId('scanner-empty-success-preview')).not.toHaveTextContent(/买入|卖出|下单|交易|target|entry|stop|take-profit/i);
-
-    fireEvent.click(within(nextSteps).getByRole('button', { name: /查看预览候选/ }));
-    expect(await screen.findByTestId('scanner-candidate-row-MARA')).toHaveTextContent(/预览|Preview/);
+    expect(nextSteps).not.toHaveTextContent('预览候选');
+    expect(nextSteps).not.toHaveTextContent('预览不会改变官方入选或评分');
+    expect(within(nextSteps).queryByTestId('scanner-empty-success-preview')).not.toBeInTheDocument();
+    expect(within(nextSteps).queryByTestId('scanner-next-step-preview')).not.toBeInTheDocument();
 
     fireEvent.change(within(nextSteps).getByLabelText(/手动补充研究代码/), { target: { value: 'TSLA' } });
     fireEvent.click(within(nextSteps).getByRole('button', { name: /加入观察名单 TSLA/ }));
