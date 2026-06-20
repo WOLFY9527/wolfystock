@@ -204,13 +204,6 @@ function marketNarrativeCopy(text: string, fallback = '等待更多市场数据'
   return normalized || fallback;
 }
 
-function stripCurrentMarketPrefix(value: string): string {
-  return value
-    .replace(/^当前市场[:：]\s*/i, '')
-    .replace(/^Current market[:：]\s*/i, '')
-    .trim();
-}
-
 function uniqueNarrativeStrings(items: Array<string | null | undefined>, limit: number, fallback: string): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -306,22 +299,6 @@ function buildMarketNarrativeVerdict(params: {
     headline: '市场线索分化，当前以中性观察为主。',
     detail: marketNarrativeCopy(directionalSummary.blockingDrivers[0] || directionalSummary.supportingDrivers[0] || statusSummary.detail || '等待主线进一步清晰。'),
   };
-}
-
-function buildNarrativeCoverageLine(params: {
-  summary: DecisionReadinessSummary;
-  dataState: MarketOverviewDataStateStripView;
-  confidenceSummary: ConsumerConfidenceSummaryView;
-}): string {
-  const { summary, dataState, confidenceSummary } = params;
-  const dataLabel = dataStatusLabel(summary, dataState);
-  const quality = marketNarrativeCopy(summary.qualityLabel)
-    .replace(/背景观察/g, '背景线索')
-    .replace(/用于背景线索/g, '背景线索')
-    .replace(/观察/g, '背景线索')
-    .replace(/待补项/g, '待补');
-  const confidence = marketNarrativeCopy(confidenceSummary.value, '待确认');
-  return `${dataLabel} · ${quality} · 置信度 ${confidence}`;
 }
 
 function narrativeLineText(item?: MarketOverviewDecisionSemanticsLineView | null): string {
@@ -420,6 +397,85 @@ function buildNextObservationLine(params: {
     directionalSummary.watchItems[0],
   ];
   return uniqueNarrativeStrings(candidates, 1, '等待下一项可验证信号')[0];
+}
+
+function anchorDisplayLabel(anchor: MarketOverviewHeroAnchorView): string {
+  return marketNarrativeCopy(anchor.secondaryLabel ? `${anchor.primaryLabel} ${anchor.secondaryLabel}` : anchor.primaryLabel, anchor.key)
+    .replace(/[()]/g, '')
+    .trim();
+}
+
+function buildAnchorMoveFacts(anchors: MarketOverviewHeroAnchorView[]): string[] {
+  const priority = new Map([
+    ['VIX', 0],
+    ['US10Y', 1],
+    ['DXY', 2],
+    ['BTC', 3],
+  ]);
+  return anchors
+    .filter((anchor) => anchor.changeText && anchor.changeText !== '待确认')
+    .sort((left, right) => (priority.get(left.key) ?? 10) - (priority.get(right.key) ?? 10))
+    .map((anchor) => `${anchorDisplayLabel(anchor)} ${anchor.changeText}`)
+    .slice(0, 6);
+}
+
+function buildWhatHappenedLine(params: {
+  briefingSummary: MarketOverviewBriefingSummaryView;
+  heroAnchors: MarketOverviewHeroAnchorView[];
+  verdict: MarketNarrativeVerdictView;
+}): string {
+  const { briefingSummary, heroAnchors, verdict } = params;
+  const lead = marketNarrativeCopy(briefingSummary.leadMessage, '').trim();
+  const moveFacts = buildAnchorMoveFacts(heroAnchors);
+  if (moveFacts.length) {
+    return uniqueNarrativeStrings([
+      lead && !/暂无简报/.test(lead) ? lead : '',
+      `重点变化：${moveFacts.join('，')}。`,
+    ], 2, verdict.headline).join(' ');
+  }
+  return marketNarrativeCopy(lead || verdict.headline, verdict.headline);
+}
+
+function buildWhatMattersLine(params: {
+  drivers: MarketNarrativeDriverView[];
+  verdict: MarketNarrativeVerdictView;
+  directionalSummary: MarketDirectionalSummary;
+}): string {
+  const { drivers, verdict, directionalSummary } = params;
+  const driverDetails = drivers
+    .filter((driver) => driver.status !== '待补')
+    .slice(0, 2)
+    .map((driver) => `${driver.label}：${driver.detail}`);
+  return uniqueNarrativeStrings([
+    ...driverDetails,
+    directionalSummary.blockingDrivers[0],
+    verdict.detail,
+  ], 2, verdict.detail).join('；');
+}
+
+function buildNextCheckLine(params: {
+  nextObservation: string;
+  missingButObservable: string[];
+  summary: DecisionReadinessSummary;
+  view?: MarketOverviewDecisionSemanticsView;
+}): string {
+  const { nextObservation, missingButObservable, summary, view } = params;
+  if (summary.state === 'unavailable' || view?.insufficient) {
+    return marketNarrativeCopy(`先看 ${nextObservation}；待补 ${missingButObservable.join(' / ')}。`);
+  }
+  return marketNarrativeCopy(`${nextObservation}；若该线索转弱或迟迟没有确认，需要重新核对市场叙事。`);
+}
+
+function buildCompactMissingSummary(params: {
+  summary: DecisionReadinessSummary;
+  view?: MarketOverviewDecisionSemanticsView;
+  missingButObservable: string[];
+}): string | null {
+  const { summary, view, missingButObservable } = params;
+  if (summary.state !== 'unavailable' && !view?.insufficient) {
+    return null;
+  }
+  return marketNarrativeCopy(`可见事实有限：${missingButObservable.join(' / ')}；当前只保留已返回市场事实。`);
 }
 
 const MarketOverviewSetupPath: React.FC<{ testId: string }> = ({ testId }) => (
@@ -891,7 +947,9 @@ const MarketOverviewConclusionLayer: React.FC<{
   directionalSummary: MarketDirectionalSummary;
   regimeSummary?: MarketOverviewRegimeSummaryView;
   view?: MarketOverviewDecisionSemanticsView;
-}> = ({ testId, summary, statusSummary, dataState, directionalSummary, regimeSummary, view }) => {
+  briefingSummary: MarketOverviewBriefingSummaryView;
+  heroAnchors: MarketOverviewHeroAnchorView[];
+}> = ({ testId, summary, statusSummary, dataState, directionalSummary, regimeSummary, view, briefingSummary, heroAnchors }) => {
   const routeLocale = typeof window !== 'undefined' ? parseLocaleFromPathname(window.location.pathname) : null;
   const confidenceSummary = buildConsumerConfidenceSummary(summary, view);
   const verdict = buildMarketNarrativeVerdict({
@@ -899,11 +957,6 @@ const MarketOverviewConclusionLayer: React.FC<{
     statusSummary,
     directionalSummary,
     view,
-  });
-  const coverageLine = buildNarrativeCoverageLine({
-    summary,
-    dataState,
-    confidenceSummary,
   });
   const drivers = buildMarketNarrativeDrivers({
     directionalSummary,
@@ -916,54 +969,31 @@ const MarketOverviewConclusionLayer: React.FC<{
     regimeSummary,
     view,
   });
-  const strongestEvidence = uniqueNarrativeStrings([
-    drivers.find((driver) => driver.status !== '待补')?.label,
-    directionalSummary.supportingDrivers[0],
-    regimeSummary?.drivers[0]?.label,
-  ], 2, '关键证据待补');
-  const dataBoundary = uniqueNarrativeStrings([
-    coverageLine,
-    summary.blockers[0],
-    view?.dataGaps[0]?.label,
-    regimeSummary?.blockers[0]?.label,
-  ], 2, '关键边界待确认');
-  const observableNow = uniqueNarrativeStrings([
-    stripCurrentMarketPrefix(directionalSummary.currentLabel),
-    regimeSummary?.title,
-    directionalSummary.regimePhrase,
-  ], 2, verdict.label);
   const missingButObservable = uniqueNarrativeStrings([
     summary.blockers[0],
     view?.dataGaps[0]?.label,
     regimeSummary?.blockers[0]?.label,
     directionalSummary.blockingDrivers[0],
   ], 2, '暂无关键阻断');
+  const missingSummary = buildCompactMissingSummary({ summary, view, missingButObservable });
   const narrativeFacts = [
     {
-      key: 'state',
-      label: '当前市场状态',
-      value: observableNow.join(' / '),
+      key: 'what-happened',
+      label: '发生了什么',
+      value: buildWhatHappenedLine({ briefingSummary, heroAnchors, verdict }),
       detail: verdict.headline,
     },
     {
-      key: 'strongest-evidence',
-      label: '最强证据',
-      value: strongestEvidence.join(' / '),
-      detail: marketNarrativeCopy(verdict.detail),
-    },
-    {
-      key: 'boundary',
-      label: '数据边界',
-      value: dataBoundary.join(' / '),
-      detail: marketNarrativeCopy(confidenceSummary.detail),
+      key: 'what-matters',
+      label: '重要点',
+      value: buildWhatMattersLine({ drivers, verdict, directionalSummary }),
+      detail: marketNarrativeCopy(`数据状态：${dataStatusLabel(summary, dataState)}；信心水平：${confidenceSummary.value}。`),
     },
     {
       key: 'next',
-      label: '下一步研究',
-      value: nextObservation,
-      detail: summary.state === 'unavailable' || view?.insufficient
-        ? `当前先看已返回主线；待补：${missingButObservable.join(' / ')}。`
-        : '若下一项观察转弱或待补证据继续缺席，需要重新核对市场叙事。',
+      label: '下一步看什么',
+      value: buildNextCheckLine({ nextObservation, missingButObservable, summary, view }),
+      detail: '只作为研究核对顺序，不升级为更强结论。',
     },
   ];
   const quickActions: Array<{
@@ -1024,20 +1054,15 @@ const MarketOverviewConclusionLayer: React.FC<{
           <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">
             {verdict.headline}
           </p>
-          <p className="mt-2 max-w-3xl text-[11px] leading-5 text-white/42">
-            {marketNarrativeCopy(`证据覆盖 / 置信度：${coverageLine}`)}
-          </p>
         </div>
-        <div data-testid="market-command-chips" className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
-          <TerminalChip variant={verdict.variant}>{verdict.label}</TerminalChip>
-          <TerminalChip variant="neutral">{dataStatusLabel(summary, dataState)}</TerminalChip>
-          <TerminalChip variant="neutral">置信度 {marketNarrativeCopy(confidenceSummary.value, '待确认')}</TerminalChip>
+        <div data-testid="market-overview-status-line" className="max-w-sm text-left text-[11px] leading-5 text-white/46 lg:text-right">
+          {marketNarrativeCopy(`${verdict.label === '数据不足' ? '事实有限' : verdict.label} · ${dataStatusLabel(summary, dataState)} · 信心水平 ${confidenceSummary.value}`)}
         </div>
       </div>
       <section
         data-testid="market-overview-summary-strip"
         aria-label={routeLocale === 'en' ? 'First-read summary' : '首读摘要'}
-        className="mt-4 grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4"
+        className="mt-4 grid min-w-0 grid-cols-1 gap-2 md:grid-cols-3"
       >
         {narrativeFacts.map((fact) => (
           <div key={fact.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5">
@@ -1047,6 +1072,11 @@ const MarketOverviewConclusionLayer: React.FC<{
           </div>
         ))}
       </section>
+      {missingSummary ? (
+        <p data-testid="market-overview-missing-summary" className="mt-3 rounded-lg border border-amber-200/10 bg-amber-300/[0.035] px-3 py-2 text-[11px] leading-5 text-amber-50/66">
+          {missingSummary}
+        </p>
+      ) : null}
       <div
         data-testid="market-overview-quick-actions"
         className="mt-3 flex min-w-0 flex-wrap items-center gap-2"
@@ -1076,7 +1106,7 @@ const MarketOverviewConclusionLayer: React.FC<{
         ))}
       </div>
       <p className="mt-3 text-[11px] leading-5 text-white/38">
-        研究观察用途，不构成交易或下单指令。
+        研究用途，不形成个人化决策依据。
       </p>
     </section>
   );
@@ -1278,6 +1308,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
   temperatureSummary: MarketOverviewTemperatureSummaryView;
   briefingSummary: MarketOverviewBriefingSummaryView;
   officialMacroRecords: OfficialMacroAuthorityRecord[];
+  heroAnchors: MarketOverviewHeroAnchorView[];
   showAdminDiagnostics: boolean;
 }> = ({
   directionalSummary,
@@ -1291,6 +1322,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
   temperatureSummary,
   briefingSummary,
   officialMacroRecords,
+  heroAnchors,
   showAdminDiagnostics,
 }) => {
   const supportingEvidence = view ? [
@@ -1339,6 +1371,8 @@ const MarketDecisionSemanticsStrip: React.FC<{
           directionalSummary={directionalSummary}
           regimeSummary={regimeSummary}
           view={view}
+          briefingSummary={briefingSummary}
+          heroAnchors={heroAnchors}
         />
         <MarketOverviewDataNotesDisclosure
           directionalSummary={directionalSummary}
@@ -1488,6 +1522,7 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
               temperatureSummary={temperatureSummary}
               briefingSummary={briefingSummary}
               officialMacroRecords={officialMacroRecords}
+              heroAnchors={heroAnchors}
               showAdminDiagnostics={showAdminDiagnostics}
             />
             <div className="border-t border-[color:var(--wolfy-divider)] p-3 md:px-4">
