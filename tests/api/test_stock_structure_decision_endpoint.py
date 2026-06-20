@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.v1.endpoints import stocks as stocks_endpoint
+from src.services import symbol_research_packet_service
 from src.services.stock_structure_decision_service import STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION
 
 
@@ -332,9 +333,9 @@ def test_research_packet_endpoint_assembles_existing_data_and_missing_families(m
     )
     fake_structure = _FakeStructureDecisionService(_payload())
     fake_evidence = _FakeStockEvidenceService(_evidence_payload())
-    monkeypatch.setattr(stocks_endpoint, "StockService", lambda: fake_stock, raising=False)
-    monkeypatch.setattr(stocks_endpoint, "StockStructureDecisionService", lambda: fake_structure, raising=False)
-    monkeypatch.setattr(stocks_endpoint, "StockEvidenceService", lambda: fake_evidence, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "StockService", lambda: fake_stock, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "StockStructureDecisionService", lambda: fake_structure, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "StockEvidenceService", lambda: fake_evidence, raising=False)
 
     response = _client().get("/api/v1/stocks/AAPL/research-packet", params={"market": "us"})
 
@@ -396,9 +397,9 @@ def test_research_packet_endpoint_fail_closes_absent_quote_history_and_evidence(
     )
     fake_structure = _FakeStructureDecisionService(_payload(data_status="unavailable"))
     fake_evidence = _FakeStockEvidenceService({"symbols": [], "items": []})
-    monkeypatch.setattr(stocks_endpoint, "StockService", lambda: fake_stock, raising=False)
-    monkeypatch.setattr(stocks_endpoint, "StockStructureDecisionService", lambda: fake_structure, raising=False)
-    monkeypatch.setattr(stocks_endpoint, "StockEvidenceService", lambda: fake_evidence, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "StockService", lambda: fake_stock, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "StockStructureDecisionService", lambda: fake_structure, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "StockEvidenceService", lambda: fake_evidence, raising=False)
 
     response = _client().get("/api/v1/stocks/AAPL/research-packet", params={"market": "us"})
 

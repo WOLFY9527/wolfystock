@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from api.app import create_app
 from api.deps import CurrentUser, get_current_user
 import src.auth as auth
+from src.services import watchlist_service as watchlist_service_module
 from src.config import Config
 from src.storage import DatabaseManager, MarketScannerCandidate, MarketScannerRun, RuleBacktestRun, UserWatchlistItem
 
@@ -34,7 +35,6 @@ FORBIDDEN_CONSUMER_RESPONSE_FIELDS = (
     "source_type",
     "scoreContributionAllowed",
     "score_contribution_allowed",
-    "observationOnly",
     "observation_only",
     "raw provider error",
     "Traceback",
@@ -296,6 +296,102 @@ class WatchlistApiTestCase(unittest.TestCase):
         )
         self.assertEqual(bad_market.status_code, 422)
 
+    def test_watchlist_item_exposes_row_research_packet_for_saved_symbol_without_name_or_price(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+
+        def fake_packet(stock_code: str, *, market: str | None = None) -> dict:
+            self.assertEqual(stock_code, "600519")
+            self.assertEqual(market, "cn")
+            return {
+                "symbol": "600519",
+                "market": "cn",
+                "identity": {"name": None, "exchange": None, "sector": None, "industry": None},
+                "quote": {"state": "missing", "price": None, "changePercent": None, "asOf": None},
+                "history": {"state": "missing", "bars": 0, "period": "daily", "asOf": None},
+                "structure": {"state": "missing", "label": None, "confidence": None, "asOf": None},
+                "fundamentals": {"state": "not_integrated", "fieldsAvailable": []},
+                "events": {"state": "not_integrated", "latest": []},
+                "peer": {"state": "missing", "benchmark": None},
+                "missingData": [
+                    "quote",
+                    "price_history",
+                    "structure_analysis",
+                    "fundamentals",
+                    "filing_event_catalyst",
+                    "peer_benchmark",
+                ],
+                "researchStatus": "blocked",
+                "nextDataAction": "Add quote and daily price history evidence before marking the packet ready.",
+                "observationOnly": True,
+                "decisionGrade": False,
+                "noAdviceDisclosure": "Observation-only research packet; no personalized action instruction.",
+            }
+
+        self.addCleanup(
+            setattr,
+            watchlist_service_module,
+            "build_symbol_research_packet",
+            watchlist_service_module.build_symbol_research_packet,
+        )
+        watchlist_service_module.build_symbol_research_packet = fake_packet
+
+        add_resp = self.client.post(
+            "/api/v1/watchlist/items",
+            json={"symbol": "600519", "market": "cn", "source": "scanner"},
+        )
+        self.assertEqual(add_resp.status_code, 200)
+        self.assertEqual(add_resp.json()["rowResearchPacket"]["symbol"], "600519")
+        self.assertEqual(add_resp.json()["rowResearchPacket"]["quote"]["state"], "missing")
+
+        list_resp = self.client.get("/api/v1/watchlist/items")
+        self.assertEqual(list_resp.status_code, 200)
+        item = list_resp.json()["items"][0]
+        packet = item["rowResearchPacket"]
+        self.assertEqual(packet["symbol"], "600519")
+        self.assertEqual(packet["market"], "cn")
+        self.assertEqual(packet["identity"], {"name": None, "exchange": None, "sector": None, "industry": None})
+        self.assertEqual(packet["savedItemSource"], "scanner")
+        self.assertEqual(packet["quote"]["state"], "missing")
+        self.assertEqual(packet["researchStatus"], "blocked")
+        self.assertIn("quote", packet["missingData"])
+        self.assertIn("price_history", packet["missingData"])
+        self.assertEqual(packet["nextDataAction"], "Add quote and daily price history evidence before marking the packet ready.")
+        self.assertTrue(packet["observationOnly"])
+        self.assertEqual(packet["noAdviceDisclosure"], "Observation-only research packet; no personalized action instruction.")
+        self.assertEqual(
+            packet["scannerLineage"],
+            {
+                "runId": None,
+                "rank": None,
+                "score": None,
+                "status": None,
+                "lastScoredAt": None,
+            },
+        )
+        serialized = json.dumps(packet, ensure_ascii=False)
+        for forbidden in (
+            "sourceAuthorityAllowed",
+            "scoreContributionAllowed",
+            "provider",
+            "cache",
+            "runtime",
+            "requestId",
+            "traceId",
+            "buy",
+            "sell",
+            "hold",
+            "target price",
+            "stop-loss",
+            "position sizing",
+            "买入",
+            "卖出",
+            "持有",
+            "目标价",
+            "止损",
+            "仓位",
+        ):
+            self.assertNotIn(forbidden, serialized)
+
     def test_watchlist_refresh_scores_endpoint_updates_scanner_score(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
         add_resp = self.client.post(
@@ -368,6 +464,111 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(item["theme_id"], "crypto_miners")
         self.assertEqual(item["universe_type"], "theme")
         self.assertTrue(item["last_scored_at"])
+
+    def test_watchlist_row_research_packet_includes_scanner_lineage_without_raw_diagnostics(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+
+        def fake_packet(stock_code: str, *, market: str | None = None) -> dict:
+            self.assertEqual(stock_code, "WULF")
+            self.assertEqual(market, "us")
+            return {
+                "symbol": "WULF",
+                "market": "us",
+                "identity": {"name": None, "exchange": None, "sector": None, "industry": None},
+                "quote": {"state": "missing", "price": None, "changePercent": None, "asOf": None},
+                "history": {"state": "missing", "bars": 0, "period": "daily", "asOf": None},
+                "structure": {"state": "missing", "label": None, "confidence": None, "asOf": None},
+                "fundamentals": {"state": "not_integrated", "fieldsAvailable": []},
+                "events": {"state": "not_integrated", "latest": []},
+                "peer": {"state": "missing", "benchmark": None},
+                "missingData": ["quote", "price_history", "fundamentals", "filing_event_catalyst"],
+                "researchStatus": "blocked",
+                "nextDataAction": "Add quote and daily price history evidence before marking the packet ready.",
+                "observationOnly": True,
+                "decisionGrade": False,
+                "noAdviceDisclosure": "Observation-only research packet; no personalized action instruction.",
+            }
+
+        self.addCleanup(
+            setattr,
+            watchlist_service_module,
+            "build_symbol_research_packet",
+            watchlist_service_module.build_symbol_research_packet,
+        )
+        watchlist_service_module.build_symbol_research_packet = fake_packet
+
+        add_resp = self.client.post(
+            "/api/v1/watchlist/items",
+            json={
+                "symbol": "WULF",
+                "market": "us",
+                "source": "scanner",
+                "scanner_run_id": 5,
+                "scanner_rank": 8,
+                "scanner_score": 60,
+            },
+        )
+        self.assertEqual(add_resp.status_code, 200)
+
+        now = datetime.now()
+        run = MarketScannerRun(
+            market="us",
+            profile="us_preopen_v1",
+            universe_name="us_preopen_watchlist_v1",
+            status="completed",
+            run_at=now,
+            completed_at=now,
+            shortlist_size=1,
+        )
+        candidate = MarketScannerCandidate(
+            symbol="WULF",
+            name="WULF",
+            rank=2,
+            score=71.5,
+            reason_summary="Scanner score refreshed.",
+            created_at=now,
+        )
+        with self.db.get_session() as session:
+            session.add(run)
+            session.flush()
+            run_id = run.id
+            candidate.run_id = run.id
+            session.add(candidate)
+            session.commit()
+
+        refresh_resp = self.client.post("/api/v1/watchlist/refresh-scores", json={"market": "us"})
+        self.assertEqual(refresh_resp.status_code, 200)
+
+        list_resp = self.client.get("/api/v1/watchlist/items")
+        self.assertEqual(list_resp.status_code, 200)
+        packet = list_resp.json()["items"][0]["rowResearchPacket"]
+        self.assertEqual(
+            packet["scannerLineage"],
+            {
+                "runId": run_id,
+                "rank": 2,
+                "score": 71.5,
+                "status": "fresh",
+                "lastScoredAt": list_resp.json()["items"][0]["last_scored_at"],
+            },
+        )
+        self.assertEqual(packet["researchStatus"], "blocked")
+        self.assertEqual(packet["quote"]["state"], "missing")
+        serialized = json.dumps(packet, ensure_ascii=False)
+        for forbidden in (
+            "sourceAuthorityAllowed",
+            "scoreContributionAllowed",
+            "source_confidence",
+            "provider",
+            "rawDiagnostics",
+            "trace",
+            "target price",
+            "predicted return",
+            "买入",
+            "卖出",
+            "目标价",
+        ):
+            self.assertNotIn(forbidden, serialized)
 
     def test_watchlist_items_project_safe_local_ohlcv_quality_from_scanner_candidate_diagnostics(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
