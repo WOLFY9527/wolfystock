@@ -475,6 +475,31 @@ function formatDurationMs(startedAt?: string | null, completedAt?: string | null
   return `${minutes}m ${remainingSeconds}s`;
 }
 
+function getScannerRunDurationMs(runDetail: ScannerRunDetail | null): number | null {
+  if (!runDetail?.runAt || !runDetail.completedAt) return null;
+  const started = new Date(runDetail.runAt).getTime();
+  const completed = new Date(runDetail.completedAt).getTime();
+  if (!Number.isFinite(started) || !Number.isFinite(completed) || completed < started) return null;
+  return completed - started;
+}
+
+function isScannerPseudoEmptyRun(runDetail: ScannerRunDetail | null): boolean {
+  if (!runDetail) return false;
+  const selectedCount = getFiniteCount(runDetail.summary?.selectedCount) ?? runDetail.shortlist?.length ?? runDetail.selected?.length ?? 0;
+  const rejectedCount = getFiniteCount(runDetail.summary?.rejectedCount) ?? 0;
+  const dataFailedCount = getFiniteCount(runDetail.summary?.dataFailedCount) ?? 0;
+  const errorCount = getFiniteCount(runDetail.summary?.errorCount) ?? 0;
+  const evaluatedCount = getFiniteCount(runDetail.summary?.evaluatedCount) ?? getFiniteCount(runDetail.evaluatedSize) ?? 0;
+  const durationMs = getScannerRunDurationMs(runDetail);
+  const hasRows = Boolean(runDetail.shortlist?.length || runDetail.selected?.length || getCandidateDiagnostics(runDetail).length);
+  const noOutcomeCounts = selectedCount === 0 && rejectedCount === 0 && dataFailedCount === 0 && errorCount === 0 && evaluatedCount === 0;
+  const lacksRunEvidence = durationMs == null || durationMs <= 50;
+  return normalizeRunState(runDetail.status) !== 'failed'
+    && noOutcomeCounts
+    && !hasRows
+    && lacksRunEvidence;
+}
+
 function normalizeRunState(value?: string | null): string {
   return String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
 }
@@ -673,6 +698,20 @@ function buildScannerRunSummary(
   language: 'zh' | 'en',
 ): ScannerRunSummary | null {
   if (!runDetail) return null;
+  if (isScannerPseudoEmptyRun(runDetail)) {
+    return {
+      title,
+      statusLabel: language === 'en' ? 'Unavailable' : '暂不可用',
+      bestCandidate: language === 'en' ? 'None yet' : '尚未产出',
+      candidateCount: 0,
+      rejectedCount: 0,
+      failedCount: 0,
+      dataStatusLabel: language === 'en' ? 'Waiting for usable data' : '等待可用数据',
+      durationLabel: '--',
+      runTimeLabel: formatTimestamp(runDetail.runAt || runDetail.completedAt, language),
+      errorSummary: null,
+    };
+  }
   const selectedCount = getRunSummaryCount(runDetail, 'selectedCount', runDetail.shortlist?.length || 0);
   const rejectedCount = getRunSummaryCount(runDetail, 'rejectedCount', Math.max(0, (runDetail.evaluatedSize || 0) - selectedCount));
   const failedCount = getRunSummaryCount(runDetail, 'dataFailedCount', 0) + getRunSummaryCount(runDetail, 'errorCount', 0);
@@ -1108,6 +1147,19 @@ function buildScannerConclusion(
     };
   }
 
+  if (isScannerPseudoEmptyRun(runDetail)) {
+    return {
+      state: 'insufficient',
+      title: language === 'en' ? 'Scanner has not produced a candidate set yet' : '扫描器尚未产出候选集',
+      detail: language === 'en'
+        ? 'This result does not include candidates, exclusions, data-limited rows, or a credible run duration. Retry the same setup later, or check Market Overview before opening a symbol manually.'
+        : '本次结果没有候选、淘汰、数据受限行或可信运行耗时。可稍后同参数重试，或先查看 Market Overview 后手动打开单个代码。',
+      candidateCount: 0,
+      trustSummary,
+      tone: 'caution',
+    };
+  }
+
   const selectedCount = getRunSummaryCount(runDetail, 'selectedCount', runDetail.shortlist?.length || 0);
   const rejectedCount = getRunSummaryCount(runDetail, 'rejectedCount', 0);
   const failedCount = getRunSummaryCount(runDetail, 'dataFailedCount', 0) + getRunSummaryCount(runDetail, 'errorCount', 0);
@@ -1281,6 +1333,15 @@ function buildScannerWorkbenchEmptyState({
       body: language === 'en'
         ? `Scanner organizes observation candidates from the current scope. Starting setup: ${firstRunSetupLabel}. Run one scan first; if you want earlier results, open history.`
         : `扫描器会先按当前范围整理候选与观察线索。当前起始范围：${firstRunSetupLabel}。先直接启动一次扫描；如需查看已有结果，可打开历史记录。`,
+    };
+  }
+
+  if (isScannerPseudoEmptyRun(runDetail)) {
+    return {
+      title: language === 'en' ? 'Candidate table paused' : '候选表暂不展示',
+      body: language === 'en'
+        ? 'The page is waiting for a usable candidate set before showing rows here.'
+        : '等待可用候选集后再展示表格行。',
     };
   }
 
@@ -2669,6 +2730,7 @@ const UserScannerPage: React.FC = () => {
     () => buildScannerRunSummary(language === 'en' ? 'Current scan' : '本次扫描', runDetail, language),
     [language, runDetail],
   );
+  const scannerHasPseudoEmptyRun = isScannerPseudoEmptyRun(runDetail);
   const recentRunSummary = useMemo(
     () => buildHistoryItemSummary(language === 'en' ? 'Latest scan' : '最近扫描', historyItems[0] || null, language),
     [historyItems, language],
@@ -2887,9 +2949,9 @@ const UserScannerPage: React.FC = () => {
     [candidateFilter, diagnosticCandidates, historyResolution, language, pageErrorSummary, runDetail, scannerFirstRunSetupLabel],
   );
   const visibleHistorySummaries = useMemo(
-    () => [currentRunSummary, recentRunSummary, previousRunSummary]
+    () => [scannerHasPseudoEmptyRun ? null : currentRunSummary, recentRunSummary, previousRunSummary]
       .filter((item, index, array): item is ScannerRunSummary => Boolean(item) && array.findIndex((other) => other?.title === item?.title) === index),
-    [currentRunSummary, previousRunSummary, recentRunSummary],
+    [currentRunSummary, previousRunSummary, recentRunSummary, scannerHasPseudoEmptyRun],
   );
   const workbenchCandidatesWithEvidence = useMemo(
     () => workbenchDiagnostics.map((candidate) => withCandidateEvidence(
@@ -3425,7 +3487,9 @@ const UserScannerPage: React.FC = () => {
     : `${market.toUpperCase()} · ${scanScope === 'theme' ? (language === 'en' ? 'Theme universe' : '主题标的池') : scanScope === 'symbols' ? (language === 'en' ? 'Custom symbols' : '自定义标的') : (language === 'en' ? 'Default universe' : '默认市场池')}`;
   const scannerThemeLabel = runDetail?.themeLabel || runDetail?.themeId || (selectedTheme ? getThemeLabel(selectedTheme, language) : (language === 'en' ? 'No theme' : '无主题'));
   const scannerDataStateLabel = runDetail
-    ? `${normalizeRunState(runDetail.status) === 'failed' || normalizeRunState(runDetail.status) === 'error' ? `${currentRunSummary?.statusLabel || compactScannerStateLabel(runDetail.status, language)} · ` : ''}${getRunDataStatusLabel(runDetail, language)}`
+    ? (scannerHasPseudoEmptyRun
+      ? (language === 'en' ? 'Waiting for usable data' : '等待可用数据')
+      : `${normalizeRunState(runDetail.status) === 'failed' || normalizeRunState(runDetail.status) === 'error' ? `${currentRunSummary?.statusLabel || compactScannerStateLabel(runDetail.status, language)} · ` : ''}${getRunDataStatusLabel(runDetail, language)}`)
     : (language === 'en' ? 'Waiting' : '等待');
   const scannerResearchReadinessView = useMemo(
     () => buildConsumerResearchReadinessView(inferScannerResearchReadiness(runDetail), language),
@@ -3451,12 +3515,12 @@ const UserScannerPage: React.FC = () => {
       : (isRetryScanState ? '重新扫描' : '启动扫描');
   const heroLatestLabel = `${language === 'en' ? 'Latest' : '最近'} ${generatedAt ? formatTimestamp(generatedAt, language) : '--'}`;
   const showPreviewHandoff = currentSelectedCount === 0 && previewSelectedDiagnostics.length > 0;
-  const showWorkflowNextSteps = !runDetail
+  const showWorkflowNextSteps = !scannerHasPseudoEmptyRun && (!runDetail
     || scannerConclusion.state !== 'top-candidate'
     || scannerConclusion.trustSummary.staleCount > 0
     || scannerConclusion.trustSummary.partialCount > 0
     || scannerConclusion.trustSummary.limitedCount > 0
-    || Boolean(pageErrorSummary);
+    || Boolean(pageErrorSummary));
   const scannerWorkflowDetail = scannerConclusion.state === 'waiting'
     ? (language === 'en'
       ? 'Run the current setup first. If you need to keep moving before Scanner forms a usable candidate set, use the manual symbol research path below instead of bouncing between routes.'
@@ -3549,7 +3613,7 @@ const UserScannerPage: React.FC = () => {
     researchWorkflowSymbol
       ? (language === 'en' ? `Candidate in focus: ${researchWorkflowSymbol}` : `当前候选：${researchWorkflowSymbol}`)
       : null,
-    runDetail
+    runDetail && !scannerHasPseudoEmptyRun
       ? (language === 'en'
         ? `Scanner coverage loaded for ${scannerScopeLabel}`
         : `已载入扫描范围：${scannerScopeLabel}`)
@@ -4270,7 +4334,7 @@ const UserScannerPage: React.FC = () => {
                       className={`grid min-h-0 flex-1 min-w-0 gap-3 px-2 py-2 ${showDetailRail ? 'xl:grid-cols-[minmax(820px,1fr)_minmax(320px,340px)]' : 'grid-cols-1'}`}
                     >
                       <div data-testid="scanner-primary-work-region" className="min-w-0">
-                        {currentSelectedCount === 0 && candidateFilter === 'selected' && visibleHistorySummaries.length ? (
+                        {!scannerHasPseudoEmptyRun && currentSelectedCount === 0 && candidateFilter === 'selected' && visibleHistorySummaries.length ? (
                           <ScannerHistoryFallbackPanel
                             summaries={visibleHistorySummaries}
                             emptyState={workbenchEmptyState}
@@ -4384,7 +4448,7 @@ const UserScannerPage: React.FC = () => {
                           >
                             <div className="grid min-w-0 gap-3">
                               <p>{workbenchEmptyState.body}</p>
-                              <ScannerEmptySuccessPreview language={language} compact />
+                              {scannerHasPseudoEmptyRun ? null : <ScannerEmptySuccessPreview language={language} compact />}
                             </div>
                           </CompactEmptyRow>
                         )}

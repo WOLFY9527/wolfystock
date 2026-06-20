@@ -1633,6 +1633,59 @@ describe('UserScannerPage', () => {
     expect(band).toHaveTextContent('不代表市场没有机会');
   });
 
+  it('does not present a zero-duration empty payload as a completed scanner run', async () => {
+    getRun.mockResolvedValue(makeRunDetail({
+      status: 'completed',
+      runAt: '2026-04-22T08:30:00',
+      completedAt: '2026-04-22T08:30:00',
+      universeSize: 300,
+      preselectedSize: 300,
+      evaluatedSize: 0,
+      shortlistSize: 0,
+      sourceSummary: null,
+      headline: null,
+      universeNotes: [],
+      scoringNotes: [],
+      diagnostics: {
+        universeSelection: {
+          universeType: 'default',
+          themeId: null,
+          themeLabel: null,
+          requestedSymbolsCount: 0,
+          acceptedSymbolsCount: 0,
+          rejectedSymbols: [],
+          universeNotes: [],
+        },
+      },
+      summary: {
+        universeCount: 300,
+        submittedCount: 300,
+        evaluatedCount: 0,
+        selectedCount: 0,
+        rejectedCount: 0,
+        dataFailedCount: 0,
+        skippedCount: 0,
+        errorCount: 0,
+        limitedByResultCap: false,
+      },
+      selected: [],
+      candidates: [],
+      shortlist: [],
+    }));
+
+    const { container } = renderUserScannerPage();
+
+    const band = await screen.findByTestId('scanner-conclusion-band');
+    expect(band).toHaveTextContent('扫描器尚未产出候选集');
+    expect(band).toHaveTextContent('同参数重试');
+    expect(screen.getByTestId('scanner-status-strip')).toHaveTextContent('等待可用数据');
+    expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent('候选表暂不展示');
+    expect(screen.queryByTestId('scanner-empty-history-fallback')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('scanner-empty-success-preview')).not.toBeInTheDocument();
+    expect(container).not.toHaveTextContent(/0ms|已验证|Verified|provider|fallback|cache|runtime|schema|requestId|traceId|observation-only|Low-evidence filter active|evidence families/i);
+    expect(container).not.toHaveTextContent(/买入|卖出|下单|交易建议|投资建议|止损|目标价|position sizing|target price|stop loss|buy now|sell now/i);
+  });
+
   it('keeps completed-empty classification when history facts arrive before run detail', async () => {
     getRuns.mockResolvedValue(makeHistoryResponse([
       makeHistoryItem({
