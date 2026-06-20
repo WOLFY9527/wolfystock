@@ -73,6 +73,28 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
     def tearDown(self) -> None:
         DatabaseManager.reset_instance()
 
+    def test_operational_status_exposes_not_run_data_readiness_before_any_run(self) -> None:
+        ops_service = MarketScannerOperationsService(
+            scanner_service=self.scanner_service,
+            config=_make_config(scanner_notification_enabled=False),
+            notifier_factory=lambda: FakeNotifier(available=False),
+        )
+
+        status = ops_service.get_operational_status(market="cn", profile="cn_preopen_v1")
+
+        self.assertIsNone(status["last_run"])
+        readiness = status["dataReadiness"]
+        self.assertEqual(readiness["state"], "not_run")
+        self.assertEqual(readiness["market"], "cn")
+        self.assertEqual(readiness["profile"], "cn_preopen_v1")
+        self.assertEqual(readiness["universeSize"], 0)
+        self.assertEqual(readiness["quoteCoverage"], "unknown")
+        self.assertEqual(readiness["historyCoverage"], "unknown")
+        self.assertEqual(readiness["freshness"], "unknown")
+        self.assertEqual(readiness["blockerBucket"], "unknown")
+        self.assertIn("尚未运行", readiness["consumerSummary"])
+        self.assertIn("运行 Scanner", readiness["nextDataAction"])
+
     def test_manual_and_scheduled_runs_record_trigger_mode_and_watchlist_views(self) -> None:
         ops_service = MarketScannerOperationsService(
             scanner_service=self.scanner_service,
@@ -110,6 +132,7 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
         self.assertEqual(status["last_manual_run"]["id"], manual["id"])
         self.assertEqual(status["last_scheduled_run"]["id"], scheduled["id"])
         self.assertEqual(status["today_watchlist"]["id"], scheduled["id"])
+        self.assertEqual(status["dataReadiness"]["state"], "ready")
 
     def test_notification_success_is_recorded_on_scheduled_run(self) -> None:
         notifier = FakeNotifier(available=True, send_result=True)
@@ -224,6 +247,21 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
             ["akshare_snapshot_fetch_failed", "efinance_snapshot_fetch_failed"],
         )
         self.assertIn("snapshot_attempts=", detail["source_summary"])
+        readiness = detail["diagnostics"]["dataReadiness"]
+        self.assertEqual(readiness["state"], "blocked")
+        self.assertEqual(readiness["market"], "cn")
+        self.assertEqual(readiness["profile"], "cn_preopen_v1")
+        self.assertEqual(readiness["universeSize"], 0)
+        self.assertEqual(readiness["quoteCoverage"], "missing")
+        self.assertEqual(readiness["historyCoverage"], "unknown")
+        self.assertEqual(readiness["freshness"], "unknown")
+        self.assertEqual(readiness["blockerBucket"], "missing_quote_snapshot")
+        self.assertIn("行情快照", readiness["consumerSummary"])
+        self.assertIn("补充行情快照", readiness["nextDataAction"])
+        self.assertNotRegex(
+            " ".join(str(value) for value in readiness.values()),
+            r"Akshare|Efinance|provider|cache|runtime|sourceAuthority|scoreContribution|raw|debug|buy|sell|hold|target|stop|position",
+        )
 
     def test_scheduled_run_resolves_us_profile_from_config(self) -> None:
         stock_repo = StockRepository(self.db)
@@ -275,12 +313,23 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
         self.assertEqual(detail["shortlist"], [])
         self.assertEqual(detail["source_summary"], "scanner=empty")
         self.assertEqual(detail["diagnostics"]["empty_reason"], "扫描宇宙为空，无法生成候选名单")
-        self.assertEqual(set(detail["diagnostics"]), {"empty_reason", "operation"})
+        self.assertEqual(set(detail["diagnostics"]), {"empty_reason", "operation", "dataReadiness"})
         self.assertNotIn("coverage_summary", detail["diagnostics"])
         self.assertNotIn("candidate_diagnostics", detail["diagnostics"])
         self.assertNotIn("universe_selection", detail["diagnostics"])
         self.assertEqual(detail["accepted_symbols_count"], 0)
         self.assertEqual(data_manager.realtime_quote_calls, [])
+        readiness = detail["diagnostics"]["dataReadiness"]
+        self.assertEqual(readiness["state"], "blocked")
+        self.assertEqual(readiness["market"], "us")
+        self.assertEqual(readiness["profile"], "us_preopen_v1")
+        self.assertEqual(readiness["universeSize"], 0)
+        self.assertEqual(readiness["quoteCoverage"], "unknown")
+        self.assertEqual(readiness["historyCoverage"], "unknown")
+        self.assertEqual(readiness["freshness"], "unknown")
+        self.assertEqual(readiness["blockerBucket"], "empty_universe")
+        self.assertIn("候选池为空", readiness["consumerSummary"])
+        self.assertIn("补充可扫描标的池", readiness["nextDataAction"])
 
         persisted = us_scanner_service.get_run_detail(detail["id"])
         assert persisted is not None

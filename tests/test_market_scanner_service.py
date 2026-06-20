@@ -3662,6 +3662,104 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             providers["providers_used"],
             ["FakeDailySource", "FakeSnapshotSource", "local_db", "local_universe_cache"],
         )
+        readiness = detail["diagnostics"]["dataReadiness"]
+        self.assertEqual(readiness["state"], "ready")
+        self.assertEqual(readiness["market"], "cn")
+        self.assertEqual(readiness["profile"], "cn_preopen_v1")
+        self.assertEqual(readiness["universeSize"], 4)
+        self.assertEqual(readiness["quoteCoverage"], "available")
+        self.assertEqual(readiness["historyCoverage"], "available")
+        self.assertEqual(readiness["freshness"], "fresh")
+        self.assertEqual(readiness["candidateEvaluationCount"], 4)
+        self.assertEqual(readiness["selectedCount"], 2)
+        self.assertEqual(readiness["rejectedCount"], 2)
+        self.assertEqual(readiness["failedCount"], 0)
+        self.assertEqual(readiness["blockerBucket"], "unknown")
+        self.assertIn("Scanner 数据已满足本轮候选生成", readiness["consumerSummary"])
+        self.assertEqual(readiness["nextDataAction"], "继续按当前数据节奏复核扫描结果。")
+
+    def test_terminal_empty_run_maps_profile_filter_blocker_from_existing_counts(self) -> None:
+        detail = self.service.record_terminal_run(
+            market="us",
+            profile="us_preopen_v1",
+            profile_label="US Pre-open Scanner v1",
+            universe_name="us_preopen_watchlist_v1",
+            status="empty",
+            headline="本次未形成观察名单",
+            trigger_mode="manual",
+            request_source="api",
+            watchlist_date="2026-06-20",
+            source_summary="scanner=empty",
+            diagnostics={
+                "coverage_summary": {
+                    "input_universe_size": 4,
+                    "eligible_after_universe_fetch": 4,
+                    "eligible_after_liquidity_filter": 0,
+                    "eligible_after_data_availability_filter": 0,
+                    "ranked_candidate_count": 0,
+                    "shortlisted_count": 0,
+                    "excluded_by_reason": [
+                        {"reason": "filtered_by_profile_constraints", "count": 4},
+                    ],
+                },
+            },
+            universe_size=4,
+            preselected_size=4,
+            evaluated_size=0,
+            shortlist=[],
+        )
+
+        readiness = detail["diagnostics"]["dataReadiness"]
+        self.assertEqual(readiness["state"], "blocked")
+        self.assertEqual(readiness["universeSize"], 4)
+        self.assertEqual(readiness["quoteCoverage"], "unknown")
+        self.assertEqual(readiness["historyCoverage"], "unknown")
+        self.assertEqual(readiness["candidateEvaluationCount"], 0)
+        self.assertEqual(readiness["selectedCount"], 0)
+        self.assertEqual(readiness["rejectedCount"], 0)
+        self.assertEqual(readiness["failedCount"], 0)
+        self.assertEqual(readiness["blockerBucket"], "profile_filters_rejected_all")
+        self.assertIn("profile 过滤", readiness["consumerSummary"])
+        self.assertIn("复核扫描配置", readiness["nextDataAction"])
+
+    def test_terminal_empty_run_maps_source_quality_cap_blocker_from_existing_diagnostics(self) -> None:
+        detail = self.service.record_terminal_run(
+            market="cn",
+            profile="cn_preopen_v1",
+            profile_label="CN Pre-open Scanner v1",
+            universe_name="cn_a_liquid_watchlist_v1",
+            status="empty",
+            headline="本次未形成观察名单",
+            trigger_mode="manual",
+            request_source="api",
+            watchlist_date="2026-06-20",
+            source_summary="scanner=empty",
+            diagnostics={
+                "coverage_summary": {
+                    "input_universe_size": 3,
+                    "eligible_after_universe_fetch": 3,
+                    "eligible_after_liquidity_filter": 3,
+                    "eligible_after_data_availability_filter": 3,
+                    "ranked_candidate_count": 0,
+                    "shortlisted_count": 0,
+                    "excluded_by_reason": [
+                        {"reason": "source_quality_capped", "count": 3},
+                    ],
+                },
+            },
+            universe_size=3,
+            preselected_size=3,
+            evaluated_size=3,
+            shortlist=[],
+        )
+
+        readiness = detail["diagnostics"]["dataReadiness"]
+        self.assertEqual(readiness["state"], "blocked")
+        self.assertEqual(readiness["universeSize"], 3)
+        self.assertEqual(readiness["candidateEvaluationCount"], 3)
+        self.assertEqual(readiness["blockerBucket"], "source_quality_capped")
+        self.assertIn("数据质量不足", readiness["consumerSummary"])
+        self.assertIn("补充可用于评分的数据覆盖", readiness["nextDataAction"])
 
     def test_run_scan_attaches_cn_provider_observation_metadata_without_changing_scores_or_ranks(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

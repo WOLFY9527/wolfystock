@@ -103,6 +103,18 @@ def test_scanner_run_response_preserves_current_coarse_empty_reason_without_evid
                 "request_source": "api",
                 "watchlist_date": "2026-06-09",
             },
+            "dataReadiness": {
+                "state": "blocked",
+                "market": "us",
+                "profile": "us_preopen_v1",
+                "universeSize": 0,
+                "quoteCoverage": "unknown",
+                "historyCoverage": "unknown",
+                "freshness": "unknown",
+                "blockerBucket": "empty_universe",
+                "consumerSummary": "候选池为空，Scanner 暂时无法生成候选。",
+                "nextDataAction": "补充可扫描标的池后重新运行 Scanner。",
+            },
         },
     )
 
@@ -113,7 +125,8 @@ def test_scanner_run_response_preserves_current_coarse_empty_reason_without_evid
     assert serialized["selected"] == []
     assert serialized["candidates"] == []
     assert serialized["diagnostics"]["empty_reason"] == "扫描宇宙为空，无法生成候选名单"
-    assert set(serialized["diagnostics"]) == {"empty_reason", "operation"}
+    assert set(serialized["diagnostics"]) == {"empty_reason", "operation", "dataReadiness"}
+    assert serialized["diagnostics"]["dataReadiness"]["blockerBucket"] == "empty_universe"
     assert "coverage_summary" not in serialized["diagnostics"]
     assert "candidate_diagnostics" not in serialized["diagnostics"]
     assert "universe_selection" not in serialized["diagnostics"]
