@@ -57,8 +57,8 @@ export default function StockStructureDecisionEntryPage() {
             >
               <div className="text-xs text-[color:var(--wolfy-text-secondary)]">
                 {locale === 'en'
-                  ? 'Choose a ticker from Research Radar or open a known structure URL; this entry does not call the stock API.'
-                  : '从研究雷达选择标的，或打开已知结构 URL；该入口不会调用个股 API。'}
+                  ? 'Choose a ticker from Research Radar or open a known structure URL.'
+                  : '从研究雷达选择标的，或打开已知结构 URL。'}
               </div>
             </WolfyCommandBar>
           )}
@@ -67,8 +67,8 @@ export default function StockStructureDecisionEntryPage() {
               <RoughSectionCard eyebrow={locale === 'en' ? 'Boundary' : '边界'} title={locale === 'en' ? 'Observation-only' : '仅观察'}>
                 <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
                   {locale === 'en'
-                    ? 'Stock Structure organizes research context only. It does not write watchlists, portfolios, or external account state.'
-                    : '个股结构只组织研究语境，不写入观察列表、组合或外部账户状态。'}
+                    ? 'Research context'
+                    : '研究上下文'}
                 </p>
               </RoughSectionCard>
               <RoughSectionCard eyebrow={locale === 'en' ? 'Routes' : '路由'} title={locale === 'en' ? 'How to open detail' : '如何进入详情'}>
@@ -92,8 +92,8 @@ export default function StockStructureDecisionEntryPage() {
               eyebrow={locale === 'en' ? 'Stock Structure Decision' : '个股结构决策'}
               title={locale === 'en' ? 'Single-name structure starts from a research queue' : '个股结构从研究队列进入'}
               description={locale === 'en'
-                ? 'This entry keeps the global IA explicit while the detail route remains ticker-specific. The primary work happens after a ticker is selected.'
-                : '该入口让全局 IA 明确可达；真正的结构工作区仍按具体标的展开。'}
+                ? 'Select a ticker to open the structure workspace.'
+                : '选择标的后打开结构工作区。'}
             />
             <MetricStrip
               items={[
@@ -127,8 +127,8 @@ export default function StockStructureDecisionEntryPage() {
                     </p>
                     <p>
                       {locale === 'en'
-                        ? 'Compare mode shows structural differences and evidence completeness only. It does not rank symbols or provide trading advice.'
-                        : '对比仅展示结构差异和证据完整度，不给出买卖排序。'}
+                        ? 'Compare mode focuses on structural differences and evidence completeness.'
+                        : '对比仅展示结构差异和证据完整度。'}
                     </p>
                   </div>
                 </TerminalEmptyState>

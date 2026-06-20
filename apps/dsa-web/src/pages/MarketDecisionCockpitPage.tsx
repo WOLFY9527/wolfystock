@@ -561,8 +561,8 @@ function CockpitFirstViewportSummary({
           ) : null}
           <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
             {locale === 'en'
-              ? 'Research context only; not an action instruction.'
-              : '仅作研究语境，不构成操作指令。'}
+              ? 'Research context'
+              : '研究语境'}
           </p>
         </div>
       </RoughSectionCard>
@@ -627,7 +627,7 @@ function DailyIntelligenceBriefingSection({
         : '--',
       detail: briefing.decisionGrade
         ? (locale === 'en' ? 'Decision-grade enabled.' : '允许决策级判断。')
-        : (locale === 'en' ? 'Not decision-grade.' : '不构成决策级结论。'),
+        : (locale === 'en' ? 'Not decision-grade.' : '非决策级'),
     },
   ] : [];
 
@@ -1122,7 +1122,7 @@ export default function MarketDecisionCockpitPage() {
               </RoughSectionCard>
               <RoughSectionCard eyebrow={locale === 'en' ? 'Disclosure' : '披露'} title={locale === 'en' ? 'Research boundary' : '研究边界'}>
                 <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-                  {locale === 'en' ? 'Research context only; not an action instruction.' : '仅作研究语境，不构成操作指令。'}
+                  {locale === 'en' ? 'Research context' : '研究语境'}
                 </p>
               </RoughSectionCard>
             </ConsoleContextRail>

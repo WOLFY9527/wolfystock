@@ -494,18 +494,18 @@ function StockStructureCannotResearchState({
         <div className="space-y-1">
           <p>
             {isEnglish
-              ? 'The page does not yet have enough usable stock facts to assemble a research packet.'
-              : '当前页面还没有足够可用的个股事实，暂不能组成研究包。'}
+              ? 'Insufficient facts for a research packet.'
+              : '个股事实不足，暂不能组成研究包。'}
           </p>
           <p>
             {summary || (isEnglish
-              ? 'Return from a research queue after price history or comparable evidence becomes available.'
-              : '可在价格历史或可比证据可用后，从研究队列重新进入。')}
+              ? 'Return after price or comparable evidence becomes available.'
+              : '价格或可比证据可用后，从研究队列重新进入。')}
           </p>
           <p>
             {isEnglish
-              ? 'No investment conclusion or action instruction is generated here.'
-              : '这里不生成投资结论或操作指令。'}
+              ? 'Research observation only.'
+              : '仅研究观察。'}
           </p>
         </div>
       </TerminalEmptyState>
@@ -618,13 +618,13 @@ function StockStructureSymbolNotFoundState({
           </p>
           <p>
             {isEnglish
-              ? 'This means the symbol cannot currently be confirmed, which is different from data that is temporarily missing.'
-              : '这表示当前无法确认该标的存在，不等同于数据暂时不可用。'}
+              ? `${symbol || 'The symbol'} cannot be confirmed; this differs from temporarily missing data.`
+              : '当前无法确认该标的，不等同于数据暂时不可用。'}
           </p>
           <p>
             {isEnglish
-              ? 'This is a research observation state only; no investment conclusion is being made.'
-              : '仅作研究观察，不生成投资结论。'}
+              ? 'Research observation only.'
+              : '仅研究观察。'}
           </p>
         </div>
       </TerminalEmptyState>
@@ -967,11 +967,11 @@ export default function StockStructureDecisionPage() {
     : (locale === 'en' ? `${titleSymbol} structure workspace` : `${titleSymbol} 结构工作区`);
   const introDescription = symbolNotFound
     ? (locale === 'en'
-      ? 'Check the code or return to a research entrypoint; this is different from evidence that is temporarily missing.'
-      : '请检查代码是否正确，或返回研究入口重新选择；这不同于证据暂时缺失。')
+      ? 'Check the code or return to a research entrypoint.'
+      : '请检查代码是否正确，或返回研究入口重新选择。')
     : (locale === 'en'
-      ? 'This page assembles the usable stock facts first and folds missing-data detail into one compact boundary.'
-      : '本页优先汇总可用个股事实，并把缺失资料折叠为一处简洁边界。');
+      ? 'Assembles available stock fact summaries.'
+      : '汇总可用个股事实。');
   const railContent = data && hasResearchPacket ? (
     <ConsoleContextRail className="flex flex-col gap-3 p-3">
       {safeWatchNext.length ? (
@@ -1038,7 +1038,7 @@ export default function StockStructureDecisionPage() {
             {loading && !data ? (
               <div className="p-4 md:p-5">
                 <TerminalEmptyState title={locale === 'en' ? 'Loading structure panel' : '正在整理结构面板'}>
-                  {locale === 'en' ? 'The page is waiting for structure state, component scores, and evidence notes.' : '正在等待结构状态、组件评分与证据备注。'}
+                  {locale === 'en' ? 'Loading structure panel.' : '正在载入结构面板。'}
                 </TerminalEmptyState>
               </div>
             ) : null}

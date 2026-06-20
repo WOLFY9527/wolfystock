@@ -107,7 +107,7 @@ const SCENARIO_UNAVAILABLE_COPY: Record<Locale, {
     stateTitle: '当前市场状态数据不完整',
     stateBody: '当前市场状态数据不完整，暂无法进行情景分析。',
     nextStep: '建议先查看市场概览，确认市场状态、驱动证据和数据新鲜度。',
-    boundaryNote: '当前页面仅用于研究观察，不构成操作结论。',
+    boundaryNote: '研究观察',
     summaryFallback: '等待市场状态数据补齐后，再返回情景实验室查看该情景的观察摘要。',
     evidenceFallback: '当前先回到市场概览确认市场状态、驱动证据和数据新鲜度。',
     primaryCta: '查看市场概览',
@@ -117,7 +117,7 @@ const SCENARIO_UNAVAILABLE_COPY: Record<Locale, {
     stateTitle: 'Market state data is incomplete',
     stateBody: 'The current market state data is incomplete, so scenario analysis is not available yet.',
     nextStep: 'Open Market Overview first to confirm the market state, driver evidence, and data freshness.',
-    boundaryNote: 'This page is for research observation only; no investment conclusion is being made.',
+    boundaryNote: 'Research observation',
     summaryFallback: 'Return after the market state data is complete to review this scenario summary.',
     evidenceFallback: 'Use Market Overview first to confirm the market state, driver evidence, and data freshness.',
     primaryCta: 'Open Market Overview',
@@ -420,8 +420,8 @@ export default function ScenarioLabPage() {
               eyebrow={locale === 'en' ? 'Scenario Lab' : '情景实验室'}
               title={locale === 'en' ? 'Research scenario workbench' : '研究情景工作台'}
               description={locale === 'en'
-                ? 'The page reuses the current market cockpit context, then applies a bounded scenario shock to show what evidence would need to confirm or invalidate the research frame.'
-                : '该页面复用当前市场驾驶舱语境，再叠加有边界的情景冲击，展示研究框架需要哪些证据来确认或失效。'}
+                ? 'Apply bounded scenario shocks to the current market context.'
+                : '对当前市场语境叠加有边界的情景冲击。'}
             />
             {error ? (
               <div className="p-4 md:p-5">
@@ -432,8 +432,8 @@ export default function ScenarioLabPage() {
               <div className="p-4 md:p-5">
                 <TerminalEmptyState title={locale === 'en' ? 'Loading scenario workbench' : '正在载入情景工作台'}>
                   {locale === 'en'
-                    ? 'The page is waiting for market context and scenario output.'
-                    : '正在等待市场语境与情景输出。'}
+                    ? 'Loading scenario output.'
+                    : '正在载入情景输出。'}
                 </TerminalEmptyState>
               </div>
             ) : null}
@@ -615,8 +615,8 @@ export default function ScenarioLabPage() {
                     </div>
                     <div className="mt-3 text-xs leading-6 text-[color:var(--wolfy-text-muted)]">
                       {locale === 'en'
-                        ? 'The page shows only bounded scenario outcomes, evidence limits, and research confirmation cues.'
-                        : '页面只展示有边界的情景结果、证据限制与研究确认线索。'}
+                        ? 'Observation boundaries apply.'
+                        : '观察边界适用。'}
                     </div>
                   </RoughSectionCard>
                 </div>

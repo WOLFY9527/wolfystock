@@ -924,7 +924,7 @@ function buildLiquidityNextWatch(
     missing.length ? `优先恢复 ${missing.join('、')}` : '',
     observation.length ? `继续观察 ${observation.join('、')}` : '',
     coverageSummary.directionLabel === '可参考' ? '确认新增反向线索是否改变压力方向' : '',
-    '等待刷新后，对照 Market Overview / Rotation Radar 的主线是否一致',
+    '等待刷新后确认主线是否一致',
   ].filter(Boolean);
   return parts.length ? parts.join('；') : '等待新的关键指标恢复。';
 }
@@ -1067,7 +1067,7 @@ function buildLiquidityBiasSummary(
     label: '无明显方向',
     variant: 'neutral',
     toneClassName: 'text-white/78',
-    detail: '扩张与收缩线索暂未形成单边方向，可先对照 Market Overview / Rotation Radar 继续观察。',
+    detail: '方向未明，继续观察',
   };
 }
 
@@ -1522,7 +1522,7 @@ function buildConsumerLiquidityStatusView(
     freshnessChipLabel: consumerFreshnessLabel(data.freshness.status),
     freshnessVariant: chipVariantForFreshness(data.freshness.status),
     headline: availabilityLabel === '暂不可用'
-      ? '数据不足，暂不判断；保留最近一次流动性状态。'
+      ? '数据不足'
       : availabilityLabel === '观察中'
         ? topSignal
           ? `当前方向仅供观察，先看${topSignal}等资金面线索。`
@@ -1538,7 +1538,7 @@ function buildConsumerLiquidityStatusView(
           : '数据覆盖有限，当前方向仅供观察。'
         : '当前主要资金面线索已返回，可继续观察。',
     scoringDetail: availabilityLabel === '暂不可用'
-      ? '数据不足，暂不判断；请等待刷新，并对照 Market Overview / Rotation Radar 的相关线索。'
+      ? '数据不足，等待刷新'
       : limitedConfidence
         ? '数据覆盖有限，当前方向仅供观察；待补充指标恢复后再判断。'
         : scoringPaused

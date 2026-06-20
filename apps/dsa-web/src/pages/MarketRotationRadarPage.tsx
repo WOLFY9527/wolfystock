@@ -366,7 +366,7 @@ function consumerConfidenceLabel(state: DecisionReadinessState): string {
   if (state === 'observe') {
     return '信号待确认，先看板块强弱与走势分化。';
   }
-  return '当前轮动数据不足，轮动方向待确认。';
+  return '轮动数据待确认';
 }
 
 function consumerSufficiencyLabel(state: DecisionReadinessState): string {
@@ -725,7 +725,7 @@ function buildRotationFamilyViews(payload: MarketRotationRadarResponse): Rotatio
         preview: sanitizeRotationText(
           item.themeFlowSignal?.explanation,
           collapsedByDefault
-            ? `${familyName} 当前多为零信号或数据不足，默认折叠保留查阅入口。`
+            ? `${familyName} 默认折叠`
             : `${familyName} 当前仅保留家族级观察。`,
         ),
         collapsedByDefault,
@@ -1216,8 +1216,8 @@ function deriveRotationConclusion(
       whyNotConclusion: `${themeScope}主要依赖相对强弱、观察项或局部样本，扩散与连续性尚未同时成立。`,
       missingEvidence,
       nextStep: tiers.libraryMode
-        ? '可先查看下方分类候选，或切换到其他市场对比；待数据更新后再确认强弱。'
-        : '可先查看候选主题，并等待新的多时窗与成员广度快照；必要时切换市场对比。',
+        ? '查看分类候选或切换市场对比'
+        : '查看候选主题或切换市场对比',
       variant: 'info',
     };
   }
@@ -1231,8 +1231,8 @@ function deriveRotationConclusion(
       : `${themeScope}近期行情、广度扩散和确认信号仍待确认。`,
     missingEvidence,
     nextStep: tiers.libraryMode
-      ? '可先查看下方分类候选，或切换到其他市场对比；待数据更新后再确认强弱。'
-      : '可切换到其他市场查看分类候选，或等待数据更新后再确认强弱。',
+      ? '查看分类候选或切换市场对比'
+      : '切换市场对比或等待数据更新',
     variant: 'danger',
   };
 }
@@ -1759,8 +1759,8 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
       decisionSummary.state === 'ready'
         ? `${selectedTheme.name} 当前信号较完整，继续观察节奏与回落风险。`
         : decisionSummary.state === 'observe'
-          ? `${selectedTheme.name} 仍在观察阶段，先看持续性、广度与量能是否继续同步。`
-          : `${selectedTheme.name} 当前观察资料不足，可先查看分类候选并等待数据更新。`,
+          ? `${selectedTheme.name} 信号待确认`
+          : `${selectedTheme.name} 数据待补`,
     )
     : guidance.detail;
   const heroCards = [
@@ -1833,7 +1833,6 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
           <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-medium text-white/48">家族流向观察</p>
-              <p className="mt-2 text-[11px] leading-5 text-white/60">首屏优先保留有信号家族；零信号或数据不足家族默认下沉，避免同质化长列表占满首屏。</p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <span className="rounded-md border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/48">摘要优先</span>
@@ -1857,14 +1856,14 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
             </div>
           ) : (
             <div className="mt-3 rounded-lg border border-dashed border-white/[0.08] px-3 py-3 text-[11px] leading-5 text-white/52">
-              当前没有需要首屏优先展开的家族，先保留低信号家族的查阅入口。
+              暂无优先展开家族
             </div>
           )}
           {collapsedFamilies.length ? (
             <ConsumerDisclosure
               testId="rotation-family-rollup-collapsed"
               title="查看低信号家族"
-              summary={`${collapsedFamilies.length} 个默认折叠 · 零信号或数据不足优先下沉`}
+              summary={`${collapsedFamilies.length} 个默认折叠`}
               className="mt-3 bg-black/5"
             >
               <div className="grid gap-2">
@@ -2560,10 +2559,10 @@ const MarketRotationRadarPage: React.FC = () => {
                           {rotationConclusion?.title || '轮动方向待确认'}
                         </span>
                         <span className="mt-2 block leading-5">
-                          {rotationConclusion?.detail || '当前轮动数据不足，轮动方向待确认。'}
+                          {rotationConclusion?.detail || '轮动数据待确认'}
                         </span>
                         <span className="mt-3 block leading-5 text-white/60">
-                          {rotationConclusion?.nextStep || '可切换到其他市场查看分类候选，或等待数据更新后再确认强弱。'}
+                          {rotationConclusion?.nextStep || '切换市场对比或等待数据更新'}
                         </span>
                       </TerminalEmptyState>
                     </div>

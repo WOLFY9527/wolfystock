@@ -22,7 +22,6 @@ vi.mock('../../api/optionsLab', () => ({
 
 const NO_CONCLUSION_LABEL = '数据不足，暂不形成结论';
 const WAITING_STATE_LABEL = '等待数据确认';
-const SAFE_INSTRUCTION_BOUNDARY = '不构成执行指令';
 const OBSERVE_ONLY_EVIDENCE_COPY = '仅供观察，不作为结论依据';
 const DEMO_EVIDENCE_COPY = '演示数据：当前数据延迟，仅用于界面与情景验证，不作为结论依据。';
 const NON_DECISION_BOUNDARY_COPY = '未达到可判断等级，仅供情景观察，暂不形成结论。';
@@ -663,7 +662,6 @@ describe('OptionsLabPage', () => {
     expect(commandArea).toHaveTextContent('期权情景输入');
     expect(commandArea).toHaveTextContent('只读观察');
     expect(commandArea).toHaveTextContent('门控优先');
-    expect(commandArea).toHaveTextContent(SAFE_INSTRUCTION_BOUNDARY);
     expect(commandArea).not.toHaveTextContent('ExperimentConsole');
     expect(within(commandArea).getByLabelText('标的代码')).toHaveValue('TEM');
     expect(within(commandArea).getByRole('button', { name: '刷新情景' })).toHaveAttribute('data-terminal-primitive', 'button');
@@ -698,11 +696,11 @@ describe('OptionsLabPage', () => {
     expect(screen.getByTestId('options-lab-research-readiness-strip')).toHaveTextContent('研究就绪度');
     expect(screen.getByTestId('options-lab-research-readiness-strip')).toHaveTextContent(/研究结论受限|仅观察|等待证据更新/);
     expect(productHero).toHaveTextContent('当前主任务');
-    expect(screen.getByTestId('options-lab-consumer-availability')).toHaveTextContent('先保留输入与风险预算，等待下一次数据刷新。');
+    expect(screen.getByTestId('options-lab-consumer-availability')).toHaveTextContent('等待数据刷新');
     expect(screen.getByTestId('options-lab-consumer-availability')).toHaveTextContent('当前状态：期权数据暂不可用，情景分析已暂停。');
     const inputRegion = screen.getByTestId('options-lab-input-region');
     expect(inputRegion).toHaveTextContent('情景参数');
-    expect(inputRegion).toHaveTextContent('这里仅记录研究输入，不直接形成执行结论');
+    expect(inputRegion).not.toHaveTextContent('这里仅记录研究输入');
     const summaryStrip = screen.getByTestId('options-lab-summary-strip');
     expect(summaryStrip).toHaveTextContent('输入情景');
     expect(summaryStrip).toHaveTextContent('当前可观察');
@@ -742,7 +740,7 @@ describe('OptionsLabPage', () => {
       expect(within(section).getByText(/专业结构：牛市看涨价差 · 看涨 Call 借方价差/)).toBeInTheDocument();
       expect(within(section).getByText(/专业结构：熊市看跌价差 · 看跌 Put 借方价差/)).toBeInTheDocument();
     });
-    ['状态', '最大亏损', '情景上沿', '盈亏平衡', '假设价格下情景估算', '核心原因'].forEach((label) => {
+    ['状态', '最大亏损', '情景上沿', '盈亏平衡', '情景估算', '核心原因'].forEach((label) => {
       expect(within(section).getAllByText(label).length).toBeGreaterThan(0);
     });
     const pageText = document.body.textContent || '';
@@ -811,7 +809,7 @@ describe('OptionsLabPage', () => {
     expect(within(section).getByText('波动率与敏感度待补证')).toBeInTheDocument();
     expect(within(section).getByText('不触发执行动作')).toBeInTheDocument();
     expect(within(section).getByText('不改动现有持仓')).toBeInTheDocument();
-    expect(within(section).getByText('结论仅用于研究记录')).toBeInTheDocument();
+    expect(within(section).getByText('研究记录')).toBeInTheDocument();
     expect(section).toHaveTextContent('$7.50');
     expect(section).toHaveTextContent('$230.00');
     expect(within(section).queryByText(/provider authority|live chain|iv greeks|bid ask|synthetic_fixture|debugRef/i)).not.toBeInTheDocument();
@@ -2292,7 +2290,7 @@ describe('OptionsLabPage', () => {
     expect(await screen.findByText('暂无可用到期日')).toBeInTheDocument();
     expect(screen.getByText('等待结构比较前提')).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByText('先选择可用到期日并加载合约后，再进入结构样例比较。')).toBeInTheDocument();
+      expect(screen.getByText('请先加载合约')).toBeInTheDocument();
     });
     expect(vi.mocked(optionsLabApi.compareStrategies)).not.toHaveBeenCalled();
     expect(vi.mocked(optionsLabApi.evaluateDecision)).not.toHaveBeenCalled();
@@ -2657,7 +2655,7 @@ describe('OptionsLabPage', () => {
 
     expect((await screen.findAllByText('情景分析台')).length).toBeGreaterThan(0);
     expect(await screen.findByText('暂无可用到期日')).toBeInTheDocument();
-    expect(screen.getByText('先选择可用到期日并加载合约后，再进入结构样例比较。')).toBeInTheDocument();
+    expect(screen.getByText('请先加载合约')).toBeInTheDocument();
     expect(vi.mocked(optionsLabApi.compareStrategies)).not.toHaveBeenCalled();
     expect(document.body.textContent || '').not.toContain('TypeError');
   });
@@ -2786,8 +2784,8 @@ describe('OptionsLabPage', () => {
     expect(optionsLabPageSource).toContain('当前可观察');
     expect(optionsLabPageSource).toContain('样例顺序 #');
     expect(optionsLabPageSource).toContain('情景上沿');
-    expect(optionsLabPageSource).toContain('假设价格下情景估算');
-    expect(optionsLabPageSource).toContain('未设上沿，不代表可获利');
+    expect(optionsLabPageSource).toContain('情景估算');
+    expect(optionsLabPageSource).toContain('未设上沿');
     expect(optionsLabPageSource).toContain('break-words text-sm font-medium leading-6');
     expect(optionsLabPageSource).toContain('options-lab-strategy-metric-list');
     expect(optionsLabPageSource).toContain('options-lab-decision-metric-list');
@@ -2813,6 +2811,14 @@ describe('OptionsLabPage', () => {
       ['目标', '价格'].join(''),
       ['target', 'price'].join(' '),
       '再决定是否继续跟踪',
+      '先设定标的、方向、假设价格、目标日期与风险预算',
+      '这里仅记录研究输入，不直接形成执行结论',
+      '控制区只记录假设；数据是否可判断以后续准备度和风险边界为准',
+      '先用现有观察结构样例与链快照观察收益边界',
+      '单腿多头情景上沿未设上沿，不代表可获利',
+      '先看最大亏损与价差，再决定是否保留研究记录',
+      '先复核首个观察结构的最大亏损、盈亏平衡与流动性',
+      '先设定情景参数，再等待结构样例与风险边界生成',
     ].forEach((forbidden) => {
       expect(optionsLabPageSource).not.toContain(forbidden);
     });

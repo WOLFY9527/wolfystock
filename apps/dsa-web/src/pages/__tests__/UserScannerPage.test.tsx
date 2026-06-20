@@ -1646,8 +1646,8 @@ describe('UserScannerPage', () => {
     const band = await screen.findByTestId('scanner-conclusion-band');
     await waitFor(() => expect(band).toHaveTextContent('本次未形成入选候选'));
     expect(band).toHaveTextContent('候选 0');
-    expect(band).toHaveTextContent('数据覆盖、历史覆盖与淘汰分布');
-    expect(band).toHaveTextContent('不代表市场没有机会');
+    expect(band).toHaveTextContent('覆盖与淘汰分布');
+    expect(band).not.toHaveTextContent('不代表市场没有机会');
   });
 
   it('does not present a zero-duration empty payload as a completed scanner run', async () => {
@@ -1694,7 +1694,7 @@ describe('UserScannerPage', () => {
 
     const band = await screen.findByTestId('scanner-conclusion-band');
     expect(band).toHaveTextContent('扫描器尚未产出候选集');
-    expect(band).toHaveTextContent('同参数重试');
+    expect(band).toHaveTextContent('可稍后重试');
     const statusStrip = screen.getByTestId('scanner-status-strip');
     expect(statusStrip).toHaveTextContent('等待可用数据');
     expect(statusStrip).toHaveTextContent('候选集未产出');
@@ -1811,7 +1811,7 @@ describe('UserScannerPage', () => {
       const summary = within(resultHistory).getByTestId(`scanner-run-summary-${title}`);
       expect(summary).toHaveTextContent('暂不可用');
       expect(summary).toHaveTextContent('候选集尚未产出');
-      expect(summary).toHaveTextContent('运行数据不足或暂不可用');
+      expect(summary).toHaveTextContent('数据不足，可重试、查看历史或打开市场概览');
       expect(summary).not.toHaveTextContent(/0ms|候选数量\s*0|淘汰数量\s*0|失败数量\s*0|完成/);
     });
     expect(resultHistory).not.toHaveTextContent(/0ms|0\s*\/\s*0\s*\/\s*0/);
@@ -1932,9 +1932,9 @@ describe('UserScannerPage', () => {
     expect(nextSteps).toHaveTextContent('首选研究路径');
     expect(nextSteps).toHaveTextContent('可选保存路径');
     expect(nextSteps).toHaveTextContent('Market Overview');
-    expect(nextSteps).toHaveTextContent('不代表市场没有机会');
-    expect(nextSteps).toHaveTextContent('先研究单个代码，不改官方入选，也不触发持久化。');
-    expect(nextSteps).toHaveTextContent('不会写入观察名单');
+    expect(nextSteps).not.toHaveTextContent('不代表市场没有机会');
+    expect(nextSteps).toHaveTextContent('可手动研究单个代码');
+    expect(nextSteps).toHaveTextContent('不会自动写入观察名单');
     expect(nextSteps).not.toHaveTextContent('功能预览');
     expect(nextSteps).not.toHaveTextContent('示例预览');
     expect(nextSteps).not.toHaveTextContent('预览候选');
@@ -2988,9 +2988,9 @@ describe('UserScannerPage', () => {
     });
     const emptyState = screen.getByTestId('scanner-workbench-empty-state');
     expect(screen.getByTestId('scanner-empty-history-fallback')).toBeInTheDocument();
-    expect(emptyState).toHaveTextContent('可能与数据覆盖、历史覆盖或暂时证据不足有关');
-    expect(emptyState).toHaveTextContent('不代表市场没有机会');
-    expect(emptyState).toHaveTextContent('同参数重试');
+    expect(emptyState).toHaveTextContent('未形成入选候选，可重试、查看数据受限行或切换市场/策略');
+    expect(emptyState).not.toHaveTextContent('不代表市场没有机会');
+    expect(emptyState).toHaveTextContent('可重试');
     expect(emptyState).not.toHaveTextContent(/买入|卖出|下单|交易|券商|broker|provider|cache/i);
     expect(screen.getByTestId('scanner-candidate-filters')).toBeInTheDocument();
     expect(screen.getByTestId('scanner-ranked-sortbar')).toBeInTheDocument();
@@ -3050,8 +3050,8 @@ describe('UserScannerPage', () => {
       expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent('数据/历史覆盖不足');
     });
     const emptyState = screen.getByTestId('scanner-workbench-empty-state');
-    expect(emptyState).toHaveTextContent('数据覆盖、历史覆盖或暂时证据不足');
-    expect(emptyState).toHaveTextContent('不代表市场没有机会');
+    expect(emptyState).toHaveTextContent('未形成入选候选，可重试、查看数据受限行或切换市场/策略');
+    expect(emptyState).not.toHaveTextContent('不代表市场没有机会');
     expect(emptyState).toHaveTextContent('查看数据受限行');
     expect(emptyState).not.toHaveTextContent(/not_enough_history|provider|raw|reasonCode/i);
   });

@@ -102,7 +102,7 @@ const RISK_PROFILE_OPTIONS: Array<{ value: OptionsRiskProfile; label: string }> 
 const EMPTY_CONTRACTS: OptionContract[] = [];
 const EMPTY_EXPIRATIONS: OptionsExpiration[] = [];
 const COMPARISON_LOADING_TIMEOUT_MS = 12000;
-const COMPARISON_EMPTY_MESSAGE = '先选择可用到期日并加载合约后，再进入结构样例比较。';
+const COMPARISON_EMPTY_MESSAGE = '请先加载合约';
 const OPTIONS_LAB_CRASH_FALLBACK = '期权实验室暂时无法加载，请刷新或稍后重试。';
 const OPTIONS_MODULE_PAUSED_COPY = '期权数据暂不可用，情景分析已暂停。';
 const OPTIONS_INSUFFICIENT_COPY = '当前期权信号数据不足，仅供观察。';
@@ -604,7 +604,7 @@ function buildScenarioEvidenceView(frame?: OptionsConsumerScenarioFrame | null):
   const payoffLines = [
     typeof frame.payoffEvidence?.expectedMoveAbs === 'number' ? `预期波动：${money(frame.payoffEvidence.expectedMoveAbs)}` : null,
     typeof frame.payoffEvidence?.expectedMovePct === 'number' ? `预期波动幅度：${ratio(frame.payoffEvidence.expectedMovePct)}` : null,
-    typeof frame.payoffEvidence?.payoffAtTarget === 'number' ? `假设价格下情景估算：${money(frame.payoffEvidence.payoffAtTarget)}` : null,
+    typeof frame.payoffEvidence?.payoffAtTarget === 'number' ? `情景估算：${money(frame.payoffEvidence.payoffAtTarget)}` : null,
     frame.payoffEvidence?.expectedMoveSource ? `波动来源：${expectedMoveSourceLabel(frame.payoffEvidence.expectedMoveSource)}` : null,
   ].filter((item): item is string => Boolean(item)).slice(0, 4);
   const riskLines = [
@@ -618,7 +618,7 @@ function buildScenarioEvidenceView(frame?: OptionsConsumerScenarioFrame | null):
     frame.frameState === 'observe_only' || frame.frameState === 'blocked' || frame.frameState === 'insufficient' ? '仅观察' : null,
     frame.noTradingBoundary?.noOrderPlacement ? '不触发执行动作' : null,
     frame.noTradingBoundary?.noPortfolioMutation ? '不改动现有持仓' : null,
-    frame.noTradingBoundary?.analyticalOnly || frame.noTradingBoundary?.noTradingRecommendation ? '结论仅用于研究记录' : null,
+    frame.noTradingBoundary?.analyticalOnly || frame.noTradingBoundary?.noTradingRecommendation ? '研究记录' : null,
   ].filter((item): item is string => Boolean(item));
 
   return {
@@ -1008,10 +1008,10 @@ function padDomain(minimum: number, maximum: number, ratioValue: number, fallbac
 }
 
 function payoffBoundaryLabel(strategyType: OptionsStrategyType): string {
-  if (strategyType === 'long_call') return '单腿多头情景上沿未设上沿，不代表可获利；图形仅示意边界变化。';
-  if (strategyType === 'long_put') return '单腿多头收益受标的下行限制，图形仅示意边界变化。';
-  if (strategyType === 'bull_call_spread') return '定义风险结构：亏损与收益边界都已封顶。';
-  return '定义风险结构：下行收益与风险边界都已封顶。';
+  if (strategyType === 'long_call') return '单腿多头：上沿未设';
+  if (strategyType === 'long_put') return '单腿多头：下行受限';
+  if (strategyType === 'bull_call_spread') return '风险与收益均已封顶';
+  return '下行收益与风险均已封顶';
 }
 
 function buildPayoffVisualModel(
@@ -1177,7 +1177,7 @@ const StrategyPayoffVisual: React.FC<{
       <CompactVisualEmptyState
         testId="options-lab-payoff-empty"
         title="收益边界待补证"
-        body="当前缺少可绘制的收益边界。等待观察结构样例、腿部行权价与假设价格下情景估算同时可用后，再显示图形示意。"
+        body="等待结构样例与情景数据可用"
       />
     );
   }
@@ -1274,7 +1274,7 @@ const StrategyPayoffVisual: React.FC<{
           <p className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{strategyChineseLabel(strategy.strategyType)}</p>
         </div>
         <div className={cn(innerBlockClass, 'p-3')}>
-          <p className={labelClass}>假设价格下情景估算</p>
+          <p className={labelClass}>情景估算</p>
           <p className={cn('mt-2 font-mono text-sm font-semibold', metricTone(strategy.payoffAtTarget))}>{money(strategy.payoffAtTarget)}</p>
         </div>
         <div className={cn(innerBlockClass, 'p-3')}>
@@ -1378,8 +1378,8 @@ const IvSmileVisual: React.FC<{ chain: OptionsChainResponse | null }> = ({ chain
           <p className="mt-2 font-mono text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{ratio(model.minIv)} - {ratio(model.maxIv)}</p>
         </div>
         <div className={cn(innerBlockClass, 'p-3')}>
-          <p className={labelClass}>图形说明</p>
-          <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">仅反映当前链快照中的 IV / 行权价分布，不单独形成方向或执行结论。</p>
+          <p className={labelClass}>IV 分布</p>
+          <p className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">当前链快照</p>
         </div>
       </div>
     </div>
@@ -1404,20 +1404,15 @@ const ResearchVisualsPanel: React.FC<{
           <Pill tone="warn">示意图</Pill>
         </div>
       </SectionHeader>
-      <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-        先用现有观察结构样例与链快照观察收益边界和 IV 分布，再回到门控、缺口与风险约束做交叉复核。
-      </p>
       <div className="mt-5 grid gap-4 xl:grid-cols-2">
         <div className={cn(innerBlockClass, 'p-4')}>
           <p className={labelClass}>到期收益示意</p>
-          <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">基于当前观察结构样例的现有收益边界字段绘制，仅用于情景观察。</p>
           <div className="mt-4">
             <StrategyPayoffVisual strategy={strategy} underlyingPrice={underlyingPrice} targetPrice={targetPrice} />
           </div>
         </div>
         <div className={cn(innerBlockClass, 'p-4')}>
           <p className={labelClass}>IV 偏斜示意</p>
-          <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">基于当前期权链的 IV / 行权价点位绘制，仅反映快照形状，不延伸为交易结论。</p>
           <div className="mt-4">
             <IvSmileVisual chain={chain} />
           </div>
@@ -1506,9 +1501,6 @@ const AssumptionPanel: React.FC<{
             <Pill tone="neutral">门控优先</Pill>
           </div>
         </SectionHeader>
-        <p className="mt-2 text-sm text-[color:var(--wolfy-text-secondary)]">
-          控制区只记录假设；数据是否可判断以后续准备度和风险边界为准，不构成执行指令。
-        </p>
       </div>
 
       <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
@@ -1626,21 +1618,21 @@ function heroSummaryLine(
   comparison: OptionsStrategyCompareResponse | null,
   hasChainRows: boolean,
 ): string {
-  if (!hasChainRows) return '先加载可用期权链，再进入观察结构样例与风险边界。';
-  if (availability.stateKey === 'UPDATING') return '正在整理情景输入、样例结构与风险边界。';
+  if (!hasChainRows) return '等待期权链加载';
+  if (availability.stateKey === 'UPDATING') return '情景更新中';
   if (availability.stateKey === 'UNAVAILABLE' || availability.stateKey === 'PAUSED') {
-    return '当前不形成判断，先保留输入与风险预算，等待下一次数据刷新。';
+    return '等待数据刷新';
   }
 
   const observationStrategy = firstObservationStrategy(decision, comparison);
   if (isNonDecisionGrade(decision)) {
     return observationStrategy
-      ? '当前只显示观察结构样例，判断等级未满足，需等待更完整的数据。'
-      : '当前只满足观察条件，先记录风险边界与触发条件。';
+      ? '观察结构可用，等待更完整数据'
+      : '记录风险边界';
   }
 
   if (observationStrategy) {
-    return '当前显示样例顺序靠前的观察结构，先复核最大亏损、盈亏平衡与流动性边界。';
+    return '查看结构样例的风险边界';
   }
 
   return availability.explanation;
@@ -1652,24 +1644,24 @@ function heroPrimaryTask(
   comparison: OptionsStrategyCompareResponse | null,
   hasChainRows: boolean,
 ): string {
-  if (!hasChainRows) return '先补齐可用到期日与期权链，再进入结构样例观察。';
-  if (availability.stateKey === 'UPDATING') return '等待当前情景刷新完成，再阅读结构样例与风险边界。';
+  if (!hasChainRows) return '等待期权链加载';
+  if (availability.stateKey === 'UPDATING') return '等待刷新完成';
   if (availability.stateKey === 'UNAVAILABLE' || availability.stateKey === 'PAUSED') {
-    return '先保留输入与风险预算，等待下一次数据刷新。';
+    return '等待数据刷新';
   }
 
   const observationStrategy = firstObservationStrategy(decision, comparison);
   if (isNonDecisionGrade(decision)) {
     return observationStrategy
-      ? '先看首个观察结构的最大亏损、盈亏平衡与流动性。'
-      : '先完成情景输入，再等待可观察结构出现。';
+      ? '查看首个结构的风险边界'
+      : '完成情景输入';
   }
 
   if (observationStrategy) {
-    return '先复核样例顺序靠前结构的风险边界，再下钻图形与链表。';
+    return '复核风险边界，下钻图形与链表';
   }
 
-  return '先设定情景参数，再等待结构样例与风险边界生成。';
+  return '设定情景参数';
 }
 
 function heroObservationScope(
@@ -1677,11 +1669,11 @@ function heroObservationScope(
   decision: OptionsDecisionResponse | null,
   comparison: OptionsStrategyCompareResponse | null,
 ): string {
-  if (!hasChainRows) return '当前可观察内容会在链表可用后显示。';
+  if (!hasChainRows) return '等待链表加载';
   if (firstObservationStrategy(decision, comparison)) {
-    return '当前可先观察：结构样例、最大亏损、盈亏平衡与流动性边界。';
+    return '结构样例、风险边界';
   }
-  return '当前可先观察：期权链快照、风险边界与 IV 分布示意。';
+  return '期权链快照、IV 分布';
 }
 
 type SummaryStripItem = {
@@ -1985,7 +1977,7 @@ const StrategyRow: React.FC<{
     },
     {
       label: '情景上沿',
-      value: (alternative?.maxGain ?? strategy.maxGain) == null ? '未设上沿，不代表可获利' : money(alternative?.maxGain ?? strategy.maxGain),
+      value: (alternative?.maxGain ?? strategy.maxGain) == null ? '未设上沿' : money(alternative?.maxGain ?? strategy.maxGain),
       tone: 'text-[color:var(--wolfy-market-up)]',
     },
     {
@@ -1993,7 +1985,7 @@ const StrategyRow: React.FC<{
       value: money(strategy.breakeven),
     },
     {
-      label: '假设价格下情景估算',
+      label: '情景估算',
       value: money(strategy.payoffAtTarget),
       tone: metricTone(strategy.payoffAtTarget),
     },
@@ -2556,15 +2548,15 @@ function liquiditySensitivityNote(decision: OptionsDecisionResponse | null): str
   const hasSensitivity = ivWarnings.some((warning) => warning.includes('iv') || warning.includes('greeks') || warning.includes('expected_move'));
 
   if (hasLiquidity && hasSensitivity) {
-    return '流动性与敏感度都有限时，先看最大亏损与价差，再决定是否保留研究记录。';
+    return '流动性与敏感度均受限';
   }
   if (hasLiquidity) {
-    return '价差偏宽或成交深度不足时，名义上沿不等于实际可实现结果，先观察定义风险结构。';
+    return '价差偏宽或成交深度不足';
   }
   if (hasSensitivity) {
-    return 'IV 分位或敏感度不完整时，只能看方向边界，不能把到期前收益当成稳定结论。';
+    return 'IV / 敏感度数据不完整';
   }
-  return '优先同时看价差、OI、IV 与 Theta，再决定是否保留研究记录。';
+  return '需综合复核价差、OI、IV 与 Theta';
 }
 
 function nextActionCopy(
@@ -2573,11 +2565,11 @@ function nextActionCopy(
   hasChainRows: boolean,
   decision: OptionsDecisionResponse | null,
 ): string {
-  if (loading) return '等待链表、观察结构样例与风险边界刷新完成。';
-  if (error) return '稍后重试或更换标的，当前不要扩展判断。';
-  if (!hasChainRows) return '先加载可用到期日与期权链，再进入结构样例比较。';
-  if (isNonDecisionGrade(decision)) return '先记录观察结构与风险预算，等待更完整数据后再复核。';
-  return '先复核首个观察结构的最大亏损、盈亏平衡与流动性，再决定是否保留研究记录。';
+  if (loading) return '数据刷新中';
+  if (error) return '稍后重试或更换标的';
+  if (!hasChainRows) return '加载期权链';
+  if (isNonDecisionGrade(decision)) return '等待更完整数据';
+  return '复核风险边界与流动性';
 }
 
 const ContextRailPanel: React.FC<{
@@ -2632,7 +2624,7 @@ const MethodologyDisclosure: React.FC<{
       </div>
       <div className={cn(innerBlockClass, 'p-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')}>
         <p className={labelClass}>方法边界</p>
-        <p className="mt-2">期权可能归零，IV、Theta、流动性与价差会改变到期前估值。本模块仅做只读情景分析。</p>
+        <p className="mt-2">期权可能归零，到期前估值受 IV、Theta、流动性与价差影响。</p>
       </div>
     </div>
   </ConsoleDisclosure>
@@ -2935,8 +2927,8 @@ const OptionsLabPageContent: React.FC = () => {
     if (state.loading) return '正在加载基础数据，稍后将自动计算情景准备度。';
     if (state.error) return '期权链暂不可用，情景准备度已暂停。';
     const targetPriceValue = Number(targetPrice);
-    if (!state.summary || !state.expirations || !state.chain || !hasChainRows) return '先加载合约链后，再进入情景准备度。';
-    if (!Number.isFinite(targetPriceValue) || targetPriceValue <= 0 || !targetDate.trim()) return '先补齐假设价格与目标日期。';
+    if (!state.summary || !state.expirations || !state.chain || !hasChainRows) return '等待合约链加载';
+    if (!Number.isFinite(targetPriceValue) || targetPriceValue <= 0 || !targetDate.trim()) return '补齐假设价格与目标日期';
     return null;
   }, [hasChainRows, state.chain, state.error, state.expirations, state.loading, state.summary, targetDate, targetPrice]);
   const consumerAvailability = useMemo(
@@ -2966,7 +2958,7 @@ const OptionsLabPageContent: React.FC = () => {
       {
         label: '风险边界',
         value: riskValue,
-        meta: riskBudget ? `风险预算 ${riskBudget}` : '先定义可承受亏损',
+        meta: riskBudget ? `风险预算 ${riskBudget}` : '未设定',
       },
     ];
   }, [comparisonState.comparison, decisionState.decision, direction, riskBudget, targetDate, targetPrice]);
@@ -3023,7 +3015,7 @@ const OptionsLabPageContent: React.FC = () => {
               testId="options-lab-input-region"
               eyebrow="工作流起点"
               title="情景参数"
-              summary="先设定标的、方向、假设价格、目标日期与风险预算；这里仅记录研究输入，不直接形成执行结论。"
+              summary="情景参数输入"
               icon={Search}
             >
               <AssumptionPanel

@@ -305,7 +305,7 @@ function buildResearchRadarDerivedGuidance({
   const conditions = safeResearchQueueList(
     data?.onboardingGuidance?.conditionsDetected,
     locale,
-    locale === 'en' ? 'Research Radar remains observation-only for now.' : '当前研究雷达先保持观察边界。',
+    locale === 'en' ? 'Observation mode' : '观察模式',
   );
   const availableSurfaces = new Set(unifiedQueue?.dataQuality?.sourceSurfacesAvailable ?? []);
   const expectedSurfaces = unifiedQueue?.dataQuality?.sourceSurfacesExpected ?? [];
@@ -341,12 +341,12 @@ function buildResearchRadarDerivedGuidance({
     || (
       lowEvidenceActive && missingEvidenceLabels.length
         ? (locale === 'en'
-          ? `This queue remains observation-only while ${missingEvidenceLabels.join(', ')} still need review.`
-          : `当前队列仍缺少${missingEvidenceLabels.join('、')}，因此先保持观察边界。`)
+          ? 'Prerequisites incomplete'
+          : '前置条件未完成')
         : (expectedSurfaces.some((surface) => surface !== 'manual_gap' && !availableSurfaces.has(surface))
           ? (locale === 'en'
-            ? 'Upstream research prerequisites are still incomplete, so this queue remains observation-only.'
-            : '上游研究前置条件仍未补齐，因此当前队列先保持观察边界。')
+            ? 'Prerequisites incomplete'
+            : '前置条件未完成')
           : null)
     );
 
@@ -388,8 +388,8 @@ function ResearchQueueHubPanel({
       <div className="space-y-3">
         <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
           {locale === 'en'
-            ? 'Evidence-first follow-up across market, scanner, watchlist, and symbol research surfaces.'
-            : '按证据优先级汇总市场、Scanner、Watchlist 与标的研究入口的后续复核事项。'}
+            ? 'Evidence-first follow-up across research surfaces.'
+            : '按证据优先级汇总各研究入口的后续复核事项。'}
         </p>
 
         {items.length === 0 ? (
@@ -639,7 +639,7 @@ export default function ResearchRadarPage() {
               )}
             >
               <div className="text-xs text-[color:var(--wolfy-text-secondary)]">
-                {locale === 'en' ? 'Core queue for priority, structure handoff, verification items, and evidence gaps.' : '用于优先级、结构交接、验证事项与证据缺口的核心研究队列。'}
+                {locale === 'en' ? 'Core queue for priority, verification, and evidence gaps.' : '优先级、验证事项与证据缺口的核心队列。'}
               </div>
             </WolfyCommandBar>
           )}
@@ -676,8 +676,8 @@ export default function ResearchRadarPage() {
               eyebrow={locale === 'en' ? 'Research radar' : '研究雷达'}
               title={locale === 'en' ? 'Research queue for market-structure follow-through' : '承接市场结构的研究队列'}
               description={locale === 'en'
-                ? 'This route turns cockpit signals into reviewable ticker work, keeping queue order, why-on-radar rationale, verification items, and risk flags together.'
-                : '这个路由把驾驶舱信号转成可复核的标的研究工作，把队列顺序、上榜原因、验证事项与风险标记放在一起。'}
+                ? 'Reviewable ticker queue with rationale, verification, and risk flags.'
+                : '可复核的标的队列，集中呈现上榜原因、验证事项与风险标记。'}
             />
             {error ? (
               <div className="p-4 md:p-5">

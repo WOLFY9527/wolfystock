@@ -1323,7 +1323,7 @@ const unreliableTemperaturePayload = () => ({
   asOf: '2026-04-29T10:00:00',
   freshness: 'fallback' as const,
   isFallback: true,
-  warning: '当前关键数据不足，暂不形成方向判断。',
+  warning: '数据待补',
   confidence: 0,
   reliableInputCount: 0,
   requiredReliableInputCount: 5,
@@ -1489,11 +1489,11 @@ const unreliableTemperaturePayload = () => ({
     notInvestmentAdvice: true,
   },
   scores: {
-    overall: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前关键数据不足，暂不形成方向判断。' },
-    usRiskAppetite: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前关键数据不足，暂不形成方向判断。' },
-    cnMoneyEffect: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前关键数据不足，暂不形成方向判断。' },
-    macroPressure: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前关键数据不足，暂不形成方向判断。' },
-    liquidity: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前关键数据不足，暂不形成方向判断。' },
+    overall: { value: 50, label: '数据不足', trend: 'stable' as const, description: '数据待补' },
+    usRiskAppetite: { value: 50, label: '数据不足', trend: 'stable' as const, description: '数据待补' },
+    cnMoneyEffect: { value: 50, label: '数据不足', trend: 'stable' as const, description: '数据待补' },
+    macroPressure: { value: 50, label: '数据不足', trend: 'stable' as const, description: '数据待补' },
+    liquidity: { value: 50, label: '数据不足', trend: 'stable' as const, description: '数据待补' },
   },
 });
 
@@ -2325,7 +2325,7 @@ describe('MarketOverviewPage', () => {
     const details = expandMarketDecisionDetails();
     expect(within(details).queryByTestId('market-regime-synthesis-header')).not.toBeInTheDocument();
     expect(within(details).getByTestId('market-temperature-strip')).toBeInTheDocument();
-    expect(within(details).getByTestId('market-briefing-card')).toHaveTextContent(/主要指数走强，VIX 回落|当前关键数据不足/);
+    expect(within(details).getByTestId('market-briefing-card')).toHaveTextContent(/主要指数走强，VIX 回落|当前关键数据不足|数据待补/);
 
     const shell = screen.getByTestId('market-overview-shell');
     const workbench = screen.getByTestId('market-overview-workbench');

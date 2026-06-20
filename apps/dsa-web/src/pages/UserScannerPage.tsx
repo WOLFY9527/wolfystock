@@ -736,8 +736,8 @@ function buildUnavailableScannerRunSummary(
     unavailable: true,
     unavailableTitle: language === 'en' ? 'Candidate set has not been produced yet' : '候选集尚未产出',
     unavailableBody: language === 'en'
-      ? 'Run data is insufficient or unavailable. Next: run Scanner again, inspect history, or open Watchlist / Market Overview.'
-      : '运行数据不足或暂不可用。下一步：重新运行扫描、查看历史，或打开 Watchlist / Market Overview。',
+      ? 'Run data insufficient. Retry scan, check history, or open Watchlist / Market Overview.'
+      : '数据不足，可重试、查看历史或打开市场概览。',
   };
 }
 
@@ -1147,8 +1147,8 @@ function buildScannerConclusion(
         state: 'no-candidate',
         title: language === 'en' ? 'No selected candidate in this run' : '本次未形成入选候选',
         detail: language === 'en'
-          ? 'Review data coverage, history coverage, and the rejection mix before changing scope; this does not describe the whole market.'
-          : '先看数据覆盖、历史覆盖与淘汰分布，再决定是否调整范围；这不代表市场没有机会。',
+          ? 'Review coverage and rejection mix before adjusting scope.'
+          : '查看覆盖与淘汰分布，再决定是否调整范围。',
         candidateCount: 0,
         trustSummary,
         tone: 'caution',
@@ -1185,8 +1185,8 @@ function buildScannerConclusion(
       state: 'insufficient',
       title: language === 'en' ? 'Scanner has not produced a candidate set yet' : '扫描器尚未产出候选集',
       detail: language === 'en'
-        ? 'This result does not include candidates, exclusions, data-limited rows, or a credible run duration. Retry the same setup later, or check Market Overview before opening a symbol manually.'
-        : '本次结果没有候选、淘汰、数据受限行或可信运行耗时。可稍后同参数重试，或先查看 Market Overview 后手动打开单个代码。',
+        ? 'No candidates produced. Retry or check Market Overview.'
+        : '无候选产出，可稍后重试或查看市场概览。',
       candidateCount: 0,
       trustSummary,
       tone: 'caution',
@@ -1227,7 +1227,7 @@ function buildScannerConclusion(
       title: language === 'en' ? 'No selected candidate in this run' : '本次未形成入选候选',
       detail: language === 'en'
         ? 'Review data coverage, history coverage, and the rejection mix before changing scope; this does not describe the whole market.'
-        : '先看数据覆盖、历史覆盖与淘汰分布，再决定是否调整范围；这不代表市场没有机会。',
+        : '查看覆盖与淘汰分布，再决定是否调整范围。',
       candidateCount: selectedCount,
       trustSummary,
       tone: 'caution',
@@ -1285,8 +1285,8 @@ function buildScannerSafeEmptyReason({
     return {
       label: language === 'en' ? 'Data/history coverage limited' : '数据/历史覆盖不足',
       body: language === 'en'
-        ? `${countSummary} This run did not form selected candidates; it may reflect data coverage, history coverage, or temporarily insufficient evidence rather than a market-wide conclusion. Retry the same parameters later, inspect limited-data rows, or try another market/profile.`
-        : `${countSummary} 本次未形成入选候选，可能与数据覆盖、历史覆盖或暂时证据不足有关，不代表市场没有机会。可稍后同参数重试、查看数据受限行，或尝试其他市场/策略。`,
+        ? `${countSummary} No candidates formed. Retry, check limited-data rows, or try another market/profile.`
+        : `${countSummary} 未形成入选候选，可重试、查看数据受限行或切换市场/策略。`,
     };
   }
 
@@ -1294,16 +1294,16 @@ function buildScannerSafeEmptyReason({
     return {
       label: language === 'en' ? 'Current run settings produced no selection' : '当前运行设置未形成候选',
       body: language === 'en'
-        ? `${countSummary} The current market/profile/universe setup produced no selected candidates. Review the rejection mix, retry the loaded parameters, or switch market/profile before drawing a broader conclusion.`
-        : `${countSummary} 当前市场/策略/标的池设置未形成入选候选。先查看淘汰分布，可同参数重试，或切换市场/策略后再比较。`,
+        ? `${countSummary} No candidates selected. Review rejection mix, retry, or switch market/profile.`
+        : `${countSummary} 未形成入选候选。查看淘汰分布，可重试或切换市场/策略。`,
     };
   }
 
   return {
     label: language === 'en' ? 'Evidence insufficient for handoff' : '证据不足，未形成交接候选',
     body: language === 'en'
-      ? `${countSummary} The current run did not produce an official handoff candidate. Use history, retry, or adjust market/profile; do not treat this as proof that the market has no opportunities.`
-      : `${countSummary} 当前运行没有形成官方交接候选。可查看历史、同参数重试或调整市场/策略；不要把它理解为市场没有机会。`,
+      ? `${countSummary} No official handoff candidate. Use history, retry, or adjust settings.`
+      : `${countSummary} 未形成官方交接候选，可查看历史、重试或调整设置。`,
   };
 }
 
@@ -1347,8 +1347,8 @@ function buildScannerWorkbenchEmptyState({
       return {
         title: language === 'en' ? 'No selected candidates in this run' : '本次未形成入选候选',
         body: language === 'en'
-          ? 'The latest completed run formed no selected candidates. Open history or wait for the full run detail before changing scope.'
-          : '最近一次完成的扫描未形成入选候选。可先查看历史，或等待完整运行详情载入后再决定是否调整范围。',
+          ? 'No candidates in latest run. Open history or wait for full detail.'
+          : '本次无入选候选，可查看历史或等待完整详情。',
       };
     }
 
@@ -3277,7 +3277,7 @@ const UserScannerPage: React.FC = () => {
               {getStopLoss(candidate) ? <FieldChip label={language === 'en' ? 'Risk boundary' : '风险边界'} value={getStopLoss(candidate) || '--'} /> : null}
               {!getEntryRange(candidate) && !getTargetPrice(candidate) && !getStopLoss(candidate) ? (
                 <span className="text-xs text-white/44">
-                  {language === 'en' ? 'Watch the next update before acting on this idea.' : '先观察下一次更新，再决定是否继续跟踪。'}
+                  {language === 'en' ? 'Watch next update before acting.' : '等待下次更新后再行动。'}
                 </span>
               ) : null}
             </div>
@@ -3471,16 +3471,16 @@ const UserScannerPage: React.FC = () => {
     || Boolean(pageErrorSummary));
   const scannerWorkflowDetail = scannerConclusion.state === 'waiting'
     ? (language === 'en'
-      ? 'Run the current setup first. If you need to keep moving before Scanner forms a usable candidate set, use the manual symbol research path below instead of bouncing between routes.'
-      : '可先运行当前配置；如果当前覆盖下还没有可用候选，可直接使用下方手动研究路径，避免在页面之间来回跳转。')
+      ? 'Run current setup. Use manual research path if candidates are not yet available.'
+      : '先运行当前配置，无候选时可使用手动研究路径。')
     : scannerConclusion.state === 'insufficient'
       ? (language === 'en'
-        ? 'Current evidence is not enough for a candidate handoff. Retry and history remain available, but the clean primary path is manual symbol research until coverage catches up.'
-        : '当前证据不足，暂不适合从扫描结果移交候选。可重跑和查看历史，但更清晰的主路径是先手动研究单个代码，等待覆盖补齐。')
+        ? 'Evidence insufficient for handoff. Use manual symbol research until coverage improves.'
+        : '证据不足，暂不适合交接。先手动研究单个代码。')
       : scannerConclusion.state === 'no-candidate'
         ? (language === 'en'
-          ? 'No official candidate formed in this run. That can reflect current data/history coverage or the loaded setup, not a market-wide conclusion, so use manual symbol research as the primary next step.'
-          : '本次未形成官方入选候选，可能来自当前数据/历史覆盖或本轮设置，不代表市场没有机会；下一步以手动研究单个代码为主。')
+          ? 'No official candidate formed. Use manual symbol research as next step.'
+          : '未形成官方入选候选，可手动研究单个代码。')
         : (language === 'en'
           ? 'Some data is stale, partial, or limited. Keep the official candidate, but use history and Market Overview before treating it as research evidence.'
           : '部分数据可能过期、缺失或受限。可保留官方候选，但先结合历史与 Market Overview 再作为研究证据。');
@@ -3613,7 +3613,7 @@ const UserScannerPage: React.FC = () => {
     researchWorkflowSymbol
       ? (language === 'en' ? 'Open Watchlist to observe the existing record or empty state' : '打开观察列表，查看该代码的现有记录或空状态')
       : (language === 'en' ? 'Run scanner or use manual symbol research first' : '先运行扫描或使用手动代码研究'),
-    researchWorkflowSymbol ? (language === 'en' ? 'Review portfolio exposure before validation' : '先查看组合是否已有暴露，再进入验证') : null,
+    researchWorkflowSymbol ? (language === 'en' ? 'Review portfolio exposure' : '查看组合暴露') : null,
     researchWorkflowSymbol ? (language === 'en' ? 'Use Backtest and Options only as read-only context' : '回测与期权仅作为只读上下文核验') : null,
   ];
 
@@ -3751,8 +3751,8 @@ const UserScannerPage: React.FC = () => {
                           </span>
                           <span className="text-[11px] text-white/48">
                             {language === 'en'
-                              ? 'Research one symbol without changing official selection or persistence.'
-                              : '先研究单个代码，不改官方入选，也不触发持久化。'}
+                              ? 'Research one symbol, read-only.'
+                              : '只读研究单个代码。'}
                           </span>
                         </div>
                         <label htmlFor="scanner-manual-recovery-symbol" className="mt-3 block text-[11px] font-semibold text-white/78">
@@ -3760,8 +3760,8 @@ const UserScannerPage: React.FC = () => {
                         </label>
                         <p className="mt-1 text-[11px] leading-relaxed text-white/50">
                           {language === 'en'
-                            ? 'Use one symbol when the current candidate set is unavailable or empty under current coverage. This starts research only; it does not write to Watchlist unless you explicitly save it.'
-                            : '当当前覆盖下的候选集为空或暂不可用时，可先研究一个代码。这里默认只启动研究；除非你明确点击“加入观察名单”，否则不会写入观察名单。'}
+                            ? 'Research a symbol when candidates are unavailable. Does not add to Watchlist unless saved.'
+                            : '候选不可用时手动研究代码，不会自动写入观察名单。'}
                         </p>
                         <div className="mt-2 flex min-w-0 flex-col gap-2 sm:flex-row">
                           <input
