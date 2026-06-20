@@ -230,6 +230,10 @@ def _assert_consumer_snapshot_excludes_admin_fields(testcase: unittest.TestCase,
         "rawFailureSamples",
         "providerPayload",
         "rawProviderPayload",
+        "credentialValue",
+        "requestId",
+        "traceId",
+        "debugTrace",
         "perWindowTimeout",
         "totalProviderBudget",
         "providerDeadlineSeconds",
@@ -505,8 +509,9 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(theme["signalType"], "relative_strength")
         self.assertEqual(theme["flowEvidenceType"], "proxy_only")
         self.assertFalse(theme["flowLanguageAllowed"])
-        self.assertTrue(theme["sourceAuthorityAllowed"])
+        self.assertFalse(theme["sourceAuthorityAllowed"])
         self.assertEqual(theme["evidenceQuality"], "degraded_proxy")
+        self.assertIn("source_authority_rejected", theme["dataGaps"])
         self.assertIn("true_flow_data_missing", theme["dataGaps"])
         self.assertIn("flow_methodology_missing", theme["dataGaps"])
         self.assertIn("benchmark_proxy_missing", theme["dataGaps"])
@@ -788,6 +793,179 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
                 "percentOutperformingBenchmark": full_theme["breadth"]["percentOutperformingBenchmark"],
             },
         )
+
+    def test_configured_provider_sector_breadth_can_enter_headline_when_authority_freshness_and_coverage_pass(self) -> None:
+        payload = _rotation_family_payload(
+            {
+                "ai_applications": {
+                    "member_changes": [4.8, 4.4, 4.1, 3.7, 3.4, 3.1, 2.8, 2.5, 2.2, 2.0],
+                    "volume_ratio": 1.9,
+                    "proxy_changes": {"IGV": 2.3},
+                },
+            }
+        )
+
+        provider_meta = payload["metadata"]["quoteProvider"]
+        theme = next(item for item in payload["themes"] if item["id"] == "ai_applications")
+        consumer_snapshot = payload["consumerEvidenceSnapshot"]
+        consumer_theme = next(item for item in consumer_snapshot["themes"] if item["id"] == "ai_applications")
+        headline_ids = {
+            item["id"]
+            for item in payload["summary"]["strongestThemes"] + payload["summary"]["acceleratingThemes"]
+        }
+
+        self.assertTrue(provider_meta["sourceAuthorityAllowed"])
+        self.assertTrue(provider_meta["scoreContributionAllowed"])
+        self.assertFalse(theme["isFallback"])
+        self.assertFalse(theme["isStale"])
+        self.assertFalse(theme["isPartial"])
+        self.assertEqual(theme["breadth"]["coveragePercent"], 100.0)
+        self.assertEqual(theme["proxyQuality"]["coveragePercent"], 100.0)
+        self.assertTrue(theme["sourceAuthorityAllowed"])
+        self.assertTrue(theme["rankEligible"])
+        self.assertTrue(theme["headlineEligible"])
+        self.assertEqual(theme["rankingLane"], "headline")
+        self.assertTrue(theme["scoreContributionAllowed"])
+        self.assertIn("ai_applications", headline_ids)
+        self.assertGreater(payload["summary"]["headlineEligibleThemeCount"], 0)
+        self.assertTrue(consumer_snapshot["scoreContributionAllowed"])
+        self.assertTrue(consumer_snapshot["providerState"]["sourceAuthorityAllowed"])
+        self.assertTrue(consumer_snapshot["providerState"]["scoreContributionAllowed"])
+        self.assertTrue(consumer_theme["rankEligible"])
+        self.assertTrue(consumer_theme["headlineEligible"])
+        self.assertEqual(consumer_theme["rankingLane"], "headline")
+        self.assertTrue(consumer_theme["scoreContributionAllowed"])
+        self.assertEqual(
+            consumer_theme["breadthEvidence"],
+            {
+                "source": "rotation_theme_quote_breadth",
+                "observationOnly": True,
+                "authorityGrant": False,
+                "scoreContributionAllowed": False,
+                "observedMembers": theme["breadth"]["observedMembers"],
+                "configuredMembers": theme["breadth"]["configuredMembers"],
+                "coveragePercent": theme["breadth"]["coveragePercent"],
+                "percentUp": theme["breadth"]["percentUp"],
+                "percentOutperformingBenchmark": theme["breadth"]["percentOutperformingBenchmark"],
+            },
+        )
+
+    def test_configured_provider_sector_breadth_authority_requires_theme_coverage(self) -> None:
+        _, quotes, etf_authority_spine = _bounded_etf_authority_fixture()
+        theme_definition = _rotation_theme("ai_applications")
+        for index, symbol in enumerate(theme_definition.members[:-1]):
+            quotes[symbol] = _official_rotation_quote(symbol, 4.6 - index * 0.3, volume_ratio=1.8)
+        quotes["IGV"] = _official_rotation_quote("IGV", 2.1, volume_ratio=1.4)
+
+        service = MarketRotationRadarService(
+            quote_provider=lambda symbols: {
+                "quotes": {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+                "metadata": {
+                    "quoteMode": "configured",
+                    "source": "alpaca",
+                    "sourceLabel": "Alpaca SIP",
+                    "sourceType": "official_public",
+                    "sourceTier": "broker_authorized",
+                    "providerTier": "tier_1_configured",
+                    "freshness": "live",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "providerDiagnostics": {
+                        "etfAuthoritySpine": etf_authority_spine,
+                    },
+                },
+            },
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        payload = service.get_rotation_radar()
+        provider_meta = payload["metadata"]["quoteProvider"]
+        theme = next(item for item in payload["themes"] if item["id"] == "ai_applications")
+        consumer_theme = next(
+            item for item in payload["consumerEvidenceSnapshot"]["themes"] if item["id"] == "ai_applications"
+        )
+
+        self.assertTrue(provider_meta["sourceAuthorityAllowed"])
+        self.assertTrue(provider_meta["scoreContributionAllowed"])
+        self.assertEqual(theme["breadth"]["observedMembers"], len(theme_definition.members) - 1)
+        self.assertLess(theme["breadth"]["coveragePercent"], 100.0)
+        self.assertTrue(theme["isPartial"])
+        self.assertFalse(theme["sourceAuthorityAllowed"])
+        self.assertFalse(theme["rankEligible"])
+        self.assertFalse(theme["headlineEligible"])
+        self.assertFalse(theme["scoreContributionAllowed"])
+        self.assertEqual(theme["rankingLane"], "observation")
+        self.assertIn("source_authority_rejected", theme["dataGaps"])
+        self.assertNotIn("ai_applications", {item["id"] for item in payload["summary"]["strongestThemes"]})
+        self.assertEqual(payload["summary"]["headlineEligibleThemeCount"], 0)
+        self.assertFalse(payload["consumerEvidenceSnapshot"]["scoreContributionAllowed"])
+        self.assertFalse(consumer_theme["scoreContributionAllowed"])
+        self.assertTrue(consumer_theme["breadthEvidence"]["observationOnly"])
+        self.assertFalse(consumer_theme["breadthEvidence"]["authorityGrant"])
+        self.assertFalse(consumer_theme["breadthEvidence"]["scoreContributionAllowed"])
+        _assert_consumer_snapshot_excludes_admin_fields(self, payload["consumerEvidenceSnapshot"])
+
+    def test_configured_provider_sector_breadth_authority_requires_fresh_theme_windows(self) -> None:
+        _, quotes, etf_authority_spine = _bounded_etf_authority_fixture()
+        theme_definition = _rotation_theme("ai_applications")
+        for index, symbol in enumerate(theme_definition.members):
+            quote = _official_rotation_quote(symbol, 4.4 - index * 0.2, volume_ratio=1.8)
+            if symbol == "APP":
+                quote["freshness"] = "stale"
+                quote["isStale"] = True
+                for window in quote["timeWindows"].values():
+                    window["freshness"] = "stale"
+                    window["isStale"] = True
+            quotes[symbol] = quote
+        quotes["IGV"] = _official_rotation_quote("IGV", 2.0, volume_ratio=1.4)
+
+        service = MarketRotationRadarService(
+            quote_provider=lambda symbols: {
+                "quotes": {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+                "metadata": {
+                    "quoteMode": "configured",
+                    "source": "alpaca",
+                    "sourceLabel": "Alpaca SIP",
+                    "sourceType": "official_public",
+                    "sourceTier": "broker_authorized",
+                    "providerTier": "tier_1_configured",
+                    "freshness": "live",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "providerDiagnostics": {
+                        "etfAuthoritySpine": etf_authority_spine,
+                    },
+                },
+            },
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        payload = service.get_rotation_radar()
+        provider_meta = payload["metadata"]["quoteProvider"]
+        theme = next(item for item in payload["themes"] if item["id"] == "ai_applications")
+        consumer_theme = next(
+            item for item in payload["consumerEvidenceSnapshot"]["themes"] if item["id"] == "ai_applications"
+        )
+
+        self.assertTrue(provider_meta["sourceAuthorityAllowed"])
+        self.assertTrue(provider_meta["scoreContributionAllowed"])
+        self.assertEqual(theme["breadth"]["coveragePercent"], 100.0)
+        self.assertTrue(theme["isStale"])
+        self.assertFalse(theme["sourceAuthorityAllowed"])
+        self.assertFalse(theme["rankEligible"])
+        self.assertFalse(theme["headlineEligible"])
+        self.assertFalse(theme["scoreContributionAllowed"])
+        self.assertEqual(theme["rankingLane"], "observation")
+        self.assertIn("stale_quote_window", theme["dataGaps"])
+        self.assertIn("source_authority_rejected", theme["dataGaps"])
+        self.assertEqual(payload["summary"]["headlineEligibleThemeCount"], 0)
+        self.assertFalse(payload["consumerEvidenceSnapshot"]["scoreContributionAllowed"])
+        self.assertFalse(consumer_theme["scoreContributionAllowed"])
+        self.assertTrue(consumer_theme["breadthEvidence"]["observationOnly"])
+        self.assertFalse(consumer_theme["breadthEvidence"]["authorityGrant"])
+        self.assertFalse(consumer_theme["breadthEvidence"]["scoreContributionAllowed"])
 
     def test_fallback_when_no_provider_never_marks_live_and_caps_confidence(self) -> None:
         service = MarketRotationRadarService(now_provider=lambda: datetime(2026, 5, 7, tzinfo=timezone.utc))
@@ -1128,6 +1306,8 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
                     "sourceTier": "synthetic",
                     "freshness": "mock",
                     "asOf": "2026-05-07T09:45:00+00:00",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
                     "noExternalCalls": True,
                 },
             },
@@ -1142,11 +1322,13 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertFalse(theme["rankEligible"])
         self.assertFalse(theme["headlineEligible"])
         self.assertFalse(theme["scoreContributionAllowed"])
+        self.assertFalse(theme["sourceAuthorityAllowed"])
         self.assertTrue(theme["observationOnly"])
         self.assertEqual(theme["rankingLane"], "observation")
         self.assertEqual(theme["rankExclusionReason"], "synthetic_source")
         self.assertEqual(theme["sourceTier"], "synthetic")
         self.assertIn(theme["trustLevel"], {"weak", "unavailable"})
+        self.assertIn("source_authority_rejected", theme["dataGaps"])
         self.assertNotIn(theme["id"], {item["id"] for item in payload["summary"]["strongestThemes"]})
         self.assertTrue(all(item["rankEligible"] for item in payload["summary"]["strongestThemes"]))
         self.assertTrue(all(item["headlineEligible"] for item in payload["summary"]["acceleratingThemes"]))

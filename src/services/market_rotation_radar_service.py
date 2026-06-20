@@ -3779,7 +3779,28 @@ class MarketRotationRadarService:
     ) -> bool:
         if bool(theme.get("taxonomyOnly")) or bool(theme.get("staticThemeOnly")):
             return False
-        return bool(quote_source_authority_allowed)
+        if not bool(quote_source_authority_allowed):
+            return False
+        if bool(theme.get("isFallback")) or bool(theme.get("isStale")) or bool(theme.get("isPartial")):
+            return False
+        if bool(theme.get("isUnavailable")):
+            return False
+        freshness = str(theme.get("freshness") or "").strip().lower()
+        if freshness in {"fallback", "stale", "unavailable", "error"}:
+            return False
+        ranking_trust = theme.get("rankingTrust")
+        trust_payload = dict(ranking_trust) if isinstance(ranking_trust, Mapping) else {}
+        markers = self._rank_source_markers(theme, trust_payload)
+        if markers.intersection(_RANK_FALLBACK_MARKERS | _RANK_SYNTHETIC_MARKERS | _RANK_UNAVAILABLE_MARKERS):
+            return False
+        source_tier = str(theme.get("sourceTier") or trust_payload.get("sourceTier") or "").strip().lower()
+        if source_tier in (
+            _RANK_EXCLUDED_FALLBACK_TIERS
+            | _RANK_EXCLUDED_SYNTHETIC_TIERS
+            | _RANK_EXCLUDED_UNAVAILABLE_TIERS
+        ):
+            return False
+        return self._ranking_coverage(theme) >= 1.0
 
     def _evidence_quality(
         self,
@@ -4026,6 +4047,11 @@ class MarketRotationRadarService:
         trust_level = str(trust.get("trustLevel") or "").strip().lower()
         freshness = str(trust.get("freshness") or theme.get("freshness") or "").strip().lower()
         markers = self._rank_source_markers(theme, trust)
+        degradation_reasons = {
+            str(reason or "").strip().lower()
+            for reason in self._string_list(trust.get("degradationReasons"))
+            if str(reason or "").strip()
+        }
         if source_tier in _RANK_EXCLUDED_SYNTHETIC_TIERS or markers.intersection(_RANK_SYNTHETIC_MARKERS):
             return "synthetic_source"
         if source_tier in _RANK_EXCLUDED_UNAVAILABLE_TIERS or markers.intersection(_RANK_UNAVAILABLE_MARKERS):
@@ -4039,6 +4065,10 @@ class MarketRotationRadarService:
             or markers.intersection(_RANK_FALLBACK_MARKERS)
         ):
             return "fallback_static_source"
+        if freshness == "stale" or bool(theme.get("isStale")) or "stale_source" in degradation_reasons:
+            return "stale_source"
+        if bool(theme.get("isPartial")) and source_tier == "broker_authorized":
+            return "partial_authority_coverage"
         if trust_level in {"weak", "unavailable"} or not bool(trust.get("conclusionAllowed")):
             return "trust_gate_blocks_headline"
         return None
