@@ -234,6 +234,97 @@ class StockValidationResponse(BaseModel):
     )
 
 
+class SymbolResearchIdentity(BaseModel):
+    """最小标的身份信息。"""
+
+    name: Optional[str] = Field(None, description="标的名称")
+    exchange: Optional[str] = Field(None, description="交易所")
+    sector: Optional[str] = Field(None, description="行业板块")
+    industry: Optional[str] = Field(None, description="细分行业")
+
+
+class SymbolResearchQuoteState(BaseModel):
+    """最小行情可用性状态。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    state: Literal["available", "missing", "stale", "unknown"] = Field(..., description="行情可用性状态")
+    price: Optional[float] = Field(None, description="最新价格；缺失或不可用时为空")
+    change_percent: Optional[float] = Field(None, alias="changePercent", description="涨跌幅；缺失时为空")
+    as_of: Optional[str] = Field(None, alias="asOf", description="行情市场时间或服务端观察时间")
+
+
+class SymbolResearchHistoryState(BaseModel):
+    """最小历史行情可用性状态。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    state: Literal["available", "missing", "stale", "unknown"] = Field(..., description="历史行情可用性状态")
+    bars: Optional[int] = Field(None, description="可观察 K 线数量")
+    period: str = Field("daily", description="历史行情周期")
+    as_of: Optional[str] = Field(None, alias="asOf", description="最新 K 线日期")
+
+
+class SymbolResearchStructureState(BaseModel):
+    """结构分析可用性状态。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    state: Literal["available", "insufficient", "missing", "unknown"] = Field(..., description="结构分析状态")
+    label: Optional[str] = Field(None, description="结构观察标签")
+    confidence: Optional[str] = Field(None, description="消费端结构置信标签")
+    as_of: Optional[str] = Field(None, alias="asOf", description="结构分析时间；当前为空")
+
+
+class SymbolResearchFundamentalsState(BaseModel):
+    """基本面覆盖状态。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    state: Literal["available", "missing", "not_integrated", "unknown"] = Field(..., description="基本面覆盖状态")
+    fields_available: List[str] = Field(default_factory=list, alias="fieldsAvailable", description="已安全暴露的基本面字段")
+
+
+class SymbolResearchEventsState(BaseModel):
+    """事件、公告、催化剂覆盖状态。"""
+
+    state: Literal["available", "missing", "not_integrated", "unknown"] = Field(..., description="事件/公告/催化剂覆盖状态")
+    latest: List[Dict[str, Any]] = Field(default_factory=list, description="已安全暴露的最新事件摘要")
+
+
+class SymbolResearchPeerState(BaseModel):
+    """同业/基准覆盖状态。"""
+
+    state: Literal["available", "insufficient", "missing", "unknown"] = Field(..., description="同业或基准覆盖状态")
+    benchmark: Optional[str] = Field(None, description="可用基准或同业组标签")
+
+
+class SymbolResearchPacketResponse(BaseModel):
+    """单股票最小 research packet。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    symbol: str = Field(..., description="归一化股票代码")
+    market: str = Field(..., description="市场代码：cn / hk / us / unknown")
+    identity: SymbolResearchIdentity = Field(..., description="标的身份信息")
+    quote: SymbolResearchQuoteState = Field(..., description="行情可用性")
+    history: SymbolResearchHistoryState = Field(..., description="历史行情可用性")
+    structure: SymbolResearchStructureState = Field(..., description="结构分析可用性")
+    fundamentals: SymbolResearchFundamentalsState = Field(..., description="基本面覆盖")
+    events: SymbolResearchEventsState = Field(..., description="事件/公告/催化剂覆盖")
+    peer: SymbolResearchPeerState = Field(..., description="同业/基准覆盖")
+    missing_data: List[str] = Field(default_factory=list, alias="missingData", description="缺失数据族")
+    research_status: Literal["ready", "partial", "blocked", "unknown"] = Field(
+        ...,
+        alias="researchStatus",
+        description="整体研究就绪状态",
+    )
+    next_data_action: str = Field(..., alias="nextDataAction", description="下一步数据动作")
+    observation_only: Literal[True] = Field(True, alias="observationOnly", description="仅观察")
+    decision_grade: Literal[False] = Field(False, alias="decisionGrade", description="不输出决策等级")
+    no_advice_disclosure: str = Field(..., alias="noAdviceDisclosure", description="非个性化建议边界")
+
+
 class StockEvidenceFundamentalsSummary(BaseModel):
     """单股票证据包中的 fundamentalsSummary 白名单投影。"""
 
