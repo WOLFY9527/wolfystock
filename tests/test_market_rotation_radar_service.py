@@ -3832,6 +3832,41 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(igv_proxy["etfAuthorityEvidence"]["symbol"], "IGV")
         self.assertEqual(igv_proxy["etfAuthorityEvidence"]["reasonCodes"], [])
 
+    def test_mocked_alpaca_provider_preserves_window_source_type_for_authority_review(self) -> None:
+        stable_etfs, quotes, etf_authority_spine = _bounded_etf_authority_fixture()
+        self.assertEqual(stable_etfs, ("SPY", "QQQ", "IWM", "SMH", "SOXX", "IGV"))
+        self.assertEqual(etf_authority_spine["universe"], list(stable_etfs))
+        service = MarketRotationRadarService(
+            quote_provider=lambda symbols: {
+                "quotes": {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+                "metadata": {
+                    "quoteMode": "configured",
+                    "source": "alpaca",
+                    "sourceLabel": "Alpaca SIP",
+                    "sourceType": "official_public",
+                    "sourceTier": "broker_authorized",
+                    "providerTier": "tier_1_configured",
+                    "freshness": "live",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "noExternalCalls": False,
+                    "providerDiagnostics": {
+                        "etfAuthoritySpine": etf_authority_spine,
+                    },
+                },
+            },
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        payload = service.get_rotation_radar()
+        ai_theme = next(theme for theme in payload["themes"] if theme["id"] == "ai_applications")
+        igv_window = ai_theme["benchmarkProxies"]["IGV"]["timeWindows"]["5m"]
+
+        self.assertIn("IGV", stable_etfs)
+        self.assertEqual(igv_window["source"], "alpaca")
+        self.assertEqual(igv_window["sourceType"], "official_public")
+        self.assertEqual(igv_window["sourceTier"], "broker_authorized")
+        self.assertEqual(igv_window["providerTier"], "tier_1_configured")
+
     def test_active_bounded_etf_authority_spine_produces_leadership_diagnostics(self) -> None:
         stable_etfs, quotes, etf_authority_spine = _bounded_etf_authority_fixture()
         service = MarketRotationRadarService(

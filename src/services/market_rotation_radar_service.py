@@ -3610,6 +3610,9 @@ class MarketRotationRadarService:
         trend_values = [value for value in (self._number(item) for item in trend or []) if value is not None] if isinstance(trend, list) else []
         as_of = str(raw_quote.get("asOf") or raw_quote.get("as_of") or raw_quote.get("updatedAt") or self._now_iso())
         source_label = str(raw_quote.get("sourceLabel") or raw_quote.get("source_label") or "主题篮子行情")
+        source_type = raw_quote.get("sourceType", raw_quote.get("source_type"))
+        source_tier = raw_quote.get("sourceTier", raw_quote.get("source_tier"))
+        provider_tier = raw_quote.get("providerTier", raw_quote.get("provider_tier"))
         normalized_freshness = "fallback" if is_fallback else "stale" if is_stale else freshness
         time_windows = self._normalize_time_windows(
             raw_quote=raw_quote,
@@ -3620,6 +3623,9 @@ class MarketRotationRadarService:
             is_stale=is_stale,
             source=source,
             source_label=source_label,
+            source_type=source_type,
+            source_tier=source_tier,
+            provider_tier=provider_tier,
             as_of=as_of,
         )
         return {
@@ -3636,9 +3642,9 @@ class MarketRotationRadarService:
             "isStale": is_stale,
             "source": source,
             "sourceLabel": source_label,
-            "sourceType": raw_quote.get("sourceType", raw_quote.get("source_type")),
-            "sourceTier": raw_quote.get("sourceTier", raw_quote.get("source_tier")),
-            "providerTier": raw_quote.get("providerTier", raw_quote.get("provider_tier")),
+            "sourceType": source_type,
+            "sourceTier": source_tier,
+            "providerTier": provider_tier,
             "confidenceWeight": raw_quote.get("confidenceWeight", raw_quote.get("confidence_weight")),
             "isFromSnapshot": bool(raw_quote.get("isFromSnapshot") or raw_quote.get("is_from_snapshot")),
             "asOf": as_of,
@@ -4062,6 +4068,9 @@ class MarketRotationRadarService:
         is_stale: bool,
         source: str,
         source_label: str,
+        source_type: Any,
+        source_tier: Any,
+        provider_tier: Any,
         as_of: str,
     ) -> Dict[str, Dict[str, Any]]:
         raw_windows = raw_quote.get("timeWindows") or raw_quote.get("time_windows") or raw_quote.get("windows")
@@ -4091,8 +4100,9 @@ class MarketRotationRadarService:
                     "isStale": window_is_stale,
                     "source": str(raw_window.get("source") or source),
                     "sourceLabel": str(raw_window.get("sourceLabel") or raw_window.get("source_label") or source_label),
-                    "sourceTier": raw_window.get("sourceTier", raw_window.get("source_tier")),
-                    "providerTier": raw_window.get("providerTier", raw_window.get("provider_tier")),
+                    "sourceType": raw_window.get("sourceType") or raw_window.get("source_type") or source_type,
+                    "sourceTier": raw_window.get("sourceTier") or raw_window.get("source_tier") or source_tier,
+                    "providerTier": raw_window.get("providerTier") or raw_window.get("provider_tier") or provider_tier,
                     "asOf": str(raw_window.get("asOf") or raw_window.get("as_of") or as_of),
                     "reason": None if available else "window_unavailable",
                 }
@@ -4109,6 +4119,9 @@ class MarketRotationRadarService:
                     "isStale": is_stale,
                     "source": source,
                     "sourceLabel": source_label,
+                    "sourceType": source_type,
+                    "sourceTier": source_tier,
+                    "providerTier": provider_tier,
                     "asOf": as_of,
                     "reason": None,
                 }
