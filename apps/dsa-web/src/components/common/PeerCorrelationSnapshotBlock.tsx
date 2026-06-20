@@ -17,7 +17,7 @@ type PeerCorrelationSnapshotBlockProps = {
 };
 
 const PEER_COPY_UNSAFE_PATTERN =
-  /\b(provider|debug|trace|raw|sourceRef|reasonCode|requestId|cache|schema|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing)\b|买入|卖出|持有|推荐|目标价|止损|仓位建议/i;
+  /\b(provider|debug|trace|raw|sourceRef|reasonCode|requestId|cache|schema|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing|observation-only|insufficient_evidence|freshness\s*=\s*unavailable)\b|\b[a-z]+(?:_[a-z0-9]+)+\b|买入|卖出|持有|推荐|目标价|止损|仓位建议/i;
 
 function stateVariant(state: StockPeerCorrelationState): React.ComponentProps<typeof TerminalChip>['variant'] {
   if (state === 'aligned') return 'success';
@@ -25,12 +25,64 @@ function stateVariant(state: StockPeerCorrelationState): React.ComponentProps<ty
   return 'neutral';
 }
 
+function peerStateLabel(state: StockPeerCorrelationState, locale: 'zh' | 'en'): string {
+  const labels: Record<StockPeerCorrelationState, { zh: string; en: string }> = {
+    aligned: { zh: '同业走势同步', en: 'Peer aligned' },
+    diverging: { zh: '同业走势分化', en: 'Peer diverging' },
+    insufficient_evidence: { zh: '同业证据不足', en: 'Peer evidence insufficient' },
+  };
+  return labels[state]?.[locale] ?? (locale === 'en' ? 'Peer evidence under review' : '同业证据待确认');
+}
+
+function mapKnownPeerCopy(locale: 'zh' | 'en', value: string): string | null {
+  const text = value.trim();
+  if (!text) return null;
+  const normalized = text.toLowerCase().replace(/\s+/g, ' ').replace(/[.。!?]+$/g, '');
+
+  if (/freshness\s*=\s*unavailable/i.test(text) || normalized === 'freshness unavailable') {
+    return locale === 'en' ? 'Freshness currently unavailable' : '数据新鲜度暂不可确认';
+  }
+  if (/\binsufficient_evidence\b/i.test(text) || normalized === 'insufficient evidence') {
+    return locale === 'en' ? 'Peer evidence insufficient' : '同业证据不足';
+  }
+
+  if (locale === 'zh') {
+    const peerHistory = text.match(/^([A-Z0-9._-]+) peer history is unavailable\.?$/i);
+    if (peerHistory?.[1]) {
+      return `${peerHistory[1].toUpperCase()} 同业历史数据暂缺。`;
+    }
+    const movedWith = text.match(/^([A-Z0-9._-]+) moved with ([A-Z0-9._-]+) across the comparison window\.?$/i);
+    if (movedWith?.[1] && movedWith[2]) {
+      return `${movedWith[1].toUpperCase()} 与 ${movedWith[2].toUpperCase()} 在当前对比窗口内走势同步。`;
+    }
+    const labels: Record<string, string> = {
+      'observation-only peer movement context; no personalized action instruction': '仅供同业走势观察，不构成个性化行动指令。',
+      'review whether peer alignment persists after the next close': '下一个收盘后复核同业同步是否延续。',
+      'peer movement remains bounded by the available comparison window': '同业走势仅按当前可用对比窗口观察。',
+      'peer behavior remains bounded by current evidence': '同业行为仍受当前证据窗口约束。',
+      'need broader peer evidence': '需要补充更广泛的同业证据。',
+      'review the next close': '复核下一次收盘后的结构变化。',
+    };
+    return labels[normalized] ?? null;
+  }
+
+  if (normalized === 'observation-only peer movement context; no personalized action instruction') {
+    return 'Peer movement context only; no personalized action instruction.';
+  }
+
+  return null;
+}
+
 function safeCopy(locale: 'zh' | 'en', value: string | undefined, fallback: string): string {
   const text = String(value || '').trim();
   if (!text) return fallback;
+  const knownCopy = mapKnownPeerCopy(locale, text);
+  if (knownCopy) return knownCopy;
   const sanitized = PEER_COPY_UNSAFE_PATTERN.test(text)
     ? sanitizeUserFacingDataIssue(text, locale)
     : text;
+  const mappedSanitized = mapKnownPeerCopy(locale, sanitized);
+  if (mappedSanitized) return mappedSanitized;
   return PEER_COPY_UNSAFE_PATTERN.test(sanitized) ? fallback : sanitized;
 }
 
@@ -109,7 +161,7 @@ const PeerCorrelationSnapshotBlock: React.FC<PeerCorrelationSnapshotBlockProps> 
           {resolvedTitle}
         </span>
         <TerminalChip variant={stateVariant(snapshot.correlationState)}>
-          {snapshot.correlationState}
+          {peerStateLabel(snapshot.correlationState, locale)}
         </TerminalChip>
         <TerminalChip variant="neutral">
           {isEnglish ? `Confidence cap ${snapshot.confidenceCap}` : `置信上限 ${snapshot.confidenceCap}`}
@@ -131,7 +183,7 @@ const PeerCorrelationSnapshotBlock: React.FC<PeerCorrelationSnapshotBlockProps> 
               <p key={`${item.symbol}-${item.state}-${item.overlapDays}`} className="text-xs leading-5 text-white/66">
                 <span className="font-semibold text-white/78">{item.symbol}</span>
                 {' / '}
-                <span>{item.state}</span>
+                <span>{peerStateLabel(item.state, locale)}</span>
                 {' - '}
                 <span>{evidenceSummary(locale, item)}</span>
               </p>
@@ -150,7 +202,7 @@ const PeerCorrelationSnapshotBlock: React.FC<PeerCorrelationSnapshotBlockProps> 
               <p key={`${item.symbol}-${item.state}-${item.overlapDays}`} className="text-xs leading-5 text-white/66">
                 <span className="font-semibold text-white/78">{item.symbol}</span>
                 {' / '}
-                <span>{item.state}</span>
+                <span>{peerStateLabel(item.state, locale)}</span>
                 {' - '}
                 <span>{evidenceSummary(locale, item)}</span>
               </p>

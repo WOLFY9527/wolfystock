@@ -178,6 +178,36 @@ function statusLabel(status: string | null | undefined, language: 'zh' | 'en'): 
   return status || '--';
 }
 
+function normalizeStockConsumerToken(value: string | null | undefined): string {
+  return String(value || '')
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase()
+    .replace(/[:=./\\\s-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function stockStructureStateLabel(value: string | null | undefined, language: 'zh' | 'en'): string | null {
+  const token = normalizeStockConsumerToken(value);
+  if (!token) return null;
+  const labels: Record<string, { zh: string; en: string }> = {
+    accumulation: { zh: '吸筹阶段', en: 'Accumulation phase' },
+    breakout: { zh: '突破观察', en: 'Breakout watch' },
+    distribution: { zh: '派发压力', en: 'Distribution pressure' },
+    low_confidence: { zh: '证据不足', en: 'Evidence insufficient' },
+    mixed: { zh: '结构分化', en: 'Mixed structure' },
+    neutral: { zh: '结构中性', en: 'Neutral structure' },
+    pullback: { zh: '回撤观察', en: 'Pullback watch' },
+    range: { zh: '区间震荡', en: 'Range-bound' },
+    insufficient_evidence: { zh: '证据不足', en: 'Evidence insufficient' },
+    unavailable: { zh: '数据暂缺', en: 'Data temporarily unavailable' },
+  };
+  const mapped = labels[token]?.[language];
+  if (mapped) return mapped;
+  return safeOptionalConsumerText(mapConsumerStatusText(value, language), language);
+}
+
 function periodLabel(period: string | null | undefined, language: 'zh' | 'en'): string | null {
   if (!period) return null;
   const normalized = String(period).toLowerCase();
@@ -223,7 +253,8 @@ function freshnessMeta(item: StockSymbolCompareFreshness | undefined, language: 
 }
 
 function safeEvidenceValue(value: string | number | null | undefined, language: 'zh' | 'en'): string {
-  return safeConsumerText(value, language, language === 'en' ? 'Evidence unavailable' : '证据暂不可用');
+  const mapped = typeof value === 'string' ? stockStructureStateLabel(value, language) : null;
+  return mapped || safeConsumerText(value, language, language === 'en' ? 'Evidence unavailable' : '证据暂不可用');
 }
 
 function missingEvidenceCopy(
@@ -321,7 +352,7 @@ function buildPacketFacts(
   const usableBars = numericValue(data.dataQuality.usableBars);
   const period = periodLabel(data.dataQuality.period, language);
   const status = statusLabel(data.dataQuality.status, language);
-  const structureState = safeOptionalConsumerText(data.structureState, language);
+  const structureState = stockStructureStateLabel(data.structureState, language);
   const topScore = scoreRows[0];
   const riskFlags = safeConsumerList(data.researchNotes.riskFlags ?? [], language)
     .map((flag) => mapConsumerStatusText(flag, language))
@@ -1036,11 +1067,7 @@ export default function StockStructureDecisionPage() {
                         {
                           key: 'state',
                           label: locale === 'en' ? 'Structure state' : '结构状态',
-                          value: safeConsumerText(
-                            mapConsumerStatusText(data.structureState, locale),
-                            locale,
-                            locale === 'en' ? 'Under review' : '待确认',
-                          ),
+                          value: stockStructureStateLabel(data.structureState, locale) || (locale === 'en' ? 'Under review' : '待确认'),
                         },
                         {
                           key: 'confidence',
