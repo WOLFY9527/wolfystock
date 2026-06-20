@@ -1109,6 +1109,75 @@ def test_market_rotation_radar_api_yfinance_fallback_cannot_enable_etf_leadershi
         client.close()
 
 
+def test_market_rotation_radar_api_rejects_yfinance_proxy_source_authority_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stable_etfs, quotes, _ = _bounded_etf_authority_fixture()
+    assert stable_etfs == ("SPY", "QQQ", "IWM", "SMH", "SOXX", "IGV")
+    yfinance_quotes = {
+        symbol: {
+            **_shared_cache_quote(symbol, index, freshness="delayed"),
+            "changePercent": quotes[symbol]["changePercent"],
+            "timeWindows": {
+                "1d": {
+                    "changePercent": quotes[symbol]["changePercent"],
+                    "freshness": "delayed",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "available": True,
+                    "source": "yfinance_proxy",
+                    "sourceType": "unofficial_public_api",
+                }
+            },
+            "source": "yfinance_proxy",
+            "sourceLabel": "Yahoo Finance",
+            "sourceType": "unofficial_public_api",
+            "sourceTier": "unofficial_public_api",
+            "isFallback": True,
+        }
+        for index, symbol in enumerate(stable_etfs)
+    }
+
+    def provider_factory():
+        def provider(symbols):
+            return {
+                "quotes": {symbol: yfinance_quotes[symbol] for symbol in symbols if symbol in yfinance_quotes},
+                "metadata": {
+                    "quoteMode": "proxy",
+                    "source": "yfinance_proxy",
+                    "sourceLabel": "Yahoo Finance",
+                    "sourceType": "unofficial_public_api",
+                    "sourceTier": "unofficial_public_api",
+                    "providerTier": "tier_2_delayed_proxy",
+                    "freshness": "delayed",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "noExternalCalls": False,
+                },
+            }
+
+        return provider
+
+    client = _client(monkeypatch, provider_factory=provider_factory)
+    try:
+        response = client.get("/api/v1/market/rotation-radar")
+
+        assert response.status_code == 200
+        payload = response.json()
+        provider_meta = payload["metadata"]["quoteProvider"]
+        assert provider_meta["source"] == "yfinance_proxy"
+        assert provider_meta["sourceAuthorityAllowed"] is False
+        assert provider_meta["scoreContributionAllowed"] is False
+        assert provider_meta["sourceAuthorityRouteRejected"] is True
+        assert provider_meta["sourceAuthorityReason"] == "source_authority_router_rejected"
+        assert payload["consumerEvidenceSnapshot"]["providerState"]["sourceAuthorityAllowed"] is False
+        assert payload["consumerEvidenceSnapshot"]["providerState"]["scoreContributionAllowed"] is False
+        assert payload["summary"]["headlineEligibleThemeCount"] == 0
+        assert all(theme["scoreContributionAllowed"] is False for theme in payload["themes"])
+    finally:
+        client.close()
+
+
 def test_market_rotation_radar_timeout_preserves_configured_provider_diagnostics(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
