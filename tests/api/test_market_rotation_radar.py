@@ -274,11 +274,9 @@ def _official_rotation_quote(
 
 
 def test_market_rotation_radar_route_is_exposed(monkeypatch: pytest.MonkeyPatch) -> None:
-    app = FastAPI()
-    app.include_router(market.router, prefix="/api/v1/market")
     routes = {
-        (method, route.path)
-        for route in app.routes
+        (method, f"/api/v1/market{route.path}")
+        for route in market.router.routes
         if hasattr(route, "methods")
         for method in (route.methods or set())
         if method not in {"HEAD", "OPTIONS"}
