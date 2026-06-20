@@ -39,6 +39,22 @@ const ENGLISH_OR_TOKEN_WORDS = /[A-Za-z]/;
 const STOCK_STRUCTURE_ROUTE = /^\/stocks\/[^/?#]+\/structure-decision$/i;
 
 const EXACT_QUEUE_TEXT: Record<string, Record<ResearchQueueConsumerLocale, string>> = {
+  'missing evidence needs review': {
+    zh: '研究上下文待补',
+    en: 'Research context pending',
+  },
+  'price-history evidence': {
+    zh: '价格与历史数据待补',
+    en: 'Price/history context pending',
+  },
+  'scanner score evidence': {
+    zh: '扫描评分待更新',
+    en: 'Scanner score pending',
+  },
+  'supporting evidence': {
+    zh: '研究上下文待补',
+    en: 'Research context pending',
+  },
   'review structure detail': {
     zh: '查看个股结构，补做资料核对。',
     en: 'Review stock structure and supporting context.',

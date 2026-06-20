@@ -34,6 +34,16 @@ function peerStateLabel(state: StockPeerCorrelationState, locale: 'zh' | 'en'): 
   return labels[state]?.[locale] ?? (locale === 'en' ? 'Peer evidence under review' : '同业证据待确认');
 }
 
+function confidenceCapLabel(value: string | number | null | undefined, locale: 'zh' | 'en'): string {
+  if (value == null || value === '') return '--';
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  const normalized = String(value).trim().toLowerCase();
+  if (normalized === 'high') return locale === 'en' ? 'High' : '高';
+  if (normalized === 'medium') return locale === 'en' ? 'Medium' : '中';
+  if (normalized === 'low') return locale === 'en' ? 'Low' : '低';
+  return String(value);
+}
+
 function mapKnownPeerCopy(locale: 'zh' | 'en', value: string): string | null {
   const text = value.trim();
   if (!text) return null;
@@ -164,7 +174,7 @@ const PeerCorrelationSnapshotBlock: React.FC<PeerCorrelationSnapshotBlockProps> 
           {peerStateLabel(snapshot.correlationState, locale)}
         </TerminalChip>
         <TerminalChip variant="neutral">
-          {isEnglish ? `Confidence cap ${snapshot.confidenceCap}` : `置信上限 ${snapshot.confidenceCap}`}
+          {isEnglish ? `Confidence cap ${confidenceCapLabel(snapshot.confidenceCap, locale)}` : `置信上限 ${confidenceCapLabel(snapshot.confidenceCap, locale)}`}
         </TerminalChip>
       </div>
 
