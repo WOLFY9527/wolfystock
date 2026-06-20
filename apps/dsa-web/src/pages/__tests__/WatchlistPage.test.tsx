@@ -544,26 +544,26 @@ describe('WatchlistPage', () => {
 
     await screen.findByTestId('watchlist-row-NVDA');
     const queue = await screen.findByTestId('watchlist-research-queue');
-    expect(queue).toHaveTextContent('研究队列');
+    expect(queue).toHaveTextContent('后续研究');
     expect(queue).toHaveTextContent('MSFT');
     expect(queue).toHaveTextContent('建议复核');
     expect(queue).toHaveTextContent('当前条目的证据覆盖不足，需补充同业、基本面或市场背景后再判断。');
     expect(queue).toHaveTextContent('缺少关键证据');
     expect(queue).toHaveTextContent('价格历史数据待补充');
     expect(queue).toHaveTextContent('查看个股结构');
-    expect(queue).toHaveTextContent('先核对结构与证据缺口。');
-    expect(queue).toHaveTextContent('仅作观察');
-    expect(queue).toHaveTextContent('仅作研究观察，不构成操作结论。');
+    expect(queue).toHaveTextContent('待核对：价格历史数据待补充');
+    expect(queue).toHaveTextContent('先核对结构与资料完整性。');
     expect(queue).toHaveTextContent('NVDA');
     expect(queue).toHaveTextContent('持续跟进');
     expect(queue).toHaveTextContent('现有证据时效不足，建议先复核近期价格、同业与市场背景。');
     expect(queue).toHaveTextContent('同业、基本面或市场背景待补充');
-    expect(queue).toHaveTextContent('查看个股结构，补做证据复核。');
+    expect(queue).toHaveTextContent('查看个股结构，补做资料核对。');
     expect(queue).toHaveTextContent('BABA');
     expect(queue).toHaveTextContent('继续观察');
     expect(queue).toHaveTextContent('当前条目的证据覆盖仍需复核。');
     expect(queue).toHaveTextContent('证据待确认');
     expect(queue).toHaveTextContent('部分外部数据暂不可用');
+    expect(queue).not.toHaveTextContent(/证据缺口|仅作研究观察|不构成操作结论/);
     expect(queue).not.toHaveTextContent(/buy|sell|hold|recommend(?:ation)?|target|stop|position sizing|买入|卖出|持有|目标价|止损|仓位/i);
     expect(queue).not.toHaveTextContent(/Missing evidence needs review|Queue review pending from backend memo|evidence_missing|attention|follow_up|provider|source|runtime|debug|request[_\s-]?id|trace[_\s-]?id|schemaVersion|raw|internal|cache|observationOnly|queue_debug_path/i);
 
@@ -755,7 +755,8 @@ describe('WatchlistPage', () => {
     const row = await screen.findByTestId('watchlist-row-NVDA');
 
     expect(within(row).getByText(/分数 94.0 · 历史 \+3.2% · 命中 56%/)).toBeInTheDocument();
-    expect(within(row).getByText('已验证')).toBeInTheDocument();
+    expect(within(row).getByText('价格暂无')).toBeInTheDocument();
+    expect(within(row).getByText('研究已更新')).toBeInTheDocument();
     expect(within(row).getByText('已回测')).toBeInTheDocument();
     expect(within(row).getByText(/更新 05\/01 13:30 · 命中 56% · 回测 \+24.6%/)).toBeInTheDocument();
     fireEvent.click(within(row).getByRole('button', { name: /结果 33/ }));
@@ -858,9 +859,9 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     const row = await screen.findByTestId('watchlist-row-MARA');
-    expect(within(row).getAllByText('扫描失败').length).toBeGreaterThan(0);
+    expect(within(row).getByText('研究暂不可用')).toBeInTheDocument();
     expect(within(row).getByText('样本不足')).toBeInTheDocument();
-    expect(within(row).getByTestId('watchlist-row-note-MARA')).toHaveTextContent('当前信号暂不可用，刷新后再参考。');
+    expect(within(row).getByTestId('watchlist-row-note-MARA')).toHaveTextContent('价格暂缺，按下一步补充。');
     expect(row).not.toHaveTextContent(/provider_down|provider_error|unknown|critical|debug/i);
     expect(within(row).queryByText(/结果 /)).not.toBeInTheDocument();
   });
@@ -883,8 +884,9 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     const row = await screen.findByTestId('watchlist-row-MARA');
-    expect(within(row).getByText('未扫描')).toBeInTheDocument();
-    expect(within(row).getByTestId('watchlist-row-note-MARA')).toHaveTextContent('数据更新中，稍后将自动刷新。');
+    expect(within(row).getByText('价格暂无')).toBeInTheDocument();
+    expect(within(row).getByText('研究待补充')).toBeInTheDocument();
+    expect(within(row).getByTestId('watchlist-row-note-MARA')).toHaveTextContent('价格、研究状态暂缺，按下一步补充。');
   });
 
   it('shows stale trust state as consumer-safe freshness and confidence', async () => {
@@ -916,8 +918,8 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     const row = await screen.findByTestId('watchlist-row-BABA');
-    expect(row).toHaveTextContent('置信度较低');
-    expect(row).toHaveTextContent('已使用最近一次可用数据。');
+    expect(row).toHaveTextContent('研究待复核');
+    expect(row).toHaveTextContent('价格暂缺，按下一步补充。');
     expect(row).toHaveTextContent('下一步 补充回测');
     expect(row).not.toHaveTextContent(/proxy_fallback|proxy fallback|fallback|proxy|备用数据|代理证据|来源|扫描批次|source|scanner run|score source/i);
   });
@@ -959,8 +961,8 @@ describe('WatchlistPage', () => {
 
     const row = await screen.findByTestId('watchlist-row-AMD');
     const detailRail = screen.getByTestId('watchlist-detail-rail');
-    expect(row).toHaveTextContent('评分已刷新');
-    expect(row).toHaveTextContent('评分最近刷新；不代表来源实时或权威。');
+    expect(row).toHaveTextContent('研究已更新');
+    expect(row).toHaveTextContent('价格暂缺，按下一步补充。');
     expect(detailRail).toHaveTextContent('评分最近刷新');
     expect(detailRail).toHaveTextContent('评分最近刷新；不代表来源实时或权威。');
     expect(row).not.toHaveTextContent(/信号最新|source_status_context|score_status_context|sourceFreshnessImplied|sourceAuthorityImplied|source_confidence|reason_families|scanner_run_id|scannerRunId/i);
@@ -999,10 +1001,10 @@ describe('WatchlistPage', () => {
 
     const cachedRow = await screen.findByTestId('watchlist-row-CASH');
     const blockedRow = await screen.findByTestId('watchlist-row-HOLD');
-    expect(cachedRow).toHaveTextContent('已保存评分');
-    expect(cachedRow).toHaveTextContent('已使用已保存评分；来源实时性未确认。');
-    expect(blockedRow).toHaveTextContent('仅作观察');
-    expect(blockedRow).toHaveTextContent('当前评分依据有限，先保持观察。');
+    expect(cachedRow).toHaveTextContent('研究待复核');
+    expect(cachedRow).toHaveTextContent('价格暂缺，按下一步补充。');
+    expect(blockedRow).toHaveTextContent('研究待复核');
+    expect(blockedRow).toHaveTextContent('价格暂缺，按下一步补充。');
     expect(screen.getByTestId('watchlist-page')).not.toHaveTextContent(/score_blocked|source_confidence|sourceAuthorityAllowed|score_status_context|reason_families|raw diagnostics|JSON/i);
   });
 
@@ -1149,8 +1151,8 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     const row = await screen.findByTestId('watchlist-row-BABA');
-    expect(row).toHaveTextContent('已使用最近一次可用数据。');
-    expect(row).toHaveTextContent('置信度较低');
+    expect(row).toHaveTextContent('研究待复核');
+    expect(row).toHaveTextContent('价格暂缺，按下一步补充。');
     expect(row).not.toHaveTextContent(/历史评分|历史证据|刷新或重新扫描后再使用/);
     expect(within(row).queryByText('已验证')).not.toBeInTheDocument();
     expect(within(row).queryByText('最新')).not.toBeInTheDocument();
@@ -1178,7 +1180,8 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     const row = await screen.findByTestId('watchlist-row-SHOP');
-    expect(row).toHaveTextContent('数据更新中，稍后将自动刷新。');
+    expect(row).toHaveTextContent('研究待补充');
+    expect(row).toHaveTextContent('价格、研究状态暂缺，按下一步补充。');
     expect(row).not.toHaveTextContent(/来源未知|评分待刷新|可刷新情报|返回扫描器补齐证据/);
     expect(within(row).queryByText('已验证')).not.toBeInTheDocument();
     expect(within(row).queryByText('最新')).not.toBeInTheDocument();
@@ -1214,8 +1217,8 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     const row = await screen.findByTestId('watchlist-row-BILI');
-    expect(row).toHaveTextContent('部分自选股数据暂不可用，已使用最近一次可用数据。');
-    expect(row).toHaveTextContent('置信度较低');
+    expect(row).toHaveTextContent('研究待复核');
+    expect(row).toHaveTextContent('价格暂缺，按下一步补充。');
     expect(row).not.toHaveTextContent(/备用\/代理|备用数据|代理证据|fallback|proxy|刷新或重新扫描后再使用/i);
     expect(within(row).queryByText('已验证')).not.toBeInTheDocument();
     expect(within(row).queryByText('信号最新')).not.toBeInTheDocument();
@@ -1281,7 +1284,7 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     const row = await screen.findByTestId('watchlist-row-SHOP');
-    expect(within(row).getByTestId('watchlist-row-note-SHOP')).toHaveTextContent('数据更新中，稍后将自动刷新。');
+    expect(within(row).getByTestId('watchlist-row-note-SHOP')).toHaveTextContent('价格、研究状态暂缺，按下一步补充。');
     expect(row).not.toHaveTextContent(/信号未知|来源未知|需要刷新|score source|source unknown/i);
   });
 
@@ -1856,6 +1859,7 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     await screen.findByTestId('watchlist-row-NVDA');
+    await waitFor(() => expect(screen.getByTestId('watchlist-detail-rail')).toHaveTextContent('NVDA'));
     fireEvent.click(screen.getByRole('button', { name: '查看详情 TSM' }));
     await waitFor(() => expect(screen.getByTestId('watchlist-detail-rail')).toHaveTextContent('TSM'));
 

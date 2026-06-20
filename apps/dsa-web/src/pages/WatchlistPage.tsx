@@ -103,6 +103,13 @@ type WatchlistCatalystExposureView = {
   items: WatchlistCatalystExposureViewItem[];
   hiddenCount: number;
 };
+type WatchlistRowStatus = {
+  priceLabel: string;
+  updateLabel: string;
+  researchStatusLabel: string;
+  researchStatusVariant: ComponentProps<typeof TerminalChip>['variant'];
+  missingSummary: string | null;
+};
 type WatchlistConclusionModel = {
   title: string;
   detail: string;
@@ -221,6 +228,44 @@ function formatPct(value?: number | null): string {
 
 function formatRatio(value?: number | null): string {
   return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(2) : '--';
+}
+
+function formatPriceValue(value: number, market?: string | null): string {
+  const abs = Math.abs(value);
+  const decimals = abs >= 1000 ? 0 : abs >= 100 ? 1 : 2;
+  const formatted = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(value);
+  const normalizedMarket = normalizeMarket(market);
+  if (normalizedMarket === 'US') return `$${formatted}`;
+  if (normalizedMarket === 'HK') return `HK$${formatted}`;
+  if (normalizedMarket === 'CN') return `¥${formatted}`;
+  return formatted;
+}
+
+function readNumericField(source: unknown, keys: string[]): number | null {
+  if (!source || typeof source !== 'object') return null;
+  const record = source as Record<string, unknown>;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+      const parsed = Number(value.replace(/,/g, '').trim());
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return null;
+}
+
+function getWatchlistPriceValue(item: WatchlistItem): number | null {
+  const priceKeys = ['price', 'lastPrice', 'latestPrice', 'currentPrice', 'close', 'lastClose'];
+  const direct = readNumericField(item, priceKeys);
+  if (direct !== null) return direct;
+  const record = item as unknown as Record<string, unknown>;
+  return readNumericField(record.quote, priceKeys)
+    ?? readNumericField(record.marketData, priceKeys)
+    ?? readNumericField(record.intelligence, priceKeys);
 }
 
 function getNumeric(value?: number | null): number {
@@ -381,13 +426,6 @@ function scoreDisclosureChipVariant(state: WatchlistScoreDisclosureState): React
   if (state === 'fresh') return 'success';
   if (state === 'failed') return 'danger';
   if (state === 'stale' || state === 'cached' || state === 'blocked' || state === 'limitedConfidence' || state === 'unknown') return 'caution';
-  return 'neutral';
-}
-
-function scannerStatusChipVariant(label: string): React.ComponentProps<typeof TerminalChip>['variant'] {
-  if (label === '扫描失败') return 'danger';
-  if (label === '已验证' || label === '通过筛选') return 'info';
-  if (['置信度较低', '数据更新中', '最近数据', '仅作观察'].includes(label)) return 'caution';
   return 'neutral';
 }
 
@@ -1026,6 +1064,51 @@ function buildNextActionLabel(item: WatchlistItem, language: 'zh' | 'en'): strin
     return language === 'en' ? 'Keep observing' : '保持观察';
   }
   return language === 'en' ? 'Open analysis' : '进入分析';
+}
+
+function buildWatchlistRowStatus(item: WatchlistItem, language: 'zh' | 'en'): WatchlistRowStatus {
+  const priceValue = getWatchlistPriceValue(item);
+  const latestTime = getLatestIntelligenceTime(item);
+  const scoreState = getScoreDisclosureState(item);
+  const hasResearch = hasScannerEvidence(item) || hasBacktestEvidence(item);
+  const priceLabel = priceValue === null
+    ? (language === 'en' ? 'Price unavailable' : '价格暂无')
+    : `${language === 'en' ? 'Price' : '价格'} ${formatPriceValue(priceValue, item.market)}`;
+  const updateLabel = latestTime
+    ? `${language === 'en' ? 'Updated' : '更新'} ${formatDateTime(latestTime, language)}`
+    : (language === 'en' ? 'Update time unavailable' : '更新时间暂无');
+
+  let researchStatusLabel = language === 'en' ? 'Research pending' : '研究待补充';
+  let researchStatusVariant: WatchlistRowStatus['researchStatusVariant'] = 'neutral';
+  if (scoreState === 'failed') {
+    researchStatusLabel = language === 'en' ? 'Research unavailable' : '研究暂不可用';
+    researchStatusVariant = 'danger';
+  } else if (scoreState === 'fresh' && hasResearch) {
+    researchStatusLabel = language === 'en' ? 'Research updated' : '研究已更新';
+    researchStatusVariant = 'success';
+  } else if (hasResearch) {
+    researchStatusLabel = language === 'en' ? 'Review needed' : '研究待复核';
+    researchStatusVariant = 'caution';
+  }
+
+  const missingParts = [
+    priceValue === null ? (language === 'en' ? 'price' : '价格') : null,
+    !latestTime ? (language === 'en' ? 'update time' : '更新时间') : null,
+    !hasResearch ? (language === 'en' ? 'research status' : '研究状态') : null,
+  ].filter(Boolean) as string[];
+  const missingSummary = missingParts.length
+    ? (language === 'en'
+      ? `${missingParts.join(', ')} unavailable; use the next research check.`
+      : `${missingParts.join('、')}暂缺，按下一步补充。`)
+    : null;
+
+  return {
+    priceLabel,
+    updateLabel,
+    researchStatusLabel,
+    researchStatusVariant,
+    missingSummary,
+  };
 }
 
 function formatBacktestStatus(item: WatchlistItem, failure?: BatchFailure): string {
@@ -2084,11 +2167,6 @@ const WatchlistPage: React.FC = () => {
           items={statusItems}
         />
 
-        <WatchlistResearchQueuePanel
-          queue={researchPriorityQueue}
-          language={language}
-        />
-
         {watchlistWorkflowSymbol ? (
           <ResearchWorkspaceFlowPanel
             language={language}
@@ -2233,11 +2311,11 @@ const WatchlistPage: React.FC = () => {
               {!isWatchlistEmptyWorkspace ? (
                 <div
                   data-testid="watchlist-list-header"
-                  className="hidden min-w-0 grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)_minmax(0,1.2fr)_auto] gap-4 border-b border-[color:var(--wolfy-divider)] px-4 py-2 text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)] lg:grid"
+                  className="hidden min-w-0 grid-cols-[minmax(0,1.35fr)_minmax(0,1.15fr)_minmax(0,1.05fr)_auto] gap-4 border-b border-[color:var(--wolfy-divider)] px-4 py-2 text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)] lg:grid"
                 >
                   <span>{language === 'en' ? 'Symbol' : '标的'}</span>
-                  <span>{language === 'en' ? 'State' : '状态'}</span>
-                  <span>{language === 'en' ? 'Observation' : '观察'}</span>
+                  <span>{language === 'en' ? 'Price / update' : '价格 / 更新'}</span>
+                  <span>{language === 'en' ? 'Research / next' : '研究 / 下一步'}</span>
                   <span className="text-right">{copy.actions}</span>
                 </div>
               ) : null}
@@ -2259,16 +2337,12 @@ const WatchlistPage: React.FC = () => {
                     const scannerFailure = item.scoreError || scanner?.reason
                       ? sanitizeFailureReason(item.scoreError || scanner?.reason || '', '扫描失败')
                       : null;
-                    const latestTime = getLatestIntelligenceTime(item);
                     const scannerStatusLabel = formatScannerStatus(item);
                     const backtestStatusLabel = formatBacktestStatus(item, batchFailure);
                     const isActive = activeItem?.id === item.id;
-                    const scoreDisclosureState = getScoreDisclosureState(item);
-                    const scoreDisclosureStatusLabel = formatScoreDisclosureStatus(scoreDisclosureState, language);
                     const rowRiskNote = buildWatchRiskNote(item, language);
                     const scannerLineageCue = buildScannerLineageCue(item, language);
                     const originLabel = formatWatchlistOrigin(item.source, language);
-                    const scoreFreshnessVariant = scoreDisclosureChipVariant(scoreDisclosureState);
                     const backtestStatusVariant = backtestStatusLabel === '已回测'
                       ? 'success'
                       : ['回测失败', '行情缺失', '服务暂不可用', '超时'].includes(backtestStatusLabel)
@@ -2293,6 +2367,7 @@ const WatchlistPage: React.FC = () => {
                       : null;
                     const rowObservation = buildObservationSummary(item, language);
                     const rowNextAction = buildNextActionLabel(item, language);
+                    const rowStatus = buildWatchlistRowStatus(item, language);
                     const workflowSteps = buildWatchlistWorkflowSteps(item, language);
                     const rowStateLine = [
                       `${copy.score} ${formatScore(score)}`,
@@ -2300,7 +2375,8 @@ const WatchlistPage: React.FC = () => {
                       typeof hitRate === 'number' ? `${copy.hitPrefix} ${Math.round(hitRate * 100)}%` : null,
                     ].filter(Boolean).join(' · ');
                     const rowNotes = [
-                      rowRiskNote,
+                      rowStatus.missingSummary,
+                      !rowStatus.missingSummary ? rowRiskNote : null,
                       scannerLineageCue?.detail,
                     ].filter(Boolean).join(' ');
 
@@ -2310,7 +2386,7 @@ const WatchlistPage: React.FC = () => {
                         data-testid={`watchlist-row-${item.symbol}`}
                         className={`min-w-0 border-b border-[color:var(--wolfy-divider)] px-3 py-3 transition-colors md:px-4 ${isActive ? 'bg-white/[0.045]' : 'bg-transparent hover:bg-white/[0.02]'}`}
                       >
-                        <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)_minmax(0,1.2fr)_auto] lg:items-start lg:gap-4">
+                        <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1.15fr)_minmax(0,1.05fr)_auto] lg:items-start lg:gap-4">
                           <div className="flex min-w-0 gap-3">
                             <button
                               type="button"
@@ -2356,25 +2432,10 @@ const WatchlistPage: React.FC = () => {
 
                           <div className="min-w-0 space-y-2">
                             <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
-                              {language === 'en' ? 'State' : '状态'}
+                              {language === 'en' ? 'Price / update' : '价格 / 更新'}
                             </p>
-                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                              <TerminalChip variant={scoreFreshnessVariant} className="font-mono uppercase tracking-widest">
-                                {scoreDisclosureStatusLabel}
-                              </TerminalChip>
-                              <TerminalChip variant={scannerStatusChipVariant(scannerStatusLabel)}>
-                                {scannerStatusLabel}
-                              </TerminalChip>
-                              <TerminalChip variant={backtestStatusVariant}>{backtestStatusLabel}</TerminalChip>
-                              {scannerLineageCue ? (
-                                <TerminalChip variant="neutral">{scannerLineageCue.label}</TerminalChip>
-                              ) : null}
-                              {batchDisplayStatus ? (
-                                <TerminalChip variant={terminalChipVariant(batchDisplayStatus.tone)} className="font-mono">
-                                  {batchDisplayStatus.label}
-                                </TerminalChip>
-                              ) : null}
-                            </div>
+                            <p className="text-sm font-medium text-white/82">{rowStatus.priceLabel}</p>
+                            <p className="font-mono text-xs text-white/55">{rowStatus.updateLabel}</p>
                             <div
                               data-testid={`watchlist-row-workflow-${item.symbol}`}
                               className="flex min-w-0 flex-wrap items-center gap-1.5"
@@ -2385,18 +2446,27 @@ const WatchlistPage: React.FC = () => {
                                 <TerminalChip key={step.key} variant={step.variant}>{step.label}</TerminalChip>
                               ))}
                             </div>
-                            <p className="truncate text-xs font-mono text-white/55">{rowStateLine || `${copy.score} ${formatScore(score)}`}</p>
                           </div>
 
                           <div className="min-w-0 space-y-2">
                             <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
-                              {language === 'en' ? 'Observation' : '观察'}
+                              {language === 'en' ? 'Research / next' : '研究 / 下一步'}
                             </p>
-                            <p className="text-sm leading-6 text-white/72">{rowObservation}</p>
-                            <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs">
-                              {latestTime ? <span className="font-mono text-white/45">{copy.latestUpdate} {formatDateTime(latestTime, language)}</span> : null}
-                              <span className="text-white/55">{language === 'en' ? 'Next' : '下一步'} {rowNextAction}</span>
+                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                              <TerminalChip variant={rowStatus.researchStatusVariant}>{rowStatus.researchStatusLabel}</TerminalChip>
+                              <TerminalChip variant={backtestStatusVariant}>{backtestStatusLabel}</TerminalChip>
+                              {scannerLineageCue ? (
+                                <TerminalChip variant="neutral">{scannerLineageCue.label}</TerminalChip>
+                              ) : null}
+                              {batchDisplayStatus ? (
+                                <TerminalChip variant={terminalChipVariant(batchDisplayStatus.tone)} className="font-mono">
+                                  {batchDisplayStatus.label}
+                                </TerminalChip>
+                              ) : null}
                             </div>
+                            <p className="truncate text-xs font-mono text-white/55">{rowStateLine || `${copy.score} ${formatScore(score)}`}</p>
+                            <p className="text-sm leading-6 text-white/72">{rowObservation}</p>
+                            <p className="text-xs text-white/58">{language === 'en' ? 'Next' : '下一步'} {rowNextAction}</p>
                             {rowNotes ? (
                               <p className="text-xs leading-5 text-white/52" data-testid={`watchlist-row-note-${item.symbol}`}>
                                 {rowNotes}
@@ -3014,6 +3084,12 @@ const WatchlistPage: React.FC = () => {
                 {runtimeStatusLabel}
               </TerminalChip>
             </div>
+          </div>
+          <div className="border-t border-[color:var(--wolfy-divider)]">
+            <WatchlistResearchQueuePanel
+              queue={researchPriorityQueue}
+              language={language}
+            />
           </div>
         </div>
         ) : null}

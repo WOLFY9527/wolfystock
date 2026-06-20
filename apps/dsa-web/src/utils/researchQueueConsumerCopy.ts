@@ -40,12 +40,12 @@ const STOCK_STRUCTURE_ROUTE = /^\/stocks\/[^/?#]+\/structure-decision$/i;
 
 const EXACT_QUEUE_TEXT: Record<string, Record<ResearchQueueConsumerLocale, string>> = {
   'review structure detail': {
-    zh: '查看个股结构，补做证据复核。',
-    en: 'Review stock structure and evidence gaps.',
+    zh: '查看个股结构，补做资料核对。',
+    en: 'Review stock structure and supporting context.',
   },
   'open symbol structure detail': {
-    zh: '先核对结构与证据缺口。',
-    en: 'Review structure and evidence gaps first.',
+    zh: '先核对结构与资料完整性。',
+    en: 'Review structure and context completeness first.',
   },
   'stock structure': {
     zh: '查看个股结构',
@@ -66,7 +66,7 @@ function defaultQueueReason(locale: ResearchQueueConsumerLocale): string {
 }
 
 function defaultEvidenceGap(locale: ResearchQueueConsumerLocale): string {
-  return locale === 'en' ? 'Key evidence still needs review' : '部分关键证据待补充';
+  return locale === 'en' ? 'Key context still needs review' : '部分关键资料待补充';
 }
 
 function defaultPathLabel(locale: ResearchQueueConsumerLocale): string {
@@ -82,7 +82,7 @@ function structurePathLabel(locale: ResearchQueueConsumerLocale): string {
 }
 
 function structurePathReason(locale: ResearchQueueConsumerLocale): string {
-  return locale === 'en' ? 'Review structure and evidence gaps first.' : '先核对结构与证据缺口。';
+  return locale === 'en' ? 'Review structure and context completeness first.' : '先核对结构与资料完整性。';
 }
 
 export function getResearchQueuePriorityTierLabel(

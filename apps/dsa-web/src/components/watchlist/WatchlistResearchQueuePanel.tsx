@@ -36,7 +36,7 @@ export default function WatchlistResearchQueuePanel({
   language,
 }: WatchlistResearchQueuePanelProps) {
   const boundedQueue = queue.slice(0, 5);
-  const title = language === 'en' ? 'Research queue' : '研究队列';
+  const title = language === 'en' ? 'Research follow-up' : '后续研究';
   const countLabel = language === 'en'
     ? `${boundedQueue.length} saved symbols`
     : `${boundedQueue.length} 个已保存标的`;
@@ -56,8 +56,8 @@ export default function WatchlistResearchQueuePanel({
           </p>
           <p className="mt-1 text-xs leading-5 text-white/58">
             {language === 'en'
-              ? 'Bounded follow-up list for research review only. It is not an action conclusion.'
-              : '仅用于后续研究复核的有界列表，不构成操作结论。'}
+              ? 'Compact follow-up list for saved symbols that need one more research check.'
+              : '已保存标的的简要跟进清单，每项只保留一个待核对方向。'}
           </p>
         </div>
         <TerminalChip variant="neutral" className="font-mono">
@@ -101,9 +101,6 @@ export default function WatchlistResearchQueuePanel({
                     <TerminalChip variant={consumerCopy.priorityVariant} className="font-mono">
                       {consumerCopy.priorityTierLabel}
                     </TerminalChip>
-                    <TerminalChip variant="neutral">
-                      {language === 'en' ? 'Research only' : '仅作观察'}
-                    </TerminalChip>
                   </div>
                 </div>
 
@@ -118,24 +115,16 @@ export default function WatchlistResearchQueuePanel({
                 </div>
 
                 {consumerCopy.missingEvidence.length ? (
-                  <div className="mt-3 space-y-1.5">
-                    <p className="text-[11px] font-medium text-white/45">
-                      {language === 'en' ? 'Evidence gaps' : '证据缺口'}
-                    </p>
-                    <div className="flex min-w-0 flex-wrap gap-1.5">
-                      {consumerCopy.missingEvidence.map((label) => (
-                        <TerminalChip key={`${item.symbol}:missing:${label}`} variant="caution">
-                          {label}
-                        </TerminalChip>
-                      ))}
-                    </div>
-                  </div>
+                  <p className="mt-3 text-xs leading-5 text-white/58">
+                    {language === 'en' ? 'Needs check: ' : '待核对：'}
+                    {consumerCopy.missingEvidence.slice(0, 2).join(language === 'en' ? ', ' : '、')}
+                  </p>
                 ) : null}
 
                 {consumerCopy.suggestedResearchPath.length ? (
                   <div className="mt-3 space-y-2">
                     <p className="text-[11px] font-medium text-white/45">
-                      {language === 'en' ? 'Suggested research path' : '后续研究路径'}
+                      {language === 'en' ? 'Next check' : '下一步核对'}
                     </p>
                     {item.suggestedResearchPath.map((path, index) => {
                       const safePath = consumerCopy.suggestedResearchPath[index];
@@ -152,10 +141,6 @@ export default function WatchlistResearchQueuePanel({
                     })}
                   </div>
                 ) : null}
-
-                <p className="mt-3 text-[11px] leading-5 text-white/42">
-                  {language === 'en' ? 'Research observation only. It is not an action conclusion.' : '仅作研究观察，不构成操作结论。'}
-                </p>
               </article>
             );
           })}
