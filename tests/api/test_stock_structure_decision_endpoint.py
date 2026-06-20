@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from typing import Any
 
 from fastapi import FastAPI
@@ -140,6 +141,34 @@ class _FakeStructureDecisionService:
         }
 
 
+class _FakeStockService:
+    def __init__(self, *, quote: dict[str, Any] | None, history: dict[str, Any]) -> None:
+        self.quote = quote
+        self.history = history
+        self.quote_calls: list[str] = []
+        self.history_calls: list[dict[str, Any]] = []
+
+    def get_realtime_quote(self, stock_code: str) -> dict[str, Any] | None:
+        self.quote_calls.append(stock_code)
+        return self.quote
+
+    def get_history_data(self, stock_code: str, period: str = "daily", days: int = 30) -> dict[str, Any]:
+        self.history_calls.append({"stock_code": stock_code, "period": period, "days": days})
+        return self.history
+
+
+class _FakeStockEvidenceService:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self.payload = payload
+        self.quote_adapter = SimpleNamespace(fetcher_manager=object())
+        self.fetcher_manager = object()
+        self.calls: list[list[str]] = []
+
+    def get_stock_evidence(self, symbols: list[str], **_: Any) -> dict[str, Any]:
+        self.calls.append(symbols)
+        return self.payload
+
+
 def _client() -> TestClient:
     app = FastAPI()
     app.include_router(stocks_endpoint.router, prefix="/api/v1/stocks")
@@ -235,6 +264,164 @@ def _payload(
         "decisionGrade": False,
         "drilldownLinks": [],
     }
+
+
+def _history_payload(*, status: str = "ok", source: str = "local_db", rows: int = 2) -> dict[str, Any]:
+    data = [
+        {"date": "2026-05-27", "open": 210.0, "high": 215.0, "low": 209.0, "close": 214.0, "volume": 1000.0},
+        {"date": "2026-05-28", "open": 214.0, "high": 216.0, "low": 213.0, "close": 215.0, "volume": 1200.0},
+    ][:rows]
+    return {
+        "stock_code": "AAPL",
+        "stock_name": "Apple",
+        "period": "daily",
+        "data": data,
+        "source": source,
+        "diagnostics": {
+            "status": status,
+            "reason": "history_available" if data else "history_unavailable",
+            "rows": len(data),
+        },
+        "sourceConfidence": {
+            "freshness": "fresh" if status == "ok" else "unavailable",
+            "isFallback": False,
+            "isStale": False,
+            "isPartial": False,
+            "isSynthetic": False,
+            "isUnavailable": not data,
+        },
+    }
+
+
+def _evidence_payload(symbol: str = "AAPL") -> dict[str, Any]:
+    return {
+        "symbols": [symbol],
+        "items": [
+            {
+                "symbol": symbol,
+                "market": "us",
+                "fundamental": {"status": "missing", "missingFields": ["marketCap", "peTtm"]},
+                "news": {"status": "missing"},
+                "secFilingEvidence": {"status": "missing", "records": []},
+                "stockEvidencePacket": {
+                    "symbol": symbol,
+                    "notInvestmentAdvice": True,
+                    "observationOnly": True,
+                },
+            }
+        ],
+    }
+
+
+def test_research_packet_endpoint_assembles_existing_data_and_missing_families(monkeypatch) -> None:
+    fake_stock = _FakeStockService(
+        quote={
+            "stock_code": "AAPL",
+            "stock_name": "Apple",
+            "current_price": 214.55,
+            "change_percent": 1.11,
+            "market_timestamp": "2026-05-28T09:30:00Z",
+            "observed_at": "2026-05-28T09:31:00Z",
+            "freshness": "live",
+            "is_fallback": False,
+            "is_stale": False,
+            "is_partial": False,
+            "is_synthetic": False,
+        },
+        history=_history_payload(),
+    )
+    fake_structure = _FakeStructureDecisionService(_payload())
+    fake_evidence = _FakeStockEvidenceService(_evidence_payload())
+    monkeypatch.setattr(stocks_endpoint, "StockService", lambda: fake_stock, raising=False)
+    monkeypatch.setattr(stocks_endpoint, "StockStructureDecisionService", lambda: fake_structure, raising=False)
+    monkeypatch.setattr(stocks_endpoint, "StockEvidenceService", lambda: fake_evidence, raising=False)
+
+    response = _client().get("/api/v1/stocks/AAPL/research-packet", params={"market": "us"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert fake_stock.quote_calls == ["AAPL"]
+    assert fake_stock.history_calls == [{"stock_code": "AAPL", "period": "daily", "days": 90}]
+    assert fake_structure.calls[0]["ticker"] == "AAPL"
+    assert fake_evidence.calls == [["AAPL"]]
+    assert payload["symbol"] == "AAPL"
+    assert payload["market"] == "us"
+    assert payload["identity"] == {"name": "Apple", "exchange": None, "sector": None, "industry": None}
+    assert payload["quote"] == {
+        "state": "available",
+        "price": 214.55,
+        "changePercent": 1.11,
+        "asOf": "2026-05-28T09:30:00Z",
+    }
+    assert payload["history"] == {
+        "state": "available",
+        "bars": 2,
+        "period": "daily",
+        "asOf": "2026-05-28",
+    }
+    assert payload["structure"]["state"] == "available"
+    assert payload["structure"]["label"] == "breakout"
+    assert payload["structure"]["confidence"] == "high"
+    assert payload["fundamentals"] == {"state": "missing", "fieldsAvailable": []}
+    assert payload["events"] == {"state": "missing", "latest": []}
+    assert payload["peer"] == {"state": "missing", "benchmark": None}
+    assert payload["missingData"] == ["fundamentals", "filing_event_catalyst", "peer_benchmark"]
+    assert payload["researchStatus"] == "partial"
+    assert payload["observationOnly"] is True
+    assert payload["decisionGrade"] is False
+    assert payload["noAdviceDisclosure"] == "Observation-only research packet; no personalized action instruction."
+    serialized = json.dumps(payload, ensure_ascii=False).lower()
+    for forbidden in FORBIDDEN_ADVICE_TOKENS:
+        assert forbidden not in serialized
+    for raw_key in ("sourceType", "sourceConfidence", "provider", "cache", "traceId", "requestId"):
+        assert raw_key not in json.dumps(payload, ensure_ascii=False)
+
+
+def test_research_packet_endpoint_fail_closes_absent_quote_history_and_evidence(monkeypatch) -> None:
+    fake_stock = _FakeStockService(
+        quote={
+            "stock_code": "AAPL",
+            "stock_name": "Apple",
+            "current_price": 0.0,
+            "change_percent": None,
+            "market_timestamp": None,
+            "observed_at": "2026-05-28T09:31:00Z",
+            "freshness": "synthetic",
+            "is_fallback": False,
+            "is_stale": False,
+            "is_partial": True,
+            "is_synthetic": True,
+        },
+        history=_history_payload(status="unavailable", source="unavailable", rows=0),
+    )
+    fake_structure = _FakeStructureDecisionService(_payload(data_status="unavailable"))
+    fake_evidence = _FakeStockEvidenceService({"symbols": [], "items": []})
+    monkeypatch.setattr(stocks_endpoint, "StockService", lambda: fake_stock, raising=False)
+    monkeypatch.setattr(stocks_endpoint, "StockStructureDecisionService", lambda: fake_structure, raising=False)
+    monkeypatch.setattr(stocks_endpoint, "StockEvidenceService", lambda: fake_evidence, raising=False)
+
+    response = _client().get("/api/v1/stocks/AAPL/research-packet", params={"market": "us"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["quote"] == {"state": "missing", "price": None, "changePercent": None, "asOf": None}
+    assert payload["history"] == {"state": "missing", "bars": 0, "period": "daily", "asOf": None}
+    assert payload["structure"]["state"] == "missing"
+    assert payload["fundamentals"]["state"] == "not_integrated"
+    assert payload["events"]["state"] == "not_integrated"
+    assert payload["peer"]["state"] == "missing"
+    assert payload["missingData"] == [
+        "quote",
+        "price_history",
+        "structure_analysis",
+        "fundamentals",
+        "filing_event_catalyst",
+        "peer_benchmark",
+    ]
+    assert payload["researchStatus"] == "blocked"
+    serialized = json.dumps(payload, ensure_ascii=False).lower()
+    for forbidden in FORBIDDEN_ADVICE_TOKENS:
+        assert forbidden not in serialized
 
 
 def test_structure_decision_endpoint_returns_required_contract(monkeypatch) -> None:
