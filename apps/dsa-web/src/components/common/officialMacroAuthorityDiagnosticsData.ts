@@ -1,5 +1,30 @@
 type ChipVariant = 'neutral' | 'success' | 'caution' | 'danger' | 'info';
 
+export type OfficialMacroLocale = 'en' | 'zh';
+
+export const CHIP_LABELS: Record<OfficialMacroLocale, Record<string, string>> = {
+  en: {
+    rejected: 'Rejected',
+    unavailable: 'Unavailable',
+    official: 'Official',
+    proxyOnly: 'Proxy-only',
+    fallback: 'Fallback',
+    partial: 'Partial',
+    scoreEligible: 'Score-eligible',
+    observationOnly: 'Observation-only',
+  },
+  zh: {
+    rejected: '已拒绝',
+    unavailable: '暂无数据',
+    official: '官方来源',
+    proxyOnly: '仅代理',
+    fallback: '备用来源',
+    partial: '部分数据',
+    scoreEligible: '可计分',
+    observationOnly: '仅观察',
+  },
+};
+
 export const OFFICIAL_MACRO_SCOPE_SERIES = [
   'VIXCLS',
   'SOFR',
@@ -86,39 +111,42 @@ function chooseBetterRecord(current: OfficialMacroAuthorityRecord, candidate: Of
   return recordRank(candidate) > recordRank(current) ? candidate : current;
 }
 
-function statusChips(record: OfficialMacroAuthorityRecord, missing = false): Array<{ label: string; variant: ChipVariant }> {
+function statusChips(record: OfficialMacroAuthorityRecord, missing = false, locale: OfficialMacroLocale = 'zh'): Array<{ label: string; variant: ChipVariant }> {
   const chips: Array<{ label: string; variant: ChipVariant }> = [];
+  const labels = CHIP_LABELS[locale];
 
   if (record.sourceAuthorityRouteRejected) {
-    chips.push({ label: 'Rejected', variant: 'danger' });
+    chips.push({ label: labels.rejected, variant: 'danger' });
   }
 
   if (missing || record.isUnavailable || record.freshness === 'unavailable') {
-    chips.push({ label: 'Unavailable', variant: 'caution' });
+    chips.push({ label: labels.unavailable, variant: 'caution' });
   } else if (record.sourceAuthorityAllowed) {
-    chips.push({ label: 'Official', variant: 'success' });
+    chips.push({ label: labels.official, variant: 'success' });
   } else if (record.sourceAuthorityReason === 'proxy_context_only') {
-    chips.push({ label: 'Proxy-only', variant: 'caution' });
+    chips.push({ label: labels.proxyOnly, variant: 'caution' });
   }
 
   if (record.isFallback || record.freshness === 'fallback' || record.freshness === 'mock') {
-    chips.push({ label: 'Fallback', variant: 'caution' });
+    chips.push({ label: labels.fallback, variant: 'caution' });
   } else if (record.isPartial || record.freshness === 'partial') {
-    chips.push({ label: 'Partial', variant: 'info' });
+    chips.push({ label: labels.partial, variant: 'info' });
   }
 
   if (record.scoreContributionAllowed) {
-    chips.push({ label: 'Score-eligible', variant: 'success' });
+    chips.push({ label: labels.scoreEligible, variant: 'success' });
   } else if (record.observationOnly) {
-    chips.push({ label: 'Observation-only', variant: 'info' });
+    chips.push({ label: labels.observationOnly, variant: 'info' });
   }
 
-  return chips.length > 0 ? chips : [{ label: 'Unavailable', variant: 'caution' }];
+  return chips.length > 0 ? chips : [{ label: labels.unavailable, variant: 'caution' }];
 }
 
-function buildMeta(record: OfficialMacroAuthorityRecord, missing = false): string {
+function buildMeta(record: OfficialMacroAuthorityRecord, missing = false, locale: OfficialMacroLocale = 'zh'): string {
   if (missing) {
-    return 'API did not return this bounded official series.';
+    return locale === 'en'
+      ? 'This official series was not returned in the data.'
+      : '当前数据未包含该官方序列。';
   }
 
   const asOf = record.officialObservationDate || record.officialAsOf || record.asOf;
@@ -127,10 +155,10 @@ function buildMeta(record: OfficialMacroAuthorityRecord, missing = false): strin
     record.sourceTier || '',
     record.trustLevel || '',
     record.freshness || '',
-    asOf ? `As-of ${asOf}` : '',
+    asOf ? `${locale === 'en' ? 'As-of' : '截至'} ${asOf}` : '',
   ].filter(Boolean);
 
-  return parts.join(' · ') || 'No authority metadata returned.';
+  return parts.join(' · ') || (locale === 'en' ? 'No authority metadata returned.' : '暂无来源元数据。');
 }
 
 function buildReasonText(record: OfficialMacroAuthorityRecord): string | undefined {
@@ -145,6 +173,7 @@ function buildReasonText(record: OfficialMacroAuthorityRecord): string | undefin
 
 export function buildOfficialMacroAuthorityDiagnosticsView(
   records: OfficialMacroAuthorityRecord[],
+  locale: OfficialMacroLocale = 'zh',
 ): OfficialMacroAuthorityDiagnosticsView {
   const bySeries = new Map<string, OfficialMacroAuthorityRecord>();
 
@@ -169,8 +198,8 @@ export function buildOfficialMacroAuthorityDiagnosticsView(
         key: resolvedRecord.key,
         label: record?.label || OFFICIAL_MACRO_SCOPE_LABELS[seriesId],
         seriesId,
-        chips: statusChips(resolvedRecord, missing),
-        meta: buildMeta(resolvedRecord, missing),
+        chips: statusChips(resolvedRecord, missing, locale),
+        meta: buildMeta(resolvedRecord, missing, locale),
         reasonText: record ? buildReasonText(record) : undefined,
         missing,
       };
