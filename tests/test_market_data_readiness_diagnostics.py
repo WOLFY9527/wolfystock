@@ -10,7 +10,10 @@ from pathlib import Path
 import pytest
 import requests
 
-from src.services.market_data_readiness_diagnostics import build_market_data_readiness_diagnostics
+from src.services.market_data_readiness_diagnostics import (
+    build_market_data_readiness_diagnostics,
+    build_official_risk_source_readiness,
+)
 
 
 ALL_OPTIONAL_MODULES = {"pyarrow", "fastparquet", "tushare", "pytdx", "akshare", "efinance"}
@@ -88,6 +91,37 @@ FORBIDDEN_CONSUMER_MATRIX_FRAGMENTS = {
     "止损",
     "仓位建议",
 }
+FORBIDDEN_OFFICIAL_RISK_CONSUMER_FRAGMENTS = {
+    "api_key",
+    "token",
+    "cookie",
+    "secret",
+    "credential",
+    "provider",
+    "runtime",
+    "raw",
+    "debug",
+    "trace",
+    "requestid",
+    "marketcache",
+    "sourceauthorityallowed",
+    "scorecontributionallowed",
+    "buy",
+    "sell",
+    "hold",
+    "recommend",
+    "target price",
+    "stop loss",
+    "position sizing",
+    "买入",
+    "卖出",
+    "持有",
+    "投资建议",
+    "交易建议",
+    "目标价",
+    "止损",
+    "仓位建议",
+}
 
 
 def _spec_finder_with(available_modules: set[str], seen: list[str] | None = None):
@@ -105,6 +139,83 @@ def _find_check(payload: dict, check_id: str) -> dict:
 
 def _matrix_rows(payload: dict) -> list[dict]:
     return list(payload["consumerEvidenceReadinessMatrix"]["items"])
+
+
+def _official_row(
+    series_id: str,
+    *,
+    symbol: str | None = None,
+    value: float = 1.0,
+    source: str = "fred",
+    source_id: str | None = None,
+    freshness: str = "delayed",
+    date: str = "2026-06-19",
+    as_of: str = "2026-06-20T08:00:00+08:00",
+    source_authority_allowed: bool = True,
+    score_contribution_allowed: bool = True,
+    freshness_policy: str = "official_daily_us_weekday_t_plus_1",
+) -> dict:
+    source_id = source_id or f"{source}:{series_id}"
+    return {
+        "symbol": symbol or series_id,
+        "value": value,
+        "date": date,
+        "asOf": as_of,
+        "source": source,
+        "sourceId": source_id,
+        "sourceType": "official_public",
+        "sourceTier": "official_public",
+        "officialSeriesId": series_id,
+        "freshness": freshness,
+        "sourceAuthorityAllowed": source_authority_allowed,
+        "scoreContributionAllowed": score_contribution_allowed,
+        "cacheOnly": True,
+        "externalProviderCalls": False,
+        "sourceFreshnessEvidence": {
+            "freshness": freshness,
+            "freshnessPolicy": freshness_policy,
+            "cacheOnly": True,
+            "externalProviderCalls": False,
+            "isFallback": False,
+            "isUnavailable": False,
+            "isStale": freshness == "stale",
+        },
+    }
+
+
+def _rates_rows() -> list[dict]:
+    return [
+        _official_row("DGS2", symbol="US2Y", value=3.8, source="treasury", source_id="treasury:DGS2"),
+        _official_row("DGS10", symbol="US10Y", value=4.2, source="treasury", source_id="treasury:DGS10"),
+        _official_row("DGS30", symbol="US30Y", value=4.4, source="treasury", source_id="treasury:DGS30"),
+    ]
+
+
+def _fed_liquidity_rows() -> list[dict]:
+    return [
+        _official_row(
+            "WALCL",
+            symbol="FED_ASSETS",
+            value=7_200_000.0,
+            freshness="cached",
+            freshness_policy="official_weekly_fed_liquidity_t_plus_7",
+        ),
+        _official_row("RRPONTSYD", symbol="FED_RRP", value=330_000.0),
+        _official_row(
+            "WTREGEN",
+            symbol="TGA",
+            value=780_000.0,
+            freshness="cached",
+            freshness_policy="official_weekly_fed_liquidity_t_plus_7",
+        ),
+        _official_row(
+            "WRESBAL",
+            symbol="RESERVES",
+            value=3_100_000.0,
+            freshness="cached",
+            freshness_policy="official_weekly_fed_liquidity_t_plus_7",
+        ),
+    ]
 
 
 def _assert_path_not_disclosed(payload: dict, path: Path) -> None:
@@ -289,7 +400,118 @@ def test_diagnostics_stay_inert_without_network_or_provider_runtime_calls(tmp_pa
     assert payload["diagnosticOnly"] is True
     assert payload["providerRuntimeCalled"] is False
     assert payload["networkCallsEnabled"] is False
+    assert payload["officialRiskSourceReadiness"]["externalProviderCalls"] is False
+    assert payload["officialRiskSourceReadiness"]["mutationEnabled"] is False
     assert seen_modules == ["pyarrow", "fastparquet", "tushare", "pytdx", "akshare", "efinance"]
+
+
+def test_official_risk_source_readiness_reports_ready_bundle_from_fresh_official_rows() -> None:
+    payload = build_official_risk_source_readiness(
+        vix_rows=[_official_row("VIXCLS", symbol="VIX", value=16.2, source_id="fred:VIXCLS")],
+        rates_rows=_rates_rows(),
+        fed_liquidity_rows=_fed_liquidity_rows(),
+    )
+
+    assert payload["contractVersion"] == "official_risk_source_readiness_v1"
+    assert payload["diagnosticOnly"] is True
+    assert payload["externalProviderCalls"] is False
+    assert payload["mutationEnabled"] is False
+    assert payload["bundleState"] == "ready"
+    assert payload["vix"] == {
+        "state": "ready",
+        "series": "VIXCLS",
+        "source": "official_public",
+        "latestDate": "2026-06-19",
+        "asOf": "2026-06-20T08:00:00+08:00",
+        "freshness": "delayed",
+        "blocker": None,
+    }
+    assert payload["rates"]["state"] == "ready"
+    assert payload["rates"]["coveredSeriesCount"] == 3
+    assert payload["rates"]["latestDate"] == "2026-06-19"
+    assert payload["rates"]["freshness"] == "delayed"
+    assert payload["rates"]["blocker"] is None
+    assert payload["fedLiquidity"]["state"] == "ready"
+    assert payload["fedLiquidity"]["latestDate"] == "2026-06-19"
+    assert payload["fedLiquidity"]["freshness"] == "delayed"
+    assert payload["fedLiquidity"]["blocker"] is None
+    assert "Official VIX, rates, and Fed liquidity" in payload["consumerSummary"]
+    assert payload["nextDataAction"] == "Keep the official risk-source refresh bundle warm before market panels rely on it."
+
+
+def test_official_risk_source_readiness_fails_closed_when_vix_is_missing_or_stale() -> None:
+    missing = build_official_risk_source_readiness(
+        rates_rows=_rates_rows(),
+        fed_liquidity_rows=_fed_liquidity_rows(),
+    )
+    stale = build_official_risk_source_readiness(
+        vix_rows=[_official_row("VIXCLS", symbol="VIX", freshness="stale")],
+        rates_rows=_rates_rows(),
+        fed_liquidity_rows=_fed_liquidity_rows(),
+    )
+
+    assert missing["bundleState"] == "partial"
+    assert missing["vix"]["state"] == "blocked"
+    assert missing["vix"]["blocker"] == "missing_official_vix_row"
+    assert missing["nextDataAction"] == "Refresh the official VIX row before relying on risk-source readiness."
+    assert stale["bundleState"] == "partial"
+    assert stale["vix"]["state"] == "blocked"
+    assert stale["vix"]["freshness"] == "stale"
+    assert stale["vix"]["blocker"] == "stale_official_vix_row"
+
+    all_missing = build_official_risk_source_readiness()
+    assert all_missing["bundleState"] == "blocked"
+    assert all_missing["vix"]["state"] == "blocked"
+    assert all_missing["rates"]["state"] == "blocked"
+    assert all_missing["fedLiquidity"]["state"] == "blocked"
+
+
+def test_official_risk_source_readiness_reports_partial_rates_and_unavailable_fed_liquidity() -> None:
+    payload = build_official_risk_source_readiness(
+        vix_rows=[_official_row("VIXCLS", symbol="VIX")],
+        rates_rows=_rates_rows()[:2],
+        fed_liquidity_rows=[],
+    )
+
+    assert payload["bundleState"] == "partial"
+    assert payload["vix"]["state"] == "ready"
+    assert payload["rates"]["state"] == "partial"
+    assert payload["rates"]["coveredSeriesCount"] == 2
+    assert payload["rates"]["blocker"] == "missing_official_rates_series"
+    assert payload["fedLiquidity"]["state"] == "blocked"
+    assert payload["fedLiquidity"]["blocker"] == "missing_official_fed_liquidity_rows"
+    assert payload["nextDataAction"] == "Complete the official rates coverage before relying on the bundle."
+
+    missing_rates = build_official_risk_source_readiness(
+        vix_rows=[_official_row("VIXCLS", symbol="VIX")],
+        rates_rows=[],
+        fed_liquidity_rows=_fed_liquidity_rows(),
+    )
+    assert missing_rates["bundleState"] == "partial"
+    assert missing_rates["rates"]["state"] == "blocked"
+    assert missing_rates["rates"]["coveredSeriesCount"] == 0
+    assert missing_rates["rates"]["blocker"] == "missing_official_rates_series"
+
+
+def test_official_risk_source_readiness_consumer_fields_redact_raw_runtime_and_advice_terms() -> None:
+    payload = build_official_risk_source_readiness(
+        vix_rows=[
+            {
+                **_official_row("VIXCLS", symbol="VIX"),
+                "sourceAuthorityReason": "provider_runtime token buy target price raw debug trace",
+            }
+        ],
+        rates_rows=[],
+        fed_liquidity_rows=[],
+    )
+    consumer_values = {
+        "consumerSummary": payload["consumerSummary"],
+        "nextDataAction": payload["nextDataAction"],
+    }
+    serialized = json.dumps(consumer_values, ensure_ascii=False).lower()
+
+    for fragment in FORBIDDEN_OFFICIAL_RISK_CONSUMER_FRAGMENTS:
+        assert fragment not in serialized
 
 
 def test_consumer_evidence_readiness_matrix_is_provider_free_and_covers_core_surfaces(

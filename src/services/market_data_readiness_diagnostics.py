@@ -14,6 +14,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
+from src.services.official_macro_liquidity_cache_contracts import (
+    OFFICIAL_FED_LIQUIDITY_REQUIRED_SERIES,
+    OFFICIAL_US_RATES_REQUIRED_SERIES,
+    build_official_fed_liquidity_cache_bundle,
+    build_official_us_rates_cache_bundle,
+)
 from src.services.provider_affected_surface_mapping import (
     canonical_product_affected_surfaces,
 )
@@ -26,6 +32,9 @@ _PARQUET_ENGINES = ("pyarrow", "fastparquet")
 _OPTIONAL_PROVIDER_MODULES = ("tushare", "pytdx", "akshare", "efinance")
 _MARKET_INTELLIGENCE_SURFACES = ("market_overview", "liquidity_monitor")
 _LOCAL_US_SURFACES = ("stock_history",)
+_OFFICIAL_RISK_READINESS_VERSION = "official_risk_source_readiness_v1"
+_OFFICIAL_RISK_READY_FRESHNESS = frozenset({"live", "fresh", "cached", "delayed"})
+_VIX_SERIES_ID = "VIXCLS"
 
 
 SpecFinder = Callable[[str], object | None]
@@ -106,6 +115,7 @@ class MarketDataReadinessDiagnostics:
     readiness_status: str
     checks: tuple[MarketDataReadinessCheck, ...]
     consumer_evidence_readiness_matrix: tuple[ConsumerEvidenceReadinessSpec, ...]
+    official_risk_source_readiness: Mapping[str, Any]
     representative_symbols: tuple[str, ...] = ()
     diagnostic_only: bool = True
     provider_runtime_called: bool = False
@@ -129,6 +139,7 @@ class MarketDataReadinessDiagnostics:
                     for row in self.consumer_evidence_readiness_matrix
                 ],
             },
+            "officialRiskSourceReadiness": dict(self.official_risk_source_readiness),
         }
 
 
@@ -137,6 +148,9 @@ def build_market_data_readiness_diagnostics(
     representative_symbols: Optional[Sequence[str]] = None,
     env: Optional[Mapping[str, str]] = None,
     spec_finder: SpecFinder = importlib.util.find_spec,
+    official_vix_rows: Optional[Sequence[Mapping[str, Any]]] = None,
+    official_rates_rows: Optional[Sequence[Mapping[str, Any]]] = None,
+    official_fed_liquidity_rows: Optional[Sequence[Mapping[str, Any]]] = None,
 ) -> MarketDataReadinessDiagnostics:
     """Return an additive readiness snapshot using local-only signals."""
 
@@ -157,7 +171,212 @@ def build_market_data_readiness_diagnostics(
         readiness_status=_resolve_readiness_status(checks),
         checks=tuple(checks),
         consumer_evidence_readiness_matrix=_build_consumer_evidence_readiness_matrix(),
+        official_risk_source_readiness=build_official_risk_source_readiness(
+            vix_rows=official_vix_rows,
+            rates_rows=official_rates_rows,
+            fed_liquidity_rows=official_fed_liquidity_rows,
+        ),
         representative_symbols=normalized_symbols,
+    )
+
+
+def build_official_risk_source_readiness(
+    *,
+    vix_rows: Optional[Sequence[Mapping[str, Any]]] = None,
+    rates_rows: Optional[Sequence[Mapping[str, Any]]] = None,
+    fed_liquidity_rows: Optional[Sequence[Mapping[str, Any]]] = None,
+) -> dict[str, Any]:
+    """Project official VIX/rates/Fed-liquidity row readiness without side effects."""
+
+    vix = _build_vix_readiness(vix_rows)
+    rates_bundle = build_official_us_rates_cache_bundle(rates_rows)
+    fed_bundle = build_official_fed_liquidity_cache_bundle(fed_liquidity_rows)
+    rates = _build_bundle_family_readiness(
+        rates_bundle,
+        rows=rates_rows,
+        series=",".join(OFFICIAL_US_RATES_REQUIRED_SERIES),
+        missing_blocker="missing_official_rates_series",
+        stale_blocker="stale_official_rates_series",
+        malformed_blocker="malformed_official_rates_row",
+        fallback_blocker="non_official_rates_row",
+        unavailable_blocker="unavailable_official_rates_rows",
+        policy_blocker="official_rates_freshness_policy_not_met",
+        budget_blocker="official_rates_refresh_budget_blocked",
+        include_covered_series_count=True,
+    )
+    fed_liquidity = _build_bundle_family_readiness(
+        fed_bundle,
+        rows=fed_liquidity_rows,
+        series=",".join(OFFICIAL_FED_LIQUIDITY_REQUIRED_SERIES),
+        missing_blocker="missing_official_fed_liquidity_rows",
+        stale_blocker="stale_official_fed_liquidity_rows",
+        malformed_blocker="malformed_official_fed_liquidity_rows",
+        fallback_blocker="non_official_fed_liquidity_rows",
+        unavailable_blocker="unavailable_official_fed_liquidity_rows",
+        policy_blocker="official_fed_liquidity_freshness_policy_not_met",
+        budget_blocker="official_fed_liquidity_refresh_budget_blocked",
+        include_covered_series_count=False,
+    )
+    bundle_state = _derive_official_risk_bundle_state((vix["state"], rates["state"], fed_liquidity["state"]))
+
+    return {
+        "contractVersion": _OFFICIAL_RISK_READINESS_VERSION,
+        "diagnosticOnly": True,
+        "networkCallsEnabled": False,
+        "externalProviderCalls": False,
+        "mutationEnabled": False,
+        "vix": vix,
+        "rates": rates,
+        "fedLiquidity": fed_liquidity,
+        "bundleState": bundle_state,
+        "consumerSummary": _official_risk_consumer_summary(
+            bundle_state=bundle_state,
+            vix_state=str(vix["state"]),
+            rates_state=str(rates["state"]),
+            fed_liquidity_state=str(fed_liquidity["state"]),
+        ),
+        "nextDataAction": _official_risk_next_data_action(vix=vix, rates=rates, fed_liquidity=fed_liquidity),
+    }
+
+
+def _build_vix_readiness(rows: Optional[Sequence[Mapping[str, Any]]]) -> dict[str, Any]:
+    candidates = [row for row in rows or () if isinstance(row, Mapping) and _row_series_id(row) == _VIX_SERIES_ID]
+    if not candidates:
+        return _family_readiness(
+            state="blocked",
+            series=_VIX_SERIES_ID,
+            source="official_public",
+            blocker="missing_official_vix_row",
+        )
+
+    row = _latest_row(candidates)
+    freshness = _row_freshness(row)
+    if _row_is_flagged(row, "isFallback") or freshness in {"fallback", "mock", "synthetic"}:
+        return _family_readiness(
+            state="blocked",
+            series=_VIX_SERIES_ID,
+            source="official_public",
+            latest_date=_row_latest_date(row),
+            as_of=_row_as_of(row),
+            freshness=freshness,
+            blocker="non_official_vix_row",
+        )
+    if _row_is_flagged(row, "isUnavailable") or freshness in {"unavailable", "error"}:
+        return _family_readiness(
+            state="blocked",
+            series=_VIX_SERIES_ID,
+            source="official_public",
+            latest_date=_row_latest_date(row),
+            as_of=_row_as_of(row),
+            freshness=freshness,
+            blocker="unavailable_official_vix_row",
+        )
+    if _row_is_flagged(row, "isStale") or freshness == "stale":
+        return _family_readiness(
+            state="blocked",
+            series=_VIX_SERIES_ID,
+            source="official_public",
+            latest_date=_row_latest_date(row),
+            as_of=_row_as_of(row),
+            freshness=freshness,
+            blocker="stale_official_vix_row",
+        )
+    if not _row_is_official_public(row) or not _row_numeric_value(row):
+        return _family_readiness(
+            state="blocked",
+            series=_VIX_SERIES_ID,
+            source="official_public",
+            latest_date=_row_latest_date(row),
+            as_of=_row_as_of(row),
+            freshness=freshness,
+            blocker="invalid_official_vix_row",
+        )
+    if row.get("sourceAuthorityAllowed") is not True or row.get("scoreContributionAllowed") is not True:
+        return _family_readiness(
+            state="blocked",
+            series=_VIX_SERIES_ID,
+            source="official_public",
+            latest_date=_row_latest_date(row),
+            as_of=_row_as_of(row),
+            freshness=freshness,
+            blocker="official_vix_authority_not_ready",
+        )
+    if freshness not in _OFFICIAL_RISK_READY_FRESHNESS:
+        return _family_readiness(
+            state="blocked",
+            series=_VIX_SERIES_ID,
+            source="official_public",
+            latest_date=_row_latest_date(row),
+            as_of=_row_as_of(row),
+            freshness=freshness,
+            blocker="official_vix_freshness_not_ready",
+        )
+    return _family_readiness(
+        state="ready",
+        series=_VIX_SERIES_ID,
+        source="official_public",
+        latest_date=_row_latest_date(row),
+        as_of=_row_as_of(row),
+        freshness=freshness,
+        blocker=None,
+    )
+
+
+def _build_bundle_family_readiness(
+    bundle: Mapping[str, Any],
+    *,
+    rows: Optional[Sequence[Mapping[str, Any]]],
+    series: str,
+    missing_blocker: str,
+    stale_blocker: str,
+    malformed_blocker: str,
+    fallback_blocker: str,
+    unavailable_blocker: str,
+    policy_blocker: str,
+    budget_blocker: str,
+    include_covered_series_count: bool,
+) -> dict[str, Any]:
+    coverage_count = _int(bundle.get("coverageCount"))
+    if bundle.get("readinessEligible") is True:
+        state = "ready"
+        blocker = None
+    elif bundle.get("budgetBlockedSeries"):
+        state = "partial" if coverage_count else "blocked"
+        blocker = budget_blocker
+    elif bundle.get("malformedSeries"):
+        state = "partial" if coverage_count else "blocked"
+        blocker = malformed_blocker
+    elif bundle.get("fallbackOrProxySeries"):
+        state = "partial" if coverage_count else "blocked"
+        blocker = fallback_blocker
+    elif bundle.get("policyRejectedSeries"):
+        state = "partial" if coverage_count else "blocked"
+        blocker = policy_blocker
+    elif bundle.get("staleSeries"):
+        state = "partial" if coverage_count else "blocked"
+        blocker = stale_blocker
+    elif bundle.get("missingSeries"):
+        state = "partial" if coverage_count else "blocked"
+        blocker = missing_blocker
+    elif bundle.get("unavailableSeries"):
+        state = "partial" if coverage_count else "blocked"
+        blocker = unavailable_blocker
+    elif bundle.get("isPartial"):
+        state = "partial"
+        blocker = missing_blocker
+    else:
+        state = "blocked"
+        blocker = unavailable_blocker
+
+    return _family_readiness(
+        state=state,
+        series=series,
+        source="official_public",
+        latest_date=_latest_from_rows(rows, "date") or _latest_from_bundle(bundle, "date"),
+        as_of=_latest_from_rows(rows, "asOf") or _latest_from_bundle(bundle, "asOf"),
+        freshness=_safe_text(bundle.get("freshness")) or "unavailable",
+        blocker=blocker,
+        covered_series_count=coverage_count if include_covered_series_count else None,
     )
 
 
@@ -679,8 +898,218 @@ def _resolve_readiness_status(checks: Sequence[MarketDataReadinessCheck]) -> str
     return "ready"
 
 
+def _family_readiness(
+    *,
+    state: str,
+    series: str,
+    source: str,
+    latest_date: str | None = None,
+    as_of: str | None = None,
+    freshness: str = "unavailable",
+    blocker: str | None = None,
+    covered_series_count: int | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "state": state,
+        "series": series,
+        "source": source,
+        "latestDate": latest_date,
+        "asOf": as_of,
+        "freshness": freshness,
+        "blocker": blocker,
+    }
+    if covered_series_count is not None:
+        payload["coveredSeriesCount"] = covered_series_count
+    return payload
+
+
+def _derive_official_risk_bundle_state(states: Sequence[str]) -> str:
+    normalized = [_safe_text(state) for state in states if _safe_text(state)]
+    if not normalized:
+        return "unknown"
+    if all(state == "ready" for state in normalized):
+        return "ready"
+    if any(state in {"ready", "partial"} for state in normalized):
+        return "partial"
+    if all(state == "blocked" for state in normalized):
+        return "blocked"
+    return "unknown"
+
+
+def _official_risk_consumer_summary(
+    *,
+    bundle_state: str,
+    vix_state: str,
+    rates_state: str,
+    fed_liquidity_state: str,
+) -> str:
+    if bundle_state == "ready":
+        return "Official VIX, rates, and Fed liquidity are ready for market risk-source checks."
+    if "ready" in {vix_state, rates_state, fed_liquidity_state} or "partial" in {
+        vix_state,
+        rates_state,
+        fed_liquidity_state,
+    }:
+        return "Official risk-source coverage is partly ready; incomplete families remain excluded from stronger market interpretation."
+    if bundle_state == "blocked":
+        return "Official risk-source coverage is not ready; market panels should wait for official rows before relying on the bundle."
+    return "Official risk-source readiness is unknown until official rows are checked."
+
+
+def _official_risk_next_data_action(
+    *,
+    vix: Mapping[str, Any],
+    rates: Mapping[str, Any],
+    fed_liquidity: Mapping[str, Any],
+) -> str:
+    if vix.get("state") != "ready":
+        return "Refresh the official VIX row before relying on risk-source readiness."
+    if rates.get("state") != "ready":
+        return "Complete the official rates coverage before relying on the bundle."
+    if fed_liquidity.get("state") != "ready":
+        return "Complete the official Fed liquidity coverage before relying on the bundle."
+    return "Keep the official risk-source refresh bundle warm before market panels rely on it."
+
+
+def _latest_row(rows: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
+    return max(rows, key=lambda row: (_row_as_of(row) or "", _row_latest_date(row) or ""))
+
+
+def _latest_from_bundle(bundle: Mapping[str, Any], key: str) -> str | None:
+    evidence = bundle.get("sourceFreshnessEvidence")
+    values: list[str] = []
+    for source in (bundle, evidence if isinstance(evidence, Mapping) else {}):
+        for value_key in (key, _camel_to_snake(key), key.lower()):
+            value = _safe_text(source.get(value_key))
+            if value:
+                values.append(value)
+        for nested_key in ("fulfilledRows", "rows", "items", "inputs"):
+            nested = source.get(nested_key)
+            if isinstance(nested, Sequence) and not isinstance(nested, (str, bytes, bytearray)):
+                for item in nested:
+                    if isinstance(item, Mapping):
+                        nested_value = _safe_text(
+                            item.get(key) or item.get(_camel_to_snake(key)) or item.get(key.lower())
+                        )
+                        if nested_value:
+                            values.append(nested_value)
+    return max(values) if values else None
+
+
+def _latest_from_rows(rows: Optional[Sequence[Mapping[str, Any]]], key: str) -> str | None:
+    values: list[str] = []
+    for row in rows or ():
+        if not isinstance(row, Mapping):
+            continue
+        if key == "date":
+            value = _row_latest_date(row)
+        elif key == "asOf":
+            value = _row_as_of(row)
+        else:
+            value = _safe_text(row.get(key))
+        if value:
+            values.append(value)
+    return max(values) if values else None
+
+
+def _row_series_id(row: Mapping[str, Any]) -> str:
+    raw = (
+        row.get("officialSeriesId")
+        or row.get("official_series_id")
+        or row.get("seriesId")
+        or row.get("series_id")
+        or row.get("sourceId")
+        or row.get("source_id")
+        or row.get("symbol")
+        or row.get("key")
+    )
+    text = _safe_text(raw)
+    if ":" in text:
+        text = text.rsplit(":", 1)[-1]
+    return text.upper()
+
+
+def _row_freshness(row: Mapping[str, Any]) -> str:
+    evidence = row.get("sourceFreshnessEvidence")
+    if isinstance(evidence, Mapping):
+        evidence_freshness = _safe_text(evidence.get("freshness")).lower()
+    else:
+        evidence_freshness = ""
+    return (_safe_text(row.get("freshness")).lower() or evidence_freshness or "unavailable")
+
+
+def _row_latest_date(row: Mapping[str, Any]) -> str | None:
+    return _first_nonempty_text(row, ("latestDate", "date", "officialObservationDate", "observationDate", "updatedAt"))
+
+
+def _row_as_of(row: Mapping[str, Any]) -> str | None:
+    return _first_nonempty_text(row, ("asOf", "as_of", "officialAsOf", "updatedAt"))
+
+
+def _row_is_official_public(row: Mapping[str, Any]) -> bool:
+    source_type = _safe_text(row.get("sourceType") or row.get("source_type")).lower()
+    source_tier = _safe_text(row.get("sourceTier") or row.get("source_tier")).lower()
+    source_id = _safe_text(row.get("sourceId") or row.get("source_id")).lower()
+    source = _safe_text(row.get("source")).lower()
+    return bool(
+        (source_type == "official_public" or source_tier == "official_public")
+        and (source in {"fred", "treasury", "nyfed"} or source_id.startswith(("fred:", "treasury:", "nyfed:")))
+    )
+
+
+def _row_numeric_value(row: Mapping[str, Any]) -> bool:
+    value = row.get("value") if row.get("value") is not None else row.get("price")
+    if value is None or isinstance(value, bool):
+        return False
+    try:
+        float(value)
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def _row_is_flagged(row: Mapping[str, Any], key: str) -> bool:
+    evidence = row.get("sourceFreshnessEvidence")
+    return bool(row.get(key) or (isinstance(evidence, Mapping) and evidence.get(key)))
+
+
+def _first_nonempty_text(row: Mapping[str, Any], keys: Sequence[str]) -> str | None:
+    for key in keys:
+        value = _safe_text(row.get(key))
+        if value:
+            return value
+    evidence = row.get("sourceFreshnessEvidence")
+    if isinstance(evidence, Mapping):
+        for key in keys:
+            value = _safe_text(evidence.get(key))
+            if value:
+                return value
+    return None
+
+
+def _safe_text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _camel_to_snake(value: str) -> str:
+    chars: list[str] = []
+    for character in value:
+        if character.isupper() and chars:
+            chars.append("_")
+        chars.append(character.lower())
+    return "".join(chars)
+
+
 __all__ = [
     "MarketDataReadinessCheck",
     "MarketDataReadinessDiagnostics",
+    "build_official_risk_source_readiness",
     "build_market_data_readiness_diagnostics",
 ]
