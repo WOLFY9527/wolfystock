@@ -1081,17 +1081,19 @@ function buildMarketOverviewEvidenceSnapshotMarkdown(params: {
     ...(decisionSemantics?.confirmationSignals.map((item) => item.meta || item.label) ?? []),
   ];
   const freshnessLabel = dataState.isRefreshing
-    ? 'Refresh in progress'
+    ? (language === 'en' ? 'Refresh in progress' : '正在刷新')
     : dataState.hasUnavailable
-      ? 'Some evidence unavailable'
+      ? (language === 'en' ? 'Some evidence unavailable' : '部分证据暂不可用')
       : dataState.staleCount > 0 || dataState.hasFallback
-        ? 'Delayed or partial data'
-        : 'Loaded evidence current';
-  const consumerDataQualityLabel = mapConsumerStatusText(dataQuality.status, 'en');
+        ? (language === 'en' ? 'Delayed or partial data' : '数据存在延迟或部分缺失')
+        : (language === 'en' ? 'Loaded evidence current' : '证据数据已就绪');
+  const consumerDataQualityLabel = mapConsumerStatusText(dataQuality.status, language);
 
   return buildMarketIntelligenceEvidenceMarkdown({
-    title: `Market Intelligence Evidence Snapshot | ${activeCategoryLabel}`,
-    locale: 'en',
+    title: language === 'en'
+      ? `Market Intelligence Evidence Snapshot | ${activeCategoryLabel}`
+      : `市场情报证据快照 | ${activeCategoryLabel}`,
+    locale: language,
     generatedAt: new Date(),
     regimeObservation: {
       title: regimeSynthesis?.title || directionalSummary.currentLabel,
@@ -1107,7 +1109,9 @@ function buildMarketOverviewEvidenceSnapshotMarkdown(params: {
       },
       {
         label: language === 'en' ? 'Data quality' : '数据质量',
-        meta: `${consumerDataQualityLabel} · ${activeCategoryLabel}: available ${coverageSummary.real}, partial ${coverageSummary.mixed}, delayed ${coverageSummary.fallback}`,
+        meta: language === 'en'
+          ? `${consumerDataQualityLabel} · ${activeCategoryLabel}: available ${coverageSummary.real}, partial ${coverageSummary.mixed}, delayed ${coverageSummary.fallback}`
+          : `${consumerDataQualityLabel} · ${activeCategoryLabel}：可用 ${coverageSummary.real}，部分 ${coverageSummary.mixed}，延迟 ${coverageSummary.fallback}`,
       },
       ...heroEvidence,
       ...briefingEvidence,
