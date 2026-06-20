@@ -73,6 +73,29 @@ FORBIDDEN_CONSUMER_READINESS_TERMS = {
     "止损",
     "仓位建议",
 }
+EXPECTED_OFFICIAL_RISK_READINESS_FIELDS = {
+    "contractVersion",
+    "diagnosticOnly",
+    "networkCallsEnabled",
+    "externalProviderCalls",
+    "mutationEnabled",
+    "vix",
+    "rates",
+    "fedLiquidity",
+    "bundleState",
+    "consumerSummary",
+    "nextDataAction",
+}
+EXPECTED_OFFICIAL_RISK_FAMILY_FIELDS = {
+    "state",
+    "series",
+    "source",
+    "latestDate",
+    "asOf",
+    "freshness",
+    "blocker",
+}
+EXPECTED_OFFICIAL_RATES_FIELDS = EXPECTED_OFFICIAL_RISK_FAMILY_FIELDS | {"coveredSeriesCount"}
 
 
 class _Payload:
@@ -97,17 +120,11 @@ def _spec_finder_with(available_modules: set[str]):
 
 
 def test_market_data_readiness_route_is_exposed() -> None:
-    app = FastAPI()
-    app.include_router(market.router, prefix="/api/v1/market")
-    routes = {
-        (method, route.path)
-        for route in app.routes
-        if hasattr(route, "methods")
-        for method in (route.methods or set())
-        if method not in {"HEAD", "OPTIONS"}
-    }
+    with _client() as client:
+        response = client.get("/api/v1/market/data-readiness")
 
-    assert ("GET", "/api/v1/market/data-readiness") in routes
+    assert response.status_code == 200
+    assert response.json()["diagnosticOnly"] is True
 
 
 def test_market_data_readiness_route_returns_read_only_diagnostic_payload(
@@ -157,12 +174,27 @@ def test_market_data_readiness_route_returns_read_only_diagnostic_payload(
 
     checks = payload["checks"]
     matrix = payload["consumerEvidenceReadinessMatrix"]
+    official_risk = payload["officialRiskSourceReadiness"]
     rows = matrix["items"]
 
     assert matrix["contractVersion"] == "consumer_evidence_readiness_matrix_v1"
     assert matrix["diagnosticOnly"] is True
     assert matrix["networkCallsEnabled"] is False
     assert matrix["mutationEnabled"] is False
+    assert set(official_risk) == EXPECTED_OFFICIAL_RISK_READINESS_FIELDS
+    assert official_risk["contractVersion"] == "official_risk_source_readiness_v1"
+    assert official_risk["diagnosticOnly"] is True
+    assert official_risk["networkCallsEnabled"] is False
+    assert official_risk["externalProviderCalls"] is False
+    assert official_risk["mutationEnabled"] is False
+    assert official_risk["bundleState"] in {"ready", "partial", "blocked", "unknown"}
+    assert set(official_risk["vix"]) == EXPECTED_OFFICIAL_RISK_FAMILY_FIELDS
+    assert set(official_risk["rates"]) == EXPECTED_OFFICIAL_RATES_FIELDS
+    assert set(official_risk["fedLiquidity"]) == EXPECTED_OFFICIAL_RISK_FAMILY_FIELDS
+    assert official_risk["vix"]["series"] == "VIXCLS"
+    assert official_risk["rates"]["coveredSeriesCount"] == 0
+    assert isinstance(official_risk["consumerSummary"], str)
+    assert isinstance(official_risk["nextDataAction"], str)
     assert {
         "market_overview",
         "liquidity_monitor",
@@ -219,6 +251,16 @@ def test_market_data_readiness_route_returns_read_only_diagnostic_payload(
     serialized_matrix = json.dumps(matrix, ensure_ascii=False).lower()
     for term in FORBIDDEN_CONSUMER_READINESS_TERMS:
         assert term not in serialized_matrix
+
+    serialized_official_risk_consumer = json.dumps(
+        {
+            "consumerSummary": official_risk["consumerSummary"],
+            "nextDataAction": official_risk["nextDataAction"],
+        },
+        ensure_ascii=False,
+    ).lower()
+    for term in FORBIDDEN_CONSUMER_READINESS_TERMS | {"credential", "secret", "api_key"}:
+        assert term not in serialized_official_risk_consumer
 
     parquet_check = next(check for check in checks if check["id"] == "local_us_parquet_dir")
     assert parquet_check["details"]["pathConfigured"] is True
