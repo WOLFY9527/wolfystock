@@ -1,21 +1,24 @@
 import type React from 'react';
 import { TerminalChip, TerminalDisclosure, TerminalSectionHeader } from '../terminal/TerminalPrimitives';
 import { cn } from '../../utils/cn';
-import type { OfficialMacroAuthorityDiagnosticsView } from './officialMacroAuthorityDiagnosticsData';
+import type { OfficialMacroAuthorityDiagnosticsView, OfficialMacroLocale } from './officialMacroAuthorityDiagnosticsData';
+import { CHIP_LABELS } from './officialMacroAuthorityDiagnosticsData';
 
 export const OfficialMacroAuthorityDiagnostics: React.FC<{
   testId: string;
   title: string;
   view: OfficialMacroAuthorityDiagnosticsView;
-}> = ({ testId, title, view }) => {
+  locale?: OfficialMacroLocale;
+}> = ({ testId, title, view, locale = 'zh' }) => {
   const resolvedCount = view.rows.filter((row) => !row.missing).length;
+  const labels = CHIP_LABELS[locale];
   const countRowsWithChip = (label: string) => view.rows.filter((row) => row.chips.some((chip) => chip.label === label)).length;
-  const officialCount = countRowsWithChip('Official');
-  const proxyCount = countRowsWithChip('Proxy-only');
-  const fallbackCount = countRowsWithChip('Fallback');
-  const rejectedCount = countRowsWithChip('Rejected');
-  const observationOnlyCount = countRowsWithChip('Observation-only');
-  const scoreEligibleCount = countRowsWithChip('Score-eligible');
+  const officialCount = countRowsWithChip(labels.official);
+  const proxyCount = countRowsWithChip(labels.proxyOnly);
+  const fallbackCount = countRowsWithChip(labels.fallback);
+  const rejectedCount = countRowsWithChip(labels.rejected);
+  const observationOnlyCount = countRowsWithChip(labels.observationOnly);
+  const scoreEligibleCount = countRowsWithChip(labels.scoreEligible);
   const gapCount = view.rows.filter((row) => row.missing).length;
   const hasGapsOrRejections = gapCount > 0 || rejectedCount > 0;
 
