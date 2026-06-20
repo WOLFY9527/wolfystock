@@ -256,6 +256,7 @@ function renderWatchlist(path = '/watchlist') {
           <Route path="/zh/scanner" element={<><div>scanner</div><LocationProbe /></>} />
           <Route path="/zh/backtest" element={<><div>backtest</div><LocationProbe /></>} />
           <Route path="/zh/backtest/results/:runId" element={<><div>backtest result</div><LocationProbe /></>} />
+          <Route path="/zh/stocks/:stockCode/structure-decision" element={<><div>stock structure</div><LocationProbe /></>} />
           <Route path="/zh/login" element={<div>login</div>} />
         </Routes>
       </UiLanguageProvider>
@@ -755,13 +756,92 @@ describe('WatchlistPage', () => {
     const row = await screen.findByTestId('watchlist-row-NVDA');
 
     expect(within(row).getByText(/分数 94.0 · 历史 \+3.2% · 命中 56%/)).toBeInTheDocument();
-    expect(within(row).getByText('价格暂无')).toBeInTheDocument();
+    expect(within(row).getByText('价格暂缺')).toBeInTheDocument();
     expect(within(row).getByText('研究已更新')).toBeInTheDocument();
     expect(within(row).getByText('已回测')).toBeInTheDocument();
     expect(within(row).getByText(/更新 05\/01 13:30 · 命中 56% · 回测 \+24.6%/)).toBeInTheDocument();
     fireEvent.click(within(row).getByRole('button', { name: /结果 33/ }));
     expect(screen.getByText('backtest result')).toBeInTheDocument();
     expect(screen.getByTestId('location')).toHaveTextContent('/zh/backtest/results/33');
+  });
+
+  it('keeps a 600519-style saved row useful when price and name are missing', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [makeItem({
+        id: 18,
+        symbol: '600519',
+        market: 'cn',
+        name: null,
+        source: 'manual',
+        scannerRunId: 39,
+        scannerRank: 8,
+        scannerScore: 77,
+        lastScoredAt: null,
+        scoreSource: 'scanner_run',
+        scoreStatus: 'stale',
+        intelligence: {
+          scanner: {
+            lastScore: 77,
+            lastRank: 8,
+            status: 'selected',
+            theme: null,
+            themeLabel: null,
+            profile: null,
+            reason: 'Latest scanner score.',
+            lastScannedAt: '2026-05-01T10:10:00Z',
+          },
+          strategySimulation: { status: 'unknown' },
+          backtest: {},
+        },
+        createdAt: '2026-04-10T08:00:00Z',
+        updatedAt: '2026-05-01T10:05:00Z',
+      })],
+    });
+    getResearchOverlay.mockResolvedValue({
+      schemaVersion: 'watchlist_research_overlay_v1',
+      overlayState: 'degraded',
+      researchSummary: 'Missing evidence needs review.',
+      researchPriorityQueue: [
+        {
+          symbol: '600519',
+          priorityTier: 'attention',
+          priorityReasonSafeLabel: 'Missing evidence needs review.',
+          evidenceAge: { state: 'no_evidence', lastReviewedAt: null },
+          missingEvidence: ['provider_runtime_trace', 'insufficient_evidence'],
+          suggestedResearchPath: [
+            {
+              label: 'Stock Structure',
+              route: '/stocks/600519/structure-decision',
+              section: 'watchlistResearchOverlay',
+              reason: 'Open symbol structure detail.',
+            },
+          ],
+          observationOnly: true,
+        },
+      ],
+      observationOnly: true,
+      decisionGrade: false,
+    });
+
+    renderWatchlist();
+
+    const row = await screen.findByTestId('watchlist-row-600519');
+    const primaryRegion = screen.getByTestId('watchlist-board-shell');
+    expect(row).toHaveTextContent('600519');
+    expect(row).toHaveTextContent('A股 600519');
+    expect(row).toHaveTextContent('价格暂缺');
+    expect(row).toHaveTextContent(/更新 05\/01/);
+    expect(row).toHaveTextContent('研究待复核');
+    expect(row).toHaveTextContent('下一步 查看个股结构');
+    expect(within(row).getByRole('button', { name: '查看个股结构 600519' })).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: '打开扫描器 600519' })).toBeInTheDocument();
+    expect(row).not.toHaveTextContent('--');
+    expect(primaryRegion).not.toHaveTextContent(/证据缺口|Missing evidence needs review|provider|cache|runtime|schema|requestId|traceId|fallback|proxy|sourceAuthority|score-grade|observation-only|insufficient_evidence/i);
+    expect(primaryRegion).not.toHaveTextContent(/买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓|buy|sell|hold|target price|stop-loss|position sizing/i);
+
+    fireEvent.click(within(row).getByRole('button', { name: '查看个股结构 600519' }));
+    expect(screen.getByText('stock structure')).toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent('/zh/stocks/600519/structure-decision');
   });
 
   it('renders derived workflow strips from watchlist item fields without durable or trading wording', async () => {
@@ -884,7 +964,7 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     const row = await screen.findByTestId('watchlist-row-MARA');
-    expect(within(row).getByText('价格暂无')).toBeInTheDocument();
+    expect(within(row).getByText('价格暂缺')).toBeInTheDocument();
     expect(within(row).getByText('研究待补充')).toBeInTheDocument();
     expect(within(row).getByTestId('watchlist-row-note-MARA')).toHaveTextContent('价格、研究状态暂缺，按下一步补充。');
   });

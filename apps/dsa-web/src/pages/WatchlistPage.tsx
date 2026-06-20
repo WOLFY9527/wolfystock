@@ -167,6 +167,16 @@ function formatMarket(value?: string | null): string {
   return market || '--';
 }
 
+function buildWatchlistIdentityLabel(item: WatchlistItem, language: 'zh' | 'en'): string {
+  const name = normalizeText(item.name);
+  if (name) return name;
+  const symbol = normalizeText(item.symbol).toUpperCase();
+  const market = formatMarket(item.market);
+  if (symbol && market !== '--') return `${market} ${symbol}`;
+  if (symbol) return language === 'en' ? `Saved symbol ${symbol}` : `观察标的 ${symbol}`;
+  return language === 'en' ? 'Saved symbol' : '观察标的';
+}
+
 function formatWatchlistOrigin(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
   const token = normalizeToken(value);
   if (token === 'scanner' || token === 'scanner_run') return language === 'en' ? 'Research candidate' : '研究候选';
@@ -1054,6 +1064,10 @@ function buildWatchRiskNote(item: WatchlistItem, language: 'zh' | 'en'): string 
 
 function buildNextActionLabel(item: WatchlistItem, language: 'zh' | 'en'): string {
   const state = getScoreDisclosureState(item);
+  const priceValue = getWatchlistPriceValue(item);
+  if (priceValue === null && !normalizeText(item.name)) {
+    return language === 'en' ? 'Review stock structure' : '查看个股结构';
+  }
   if (state === 'failed' || state === 'unknown') {
     return language === 'en' ? 'Refresh and review' : '刷新后再看';
   }
@@ -1072,7 +1086,7 @@ function buildWatchlistRowStatus(item: WatchlistItem, language: 'zh' | 'en'): Wa
   const scoreState = getScoreDisclosureState(item);
   const hasResearch = hasScannerEvidence(item) || hasBacktestEvidence(item);
   const priceLabel = priceValue === null
-    ? (language === 'en' ? 'Price unavailable' : '价格暂无')
+    ? (language === 'en' ? 'Price unavailable' : '价格暂缺')
     : `${language === 'en' ? 'Price' : '价格'} ${formatPriceValue(priceValue, item.market)}`;
   const updateLabel = latestTime
     ? `${language === 'en' ? 'Updated' : '更新'} ${formatDateTime(latestTime, language)}`
@@ -1164,6 +1178,19 @@ function buildBacktestPath(item: WatchlistItem, language: 'zh' | 'en'): string {
     market,
     source: normalizeResearchWorkspaceSource(item.source) || 'watchlist',
   });
+}
+
+function buildScannerPath(item: WatchlistItem, language: 'zh' | 'en'): string {
+  const market = normalizeMarket(item.market);
+  return buildResearchWorkspacePath('scanner', language, {
+    symbol: item.symbol,
+    market,
+    source: 'watchlist',
+  });
+}
+
+function buildStockStructurePath(item: WatchlistItem, language: 'zh' | 'en'): string {
+  return buildLocalizedPath(`/stocks/${encodeURIComponent(item.symbol)}/structure-decision`, language);
 }
 
 function extractAcceptedTaskId(response: Awaited<ReturnType<typeof analysisApi.analyzeAsync>>): string | null {
@@ -2077,6 +2104,7 @@ const WatchlistPage: React.FC = () => {
   const activeObservationSummary = activeItem ? buildObservationSummary(activeItem, language) : copy.noEvidence;
   const activeRiskNote = activeItem ? buildWatchRiskNote(activeItem, language) : null;
   const activeNextActionLabel = activeItem ? buildNextActionLabel(activeItem, language) : '--';
+  const activeIdentityLabel = activeItem ? buildWatchlistIdentityLabel(activeItem, language) : '';
   const activeSavedNote = activeItem ? normalizeText(activeItem.notes) : '';
   const activeContextTags = activeItem
     ? [
@@ -2368,6 +2396,7 @@ const WatchlistPage: React.FC = () => {
                     const rowObservation = buildObservationSummary(item, language);
                     const rowNextAction = buildNextActionLabel(item, language);
                     const rowStatus = buildWatchlistRowStatus(item, language);
+                    const identityLabel = buildWatchlistIdentityLabel(item, language);
                     const workflowSteps = buildWatchlistWorkflowSteps(item, language);
                     const rowStateLine = [
                       `${copy.score} ${formatScore(score)}`,
@@ -2425,7 +2454,7 @@ const WatchlistPage: React.FC = () => {
                                 <TerminalChip variant="neutral">{formatMarket(item.market)}</TerminalChip>
                                 {isRecentlyAdded(item) ? <TerminalChip variant="info">{copy.recentlyAdded}</TerminalChip> : null}
                               </div>
-                              <p className="truncate text-sm text-white/78">{item.name || '--'}</p>
+                              <p className="truncate text-sm text-white/78">{identityLabel}</p>
                               <p className="truncate text-[11px] text-white/45">{originLabel}</p>
                             </button>
                           </div>
@@ -2477,6 +2506,24 @@ const WatchlistPage: React.FC = () => {
                           </div>
 
                           <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+                            <TerminalButton
+                              type="button"
+                              variant="compact"
+                              aria-label={`${language === 'zh' ? '查看个股结构' : 'Open stock structure'} ${item.symbol}`}
+                              onClick={() => navigate(buildStockStructurePath(item, language))}
+                            >
+                              <Search className="h-3.5 w-3.5" />
+                              {language === 'zh' ? '结构' : 'Structure'}
+                            </TerminalButton>
+                            <TerminalButton
+                              type="button"
+                              variant="compact"
+                              aria-label={`${language === 'zh' ? '打开扫描器' : 'Open scanner'} ${item.symbol}`}
+                              onClick={() => navigate(buildScannerPath(item, language))}
+                            >
+                              <RefreshCw className="h-3.5 w-3.5" />
+                              {language === 'zh' ? '扫描器' : 'Scanner'}
+                            </TerminalButton>
                             <TerminalButton
                               type="button"
                               variant="compact"
@@ -2678,7 +2725,7 @@ const WatchlistPage: React.FC = () => {
                     <div className="min-w-0">
                       <p className="text-[11px] text-white/40">{language === 'zh' ? '已选项目' : 'Selected item'}</p>
                       <h2 className="truncate text-base font-semibold text-white">{activeItem.symbol}</h2>
-                      <p className="truncate text-xs text-white/58">{activeItem.name || '--'}</p>
+                      <p className="truncate text-xs text-white/58">{activeIdentityLabel}</p>
                     </div>
                     <TerminalChip variant="neutral">{formatMarket(activeItem.market)}</TerminalChip>
                   </div>
@@ -2938,6 +2985,22 @@ const WatchlistPage: React.FC = () => {
 
                 <section className="min-w-0 pt-4">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <TerminalButton
+                      type="button"
+                      variant="compact"
+                      onClick={() => navigate(buildStockStructurePath(activeItem, language))}
+                    >
+                      <Search className="h-3.5 w-3.5" />
+                      {language === 'zh' ? '结构' : 'Structure'}
+                    </TerminalButton>
+                    <TerminalButton
+                      type="button"
+                      variant="compact"
+                      onClick={() => navigate(buildScannerPath(activeItem, language))}
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      {language === 'zh' ? '扫描器' : 'Scanner'}
+                    </TerminalButton>
                     <TerminalButton
                       type="button"
                       variant="secondary"
