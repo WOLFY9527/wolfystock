@@ -1970,6 +1970,333 @@ class MarketScannerService:
         }
         return theme_payload, summary, candidates
 
+    @staticmethod
+    def _readiness_int(value: Any, default: int = 0) -> int:
+        try:
+            if value is None or (isinstance(value, str) and not value.strip()):
+                return default
+            return int(float(value))
+        except Exception:
+            return default
+
+    @staticmethod
+    def _readiness_reason_counts(coverage_summary: Mapping[str, Any]) -> Dict[str, int]:
+        result: Dict[str, int] = {}
+        for item in coverage_summary.get("excluded_by_reason") or []:
+            if not isinstance(item, Mapping):
+                continue
+            reason = str(item.get("reason") or "").strip().lower()
+            if not reason:
+                continue
+            result[reason] = result.get(reason, 0) + MarketScannerService._readiness_int(item.get("count"))
+        return result
+
+    @staticmethod
+    def _readiness_status_counts(
+        summary: Mapping[str, Any],
+        candidates: Sequence[Mapping[str, Any]],
+    ) -> Dict[str, int]:
+        counts = {
+            "selected": MarketScannerService._readiness_int(summary.get("selected_count")),
+            "rejected": MarketScannerService._readiness_int(summary.get("rejected_count")),
+            "data_failed": MarketScannerService._readiness_int(summary.get("data_failed_count")),
+            "error": MarketScannerService._readiness_int(summary.get("error_count")),
+        }
+        if candidates and not any(counts.values()):
+            for item in candidates:
+                status = str(item.get("status") or "").strip().lower()
+                if status in counts:
+                    counts[status] += 1
+        return counts
+
+    def _quote_readiness_coverage(
+        self,
+        diagnostics: Mapping[str, Any],
+        *,
+        status: str,
+        selected_count: int,
+        evaluated_count: int,
+        blocker_hint: str,
+    ) -> str:
+        if blocker_hint == "missing_quote_snapshot":
+            return "missing"
+        live_quote_stats = diagnostics.get("live_quote_stats")
+        if isinstance(live_quote_stats, Mapping):
+            attempted = self._readiness_int(live_quote_stats.get("attempted_candidates"))
+            available = self._readiness_int(live_quote_stats.get("available_candidates"))
+            if attempted > 0:
+                if available <= 0:
+                    return "missing"
+                return "available" if available >= attempted else "partial"
+        scanner_data = diagnostics.get("scanner_data") if isinstance(diagnostics.get("scanner_data"), Mapping) else {}
+        snapshot_resolution = scanner_data.get("snapshot_resolution") if isinstance(scanner_data.get("snapshot_resolution"), Mapping) else {}
+        if diagnostics.get("snapshot_source") or snapshot_resolution.get("source"):
+            return "available"
+        if status == "completed" and (selected_count > 0 or evaluated_count > 0):
+            return "available"
+        return "unknown"
+
+    def _history_readiness_coverage(
+        self,
+        diagnostics: Mapping[str, Any],
+        *,
+        status: str,
+        evaluated_count: int,
+        reason_counts: Mapping[str, int],
+        blocker_hint: str,
+    ) -> str:
+        if blocker_hint == "missing_history":
+            return "missing"
+        if blocker_hint == "stale_history":
+            return "partial"
+        history_stats = diagnostics.get("history_stats")
+        if isinstance(history_stats, Mapping):
+            available = self._readiness_int(history_stats.get("local_hits")) + self._readiness_int(
+                history_stats.get("network_fetches")
+            )
+            skipped = self._readiness_int(history_stats.get("skipped_for_history"))
+            if available > 0:
+                return "partial" if skipped > 0 else "available"
+            if skipped > 0:
+                return "missing"
+        if self._readiness_int(reason_counts.get("missing_history")) > 0:
+            return "missing"
+        if status == "completed" and evaluated_count > 0:
+            return "available"
+        return "unknown"
+
+    @staticmethod
+    def _data_readiness_freshness(
+        *,
+        status: str,
+        quote_coverage: str,
+        history_coverage: str,
+        blocker: str,
+        diagnostics: Mapping[str, Any],
+    ) -> str:
+        tokens = " ".join(str(value or "").lower() for value in diagnostics.values() if not isinstance(value, (dict, list)))
+        if blocker == "stale_history" or "stale" in tokens:
+            return "stale"
+        if quote_coverage == "missing" or history_coverage == "missing":
+            return "unknown"
+        if quote_coverage == "partial" or history_coverage == "partial":
+            return "delayed"
+        if status == "completed" and quote_coverage == "available" and history_coverage == "available":
+            return "fresh"
+        return "unknown"
+
+    def _data_readiness_blocker(
+        self,
+        *,
+        status: str,
+        diagnostics: Mapping[str, Any],
+        reason_counts: Mapping[str, int],
+        universe_size: int,
+        selected_count: int,
+    ) -> str:
+        reason_code = str(diagnostics.get("reason_code") or "").strip().lower()
+        empty_reason = str(diagnostics.get("empty_reason") or "").strip().lower()
+        failure = diagnostics.get("failure") if isinstance(diagnostics.get("failure"), Mapping) else {}
+        failure_message = str(failure.get("message") or "").strip().lower()
+        tokens = " ".join([reason_code, empty_reason, failure_message, *reason_counts.keys()])
+
+        if any(marker in tokens for marker in ("universe_source_unavailable", "us_universe_unavailable", "hk_universe_unavailable")):
+            return "missing_universe"
+        if "扫描宇宙为空" in empty_reason or "empty universe" in tokens:
+            return "empty_universe"
+        if any(marker in tokens for marker in ("no_realtime_snapshot_available", "missing_quote_or_snapshot", "snapshot_unavailable")):
+            return "missing_quote_snapshot"
+        if "stale_history" in tokens:
+            return "stale_history"
+        if any(marker in tokens for marker in ("missing_history", "insufficient_history", "not_enough_history", "history_coverage")):
+            return "missing_history"
+        if selected_count <= 0 and self._readiness_int(reason_counts.get("filtered_by_profile_constraints")) > 0:
+            return "profile_filters_rejected_all"
+        if selected_count <= 0 and any(marker in tokens for marker in ("source_quality_capped", "source_cap", "score_cap")):
+            return "source_quality_capped"
+        if status == "failed":
+            return "scanner_runtime_unavailable"
+        return "unknown"
+
+    @staticmethod
+    def _data_readiness_copy(blocker: str, state: str) -> Tuple[str, str]:
+        copies = {
+            "missing_universe": (
+                "Scanner 缺少可用标的池，暂时无法生成候选。",
+                "补充可扫描标的池后重新运行 Scanner。",
+            ),
+            "empty_universe": (
+                "候选池为空，Scanner 暂时无法生成候选。",
+                "补充可扫描标的池后重新运行 Scanner。",
+            ),
+            "missing_quote_snapshot": (
+                "行情快照不足，Scanner 暂时无法完成候选生成。",
+                "补充行情快照后重新运行 Scanner。",
+            ),
+            "missing_history": (
+                "历史行情覆盖不足，Scanner 暂时无法完成候选生成。",
+                "补充历史行情覆盖后重新运行 Scanner。",
+            ),
+            "stale_history": (
+                "历史行情不够新，Scanner 只能给出受限结果。",
+                "刷新历史行情后再复核 Scanner。",
+            ),
+            "profile_filters_rejected_all": (
+                "本轮 profile 过滤后没有留下候选。",
+                "复核扫描配置、标的池和数据覆盖后重新运行 Scanner。",
+            ),
+            "source_quality_capped": (
+                "本轮数据质量不足，候选结果被限制。",
+                "补充可用于评分的数据覆盖后重新运行 Scanner。",
+            ),
+            "scanner_runtime_unavailable": (
+                "Scanner 本轮运行未完成，暂时无法判断候选。",
+                "修复运行条件后重新运行 Scanner。",
+            ),
+        }
+        if blocker in copies:
+            return copies[blocker]
+        if state == "ready":
+            return "Scanner 数据已满足本轮候选生成。", "继续按当前数据节奏复核扫描结果。"
+        if state == "partial":
+            return "Scanner 已生成候选，但部分数据覆盖仍需复核。", "补充缺口数据后复核候选稳定性。"
+        if state == "not_run":
+            return "Scanner 尚未运行，暂时没有数据准备度结论。", "运行 Scanner 后查看数据准备度。"
+        return "Scanner 数据准备度暂时无法判断。", "补充运行记录后再复核。"
+
+    def _build_data_readiness(
+        self,
+        *,
+        market: str,
+        profile: str,
+        status: str,
+        universe_size: int,
+        preselected_size: int,
+        evaluated_size: int,
+        shortlist_size: int,
+        diagnostics: Mapping[str, Any],
+        summary: Optional[Mapping[str, Any]] = None,
+        candidates: Optional[Sequence[Mapping[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        diagnostics = dict(diagnostics or {})
+        summary = dict(summary or {})
+        candidates = list(candidates or [])
+        coverage_summary = diagnostics.get("coverage_summary") if isinstance(diagnostics.get("coverage_summary"), Mapping) else {}
+        reason_counts = self._readiness_reason_counts(coverage_summary)
+        counts = self._readiness_status_counts(summary, candidates)
+        selected_count = counts["selected"] or self._readiness_int(shortlist_size)
+        rejected_count = counts["rejected"]
+        failed_count = counts["data_failed"] + counts["error"]
+        candidate_evaluation_count = self._readiness_int(summary.get("evaluated_count"), self._readiness_int(evaluated_size))
+        if candidate_evaluation_count <= 0:
+            candidate_evaluation_count = self._readiness_int(evaluated_size)
+        resolved_universe_size = self._readiness_int(universe_size)
+        if resolved_universe_size <= 0:
+            resolved_universe_size = self._readiness_int(coverage_summary.get("eligible_after_liquidity_filter"))
+        if resolved_universe_size <= 0 and str(status or "").strip().lower() == "completed":
+            resolved_universe_size = self._readiness_int(coverage_summary.get("input_universe_size"))
+
+        normalized_status = str(status or "").strip().lower()
+        blocker_hint = self._data_readiness_blocker(
+            status=normalized_status,
+            diagnostics=diagnostics,
+            reason_counts=reason_counts,
+            universe_size=resolved_universe_size,
+            selected_count=selected_count,
+        )
+        quote_coverage = self._quote_readiness_coverage(
+            diagnostics,
+            status=normalized_status,
+            selected_count=selected_count,
+            evaluated_count=candidate_evaluation_count,
+            blocker_hint=blocker_hint,
+        )
+        history_coverage = self._history_readiness_coverage(
+            diagnostics,
+            status=normalized_status,
+            evaluated_count=candidate_evaluation_count,
+            reason_counts=reason_counts,
+            blocker_hint=blocker_hint,
+        )
+
+        if normalized_status == "not_run":
+            state = "not_run"
+        elif blocker_hint != "unknown" and (selected_count <= 0 or normalized_status in {"empty", "failed"}):
+            state = "blocked"
+        elif normalized_status == "completed" and selected_count > 0 and quote_coverage == "available" and history_coverage == "available":
+            state = "ready"
+        elif normalized_status == "completed" and selected_count > 0:
+            state = "partial"
+        elif normalized_status in {"empty", "failed"}:
+            state = "blocked"
+        else:
+            state = "unknown"
+
+        freshness = self._data_readiness_freshness(
+            status=normalized_status,
+            quote_coverage=quote_coverage,
+            history_coverage=history_coverage,
+            blocker=blocker_hint,
+            diagnostics=diagnostics,
+        )
+        consumer_summary, next_data_action = self._data_readiness_copy(blocker_hint, state)
+        universe_availability = "available" if resolved_universe_size > 0 else "unknown"
+        if normalized_status == "not_run":
+            universe_availability = "unknown"
+        elif blocker_hint == "missing_universe":
+            universe_availability = "missing"
+        elif blocker_hint == "empty_universe":
+            universe_availability = "empty"
+        elif normalized_status not in {"completed", "empty", "failed"}:
+            universe_availability = "unknown"
+
+        return {
+            "state": state,
+            "market": str(market or "").strip().lower() or "unknown",
+            "profile": str(profile or "").strip() or "unknown",
+            "universeAvailability": universe_availability,
+            "universeSize": int(resolved_universe_size),
+            "quoteCoverage": quote_coverage,
+            "historyCoverage": history_coverage,
+            "freshness": freshness,
+            "candidateEvaluationCount": int(candidate_evaluation_count),
+            "selectedCount": int(selected_count),
+            "rejectedCount": int(rejected_count),
+            "failedCount": int(failed_count),
+            "blockerBucket": blocker_hint,
+            "consumerSummary": consumer_summary,
+            "nextDataAction": next_data_action,
+        }
+
+    def _attach_data_readiness(
+        self,
+        diagnostics: Mapping[str, Any],
+        *,
+        market: str,
+        profile: str,
+        status: str,
+        universe_size: int,
+        preselected_size: int,
+        evaluated_size: int,
+        shortlist_size: int,
+        summary: Optional[Mapping[str, Any]] = None,
+        candidates: Optional[Sequence[Mapping[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        payload = dict(diagnostics or {})
+        payload["dataReadiness"] = self._build_data_readiness(
+            market=market,
+            profile=profile,
+            status=status,
+            universe_size=universe_size,
+            preselected_size=preselected_size,
+            evaluated_size=evaluated_size,
+            shortlist_size=shortlist_size,
+            diagnostics=payload,
+            summary=summary,
+            candidates=candidates,
+        )
+        return payload
+
     def _finalize_completed_scan(
         self,
         *,
@@ -2014,6 +2341,18 @@ class MarketScannerService:
             ranked_candidates=ranked_candidates_list,
             shortlist=shortlist_list,
             diagnostics=finalized_diagnostics,
+        )
+        finalized_diagnostics = self._attach_data_readiness(
+            finalized_diagnostics,
+            market=profile_config.market,
+            profile=profile_config.key,
+            status="completed",
+            universe_size=int(universe_size),
+            preselected_size=int(preselected_size),
+            evaluated_size=int(len(evaluated_candidates)),
+            shortlist_size=len(shortlist_list),
+            summary=summary_payload,
+            candidates=candidate_diagnostics,
         )
         self._attach_shortlist_evidence_packets(
             shortlist=shortlist_list,
@@ -4882,10 +5221,22 @@ class MarketScannerService:
             shortlist=shortlist,
             diagnostics=diagnostics if isinstance(diagnostics, dict) else {},
         )
+        diagnostics_payload = self._attach_data_readiness(
+            diagnostics if isinstance(diagnostics, dict) else {},
+            market=run.market,
+            profile=run.profile,
+            status=run.status,
+            universe_size=int(run.universe_size or 0),
+            preselected_size=int(run.preselected_size or 0),
+            evaluated_size=int(run.evaluated_size or 0),
+            shortlist_size=int(run.shortlist_size or 0),
+            summary=summary_payload,
+            candidates=candidate_diagnostics,
+        )
         scanner_context_frame = self._build_scanner_context_frame(
             market=run.market,
             run_id=int(run.id),
-            diagnostics=diagnostics if isinstance(diagnostics, dict) else {},
+            diagnostics=diagnostics_payload,
             universe_selection=universe_selection,
         )
         self._attach_candidate_research_summaries(
@@ -4922,7 +5273,7 @@ class MarketScannerService:
             "requested_symbols_count": universe_selection["requested_symbols_count"],
             "accepted_symbols_count": universe_selection["accepted_symbols_count"],
             "rejected_symbols": universe_selection["rejected_symbols"],
-            "diagnostics": diagnostics if isinstance(diagnostics, dict) else {},
+            "diagnostics": diagnostics_payload,
             "scannerContextFrame": scanner_context_frame,
             "notification": self._normalize_notification_result(diagnostics.get("notification")),
             "failure_reason": self._extract_failure_reason(diagnostics),
@@ -5019,6 +5370,53 @@ class MarketScannerService:
             return None
         return self.get_run_detail(selected_run.id, scope=OWNERSHIP_SCOPE_SYSTEM)
 
+    def _operational_status_data_readiness(
+        self,
+        *,
+        market: str,
+        profile: str,
+        last_run: Optional[Mapping[str, Any]],
+    ) -> Dict[str, Any]:
+        if isinstance(last_run, Mapping) and last_run.get("id"):
+            try:
+                detail = self.get_run_detail(self._readiness_int(last_run.get("id")))
+            except Exception:
+                pass
+            else:
+                diagnostics = detail.get("diagnostics") if isinstance(detail, Mapping) else {}
+                readiness = diagnostics.get("dataReadiness") if isinstance(diagnostics, Mapping) else None
+                if isinstance(readiness, Mapping):
+                    return dict(readiness)
+
+        if not last_run:
+            return self._build_data_readiness(
+                market=market,
+                profile=profile,
+                status="not_run",
+                universe_size=0,
+                preselected_size=0,
+                evaluated_size=0,
+                shortlist_size=0,
+                diagnostics={},
+                summary={},
+                candidates=[],
+            )
+
+        status = str(last_run.get("status") or "unknown")
+        selected_count = self._readiness_int(last_run.get("shortlist_size")) if status == "completed" else 0
+        return self._build_data_readiness(
+            market=market,
+            profile=profile,
+            status=status,
+            universe_size=0,
+            preselected_size=0,
+            evaluated_size=0,
+            shortlist_size=selected_count,
+            diagnostics={},
+            summary={"selected_count": selected_count},
+            candidates=[],
+        )
+
     def get_operational_status(
         self,
         *,
@@ -5061,6 +5459,7 @@ class MarketScannerService:
         for item in today_items:
             if today_watchlist is None or self._prefer_watchlist_item(item, today_watchlist):
                 today_watchlist = item
+        last_run = items[0] if items else None
 
         return {
             "market": resolved_profile.market,
@@ -5072,8 +5471,13 @@ class MarketScannerService:
             "schedule_time": schedule_time,
             "schedule_run_immediately": bool(schedule_run_immediately),
             "notification_enabled": bool(notification_enabled),
+            "dataReadiness": self._operational_status_data_readiness(
+                market=resolved_profile.market,
+                profile=resolved_profile.key,
+                last_run=last_run,
+            ),
             "today_watchlist": today_watchlist,
-            "last_run": items[0] if items else None,
+            "last_run": last_run,
             "last_scheduled_run": first_where(lambda item: item.get("trigger_mode") == "scheduled"),
             "last_manual_run": first_where(lambda item: item.get("trigger_mode") == "manual"),
             "latest_failure": first_where(lambda item: item.get("status") == "failed"),
@@ -5179,6 +5583,25 @@ class MarketScannerService:
             "trigger_mode": trigger_mode,
             "request_source": request_source,
         }
+        terminal_diagnostics = self._attach_data_readiness(
+            {
+                **dict(diagnostics or {}),
+                "operation": {
+                    "trigger_mode": trigger_mode,
+                    "request_source": request_source,
+                    "watchlist_date": watchlist_date,
+                },
+            },
+            market=market,
+            profile=profile,
+            status=status,
+            universe_size=int(universe_size),
+            preselected_size=int(preselected_size),
+            evaluated_size=int(evaluated_size),
+            shortlist_size=len(normalized_shortlist),
+            summary=summary,
+            candidates=normalized_shortlist,
+        )
         run_model = MarketScannerRun(
             owner_id=resolved_owner_id,
             scope=normalized_scope,
@@ -5195,17 +5618,7 @@ class MarketScannerService:
             source_summary=source_summary,
             summary_json=json.dumps(summary, ensure_ascii=False),
             diagnostics_json=json.dumps(
-                adapt_scanner_topdown_context_diagnostics(
-                    {
-                        **dict(diagnostics or {}),
-                        "operation": {
-                            "trigger_mode": trigger_mode,
-                            "request_source": request_source,
-                            "watchlist_date": watchlist_date,
-                        },
-                    },
-                    market=market,
-                ),
+                adapt_scanner_topdown_context_diagnostics(terminal_diagnostics, market=market),
                 ensure_ascii=False,
             ),
             universe_notes_json=json.dumps(universe_notes or [], ensure_ascii=False),

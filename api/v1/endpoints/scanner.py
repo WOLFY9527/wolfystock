@@ -45,6 +45,10 @@ SCANNER_VALIDATION_ERROR_MESSAGE = "Scanner request could not be processed."
 SCANNER_INTERNAL_ERROR_MESSAGE = "Scanner data is temporarily unavailable. Please retry later."
 
 
+class ScannerOperationalStatusWithReadinessResponse(ScannerOperationalStatusResponse):
+    dataReadiness: Optional[dict[str, Any]] = None
+
+
 def _public_theme_payload(theme: object) -> dict[str, Any]:
     payload = theme.to_dict()
     if payload.get("source") == "ai_generated":
@@ -361,7 +365,7 @@ def get_recent_watchlists(
 
 @router.get(
     "/status",
-    response_model=ScannerOperationalStatusResponse,
+    response_model=ScannerOperationalStatusWithReadinessResponse,
     responses={
         200: {"description": "Scanner 运行状态"},
         500: {"description": "服务器错误", "model": ErrorResponse},
@@ -373,14 +377,14 @@ def get_scanner_operational_status(
     profile: Optional[str] = Query(None, description="扫描配置过滤"),
     db_manager: DatabaseManager = Depends(get_database_manager),
     _: CurrentUser = Depends(require_admin_capability("scanner:admin:read")),
-) -> ScannerOperationalStatusResponse:
-    def _operation() -> ScannerOperationalStatusResponse:
+) -> ScannerOperationalStatusWithReadinessResponse:
+    def _operation() -> ScannerOperationalStatusWithReadinessResponse:
         service = _build_scanner_ops_service(db_manager, None)
         payload = service.get_operational_status(
             market=market or "cn",
             profile=profile,
         )
-        return ScannerOperationalStatusResponse(**payload)
+        return ScannerOperationalStatusWithReadinessResponse(**payload)
 
     return _run_endpoint("查询 Scanner 运营状态失败", _operation)
 

@@ -240,6 +240,23 @@ def _make_operational_status_payload(
         "schedule_time": "21:20" if is_us else "08:40",
         "schedule_run_immediately": False,
         "notification_enabled": True,
+        "dataReadiness": {
+            "state": "not_run",
+            "market": market,
+            "profile": profile,
+            "universeAvailability": "unknown",
+            "universeSize": 0,
+            "quoteCoverage": "unknown",
+            "historyCoverage": "unknown",
+            "freshness": "unknown",
+            "candidateEvaluationCount": 0,
+            "selectedCount": 0,
+            "rejectedCount": 0,
+            "failedCount": 0,
+            "blockerBucket": "unknown",
+            "consumerSummary": "Scanner 尚未运行，暂时没有数据准备度结论。",
+            "nextDataAction": "运行 Scanner 后查看数据准备度。",
+        },
         "today_watchlist": {
             "id": 12,
             "watchlist_date": "2026-04-13",
@@ -1438,6 +1455,8 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.last_manual_run.trigger_mode, "manual")
         self.assertTrue(response.quality_summary.available)
         self.assertEqual(response.quality_summary.run_count, 5)
+        self.assertEqual(response.dataReadiness["state"], "not_run")
+        self.assertEqual(response.dataReadiness["blockerBucket"], "unknown")
         service.get_operational_status.assert_called_once()
 
 
