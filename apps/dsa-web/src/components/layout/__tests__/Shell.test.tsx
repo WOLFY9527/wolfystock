@@ -164,8 +164,8 @@ describe('Shell', () => {
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.scanner') })).toBeInTheDocument();
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveClass('is-active');
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.portfolio') })).toBeInTheDocument();
-    expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.optionsLab') })).toBeInTheDocument();
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.scenarioLab') })).toBeInTheDocument();
+    expect(within(primaryNav).queryByRole('link', { name: translate('zh', 'nav.optionsLab') })).not.toBeInTheDocument();
     expect(within(primaryNav).queryByRole('link', { name: translate('zh', 'nav.home') })).not.toBeInTheDocument();
     expect(within(primaryNav).queryByRole('link', { name: translate('zh', 'nav.backtest') })).not.toBeInTheDocument();
     expect(within(primaryNav).queryByRole('link', { name: '流动性监测' })).not.toBeInTheDocument();
@@ -189,7 +189,6 @@ describe('Shell', () => {
       ['scanner', 'context', '/scanner', true],
       ['watchlist', 'context', '/watchlist', true],
       ['portfolio', 'context', '/portfolio', true],
-      ['options-lab', 'observe', '/options-lab', true],
       ['scenario-lab', 'observe', '/scenario-lab', true],
     ]);
     expect(CONSUMER_NAV_ITEMS.find((item) => item.key === 'decision-cockpit')?.to).not.toBe('/cockpit');
@@ -616,8 +615,8 @@ describe('Shell', () => {
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.researchRadar') })).toBeInTheDocument();
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.stockStructure') })).toBeInTheDocument();
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveClass('is-active');
-    expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.optionsLab') })).toBeInTheDocument();
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.scenarioLab') })).toBeInTheDocument();
+    expect(within(drawerNav).queryByRole('link', { name: translate('zh', 'nav.optionsLab') })).not.toBeInTheDocument();
     expect(within(drawerNav).queryByRole('link', { name: '轮动雷达' })).not.toBeInTheDocument();
     expect(within(drawerNav).queryByRole('link', { name: translate('zh', 'nav.backtest') })).not.toBeInTheDocument();
     const accountPanel = screen.getByTestId('shell-mobile-account-center');

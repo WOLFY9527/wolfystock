@@ -10,9 +10,8 @@ export type ConsumerNavItemKey =
   | 'scanner'
   | 'watchlist'
   | 'portfolio'
-  | 'options-lab'
   | 'scenario-lab';
-export type ConsumerRouteKey = ConsumerNavItemKey | 'home' | 'guest' | 'liquidity-monitor' | 'rotation-radar' | 'backtest';
+export type ConsumerRouteKey = ConsumerNavItemKey | 'home' | 'guest' | 'liquidity-monitor' | 'rotation-radar' | 'backtest' | 'options-lab';
 
 export type ConsumerNavItem = {
   key: ConsumerNavItemKey;
@@ -64,7 +63,6 @@ export const CONSUMER_NAV_ITEMS: ConsumerNavItem[] = [
   { key: 'scanner', labelKey: 'nav.scanner', to: '/scanner', group: 'context', requiresAuth: true },
   { key: 'watchlist', labelKey: 'nav.watchlist', to: '/watchlist', group: 'context', requiresAuth: true },
   { key: 'portfolio', labelKey: 'nav.portfolio', to: '/portfolio', group: 'context', requiresAuth: true },
-  { key: 'options-lab', labelKey: 'nav.optionsLab', to: '/options-lab', group: 'observe', requiresAuth: true },
   { key: 'scenario-lab', labelKey: 'nav.scenarioLab', to: '/scenario-lab', group: 'observe', requiresAuth: true },
 ];
 
@@ -394,28 +392,28 @@ export const ROUTE_STORIES: ConsumerRouteStory[] = [
     routeKey: 'backtest',
     group: 'observe',
     to: '/backtest',
-    primaryTo: '/options-lab',
-    secondaryTo: '/watchlist',
+    primaryTo: '/watchlist',
+    secondaryTo: '/market-overview',
     copy: {
       zh: {
         eyebrow: '验证 / 回测',
         title: '把研究假设放进确定性验证，而不是直接改动记录。',
         purpose: '回测页用于比较规则、窗口、结果摘要和可解释限制。',
-        nextStep: '验证后回到观察列表，或进入期权实验室查看只读情景。',
+        nextStep: '验证后回到观察列表沉淀研究对象，或回到市场总览确认背景。',
         evidence: '证据边界：结果、质量说明和导出细节默认保持可复核。',
         boundary: '回测结果只用于只读验证，不改变任何记录或持仓状态。',
-        primaryAction: '打开期权实验室',
-        secondaryAction: '回到观察列表',
+        primaryAction: '回到观察列表',
+        secondaryAction: '回到市场总览',
       },
       en: {
         eyebrow: 'Validate / Backtest',
         title: 'Put research assumptions into deterministic validation before scenario review.',
         purpose: 'Backtest compares rules, windows, result summaries, and explainable limits.',
-        nextStep: 'After validation, return to Watchlist or open Options Lab for read-only scenarios.',
+        nextStep: 'After validation, return to Watchlist for research context or Market Overview for the backdrop.',
         evidence: 'Evidence boundary: results, quality notes, and export details stay reviewable.',
         boundary: 'Backtest output is read-only validation; it does not change records or holdings.',
-        primaryAction: 'Open Options Lab',
-        secondaryAction: 'Back to Watchlist',
+        primaryAction: 'Back to Watchlist',
+        secondaryAction: 'Back to Market Overview',
       },
     },
   },
@@ -453,27 +451,27 @@ export const ROUTE_STORIES: ConsumerRouteStory[] = [
     group: 'observe',
     to: '/scenario-lab',
     primaryTo: '/market/decision-cockpit',
-    secondaryTo: '/options-lab',
+    secondaryTo: '/market-overview',
     copy: {
       zh: {
         eyebrow: '观察验证 / Scenario Lab',
         title: 'Scenario Lab 先作为研究入口占位，不接入后端执行。',
         purpose: '该入口预留给后续跨市场、个股和期权证据的只读情景对照。',
-        nextStep: '当前先回到决策驾驶舱或期权实验室查看已有观察面。',
+        nextStep: '当前先回到决策驾驶舱或市场总览查看已有观察面。',
         evidence: '证据边界：占位页不读取 provider、broker、portfolio 或 raw debug payload。',
         boundary: 'Scenario Lab 当前不运行模型、不写入记录、不形成个性化建议。',
         primaryAction: '打开决策驾驶舱',
-        secondaryAction: '打开期权实验室',
+        secondaryAction: '回到市场总览',
       },
       en: {
         eyebrow: 'Observation / Scenario Lab',
         title: 'Scenario Lab is a research entry placeholder until the frontend contract is available.',
         purpose: 'The entry is reserved for future read-only scenario comparison across market, single-name, and options evidence.',
-        nextStep: 'Use Decision Cockpit or Options Lab for the currently available observation surfaces.',
+        nextStep: 'Use Decision Cockpit or Market Overview for the currently available observation surfaces.',
         evidence: 'Evidence boundary: the placeholder reads no provider, broker, portfolio, or raw debug payload.',
         boundary: 'Scenario Lab currently runs no model, writes no record, and creates no personalized advice.',
         primaryAction: 'Open Decision Cockpit',
-        secondaryAction: 'Open Options Lab',
+        secondaryAction: 'Back to Market Overview',
       },
     },
   },
