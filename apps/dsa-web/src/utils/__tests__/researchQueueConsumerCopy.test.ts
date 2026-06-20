@@ -26,7 +26,7 @@ describe('researchQueueConsumerCopy', () => {
       suggestedResearchPath: [
         {
           label: '查看个股结构',
-          reason: '先核对结构与证据缺口。',
+          reason: '先核对结构与资料完整性。',
         },
       ],
     });
@@ -50,7 +50,7 @@ describe('researchQueueConsumerCopy', () => {
     expect(copy.priorityTierLabel).toBe('继续观察');
     expect(copy.evidenceStateLabel).toBe('证据待确认');
     expect(copy.priorityReason).toBe('当前条目的证据覆盖仍需复核。');
-    expect(copy.missingEvidence).toEqual(['部分外部数据暂不可用', '部分关键证据待补充']);
+    expect(copy.missingEvidence).toEqual(['部分外部数据暂不可用', '部分关键资料待补充']);
     expect(copy.suggestedResearchPath).toEqual([
       {
         label: '查看个股结构',
@@ -61,6 +61,6 @@ describe('researchQueueConsumerCopy', () => {
 
   it('suppresses advice wording instead of rendering it to consumers', () => {
     expect(getResearchQueueConsumerText('Buy before breakout with stop loss', 'zh', '当前条目的证据覆盖仍需复核。')).toBe('当前条目的证据覆盖仍需复核。');
-    expect(getResearchQueueConsumerText('目标价 150，建议加仓', 'zh', '部分关键证据待补充')).toBe('部分关键证据待补充');
+    expect(getResearchQueueConsumerText('目标价 150，建议加仓', 'zh', '部分关键资料待补充')).toBe('部分关键资料待补充');
   });
 });
