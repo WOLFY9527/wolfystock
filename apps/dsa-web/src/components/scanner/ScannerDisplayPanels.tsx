@@ -191,6 +191,9 @@ export function ScannerResultHistorySummary({
     durationLabel: string;
     runTimeLabel: string;
     errorSummary: string | null;
+    unavailable?: boolean;
+    unavailableTitle?: string;
+    unavailableBody?: string;
   } | null;
   recentSummary: {
     title: string;
@@ -203,6 +206,9 @@ export function ScannerResultHistorySummary({
     durationLabel: string;
     runTimeLabel: string;
     errorSummary: string | null;
+    unavailable?: boolean;
+    unavailableTitle?: string;
+    unavailableBody?: string;
   } | null;
   previousSummary: {
     title: string;
@@ -215,6 +221,9 @@ export function ScannerResultHistorySummary({
     durationLabel: string;
     runTimeLabel: string;
     errorSummary: string | null;
+    unavailable?: boolean;
+    unavailableTitle?: string;
+    unavailableBody?: string;
   } | null;
   comparisonItems: ScannerLabeledValue[];
   hasHistory: boolean;
@@ -240,14 +249,25 @@ export function ScannerResultHistorySummary({
                   <span className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{summary.title}</span>
                   <TerminalChip variant="neutral" className="shrink-0 px-1.5 py-0.5 text-[10px] font-sans text-white/62">{summary.statusLabel}</TerminalChip>
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-1.5 text-[11px] sm:grid-cols-3">
-                  <FieldChip label="最佳候选" value={summary.bestCandidate} />
-                  <FieldChip label="候选数量" value={String(summary.candidateCount)} />
-                  <FieldChip label="淘汰数量" value={String(summary.rejectedCount)} />
-                  <FieldChip label="失败数量" value={String(summary.failedCount)} />
-                  <FieldChip label="数据状态" value={summary.dataStatusLabel} />
-                  <FieldChip label="耗时" value={summary.durationLabel} />
-                </div>
+                {summary.unavailable ? (
+                  <div className="mt-2 rounded-lg border border-amber-300/15 bg-amber-300/[0.045] px-2.5 py-2 text-[11px] leading-relaxed">
+                    <p className="font-semibold text-amber-100/90">
+                      {summary.unavailableTitle || (language === 'en' ? 'Candidate set unavailable' : '候选集暂不可用')}
+                    </p>
+                    <p className="mt-1 text-white/55">
+                      {summary.unavailableBody || (language === 'en' ? 'Run data is unavailable.' : '运行数据暂不可用。')}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-2 grid grid-cols-2 gap-1.5 text-[11px] sm:grid-cols-3">
+                    <FieldChip label="最佳候选" value={summary.bestCandidate} />
+                    <FieldChip label="候选数量" value={String(summary.candidateCount)} />
+                    <FieldChip label="淘汰数量" value={String(summary.rejectedCount)} />
+                    <FieldChip label="失败数量" value={String(summary.failedCount)} />
+                    <FieldChip label="数据状态" value={summary.dataStatusLabel} />
+                    <FieldChip label="耗时" value={summary.durationLabel} />
+                  </div>
+                )}
                 <p className="mt-2 truncate text-[11px] text-white/42">
                   运行时间：<span className="font-mono text-white/58">{summary.runTimeLabel}</span>
                   {summary.errorSummary ? <span className="text-rose-200/80"> · {summary.errorSummary}</span> : null}

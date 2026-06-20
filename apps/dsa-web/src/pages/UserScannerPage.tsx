@@ -156,6 +156,9 @@ type ScannerRunSummary = {
   durationLabel: string;
   runTimeLabel: string;
   errorSummary: string | null;
+  unavailable?: boolean;
+  unavailableTitle?: string;
+  unavailableBody?: string;
 };
 type ScannerHistoryResolution = {
   hasLoaded: boolean;
@@ -182,11 +185,6 @@ type ScannerConclusionModel = {
 type ScannerWorkbenchEmptyState = {
   title: string;
   body: string;
-};
-type ScannerEmptyPreviewItem = {
-  label: string;
-  value: string;
-  detail: string;
 };
 type ScannerSafeEmptyReason = {
   label: string;
@@ -462,11 +460,8 @@ function formatTimestamp(value?: string | null, language: 'zh' | 'en' = 'zh'): s
 }
 
 function formatDurationMs(startedAt?: string | null, completedAt?: string | null): string {
-  if (!startedAt || !completedAt) return '--';
-  const started = new Date(startedAt).getTime();
-  const completed = new Date(completedAt).getTime();
-  if (!Number.isFinite(started) || !Number.isFinite(completed) || completed < started) return '--';
-  const durationMs = completed - started;
+  const durationMs = getElapsedDurationMs(startedAt, completedAt);
+  if (durationMs == null || durationMs <= 0) return '--';
   if (durationMs < 1000) return `${durationMs}ms`;
   const seconds = Math.round(durationMs / 1000);
   if (seconds < 60) return `${seconds}s`;
@@ -475,12 +470,16 @@ function formatDurationMs(startedAt?: string | null, completedAt?: string | null
   return `${minutes}m ${remainingSeconds}s`;
 }
 
-function getScannerRunDurationMs(runDetail: ScannerRunDetail | null): number | null {
-  if (!runDetail?.runAt || !runDetail.completedAt) return null;
-  const started = new Date(runDetail.runAt).getTime();
-  const completed = new Date(runDetail.completedAt).getTime();
+function getElapsedDurationMs(startedAt?: string | null, completedAt?: string | null): number | null {
+  if (!startedAt || !completedAt) return null;
+  const started = new Date(startedAt).getTime();
+  const completed = new Date(completedAt).getTime();
   if (!Number.isFinite(started) || !Number.isFinite(completed) || completed < started) return null;
   return completed - started;
+}
+
+function getScannerRunDurationMs(runDetail: ScannerRunDetail | null): number | null {
+  return getElapsedDurationMs(runDetail?.runAt, runDetail?.completedAt);
 }
 
 function isScannerPseudoEmptyRun(runDetail: ScannerRunDetail | null): boolean {
@@ -699,18 +698,7 @@ function buildScannerRunSummary(
 ): ScannerRunSummary | null {
   if (!runDetail) return null;
   if (isScannerPseudoEmptyRun(runDetail)) {
-    return {
-      title,
-      statusLabel: language === 'en' ? 'Unavailable' : '暂不可用',
-      bestCandidate: language === 'en' ? 'None yet' : '尚未产出',
-      candidateCount: 0,
-      rejectedCount: 0,
-      failedCount: 0,
-      dataStatusLabel: language === 'en' ? 'Waiting for usable data' : '等待可用数据',
-      durationLabel: '--',
-      runTimeLabel: formatTimestamp(runDetail.runAt || runDetail.completedAt, language),
-      errorSummary: null,
-    };
+    return buildUnavailableScannerRunSummary(title, runDetail.runAt || runDetail.completedAt, language);
   }
   const selectedCount = getRunSummaryCount(runDetail, 'selectedCount', runDetail.shortlist?.length || 0);
   const rejectedCount = getRunSummaryCount(runDetail, 'rejectedCount', Math.max(0, (runDetail.evaluatedSize || 0) - selectedCount));
@@ -729,6 +717,30 @@ function buildScannerRunSummary(
   };
 }
 
+function buildUnavailableScannerRunSummary(
+  title: string,
+  runTime: string | null | undefined,
+  language: 'zh' | 'en',
+): ScannerRunSummary {
+  return {
+    title,
+    statusLabel: language === 'en' ? 'Unavailable' : '暂不可用',
+    bestCandidate: language === 'en' ? 'Not produced yet' : '尚未产出',
+    candidateCount: 0,
+    rejectedCount: 0,
+    failedCount: 0,
+    dataStatusLabel: language === 'en' ? 'Run data unavailable' : '运行数据暂不可用',
+    durationLabel: '--',
+    runTimeLabel: formatTimestamp(runTime, language),
+    errorSummary: null,
+    unavailable: true,
+    unavailableTitle: language === 'en' ? 'Candidate set has not been produced yet' : '候选集尚未产出',
+    unavailableBody: language === 'en'
+      ? 'Run data is insufficient or unavailable. Next: run Scanner again, inspect history, or open Watchlist / Market Overview.'
+      : '运行数据不足或暂不可用。下一步：重新运行扫描、查看历史，或打开 Watchlist / Market Overview。',
+  };
+}
+
 function getHistorySelectedCount(item: ScannerRunHistoryItem): number {
   const shortlistSize = getFiniteCount(item.shortlistSize);
   if (shortlistSize != null) return shortlistSize;
@@ -737,8 +749,26 @@ function getHistorySelectedCount(item: ScannerRunHistoryItem): number {
 
 function isCompletedEmptyHistoryRun(item: ScannerRunHistoryItem | null): boolean {
   if (!item) return false;
+  if (isScannerPseudoEmptyHistoryRun(item)) return false;
   const runState = normalizeRunState(item.status);
   return (runState === 'completed' || runState === 'empty') && getHistorySelectedCount(item) === 0;
+}
+
+function isScannerPseudoEmptyHistoryRun(item: ScannerRunHistoryItem | null): boolean {
+  if (!item) return false;
+  const runState = normalizeRunState(item.status);
+  if (runState === 'failed' || runState === 'failure' || runState === 'error') return false;
+  const selectedCount = getHistorySelectedCount(item);
+  const evaluatedCount = getFiniteCount(item.evaluatedSize) ?? 0;
+  const rejectedCount = Math.max(0, evaluatedCount - selectedCount);
+  const failedCount = runState === 'failed' ? 1 : 0;
+  const durationMs = getElapsedDurationMs(item.runAt, item.completedAt);
+  const hasSymbols = Boolean(item.topSymbols?.some((symbol) => String(symbol || '').trim()));
+  return selectedCount === 0
+    && rejectedCount === 0
+    && failedCount === 0
+    && !hasSymbols
+    && (durationMs == null || durationMs <= 50);
 }
 
 function buildHistoryItemSummary(
@@ -747,6 +777,9 @@ function buildHistoryItemSummary(
   language: 'zh' | 'en',
 ): ScannerRunSummary | null {
   if (!item) return null;
+  if (isScannerPseudoEmptyHistoryRun(item)) {
+    return buildUnavailableScannerRunSummary(title, item.runAt || item.completedAt, language);
+  }
   const failedCount = item.status === 'failed' ? 1 : 0;
   return {
     title,
@@ -1387,90 +1420,6 @@ function buildScannerWorkbenchEmptyState({
       ? 'Switch the candidate view, inspect limited-data rows, or adjust market, universe, detailed review, and shortlist controls in the top command bar.'
       : '切换候选视图、查看数据受限行，或在顶部命令栏调整市场、范围、评估深度与候选上限。',
   };
-}
-
-function buildScannerEmptyPreviewItems(language: 'zh' | 'en'): ScannerEmptyPreviewItem[] {
-  if (language === 'en') {
-    return [
-      {
-        label: 'Candidate summary',
-        value: 'Symbol / name / score band',
-        detail: 'Successful runs show the compact candidate identity and observation strength.',
-      },
-      {
-        label: 'Evidence view',
-        value: 'Why now / data state / risk note',
-        detail: 'Rows explain why the symbol is worth further research without turning it into advice.',
-      },
-      {
-        label: 'Next step',
-        value: 'Start manual research / save observation',
-        detail: 'Manual research is the primary handoff; optional save actions stay user-controlled and do not change scanner ranking.',
-      },
-    ];
-  }
-
-  return [
-    {
-      label: '候选摘要',
-      value: '代码 / 名称 / 评分区间',
-      detail: '成功扫描会先展示候选身份与观察强度。',
-    },
-    {
-      label: '观察依据',
-      value: '当前原因 / 数据状态 / 风险提示',
-      detail: '按行解释为什么值得继续研究，但不转成投资建议。',
-    },
-    {
-      label: '下一步',
-      value: '启动手动研究 / 保存观察',
-      detail: '手动研究是主路径；保存动作仍由用户触发，并且不改变扫描排名。',
-    },
-  ];
-}
-
-function ScannerEmptySuccessPreview({
-  language,
-  compact = false,
-}: {
-  language: 'zh' | 'en';
-  compact?: boolean;
-}) {
-  const previewItems = buildScannerEmptyPreviewItems(language);
-  return (
-    <div
-      data-testid="scanner-empty-success-preview"
-      className={`min-w-0 rounded-lg border border-white/8 bg-black/20 ${compact ? 'px-3 py-2 text-left' : 'p-3'}`}
-    >
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className="rounded-md border border-indigo-300/20 bg-indigo-300/10 px-2 py-0.5 text-[11px] font-semibold text-indigo-100/86">
-          {language === 'en' ? 'Feature preview' : '功能预览'}
-        </span>
-        <span className="text-[11px] text-white/42">
-          {language === 'en' ? 'Example preview only' : '示例预览'}
-        </span>
-      </div>
-      <p className="mt-2 text-[11px] leading-relaxed text-white/54">
-        {language === 'en'
-          ? 'When a scan has usable candidates, the workbench shows the following structure.'
-          : '当扫描形成可继续观察的候选时，工作台通常会展示这些信息。'}
-      </p>
-      <div className={`mt-2 grid min-w-0 gap-2 ${compact ? '' : 'lg:grid-cols-3'}`}>
-        {previewItems.map((item) => (
-          <div key={item.label} className="min-w-0 rounded-md border border-white/8 bg-white/[0.025] px-2.5 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/36">{item.label}</p>
-            <p className="mt-1 text-xs font-medium text-white/76">{item.value}</p>
-            <p className="mt-1 text-[11px] leading-relaxed text-white/45">{item.detail}</p>
-          </div>
-        ))}
-      </div>
-      <p className="mt-2 text-[11px] leading-relaxed text-white/42">
-        {language === 'en'
-          ? 'This demo sample is not live scanner output, is not saved to Watchlist, and is not included in official ranking or export data.'
-          : '此演示样例不是实时扫描结果，不会写入观察名单，也不会进入官方排名或导出数据。'}
-      </p>
-    </div>
-  );
 }
 
 function buildVisualSummarySegments(
@@ -3514,7 +3463,6 @@ const UserScannerPage: React.FC = () => {
       ? (isRetryScanState ? 'Run again' : t('scanner.run'))
       : (isRetryScanState ? '重新扫描' : '启动扫描');
   const heroLatestLabel = `${language === 'en' ? 'Latest' : '最近'} ${generatedAt ? formatTimestamp(generatedAt, language) : '--'}`;
-  const showPreviewHandoff = currentSelectedCount === 0 && previewSelectedDiagnostics.length > 0;
   const showWorkflowNextSteps = !scannerHasPseudoEmptyRun && (!runDetail
     || scannerConclusion.state !== 'top-candidate'
     || scannerConclusion.trustSummary.staleCount > 0
@@ -3537,9 +3485,11 @@ const UserScannerPage: React.FC = () => {
           ? 'Some data is stale, partial, or limited. Keep the official candidate, but use history and Market Overview before treating it as research evidence.'
           : '部分数据可能过期、缺失或受限。可保留官方候选，但先结合历史与 Market Overview 再作为研究证据。');
   const scannerWorkflowStats = runDetail
-    ? (language === 'en'
+    ? (scannerHasPseudoEmptyRun
+      ? (language === 'en' ? 'Candidate set not produced' : '候选集未产出')
+      : (language === 'en'
       ? `Official ${currentSelectedCount} · rejected ${runDetail.summary?.rejectedCount ?? 0} · limited ${scannerConclusion.trustSummary.limitedCount}`
-      : `官方入选 ${currentSelectedCount} · 淘汰 ${runDetail.summary?.rejectedCount ?? 0} · 数据受限 ${scannerConclusion.trustSummary.limitedCount}`)
+      : `官方入选 ${currentSelectedCount} · 淘汰 ${runDetail.summary?.rejectedCount ?? 0} · 数据受限 ${scannerConclusion.trustSummary.limitedCount}`))
     : (language === 'en' ? 'No run loaded yet' : '尚未载入扫描结果');
   const scannerMarketSwitchOptions = [
     { value: 'cn' as const, label: t('scanner.marketCn') },
@@ -3562,7 +3512,9 @@ const UserScannerPage: React.FC = () => {
     },
     {
       label: language === 'en' ? 'Candidate mix' : '候选分布',
-      value: `${shortlistCount} / ${runDetail?.summary?.rejectedCount ?? 0} / ${runDetail?.summary?.dataFailedCount ?? 0}`,
+      value: scannerHasPseudoEmptyRun
+        ? (language === 'en' ? 'No candidate set' : '候选集未产出')
+        : `${shortlistCount} / ${runDetail?.summary?.rejectedCount ?? 0} / ${runDetail?.summary?.dataFailedCount ?? 0}`,
     },
     {
       label: language === 'en' ? 'Signal state' : '信号状态',
@@ -3590,20 +3542,35 @@ const UserScannerPage: React.FC = () => {
       value: generatedAt ? formatTimestamp(generatedAt, language) : '--',
     },
   ];
-  const scannerRailCounts = [
-    {
-      label: language === 'en' ? 'Candidates' : '候选',
-      value: currentRunSummary?.candidateCount ?? shortlistCount,
-    },
-    {
-      label: language === 'en' ? 'Rejected' : '淘汰',
-      value: currentRunSummary?.rejectedCount ?? runDetail?.summary?.rejectedCount ?? 0,
-    },
-    {
-      label: language === 'en' ? 'Limited' : '数据受限',
-      value: currentRunSummary?.failedCount ?? ((runDetail?.summary?.dataFailedCount ?? 0) + (runDetail?.summary?.errorCount ?? 0)),
-    },
-  ];
+  const scannerRailCounts = scannerHasPseudoEmptyRun
+    ? [
+      {
+        label: language === 'en' ? 'Candidates' : '候选',
+        value: language === 'en' ? 'Not produced' : '未产出',
+      },
+      {
+        label: language === 'en' ? 'Rejected' : '淘汰',
+        value: '--',
+      },
+      {
+        label: language === 'en' ? 'Limited' : '数据受限',
+        value: '--',
+      },
+    ]
+    : [
+      {
+        label: language === 'en' ? 'Candidates' : '候选',
+        value: currentRunSummary?.candidateCount ?? shortlistCount,
+      },
+      {
+        label: language === 'en' ? 'Rejected' : '淘汰',
+        value: currentRunSummary?.rejectedCount ?? runDetail?.summary?.rejectedCount ?? 0,
+      },
+      {
+        label: language === 'en' ? 'Limited' : '数据受限',
+        value: currentRunSummary?.failedCount ?? ((runDetail?.summary?.dataFailedCount ?? 0) + (runDetail?.summary?.errorCount ?? 0)),
+      },
+    ];
   const scannerRunFactItems = buildScannerRunFactItems(runDetail, language);
   const scannerHistoryScopeHint = buildScannerHistoryScopeHint(runDetail, market, profile, language);
   const researchWorkflowCandidate = activeDetailCandidate || sortedCandidates[0] || previewHandoffCandidates[0] || currentFilterHandoffCandidates[0] || null;
@@ -3741,22 +3708,10 @@ const UserScannerPage: React.FC = () => {
                           <span className="rounded-md border border-white/10 bg-black/20 px-2 py-0.5 text-[11px] text-white/58">
                             {scannerWorkflowStats}
                           </span>
-                          {showPreviewHandoff ? (
-                            <span className="rounded-md border border-blue-300/20 bg-blue-300/10 px-2 py-0.5 text-[11px] text-blue-100/80">
-                              {language === 'en' ? `Preview candidates ${previewSelectedDiagnostics.length}` : `预览候选 ${previewSelectedDiagnostics.length}`}
-                            </span>
-                          ) : null}
                         </div>
                         <p className="mt-1 max-w-4xl text-xs leading-relaxed text-white/58">
                           {scannerWorkflowDetail}
                         </p>
-                        {showPreviewHandoff ? (
-                          <p className="mt-1 text-[11px] leading-relaxed text-white/46">
-                            {language === 'en'
-                              ? 'Preview does not change official selection or scoring.'
-                              : '预览不会改变官方入选或评分。'}
-                          </p>
-                        ) : null}
                       </div>
                       <div className="flex shrink-0 flex-wrap items-center gap-1.5">
                         {runDetail ? (
@@ -3782,24 +3737,6 @@ const UserScannerPage: React.FC = () => {
                           <History className="h-3.5 w-3.5" aria-hidden="true" />
                           <span>{language === 'en' ? 'Inspect history' : '查看历史'}</span>
                         </TerminalButton>
-                        {showPreviewHandoff ? (
-                          <TerminalButton
-                            type="button"
-                            variant="secondary"
-                            data-testid="scanner-next-step-preview"
-                            className="h-9 px-3 text-xs"
-                            onClick={() => {
-                              setCandidateFilter('pool');
-                              const firstPreview = previewSelectedDiagnostics[0];
-                              if (firstPreview?.symbol) {
-                                setInspectorSymbol(firstPreview.symbol);
-                              }
-                            }}
-                          >
-                            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-                            <span>{language === 'en' ? `View preview candidates ${previewSelectedDiagnostics.length}` : `查看预览候选 ${previewSelectedDiagnostics.length}`}</span>
-                          </TerminalButton>
-                        ) : null}
                       </div>
                     </div>
 
@@ -3876,8 +3813,6 @@ const UserScannerPage: React.FC = () => {
                           </TerminalButton>
                         </div>
                       </div>
-
-                      <ScannerEmptySuccessPreview language={language} />
 
                       <div className="min-w-0 rounded-lg border border-white/8 bg-black/20 p-3">
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -4448,7 +4383,6 @@ const UserScannerPage: React.FC = () => {
                           >
                             <div className="grid min-w-0 gap-3">
                               <p>{workbenchEmptyState.body}</p>
-                              {scannerHasPseudoEmptyRun ? null : <ScannerEmptySuccessPreview language={language} compact />}
                             </div>
                           </CompactEmptyRow>
                         )}
