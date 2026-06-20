@@ -26,6 +26,42 @@ class WatchlistScoreStatusContextResponse(BaseModel):
     source_authority_implied: bool
 
 
+class WatchlistRowResearchIdentityResponse(BaseModel):
+    name: Optional[str] = None
+    exchange: Optional[str] = None
+    sector: Optional[str] = None
+    industry: Optional[str] = None
+
+
+class WatchlistRowResearchQuoteResponse(BaseModel):
+    state: Literal["available", "missing", "stale", "unknown"]
+    price: Optional[float] = None
+    changePercent: Optional[float] = None
+    asOf: Optional[str] = None
+
+
+class WatchlistRowScannerLineageResponse(BaseModel):
+    runId: Optional[int] = None
+    rank: Optional[int] = None
+    score: Optional[float] = None
+    status: Optional[str] = None
+    lastScoredAt: Optional[str] = None
+
+
+class WatchlistRowResearchPacketResponse(BaseModel):
+    symbol: str
+    market: str
+    identity: WatchlistRowResearchIdentityResponse
+    savedItemSource: str
+    quote: WatchlistRowResearchQuoteResponse
+    scannerLineage: WatchlistRowScannerLineageResponse = Field(default_factory=WatchlistRowScannerLineageResponse)
+    researchStatus: Literal["ready", "partial", "blocked", "unknown"]
+    missingData: List[str] = Field(default_factory=list)
+    nextDataAction: str
+    observationOnly: Literal[True] = True
+    noAdviceDisclosure: str
+
+
 class WatchlistItemCreateRequest(BaseModel):
     symbol: str = Field(..., min_length=1, max_length=16)
     market: Literal["cn", "hk", "us"] = "cn"
@@ -95,6 +131,7 @@ class WatchlistItemResponse(BaseModel):
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     intelligence: Optional["WatchlistIntelligenceResponse"] = None
+    rowResearchPacket: Optional[WatchlistRowResearchPacketResponse] = None
 
 
 class WatchlistOhlcvProvenanceResponse(BaseModel):

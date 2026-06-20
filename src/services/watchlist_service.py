@@ -15,6 +15,7 @@ from src.repositories.scanner_repo import ScannerRepository
 from src.services.catalyst_event_exposure import build_catalyst_event_exposures
 from src.services.reason_code_vocabulary import classify_reason_code
 from src.services.scanner_evidence_packet import build_scanner_investor_signal
+from src.services.symbol_research_packet_service import build_symbol_research_packet_from_parts as build_symbol_research_packet
 from src.storage import AppUser, DatabaseManager, MarketScannerCandidate, MarketScannerRun, RuleBacktestRun, UserWatchlistItem
 from src.utils.symbol_normalization import canonical_stock_code
 from src.utils.symbol_validation import validate_consumer_symbol_precheck
@@ -124,6 +125,7 @@ class WatchlistService:
         }
         payload["intelligence"] = WatchlistService._build_intelligence_payload(payload)
         payload.update(WatchlistService._build_research_context_payload(payload))
+        payload["rowResearchPacket"] = WatchlistService._build_row_research_packet(payload)
         return payload
 
     @classmethod
@@ -367,6 +369,61 @@ class WatchlistService:
             "notes_available": cls._optional_str(item.get("notes")) is not None,
             "user_note_present": cls._optional_str(item.get("notes")) is not None,
             "no_advice_disclosure": _WATCHLIST_NO_ADVICE_DISCLOSURE,
+        }
+
+    @classmethod
+    def _build_row_research_packet(cls, item: Dict[str, Any]) -> Dict[str, Any]:
+        symbol = str(item.get("symbol") or "").strip().upper()
+        market = str(item.get("market") or "").strip().lower()
+        try:
+            packet = build_symbol_research_packet(symbol, market=market)
+        except Exception:
+            packet = {
+                "symbol": symbol,
+                "market": market or "unknown",
+                "identity": {"name": None, "exchange": None, "sector": None, "industry": None},
+                "quote": {"state": "unknown", "price": None, "changePercent": None, "asOf": None},
+                "missingData": ["quote", "price_history", "structure_analysis", "fundamentals", "filing_event_catalyst", "peer_benchmark"],
+                "researchStatus": "blocked",
+                "nextDataAction": "Verify symbol format and market before requesting research data.",
+                "observationOnly": True,
+                "noAdviceDisclosure": "Observation-only research packet; no personalized action instruction.",
+            }
+        identity = packet.get("identity") if isinstance(packet.get("identity"), dict) else {}
+        safe_identity = {
+            "name": cls._optional_str(item.get("name")) or cls._optional_str(identity.get("name")),
+            "exchange": cls._optional_str(identity.get("exchange")),
+            "sector": cls._optional_str(identity.get("sector")),
+            "industry": cls._optional_str(identity.get("industry")),
+        }
+        run_id = cls._safe_int(item.get("scanner_run_id"))
+        rank = cls._safe_int(item.get("scanner_rank"))
+        score = cls._safe_float(item.get("scanner_score"))
+        last_scored_at = cls._optional_str(item.get("last_scored_at"))
+        score_status = cls._optional_str(item.get("score_status")) if any(
+            value is not None for value in (run_id, rank, score, last_scored_at)
+        ) else None
+        return {
+            "symbol": str(packet.get("symbol") or symbol),
+            "market": str(packet.get("market") or market or "unknown"),
+            "identity": safe_identity,
+            "savedItemSource": str(item.get("source") or "scanner"),
+            "quote": packet.get("quote") if isinstance(packet.get("quote"), dict) else {"state": "unknown", "price": None, "changePercent": None, "asOf": None},
+            "scannerLineage": {
+                "runId": run_id,
+                "rank": rank,
+                "score": score,
+                "status": score_status,
+                "lastScoredAt": last_scored_at,
+            },
+            "researchStatus": str(packet.get("researchStatus") or "unknown"),
+            "missingData": list(packet.get("missingData") or []),
+            "nextDataAction": str(packet.get("nextDataAction") or "Review missing data before interpreting this packet."),
+            "observationOnly": True,
+            "noAdviceDisclosure": str(
+                packet.get("noAdviceDisclosure")
+                or "Observation-only research packet; no personalized action instruction."
+            ),
         }
 
     @staticmethod
@@ -1056,6 +1113,7 @@ class WatchlistService:
                 catalyst_exposures=intelligence_context.get("catalyst_exposures"),
             )
             item.update(self._build_research_context_payload(item))
+            item["rowResearchPacket"] = self._build_row_research_packet(item)
         return items
 
     def list_items(self, owner_id: str) -> List[Dict[str, Any]]:
