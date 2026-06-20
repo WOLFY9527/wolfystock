@@ -132,9 +132,9 @@ function confidenceLabel(value: string | null | undefined, language: 'zh' | 'en'
 
 function consumerOptionsBoundaryLabel(observationOnly: boolean | null | undefined, language: 'zh' | 'en'): string {
   if (observationOnly === false) {
-    return language === 'en' ? 'Structured observation' : '可继续观察';
+    return language === 'en' ? 'Structured research context' : '结构化研究语境';
   }
-  return language === 'en' ? 'Observe only' : '仅供观察';
+  return language === 'en' ? 'Research context only' : '仅作研究语境';
 }
 
 function consumerDecisionGradeLabel(decisionGrade: boolean | null | undefined, language: 'zh' | 'en'): string {
@@ -280,6 +280,32 @@ function sanitizeCockpitDisplayItems(
   return labels;
 }
 
+function pushUniqueLabel(target: string[], label: string | null | undefined, limit = Number.POSITIVE_INFINITY) {
+  const normalized = String(label || '').trim();
+  if (!normalized || target.includes(normalized) || target.length >= limit) {
+    return;
+  }
+  target.push(normalized);
+}
+
+function pushSanitizedLabels(
+  target: string[],
+  items: Array<string | null | undefined> | null | undefined,
+  language: 'zh' | 'en',
+  limit = Number.POSITIVE_INFINITY,
+) {
+  sanitizeCockpitDisplayItems(items ?? [], language).forEach((item) => pushUniqueLabel(target, item, limit));
+}
+
+function pushDailyReasonLabels(
+  target: string[],
+  items: Array<string | null | undefined> | null | undefined,
+  language: 'zh' | 'en',
+  limit = Number.POSITIVE_INFINITY,
+) {
+  (items ?? []).forEach((item) => pushUniqueLabel(target, dailyReasonLabel(item, language), limit));
+}
+
 function normalizeCockpitStatusToken(value: string | null | undefined): string {
   return String(value || '')
     .trim()
@@ -393,6 +419,157 @@ function EvidenceLinkStrip({
   );
 }
 
+function CockpitFirstViewportSummary({
+  data,
+  briefing,
+  loading,
+  dailyLoading,
+  narrativeSentences,
+}: {
+  data: MarketDecisionCockpitResponse | null;
+  briefing: DailyIntelligenceResponse | null;
+  loading: boolean;
+  dailyLoading: boolean;
+  narrativeSentences: string[];
+}) {
+  const { language } = useI18n();
+  const locale = language === 'en' ? 'en' : 'zh';
+
+  const summary = useMemo(() => {
+    const whatHappened: string[] = [];
+    const whatMatters: string[] = [];
+    const nextChecks: string[] = [];
+    const missingData: string[] = [];
+
+    pushSanitizedLabels(whatHappened, briefing?.whatChanged, locale, 3);
+    pushSanitizedLabels(whatHappened, data?.cockpitSummary?.whatChanged, locale, 3);
+    pushSanitizedLabels(whatHappened, narrativeSentences.slice(0, 1), locale, 3);
+
+    pushSanitizedLabels(whatMatters, briefing?.marketRegimeSummary?.supportingObservations, locale, 3);
+    pushSanitizedLabels(whatMatters, data?.cockpitSummary?.whyItMatters, locale, 3);
+    pushSanitizedLabels(whatMatters, data?.marketRegimeDecision?.explanation?.whyThisRegime, locale, 3);
+    (briefing?.topResearchPriorities ?? []).forEach((item) => {
+      const subject = item.ticker || item.label || '';
+      const observation = sanitizeCockpitDisplayItems(item.observations ?? [], locale)[0]
+        || sanitizeCockpitDisplayItems(item.whatToVerify ?? [], locale)[0];
+      if (subject && observation) {
+        pushUniqueLabel(whatMatters, `${subject}: ${observation}`, 3);
+      }
+    });
+
+    (briefing?.topResearchPriorities ?? []).forEach((item) => pushSanitizedLabels(nextChecks, item.whatToVerify, locale, 3));
+    pushSanitizedLabels(nextChecks, data?.marketRegimeDecision?.researchPriorities?.watchToday, locale, 3);
+    pushSanitizedLabels(nextChecks, data?.marketRegimeDecision?.researchPriorities?.investigateNext, locale, 3);
+    (data?.researchQueuePreview?.topCandidates ?? []).forEach((candidate) => pushSanitizedLabels(nextChecks, candidate.whatToVerify, locale, 3));
+    pushSanitizedLabels(nextChecks, briefing?.firstRunChecklist, locale, 3);
+    pushSanitizedLabels(nextChecks, briefing?.starterResearchWorkflow, locale, 3);
+
+    pushDailyReasonLabels(missingData, briefing?.degradedInputs.map((item) => item.reason), locale, 3);
+    pushDailyReasonLabels(missingData, briefing?.evidenceGaps, locale, 3);
+    (briefing?.topResearchPriorities ?? []).forEach((item) => pushDailyReasonLabels(missingData, item.evidenceGaps, locale, 3));
+    (briefing?.scannerHighlights ?? []).forEach((item) => pushDailyReasonLabels(missingData, item.evidenceGaps, locale, 3));
+    (briefing?.watchlistHighlights ?? []).forEach((item) => pushDailyReasonLabels(missingData, item.evidenceGaps, locale, 3));
+    (briefing?.portfolioStructureHighlights ?? []).forEach((item) => pushDailyReasonLabels(missingData, item.missingEvidence, locale, 3));
+    pushSanitizedLabels(missingData, data?.dataQuality?.reasonCodes, locale, 3);
+    pushSanitizedLabels(missingData, data?.researchQueuePreview?.degradedState?.reasonCodes, locale, 3);
+    pushSanitizedLabels(missingData, data?.researchQueuePreview?.evidenceGaps, locale, 3);
+    consumerMissingEvidenceLabels(data?.optionsStructureStatus?.missingEvidence, locale)
+      .forEach((item) => pushUniqueLabel(missingData, item, 3));
+    pushSanitizedLabels(missingData, data?.optionsStructureStatus?.blockedReasonCodes, locale, 3);
+
+    const headline = briefing?.marketRegimeSummary?.summary
+      || data?.cockpitSummary?.whatChanged?.[0]
+      || narrativeSentences[0]
+      || (locale === 'en'
+        ? 'The research packet is still assembling market context.'
+        : '研究包正在整理当前市场语境。');
+
+    return {
+      headline: sanitizeCockpitDisplayItems([headline], locale)[0] || headline,
+      whatHappened,
+      whatMatters,
+      nextChecks,
+      missingData,
+    };
+  }, [briefing, data, locale, narrativeSentences]);
+
+  if (loading && dailyLoading && !data && !briefing) {
+    return (
+      <div className="border-b border-[color:var(--wolfy-divider)] p-3">
+        <RoughSectionCard
+          eyebrow={locale === 'en' ? 'Research state' : '研究状态'}
+          title={locale === 'en' ? 'Preparing market context' : '正在整理市场语境'}
+          data-testid="decision-cockpit-first-viewport-summary"
+        >
+          <TerminalEmptyState title={locale === 'en' ? 'Loading research packet' : '正在载入研究包'}>
+            {locale === 'en'
+              ? 'The page is collecting the latest market frame and next research checks.'
+              : '页面正在收集最新市场框架与下一步研究检查。'}
+          </TerminalEmptyState>
+        </RoughSectionCard>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-b border-[color:var(--wolfy-divider)] p-3">
+      <RoughSectionCard
+        eyebrow={locale === 'en' ? 'Research state' : '研究状态'}
+        title={locale === 'en' ? 'What happened, what matters, what to check next' : '发生了什么、为什么重要、下一步查什么'}
+        data-testid="decision-cockpit-first-viewport-summary"
+      >
+        <div className="space-y-4">
+          <p className="text-base leading-7 text-[color:var(--wolfy-text-primary)]">{summary.headline}</p>
+          <div className="grid gap-3 xl:grid-cols-3">
+            <BriefingBlock
+              eyebrow={locale === 'en' ? 'What happened' : '发生了什么'}
+              title={locale === 'en' ? 'Latest readout' : '最新读数'}
+            >
+              <RoughBulletList
+                items={summary.whatHappened}
+                emptyText={locale === 'en' ? 'No market change has been summarized yet.' : '暂未整理出市场变化摘要。'}
+              />
+            </BriefingBlock>
+            <BriefingBlock
+              eyebrow={locale === 'en' ? 'What matters' : '为什么重要'}
+              title={locale === 'en' ? 'Useful context already available' : '已有可用语境'}
+            >
+              <RoughBulletList
+                items={summary.whatMatters}
+                emptyText={locale === 'en' ? 'Useful market context is still thin.' : '当前可用市场语境仍偏薄。'}
+              />
+            </BriefingBlock>
+            <BriefingBlock
+              eyebrow={locale === 'en' ? 'Check next' : '下一步检查'}
+              title={locale === 'en' ? 'Research checks' : '研究检查'}
+            >
+              <RoughBulletList
+                items={summary.nextChecks}
+                emptyText={locale === 'en' ? 'No specific next check is ready yet.' : '暂未形成明确下一步检查。'}
+              />
+            </BriefingBlock>
+          </div>
+          {summary.missingData.length ? (
+            <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-black/10 p-3" data-testid="decision-cockpit-missing-summary">
+              <div className="text-xs font-medium text-[color:var(--wolfy-text-primary)]">
+                {locale === 'en' ? 'What is still missing' : '仍需补齐的部分'}
+              </div>
+              <p className="mt-1 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+                {summary.missingData.join(locale === 'en' ? ' · ' : '；')}
+              </p>
+            </div>
+          ) : null}
+          <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+            {locale === 'en'
+              ? 'Research context only; not an action instruction.'
+              : '仅作研究语境，不构成操作指令。'}
+          </p>
+        </div>
+      </RoughSectionCard>
+    </div>
+  );
+}
+
 function DailyIntelligenceBriefingSection({
   briefing,
   loading,
@@ -446,7 +623,7 @@ function DailyIntelligenceBriefingSection({
       key: 'boundary',
       label: locale === 'en' ? 'Boundary' : '边界',
       value: briefing.observationOnly
-        ? (locale === 'en' ? 'Observation-only' : '仅观察')
+        ? (locale === 'en' ? 'Research context only' : '仅作研究语境')
         : '--',
       detail: briefing.decisionGrade
         ? (locale === 'en' ? 'Decision-grade enabled.' : '允许决策级判断。')
@@ -486,10 +663,6 @@ function DailyIntelligenceBriefingSection({
               <div>
                 <span className="text-[color:var(--wolfy-text-secondary)]">{locale === 'en' ? 'Verify next: ' : '下一步验证：'}</span>
                 {(item.whatToVerify ?? []).join(locale === 'en' ? ' · ' : '；') || '--'}
-              </div>
-              <div>
-                <span className="text-[color:var(--wolfy-text-secondary)]">{locale === 'en' ? 'Evidence gap: ' : '证据缺口：'}</span>
-                {(item.evidenceGaps ?? []).map((gap) => dailyReasonLabel(gap, locale)).join(locale === 'en' ? ' · ' : '；') || '--'}
               </div>
             </div>
             <div className="mt-3">
@@ -572,14 +745,6 @@ function DailyIntelligenceBriefingSection({
                   {item.riskFlags.map((flag) => dailyReasonLabel(flag, locale)).join(locale === 'en' ? ' · ' : '；')}
                 </div>
               ) : null}
-              {(item.evidenceGaps?.length || item.missingEvidence?.length) ? (
-                <div>
-                  <span className="text-[color:var(--wolfy-text-secondary)]">{locale === 'en' ? 'Evidence gaps: ' : '证据缺口：'}</span>
-                  {[...(item.evidenceGaps ?? []), ...(item.missingEvidence ?? [])]
-                    .map((gap) => dailyReasonLabel(gap, locale))
-                    .join(locale === 'en' ? ' · ' : '；')}
-                </div>
-              ) : null}
             </div>
             <div className="mt-3">
               <EvidenceLinkStrip
@@ -596,11 +761,16 @@ function DailyIntelligenceBriefingSection({
 
   return (
     <div className="border-b border-[color:var(--wolfy-divider)] p-3">
-      <RoughSectionCard
-        eyebrow={locale === 'en' ? 'Daily intelligence' : '日度情报'}
-        title={locale === 'en' ? 'Daily research briefing' : '每日研究简报'}
-        data-testid="daily-intelligence-briefing"
-      >
+      <details className="rounded-[16px] border border-[color:var(--wolfy-border-subtle)] bg-black/5 p-3">
+        <summary className="cursor-pointer text-sm font-medium text-[color:var(--wolfy-text-secondary)]">
+          {locale === 'en' ? 'Daily briefing details and availability notes' : '日度简报明细与可用性说明'}
+        </summary>
+        <div className="mt-3">
+          <RoughSectionCard
+            eyebrow={locale === 'en' ? 'Daily intelligence' : '日度情报'}
+            title={locale === 'en' ? 'Daily research briefing' : '每日研究简报'}
+            data-testid="daily-intelligence-briefing"
+          >
         {loading && !briefing ? (
           <TerminalEmptyState title={locale === 'en' ? 'Preparing daily briefing' : '正在整理日度简报'}>
             {locale === 'en'
@@ -638,7 +808,7 @@ function DailyIntelligenceBriefingSection({
                     />
                     <TerminalChip variant="info">
                       {briefing.observationOnly
-                        ? (locale === 'en' ? 'Observation-only briefing' : '仅观察简报')
+                        ? (locale === 'en' ? 'Research-context briefing' : '研究语境简报')
                         : '--'}
                     </TerminalChip>
                     <TerminalChip variant={briefing.decisionGrade ? 'success' : 'caution'}>
@@ -716,7 +886,7 @@ function DailyIntelligenceBriefingSection({
               </BriefingBlock>
               <BriefingBlock
                 eyebrow={dailySectionLabel('scenarioRisks', locale)}
-                title={locale === 'en' ? 'Scenario risks and evidence gaps' : '情景风险与证据缺口'}
+                title={locale === 'en' ? 'Scenario risks' : '情景风险'}
               >
                 <RoughBulletList
                   items={(briefing.scenarioRisks ?? []).map((item, index) => (
@@ -733,15 +903,6 @@ function DailyIntelligenceBriefingSection({
                   ))}
                   emptyText={emptyTextForSection('scenarioRisks')}
                 />
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {(briefing.evidenceGaps ?? []).length
-                    ? (briefing.evidenceGaps ?? []).map((gap, index) => (
-                      <TerminalChip key={`${gap}-${index}`} variant="caution">
-                        {dailyReasonLabel(gap, locale)}
-                      </TerminalChip>
-                    ))
-                    : <TerminalChip variant="success">{locale === 'en' ? 'No aggregate evidence gap' : '暂无汇总证据缺口'}</TerminalChip>}
-                </div>
               </BriefingBlock>
             </div>
             <div className="grid gap-3 xl:grid-cols-3">
@@ -803,7 +964,9 @@ function DailyIntelligenceBriefingSection({
             </BriefingBlock>
           </div>
         ) : null}
-      </RoughSectionCard>
+          </RoughSectionCard>
+        </div>
+      </details>
     </div>
   );
 }
@@ -906,10 +1069,6 @@ export default function MarketDecisionCockpitPage() {
     const items = sanitizeCockpitDisplayItems(cockpitSummary?.whatChanged ?? [], locale);
     return items.length ? items : cockpitNarrative?.sentences.slice(0, 2) ?? [];
   }, [cockpitNarrative?.sentences, cockpitSummary?.whatChanged, locale]);
-  const railBoundaryItems = useMemo(() => {
-    const items = sanitizeCockpitDisplayItems(cockpitSummary?.confidenceLimits ?? [], locale);
-    return items.length ? items : cockpitNarrative?.sentences.slice(2, 4) ?? [];
-  }, [cockpitNarrative?.sentences, cockpitSummary?.confidenceLimits, locale]);
   const nextEvidenceItems = (priorities?.needsMoreEvidence?.length
     ? priorities.needsMoreEvidence
     : data?.researchQueuePreview.evidenceGaps) ?? [];
@@ -943,7 +1102,7 @@ export default function MarketDecisionCockpitPage() {
               )}
             >
               <div className="text-xs text-[color:var(--wolfy-text-secondary)]">
-                {locale === 'en' ? 'Primary market-structure entry for regime, queue, confidence limits, and observation-only gamma context.' : '市场结构主入口，集中呈现状态、队列、置信边界与仅观察 Gamma 语境。'}
+                {locale === 'en' ? 'Primary market-structure entry for the current backdrop, research queue, and next checks.' : '市场结构主入口，集中呈现当前背景、研究队列与下一步检查。'}
               </div>
             </WolfyCommandBar>
           )}
@@ -955,17 +1114,15 @@ export default function MarketDecisionCockpitPage() {
                   emptyText={locale === 'en' ? 'No change summary yet.' : '暂未整理变化摘要。'}
                 />
               </RoughSectionCard>
-              <RoughSectionCard eyebrow={locale === 'en' ? 'Boundary' : '边界'} title={locale === 'en' ? 'Confidence limits' : '置信边界'}>
+              <RoughSectionCard eyebrow={locale === 'en' ? 'Research focus' : '研究焦点'} title={locale === 'en' ? 'What to check next' : '下一步查什么'}>
                 <RoughBulletList
-                  items={railBoundaryItems}
-                  emptyText={locale === 'en' ? 'No explicit confidence limit yet.' : '暂未整理明确的置信边界。'}
+                  items={sanitizeCockpitDisplayItems(priorities?.investigateNext ?? nextEvidenceItems, locale).slice(0, 3)}
+                  emptyText={locale === 'en' ? 'No explicit next check yet.' : '暂未整理明确下一步检查。'}
                 />
               </RoughSectionCard>
-              <RoughSectionCard eyebrow={locale === 'en' ? 'Disclosure' : '披露'} title={locale === 'en' ? 'Observation-only note' : '观察型说明'}>
+              <RoughSectionCard eyebrow={locale === 'en' ? 'Disclosure' : '披露'} title={locale === 'en' ? 'Research boundary' : '研究边界'}>
                 <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-                  {data?.noAdviceDisclosure || (locale === 'en'
-                    ? 'Research context only.'
-                    : '仅供研究语境参考。')}
+                  {locale === 'en' ? 'Research context only; not an action instruction.' : '仅作研究语境，不构成操作指令。'}
                 </p>
               </RoughSectionCard>
             </ConsoleContextRail>
@@ -976,8 +1133,15 @@ export default function MarketDecisionCockpitPage() {
               eyebrow={locale === 'en' ? 'Market decision cockpit' : '市场决策驾驶舱'}
               title={locale === 'en' ? 'Market structure, positioning context, and research queue' : '市场结构、定位语境与研究队列'}
               description={locale === 'en'
-                ? 'This surface is the first-stop cockpit for reading the current market backdrop, evidence quality, and what deserves research attention next.'
-                : '这个页面是新版研究工作流的第一站，用于阅读当前市场背景、证据质量和下一步研究关注点。'}
+                ? 'Use this first to read the current market backdrop, the facts already available, and the next research checks worth opening.'
+                : '先用这里阅读当前市场背景、已可用事实，以及值得打开的下一步研究检查。'}
+            />
+            <CockpitFirstViewportSummary
+              data={data}
+              briefing={dailyIntelligence}
+              loading={loading}
+              dailyLoading={dailyIntelligenceLoading}
+              narrativeSentences={cockpitNarrative?.sentences ?? []}
             />
             <DailyIntelligenceBriefingSection
               briefing={dailyIntelligence}
@@ -1003,7 +1167,11 @@ export default function MarketDecisionCockpitPage() {
               </div>
             ) : null}
             {data ? (
-              <>
+              <details className="m-3 rounded-[16px] border border-[color:var(--wolfy-border-subtle)] bg-black/5 p-3">
+                <summary className="cursor-pointer text-sm font-medium text-[color:var(--wolfy-text-secondary)]">
+                  {locale === 'en' ? 'Market structure details and data-quality notes' : '市场结构明细与数据质量说明'}
+                </summary>
+                <div className="mt-3">
                 <ConsoleStatusStrip
                   items={[
                     {
@@ -1105,7 +1273,7 @@ export default function MarketDecisionCockpitPage() {
                       ]}
                     />
                   </RoughSectionCard>
-                  <RoughSectionCard eyebrow={locale === 'en' ? 'Options / gamma' : '期权 / Gamma'} title={locale === 'en' ? 'Observation-only status' : '仅观察状态'}>
+                  <RoughSectionCard eyebrow={locale === 'en' ? 'Options / gamma' : '期权 / Gamma'} title={locale === 'en' ? 'Research context status' : '研究语境状态'}>
                     {(() => {
                       const blockedReasonLabels = sanitizeCockpitDisplayItems(optionsStatus?.blockedReasonCodes ?? [], locale);
                       const missingEvidenceLabels = consumerMissingEvidenceLabels(optionsStatus?.missingEvidence, locale);
@@ -1175,12 +1343,13 @@ export default function MarketDecisionCockpitPage() {
                       </div>
                     ) : (
                       <TerminalEmptyState title={locale === 'en' ? 'Queue preview unavailable' : '队列预览暂不可用'}>
-                        {locale === 'en' ? 'Use this area for top candidates, evidence gaps, and degraded queue notes.' : '这里用于展示重点候选、证据缺口与降级说明。'}
+                        {locale === 'en' ? 'Top candidates and next checks will appear here when the queue is ready.' : '队列就绪后，这里会展示重点候选与下一步检查。'}
                       </TerminalEmptyState>
                     )}
                   </RoughSectionCard>
                 </div>
-              </>
+                </div>
+              </details>
             ) : null}
           </ConsoleBoard>
         </ResearchConsoleShell>
