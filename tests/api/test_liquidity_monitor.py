@@ -342,6 +342,125 @@ def test_liquidity_monitor_route_exposes_safe_data_quality_for_unavailable_score
         assert field not in dumped_quality
 
 
+def test_data036_liquidity_route_preserves_official_risk_bundle_readiness_contract() -> None:
+    app = FastAPI()
+    app.include_router(liquidity_monitor.router, prefix="/api/v1/market")
+
+    payload = {
+        "endpoint": "/api/v1/market/liquidity-monitor",
+        "generatedAt": "2026-05-07T10:00:00+08:00",
+        "score": {
+            "value": 50,
+            "regime": "unavailable",
+            "confidence": 0.2,
+            "includedIndicatorCount": 0,
+            "possibleIndicatorWeight": 49,
+            "includedIndicatorWeight": 0,
+        },
+        "freshness": {
+            "status": "cached",
+            "weakestIndicatorFreshness": "cached",
+            "latestAsOf": "2026-05-07T10:00:00+08:00",
+        },
+        "indicators": [],
+        "officialRiskBundleReadiness": {
+            "contractVersion": "official_risk_bundle_readiness_v1",
+            "status": "partial",
+            "scoreAuthority": "observation_only",
+            "scoreAuthorityEligible": False,
+            "observationOnly": True,
+            "sourceAuthorityState": "partial",
+            "asOf": "2026-05-07T10:00:00+08:00",
+            "freshness": "cached",
+            "requiredFamilies": ["vix", "rates", "fedLiquidity"],
+            "availableFamilies": ["vix"],
+            "partialFamilies": ["rates"],
+            "missingRequiredFamilies": ["fedLiquidity"],
+            "staleFamilies": [],
+            "blockedFamilies": [],
+            "requiredSeries": ["VIXCLS", "DGS2", "DGS10", "DGS30", "WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"],
+            "missingRequiredSeries": ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"],
+            "nextEvidenceRequired": ["fedLiquidity_missing_official_series"],
+            "families": [
+                {
+                    "familyId": "vix",
+                    "label": "VIX volatility proxy",
+                    "required": True,
+                    "status": "available",
+                    "sourceType": "official_public",
+                    "sourceAuthorityAllowed": True,
+                    "scoreAuthorityEligible": True,
+                    "observationOnly": False,
+                    "freshness": "cached",
+                    "asOf": "2026-05-07T10:00:00+08:00",
+                    "freshnessWindow": "official_daily_us_weekday_t_plus_1",
+                    "requiredSeries": ["VIXCLS"],
+                    "fulfilledSeries": ["VIXCLS"],
+                    "missingSeries": [],
+                    "staleSeries": [],
+                    "blockedSeries": [],
+                    "nextEvidenceRequired": [],
+                },
+                {
+                    "familyId": "fedLiquidity",
+                    "label": "Fed liquidity",
+                    "required": True,
+                    "status": "missing",
+                    "sourceType": "official_public",
+                    "sourceAuthorityAllowed": False,
+                    "scoreAuthorityEligible": False,
+                    "observationOnly": True,
+                    "freshness": "unavailable",
+                    "asOf": None,
+                    "freshnessWindow": "official_weekly_fed_liquidity_t_plus_7",
+                    "requiredSeries": ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"],
+                    "fulfilledSeries": [],
+                    "missingSeries": ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"],
+                    "staleSeries": [],
+                    "blockedSeries": [],
+                    "nextEvidenceRequired": ["fedLiquidity_missing_official_series"],
+                },
+            ],
+        },
+        "liquidityImpulseSynthesis": {
+            "liquidityImpulse": "data_insufficient",
+            "impulseLabel": "Data insufficient for a reliable liquidity call",
+            "subtype": "data_insufficient",
+            "confidence": 0.2,
+            "confidenceLabel": "insufficient",
+            "pillarScores": {},
+            "directionScore": 0.0,
+            "dominantDrivers": [],
+            "counterEvidence": [],
+            "dataGaps": [],
+            "narrativeBullets": [],
+            "evidenceQuality": {},
+            "notInvestmentAdvice": True,
+        },
+        "advisoryDisclosure": "Advisory-only liquidity monitor output.",
+        "sourceMetadata": {
+            "externalProviderCalls": False,
+            "providerRuntimeChanged": False,
+            "marketCacheMutation": False,
+        },
+    }
+
+    with patch("api.v1.endpoints.liquidity_monitor.LiquidityMonitorService") as mock_service:
+        mock_service.return_value.get_liquidity_monitor.return_value = payload
+        response = TestClient(app).get("/api/v1/market/liquidity-monitor")
+
+    assert response.status_code == 200
+    body = response.json()
+    bundle = body["officialRiskBundleReadiness"]
+    assert bundle["status"] == "partial"
+    assert bundle["scoreAuthorityEligible"] is False
+    assert bundle["missingRequiredFamilies"] == ["fedLiquidity"]
+    assert bundle["families"][0]["sourceAuthorityAllowed"] is True
+    dumped = json.dumps(bundle, ensure_ascii=False)
+    for field in ("cacheBundleDiagnostics", "providerRuntime", "requestId", "traceId", "rawPayload"):
+        assert field not in dumped
+
+
 def test_liquidity_monitor_route_preserves_evidence_input_authority_metadata() -> None:
     app = FastAPI()
     app.include_router(liquidity_monitor.router, prefix="/api/v1/market")

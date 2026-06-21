@@ -292,6 +292,157 @@ def _fed_liquidity_macro_item(
     }
 
 
+def _data036_official_rate_item(
+    symbol: str,
+    series_id: str,
+    *,
+    freshness: str = "cached",
+    source_authority_allowed: bool = True,
+    score_contribution_allowed: bool = True,
+    is_stale: bool = False,
+    include_freshness_evidence: bool = True,
+) -> Dict[str, Any]:
+    base_as_of = "2026-05-20T16:15:00+08:00"
+    item: Dict[str, Any] = {
+        "symbol": symbol,
+        "label": symbol,
+        "value": 1.0,
+        "changePercent": 0.0,
+        "source": "treasury" if series_id.startswith("DGS") else "fred",
+        "sourceId": f"{'treasury' if series_id.startswith('DGS') else 'fred'}:{series_id}",
+        "sourceType": "official_public",
+        "sourceLabel": f"{'US Treasury' if series_id.startswith('DGS') else 'FRED'} {series_id}",
+        "sourceTier": "official_public",
+        "trustLevel": "reliable",
+        "unit": "%",
+        "freshness": freshness,
+        "asOf": base_as_of,
+        "updatedAt": base_as_of,
+        "officialSeriesId": series_id,
+        "officialObservationDate": "2026-05-20",
+        "officialAsOf": "2026-05-20",
+        "sourceAuthorityAllowed": source_authority_allowed,
+        "scoreContributionAllowed": score_contribution_allowed,
+        "routeRejectedReasonCodes": [],
+        "isStale": is_stale,
+        "isUnavailable": False,
+        "isFallback": False,
+    }
+    if include_freshness_evidence:
+        item["sourceFreshnessEvidence"] = {
+            "freshness": freshness,
+            "freshnessPolicy": "official_daily_us_weekday_t_plus_1",
+            "externalProviderCalls": False,
+            "isFallback": False,
+            "isStale": is_stale,
+            "isUnavailable": False,
+        }
+    if not source_authority_allowed or not score_contribution_allowed:
+        item["sourceAuthorityReason"] = "source_authority_not_explicit"
+        item["routeRejectedReasonCodes"] = ["source_authority_not_explicit"]
+    return item
+
+
+def _data036_official_credit_item() -> Dict[str, Any]:
+    base_as_of = "2026-05-20T16:15:00+08:00"
+    return {
+        "symbol": "CREDIT",
+        "label": "Credit spreads",
+        "value": 1.0,
+        "change": 0.0,
+        "changePercent": 0.0,
+        "source": "fred",
+        "sourceId": "fred:BAMLH0A0HYM2",
+        "sourceType": "official_public",
+        "sourceLabel": "FRED ICE BofA US High Yield Index Option-Adjusted Spread",
+        "sourceTier": "official_public",
+        "trustLevel": "reliable",
+        "officialSeriesId": "BAMLH0A0HYM2",
+        "officialObservationDate": "2026-05-20",
+        "officialAsOf": "2026-05-20",
+        "unit": "bps",
+        "freshness": "cached",
+        "asOf": base_as_of,
+        "updatedAt": base_as_of,
+        "observationOnly": True,
+        "includedInScore": False,
+        "sourceAuthorityAllowed": True,
+        "scoreContributionAllowed": False,
+    }
+
+
+def _seed_data036_official_risk_context(
+    service: LiquidityMonitorService,
+    *,
+    include_vix: bool = True,
+    missing_rate_series: str | None = None,
+    stale_rate_series: str | None = None,
+    cache_only_vix_without_authority_proof: bool = False,
+    stale_vix: bool = False,
+    stale_fed_liquidity: bool = False,
+    include_credit: bool = True,
+) -> None:
+    base_as_of = "2026-05-20T16:15:00+08:00"
+    macro_items: list[Dict[str, Any]] = []
+    if include_vix:
+        vix_freshness = "stale" if stale_vix else "cached"
+        vix_item = _official_vix_item(
+            value=1.0,
+            change_percent=0.0,
+            as_of=base_as_of,
+            freshness=vix_freshness,
+        )
+        if stale_vix:
+            vix_item["isStale"] = True
+            vix_item["sourceFreshnessEvidence"]["isStale"] = True
+        if cache_only_vix_without_authority_proof:
+            vix_item.pop("sourceFreshnessEvidence", None)
+            vix_item["sourceAuthorityAllowed"] = False
+            vix_item["scoreContributionAllowed"] = False
+            vix_item["sourceAuthorityReason"] = "source_authority_not_explicit"
+            vix_item["routeRejectedReasonCodes"] = ["source_authority_not_explicit"]
+        macro_items.append(vix_item)
+
+    for symbol, series_id in (("US2Y", "DGS2"), ("US10Y", "DGS10"), ("US30Y", "DGS30")):
+        if series_id == missing_rate_series:
+            continue
+        is_stale = series_id == stale_rate_series
+        macro_items.append(
+            _data036_official_rate_item(
+                symbol,
+                series_id,
+                freshness="stale" if is_stale else "cached",
+                is_stale=is_stale,
+            )
+        )
+
+    for symbol in FED_LIQUIDITY_SERIES_BY_SYMBOL:
+        macro_items.append(
+            _fed_liquidity_macro_item(
+                symbol,
+                value=1.0,
+                change_percent=0.0,
+                freshness="stale" if stale_fed_liquidity else "cached",
+                is_stale=stale_fed_liquidity,
+            )
+        )
+
+    if include_credit:
+        macro_items.append(_data036_official_credit_item())
+
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="mixed",
+            freshness="stale" if stale_vix or stale_rate_series or stale_fed_liquidity else "cached",
+            items=macro_items,
+            updated_at=base_as_of,
+            as_of=base_as_of,
+        ),
+        ttl_seconds=30,
+    )
+
+
 def _authorized_us_breadth_item(
     symbol: str,
     value: Any,
@@ -6545,6 +6696,161 @@ def test_fed_liquidity_indicator_requires_explicit_authority_even_with_full_cove
     assert inputs["FED_RRP"]["scoreContributionAllowed"] is False
 
 
+def _official_risk_bundle(payload: Dict[str, Any]) -> Dict[str, Any]:
+    bundle = payload.get("officialRiskBundleReadiness")
+    assert isinstance(bundle, dict)
+    return bundle
+
+
+def _official_risk_family(bundle: Dict[str, Any], family_id: str) -> Dict[str, Any]:
+    families = {
+        str(item.get("familyId")): item
+        for item in bundle.get("families", [])
+        if isinstance(item, dict)
+    }
+    assert family_id in families
+    return families[family_id]
+
+
+def test_data036_official_risk_bundle_ready_requires_vix_rates_and_fed_liquidity_authority(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    _seed_data036_official_risk_context(service)
+
+    payload = service.get_liquidity_monitor()
+    bundle = _official_risk_bundle(payload)
+
+    assert bundle["contractVersion"] == "official_risk_bundle_readiness_v1"
+    assert bundle["status"] == "available"
+    assert bundle["scoreAuthorityEligible"] is True
+    assert bundle["scoreAuthority"] == "eligible"
+    assert bundle["observationOnly"] is False
+    assert bundle["sourceAuthorityState"] == "available"
+    assert bundle["requiredFamilies"] == ["vix", "rates", "fedLiquidity"]
+    assert bundle["missingRequiredFamilies"] == []
+    assert bundle["staleFamilies"] == []
+    assert bundle["blockedFamilies"] == []
+    assert set(bundle["availableFamilies"]) >= {"vix", "rates", "fedLiquidity"}
+
+    vix = _official_risk_family(bundle, "vix")
+    rates = _official_risk_family(bundle, "rates")
+    fed_liquidity = _official_risk_family(bundle, "fedLiquidity")
+    credit = _official_risk_family(bundle, "creditStress")
+
+    assert vix["requiredSeries"] == ["VIXCLS"]
+    assert vix["sourceAuthorityAllowed"] is True
+    assert vix["scoreAuthorityEligible"] is True
+    assert vix["freshnessWindow"] == "official_daily_us_weekday_t_plus_1"
+    assert rates["requiredSeries"] == ["DGS2", "DGS10", "DGS30"]
+    assert rates["fulfilledSeries"] == ["DGS2", "DGS10", "DGS30"]
+    assert rates["scoreAuthorityEligible"] is True
+    assert fed_liquidity["requiredSeries"] == ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"]
+    assert fed_liquidity["scoreAuthorityEligible"] is True
+    assert credit["required"] is False
+    assert credit["status"] == "available"
+    assert credit["scoreAuthorityEligible"] is False
+    assert credit["observationOnly"] is True
+    assert all(family["sourceType"] == "official_public" for family in bundle["families"])
+
+
+def test_data036_missing_vix_or_rates_keeps_official_risk_bundle_partial_or_blocked(
+    isolated_db: DatabaseManager,
+) -> None:
+    missing_vix_service = _make_service()
+    _seed_data036_official_risk_context(missing_vix_service, include_vix=False)
+    missing_vix_bundle = _official_risk_bundle(missing_vix_service.get_liquidity_monitor())
+
+    assert missing_vix_bundle["status"] in {"partial", "blocked", "missing"}
+    assert missing_vix_bundle["scoreAuthorityEligible"] is False
+    assert "vix" in missing_vix_bundle["missingRequiredFamilies"]
+    assert _official_risk_family(missing_vix_bundle, "vix")["status"] == "missing"
+
+    missing_rates_service = _make_service()
+    _seed_data036_official_risk_context(missing_rates_service, missing_rate_series="DGS10")
+    missing_rates_bundle = _official_risk_bundle(missing_rates_service.get_liquidity_monitor())
+    rates = _official_risk_family(missing_rates_bundle, "rates")
+
+    assert missing_rates_bundle["scoreAuthorityEligible"] is False
+    assert missing_rates_bundle["status"] in {"partial", "blocked"}
+    assert "rates" in missing_rates_bundle["missingRequiredFamilies"]
+    assert rates["status"] == "partial"
+    assert rates["missingSeries"] == ["DGS10"]
+    assert rates["scoreAuthorityEligible"] is False
+
+
+def test_data036_stale_official_series_downgrades_risk_bundle_score_authority(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    _seed_data036_official_risk_context(service, stale_rate_series="DGS10")
+
+    bundle = _official_risk_bundle(service.get_liquidity_monitor())
+    rates = _official_risk_family(bundle, "rates")
+
+    assert bundle["status"] == "stale"
+    assert bundle["scoreAuthorityEligible"] is False
+    assert bundle["scoreAuthority"] == "observation_only"
+    assert "rates" in bundle["staleFamilies"]
+    assert rates["status"] == "stale"
+    assert rates["staleSeries"] == ["DGS10"]
+    assert rates["scoreAuthorityEligible"] is False
+    assert rates["observationOnly"] is True
+
+
+def test_data036_cache_only_without_authority_proof_keeps_risk_bundle_observation_only(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    _seed_data036_official_risk_context(
+        service,
+        cache_only_vix_without_authority_proof=True,
+    )
+
+    bundle = _official_risk_bundle(service.get_liquidity_monitor())
+    vix = _official_risk_family(bundle, "vix")
+
+    assert bundle["scoreAuthorityEligible"] is False
+    assert bundle["scoreAuthority"] == "observation_only"
+    assert bundle["observationOnly"] is True
+    assert bundle["status"] == "blocked"
+    assert "vix" in bundle["blockedFamilies"]
+    assert vix["status"] == "blocked"
+    assert vix["sourceAuthorityAllowed"] is False
+    assert vix["scoreAuthorityEligible"] is False
+    assert "source_authority_not_explicit" in vix["nextEvidenceRequired"]
+
+
+def test_data036_official_risk_bundle_emits_no_advice_wording(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    _seed_data036_official_risk_context(service)
+
+    dumped = json.dumps(_official_risk_bundle(service.get_liquidity_monitor()), ensure_ascii=False)
+
+    forbidden = (
+        "buy recommendation",
+        "sell recommendation",
+        "hold recommendation",
+        "target price",
+        "stop loss",
+        "买入建议",
+        "卖出建议",
+        "持有建议",
+        "目标价",
+        "止损",
+        "仓位建议",
+        "建仓建议",
+        "加仓建议",
+        "减仓建议",
+        "交易建议",
+        "操作建议",
+    )
+    for phrase in forbidden:
+        assert phrase not in dumped
+
+
 def test_usd_pressure_scores_when_official_trade_weighted_usd_is_fresh(
     isolated_db: DatabaseManager,
 ) -> None:
@@ -7276,7 +7582,12 @@ def test_liquidity_monitor_golden_fixtures_match_public_dto_contract(
     assert actual["capitalFlowSignal"]["observationOnly"] is True
     assert actual["capitalFlowSignal"]["sourceAuthorityAllowed"] is False
     assert actual["capitalFlowSignal"]["scoreContributionAllowed"] is False
-    assert {key: value for key, value in actual.items() if key != "capitalFlowSignal"} == expected
+    additive_contract_fields = {"capitalFlowSignal", "officialRiskBundleReadiness"}
+    assert {
+        key: value
+        for key, value in actual.items()
+        if key not in additive_contract_fields
+    } == expected
     _assert_no_sensitive_public_payload(actual)
 
 

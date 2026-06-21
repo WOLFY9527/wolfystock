@@ -62,6 +62,7 @@ CAPITAL_FLOW_PARTIAL_SOURCE_TYPES = PROXY_SOURCE_TYPES | {"cache_snapshot", "uno
 SCORE_WEIGHT_BUDGET = 49
 POSSIBLE_WEIGHT = SCORE_WEIGHT_BUDGET
 LIQUIDITY_COVERAGE_CONTRACT_VERSION = "liquidity_coverage_contract_v1"
+OFFICIAL_RISK_BUNDLE_CONTRACT_VERSION = "official_risk_bundle_readiness_v1"
 CRYPTO_FUNDING_BACKFILL_MAX_AGE = timedelta(hours=12)
 OFFICIAL_VIX_SERIES_ID = "VIXCLS"
 OFFICIAL_VIX_AUTHORITY_BLOCK_REASON = "official_vix_authority_not_explicit"
@@ -171,6 +172,70 @@ LIQUIDITY_INDICATOR_REQUIRED_INPUTS = {
     "cn_money_market_rates": ("DR007", "SHIBOR"),
     "futures_premarket": ("NQ", "ES", "YM", "RTY"),
 }
+
+OFFICIAL_RISK_BUNDLE_REQUIRED_FAMILIES = ("vix", "rates", "fedLiquidity")
+OFFICIAL_RISK_BUNDLE_FAMILY_CONFIG = {
+    "vix": {
+        "label": "VIX volatility proxy",
+        "indicatorKey": "vix_pressure",
+        "required": True,
+        "sourceType": "official_public",
+        "requiredSeries": ("VIXCLS",),
+        "freshnessWindow": "official_daily_us_weekday_t_plus_1",
+    },
+    "rates": {
+        "label": "Treasury/FRED rates",
+        "indicatorKey": "us_rates_pressure",
+        "required": True,
+        "sourceType": "official_public",
+        "requiredSeries": ("DGS2", "DGS10", "DGS30"),
+        "freshnessWindow": "official_daily_us_weekday_t_plus_1",
+    },
+    "fedLiquidity": {
+        "label": "Fed liquidity",
+        "indicatorKey": "fed_liquidity",
+        "required": True,
+        "sourceType": "official_public",
+        "requiredSeries": ("WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"),
+        "freshnessWindow": "official_weekly_fed_liquidity_t_plus_7",
+    },
+    "creditStress": {
+        "label": "Credit stress",
+        "indicatorKey": "us_rates_pressure",
+        "required": False,
+        "sourceType": "official_public",
+        "requiredSeries": ("BAMLH0A0HYM2",),
+        "freshnessWindow": "official_daily_us_weekday_t_plus_1",
+    },
+}
+OFFICIAL_RISK_SERIES_ALIASES = {
+    "VIX": "VIXCLS",
+    "VIXCLS": "VIXCLS",
+    "US2Y": "DGS2",
+    "DGS2": "DGS2",
+    "US10Y": "DGS10",
+    "DGS10": "DGS10",
+    "US30Y": "DGS30",
+    "DGS30": "DGS30",
+    "FED_ASSETS": "WALCL",
+    "WALCL": "WALCL",
+    "FED_RRP": "RRPONTSYD",
+    "RRPONTSYD": "RRPONTSYD",
+    "TGA": "WTREGEN",
+    "WTREGEN": "WTREGEN",
+    "RESERVES": "WRESBAL",
+    "WRESBAL": "WRESBAL",
+    "CREDIT": "BAMLH0A0HYM2",
+    "BAMLH0A0HYM2": "BAMLH0A0HYM2",
+}
+OFFICIAL_RISK_BLOCKING_CACHE_SERIES_FIELDS = (
+    "blockedSeries",
+    "policyRejectedSeries",
+    "budgetBlockedSeries",
+    "fallbackOrProxySeries",
+    "unavailableSeries",
+    "malformedSeries",
+)
 
 LIQUIDITY_INPUT_ALIASES = {
     "VIXCLS": "VIX",
@@ -367,6 +432,7 @@ class LiquidityMonitorService:
             "weakestIndicatorFreshness": self._weakest_freshness(available_freshness) if available_freshness else "unavailable",
             "latestAsOf": max(available_as_of) if available_as_of else None,
         }
+        official_risk_bundle_readiness = self._build_official_risk_bundle_readiness(indicators, panels)
 
         return {
             "endpoint": "/api/v1/market/liquidity-monitor",
@@ -389,6 +455,7 @@ class LiquidityMonitorService:
                 }
             ),
             "indicators": indicators,
+            "officialRiskBundleReadiness": official_risk_bundle_readiness,
             "observationEvidenceSnapshot": self._build_observation_evidence_snapshot(indicators),
             "capitalFlowSignal": self._build_capital_flow_signal(indicators, panels),
             "liquidityImpulseSynthesis": self._build_liquidity_impulse_synthesis_payload(indicators),
@@ -3512,6 +3579,332 @@ class LiquidityMonitorService:
             "scoreWeightIncluded": max(0, int(included_weight)),
             "families": families,
         }
+
+    def _build_official_risk_bundle_readiness(
+        self,
+        indicators: List[Dict[str, Any]],
+        panels: Dict[str, PanelState],
+    ) -> Dict[str, Any]:
+        indicator_by_key = {
+            str(indicator.get("key") or ""): indicator
+            for indicator in indicators
+            if isinstance(indicator, dict)
+        }
+        families = [
+            self._build_official_risk_family(
+                family_id,
+                indicator_by_key.get(str(config.get("indicatorKey") or "")),
+                panels,
+            )
+            for family_id, config in OFFICIAL_RISK_BUNDLE_FAMILY_CONFIG.items()
+        ]
+        required_families = list(OFFICIAL_RISK_BUNDLE_REQUIRED_FAMILIES)
+        required_family_rows = [
+            family
+            for family in families
+            if str(family.get("familyId") or "") in required_families
+        ]
+        all_required_eligible = bool(required_family_rows) and all(
+            bool(family.get("scoreAuthorityEligible"))
+            for family in required_family_rows
+        )
+        blocked_families = [
+            str(family["familyId"])
+            for family in required_family_rows
+            if family.get("status") == "blocked"
+        ]
+        stale_families = [
+            str(family["familyId"])
+            for family in required_family_rows
+            if family.get("status") == "stale"
+        ]
+        missing_required_families = [
+            str(family["familyId"])
+            for family in required_family_rows
+            if family.get("status") in {"missing", "partial"}
+        ]
+        partial_families = [
+            str(family["familyId"])
+            for family in families
+            if family.get("status") == "partial"
+        ]
+        available_families = [
+            str(family["familyId"])
+            for family in families
+            if family.get("status") == "available"
+        ]
+        all_required_missing = bool(required_family_rows) and all(
+            family.get("status") == "missing"
+            for family in required_family_rows
+        )
+        if all_required_eligible:
+            status = "available"
+        elif stale_families:
+            status = "stale"
+        elif blocked_families:
+            status = "blocked"
+        elif all_required_missing:
+            status = "missing"
+        else:
+            status = "partial"
+
+        required_series = self._official_risk_required_series(required_only=True)
+        missing_required_series: list[str] = []
+        next_evidence_required: list[str] = []
+        for family in required_family_rows:
+            missing_required_series.extend(str(item) for item in family.get("missingSeries") or [])
+            next_evidence_required.extend(str(item) for item in family.get("nextEvidenceRequired") or [])
+
+        family_as_of_values = [
+            str(family.get("asOf") or "")
+            for family in families
+            if str(family.get("asOf") or "").strip()
+        ]
+        family_freshness_values = [
+            str(family.get("freshness") or "unavailable")
+            for family in families
+            if family.get("status") != "missing"
+        ]
+        return {
+            "contractVersion": OFFICIAL_RISK_BUNDLE_CONTRACT_VERSION,
+            "status": status,
+            "scoreAuthority": "eligible" if all_required_eligible else "observation_only",
+            "scoreAuthorityEligible": all_required_eligible,
+            "observationOnly": not all_required_eligible,
+            "sourceAuthorityState": "available" if all_required_eligible else status,
+            "asOf": max(family_as_of_values) if family_as_of_values else None,
+            "freshness": self._weakest_freshness(family_freshness_values) if family_freshness_values else "unavailable",
+            "requiredFamilies": required_families,
+            "availableFamilies": available_families,
+            "partialFamilies": partial_families,
+            "missingRequiredFamilies": list(dict.fromkeys(missing_required_families)),
+            "staleFamilies": stale_families,
+            "blockedFamilies": blocked_families,
+            "requiredSeries": required_series,
+            "missingRequiredSeries": list(dict.fromkeys(missing_required_series)),
+            "nextEvidenceRequired": list(dict.fromkeys(next_evidence_required)),
+            "families": families,
+        }
+
+    def _build_official_risk_family(
+        self,
+        family_id: str,
+        indicator: Optional[Dict[str, Any]],
+        panels: Dict[str, PanelState],
+    ) -> Dict[str, Any]:
+        config = OFFICIAL_RISK_BUNDLE_FAMILY_CONFIG[family_id]
+        required_series = [str(item) for item in config.get("requiredSeries") or ()]
+        inputs = self._official_risk_indicator_inputs(indicator)
+        inputs.extend(self._official_risk_panel_inputs(family_id, panels))
+        inputs_by_series: dict[str, list[Dict[str, Any]]] = {}
+        for item in inputs:
+            series_id = self._official_risk_series_id(item)
+            if series_id:
+                inputs_by_series.setdefault(series_id, []).append(item)
+
+        fulfilled_series: list[str] = []
+        missing_series: list[str] = []
+        stale_series: list[str] = []
+        blocked_series: list[str] = []
+        next_evidence_required: list[str] = []
+        as_of_values: list[str] = []
+        freshness_values: list[str] = []
+
+        for series_id in required_series:
+            candidates = inputs_by_series.get(series_id) or []
+            if not candidates:
+                missing_series.append(series_id)
+                continue
+            fulfilled_series.append(series_id)
+            has_family_authority = any(
+                self._official_risk_input_has_family_authority(
+                    item,
+                    series_id,
+                    requires_score=bool(config.get("required")),
+                )
+                for item in candidates
+            )
+            has_stale_evidence = any(self._official_risk_input_is_stale(item) for item in candidates)
+            if has_stale_evidence and not has_family_authority:
+                stale_series.append(series_id)
+            if not has_family_authority and not has_stale_evidence:
+                blocked_series.append(series_id)
+                next_evidence_required.extend(self._official_risk_input_blockers(candidates))
+            for item in candidates:
+                as_of = self._text(item.get("asOf") or item.get("updatedAt") or item.get("officialAsOf"))
+                if as_of:
+                    as_of_values.append(as_of)
+                freshness = str(item.get("freshness") or "unavailable")
+                if freshness in FRESHNESS_ORDER:
+                    freshness_values.append(freshness)
+
+        if missing_series:
+            next_evidence_required.append(f"{family_id}_missing_official_series")
+        if stale_series:
+            next_evidence_required.append(f"{family_id}_stale_official_series")
+        if blocked_series and not next_evidence_required:
+            next_evidence_required.append(f"{family_id}_source_authority_blocked")
+
+        missing_count = len(missing_series)
+        family_authority_available = bool(not missing_series and not stale_series and not blocked_series)
+        score_authority_eligible = bool(config.get("required") and family_authority_available)
+        if missing_count == len(required_series):
+            status = "missing"
+        elif stale_series:
+            status = "stale"
+        elif missing_series:
+            status = "partial"
+        elif blocked_series:
+            status = "blocked"
+        else:
+            status = "available"
+
+        return {
+            "familyId": family_id,
+            "label": str(config.get("label") or family_id),
+            "required": bool(config.get("required")),
+            "status": status,
+            "sourceType": str(config.get("sourceType") or "official_public"),
+            "sourceAuthorityAllowed": family_authority_available,
+            "scoreAuthorityEligible": score_authority_eligible,
+            "observationOnly": not score_authority_eligible,
+            "freshness": self._weakest_freshness(freshness_values) if freshness_values else "unavailable",
+            "asOf": max(as_of_values) if as_of_values else None,
+            "freshnessWindow": str(config.get("freshnessWindow") or ""),
+            "requiredSeries": required_series,
+            "fulfilledSeries": fulfilled_series,
+            "missingSeries": missing_series,
+            "staleSeries": stale_series,
+            "blockedSeries": blocked_series,
+            "nextEvidenceRequired": list(dict.fromkeys(next_evidence_required)),
+        }
+
+    @staticmethod
+    def _official_risk_indicator_inputs(indicator: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not isinstance(indicator, dict):
+            return []
+        evidence = indicator.get("evidence")
+        if not isinstance(evidence, dict):
+            return []
+        return [
+            item
+            for item in evidence.get("inputs") or []
+            if isinstance(item, dict)
+        ]
+
+    def _official_risk_panel_inputs(
+        self,
+        family_id: str,
+        panels: Dict[str, PanelState],
+    ) -> List[Dict[str, Any]]:
+        panel_keys = ("macro", "rates") if family_id in {"rates", "creditStress"} else ("macro", "volatility")
+        if family_id == "fedLiquidity":
+            panel_keys = ("macro",)
+        required = set(OFFICIAL_RISK_BUNDLE_FAMILY_CONFIG[family_id].get("requiredSeries") or ())
+        inputs: list[Dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
+        for key in panel_keys:
+            panel = panels.get(key)
+            if panel is None:
+                continue
+            for raw in panel.payload.get("items") or []:
+                if not isinstance(raw, dict):
+                    continue
+                series_id = self._official_risk_series_id(raw)
+                if series_id not in required:
+                    continue
+                marker = (series_id, str(raw.get("sourceId") or raw.get("symbol") or ""))
+                if marker in seen:
+                    continue
+                seen.add(marker)
+                projected = self._source_confidence_input_from_item(
+                    raw,
+                    panel,
+                    key=str(raw.get("symbol") or series_id),
+                    label=str(raw.get("label") or raw.get("symbol") or series_id),
+                )
+                raw_freshness = str(raw.get("freshness") or "").lower()
+                if raw_freshness in FRESHNESS_ORDER:
+                    projected["freshness"] = raw_freshness
+                    projected["isStale"] = bool(raw.get("isStale") or raw_freshness == "stale")
+                inputs.append(projected)
+        return inputs
+
+    @staticmethod
+    def _official_risk_required_series(*, required_only: bool) -> list[str]:
+        series: list[str] = []
+        for family_id, config in OFFICIAL_RISK_BUNDLE_FAMILY_CONFIG.items():
+            if required_only and family_id not in OFFICIAL_RISK_BUNDLE_REQUIRED_FAMILIES:
+                continue
+            series.extend(str(item) for item in config.get("requiredSeries") or ())
+        return list(dict.fromkeys(series))
+
+    @staticmethod
+    def _official_risk_series_id(item: Dict[str, Any]) -> str:
+        candidates = [
+            item.get("officialSeriesId"),
+            str(item.get("sourceId") or "").split(":")[-1],
+            item.get("key"),
+            item.get("symbol"),
+            item.get("label"),
+        ]
+        for value in candidates:
+            text = str(value or "").strip().upper()
+            if not text:
+                continue
+            return OFFICIAL_RISK_SERIES_ALIASES.get(text, text)
+        return ""
+
+    @staticmethod
+    def _official_risk_input_is_stale(item: Dict[str, Any]) -> bool:
+        freshness = str(item.get("freshness") or "").lower()
+        return bool(item.get("isStale") or freshness == "stale")
+
+    def _official_risk_input_has_family_authority(
+        self,
+        item: Dict[str, Any],
+        series_id: str,
+        *,
+        requires_score: bool,
+    ) -> bool:
+        source_type = str(item.get("sourceType") or "").lower()
+        source_tier = str(item.get("sourceTier") or "").lower()
+        freshness = str(item.get("freshness") or "").lower()
+        authority_allowed = bool(
+            self._official_risk_series_id(item) == series_id
+            and (source_type == "official_public" or source_tier == "official_public")
+            and item.get("sourceAuthorityAllowed") is True
+            and not item.get("isFallback")
+            and not item.get("isUnavailable")
+            and not item.get("isStale")
+            and freshness in RELIABLE_FRESHNESS
+        )
+        if not authority_allowed:
+            return False
+        return bool(item.get("scoreContributionAllowed") is True) if requires_score else True
+
+    @staticmethod
+    def _official_risk_input_blockers(items: list[Dict[str, Any]]) -> list[str]:
+        blockers: list[str] = []
+        for item in items:
+            for value in (
+                item.get("sourceAuthorityReason"),
+                item.get("degradationReason"),
+                item.get("capReason"),
+            ):
+                text = str(value or "").strip()
+                if text:
+                    blockers.append(text)
+            blockers.extend(LiquidityMonitorService._normalized_reason_code_list(item.get("routeRejectedReasonCodes")))
+            freshness = str(item.get("freshness") or "").lower()
+            source_type = str(item.get("sourceType") or "").lower()
+            if item.get("isFallback") or freshness in {"fallback", "mock"} or source_type in PROXY_SOURCE_TYPES:
+                blockers.append("fallback_or_proxy_source")
+            if item.get("isUnavailable") or freshness == "unavailable":
+                blockers.append("unavailable_official_risk_evidence")
+            if item.get("isStale") or freshness == "stale":
+                blockers.append("stale_official_risk_evidence")
+        return list(dict.fromkeys(blockers))
 
     def _indicator_score_eligible_input_count(
         self,
