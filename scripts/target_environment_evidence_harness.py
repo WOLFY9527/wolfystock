@@ -23,6 +23,7 @@ from typing import Any, Mapping
 
 SCHEMA_VERSION = "wolfystock_target_environment_evidence_harness_v1"
 ARTIFACT_VERSION = "wolfystock_data033_target_environment_evidence_v1"
+SCENARIO_BASELINE_ARTIFACT_VERSION = "wolfystock_data042_scenario_baseline_evidence_v1"
 REDACTION_VERSION = "target_environment_evidence_redaction_v1"
 REDACTED = "<redacted>"
 DEFAULT_TIMEOUT_SECONDS = 3.0
@@ -76,6 +77,58 @@ _SENSITIVE_VALUE_PATTERNS = (
     re.compile(r"\b" + re.escape(_join("bear", "er")) + r"\s+[A-Za-z0-9._~+/=-]{8,}", re.IGNORECASE),
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*-----END [A-Z ]*PRIVATE KEY-----", re.IGNORECASE | re.DOTALL),
 )
+_SCENARIO_UNSAFE_KEY_MARKERS = (
+    "admin_diagnostics",
+    "cache_debug",
+    "cache_key",
+    "debug",
+    "provider_diagnostics",
+    "provider_payload",
+    "provider_runtime",
+    "raw_payload",
+    "request_url",
+    "runtime_cache",
+    "stack_trace",
+    "source_ref",
+    "url",
+)
+_SCENARIO_SAFE_COMPONENT_KEYS = {
+    "state",
+    "available",
+    "lastUpdated",
+    "affectedComponents",
+}
+_SCENARIO_SAFE_DRIVER_INPUT_KEYS = {
+    "state",
+    "availableDriverKeys",
+    "partialDriverKeys",
+    "missingDriverKeys",
+    "affectedDriverKeys",
+}
+_SCENARIO_SAFE_EVIDENCE_KEYS = {
+    "state",
+    "gaps",
+}
+_SCENARIO_SAFE_READINESS_KEYS = {
+    "status",
+    "baselineSnapshot",
+    "marketFrame",
+    "driverInputs",
+    "evidenceCompleteness",
+    "dataState",
+    "sampleState",
+    "scoreAuthority",
+    "sourceAuthorityAllowed",
+    "authoritative",
+    "observationOnly",
+    "ready",
+    "partial",
+    "blocked",
+    "affectedBaselineComponents",
+    "affectedDriverKeys",
+    "evidenceGaps",
+    "lastUpdated",
+}
 
 
 @dataclass(frozen=True)
@@ -241,6 +294,34 @@ def _redact(value: Any, stats: RedactionStats) -> Any:
         return [_redact(item, stats) for item in value]
     if isinstance(value, tuple):
         return [_redact(item, stats) for item in value]
+    if isinstance(value, str) and _is_sensitive_value(value):
+        stats.redacted_value_count += 1
+        return REDACTED
+    return value
+
+
+def _is_scenario_unsafe_key(key: Any) -> bool:
+    compacted = _compact(key)
+    return _is_sensitive_key(key) or any(_compact(marker) in compacted for marker in _SCENARIO_UNSAFE_KEY_MARKERS)
+
+
+def _redact_scenario_input(value: Any, stats: RedactionStats) -> Any:
+    if isinstance(value, Mapping):
+        output: dict[str, Any] = {}
+        redacted_index = 1
+        for key, child in value.items():
+            if _is_scenario_unsafe_key(key):
+                output[f"redactedKey{redacted_index}"] = REDACTED
+                redacted_index += 1
+                stats.redacted_key_count += 1
+                stats.redacted_value_count += 1
+                continue
+            output[str(key)] = _redact_scenario_input(child, stats)
+        return output
+    if isinstance(value, list):
+        return [_redact_scenario_input(item, stats) for item in value]
+    if isinstance(value, tuple):
+        return [_redact_scenario_input(item, stats) for item in value]
     if isinstance(value, str) and _is_sensitive_value(value):
         stats.redacted_value_count += 1
         return REDACTED
@@ -508,6 +589,238 @@ def _artifact_path(output_dir: Path, captured_at: str, output_path: Path | None 
     return output_dir / f"target_environment_evidence_{_timestamp_for_filename(captured_at)}.json"
 
 
+def _scenario_artifact_path(output_dir: Path, generated_at: str, output_path: Path | None = None) -> Path:
+    if output_path is not None:
+        return output_path
+    return output_dir / f"scenario_baseline_evidence_{_timestamp_for_filename(generated_at)}.json"
+
+
+def _safe_environment_label(value: str | None) -> str:
+    text = str(value or "local_operator").strip() or "local_operator"
+    stats = RedactionStats()
+    redacted = _redact_scenario_input(text, stats)
+    return str(redacted or REDACTED)
+
+
+def _safe_mapping_fields(value: Any, allowed_keys: set[str]) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    return {key: value[key] for key in allowed_keys if key in value}
+
+
+def _safe_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item)]
+
+
+def _dedupe(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    output: list[str] = []
+    for item in items:
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        output.append(item)
+    return output
+
+
+def _blocked_scenario_readiness(reason: str) -> dict[str, Any]:
+    return {
+        "status": "blocked",
+        "baselineSnapshot": {
+            "state": "missing",
+            "available": False,
+            "lastUpdated": None,
+            "affectedComponents": ["baselineSnapshot"],
+        },
+        "marketFrame": {
+            "state": "missing",
+            "available": False,
+            "lastUpdated": None,
+            "affectedComponents": ["marketFrame"],
+        },
+        "driverInputs": {
+            "state": "missing",
+            "availableDriverKeys": [],
+            "partialDriverKeys": [],
+            "missingDriverKeys": [],
+            "affectedDriverKeys": [],
+        },
+        "evidenceCompleteness": {
+            "state": "blocked",
+            "gaps": [reason],
+        },
+        "dataState": "unavailable",
+        "sampleState": "none",
+        "scoreAuthority": "observation_only",
+        "sourceAuthorityAllowed": False,
+        "authoritative": False,
+        "observationOnly": True,
+        "ready": False,
+        "partial": False,
+        "blocked": True,
+        "affectedBaselineComponents": ["baselineSnapshot", "marketFrame"],
+        "affectedDriverKeys": [],
+        "evidenceGaps": [reason],
+        "lastUpdated": None,
+    }
+
+
+def _extract_scenario_readiness(scenario_input: Any) -> tuple[dict[str, Any], list[str]]:
+    if not isinstance(scenario_input, Mapping):
+        return _blocked_scenario_readiness("scenarioBaselineInput"), ["scenarioBaselineInput"]
+    readiness = scenario_input.get("baselineReadiness")
+    if not isinstance(readiness, Mapping) and isinstance(scenario_input.get("scenarioBaselineEvidence"), Mapping):
+        readiness = _dig(scenario_input, ("scenarioBaselineEvidence", "baselineReadiness"))
+    if not isinstance(readiness, Mapping):
+        return _blocked_scenario_readiness("baselineReadiness"), ["baselineReadiness"]
+
+    missing_required = [
+        key
+        for key in ("status", "baselineSnapshot", "marketFrame", "driverInputs", "evidenceCompleteness")
+        if key not in readiness
+    ]
+    if missing_required:
+        blocked = _blocked_scenario_readiness("baselineReadinessIncomplete")
+        blocked["evidenceCompleteness"]["gaps"] = ["baselineReadinessIncomplete", *missing_required]
+        blocked["evidenceGaps"] = ["baselineReadinessIncomplete", *missing_required]
+        return blocked, ["baselineReadinessIncomplete", *missing_required]
+
+    projected = _safe_mapping_fields(readiness, _SCENARIO_SAFE_READINESS_KEYS)
+    projected["baselineSnapshot"] = _safe_mapping_fields(
+        projected.get("baselineSnapshot"),
+        _SCENARIO_SAFE_COMPONENT_KEYS,
+    )
+    projected["marketFrame"] = _safe_mapping_fields(
+        projected.get("marketFrame"),
+        _SCENARIO_SAFE_COMPONENT_KEYS,
+    )
+    projected["driverInputs"] = _safe_mapping_fields(
+        projected.get("driverInputs"),
+        _SCENARIO_SAFE_DRIVER_INPUT_KEYS,
+    )
+    projected["evidenceCompleteness"] = _safe_mapping_fields(
+        projected.get("evidenceCompleteness"),
+        _SCENARIO_SAFE_EVIDENCE_KEYS,
+    )
+    return projected, []
+
+
+def _scenario_reason_codes(readiness: Mapping[str, Any], missing_reasons: list[str]) -> list[str]:
+    reasons: list[str] = list(missing_reasons)
+    evidence = readiness.get("evidenceCompleteness") if isinstance(readiness.get("evidenceCompleteness"), Mapping) else {}
+    driver_inputs = readiness.get("driverInputs") if isinstance(readiness.get("driverInputs"), Mapping) else {}
+    for key in (
+        "evidenceGaps",
+        "affectedBaselineComponents",
+    ):
+        reasons.extend(_safe_list(readiness.get(key)))
+    reasons.extend(_safe_list(evidence.get("gaps")))
+    reasons.extend(_safe_list(driver_inputs.get("affectedDriverKeys")))
+    for component_key, reason in (("baselineSnapshot", "baselineSnapshot"), ("marketFrame", "marketFrame")):
+        component = readiness.get(component_key) if isinstance(readiness.get(component_key), Mapping) else {}
+        state = str(component.get("state") or "").strip()
+        if state in {"missing", "stale", "partial", "blocked"}:
+            reasons.append(reason)
+    data_state = str(readiness.get("dataState") or "").strip()
+    sample_state = str(readiness.get("sampleState") or "").strip()
+    if data_state in {"demo_static_sample", "request_supplied", "unavailable"}:
+        reasons.append("scenarioDataBoundary" if data_state == "demo_static_sample" else data_state)
+    if sample_state and sample_state != "none":
+        reasons.append(sample_state)
+    if not readiness.get("sourceAuthorityAllowed"):
+        reasons.append("scoreAuthority")
+    return _dedupe(reasons)
+
+
+def _scenario_baseline_evidence(readiness: Mapping[str, Any], missing_reasons: list[str]) -> dict[str, Any]:
+    baseline_snapshot = readiness.get("baselineSnapshot") if isinstance(readiness.get("baselineSnapshot"), Mapping) else {}
+    market_frame = readiness.get("marketFrame") if isinstance(readiness.get("marketFrame"), Mapping) else {}
+    driver_inputs = readiness.get("driverInputs") if isinstance(readiness.get("driverInputs"), Mapping) else {}
+    evidence = readiness.get("evidenceCompleteness") if isinstance(readiness.get("evidenceCompleteness"), Mapping) else {}
+    source_authority = bool(readiness.get("sourceAuthorityAllowed"))
+    score_authority = str(readiness.get("scoreAuthority") or "observation_only")
+    authoritative = bool(readiness.get("authoritative") is True and source_authority and score_authority == "authoritative")
+    observation_only = not authoritative
+    return {
+        "baselineReadinessState": str(readiness.get("status") or "blocked"),
+        "baselineSnapshotComponentState": str(baseline_snapshot.get("state") or "missing"),
+        "marketFrameState": str(market_frame.get("state") or "missing"),
+        "driverInputState": str(driver_inputs.get("state") or "missing"),
+        "evidenceCompletenessState": str(evidence.get("state") or "blocked"),
+        "sourceAuthorityScoreAuthoritySafeState": {
+            "sourceAuthorityAllowed": source_authority,
+            "scoreAuthority": score_authority,
+            "authoritative": authoritative,
+        },
+        "staleMissingBlockedReasonCodes": _scenario_reason_codes(readiness, missing_reasons),
+        "affectedDriverKeys": _safe_list(readiness.get("affectedDriverKeys"))
+        or _safe_list(driver_inputs.get("affectedDriverKeys")),
+        "observationOnly": observation_only,
+        "diagnosticOnly": True,
+        "baselineReadiness": dict(readiness),
+    }
+
+
+def run_scenario_baseline_evidence_export(
+    *,
+    scenario_input: Mapping[str, Any] | None,
+    output_dir: str | Path,
+    environment_label: str | None = None,
+    generated_at: str | None = None,
+    output_path: str | Path | None = None,
+) -> dict[str, Any]:
+    generated = generated_at or _now_iso()
+    stats = RedactionStats()
+    sanitized_input = _redact_scenario_input(scenario_input, stats)
+    readiness, missing_reasons = _extract_scenario_readiness(sanitized_input)
+    evidence = _scenario_baseline_evidence(readiness, missing_reasons)
+    artifact_file = _scenario_artifact_path(
+        Path(output_dir),
+        generated,
+        Path(output_path) if output_path is not None else None,
+    )
+    artifact = {
+        "schemaVersion": SCHEMA_VERSION,
+        "artifactVersion": SCENARIO_BASELINE_ARTIFACT_VERSION,
+        "generatedAt": generated,
+        "environmentLabel": _safe_environment_label(environment_label),
+        "artifactPath": str(artifact_file),
+        "executionBoundary": {
+            "readOnly": True,
+            "localOperatorRun": True,
+            "observationOnly": evidence["observationOnly"],
+            "diagnosticOnly": True,
+            "noDataMutation": True,
+            "noProviderCalls": True,
+            "noNetworkBehaviorChanged": True,
+            "noRuntimeCacheChange": True,
+            "providerRoutingChanged": False,
+            "liveProviderSuccessClaimed": False,
+        },
+        "scenarioBaselineEvidence": evidence,
+        "operatorNextSteps": _operator_next_steps_for_scenario(evidence),
+        "redactionSummary": {
+            "redactionVersion": REDACTION_VERSION,
+            "redactedKeyCount": stats.redacted_key_count,
+            "redactedValueCount": stats.redacted_value_count,
+        },
+    }
+    artifact_file.parent.mkdir(parents=True, exist_ok=True)
+    artifact_file.write_text(json.dumps(artifact, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return artifact
+
+
+def _operator_next_steps_for_scenario(evidence: Mapping[str, Any]) -> list[str]:
+    if evidence.get("baselineReadinessState") == "ready" and not evidence.get("observationOnly"):
+        return ["Archive this sanitized local evidence artifact with operator review."]
+    reasons = ", ".join(str(item) for item in evidence.get("staleMissingBlockedReasonCodes") or [])
+    if reasons:
+        return [f"Collect safe Scenario baseline evidence for: {reasons}."]
+    return ["Review the sanitized Scenario baseline evidence artifact."]
+
+
 def _build_operator_next_steps(surfaces: Mapping[str, Any]) -> list[str]:
     steps: list[str] = []
     for surface in surfaces.values():
@@ -651,9 +964,57 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = _build_parser()
+def _build_scenario_baseline_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Export sanitized local Scenario baseline readiness evidence from supplied JSON input.",
+    )
+    parser.add_argument("--scenario-input-json", default=None, help="Scenario readiness JSON object.")
+    parser.add_argument("--scenario-input-file", default=None, help="Path to a Scenario readiness JSON object.")
+    parser.add_argument(
+        "--environment-label",
+        default="local_operator",
+        help="Non-secret environment label for the artifact.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="artifacts/scenario-baseline-evidence",
+        help="Directory for timestamped Scenario baseline JSON output.",
+    )
+    parser.add_argument("--output", default=None, help="Exact JSON output path. Overrides --output-dir filename.")
+    return parser
+
+
+def _scenario_baseline_main(argv: list[str]) -> int:
+    parser = _build_scenario_baseline_parser()
     args = parser.parse_args(argv)
+    try:
+        scenario_input = _load_json_body(args.scenario_input_json, args.scenario_input_file)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        parser.error(str(exc))
+    artifact = run_scenario_baseline_evidence_export(
+        scenario_input=scenario_input,
+        output_dir=args.output_dir,
+        output_path=args.output,
+        environment_label=args.environment_label,
+    )
+    print(
+        json.dumps(
+            {
+                "artifactPath": artifact["artifactPath"],
+                "scenarioBaselineEvidence": artifact["scenarioBaselineEvidence"],
+            },
+            ensure_ascii=False,
+        )
+    )
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    raw_argv = list(argv if argv is not None else sys.argv[1:])
+    if raw_argv[:1] == ["scenario-baseline"]:
+        return _scenario_baseline_main(raw_argv[1:])
+    parser = _build_parser()
+    args = parser.parse_args(raw_argv)
     specs = _default_specs()
     if args.list_surfaces:
         print(json.dumps({key: {"method": spec.method, "path": spec.path} for key, spec in specs.items()}, indent=2))
