@@ -150,8 +150,12 @@ def test_manifest_mode_summarizes_multiple_safe_artifacts(tmp_path: Path, capsys
     stdout = json.loads(capsys.readouterr().out)
     manifest = json.loads(output_path.read_text(encoding="utf-8"))
     assert stdout["artifactPath"] == str(output_path)
+    assert stdout["rejectedArtifactCount"] == 0
     assert manifest["artifactVersion"] == harness.MANIFEST_ARTIFACT_VERSION
+    assert manifest["manifestSchemaVersion"] == harness.MANIFEST_SCHEMA_VERSION
     assert manifest["artifactCount"] == 2
+    assert manifest["inputArtifactCount"] == 2
+    assert manifest["rejectedArtifactCount"] == 0
     assert manifest["stateCounts"] == {
         "ready": 1,
         "partial": 1,
@@ -169,6 +173,56 @@ def test_manifest_mode_summarizes_multiple_safe_artifacts(tmp_path: Path, capsys
     assert manifest["redactionSummary"]["artifactRedactedValueCount"] == 3
     assert manifest["executionBoundary"]["localFilesOnly"] is True
     assert manifest["executionBoundary"]["noApiCalls"] is True
+
+
+def test_manifest_cli_invalid_artifact_path_exits_fail_closed_clearly(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output_path = tmp_path / "manifest.json"
+
+    with pytest.raises(SystemExit) as exc:
+        harness.main(
+            [
+                "manifest",
+                "--artifact",
+                str(tmp_path / "missing.json"),
+                "--output",
+                str(output_path),
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exc.value.code == 2
+    assert "artifact path does not exist" in captured.err
+    assert "missing.json" in captured.err
+    assert not output_path.exists()
+
+
+def test_manifest_cli_malformed_json_exits_fail_closed_clearly(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    malformed = tmp_path / "malformed.json"
+    malformed.write_text("{not-json", encoding="utf-8")
+    output_path = tmp_path / "manifest.json"
+
+    with pytest.raises(SystemExit) as exc:
+        harness.main(
+            [
+                "manifest",
+                "--artifact",
+                str(malformed),
+                "--output",
+                str(output_path),
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exc.value.code == 2
+    assert "artifact JSON is invalid" in captured.err
+    assert "malformed.json" in captured.err
+    assert not output_path.exists()
 
 
 def test_manifest_invalid_artifact_path_fails_closed(tmp_path: Path) -> None:
@@ -208,18 +262,46 @@ def test_manifest_unknown_artifact_shape_is_unknown_and_blocked(tmp_path: Path) 
         "observationOnly": 0,
         "unknown": 1,
     }
+    assert manifest["rejectedArtifactCount"] == 1
     assert manifest["missingEvidenceFamilies"] == ["unknown_artifact_shape"]
     assert manifest["surfaceStatusSummary"] == [
         {
             "artifactLabel": "unknown.json",
             "surface": "unknown_artifact",
             "surfaceLabel": "Unknown evidence artifact",
-            "status": "unknown",
-            "readinessStatus": "unknown",
+            "status": "rejected_unknown_shape",
+            "readinessStatus": "unknown_shape",
             "missingEvidence": ["unknown_artifact_shape"],
             "observationOnly": False,
+            "readyExcludedReason": None,
         }
     ]
+
+
+def test_manifest_surface_order_is_deterministic_across_input_order(tmp_path: Path) -> None:
+    harness_artifact = _write_artifact(tmp_path / "z-target.json", _safe_harness_artifact())
+    scenario_artifact = _write_artifact(tmp_path / "a-scenario.json", _safe_scenario_artifact())
+
+    first = harness.run_target_evidence_manifest_export(
+        artifact_paths=[scenario_artifact, harness_artifact],
+        output_dir=tmp_path / "first",
+        generated_at="2026-06-21T03:04:05+00:00",
+    )
+    second = harness.run_target_evidence_manifest_export(
+        artifact_paths=[harness_artifact, scenario_artifact],
+        output_dir=tmp_path / "second",
+        generated_at="2026-06-21T03:04:05+00:00",
+    )
+
+    expected_surfaces = [
+        "rotation_quote_readiness",
+        "portfolio_lineage",
+        "scenario_baseline_readiness",
+    ]
+    assert [item["surface"] for item in first["surfaceStatusSummary"]] == expected_surfaces
+    assert [item["surface"] for item in second["surfaceStatusSummary"]] == expected_surfaces
+    assert first["surfaceStatusSummary"] == second["surfaceStatusSummary"]
+    assert first["missingEvidenceFamilies"] == second["missingEvidenceFamilies"]
 
 
 def test_manifest_does_not_promote_observation_only_ready_state(tmp_path: Path) -> None:
@@ -246,6 +328,7 @@ def test_manifest_does_not_promote_observation_only_ready_state(tmp_path: Path) 
     assert manifest["stateCounts"]["ready"] == 0
     assert manifest["stateCounts"]["blocked"] == 1
     assert manifest["stateCounts"]["observationOnly"] == 1
+    assert manifest["surfaceStatusSummary"][0]["readyExcludedReason"] == "observation_only_not_authoritative"
 
 
 def test_manifest_redacts_or_omits_unsafe_raw_fields(tmp_path: Path) -> None:
@@ -273,6 +356,8 @@ def test_manifest_redacts_or_omits_unsafe_raw_fields(tmp_path: Path) -> None:
     assert all(term not in output for term in forbidden)
     assert manifest["redactionSummary"]["redactedKeyCount"] >= 2
     assert manifest["redactionSummary"]["redactedValueCount"] >= 2
+    assert manifest["redactionSummary"]["totalRedactedKeyCount"] >= 2
+    assert manifest["redactionSummary"]["totalRedactedValueCount"] >= 2
 
 
 def test_manifest_has_no_advice_or_raw_internal_leaks(tmp_path: Path) -> None:

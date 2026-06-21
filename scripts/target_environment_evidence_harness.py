@@ -25,6 +25,7 @@ SCHEMA_VERSION = "wolfystock_target_environment_evidence_harness_v1"
 ARTIFACT_VERSION = "wolfystock_data033_target_environment_evidence_v1"
 SCENARIO_BASELINE_ARTIFACT_VERSION = "wolfystock_data042_scenario_baseline_evidence_v1"
 MANIFEST_ARTIFACT_VERSION = "wolfystock_data046_target_evidence_manifest_v1"
+MANIFEST_SCHEMA_VERSION = "wolfystock_target_evidence_manifest_schema_v1"
 REDACTION_VERSION = "target_environment_evidence_redaction_v1"
 REDACTED = "<redacted>"
 DEFAULT_TIMEOUT_SECONDS = 3.0
@@ -911,6 +912,7 @@ def _manifest_summary_item(
     readiness_status: str,
     missing_evidence: list[str],
     observation_only: bool,
+    ready_excluded_reason: str | None = None,
 ) -> dict[str, Any]:
     return {
         "artifactLabel": artifact_label,
@@ -920,6 +922,7 @@ def _manifest_summary_item(
         "readinessStatus": readiness_status,
         "missingEvidence": missing_evidence,
         "observationOnly": observation_only,
+        "readyExcludedReason": ready_excluded_reason,
     }
 
 
@@ -955,6 +958,7 @@ def _summarize_scenario_artifact(artifact: Mapping[str, Any], artifact_label: st
     status = str(evidence.get("baselineReadinessState") or "unknown")
     readiness = evidence.get("baselineReadiness") if isinstance(evidence.get("baselineReadiness"), Mapping) else {}
     readiness_status = str(readiness.get("status") or status)
+    observation_only = bool(evidence.get("observationOnly") is True)
     return [
         _manifest_summary_item(
             artifact_label=artifact_label,
@@ -963,7 +967,12 @@ def _summarize_scenario_artifact(artifact: Mapping[str, Any], artifact_label: st
             status=status,
             readiness_status=readiness_status,
             missing_evidence=_safe_missing_evidence(evidence.get("staleMissingBlockedReasonCodes")),
-            observation_only=bool(evidence.get("observationOnly") is True),
+            observation_only=observation_only,
+            ready_excluded_reason=(
+                "observation_only_not_authoritative"
+                if observation_only and _state_bucket(status, readiness_status) == "ready"
+                else None
+            ),
         )
     ]
 
@@ -973,8 +982,8 @@ def _unknown_artifact_summary(artifact_label: str) -> dict[str, Any]:
         artifact_label=artifact_label,
         surface="unknown_artifact",
         surface_label="Unknown evidence artifact",
-        status="unknown",
-        readiness_status="unknown",
+        status="rejected_unknown_shape",
+        readiness_status="unknown_shape",
         missing_evidence=["unknown_artifact_shape"],
         observation_only=False,
     )
@@ -1026,6 +1035,32 @@ def _artifact_redaction_summary(artifact: Any) -> tuple[int, int]:
     )
 
 
+_MANIFEST_SURFACE_ORDER = {
+    "rotation_quote_readiness": 10,
+    "portfolio_lineage": 20,
+    "options_chain_readiness": 30,
+    "scenario_baseline_readiness": 40,
+    "unknown_artifact": 90,
+}
+
+
+def _manifest_summary_sort_key(item: Mapping[str, Any]) -> tuple[int, str, str]:
+    surface = str(item.get("surface") or "")
+    return (
+        _MANIFEST_SURFACE_ORDER.get(surface, 80),
+        surface,
+        str(item.get("artifactLabel") or ""),
+    )
+
+
+def _manifest_rejected_artifact_count(summaries_by_artifact: Mapping[str, list[dict[str, Any]]]) -> int:
+    rejected = 0
+    for summaries in summaries_by_artifact.values():
+        if summaries and all(str(item.get("surface") or "") == "unknown_artifact" for item in summaries):
+            rejected += 1
+    return rejected
+
+
 def run_target_evidence_manifest_export(
     *,
     artifact_paths: list[str | Path],
@@ -1041,6 +1076,7 @@ def run_target_evidence_manifest_export(
     artifact_key_count = 0
     artifact_value_count = 0
     artifact_labels: list[str] = []
+    summaries_by_artifact: dict[str, list[dict[str, Any]]] = {}
 
     for raw_path in artifact_paths:
         artifact_path = Path(raw_path)
@@ -1051,8 +1087,11 @@ def run_target_evidence_manifest_export(
         key_count, value_count = _artifact_redaction_summary(sanitized_artifact)
         artifact_key_count += key_count
         artifact_value_count += value_count
-        surface_summaries.extend(_summarize_manifest_artifact(sanitized_artifact, artifact_label))
+        artifact_summaries = _summarize_manifest_artifact(sanitized_artifact, artifact_label)
+        summaries_by_artifact[artifact_label] = artifact_summaries
+        surface_summaries.extend(artifact_summaries)
 
+    surface_summaries.sort(key=_manifest_summary_sort_key)
     missing_evidence = _dedupe(
         [
             reason
@@ -1067,11 +1106,14 @@ def run_target_evidence_manifest_export(
     )
     manifest = {
         "schemaVersion": SCHEMA_VERSION,
+        "manifestSchemaVersion": MANIFEST_SCHEMA_VERSION,
         "artifactVersion": MANIFEST_ARTIFACT_VERSION,
         "generatedAt": generated,
         "artifactPath": str(artifact_file),
         "artifactCount": len(artifact_paths),
-        "artifactLabels": artifact_labels,
+        "inputArtifactCount": len(artifact_paths),
+        "rejectedArtifactCount": _manifest_rejected_artifact_count(summaries_by_artifact),
+        "artifactLabels": sorted(artifact_labels),
         "executionBoundary": {
             "readOnly": True,
             "localOperatorRun": True,
@@ -1092,6 +1134,8 @@ def run_target_evidence_manifest_export(
             "redactedValueCount": stats.redacted_value_count,
             "artifactRedactedKeyCount": artifact_key_count,
             "artifactRedactedValueCount": artifact_value_count,
+            "totalRedactedKeyCount": stats.redacted_key_count + artifact_key_count,
+            "totalRedactedValueCount": stats.redacted_value_count + artifact_value_count,
         },
     }
     artifact_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1331,6 +1375,8 @@ def _manifest_main(argv: list[str]) -> int:
             {
                 "artifactPath": manifest["artifactPath"],
                 "artifactCount": manifest["artifactCount"],
+                "inputArtifactCount": manifest["inputArtifactCount"],
+                "rejectedArtifactCount": manifest["rejectedArtifactCount"],
                 "stateCounts": manifest["stateCounts"],
                 "missingEvidenceFamilies": manifest["missingEvidenceFamilies"],
             },
