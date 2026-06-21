@@ -154,6 +154,101 @@ describe('watchlistApi investor signal normalization', () => {
     expect(exposure).not.toHaveProperty('debug');
   });
 
+  it('normalizes row research packets while preserving rows without readiness context', async () => {
+    const { watchlistApi } = await import('../watchlist');
+    get.mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            id: 1,
+            symbol: 'msft',
+            market: 'us',
+            source: 'manual',
+            row_research_packet: {
+              symbol: 'msft',
+              market: 'US',
+              identity: {
+                name: 'Microsoft',
+                exchange: 'NASDAQ',
+                sector: 'Technology',
+                industry: 'Software',
+              },
+              saved_item_source: 'manual',
+              quote: {
+                state: 'stale',
+                price: '421.35',
+                change_percent: '-0.42',
+                as_of: '2026-05-01T11:00:00Z',
+                provider_runtime_trace: 'hidden',
+              },
+              scanner_lineage: {
+                run_id: null,
+                rank: null,
+                score: null,
+                status: null,
+                last_scored_at: null,
+                source_authority: 'hidden',
+              },
+              research_status: 'partial',
+              missing_data: ['fundamentals', 'filing_event_catalyst', 'peer_benchmark'],
+              next_data_action: 'Add fundamentals, filing/event/catalyst, and peer evidence.',
+              observation_only: true,
+              no_advice_disclosure: 'Observation-only research packet.',
+              raw_provider_payload: { hidden: true },
+              debug: { trace: true },
+              source_authority: false,
+            },
+          },
+          {
+            id: 2,
+            symbol: '600519',
+            market: 'cn',
+            source: 'manual',
+          },
+        ],
+      },
+    });
+
+    const payload = await watchlistApi.listWatchlistItems();
+    const packet = payload.items[0].rowResearchPacket;
+
+    expect(packet).toEqual({
+      symbol: 'MSFT',
+      market: 'us',
+      identity: {
+        name: 'Microsoft',
+        exchange: 'NASDAQ',
+        sector: 'Technology',
+        industry: 'Software',
+      },
+      savedItemSource: 'manual',
+      quote: {
+        state: 'stale',
+        price: 421.35,
+        changePercent: -0.42,
+        asOf: '2026-05-01T11:00:00Z',
+      },
+      scannerLineage: {
+        runId: null,
+        rank: null,
+        score: null,
+        status: null,
+        lastScoredAt: null,
+      },
+      researchStatus: 'partial',
+      missingData: ['fundamentals', 'filing_event_catalyst', 'peer_benchmark'],
+      nextDataAction: 'Add fundamentals, filing/event/catalyst, and peer evidence.',
+      observationOnly: true,
+      noAdviceDisclosure: 'Observation-only research packet.',
+    });
+    expect(packet).not.toHaveProperty('rawProviderPayload');
+    expect(packet).not.toHaveProperty('debug');
+    expect(packet).not.toHaveProperty('sourceAuthority');
+    expect(packet?.quote).not.toHaveProperty('providerRuntimeTrace');
+    expect(packet?.scannerLineage).not.toHaveProperty('sourceAuthority');
+    expect(payload.items[1].rowResearchPacket).toBeNull();
+  });
+
   it('fetches the watchlist research overlay and keeps the priority queue consumer-safe', async () => {
     const { watchlistApi } = await import('../watchlist');
     get.mockResolvedValueOnce({
