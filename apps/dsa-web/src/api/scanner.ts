@@ -14,6 +14,33 @@ import type {
   ScannerThemesResponse,
 } from '../types/scanner';
 
+export interface ScannerDataReadiness {
+  state?: 'ready' | 'partial' | 'blocked' | 'unknown' | 'not_run' | string | null;
+  market?: string | null;
+  profile?: string | null;
+  universeSize?: number | null;
+  quoteCoverage?: string | null;
+  historyCoverage?: string | null;
+  freshness?: string | null;
+  candidateEvaluationCount?: number | null;
+  selectedCount?: number | null;
+  rejectedCount?: number | null;
+  failedCount?: number | null;
+  blockerBucket?: string | null;
+  consumerSummary?: string | null;
+  nextDataAction?: string | null;
+}
+
+export type ScannerRunDetailWithDataReadiness = ScannerRunDetail & {
+  diagnostics: ScannerRunDetail['diagnostics'] & {
+    dataReadiness?: ScannerDataReadiness;
+  };
+};
+
+export type ScannerOperationalStatusWithDataReadiness = ScannerOperationalStatus & {
+  dataReadiness?: ScannerDataReadiness | null;
+};
+
 const SCANNER_RESEARCH_PACKET_TEXT_LIMIT = 220;
 const SCANNER_RESEARCH_PACKET_LIST_LIMIT = 4;
 
@@ -83,12 +110,33 @@ function normalizeScannerCandidates(candidates?: ScannerCandidate[]): ScannerCan
   return Array.isArray(candidates) ? candidates.map(normalizeScannerCandidate) : candidates;
 }
 
-function normalizeScannerRunDetail(payload: Record<string, unknown>): ScannerRunDetail {
+function normalizeScannerDataReadiness(value: unknown): ScannerDataReadiness | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const normalized = toCamelCase<ScannerDataReadiness>(value as Record<string, unknown>);
+  if (!normalized.state && !normalized.blockerBucket) return undefined;
+  return normalized;
+}
+
+function normalizeScannerRunDetail(payload: Record<string, unknown>): ScannerRunDetailWithDataReadiness {
   const normalized = toCamelCase<ScannerRunDetail>(payload);
+  const normalizedDiagnostics = normalized.diagnostics as ScannerRunDetailWithDataReadiness['diagnostics'] | undefined;
+  const diagnostics = {
+    ...(normalizedDiagnostics || {}),
+    dataReadiness: normalizeScannerDataReadiness(normalizedDiagnostics?.dataReadiness),
+  };
   return {
     ...normalized,
+    diagnostics,
     shortlist: normalizeScannerCandidates(normalized.shortlist) || [],
     selected: normalizeScannerCandidates(normalized.selected),
+  };
+}
+
+function normalizeScannerOperationalStatus(payload: Record<string, unknown>): ScannerOperationalStatusWithDataReadiness {
+  const normalized = toCamelCase<ScannerOperationalStatusWithDataReadiness>(payload);
+  return {
+    ...normalized,
+    dataReadiness: normalizeScannerDataReadiness(normalized.dataReadiness),
   };
 }
 
@@ -232,7 +280,7 @@ export const scannerApi = {
   getStatus: async (params: {
     market?: string;
     profile?: string;
-  } = {}): Promise<ScannerOperationalStatus> => {
+  } = {}): Promise<ScannerOperationalStatusWithDataReadiness> => {
     const response = await apiClient.get<Record<string, unknown>>(
       '/api/v1/scanner/status',
       {
@@ -242,6 +290,6 @@ export const scannerApi = {
         },
       },
     );
-    return toCamelCase<ScannerOperationalStatus>(response.data);
+    return normalizeScannerOperationalStatus(response.data);
   },
 };

@@ -20,7 +20,11 @@ import {
   buildScannerTopDownContextView,
   inferScannerResearchReadiness,
 } from '../api/researchReadiness';
-import { scannerApi } from '../api/scanner';
+import {
+  scannerApi,
+  type ScannerDataReadiness,
+  type ScannerOperationalStatusWithDataReadiness,
+} from '../api/scanner';
 import { watchlistApi } from '../api/watchlist';
 import ConsumerResearchReadinessStrip from '../components/common/ConsumerResearchReadinessStrip';
 import ResearchWorkspaceFlowPanel from '../components/research/ResearchWorkspaceFlowPanel';
@@ -190,6 +194,13 @@ type ScannerSafeEmptyReason = {
   label: string;
   body: string;
 };
+type ScannerDataReadinessView = {
+  stateLabel: string;
+  blockerLabel: string | null;
+  nextDataLabel: string | null;
+  coverageChips: ScannerLabeledValue[];
+  isMeaningful: boolean;
+};
 type ScannerVisualSummaryBarSegment = {
   key: string;
   label: string;
@@ -353,6 +364,93 @@ function getNestedStringArray(parent: Record<string, unknown> | null, ...keys: s
 
 function addUniqueBucket(buckets: TrustDisclosureBucket[], bucket: TrustDisclosureBucket) {
   if (!buckets.includes(bucket)) buckets.push(bucket);
+}
+
+function normalizeScannerDataReadinessState(value?: string | null): string {
+  return String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+}
+
+const SCANNER_DATA_READINESS_STATE_LABELS: Record<string, { zh: string; en: string }> = {
+  ready: { zh: '可扫描', en: 'Ready to scan' },
+  partial: { zh: '部分可用', en: 'Partially ready' },
+  blocked: { zh: '数据待补', en: 'Data blocked' },
+  unknown: { zh: '待确认', en: 'To confirm' },
+  not_run: { zh: '未运行', en: 'Not run' },
+};
+
+const SCANNER_DATA_READINESS_BLOCKER_LABELS: Record<string, { zh: string; en: string }> = {
+  missing_universe: { zh: '标的池待补', en: 'Universe pending' },
+  empty_universe: { zh: '标的池为空', en: 'Universe empty' },
+  missing_quote_snapshot: { zh: '报价快照待补', en: 'Quote snapshot pending' },
+  missing_history: { zh: '历史数据待补', en: 'History pending' },
+  stale_history: { zh: '历史数据待更新', en: 'History refresh pending' },
+  profile_filters_rejected_all: { zh: '条件过窄', en: 'Filters too narrow' },
+  source_quality_capped: { zh: '来源质量受限', en: 'Source quality limited' },
+  scanner_runtime_unavailable: { zh: '扫描服务待恢复', en: 'Scanner service pending' },
+  unknown: { zh: '待确认', en: 'To confirm' },
+};
+
+const SCANNER_DATA_READINESS_COVERAGE_LABELS: Record<string, { zh: string; en: string }> = {
+  available: { zh: '可用', en: 'Available' },
+  partial: { zh: '部分可用', en: 'Partial' },
+  unknown: { zh: '待确认', en: 'Unknown' },
+  stale: { zh: '待更新', en: 'Stale' },
+  missing: { zh: '待补', en: 'Missing' },
+};
+
+function localizedDataReadinessLabel(
+  value: string | null | undefined,
+  mapping: Record<string, { zh: string; en: string }>,
+  language: 'zh' | 'en',
+): string | null {
+  const normalized = normalizeScannerDataReadinessState(value);
+  if (!normalized) return null;
+  return mapping[normalized]?.[language] || null;
+}
+
+function sanitizeScannerDataReadinessText(value: string | null | undefined, language: 'zh' | 'en'): string | null {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  if (/provider|debug|trace|schema|raw|request|cache|runtime|sourceauthority|blockerbucket/i.test(text)) return null;
+  return sanitizeUserFacingDataIssue(text, language);
+}
+
+function buildScannerDataReadinessView(
+  readiness: ScannerDataReadiness | null | undefined,
+  language: 'zh' | 'en',
+): ScannerDataReadinessView | null {
+  if (!readiness) return null;
+  const state = normalizeScannerDataReadinessState(readiness.state);
+  const blockerBucket = normalizeScannerDataReadinessState(readiness.blockerBucket);
+  const stateLabel = localizedDataReadinessLabel(state, SCANNER_DATA_READINESS_STATE_LABELS, language)
+    || (language === 'en' ? 'To confirm' : '待确认');
+  const blockerLabel = blockerBucket && blockerBucket !== 'unknown'
+    ? localizedDataReadinessLabel(blockerBucket, SCANNER_DATA_READINESS_BLOCKER_LABELS, language)
+      || (language === 'en' ? 'To confirm' : '待确认')
+    : null;
+  const nextDataLabel = sanitizeScannerDataReadinessText(readiness.nextDataAction, language)
+    || sanitizeScannerDataReadinessText(readiness.consumerSummary, language)
+    || blockerLabel;
+  const coverageChips = [
+    readiness.quoteCoverage ? { label: language === 'en' ? 'Quote' : '报价', value: localizedDataReadinessLabel(readiness.quoteCoverage, SCANNER_DATA_READINESS_COVERAGE_LABELS, language) || (language === 'en' ? 'To confirm' : '待确认') } : null,
+    readiness.historyCoverage ? { label: language === 'en' ? 'History' : '历史', value: localizedDataReadinessLabel(readiness.historyCoverage, SCANNER_DATA_READINESS_COVERAGE_LABELS, language) || (language === 'en' ? 'To confirm' : '待确认') } : null,
+    readiness.universeSize != null ? { label: language === 'en' ? 'Universe' : '标的池', value: String(readiness.universeSize) } : null,
+  ].filter((item): item is ScannerLabeledValue => Boolean(item));
+
+  return {
+    stateLabel,
+    blockerLabel,
+    nextDataLabel,
+    coverageChips,
+    isMeaningful: ['ready', 'partial', 'blocked'].includes(state) || Boolean(blockerLabel),
+  };
+}
+
+function getRunDetailDataReadiness(runDetail: ScannerRunDetail | null): ScannerDataReadiness | null {
+  const diagnostics = runDetail?.diagnostics as (ScannerRunDetail['diagnostics'] & {
+    dataReadiness?: ScannerDataReadiness;
+  }) | undefined;
+  return diagnostics?.dataReadiness || null;
 }
 
 function getScannerEvidencePayload(candidate: ScannerCandidate | ScannerCandidateDiagnostic): Record<string, unknown> | null {
@@ -1126,8 +1224,19 @@ function buildScannerConclusion(
   language: 'zh' | 'en',
   firstRunSetupLabel: string,
   historyResolution: ScannerHistoryResolution,
+  dataReadinessView: ScannerDataReadinessView | null,
 ): ScannerConclusionModel {
   const trustSummary = buildScannerTrustSummary(runDetail);
+  if (!runDetail && dataReadinessView?.isMeaningful && dataReadinessView.stateLabel !== (language === 'en' ? 'Ready to scan' : '可扫描')) {
+    return {
+      state: dataReadinessView.stateLabel === (language === 'en' ? 'Not run' : '未运行') ? 'waiting' : 'insufficient',
+      title: dataReadinessView.blockerLabel || dataReadinessView.stateLabel,
+      detail: dataReadinessView.nextDataLabel || dataReadinessView.stateLabel,
+      candidateCount: 0,
+      trustSummary,
+      tone: dataReadinessView.stateLabel === (language === 'en' ? 'Data blocked' : '数据待补') ? 'caution' : 'neutral',
+    };
+  }
   if (!runDetail) {
     if (!historyResolution.hasLoaded) {
       return {
@@ -1183,10 +1292,10 @@ function buildScannerConclusion(
   if (isScannerPseudoEmptyRun(runDetail)) {
     return {
       state: 'insufficient',
-      title: language === 'en' ? 'Scanner has not produced a candidate set yet' : '扫描器尚未产出候选集',
-      detail: language === 'en'
+      title: dataReadinessView?.blockerLabel || (language === 'en' ? 'Scanner has not produced a candidate set yet' : '扫描器尚未产出候选集'),
+      detail: dataReadinessView?.nextDataLabel || (language === 'en'
         ? 'No candidates produced. Retry or check Market Overview.'
-        : '无候选产出，可稍后重试或查看市场概览。',
+        : '无候选产出，可稍后重试或查看市场概览。'),
       candidateCount: 0,
       trustSummary,
       tone: 'caution',
@@ -1208,10 +1317,10 @@ function buildScannerConclusion(
   if (evidenceInsufficient) {
     return {
       state: 'insufficient',
-      title: language === 'en' ? 'Research evidence pending' : '证据不足',
-      detail: language === 'en'
+      title: dataReadinessView?.blockerLabel || (language === 'en' ? 'Research evidence pending' : '证据不足'),
+      detail: dataReadinessView?.nextDataLabel || (language === 'en'
         ? 'Refresh quotes or history evidence before treating this scan as evidence.'
-        : '补齐行情或历史证据后，再将本次扫描视为证据。',
+        : '补齐行情或历史证据后，再将本次扫描视为证据。'),
       candidateCount: selectedCount,
       trustSummary,
       tone: 'danger',
@@ -1224,10 +1333,10 @@ function buildScannerConclusion(
   if (selectedCount <= 0 || !topCandidate) {
     return {
       state: 'no-candidate',
-      title: language === 'en' ? 'No selected candidate in this run' : '本次未形成入选候选',
-      detail: language === 'en'
+      title: dataReadinessView?.blockerLabel || (language === 'en' ? 'No selected candidate in this run' : '本次未形成入选候选'),
+      detail: dataReadinessView?.nextDataLabel || (language === 'en'
         ? 'Review data coverage, history coverage, and the rejection mix before changing scope; this does not describe the whole market.'
-        : '查看覆盖与淘汰分布，再决定是否调整范围。',
+        : '查看覆盖与淘汰分布，再决定是否调整范围。'),
       candidateCount: selectedCount,
       trustSummary,
       tone: 'caution',
@@ -1315,6 +1424,7 @@ function buildScannerWorkbenchEmptyState({
   language,
   pageErrorSummary,
   runDetail,
+  dataReadinessView,
 }: {
   candidateFilter: CandidateFilter;
   diagnosticCandidates: ScannerCandidateDiagnostic[];
@@ -1323,6 +1433,7 @@ function buildScannerWorkbenchEmptyState({
   language: 'zh' | 'en';
   pageErrorSummary: string | null;
   runDetail: ScannerRunDetail | null;
+  dataReadinessView: ScannerDataReadinessView | null;
 }): ScannerWorkbenchEmptyState {
   if (pageErrorSummary) {
     return {
@@ -1334,6 +1445,12 @@ function buildScannerWorkbenchEmptyState({
   }
 
   if (!runDetail) {
+    if (dataReadinessView?.isMeaningful && dataReadinessView.stateLabel !== (language === 'en' ? 'Ready to scan' : '可扫描')) {
+      return {
+        title: dataReadinessView.blockerLabel || dataReadinessView.stateLabel,
+        body: dataReadinessView.nextDataLabel || dataReadinessView.stateLabel,
+      };
+    }
     if (!historyResolution.hasLoaded) {
       return {
         title: language === 'en' ? 'Loading recent scans' : '正在读取最近扫描',
@@ -1371,10 +1488,10 @@ function buildScannerWorkbenchEmptyState({
 
   if (isScannerPseudoEmptyRun(runDetail)) {
     return {
-      title: language === 'en' ? 'Candidate table paused' : '候选表暂不展示',
-      body: language === 'en'
+      title: dataReadinessView?.blockerLabel || (language === 'en' ? 'Candidate table paused' : '候选表暂不展示'),
+      body: dataReadinessView?.nextDataLabel || (language === 'en'
         ? 'The page is waiting for a usable candidate set before showing rows here.'
-        : '等待可用候选集后再展示表格行。',
+        : '等待可用候选集后再展示表格行。'),
     };
   }
 
@@ -1392,16 +1509,16 @@ function buildScannerWorkbenchEmptyState({
   if (evidenceInsufficient) {
     const safeReason = buildScannerSafeEmptyReason({ diagnosticCandidates, language, runDetail });
     return {
-      title: safeReason.label,
-      body: safeReason.body,
+      title: dataReadinessView?.blockerLabel || safeReason.label,
+      body: dataReadinessView?.nextDataLabel || safeReason.body,
     };
   }
 
   if (selectedCount === 0 && diagnosticCandidates.length > 0) {
     const safeReason = buildScannerSafeEmptyReason({ diagnosticCandidates, language, runDetail });
     return {
-      title: language === 'en' ? 'No selected candidates in this run' : '本次未形成入选候选',
-      body: safeReason.body,
+      title: dataReadinessView?.blockerLabel || (language === 'en' ? 'No selected candidates in this run' : '本次未形成入选候选'),
+      body: dataReadinessView?.nextDataLabel || safeReason.body,
     };
   }
 
@@ -2239,6 +2356,7 @@ const UserScannerPage: React.FC = () => {
   const [isGeneratingTheme, setIsGeneratingTheme] = useState(false);
   const [customSymbols, setCustomSymbols] = useState('');
   const [runDetail, setRunDetail] = useState<ScannerRunDetail | null>(null);
+  const [scannerOperationalStatus, setScannerOperationalStatus] = useState<ScannerOperationalStatusWithDataReadiness | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
   const [historyItems, setHistoryItems] = useState<ScannerRunHistoryItem[]>([]);
   const [hasLoadedHistory, setHasLoadedHistory] = useState(false);
@@ -2358,6 +2476,22 @@ const UserScannerPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+    scannerApi.getStatus({ market, profile })
+      .then((response) => {
+        if (!isMounted) return;
+        setScannerOperationalStatus(response);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setScannerOperationalStatus(null);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [market, profile]);
+
+  useEffect(() => {
     if (scanScope !== 'theme') return;
     if (selectedTheme?.market === market) return;
     const firstConfiguredTheme = marketThemes.find((theme) => theme.symbols.length > 0);
@@ -2440,6 +2574,7 @@ const UserScannerPage: React.FC = () => {
   useEffect(() => {
     setHasLoadedHistory(false);
     setRunDetail(null);
+    setScannerOperationalStatus(null);
     selectedRunIdRef.current = null;
     setSelectedRunId(null);
     setStrategySimulation(null);
@@ -2473,6 +2608,7 @@ const UserScannerPage: React.FC = () => {
       language,
       scannerFirstRunSetupLabel,
       { hasLoaded: true, latestRun: null },
+      null,
     ).state;
     const retryRequest = retryState === 'no-candidate' || retryState === 'insufficient'
       ? buildScannerRetryRequest(runDetail)
@@ -2675,11 +2811,28 @@ const UserScannerPage: React.FC = () => {
     () => buildRunComparison(runDetail, previousRunDetail, previewThreshold, language),
     [language, previewThreshold, previousRunDetail, runDetail],
   );
+  const scannerDataReadiness = getRunDetailDataReadiness(runDetail)
+    || scannerOperationalStatus?.dataReadiness
+    || null;
+  const scannerDataReadinessView = useMemo(
+    () => buildScannerDataReadinessView(scannerDataReadiness, language),
+    [language, scannerDataReadiness],
+  );
   const currentRunSummary = useMemo(
     () => buildScannerRunSummary(language === 'en' ? 'Current scan' : '本次扫描', runDetail, language),
     [language, runDetail],
   );
   const scannerHasPseudoEmptyRun = isScannerPseudoEmptyRun(runDetail);
+  const scannerHasReadinessBlockedEmptyRun = Boolean(
+    runDetail
+    && scannerDataReadinessView?.isMeaningful
+    && currentSelectedCount === 0
+    && !(runDetail.shortlist?.length)
+    && !(runDetail.selected?.length)
+    && diagnosticCandidates.length === 0
+    && !['failed', 'failure', 'error'].includes(normalizeRunState(runDetail.status)),
+  );
+  const scannerShouldHideEmptyRunCounts = scannerHasPseudoEmptyRun || scannerHasReadinessBlockedEmptyRun;
   const recentRunSummary = useMemo(
     () => buildHistoryItemSummary(language === 'en' ? 'Latest scan' : '最近扫描', historyItems[0] || null, language),
     [historyItems, language],
@@ -2889,18 +3042,19 @@ const UserScannerPage: React.FC = () => {
     () => buildScannerWorkbenchEmptyState({
       candidateFilter,
       diagnosticCandidates,
+      dataReadinessView: scannerDataReadinessView,
       firstRunSetupLabel: scannerFirstRunSetupLabel,
       historyResolution,
       language,
       pageErrorSummary,
       runDetail,
     }),
-    [candidateFilter, diagnosticCandidates, historyResolution, language, pageErrorSummary, runDetail, scannerFirstRunSetupLabel],
+    [candidateFilter, diagnosticCandidates, historyResolution, language, pageErrorSummary, runDetail, scannerDataReadinessView, scannerFirstRunSetupLabel],
   );
   const visibleHistorySummaries = useMemo(
-    () => [scannerHasPseudoEmptyRun ? null : currentRunSummary, recentRunSummary, previousRunSummary]
+    () => [scannerShouldHideEmptyRunCounts ? null : currentRunSummary, recentRunSummary, previousRunSummary]
       .filter((item, index, array): item is ScannerRunSummary => Boolean(item) && array.findIndex((other) => other?.title === item?.title) === index),
-    [currentRunSummary, previousRunSummary, recentRunSummary, scannerHasPseudoEmptyRun],
+    [currentRunSummary, previousRunSummary, recentRunSummary, scannerShouldHideEmptyRunCounts],
   );
   const workbenchCandidatesWithEvidence = useMemo(
     () => workbenchDiagnostics.map((candidate) => withCandidateEvidence(
@@ -3436,10 +3590,14 @@ const UserScannerPage: React.FC = () => {
     : `${market.toUpperCase()} · ${scanScope === 'theme' ? (language === 'en' ? 'Theme universe' : '主题标的池') : scanScope === 'symbols' ? (language === 'en' ? 'Custom symbols' : '自定义标的') : (language === 'en' ? 'Default universe' : '默认市场池')}`;
   const scannerThemeLabel = runDetail?.themeLabel || runDetail?.themeId || (selectedTheme ? getThemeLabel(selectedTheme, language) : (language === 'en' ? 'No theme' : '无主题'));
   const scannerDataStateLabel = runDetail
-    ? (scannerHasPseudoEmptyRun
-      ? (language === 'en' ? 'Waiting for usable data' : '等待可用数据')
-      : `${normalizeRunState(runDetail.status) === 'failed' || normalizeRunState(runDetail.status) === 'error' ? `${currentRunSummary?.statusLabel || compactScannerStateLabel(runDetail.status, language)} · ` : ''}${getRunDataStatusLabel(runDetail, language)}`)
-    : (language === 'en' ? 'Waiting' : '等待');
+    ? (scannerDataReadinessView?.isMeaningful
+      ? `${scannerDataReadinessView.stateLabel}${scannerDataReadinessView.blockerLabel ? ` · ${scannerDataReadinessView.blockerLabel}` : ''}`
+      : (scannerHasPseudoEmptyRun
+        ? (language === 'en' ? 'Waiting for usable data' : '等待可用数据')
+        : `${normalizeRunState(runDetail.status) === 'failed' || normalizeRunState(runDetail.status) === 'error' ? `${currentRunSummary?.statusLabel || compactScannerStateLabel(runDetail.status, language)} · ` : ''}${getRunDataStatusLabel(runDetail, language)}`))
+    : (scannerDataReadinessView?.isMeaningful
+      ? `${scannerDataReadinessView.stateLabel}${scannerDataReadinessView.blockerLabel ? ` · ${scannerDataReadinessView.blockerLabel}` : ''}`
+      : (language === 'en' ? 'Waiting' : '等待'));
   const scannerResearchReadinessView = useMemo(
     () => buildConsumerResearchReadinessView(inferScannerResearchReadiness(runDetail), language),
     [language, runDetail],
@@ -3449,8 +3607,8 @@ const UserScannerPage: React.FC = () => {
     [language, runDetail],
   );
   const scannerConclusion = useMemo(
-    () => buildScannerConclusion(runDetail, language, scannerFirstRunSetupLabel, historyResolution),
-    [historyResolution, language, runDetail, scannerFirstRunSetupLabel],
+    () => buildScannerConclusion(runDetail, language, scannerFirstRunSetupLabel, historyResolution, scannerDataReadinessView),
+    [historyResolution, language, runDetail, scannerDataReadinessView, scannerFirstRunSetupLabel],
   );
   const scannerRetryRequest = useMemo(
     () => buildScannerRetryRequest(runDetail),
@@ -3485,8 +3643,8 @@ const UserScannerPage: React.FC = () => {
           ? 'Some data is stale, partial, or limited. Keep the official candidate, but use history and Market Overview before treating it as research evidence.'
           : '部分数据可能过期、缺失或受限。可保留官方候选，但先结合历史与 Market Overview 再作为研究证据。');
   const scannerWorkflowStats = runDetail
-    ? (scannerHasPseudoEmptyRun
-      ? (language === 'en' ? 'Candidate set not produced' : '候选集未产出')
+    ? (scannerShouldHideEmptyRunCounts
+      ? (scannerDataReadinessView?.blockerLabel || (language === 'en' ? 'Candidate set not produced' : '候选集未产出'))
       : (language === 'en'
       ? `Official ${currentSelectedCount} · rejected ${runDetail.summary?.rejectedCount ?? 0} · limited ${scannerConclusion.trustSummary.limitedCount}`
       : `官方入选 ${currentSelectedCount} · 淘汰 ${runDetail.summary?.rejectedCount ?? 0} · 数据受限 ${scannerConclusion.trustSummary.limitedCount}`))
@@ -3512,7 +3670,7 @@ const UserScannerPage: React.FC = () => {
     },
     {
       label: language === 'en' ? 'Candidate mix' : '候选分布',
-      value: scannerHasPseudoEmptyRun
+      value: scannerShouldHideEmptyRunCounts
         ? (language === 'en' ? 'No candidate set' : '候选集未产出')
         : `${shortlistCount} / ${runDetail?.summary?.rejectedCount ?? 0} / ${runDetail?.summary?.dataFailedCount ?? 0}`,
     },
@@ -3542,7 +3700,7 @@ const UserScannerPage: React.FC = () => {
       value: generatedAt ? formatTimestamp(generatedAt, language) : '--',
     },
   ];
-  const scannerRailCounts = scannerHasPseudoEmptyRun
+  const scannerRailCounts = scannerShouldHideEmptyRunCounts
     ? [
       {
         label: language === 'en' ? 'Candidates' : '候选',
@@ -3690,6 +3848,8 @@ const UserScannerPage: React.FC = () => {
                 scopeLabel={scannerScopeLabel}
                 dataStateLabel={scannerDataStateLabel}
                 latestLabel={heroLatestLabel}
+                dataReadinessChips={scannerDataReadinessView?.coverageChips || []}
+                nextDataLabel={scannerDataReadinessView?.nextDataLabel || null}
                 language={language}
               />
               {showWorkflowNextSteps ? (
