@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Activity, Gauge, Waves } from 'lucide-react';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import {
+  buildOfficialRiskBundleReadinessView,
   liquidityMonitorApi,
   type LiquidityCapitalFlowSignal,
   type LiquidityMonitorFreshness,
@@ -11,12 +12,8 @@ import {
   type LiquidityImpulseSynthesisEvidenceItem,
   type LiquidityMonitorRegime,
   type LiquidityMonitorResponse,
+  type OfficialRiskBundleReadiness,
 } from '../api/liquidityMonitor';
-import {
-  buildOfficialRiskSourceReadinessView,
-  marketApi,
-  type OfficialRiskSourceReadiness,
-} from '../api/market';
 import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import {
   LiquidityImpulseSynthesisHeader,
@@ -72,6 +69,7 @@ const FRESHNESS_LABELS: Record<LiquidityMonitorFreshness, string> = {
   live: '实时',
   cached: '缓存',
   delayed: '延迟',
+  partial: '部分',
   stale: '过期',
   fallback: '备用',
   mock: '备用',
@@ -119,7 +117,7 @@ function chipVariantForStatus(status: LiquidityMonitorIndicator['status']): 'neu
 
 function chipVariantForFreshness(freshness: LiquidityMonitorFreshness): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
   if (freshness === 'live') return 'success';
-  if (freshness === 'cached' || freshness === 'delayed') return 'info';
+  if (freshness === 'cached' || freshness === 'delayed' || freshness === 'partial') return 'info';
   if (freshness === 'stale' || freshness === 'fallback' || freshness === 'mock') return 'caution';
   if (freshness === 'error') return 'danger';
   return 'neutral';
@@ -1781,10 +1779,10 @@ const ConsumerDisclosure: React.FC<{
   );
 };
 
-const OfficialRiskSourceReadinessStrip: React.FC<{
-  readiness?: OfficialRiskSourceReadiness | null;
+const OfficialRiskBundleReadinessStrip: React.FC<{
+  readiness?: OfficialRiskBundleReadiness | null;
 }> = ({ readiness }) => {
-  const view = buildOfficialRiskSourceReadinessView(readiness);
+  const view = buildOfficialRiskBundleReadinessView(readiness);
 
   return (
     <section
@@ -1793,8 +1791,9 @@ const OfficialRiskSourceReadinessStrip: React.FC<{
     >
       <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
-          <p className="text-[11px] font-medium text-white/48">官方风险源</p>
+          <p className="text-[11px] font-medium text-white/48">官方风险包</p>
           <p className="mt-1 text-sm font-semibold text-white/84">{view.bundleLabel}</p>
+          <p className="mt-1 text-[11px] leading-5 text-white/52">{view.summary}</p>
         </div>
         <div className="flex min-w-0 flex-wrap gap-1.5 md:justify-end">
           <TerminalChip variant={view.bundleVariant}>{view.bundleLabel}</TerminalChip>
@@ -2464,7 +2463,6 @@ const LiquidityGuidancePanel: React.FC<{
 const LiquidityMonitorPage: React.FC = () => {
   const { isAdminMode, canReadProviders } = useProductSurface();
   const [data, setData] = useState<LiquidityMonitorResponse | null>(null);
-  const [officialRiskSourceReadiness, setOfficialRiskSourceReadiness] = useState<OfficialRiskSourceReadiness | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -2491,29 +2489,6 @@ const LiquidityMonitorPage: React.FC = () => {
     }
 
     void load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadSourceReadiness() {
-      try {
-        const payload = await marketApi.getDataReadiness();
-        if (!cancelled) {
-          setOfficialRiskSourceReadiness(payload?.officialRiskSourceReadiness || null);
-        }
-      } catch {
-        if (!cancelled) {
-          setOfficialRiskSourceReadiness(null);
-        }
-      }
-    }
-
-    void loadSourceReadiness();
 
     return () => {
       cancelled = true;
@@ -2579,7 +2554,7 @@ const LiquidityMonitorPage: React.FC = () => {
       {data && regimeGauge && readinessSummary ? (
         <TerminalGrid>
           <div className="flex flex-col gap-4 xl:col-span-12">
-            <OfficialRiskSourceReadinessStrip readiness={officialRiskSourceReadiness} />
+            <OfficialRiskBundleReadinessStrip readiness={data.officialRiskBundleReadiness} />
             <LiquidityGuidancePanel
               coverageSummary={coverageSummary}
               synthesisView={synthesisView}

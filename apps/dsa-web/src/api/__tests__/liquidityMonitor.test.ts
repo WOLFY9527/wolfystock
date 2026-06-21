@@ -16,7 +16,7 @@ describe('liquidityMonitorApi', () => {
   });
 
   it('normalizes the advisory liquidity monitor response from the backend route', async () => {
-    const { liquidityMonitorApi } = await import('../liquidityMonitor');
+    const { buildOfficialRiskBundleReadinessView, liquidityMonitorApi } = await import('../liquidityMonitor');
     get.mockResolvedValueOnce({
       data: {
         endpoint: '/api/v1/market/liquidity-monitor',
@@ -265,6 +265,65 @@ describe('liquidityMonitorApi', () => {
           contradiction_signals: ['btc_not_confirming_growth_absorption'],
           explanation: 'Growth is absorbing more attention while BTC is not confirming the move.',
         },
+        official_risk_bundle_readiness: {
+          contract_version: 'official_risk_bundle_readiness_v1',
+          status: 'partial',
+          score_authority: 'observation_only',
+          score_authority_eligible: false,
+          observation_only: true,
+          source_authority_state: 'partial',
+          as_of: '2026-05-07T10:00:00+08:00',
+          freshness: 'cached',
+          required_families: ['vix', 'rates', 'fedLiquidity'],
+          available_families: ['vix'],
+          partial_families: ['rates'],
+          missing_required_families: ['fedLiquidity'],
+          stale_families: [],
+          blocked_families: [],
+          required_series: ['VIXCLS', 'DGS2', 'DGS10', 'DGS30', 'WALCL'],
+          missing_required_series: ['WALCL'],
+          next_evidence_required: ['fedLiquidity_missing_official_series'],
+          families: [
+            {
+              family_id: 'vix',
+              label: 'VIX volatility proxy',
+              required: true,
+              status: 'available',
+              source_type: 'official_public',
+              source_authority_allowed: true,
+              score_authority_eligible: true,
+              observation_only: false,
+              freshness: 'cached',
+              as_of: '2026-05-07T10:00:00+08:00',
+              freshness_window: 'official_daily_us_weekday_t_plus_1',
+              required_series: ['VIXCLS'],
+              fulfilled_series: ['VIXCLS'],
+              missing_series: [],
+              stale_series: [],
+              blocked_series: [],
+              next_evidence_required: [],
+            },
+            {
+              family_id: 'fedLiquidity',
+              label: 'Fed liquidity',
+              required: true,
+              status: 'missing',
+              source_type: 'official_public',
+              source_authority_allowed: false,
+              score_authority_eligible: false,
+              observation_only: true,
+              freshness: 'unavailable',
+              as_of: null,
+              freshness_window: 'official_weekly_fed_liquidity_t_plus_7',
+              required_series: ['WALCL'],
+              fulfilled_series: [],
+              missing_series: ['WALCL'],
+              stale_series: [],
+              blocked_series: [],
+              next_evidence_required: ['fedLiquidity_missing_official_series'],
+            },
+          ],
+        },
       },
     });
 
@@ -334,6 +393,26 @@ describe('liquidityMonitorApi', () => {
     });
     expect(payload.capitalFlowSignal?.contradictionSignals).toEqual(['btc_not_confirming_growth_absorption']);
     expect(payload.sourceMetadata.externalProviderCalls).toBe(false);
+    expect(payload.officialRiskBundleReadiness).toMatchObject({
+      status: 'partial',
+      scoreAuthority: 'observation_only',
+      requiredFamilies: ['vix', 'rates', 'fedLiquidity'],
+      missingRequiredSeries: ['WALCL'],
+    });
+    expect(payload.officialRiskBundleReadiness?.families[0]).toMatchObject({
+      familyId: 'vix',
+      requiredSeries: ['VIXCLS'],
+      fulfilledSeries: ['VIXCLS'],
+    });
+    expect(payload.officialRiskBundleReadiness).not.toHaveProperty('sourceAuthorityState');
+    expect(payload.officialRiskBundleReadiness).not.toHaveProperty('scoreAuthorityEligible');
+    expect(payload.officialRiskBundleReadiness?.families[0]).not.toHaveProperty('sourceType');
+    expect(payload.officialRiskBundleReadiness?.families[0]).not.toHaveProperty('sourceAuthorityAllowed');
+    expect(buildOfficialRiskBundleReadinessView(payload.officialRiskBundleReadiness)).toMatchObject({
+      bundleLabel: '官方风险包部分待补',
+      bundleVariant: 'info',
+      summary: expect.stringContaining('待补序列 1 项'),
+    });
   });
 
   it('preserves evidence boundary metadata for fallback, stale, synthetic, and unavailable inputs', async () => {
@@ -495,5 +574,6 @@ describe('liquidityMonitorApi', () => {
       officialObservationDate: null,
       officialAsOf: null,
     });
+    expect(payload.officialRiskBundleReadiness).toBeUndefined();
   });
 });
