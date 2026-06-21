@@ -698,7 +698,6 @@ function hasDemoOrStalePayload(
     || value.includes('demo')
     || value.includes('stale')
     || value.includes('delayed')
-    || value.includes('fallback')
     || value.includes('cached')
   ));
 }
@@ -988,9 +987,9 @@ function finiteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-function padDomain(minimum: number, maximum: number, ratioValue: number, fallback = 1): [number, number] {
+function padDomain(minimum: number, maximum: number, ratioValue: number, defaultPadding = 1): [number, number] {
   const span = Math.abs(maximum - minimum);
-  const padding = Math.max(span * ratioValue, fallback);
+  const padding = Math.max(span * ratioValue, defaultPadding);
   if (span === 0) {
     return [Math.max(0, minimum - padding), maximum + padding];
   }
@@ -1656,6 +1655,15 @@ function firstReadChips(
   if (!chain?.expiration || !hasChainRows) {
     chips.push({ label: '到期/行权价待选', tone: 'warn' });
   }
+
+  chain?.optionsChainReadinessView?.allLabels.forEach((label) => {
+    const tone: FirstReadChip['tone'] = label === '链可用' || label === '到期覆盖可用' || label === '结构比较可用'
+      ? 'good'
+      : label === '演示样本' || label === '仅观察'
+        ? 'info'
+        : 'warn';
+    chips.push({ label, tone });
+  });
 
   chips.push({ label: '风险边界', tone: 'risk' });
 

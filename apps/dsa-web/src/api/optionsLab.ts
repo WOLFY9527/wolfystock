@@ -4,7 +4,7 @@ import type { OptionsResearchReadiness } from '../types/researchReadiness';
 
 export type OptionsDirection = 'bullish' | 'bearish' | 'neutral' | 'volatility';
 export type OptionsRiskProfile = 'conservative' | 'balanced' | 'aggressive';
-export type OptionsFreshness = 'live' | 'delayed' | 'cached' | 'stale' | 'fallback' | 'mock' | 'error';
+export type OptionsFreshness = 'live' | 'delayed' | 'cached' | 'stale' | 'mock' | 'error' | string;
 export type OptionSide = 'call' | 'put';
 export type OptionMoneyness = 'itm' | 'atm' | 'otm';
 export type OptionsStrategyType = 'long_call' | 'long_put' | 'bull_call_spread' | 'bear_put_spread';
@@ -97,6 +97,74 @@ export type OptionsChainResponse = {
   optionsReadiness?: OptionsResearchReadiness | null;
   optionsResearchReadiness?: OptionsResearchReadiness | null;
   optionsStructureSignalPacket?: OptionsStructureSignalPacket | null;
+  optionsChainReadiness?: OptionsChainReadiness | null;
+  optionsChainReadinessView?: OptionsChainReadinessView;
+};
+
+export type OptionsChainCoverageReadiness = {
+  state: 'available' | 'limited' | 'missing' | string;
+};
+
+export type OptionsChainExpirationCoverageReadiness = OptionsChainCoverageReadiness & {
+  expirationCount?: number | null;
+  missingCount?: number | null;
+  coveredExpirations?: string[] | null;
+};
+
+export type OptionsChainStrikeCoverageReadiness = OptionsChainCoverageReadiness & {
+  strikeCount?: number | null;
+  sparseCount?: number | null;
+};
+
+export type OptionsChainFieldCompleteness = {
+  state: 'available' | 'partial' | 'missing' | string;
+  availableCount?: number | null;
+  missingCount?: number | null;
+  totalCount?: number | null;
+};
+
+export type OptionsChainCompletenessReadiness = {
+  iv?: OptionsChainFieldCompleteness | null;
+  greeks?: OptionsChainFieldCompleteness | null;
+  openInterest?: OptionsChainFieldCompleteness | null;
+  volume?: OptionsChainFieldCompleteness | null;
+  quote?: OptionsChainFieldCompleteness | null;
+};
+
+export type OptionsChainReadiness = {
+  contractVersion?: string | null;
+  overallState: 'ready' | 'partial' | 'blocked' | string;
+  chainState: 'available' | 'partial' | 'stale' | 'missing' | string;
+  configurationState: 'available' | 'missing' | string;
+  dataBoundary: 'provider_backed' | 'demo_sample' | 'unavailable' | string;
+  authorityState: 'authoritative' | 'observation_only' | string;
+  scoreAuthority?: 'authoritative' | 'observation_only' | string | null;
+  expirationCoverage?: OptionsChainExpirationCoverageReadiness | null;
+  strikeCoverage?: OptionsChainStrikeCoverageReadiness | null;
+  fieldCompleteness?: OptionsChainCompletenessReadiness | null;
+  blockingReasons?: string[] | null;
+  warnings?: string[] | null;
+  nextEvidenceNeeded?: string[] | null;
+};
+
+export type OptionsChainReadinessLabel =
+  | '链可用'
+  | '链待接入'
+  | '链部分可用'
+  | '到期覆盖可用'
+  | '行权价覆盖有限'
+  | 'IV待补'
+  | '希腊值待补'
+  | 'OI/成交待补'
+  | '报价字段待补'
+  | '演示样本'
+  | '仅观察'
+  | '结构比较可用';
+
+export type OptionsChainReadinessView = {
+  labels: OptionsChainReadinessLabel[];
+  blockerLabels: OptionsChainReadinessLabel[];
+  allLabels: OptionsChainReadinessLabel[];
 };
 
 export type OptionsStructureSignalPacket = {
@@ -686,6 +754,89 @@ function normalizeSymbol(symbol: string): string {
   return symbol.trim().toUpperCase() || 'TEM';
 }
 
+const EMPTY_OPTIONS_CHAIN_READINESS_VIEW: OptionsChainReadinessView = {
+  labels: [],
+  blockerLabels: [],
+  allLabels: [],
+};
+
+function uniqueChainReadinessLabels(labels: OptionsChainReadinessLabel[]): OptionsChainReadinessLabel[] {
+  return [...new Set(labels)];
+}
+
+function isIncompleteField(value?: OptionsChainFieldCompleteness | null): boolean {
+  return value?.state === 'partial' || value?.state === 'missing';
+}
+
+export function normalizeOptionsChainReadinessView(
+  readiness?: OptionsChainReadiness | null,
+): OptionsChainReadinessView {
+  if (!readiness) return EMPTY_OPTIONS_CHAIN_READINESS_VIEW;
+
+  const labels: OptionsChainReadinessLabel[] = [];
+  const blockerLabels: OptionsChainReadinessLabel[] = [];
+  const configurationMissing = readiness.configurationState === 'missing';
+  const unavailableBoundary = readiness.dataBoundary === 'unavailable';
+
+  if (configurationMissing || unavailableBoundary || readiness.chainState === 'missing') {
+    labels.push('链待接入');
+  } else if (readiness.chainState === 'partial' || readiness.chainState === 'stale' || readiness.overallState === 'partial') {
+    labels.push('链部分可用');
+  } else {
+    labels.push('链可用');
+  }
+
+  if (readiness.expirationCoverage?.state === 'available') {
+    labels.push('到期覆盖可用');
+  }
+
+  if (readiness.strikeCoverage?.state === 'limited' || readiness.strikeCoverage?.state === 'missing') {
+    blockerLabels.push('行权价覆盖有限');
+  }
+
+  const completeness = readiness.fieldCompleteness;
+  if (isIncompleteField(completeness?.iv)) blockerLabels.push('IV待补');
+  if (isIncompleteField(completeness?.greeks)) blockerLabels.push('希腊值待补');
+  if (isIncompleteField(completeness?.openInterest) || isIncompleteField(completeness?.volume)) {
+    blockerLabels.push('OI/成交待补');
+  }
+  if (isIncompleteField(completeness?.quote)) blockerLabels.push('报价字段待补');
+
+  if (readiness.dataBoundary === 'demo_sample') {
+    labels.push('演示样本');
+  }
+
+  if (readiness.authorityState === 'observation_only' || readiness.overallState === 'blocked') {
+    labels.push('仅观察');
+  } else if (
+    readiness.authorityState === 'authoritative'
+    && readiness.overallState === 'ready'
+    && readiness.chainState === 'available'
+    && blockerLabels.length === 0
+  ) {
+    labels.push('结构比较可用');
+  }
+
+  const safeLabels = uniqueChainReadinessLabels(labels);
+  const safeBlockers = uniqueChainReadinessLabels(blockerLabels);
+
+  return {
+    labels: safeLabels,
+    blockerLabels: safeBlockers,
+    allLabels: uniqueChainReadinessLabels([...safeLabels, ...safeBlockers]),
+  };
+}
+
+function normalizeOptionsChainResponse(response: OptionsChainResponse): OptionsChainResponse {
+  const readiness = response.optionsChainReadiness ?? null;
+
+  return {
+    ...response,
+    optionsChainReadiness: readiness,
+    optionsChainReadinessView: normalizeOptionsChainReadinessView(readiness),
+  };
+}
+
 async function getOrFixture<T>(path: string, fixture: T): Promise<T> {
   try {
     const response = await apiClient.get<Record<string, unknown>>(path);
@@ -710,7 +861,10 @@ export const optionsLabApi = {
   getOptionChain(symbol: string, expiration: string): Promise<OptionsChainResponse> {
     const normalized = normalizeSymbol(symbol);
     const query = new URLSearchParams({ expiration, side: 'both' });
-    return getOrFixture(`/api/v1/options/underlyings/${encodeURIComponent(normalized)}/chain?${query.toString()}`, fixtureChain(normalized, expiration));
+    return getOrFixture(
+      `/api/v1/options/underlyings/${encodeURIComponent(normalized)}/chain?${query.toString()}`,
+      fixtureChain(normalized, expiration),
+    ).then(normalizeOptionsChainResponse);
   },
   compareStrategies(request: OptionsStrategyCompareRequest): Promise<OptionsStrategyCompareResponse> {
     const normalized = normalizeSymbol(request.symbol);
