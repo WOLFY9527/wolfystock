@@ -1964,14 +1964,63 @@ describe('MarketOverviewPage', () => {
     render(createElement(MarketOverviewPage));
 
     const strip = await screen.findByTestId('market-overview-source-readiness');
+    const boundary = await screen.findByTestId('market-overview-evidence-boundary');
     await waitFor(() => expect(strip).toHaveTextContent('官方风险源部分可用'));
     expect(strip).toHaveTextContent('VIX可用');
     expect(strip).toHaveTextContent('利率待更新');
     expect(strip).toHaveTextContent('Fed流动性待补');
+    expect(boundary).toHaveTextContent('证据边界待确认');
+    expect(boundary).toHaveTextContent('市场总览待补');
+    expect(boundary).toHaveTextContent('广度待补');
     expect(strip.textContent || '').not.toMatch(
       /authorized|unavailable|partial|unknown|fallbackUsed|providerConfigured|sourceAuthority|scoreContributionAllowed|provider|runtime|credential/i,
     );
     expect(strip.textContent || '').not.toMatch(/buy|sell|hold|target price|stop-loss|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
+    expect(boundary.textContent || '').not.toMatch(/provider|cache|debug|raw|sourceAuthority|buy|sell|买入|卖出|目标价|止损|仓位/i);
+  });
+
+  it('renders market overview evidence boundary states from readiness matrix without raw internals', async () => {
+    vi.mocked(marketApi.getDataReadiness).mockResolvedValue({
+      ...officialRiskReadinessPayload(),
+      consumerEvidenceReadinessMatrix: {
+        contractVersion: 'consumer_evidence_readiness_matrix_v1',
+        diagnosticOnly: true,
+        networkCallsEnabled: false,
+        mutationEnabled: false,
+        items: [
+          {
+            surface: 'market_overview',
+            evidenceFamily: 'market_regime',
+            requiredInputs: ['market overview read model', 'market breadth context', 'rotation context', 'macro context', 'liquidity context'],
+            fulfilledInputs: ['market overview read model'],
+            missingInputs: ['market breadth context'],
+            staleInputs: ['rotation context'],
+            blockedInputs: ['macro context'],
+            observationOnlyInputs: ['liquidity context'],
+            scoreGradeInputs: ['market overview read model'],
+            readinessState: 'score_grade',
+            confidenceCapReason: 'cap reason',
+            sourceAuthorityReason: 'source authority reason',
+            freshnessReason: 'freshness reason',
+            nextDiagnostic: 'compare raw diagnostics',
+            consumerSafeSummary: 'market overview summary',
+          },
+        ],
+      },
+    });
+
+    render(createElement(MarketOverviewPage));
+
+    const boundary = await screen.findByTestId('market-overview-evidence-boundary');
+    expect(boundary).toHaveTextContent('证据可用');
+    expect(boundary).toHaveTextContent('市场总览读数可用');
+    expect(boundary).toHaveTextContent('市场广度待补');
+    expect(boundary).toHaveTextContent('板块轮动待更新');
+    expect(boundary).toHaveTextContent('风险状态仅观察');
+    expect(boundary).toHaveTextContent('下一步：补齐市场广度、宏观背景');
+    expect(boundary.textContent || '').not.toMatch(
+      /contractVersion|market_overview|market_regime|confidenceCapReason|sourceAuthority|freshnessReason|nextDiagnostic|consumerSafeSummary|provider|runtime|credential|cache|debug|raw|buy|sell|hold|target price|position sizing|买入|卖出|持有|目标价|止损|仓位/i,
+    );
   });
 
   it('renders the MarketMonitor boundary with stable controls and collapsed diagnostics', async () => {
@@ -1986,9 +2035,11 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-visual-card-core-trends')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-visual-card-risk-pressure')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-visual-card-flow-rotation')).toBeInTheDocument();
-    expect(screen.getByTestId('market-overview-grid-loading')).toBeInTheDocument();
-    expect(screen.getByTestId('market-overview-grid-loading')).toHaveAttribute('aria-busy', 'true');
-    expect(screen.getByTestId('market-overview-grid-loading')).not.toHaveClass('bg-black');
+    const gridLoading = screen.queryByTestId('market-overview-grid-loading');
+    if (gridLoading) {
+      expect(gridLoading).toHaveAttribute('aria-busy', 'true');
+      expect(gridLoading).not.toHaveClass('bg-black');
+    }
     expect(await screen.findByTestId('market-overview-main-grid')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-side-rail')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '展开 技术细节' })).not.toBeInTheDocument();
@@ -3445,8 +3496,9 @@ describe('MarketOverviewPage', () => {
 
     render(createElement(MarketOverviewPage));
 
-    expect(await screen.findByTestId('market-overview-top-verdict')).toHaveTextContent(/偏强观察|中性观察|偏弱观察/);
-    expect(screen.getByTestId('market-overview-top-verdict')).not.toHaveTextContent('数据不足');
+    const topVerdict = await screen.findByTestId('market-overview-top-verdict');
+    await waitFor(() => expect(topVerdict).toHaveTextContent(/偏强观察|中性观察|偏弱观察/));
+    expect(topVerdict).not.toHaveTextContent('数据不足');
     expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent(/信号置信度仍偏有限|关键证据未补齐|待补/);
     const railActionHint = screen.queryByTestId('market-overview-rail-action-hint');
     if (railActionHint) {

@@ -24,6 +24,7 @@ import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../component
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
 import {
   buildAlpacaQuoteAuthorityReadinessView,
+  buildMarketRotationEvidenceBoundaryView,
   marketRotationApi,
   type MarketRotationEvidenceQuality,
   type MarketRotationFamilyRollupItem,
@@ -1737,6 +1738,32 @@ const RotationFamilyRow: React.FC<{ view: RotationFamilyView }> = ({ view }) => 
   );
 };
 
+const RotationEvidenceBoundaryStrip: React.FC<{ payload: MarketRotationRadarResponse }> = ({ payload }) => {
+  const view = buildMarketRotationEvidenceBoundaryView(payload);
+
+  return (
+    <div
+      data-testid="rotation-evidence-boundary"
+      className="mt-3 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2.5"
+    >
+      <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-white/48">轮动证据边界</p>
+          <p className="mt-1 text-sm font-semibold text-white/84">{view.label}</p>
+          {view.note ? <p className="mt-1 text-[11px] leading-5 text-white/52">{view.note}</p> : null}
+        </div>
+        <div className="flex min-w-0 flex-wrap gap-1.5 md:justify-end">
+          <TerminalChip variant={view.variant}>{view.label}</TerminalChip>
+          {view.chips.map((chip) => (
+            <TerminalChip key={chip.key} variant={chip.variant}>{chip.label}</TerminalChip>
+          ))}
+        </div>
+      </div>
+      <p className="mt-2 text-[11px] leading-5 text-white/48">{view.nextEvidence}</p>
+    </div>
+  );
+};
+
 const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> = ({ payload }) => {
   const tiers = deriveRotationTiers(payload);
   const guidance = rotationGuidance(payload);
@@ -1826,6 +1853,8 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
           </div>
         ))}
       </div>
+
+      <RotationEvidenceBoundaryStrip payload={payload} />
 
       <div
         data-testid="rotation-alpaca-quote-readiness"

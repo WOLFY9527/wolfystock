@@ -917,6 +917,162 @@ export function buildAlpacaQuoteAuthorityReadinessView(
   };
 }
 
+export type MarketRotationEvidenceBoundaryChip = {
+  key: string;
+  label: string;
+  variant: 'success' | 'info' | 'caution' | 'neutral';
+};
+
+export type MarketRotationEvidenceBoundaryView = {
+  label: string;
+  variant: 'success' | 'info' | 'caution' | 'neutral';
+  chips: MarketRotationEvidenceBoundaryChip[];
+  nextEvidence: string;
+  note?: string;
+};
+
+const ROTATION_BOUNDARY_SAMPLE_TOKENS = ['demo', 'sample', 'fixture', 'synthetic', 'mock', 'static'];
+
+function normalizeRotationBoundaryToken(value?: string | null): string {
+  return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function rotationBoundaryHasSampleToken(value?: string | null): boolean {
+  const normalized = normalizeRotationBoundaryToken(value);
+  return ROTATION_BOUNDARY_SAMPLE_TOKENS.some((token) => normalized.includes(token));
+}
+
+function rotationBoundaryLabel(
+  readiness: MarketRotationAlpacaQuoteAuthorityReadinessView,
+  payload?: MarketRotationRadarResponse | null,
+): MarketRotationEvidenceBoundaryView {
+  if (!payload) {
+    return {
+      label: '证据边界待确认',
+      variant: 'neutral',
+      chips: [
+        { key: 'boundary', label: '证据边界待确认', variant: 'neutral' },
+        { key: 'broad', label: '广度待补', variant: 'neutral' },
+        { key: 'sector', label: '板块轮动待补', variant: 'neutral' },
+        { key: 'risk', label: '风险状态待补', variant: 'neutral' },
+      ],
+      nextEvidence: '继续观察现有证据。',
+      note: readiness.detail,
+    };
+  }
+
+  const snapshot = payload?.consumerEvidenceSnapshot;
+  const providerState = snapshot?.providerState;
+  const sampleLike = [
+    payload?.source,
+    payload?.sourceLabel,
+    providerState?.quoteMode,
+    providerState?.status,
+    providerState?.sourceType,
+    providerState?.sourceTier,
+    providerState?.providerTier,
+    snapshot?.etfProxySummary?.label,
+    ...(Array.isArray(snapshot?.reasonCodes) ? snapshot.reasonCodes : []),
+  ].some((value) => rotationBoundaryHasSampleToken(value));
+
+  const stale = payload?.isStale === true
+    || snapshot?.isStale === true
+    || payload?.freshness === 'stale'
+    || readiness.familyRows.some((row) => row.statusLabel.includes('待更新'));
+  const fallback = payload?.isFallback === true
+    || snapshot?.isFallback === true
+    || payload?.freshness === 'fallback';
+  const limited = readiness.label !== 'ETF引用可用'
+    || readiness.chips.some((chip) => chip.label === '仅观察' || chip.label === '代理覆盖有限' || chip.label === '报价可能延迟');
+  const missing = readiness.label === 'ETF引用待补';
+  const partial = snapshot?.isPartial === true
+    || snapshot?.scoreContributionAllowed === false
+    || readiness.label === 'ETF引用部分可用';
+
+  const broadRow = readiness.familyRows.find((row) => row.label === '大盘代理覆盖');
+  const sectorRow = readiness.familyRows.find((row) => row.label === '行业ETF覆盖');
+  const riskRow = readiness.familyRows.find((row) => row.label === '风险代理覆盖');
+  const broadChipLabel = `${broadRow?.label || '广度覆盖'} · ${broadRow?.statusLabel || '待补'}`;
+  const sectorChipLabel = `${sectorRow?.label || '板块轮动'} · ${sectorRow?.statusLabel || '待补'}`;
+  const riskChipLabel = `${riskRow?.label || '风险状态'} · ${riskRow?.statusLabel || '待补'}`;
+
+  if (sampleLike) {
+    return {
+      label: '演示样本，仅观察',
+      variant: 'neutral',
+      chips: [
+        { key: 'boundary', label: '演示样本，仅观察', variant: 'neutral' },
+        { key: 'broad', label: broadChipLabel, variant: 'neutral' },
+        { key: 'sector', label: sectorChipLabel, variant: 'neutral' },
+        { key: 'risk', label: riskChipLabel, variant: 'neutral' },
+      ],
+      nextEvidence: '仅保留观察，不升格结论。',
+      note: readiness.detail,
+    };
+  }
+
+  if (stale) {
+    return {
+      label: '待更新',
+      variant: 'caution',
+      chips: [
+        { key: 'boundary', label: '待更新', variant: 'caution' },
+        { key: 'broad', label: broadChipLabel, variant: 'caution' },
+        { key: 'sector', label: sectorChipLabel, variant: 'caution' },
+        { key: 'risk', label: riskChipLabel, variant: 'caution' },
+      ],
+      nextEvidence: '下一步：更新广度、轮动和风险代理覆盖。',
+      note: payload?.freshness === 'stale' ? '当前数据已过时，继续观察新快照。' : readiness.detail,
+    };
+  }
+
+  if (fallback || missing || partial || limited) {
+    const boundaryLabel = missing ? '待补' : partial ? '部分可用' : '仅观察';
+    const boundaryVariant = missing ? 'caution' as const : partial ? 'info' as const : 'neutral' as const;
+    const chips: MarketRotationEvidenceBoundaryChip[] = [
+      { key: 'boundary', label: boundaryLabel, variant: boundaryVariant },
+      { key: 'broad', label: broadChipLabel, variant: 'neutral' },
+      { key: 'sector', label: sectorChipLabel, variant: 'neutral' },
+      { key: 'risk', label: riskChipLabel, variant: 'neutral' },
+    ];
+    if (payload?.isFallback || snapshot?.isFallback) {
+      chips.push({ key: 'freshness', label: '最近一次可用', variant: 'info' });
+    }
+    if (readiness.chips.some((chip) => chip.label === '仅观察')) {
+      chips.push({ key: 'observe', label: '仅观察', variant: 'neutral' });
+    }
+    return {
+      label: boundaryLabel,
+      variant: boundaryVariant,
+      chips,
+      nextEvidence: missing
+        ? '下一步：补齐报价覆盖与风险代理。'
+        : '继续观察现有证据。',
+      note: readiness.detail,
+    };
+  }
+
+  return {
+    label: '证据可用',
+    variant: 'success',
+    chips: [
+      { key: 'boundary', label: '证据可用', variant: 'success' },
+      { key: 'broad', label: broadChipLabel.replace('待补', '可用'), variant: 'success' },
+      { key: 'sector', label: sectorChipLabel.replace('待补', '可用'), variant: 'success' },
+      { key: 'risk', label: riskChipLabel.replace('待补', '可用'), variant: 'success' },
+    ],
+    nextEvidence: '继续观察广度、轮动和风险代理变化。',
+    note: readiness.detail,
+  };
+}
+
+export function buildMarketRotationEvidenceBoundaryView(
+  payload?: MarketRotationRadarResponse | null,
+): MarketRotationEvidenceBoundaryView {
+  const readiness = buildAlpacaQuoteAuthorityReadinessView(payload?.alpacaQuoteAuthorityReadiness);
+  return rotationBoundaryLabel(readiness, payload);
+}
+
 function normalizeTimeWindows(windows?: Record<string, MarketRotationTimeWindow> | null): Record<string, MarketRotationTimeWindow> {
   if (!windows || typeof windows !== 'object') {
     return {};

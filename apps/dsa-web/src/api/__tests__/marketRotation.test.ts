@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import apiClient from '../index';
-import { buildAlpacaQuoteAuthorityReadinessView, marketRotationApi } from '../marketRotation';
+import {
+  buildAlpacaQuoteAuthorityReadinessView,
+  buildMarketRotationEvidenceBoundaryView,
+  marketRotationApi,
+  type MarketRotationRadarResponse,
+} from '../marketRotation';
 
 vi.mock('../index', () => ({
   default: {
@@ -194,6 +199,88 @@ describe('marketRotationApi', () => {
     expect(view.familyRows).toEqual([]);
     expect(`${view.label} ${view.detail} ${view.chips.map((chip) => chip.label).join(' ')}`).not.toMatch(
       /Alpaca部分可用|Alpaca待配置|Alpaca可用|Alpaca未配置|回退观察|备用样本观察|provider|runtime|credential|sourceAuthority|fallback/i,
+    );
+  });
+
+  it('keeps absent rotation evidence readiness fail-closed', () => {
+    const view = buildMarketRotationEvidenceBoundaryView(undefined);
+
+    expect(view.label).toBe('证据边界待确认');
+    expect(view.chips.map((chip) => chip.label)).toEqual(['证据边界待确认', '广度待补', '板块轮动待补', '风险状态待补']);
+    expect(JSON.stringify(view)).not.toMatch(/证据可用|provider|runtime|credential|sourceAuthority|fallback|buy|sell|买入|卖出|目标价|止损|仓位/i);
+  });
+
+  it('projects demo or sample rotation evidence as observation-only consumer copy', () => {
+    const view = buildMarketRotationEvidenceBoundaryView({
+      source: 'computed',
+      sourceLabel: 'Computed',
+      freshness: 'delayed',
+      isFallback: false,
+      isStale: false,
+      consumerEvidenceSnapshot: {
+        market: 'US',
+        freshness: 'delayed',
+        isFallback: false,
+        isStale: false,
+        isPartial: true,
+        scoreContributionAllowed: false,
+        reasonCodes: ['synthetic_fixture'],
+        providerState: {
+          present: true,
+          quoteMode: 'demo_sample',
+          sourceType: 'synthetic_fixture',
+          sourceTier: 'synthetic_fixture',
+          sourceAuthorityAllowed: false,
+          scoreContributionAllowed: false,
+        },
+        rotationFamilyRollup: [],
+      },
+      alpacaQuoteAuthorityReadiness: {
+        providerConfigured: true,
+        sourceAuthority: 'partial',
+        scoreContributionAllowed: false,
+        quoteCoverageByFamily: [
+          {
+            familyId: 'broad_us_market',
+            configuredCount: 3,
+            availableCount: 2,
+            missingCount: 1,
+            staleCount: 0,
+            scoreAuthorityAllowedCount: 1,
+            observationOnlyCount: 2,
+          },
+          {
+            familyId: 'sector_etfs',
+            configuredCount: 4,
+            availableCount: 3,
+            missingCount: 0,
+            staleCount: 1,
+            scoreAuthorityAllowedCount: 1,
+            observationOnlyCount: 3,
+          },
+          {
+            familyId: 'volatility_risk',
+            configuredCount: 1,
+            availableCount: 0,
+            missingCount: 1,
+            staleCount: 0,
+            scoreAuthorityAllowedCount: 0,
+            observationOnlyCount: 1,
+          },
+        ],
+      },
+    } as MarketRotationRadarResponse);
+
+    expect(view.label).toBe('演示样本，仅观察');
+    expect(view.nextEvidence).toBe('仅保留观察，不升格结论。');
+    expect(view.chips.map((chip) => chip.label)).toEqual([
+      '演示样本，仅观察',
+      '大盘代理覆盖 · 代理覆盖有限',
+      '行业ETF覆盖 · ETF引用部分可用',
+      '风险代理覆盖 · 报价待补',
+    ]);
+    expect(JSON.stringify(view)).not.toMatch(
+      /synthetic_fixture|demo_sample|providerState|sourceAuthorityAllowed|scoreContributionAllowed|provider|runtime|cache|debug|raw|buy|sell|target price|position sizing|买入|卖出|目标价|止损|仓位/i,
     );
   });
 
