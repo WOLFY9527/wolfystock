@@ -33,8 +33,17 @@ from api.v1.schemas.options import (
     OptionsOptimizerAlternative,
     OptionsScenarioRequest,
     OptionsScenarioResponse,
+    OptionsHistoricalWinRate,
+    OptionsModelImpliedProbability,
+    OptionsStrategyAggregateGreeks,
+    OptionsStrategyAnalysis,
+    OptionsStrategyAnalyzerLeg,
+    OptionsStrategyAnalyzerReadiness,
+    OptionsStrategyAnalyzerRequest,
+    OptionsStrategyAnalyzerResponse,
     OptionsStrategyComparison,
     OptionsStrategyGateSummary,
+    OptionsStrategyPayoffRow,
     OptionsStrategyCompareRequest,
     OptionsStrategyCompareResponse,
     OptionsStrategyLeg,
@@ -62,9 +71,17 @@ from src.services.options_lab_domain_models import (
     ScenarioPayoffRowModel,
     ScenarioResultModel,
     ScenarioRiskModel,
+    StrategyAnalysisModel,
+    StrategyAnalyzerGreeksModel,
+    StrategyAnalyzerLegModel,
+    StrategyAnalyzerPayoffRowModel,
+    StrategyAnalyzerReadinessModel,
+    StrategyAnalyzerResultModel,
     StrategyCompareResultModel,
     StrategyComparisonModel,
+    StrategyHistoricalWinRateModel,
     StrategyLegModel,
+    StrategyProbabilityModel,
 )
 from src.services.options_lab_service import (
     OptionsLabProviderUnavailable,
@@ -319,6 +336,99 @@ def _map_strategy_compare_response(result: StrategyCompareResultModel) -> Option
         assumptions=dict(result.assumptions),
         strategies=[_map_strategy_comparison(item) for item in result.strategies],
         limitations=list(result.limitations),
+        metadata=_map_options_metadata(result.metadata),
+    )
+
+
+def _map_strategy_analyzer_leg(leg: StrategyAnalyzerLegModel) -> OptionsStrategyAnalyzerLeg:
+    return OptionsStrategyAnalyzerLeg(
+        legAction=leg.leg_action,
+        side=leg.side,
+        contractSymbol=leg.contract_symbol,
+        expiration=leg.expiration,
+        strike=leg.strike,
+        mid=leg.mid,
+        quantity=leg.quantity,
+    )
+
+
+def _map_strategy_payoff_row(row: StrategyAnalyzerPayoffRowModel) -> OptionsStrategyPayoffRow:
+    return OptionsStrategyPayoffRow(
+        underlyingPrice=row.underlying_price,
+        grossPayoff=row.gross_payoff,
+        netPayoff=row.net_payoff,
+    )
+
+
+def _map_strategy_greeks(greeks: StrategyAnalyzerGreeksModel | None) -> OptionsStrategyAggregateGreeks | None:
+    if greeks is None:
+        return None
+    return OptionsStrategyAggregateGreeks(
+        delta=greeks.delta,
+        gamma=greeks.gamma,
+        theta=greeks.theta,
+        vega=greeks.vega,
+        rho=greeks.rho,
+    )
+
+
+def _map_strategy_probability(probability: StrategyProbabilityModel) -> OptionsModelImpliedProbability:
+    return OptionsModelImpliedProbability(
+        state=probability.state,
+        modelImpliedProbabilityOfProfit=probability.model_implied_probability_of_profit,
+        inputs=dict(probability.inputs),
+        blockers=list(probability.blockers),
+    )
+
+
+def _map_historical_win_rate(history: StrategyHistoricalWinRateModel) -> OptionsHistoricalWinRate:
+    return OptionsHistoricalWinRate(
+        state=history.state,
+        value=history.value,
+        blockers=list(history.blockers),
+    )
+
+
+def _map_strategy_analyzer_readiness(readiness: StrategyAnalyzerReadinessModel) -> OptionsStrategyAnalyzerReadiness:
+    return OptionsStrategyAnalyzerReadiness(
+        strategyStructureState=readiness.strategy_structure_state,
+        chainDataState=readiness.chain_data_state,
+        analysisState=readiness.analysis_state,
+        observationOnly=readiness.observation_only,
+        decisionGrade=readiness.decision_grade,
+        dataBlockers=list(readiness.data_blockers),
+    )
+
+
+def _map_strategy_analysis(analysis: StrategyAnalysisModel) -> OptionsStrategyAnalysis:
+    return OptionsStrategyAnalysis(
+        strategyType=analysis.strategy_type,
+        legs=[_map_strategy_analyzer_leg(leg) for leg in analysis.legs],
+        netDebit=analysis.net_debit,
+        netCredit=analysis.net_credit,
+        maxProfit=analysis.max_profit,
+        maxLoss=analysis.max_loss,
+        breakevens=list(analysis.breakevens),
+        payoffTable=[_map_strategy_payoff_row(row) for row in analysis.payoff_table],
+        aggregateGreeks=_map_strategy_greeks(analysis.aggregate_greeks),
+        missingGreeksBlockers=list(analysis.missing_greeks_blockers),
+        modelImpliedProbability=_map_strategy_probability(analysis.model_implied_probability),
+        historicalWinRate=_map_historical_win_rate(analysis.historical_win_rate),
+        readiness=_map_strategy_analyzer_readiness(analysis.readiness),
+        limitations=list(analysis.limitations),
+    )
+
+
+def _map_strategy_analyzer_response(result: StrategyAnalyzerResultModel) -> OptionsStrategyAnalyzerResponse:
+    return OptionsStrategyAnalyzerResponse(
+        symbol=result.symbol,
+        underlying=dict(result.underlying),
+        assumptions=dict(result.assumptions),
+        analyses=[_map_strategy_analysis(item) for item in result.analyses],
+        strategyReadiness=_map_strategy_analyzer_readiness(result.strategy_readiness),
+        limitations=list(result.limitations),
+        observationOnly=result.observation_only,
+        decisionGrade=result.decision_grade,
         metadata=_map_options_metadata(result.metadata),
     )
 
@@ -600,6 +710,22 @@ def analyze_options_scenario(request: OptionsScenarioRequest) -> OptionsScenario
 def compare_options_strategies(request: OptionsStrategyCompareRequest) -> OptionsStrategyCompareResponse:
     try:
         return _map_strategy_compare_response(_service().compare_strategies(request))
+    except OptionsLabUnsupportedSymbol as exc:
+        raise _unsupported_response(exc) from exc
+    except OptionsLabProviderUnavailable as exc:
+        raise _provider_unavailable_response(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"error": "validation_error", "message": str(exc)}) from exc
+
+
+@router.post(
+    "/strategies/analyze",
+    response_model=OptionsStrategyAnalyzerResponse,
+    summary="Analyze neutral fixture-backed Options Lab strategy templates",
+)
+def analyze_options_strategies(request: OptionsStrategyAnalyzerRequest) -> OptionsStrategyAnalyzerResponse:
+    try:
+        return _map_strategy_analyzer_response(_service().analyze_strategies(request))
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
     except OptionsLabProviderUnavailable as exc:

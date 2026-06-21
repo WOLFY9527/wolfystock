@@ -1480,6 +1480,70 @@ def test_strategy_compare_endpoint_returns_defined_risk_structures() -> None:
         client.close()
 
 
+def test_strategy_analyzer_endpoint_returns_payoff_probability_and_readiness_contract() -> None:
+    client = _client()
+    try:
+        response = client.post(
+            "/api/v1/options/strategies/analyze",
+            json={
+                "symbol": "TEM",
+                "expiration": "2026-06-19",
+                "strategies": ["long_straddle", "long_strangle", "bull_call_spread", "iron_condor"],
+                "scenarioPrices": [40, 52.4, 70],
+                "forceRefresh": True,
+            },
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["observationOnly"] is True
+        assert payload["decisionGrade"] is False
+        assert payload["strategyReadiness"]["strategyStructureState"] == "available"
+        assert payload["strategyReadiness"]["observationOnly"] is True
+        assert payload["strategyReadiness"]["decisionGrade"] is False
+        assert [item["strategyType"] for item in payload["analyses"]] == [
+            "long_straddle",
+            "long_strangle",
+            "bull_call_spread",
+            "iron_condor",
+        ]
+
+        straddle = payload["analyses"][0]
+        assert straddle["netDebit"] == 750
+        assert straddle["maxLoss"] == 750
+        assert straddle["maxProfit"] is None
+        assert straddle["breakevens"] == [42.5, 57.5]
+        assert straddle["payoffTable"][0] == {
+            "underlyingPrice": 40.0,
+            "grossPayoff": 1000.0,
+            "netPayoff": 250.0,
+        }
+        assert straddle["aggregateGreeks"] == {
+            "delta": 0.22,
+            "gamma": 0.091,
+            "theta": -0.133,
+            "vega": 0.234,
+            "rho": 0.012,
+        }
+        assert straddle["modelImpliedProbability"]["state"] == "available"
+        assert 0 <= straddle["modelImpliedProbability"]["modelImpliedProbabilityOfProfit"] <= 1
+        assert straddle["modelImpliedProbability"]["inputs"]["riskFreeRate"] == 0.04
+        assert straddle["historicalWinRate"] == {
+            "state": "unavailable",
+            "value": None,
+            "blockers": ["historical_options_chain_data_unavailable"],
+        }
+
+        condor = next(item for item in payload["analyses"] if item["strategyType"] == "iron_condor")
+        assert condor["netCredit"] == 345
+        assert condor["maxProfit"] == 345
+        assert condor["maxLoss"] == 655
+        assert condor["breakevens"] == [46.55, 58.45]
+        assert condor["modelImpliedProbability"]["state"] == "available"
+        _assert_no_safety_leaks(payload)
+    finally:
+        client.close()
+
+
 def test_strategy_compare_endpoint_matches_service_alias_contract() -> None:
     request_payload = {
         "symbol": "TEM",

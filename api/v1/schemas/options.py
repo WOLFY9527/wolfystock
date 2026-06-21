@@ -234,6 +234,15 @@ class OptionChainResponse(_OptionsModel):
 OptionDirection = Literal["bullish", "bearish", "neutral", "volatility"]
 OptionRiskProfile = Literal["conservative", "balanced", "aggressive"]
 OptionStrategy = Literal["long_call", "long_put", "bull_call_spread", "bear_put_spread"]
+OptionsStrategyAnalyzerTemplate = Literal[
+    "long_straddle",
+    "long_strangle",
+    "bull_call_spread",
+    "bear_put_spread",
+    "iron_condor",
+    "long_call",
+    "long_put",
+]
 OptionsDataQualityTier = Literal["live_usable", "delayed_usable", "synthetic_demo_only", "insufficient"]
 OptionsDecisionLabel = Literal["数据不足，禁止判断", "不建议", "仅观察", "有条件可交易", "高风险，仅小仓验证"]
 OptionsOptimizerLabel = Literal["数据不足，禁止判断", "不建议交易", "仅观察", "可关注替代结构", "有条件可交易"]
@@ -256,6 +265,11 @@ OptionsChainCoverageState = Literal["available", "limited", "missing"]
 OptionsChainCompletenessState = Literal["available", "partial", "missing"]
 OptionsChainDataBoundaryState = Literal["provider_backed", "demo_sample", "unavailable"]
 OptionsChainAuthorityState = Literal["authoritative", "observation_only"]
+OptionsStrategyStructureState = Literal["available", "blocked"]
+OptionsStrategyChainDataState = Literal["sufficient", "partial", "blocked"]
+OptionsStrategyAnalysisState = Literal["analysis_ready", "observation_only", "blocked"]
+OptionsStrategyProbabilityState = Literal["available", "partial", "unavailable"]
+OptionsHistoricalWinRateState = Literal["available", "unavailable"]
 
 _READY_FRESHNESS_VALUES = {"fresh", "live", "realtime", "real_time", "real-time"}
 _DELAYED_FRESHNESS_VALUES = {"delayed", "cached", "stale", "delayed_usable"}
@@ -1635,6 +1649,103 @@ class OptionsStrategyCompareResponse(_OptionsModel):
             self.options_research_readiness,
         )
         return self
+
+
+class OptionsStrategyAnalyzerRequest(_OptionsModel):
+    symbol: str
+    market_data_provider: str = Field(default="synthetic_fixture", alias="marketDataProvider")
+    expiration: Optional[str] = None
+    strategies: List[OptionsStrategyAnalyzerTemplate] = Field(
+        default_factory=lambda: [
+            "long_straddle",
+            "long_strangle",
+            "bull_call_spread",
+            "bear_put_spread",
+            "iron_condor",
+        ]
+    )
+    scenario_prices: List[float] = Field(default_factory=list, alias="scenarioPrices")
+    risk_free_rate: float = Field(default=0.04, alias="riskFreeRate")
+    scenario_assumptions: Dict[str, Any] = Field(default_factory=dict, alias="scenarioAssumptions")
+    force_refresh: bool = Field(default=False, alias="forceRefresh")
+
+
+class OptionsStrategyAnalyzerLeg(_OptionsModel):
+    leg_action: Literal["long", "short"] = Field(alias="legAction")
+    side: Literal["call", "put"]
+    contract_symbol: str = Field(alias="contractSymbol")
+    expiration: str
+    strike: float
+    mid: float
+    quantity: int = 1
+
+
+class OptionsStrategyPayoffRow(_OptionsModel):
+    underlying_price: float = Field(alias="underlyingPrice")
+    gross_payoff: float = Field(alias="grossPayoff")
+    net_payoff: float = Field(alias="netPayoff")
+
+
+class OptionsStrategyAggregateGreeks(_OptionsModel):
+    delta: float
+    gamma: float
+    theta: float
+    vega: float
+    rho: Optional[float] = None
+
+
+class OptionsModelImpliedProbability(_OptionsModel):
+    state: OptionsStrategyProbabilityState
+    model_implied_probability_of_profit: Optional[float] = Field(
+        default=None,
+        alias="modelImpliedProbabilityOfProfit",
+    )
+    inputs: Dict[str, Any] = Field(default_factory=dict)
+    blockers: List[str] = Field(default_factory=list)
+
+
+class OptionsHistoricalWinRate(_OptionsModel):
+    state: OptionsHistoricalWinRateState = "unavailable"
+    value: Optional[float] = None
+    blockers: List[str] = Field(default_factory=lambda: ["historical_options_chain_data_unavailable"])
+
+
+class OptionsStrategyAnalyzerReadiness(_OptionsModel):
+    strategy_structure_state: OptionsStrategyStructureState = Field(alias="strategyStructureState")
+    chain_data_state: OptionsStrategyChainDataState = Field(alias="chainDataState")
+    analysis_state: OptionsStrategyAnalysisState = Field(alias="analysisState")
+    observation_only: bool = Field(default=True, alias="observationOnly")
+    decision_grade: bool = Field(default=False, alias="decisionGrade")
+    data_blockers: List[str] = Field(default_factory=list, alias="dataBlockers")
+
+
+class OptionsStrategyAnalysis(_OptionsModel):
+    strategy_type: OptionsStrategyAnalyzerTemplate = Field(alias="strategyType")
+    legs: List[OptionsStrategyAnalyzerLeg]
+    net_debit: Optional[float] = Field(default=None, alias="netDebit")
+    net_credit: Optional[float] = Field(default=None, alias="netCredit")
+    max_profit: Optional[float] = Field(default=None, alias="maxProfit")
+    max_loss: Optional[float] = Field(default=None, alias="maxLoss")
+    breakevens: List[float] = Field(default_factory=list)
+    payoff_table: List[OptionsStrategyPayoffRow] = Field(default_factory=list, alias="payoffTable")
+    aggregate_greeks: Optional[OptionsStrategyAggregateGreeks] = Field(default=None, alias="aggregateGreeks")
+    missing_greeks_blockers: List[str] = Field(default_factory=list, alias="missingGreeksBlockers")
+    model_implied_probability: OptionsModelImpliedProbability = Field(alias="modelImpliedProbability")
+    historical_win_rate: OptionsHistoricalWinRate = Field(alias="historicalWinRate")
+    readiness: OptionsStrategyAnalyzerReadiness
+    limitations: List[str] = Field(default_factory=list)
+
+
+class OptionsStrategyAnalyzerResponse(_OptionsModel):
+    symbol: str
+    underlying: Dict[str, Any]
+    assumptions: Dict[str, Any]
+    analyses: List[OptionsStrategyAnalysis] = Field(default_factory=list)
+    strategy_readiness: OptionsStrategyAnalyzerReadiness = Field(alias="strategyReadiness")
+    limitations: List[str] = Field(default_factory=list)
+    observation_only: bool = Field(default=True, alias="observationOnly")
+    decision_grade: bool = Field(default=False, alias="decisionGrade")
+    metadata: OptionsMetadata = Field(default_factory=OptionsMetadata)
 
 
 class OptionsDecisionLeg(_OptionsModel):

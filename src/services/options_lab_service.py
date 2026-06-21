@@ -21,6 +21,7 @@ from api.v1.schemas.options import (
     OptionsDecisionLeg,
     OptionsDecisionRequest,
     OptionsScenarioRequest,
+    OptionsStrategyAnalyzerRequest,
     OptionsStrategyCompareRequest,
 )
 from src.services.options_data_quality_gates import (
@@ -53,9 +54,17 @@ from src.services.options_lab_domain_models import (
     ScenarioPayoffRowModel,
     ScenarioResultModel,
     ScenarioRiskModel,
+    StrategyAnalysisModel,
+    StrategyAnalyzerGreeksModel,
+    StrategyAnalyzerLegModel,
+    StrategyAnalyzerPayoffRowModel,
+    StrategyAnalyzerReadinessModel,
+    StrategyAnalyzerResultModel,
     StrategyCompareResultModel,
     StrategyComparisonModel,
+    StrategyHistoricalWinRateModel,
     StrategyLegModel,
+    StrategyProbabilityModel,
 )
 from src.services.options_market_data_provider import (
     DEFAULT_OPTIONS_FIXTURE_PATH,
@@ -114,8 +123,29 @@ CONTRACT_MULTIPLIER = 100
 SCORING_MODEL_VERSION = "deterministic_fixture_scoring_v1"
 SCENARIO_MODEL_VERSION = "expiration_payoff_v1"
 STRATEGY_COMPARE_MODEL_VERSION = "defined_risk_strategy_compare_v1"
+STRATEGY_ANALYZER_MODEL_VERSION = "strategy_analyzer_engine_v1"
 DECISION_ENGINE_MODEL_VERSION = "options_decision_engine_r2"
 SUPPORTED_COMPARE_STRATEGIES = {"long_call", "long_put", "bull_call_spread", "bear_put_spread"}
+SUPPORTED_ANALYZER_STRATEGIES = {
+    "long_straddle",
+    "long_strangle",
+    "bull_call_spread",
+    "bear_put_spread",
+    "iron_condor",
+    "long_call",
+    "long_put",
+}
+STRATEGY_ANALYZER_LIMITATIONS = [
+    "uses_current_option_chain_snapshot_only",
+    "historical_options_chain_data_unavailable",
+    "model_implied_probability_requires_underlying_dte_iv_and_breakevens",
+    "no_live_provider_calls",
+    "no_llm_calls",
+    "no_broker_execution",
+    "no_portfolio_mutation",
+    "no_order_placement",
+    "neutral_analytical_templates_only",
+]
 
 
 class OptionsLabUnsupportedSymbol(ValueError):
@@ -433,6 +463,59 @@ class OptionsLabService:
                 fixture=fixture,
                 scoring_engine=SCORING_MODEL_VERSION,
                 strategy_engine=STRATEGY_COMPARE_MODEL_VERSION,
+            ),
+        )
+
+    def analyze_strategies(
+        self, request: OptionsStrategyAnalyzerRequest | Dict[str, Any]
+    ) -> StrategyAnalyzerResultModel:
+        parsed = self._parse_strategy_analyzer_request(request)
+        requested = self._validate_analyzer_strategies(parsed.strategies)
+        fixture = self._fixture_for_symbol(parsed.symbol, market_data_provider=parsed.market_data_provider)
+        contracts = list(self._contracts_for_fixture(fixture, include_greeks=True))
+        if parsed.expiration:
+            contracts = [contract for contract in contracts if contract.expiration == parsed.expiration]
+        underlying = self._safe_underlying(fixture)
+        underlying_price = self._float_or_none(underlying.get("price"))
+        analyses: List[StrategyAnalysisModel] = []
+
+        for strategy in parsed.strategies:
+            if strategy not in requested:
+                continue
+            analyses.append(
+                self._build_strategy_analysis(
+                    strategy=strategy,
+                    contracts=contracts,
+                    underlying_price=underlying_price,
+                    scenario_prices=parsed.scenario_prices,
+                    risk_free_rate=parsed.risk_free_rate,
+                )
+            )
+
+        readiness = self._aggregate_strategy_readiness(analyses, metadata=self._metadata(fixture=fixture))
+        return StrategyAnalyzerResultModel(
+            symbol=fixture["symbol"],
+            underlying=underlying,
+            assumptions={
+                "expiration": parsed.expiration,
+                "strategies": list(parsed.strategies),
+                "scenarioPrices": [float(price) for price in parsed.scenario_prices],
+                "riskFreeRate": parsed.risk_free_rate,
+                "riskFreeRateAssumption": "default_0.04_annualized_when_not_supplied",
+                "pricingMode": "expiration_intrinsic_plus_net_premium",
+                "contractMultiplier": CONTRACT_MULTIPLIER,
+                "historicalOptionsChainDataAvailable": False,
+            },
+            analyses=analyses,
+            strategy_readiness=readiness,
+            limitations=list(STRATEGY_ANALYZER_LIMITATIONS),
+            observation_only=True,
+            decision_grade=False,
+            metadata=self._metadata(
+                force_refresh=parsed.force_refresh,
+                fixture=fixture,
+                scoring_engine=SCORING_MODEL_VERSION,
+                strategy_engine=STRATEGY_ANALYZER_MODEL_VERSION,
             ),
         )
 
@@ -1622,6 +1705,14 @@ class OptionsLabService:
         return OptionsStrategyCompareRequest.model_validate(request)
 
     @staticmethod
+    def _parse_strategy_analyzer_request(
+        request: OptionsStrategyAnalyzerRequest | Dict[str, Any]
+    ) -> OptionsStrategyAnalyzerRequest:
+        if isinstance(request, OptionsStrategyAnalyzerRequest):
+            return request
+        return OptionsStrategyAnalyzerRequest.model_validate(request)
+
+    @staticmethod
     def _parse_decision_request(request: OptionsDecisionRequest | Dict[str, Any]) -> OptionsDecisionRequest:
         if isinstance(request, OptionsDecisionRequest):
             return request
@@ -1632,6 +1723,22 @@ class OptionsLabService:
         requested = set(strategies or ["long_call", "long_put", "bull_call_spread", "bear_put_spread"])
         if not requested or requested - SUPPORTED_COMPARE_STRATEGIES:
             raise ValueError("Unsupported strategy requested for Options Lab Phase 4.")
+        return requested
+
+    @staticmethod
+    def _validate_analyzer_strategies(strategies: Sequence[str]) -> set[str]:
+        requested = set(
+            strategies
+            or [
+                "long_straddle",
+                "long_strangle",
+                "bull_call_spread",
+                "bear_put_spread",
+                "iron_condor",
+            ]
+        )
+        if not requested or requested - SUPPORTED_ANALYZER_STRATEGIES:
+            raise ValueError("Unsupported strategy requested for Options Strategy Analyzer.")
         return requested
 
     @staticmethod
@@ -1917,6 +2024,489 @@ class OptionsLabService:
         if not filtered:
             raise ValueError("No supported fixture contract matched the scenario request.")
         return sorted(filtered, key=lambda contract: (contract.expiration, contract.strike))[0]
+
+    def _build_strategy_analysis(
+        self,
+        strategy: str,
+        contracts: Sequence[OptionContract],
+        underlying_price: Optional[float],
+        scenario_prices: Sequence[float],
+        risk_free_rate: float,
+    ) -> StrategyAnalysisModel:
+        selected = self._strategy_template_legs(strategy, contracts, underlying_price)
+        if not selected:
+            readiness = StrategyAnalyzerReadinessModel(
+                strategy_structure_state="blocked",
+                chain_data_state="blocked",
+                analysis_state="blocked",
+                data_blockers=["strategy_template_contracts_unavailable"],
+            )
+            return StrategyAnalysisModel(
+                strategy_type=strategy,
+                readiness=readiness,
+                model_implied_probability=StrategyProbabilityModel(
+                    state="unavailable",
+                    blockers=["strategy_template_contracts_unavailable"],
+                ),
+                historical_win_rate=StrategyHistoricalWinRateModel(),
+                limitations=list(STRATEGY_ANALYZER_LIMITATIONS),
+            )
+
+        net_cost_share = self._strategy_net_cost_share(selected)
+        net_debit = round(net_cost_share * CONTRACT_MULTIPLIER, 2) if net_cost_share > 0 else None
+        net_credit = round(abs(net_cost_share) * CONTRACT_MULTIPLIER, 2) if net_cost_share < 0 else None
+        breakevens = self._strategy_breakevens(strategy, selected, net_cost_share)
+        max_profit, max_loss = self._strategy_max_profit_loss(strategy, selected, net_cost_share)
+        payoff_table = [
+            self._strategy_payoff_row(price, selected, net_cost_share)
+            for price in self._strategy_scenario_prices(scenario_prices, underlying_price, selected, breakevens)
+        ]
+        aggregate_greeks, missing_greeks = self._strategy_aggregate_greeks(selected)
+        probability = self._model_implied_probability(
+            strategy=strategy,
+            selected=selected,
+            underlying_price=underlying_price,
+            breakevens=breakevens,
+            risk_free_rate=risk_free_rate,
+        )
+        blockers = list(dict.fromkeys([*missing_greeks, *probability.blockers]))
+        chain_state = "sufficient"
+        if blockers:
+            chain_state = "partial"
+        readiness = StrategyAnalyzerReadinessModel(
+            strategy_structure_state="available",
+            chain_data_state=chain_state,
+            analysis_state="observation_only",
+            observation_only=True,
+            decision_grade=False,
+            data_blockers=blockers or ["demo_sample_data"],
+        )
+        return StrategyAnalysisModel(
+            strategy_type=strategy,
+            legs=[self._analyzer_leg(action, contract) for action, contract in selected],
+            net_debit=net_debit,
+            net_credit=net_credit,
+            max_profit=max_profit,
+            max_loss=max_loss,
+            breakevens=breakevens,
+            payoff_table=payoff_table,
+            aggregate_greeks=aggregate_greeks,
+            missing_greeks_blockers=missing_greeks,
+            model_implied_probability=probability,
+            historical_win_rate=StrategyHistoricalWinRateModel(),
+            readiness=readiness,
+            limitations=list(STRATEGY_ANALYZER_LIMITATIONS),
+        )
+
+    def _strategy_template_legs(
+        self,
+        strategy: str,
+        contracts: Sequence[OptionContract],
+        underlying_price: Optional[float],
+    ) -> List[tuple[str, OptionContract]]:
+        if strategy == "long_call":
+            contract = self._nearest_contract(contracts, "call", underlying_price)
+            return [("long", contract)] if contract is not None else []
+        if strategy == "long_put":
+            contract = self._nearest_contract(contracts, "put", underlying_price)
+            return [("long", contract)] if contract is not None else []
+        if strategy == "long_straddle":
+            pair = self._straddle_pair(contracts, underlying_price)
+            return [("long", pair[0]), ("long", pair[1])] if pair else []
+        if strategy == "long_strangle":
+            pair = self._strangle_pair(contracts, underlying_price)
+            return [("long", pair[0]), ("long", pair[1])] if pair else []
+        if strategy == "bull_call_spread":
+            pair = self._best_debit_spread_pair("bull_call_spread", "call", contracts)
+            return [("long", pair[0]), ("short", pair[1])] if pair else []
+        if strategy == "bear_put_spread":
+            pair = self._best_debit_spread_pair("bear_put_spread", "put", contracts)
+            return [("long", pair[0]), ("short", pair[1])] if pair else []
+        if strategy == "iron_condor":
+            condor = self._iron_condor_legs(contracts, underlying_price)
+            if not condor:
+                return []
+            long_put, short_put, short_call, long_call = condor
+            return [
+                ("long", long_put),
+                ("short", short_put),
+                ("short", short_call),
+                ("long", long_call),
+            ]
+        return []
+
+    @staticmethod
+    def _nearest_contract(
+        contracts: Sequence[OptionContract],
+        side: str,
+        underlying_price: Optional[float],
+    ) -> Optional[OptionContract]:
+        candidates = [contract for contract in contracts if contract.side == side]
+        if not candidates:
+            return None
+        if underlying_price and underlying_price > 0:
+            return sorted(candidates, key=lambda contract: (abs(contract.strike - underlying_price), contract.strike))[0]
+        return sorted(candidates, key=lambda contract: contract.strike)[0]
+
+    def _straddle_pair(
+        self,
+        contracts: Sequence[OptionContract],
+        underlying_price: Optional[float],
+    ) -> Optional[tuple[OptionContract, OptionContract]]:
+        calls_by_strike = {contract.strike: contract for contract in contracts if contract.side == "call"}
+        puts_by_strike = {contract.strike: contract for contract in contracts if contract.side == "put"}
+        common = sorted(set(calls_by_strike) & set(puts_by_strike))
+        if not common:
+            return None
+        if underlying_price and underlying_price > 0:
+            strike = sorted(common, key=lambda value: (abs(value - underlying_price), value))[0]
+        else:
+            strike = common[0]
+        return calls_by_strike[strike], puts_by_strike[strike]
+
+    def _strangle_pair(
+        self,
+        contracts: Sequence[OptionContract],
+        underlying_price: Optional[float],
+    ) -> Optional[tuple[OptionContract, OptionContract]]:
+        calls = sorted([contract for contract in contracts if contract.side == "call"], key=lambda item: item.strike)
+        puts = sorted([contract for contract in contracts if contract.side == "put"], key=lambda item: item.strike, reverse=True)
+        if not calls or not puts:
+            return None
+        if underlying_price and underlying_price > 0:
+            call = next((contract for contract in calls if contract.strike >= underlying_price), calls[-1])
+            put = next((contract for contract in puts if contract.strike <= underlying_price), puts[-1])
+            return call, put
+        return calls[0], puts[0]
+
+    def _best_debit_spread_pair(
+        self,
+        strategy: str,
+        side: str,
+        contracts: Sequence[OptionContract],
+    ) -> Optional[tuple[OptionContract, OptionContract]]:
+        pairs = []
+        for long_leg, short_leg in self._debit_spread_pairs(strategy, side, contracts):
+            long_mid = self._contract_mid(long_leg)
+            short_mid = self._contract_mid(short_leg)
+            net_debit = round((long_mid - short_mid) * CONTRACT_MULTIPLIER, 2)
+            width = abs(long_leg.strike - short_leg.strike) * CONTRACT_MULTIPLIER
+            if net_debit > 0 and width > net_debit:
+                warning_count = len(self._strategy_liquidity_warnings([long_leg, short_leg]))
+                pairs.append((warning_count, net_debit, -width, long_leg.strike, short_leg.strike, long_leg, short_leg))
+        if not pairs:
+            return None
+        _, _, _, _, _, long_leg, short_leg = sorted(pairs, key=lambda item: (item[0], item[1], item[2], item[3], item[4]))[0]
+        return long_leg, short_leg
+
+    def _iron_condor_legs(
+        self,
+        contracts: Sequence[OptionContract],
+        underlying_price: Optional[float],
+    ) -> Optional[tuple[OptionContract, OptionContract, OptionContract, OptionContract]]:
+        calls = sorted([contract for contract in contracts if contract.side == "call"], key=lambda item: item.strike)
+        puts = sorted([contract for contract in contracts if contract.side == "put"], key=lambda item: item.strike)
+        if len(calls) < 2 or len(puts) < 2:
+            return None
+        if underlying_price and underlying_price > 0:
+            call_candidates = [contract for contract in calls if contract.strike >= underlying_price]
+            put_candidates = [contract for contract in puts if contract.strike <= underlying_price]
+            if len(call_candidates) < 2 or len(put_candidates) < 2:
+                return None
+            short_call, long_call = call_candidates[0], call_candidates[1]
+            short_put, long_put = put_candidates[-1], put_candidates[-2]
+        else:
+            long_put, short_put = puts[0], puts[1]
+            short_call, long_call = calls[-2], calls[-1]
+        return long_put, short_put, short_call, long_call
+
+    @staticmethod
+    def _contract_mid(contract: OptionContract) -> float:
+        return round(float(contract.mid if contract.mid is not None else contract.last or 0), 4)
+
+    def _analyzer_leg(self, action: str, contract: OptionContract) -> StrategyAnalyzerLegModel:
+        return StrategyAnalyzerLegModel(
+            leg_action=action,
+            side=contract.side,
+            contract_symbol=contract.contract_symbol,
+            expiration=contract.expiration,
+            strike=contract.strike,
+            mid=self._contract_mid(contract),
+            quantity=1,
+        )
+
+    def _strategy_net_cost_share(self, selected: Sequence[tuple[str, OptionContract]]) -> float:
+        cost = 0.0
+        for action, contract in selected:
+            mid = self._contract_mid(contract)
+            cost += mid if action == "long" else -mid
+        return round(cost, 4)
+
+    def _strategy_breakevens(
+        self,
+        strategy: str,
+        selected: Sequence[tuple[str, OptionContract]],
+        net_cost_share: float,
+    ) -> List[float]:
+        debit = max(net_cost_share, 0.0)
+        credit = max(-net_cost_share, 0.0)
+        if strategy == "long_call":
+            return [round(selected[0][1].strike + debit, 2)]
+        if strategy == "long_put":
+            return [round(selected[0][1].strike - debit, 2)]
+        if strategy == "long_straddle":
+            strike = selected[0][1].strike
+            return [round(strike - debit, 2), round(strike + debit, 2)]
+        if strategy == "long_strangle":
+            call = next(contract for action, contract in selected if contract.side == "call")
+            put = next(contract for action, contract in selected if contract.side == "put")
+            return [round(put.strike - debit, 2), round(call.strike + debit, 2)]
+        if strategy == "bull_call_spread":
+            long_call = selected[0][1]
+            return [round(long_call.strike + debit, 2)]
+        if strategy == "bear_put_spread":
+            long_put = selected[0][1]
+            return [round(long_put.strike - debit, 2)]
+        if strategy == "iron_condor":
+            short_put = selected[1][1]
+            short_call = selected[2][1]
+            return [round(short_put.strike - credit, 2), round(short_call.strike + credit, 2)]
+        return []
+
+    def _strategy_max_profit_loss(
+        self,
+        strategy: str,
+        selected: Sequence[tuple[str, OptionContract]],
+        net_cost_share: float,
+    ) -> tuple[Optional[float], Optional[float]]:
+        debit = round(max(net_cost_share, 0.0) * CONTRACT_MULTIPLIER, 2)
+        credit = round(max(-net_cost_share, 0.0) * CONTRACT_MULTIPLIER, 2)
+        if strategy in {"long_call", "long_put", "long_straddle", "long_strangle"}:
+            return None, debit
+        if strategy in {"bull_call_spread", "bear_put_spread"}:
+            width = abs(selected[0][1].strike - selected[1][1].strike) * CONTRACT_MULTIPLIER
+            return round(width - debit, 2), debit
+        if strategy == "iron_condor":
+            put_width = abs(selected[1][1].strike - selected[0][1].strike) * CONTRACT_MULTIPLIER
+            call_width = abs(selected[3][1].strike - selected[2][1].strike) * CONTRACT_MULTIPLIER
+            return credit, round(max(put_width, call_width) - credit, 2)
+        return None, None
+
+    def _strategy_payoff_row(
+        self,
+        terminal_price: float,
+        selected: Sequence[tuple[str, OptionContract]],
+        net_cost_share: float,
+    ) -> StrategyAnalyzerPayoffRowModel:
+        gross = 0.0
+        for action, contract in selected:
+            intrinsic = (
+                max(0.0, terminal_price - contract.strike)
+                if contract.side == "call"
+                else max(0.0, contract.strike - terminal_price)
+            )
+            gross += intrinsic if action == "long" else -intrinsic
+        gross_payoff = round(gross * CONTRACT_MULTIPLIER, 2)
+        net_payoff = round(gross_payoff - net_cost_share * CONTRACT_MULTIPLIER, 2)
+        return StrategyAnalyzerPayoffRowModel(
+            underlying_price=round(float(terminal_price), 2),
+            gross_payoff=gross_payoff,
+            net_payoff=net_payoff,
+        )
+
+    @staticmethod
+    def _strategy_scenario_prices(
+        scenario_prices: Sequence[float],
+        underlying_price: Optional[float],
+        selected: Sequence[tuple[str, OptionContract]],
+        breakevens: Sequence[float],
+    ) -> List[float]:
+        if scenario_prices:
+            values = [float(price) for price in scenario_prices]
+        elif underlying_price and underlying_price > 0:
+            values = [underlying_price * 0.8, underlying_price, underlying_price * 1.2, *breakevens]
+        else:
+            strikes = [contract.strike for _, contract in selected]
+            values = [min(strikes), max(strikes), *breakevens] if strikes else []
+        seen: set[float] = set()
+        unique: List[float] = []
+        for value in values:
+            rounded = round(float(value), 2)
+            if rounded in seen:
+                continue
+            seen.add(rounded)
+            unique.append(rounded)
+        return unique
+
+    def _strategy_aggregate_greeks(
+        self,
+        selected: Sequence[tuple[str, OptionContract]],
+    ) -> tuple[Optional[StrategyAnalyzerGreeksModel], List[str]]:
+        required = ("delta", "gamma", "theta", "vega")
+        blockers = []
+        totals = {"delta": 0.0, "gamma": 0.0, "theta": 0.0, "vega": 0.0, "rho": 0.0}
+        rho_available = True
+        for action, contract in selected:
+            sign = 1 if action == "long" else -1
+            if contract.greeks is None or any(getattr(contract.greeks, name) is None for name in required):
+                blockers.append(f"missing_greeks:{contract.contract_symbol}")
+                continue
+            for name in required:
+                totals[name] += sign * float(getattr(contract.greeks, name) or 0)
+            if contract.greeks.rho is None:
+                rho_available = False
+            else:
+                totals["rho"] += sign * float(contract.greeks.rho)
+        if blockers:
+            return None, blockers
+        return (
+            StrategyAnalyzerGreeksModel(
+                delta=round(totals["delta"], 3),
+                gamma=round(totals["gamma"], 3),
+                theta=round(totals["theta"], 3),
+                vega=round(totals["vega"], 3),
+                rho=round(totals["rho"], 3) if rho_available else None,
+            ),
+            [],
+        )
+
+    def _model_implied_probability(
+        self,
+        strategy: str,
+        selected: Sequence[tuple[str, OptionContract]],
+        underlying_price: Optional[float],
+        breakevens: Sequence[float],
+        risk_free_rate: float,
+    ) -> StrategyProbabilityModel:
+        blockers = []
+        if underlying_price is None or underlying_price <= 0:
+            blockers.append("missing_underlying_price")
+        dte = min((contract.dte for _, contract in selected if contract.dte > 0), default=0)
+        if dte <= 0:
+            blockers.append("missing_dte")
+        iv_values = [
+            float(contract.implied_volatility)
+            for _, contract in selected
+            if contract.implied_volatility is not None and float(contract.implied_volatility) > 0
+        ]
+        if len(iv_values) != len(selected):
+            blockers.append("missing_implied_volatility")
+        if not breakevens:
+            blockers.append("missing_breakevens")
+        if blockers:
+            return StrategyProbabilityModel(
+                state="unavailable",
+                inputs={
+                    "underlyingPrice": underlying_price,
+                    "dte": dte or None,
+                    "riskFreeRate": risk_free_rate,
+                    "breakevens": list(breakevens),
+                },
+                blockers=list(dict.fromkeys(blockers)),
+            )
+        average_iv = sum(iv_values) / len(iv_values)
+        probability = self._probability_of_profit_by_strategy(
+            strategy=strategy,
+            underlying_price=float(underlying_price),
+            dte=dte,
+            implied_volatility=average_iv,
+            breakevens=breakevens,
+            risk_free_rate=risk_free_rate,
+        )
+        return StrategyProbabilityModel(
+            state="available",
+            model_implied_probability_of_profit=round(probability, 4),
+            inputs={
+                "underlyingPrice": round(float(underlying_price), 4),
+                "dte": dte,
+                "impliedVolatility": round(average_iv, 4),
+                "riskFreeRate": risk_free_rate,
+                "breakevens": list(breakevens),
+                "model": "lognormal_expiry_distribution",
+            },
+            blockers=[],
+        )
+
+    def _probability_of_profit_by_strategy(
+        self,
+        strategy: str,
+        underlying_price: float,
+        dte: int,
+        implied_volatility: float,
+        breakevens: Sequence[float],
+        risk_free_rate: float,
+    ) -> float:
+        if len(breakevens) == 1:
+            cdf = self._lognormal_cdf(underlying_price, breakevens[0], dte, implied_volatility, risk_free_rate)
+            if strategy in {"long_put", "bear_put_spread"}:
+                return cdf
+            return 1 - cdf
+        lower, upper = min(breakevens), max(breakevens)
+        lower_cdf = self._lognormal_cdf(underlying_price, lower, dte, implied_volatility, risk_free_rate)
+        upper_cdf = self._lognormal_cdf(underlying_price, upper, dte, implied_volatility, risk_free_rate)
+        if strategy == "iron_condor":
+            return max(0.0, upper_cdf - lower_cdf)
+        return max(0.0, lower_cdf + (1 - upper_cdf))
+
+    @staticmethod
+    def _lognormal_cdf(
+        underlying_price: float,
+        terminal_price: float,
+        dte: int,
+        implied_volatility: float,
+        risk_free_rate: float,
+    ) -> float:
+        if underlying_price <= 0 or terminal_price <= 0 or dte <= 0 or implied_volatility <= 0:
+            return 0.0
+        time_years = dte / 365
+        volatility_term = implied_volatility * math.sqrt(time_years)
+        if volatility_term <= 0:
+            return 0.0
+        z_score = (
+            math.log(terminal_price / underlying_price)
+            - (risk_free_rate - 0.5 * implied_volatility * implied_volatility) * time_years
+        ) / volatility_term
+        return max(0.0, min(1.0, 0.5 * (1 + math.erf(z_score / math.sqrt(2)))))
+
+    @staticmethod
+    def _aggregate_strategy_readiness(
+        analyses: Sequence[StrategyAnalysisModel],
+        metadata: OptionsLabMetadataModel,
+    ) -> StrategyAnalyzerReadinessModel:
+        blockers = list(
+            dict.fromkeys(
+                code
+                for analysis in analyses
+                for code in analysis.readiness.data_blockers
+            )
+        )
+        if not analyses or any(analysis.readiness.strategy_structure_state == "blocked" for analysis in analyses):
+            structure_state = "blocked"
+        else:
+            structure_state = "available"
+        if structure_state == "blocked":
+            chain_state = "blocked"
+        elif any(analysis.readiness.chain_data_state == "partial" for analysis in analyses):
+            chain_state = "partial"
+        else:
+            chain_state = "sufficient"
+        authority_tier = str(metadata.provider_capabilities.get("authorityTier") or "").strip().lower()
+        analysis_ready = (
+            metadata.live_provider_enabled
+            and not metadata.fixture_backed
+            and not metadata.synthetic_data
+            and metadata.provider_capabilities.get("tradeableData") is True
+            and authority_tier == "decision_grade"
+        )
+        analysis_state = "analysis_ready" if analysis_ready else "observation_only"
+        return StrategyAnalyzerReadinessModel(
+            strategy_structure_state=structure_state,
+            chain_data_state=chain_state,
+            analysis_state=analysis_state,
+            observation_only=True,
+            decision_grade=False,
+            data_blockers=blockers,
+        )
 
     def _build_strategy_comparison(
         self,
