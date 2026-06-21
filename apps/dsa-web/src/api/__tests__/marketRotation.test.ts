@@ -44,6 +44,14 @@ describe('marketRotationApi', () => {
           source_authority: 'unavailable',
           fallback_used: true,
           score_contribution_allowed: false,
+          coverage_summary: {
+            configured_count: 8,
+            available_count: 6,
+            missing_count: 1,
+            stale_count: 1,
+            score_authority_allowed_count: 3,
+            observation_only_count: 5,
+          },
           quote_coverage_by_family: [
             {
               family_id: 'broad_us_market',
@@ -57,8 +65,8 @@ describe('marketRotationApi', () => {
               available_count: 2,
               missing_count: 1,
               stale_count: 0,
-              score_authority_allowed_count: 0,
-              observation_only_count: 3,
+              score_authority_allowed_count: 2,
+              observation_only_count: 1,
               fallback_or_limited_sample_used: true,
               symbols: [
                 {
@@ -67,13 +75,47 @@ describe('marketRotationApi', () => {
                   quote_available: true,
                   missing: false,
                   stale: false,
-                  source_authority_allowed: false,
-                  score_contribution_allowed: false,
-                  fallback_or_limited_sample_used: true,
+                  source_authority_allowed: true,
+                  score_contribution_allowed: true,
+                  fallback_or_limited_sample_used: false,
                   source_family: 'configured_provider',
                   provider_class: 'configured_quote',
                 },
               ],
+            },
+            {
+              family_id: 'sector_etfs',
+              family_label: 'US sector ETFs',
+              configured_symbols: ['XLK', 'XLE', 'XLV', 'XLU'],
+              available_symbols: ['XLK', 'XLE', 'XLV', 'XLU'],
+              missing_symbols: [],
+              stale_symbols: ['XLE'],
+              score_authority_allowed_symbols: ['XLK'],
+              observation_only_symbols: ['XLE', 'XLV', 'XLU'],
+              configured_count: 4,
+              available_count: 4,
+              missing_count: 0,
+              stale_count: 1,
+              score_authority_allowed_count: 1,
+              observation_only_count: 3,
+              fallback_or_limited_sample_used: true,
+            },
+            {
+              family_id: 'volatility_risk',
+              family_label: 'Volatility / risk proxies',
+              configured_symbols: ['VIX'],
+              available_symbols: [],
+              missing_symbols: ['VIX'],
+              stale_symbols: [],
+              score_authority_allowed_symbols: [],
+              observation_only_symbols: ['VIX'],
+              configured_count: 1,
+              available_count: 0,
+              missing_count: 1,
+              stale_count: 0,
+              score_authority_allowed_count: 0,
+              observation_only_count: 1,
+              fallback_or_limited_sample_used: true,
             },
           ],
         },
@@ -86,30 +128,72 @@ describe('marketRotationApi', () => {
     expect(payload.alpacaQuoteAuthorityReadiness?.providerConfigured).toBe(false);
     expect(payload.alpacaQuoteAuthorityReadiness?.sourceAuthority).toBe('unavailable');
     expect(payload.alpacaQuoteAuthorityReadiness?.fallbackUsed).toBe(true);
+    expect(payload.alpacaQuoteAuthorityReadiness?.coverageSummary).toMatchObject({
+      missingCount: 1,
+      staleCount: 1,
+      scoreAuthorityAllowedCount: 3,
+      observationOnlyCount: 5,
+    });
     expect(payload.alpacaQuoteAuthorityReadiness?.quoteCoverageByFamily?.[0]).toMatchObject({
       familyId: 'broad_us_market',
       configuredSymbols: ['SPY', 'QQQ', 'IWM'],
       availableSymbols: ['SPY', 'QQQ'],
       missingSymbols: ['IWM'],
       observationOnlySymbols: ['IWM'],
-      scoreAuthorityAllowedCount: 0,
+      scoreAuthorityAllowedCount: 2,
       fallbackOrLimitedSampleUsed: true,
     });
     expect(payload.alpacaQuoteAuthorityReadiness?.quoteCoverageByFamily?.[0]?.symbols?.[0]).toMatchObject({
       symbol: 'SPY',
       quoteAvailable: true,
-      sourceAuthorityAllowed: false,
-      scoreContributionAllowed: false,
+      sourceAuthorityAllowed: true,
+      scoreContributionAllowed: true,
       sourceFamily: 'configured_provider',
       providerClass: 'configured_quote',
     });
     expect(view.label).toBe('ETF引用待补');
-    expect(view.chips.map((chip) => chip.label)).toEqual(['ETF引用待补', '备用样本观察', '仅观察']);
+    expect(view.chips.map((chip) => chip.label)).toEqual(['ETF引用待补', '代理覆盖有限', '报价可能延迟', '仅观察', '评分待确认']);
+    expect(view.summaryItems).toEqual(['报价待补 1', '报价可能延迟 1', '评分可用 3', '仅观察 5']);
+    expect(view.familyRows).toEqual([
+      expect.objectContaining({
+        key: 'broad_us_market',
+        label: '大盘代理覆盖',
+        statusLabel: '代理覆盖有限',
+        countsLabel: '代理覆盖可用 2/3 · 报价待补 1 · 报价可能延迟 0',
+        scoringLabel: '评分可用 2 · 仅观察 1',
+      }),
+      expect.objectContaining({
+        key: 'sector_etfs',
+        label: '行业ETF覆盖',
+        statusLabel: 'ETF引用部分可用',
+        countsLabel: 'ETF引用可用 4/4 · 报价待补 0 · 报价可能延迟 1',
+        scoringLabel: '评分可用 1 · 仅观察 3',
+      }),
+      expect.objectContaining({
+        key: 'volatility_risk',
+        label: '风险代理覆盖',
+        statusLabel: '报价待补',
+        countsLabel: '代理覆盖可用 0/1 · 报价待补 1 · 报价可能延迟 0',
+        scoringLabel: '评分待确认 · 仅观察 1',
+      }),
+    ]);
     expect(`${view.label} ${view.detail} ${view.chips.map((chip) => chip.label).join(' ')}`).not.toMatch(
-      /Alpaca部分可用|Alpaca待配置|Alpaca可用|Alpaca未配置|回退观察/,
+      /Alpaca部分可用|Alpaca待配置|Alpaca可用|Alpaca未配置|回退观察|备用样本观察/,
     );
     expect(`${view.label} ${view.detail}`).not.toMatch(
       /authorized|unavailable|partial|unknown|fallbackUsed|providerConfigured|sourceAuthority|scoreContributionAllowed|provider|runtime|credential/i,
+    );
+  });
+
+  it('keeps missing ETF quote readiness backward compatible with safe defaults', () => {
+    const view = buildAlpacaQuoteAuthorityReadinessView(undefined);
+
+    expect(view.label).toBe('ETF引用待补');
+    expect(view.chips.map((chip) => chip.label)).toEqual(['ETF引用待补', '报价待补', '评分待确认']);
+    expect(view.summaryItems).toEqual(['报价待补 0', '报价可能延迟 0', '评分可用 0', '仅观察 0']);
+    expect(view.familyRows).toEqual([]);
+    expect(`${view.label} ${view.detail} ${view.chips.map((chip) => chip.label).join(' ')}`).not.toMatch(
+      /Alpaca部分可用|Alpaca待配置|Alpaca可用|Alpaca未配置|回退观察|备用样本观察|provider|runtime|credential|sourceAuthority|fallback/i,
     );
   });
 

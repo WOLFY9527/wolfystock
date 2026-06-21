@@ -1197,7 +1197,7 @@ describe('MarketRotationRadarPage', () => {
     expect(shell).toHaveClass('py-5', 'md:py-6');
   });
 
-  it('maps ETF quote readiness into provider-neutral consumer labels and fallback observation copy', async () => {
+  it('maps ETF quote readiness into provider-neutral consumer labels and observation copy', async () => {
     vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce({
       ...radarFixture(),
       alpacaQuoteAuthorityReadiness: {
@@ -1210,6 +1210,67 @@ describe('MarketRotationRadarPage', () => {
           ratio: 0.67,
           missingSymbols: ['IWM', 'IGV'],
         },
+        coverageSummary: {
+          configuredCount: 8,
+          availableCount: 6,
+          missingCount: 1,
+          staleCount: 1,
+          scoreAuthorityAllowedCount: 3,
+          observationOnlyCount: 5,
+        },
+        quoteCoverageByFamily: [
+          {
+            familyId: 'broad_us_market',
+            familyLabel: 'Broad US market',
+            configuredSymbols: ['SPY', 'QQQ', 'IWM'],
+            availableSymbols: ['SPY', 'QQQ'],
+            missingSymbols: ['IWM'],
+            staleSymbols: [],
+            scoreAuthorityAllowedSymbols: ['SPY', 'QQQ'],
+            observationOnlySymbols: ['IWM'],
+            configuredCount: 3,
+            availableCount: 2,
+            missingCount: 1,
+            staleCount: 0,
+            scoreAuthorityAllowedCount: 2,
+            observationOnlyCount: 1,
+            fallbackOrLimitedSampleUsed: true,
+          },
+          {
+            familyId: 'sector_etfs',
+            familyLabel: 'US sector ETFs',
+            configuredSymbols: ['XLK', 'XLE', 'XLV', 'XLU'],
+            availableSymbols: ['XLK', 'XLE', 'XLV', 'XLU'],
+            missingSymbols: [],
+            staleSymbols: ['XLE'],
+            scoreAuthorityAllowedSymbols: ['XLK'],
+            observationOnlySymbols: ['XLE', 'XLV', 'XLU'],
+            configuredCount: 4,
+            availableCount: 4,
+            missingCount: 0,
+            staleCount: 1,
+            scoreAuthorityAllowedCount: 1,
+            observationOnlyCount: 3,
+            fallbackOrLimitedSampleUsed: true,
+          },
+          {
+            familyId: 'volatility_risk',
+            familyLabel: 'Volatility / risk proxies',
+            configuredSymbols: ['VIX'],
+            availableSymbols: [],
+            missingSymbols: ['VIX'],
+            staleSymbols: [],
+            scoreAuthorityAllowedSymbols: [],
+            observationOnlySymbols: ['VIX'],
+            configuredCount: 1,
+            availableCount: 0,
+            missingCount: 1,
+            staleCount: 0,
+            scoreAuthorityAllowedCount: 0,
+            observationOnlyCount: 1,
+            fallbackOrLimitedSampleUsed: true,
+          },
+        ],
         freshestAsOf: '2026-05-07T09:45:00Z',
         sourceAuthority: 'partial',
         fallbackUsed: true,
@@ -1224,10 +1285,24 @@ describe('MarketRotationRadarPage', () => {
 
     const strip = await screen.findByTestId('rotation-alpaca-quote-readiness');
     await waitFor(() => expect(strip).toHaveTextContent('ETF引用部分可用'));
-    expect(strip).toHaveTextContent('备用样本观察');
+    expect(strip).toHaveTextContent('代理覆盖有限');
+    expect(strip).toHaveTextContent('报价可能延迟');
     expect(strip).toHaveTextContent('仅观察');
     expect(strip).toHaveTextContent('当前仅作观察，不纳入评分。');
-    expect(strip.textContent || '').not.toMatch(/Alpaca部分可用|Alpaca待配置|Alpaca可用|Alpaca未配置|回退观察/);
+    expect(strip).toHaveTextContent('大盘代理覆盖');
+    expect(strip).toHaveTextContent('行业ETF覆盖');
+    expect(strip).toHaveTextContent('风险代理覆盖');
+    expect(strip).toHaveTextContent('代理覆盖有限');
+    expect(strip).toHaveTextContent('ETF引用部分可用');
+    expect(strip).toHaveTextContent('报价待补');
+    expect(strip).toHaveTextContent('报价待补 1');
+    expect(strip).toHaveTextContent('报价可能延迟 1');
+    expect(strip).toHaveTextContent('评分可用 3');
+    expect(strip).toHaveTextContent('仅观察 5');
+    expect(strip).toHaveTextContent('代理覆盖可用 2/3 · 报价待补 1 · 报价可能延迟 0');
+    expect(strip).toHaveTextContent('ETF引用可用 4/4 · 报价待补 0 · 报价可能延迟 1');
+    expect(strip).toHaveTextContent('代理覆盖可用 0/1 · 报价待补 1 · 报价可能延迟 0');
+    expect(strip.textContent || '').not.toMatch(/Alpaca部分可用|Alpaca待配置|Alpaca可用|Alpaca未配置|回退观察|备用样本观察/);
     expect(strip.textContent || '').not.toMatch(
       /authorized|unavailable|partial|unknown|fallbackUsed|providerConfigured|sourceAuthority|scoreContributionAllowed|provider|runtime|credential/i,
     );
@@ -1253,7 +1328,7 @@ describe('MarketRotationRadarPage', () => {
     expect(guidance).toHaveTextContent('AI 应用');
     expect(guidance).toHaveTextContent('当前以相对强弱、成交额扩张、广度和同步性作为观察依据。');
     expect(guidance).not.toHaveTextContent('下一步');
-    expect(guidance.querySelectorAll('[data-terminal-primitive="chip"]').length).toBeLessThanOrEqual(2);
+    expect(guidance.querySelectorAll('[data-terminal-primitive="chip"]').length).toBeLessThanOrEqual(4);
     expect(pageHeading).toHaveClass('text-xl', 'md:text-2xl');
     expect(heroHeading).toHaveClass('text-base', 'md:text-lg');
     expect(heroHeading).not.toHaveClass('text-2xl');
