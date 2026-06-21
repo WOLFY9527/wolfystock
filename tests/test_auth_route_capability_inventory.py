@@ -139,6 +139,7 @@ DOCS_AND_SCHEMA_ROUTE_CLASSIFICATIONS = {
 }
 EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("GET", "/api/v1/market/data-readiness"): "operator_diagnostic",
+    ("GET", "/api/v1/market/data-source-gap-registry"): "operator_diagnostic",
     ("GET", "/api/v1/market/cn-provider-health"): "operator_diagnostic",
     ("GET", "/api/v1/market/provider-fit-advisor"): "admin_capability_required",
     ("GET", "/api/v1/agent/status"): "operator_diagnostic",
@@ -192,6 +193,7 @@ EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
 }
 EXPECTED_OPERATOR_DIAGNOSTIC_ROUTE_CLASSIFICATIONS = {
     ("GET", "/api/v1/market/data-readiness"),
+    ("GET", "/api/v1/market/data-source-gap-registry"),
     ("GET", "/api/v1/market/cn-provider-health"),
     ("GET", "/api/v1/agent/status"),
     ("GET", "/api/v1/agent/models"),
@@ -719,6 +721,7 @@ def test_backend_route_surface_classification_covers_target_live_surfaces() -> N
         or signature[1] == "/api/v1/usage/summary"
         or signature[1] in {
             "/api/v1/market/data-readiness",
+            "/api/v1/market/data-source-gap-registry",
             "/api/v1/market/cn-provider-health",
             "/api/v1/market/provider-fit-advisor",
         }

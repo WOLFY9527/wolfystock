@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from api.deps import CurrentUser, get_optional_current_user, require_admin_capability
 from api.v1.consumer_safe_response import consumer_safe_json_response
 from api.v1.schemas.daily_intelligence import DailyIntelligenceBriefingResponse
+from api.v1.schemas.data_source_gap_registry import DataSourceGapRegistryResponse
 from api.v1.errors import safe_api_error
 from api.v1.schemas.market_briefing import MarketOverviewBriefingResponse
 from api.v1.schemas.market_scenario_lab import MarketScenarioLabRequest, MarketScenarioLabResponse
@@ -21,6 +22,7 @@ from api.v1.schemas.market_temperature import MarketTemperatureConsumedSubsetRes
 from src.services.cn_provider_health_service import CNProviderHealthService
 from src.services.crypto_realtime_service import get_crypto_realtime_service
 from src.services.consumer_issue_labels import sanitize_consumer_reason_payload
+from src.services.data_source_gap_registry_service import build_data_source_gap_registry
 from src.services.market_scenario_lab_engine import build_market_scenario_lab
 from src.services.market_decision_cockpit_service import MarketDecisionCockpitService
 from src.services.market_data_readiness_diagnostics import build_market_data_readiness_diagnostics
@@ -292,3 +294,12 @@ def get_market_data_readiness(
     return build_market_data_readiness_diagnostics(
         representative_symbols=_parse_data_readiness_symbols(symbols)
     ).to_dict()
+
+
+@router.get(
+    "/data-source-gap-registry",
+    response_model=DataSourceGapRegistryResponse,
+    summary="Get read-only data source gap registry",
+)
+def get_data_source_gap_registry() -> dict[str, Any]:
+    return build_data_source_gap_registry()
