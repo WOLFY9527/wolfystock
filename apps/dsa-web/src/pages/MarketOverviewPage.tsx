@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MarketDataMeta, MarketOverviewPanel } from '../api/marketOverview';
 import { marketOverviewApi } from '../api/marketOverview';
 import type {
+  ConsumerEvidenceReadinessMatrix,
   CnShortSentimentResponse,
   MarketBriefingResponse,
   MarketFuturesResponse,
@@ -9,6 +10,7 @@ import type {
   OfficialRiskSourceReadiness,
 } from '../api/market';
 import {
+  buildConsumerEvidenceBoundaryView,
   buildOfficialRiskSourceReadinessView,
   marketApi,
   normalizeCnShortSentimentConsumerCopy,
@@ -691,12 +693,43 @@ const OfficialRiskSourceReadinessStrip = ({
   );
 };
 
+const MarketOverviewEvidenceBoundaryStrip = ({
+  matrix,
+}: {
+  matrix?: ConsumerEvidenceReadinessMatrix | null;
+}) => {
+  const view = buildConsumerEvidenceBoundaryView(matrix);
+
+  return (
+    <section
+      data-testid="market-overview-evidence-boundary"
+      className="rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2.5"
+    >
+      <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-white/48">市场总览证据边界</p>
+          <p className="mt-1 text-sm font-semibold text-white/84">{view.label}</p>
+        </div>
+        <div className="flex min-w-0 flex-wrap gap-1.5 md:justify-end">
+          <TerminalChip variant={view.variant}>{view.label}</TerminalChip>
+          {view.chips.map((chip) => (
+            <TerminalChip key={chip.key} variant={chip.variant}>{chip.label}</TerminalChip>
+          ))}
+        </div>
+      </div>
+      <p className="mt-2 text-[11px] leading-5 text-white/48">{view.nextEvidence}</p>
+      {view.note ? <p className="mt-1 text-[11px] leading-5 text-white/40">{view.note}</p> : null}
+    </section>
+  );
+};
+
 const MarketOverviewPage = () => {
   const { language } = useI18n();
   const { isAdminMode, canReadProviders } = useProductSurface();
   const [initialLocalSnapshot] = useState(() => buildInitialPanelsFromLocalSnapshot());
   const [panels, setPanels] = useState<PanelState>(initialLocalSnapshot.panels);
   const [officialRiskSourceReadiness, setOfficialRiskSourceReadiness] = useState<OfficialRiskSourceReadiness | null>(null);
+  const [consumerEvidenceReadinessMatrix, setConsumerEvidenceReadinessMatrix] = useState<ConsumerEvidenceReadinessMatrix | null>(null);
   const [loading, setLoading] = useState(initialLocalSnapshot.source !== 'local');
   const [localSnapshotSavedAt, setLocalSnapshotSavedAt] = useState<string | undefined>(initialLocalSnapshot.savedAt);
   const [refreshErrors, setRefreshErrors] = useState<Record<string, string>>({});
@@ -899,10 +932,12 @@ const MarketOverviewPage = () => {
         const payload = await marketApi.getDataReadiness();
         if (!cancelled) {
           setOfficialRiskSourceReadiness(payload?.officialRiskSourceReadiness || null);
+          setConsumerEvidenceReadinessMatrix(payload?.consumerEvidenceReadinessMatrix || null);
         }
       } catch {
         if (!cancelled) {
           setOfficialRiskSourceReadiness(null);
+          setConsumerEvidenceReadinessMatrix(null);
         }
       }
     }
@@ -978,6 +1013,7 @@ const MarketOverviewPage = () => {
         className="flex min-h-0 flex-1 flex-col gap-4 md:gap-6"
       >
         <OfficialRiskSourceReadinessStrip readiness={officialRiskSourceReadiness} />
+        <MarketOverviewEvidenceBoundaryStrip matrix={consumerEvidenceReadinessMatrix} />
         <MarketOverviewWorkbench
           heading={(
             <TerminalPageHeading

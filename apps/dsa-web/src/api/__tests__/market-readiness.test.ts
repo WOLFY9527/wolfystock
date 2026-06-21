@@ -100,4 +100,60 @@ describe('marketApi.getDataReadiness', () => {
       nextDiagnostic: 'Compare overview evidence families against current safe surface snapshots.',
     });
   });
+
+  it('builds compact consumer evidence boundary labels without exposing matrix internals', async () => {
+    const { buildConsumerEvidenceBoundaryView } = await import('../market');
+
+    const view = buildConsumerEvidenceBoundaryView({
+      contractVersion: 'consumer_evidence_readiness_matrix_v1',
+      diagnosticOnly: true,
+      networkCallsEnabled: false,
+      mutationEnabled: false,
+      items: [
+        {
+          surface: 'market_overview',
+          evidenceFamily: 'market_regime',
+          requiredInputs: ['market overview read model', 'market breadth context', 'rotation context', 'macro context', 'liquidity context'],
+          fulfilledInputs: ['market overview read model'],
+          missingInputs: ['market breadth context'],
+          staleInputs: ['rotation context'],
+          blockedInputs: ['macro context'],
+          observationOnlyInputs: ['liquidity context'],
+          scoreGradeInputs: ['market overview read model'],
+          readinessState: 'score_grade',
+          confidenceCapReason: 'internal cap reason',
+          sourceAuthorityReason: 'source_authority_router_rejected',
+          freshnessReason: 'freshness stale',
+          nextDiagnostic: 'Compare raw provider cache diagnostics.',
+          consumerSafeSummary: 'Market overview evidence summary.',
+        },
+      ],
+    });
+
+    expect(view.label).toBe('证据可用');
+    expect(view.chips.map((chip) => chip.label)).toEqual([
+      '证据可用',
+      '市场总览读数可用',
+      '市场广度待补',
+      '板块轮动待更新',
+      '风险状态仅观察',
+    ]);
+    expect(view.nextEvidence).toBe('下一步：补齐市场广度、宏观背景');
+    expect(JSON.stringify(view)).not.toMatch(
+      /contractVersion|market_overview|market_regime|confidenceCapReason|sourceAuthority|nextDiagnostic|consumerSafeSummary|provider|cache|debug|raw|buy|sell|target price|position sizing|买入|卖出|目标价|止损|仓位/i,
+    );
+  });
+
+  it('keeps absent consumer evidence readiness fail-closed', async () => {
+    const { buildConsumerEvidenceBoundaryView } = await import('../market');
+
+    const view = buildConsumerEvidenceBoundaryView(undefined);
+
+    expect(view.label).toBe('证据边界待确认');
+    expect(view.chips.map((chip) => chip.label)).toContain('市场总览待补');
+    expect(view.chips.map((chip) => chip.label)).toContain('广度待补');
+    expect(view.chips.map((chip) => chip.label)).toContain('板块轮动待补');
+    expect(view.chips.map((chip) => chip.label)).toContain('风险状态待补');
+    expect(JSON.stringify(view)).not.toMatch(/证据可用|provider|cache|debug|raw|buy|sell|买入|卖出|目标价|止损|仓位/i);
+  });
 });

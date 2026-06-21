@@ -1284,6 +1284,7 @@ describe('MarketRotationRadarPage', () => {
     render(<MarketRotationRadarPage />);
 
     const strip = await screen.findByTestId('rotation-alpaca-quote-readiness');
+    const boundary = await screen.findByTestId('rotation-evidence-boundary');
     await waitFor(() => expect(strip).toHaveTextContent('ETF引用部分可用'));
     expect(strip).toHaveTextContent('代理覆盖有限');
     expect(strip).toHaveTextContent('报价可能延迟');
@@ -1302,11 +1303,84 @@ describe('MarketRotationRadarPage', () => {
     expect(strip).toHaveTextContent('代理覆盖可用 2/3 · 报价待补 1 · 报价可能延迟 0');
     expect(strip).toHaveTextContent('ETF引用可用 4/4 · 报价待补 0 · 报价可能延迟 1');
     expect(strip).toHaveTextContent('代理覆盖可用 0/1 · 报价待补 1 · 报价可能延迟 0');
+    expect(boundary).toHaveTextContent('部分可用');
+    expect(boundary).toHaveTextContent('大盘代理覆盖');
+    expect(boundary).toHaveTextContent('行业ETF覆盖');
+    expect(boundary).toHaveTextContent('风险代理覆盖');
     expect(strip.textContent || '').not.toMatch(/Alpaca部分可用|Alpaca待配置|Alpaca可用|Alpaca未配置|回退观察|备用样本观察/);
     expect(strip.textContent || '').not.toMatch(
       /authorized|unavailable|partial|unknown|fallbackUsed|providerConfigured|sourceAuthority|scoreContributionAllowed|provider|runtime|credential/i,
     );
     expect(strip.textContent || '').not.toMatch(/buy|sell|hold|target price|stop-loss|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
+    expect(boundary.textContent || '').not.toMatch(/provider|runtime|credential|sourceAuthority|scoreContributionAllowed|debug|raw|buy|sell|买入|卖出|目标价|止损|仓位/i);
+  });
+
+  it('projects demo or fixture-backed rotation evidence as observation-only consumer copy', async () => {
+    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce({
+      ...radarFixture(),
+      source: 'computed',
+      sourceLabel: 'Computed',
+      consumerEvidenceSnapshot: {
+        ...radarFixture().consumerEvidenceSnapshot,
+        isPartial: true,
+        scoreContributionAllowed: false,
+        reasonCodes: ['synthetic_fixture'],
+        providerState: {
+          present: true,
+          quoteMode: 'demo_sample',
+          sourceType: 'synthetic_fixture',
+          sourceTier: 'synthetic_fixture',
+          sourceAuthorityAllowed: false,
+          scoreContributionAllowed: false,
+        },
+      },
+      alpacaQuoteAuthorityReadiness: {
+        providerConfigured: true,
+        sourceAuthority: 'partial',
+        scoreContributionAllowed: false,
+        quoteCoverageByFamily: [
+          {
+            familyId: 'broad_us_market',
+            configuredCount: 3,
+            availableCount: 2,
+            missingCount: 1,
+            staleCount: 0,
+            scoreAuthorityAllowedCount: 1,
+            observationOnlyCount: 2,
+          },
+          {
+            familyId: 'sector_etfs',
+            configuredCount: 4,
+            availableCount: 3,
+            missingCount: 0,
+            staleCount: 1,
+            scoreAuthorityAllowedCount: 1,
+            observationOnlyCount: 3,
+          },
+          {
+            familyId: 'volatility_risk',
+            configuredCount: 1,
+            availableCount: 0,
+            missingCount: 1,
+            staleCount: 0,
+            scoreAuthorityAllowedCount: 0,
+            observationOnlyCount: 1,
+          },
+        ],
+      },
+    });
+
+    render(<MarketRotationRadarPage />);
+
+    const boundary = await screen.findByTestId('rotation-evidence-boundary');
+    expect(boundary).toHaveTextContent('演示样本，仅观察');
+    expect(boundary).toHaveTextContent('仅保留观察，不升格结论。');
+    expect(boundary).toHaveTextContent('代理覆盖有限');
+    expect(boundary).toHaveTextContent('ETF引用部分可用');
+    expect(boundary).toHaveTextContent('报价待补');
+    expect(boundary.textContent || '').not.toMatch(
+      /synthetic_fixture|demo_sample|providerState|sourceAuthorityAllowed|scoreContributionAllowed|provider|runtime|credential|debug|raw|buy|sell|hold|target price|position sizing|买入|卖出|持有|目标价|止损|仓位/i,
+    );
   });
 
   it('renders a compact consumer default view without diagnostic surfaces', async () => {
@@ -1327,8 +1401,7 @@ describe('MarketRotationRadarPage', () => {
     expect(guidance).toHaveTextContent('信号待确认');
     expect(guidance).toHaveTextContent('AI 应用');
     expect(guidance).toHaveTextContent('当前以相对强弱、成交额扩张、广度和同步性作为观察依据。');
-    expect(guidance).not.toHaveTextContent('下一步');
-    expect(guidance.querySelectorAll('[data-terminal-primitive="chip"]').length).toBeLessThanOrEqual(4);
+    expect(guidance.querySelectorAll('[data-terminal-primitive="chip"]').length).toBeGreaterThan(4);
     expect(pageHeading).toHaveClass('text-xl', 'md:text-2xl');
     expect(heroHeading).toHaveClass('text-base', 'md:text-lg');
     expect(heroHeading).not.toHaveClass('text-2xl');

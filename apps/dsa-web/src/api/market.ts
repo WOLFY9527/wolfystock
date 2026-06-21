@@ -481,6 +481,20 @@ export type OfficialRiskSourceReadinessView = {
   note?: string;
 };
 
+export type ConsumerEvidenceBoundaryChip = {
+  key: string;
+  label: string;
+  variant: 'success' | 'info' | 'caution' | 'neutral';
+};
+
+export type ConsumerEvidenceBoundaryView = {
+  label: string;
+  variant: 'success' | 'info' | 'caution' | 'neutral';
+  chips: ConsumerEvidenceBoundaryChip[];
+  nextEvidence: string;
+  note?: string;
+};
+
 export type MarketDataReadinessResponse = {
   readinessStatus: MarketDataReadinessStatus;
   diagnosticOnly: boolean;
@@ -627,6 +641,154 @@ export function buildOfficialRiskSourceReadinessView(
     bundleVariant: officialRiskSourceBundleVariant(readiness.bundleState),
     chips,
     ...(note ? { note } : {}),
+  };
+}
+
+const CONSUMER_EVIDENCE_INPUT_LABELS: Record<string, string> = {
+  'market overview': '市场总览',
+  'market overview read model': '市场总览读数',
+  'market breadth context': '市场广度',
+  'rotation context': '板块轮动',
+  'liquidity context': '流动性',
+  'macro context': '宏观背景',
+  'research radar': '研究雷达',
+  'rotation radar': '轮动雷达',
+  'liquidity monitor': '流动性看板',
+  'options observation': '期权观察',
+  'completed scanner evidence': '扫描器证据',
+  'watchlist research context': '观察名单研究上下文',
+  'candidate evidence quality': '候选证据质量',
+};
+
+function normalizeConsumerEvidenceToken(value?: string | null): string {
+  return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function consumerEvidenceInputLabel(value?: string | null): string {
+  const normalized = normalizeConsumerEvidenceToken(value);
+  if (!normalized) {
+    return '数据项';
+  }
+  return CONSUMER_EVIDENCE_INPUT_LABELS[normalized] || '数据项';
+}
+
+function consumerEvidenceStateLabel(state?: string | null): { label: string; variant: ConsumerEvidenceBoundaryView['variant'] } {
+  const normalized = normalizeConsumerEvidenceToken(state);
+  if (normalized === 'score_grade' || normalized === 'ready') {
+    return { label: '证据可用', variant: 'success' };
+  }
+  if (normalized === 'partial') {
+    return { label: '部分可用', variant: 'info' };
+  }
+  if (normalized === 'observation_only') {
+    return { label: '仅观察', variant: 'neutral' };
+  }
+  if (normalized === 'stale') {
+    return { label: '待更新', variant: 'caution' };
+  }
+  if (normalized === 'blocked' || normalized === 'missing' || normalized === 'unavailable') {
+    return { label: '待补', variant: 'caution' };
+  }
+  return { label: '证据待确认', variant: 'neutral' };
+}
+
+function consumerEvidenceInputState(
+  item: ConsumerEvidenceReadinessItem,
+  inputName: string,
+): { label: string; variant: ConsumerEvidenceBoundaryView['variant'] } {
+  const normalizedInput = normalizeConsumerEvidenceToken(inputName);
+  const categoryName = consumerEvidenceInputLabel(inputName);
+  const isMissing = item.missingInputs.some((value) => normalizeConsumerEvidenceToken(value) === normalizedInput);
+  const isBlocked = item.blockedInputs.some((value) => normalizeConsumerEvidenceToken(value) === normalizedInput);
+  const isStale = item.staleInputs.some((value) => normalizeConsumerEvidenceToken(value) === normalizedInput);
+  const isObservationOnly = item.observationOnlyInputs.some((value) => normalizeConsumerEvidenceToken(value) === normalizedInput);
+  const isReady = item.fulfilledInputs.some((value) => normalizeConsumerEvidenceToken(value) === normalizedInput)
+    || item.scoreGradeInputs.some((value) => normalizeConsumerEvidenceToken(value) === normalizedInput);
+
+  if (isMissing || isBlocked) {
+    return { label: `${categoryName}待补`, variant: 'caution' };
+  }
+  if (isStale) {
+    return { label: `${categoryName}待更新`, variant: 'caution' };
+  }
+  if (isObservationOnly) {
+    return { label: `${categoryName}仅观察`, variant: 'neutral' };
+  }
+  if (isReady) {
+    return { label: `${categoryName}可用`, variant: 'success' };
+  }
+  return { label: `${categoryName}待确认`, variant: 'neutral' };
+}
+
+function consumerEvidenceNextLine(item?: ConsumerEvidenceReadinessItem): string {
+  if (!item) {
+    return '继续观察现有证据。';
+  }
+  const nextInputs = [
+    ...item.missingInputs,
+    ...item.blockedInputs,
+    ...item.staleInputs,
+    ...item.observationOnlyInputs,
+  ];
+  const unique = Array.from(new Set(nextInputs.map((value) => consumerEvidenceInputLabel(value)).filter((value) => value !== '数据项')));
+  if (!unique.length) {
+    return '继续观察现有证据。';
+  }
+  return `下一步：补齐${unique.slice(0, 2).join('、')}`;
+}
+
+function selectConsumerEvidenceBoundaryItem(
+  matrix?: ConsumerEvidenceReadinessMatrix | null,
+): ConsumerEvidenceReadinessItem | undefined {
+  const items = Array.isArray(matrix?.items) ? matrix.items : [];
+  return items.find((item) => normalizeConsumerEvidenceToken(item.surface) === 'market_overview') || items[0];
+}
+
+export function buildConsumerEvidenceBoundaryView(
+  matrix?: ConsumerEvidenceReadinessMatrix | null,
+): ConsumerEvidenceBoundaryView {
+  const item = selectConsumerEvidenceBoundaryItem(matrix);
+  if (!matrix || !item) {
+    return {
+      label: '证据边界待确认',
+      variant: 'neutral',
+      chips: [
+        { key: 'boundary', label: '证据边界待确认', variant: 'neutral' },
+        { key: 'overview', label: '市场总览待补', variant: 'neutral' },
+        { key: 'breadth', label: '广度待补', variant: 'neutral' },
+        { key: 'rotation', label: '板块轮动待补', variant: 'neutral' },
+        { key: 'risk', label: '风险状态待补', variant: 'neutral' },
+      ],
+      nextEvidence: '继续观察现有证据。',
+      note: '当前未返回市场总览证据矩阵，保持观察。',
+    };
+  }
+
+  const overallState = consumerEvidenceStateLabel(item.readinessState);
+  const breadthState = consumerEvidenceInputState(item, 'market breadth context');
+  const rotationState = consumerEvidenceInputState(item, 'rotation context');
+  const riskState = item.observationOnlyInputs.length > 0 || item.readinessState === 'observation_only'
+    ? { label: '风险状态仅观察', variant: 'neutral' as const }
+    : item.missingInputs.length > 0 || item.blockedInputs.length > 0
+      ? { label: '风险状态待补', variant: 'caution' as const }
+      : item.staleInputs.length > 0
+        ? { label: '风险状态待更新', variant: 'caution' as const }
+        : { label: '风险状态可用', variant: 'success' as const };
+
+  const chips: ConsumerEvidenceBoundaryChip[] = [
+    { key: 'boundary', label: overallState.label, variant: overallState.variant },
+    { key: 'overview', label: consumerEvidenceInputState(item, 'market overview read model').label, variant: consumerEvidenceInputState(item, 'market overview read model').variant },
+    { key: 'breadth', label: breadthState.label, variant: breadthState.variant },
+    { key: 'rotation', label: rotationState.label, variant: rotationState.variant },
+    { key: 'risk', label: riskState.label, variant: riskState.variant },
+  ];
+
+  return {
+    label: overallState.label,
+    variant: overallState.variant,
+    chips,
+    nextEvidence: consumerEvidenceNextLine(item),
+    note: matrix.diagnosticOnly ? '当前仅用于观察，不代表可形成结论。' : undefined,
   };
 }
 
