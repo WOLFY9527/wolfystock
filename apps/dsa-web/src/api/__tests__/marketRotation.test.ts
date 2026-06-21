@@ -44,6 +44,38 @@ describe('marketRotationApi', () => {
           source_authority: 'unavailable',
           fallback_used: true,
           score_contribution_allowed: false,
+          quote_coverage_by_family: [
+            {
+              family_id: 'broad_us_market',
+              family_label: 'Broad US market',
+              configured_symbols: ['SPY', 'QQQ', 'IWM'],
+              available_symbols: ['SPY', 'QQQ'],
+              missing_symbols: ['IWM'],
+              stale_symbols: [],
+              observation_only_symbols: ['IWM'],
+              configured_count: 3,
+              available_count: 2,
+              missing_count: 1,
+              stale_count: 0,
+              score_authority_allowed_count: 0,
+              observation_only_count: 3,
+              fallback_or_limited_sample_used: true,
+              symbols: [
+                {
+                  symbol: 'SPY',
+                  configured: true,
+                  quote_available: true,
+                  missing: false,
+                  stale: false,
+                  source_authority_allowed: false,
+                  score_contribution_allowed: false,
+                  fallback_or_limited_sample_used: true,
+                  source_family: 'configured_provider',
+                  provider_class: 'configured_quote',
+                },
+              ],
+            },
+          ],
         },
       },
     } as never);
@@ -54,6 +86,23 @@ describe('marketRotationApi', () => {
     expect(payload.alpacaQuoteAuthorityReadiness?.providerConfigured).toBe(false);
     expect(payload.alpacaQuoteAuthorityReadiness?.sourceAuthority).toBe('unavailable');
     expect(payload.alpacaQuoteAuthorityReadiness?.fallbackUsed).toBe(true);
+    expect(payload.alpacaQuoteAuthorityReadiness?.quoteCoverageByFamily?.[0]).toMatchObject({
+      familyId: 'broad_us_market',
+      configuredSymbols: ['SPY', 'QQQ', 'IWM'],
+      availableSymbols: ['SPY', 'QQQ'],
+      missingSymbols: ['IWM'],
+      observationOnlySymbols: ['IWM'],
+      scoreAuthorityAllowedCount: 0,
+      fallbackOrLimitedSampleUsed: true,
+    });
+    expect(payload.alpacaQuoteAuthorityReadiness?.quoteCoverageByFamily?.[0]?.symbols?.[0]).toMatchObject({
+      symbol: 'SPY',
+      quoteAvailable: true,
+      sourceAuthorityAllowed: false,
+      scoreContributionAllowed: false,
+      sourceFamily: 'configured_provider',
+      providerClass: 'configured_quote',
+    });
     expect(view.label).toBe('ETF引用待补');
     expect(view.chips.map((chip) => chip.label)).toEqual(['ETF引用待补', '备用样本观察', '仅观察']);
     expect(`${view.label} ${view.detail} ${view.chips.map((chip) => chip.label).join(' ')}`).not.toMatch(

@@ -41,6 +41,23 @@ _ALPACA_MAX_SYMBOLS_PER_WINDOW = 32
 _ALPACA_MAX_PROBE_SYMBOLS = 12
 _ALPACA_STABLE_ACTIVATION_PROBE_SYMBOLS = ("SPY", "QQQ", "IWM", "SMH", "SOXX", "IGV")
 _ROTATION_RADAR_AUTHORITY_ETF_UNIVERSE = _ALPACA_STABLE_ACTIVATION_PROBE_SYMBOLS
+_ROTATION_RADAR_QUOTE_COVERAGE_FAMILIES = (
+    {
+        "familyId": "broad_us_market",
+        "familyLabel": "Broad US market",
+        "symbols": ("SPY", "QQQ", "IWM", "DIA"),
+    },
+    {
+        "familyId": "sector_etfs",
+        "familyLabel": "US sector ETFs",
+        "symbols": ("XLK", "XLF", "XLE", "XLY", "XLP", "XLI", "XLV", "XLU", "XLB", "XLRE", "XLC"),
+    },
+    {
+        "familyId": "volatility_risk",
+        "familyLabel": "Volatility / risk proxies",
+        "symbols": ("VIX", "VXX", "UVXY"),
+    },
+)
 _ALPACA_PER_WINDOW_TIMEOUT_SECONDS = 2.5
 _ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS = 8.0
 _ALPACA_PROVIDER_DEADLINE_SECONDS = 10.0
@@ -1782,6 +1799,18 @@ def _alpaca_quote_authority_readiness(
     freshest_as_of = _freshest_as_of_for_symbols(configured_attempt.quotes, configured_symbols)
     provider_configured = bool(provider_diagnostics.get("credentialsPresent"))
     fallback_used = bool(yfinance_attempt.quotes)
+    coverage_by_family = _alpaca_quote_coverage_by_family(
+        requested_symbols=requested_symbols,
+        configured_attempt=configured_attempt,
+        yfinance_attempt=yfinance_attempt,
+        provider_diagnostics=provider_diagnostics,
+    )
+    family_symbols = [
+        symbol_row
+        for family in coverage_by_family
+        for symbol_row in family.get("symbols", [])
+        if isinstance(symbol_row, Mapping)
+    ]
     blocker_bucket = _alpaca_quote_authority_blocker_bucket(
         provider_configured=provider_configured,
         fallback_used=fallback_used,
@@ -1816,6 +1845,34 @@ def _alpaca_quote_authority_readiness(
             "ratio": coverage_ratio,
             "missingSymbols": missing_symbols,
         },
+        "quoteCoverageByFamily": coverage_by_family,
+        "coverageSummary": {
+            "configuredCount": len(family_symbols),
+            "availableCount": sum(1 for row in family_symbols if row.get("quoteAvailable") is True),
+            "missingCount": sum(1 for row in family_symbols if row.get("missing") is True),
+            "staleCount": sum(1 for row in family_symbols if row.get("stale") is True),
+            "scoreAuthorityAllowedCount": sum(
+                1 for row in family_symbols if row.get("scoreContributionAllowed") is True
+            ),
+            "observationOnlyCount": sum(
+                1 for row in family_symbols if row.get("scoreContributionAllowed") is not True
+            ),
+        },
+        "availableSymbols": _bounded_unique_symbols(
+            row.get("symbol") for row in family_symbols if row.get("quoteAvailable") is True
+        ),
+        "missingSymbols": _bounded_unique_symbols(
+            row.get("symbol") for row in family_symbols if row.get("missing") is True
+        ),
+        "staleSymbols": _bounded_unique_symbols(
+            row.get("symbol") for row in family_symbols if row.get("stale") is True
+        ),
+        "scoreAuthorityAllowedSymbols": _bounded_unique_symbols(
+            row.get("symbol") for row in family_symbols if row.get("scoreContributionAllowed") is True
+        ),
+        "observationOnlySymbols": _bounded_unique_symbols(
+            row.get("symbol") for row in family_symbols if row.get("scoreContributionAllowed") is not True
+        ),
         "freshestAsOf": freshest_as_of,
         "sourceAuthority": authority_state,
         "fallbackUsed": fallback_used,
@@ -1826,6 +1883,160 @@ def _alpaca_quote_authority_readiness(
         ),
         "nextDataAction": _alpaca_quote_authority_next_data_action(blocker_bucket),
         "scoreContributionAllowed": score_contribution_allowed,
+    }
+
+
+def _alpaca_quote_coverage_by_family(
+    *,
+    requested_symbols: Sequence[str],
+    configured_attempt: _ProviderAttempt,
+    yfinance_attempt: _ProviderAttempt,
+    provider_diagnostics: Mapping[str, Any],
+) -> list[Dict[str, Any]]:
+    requested = {
+        str(symbol).strip().upper()
+        for symbol in requested_symbols
+        if str(symbol).strip()
+    }
+    activation = provider_diagnostics.get("alpacaActivationDiagnostics")
+    activation = dict(activation) if isinstance(activation, Mapping) else {}
+    activation_allowed = bool(activation.get("sourceAuthorityAllowed"))
+    activation_reason = str(activation.get("reason") or "").strip() or None
+    fulfilled_windows = _as_string_sequence(activation.get("fulfilledWindows"))
+    missing_windows = _as_string_sequence(activation.get("missingWindows"))
+    stale_windows = _as_string_sequence(activation.get("staleWindows"))
+    families: list[Dict[str, Any]] = []
+
+    for family in _ROTATION_RADAR_QUOTE_COVERAGE_FAMILIES:
+        configured_symbols = [
+            symbol
+            for symbol in _as_string_sequence(family.get("symbols"))
+            if symbol in requested
+        ]
+        if not configured_symbols:
+            continue
+        rows = [
+            _alpaca_quote_coverage_symbol_row(
+                symbol=symbol,
+                configured_attempt=configured_attempt,
+                yfinance_attempt=yfinance_attempt,
+                activation_allowed=activation_allowed,
+                activation_reason=activation_reason,
+                fulfilled_windows=fulfilled_windows,
+                missing_windows=missing_windows,
+                stale_windows=stale_windows,
+            )
+            for symbol in configured_symbols
+        ]
+        available_symbols = [row["symbol"] for row in rows if row["quoteAvailable"]]
+        missing_symbols = [row["symbol"] for row in rows if row["missing"]]
+        stale_symbols = [row["symbol"] for row in rows if row["stale"]]
+        score_authority_symbols = [
+            row["symbol"] for row in rows if row["scoreContributionAllowed"]
+        ]
+        observation_only_symbols = [
+            row["symbol"] for row in rows if not row["scoreContributionAllowed"]
+        ]
+        fallback_or_limited = any(row["fallbackOrLimitedSampleUsed"] for row in rows)
+        families.append({
+            "familyId": str(family.get("familyId") or ""),
+            "familyLabel": str(family.get("familyLabel") or ""),
+            "configuredSymbols": configured_symbols,
+            "availableSymbols": available_symbols,
+            "missingSymbols": missing_symbols,
+            "staleSymbols": stale_symbols,
+            "scoreAuthorityAllowedSymbols": score_authority_symbols,
+            "observationOnlySymbols": observation_only_symbols,
+            "configuredCount": len(configured_symbols),
+            "availableCount": len(available_symbols),
+            "missingCount": len(missing_symbols),
+            "staleCount": len(stale_symbols),
+            "scoreAuthorityAllowedCount": len(score_authority_symbols),
+            "observationOnlyCount": len(observation_only_symbols),
+            "fallbackOrLimitedSampleUsed": bool(fallback_or_limited),
+            "symbols": rows,
+        })
+    return families
+
+
+def _alpaca_quote_coverage_symbol_row(
+    *,
+    symbol: str,
+    configured_attempt: _ProviderAttempt,
+    yfinance_attempt: _ProviderAttempt,
+    activation_allowed: bool,
+    activation_reason: Optional[str],
+    fulfilled_windows: Sequence[str],
+    missing_windows: Sequence[str],
+    stale_windows: Sequence[str],
+) -> Dict[str, Any]:
+    configured_quote = configured_attempt.quotes.get(symbol)
+    fallback_quote = yfinance_attempt.quotes.get(symbol)
+    quote = configured_quote if isinstance(configured_quote, Mapping) else fallback_quote
+    quote_available = isinstance(quote, Mapping)
+    configured_quote_available = _is_configured_alpaca_quote(configured_quote)
+    time_windows = quote.get("timeWindows") if isinstance(quote, Mapping) else {}
+    time_windows = time_windows if isinstance(time_windows, Mapping) else {}
+    fulfilled = [
+        window
+        for window in _ALPACA_TIMEFRAMES
+        if _etf_authority_window_slot_valid(time_windows.get(window))
+    ]
+    missing = [window for window in _ALPACA_TIMEFRAMES if window not in fulfilled]
+    stale = bool(
+        isinstance(quote, Mapping)
+        and (
+            quote.get("isStale") is True
+            or str(quote.get("freshness") or "").strip().lower() == "stale"
+            or any(
+                str((time_windows.get(window) or {}).get("freshness") or "").strip().lower() == "stale"
+                for window in fulfilled
+            )
+        )
+    )
+    source_authority_allowed = bool(
+        activation_allowed
+        and configured_quote_available
+        and fulfilled == list(_ALPACA_TIMEFRAMES)
+        and not stale
+    )
+    source_family = (
+        "configured_provider"
+        if configured_quote_available
+        else "fallback_proxy" if quote_available else "missing"
+    )
+    provider_class = (
+        "configured_quote"
+        if configured_quote_available
+        else "fallback_quote_proxy" if quote_available else "not_available"
+    )
+    fallback_or_limited = bool(
+        not quote_available
+        or not source_authority_allowed
+        or source_family != "configured_provider"
+        or stale
+    )
+    return {
+        "symbol": symbol,
+        "configured": True,
+        "quoteAvailable": quote_available,
+        "missing": not quote_available,
+        "stale": stale,
+        "freshness": quote.get("freshness") if isinstance(quote, Mapping) else None,
+        "asOf": quote.get("asOf") if isinstance(quote, Mapping) else None,
+        "sourceAuthorityAllowed": source_authority_allowed,
+        "scoreContributionAllowed": source_authority_allowed,
+        "fallbackOrLimitedSampleUsed": fallback_or_limited,
+        "sourceFamily": source_family,
+        "providerClass": provider_class,
+        "reasonCodes": _etf_authority_reason_codes(
+            activation_reason=None if source_authority_allowed else activation_reason,
+            missing_windows=missing or missing_windows,
+            stale_windows=(list(_ALPACA_TIMEFRAMES) if stale else []) or stale_windows,
+            quote_missing=not quote_available,
+        ),
+        "windowsFulfilled": fulfilled if fulfilled else fulfilled_windows,
+        "missingWindows": missing,
     }
 
 
