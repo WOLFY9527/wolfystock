@@ -21,7 +21,6 @@ vi.mock('../../api/optionsLab', () => ({
 }));
 
 const NO_CONCLUSION_LABEL = '数据不足，暂不形成结论';
-const WAITING_STATE_LABEL = '等待数据确认';
 const OBSERVE_ONLY_EVIDENCE_COPY = '仅供观察，不作为结论依据';
 const DEMO_EVIDENCE_COPY = '演示数据：当前数据延迟，仅用于界面与情景验证，不作为结论依据。';
 const NON_DECISION_BOUNDARY_COPY = '未达到可判断等级，仅供情景观察，暂不形成结论。';
@@ -661,7 +660,7 @@ describe('OptionsLabPage', () => {
     expect(commandArea).toHaveTextContent('情景控制台');
     expect(commandArea).toHaveTextContent('期权情景输入');
     expect(commandArea).toHaveTextContent('只读观察');
-    expect(commandArea).toHaveTextContent('门控优先');
+    expect(commandArea).toHaveTextContent('情景输入');
     expect(commandArea).not.toHaveTextContent('ExperimentConsole');
     expect(within(commandArea).getByLabelText('标的代码')).toHaveValue('TEM');
     expect(within(commandArea).getByRole('button', { name: '刷新情景' })).toHaveAttribute('data-terminal-primitive', 'button');
@@ -675,29 +674,40 @@ describe('OptionsLabPage', () => {
     expect(within(commandArea).getByText('波动扩张')).toBeInTheDocument();
 
     const productHero = screen.getByTestId('options-lab-product-hero');
-    expect(productHero).toHaveTextContent('情景分析台');
+    expect(productHero).toHaveTextContent('期权研究首读');
     await waitFor(() => {
       expect(productHero).toHaveTextContent('TEM');
       expect(productHero).toHaveTextContent('TEM · 演示标的');
       expect(productHero).toHaveTextContent('US · 演示/延迟数据');
-      expect(productHero).toHaveTextContent(WAITING_STATE_LABEL);
-      expect(productHero).toHaveTextContent('有限置信度');
-      expect(productHero).toHaveTextContent('期权数据暂不可用，情景分析已暂停。');
+      expect(productHero).toHaveTextContent('策略结构可比');
+      expect(productHero).toHaveTextContent('演示样本');
+      expect(productHero).toHaveTextContent('风险边界');
+      expect(productHero).toHaveTextContent('下一步证据');
+      expect(productHero).toHaveTextContent('研究记录');
+      expect(productHero).toHaveTextContent('非交易指令');
+      expect(productHero).toHaveTextContent('仅观察');
       expect(productHero).toHaveTextContent('最后更新：2026年5月6日 17:45');
     });
+    const heroText = productHero.textContent || '';
+    expect(heroText.indexOf('当前标的')).toBeGreaterThanOrEqual(0);
+    expect(heroText.indexOf('策略结构可比')).toBeGreaterThan(heroText.indexOf('当前标的'));
+    expect(heroText.indexOf('风险边界')).toBeGreaterThan(heroText.indexOf('策略结构可比'));
+    expect(heroText).not.toContain('研究就绪度');
+    expect(heroText).not.toContain('门控摘要');
+    expect(heroText).not.toContain('当前状态：');
+    expect(heroText).not.toContain('期权数据暂不可用，情景分析已暂停。');
     const dataQualityBanner = within(productHero).getByTestId('options-lab-data-quality-banner');
-    expect(dataQualityBanner).toHaveTextContent('仅供观察');
-    expect(dataQualityBanner).toHaveTextContent('当前不是实时期权链');
+    expect(dataQualityBanner).toHaveTextContent('仅观察');
+    expect(dataQualityBanner).toHaveTextContent('演示样本');
+    expect(dataQualityBanner).toHaveTextContent('波动结构待确认');
     expect(dataQualityBanner).toHaveTextContent('最后更新：2026年5月6日 17:45');
-    expect(dataQualityBanner).toHaveTextContent('不形成可用于判断的结论');
+    expect(dataQualityBanner).toHaveTextContent('风险边界');
     expect(dataQualityBanner.textContent || '').not.toMatch(/ready_fixture_only|missing_gamma|_blocked|_gate|undefined|null|NaN/i);
+    expect(dataQualityBanner.textContent || '').not.toMatch(/当前显示演示、延迟或本地验证快照|不用于真实判断|外部执行/);
     expect(document.body.textContent || '').not.toContain('2026-05-06T09:45:00Z');
     expect(document.body.textContent || '').not.toContain('2026-05-06T09:45:00-04:00');
-    expect(screen.getByTestId('options-lab-research-readiness-strip')).toHaveTextContent('研究就绪度');
-    expect(screen.getByTestId('options-lab-research-readiness-strip')).toHaveTextContent(/研究结论受限|仅观察|等待证据更新/);
-    expect(productHero).toHaveTextContent('当前主任务');
-    expect(screen.getByTestId('options-lab-consumer-availability')).toHaveTextContent('等待数据刷新');
-    expect(screen.getByTestId('options-lab-consumer-availability')).toHaveTextContent('当前状态：期权数据暂不可用，情景分析已暂停。');
+    expect(screen.getByTestId('options-lab-consumer-availability')).toHaveTextContent('当前可读');
+    expect(screen.getByTestId('options-lab-consumer-availability')).toHaveTextContent('结构样例、风险边界');
     const inputRegion = screen.getByTestId('options-lab-input-region');
     expect(inputRegion).toHaveTextContent('情景参数');
     expect(inputRegion).not.toHaveTextContent('这里仅记录研究输入');
@@ -807,13 +817,13 @@ describe('OptionsLabPage', () => {
     expect(within(section).getByText('策略比较覆盖')).toBeInTheDocument();
     expect(within(section).getByText('双边报价待补证')).toBeInTheDocument();
     expect(within(section).getByText('波动率与敏感度待补证')).toBeInTheDocument();
-    expect(within(section).getByText('不触发执行动作')).toBeInTheDocument();
-    expect(within(section).getByText('不改动现有持仓')).toBeInTheDocument();
     expect(within(section).getByText('研究记录')).toBeInTheDocument();
+    expect(within(section).getByText('非交易指令')).toBeInTheDocument();
+    expect(within(section).getByText('仅观察')).toBeInTheDocument();
     expect(section).toHaveTextContent('$7.50');
     expect(section).toHaveTextContent('$230.00');
     expect(within(section).queryByText(/provider authority|live chain|iv greeks|bid ask|synthetic_fixture|debugRef/i)).not.toBeInTheDocument();
-    expect(within(section).queryByText(/经纪商|订单|交易|buy|sell|trade|broker|order/i)).not.toBeInTheDocument();
+    expect(within(section).queryByText(/经纪商|订单|buy|sell|trade|broker|order/i)).not.toBeInTheDocument();
 
     const decisionSection = screen.getByTestId('options-lab-decision-engine');
     expect(within(decisionSection).getAllByText('$7.50').length).toBeGreaterThan(0);
@@ -950,10 +960,9 @@ describe('OptionsLabPage', () => {
     expect(within(section).getByText('专业结构')).toBeInTheDocument();
     expect(within(section).getAllByText('牛市看涨价差').length).toBeGreaterThan(0);
     expect(within(section).getByText('Call / Put 点位')).toBeInTheDocument();
-    expect(within(section).getByText('不构成买卖建议')).toBeInTheDocument();
-    expect(within(section).getByText('不会触发外部执行')).toBeInTheDocument();
-    expect(within(section).getByText('不连接外部执行通道')).toBeInTheDocument();
-    expect(within(section).getByText('不改动投资组合')).toBeInTheDocument();
+    expect(within(section).getByText('研究记录')).toBeInTheDocument();
+    expect(within(section).getByText('非交易指令')).toBeInTheDocument();
+    expect(within(section).getByText('仅观察')).toBeInTheDocument();
     expect(within(section).queryByText(/best contract|AI recommends you buy|buy now|sell now/i)).not.toBeInTheDocument();
   });
 
@@ -976,9 +985,9 @@ describe('OptionsLabPage', () => {
     expect(within(section).getByText('下一步补证')).toBeInTheDocument();
     expect(within(section).getByText('确认非演示链路新鲜度')).toBeInTheDocument();
     expect(within(section).getByText('复核低流动性合约行')).toBeInTheDocument();
-    expect(within(section).getAllByText('仅供研究观察').length).toBeGreaterThan(0);
-    expect(within(section).getAllByText('不触发执行').length).toBeGreaterThan(0);
-    expect(within(section).getByText('不连接外部执行通道')).toBeInTheDocument();
+    expect(within(section).getAllByText('研究记录').length).toBeGreaterThan(0);
+    expect(within(section).getAllByText('非交易指令').length).toBeGreaterThan(0);
+    expect(within(section).getByText('仅观察')).toBeInTheDocument();
     expect(within(section).queryByText(/buy|sell|trade|best contract|target price|stop loss|position sizing/i)).not.toBeInTheDocument();
     expect(within(section).queryByText(/gammaCoverageState|ivCoverageState|demo_or_stale|synthetic_options_lab_fixture|schemaVersion/i)).not.toBeInTheDocument();
   });
@@ -1111,7 +1120,7 @@ describe('OptionsLabPage', () => {
     expect(document.body.textContent || '').not.toContain('决策中枢');
     expect(document.body.textContent || '').not.toContain('策略决策');
     expect(document.body.textContent || '').not.toContain('首选观察');
-    expect(document.body.textContent || '').not.toContain('可观察结构');
+    expect(screen.getByTestId('options-lab-product-hero')).toHaveTextContent('可观察结构');
   });
 
   it('renders compact readiness gate strips with observation-only framing and hidden raw codes', async () => {
@@ -1223,31 +1232,28 @@ describe('OptionsLabPage', () => {
     expect(decisionStrip.textContent || '').not.toMatch(/买入|卖出|推荐/);
   });
 
-  it('surfaces additive readiness gates near the hero area without leaking internal labels', async () => {
+  it('surfaces additive readiness as compact first-read chips without leaking internal labels', async () => {
     mockHappyPath(buildOptionsResearchReadiness());
     renderPage();
 
-    const summary = await screen.findByTestId('options-lab-readiness-gate-summary');
-    expect(summary).toHaveTextContent('门控摘要');
-    expect(summary).toHaveTextContent('数据层级：演示/延迟');
-    expect(summary).toHaveTextContent('判断等级：未通过');
-    expect(summary).toHaveTextContent('执行边界：只读无执行');
-    expect(summary).toHaveTextContent('当前仍受授权、IV / 希腊值与流动性证据限制。');
-    expect(summary).toHaveTextContent('下一步：补齐授权链路、IV / 希腊值、OI / 成交量与更紧价差证据。');
-    expect(within(summary).getByRole('button', { name: /展开 完整门控与补证/ })).toHaveAttribute('aria-expanded', 'false');
-    await act(async () => {
-      within(summary).getByRole('button', { name: /展开 完整门控与补证/ }).click();
-    });
-    expect(summary).toHaveTextContent('授权级别：观察级');
-    expect(summary).toHaveTextContent('流动性：人工复核');
-    expect(summary).toHaveTextContent('IV / 希腊值：已阻断');
-    expect(summary).toHaveTextContent('价差：人工复核');
-    expect(summary).toHaveTextContent('情景覆盖：单合约');
-    expect(summary.textContent || '').not.toContain('observationOnly');
-    expect(summary.textContent || '').not.toContain('manual_review');
-    expect(summary.textContent || '').not.toContain('single_contract');
-    expect(summary.textContent || '').not.toContain('provider_authority_tier_observation_only');
-    expect(summary.textContent || '').not.toContain('wide_bid_ask_spread');
+    const hero = await screen.findByTestId('options-lab-product-hero');
+    expect(hero).toHaveTextContent('期权研究首读');
+    expect(hero).toHaveTextContent('策略结构可比');
+    expect(hero).toHaveTextContent('演示样本');
+    expect(hero).toHaveTextContent('希腊值待补');
+    expect(hero).toHaveTextContent('波动结构待确认');
+    expect(hero).toHaveTextContent('风险边界');
+    expect(hero).toHaveTextContent('下一步证据');
+    expect(hero).toHaveTextContent('补齐链路接入证据');
+    expect(hero).toHaveTextContent('补齐 IV / 希腊值');
+    expect(hero).toHaveTextContent('补齐成交深度与价差');
+    expect(hero.textContent || '').not.toContain('门控摘要');
+    expect(hero.textContent || '').not.toContain('observationOnly');
+    expect(hero.textContent || '').not.toContain('manual_review');
+    expect(hero.textContent || '').not.toContain('single_contract');
+    expect(hero.textContent || '').not.toContain('provider_authority_tier_observation_only');
+    expect(hero.textContent || '').not.toContain('wide_bid_ask_spread');
+    expect(screen.queryByTestId('options-lab-readiness-gate-summary')).not.toBeInTheDocument();
   });
 
   it('maps internal scenario and readiness reason codes into consumer-safe copy', async () => {
@@ -1388,20 +1394,14 @@ describe('OptionsLabPage', () => {
   it('fails closed when additive readiness is missing', async () => {
     renderPage();
 
-    const summary = await screen.findByTestId('options-lab-readiness-gate-summary');
-    expect(summary).toHaveTextContent('数据层级：证据不足');
-    expect(summary).toHaveTextContent('判断等级：未通过');
-    expect(summary).toHaveTextContent('执行边界：只读无执行');
-    expect(summary).toHaveTextContent('当前缺少就绪度回执，先按证据不足处理。');
-    expect(summary).toHaveTextContent('下一步：补齐期权链、IV / 希腊值与流动性证据。');
-    await act(async () => {
-      within(summary).getByRole('button', { name: /展开 完整门控与补证/ }).click();
-    });
-    expect(summary).toHaveTextContent('授权级别：待补证');
-    expect(summary).toHaveTextContent('流动性：已阻断');
-    expect(summary).toHaveTextContent('IV / 希腊值：已阻断');
-    expect(summary).toHaveTextContent('价差：已阻断');
-    expect(summary).toHaveTextContent('情景覆盖：缺少链路');
+    const hero = await screen.findByTestId('options-lab-product-hero');
+    expect(hero).toHaveTextContent('期权研究首读');
+    expect(hero).toHaveTextContent('策略结构可比');
+    expect(hero).toHaveTextContent('下一步证据');
+    expect(hero).toHaveTextContent('补齐链路接入证据');
+    expect(hero).toHaveTextContent('补齐 IV / 希腊值');
+    expect(hero).toHaveTextContent('补齐成交深度与价差');
+    expect(hero).not.toHaveTextContent('门控摘要');
   });
 
   it('keeps delayed usable readiness consumer-safe and observation-bounded', async () => {
@@ -1420,22 +1420,13 @@ describe('OptionsLabPage', () => {
     }));
     renderPage();
 
-    const summary = await screen.findByTestId('options-lab-readiness-gate-summary');
-    expect(summary).toHaveTextContent('数据层级：延迟可观察');
-    expect(summary).toHaveTextContent('判断等级：可用');
-    expect(summary).toHaveTextContent('执行边界：只读无执行');
-    expect(summary).toHaveTextContent('等待更高新鲜度链路');
-    await act(async () => {
-      within(summary).getByRole('button', { name: /展开 完整门控与补证/ }).click();
-    });
-    expect(summary).toHaveTextContent('授权级别：授权链路');
-    expect(summary).toHaveTextContent('流动性：已通过');
-    expect(summary).toHaveTextContent('IV / 希腊值：人工复核');
-    expect(summary).toHaveTextContent('价差：已通过');
-    expect(summary).toHaveTextContent('情景覆盖：单合约');
-    expect(summary.textContent || '').not.toContain('scoreGradeAllowed');
-    expect(summary.textContent || '').not.toContain('manual_review');
-    expect(summary.textContent || '').not.toMatch(/买入|卖出|推荐|下单|经纪商/);
+    const hero = await screen.findByTestId('options-lab-product-hero');
+    expect(hero).toHaveTextContent('策略结构可比');
+    expect(hero).toHaveTextContent('下一步证据');
+    expect(hero).toHaveTextContent('补齐链路接入证据');
+    expect(hero.textContent || '').not.toContain('scoreGradeAllowed');
+    expect(hero.textContent || '').not.toContain('manual_review');
+    expect(hero.textContent || '').not.toMatch(/买入|卖出|推荐|下单|经纪商/);
   });
 
   it('renders safe guarded UI when gateIssues arrive as API issue objects', async () => {
@@ -1586,7 +1577,8 @@ describe('OptionsLabPage', () => {
 
     const productHero = await screen.findByTestId('options-lab-product-hero');
     await waitFor(() => {
-      expect(productHero).toHaveTextContent('期权数据暂不可用，情景分析已暂停。');
+      expect(productHero).toHaveTextContent('期权研究首读');
+      expect(productHero).toHaveTextContent('风险边界');
     });
     expect(screen.queryByTestId('options-lab-setup-path')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '查看 Provider Ops' })).not.toBeInTheDocument();
@@ -1724,7 +1716,9 @@ describe('OptionsLabPage', () => {
       expect(within(section).getAllByText(DEMO_EVIDENCE_COPY).length).toBeGreaterThan(0);
     });
 
-    expect(within(productHero).getByText(WAITING_STATE_LABEL)).toBeInTheDocument();
+    expect(within(productHero).getByText('期权研究首读')).toBeInTheDocument();
+    expect(within(productHero).getAllByText('演示样本').length).toBeGreaterThan(0);
+    expect(within(productHero).getAllByText('风险边界').length).toBeGreaterThan(0);
     expect(within(productHero).getByText(NO_CONCLUSION_LABEL)).toBeInTheDocument();
     expect(within(section).getAllByText('演示/延迟数据').length).toBeGreaterThan(0);
     expect(evidence).toHaveTextContent('演示/延迟');
@@ -2303,7 +2297,7 @@ describe('OptionsLabPage', () => {
     });
     renderPage();
 
-    expect((await screen.findAllByText('情景分析台')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('期权研究首读')).length).toBeGreaterThan(0);
     const section = await screen.findByTestId('options-lab-strategy-comparison');
     expect(within(section).getByText('观察结构样例')).toBeInTheDocument();
     await waitFor(() => {
@@ -2338,7 +2332,7 @@ describe('OptionsLabPage', () => {
 
     renderPage();
 
-    expect((await screen.findAllByText('情景分析台')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('期权研究首读')).length).toBeGreaterThan(0);
     const section = await screen.findByTestId('options-lab-strategy-comparison');
     await waitFor(() => {
       expect(within(section).getByText(/专业结构：看涨期权多头 · 看涨 Call 多头/)).toBeInTheDocument();
@@ -2354,7 +2348,7 @@ describe('OptionsLabPage', () => {
     });
     renderPage();
 
-    expect((await screen.findAllByText('情景分析台')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('期权研究首读')).length).toBeGreaterThan(0);
     const section = await screen.findByTestId('options-lab-strategy-comparison');
     expect(within(section).getByText('观察结构样例')).toBeInTheDocument();
     await waitFor(() => {
@@ -2370,7 +2364,7 @@ describe('OptionsLabPage', () => {
     });
     renderPage();
 
-    expect((await screen.findAllByText('情景分析台')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('期权研究首读')).length).toBeGreaterThan(0);
     const section = await screen.findByTestId('options-lab-strategy-comparison');
     await waitFor(() => {
       expect(within(section).getByText('结构样例比较暂不可用。请稍后重试或调整假设。')).toBeInTheDocument();
@@ -2439,7 +2433,8 @@ describe('OptionsLabPage', () => {
       expect(screen.queryByTestId(testId)).not.toBeInTheDocument();
     });
     const productHero = screen.getByTestId('options-lab-product-hero');
-    expect(productHero).toHaveTextContent(/当前期权信号数据不足，仅供观察。|期权数据暂不可用，情景分析已暂停。/);
+    expect(productHero).toHaveTextContent('期权研究首读');
+    expect(productHero).toHaveTextContent('下一步证据');
     expect(productHero).toHaveTextContent('最后更新：');
     const decision = await screen.findByTestId('options-lab-decision-engine');
     await waitFor(() => {
@@ -2653,7 +2648,7 @@ describe('OptionsLabPage', () => {
 
     renderPage();
 
-    expect((await screen.findAllByText('情景分析台')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('期权研究首读')).length).toBeGreaterThan(0);
     expect(await screen.findByText('暂无可用到期日')).toBeInTheDocument();
     expect(screen.getByText('请先加载合约')).toBeInTheDocument();
     expect(vi.mocked(optionsLabApi.compareStrategies)).not.toHaveBeenCalled();
@@ -2769,18 +2764,17 @@ describe('OptionsLabPage', () => {
 
   it('keeps research-trust copy sentinels analytical and no-decision grade', () => {
     expect(optionsLabPageSource).toContain('只读观察');
-    expect(optionsLabPageSource).toContain('不构成买卖建议');
+    expect(optionsLabPageSource).toContain('研究记录');
+    expect(optionsLabPageSource).toContain('非交易指令');
+    expect(optionsLabPageSource).toContain('仅观察');
     expect(optionsLabPageSource).toContain('不可用于真实交易判断');
-    expect(optionsLabPageSource).toContain('不会触发外部执行');
-    expect(optionsLabPageSource).toContain('不连接外部执行通道');
-    expect(optionsLabPageSource).toContain('不改动投资组合');
     expect(optionsLabPageSource).toContain('options-lab-consumer-availability');
     expect(optionsLabPageSource).toContain('options-lab-input-region');
     expect(optionsLabPageSource).toContain('options-lab-output-region');
     expect(optionsLabPageSource).toContain('观察结构样例');
     expect(optionsLabPageSource).toContain('情景参数');
     expect(optionsLabPageSource).toContain('分析结果');
-    expect(optionsLabPageSource).toContain('当前主任务');
+    expect(optionsLabPageSource).toContain('当前可读');
     expect(optionsLabPageSource).toContain('当前可观察');
     expect(optionsLabPageSource).toContain('样例顺序 #');
     expect(optionsLabPageSource).toContain('情景上沿');
