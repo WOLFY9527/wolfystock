@@ -4,7 +4,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional, Type, TypeVar
+from types import SimpleNamespace
+from typing import Any, Callable, Optional, Type, TypeVar
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 
@@ -24,6 +25,8 @@ from api.v1.schemas.backtest import (
     RuleBacktestDetailResponse,
     RuleBacktestCompareRequest,
     RuleBacktestCompareResponse,
+    RuleBacktestParameterSweepRequest,
+    RuleBacktestParameterSweepResponse,
     RuleBacktestHistoryItem,
     RuleBacktestHistoryResponse,
     RuleBacktestStatusResponse,
@@ -47,6 +50,7 @@ from api.v1.schemas.backtest import (
 )
 from api.v1.schemas.common import ErrorResponse
 from src.services.backtest_service import BacktestService
+from src.services.backtest_parameter_stability import build_parameter_stability_plan
 from src.services.backtest_response_contract import build_performance_contract, build_rule_run_contract
 from src.services.rule_backtest_execution_model_registry import (
     RuleBacktestExecutionModelUnsupportedError,
@@ -89,6 +93,142 @@ def _build_model(model_cls: Type[ResponseT], data: dict) -> ResponseT:
 
 def _build_models(model_cls: Type[ResponseT], items: list[dict]) -> list[ResponseT]:
     return [_build_model(model_cls, item) for item in items]
+
+
+def _build_supplied_bar_payloads(request: RuleBacktestParameterSweepRequest) -> list[SimpleNamespace]:
+    bars: list[SimpleNamespace] = []
+    for bar in request.bars:
+        bars.append(
+            SimpleNamespace(
+                code=str(bar.code or request.code).strip(),
+                date=bar.date,
+                open=float(bar.open),
+                high=float(bar.high),
+                low=float(bar.low),
+                close=float(bar.close),
+                volume=float(bar.volume),
+            )
+        )
+    return bars
+
+
+def _run_rule_backtest_parameter_sweep_with_supplied_bars(
+    *,
+    service: RuleBacktestService,
+    request: RuleBacktestParameterSweepRequest,
+) -> dict[str, Any]:
+    normalized_code = str(request.code or "").strip()
+    raw_text = str(request.strategy_text or "").strip()
+    if not normalized_code:
+        return service._parameter_sweep_fail_closed("code_required")
+    if not raw_text:
+        return service._parameter_sweep_fail_closed("strategy_text_required", code=normalized_code)
+    if request.parsed_strategy is None:
+        return service._parameter_sweep_fail_closed("parsed_strategy_required", code=normalized_code)
+
+    try:
+        service._resolve_execution_model_request(request.execution_model)
+        normalized_start_date, normalized_end_date = service._normalize_date_range(
+            start_date=request.start_date,
+            end_date=request.end_date,
+        )
+    except ValueError as exc:
+        return service._parameter_sweep_fail_closed(
+            "invalid_parameter_sweep_request",
+            code=normalized_code,
+            diagnostics={"message": str(exc)},
+        )
+    if normalized_start_date is None or normalized_end_date is None:
+        return service._parameter_sweep_fail_closed("fixed_start_date_end_date_required", code=normalized_code)
+
+    try:
+        parsed = service._dict_to_parsed_strategy(request.parsed_strategy, raw_text)
+        parsed = service._normalize_parsed_strategy(
+            parsed,
+            code=normalized_code,
+            start_date=normalized_start_date,
+            end_date=normalized_end_date,
+            initial_capital=request.initial_capital,
+            fee_bps=request.fee_bps,
+            slippage_bps=request.slippage_bps,
+        )
+    except (TypeError, ValueError) as exc:
+        return service._parameter_sweep_fail_closed(
+            "invalid_parsed_strategy",
+            code=normalized_code,
+            diagnostics={"message": str(exc)},
+        )
+    if parsed.needs_confirmation and not bool(request.confirmed):
+        return service._parameter_sweep_fail_closed("strategy_confirmation_required", code=normalized_code)
+
+    try:
+        plan = build_parameter_stability_plan(
+            strategy_id=service._parameter_sweep_strategy_id(normalized_code, raw_text, parsed),
+            dataset_id=service._parameter_sweep_dataset_id(
+                normalized_code,
+                normalized_start_date,
+                normalized_end_date,
+            ),
+            base_parameters={},
+            parameter_grid=request.parameter_grid or {},
+            metric_keys=["total_return_pct", "max_drawdown_pct", "trade_count"],
+            primary_metric="total_return_pct",
+            risk_metric="max_drawdown_pct",
+            min_completed_runs=1,
+            max_combinations=int(request.max_combinations),
+            overflow_policy="reject",
+        )
+    except (TypeError, ValueError) as exc:
+        return service._parameter_sweep_fail_closed(
+            "invalid_parameter_grid",
+            code=normalized_code,
+            diagnostics={"message": str(exc)},
+        )
+
+    requests = list((plan.get("parameter_grid_request_bundle") or {}).get("requests") or [])
+    insufficient_data = dict(plan.get("insufficient_data") or {})
+    if insufficient_data and not requests:
+        return service._parameter_sweep_fail_closed(
+            str(insufficient_data.get("reason_code") or "invalid_parameter_grid"),
+            code=normalized_code,
+            plan=plan,
+            diagnostics=insufficient_data,
+        )
+
+    bars = _build_supplied_bar_payloads(request)
+    if not bars:
+        return service._parameter_sweep_fail_closed(
+            "blocked_missing_supplied_bars",
+            code=normalized_code,
+            plan=plan,
+            diagnostics={
+                "reasonCode": "blocked_missing_supplied_bars",
+                "message": "No caller-supplied bars were provided for the requested fixed window.",
+            },
+        )
+
+    runner_result = service._run_bounded_parameter_grid_diagnostic_with_supplied_bars(
+        parsed_strategy=parsed,
+        bars=bars,
+        code=normalized_code,
+        start_date=normalized_start_date,
+        end_date=normalized_end_date,
+        lookback_bars=request.lookback_bars,
+        initial_capital=request.initial_capital,
+        fee_bps=request.fee_bps,
+        slippage_bps=request.slippage_bps,
+        parameter_grid_descriptor=plan["parameter_grid_descriptor"],
+        parameter_grid_request_bundle=plan["parameter_grid_request_bundle"],
+        parameter_stability_plan=plan,
+        total_timeout_seconds=request.total_timeout_seconds,
+    )
+    return service._parameter_sweep_response(
+        code=normalized_code,
+        parsed_strategy=parsed,
+        plan=plan,
+        runner_result=runner_result,
+        bars=bars,
+    )
 
 
 def _validation_error(exc: ValueError) -> HTTPException:
@@ -581,6 +721,36 @@ def parse_rule_strategy(
             max_lookback=int(parsed.get("max_lookback") or 1),
         )
     return _run_endpoint("解析规则策略失败", _operation, allow_validation_error=True)
+
+
+@router.post(
+    "/rule/parameter-sweep",
+    response_model=RuleBacktestParameterSweepResponse,
+    responses={
+        200: {"description": "有界 supplied-input 参数扫描诊断结果"},
+        400: {"description": "请求参数错误", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="运行 supplied-input 有界规则回测参数扫描",
+    description=(
+        "仅使用调用方提供的 bars 与有界参数网格，同步返回 response-only 诊断结果；"
+        "不创建 stored run，不拉取 provider，不生成 dataset snapshot，不提升为优化器或推荐引擎。"
+    ),
+)
+def run_rule_backtest_parameter_sweep(
+    request: RuleBacktestParameterSweepRequest,
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> RuleBacktestParameterSweepResponse:
+    def _operation() -> RuleBacktestParameterSweepResponse:
+        service = _build_rule_backtest_service(db_manager, current_user)
+        data = _run_rule_backtest_parameter_sweep_with_supplied_bars(
+            service=service,
+            request=request,
+        )
+        return RuleBacktestParameterSweepResponse(**data)
+
+    return _run_endpoint("规则回测参数扫描失败", _operation, allow_validation_error=True)
 
 
 @router.post(

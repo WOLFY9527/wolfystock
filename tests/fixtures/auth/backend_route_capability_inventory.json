@@ -38,7 +38,7 @@
     },
     {
       "route_id": "backtest.member_surface",
-      "path_pattern": "^/api/v1/backtest/(?:run|prepare-samples|sample-status|runs|results|performance(?:/\\{code\\})?|samples/clear|results/clear|rule/(?:parse|run|universe-jobs(?:/\\{job_id\\}(?:/(?:run|status|diagnostics|results))?)?|runs(?:/\\{run_id\\}(?:/(?:status|support-bundle-manifest|export-index|support-bundle-reproducibility-manifest|execution-trace\\.json|execution-trace\\.csv|cancel))?)?|compare))$",
+      "path_pattern": "^/api/v1/backtest/(?:run|prepare-samples|sample-status|runs|results|performance(?:/\\{code\\})?|samples/clear|results/clear|rule/(?:parse|parameter-sweep|run|universe-jobs(?:/\\{job_id\\}(?:/(?:run|status|diagnostics|results))?)?|runs(?:/\\{run_id\\}(?:/(?:status|support-bundle-manifest|export-index|support-bundle-reproducibility-manifest|execution-trace\\.json|execution-trace\\.csv|cancel))?)?|compare))$",
       "methods": ["GET", "POST"],
       "surface": "backtest",
       "auth_dependency_label": "authenticated_user",
