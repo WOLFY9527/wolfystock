@@ -630,17 +630,17 @@ export function buildAlpacaQuoteAuthorityReadinessView(
 
   const state = readiness.sourceAuthority;
   const primary = state === 'authorized' && readiness.providerConfigured !== false
-    ? { label: 'Alpaca可用', variant: 'success' as const }
+    ? { label: 'ETF引用可用', variant: 'success' as const }
     : state === 'partial'
-      ? { label: 'Alpaca部分可用', variant: 'info' as const }
+      ? { label: 'ETF引用部分可用', variant: 'info' as const }
       : state === 'unavailable' || readiness.providerConfigured === false
-        ? { label: 'Alpaca待配置', variant: 'caution' as const }
+        ? { label: 'ETF引用待补', variant: 'caution' as const }
         : { label: '来源待确认', variant: 'neutral' as const };
 
   const limited = readiness.fallbackUsed === true || readiness.scoreContributionAllowed === false;
   const chips = [
     { key: 'readiness', label: primary.label, variant: primary.variant },
-    ...(readiness.fallbackUsed ? [{ key: 'fallback', label: '回退观察', variant: 'caution' as const }] : []),
+    ...(readiness.fallbackUsed ? [{ key: 'fallback', label: '备用样本观察', variant: 'caution' as const }] : []),
     ...(limited ? [{ key: 'limited', label: '仅观察', variant: 'neutral' as const }] : []),
   ];
 
