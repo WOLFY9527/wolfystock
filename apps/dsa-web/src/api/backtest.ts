@@ -15,6 +15,8 @@ import type {
   RuleBacktestParseResponse,
   RuleBacktestRunRequest,
   RuleBacktestRunResponse,
+  RuleBacktestParameterSweepRequest,
+  RuleBacktestParameterSweepResponse,
   RuleBacktestCompareResponse,
   RuleBacktestHistoryResponse,
   RuleBacktestStatusResponse,
@@ -103,6 +105,34 @@ export const backtestApi = {
       requestData,
     );
     return toCamelCase<RuleBacktestRunResponse>(response.data);
+  },
+
+  runRuleParameterSweep: async (
+    params: RuleBacktestParameterSweepRequest,
+  ): Promise<RuleBacktestParameterSweepResponse> => {
+    const requestData: Record<string, unknown> = {
+      code: params.code,
+      strategy_text: params.strategyText,
+      parsed_strategy: params.parsedStrategy,
+      lookback_bars: params.lookbackBars,
+      initial_capital: params.initialCapital,
+      fee_bps: params.feeBps,
+      slippage_bps: params.slippageBps,
+      confirmed: params.confirmed,
+      parameter_grid: params.parameterGrid,
+      max_combinations: params.maxCombinations,
+      bars: params.bars,
+    };
+    if (params.startDate) requestData.start_date = params.startDate;
+    if (params.endDate) requestData.end_date = params.endDate;
+    if (params.executionModel) requestData.execution_model = params.executionModel;
+    if (params.totalTimeoutSeconds != null) requestData.total_timeout_seconds = params.totalTimeoutSeconds;
+
+    const response = await apiClient.post<Record<string, unknown>>(
+      '/api/v1/backtest/rule/parameter-sweep',
+      requestData,
+    );
+    return toCamelCase<RuleBacktestParameterSweepResponse>(response.data);
   },
 
   getRuleBacktestRuns: async (params: { code?: string; page?: number; limit?: number } = {}): Promise<RuleBacktestHistoryResponse> => {

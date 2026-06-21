@@ -32,6 +32,7 @@ const {
   clearResults,
   parseRuleStrategy,
   runRuleBacktest,
+  runRuleParameterSweep,
   getRuleBacktestRuns,
   getRuleBacktestRun,
   getRuleBacktestRunStatus,
@@ -48,6 +49,7 @@ const {
   clearResults: vi.fn(),
   parseRuleStrategy: vi.fn(),
   runRuleBacktest: vi.fn(),
+  runRuleParameterSweep: vi.fn(),
   getRuleBacktestRuns: vi.fn(),
   getRuleBacktestRun: vi.fn(),
   getRuleBacktestRunStatus: vi.fn(),
@@ -108,6 +110,7 @@ vi.mock('../../api/backtest', () => ({
     clearResults,
     parseRuleStrategy,
     runRuleBacktest,
+    runRuleParameterSweep,
     getRuleBacktestRuns,
     getRuleBacktestRun,
     getRuleBacktestRunStatus,
@@ -686,6 +689,37 @@ describe('BacktestPage', () => {
     runBacktest.mockResolvedValue(makeRunResponse());
     parseRuleStrategy.mockResolvedValue(makeRuleParseResponse());
     runRuleBacktest.mockResolvedValue(makeRuleRunResponse());
+    runRuleParameterSweep.mockResolvedValue({
+      state: 'completed',
+      diagnosticOnly: true,
+      researchOnly: true,
+      notOptimizer: true,
+      winnerPromotion: false,
+      decisionGrade: false,
+      code: 'ORCL',
+      storage: { mode: 'response_only' },
+      summary: {
+        runCount: 0,
+        skippedCount: 0,
+        blockedCount: 0,
+      },
+      datasetLineageReadiness: {
+        readinessState: 'diagnostic-only',
+        barBoundary: {
+          suppliedBarsToRunner: true,
+          providerCallsExecuted: false,
+          localBars: true,
+        },
+        missingLineageFields: [],
+        provenanceStatus: {
+          providerHydrationExecuted: false,
+          storedReadbackAvailable: false,
+        },
+      },
+      reproducibilityMetadata: {
+        gridDescriptorHashSha256: 'grid-hash',
+      },
+    });
     getRuleBacktestRuns.mockResolvedValue({
       total: 0,
       page: 1,
@@ -1180,8 +1214,10 @@ describe('BacktestPage', () => {
     fireEvent.click(screen.getByTestId('pro-workflow-step-advanced'));
     expect(await screen.findByTestId('pro-step-advanced')).toBeInTheDocument();
     expect(screen.getByText('当前能力说明')).toBeInTheDocument();
-    expect(screen.getByText('网格搜索（计划中）')).toBeInTheDocument();
-    expect(screen.getByText('贝叶斯搜索（计划中）')).toBeInTheDocument();
+    expect(screen.getByTestId('pro-parameter-sweep-panel')).toBeInTheDocument();
+    expect(screen.getByLabelText('参数网格 JSON')).toBeInTheDocument();
+    expect(screen.getByLabelText('输入 bars JSON')).toBeInTheDocument();
+    expect(screen.getByLabelText('最大组合数')).toBeInTheDocument();
     expect(screen.queryByLabelText('启用网格搜索')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('启用贝叶斯搜索')).not.toBeInTheDocument();
     expect(screen.queryByText('Grid Search')).not.toBeInTheDocument();
@@ -1209,8 +1245,11 @@ describe('BacktestPage', () => {
 
     fireEvent.click(screen.getByTestId('pro-workflow-step-advanced'));
     const advancedStep = await screen.findByTestId('pro-step-advanced');
-    expect(within(advancedStep).getByText('网格搜索（计划中）')).toBeInTheDocument();
-    expect(within(advancedStep).getByText('贝叶斯搜索（计划中）')).toBeInTheDocument();
+    expect(within(advancedStep).getByTestId('pro-parameter-sweep-panel')).toBeInTheDocument();
+    expect(within(advancedStep).getByText('有界的输入驱动参数扫描')).toBeInTheDocument();
+    expect(within(advancedStep).getByLabelText('参数网格 JSON')).toBeInTheDocument();
+    expect(within(advancedStep).getByLabelText('输入 bars JSON')).toBeInTheDocument();
+    expect(runRuleParameterSweep).not.toHaveBeenCalled();
     expect(within(advancedStep).queryByLabelText('启用网格搜索')).not.toBeInTheDocument();
     expect(within(advancedStep).queryByLabelText('启用贝叶斯搜索')).not.toBeInTheDocument();
 

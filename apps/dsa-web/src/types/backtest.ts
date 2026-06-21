@@ -516,6 +516,141 @@ export interface RuleBacktestRunRequest {
   waitForCompletion?: boolean;
 }
 
+export interface RuleBacktestParameterSweepBar {
+  code?: string | null;
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number | null;
+}
+
+export interface RuleBacktestParameterSweepRequest {
+  code: string;
+  strategyText: string;
+  parsedStrategy: RuleBacktestParsedStrategy;
+  startDate?: string;
+  endDate?: string;
+  lookbackBars: number;
+  initialCapital: number;
+  feeBps: number;
+  slippageBps: number;
+  executionModel?: Record<string, unknown> | null;
+  confirmed: boolean;
+  parameterGrid: Record<string, Array<string | number | boolean | null>>;
+  maxCombinations: number;
+  totalTimeoutSeconds?: number | null;
+  bars: RuleBacktestParameterSweepBar[];
+}
+
+export interface RuleBacktestParameterSweepSummary {
+  totalParameterSets?: number;
+  runCount?: number;
+  executedCount?: number;
+  completedCount?: number;
+  blockedCount?: number;
+  failedCount?: number;
+  skippedCount?: number;
+}
+
+export interface RuleBacktestParameterSweepLineageField {
+  state?: string;
+  value?: unknown;
+  evidenceSource?: string;
+  acceptedAsProfessionalEvidence?: boolean;
+}
+
+export interface RuleBacktestParameterSweepLineageReadiness {
+  contractKind?: string;
+  contractVersion?: string;
+  readinessState?: string;
+  diagnosticOnly?: boolean;
+  blocked?: boolean;
+  professionalReadinessApproved?: boolean;
+  decisionGrade?: boolean;
+  stateReasonCode?: string | null;
+  code?: string;
+  barBoundary?: {
+    barSource?: string;
+    localBars?: boolean;
+    suppliedBarsToRunner?: boolean;
+    barCount?: number;
+    acceptedAsProviderAuthority?: boolean;
+    providerCallsExecuted?: boolean;
+    marketCacheAccessed?: boolean;
+    storageMutation?: boolean;
+  };
+  lineageFields?: Record<string, RuleBacktestParameterSweepLineageField>;
+  sourceAuthority?: {
+    authorityStatus?: string;
+    authoritySourceType?: string;
+    authorityReasonCodes?: string[];
+    authorityAllowed?: boolean;
+    acceptedAsProviderAuthority?: boolean;
+    acceptedAsReadinessEvidence?: boolean;
+  };
+  provenanceStatus?: {
+    state?: string;
+    providerHydrationExecuted?: boolean;
+    dataIngestionExecuted?: boolean;
+    storedReadbackAvailable?: boolean;
+  };
+  missingLineageFields?: string[];
+  markers?: Record<string, { state?: string; marker?: boolean | string; reasonCode?: string | null }>;
+  reproducibility?: {
+    state?: string;
+    inputShapeHashSha256?: string | null;
+    gridDescriptorHashSha256?: string | null;
+    requestBundleId?: string | null;
+    inputOrdering?: unknown;
+    gridRunOrdering?: unknown;
+    runIdPolicy?: unknown;
+    storedManifestAvailable?: boolean;
+    acceptedAsProfessionalDatasetEvidence?: boolean;
+  };
+  parameterSetBoundary?: {
+    sharedDatasetBoundaryForAllParameterSets?: boolean;
+    perMemberStoredLineageAvailable?: boolean;
+    parameterSetIds?: string[];
+  };
+  professionalReadiness?: Record<string, unknown>;
+}
+
+export interface RuleBacktestParameterSweepResponse {
+  contractKind?: string;
+  contractVersion?: string;
+  state?: string;
+  diagnosticOnly?: boolean;
+  researchOnly?: boolean;
+  notOptimizer?: boolean;
+  winnerPromotion?: boolean;
+  decisionGrade?: boolean;
+  code?: string;
+  strategyFamily?: string | null;
+  engine?: Record<string, unknown>;
+  executionAssumptions?: Record<string, unknown>;
+  datasetMetadata?: Record<string, unknown>;
+  datasetLineageReadiness?: RuleBacktestParameterSweepLineageReadiness;
+  storage?: Record<string, unknown>;
+  summary?: RuleBacktestParameterSweepSummary;
+  parameterRows?: Array<Record<string, unknown>>;
+  skippedRows?: Array<Record<string, unknown>>;
+  blockedRows?: Array<Record<string, unknown>>;
+  failedRows?: Array<Record<string, unknown>>;
+  failClosedReasonCode?: string | null;
+  failClosedDiagnostics?: Record<string, unknown>;
+  parameterStabilitySurface?: unknown;
+  reproducibilityMetadata?: {
+    state?: string;
+    plan?: Record<string, unknown>;
+    requestBundleId?: string | null;
+    gridDescriptorHashSha256?: string | null;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface RuleBacktestTradeItem {
   id?: number;
   runId?: number;

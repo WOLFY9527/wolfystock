@@ -25,11 +25,12 @@ import {
   type RuleBenchmarkMode,
 } from './shared';
 import { backtestStrategyDisplayCopy, getStrategyCatalogGroups } from './strategyCatalog';
+import ParameterSweepPanel from './ParameterSweepPanel';
 
 type BacktestLanguage = 'zh' | 'en';
 type WorkspaceStep = 'assets' | 'strategy' | 'orders' | 'costs' | 'advanced';
 type OrdersTab = 'routing' | 'guards';
-type AdvancedTab = 'optimization' | 'robustness';
+type AdvancedTab = 'sweep' | 'robustness';
 
 type StepStatusTone = 'done' | 'pending' | 'default' | 'modified' | 'off' | 'error';
 
@@ -290,7 +291,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
 }) => {
   const [activeStep, setActiveStep] = useState<WorkspaceStep>('assets');
   const [ordersTab, setOrdersTab] = useState<OrdersTab>('routing');
-  const [advancedTab, setAdvancedTab] = useState<AdvancedTab>('optimization');
+  const [advancedTab, setAdvancedTab] = useState<AdvancedTab>('sweep');
   const [resultsOpen, setResultsOpen] = useState(false);
   const [catalogToast, setCatalogToast] = useState<string | null>(null);
   const [isCatalogDrawerOpen, setIsCatalogDrawerOpen] = useState(false);
@@ -866,16 +867,16 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   const renderAdvancedStep = () => (
     <section data-testid="pro-step-advanced" className="flex min-w-0 flex-col gap-4">
       <StepHeader step={stepDefinitions[4]} language={language} chips={[
-        advancedTab === 'optimization' ? (language === 'en' ? 'optimization' : '优化') : (language === 'en' ? 'robustness' : '稳健性'),
-        advancedTab === 'optimization'
-          ? (language === 'en' ? 'planned only' : '计划中')
+        advancedTab === 'sweep' ? (language === 'en' ? 'sweep' : '参数扫描') : (language === 'en' ? 'robustness' : '稳健性'),
+        advancedTab === 'sweep'
+          ? (language === 'en' ? 'diagnostic only' : '仅诊断')
           : robustnessEnabled
             ? (language === 'en' ? 'diagnostics enabled' : '诊断已启用')
             : (language === 'en' ? 'diagnostics optional' : '诊断可选'),
       ]} />
       <div className={`${ghostCardClass} p-4 md:p-5`}>
         <div className="flex min-w-0 flex-wrap gap-2">
-          <button type="button" onClick={() => setAdvancedTab('optimization')} className={advancedTab === 'optimization' ? activeChipButtonClass : chipButtonClass}>{language === 'en' ? 'Optimization' : '优化'}</button>
+          <button type="button" onClick={() => setAdvancedTab('sweep')} className={advancedTab === 'sweep' ? activeChipButtonClass : chipButtonClass}>{language === 'en' ? 'Sweep' : '参数扫描'}</button>
           <button type="button" onClick={() => setAdvancedTab('robustness')} className={advancedTab === 'robustness' ? activeChipButtonClass : chipButtonClass}>{language === 'en' ? 'Robustness' : '稳健性'}</button>
         </div>
         <div className="mt-5 grid gap-3">
@@ -884,34 +885,30 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               {language === 'en' ? 'Current truth label' : '当前能力说明'}
             </p>
             <p className="mt-2 text-sm text-white/52">
-              {advancedTab === 'optimization'
+              {advancedTab === 'sweep'
                 ? (language === 'en'
-                  ? 'The current professional run only uses basic parameters plus the parsed executable strategy. Optimization controls below remain planned placeholders.'
-                  : '当前专业模式实际只会提交基础参数与已解析的可执行策略；下方优化控件仍是计划中的占位能力。')
+                  ? 'The current professional run submits bounded supplied-input parameter sweeps only. It does not rank parameter sets or turn results into actions.'
+                  : '当前专业模式只会提交有界的输入驱动参数扫描，不排序参数组，也不转化为行动。')
                 : (language === 'en'
                   ? 'Robustness diagnostics are opt-in. When disabled, no extra diagnostics config is sent. When enabled, only the fixed walk-forward preset and chosen Monte Carlo simulation count are added, without changing the primary strategy logic.'
                   : '稳健性诊断为可选项。关闭时不会附加额外诊断参数；启用后只会追加固定滚动样本外预设和你选择的 Monte Carlo 仿真次数，不会改动主策略逻辑。')}
             </p>
           </div>
-          {advancedTab === 'optimization' ? (
-            <>
-              <PlannedCapability
-                title={language === 'en' ? 'Grid Search (planned)' : '网格搜索（计划中）'}
-                description={language === 'en'
-                  ? 'Parameter sweeps are not wired into the current professional executor.'
-                  : '参数网格扫描尚未接入当前专业执行流。'}
-                testId="pro-advanced-grid-search"
-                language={language}
-              />
-              <PlannedCapability
-                title={language === 'en' ? 'Bayesian Search (planned)' : '贝叶斯搜索（计划中）'}
-                description={language === 'en'
-                  ? 'Bayesian optimization remains a future capability and does not trigger backend actions today.'
-                  : '贝叶斯优化仍为后续能力，当前不会触发后端动作。'}
-                testId="pro-advanced-bayesian"
-                language={language}
-              />
-            </>
+          {advancedTab === 'sweep' ? (
+            <ParameterSweepPanel
+              language={language}
+              code={code}
+              strategyText={strategyText}
+              startDate={startDate}
+              endDate={endDate}
+              lookbackBars={lookbackBars}
+              initialCapital={initialCapital}
+              feeBps={feeBps}
+              slippageBps={slippageBps}
+              parsedStrategy={parsedStrategy}
+              confirmed={confirmed}
+              parseStale={parseStale}
+            />
           ) : (
             <>
               <div
