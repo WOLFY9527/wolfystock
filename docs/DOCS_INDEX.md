@@ -6,6 +6,9 @@ evidence, local artifacts, and older inherited guides.
 
 ## Start Here
 
+- [WolfyStock AI Project Manual](./AI_PROJECT_MANUAL.md): generated AI worker
+  onboarding and navigation manual for project purpose, surfaces, data reality,
+  protected domains, validation, and source-of-truth routing.
 - [WolfyStock System Handbook](./WOLFYSTOCK_SYSTEM_HANDBOOK.md): product,
   module, route, API, provider, validation, troubleshooting, and safe-change
   overview.
@@ -67,6 +70,7 @@ operator workflows.
 
 | Area | Current source |
 | --- | --- |
+| AI project onboarding | [AI Project Manual](./AI_PROJECT_MANUAL.md) |
 | System overview | [System Handbook](./WOLFYSTOCK_SYSTEM_HANDBOOK.md) |
 | AI-assisted maintenance | [AI Maintenance Manual](./WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md) |
 | Module boundaries | [Modular Architecture Manual](./architecture/WOLFYSTOCK_MODULE_ARCHITECTURE.md) |

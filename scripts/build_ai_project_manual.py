@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 MANUAL_PATH = ROOT / "docs" / "AI_PROJECT_MANUAL.md"
 MANIFEST_PATH = ROOT / "docs" / "AI_PROJECT_MANUAL_SOURCES.json"
 GENERATOR_PATH = "scripts/build_ai_project_manual.py"
-GENERATOR_VERSION = 2
+GENERATOR_VERSION = 3
 SCHEMA_VERSION = 1
 
 PRUNED_DIR_NAMES = {
@@ -94,6 +94,20 @@ class GeneratedOutputs:
 SOURCE_REFS = [
     SourceRef("AGENTS.md", "canonical repository AI-agent rules", ("workflow", "governance")),
     SourceRef("README.md", "product purpose, feature set, stack, entry points", ("product", "architecture")),
+    SourceRef("docs/product-recovery/WOLFYSTOCK_PRODUCT_RECOVERY_PLAN.md", "canonical product recovery plan and recovery posture", ("product-recovery", "product")),
+    SourceRef("docs/product-recovery/DATA_COVERAGE_MATRIX.md", "repo-grounded data coverage matrix for product recovery", ("product-recovery", "data")),
+    SourceRef("docs/product-recovery/DATA011_PACKET_CONSUMPTION_ACCEPTANCE.md", "packet consumption acceptance for first-read recovery", ("product-recovery", "acceptance")),
+    SourceRef("docs/product-recovery/DATA016_FOCUSED_ACCEPTANCE.md", "focused first-read recovery acceptance", ("product-recovery", "acceptance")),
+    SourceRef("docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md", "real data value acceptance and remaining blockers", ("product-recovery", "acceptance")),
+    SourceRef("docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md", "professional data source roadmap", ("product-recovery", "roadmap")),
+    SourceRef("docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md", "backtest professional upgrade audit", ("product-recovery", "backtest")),
+    SourceRef("docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md", "target-environment evidence harness", ("product-recovery", "evidence")),
+    SourceRef("docs/product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md", "options provider entitlement decision", ("product-recovery", "options")),
+    SourceRef("docs/product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md", "scenario durable baseline snapshot plan", ("product-recovery", "scenario")),
+    SourceRef("docs/product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md", "authorized quote spine contract", ("product-recovery", "data")),
+    SourceRef("docs/product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md", "backtest dataset lineage gate contract", ("product-recovery", "backtest")),
+    SourceRef("docs/product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md", "minimum symbol research packet contract", ("product-recovery", "packet")),
+    SourceRef("docs/data/market-source-activation-blueprint.md", "official risk and quote source activation roadmap", ("data", "roadmap")),
     SourceRef("docs/DOCS_INDEX.md", "current documentation navigation and authority map", ("governance", "sources")),
     SourceRef("docs/DEPLOY.md", "deployment modes and boundary notes", ("deployment", "launch")),
     SourceRef("docs/ARCHIVE_INDEX.md", "archive lanes and safe-use rules", ("governance", "sources")),
@@ -103,9 +117,12 @@ SOURCE_REFS = [
     SourceRef("docs/architecture/WOLFYSTOCK_MODULE_ARCHITECTURE.md", "bounded-context architecture and dependency rules", ("architecture", "protected-domains")),
     SourceRef("docs/architecture/backend-frontend-modular-maintenance-handbook.md", "module owners, first files, invariants, debug flow", ("architecture", "workflow")),
     SourceRef("docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md", "Codex operating guard, protected domains, validation policy", ("workflow", "protected-domains")),
+    SourceRef("docs/codex/WOLFYSTOCK_CODEX_DISCOVERY_PROTOCOL.md", "Codex discovery protocol for compact prompts", ("workflow", "validation")),
+    SourceRef("docs/codex/WOLFYSTOCK_CODEX_EXECUTION_POLICY.md", "Codex execution policy for task modes and prompt compression", ("workflow", "validation")),
     SourceRef("docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md", "execution modes, prompt fields, commit/push rules", ("workflow", "validation")),
     SourceRef("docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md", "final report evidence contract", ("workflow", "validation")),
     SourceRef("docs/codex/WOLFYSTOCK_CODEX_VALIDATION_MATRIX.md", "smallest-safe validation tiers and path routing", ("validation",)),
+    SourceRef("docs/codex/NO_ADVICE_REGRESSION_GUARDS.md", "no-advice regression guards and grep policy", ("validation", "product-safety")),
     SourceRef("docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md", "backend protected semantic boundaries", ("protected-domains",)),
     SourceRef("docs/codex/WOLFYSTOCK_PROVIDER_BUDGET_AND_ROUTING_RULES.md", "provider budget, quota, and routing rules", ("provider", "quota", "cost")),
     SourceRef("docs/codex/WOLFYSTOCK_BACKTEST_UNIVERSE_RULES.md", "backtest universe local-only guardrails", ("backtest", "protected-domains")),
@@ -123,12 +140,17 @@ SOURCE_REFS = [
     SourceRef("docs/backtest/README.md", "backtest domain entry point and v1 semantics freeze", ("backtest",)),
     SourceRef("docs/backtest-system.md", "backtest APIs, async behavior, stored-first exports", ("backtest",)),
     SourceRef("docs/audits/backtest-portfolio-public-safety-audit.md", "portfolio/backtest public safety evidence", ("portfolio", "backtest", "launch")),
+    SourceRef("docs/market-overview/README.md", "market overview domain entry point and boundary rules", ("market-overview", "product")),
+    SourceRef("docs/scanner/README.md", "scanner and watchlist domain entry point and boundary rules", ("scanner", "product")),
+    SourceRef("docs/liquidity/README.md", "liquidity domain entry point and boundary rules", ("liquidity", "product")),
+    SourceRef("docs/rotation/README.md", "rotation domain entry point and boundary rules", ("rotation", "product")),
     SourceRef("docs/provider-data/README.md", "provider, data, freshness, cache, disclosure rules", ("provider", "data")),
     SourceRef("docs/audits/index-provider-data-options.md", "provider/data/options readiness index", ("provider", "options", "data")),
     SourceRef("docs/audits/index-cost-quota-observability.md", "cost, quota, provider budget, observability index", ("quota", "cost")),
     SourceRef("docs/audits/quota-reserve-release-operator-evidence-checklist.md", "quota reserve/release operator evidence", ("quota", "cost")),
     SourceRef("docs/operations/background-job-queue-boundary.md", "process-local async and first queue boundary", ("ws2", "runtime")),
     SourceRef("docs/operations/queue-ws2-metrics-production-readiness.md", "queue/WS2 metrics production-readiness notes", ("ws2", "runtime")),
+    SourceRef("docs/operations/provider-capability-metadata.md", "provider capability metadata and inert source-confidence contract", ("provider", "data")),
     SourceRef("docs/audits/ws2-multi-instance-smoke-test-design.md", "multi-instance smoke design and acceptance criteria", ("ws2", "runtime", "launch")),
     SourceRef("docs/audits/ws2-multi-user-runtime-cost-control-design.md", "multi-user runtime, quota, cost, circuit baseline", ("ws2", "quota", "cost")),
     SourceRef("docs/options/README.md", "Options Lab domain entry point", ("options",)),
@@ -195,6 +217,89 @@ SECTIONS = [
         ),
         update_trigger="Product positioning, deployment mode, private beta, no-advice, or launch verdict changes.",
         validation="Docs-only validation for docs changes; release/UAT evidence for deployment posture changes.",
+    ),
+    ManualSection(
+        key="hard-stops",
+        title="Protected Domains And Hard Stops",
+        body=(
+            "Treat these as hard stops unless the task explicitly scopes them and gives a focused validation path:\n\n"
+            "- provider order, credentials, live-call paths, cache/freshness labels, source authority, score contribution, and right-to-display;\n"
+            "- scanner scoring, selection, thresholds, ranking, sorting, and live/fallback labels;\n"
+            "- backtest math, fills, costs, metrics, benchmarks, stored result semantics, and parameter/winner semantics;\n"
+            "- portfolio accounting, cash, holdings, P&L, FX/native currency, cost basis, sync/import/replay, and ledger semantics;\n"
+            "- auth/RBAC/security, sessions, CSRF/CORS, password/token handling, MFA, and admin protection;\n"
+            "- DB migrations, package/config/env, and external network behavior;\n"
+            "- direct trading advice, buy/sell/order CTAs, target prices, position sizing, or synthetic readiness claims.\n\n"
+            "No fake data, no fallback promotion, no hidden compatibility layer, and no advice. Changes in these areas need the matching guard docs and "
+            "focused validation before anyone should call the result safe."
+        ),
+        source_paths=(
+            "AGENTS.md",
+            "docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md",
+            "docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md",
+            "docs/codex/NO_ADVICE_REGRESSION_GUARDS.md",
+            "docs/audits/trading-no-advice-product-policy.md",
+            "docs/data-reliability/provider-source-confidence-contract.md",
+            "docs/operations/provider-capability-metadata.md",
+        ),
+        update_trigger="Protected-domain boundaries, no-advice policy, provider/source confidence, or hard-stop validation rules change.",
+        validation="Read the guard docs first; then use focused tests and the smallest validation tier that proves the protected semantic stayed intact.",
+    ),
+    ManualSection(
+        key="product-surfaces-data-reality",
+        title="Product Surfaces And Data Reality",
+        body=(
+            "WolfyStock is for professional market and stock research support. It is not generic stock-app filler, a broker surface, or a direct advice engine.\n\n"
+            "{{PRODUCT_SURFACE_TABLE}}\n\n"
+            "{{PROFESSIONAL_DATA_FAMILY_TABLE}}\n\n"
+            "Roadmap order:\n"
+            "- Official VIX / volatility.\n"
+            "- Macro / rates / Fed liquidity.\n"
+            "- US index / ETF quote coverage.\n"
+            "- Scanner universe / history / quote readiness.\n"
+            "- Watchlist row packet and Stock research packet.\n"
+            "- Portfolio price / FX lineage.\n"
+            "- Options rights and methodology proof.\n"
+            "- Scenario baseline snapshots.\n"
+            "- Backtest dataset lineage.\n"
+            "- Factor research lineage.\n\n"
+            "Missing families stay missing, blocked, partial, or observation-only. Do not turn proxy, cached, synthetic, fallback, or fixture data into "
+            "live, fresh, decision-grade evidence. Do not output direct trading advice."
+        ),
+        source_paths=(
+            "README.md",
+            "docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md",
+            "docs/market-overview/README.md",
+            "docs/scanner/README.md",
+            "docs/liquidity/README.md",
+            "docs/rotation/README.md",
+            "docs/options/README.md",
+            "docs/portfolio/README.md",
+            "docs/backtest/README.md",
+            "docs/backtest-system.md",
+            "docs/product-recovery/WOLFYSTOCK_PRODUCT_RECOVERY_PLAN.md",
+            "docs/product-recovery/DATA_COVERAGE_MATRIX.md",
+            "docs/product-recovery/DATA011_PACKET_CONSUMPTION_ACCEPTANCE.md",
+            "docs/product-recovery/DATA016_FOCUSED_ACCEPTANCE.md",
+            "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md",
+            "docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md",
+            "docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md",
+            "docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md",
+            "docs/product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md",
+            "docs/product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md",
+            "docs/product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md",
+            "docs/product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md",
+            "docs/product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md",
+            "docs/data/market-source-activation-blueprint.md",
+            "docs/data-reliability/provider-source-confidence-contract.md",
+            "docs/operations/provider-capability-metadata.md",
+            "docs/audits/data-quality-user-disclosure-policy.md",
+            "docs/audits/options-provider-adapter-contract.md",
+            "docs/audits/backtest-portfolio-public-safety-audit.md",
+            "docs/audits/trading-no-advice-product-policy.md",
+        ),
+        update_trigger="Surface maps, data-roadmap boundaries, or any professional data family readiness change.",
+        validation="Use the source docs and current code/tests to classify every surface and family as ready, partial, blocked, missing, unauthorized, or observation-only before editing anything else.",
     ),
     ManualSection(
         key="architecture-surfaces",
@@ -343,24 +448,30 @@ SECTIONS = [
     ),
     ManualSection(
         key="validation-workflow",
-        title="Validation Profiles And Task Workflow",
+        title="Codex Workflow, Validation, And Reporting",
         body=(
-            "Pick the smallest validation set that proves the current change. Docs/generator tasks use docs/generator commands and secret scan; frontend source changes need route-aware tests and browser evidence; "
+            "Pick the smallest validation set that proves the current change. Docs/generator tasks use docs diff-checks plus secret scan; frontend source changes need route-aware tests and browser evidence; "
             "backend/API/auth/provider changes need focused tests and wider gates when protected or shared contracts are near scope.\n\n"
-            "Standard task modes are `CODEX-ISOLATED`, `SERIAL-MAIN`, `WORKTREE-WORKER`, and `READ-ONLY-AUDIT`. In worktree worker mode, stay in the prompt workspace and branch. "
-            "Push only when the prompt authorizes it and only to the prompt-named branch.\n\n"
-            "Never claim completion, readiness, mergeability, or passing status without fresh command evidence. If validation cannot run, report the exact command and blocker."
+            "Use the task mode and workspace the prompt actually names. `WORKTREE-WORKER` means stay inside the prompt workspace and branch. `SERIAL-MAIN` is only for an explicit shared-main task. "
+            "Do not push unless the prompt authorizes it, and keep the branch name exactly aligned with the task contract.\n\n"
+            "Before final reporting, fetch the latest `origin/main` when the task contract requires it, rebase onto it, rerun the focused validation, and confirm the branch is clean, ahead of `origin/main`, and not behind.\n\n"
+            "Cleanup happens after the final report is captured, not before. Do not create one-off task report markdown when the canonical final report template already exists. "
+            "Do not broaden validation just to look thorough, and do not treat green tests on a different surface as proof for this one.\n\n"
+            "If docs are changed, change the docs because the source-of-truth moved or the behavior did, not because the task needs a separate story file."
         ),
         source_paths=(
             "AGENTS.md",
+            "docs/codex/WOLFYSTOCK_CODEX_DISCOVERY_PROTOCOL.md",
+            "docs/codex/WOLFYSTOCK_CODEX_EXECUTION_POLICY.md",
             "docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md",
             "docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md",
             "docs/codex/WOLFYSTOCK_CODEX_VALIDATION_MATRIX.md",
             "docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md",
+            "docs/codex/NO_ADVICE_REGRESSION_GUARDS.md",
             "docs/frontend/validation-playbook.md",
         ),
         update_trigger="Task modes, prompt fields, validation matrix, final report format, or frontend evidence rules change.",
-        validation="Run the task-required commands; docs-only changes use diff-check/status/secret scan unless task says otherwise.",
+        validation="Run the smallest validation that proves the touched files, then record the command, exit status, and any blocker in the final report.",
     ),
     ManualSection(
         key="launch-no-go",
@@ -401,6 +512,57 @@ SECTIONS = [
         ),
         update_trigger="Any diagnostic/demo/fixture/dry-run surface becomes runtime, production, or user-visible decision authority.",
         validation="Fail-closed tests, no-live-call proof, redaction checks, docs wording review, and task-specific runtime evidence.",
+    ),
+    ManualSection(
+        key="source-truth-index",
+        title="Source-Of-Truth Index",
+        body=(
+            "Use this compact index to jump to the canonical doc for a topic, then read the supporting docs only as needed. If a topic is historical or archive-only, say so explicitly and do not treat it as current authority.\n\n"
+            "{{SOURCE_TRUTH_INDEX_TABLE}}\n\n"
+            "The canonical doc should be the first stop. Supporting docs are there to narrow scope, validate edge cases, or explain why a path is blocked, partial, or observation-only."
+        ),
+        source_paths=(
+            "AGENTS.md",
+            "docs/DOCS_INDEX.md",
+            "docs/ARCHIVE_INDEX.md",
+            "docs/WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md",
+            "docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md",
+            "docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md",
+            "docs/codex/WOLFYSTOCK_CODEX_DISCOVERY_PROTOCOL.md",
+            "docs/codex/WOLFYSTOCK_CODEX_EXECUTION_POLICY.md",
+            "docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md",
+            "docs/codex/WOLFYSTOCK_CODEX_VALIDATION_MATRIX.md",
+            "docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md",
+            "docs/codex/NO_ADVICE_REGRESSION_GUARDS.md",
+            "docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md",
+            "docs/data-reliability/provider-source-confidence-contract.md",
+            "docs/operations/provider-capability-metadata.md",
+            "docs/data/market-source-activation-blueprint.md",
+            "docs/product-recovery/WOLFYSTOCK_PRODUCT_RECOVERY_PLAN.md",
+            "docs/product-recovery/DATA_COVERAGE_MATRIX.md",
+            "docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md",
+            "docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md",
+            "docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md",
+            "docs/product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md",
+            "docs/product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md",
+            "docs/product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md",
+            "docs/product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md",
+            "docs/product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md",
+            "docs/market-overview/README.md",
+            "docs/scanner/README.md",
+            "docs/liquidity/README.md",
+            "docs/rotation/README.md",
+            "docs/options/README.md",
+            "docs/portfolio/README.md",
+            "docs/backtest/README.md",
+            "docs/backtest-system.md",
+            "docs/audits/data-quality-user-disclosure-policy.md",
+            "docs/audits/options-provider-adapter-contract.md",
+            "docs/audits/backtest-portfolio-public-safety-audit.md",
+            "docs/audits/trading-no-advice-product-policy.md",
+        ),
+        update_trigger="Canonical source maps, source curation, or topic ownership changes.",
+        validation="Read the canonical doc first, then supporting docs, and use the class label to decide whether the topic is policy, contract, roadmap, historical, or generated manual source.",
     ),
     ManualSection(
         key="source-policy",
@@ -605,6 +767,433 @@ def source_list(paths: tuple[str, ...]) -> str:
     return ", ".join(manual_link(path) for path in paths)
 
 
+PRODUCT_SURFACE_ROWS = [
+    (
+        "Market Overview",
+        "Regime, breadth, and risk first read",
+        "`api/v1/endpoints/market_overview.py`; `src/services/market_overview_service.py`; `apps/dsa-web/src/pages/MarketOverviewPage.tsx`",
+        "partial; official risk bundle and quote authority still gate the first screen",
+        "fallback/static, stale, proxy-only, missing official risk rows -> `mixed_no_clear_edge` or unavailable",
+        source_list(
+            (
+                "docs/market-overview/README.md",
+                "docs/data/market-source-activation-blueprint.md",
+                "docs/provider-data/README.md",
+                "docs/audits/data-quality-user-disclosure-policy.md",
+            )
+        ),
+    ),
+    (
+        "Scanner",
+        "Candidate discovery and watchlist handoff",
+        "`api/v1/endpoints/scanner.py`; `src/services/market_scanner_service.py`; `src/repositories/scanner_repo.py`; `apps/dsa-web/src/pages/UserScannerPage.tsx`",
+        "partial; useful only when universe, quote, history, turnover, and evidence packet inputs exist",
+        "empty runs from missing local data, blocked input readiness, stale/fallback quote/history",
+        source_list(
+            (
+                "docs/scanner/README.md",
+                "docs/product-recovery/DATA_COVERAGE_MATRIX.md",
+                "docs/product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md",
+            )
+        ),
+    ),
+    (
+        "Watchlist",
+        "Saved symbols and research queue",
+        "`api/v1/endpoints/watchlist.py`; `src/services/watchlist_service.py`; `src/services/watchlist_research_overlay_service.py`; `apps/dsa-web/src/pages/WatchlistPage.tsx`",
+        "partial; row packet still missing quote/freshness/catalyst refs in many cases",
+        "missing quote freshness, missing research packet, missing catalyst age, stale scanner lineage",
+        source_list(
+            (
+                "docs/product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md",
+                "docs/product-recovery/DATA_COVERAGE_MATRIX.md",
+                "docs/scanner/README.md",
+            )
+        ),
+    ),
+    (
+        "Stock Detail",
+        "Symbol research packet and structure decision",
+        "`api/v1/endpoints/stocks.py`; `src/services/stock_service.py`; `src/services/stock_structure_decision_service.py`",
+        "partial; stock packet assembly is not yet fully durable",
+        "missing quote/history/fundamentals/events/peer, parser-only SEC facts, observation-only structure",
+        source_list(
+            (
+                "docs/product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md",
+                "docs/product-recovery/DATA_COVERAGE_MATRIX.md",
+                "docs/audits/data-quality-user-disclosure-policy.md",
+            )
+        ),
+    ),
+    (
+        "Options Lab",
+        "Read-only experiment console",
+        "`api/v1/endpoints/options.py`; `src/services/options_lab_service.py`; `apps/dsa-web/src/pages/OptionsLabPage.tsx`",
+        "observation-only / partial; fixture and dry-run default, no live provider authority proven",
+        "missing chain/IV/Greeks/OI/volume, missing entitlement/redisplay, no strategy ranking or trade workflow",
+        source_list(
+            (
+                "docs/options/README.md",
+                "docs/product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md",
+                "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md",
+                "docs/audits/options-provider-adapter-contract.md",
+            )
+        ),
+    ),
+    (
+        "Liquidity Monitor",
+        "Capital pressure and market stress",
+        "`api/v1/endpoints/liquidity_monitor.py`; `src/services/liquidity_monitor_service.py`; `apps/dsa-web/src/pages/LiquidityMonitorPage.tsx`",
+        "partial; official risk bundle and coverage contract still gate score-grade",
+        "proxy-only flow, stale or missing official macro rows, observation-only CN/HK flow",
+        source_list(
+            (
+                "docs/liquidity/README.md",
+                "docs/data/market-source-activation-blueprint.md",
+                "docs/provider-data/README.md",
+            )
+        ),
+    ),
+    (
+        "Backtest / Parameter Sweep",
+        "Deterministic rule backtest and stored readback",
+        "`api/v1/endpoints/backtest.py`; `src/core/rule_backtest_engine.py`; `src/services/backtest_service.py`; `apps/dsa-web/src/pages/BacktestPage.tsx`",
+        "research-useful; v1 deterministic engine is live, parameter sweep remains diagnostic for professional claims",
+        "no optimizer/winner semantics, no portfolio allocation, no live provider hydration, no fake performance",
+        source_list(
+            (
+                "docs/backtest/README.md",
+                "docs/backtest-system.md",
+                "docs/product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md",
+                "docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md",
+            )
+        ),
+    ),
+    (
+        "Factor Research",
+        "Offline factor helpers and backtest bridge",
+        "`src/services/factor_metrics.py`; `src/services/factor_exposure.py`; `src/services/backtest_factor_research_bridge.py`",
+        "diagnostic-only; no public factor panel, no long-short return backtest, no PIT universe",
+        "missing forward returns, no PIT membership, no survivorship control, no winner promotion",
+        source_list(
+            (
+                "docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md",
+                "docs/product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md",
+                "docs/backtest/README.md",
+            )
+        ),
+    ),
+    (
+        "Scenario Lab",
+        "Bounded shock comparison",
+        "`api/v1/endpoints/market.py`; `src/services/market_scenario_lab_engine.py`; `apps/dsa-web/src/pages/ScenarioLabPage.tsx`",
+        "partial; request/snapshot driven, authoritative only when real cached baseline inputs exist",
+        "sample/demo/fallback/static/request-supplied-only state stays observation-only, no execution-readiness implication",
+        source_list(
+            (
+                "docs/product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md",
+                "docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md",
+                "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md",
+            )
+        ),
+    ),
+    (
+        "Portfolio",
+        "Holdings, P&L, FX, ledger, risk",
+        "`api/v1/endpoints/portfolio.py`; `src/services/portfolio_service.py`; `apps/dsa-web/src/pages/PortfolioPage.tsx`",
+        "partial; accounting is real, valuation lineage and FX freshness still gate credibility",
+        "stale or missing FX, missing price lineage, no order/broker semantics, manual forms are ledger records only",
+        source_list(
+            (
+                "docs/portfolio/README.md",
+                "docs/product-recovery/DATA_COVERAGE_MATRIX.md",
+                "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md",
+                "docs/audits/backtest-portfolio-public-safety-audit.md",
+            )
+        ),
+    ),
+    (
+        "Evidence Harness / target env artifacts",
+        "Sanitized operator evidence for readiness",
+        "`scripts/target_environment_evidence_harness.py`; `scripts/ws2_target_environment_evidence_check.py`",
+        "read-only / observation-only; captures evidence, does not prove acceptance",
+        "secrets, raw payloads, unavailable endpoints, readiness blocked vs endpoint unavailable conflation",
+        source_list(
+            (
+                "docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md",
+                "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md",
+            )
+        ),
+    ),
+    (
+        "Admin / diagnostics",
+        "Operator-facing observability",
+        "`api/v1/endpoints/admin/*`; `src/services/admin_*`; `apps/dsa-web/src/pages/Admin*`",
+        "manual-review-gated; operational only",
+        "raw provider/internal leakage, security evidence, cross-domain semantic changes",
+        source_list(
+            (
+                "docs/frontend/WOLFYSTOCK_ADMIN_MAINTENANCE_OS.md",
+                "docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md",
+                "docs/audits/README.md",
+            )
+        ),
+    ),
+]
+
+PROFESSIONAL_DATA_FAMILY_ROWS = [
+    (
+        "Official risk bundle",
+        "partial",
+        "VIX, rates, Fed liquidity, and credit stress are the first credibility layer, but target-environment activation still needs proof.",
+        "Do not relabel proxy rows as official or live.",
+        source_list(
+            (
+                "docs/data/market-source-activation-blueprint.md",
+                "docs/provider-data/README.md",
+                "docs/data-reliability/provider-source-confidence-contract.md",
+            )
+        ),
+    ),
+    (
+        "ETF / index quote and membership coverage",
+        "partial",
+        "US index / ETF quote coverage and official membership / weight proofs are still incomplete for broad market and rotation claims.",
+        "No headline Rotation or Market Overview claim from proxy membership alone.",
+        source_list(
+            (
+                "docs/data/market-source-activation-blueprint.md",
+                "docs/product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md",
+                "docs/product-recovery/DATA_COVERAGE_MATRIX.md",
+            )
+        ),
+    ),
+    (
+        "Authorized quote spine",
+        "partial",
+        "Durable US/CN/HK quote and daily OHLCV snapshots still need a unified store and explicit display rights.",
+        "No fake live quotes or fallback promotion.",
+        source_list(
+            (
+                "docs/product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md",
+                "docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md",
+                "docs/product-recovery/DATA_COVERAGE_MATRIX.md",
+            )
+        ),
+    ),
+    (
+        "Breadth, flows, and positioning",
+        "partial / observation-only",
+        "Real flow and positioning remain unproven; proxy breadth and quote-derived flow stay bounded and explicitly capped.",
+        "No score-grade flow or positioning claim from proxy data.",
+        source_list(
+            (
+                "docs/data/market-source-activation-blueprint.md",
+                "docs/liquidity/README.md",
+                "docs/provider-data/README.md",
+            )
+        ),
+    ),
+    (
+        "Fundamentals, filings, and events",
+        "partial",
+        "Fundamental fields, filings, catalysts, and normalized events are fragmented and still need a durable research packet.",
+        "No invented catalysts, ratios, or event freshness.",
+        source_list(
+            (
+                "docs/product-recovery/DATA_COVERAGE_MATRIX.md",
+                "docs/product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md",
+                "docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md",
+            )
+        ),
+    ),
+    (
+        "Options chains and Greeks",
+        "blocked / observation-only",
+        "No authorized live provider or rights proof exists for production use, and methodology approval is still missing for gamma-family outputs.",
+        "No strategy ranking, GEX, vanna, charm, or order CTA.",
+        source_list(
+            (
+                "docs/product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md",
+                "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md",
+                "docs/audits/options-provider-adapter-contract.md",
+            )
+        ),
+    ),
+    (
+        "Scenario baselines",
+        "partial",
+        "Scenario Lab is still request/snapshot driven until durable baseline snapshots and target-environment proof exist.",
+        "No execution-readiness implication from scenario comparisons.",
+        source_list(
+            (
+                "docs/product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md",
+                "docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md",
+                "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md",
+            )
+        ),
+    ),
+    (
+        "Backtest dataset lineage",
+        "partial / research-useful",
+        "v1 backtests exist, but the professional lineage gate is incomplete and still needs adjusted basis, calendar, PIT, and reproducibility proof.",
+        "No optimizer/winner semantics or fake performance.",
+        source_list(
+            (
+                "docs/product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md",
+                "docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md",
+                "docs/backtest/README.md",
+            )
+        ),
+    ),
+    (
+        "Factor research lineage",
+        "diagnostic-only",
+        "Offline factor helpers exist, but there is no PIT universe or long-short return backtest contract yet.",
+        "No lookahead or winner promotion.",
+        source_list(
+            (
+                "docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md",
+                "docs/product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md",
+                "docs/backtest/README.md",
+            )
+        ),
+    ),
+]
+
+SOURCE_TRUTH_INDEX_ROWS = [
+    (
+        "AI onboarding and navigation",
+        manual_link("docs/AI_PROJECT_MANUAL.md"),
+        source_list(("AGENTS.md", "docs/DOCS_INDEX.md", "scripts/build_ai_project_manual.py")),
+        "repo-wide AI maintenance",
+        "first five minutes of any task",
+        "generated manual source",
+    ),
+    (
+        "Repository AI rules",
+        manual_link("AGENTS.md"),
+        source_list(("docs/WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md", "docs/DOCS_INDEX.md")),
+        "repo-wide",
+        "before any edit, commit, or validation",
+        "policy",
+    ),
+    (
+        "Codex workflow and reporting",
+        manual_link("docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md"),
+        source_list(
+            (
+                "docs/codex/WOLFYSTOCK_CODEX_DISCOVERY_PROTOCOL.md",
+                "docs/codex/WOLFYSTOCK_CODEX_EXECUTION_POLICY.md",
+                "docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md",
+                "docs/codex/WOLFYSTOCK_CODEX_VALIDATION_MATRIX.md",
+                "docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md",
+                "docs/codex/NO_ADVICE_REGRESSION_GUARDS.md",
+            )
+        ),
+        "Codex workers",
+        "before any execution-class task",
+        "policy",
+    ),
+    (
+        "Protected backend domains",
+        manual_link("docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md"),
+        source_list(("docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md", "docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md")),
+        "scanner / backtest / portfolio / provider / auth / options",
+        "before touching protected runtime semantics",
+        "policy",
+    ),
+    (
+        "Provider source confidence",
+        manual_link("docs/data-reliability/provider-source-confidence-contract.md"),
+        source_list(("docs/provider-data/README.md", "docs/operations/provider-capability-metadata.md", "docs/audits/data-quality-user-disclosure-policy.md")),
+        "provider / data",
+        "before reasoning about freshness, coverage, or authority",
+        "contract",
+    ),
+    (
+        "Official risk and quote activation",
+        manual_link("docs/data/market-source-activation-blueprint.md"),
+        source_list(("docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md", "docs/product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md")),
+        "market overview / liquidity / rotation",
+        "before activating official VIX, rates, or quote coverage",
+        "roadmap",
+    ),
+    (
+        "Symbol research packet",
+        manual_link("docs/product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md"),
+        source_list(("docs/product-recovery/DATA_COVERAGE_MATRIX.md", "docs/product-recovery/DATA011_PACKET_CONSUMPTION_ACCEPTANCE.md")),
+        "watchlist / stock detail",
+        "before assembling row-level research packets",
+        "contract",
+    ),
+    (
+        "Quote spine and target env evidence",
+        manual_link("docs/product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md"),
+        source_list(("docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md", "docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md")),
+        "scanner / watchlist / stock / portfolio / market / rotation",
+        "before quote or history lineage changes",
+        "contract",
+    ),
+    (
+        "Backtest dataset lineage",
+        manual_link("docs/product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md"),
+        source_list(("docs/backtest/README.md", "docs/backtest-system.md", "docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md")),
+        "backtest / factor research",
+        "before adjusting backtest lineage or sweep storage",
+        "contract",
+    ),
+    (
+        "Options entitlement and no-advice",
+        manual_link("docs/product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md"),
+        source_list(("docs/options/README.md", "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md", "docs/audits/options-provider-adapter-contract.md", "docs/audits/trading-no-advice-product-policy.md")),
+        "options lab",
+        "before touching options chain, Greeks, or strategy copy",
+        "decision record",
+    ),
+    (
+        "Scenario baseline evidence",
+        manual_link("docs/product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md"),
+        source_list(("docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md", "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md")),
+        "scenario lab / target-env evidence",
+        "before scenario baseline or operator evidence work",
+        "plan",
+    ),
+    (
+        "Market data recovery summary",
+        manual_link("docs/product-recovery/WOLFYSTOCK_PRODUCT_RECOVERY_PLAN.md"),
+        source_list(("docs/product-recovery/DATA_COVERAGE_MATRIX.md", "docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md")),
+        "recovery program",
+        "before any product-recovery task",
+        "roadmap",
+    ),
+    (
+        "Surface entry docs",
+        manual_link("docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md"),
+        source_list(("docs/market-overview/README.md", "docs/scanner/README.md", "docs/liquidity/README.md", "docs/rotation/README.md", "docs/portfolio/README.md", "docs/backtest/README.md", "docs/options/README.md")),
+        "route families",
+        "before touching a user-facing route",
+        "entry point",
+    ),
+    (
+        "Historical / archive only",
+        manual_link("docs/ARCHIVE_INDEX.md"),
+        source_list(("docs/audits/README.md", "docs/architecture/file-governance-taxonomy.md")),
+        "provenance only",
+        "only to trace prior decisions or retired evidence",
+        "historical",
+    ),
+    (
+        "Current documentation navigation",
+        manual_link("docs/DOCS_INDEX.md"),
+        source_list(("docs/WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md", "docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md")),
+        "maintainers",
+        "when you need the current doc tree",
+        "index",
+    ),
+]
+
+
 def markdown_table(headers: tuple[str, ...], rows: list[tuple[str, ...]]) -> list[str]:
     output = ["| " + " | ".join(headers) + " |", "| " + " | ".join("---" for _ in headers) + " |"]
     for row in rows:
@@ -612,8 +1201,45 @@ def markdown_table(headers: tuple[str, ...], rows: list[tuple[str, ...]]) -> lis
     return output
 
 
+def render_section_body(body: str) -> str:
+    table_replacements = {
+        "{{PRODUCT_SURFACE_TABLE}}": markdown_table(
+            (
+                "Surface",
+                "User-visible purpose",
+                "Main ownership",
+                "Current data readiness boundary",
+                "Major fail-closed states",
+                "Deeper source docs",
+            ),
+            PRODUCT_SURFACE_ROWS,
+        ),
+        "{{PROFESSIONAL_DATA_FAMILY_TABLE}}": markdown_table(
+            ("Family", "Readiness", "Current reality", "Fail-closed rule", "Deeper source docs"),
+            PROFESSIONAL_DATA_FAMILY_ROWS,
+        ),
+        "{{SOURCE_TRUTH_INDEX_TABLE}}": markdown_table(
+            (
+                "Topic",
+                "Canonical doc",
+                "Supporting docs",
+                "Owner / surface",
+                "When an AI should read it",
+                "Type",
+            ),
+            SOURCE_TRUTH_INDEX_ROWS,
+        ),
+    }
+    rendered = body
+    for placeholder, table_lines in table_replacements.items():
+        rendered = rendered.replace(placeholder, "\n".join(table_lines))
+    if "{{" in rendered or "}}" in rendered:
+        raise RuntimeError("unresolved manual placeholder detected")
+    return rendered
+
+
 def section_anchor(title: str) -> str:
-    cleaned = re.sub(r"[^a-z0-9 ]+", "", title.lower().replace("/", " "))
+    cleaned = re.sub(r"[^a-z0-9]+", " ", title.lower().replace("/", " "))
     return re.sub(r"\s+", "-", cleaned.strip())
 
 
@@ -652,7 +1278,7 @@ def build_manual(source_meta: dict[str, dict[str, object]], discovery: dict[str,
             [
                 f"## {section.title}",
                 "",
-                section.body.strip(),
+                render_section_body(section.body.strip()),
                 "",
                 f"Source provenance: {source_list(section.source_paths)}.",
                 "",
