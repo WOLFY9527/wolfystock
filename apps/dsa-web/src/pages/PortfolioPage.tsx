@@ -276,6 +276,7 @@ function consumerFxLabel(state: 'fresh' | 'stale' | 'missing' | 'pending', langu
 function consumerPortfolioDataNotice(
   options: {
     valuationLineageNotice?: string | null;
+    hasDataLineage?: boolean;
     hasPriceFallback: boolean;
     hasUpdatingPrice: boolean;
     hasLimitedConfidence: boolean;
@@ -311,6 +312,11 @@ function consumerPortfolioDataNotice(
     return language === 'zh'
       ? '当前估值可能存在延迟，仅供参考。'
       : 'Current valuation may be delayed and is for reference only.';
+  }
+  if (options.hasDataLineage === false) {
+    return language === 'zh'
+      ? '价格、汇率与估值状态待确认。'
+      : 'Price, FX, and valuation state are still pending.';
   }
   return null;
 }
@@ -410,7 +416,7 @@ function mapValuationLineageState(
       notice: null,
       trustItem: {
         key: `valuation-lineage-${token}`,
-        label: language === 'zh' ? '估值已更新' : 'Valuation current',
+        label: language === 'zh' ? '估值完整' : 'Valuation complete',
         variant: 'success',
       },
     };
@@ -2410,16 +2416,17 @@ const PortfolioPage: React.FC = () => {
   const hasUpdatingPrice = hasHoldings && positionRows.some((row) => !row.priceAsOf && !row.isPriceFallback);
   const hasLimitedConfidence = positionRows.some(hasLimitedValuationConfidence);
   const { notice: valuationLineageNotice, trustItem: valuationLineageTrustItem } = mapValuationLineageState(snapshot?.valuationLineageState, language);
+  const portfolioLineageSummary = snapshot?.portfolioLineageSummary ?? null;
+  const hasDataLineage = hasPortfolioLineage(portfolioLineageSummary);
   const consumerDataNotice = consumerPortfolioDataNotice({
     valuationLineageNotice,
+    hasDataLineage: hasDataLineage,
     hasPriceFallback,
     hasUpdatingPrice,
     hasLimitedConfidence,
     hasFxUnavailable,
     hasFxStale: snapshot?.fxStale,
   }, language);
-  const portfolioLineageSummary = snapshot?.portfolioLineageSummary ?? null;
-  const hasDataLineage = hasPortfolioLineage(portfolioLineageSummary);
   const historyHasNextPage = currentEventCount >= DEFAULT_PAGE_SIZE;
   const totalAssetsTitle = language === 'zh' ? '总资产' : 'Total Assets';
   const historyDrawerTitle = language === 'en' ? 'Ledger History' : '历史记录';
@@ -2561,8 +2568,8 @@ const PortfolioPage: React.FC = () => {
       ? { key: 'valuation-delayed', label: language === 'zh' ? '价格可能延迟' : 'Pricing may be delayed', variant: 'caution' }
       : hasLimitedConfidence
         ? { key: 'valuation-limited', label: limitedConfidenceLabel(language), variant: 'caution' }
-      : hasHoldings
-        ? { key: 'valuation-reliable', label: language === 'zh' ? '估值已更新' : 'Valuation current', variant: 'success' }
+      : !hasDataLineage && hasHoldings
+        ? { key: 'valuation-partial-without-lineage', label: language === 'zh' ? '估值部分可用' : 'Valuation partial', variant: 'caution' }
         : null,
     summarizePortfolioPriceFreshness(positionRows, language),
     summarizePortfolioPriceAsOf(positionRows, language),
@@ -2826,17 +2833,33 @@ const PortfolioPage: React.FC = () => {
         label: language === 'zh' ? '估值已暂停' : 'Valuation paused',
         variant: 'danger',
       }
-      : hasPriceFallback || snapshot?.fxStale || hasLimitedConfidence
-        ? {
-          key: 'hero-valuation-delayed',
-          label: language === 'zh' ? '估值可能延迟' : 'Valuation may be delayed',
-          variant: 'caution',
-        }
-        : hasHoldings
+      : hasDataLineage
+        ? portfolioLineageSummary.snapshot.label === '估值完整'
+          && portfolioLineageSummary.price.label === '价格可用'
+          && portfolioLineageSummary.fx.label === '汇率已确认'
           ? {
             key: 'hero-valuation-current',
-            label: language === 'zh' ? '估值已更新' : 'Valuation current',
+            label: language === 'zh' ? '估值完整' : 'Valuation complete',
             variant: 'success',
+          }
+          : portfolioLineageSummary.snapshot.label === '估值不可用'
+            || portfolioLineageSummary.price.label === '价格缺失'
+            || portfolioLineageSummary.fx.label === '汇率缺失'
+            ? {
+              key: 'hero-valuation-unavailable',
+              label: language === 'zh' ? '估值不可用' : 'Valuation unavailable',
+              variant: 'danger',
+            }
+            : {
+              key: 'hero-valuation-partial',
+              label: language === 'zh' ? '估值部分可用' : 'Valuation partial',
+              variant: 'caution',
+            }
+        : hasHoldings
+          ? {
+            key: 'hero-valuation-partial',
+            label: language === 'zh' ? '估值部分可用' : 'Valuation partial',
+            variant: 'caution',
           }
           : {
             key: 'hero-valuation-pending',
@@ -2865,7 +2888,7 @@ const PortfolioPage: React.FC = () => {
             key: 'hero-risk-balanced',
             label: language === 'zh' ? '风险可控' : 'Risk balanced',
             variant: 'success',
-          },
+          }
   ]).slice(0, 3);
   const heroConclusion = !hasActiveAccounts
     ? (language === 'zh'
@@ -2916,8 +2939,33 @@ const PortfolioPage: React.FC = () => {
             ? '当前组合已可观察，下一步可补录现金、公司行为或同步新数据。'
             : 'The portfolio is ready to observe. Next you can add cash flows, corporate actions, or sync new data.');
   const hasFreshValuationState = hasDataLineage
-    ? portfolioLineageSummary.snapshot.label === '估值可用'
-    : !hasFxUnavailable && !hasPriceFallback && !snapshot?.fxStale && !hasLimitedConfidence;
+    ? portfolioLineageSummary.snapshot.label === '估值完整'
+    : false;
+  const valuationNextEvidenceCopy = hasDataLineage
+    ? (
+      portfolioLineageSummary.snapshot.label === '估值完整'
+        ? (language === 'zh'
+          ? '下一步：当前估值已完整，可继续观察价格、汇率与风险变化。'
+          : 'Next step: valuation is complete; keep observing price, FX, and risk changes.')
+        : [
+          portfolioLineageSummary.price.label !== '价格可用'
+            ? (language === 'zh' ? '补齐价格' : 'complete price')
+            : null,
+          portfolioLineageSummary.fx.label !== '汇率已确认'
+            ? (language === 'zh' ? '确认汇率' : 'confirm FX')
+            : null,
+          portfolioLineageSummary.snapshot.label !== '估值完整'
+            ? (language === 'zh' ? '补齐估值快照' : 'complete valuation snapshot')
+            : null,
+        ].filter(Boolean).join(language === 'zh' ? '、' : ', ').replace(/^/, language === 'zh' ? '下一步：' : 'Next step: ')
+    )
+    : hasHoldings
+      ? (language === 'zh'
+        ? '下一步：先确认价格与汇率，再补齐估值快照。'
+        : 'Next step: confirm price and FX, then complete the valuation snapshot.')
+      : (language === 'zh'
+        ? '下一步：先接入持仓，再确认价格与汇率。'
+        : 'Next step: connect holdings first, then confirm price and FX.');
   const researchStateNextAction = !hasHoldings
     ? (language === 'zh' ? '补持仓或导入流水' : 'Add records or import ledger')
     : hasFxUnavailable || snapshot?.fxStale
@@ -2952,85 +3000,89 @@ const PortfolioPage: React.FC = () => {
       key: 'price-readiness',
       label: hasDataLineage
         ? portfolioLineageSummary.price.label
-        : hasHoldings && !hasPriceFallback && !hasUpdatingPrice
-          ? '价格可用'
-          : hasHoldings && (hasPriceFallback || hasUpdatingPrice)
-            ? '价格可能延迟'
+        : hasHoldings && (hasPriceFallback || hasUpdatingPrice)
+          ? '价格延迟'
+          : hasHoldings
+            ? '价格缺失'
             : '价格待补',
       value: hasDataLineage
         ? portfolioLineageSummary.price.label
-        : hasHoldings && !hasPriceFallback && !hasUpdatingPrice
-          ? '价格可用'
-          : hasHoldings && (hasPriceFallback || hasUpdatingPrice)
-            ? '价格可能延迟'
+        : hasHoldings && (hasPriceFallback || hasUpdatingPrice)
+          ? '价格延迟'
+          : hasHoldings
+            ? '价格缺失'
             : '价格待补',
       detail: hasDataLineage
         ? lineagePreviewDetail(portfolioLineageSummary.price, language === 'zh' ? '价格状态待补。' : 'Price readiness pending.')
         : hasHoldings
-          ? (summarizePortfolioPriceAsOf(positionRows, language)?.label || (language === 'zh' ? '价格快照待确认' : 'Price snapshot pending'))
+          ? (hasPriceFallback || hasUpdatingPrice
+            ? (language === 'zh' ? '价格可能延迟。' : 'Price may be delayed.')
+            : (language === 'zh' ? '价格来源待确认。' : 'Price source pending.'))
           : (language === 'zh' ? '首笔持仓后确认价格。' : 'Price readiness appears after positions exist.'),
       variant: hasDataLineage
         ? portfolioLineageSummary.price.variant
-        : hasHoldings && !hasPriceFallback && !hasUpdatingPrice
-          ? 'success'
+        : hasHoldings && (hasPriceFallback || hasUpdatingPrice)
+          ? 'caution'
           : hasHoldings
-            ? 'caution'
+            ? 'danger'
             : 'neutral',
     },
     {
       key: 'valuation-readiness',
       label: hasDataLineage
         ? portfolioLineageSummary.snapshot.label
-        : hasHoldings && hasFreshValuationState
-        ? (language === 'zh' ? '估值已更新' : 'Valuation current')
-        : (language === 'zh' ? '估值待补' : 'Valuation pending'),
+        : hasHoldings
+        ? (hasFxUnavailable ? '估值不可用' : '估值部分可用')
+        : '估值不可用',
       value: hasDataLineage
         ? portfolioLineageSummary.snapshot.label
-        : hasHoldings && hasFreshValuationState
+        : hasHoldings && !hasFxUnavailable
         ? valuationSnapshotNote
-        : (language === 'zh' ? '估值待补' : 'Valuation pending'),
+        : (language === 'zh' ? '估值不可用' : 'Valuation unavailable'),
       detail: hasDataLineage
         ? lineagePreviewDetail(portfolioLineageSummary.snapshot, language === 'zh' ? '估值状态待补。' : 'Valuation readiness pending.')
         : hasHoldings
-        ? (consumerDataNotice || (language === 'zh' ? '可用于观察组合表现。' : 'Ready for portfolio observation.'))
+        ? (hasFxUnavailable
+          ? (language === 'zh' ? '汇率缺失，估值暂停。' : 'FX is missing, so valuation is paused.')
+          : (language === 'zh' ? '估值完整性待确认。' : 'Valuation completeness is still pending.'))
         : (language === 'zh' ? '首笔持仓后生成估值与盈亏。' : 'Valuation and P&L appear after positions exist.'),
-      variant: hasDataLineage ? portfolioLineageSummary.snapshot.variant : hasHoldings && hasFreshValuationState ? 'success' : hasHoldings ? 'caution' : 'neutral',
+      variant: hasDataLineage ? portfolioLineageSummary.snapshot.variant : hasHoldings && hasFxUnavailable ? 'danger' : hasHoldings ? 'caution' : 'neutral',
     },
     {
       key: 'fx-readiness',
       label: hasDataLineage
         ? portfolioLineageSummary.fx.label
         : hasFxUnavailable || snapshot?.fxStale
-        ? (language === 'zh' ? 'FX待确认' : 'FX pending')
-        : (language === 'zh' ? 'FX已确认' : 'FX confirmed'),
+        ? (language === 'zh' ? '汇率缺失' : 'FX missing')
+        : (language === 'zh' ? '汇率待确认' : 'FX pending'),
       value: hasDataLineage
         ? portfolioLineageSummary.fx.label
         : hasFxUnavailable || snapshot?.fxStale
-        ? (language === 'zh' ? 'FX待确认' : 'FX pending')
-        : (language === 'zh' ? 'FX已确认' : 'FX confirmed'),
+        ? (language === 'zh' ? '汇率缺失' : 'FX missing')
+        : (language === 'zh' ? '汇率待确认' : 'FX pending'),
       detail: hasDataLineage
         ? lineagePreviewDetail(portfolioLineageSummary.fx, language === 'zh' ? 'FX状态待确认。' : 'FX readiness pending.')
         : hasFxUnavailable || snapshot?.fxStale
-        ? (language === 'zh' ? '跨币种折算需继续确认。' : 'Cross-currency conversion needs confirmation.')
-        : fxLastUpdated,
-      variant: hasDataLineage ? portfolioLineageSummary.fx.variant : hasFxUnavailable ? 'danger' : snapshot?.fxStale ? 'caution' : 'success',
+        ? (language === 'zh' ? '跨币种折算暂不可用。' : 'Cross-currency conversion is unavailable.')
+        : (language === 'zh' ? '汇率来源待确认。' : 'FX source pending.'),
+      variant: hasDataLineage ? portfolioLineageSummary.fx.variant : hasFxUnavailable || snapshot?.fxStale ? 'danger' : 'caution',
     },
     {
       key: 'risk-readiness',
       label: hasDataLineage
         ? portfolioLineageSummary.analytics.label
         : hasHoldings
-        ? (language === 'zh' ? '风险视图已生成' : 'Risk view ready')
+        ? (language === 'zh' ? '仅观察' : 'Observation only')
         : (language === 'zh' ? '风险视图待生成' : 'Risk view pending'),
       value: hasDataLineage
         ? portfolioLineageSummary.analytics.label
-        : hasHoldings ? concentrationLabel : (language === 'zh' ? '风险视图待生成' : 'Risk view pending'),
+        : hasHoldings ? (language === 'zh' ? '仅观察' : 'Observation only') : (language === 'zh' ? '风险视图待生成' : 'Risk view pending'),
       detail: hasDataLineage
         ? lineagePreviewDetail(portfolioLineageSummary.analytics, language === 'zh' ? '风险视图待生成。' : 'Risk view pending.')
         : hasHoldings
-        ? (language === 'zh' ? '可查看集中度、币种与市场暴露。' : 'Concentration, currency, and market exposure are available.')
+        ? (language === 'zh' ? '风险读数仅供观察。' : 'Risk readings are observation only.')
         : (language === 'zh' ? '持仓接入后生成暴露与集中度。' : 'Exposure and concentration appear after records exist.'),
-      variant: hasDataLineage ? portfolioLineageSummary.analytics.variant : hasHoldings ? 'success' : 'neutral',
+      variant: hasDataLineage ? portfolioLineageSummary.analytics.variant : hasHoldings ? 'info' : 'neutral',
     },
   ] satisfies Array<{
     key: string;
@@ -3064,6 +3116,9 @@ const PortfolioPage: React.FC = () => {
             <p className="mt-2 text-xs leading-5 text-white/46">{item.detail}</p>
           </div>
         ))}
+      </div>
+      <div data-testid="portfolio-research-next-evidence" className="rounded-xl border border-white/[0.04] bg-white/[0.025] px-3 py-2 text-xs leading-5 text-white/52">
+        {valuationNextEvidenceCopy}
       </div>
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.04] bg-white/[0.025] px-3 py-2.5">
         <span className="text-xs font-medium text-white/62">{language === 'zh' ? '下一步' : 'Next action'}</span>
@@ -4038,6 +4093,9 @@ const PortfolioPage: React.FC = () => {
                       <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '汇率更新时间' : 'FX updated'}</div>
                       <div className="mt-2 text-sm text-white">{hasFxUnavailable ? fxUnavailableLabel : fxLastUpdated}</div>
                     </div>
+                  </div>
+                  <div data-testid="portfolio-valuation-next-evidence" className="rounded-xl border border-white/[0.03] bg-black/20 px-3 py-2 text-xs leading-5 text-white/50">
+                    {valuationNextEvidenceCopy}
                   </div>
                   {valuationTrustItems.length ? (
                     <PortfolioTrustStrip

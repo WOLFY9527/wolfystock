@@ -385,7 +385,7 @@ function makePortfolioLineageSummary(overrides: Record<string, unknown> = {}) {
     authoritative: false,
     observationOnly: true,
     price: {
-      label: '价格可能延迟',
+      label: '价格延迟',
       variant: 'caution',
       detail: 'AAPL, MSFT · 2/2',
       affectedSymbols: ['AAPL', 'MSFT'],
@@ -394,7 +394,7 @@ function makePortfolioLineageSummary(overrides: Record<string, unknown> = {}) {
       lastUpdatedAt: '2026-03-19',
     },
     fx: {
-      label: 'FX待确认',
+      label: '汇率待确认',
       variant: 'danger',
       detail: 'USD · 1/1',
       affectedCurrencies: ['USD'],
@@ -837,8 +837,8 @@ describe('PortfolioPage FX refresh', () => {
     expect(researchStatePreview).toHaveTextContent('组合研究状态');
     expect(researchStatePreview).toHaveTextContent('账户已设置');
     expect(researchStatePreview).toHaveTextContent('持仓待接入');
-    expect(researchStatePreview).toHaveTextContent('估值待补');
-    expect(researchStatePreview).toHaveTextContent('FX待确认');
+    expect(researchStatePreview).toHaveTextContent('估值不可用');
+    expect(researchStatePreview).toHaveTextContent('汇率缺失');
     expect(researchStatePreview).toHaveTextContent('风险视图待生成');
     expect(researchStatePreview).toHaveTextContent('补持仓或导入流水');
     expect(screen.getByTestId('portfolio-exposure-card')).toHaveTextContent('暂无持仓，保存持仓流水后生成盈亏与资产配置。');
@@ -1036,8 +1036,8 @@ describe('PortfolioPage FX refresh', () => {
     expect(researchStatePreview).toHaveTextContent('组合研究状态');
     expect(researchStatePreview).toHaveTextContent('持仓待接入');
     expect(researchStatePreview).toHaveTextContent('账户已设置');
-    expect(researchStatePreview).toHaveTextContent('估值待补');
-    expect(researchStatePreview).toHaveTextContent('FX待确认');
+    expect(researchStatePreview).toHaveTextContent('估值不可用');
+    expect(researchStatePreview).toHaveTextContent('汇率缺失');
     expect(researchStatePreview).toHaveTextContent('风险视图待生成');
     expect(researchStatePreview).toHaveTextContent('补持仓或导入流水');
     expect(researchStatePreview).toHaveTextContent('接入后评估市值、盈亏与暴露。');
@@ -1100,9 +1100,9 @@ describe('PortfolioPage FX refresh', () => {
     expect(researchStatePreview).toHaveTextContent('组合研究状态');
     expect(researchStatePreview).toHaveTextContent('可评估持仓');
     expect(researchStatePreview).toHaveTextContent('1 项');
-    expect(researchStatePreview).toHaveTextContent('估值已更新');
-    expect(researchStatePreview).toHaveTextContent('FX已确认');
-    expect(researchStatePreview).toHaveTextContent('风险视图已生成');
+    expect(researchStatePreview).toHaveTextContent('估值部分可用');
+    expect(researchStatePreview).toHaveTextContent('汇率待确认');
+    expect(researchStatePreview).toHaveTextContent('仅观察');
     expect(researchStatePreview.textContent || '').not.toMatch(/provider|runtime|credential|sourceAuthority|unavailable|missing|unknown|fallback|debug/i);
     expect(researchStatePreview.textContent || '').not.toMatch(/buy|sell|hold|target|stop|position[- ]?size|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
     const commandStrip = screen.getByTestId('portfolio-command-strip');
@@ -1789,8 +1789,8 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     const researchStatePreview = screen.getByTestId('portfolio-research-state-preview');
-    expect(researchStatePreview).toHaveTextContent('价格可能延迟');
-    expect(researchStatePreview).toHaveTextContent('FX待确认');
+    expect(researchStatePreview).toHaveTextContent('价格延迟');
+    expect(researchStatePreview).toHaveTextContent('汇率待确认');
     expect(researchStatePreview).toHaveTextContent('估值部分可用');
     expect(researchStatePreview).toHaveTextContent('仅观察');
     expect(researchStatePreview).toHaveTextContent('AAPL');
@@ -1799,8 +1799,8 @@ describe('PortfolioPage FX refresh', () => {
     const riskCard = screen.getByTestId('portfolio-risk-card');
     const context = within(riskCard).getByTestId('portfolio-exposure-research-context');
     const lineageSummary = within(context).getByTestId('portfolio-exposure-lineage-summary');
-    expect(lineageSummary).toHaveTextContent('价格可能延迟');
-    expect(lineageSummary).toHaveTextContent('FX待确认');
+    expect(lineageSummary).toHaveTextContent('价格延迟');
+    expect(lineageSummary).toHaveTextContent('汇率待确认');
     expect(lineageSummary).toHaveTextContent('估值部分可用');
     expect(lineageSummary).toHaveTextContent('仅观察');
     expect(lineageSummary).toHaveTextContent('AAPL');
@@ -1809,6 +1809,29 @@ describe('PortfolioPage FX refresh', () => {
     const combinedText = `${researchStatePreview.textContent || ''} ${lineageSummary.textContent || ''}`;
     expect(combinedText).not.toMatch(
       /sourceAuthority|reasonCode|provider|cache|debug|backend|raw|sourceRefs|adminDiagnostics|riskDiagnostics|confidenceCap|fallback_1_to_1|provider_timeout|target price|stop-loss|position sizing|目标价|止损|仓位建议|建仓建议|加仓建议|减仓建议|买入建议|卖出建议|持有建议|交易建议|操作建议/i,
+    );
+  });
+
+  it('fails closed when valuation lineage fields are absent', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({
+      includePosition: true,
+      fxStale: false,
+    }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const researchStatePreview = screen.getByTestId('portfolio-research-state-preview');
+    expect(researchStatePreview).toHaveTextContent('价格缺失');
+    expect(researchStatePreview).toHaveTextContent('汇率待确认');
+    expect(researchStatePreview).toHaveTextContent('估值部分可用');
+    expect(researchStatePreview).toHaveTextContent('仅观察');
+    expect(screen.getByTestId('portfolio-research-next-evidence')).toHaveTextContent('下一步：先确认价格与汇率，再补齐估值快照。');
+    expect(screen.getByTestId('portfolio-valuation-next-evidence')).toHaveTextContent('下一步：先确认价格与汇率，再补齐估值快照。');
+    expect(screen.getByTestId('portfolio-consumer-data-notice')).toHaveTextContent('价格、汇率与估值状态待确认。');
+    expect(screen.getByTestId('portfolio-bento-page').textContent || '').not.toMatch(
+      /priceLineage|fxLineage|valuationSnapshotLineage|analyticsReadiness|provider|cache|debug|backend|raw|sourceRefs|adminDiagnostics|riskDiagnostics|confidenceCap|fallback_1_to_1|provider_timeout|target price|stop-loss|position sizing|目标价|止损|仓位建议|建仓建议|加仓建议|减仓建议|买入建议|卖出建议|持有建议|交易建议|操作建议/i,
     );
   });
 
@@ -1926,6 +1949,49 @@ describe('PortfolioPage FX refresh', () => {
     getSnapshot.mockResolvedValue(makeSnapshot({
       includePosition: false,
       fxStale: false,
+      portfolioLineageSummary: makePortfolioLineageSummary({
+        authoritative: true,
+        observationOnly: false,
+        price: {
+          label: '价格可用',
+          variant: 'success',
+          detail: '1/1',
+          affectedSymbols: [],
+          count: 1,
+          total: 1,
+          lastUpdatedAt: '2026-03-19',
+        },
+        fx: {
+          label: '汇率已确认',
+          variant: 'success',
+          detail: '1/1',
+          affectedCurrencies: [],
+          affectedPairs: [],
+          count: 1,
+          total: 1,
+          lastUpdatedAt: '2026-03-19',
+        },
+        snapshot: {
+          label: '估值完整',
+          variant: 'success',
+          detail: '1/1',
+          affectedSymbols: [],
+          affectedCurrencies: [],
+          affectedPairs: [],
+          count: 1,
+          total: 1,
+          lastUpdatedAt: '2026-03-19',
+        },
+        analytics: {
+          label: '风险视图可用',
+          variant: 'success',
+          detail: '1/1',
+          affectedSymbols: [],
+          affectedCurrencies: [],
+          count: 1,
+          total: 1,
+        },
+      }),
       valuationLineageState: 'current',
     }));
 
@@ -1934,7 +2000,7 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     const valuationTrust = screen.getByTestId('portfolio-valuation-trust-strip');
-    expect(valuationTrust).toHaveTextContent('估值已更新');
+    expect(valuationTrust).toHaveTextContent('估值完整');
     expect(screen.getByTestId('portfolio-bento-page').textContent || '').not.toMatch(/current|valuationLineageState/i);
     expect(screen.queryByTestId('portfolio-consumer-data-notice')).not.toBeInTheDocument();
   });

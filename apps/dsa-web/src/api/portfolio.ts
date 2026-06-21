@@ -411,8 +411,8 @@ function buildLineageSummary(
   const priceLabel = priceToken === 'available'
     ? '价格可用'
     : priceToken === 'stale'
-      ? '价格可能延迟'
-      : '价格待补';
+      ? '价格延迟'
+      : '价格缺失';
   const price = priceLineage
     ? {
       label: priceLabel,
@@ -425,7 +425,7 @@ function buildLineageSummary(
       affectedPairs: [],
       lastUpdatedAt: priceLineage.lastUpdatedAt,
     }
-    : buildDefaultLineageStatus('价格待补');
+    : buildDefaultLineageStatus('价格缺失', 'danger');
 
   const fxAffectedCurrencies = fxLineage
     ? listUnion(
@@ -451,7 +451,7 @@ function buildLineageSummary(
   const fxTotal = fxLineage?.counts.total ?? fxAffectedCurrencies.length;
   const fx = fxLineage
     ? {
-      label: fxToken === 'available' ? 'FX可用' : 'FX待确认',
+      label: fxToken === 'available' ? '汇率已确认' : fxToken === 'stale' ? '汇率待确认' : '汇率缺失',
       variant: (fxToken === 'available' ? 'success' : fxToken === 'stale' ? 'caution' : 'danger') as LineageChipVariant,
       detail: lineageDetail(fxAffectedCurrencies, fxCount, fxTotal),
       count: fxCount,
@@ -461,7 +461,7 @@ function buildLineageSummary(
       affectedPairs: fxAffectedPairs,
       lastUpdatedAt: fxLineage.lastUpdatedAt,
     }
-    : buildDefaultLineageStatus('FX待确认');
+    : buildDefaultLineageStatus('汇率缺失', 'danger');
 
   const snapshotAffectedSymbols = valuationSnapshotLineage?.blockedBy.priceSymbols ?? [];
   const snapshotAffectedCurrencies = valuationSnapshotLineage?.blockedBy.fxCurrencies ?? [];
@@ -473,10 +473,10 @@ function buildLineageSummary(
     : 0;
   const snapshotTotal = valuationSnapshotLineage?.positionCount ?? snapshotCount;
   const snapshotLabel = snapshotToken === 'complete'
-    ? '估值可用'
+    ? '估值完整'
     : snapshotToken === 'partial'
       ? '估值部分可用'
-      : '估值待补';
+      : '估值不可用';
   const snapshot = valuationSnapshotLineage
     ? {
       label: snapshotLabel,
@@ -489,7 +489,7 @@ function buildLineageSummary(
       affectedPairs: snapshotAffectedPairs,
       lastUpdatedAt: valuationSnapshotLineage.lastUpdatedAt,
     }
-    : buildDefaultLineageStatus('估值待补');
+    : buildDefaultLineageStatus('估值不可用', 'danger');
 
   const analyticsCount = analyticsReadiness
     ? Math.max(analyticsReadiness.affectedSymbols.length, analyticsReadiness.affectedCurrencies.length, snapshotTotal)
@@ -499,11 +499,11 @@ function buildLineageSummary(
     ? '风险视图待生成'
     : observationOnly
       ? '仅观察'
-      : '估值可用';
+      : '风险视图可用';
   const analytics = analyticsReadiness
     ? {
       label: analyticsLabel,
-      variant: (analyticsLabel === '估值可用' ? 'success' : analyticsLabel === '仅观察' ? 'info' : 'neutral') as LineageChipVariant,
+      variant: (analyticsLabel === '风险视图可用' ? 'success' : analyticsLabel === '仅观察' ? 'info' : 'neutral') as LineageChipVariant,
       detail: lineageDetail(listUnion(analyticsReadiness.affectedSymbols, analyticsReadiness.affectedCurrencies), analyticsCount, analyticsTotal),
       count: analyticsCount,
       total: analyticsTotal,
