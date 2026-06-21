@@ -4088,6 +4088,104 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertTrue(all(row["sourceAuthorityAllowed"] is False for row in spine["quotes"]))
         self.assertTrue(all("entitlement" in row["reasonCodes"] for row in spine["quotes"]))
 
+    def test_etf_index_quote_coverage_readiness_groups_broad_and_sector_proxies(self) -> None:
+        requested = ("SPY", "QQQ", "IWM", "XLU", "XLV", "XLE", "XLB")
+        stale_as_of = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
+
+        class MixedCoverageAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                if symbol == "XLB":
+                    return []
+                return _alpaca_bars(
+                    end_close=102.0,
+                    as_of=stale_as_of if symbol == "XLE" else None,
+                )
+
+        with patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}), patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="sip"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            MixedCoverageAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=_yfinance_frame(),
+        ):
+            payload = load_rotation_radar_quotes(requested)
+
+        readiness = payload["metadata"]["alpacaQuoteAuthorityReadiness"]
+        families = {row["familyId"]: row for row in readiness["quoteCoverageByFamily"]}
+
+        self.assertEqual(readiness["quoteCoverage"]["total"], 3)
+        self.assertEqual(readiness["quoteCoverage"]["covered"], 3)
+        self.assertEqual(readiness["coverageSummary"]["configuredCount"], len(requested))
+        self.assertEqual(readiness["coverageSummary"]["availableCount"], len(requested))
+        self.assertEqual(readiness["coverageSummary"]["staleCount"], 1)
+        self.assertEqual(readiness["coverageSummary"]["scoreAuthorityAllowedCount"], 5)
+        self.assertEqual(readiness["coverageSummary"]["observationOnlyCount"], 2)
+        self.assertEqual(readiness["missingSymbols"], [])
+        self.assertIn("XLB", readiness["observationOnlySymbols"])
+        self.assertIn("XLE", readiness["staleSymbols"])
+        self.assertTrue(readiness["fallbackUsed"])
+        self.assertFalse(readiness["scoreContributionAllowed"])
+
+        broad = families["broad_us_market"]
+        self.assertEqual(broad["configuredSymbols"], ["SPY", "QQQ", "IWM"])
+        self.assertEqual(broad["availableSymbols"], ["SPY", "QQQ", "IWM"])
+        self.assertEqual(broad["scoreAuthorityAllowedCount"], 3)
+        self.assertEqual(broad["observationOnlyCount"], 0)
+        self.assertFalse(broad["fallbackOrLimitedSampleUsed"])
+
+        sectors = families["sector_etfs"]
+        self.assertEqual(sectors["configuredSymbols"], ["XLE", "XLV", "XLU", "XLB"])
+        self.assertEqual(sectors["availableSymbols"], ["XLE", "XLV", "XLU", "XLB"])
+        self.assertEqual(sectors["staleSymbols"], ["XLE"])
+        self.assertEqual(sectors["observationOnlySymbols"], ["XLE", "XLB"])
+        self.assertEqual(sectors["scoreAuthorityAllowedCount"], 2)
+        self.assertEqual(sectors["observationOnlyCount"], 2)
+        self.assertTrue(sectors["fallbackOrLimitedSampleUsed"])
+
+        xlb = next(row for row in sectors["symbols"] if row["symbol"] == "XLB")
+        self.assertTrue(xlb["quoteAvailable"])
+        self.assertTrue(xlb["fallbackOrLimitedSampleUsed"])
+        self.assertFalse(xlb["sourceAuthorityAllowed"])
+        self.assertFalse(xlb["scoreContributionAllowed"])
+        self.assertEqual(xlb["sourceFamily"], "fallback_proxy")
+
+    def test_missing_credentials_quote_coverage_readiness_fails_closed_without_fake_prices(self) -> None:
+        requested = ("SPY", "QQQ", "IWM", "XLU", "XLV")
+
+        with patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_missing_alpaca_credentials(),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            return_value=pd.DataFrame(),
+        ):
+            payload = load_rotation_radar_quotes(requested)
+
+        readiness = payload["metadata"]["alpacaQuoteAuthorityReadiness"]
+        families = {row["familyId"]: row for row in readiness["quoteCoverageByFamily"]}
+
+        self.assertFalse(readiness["providerConfigured"])
+        self.assertEqual(readiness["quoteCoverage"]["covered"], 0)
+        self.assertEqual(readiness["quoteCoverage"]["missingSymbols"], ["SPY", "QQQ", "IWM"])
+        self.assertEqual(readiness["coverageSummary"]["configuredCount"], len(requested))
+        self.assertEqual(readiness["coverageSummary"]["availableCount"], 0)
+        self.assertEqual(readiness["missingSymbols"], ["SPY", "QQQ", "IWM", "XLV", "XLU"])
+        self.assertEqual(readiness["sourceAuthority"], "unavailable")
+        self.assertFalse(readiness["scoreContributionAllowed"])
+        self.assertEqual(families["broad_us_market"]["availableCount"], 0)
+        self.assertEqual(families["broad_us_market"]["scoreAuthorityAllowedCount"], 0)
+        self.assertEqual(families["sector_etfs"]["availableCount"], 0)
+        self.assertEqual(families["sector_etfs"]["scoreAuthorityAllowedCount"], 0)
+
     def test_active_etf_authority_spine_does_not_promote_static_themes_to_headlines(self) -> None:
         stable_etfs = ("SPY", "QQQ", "IWM", "SMH", "SOXX", "IGV")
         time_windows = {

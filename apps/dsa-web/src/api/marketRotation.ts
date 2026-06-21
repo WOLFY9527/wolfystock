@@ -193,6 +193,52 @@ export type MarketRotationConsumerEvidenceSnapshot = {
   rotationFamilyRollup: MarketRotationFamilyRollupItem[];
 };
 
+export type MarketRotationQuoteCoverageSymbol = {
+  symbol?: string;
+  configured?: boolean;
+  quoteAvailable?: boolean;
+  missing?: boolean;
+  stale?: boolean;
+  freshness?: string | null;
+  asOf?: string | null;
+  sourceAuthorityAllowed?: boolean;
+  scoreContributionAllowed?: boolean;
+  fallbackOrLimitedSampleUsed?: boolean;
+  sourceFamily?: string;
+  providerClass?: string;
+  reasonCodes?: string[];
+  windowsFulfilled?: string[];
+  missingWindows?: string[];
+};
+
+export type MarketRotationQuoteCoverageFamily = {
+  familyId?: string;
+  familyLabel?: string;
+  configuredSymbols?: string[];
+  availableSymbols?: string[];
+  missingSymbols?: string[];
+  staleSymbols?: string[];
+  scoreAuthorityAllowedSymbols?: string[];
+  observationOnlySymbols?: string[];
+  configuredCount?: number;
+  availableCount?: number;
+  missingCount?: number;
+  staleCount?: number;
+  scoreAuthorityAllowedCount?: number;
+  observationOnlyCount?: number;
+  fallbackOrLimitedSampleUsed?: boolean;
+  symbols?: MarketRotationQuoteCoverageSymbol[];
+};
+
+export type MarketRotationQuoteCoverageSummary = {
+  configuredCount?: number;
+  availableCount?: number;
+  missingCount?: number;
+  staleCount?: number;
+  scoreAuthorityAllowedCount?: number;
+  observationOnlyCount?: number;
+};
+
 export type MarketRotationAlpacaQuoteAuthorityReadiness = {
   providerConfigured?: boolean;
   dataFeed?: string | null;
@@ -203,6 +249,13 @@ export type MarketRotationAlpacaQuoteAuthorityReadiness = {
     ratio?: number;
     missingSymbols?: string[];
   };
+  quoteCoverageByFamily?: MarketRotationQuoteCoverageFamily[];
+  coverageSummary?: MarketRotationQuoteCoverageSummary;
+  availableSymbols?: string[];
+  missingSymbols?: string[];
+  staleSymbols?: string[];
+  scoreAuthorityAllowedSymbols?: string[];
+  observationOnlySymbols?: string[];
   freshestAsOf?: string | null;
   sourceAuthority?: 'authorized' | 'partial' | 'unavailable' | 'unknown' | string;
   fallbackUsed?: boolean;
@@ -532,6 +585,35 @@ function normalizeRotationFamilyRollupItem(
   };
 }
 
+function normalizeQuoteCoverageFamily(
+  family?: MarketRotationQuoteCoverageFamily | null,
+): MarketRotationQuoteCoverageFamily | undefined {
+  if (!family || typeof family !== 'object') {
+    return undefined;
+  }
+  return {
+    ...family,
+    configuredSymbols: Array.isArray(family.configuredSymbols) ? family.configuredSymbols.filter(Boolean) : [],
+    availableSymbols: Array.isArray(family.availableSymbols) ? family.availableSymbols.filter(Boolean) : [],
+    missingSymbols: Array.isArray(family.missingSymbols) ? family.missingSymbols.filter(Boolean) : [],
+    staleSymbols: Array.isArray(family.staleSymbols) ? family.staleSymbols.filter(Boolean) : [],
+    scoreAuthorityAllowedSymbols: Array.isArray(family.scoreAuthorityAllowedSymbols)
+      ? family.scoreAuthorityAllowedSymbols.filter(Boolean)
+      : [],
+    observationOnlySymbols: Array.isArray(family.observationOnlySymbols)
+      ? family.observationOnlySymbols.filter(Boolean)
+      : [],
+    symbols: Array.isArray(family.symbols)
+      ? family.symbols.map((row) => ({
+        ...row,
+        reasonCodes: Array.isArray(row.reasonCodes) ? row.reasonCodes.filter(Boolean) : [],
+        windowsFulfilled: Array.isArray(row.windowsFulfilled) ? row.windowsFulfilled.filter(Boolean) : [],
+        missingWindows: Array.isArray(row.missingWindows) ? row.missingWindows.filter(Boolean) : [],
+      }))
+      : [],
+  };
+}
+
 function normalizeRotationConsumerEvidenceSnapshot(
   snapshot?: MarketRotationConsumerEvidenceSnapshot | null,
 ): MarketRotationConsumerEvidenceSnapshot | undefined {
@@ -606,6 +688,21 @@ function normalizeAlpacaQuoteAuthorityReadiness(
           : [],
       }
       : undefined,
+    quoteCoverageByFamily: Array.isArray(readiness.quoteCoverageByFamily)
+      ? readiness.quoteCoverageByFamily
+        .map((family) => normalizeQuoteCoverageFamily(family))
+        .filter((family): family is MarketRotationQuoteCoverageFamily => Boolean(family))
+      : [],
+    coverageSummary: readiness.coverageSummary ? { ...readiness.coverageSummary } : undefined,
+    availableSymbols: Array.isArray(readiness.availableSymbols) ? readiness.availableSymbols.filter(Boolean) : [],
+    missingSymbols: Array.isArray(readiness.missingSymbols) ? readiness.missingSymbols.filter(Boolean) : [],
+    staleSymbols: Array.isArray(readiness.staleSymbols) ? readiness.staleSymbols.filter(Boolean) : [],
+    scoreAuthorityAllowedSymbols: Array.isArray(readiness.scoreAuthorityAllowedSymbols)
+      ? readiness.scoreAuthorityAllowedSymbols.filter(Boolean)
+      : [],
+    observationOnlySymbols: Array.isArray(readiness.observationOnlySymbols)
+      ? readiness.observationOnlySymbols.filter(Boolean)
+      : [],
     freshestAsOf: readiness.freshestAsOf || null,
     sourceAuthority: readiness.sourceAuthority || 'unknown',
     fallbackUsed: readiness.fallbackUsed === true,
