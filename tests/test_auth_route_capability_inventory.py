@@ -173,6 +173,7 @@ EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("POST", "/api/v1/options/decision/evaluate"): "public_fixture_analysis",
     ("POST", "/api/v1/options/scenario"): "public_fixture_analysis",
     ("POST", "/api/v1/options/strategies/compare"): "public_fixture_analysis",
+    ("POST", "/api/v1/options/strategies/analyze"): "public_fixture_analysis",
     ("GET", "/api/v1/admin/logs/storage/summary"): "admin_capability_required",
     ("POST", "/api/v1/admin/users/onboard"): "admin_capability_required",
     ("GET", "/api/v1/admin/ops/status"): "admin_capability_required",
@@ -314,10 +315,19 @@ def _route_auth_metadata(route: APIRoute) -> dict[str, str | None]:
 
 
 def _collect_live_routes() -> dict[tuple[str, str], dict[str, str | None]]:
+    def iter_effective_routes(routes: list[Any]):
+        for route in routes:
+            if isinstance(route, APIRoute) or (
+                hasattr(route, "dependant") and hasattr(route, "methods") and hasattr(route, "path")
+            ):
+                yield route
+                continue
+            effective_candidates = getattr(route, "effective_candidates", None)
+            if callable(effective_candidates):
+                yield from iter_effective_routes(list(effective_candidates()))
+
     collected: dict[tuple[str, str], dict[str, str | None]] = {}
-    for route in api_v1_router.routes:
-        if not isinstance(route, APIRoute):
-            continue
+    for route in iter_effective_routes(api_v1_router.routes):
         metadata = _route_auth_metadata(route)
         for method in route.methods or set():
             if method in {"HEAD", "OPTIONS"}:
@@ -772,7 +782,7 @@ def test_options_public_api_inventory_matches_fixture_only_frontend_gate_contrac
     app_source = APP_TSX.read_text(encoding="utf-8")
     consumer_nav_source = CONSUMER_APP_NAVIGATION_TS.read_text(encoding="utf-8")
 
-    assert len(EXPECTED_OPTIONS_FIXTURE_ROUTE_CLASSIFICATIONS) == 7
+    assert len(EXPECTED_OPTIONS_FIXTURE_ROUTE_CLASSIFICATIONS) == 8
     for signature in EXPECTED_OPTIONS_FIXTURE_ROUTE_CLASSIFICATIONS:
         entry = classifications[signature]
         marker = str(entry["no_go_marker"])
@@ -789,13 +799,18 @@ def test_options_public_api_inventory_matches_fixture_only_frontend_gate_contrac
 
     assert '<Route path="/options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />' in app_source
     assert '<Route path="options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />' in app_source
-    assert "Mirrors Shell nav visibility only. Route-level guest paywalls live in App.tsx." in consumer_nav_source
-    options_lab_index = consumer_nav_source.index("key: \'options-lab\'")
+    assert "Mirrors route-level guest gating in App.tsx." in consumer_nav_source
+    consumer_nav_items = _extract_route_block(
+        consumer_nav_source,
+        "export const CONSUMER_NAV_ITEMS: ConsumerNavItem[] = [",
+        "];",
+    )
+    assert "options-lab" not in consumer_nav_items
+    options_lab_index = consumer_nav_source.index("routeKey: 'options-lab'")
     options_lab_entry_end = consumer_nav_source.find("}", options_lab_index)
     assert options_lab_entry_end != -1
     options_lab_entry = consumer_nav_source[options_lab_index : options_lab_entry_end + 1]
     assert "to: \'/options-lab\'" in options_lab_entry
-    assert "requiresAuth: false" in options_lab_entry
 
 
 def test_backend_write_only_capabilities_do_not_leak_into_frontend_read_route_flags() -> None:
@@ -867,7 +882,7 @@ def test_frontend_route_inventory_matches_admin_capability_map_and_wrapper_bound
     fixture = _load_json(FRONTEND_FIXTURE)
     app_source = APP_TSX.read_text(encoding="utf-8")
     capability_source = ADMIN_CAPABILITIES_TS.read_text(encoding="utf-8")
-    restricted_block = _extract_route_block(app_source, "const isGuestRestrictedPath = (", ");")
+    restricted_block = _extract_route_block(app_source, "function isProtectedProductPath(", "}\n\nfunction isPublicSafePath")
     fail_closed_admin_surface_paths = {
         entry["path"]
         for entry in fixture["admin_surface_routes"]
@@ -946,5 +961,5 @@ def test_frontend_guest_paywall_and_admin_gate_boundaries_are_represented_in_exi
     assert "/zh/admin/evidence-workflow" in app_routes_test_source
     assert "/zh/admin/cost-observability" in app_routes_test_source
     assert "/zh/admin/users" in app_routes_test_source
-    assert "Sign in to continue to Portfolio" in auth_guard_test_source
-    assert "登录后即可进入 市场总览" in auth_guard_test_source
+    assert "Go to sign in Portfolio" in auth_guard_test_source
+    assert "前往登录 市场总览" in auth_guard_test_source
