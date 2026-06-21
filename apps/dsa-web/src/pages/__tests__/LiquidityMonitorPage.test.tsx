@@ -4,25 +4,18 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LiquidityMonitorPage from '../LiquidityMonitorPage';
 
-const { getLiquidityMonitor, getDataReadiness, useProductSurfaceMock } = vi.hoisted(() => ({
+const { getLiquidityMonitor, useProductSurfaceMock } = vi.hoisted(() => ({
   getLiquidityMonitor: vi.fn(),
-  getDataReadiness: vi.fn(),
   useProductSurfaceMock: vi.fn(),
 }));
 
-vi.mock('../../api/liquidityMonitor', () => ({
-  liquidityMonitorApi: {
-    getLiquidityMonitor,
-  },
-}));
-
-vi.mock('../../api/market', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../api/market')>();
+vi.mock('../../api/liquidityMonitor', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../api/liquidityMonitor')>();
   return {
     ...actual,
-    marketApi: {
-      ...actual.marketApi,
-      getDataReadiness,
+    liquidityMonitorApi: {
+      ...actual.liquidityMonitorApi,
+      getLiquidityMonitor,
     },
   };
 });
@@ -492,6 +485,103 @@ const payload = {
     providerRuntimeChanged: false,
     marketCacheMutation: false,
   },
+  officialRiskBundleReadiness: {
+    contractVersion: 'official_risk_bundle_readiness_v1',
+    status: 'available',
+    scoreAuthority: 'eligible',
+    scoreAuthorityEligible: true,
+    observationOnly: false,
+    sourceAuthorityState: 'available',
+    asOf: '2026-05-07T10:00:00+08:00',
+    freshness: 'cached',
+    requiredFamilies: ['vix', 'rates', 'fedLiquidity'],
+    availableFamilies: ['vix', 'rates', 'fedLiquidity', 'creditStress'],
+    partialFamilies: [],
+    missingRequiredFamilies: [],
+    staleFamilies: [],
+    blockedFamilies: [],
+    requiredSeries: ['VIXCLS', 'DGS2', 'DGS10', 'DGS30', 'WALCL', 'RRPONTSYD', 'WTREGEN', 'WRESBAL'],
+    missingRequiredSeries: [],
+    nextEvidenceRequired: [],
+    families: [
+      {
+        familyId: 'vix',
+        label: 'VIX volatility proxy',
+        required: true,
+        status: 'available',
+        sourceType: 'official_public',
+        sourceAuthorityAllowed: true,
+        scoreAuthorityEligible: true,
+        observationOnly: false,
+        freshness: 'cached',
+        asOf: '2026-05-07T10:00:00+08:00',
+        freshnessWindow: 'official_daily_us_weekday_t_plus_1',
+        requiredSeries: ['VIXCLS'],
+        fulfilledSeries: ['VIXCLS'],
+        missingSeries: [],
+        staleSeries: [],
+        blockedSeries: [],
+        nextEvidenceRequired: [],
+      },
+      {
+        familyId: 'rates',
+        label: 'Treasury/FRED rates',
+        required: true,
+        status: 'available',
+        sourceType: 'official_public',
+        sourceAuthorityAllowed: true,
+        scoreAuthorityEligible: true,
+        observationOnly: false,
+        freshness: 'cached',
+        asOf: '2026-05-07T10:00:00+08:00',
+        freshnessWindow: 'official_daily_us_weekday_t_plus_1',
+        requiredSeries: ['DGS2', 'DGS10', 'DGS30'],
+        fulfilledSeries: ['DGS2', 'DGS10', 'DGS30'],
+        missingSeries: [],
+        staleSeries: [],
+        blockedSeries: [],
+        nextEvidenceRequired: [],
+      },
+      {
+        familyId: 'fedLiquidity',
+        label: 'Fed liquidity',
+        required: true,
+        status: 'available',
+        sourceType: 'official_public',
+        sourceAuthorityAllowed: true,
+        scoreAuthorityEligible: true,
+        observationOnly: false,
+        freshness: 'cached',
+        asOf: '2026-05-07T10:00:00+08:00',
+        freshnessWindow: 'official_weekly_fed_liquidity_t_plus_7',
+        requiredSeries: ['WALCL', 'RRPONTSYD', 'WTREGEN', 'WRESBAL'],
+        fulfilledSeries: ['WALCL', 'RRPONTSYD', 'WTREGEN', 'WRESBAL'],
+        missingSeries: [],
+        staleSeries: [],
+        blockedSeries: [],
+        nextEvidenceRequired: [],
+      },
+      {
+        familyId: 'creditStress',
+        label: 'Credit stress',
+        required: false,
+        status: 'available',
+        sourceType: 'official_public',
+        sourceAuthorityAllowed: true,
+        scoreAuthorityEligible: false,
+        observationOnly: true,
+        freshness: 'cached',
+        asOf: '2026-05-07T10:00:00+08:00',
+        freshnessWindow: 'official_daily_us_weekday_t_plus_1',
+        requiredSeries: ['BAMLH0A0HYM2'],
+        fulfilledSeries: ['BAMLH0A0HYM2'],
+        missingSeries: [],
+        staleSeries: [],
+        blockedSeries: [],
+        nextEvidenceRequired: ['creditStress_observation_only'],
+      },
+    ],
+  },
 };
 
 const officialBreadthIndicator = {
@@ -733,20 +823,6 @@ describe('LiquidityMonitorPage', () => {
       isAdminMode: false,
       canReadProviders: false,
     });
-    getDataReadiness.mockResolvedValue({
-      readinessStatus: 'ready',
-      diagnosticOnly: true,
-      providerRuntimeCalled: false,
-      networkCallsEnabled: false,
-      representativeSymbols: [],
-      checks: [],
-      officialRiskSourceReadiness: {
-        bundleState: 'ready',
-        vix: { state: 'ready', freshness: 'live' },
-        rates: { state: 'ready', freshness: 'live' },
-        fedLiquidity: { state: 'ready', freshness: 'live' },
-      },
-    });
   });
 
   async function expandLiquidityDetails(): Promise<HTMLElement> {
@@ -800,33 +876,131 @@ describe('LiquidityMonitorPage', () => {
     expect(guidancePanel.textContent || '').not.toMatch(/计分|评分|官方曲线缺口|官方利差|数据源|提供方/);
   });
 
-  it('uses official risk source readiness without exposing raw provider details', async () => {
+  it('uses official risk bundle readiness without exposing raw internal details', async () => {
     getLiquidityMonitor.mockResolvedValueOnce(payload);
-    getDataReadiness.mockResolvedValueOnce({
-      readinessStatus: 'ready',
-      diagnosticOnly: true,
-      providerRuntimeCalled: false,
-      networkCallsEnabled: false,
-      representativeSymbols: [],
-      checks: [],
-      officialRiskSourceReadiness: {
-        bundleState: 'partial',
-        vix: { state: 'ready', freshness: 'live' },
-        rates: { state: 'stale', freshness: 'stale' },
-        fedLiquidity: { state: 'blocked', freshness: 'unavailable' },
+
+    render(<LiquidityMonitorPage />);
+
+    const strip = await screen.findByTestId('liquidity-official-risk-readiness');
+    await waitFor(() => expect(strip).toHaveTextContent('官方风险包可用'));
+    expect(strip).toHaveTextContent('VIX可用');
+    expect(strip).toHaveTextContent('利率可用');
+    expect(strip).toHaveTextContent('Fed流动性可用');
+    expect(strip).toHaveTextContent('信用压力仅观察');
+    expect(strip).toHaveTextContent('VIX、利率与 Fed 流动性已满足官方来源、时效与完整性边界。');
+    expect(strip.textContent || '').not.toMatch(
+      /sourceAuthority|scoreAuthority|contractVersion|bundleState|sourceType|freshnessWindow|requiredSeries|fulfilledSeries|missingSeries|staleSeries|blockedSeries|nextEvidenceRequired|provider|runtime|credential|raw|debug|trace/i,
+    );
+  });
+
+  it('renders fail-closed copy when the bundle is partial, stale, blocked, cache-only, or missing', async () => {
+    getLiquidityMonitor.mockResolvedValueOnce({
+      ...payload,
+      officialRiskBundleReadiness: {
+        contractVersion: 'official_risk_bundle_readiness_v1',
+        status: 'partial',
+        scoreAuthority: 'observation_only',
+        scoreAuthorityEligible: false,
+        observationOnly: true,
+        sourceAuthorityState: 'blocked',
+        asOf: '2026-05-07T10:00:00+08:00',
+        freshness: 'cached',
+        requiredFamilies: ['vix', 'rates', 'fedLiquidity'],
+        availableFamilies: ['vix'],
+        partialFamilies: ['rates'],
+        missingRequiredFamilies: ['fedLiquidity'],
+        staleFamilies: ['rates'],
+        blockedFamilies: ['fedLiquidity'],
+        requiredSeries: ['VIXCLS', 'DGS2', 'DGS10', 'DGS30', 'WALCL', 'RRPONTSYD', 'WTREGEN', 'WRESBAL'],
+        missingRequiredSeries: ['WALCL', 'RRPONTSYD', 'WTREGEN', 'WRESBAL'],
+        nextEvidenceRequired: ['fedLiquidity_missing_official_series'],
+        families: [
+          {
+            familyId: 'vix',
+            label: 'VIX volatility proxy',
+            required: true,
+            status: 'available',
+            sourceType: 'official_public',
+            sourceAuthorityAllowed: true,
+            scoreAuthorityEligible: true,
+            observationOnly: false,
+            freshness: 'cached',
+            asOf: '2026-05-07T10:00:00+08:00',
+            freshnessWindow: 'official_daily_us_weekday_t_plus_1',
+            requiredSeries: ['VIXCLS'],
+            fulfilledSeries: ['VIXCLS'],
+            missingSeries: [],
+            staleSeries: [],
+            blockedSeries: [],
+            nextEvidenceRequired: [],
+          },
+          {
+            familyId: 'rates',
+            label: 'Treasury/FRED rates',
+            required: true,
+            status: 'stale',
+            sourceType: 'official_public',
+            sourceAuthorityAllowed: false,
+            scoreAuthorityEligible: false,
+            observationOnly: true,
+            freshness: 'stale',
+            asOf: '2026-05-07T10:00:00+08:00',
+            freshnessWindow: 'official_daily_us_weekday_t_plus_1',
+            requiredSeries: ['DGS2', 'DGS10', 'DGS30'],
+            fulfilledSeries: ['DGS2'],
+            missingSeries: ['DGS10', 'DGS30'],
+            staleSeries: ['DGS2'],
+            blockedSeries: [],
+            nextEvidenceRequired: ['rates_stale_official_series'],
+          },
+          {
+            familyId: 'fedLiquidity',
+            label: 'Fed liquidity',
+            required: true,
+            status: 'blocked',
+            sourceType: 'official_public',
+            sourceAuthorityAllowed: false,
+            scoreAuthorityEligible: false,
+            observationOnly: true,
+            freshness: 'unavailable',
+            asOf: '2026-05-07T10:00:00+08:00',
+            freshnessWindow: 'official_weekly_fed_liquidity_t_plus_7',
+            requiredSeries: ['WALCL', 'RRPONTSYD', 'WTREGEN', 'WRESBAL'],
+            fulfilledSeries: [],
+            missingSeries: ['WALCL', 'RRPONTSYD', 'WTREGEN', 'WRESBAL'],
+            staleSeries: [],
+            blockedSeries: ['WALCL'],
+            nextEvidenceRequired: ['fedLiquidity_missing_official_series'],
+          },
+        ],
       },
     });
 
     render(<LiquidityMonitorPage />);
 
     const strip = await screen.findByTestId('liquidity-official-risk-readiness');
-    await waitFor(() => expect(strip).toHaveTextContent('官方风险源部分可用'));
+    expect(strip).toHaveTextContent('官方风险包部分待补');
     expect(strip).toHaveTextContent('VIX可用');
     expect(strip).toHaveTextContent('利率待更新');
-    expect(strip).toHaveTextContent('Fed流动性待补');
-    expect(strip.textContent || '').not.toMatch(
-      /authorized|unavailable|partial|unknown|fallbackUsed|providerConfigured|sourceAuthority|scoreContributionAllowed|provider|runtime|credential/i,
-    );
+    expect(strip).toHaveTextContent('Fed流动性权限待确认');
+    expect(strip).toHaveTextContent('待补序列');
+    expect(strip).toHaveTextContent('当前为缓存快照');
+    expect(strip).toHaveTextContent('仅观察，不升级结论');
+    expect(strip.textContent || '').not.toMatch(/buy|sell|trade|target price|stop loss|position sizing|建议|买入|卖出/i);
+  });
+
+  it('handles an absent officialRiskBundleReadiness field without crashing', async () => {
+    getLiquidityMonitor.mockResolvedValueOnce({
+      ...payload,
+      officialRiskBundleReadiness: undefined,
+    });
+
+    render(<LiquidityMonitorPage />);
+
+    const strip = await screen.findByTestId('liquidity-official-risk-readiness');
+    expect(strip).toHaveTextContent('官方风险包待补证');
+    expect(strip).toHaveTextContent('官方风险包未返回，当前不从其他流动性线索推断。');
+    expect(strip).not.toHaveTextContent('官方风险包可用');
   });
 
   it('renders the liquidity impulse synthesis header with evidence rows inside admin details', async () => {
