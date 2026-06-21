@@ -6,7 +6,7 @@ Task title: Visual audit route shell reconciliation
 
 Mode: READ-ONLY-AUDIT with one explicitly allowed docs artifact.
 
-Allowed artifact: `docs/codex/audits/T-1071-visual-audit-route-shell-reconciliation.md`
+Allowed artifact: `docs/codex/audits/archive/2026-06/T-1071-visual-audit-route-shell-reconciliation.md`
 
 Observed workspace:
 
@@ -171,6 +171,6 @@ Do not:
 
 This audit creates only:
 
-- `docs/codex/audits/T-1071-visual-audit-route-shell-reconciliation.md`
+- `docs/codex/audits/archive/2026-06/T-1071-visual-audit-route-shell-reconciliation.md`
 
 No source, tests, config, package, lockfile, screenshots, generated assets, route/auth/frontend/backend/provider/cache/runtime changes were made by this audit.

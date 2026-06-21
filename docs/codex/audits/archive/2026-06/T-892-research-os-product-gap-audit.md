@@ -522,7 +522,7 @@ Acceptance:
 
 ## Completion Checklist For This Audit
 
-- Main deliverable: `docs/codex/audits/T-892-research-os-product-gap-audit.md`
+- Main deliverable: `docs/codex/audits/archive/2026-06/T-892-research-os-product-gap-audit.md`
 - Runtime code changed: no
 - Frontend TSX/CSS changed: no
 - Backend endpoint/service/provider/cache/storage/accounting/auth changed: no

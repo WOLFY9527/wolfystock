@@ -211,6 +211,6 @@ The change should be class-only and local, but Backtest is a protected product s
 
 This audit creates only:
 
-- `docs/codex/audits/T-1043-ui-postfix-visual-consistency-audit.md`
+- `docs/codex/audits/archive/2026-06/T-1043-ui-postfix-visual-consistency-audit.md`
 
 No source, tests, config, package, lockfile, route, auth, backend, API, provider, cache, runtime, screenshots, or generated assets are changed.

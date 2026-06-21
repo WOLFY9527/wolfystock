@@ -44,13 +44,13 @@ authorizes it.
 - T-892 defines the Research OS gap as missing first-class research readiness
   before score/action/shortlist interpretation, and requires projection-only
   `ResearchReadinessV1` before runtime semantics change
-  (`docs/codex/audits/T-892-research-os-product-gap-audit.md:147`).
+  (`docs/codex/audits/archive/2026-06/T-892-research-os-product-gap-audit.md:147`).
 - T-892's desired Scanner workflow is global regime/liquidity -> asset classes
   -> sector/theme/style -> industries -> candidates -> evidence readiness
-  (`docs/codex/audits/T-892-research-os-product-gap-audit.md:205`).
+  (`docs/codex/audits/archive/2026-06/T-892-research-os-product-gap-audit.md:205`).
 - The existing Scanner product contract already names `scannerContextFrame`
   fields and calls out missing `candidateReadiness`
-  (`docs/codex/audits/T-892-research-os-product-gap-audit.md:249`).
+  (`docs/codex/audits/archive/2026-06/T-892-research-os-product-gap-audit.md:249`).
 - Scanner docs state the current market profiles are `cn_preopen_v1`,
   `us_preopen_v1`, and `hk_preopen_v1`, with shared run/history/review
   facilities but separated market semantics (`docs/market-scanner.md:33`).

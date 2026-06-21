@@ -4,7 +4,7 @@ Task: T-995 Bundle and code-splitting audit
 
 Mode: READ-ONLY-AUDIT with one explicitly allowed audit artifact.
 
-Allowed artifact: `docs/codex/audits/T-995-bundle-codesplitting-audit.md`
+Allowed artifact: `docs/codex/audits/archive/2026-06/T-995-bundle-codesplitting-audit.md`
 
 Observed HEAD during audit: `5e94a4fb` (`T-992: audit large-page decomposition`)
 

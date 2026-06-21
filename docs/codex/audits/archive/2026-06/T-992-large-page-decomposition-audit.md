@@ -4,7 +4,7 @@ Task: T-992 Large-page decomposition audit
 
 Mode: READ-ONLY-AUDIT with one allowed report artifact.
 
-Allowed artifact: `docs/codex/audits/T-992-large-page-decomposition-audit.md`
+Allowed artifact: `docs/codex/audits/archive/2026-06/T-992-large-page-decomposition-audit.md`
 
 Scope boundary:
 

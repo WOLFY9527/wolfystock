@@ -8,7 +8,7 @@ Mode: READ-ONLY-AUDIT with one explicitly allowed docs artifact.
 
 Allowed artifact:
 
-`docs/codex/audits/T-1079-watchlist-empty-state-alerts-ia-readiness-audit.md`
+`docs/codex/audits/archive/2026-06/T-1079-watchlist-empty-state-alerts-ia-readiness-audit.md`
 
 Observed workspace:
 

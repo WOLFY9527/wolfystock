@@ -285,4 +285,4 @@ Required validation for this docs-only audit:
 
 Expected final diff:
 
-- `docs/codex/audits/T-1021-market-liquidity-rotation-options-authority-provenance-audit.md`
+- `docs/codex/audits/archive/2026-06/T-1021-market-liquidity-rotation-options-authority-provenance-audit.md`

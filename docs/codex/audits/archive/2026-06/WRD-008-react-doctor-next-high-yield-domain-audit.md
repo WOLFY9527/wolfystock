@@ -4,7 +4,7 @@ Task ID: WRD-008
 
 Mode: READ-ONLY-AUDIT with one task-authorized docs-only artifact.
 
-Allowed artifact: `docs/codex/audits/WRD-008-react-doctor-next-high-yield-domain-audit.md`
+Allowed artifact: `docs/codex/audits/archive/2026-06/WRD-008-react-doctor-next-high-yield-domain-audit.md`
 
 Scope boundary:
 
@@ -255,5 +255,5 @@ Final diff confirmation:
 - Confirmed after marking the new audit file intent-to-add: final diff is
   docs-only.
 - Changed file:
-  `docs/codex/audits/WRD-008-react-doctor-next-high-yield-domain-audit.md`
+  `docs/codex/audits/archive/2026-06/WRD-008-react-doctor-next-high-yield-domain-audit.md`
 - No source files are allowed in the final diff.

@@ -4,7 +4,7 @@ Task: T-989 Home state orchestration risk audit
 
 Mode: READ-ONLY-AUDIT with one explicitly allowed audit artifact.
 
-Allowed artifact: `docs/codex/audits/T-989-home-state-orchestration-risk-audit.md`
+Allowed artifact: `docs/codex/audits/archive/2026-06/T-989-home-state-orchestration-risk-audit.md`
 
 Observed branch during audit: `codex/t989-home-state-orchestration-audit`
 
@@ -54,7 +54,7 @@ Files inspected:
 - `apps/dsa-web/e2e/home-scanner-evidence-browser.smoke.spec.ts`
 - `apps/dsa-web/e2e/controlled-user-testing.smoke.spec.ts`
 - `apps/dsa-web/e2e/consumer-copy-regression.smoke.spec.ts`
-- `docs/codex/audits/T-987-post-wave-react-doctor-smoke-stability-audit.md`
+- `docs/codex/audits/archive/2026-06/T-987-post-wave-react-doctor-smoke-stability-audit.md`
 
 Relevant T-987 signal:
 

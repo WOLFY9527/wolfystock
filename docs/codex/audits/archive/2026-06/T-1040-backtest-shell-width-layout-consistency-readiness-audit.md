@@ -6,7 +6,7 @@ Task title: Backtest shell width layout consistency readiness audit
 
 Mode: READ-ONLY-AUDIT with one explicitly allowed audit artifact.
 
-Allowed artifact: `docs/codex/audits/T-1040-backtest-shell-width-layout-consistency-readiness-audit.md`
+Allowed artifact: `docs/codex/audits/archive/2026-06/T-1040-backtest-shell-width-layout-consistency-readiness-audit.md`
 
 Observed workspace:
 
@@ -230,7 +230,7 @@ Defer all of the following:
 
 This audit creates only:
 
-- `docs/codex/audits/T-1040-backtest-shell-width-layout-consistency-readiness-audit.md`
+- `docs/codex/audits/archive/2026-06/T-1040-backtest-shell-width-layout-consistency-readiness-audit.md`
 
 No source, tests, config, package, lockfile, route, auth, backend, API,
 provider, cache, runtime, Backtest engine, result report/table/chart behavior,

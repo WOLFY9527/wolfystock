@@ -6,7 +6,7 @@ Task title: Options Lab 1440 responsive sanity audit
 
 Mode: READ-ONLY-AUDIT
 
-Allowed artifact: `docs/codex/audits/WFE-001-optionslab-1440-responsive-sanity-audit.md`
+Allowed artifact: `docs/codex/audits/archive/2026-06/WFE-001-optionslab-1440-responsive-sanity-audit.md`
 
 Observed workspace:
 

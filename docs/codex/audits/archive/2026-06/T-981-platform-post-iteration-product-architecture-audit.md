@@ -4,7 +4,7 @@ Task: T-981 Platform post-iteration product and architecture audit
 
 Mode: READ-ONLY-AUDIT with one explicitly allowed audit artifact.
 
-Allowed artifact: `docs/codex/audits/T-981-platform-post-iteration-product-architecture-audit.md`
+Allowed artifact: `docs/codex/audits/archive/2026-06/T-981-platform-post-iteration-product-architecture-audit.md`
 
 Observed range: T-918 `65127eea` through T-980 `dd0d0682`.
 

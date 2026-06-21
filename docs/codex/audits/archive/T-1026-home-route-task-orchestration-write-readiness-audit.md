@@ -26,7 +26,7 @@ Scope boundary:
 - The exact requested T-989 file,
   `docs/codex/audits/T-989-home-state-orchestration-audit.md`, was not present.
   The adjacent tracked audit
-  `docs/codex/audits/T-989-home-state-orchestration-risk-audit.md` was present
+  `docs/codex/audits/archive/2026-06/T-989-home-state-orchestration-risk-audit.md` was present
   and used as stale-risk context.
 
 ## Readiness verdict
@@ -54,7 +54,7 @@ Required docs:
 - `docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md`
 - `docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`
 - `docs/codex/audits/T-1014-post-ux-wave-platform-roadmap-audit.md`
-- `docs/codex/audits/T-989-home-state-orchestration-risk-audit.md`
+- `docs/codex/audits/archive/2026-06/T-989-home-state-orchestration-risk-audit.md`
 
 Home code and task lifecycle:
 

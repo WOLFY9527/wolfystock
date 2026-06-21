@@ -55,8 +55,8 @@ Targeted files and commands inspected:
 - `apps/dsa-web/src/pages/tests/DeterministicBacktestResultPage.test.tsx`
 - `apps/dsa-web/src/pages/__tests__/HomeSurfacePage.test.tsx`
 - selected Playwright fixture route harnesses under `apps/dsa-web/e2e/fixtures/`
-- prior audit context in `docs/codex/audits/T-987-post-wave-react-doctor-smoke-stability-audit.md`
-- prior fixture audit context in `docs/codex/audits/T-990-smoke-fixture-consolidation-audit.md`
+- prior audit context in `docs/codex/audits/archive/2026-06/T-987-post-wave-react-doctor-smoke-stability-audit.md`
+- prior fixture audit context in `docs/codex/audits/archive/2026-06/T-990-smoke-fixture-consolidation-audit.md`
 
 Key config facts:
 
