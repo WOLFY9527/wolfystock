@@ -238,6 +238,47 @@ class LiquidityImpulseSynthesisPayload(BaseModel):
     notInvestmentAdvice: bool = True
 
 
+class OfficialRiskBundleFamilyReadiness(BaseModel):
+    familyId: str
+    label: str
+    required: bool = False
+    status: Literal["available", "partial", "missing", "stale", "blocked"]
+    sourceType: str
+    sourceAuthorityAllowed: bool = False
+    scoreAuthorityEligible: bool = False
+    observationOnly: bool = True
+    freshness: EvidenceFreshnessLabel
+    asOf: Optional[str] = None
+    freshnessWindow: str
+    requiredSeries: list[str] = Field(default_factory=list)
+    fulfilledSeries: list[str] = Field(default_factory=list)
+    missingSeries: list[str] = Field(default_factory=list)
+    staleSeries: list[str] = Field(default_factory=list)
+    blockedSeries: list[str] = Field(default_factory=list)
+    nextEvidenceRequired: list[str] = Field(default_factory=list)
+
+
+class OfficialRiskBundleReadiness(BaseModel):
+    contractVersion: str
+    status: Literal["available", "partial", "missing", "stale", "blocked"]
+    scoreAuthority: Literal["eligible", "observation_only"]
+    scoreAuthorityEligible: bool = False
+    observationOnly: bool = True
+    sourceAuthorityState: Literal["available", "partial", "missing", "stale", "blocked"]
+    asOf: Optional[str] = None
+    freshness: EvidenceFreshnessLabel
+    requiredFamilies: list[str] = Field(default_factory=list)
+    availableFamilies: list[str] = Field(default_factory=list)
+    partialFamilies: list[str] = Field(default_factory=list)
+    missingRequiredFamilies: list[str] = Field(default_factory=list)
+    staleFamilies: list[str] = Field(default_factory=list)
+    blockedFamilies: list[str] = Field(default_factory=list)
+    requiredSeries: list[str] = Field(default_factory=list)
+    missingRequiredSeries: list[str] = Field(default_factory=list)
+    nextEvidenceRequired: list[str] = Field(default_factory=list)
+    families: list[OfficialRiskBundleFamilyReadiness] = Field(default_factory=list)
+
+
 class LiquidityMonitorResponse(BaseModel):
     endpoint: str
     generatedAt: str
@@ -247,6 +288,7 @@ class LiquidityMonitorResponse(BaseModel):
     dataQuality: ConsumerDataQuality
     indicators: list[LiquidityMonitorIndicator] = Field(default_factory=list)
     capitalFlowSignal: LiquidityMonitorCapitalFlowSignal | None = None
+    officialRiskBundleReadiness: OfficialRiskBundleReadiness | None = None
     liquidityImpulseSynthesis: LiquidityImpulseSynthesisPayload
     advisoryDisclosure: str
     sourceMetadata: LiquidityMonitorSourceMetadata
