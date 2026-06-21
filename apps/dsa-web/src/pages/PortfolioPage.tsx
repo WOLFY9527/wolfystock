@@ -2690,29 +2690,6 @@ const PortfolioPage: React.FC = () => {
         : 'Real holdings, risk, and recent activity appear automatically after completion',
     },
   ];
-  const onboardingPreviewItems = [
-    {
-      key: 'ledger',
-      label: language === 'zh' ? '持仓台账' : 'Holdings ledger',
-      detail: language === 'zh'
-        ? '展示标的、数量、估值与数据状态'
-        : 'Shows symbols, quantities, valuation, and data state',
-    },
-    {
-      key: 'risk',
-      label: language === 'zh' ? '风险摘要' : 'Risk summary',
-      detail: language === 'zh'
-        ? '展示集中度、币种/市场暴露与压力情景入口'
-        : 'Shows concentration, currency/market exposure, and scenario entry points',
-    },
-    {
-      key: 'activity',
-      label: language === 'zh' ? '近期活动' : 'Recent activity',
-      detail: language === 'zh'
-        ? '展示持仓、现金与公司行为时间线'
-        : 'Shows the timeline for holdings, cash, and corporate actions',
-    },
-  ];
   const emptyRiskPreviewItems = [
     {
       key: 'position',
@@ -2893,8 +2870,8 @@ const PortfolioPage: React.FC = () => {
       : 'Once the account is ready, you can add holdings, import records, and review risk and evidence.')
     : !hasHoldings
       ? (language === 'zh'
-        ? '组合为空，请添加持仓'
-        : 'Portfolio empty, add holdings')
+        ? '组合为空，请添加持仓。数据不足，暂不形成结论。'
+        : 'Portfolio empty, add holdings. Evidence is insufficient for a conclusion.')
       : hasFxUnavailable
         ? (language === 'zh'
           ? '部分汇率暂不可用'
@@ -2907,8 +2884,134 @@ const PortfolioPage: React.FC = () => {
             ? '当前组合已可观察，下一步可补录现金、公司行为或同步新数据。'
             : 'The portfolio is ready to observe. Next you can add cash flows, corporate actions, or sync new data.');
   const hasFreshValuationState = !hasFxUnavailable && !hasPriceFallback && !snapshot?.fxStale && !hasLimitedConfidence;
+  const researchStateNextAction = !hasHoldings
+    ? (language === 'zh' ? '补持仓或导入流水' : 'Add records or import ledger')
+    : hasFxUnavailable || snapshot?.fxStale
+      ? (language === 'zh' ? '确认FX与估值' : 'Confirm FX and valuation')
+      : (language === 'zh' ? '查看风险暴露' : 'Review risk exposure');
+  const researchStatePreviewItems = [
+    {
+      key: 'account-readiness',
+      label: hasActiveAccounts
+        ? (language === 'zh' ? '账户已设置' : 'Account ready')
+        : (language === 'zh' ? '账户待设置' : 'Account setup pending'),
+      value: hasActiveAccounts ? accountStateSummary : (language === 'zh' ? '账户待设置' : 'Account setup pending'),
+      detail: hasWritableAccounts
+        ? (language === 'zh' ? '可继续接入真实流水。' : 'Ready for real ledger records.')
+        : (language === 'zh' ? '先创建账户。' : 'Create an account first.'),
+      variant: hasActiveAccounts ? 'success' : 'neutral',
+    },
+    {
+      key: 'holding-readiness',
+      label: hasHoldings
+        ? (language === 'zh' ? '可评估持仓' : 'Evaluable positions')
+        : (language === 'zh' ? '持仓待接入' : 'Position records pending'),
+      value: hasHoldings
+        ? (language === 'zh' ? `${positionRows.length} 项` : `${positionRows.length} positions`)
+        : (language === 'zh' ? '持仓待接入' : 'Position records pending'),
+      detail: hasHoldings
+        ? (language === 'zh' ? '已进入首屏风险与估值摘要。' : 'Shown in first-screen risk and valuation summary.')
+        : (language === 'zh' ? '接入后评估市值、盈亏与暴露。' : 'Adds valuation, P&L, and exposure context.'),
+      variant: hasHoldings ? 'success' : 'neutral',
+    },
+    {
+      key: 'valuation-readiness',
+      label: hasHoldings && hasFreshValuationState
+        ? (language === 'zh' ? '估值已更新' : 'Valuation current')
+        : (language === 'zh' ? '估值待补' : 'Valuation pending'),
+      value: hasHoldings && hasFreshValuationState
+        ? valuationSnapshotNote
+        : (language === 'zh' ? '估值待补' : 'Valuation pending'),
+      detail: hasHoldings
+        ? (consumerDataNotice || (language === 'zh' ? '可用于观察组合表现。' : 'Ready for portfolio observation.'))
+        : (language === 'zh' ? '首笔持仓后生成估值与盈亏。' : 'Valuation and P&L appear after positions exist.'),
+      variant: hasHoldings && hasFreshValuationState ? 'success' : hasHoldings ? 'caution' : 'neutral',
+    },
+    {
+      key: 'fx-readiness',
+      label: hasFxUnavailable || snapshot?.fxStale
+        ? (language === 'zh' ? 'FX待确认' : 'FX pending')
+        : (language === 'zh' ? 'FX已确认' : 'FX confirmed'),
+      value: hasFxUnavailable || snapshot?.fxStale
+        ? (language === 'zh' ? 'FX待确认' : 'FX pending')
+        : (language === 'zh' ? 'FX已确认' : 'FX confirmed'),
+      detail: hasFxUnavailable || snapshot?.fxStale
+        ? (language === 'zh' ? '跨币种折算需继续确认。' : 'Cross-currency conversion needs confirmation.')
+        : fxLastUpdated,
+      variant: hasFxUnavailable ? 'danger' : snapshot?.fxStale ? 'caution' : 'success',
+    },
+    {
+      key: 'risk-readiness',
+      label: hasHoldings
+        ? (language === 'zh' ? '风险视图已生成' : 'Risk view ready')
+        : (language === 'zh' ? '风险视图待生成' : 'Risk view pending'),
+      value: hasHoldings ? concentrationLabel : (language === 'zh' ? '风险视图待生成' : 'Risk view pending'),
+      detail: hasHoldings
+        ? (language === 'zh' ? '可查看集中度、币种与市场暴露。' : 'Concentration, currency, and market exposure are available.')
+        : (language === 'zh' ? '持仓接入后生成暴露与集中度。' : 'Exposure and concentration appear after records exist.'),
+      variant: hasHoldings ? 'success' : 'neutral',
+    },
+  ] satisfies Array<{
+    key: string;
+    label: string;
+    value: string;
+    detail: string;
+    variant: PortfolioTrustChipItem['variant'];
+  }>;
   const filteredSafeRiskWarningLabels = safeRiskWarningLabels.filter((warning) => warning !== riskWarningLabels.no_holdings);
   const holdingsTableStatusLabel = language === 'zh' ? '状态' : 'Status';
+  const portfolioResearchStatePreview = (
+    <TerminalPanel as="section" data-testid="portfolio-research-state-preview" className="min-w-0 flex flex-col gap-4 border-white/[0.08] bg-white/[0.035]">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">{language === 'zh' ? '组合研究状态' : 'Portfolio research state'}</h2>
+          <p className="mt-2 max-w-[72ch] text-sm leading-6 text-white/58">
+            {hasHoldings
+              ? (language === 'zh' ? '当前可先评估持仓、估值、FX与风险暴露。' : 'Current positions, valuation, FX, and risk exposure are ready for first read.')
+              : (language === 'zh' ? '首屏先说明可评估什么、缺什么，以及下一步。' : 'The first screen shows what can be evaluated, what is pending, and the next action.')}
+          </p>
+        </div>
+        <TerminalChip variant={hasHoldings ? 'success' : 'neutral'}>{researchStateNextAction}</TerminalChip>
+      </div>
+      <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+        {researchStatePreviewItems.map((item) => (
+          <div key={item.key} className="min-w-0 rounded-xl border border-white/[0.05] bg-black/20 px-3 py-3">
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <div className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-white/38">{item.label}</div>
+              <TerminalChip variant={item.variant} className="shrink-0">{item.value}</TerminalChip>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-white/46">{item.detail}</p>
+          </div>
+        ))}
+      </div>
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.04] bg-white/[0.025] px-3 py-2.5">
+        <span className="text-xs font-medium text-white/62">{language === 'zh' ? '下一步' : 'Next action'}</span>
+        <div className="flex min-w-0 flex-wrap gap-2">
+          <TerminalButton
+            type="button"
+            variant="primary"
+            className="h-9 px-3"
+            onClick={() => {
+              if (!hasAccounts || !hasWritableAccounts) {
+                openManualLedger('account');
+                return;
+              }
+              if (hasHoldings && (hasFxUnavailable || snapshot?.fxStale)) {
+                openManualLedger('fx');
+                return;
+              }
+              openManualLedger('trade', 'stock');
+            }}
+          >
+            {researchStateNextAction}
+          </TerminalButton>
+          <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
+            {importTradesActionLabel}
+          </TerminalButton>
+        </div>
+      </div>
+    </TerminalPanel>
+  );
 
   const handleToggleTradeActionMenu = (id: number) => {
     setOpenTradeActionMenuId((prev) => (prev === id ? null : id));
@@ -3317,6 +3420,7 @@ const PortfolioPage: React.FC = () => {
                       <div className="mt-1 text-xs leading-5 text-white/38">{heroStatusChips.map((item) => item.label).join(' · ')}</div>
                     </TerminalPanel>
                   </div>
+                  {portfolioResearchStatePreview}
                 </div>
               ) : (
                 <div data-testid="portfolio-empty-onboarding-row" className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
@@ -3411,30 +3515,7 @@ const PortfolioPage: React.FC = () => {
                     ) : null}
                   </TerminalPanel>
 
-                  <TerminalPanel as="section" data-testid="portfolio-preview-card" className="min-w-0 flex flex-col gap-4">
-                    <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">{language === 'zh' ? '功能预览 / 示例结构' : 'Feature preview / sample structure'}</h2>
-                        <p className="mt-2 text-sm leading-6 text-white/52">
-                          {language === 'zh'
-                            ? '展示模式'
-                            : 'Demo mode'}
-                        </p>
-                      </div>
-                      <TerminalChip variant="neutral">{language === 'zh' ? '非持久预览' : 'Non-persistent preview'}</TerminalChip>
-                    </div>
-                    <div className="grid min-w-0 grid-cols-1 gap-2">
-                      {onboardingPreviewItems.map((item) => (
-                        <div key={item.key} className="min-w-0 rounded-2xl border border-white/[0.05] bg-black/20 px-4 py-3">
-                          <div className="flex min-w-0 items-center justify-between gap-3">
-                            <div className="text-sm font-medium text-white">{item.label}</div>
-                            <PillBadge variant="default" className="text-white/55">{language === 'zh' ? '完成后显示' : 'Shown after setup'}</PillBadge>
-                          </div>
-                          <p className="mt-2 text-xs leading-5 text-white/45">{item.detail}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </TerminalPanel>
+                  {portfolioResearchStatePreview}
                 </div>
               )}
             </div>
