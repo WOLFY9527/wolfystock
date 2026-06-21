@@ -2609,6 +2609,7 @@ class PortfolioService:
                 cost_method=method,
             )
         )
+        snapshot_payload.update(self._build_portfolio_lineage_summary(snapshot=snapshot_payload))
         return snapshot_payload
 
     def _attach_account_availability(self, account_payload: Dict[str, Any], *, loaded_from_cache: bool) -> None:
@@ -2674,6 +2675,300 @@ class PortfolioService:
             if position.get("is_price_fallback") is True:
                 return True
         return False
+
+    def _build_portfolio_lineage_summary(self, *, snapshot: Dict[str, Any]) -> Dict[str, Any]:
+        price_lineage = self._build_price_lineage(snapshot=snapshot)
+        fx_lineage = self._build_fx_lineage(snapshot=snapshot)
+        valuation_snapshot_lineage = self._build_valuation_snapshot_lineage(
+            snapshot=snapshot,
+            price_lineage=price_lineage,
+            fx_lineage=fx_lineage,
+        )
+        analytics_readiness = self._build_analytics_readiness(
+            snapshot=snapshot,
+            valuation_snapshot_lineage=valuation_snapshot_lineage,
+        )
+        return {
+            "price_lineage": price_lineage,
+            "fx_lineage": fx_lineage,
+            "valuation_snapshot_lineage": valuation_snapshot_lineage,
+            "analytics_readiness": analytics_readiness,
+        }
+
+    def _build_price_lineage(self, *, snapshot: Dict[str, Any]) -> Dict[str, Any]:
+        positions = self._snapshot_positions(snapshot)
+        counts = {
+            "total": len(positions),
+            "available": 0,
+            "missing": 0,
+            "stale": 0,
+            "delayed": 0,
+            "fallback": 0,
+        }
+        affected_symbols: Dict[str, Set[str]] = {
+            "available": set(),
+            "missing": set(),
+            "stale": set(),
+            "delayed": set(),
+            "fallback": set(),
+        }
+        last_updated_at: Optional[str] = None
+        snapshot_as_of = str(snapshot.get("as_of") or "").strip()
+
+        for position in positions:
+            symbol = str(position.get("symbol") or "").strip().upper()
+            price_source = str(position.get("price_source") or "").strip()
+            price_as_of = str(position.get("price_as_of") or "").strip() or None
+            is_fallback = bool(position.get("is_price_fallback")) or price_source == PORTFOLIO_PRICE_SOURCE_AVG_COST_FALLBACK
+            if price_as_of and (last_updated_at is None or price_as_of > last_updated_at):
+                last_updated_at = price_as_of
+
+            if is_fallback:
+                counts["missing"] += 1
+                counts["fallback"] += 1
+                if symbol:
+                    affected_symbols["missing"].add(symbol)
+                    affected_symbols["fallback"].add(symbol)
+                continue
+            if price_source == PORTFOLIO_PRICE_SOURCE_BROKER_SYNC_SNAPSHOT:
+                counts["available"] += 1
+                counts["delayed"] += 1
+                if symbol:
+                    affected_symbols["available"].add(symbol)
+                    affected_symbols["delayed"].add(symbol)
+                continue
+            if price_as_of and snapshot_as_of and price_as_of < snapshot_as_of:
+                counts["available"] += 1
+                counts["stale"] += 1
+                if symbol:
+                    affected_symbols["available"].add(symbol)
+                    affected_symbols["stale"].add(symbol)
+                continue
+            counts["available"] += 1
+            if symbol:
+                affected_symbols["available"].add(symbol)
+
+        status = self._lineage_status(
+            total=counts["total"],
+            missing=counts["missing"],
+            stale=counts["stale"],
+            delayed=counts["delayed"],
+            fallback=counts["fallback"],
+        )
+        return {
+            "status": status,
+            "score_authority": "authoritative" if status == "available" else "observation_only",
+            "counts": counts,
+            "affected_symbols": self._sorted_set_map(affected_symbols),
+            "last_updated_at": last_updated_at,
+        }
+
+    def _build_fx_lineage(self, *, snapshot: Dict[str, Any]) -> Dict[str, Any]:
+        positions = self._snapshot_positions(snapshot)
+        rows = [dict(item) for item in list(snapshot.get("fx_rates") or []) if isinstance(item, dict)]
+        counts = {
+            "total": len(rows),
+            "available": 0,
+            "missing": 0,
+            "stale": 0,
+            "fallback": 0,
+            "identity": 0,
+        }
+        affected_currencies: Dict[str, Set[str]] = {
+            "available": set(),
+            "missing": set(),
+            "stale": set(),
+            "fallback": set(),
+            "identity": set(),
+        }
+        affected_pairs: Dict[str, Set[str]] = {
+            "available": set(),
+            "missing": set(),
+            "stale": set(),
+            "fallback": set(),
+            "identity": set(),
+        }
+        last_updated_at: Optional[str] = None
+
+        for account in list(snapshot.get("accounts") or []):
+            if not isinstance(account, dict):
+                continue
+            base_currency = self._normalize_currency(account.get("base_currency") or snapshot.get("currency") or "CNY")
+            for position in list(account.get("positions") or []):
+                if not isinstance(position, dict):
+                    continue
+                currency = self._normalize_currency(position.get("currency") or base_currency)
+                if currency == base_currency:
+                    counts["identity"] += 1
+                    affected_currencies["identity"].add(currency)
+                    affected_pairs["identity"].add(f"{currency}/{base_currency}")
+
+        for row in rows:
+            from_currency = self._normalize_currency(row.get("from_currency") or "")
+            to_currency = self._normalize_currency(row.get("to_currency") or "")
+            pair = f"{from_currency}/{to_currency}"
+            updated_at = str(row.get("updated_at") or row.get("rate_date") or "").strip() or None
+            if updated_at and (last_updated_at is None or updated_at > last_updated_at):
+                last_updated_at = updated_at
+            source = str(row.get("source") or "").strip().lower()
+            source_direction = str(row.get("source_direction") or "").strip().lower()
+            rate = row.get("rate")
+            if rate in (None, "") or source == "missing" or source_direction == "missing":
+                counts["missing"] += 1
+                counts["fallback"] += 1
+                affected_currencies["missing"].add(from_currency)
+                affected_currencies["fallback"].add(from_currency)
+                affected_pairs["missing"].add(pair)
+                affected_pairs["fallback"].add(pair)
+                continue
+            if bool(row.get("is_stale")):
+                counts["stale"] += 1
+                affected_currencies["stale"].add(from_currency)
+                affected_pairs["stale"].add(pair)
+                continue
+            counts["available"] += 1
+            affected_currencies["available"].add(from_currency)
+            affected_pairs["available"].add(pair)
+
+        if rows:
+            status = self._lineage_status(
+                total=len(rows),
+                missing=counts["missing"],
+                stale=counts["stale"],
+                delayed=0,
+                fallback=counts["fallback"],
+            )
+        elif positions:
+            status = "available" if counts["identity"] > 0 else "missing"
+        else:
+            status = "missing"
+        return {
+            "status": status,
+            "score_authority": "authoritative" if status == "available" else "observation_only",
+            "counts": counts,
+            "affected_currencies": self._sorted_set_map(affected_currencies),
+            "affected_pairs": self._sorted_set_map(affected_pairs),
+            "last_updated_at": last_updated_at,
+        }
+
+    def _build_valuation_snapshot_lineage(
+        self,
+        *,
+        snapshot: Dict[str, Any],
+        price_lineage: Dict[str, Any],
+        fx_lineage: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        availability = snapshot.get("availability") if isinstance(snapshot.get("availability"), dict) else {}
+        metrics_ready = bool(availability.get("metrics_ready"))
+        data_status = str(snapshot.get("data_status") or "").strip().lower()
+        calculation_status = str(snapshot.get("calculation_status") or "").strip().lower()
+        position_count = int(dict(price_lineage.get("counts") or {}).get("total", 0) or 0)
+        price_status = str(price_lineage.get("status") or "").strip().lower()
+        fx_status = str(fx_lineage.get("status") or "").strip().lower()
+
+        blocked = (
+            not metrics_ready
+            or position_count == 0
+            or calculation_status == PORTFOLIO_CALCULATION_STATUS_UNAVAILABLE
+            or data_status in {PORTFOLIO_DATA_STATUS_NO_ACCOUNT, PORTFOLIO_DATA_STATUS_NO_POSITIONS}
+        )
+        if blocked:
+            status = "blocked"
+        elif price_status == "available" and fx_status == "available" and data_status == PORTFOLIO_DATA_STATUS_READY:
+            status = "complete"
+        else:
+            status = "partial"
+
+        price_symbols = dict(price_lineage.get("affected_symbols") or {})
+        fx_pairs = dict(fx_lineage.get("affected_pairs") or {})
+        fx_currencies = dict(fx_lineage.get("affected_currencies") or {})
+        blocked_by = {
+            "price_symbols": sorted(
+                set(price_symbols.get("missing") or [])
+                | set(price_symbols.get("stale") or [])
+                | set(price_symbols.get("delayed") or [])
+                | set(price_symbols.get("fallback") or [])
+            ),
+            "fx_pairs": sorted(
+                set(fx_pairs.get("missing") or []) | set(fx_pairs.get("stale") or []) | set(fx_pairs.get("fallback") or [])
+            ),
+            "fx_currencies": sorted(
+                set(fx_currencies.get("missing") or [])
+                | set(fx_currencies.get("stale") or [])
+                | set(fx_currencies.get("fallback") or [])
+            ),
+        }
+        last_candidates = [
+            str(value)
+            for value in (price_lineage.get("last_updated_at"), fx_lineage.get("last_updated_at"), snapshot.get("as_of"))
+            if value
+        ]
+        return {
+            "status": status,
+            "score_authority": "authoritative" if status == "complete" else "observation_only",
+            "snapshot_state": "cached_or_stale" if data_status == PORTFOLIO_DATA_STATUS_STALE_OR_CACHED else data_status,
+            "metrics_ready": metrics_ready,
+            "position_count": position_count,
+            "complete_position_count": position_count if status == "complete" else 0,
+            "partial_position_count": position_count if status == "partial" else 0,
+            "blocked_position_count": position_count if status == "blocked" else 0,
+            "blocked_by": blocked_by,
+            "last_updated_at": max(last_candidates) if last_candidates else None,
+        }
+
+    @staticmethod
+    def _build_analytics_readiness(
+        *,
+        snapshot: Dict[str, Any],
+        valuation_snapshot_lineage: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        valuation_status = str(valuation_snapshot_lineage.get("status") or "blocked")
+        analytics = snapshot.get("analytics") if isinstance(snapshot.get("analytics"), dict) else {}
+        risk = analytics.get("risk") if isinstance(analytics.get("risk"), dict) else {}
+        if valuation_status == "blocked":
+            risk_status = "blocked"
+        elif bool(risk.get("fx_unavailable")) or valuation_status == "partial":
+            risk_status = "partial"
+        else:
+            risk_status = "available"
+        score_authority = "authoritative" if valuation_status == "complete" and risk_status == "available" else "observation_only"
+        return {
+            "valuation": valuation_status,
+            "risk": risk_status,
+            "score_authority": score_authority,
+            "observation_only": score_authority != "authoritative",
+            "read_model_boundary": "no_advice",
+            "affected_symbols": dict(valuation_snapshot_lineage.get("blocked_by") or {}).get("price_symbols", []),
+            "affected_currencies": dict(valuation_snapshot_lineage.get("blocked_by") or {}).get("fx_currencies", []),
+            "warning_codes": list(risk.get("warnings") or []) if isinstance(risk.get("warnings"), list) else [],
+        }
+
+    @staticmethod
+    def _lineage_status(*, total: int, missing: int, stale: int, delayed: int, fallback: int) -> str:
+        if total <= 0:
+            return "missing"
+        if missing > 0 and missing >= total:
+            return "missing"
+        if missing > 0 or fallback > 0:
+            return "partial"
+        if stale > 0 or delayed > 0:
+            return "stale"
+        return "available"
+
+    @staticmethod
+    def _sorted_set_map(value: Dict[str, Set[str]]) -> Dict[str, List[str]]:
+        return {key: sorted(items) for key, items in value.items()}
+
+    @staticmethod
+    def _snapshot_positions(snapshot: Dict[str, Any]) -> List[Dict[str, Any]]:
+        positions: List[Dict[str, Any]] = []
+        for account in list(snapshot.get("accounts") or []):
+            if not isinstance(account, dict):
+                continue
+            for position in list(account.get("positions") or []):
+                if isinstance(position, dict):
+                    positions.append(position)
+        return positions
 
     def _build_fx_rate_snapshot(
         self,
