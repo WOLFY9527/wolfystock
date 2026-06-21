@@ -179,8 +179,8 @@ export function PortfolioExposureResearchContextPanel({
   const staleInputs = context.staleInputs.slice(0, 4);
   const researchNextSteps = context.researchNextSteps.slice(0, 3);
   const boundaryMessage = language === 'zh'
-    ? '仅供观察'
-    : 'Observation only';
+    ? '仅供观察，不改动账务或组合数据'
+    : 'Observation only; no accounting or portfolio data is changed';
 
   const summaryText = language === 'zh'
     ? `${dominantLabel} · ${concentrationState}`
