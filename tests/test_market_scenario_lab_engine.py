@@ -153,6 +153,40 @@ def _base_decision() -> dict[str, Any]:
     }
 
 
+def _authoritative_base_decision() -> dict[str, Any]:
+    base = copy.deepcopy(_base_decision())
+    base.update(
+        {
+            "dataSourceClass": "cached",
+            "sourceAuthorityAllowed": True,
+            "generatedAt": "2026-06-15T09:30:00Z",
+            "baselineSnapshot": {
+                "state": "available",
+                "asOf": "2026-06-15T09:30:00Z",
+                "available": True,
+            },
+            "marketFrame": {
+                "state": "available",
+                "asOf": "2026-06-15T09:30:00Z",
+                "available": True,
+            },
+            "dataQuality": {
+                "availableDriverCount": 8,
+                "scoringDriverCount": 8,
+                "missingDriverCount": 0,
+                "sourceAuthorityAllowed": True,
+                "scoreAuthorityAllowed": True,
+                "confidenceCapReasons": [],
+            },
+            "missingEvidence": [],
+        }
+    )
+    for driver in base["driverScores"].values():
+        driver["evidenceState"] = "score_grade"
+        driver["score"] = driver["score"] or 15
+    return base
+
+
 def _serialized_values(payload: object) -> str:
     values: list[str] = []
 
@@ -320,6 +354,7 @@ def test_volatility_spike_scenario_reclassifies_base_decision_without_mutating_i
         "selectedScenario",
         "scenarioPresets",
         "baseMarketContext",
+        "baselineReadiness",
         "baseRegime",
         "scenarioRegime",
         "scenarioOutput",
@@ -357,6 +392,15 @@ def test_volatility_spike_scenario_reclassifies_base_decision_without_mutating_i
         "evidenceState": "degraded",
         "scoringDriverCount": 6,
     }
+    assert payload["baselineReadiness"]["status"] == "blocked"
+    assert payload["baselineReadiness"]["baselineSnapshot"]["state"] == "missing"
+    assert payload["baselineReadiness"]["marketFrame"]["state"] == "available"
+    assert payload["baselineReadiness"]["driverInputs"]["state"] == "partial"
+    assert payload["baselineReadiness"]["evidenceCompleteness"]["state"] == "blocked"
+    assert payload["baselineReadiness"]["scoreAuthority"] == "observation_only"
+    assert payload["baselineReadiness"]["observationOnly"] is True
+    assert "baselineSnapshot" in payload["baselineReadiness"]["evidenceGaps"]
+    assert "dealerGamma" in payload["baselineReadiness"]["affectedDriverKeys"]
     assert payload["baseRegime"] == {"regime": "riskOn", "confidence": "medium", "confidenceScore": 0.68}
     assert payload["scenarioRegime"]["regime"] in {"mixed", "riskOff", "downsideAccelerationRisk"}
     assert payload["scenarioRegime"]["confidence"] in {"low", "medium"}
@@ -453,6 +497,13 @@ def test_missing_base_evidence_returns_degraded_unavailable_payload() -> None:
         "observationOnly": True,
         "decisionGrade": False,
     }
+    assert payload["baselineReadiness"]["status"] == "blocked"
+    assert payload["baselineReadiness"]["baselineSnapshot"]["state"] == "missing"
+    assert payload["baselineReadiness"]["marketFrame"]["state"] == "missing"
+    assert payload["baselineReadiness"]["driverInputs"]["state"] == "missing"
+    assert payload["baselineReadiness"]["evidenceCompleteness"]["state"] == "blocked"
+    assert payload["baselineReadiness"]["dataState"] == "unavailable"
+    assert payload["baselineReadiness"]["scoreAuthority"] == "observation_only"
     assert payload["observationOnly"] is True
     assert payload["decisionGrade"] is False
     assert payload["selectedScenario"]["name"] == "riskOnConfirmation"
@@ -488,6 +539,11 @@ def test_fixture_path_runs_volatility_spike_without_weakening_real_gating() -> N
     )
 
     _assert_fixture_payload(payload, "volatilitySpike")
+    assert payload["baselineReadiness"]["status"] == "blocked"
+    assert payload["baselineReadiness"]["dataState"] == "demo_static_sample"
+    assert payload["baselineReadiness"]["sampleState"] == "fixture"
+    assert payload["baselineReadiness"]["scoreAuthority"] == "observation_only"
+    assert payload["baselineReadiness"]["observationOnly"] is True
     assert payload["baseRegime"]["regime"] == "riskOn"
     assert payload["confidenceDelta"] < 0
     assert payload["driverDeltas"]["volatilityStructure"] < 0
@@ -501,9 +557,29 @@ def test_fixture_path_runs_risk_on_confirmation_without_weakening_real_gating() 
     )
 
     _assert_fixture_payload(payload, "riskOnConfirmation")
+    assert payload["baselineReadiness"]["dataState"] == "demo_static_sample"
+    assert payload["baselineReadiness"]["sampleState"] == "sample"
     assert payload["driverDeltas"]["breadthParticipation"] > 0
     assert payload["driverDeltas"]["liquidityCredit"] > 0
     assert "breadthParticipation" in payload["changedDrivers"]
+
+
+def test_static_fallback_baseline_is_observation_only() -> None:
+    base = _authoritative_base_decision()
+    base["dataSourceClass"] = "static_fallback"
+
+    payload = build_market_scenario_lab(
+        base_decision=base,
+        scenario={"name": "riskOnConfirmation"},
+    )
+
+    readiness = payload["baselineReadiness"]
+    assert readiness["status"] == "partial"
+    assert readiness["dataState"] == "demo_static_sample"
+    assert readiness["sampleState"] == "fallback"
+    assert readiness["baselineSnapshot"]["state"] == "partial"
+    assert readiness["scoreAuthority"] == "observation_only"
+    assert readiness["observationOnly"] is True
 
 
 def test_normalized_driver_scores_can_be_used_without_base_decision_payload() -> None:
@@ -527,6 +603,100 @@ def test_normalized_driver_scores_can_be_used_without_base_decision_payload() ->
         "liquidityCredit",
         "crossAssetRisk",
     ]
+    assert payload["baselineReadiness"]["status"] == "blocked"
+    assert payload["baselineReadiness"]["baselineSnapshot"]["state"] == "missing"
+    assert payload["baselineReadiness"]["dataState"] == "request_supplied"
+
+
+def test_complete_cached_baseline_snapshot_can_be_ready_and_authoritative() -> None:
+    payload = build_market_scenario_lab(
+        base_decision=_authoritative_base_decision(),
+        scenario={"name": "riskOnConfirmation"},
+    )
+
+    readiness = payload["baselineReadiness"]
+    assert readiness["status"] == "ready"
+    assert readiness["baselineSnapshot"] == {
+        "state": "available",
+        "available": True,
+        "lastUpdated": "2026-06-15T09:30:00Z",
+        "affectedComponents": [],
+    }
+    assert readiness["marketFrame"] == {
+        "state": "available",
+        "available": True,
+        "lastUpdated": "2026-06-15T09:30:00Z",
+        "affectedComponents": [],
+    }
+    assert readiness["driverInputs"]["state"] == "available"
+    assert readiness["driverInputs"]["affectedDriverKeys"] == []
+    assert readiness["evidenceCompleteness"] == {"state": "ready", "gaps": []}
+    assert readiness["dataState"] == "real_cached"
+    assert readiness["scoreAuthority"] == "authoritative"
+    assert readiness["authoritative"] is True
+    assert readiness["observationOnly"] is False
+    assert readiness["lastUpdated"] == "2026-06-15T09:30:00Z"
+
+
+def test_complete_cached_baseline_without_authority_remains_observation_only() -> None:
+    base = _authoritative_base_decision()
+    base["sourceAuthorityAllowed"] = False
+    base["dataQuality"]["sourceAuthorityAllowed"] = False
+    base["dataQuality"]["scoreAuthorityAllowed"] = False
+
+    payload = build_market_scenario_lab(
+        base_decision=base,
+        scenario={"name": "riskOnConfirmation"},
+    )
+
+    readiness = payload["baselineReadiness"]
+    assert readiness["status"] == "partial"
+    assert readiness["baselineSnapshot"]["state"] == "partial"
+    assert readiness["dataState"] == "request_supplied"
+    assert readiness["scoreAuthority"] == "observation_only"
+    assert readiness["authoritative"] is False
+    assert "scoreAuthority" in readiness["evidenceGaps"]
+
+
+def test_stale_baseline_snapshot_limits_readiness_without_changing_output() -> None:
+    base = _authoritative_base_decision()
+    base["baselineSnapshot"]["state"] = "stale"
+    base["baselineSnapshot"]["isStale"] = True
+    base["marketFrame"]["freshness"] = "stale"
+
+    payload = build_market_scenario_lab(
+        base_decision=base,
+        scenario={"name": "volatilitySpike"},
+    )
+
+    readiness = payload["baselineReadiness"]
+    assert payload["driverDeltas"]["volatilityStructure"] < 0
+    assert readiness["status"] == "partial"
+    assert readiness["baselineSnapshot"]["state"] == "stale"
+    assert readiness["marketFrame"]["state"] == "stale"
+    assert readiness["evidenceCompleteness"]["state"] == "partial"
+    assert readiness["scoreAuthority"] == "observation_only"
+    assert readiness["affectedBaselineComponents"] == ["baselineSnapshot", "marketFrame"]
+
+
+def test_missing_driver_inputs_report_affected_keys() -> None:
+    base = _authoritative_base_decision()
+    base["driverScores"]["eventCatalyst"] = {"score": 0, "evidenceState": "unavailable"}
+    base["dataQuality"]["confidenceCapReasons"] = ["event_evidence_missing"]
+    base["missingEvidence"] = ["eventCatalyst:unavailable"]
+
+    payload = build_market_scenario_lab(
+        base_decision=base,
+        scenario={"name": "riskOnConfirmation"},
+    )
+
+    readiness = payload["baselineReadiness"]
+    assert readiness["status"] == "partial"
+    assert readiness["driverInputs"]["state"] == "partial"
+    assert "eventCatalyst" in readiness["driverInputs"]["missingDriverKeys"]
+    assert "eventCatalyst" in readiness["affectedDriverKeys"]
+    assert "evidenceLimits" in readiness["evidenceGaps"]
+    assert readiness["evidenceCompleteness"]["state"] == "partial"
 
 
 def test_all_public_named_scenarios_return_research_planning_payloads() -> None:

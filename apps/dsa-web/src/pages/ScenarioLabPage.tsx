@@ -355,6 +355,7 @@ export default function ScenarioLabPage() {
         ...(scenarioResult?.evidenceLimits ?? []),
       ], locale)[0] ?? (locale === 'en' ? 'Continue evidence review' : '继续补充确认线索')
     );
+  const readinessLabels = scenarioResult?.readinessLabels ?? [];
   const scenarioUnavailableActions = (
     <div className="flex flex-col gap-2 sm:flex-row">
       <Link
@@ -491,6 +492,11 @@ export default function ScenarioLabPage() {
                           <TerminalChip variant={scenarioUnavailable ? 'caution' : 'info'}>
                             {firstReadBoundaryText || (locale === 'en' ? 'Baseline pending' : '基准待确认')}
                           </TerminalChip>
+                          {readinessLabels.slice(0, 3).map((label) => (
+                            <TerminalChip key={label} variant={label === '基准可用' || label === '当前框架可用' ? 'success' : 'caution'}>
+                              {label}
+                            </TerminalChip>
+                          ))}
                           <TerminalChip variant="info">
                             {formatDelta(scenarioResult.confidenceDelta)}
                           </TerminalChip>
@@ -672,6 +678,11 @@ export default function ScenarioLabPage() {
                     <div className="flex flex-wrap gap-2">
                       <TerminalChip variant="info">{locale === 'en' ? 'Observation only' : '仅观察'}</TerminalChip>
                       <TerminalChip variant="info">{locale === 'en' ? 'No external action' : '不触发外部动作'}</TerminalChip>
+                      {readinessLabels.slice(0, 5).map((label) => (
+                        <TerminalChip key={label} variant={label === '基准可用' || label === '当前框架可用' ? 'success' : 'caution'}>
+                          {label}
+                        </TerminalChip>
+                      ))}
                       <TerminalChip variant={statusTone(scenarioResult.scenarioRegime.status || scenarioResult.scenarioRegime.confidence)}>
                         {scenarioResult.scenarioRegime.status
                           ? mapConsumerStatusText(scenarioResult.scenarioRegime.status, locale)

@@ -33,6 +33,22 @@ DRIVER_KEYS: tuple[str, ...] = (
 _SCORING_DRIVER_KEYS = tuple(key for key in DRIVER_KEYS if key != "dealerGamma")
 _MIN_BASE_SCORING_DRIVERS = 3
 _FIXTURE_SOURCE_CLASSES = {"fixture", "demo", "sample"}
+_STATIC_SOURCE_CLASSES = {"static", "fallback", "static_fallback", "public_web_fallback"}
+_REAL_SOURCE_CLASSES = {
+    "cached",
+    "provider_backed",
+    "provider-backed",
+    "real_cached",
+    "real",
+    "live",
+    "official",
+    "authorized",
+    "authorized_cached",
+}
+_STALE_STATES = {"stale", "expired", "stale_or_cached"}
+_MISSING_STATES = {"missing", "unavailable", "blocked", "no_data", "none"}
+_PARTIAL_STATES = {"partial", "degraded", "limited", "incomplete"}
+_AVAILABLE_STATES = {"available", "ready", "fresh", "live", "cached", "delayed"}
 
 _SHOCK_TO_DRIVER: dict[str, str] = {
     "volatilityShock": "volatilityStructure",
@@ -296,7 +312,7 @@ class MarketScenarioLabEngine:
             base_decision = _fixture_base_decision()
         base = _base_from_inputs(base_decision=base_decision, driver_scores=driver_scores)
         if base["scoringDriverCount"] < _MIN_BASE_SCORING_DRIVERS:
-            return _unavailable_payload(base, scenario_input)
+            return _unavailable_payload(base, scenario_input, fixture_source_class=fixture_source_class)
 
         deltas = _scenario_deltas(scenario_input)
         scenario_scores = {
@@ -354,6 +370,11 @@ class MarketScenarioLabEngine:
             scenario_input.get("gammaEvidenceStatus"),
             "proxy_or_sample_evidence_present" if fixture_source_class else None,
         )
+        baseline_readiness = _baseline_readiness(
+            base=base,
+            evidence_limits=evidence_limits,
+            fixture_source_class=fixture_source_class,
+        )
         payload = {
             "schemaVersion": SCHEMA_VERSION,
             "contractStatus": _contract_status(base=base, evidence_limits=evidence_limits),
@@ -362,6 +383,7 @@ class MarketScenarioLabEngine:
             "selectedScenario": _selected_scenario(scenario_input),
             "scenarioPresets": _scenario_presets(),
             "baseMarketContext": _base_market_context(base),
+            "baselineReadiness": baseline_readiness,
             "baseRegime": {
                 "regime": base["regime"],
                 "confidence": base["confidence"],
@@ -441,6 +463,30 @@ def _base_from_inputs(
         "dataQuality": decision.get("dataQuality") if isinstance(decision.get("dataQuality"), Mapping) else {},
         "scoringDriverCount": scoring_driver_count,
         "contextSource": _base_context_source(decision=decision, driver_scores=driver_scores),
+        "baselineSnapshot": _mapping_or_empty(
+            decision.get("baselineSnapshot") or decision.get("baselineMarketSnapshot") or decision.get("snapshot")
+        ),
+        "marketFrame": _mapping_or_empty(decision.get("marketFrame") or decision.get("currentMarketFrame")),
+        "lastUpdated": _first_text(
+            decision.get("lastUpdated"),
+            decision.get("updatedAt"),
+            decision.get("generatedAt"),
+            decision.get("asOf"),
+            decision.get("timestamp"),
+        ),
+        "sourceClass": _first_text(
+            decision.get("dataSourceClass"),
+            decision.get("sourceClass"),
+            decision.get("sourceType"),
+            decision.get("dataState"),
+        ),
+        "sourceAuthorityAllowed": _truthy(
+            decision.get("sourceAuthorityAllowed"),
+            decision.get("scoreAuthorityAllowed"),
+            _mapping_or_empty(decision.get("dataQuality")).get("sourceAuthorityAllowed"),
+            _mapping_or_empty(decision.get("dataQuality")).get("scoreAuthorityAllowed"),
+            _mapping_or_empty(decision.get("dataQuality")).get("scoreContributionAllowed"),
+        ),
     }
 
 
@@ -775,7 +821,12 @@ def _contract_status_payload(*, state: str, label: str, message: str) -> dict[st
     }
 
 
-def _unavailable_payload(base: Mapping[str, Any], scenario: Mapping[str, Any]) -> dict[str, Any]:
+def _unavailable_payload(
+    base: Mapping[str, Any],
+    scenario: Mapping[str, Any],
+    *,
+    fixture_source_class: str | None = None,
+) -> dict[str, Any]:
     scenario_regime = {
         "regime": "lowConfidence",
         "confidence": "low",
@@ -792,6 +843,11 @@ def _unavailable_payload(base: Mapping[str, Any], scenario: Mapping[str, Any]) -
         "selectedScenario": _selected_scenario(scenario),
         "scenarioPresets": _scenario_presets(),
         "baseMarketContext": _base_market_context(base),
+        "baselineReadiness": _baseline_readiness(
+            base=base,
+            evidence_limits=evidence_limits,
+            fixture_source_class=fixture_source_class,
+        ),
         "baseRegime": {
             "regime": base["regime"],
             "confidence": base["confidence"],
@@ -824,6 +880,279 @@ def _unavailable_payload(base: Mapping[str, Any], scenario: Mapping[str, Any]) -
         "consumerIssues": build_consumer_issues(base.get("missingEvidence"), base.get("dataQuality")),
         "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
     }
+
+
+def _baseline_readiness(
+    *,
+    base: Mapping[str, Any],
+    evidence_limits: Sequence[str],
+    fixture_source_class: str | None,
+) -> dict[str, Any]:
+    source_class = fixture_source_class or _normalized_token(base.get("sourceClass"))
+    sample_state = _sample_state(source_class)
+    data_state = _data_state(base=base, sample_state=sample_state)
+    source_authority_allowed = bool(base.get("sourceAuthorityAllowed"))
+    baseline_snapshot = _baseline_snapshot_component(
+        base=base,
+        source_authority_allowed=source_authority_allowed,
+        data_state=data_state,
+    )
+    market_frame = _market_frame_component(base=base)
+    driver_inputs = _driver_inputs_component(base)
+    evidence = _evidence_completeness_component(
+        baseline_snapshot=baseline_snapshot,
+        market_frame=market_frame,
+        driver_inputs=driver_inputs,
+        evidence_limits=evidence_limits,
+        data_state=data_state,
+        source_authority_allowed=source_authority_allowed,
+    )
+    ready = evidence["state"] == "ready"
+    blocked = evidence["state"] == "blocked"
+    partial = not ready and not blocked
+    last_updated = _first_text(
+        baseline_snapshot.get("lastUpdated"),
+        market_frame.get("lastUpdated"),
+        base.get("lastUpdated"),
+    )
+    score_authority = "authoritative" if ready and source_authority_allowed else "observation_only"
+    affected_baseline_components = _dedupe(
+        [
+            *baseline_snapshot["affectedComponents"],
+            *market_frame["affectedComponents"],
+        ]
+    )
+    evidence_gaps = _dedupe([*evidence["gaps"], *affected_baseline_components])
+    return {
+        "status": "ready" if ready else "blocked" if blocked else "partial",
+        "baselineSnapshot": baseline_snapshot,
+        "marketFrame": market_frame,
+        "driverInputs": driver_inputs,
+        "evidenceCompleteness": evidence,
+        "dataState": data_state,
+        "sampleState": sample_state,
+        "scoreAuthority": score_authority,
+        "sourceAuthorityAllowed": source_authority_allowed,
+        "authoritative": score_authority == "authoritative",
+        "observationOnly": score_authority != "authoritative",
+        "ready": ready,
+        "partial": partial,
+        "blocked": blocked,
+        "affectedBaselineComponents": affected_baseline_components,
+        "affectedDriverKeys": driver_inputs["affectedDriverKeys"],
+        "evidenceGaps": evidence_gaps,
+        "lastUpdated": last_updated,
+    }
+
+
+def _baseline_snapshot_component(
+    *,
+    base: Mapping[str, Any],
+    source_authority_allowed: bool,
+    data_state: str,
+) -> dict[str, Any]:
+    snapshot = base.get("baselineSnapshot") if isinstance(base.get("baselineSnapshot"), Mapping) else {}
+    state = _component_state(snapshot, default="missing")
+    if data_state == "unavailable":
+        state = "missing"
+    elif state == "available" and (not source_authority_allowed or data_state != "real_cached"):
+        state = "partial"
+    affected = _component_gaps(
+        snapshot,
+        fallback=["baselineSnapshot"] if state != "available" else [],
+    )
+    return {
+        "state": state,
+        "available": state == "available",
+        "lastUpdated": _component_last_updated(snapshot) or base.get("lastUpdated"),
+        "affectedComponents": affected,
+    }
+
+
+def _market_frame_component(*, base: Mapping[str, Any]) -> dict[str, Any]:
+    frame = base.get("marketFrame") if isinstance(base.get("marketFrame"), Mapping) else {}
+    if frame:
+        state = _component_state(frame, default="available")
+    elif base.get("regime") and int(base.get("scoringDriverCount") or 0) >= _MIN_BASE_SCORING_DRIVERS:
+        state = "available"
+    else:
+        state = "missing"
+    if _has_stale_marker(frame, base.get("dataQuality")):
+        state = "stale"
+    return {
+        "state": state,
+        "available": state == "available",
+        "lastUpdated": _component_last_updated(frame) or base.get("lastUpdated"),
+        "affectedComponents": _component_gaps(
+            frame,
+            fallback=["marketFrame"] if state != "available" else [],
+        ),
+    }
+
+
+def _driver_inputs_component(base: Mapping[str, Any]) -> dict[str, Any]:
+    evidence_states = base.get("evidenceStates") if isinstance(base.get("evidenceStates"), Mapping) else {}
+    available_driver_keys: list[str] = []
+    partial_driver_keys: list[str] = []
+    missing_driver_keys: list[str] = []
+    for key in DRIVER_KEYS:
+        state = _normalized_token(evidence_states.get(key))
+        score = _number(_mapping_or_empty(base.get("scores")).get(key))
+        if state in {"score_grade", "ready", "available"} or (score is not None and score != 0):
+            available_driver_keys.append(key)
+        elif state in {"limited", "partial", "degraded", "stale"}:
+            partial_driver_keys.append(key)
+        else:
+            missing_driver_keys.append(key)
+    if int(base.get("scoringDriverCount") or 0) < _MIN_BASE_SCORING_DRIVERS:
+        state = "missing"
+    elif missing_driver_keys or partial_driver_keys:
+        state = "partial"
+    else:
+        state = "available"
+    return {
+        "state": state,
+        "availableDriverKeys": available_driver_keys,
+        "partialDriverKeys": partial_driver_keys,
+        "missingDriverKeys": missing_driver_keys,
+        "affectedDriverKeys": _dedupe([*partial_driver_keys, *missing_driver_keys]),
+    }
+
+
+def _evidence_completeness_component(
+    *,
+    baseline_snapshot: Mapping[str, Any],
+    market_frame: Mapping[str, Any],
+    driver_inputs: Mapping[str, Any],
+    evidence_limits: Sequence[str],
+    data_state: str,
+    source_authority_allowed: bool,
+) -> dict[str, Any]:
+    gaps: list[str] = []
+    if baseline_snapshot.get("state") != "available":
+        gaps.append("baselineSnapshot")
+    if market_frame.get("state") != "available":
+        gaps.append("marketFrame")
+    gaps.extend(str(key) for key in driver_inputs.get("affectedDriverKeys") or [])
+    if data_state in {"demo_static_sample", "request_supplied"}:
+        gaps.append("scenarioDataBoundary")
+    if not source_authority_allowed:
+        gaps.append("scoreAuthority")
+    if list(evidence_limits) != [_GENERIC_EVIDENCE_LIMIT]:
+        gaps.append("evidenceLimits")
+    gaps = _dedupe(gaps)
+    if baseline_snapshot.get("state") == "missing" or market_frame.get("state") == "missing" or driver_inputs.get("state") == "missing":
+        state = "blocked"
+    elif gaps:
+        state = "partial"
+    else:
+        state = "ready"
+    return {
+        "state": state,
+        "gaps": gaps,
+    }
+
+
+def _data_state(*, base: Mapping[str, Any], sample_state: str) -> str:
+    if int(base.get("scoringDriverCount") or 0) < _MIN_BASE_SCORING_DRIVERS:
+        return "unavailable"
+    if sample_state != "none":
+        return "demo_static_sample"
+    source_class = _normalized_token(base.get("sourceClass"))
+    if source_class in {_normalized_token(item) for item in _REAL_SOURCE_CLASSES} and base.get("sourceAuthorityAllowed"):
+        return "real_cached"
+    return "request_supplied"
+
+
+def _sample_state(source_class: str | None) -> str:
+    normalized = _normalized_token(source_class)
+    if normalized in _FIXTURE_SOURCE_CLASSES:
+        return "fixture" if normalized == "fixture" else normalized
+    if normalized in _STATIC_SOURCE_CLASSES:
+        return "fallback" if "fallback" in normalized else "static"
+    return "none"
+
+
+def _component_state(component: Mapping[str, Any], *, default: str) -> str:
+    raw = _normalized_token(
+        component.get("state")
+        or component.get("status")
+        or component.get("readiness")
+        or component.get("freshness")
+        or component.get("dataStatus")
+    )
+    if _has_stale_marker(component):
+        return "stale"
+    if raw in _MISSING_STATES:
+        return "missing"
+    if raw in _STALE_STATES:
+        return "stale"
+    if raw in _PARTIAL_STATES:
+        return "partial"
+    if raw in _AVAILABLE_STATES:
+        return "available"
+    if component.get("available") is True:
+        return "available"
+    if component.get("available") is False:
+        return "missing"
+    return default
+
+
+def _component_gaps(component: Mapping[str, Any], *, fallback: Sequence[str]) -> list[str]:
+    gaps = [
+        str(item)
+        for item in (
+            component.get("affectedComponents")
+            or component.get("missingComponents")
+            or component.get("gaps")
+            or []
+        )
+        if str(item)
+    ]
+    return _dedupe(gaps or list(fallback))
+
+
+def _component_last_updated(component: Mapping[str, Any]) -> str | None:
+    return _first_text(
+        component.get("lastUpdated"),
+        component.get("updatedAt"),
+        component.get("asOf"),
+        component.get("timestamp"),
+    )
+
+
+def _has_stale_marker(*components: Any) -> bool:
+    for component in components:
+        if not isinstance(component, Mapping):
+            continue
+        if component.get("isStale") is True or component.get("stale") is True:
+            return True
+        freshness = _normalized_token(component.get("freshness") or component.get("status") or component.get("state"))
+        if freshness in _STALE_STATES:
+            return True
+    return False
+
+
+def _mapping_or_empty(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _first_text(*values: Any) -> str | None:
+    for value in values:
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return None
+
+
+def _truthy(*values: Any) -> bool:
+    return any(value is True or str(value).strip().lower() in {"true", "1", "yes"} for value in values)
+
+
+def _normalized_token(value: Any) -> str:
+    return str(value or "").strip().replace("-", "_").lower()
 
 
 def _confirm_invalidate_context(

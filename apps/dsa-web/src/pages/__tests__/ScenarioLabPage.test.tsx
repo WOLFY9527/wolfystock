@@ -102,6 +102,7 @@ describe('ScenarioLabPage', () => {
         confidence: 'low',
         confidenceScore: 0.43,
       },
+      readinessLabels: ['基准部分可用', '当前框架可用', '驱动待补', '证据边界', '仅观察'],
       confidenceDelta: -0.25,
       driverDeltas: {
         dealerGamma: 0,
@@ -139,6 +140,9 @@ describe('ScenarioLabPage', () => {
     expect(firstRead).toHaveTextContent('波动结构 -145');
     expect(firstRead).toHaveTextContent('证据边界');
     expect(firstRead).toHaveTextContent('中 -> 低');
+    expect(firstRead).toHaveTextContent('基准部分可用');
+    expect(firstRead).toHaveTextContent('当前框架可用');
+    expect(firstRead).toHaveTextContent('驱动待补');
     expect(firstRead).toHaveTextContent('待补证据');
     expect(firstRead).toHaveTextContent('需要更高质量证据共同确认受压驱动是否同向变化。');
     expect(screen.getByRole('button', { name: '波动冲击' })).toBeInTheDocument();
@@ -181,6 +185,7 @@ describe('ScenarioLabPage', () => {
         confidenceScore: 0,
         status: 'unavailable',
       },
+      readinessLabels: ['基准待确认', '驱动待补', '证据边界', '情景待更新', '仅观察'],
       confidenceDelta: 0,
       driverDeltas: {},
       changedDrivers: [],
@@ -209,6 +214,8 @@ describe('ScenarioLabPage', () => {
     expect(firstRead).toHaveTextContent('情景待更新');
     expect(firstRead).toHaveTextContent('证据边界');
     expect(firstRead).toHaveTextContent('基准待确认');
+    expect(firstRead).toHaveTextContent('驱动待补');
+    expect(firstRead).toHaveTextContent('证据边界');
     expect(firstRead).toHaveTextContent('待补证据');
     expect(firstRead).toHaveTextContent('市场框架、驱动证据、数据新鲜度');
     expect(Boolean(firstRead.compareDocumentPosition(secondaryState) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
