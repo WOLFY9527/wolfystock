@@ -2238,6 +2238,199 @@ class RuleBacktestService:
         digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
         return f"local_bars_{digest}"
 
+    @staticmethod
+    def _parameter_sweep_lineage_field(
+        *,
+        state: str,
+        value: Any = None,
+        evidence_source: str = "not_provided",
+        accepted_as_professional_evidence: bool = False,
+    ) -> Dict[str, Any]:
+        return {
+            "state": str(state or "unknown"),
+            "value": value,
+            "evidenceSource": str(evidence_source or "not_provided"),
+            "acceptedAsProfessionalEvidence": bool(accepted_as_professional_evidence),
+        }
+
+    @classmethod
+    def _build_parameter_sweep_dataset_lineage_readiness(
+        cls,
+        *,
+        code: str,
+        plan: Mapping[str, Any],
+        runner_result: Mapping[str, Any],
+        bars: Sequence[Any],
+        parameter_rows: Sequence[Mapping[str, Any]],
+        skipped_rows: Sequence[Mapping[str, Any]],
+        blocked_rows: Sequence[Mapping[str, Any]],
+        failed_rows: Sequence[Mapping[str, Any]],
+    ) -> Dict[str, Any]:
+        bar_count = len(list(bars or []))
+        runner_state = str(runner_result.get("state") or "rejected")
+        fail_closed_reason = runner_result.get("failClosedReasonCode")
+        has_local_bars = bar_count > 0
+        provider_calls_executed = False
+        if has_local_bars:
+            bar_source = "local_stock_daily_rows"
+        elif fail_closed_reason == "blocked_missing_local_data":
+            bar_source = "unavailable_local_bars"
+        else:
+            bar_source = "not_loaded_fail_closed"
+
+        readiness_state = (
+            "diagnostic-only"
+            if has_local_bars and runner_state in {"completed", "partial"}
+            else "blocked"
+        )
+        data_quality = {
+            "source": bar_source,
+            "provider": "unknown",
+            "authority_status": "unknown",
+            "authority_source_type": "unknown",
+            "authority_reason_codes": ["source_authority_unknown"],
+            "bar_count": bar_count,
+            "adjustment_mode": "unknown",
+            "return_basis": "unknown",
+            "dividends_handled": "unknown",
+            "splits_handled": "unknown",
+        }
+        professional_readiness = cls._build_single_symbol_professional_readiness_payload(
+            data_quality=data_quality,
+            execution_assumptions={},
+            result_authority={},
+            dataset_version="unknown",
+        )
+        quant_gate_passed = bool(professional_readiness.get("professional_quant_ready"))
+        if quant_gate_passed:
+            readiness_state = "professional" + "-ready"
+
+        reproducibility = dict(plan.get("reproducibility") or {})
+        descriptor = dict(plan.get("parameter_grid_descriptor") or {})
+        request_bundle = dict(plan.get("parameter_grid_request_bundle") or {})
+        dataset_reference = plan.get("dataset_id")
+        all_rows = list(parameter_rows or []) + list(skipped_rows or []) + list(blocked_rows or []) + list(failed_rows or [])
+        parameter_set_ids: List[str] = []
+        seen_parameter_set_ids: set[str] = set()
+        for row in all_rows:
+            parameter_set_id = str(row.get("parameterSetId") or "")
+            if not parameter_set_id or parameter_set_id in seen_parameter_set_ids:
+                continue
+            seen_parameter_set_ids.add(parameter_set_id)
+            parameter_set_ids.append(parameter_set_id)
+        missing_lineage_fields = [
+            "datasetId",
+            "symbolUniverseId",
+            "symbolIdentity",
+            "marketExchange",
+            "adjustedBasis",
+            "corporateActionPolicy",
+            "calendarSessionPolicy",
+            "pointInTimeMembershipStatus",
+            "survivorshipBiasMarker",
+            "sourceAuthority",
+            "asOfTimestamp",
+            "reproducibilityManifest",
+        ]
+        if not has_local_bars:
+            missing_lineage_fields.append("barSource")
+
+        return {
+            "contractKind": "rule_backtest_parameter_sweep_dataset_lineage_readiness",
+            "contractVersion": "v1",
+            "readinessState": readiness_state,
+            "diagnosticOnly": readiness_state == "diagnostic-only",
+            "blocked": readiness_state == "blocked",
+            "professionalReadinessApproved": quant_gate_passed,
+            "decisionGrade": False,
+            "stateReasonCode": str(fail_closed_reason or "lineage_incomplete_for_professional_readiness"),
+            "code": str(code or ""),
+            "barBoundary": {
+                "barSource": bar_source,
+                "localBars": has_local_bars,
+                "suppliedBarsToRunner": has_local_bars,
+                "barCount": bar_count,
+                "acceptedAsProviderAuthority": False,
+                "providerCallsExecuted": provider_calls_executed,
+                "marketCacheAccessed": False,
+                "storageMutation": False,
+            },
+            "lineageFields": {
+                "datasetId": cls._parameter_sweep_lineage_field(
+                    state="missing",
+                    value=None,
+                    evidence_source="no_stored_dataset_snapshot_id",
+                ),
+                "sweepDatasetReference": cls._parameter_sweep_lineage_field(
+                    state="deterministic_plan_reference",
+                    value=dataset_reference,
+                    evidence_source="parameter_stability_plan.dataset_id",
+                ),
+                "symbolUniverseId": cls._parameter_sweep_lineage_field(state="missing"),
+                "symbolIdentity": cls._parameter_sweep_lineage_field(
+                    state="partial",
+                    value={"code": str(code or "")} if str(code or "") else None,
+                    evidence_source="request_code_only",
+                ),
+                "marketExchange": cls._parameter_sweep_lineage_field(state="unknown"),
+                "barSource": cls._parameter_sweep_lineage_field(
+                    state="local" if has_local_bars else "missing",
+                    value=bar_source,
+                    evidence_source="stock_repo.get_range" if has_local_bars else "fail_closed_before_runner",
+                ),
+                "adjustedBasis": cls._parameter_sweep_lineage_field(state="unknown"),
+                "corporateActionPolicy": cls._parameter_sweep_lineage_field(state="unknown"),
+                "calendarSessionPolicy": cls._parameter_sweep_lineage_field(state="unknown"),
+                "pointInTimeMembershipStatus": cls._parameter_sweep_lineage_field(state="unknown"),
+                "survivorshipBiasMarker": cls._parameter_sweep_lineage_field(state="unknown"),
+                "asOfTimestamp": cls._parameter_sweep_lineage_field(state="unknown"),
+            },
+            "sourceAuthority": {
+                "authorityStatus": "unknown",
+                "authoritySourceType": "unknown",
+                "authorityReasonCodes": ["source_authority_unknown"],
+                "authorityAllowed": False,
+                "acceptedAsProviderAuthority": False,
+                "acceptedAsReadinessEvidence": False,
+            },
+            "provenanceStatus": {
+                "state": "partial_without_source_authority" if has_local_bars else "blocked_without_loaded_bars",
+                "providerHydrationExecuted": False,
+                "dataIngestionExecuted": False,
+                "storedReadbackAvailable": False,
+            },
+            "missingLineageFields": missing_lineage_fields,
+            "markers": {
+                "missingBars": {
+                    "state": "present" if fail_closed_reason == "blocked_missing_local_data" else "not_detected",
+                    "marker": fail_closed_reason == "blocked_missing_local_data",
+                    "reasonCode": fail_closed_reason if fail_closed_reason == "blocked_missing_local_data" else None,
+                },
+                "staleBars": {"state": "unknown", "marker": "unknown"},
+                "fallbackBars": {"state": "unknown", "marker": "unknown"},
+                "sampleBars": {"state": "unknown", "marker": "unknown"},
+                "syntheticBars": {"state": "unknown", "marker": "unknown"},
+                "providerHydration": {"state": "not_executed", "marker": False},
+            },
+            "reproducibility": {
+                "state": "shape_hash_available" if reproducibility else "missing",
+                "inputShapeHashSha256": reproducibility.get("grid_spec_hash_sha256"),
+                "gridDescriptorHashSha256": descriptor.get("grid_descriptor_hash_sha256"),
+                "requestBundleId": request_bundle.get("request_bundle_id"),
+                "inputOrdering": reproducibility.get("input_ordering"),
+                "gridRunOrdering": reproducibility.get("grid_run_ordering"),
+                "runIdPolicy": reproducibility.get("run_id_policy"),
+                "storedManifestAvailable": False,
+                "acceptedAsProfessionalDatasetEvidence": False,
+            },
+            "parameterSetBoundary": {
+                "sharedDatasetBoundaryForAllParameterSets": True,
+                "perMemberStoredLineageAvailable": False,
+                "parameterSetIds": parameter_set_ids,
+            },
+            "professionalReadiness": professional_readiness,
+        }
+
     def _parameter_sweep_fail_closed(
         self,
         reason_code: str,
@@ -2322,6 +2515,16 @@ class RuleBacktestService:
             self._parameter_sweep_row_from_runner(row)
             for row in list(runner_result.get("failedRows") or [])
         ]
+        dataset_lineage_readiness = self._build_parameter_sweep_dataset_lineage_readiness(
+            code=code,
+            plan=plan,
+            runner_result=runner_result,
+            bars=bars,
+            parameter_rows=parameter_rows,
+            skipped_rows=skipped_rows,
+            blocked_rows=blocked_rows,
+            failed_rows=failed_rows,
+        )
         return {
             "contractKind": "rule_backtest_parameter_sweep_pilot",
             "contractVersion": "v1",
@@ -2356,6 +2559,7 @@ class RuleBacktestService:
                 "providerCallsExecuted": False,
                 "marketCacheAccessed": False,
             },
+            "datasetLineageReadiness": dataset_lineage_readiness,
             "storage": {"mode": "response_only", "storedReadbackAvailable": False},
             "summary": {
                 "totalParameterSets": int(summary.get("totalParameterSets") or 0),
