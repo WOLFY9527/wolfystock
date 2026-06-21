@@ -54,8 +54,11 @@ describe('marketRotationApi', () => {
     expect(payload.alpacaQuoteAuthorityReadiness?.providerConfigured).toBe(false);
     expect(payload.alpacaQuoteAuthorityReadiness?.sourceAuthority).toBe('unavailable');
     expect(payload.alpacaQuoteAuthorityReadiness?.fallbackUsed).toBe(true);
-    expect(view.label).toBe('Alpaca待配置');
-    expect(view.chips.map((chip) => chip.label)).toEqual(['Alpaca待配置', '回退观察', '仅观察']);
+    expect(view.label).toBe('ETF引用待补');
+    expect(view.chips.map((chip) => chip.label)).toEqual(['ETF引用待补', '备用样本观察', '仅观察']);
+    expect(`${view.label} ${view.detail} ${view.chips.map((chip) => chip.label).join(' ')}`).not.toMatch(
+      /Alpaca部分可用|Alpaca待配置|Alpaca可用|Alpaca未配置|回退观察/,
+    );
     expect(`${view.label} ${view.detail}`).not.toMatch(
       /authorized|unavailable|partial|unknown|fallbackUsed|providerConfigured|sourceAuthority|scoreContributionAllowed|provider|runtime|credential/i,
     );

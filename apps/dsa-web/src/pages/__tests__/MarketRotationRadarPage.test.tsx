@@ -1197,7 +1197,7 @@ describe('MarketRotationRadarPage', () => {
     expect(shell).toHaveClass('py-5', 'md:py-6');
   });
 
-  it('maps Alpaca quote authority readiness into consumer labels and fallback observation copy', async () => {
+  it('maps ETF quote readiness into provider-neutral consumer labels and fallback observation copy', async () => {
     vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce({
       ...radarFixture(),
       alpacaQuoteAuthorityReadiness: {
@@ -1223,10 +1223,11 @@ describe('MarketRotationRadarPage', () => {
     render(<MarketRotationRadarPage />);
 
     const strip = await screen.findByTestId('rotation-alpaca-quote-readiness');
-    await waitFor(() => expect(strip).toHaveTextContent('Alpaca部分可用'));
-    expect(strip).toHaveTextContent('回退观察');
+    await waitFor(() => expect(strip).toHaveTextContent('ETF引用部分可用'));
+    expect(strip).toHaveTextContent('备用样本观察');
     expect(strip).toHaveTextContent('仅观察');
     expect(strip).toHaveTextContent('当前仅作观察，不纳入评分。');
+    expect(strip.textContent || '').not.toMatch(/Alpaca部分可用|Alpaca待配置|Alpaca可用|Alpaca未配置|回退观察/);
     expect(strip.textContent || '').not.toMatch(
       /authorized|unavailable|partial|unknown|fallbackUsed|providerConfigured|sourceAuthority|scoreContributionAllowed|provider|runtime|credential/i,
     );
