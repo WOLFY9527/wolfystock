@@ -540,11 +540,14 @@ describe('scannerApi investor signal normalization', () => {
               primary_evidence: [
                 'Technicals available',
                 'Liquidity available',
+                '报价可用',
+                '行业/ETF线索可用',
                 'provider_timeout raw detail',
                 'buy now',
+                '买入建议',
               ],
-              limiting_evidence: ['Fundamentals pending', 'trace_id=req-raw-1'],
-              data_quality_notes: ['data quality: partial', 'debug_ref=scanner:nvda'],
+              limiting_evidence: ['Fundamentals pending', '待补证据', 'trace_id=req-raw-1'],
+              data_quality_notes: ['data quality: partial', '证据部分可用', '报价可能延迟', 'debug_ref=scanner:nvda'],
               rejected_or_limited_reason_safe_label: 'Ready for research review',
               research_next_step: 'Refresh fundamentals before follow-up review.',
               observation_only: true,
@@ -590,13 +593,13 @@ describe('scannerApi investor signal normalization', () => {
       ['MSFT', 2, 79],
     ]);
     expect(packet?.whySurfaced).toBe('Trend and liquidity evidence moved this symbol into follow-up review.');
-    expect(packet?.primaryEvidence).toEqual(['Technicals available', 'Liquidity available']);
-    expect(packet?.limitingEvidence).toEqual(['Fundamentals pending']);
-    expect(packet?.dataQualityNotes).toEqual(['data quality: partial']);
+    expect(packet?.primaryEvidence).toEqual(['Technicals available', 'Liquidity available', '报价可用', '行业/ETF线索可用']);
+    expect(packet?.limitingEvidence).toEqual(['Fundamentals pending', '待补证据']);
+    expect(packet?.dataQualityNotes).toEqual(['data quality: partial', '证据部分可用', '报价可能延迟']);
     expect(packet?.rejectedOrLimitedReasonSafeLabel).toBe('Ready for research review');
     expect(packet?.researchNextStep).toBe('Refresh fundamentals before follow-up review.');
     expect(packet?.observationOnly).toBe(true);
     expect(payload.shortlist[1].candidateResearchPacket).toBeUndefined();
-    expect(JSON.stringify(packet)).not.toMatch(/provider_timeout|reasonCodes|sourceRefs|providerDiagnostics|debugRef|trace_id|buy now|raw_payload/i);
+    expect(JSON.stringify(packet)).not.toMatch(/provider_timeout|reasonCodes|sourceRefs|providerDiagnostics|debugRef|trace_id|buy now|买入建议|目标价|止损|交易建议|raw_payload/i);
   });
 });

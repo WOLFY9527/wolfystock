@@ -674,9 +674,9 @@ function makeCandidateResearchSummaryFrame(overrides: Record<string, unknown> = 
 function makeCandidateResearchPacket(overrides: Partial<ScannerCandidateResearchPacket> & Record<string, unknown> = {}) {
   return {
     whySurfaced: '趋势与流动性线索使该标的进入本轮复核。',
-    primaryEvidence: ['技术面可用', '流动性可用'],
+    primaryEvidence: ['技术面可用', '流动性可用', '报价可用', '行业/ETF线索可用'],
     limitingEvidence: ['基本面证据待补', '新闻催化待补'],
-    dataQualityNotes: ['data quality: partial', 'freshness: delayed'],
+    dataQualityNotes: ['证据部分可用', '报价可能延迟'],
     rejectedOrLimitedReasonSafeLabel: '已进入本轮观察名单',
     researchNextStep: '补充基本面与新闻催化证据后再复核。',
     observationOnly: true,
@@ -1476,14 +1476,31 @@ describe('UserScannerPage', () => {
 
     const row = await screen.findByTestId('scanner-result-row-NVDA');
     const rowPacket = within(row).getByTestId('scanner-candidate-research-packet-row-NVDA');
+    expect(rowPacket).toHaveTextContent('研究信号');
     expect(rowPacket).toHaveTextContent('研究包');
     expect(rowPacket).toHaveTextContent('趋势与流动性线索使该标的进入本轮复核。');
+    expect(rowPacket).toHaveTextContent('证据可用 4');
+    expect(rowPacket).toHaveTextContent('证据部分可用 1');
+    expect(rowPacket).toHaveTextContent('待补证据 2');
+    expect(rowPacket).toHaveTextContent('报价可能延迟');
+    expect(rowPacket).toHaveTextContent('行业/ETF线索可用');
+    expect(rowPacket).toHaveTextContent('研究包可用');
     expect(rowPacket).toHaveTextContent('技术面可用');
     expect(rowPacket).toHaveTextContent('基本面证据待补');
     expect(rowPacket).toHaveTextContent('仅研究观察');
+    expect(rowPacket).toHaveTextContent('仅观察');
+    expect(rowPacket).toHaveTextContent('评分待确认');
 
     const detailPacket = await screen.findByTestId('scanner-inline-candidate-research-packet-NVDA');
+    expect(detailPacket).toHaveTextContent('研究信号');
     expect(detailPacket).toHaveTextContent('研究包');
+    expect(detailPacket).toHaveTextContent('证据可用 4');
+    expect(detailPacket).toHaveTextContent('证据部分可用 1');
+    expect(detailPacket).toHaveTextContent('待补证据 2');
+    expect(detailPacket).toHaveTextContent('报价可能延迟');
+    expect(detailPacket).toHaveTextContent('行业/ETF线索可用');
+    expect(detailPacket).toHaveTextContent('研究包可用');
+    expect(detailPacket).toHaveTextContent('评分待确认');
     expect(detailPacket).toHaveTextContent('为什么出现');
     expect(detailPacket).toHaveTextContent('主要证据');
     expect(detailPacket).toHaveTextContent('限制因素');

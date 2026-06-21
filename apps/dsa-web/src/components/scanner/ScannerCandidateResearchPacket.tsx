@@ -4,6 +4,10 @@ import { TerminalChip } from '../terminal/TerminalPrimitives';
 import { FieldChip } from './ScannerDisplayAtoms';
 
 type ResearchPacketVariant = 'row' | 'detail';
+type ResearchSignalLabel = {
+  label: string;
+  tone?: 'neutral' | 'warning';
+};
 
 function safePacketText(value: unknown): string | null {
   const text = consumerSafeReportText(value, '').trim();
@@ -33,6 +37,106 @@ function hasVisiblePacket(packet?: ScannerCandidateResearchPacketView | null): b
   );
 }
 
+function textIncludesAny(value: string, patterns: Array<string | RegExp>): boolean {
+  return patterns.some((pattern) => (typeof pattern === 'string' ? value.includes(pattern) : pattern.test(value)));
+}
+
+function countMatching(items: string[], patterns: Array<string | RegExp>): number {
+  return items.filter((item) => textIncludesAny(item.toLowerCase(), patterns)).length;
+}
+
+function buildResearchSignalLabels({
+  primaryEvidence,
+  limitingEvidence,
+  dataQualityNotes,
+  observationOnly,
+  language,
+}: {
+  primaryEvidence: string[];
+  limitingEvidence: string[];
+  dataQualityNotes: string[];
+  observationOnly: boolean;
+  language: 'zh' | 'en';
+}): ResearchSignalLabel[] {
+  const allPrimary = primaryEvidence.join(' ').toLowerCase();
+  const allNotes = dataQualityNotes.join(' ').toLowerCase();
+  const availableCount = primaryEvidence.length;
+  const missingCount = limitingEvidence.length;
+  const partialCount = countMatching(dataQualityNotes, [/partial/i, /部分/]);
+  const staleCount = countMatching(dataQualityNotes, [/stale/i, /过期|较早/]);
+  const quoteDelayed = textIncludesAny(allNotes, [/delayed/i, /延迟|可能延迟/]);
+  const quoteAvailable = textIncludesAny(allPrimary, [/quote/i, /报价/]);
+  const contextAvailable = textIncludesAny(allPrimary, [/sector/i, /\betf\b/i, /theme/i, /行业|板块|主题|ETF/]);
+
+  if (language === 'en') {
+    return [
+      {
+        label: availableCount ? `Evidence available ${availableCount}` : 'Evidence pending',
+      },
+      ...(partialCount ? [{ label: `Evidence partial ${partialCount}`, tone: 'warning' as const }] : []),
+      ...(staleCount ? [{ label: `Older evidence ${staleCount}`, tone: 'warning' as const }] : []),
+      {
+        label: missingCount ? `Evidence pending ${missingCount}` : 'Evidence available',
+        tone: missingCount ? 'warning' : 'neutral',
+      },
+      {
+        label: quoteDelayed
+          ? 'Quote may be delayed'
+          : quoteAvailable
+            ? 'Quote available'
+            : 'Quote pending',
+        tone: quoteAvailable || quoteDelayed ? 'neutral' : 'warning',
+      },
+      {
+        label: contextAvailable
+          ? 'Sector/ETF context available'
+          : 'Sector/ETF context pending',
+        tone: contextAvailable ? 'neutral' : 'warning',
+      },
+      { label: 'Research packet available' },
+      ...(observationOnly
+        ? [
+          { label: 'Observation only', tone: 'warning' as const },
+          { label: 'Score pending', tone: 'warning' as const },
+        ]
+        : [{ label: 'Evidence available' }]),
+    ];
+  }
+
+  return [
+    {
+      label: availableCount ? `证据可用 ${availableCount}` : '证据待补',
+    },
+    ...(partialCount ? [{ label: `证据部分可用 ${partialCount}`, tone: 'warning' as const }] : []),
+    ...(staleCount ? [{ label: `较早证据 ${staleCount}`, tone: 'warning' as const }] : []),
+    {
+      label: missingCount ? `待补证据 ${missingCount}` : '证据可用',
+      tone: missingCount ? 'warning' : 'neutral',
+    },
+    {
+        label: quoteDelayed
+          ? '报价可能延迟'
+          : quoteAvailable
+            ? '报价可用'
+            : '报价待补',
+        tone: quoteAvailable || quoteDelayed ? 'neutral' : 'warning',
+      },
+      {
+        label: contextAvailable
+          ? '行业/ETF线索可用'
+          : '行业/ETF线索待补',
+        tone: contextAvailable ? 'neutral' : 'warning',
+      },
+    { label: '研究包可用' },
+    ...(observationOnly
+      ? [
+        { label: '仅观察', tone: 'warning' as const },
+        { label: '评分待确认', tone: 'warning' as const },
+      ]
+      : [{ label: '证据可用' }]),
+  ];
+}
+
 export function ScannerCandidateResearchPacket({
   packet,
   language,
@@ -54,11 +158,20 @@ export function ScannerCandidateResearchPacket({
   const safeLabel = safePacketText(packet.rejectedOrLimitedReasonSafeLabel);
   const researchNextStep = safePacketText(packet.researchNextStep);
   const boundaryLabel = language === 'en' ? 'Research only' : '仅研究观察';
+  const researchSignalTitle = language === 'en' ? 'Research signal' : '研究信号';
+  const researchSignalLabels = buildResearchSignalLabels({
+    primaryEvidence,
+    limitingEvidence,
+    dataQualityNotes,
+    observationOnly: packet.observationOnly === true,
+    language,
+  });
 
   if (variant === 'row') {
     return (
       <div data-testid={testId} className="mt-1.5 space-y-1.5">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <span className="text-[10px] font-semibold uppercase text-white/36">{researchSignalTitle}</span>
           <span className="text-[10px] font-semibold uppercase text-white/36">{title}</span>
           {packet.observationOnly ? (
             <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
@@ -71,6 +184,19 @@ export function ScannerCandidateResearchPacket({
             {whySurfaced}
           </p>
         ) : null}
+        <div className="flex min-w-0 flex-wrap gap-1.5 text-[10px] text-white/46">
+          {researchSignalLabels.map((item) => (
+            <TerminalChip
+              key={`signal-${item.label}`}
+              variant="neutral"
+              className={`px-1.5 py-0.5 text-[10px] font-sans ${
+                item.tone === 'warning' ? 'text-amber-100/78' : 'text-white/72'
+              }`}
+            >
+              {item.label}
+            </TerminalChip>
+          ))}
+        </div>
         <div className="flex min-w-0 flex-wrap gap-1.5 text-[10px] text-white/46">
           {primaryEvidence.slice(0, 1).map((item) => (
             <TerminalChip key={`primary-${item}`} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
@@ -99,6 +225,24 @@ export function ScannerCandidateResearchPacket({
             {boundaryLabel}
           </TerminalChip>
         ) : null}
+      </div>
+      <div className="grid gap-1 rounded-md border border-white/8 bg-black/10 p-2">
+        <p className="text-[10px] font-semibold uppercase text-white/36">
+          {researchSignalTitle}
+        </p>
+        <div className="flex min-w-0 flex-wrap gap-1.5">
+          {researchSignalLabels.map((item) => (
+            <TerminalChip
+              key={`signal-${item.label}`}
+              variant="neutral"
+              className={`px-1.5 py-0.5 text-[10px] font-sans ${
+                item.tone === 'warning' ? 'text-amber-100/78' : 'text-white/72'
+              }`}
+            >
+              {item.label}
+            </TerminalChip>
+          ))}
+        </div>
       </div>
       {whySurfaced ? (
         <div className="grid gap-1">
