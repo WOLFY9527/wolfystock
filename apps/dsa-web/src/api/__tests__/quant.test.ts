@@ -69,4 +69,65 @@ describe('quantApi', () => {
       symbols: ['AAPL', 'MSFT'],
     });
   });
+
+  it('posts factor research reports without injecting fallback data', async () => {
+    const { quantApi } = await import('../quant');
+    post.mockResolvedValue({
+      data: {
+        status: 'partial',
+        boundary: {
+          purpose: 'diagnostic factor report',
+          research_only: true,
+          diagnostic_only: true,
+          supplied_observations_only: true,
+        },
+        factor_metadata: [],
+        input_shape: {
+          observation_count: 1,
+          metric_observation_count: 1,
+          forward_return_observation_count: 1,
+          factor_count: 1,
+          factor_ids: ['momentum.momentum_21d'],
+          symbol_count: 1,
+          symbols: ['AAPL'],
+          as_of_count: 1,
+          forward_return_horizons: ['1d'],
+          portfolio_weight_count: 0,
+          long_weight_count: 0,
+          short_weight_count: 0,
+          neutralization_axes: [],
+          min_group_size: 2,
+          market_cap_bucket_count: 5,
+          hash_algorithm: 'sha256',
+          input_content_hash: 'abc123',
+        },
+        report: {
+          window: {
+            as_of_count: 1,
+            observation_count: 1,
+          },
+          factor_coverage: [],
+          metrics_summary: [],
+          neutralization_summary: [],
+          exposure_summary: [],
+          missing_data_reasons: [],
+          warnings: [],
+        },
+        missing_data_reasons: [],
+        warnings: [],
+      },
+    });
+
+    const payload = {
+      observations: [{ factorId: 'momentum.momentum_21d' }],
+      metricObservations: [{ factorId: 'momentum.momentum_21d' }],
+      neutralizationAxes: ['sector'],
+    };
+
+    const result = await quantApi.buildFactorResearchReport(payload);
+
+    expect(post).toHaveBeenCalledWith('/api/v1/quant/factor-research/report', payload);
+    expect(result.inputShape.inputContentHash).toBe('abc123');
+    expect(result.boundary.researchOnly).toBe(true);
+  });
 });

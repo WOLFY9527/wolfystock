@@ -23,6 +23,7 @@ import {
 } from '../../api/quant';
 import { cn } from '../../utils/cn';
 import { formatDurationMs, formatNumber } from '../../utils/format';
+import FactorResearchReportPanel from './FactorResearchReportPanel';
 
 type DuckDBQuantPanelProps = {
   configEnabledState: 'enabled' | 'disabled' | 'unknown';
@@ -292,6 +293,8 @@ const DuckDBQuantPanel: React.FC<DuckDBQuantPanelProps> = ({ configEnabledState 
           {message ? <p className="mt-2 text-[11px] leading-5 text-white/45" role="status">{message}</p> : null}
         </div>
       </div>
+
+      <FactorResearchReportPanel />
 
       <Disclosure
         summary={<span className="text-xs font-semibold text-white/55">开发者细节</span>}
