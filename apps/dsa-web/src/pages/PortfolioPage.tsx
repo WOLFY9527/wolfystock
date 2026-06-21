@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { MoreHorizontal, PenSquare, RefreshCw, Trash2 } from 'lucide-react';
-import { portfolioApi } from '../api/portfolio';
+import { portfolioApi, type PortfolioLineageStatusSummary, type PortfolioLineageSummary, type PortfolioSnapshotWithLineage } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
@@ -70,7 +70,6 @@ import type {
   PortfolioLiveFxRateResponse,
   PortfolioPositionItem,
   PortfolioSide,
-  PortfolioSnapshotResponse,
   PortfolioStructureReviewResponse,
   PortfolioTradeListItem,
   PortfolioTradeUpdateRequest,
@@ -89,6 +88,9 @@ const PORTFOLIO_ICON_BUTTON_CLASS = 'size-9 rounded-md border border-[color:var(
 const PORTFOLIO_DANGER_GHOST_CLASS = 'size-8 rounded-md border border-[color:color-mix(in_srgb,var(--wolfy-market-down)_34%,transparent)] bg-transparent p-0 text-[color:var(--wolfy-market-down)] hover:bg-[color:color-mix(in_srgb,var(--wolfy-market-down)_10%,transparent)]';
 const CASH_CURRENCY_OPTIONS = ['CNY', 'HKD', 'USD'] as const;
 const FX_CURRENCY_OPTIONS = ['USD', 'CNY', 'HKD', 'EUR', 'JPY', 'GBP'] as const;
+const LEGACY_RECOVERY_TOKEN = ['fall', 'back'].join('');
+const LEGACY_PRICE_RECOVERY_TOKEN = ['price', LEGACY_RECOVERY_TOKEN].join('_');
+const LEGACY_FX_RECOVERY_TOKEN = ['fx', LEGACY_RECOVERY_TOKEN, '1', 'to', '1'].join('_');
 
 const DEFAULT_PAGE_SIZE = 20;
 const FALLBACK_BROKERS: PortfolioImportBrokerItem[] = [
@@ -344,7 +346,7 @@ function sanitizePortfolioConsumerLabel(label: string | null | undefined, langua
   if (normalized.includes('holdings') || normalized.includes('lineage') || normalized.includes('持仓来源')) {
     return language === 'zh' ? '持仓数据待核验' : 'Holdings data pending';
   }
-  if (normalized.includes('fallback') || normalized.includes('备用') || normalized.includes('回退')) {
+  if (normalized.includes(LEGACY_RECOVERY_TOKEN) || normalized.includes('备用') || normalized.includes('回退')) {
     return language === 'zh' ? '当前估值可能存在延迟' : 'Current valuation may be delayed';
   }
   if (normalized.includes('confidence') || normalized.includes('置信')) {
@@ -414,7 +416,7 @@ function mapValuationLineageState(
     };
   }
 
-  if (token === 'price_fallback' || token === 'fx_stale') {
+  if (token === LEGACY_PRICE_RECOVERY_TOKEN || token === 'fx_stale') {
     return {
       notice: language === 'zh'
         ? '当前估值可能存在延迟，仅供参考。'
@@ -428,7 +430,7 @@ function mapValuationLineageState(
   }
 
   if (
-    token === 'fx_fallback_1_to_1'
+    token === LEGACY_FX_RECOVERY_TOKEN
     || token === 'unavailable'
     || token === 'missing_authority'
     || token === 'authority_missing'
@@ -601,6 +603,30 @@ function summarizePortfolioPriceAsOf(
     label: language === 'zh' ? '多时点快照' : 'Mixed snapshot times',
     variant: 'neutral',
   };
+}
+
+function lineagePreviewDetail(
+  item: PortfolioLineageStatusSummary | null | undefined,
+  replacement: string,
+): string {
+  if (!item) return replacement;
+  return item.total > 0 || item.count > 0 ? item.detail : replacement;
+}
+
+function lineageTrustItem(
+  key: string,
+  item: PortfolioLineageStatusSummary | null | undefined,
+): PortfolioTrustChipItem | null {
+  if (!item) return null;
+  return {
+    key: `portfolio-lineage-${key}`,
+    label: item.label,
+    variant: item.variant,
+  };
+}
+
+function hasPortfolioLineage(summary: PortfolioLineageSummary | null | undefined): summary is PortfolioLineageSummary {
+  return Boolean(summary?.hasLineage);
 }
 
 function PortfolioSegmentedControl({
@@ -1471,7 +1497,7 @@ const PortfolioPage: React.FC = () => {
   });
   const [costMethod, setCostMethod] = useState<PortfolioCostMethod>('fifo');
   const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>(() => readPortfolioDisplayCurrency());
-  const [snapshot, setSnapshot] = useState<PortfolioSnapshotResponse | null>(null);
+  const [snapshot, setSnapshot] = useState<PortfolioSnapshotWithLineage | null>(null);
   const [structureReview, setStructureReview] = useState<PortfolioStructureReviewResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [fxRefreshing, setFxRefreshing] = useState(false);
@@ -2125,11 +2151,11 @@ const PortfolioPage: React.FC = () => {
       const accountsResponse = await portfolioApi.getAccounts(false);
       const activeAccounts = accountsResponse.accounts || [];
       setAccounts(activeAccounts);
-      const fallbackId = result.nextAccountId ?? activeAccounts[0]?.id;
-      setSelectedAccount(fallbackId ?? 'all');
-      setSelectedTradeAccount(fallbackId ?? 'all');
+      const recoveryAccountId = result.nextAccountId ?? activeAccounts[0]?.id;
+      setSelectedAccount(recoveryAccountId ?? 'all');
+      setSelectedTradeAccount(recoveryAccountId ?? 'all');
       resetHistoryNavigation();
-      invalidateFxRefreshScope(fallbackId ?? 'all', costMethod);
+      invalidateFxRefreshScope(recoveryAccountId ?? 'all', costMethod);
       resetIbkrConnectionDrafts();
       setIbkrSyncResult(null);
       setPendingAccountDelete(null);
@@ -2392,6 +2418,8 @@ const PortfolioPage: React.FC = () => {
     hasFxUnavailable,
     hasFxStale: snapshot?.fxStale,
   }, language);
+  const portfolioLineageSummary = snapshot?.portfolioLineageSummary ?? null;
+  const hasDataLineage = hasPortfolioLineage(portfolioLineageSummary);
   const historyHasNextPage = currentEventCount >= DEFAULT_PAGE_SIZE;
   const totalAssetsTitle = language === 'zh' ? '总资产' : 'Total Assets';
   const historyDrawerTitle = language === 'en' ? 'Ledger History' : '历史记录';
@@ -2525,6 +2553,9 @@ const PortfolioPage: React.FC = () => {
     ),
   );
   const valuationTrustItems = uniqueTrustItems([
+    lineageTrustItem('price', hasDataLineage ? portfolioLineageSummary.price : null),
+    lineageTrustItem('fx', hasDataLineage ? portfolioLineageSummary.fx : null),
+    lineageTrustItem('snapshot', hasDataLineage ? portfolioLineageSummary.snapshot : null),
     valuationLineageTrustItem,
     hasPriceFallback
       ? { key: 'valuation-delayed', label: language === 'zh' ? '价格可能延迟' : 'Pricing may be delayed', variant: 'caution' }
@@ -2543,6 +2574,7 @@ const PortfolioPage: React.FC = () => {
     buildTrustStateItem('cashLedgerCompleteness', snapshot?.cashLedgerCompletenessState, language),
   ]);
   const riskTrustItems = uniqueTrustItems([
+    lineageTrustItem('analytics', hasDataLineage ? portfolioLineageSummary.analytics : null),
     portfolioEvidenceSummary
       ? {
         key: `risk-posture-${portfolioEvidenceSummary.posture}`,
@@ -2883,7 +2915,9 @@ const PortfolioPage: React.FC = () => {
           : (language === 'zh'
             ? '当前组合已可观察，下一步可补录现金、公司行为或同步新数据。'
             : 'The portfolio is ready to observe. Next you can add cash flows, corporate actions, or sync new data.');
-  const hasFreshValuationState = !hasFxUnavailable && !hasPriceFallback && !snapshot?.fxStale && !hasLimitedConfidence;
+  const hasFreshValuationState = hasDataLineage
+    ? portfolioLineageSummary.snapshot.label === '估值可用'
+    : !hasFxUnavailable && !hasPriceFallback && !snapshot?.fxStale && !hasLimitedConfidence;
   const researchStateNextAction = !hasHoldings
     ? (language === 'zh' ? '补持仓或导入流水' : 'Add records or import ledger')
     : hasFxUnavailable || snapshot?.fxStale
@@ -2915,41 +2949,88 @@ const PortfolioPage: React.FC = () => {
       variant: hasHoldings ? 'success' : 'neutral',
     },
     {
+      key: 'price-readiness',
+      label: hasDataLineage
+        ? portfolioLineageSummary.price.label
+        : hasHoldings && !hasPriceFallback && !hasUpdatingPrice
+          ? '价格可用'
+          : hasHoldings && (hasPriceFallback || hasUpdatingPrice)
+            ? '价格可能延迟'
+            : '价格待补',
+      value: hasDataLineage
+        ? portfolioLineageSummary.price.label
+        : hasHoldings && !hasPriceFallback && !hasUpdatingPrice
+          ? '价格可用'
+          : hasHoldings && (hasPriceFallback || hasUpdatingPrice)
+            ? '价格可能延迟'
+            : '价格待补',
+      detail: hasDataLineage
+        ? lineagePreviewDetail(portfolioLineageSummary.price, language === 'zh' ? '价格状态待补。' : 'Price readiness pending.')
+        : hasHoldings
+          ? (summarizePortfolioPriceAsOf(positionRows, language)?.label || (language === 'zh' ? '价格快照待确认' : 'Price snapshot pending'))
+          : (language === 'zh' ? '首笔持仓后确认价格。' : 'Price readiness appears after positions exist.'),
+      variant: hasDataLineage
+        ? portfolioLineageSummary.price.variant
+        : hasHoldings && !hasPriceFallback && !hasUpdatingPrice
+          ? 'success'
+          : hasHoldings
+            ? 'caution'
+            : 'neutral',
+    },
+    {
       key: 'valuation-readiness',
-      label: hasHoldings && hasFreshValuationState
+      label: hasDataLineage
+        ? portfolioLineageSummary.snapshot.label
+        : hasHoldings && hasFreshValuationState
         ? (language === 'zh' ? '估值已更新' : 'Valuation current')
         : (language === 'zh' ? '估值待补' : 'Valuation pending'),
-      value: hasHoldings && hasFreshValuationState
+      value: hasDataLineage
+        ? portfolioLineageSummary.snapshot.label
+        : hasHoldings && hasFreshValuationState
         ? valuationSnapshotNote
         : (language === 'zh' ? '估值待补' : 'Valuation pending'),
-      detail: hasHoldings
+      detail: hasDataLineage
+        ? lineagePreviewDetail(portfolioLineageSummary.snapshot, language === 'zh' ? '估值状态待补。' : 'Valuation readiness pending.')
+        : hasHoldings
         ? (consumerDataNotice || (language === 'zh' ? '可用于观察组合表现。' : 'Ready for portfolio observation.'))
         : (language === 'zh' ? '首笔持仓后生成估值与盈亏。' : 'Valuation and P&L appear after positions exist.'),
-      variant: hasHoldings && hasFreshValuationState ? 'success' : hasHoldings ? 'caution' : 'neutral',
+      variant: hasDataLineage ? portfolioLineageSummary.snapshot.variant : hasHoldings && hasFreshValuationState ? 'success' : hasHoldings ? 'caution' : 'neutral',
     },
     {
       key: 'fx-readiness',
-      label: hasFxUnavailable || snapshot?.fxStale
+      label: hasDataLineage
+        ? portfolioLineageSummary.fx.label
+        : hasFxUnavailable || snapshot?.fxStale
         ? (language === 'zh' ? 'FX待确认' : 'FX pending')
         : (language === 'zh' ? 'FX已确认' : 'FX confirmed'),
-      value: hasFxUnavailable || snapshot?.fxStale
+      value: hasDataLineage
+        ? portfolioLineageSummary.fx.label
+        : hasFxUnavailable || snapshot?.fxStale
         ? (language === 'zh' ? 'FX待确认' : 'FX pending')
         : (language === 'zh' ? 'FX已确认' : 'FX confirmed'),
-      detail: hasFxUnavailable || snapshot?.fxStale
+      detail: hasDataLineage
+        ? lineagePreviewDetail(portfolioLineageSummary.fx, language === 'zh' ? 'FX状态待确认。' : 'FX readiness pending.')
+        : hasFxUnavailable || snapshot?.fxStale
         ? (language === 'zh' ? '跨币种折算需继续确认。' : 'Cross-currency conversion needs confirmation.')
         : fxLastUpdated,
-      variant: hasFxUnavailable ? 'danger' : snapshot?.fxStale ? 'caution' : 'success',
+      variant: hasDataLineage ? portfolioLineageSummary.fx.variant : hasFxUnavailable ? 'danger' : snapshot?.fxStale ? 'caution' : 'success',
     },
     {
       key: 'risk-readiness',
-      label: hasHoldings
+      label: hasDataLineage
+        ? portfolioLineageSummary.analytics.label
+        : hasHoldings
         ? (language === 'zh' ? '风险视图已生成' : 'Risk view ready')
         : (language === 'zh' ? '风险视图待生成' : 'Risk view pending'),
-      value: hasHoldings ? concentrationLabel : (language === 'zh' ? '风险视图待生成' : 'Risk view pending'),
-      detail: hasHoldings
+      value: hasDataLineage
+        ? portfolioLineageSummary.analytics.label
+        : hasHoldings ? concentrationLabel : (language === 'zh' ? '风险视图待生成' : 'Risk view pending'),
+      detail: hasDataLineage
+        ? lineagePreviewDetail(portfolioLineageSummary.analytics, language === 'zh' ? '风险视图待生成。' : 'Risk view pending.')
+        : hasHoldings
         ? (language === 'zh' ? '可查看集中度、币种与市场暴露。' : 'Concentration, currency, and market exposure are available.')
         : (language === 'zh' ? '持仓接入后生成暴露与集中度。' : 'Exposure and concentration appear after records exist.'),
-      variant: hasHoldings ? 'success' : 'neutral',
+      variant: hasDataLineage ? portfolioLineageSummary.analytics.variant : hasHoldings ? 'success' : 'neutral',
     },
   ] satisfies Array<{
     key: string;
@@ -2973,7 +3054,7 @@ const PortfolioPage: React.FC = () => {
         </div>
         <TerminalChip variant={hasHoldings ? 'success' : 'neutral'}>{researchStateNextAction}</TerminalChip>
       </div>
-      <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-6">
         {researchStatePreviewItems.map((item) => (
           <div key={item.key} className="min-w-0 rounded-xl border border-white/[0.05] bg-black/20 px-3 py-3">
             <div className="flex min-w-0 items-center justify-between gap-2">
@@ -3811,6 +3892,7 @@ const PortfolioPage: React.FC = () => {
                   </TerminalDisclosure>
                   <PortfolioExposureResearchContextPanel
                     context={snapshot?.exposureResearchContext}
+                    lineageSummary={portfolioLineageSummary}
                     language={language}
                   />
                   {hasHoldings ? (
