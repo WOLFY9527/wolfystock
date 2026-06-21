@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from datetime import date as date_type
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
@@ -178,6 +179,63 @@ class RuleBacktestParseRequest(BaseModel):
     initial_capital: Optional[float] = Field(None, gt=0, description="初始资金")
     fee_bps: float = Field(0.0, ge=0, le=500, description="单边手续费（bp）")
     slippage_bps: float = Field(0.0, ge=0, le=500, description="单边滑点（bp）")
+
+
+class RuleBacktestParameterSweepBar(BaseModel):
+    code: Optional[str] = Field(None, description="可选标的代码；缺省时使用请求 code")
+    date: date_type = Field(..., description="bar 日期")
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float = 0.0
+
+
+class RuleBacktestParameterSweepRequest(BaseModel):
+    code: str = Field(..., description="股票代码")
+    strategy_text: str = Field(..., description="策略文本")
+    parsed_strategy: Dict[str, Any] = Field(..., description="已确认的规则策略解析结果")
+    start_date: Optional[str] = Field(None, description="固定窗口开始日期（YYYY-MM-DD）")
+    end_date: Optional[str] = Field(None, description="固定窗口结束日期（YYYY-MM-DD）")
+    lookback_bars: int = Field(252, description="回看 bars")
+    initial_capital: float = Field(100000.0, description="初始资金")
+    fee_bps: float = Field(0.0, description="单边手续费（bp）")
+    slippage_bps: float = Field(0.0, description="单边滑点（bp）")
+    execution_model: Optional[Dict[str, Any]] = Field(None, description="执行模型请求")
+    confirmed: bool = Field(False, description="是否确认解析结果")
+    parameter_grid: Dict[str, List[Any]] = Field(default_factory=dict, description="有界参数网格")
+    max_combinations: int = Field(10, description="最大参数组合数；超出既有 hard cap 时 fail closed")
+    total_timeout_seconds: Optional[float] = Field(None, description="同步执行总超时预算")
+    bars: List[RuleBacktestParameterSweepBar] = Field(default_factory=list, description="调用方提供的本地/供应 bars")
+
+
+class RuleBacktestParameterSweepResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    contractKind: str
+    contractVersion: str
+    state: str
+    diagnosticOnly: bool
+    researchOnly: bool
+    notOptimizer: bool
+    winnerPromotion: bool
+    decisionGrade: bool
+    code: str
+    strategyFamily: Optional[str] = None
+    engine: Dict[str, Any] = Field(default_factory=dict)
+    executionAssumptions: Dict[str, Any] = Field(default_factory=dict)
+    datasetMetadata: Dict[str, Any] = Field(default_factory=dict)
+    datasetLineageReadiness: Dict[str, Any] = Field(default_factory=dict)
+    storage: Dict[str, Any] = Field(default_factory=dict)
+    summary: Dict[str, Any] = Field(default_factory=dict)
+    parameterRows: List[Dict[str, Any]] = Field(default_factory=list)
+    skippedRows: List[Dict[str, Any]] = Field(default_factory=list)
+    blockedRows: List[Dict[str, Any]] = Field(default_factory=list)
+    failedRows: List[Dict[str, Any]] = Field(default_factory=list)
+    failClosedReasonCode: Optional[str] = None
+    failClosedDiagnostics: Dict[str, Any] = Field(default_factory=dict)
+    parameterStabilitySurface: Optional[Any] = None
+    reproducibilityMetadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class RuleBacktestStrategySupport(BaseModel):
