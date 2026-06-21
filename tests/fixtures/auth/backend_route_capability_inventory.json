@@ -379,6 +379,16 @@
       "transitional_note": "Fixture-only classification; no route guard is changed by this inventory."
     },
     {
+      "route_id": "market.data_source_gap_registry",
+      "path": "/api/v1/market/data-source-gap-registry",
+      "method": "GET",
+      "surface_classification": "operator_diagnostic",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: registry diagnostics are not public-ingress safe while route-level auth remains absent.",
+      "transitional_note": "Fixture-only classification; no registry runtime behavior is changed by this inventory."
+    },
+    {
       "route_id": "market.cn_provider_health",
       "path": "/api/v1/market/cn-provider-health",
       "method": "GET",

@@ -79,6 +79,7 @@ DOCS_AND_SCHEMA_CLASSIFICATIONS = {
 LEGACY_UNSUPPORTED_OPENAPI_PATH = "/api/v1/openapi.json"
 DIAGNOSTIC_ROUTES_EXCLUDED_FROM_SAFE_BYPASS = {
     ("GET", "/api/v1/market/data-readiness"),
+    ("GET", "/api/v1/market/data-source-gap-registry"),
     ("GET", "/api/v1/market/cn-provider-health"),
     ("GET", "/api/v1/agent/status"),
     ("GET", "/api/v1/agent/models"),
@@ -394,6 +395,7 @@ def test_docs_openapi_and_backend_diagnostics_have_explicit_surface_classificati
     assert classifications[("GET", "/api/v1/admin/mission-control")] == "admin_capability_required"
     assert classifications[("POST", "/api/v1/admin/cost/quota-dry-run")] == "admin_capability_required"
     assert classifications[("GET", "/api/v1/market/data-readiness")] == "operator_diagnostic"
+    assert classifications[("GET", "/api/v1/market/data-source-gap-registry")] == "operator_diagnostic"
     assert classifications[("GET", "/api/v1/agent/provider-health")] == "operator_diagnostic"
 
     api_routes_with_doc_labels = [
