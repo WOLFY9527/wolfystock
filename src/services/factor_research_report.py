@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import hashlib
+import json
+from dataclasses import dataclass, fields, is_dataclass
 from typing import Any, Mapping, Sequence
 
 from api.v1.schemas.factors import (
@@ -16,8 +18,16 @@ from api.v1.schemas.factors import (
 from src.services.factor_exposure import (
     FactorExposureReport,
     FactorLongShortExposureReport,
+    build_factor_exposure_report,
+    build_long_short_factor_exposure_report,
 )
+from src.services.factor_metrics import build_factor_metrics_report
 from src.services.factor_neutralization import FactorNeutralizationReport
+from src.services.factor_neutralization import (
+    build_market_cap_bucket_neutralization_report,
+    build_sector_neutralization_report,
+)
+from src.services.factor_registry import get_factor_definition
 
 
 @dataclass(frozen=True)
@@ -166,6 +176,450 @@ def build_factor_research_report(
         missing_data_reasons=tuple(missing_data_reasons),
         warnings=_collect_warning_names(missing_data_reasons),
     )
+
+
+def build_factor_research_report_pilot(
+    observations: Sequence[FactorObservation | Mapping[str, Any] | object] | None,
+    *,
+    metric_observations: Sequence[Mapping[str, Any] | object] | None = None,
+    portfolio_weights: Sequence[Mapping[str, Any] | object] | Mapping[str, Any] | None = None,
+    long_weights: Sequence[Mapping[str, Any] | object] | Mapping[str, Any] | None = None,
+    short_weights: Sequence[Mapping[str, Any] | object] | Mapping[str, Any] | None = None,
+    neutralization_axes: Sequence[str] | None = None,
+    min_group_size: int = 2,
+    market_cap_bucket_count: int = 5,
+) -> dict[str, Any]:
+    """Build the DATA-040 supplied-input factor research report pilot."""
+    normalized_observations = list(observations or ())
+    normalized_metric_observations = list(metric_observations or ())
+    extra_missing_reasons: list[FactorResearchMissingDataReason] = []
+
+    metrics_report = None
+    if normalized_metric_observations:
+        metrics_report = build_factor_metrics_report(normalized_metric_observations)
+        extra_missing_reasons.extend(_missing_forward_return_reasons(normalized_metric_observations))
+
+    neutralization_reports = _build_pilot_neutralization_reports(
+        normalized_observations,
+        axes=neutralization_axes or (),
+        min_group_size=min_group_size,
+        market_cap_bucket_count=market_cap_bucket_count,
+        missing_data_reasons=extra_missing_reasons,
+    )
+    exposure_reports = _build_pilot_exposure_reports(
+        normalized_observations,
+        portfolio_weights=portfolio_weights,
+        long_weights=long_weights,
+        short_weights=short_weights,
+        missing_data_reasons=extra_missing_reasons,
+    )
+
+    report = build_factor_research_report(
+        normalized_observations,
+        metrics_report=metrics_report,
+        neutralization_reports=neutralization_reports or None,
+        exposure_reports=exposure_reports or None,
+    )
+    report_payload = _to_plain(report)
+    missing_data_reasons = _dedupe_missing_reasons(
+        [
+            *report.missing_data_reasons,
+            *extra_missing_reasons,
+        ]
+    )
+    report_payload["missing_data_reasons"] = [_to_plain(item) for item in missing_data_reasons]
+
+    warnings = _collect_warning_names(missing_data_reasons)
+    report_payload["warnings"] = list(warnings)
+    factor_ids = _collect_report_factor_ids(
+        normalized_observations,
+        normalized_metric_observations,
+        report_payload,
+    )
+    input_shape = _build_pilot_input_shape(
+        observations=normalized_observations,
+        metric_observations=normalized_metric_observations,
+        portfolio_weights=portfolio_weights,
+        long_weights=long_weights,
+        short_weights=short_weights,
+        neutralization_axes=neutralization_axes or (),
+        min_group_size=min_group_size,
+        market_cap_bucket_count=market_cap_bucket_count,
+    )
+
+    return {
+        "status": _resolve_pilot_status(
+            observation_count=input_shape["observation_count"],
+            missing_data_reasons=missing_data_reasons,
+        ),
+        "boundary": _pilot_boundary(),
+        "factor_metadata": _build_factor_metadata(factor_ids),
+        "input_shape": input_shape,
+        "report": report_payload,
+        "missing_data_reasons": [_to_plain(item) for item in missing_data_reasons],
+        "warnings": list(warnings),
+    }
+
+
+def _build_pilot_neutralization_reports(
+    observations: Sequence[FactorObservation | Mapping[str, Any] | object],
+    *,
+    axes: Sequence[str],
+    min_group_size: int,
+    market_cap_bucket_count: int,
+    missing_data_reasons: list[FactorResearchMissingDataReason],
+) -> list[FactorNeutralizationReport]:
+    reports: list[FactorNeutralizationReport] = []
+    normalized_axes = _normalize_axes(axes)
+    if not normalized_axes:
+        return reports
+
+    factor_ids = _factor_ids_from_observations(observations)
+    for axis in normalized_axes:
+        if axis not in {"sector", "market_cap_bucket"}:
+            missing_data_reasons.append(
+                FactorResearchMissingDataReason(
+                    section="neutralization",
+                    reason="unsupported_neutralization_axis",
+                    context=axis,
+                )
+            )
+            continue
+        for factor_id in factor_ids:
+            factor_observations = [
+                item
+                for item in observations
+                if _observation_factor_id(item) == factor_id
+            ]
+            if not factor_observations:
+                continue
+            if axis == "sector":
+                reports.append(
+                    build_sector_neutralization_report(
+                        factor_observations,
+                        min_group_size=min_group_size,
+                    )
+                )
+            else:
+                reports.append(
+                    build_market_cap_bucket_neutralization_report(
+                        factor_observations,
+                        bucket_count=market_cap_bucket_count,
+                        min_group_size=min_group_size,
+                    )
+                )
+    return reports
+
+
+def _build_pilot_exposure_reports(
+    observations: Sequence[FactorObservation | Mapping[str, Any] | object],
+    *,
+    portfolio_weights: Sequence[Mapping[str, Any] | object] | Mapping[str, Any] | None,
+    long_weights: Sequence[Mapping[str, Any] | object] | Mapping[str, Any] | None,
+    short_weights: Sequence[Mapping[str, Any] | object] | Mapping[str, Any] | None,
+    missing_data_reasons: list[FactorResearchMissingDataReason],
+) -> list[FactorExposureReport | FactorLongShortExposureReport]:
+    reports: list[FactorExposureReport | FactorLongShortExposureReport] = []
+    if portfolio_weights is not None:
+        reports.append(
+            build_factor_exposure_report(
+                observations,
+                portfolio_weights,
+                scope="portfolio",
+            )
+        )
+
+    if long_weights is None and short_weights is None:
+        return reports
+    if long_weights is None or short_weights is None:
+        missing_data_reasons.append(
+            FactorResearchMissingDataReason(
+                section="exposure",
+                reason="incomplete_long_short_weights",
+                context="long_short",
+            )
+        )
+        return reports
+
+    reports.append(
+        build_long_short_factor_exposure_report(
+            observations,
+            long_weights=long_weights,
+            short_weights=short_weights,
+        )
+    )
+    return reports
+
+
+def _missing_forward_return_reasons(
+    metric_observations: Sequence[Mapping[str, Any] | object],
+) -> list[FactorResearchMissingDataReason]:
+    factor_ids = _factor_ids_from_observations(metric_observations)
+    factors_with_returns: set[str] = set()
+    for item in metric_observations:
+        factor_id = _observation_factor_id(item)
+        if not factor_id:
+            continue
+        forward_returns = _metric_forward_returns(item)
+        if any(_is_finite_number(value) for value in forward_returns.values()):
+            factors_with_returns.add(factor_id)
+
+    return [
+        FactorResearchMissingDataReason(
+            section="metrics",
+            reason="missing_forward_returns",
+            factor_id=factor_id,
+        )
+        for factor_id in factor_ids
+        if factor_id not in factors_with_returns
+    ]
+
+
+def _build_factor_metadata(factor_ids: Sequence[str]) -> list[dict[str, Any]]:
+    metadata: list[dict[str, Any]] = []
+    for factor_id in factor_ids:
+        definition = get_factor_definition(factor_id)
+        if definition is None:
+            metadata.append(
+                {
+                    "factor_id": factor_id,
+                    "registry_state": "not_registered",
+                }
+            )
+            continue
+        payload = definition.model_dump(mode="json")
+        payload["registry_state"] = "registered"
+        metadata.append(payload)
+    return metadata
+
+
+def _build_pilot_input_shape(
+    *,
+    observations: Sequence[FactorObservation | Mapping[str, Any] | object],
+    metric_observations: Sequence[Mapping[str, Any] | object],
+    portfolio_weights: Sequence[Mapping[str, Any] | object] | Mapping[str, Any] | None,
+    long_weights: Sequence[Mapping[str, Any] | object] | Mapping[str, Any] | None,
+    short_weights: Sequence[Mapping[str, Any] | object] | Mapping[str, Any] | None,
+    neutralization_axes: Sequence[str],
+    min_group_size: int,
+    market_cap_bucket_count: int,
+) -> dict[str, Any]:
+    observation_factor_ids = _factor_ids_from_observations(observations)
+    metric_factor_ids = _factor_ids_from_observations(metric_observations)
+    symbols = sorted(
+        {
+            symbol
+            for item in [*observations, *metric_observations]
+            if (symbol := _observation_symbol(item))
+        }
+    )
+    as_ofs = sorted(
+        {
+            as_of
+            for item in [*observations, *metric_observations]
+            if (as_of := _observation_as_of(item))
+        }
+    )
+    horizons = sorted(
+        {
+            horizon
+            for item in metric_observations
+            for horizon, value in _metric_forward_returns(item).items()
+            if _is_finite_number(value)
+        }
+    )
+    shape = {
+        "observation_count": len(observations),
+        "metric_observation_count": len(metric_observations),
+        "forward_return_observation_count": sum(
+            1
+            for item in metric_observations
+            if any(_is_finite_number(value) for value in _metric_forward_returns(item).values())
+        ),
+        "factor_count": len(sorted({*observation_factor_ids, *metric_factor_ids})),
+        "factor_ids": sorted({*observation_factor_ids, *metric_factor_ids}),
+        "symbol_count": len(symbols),
+        "symbols": symbols,
+        "as_of_start": as_ofs[0] if as_ofs else None,
+        "as_of_end": as_ofs[-1] if as_ofs else None,
+        "as_of_count": len(as_ofs),
+        "forward_return_horizons": horizons,
+        "portfolio_weight_count": _weight_count(portfolio_weights),
+        "long_weight_count": _weight_count(long_weights),
+        "short_weight_count": _weight_count(short_weights),
+        "neutralization_axes": _normalize_axes(neutralization_axes),
+        "min_group_size": min_group_size,
+        "market_cap_bucket_count": market_cap_bucket_count,
+        "hash_algorithm": "sha256",
+    }
+    shape["input_content_hash"] = _hash_payload(
+        {
+            "observations": _to_plain(observations),
+            "metric_observations": _to_plain(metric_observations),
+            "portfolio_weights": _to_plain(portfolio_weights),
+            "long_weights": _to_plain(long_weights),
+            "short_weights": _to_plain(short_weights),
+            "neutralization_axes": shape["neutralization_axes"],
+            "min_group_size": min_group_size,
+            "market_cap_bucket_count": market_cap_bucket_count,
+        }
+    )
+    return shape
+
+
+def _pilot_boundary() -> dict[str, Any]:
+    return {
+        "purpose": "diagnostic factor report",
+        "research_only": True,
+        "diagnostic_only": True,
+        "supplied_observations_only": True,
+        "portfolio_optimizer": False,
+        "professional_readiness_claimed": False,
+        "forward_returns_required_for_performance": True,
+        "external_data_hydration_executed": False,
+        "live_quote_hydration_executed": False,
+        "forward_returns_computed": False,
+    }
+
+
+def _resolve_pilot_status(
+    *,
+    observation_count: int,
+    missing_data_reasons: Sequence[FactorResearchMissingDataReason],
+) -> str:
+    if observation_count == 0:
+        return "blocked"
+    if missing_data_reasons:
+        return "partial"
+    return "ready"
+
+
+def _collect_report_factor_ids(
+    observations: Sequence[FactorObservation | Mapping[str, Any] | object],
+    metric_observations: Sequence[Mapping[str, Any] | object],
+    report_payload: Mapping[str, Any],
+) -> list[str]:
+    factor_ids = {
+        *_factor_ids_from_observations(observations),
+        *_factor_ids_from_observations(metric_observations),
+    }
+    for section in ("factor_coverage", "metrics_summary", "neutralization_summary", "exposure_summary"):
+        for item in report_payload.get(section, []) or []:
+            factor_id = item.get("factor_id") if isinstance(item, Mapping) else None
+            if factor_id:
+                factor_ids.add(str(factor_id))
+    return sorted(factor_ids)
+
+
+def _dedupe_missing_reasons(
+    reasons: Sequence[FactorResearchMissingDataReason],
+) -> tuple[FactorResearchMissingDataReason, ...]:
+    deduped: list[FactorResearchMissingDataReason] = []
+    seen: set[tuple[str | None, str | None, str | None, str | None]] = set()
+    for item in reasons:
+        key = (item.section, item.reason, item.factor_id, item.context)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return tuple(deduped)
+
+
+def _factor_ids_from_observations(
+    observations: Sequence[FactorObservation | Mapping[str, Any] | object],
+) -> list[str]:
+    return sorted(
+        {
+            factor_id
+            for item in observations
+            if (factor_id := _observation_factor_id(item))
+        }
+    )
+
+
+def _observation_factor_id(value: FactorObservation | Mapping[str, Any] | object) -> str | None:
+    try:
+        return _normalize_observation(value).factor_id
+    except Exception:
+        return None
+
+
+def _observation_symbol(value: FactorObservation | Mapping[str, Any] | object) -> str | None:
+    try:
+        return _normalize_observation(value).symbol
+    except Exception:
+        return None
+
+
+def _observation_as_of(value: FactorObservation | Mapping[str, Any] | object) -> str | None:
+    try:
+        return _normalize_observation(value).as_of
+    except Exception:
+        return None
+
+
+def _metric_forward_returns(value: Mapping[str, Any] | object) -> Mapping[str, Any]:
+    raw = _field(value, "forward_returns")
+    if raw is None:
+        raw = _field(value, "forwardReturns")
+    return raw if isinstance(raw, Mapping) else {}
+
+
+def _normalize_axes(values: Sequence[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        normalized = str(value or "").strip().lower()
+        if normalized == "market_cap":
+            normalized = "market_cap_bucket"
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(normalized)
+    return result
+
+
+def _weight_count(value: Sequence[Mapping[str, Any] | object] | Mapping[str, Any] | None) -> int:
+    if value is None:
+        return 0
+    if isinstance(value, Mapping):
+        return len(value)
+    return len(list(value))
+
+
+def _is_finite_number(value: Any) -> bool:
+    if value is None or isinstance(value, bool):
+        return False
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return False
+    return numeric == numeric and numeric not in {float("inf"), float("-inf")}
+
+
+def _hash_payload(value: Any) -> str:
+    payload = json.dumps(_to_plain(value), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _to_plain(value: Any) -> Any:
+    if is_dataclass(value) and not isinstance(value, type):
+        return {
+            field.name: _to_plain(getattr(value, field.name))
+            for field in fields(value)
+        }
+    if hasattr(value, "model_dump"):
+        try:
+            return _to_plain(value.model_dump(mode="json"))
+        except TypeError:
+            return _to_plain(value.model_dump())
+    if isinstance(value, Mapping):
+        return {str(key): _to_plain(child) for key, child in value.items()}
+    if isinstance(value, tuple):
+        return [_to_plain(item) for item in value]
+    if isinstance(value, list):
+        return [_to_plain(item) for item in value]
+    return value
 
 
 def _build_factor_coverage(
@@ -443,4 +897,5 @@ __all__ = [
     "FactorResearchReport",
     "FactorResearchWindow",
     "build_factor_research_report",
+    "build_factor_research_report_pilot",
 ]

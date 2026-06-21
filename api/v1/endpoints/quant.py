@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import logging
+import re
+from typing import Any
 
 from fastapi import APIRouter, Depends
 
@@ -26,8 +28,11 @@ from api.v1.schemas.quant import (
     QuantDuckDBInitResponse,
     QuantDuckDBValidateFactorPathRequest,
     QuantDuckDBValidateFactorPathResponse,
+    QuantFactorResearchReportRequest,
+    QuantFactorResearchReportResponse,
 )
 from src.config import Config
+from src.services.factor_research_report import build_factor_research_report_pilot
 from src.services.quant_analytics.duckdb_service import QuantDuckDBService
 
 logger = logging.getLogger(__name__)
@@ -36,6 +41,61 @@ router = APIRouter()
 
 def get_quant_duckdb_service(config: Config = Depends(get_config_dep)) -> QuantDuckDBService:
     return QuantDuckDBService.from_config(config)
+
+
+def _camelize_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {_camelize_key(key): _camelize_payload(child) for key, child in value.items()}
+    if isinstance(value, list):
+        return [_camelize_payload(item) for item in value]
+    return value
+
+
+def _camelize_key(value: Any) -> str:
+    text = str(value)
+    if "_" not in text:
+        return text
+    parts = re.split(r"_+", text)
+    return parts[0] + "".join(part[:1].upper() + part[1:] for part in parts[1:])
+
+
+@router.post(
+    "/factor-research/report",
+    response_model=QuantFactorResearchReportResponse,
+    responses={
+        401: {"description": "Unauthorized", "model": ErrorResponse},
+        403: {"description": "Admin access required", "model": ErrorResponse},
+    },
+    summary="Build supplied-input factor research report",
+    description="Build a deterministic research-only factor report from caller-supplied observations and forward returns.",
+)
+def build_factor_research_report_endpoint(
+    request: QuantFactorResearchReportRequest,
+    _admin: CurrentUser = Depends(require_admin_capability("quant:admin:read")),
+) -> QuantFactorResearchReportResponse:
+    payload = build_factor_research_report_pilot(
+        observations=[item.model_dump(by_alias=False) for item in request.observations],
+        metric_observations=[item.model_dump(by_alias=False) for item in request.metric_observations],
+        portfolio_weights=(
+            [item.model_dump(by_alias=False) for item in request.portfolio_weights]
+            if request.portfolio_weights is not None
+            else None
+        ),
+        long_weights=(
+            [item.model_dump(by_alias=False) for item in request.long_weights]
+            if request.long_weights is not None
+            else None
+        ),
+        short_weights=(
+            [item.model_dump(by_alias=False) for item in request.short_weights]
+            if request.short_weights is not None
+            else None
+        ),
+        neutralization_axes=request.neutralization_axes,
+        min_group_size=request.min_group_size,
+        market_cap_bucket_count=request.market_cap_bucket_count,
+    )
+    return QuantFactorResearchReportResponse.model_validate(_camelize_payload(payload))
 
 
 @router.get(

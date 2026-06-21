@@ -127,6 +127,15 @@
       "transitional_note": null
     },
     {
+      "route_id": "quant.factor_research.read",
+      "path_pattern": "^/api/v1/quant/factor-research/report$",
+      "methods": ["POST"],
+      "surface": "quant_factor_research_admin",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "quant:admin:read",
+      "transitional_note": null
+    },
+    {
       "route_id": "admin.users.read",
       "path_pattern": "^/api/v1/admin/users(?:/\\{user_id\\})?$",
       "methods": ["GET"],

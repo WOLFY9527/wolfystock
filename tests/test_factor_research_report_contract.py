@@ -17,7 +17,7 @@ from src.services.factor_exposure import (
 )
 from src.services.factor_metrics import build_factor_metrics_report
 from src.services.factor_neutralization import build_sector_neutralization_report
-from src.services.factor_research_report import build_factor_research_report
+from src.services.factor_research_report import build_factor_research_report, build_factor_research_report_pilot
 
 
 _SYMBOL_METADATA = {
@@ -370,3 +370,113 @@ print(json.dumps({name: name in __import__('sys').modules for name in blocked}, 
 
     imported = json.loads(completed.stdout)
     assert imported == {name: False for name in imported}
+
+
+def test_factor_research_report_pilot_adds_metadata_boundary_and_reproducibility() -> None:
+    payload = build_factor_research_report_pilot(
+        observations=_complete_observations(),
+        metric_observations=_complete_metric_observations(),
+        portfolio_weights=[_weight("AAA", 2.0), _weight("BBB", 1.0), _weight("CCC", 1.0), _weight("DDD", 1.0)],
+        long_weights=[_weight("AAA", 2.0), _weight("BBB", 1.0)],
+        short_weights=[_weight("CCC", 1.0), _weight("DDD", 1.0)],
+        neutralization_axes=["sector"],
+    )
+
+    assert payload["status"] == "ready"
+    assert payload["boundary"]["purpose"] == "diagnostic factor report"
+    assert payload["boundary"]["research_only"] is True
+    assert payload["boundary"]["diagnostic_only"] is True
+    assert payload["boundary"]["supplied_observations_only"] is True
+    assert payload["boundary"]["portfolio_optimizer"] is False
+    assert payload["boundary"]["professional_readiness_claimed"] is False
+    assert payload["boundary"]["external_data_hydration_executed"] is False
+    assert payload["boundary"]["live_quote_hydration_executed"] is False
+    assert payload["boundary"]["forward_returns_computed"] is False
+    assert payload["boundary"]["forward_returns_required_for_performance"] is True
+    assert [item["factor_id"] for item in payload["factor_metadata"]] == [
+        "momentum.momentum_21d",
+        "trend.trend_strength_20d",
+    ]
+    assert payload["input_shape"]["observation_count"] == 24
+    assert payload["input_shape"]["metric_observation_count"] == 24
+    assert payload["input_shape"]["forward_return_observation_count"] == 24
+    assert payload["input_shape"]["portfolio_weight_count"] == 4
+    assert payload["input_shape"]["long_weight_count"] == 2
+    assert payload["input_shape"]["short_weight_count"] == 2
+    assert payload["input_shape"]["neutralization_axes"] == ["sector"]
+    assert payload["input_shape"]["hash_algorithm"] == "sha256"
+    assert len(payload["input_shape"]["input_content_hash"]) == 64
+
+    momentum = payload["report"]["metrics_summary"][0]
+    assert momentum["factor_id"] == "momentum.momentum_21d"
+    assert momentum["ic"][0]["value"] == pytest.approx(1.0)
+    assert momentum["rank_ic"][1]["value"] == pytest.approx(-1.0)
+
+    assert {item["scope"] for item in payload["report"]["exposure_summary"]} == {"long_short", "portfolio"}
+    portfolio_momentum = next(
+        item
+        for item in payload["report"]["exposure_summary"]
+        if item["scope"] == "portfolio" and item["factor_id"] == "momentum.momentum_21d"
+    )
+    assert portfolio_momentum["weighted_exposure"] == pytest.approx(12.0)
+    assert portfolio_momentum["exposure"] == pytest.approx(2.4)
+    assert payload["missing_data_reasons"] == []
+    assert payload["warnings"] == []
+
+
+def test_factor_research_report_pilot_does_not_invent_performance_without_forward_returns() -> None:
+    metric_observations = [
+        _metric_observation(
+            factor_id="momentum.momentum_21d",
+            symbol=symbol,
+            as_of="2026-05-01",
+            value=value,
+            returns={},
+        )
+        for symbol, value in (("AAA", 4.0), ("BBB", 3.0), ("CCC", 2.0), ("DDD", 1.0))
+    ]
+
+    payload = build_factor_research_report_pilot(
+        observations=[{"observation": item["observation"], "sector": "Technology", "market_cap": 100.0} for item in metric_observations],
+        metric_observations=metric_observations,
+    )
+
+    assert payload["status"] == "partial"
+    reasons = {(item["section"], item["reason"], item.get("factor_id")) for item in payload["missing_data_reasons"]}
+    assert ("metrics", "missing_forward_returns", "momentum.momentum_21d") in reasons
+    assert payload["report"]["metrics_summary"][0]["ic"] == []
+    assert payload["report"]["metrics_summary"][0]["rank_ic"] == []
+
+
+def test_factor_research_report_pilot_uses_supplied_metadata_for_neutralization_only() -> None:
+    observations = _insufficient_observations()
+
+    payload = build_factor_research_report_pilot(
+        observations=observations,
+        metric_observations=[
+            _metric_observation(
+                factor_id="relative_strength.relative_strength_63d",
+                symbol="AAA",
+                as_of="2026-05-16",
+                value=1.0,
+                returns={"1d": 0.1},
+            ),
+            _metric_observation(
+                factor_id="relative_strength.relative_strength_63d",
+                symbol="BBB",
+                as_of="2026-05-16",
+                value=1.0,
+                returns={"1d": 0.1},
+            ),
+        ],
+        neutralization_axes=["sector"],
+        min_group_size=3,
+    )
+
+    assert payload["status"] == "partial"
+    summary = payload["report"]["neutralization_summary"][0]
+    assert summary["axis"] == "sector"
+    assert summary["sample_size"] == 0
+    assert summary["insufficient_group_observations"] == 2
+    reasons = {(item["section"], item["reason"], item.get("context")) for item in payload["missing_data_reasons"]}
+    assert ("neutralization", "insufficient_group_size", "sector") in reasons
