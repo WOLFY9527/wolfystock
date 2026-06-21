@@ -472,7 +472,7 @@ Larger-scope tasks requiring design decisions, cross-surface coordination, or ar
 
 | Artifact | Path | Status |
 |----------|------|--------|
-| UX QA Report | `docs/product-audit/qw003-screenshot-ux-qa-pass.md` | This file |
+| UX QA Report | `docs/product-audit/archive/qw003-screenshot-ux-qa-pass.md` | This file |
 | Screenshots | None captured | Frontend dev server not running; source-code-only analysis |
 
 ## Validation
@@ -498,7 +498,7 @@ Findings should be validated with live screenshots once the frontend dev server 
 **Status:** READY TO LAND
 **Summary:** 10 UX issues identified (2 P0, 5 P1, 3 P2), 7 quick-win Qwen tasks, 7 larger GPT/Codex product tasks. All 12 consumer pages inspected via source code. No product code edited.
 **Pages inspected:** 12 (Home, Market Overview, Decision Cockpit, Liquidity Monitor, Rotation Radar, Research Radar, Stock Structure Entry + Detail, Scanner, Watchlist, Portfolio, Options Lab, Scenario Lab)
-**Files changed:** 1 (`docs/product-audit/qw003-screenshot-ux-qa-pass.md`)
+**Files changed:** 1 (`docs/product-audit/archive/qw003-screenshot-ux-qa-pass.md`)
 **Product code touched:** None
 **Protected domain touched:** No
 **Validation outputs:** `git diff --check origin/main...HEAD` PASS (exit 0); `git diff --check` PASS (exit 0); `scripts/release_secret_scan.sh --base-ref origin/main` PASS — no secrets found; `git rebase origin/main` — already up to date
