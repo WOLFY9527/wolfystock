@@ -444,6 +444,10 @@ class PortfolioSnapshotResponse(BaseModel):
     sourceAuthorityState: Optional[str] = None
     fxFreshnessState: Optional[str] = None
     valuationLineageState: Optional[str] = None
+    price_lineage: Optional[Dict[str, Any]] = None
+    fx_lineage: Optional[Dict[str, Any]] = None
+    valuation_snapshot_lineage: Optional[Dict[str, Any]] = None
+    analytics_readiness: Optional[Dict[str, Any]] = None
     holdingsLineageState: Optional[str] = None
     cashLedgerCompletenessState: Optional[str] = None
     benchmarkMappingState: Optional[str] = None

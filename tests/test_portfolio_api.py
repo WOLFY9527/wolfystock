@@ -455,6 +455,186 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(payload["analytics"]["exposure"]["by_symbol"][0]["symbol"], "AAPL")
         self.assertEqual(payload["analytics"]["risk"]["largest_position"]["symbol"], "AAPL")
 
+    def test_snapshot_lineage_marks_complete_price_fx_inputs_available(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "FX Complete", "broker": "Demo", "market": "global", "base_currency": "CNY"},
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        account_id = create_resp.json()["id"]
+        self.client.post(
+            "/api/v1/portfolio/trades",
+            json={
+                "account_id": account_id,
+                "symbol": "AAPL",
+                "trade_date": "2026-01-01",
+                "side": "buy",
+                "quantity": 2,
+                "price": 100.0,
+                "market": "us",
+                "currency": "USD",
+            },
+        )
+        self._save_close("AAPL", date(2026, 1, 2), 130.0)
+        PortfolioService().repo.save_fx_rate(
+            from_currency="USD",
+            to_currency="CNY",
+            rate_date=date(2026, 1, 2),
+            rate=7.0,
+            source="manual",
+            is_stale=False,
+        )
+
+        snapshot_resp = self.client.get(
+            "/api/v1/portfolio/snapshot",
+            params={"account_id": account_id, "as_of": "2026-01-02", "cost_method": "fifo"},
+        )
+        self.assertEqual(snapshot_resp.status_code, 200)
+        payload = snapshot_resp.json()
+
+        self.assertIn("total_market_value", payload)
+        self.assertIn("analytics", payload)
+        self.assertEqual(payload["price_lineage"]["status"], "available")
+        self.assertEqual(payload["price_lineage"]["score_authority"], "authoritative")
+        self.assertEqual(payload["price_lineage"]["counts"]["available"], 1)
+        self.assertEqual(payload["price_lineage"]["affected_symbols"]["available"], ["AAPL"])
+        self.assertEqual(payload["price_lineage"]["last_updated_at"], "2026-01-02")
+        self.assertEqual(payload["fx_lineage"]["status"], "available")
+        self.assertEqual(payload["fx_lineage"]["score_authority"], "authoritative")
+        self.assertEqual(payload["fx_lineage"]["counts"]["available"], 1)
+        self.assertEqual(payload["fx_lineage"]["affected_currencies"]["available"], ["USD"])
+        self.assertEqual(payload["valuation_snapshot_lineage"]["status"], "complete")
+        self.assertEqual(payload["valuation_snapshot_lineage"]["score_authority"], "authoritative")
+        self.assertTrue(payload["valuation_snapshot_lineage"]["metrics_ready"])
+        self.assertEqual(payload["analytics_readiness"]["valuation"], "complete")
+        self.assertEqual(payload["analytics_readiness"]["risk"], "available")
+        self.assertEqual(payload["analytics_readiness"]["score_authority"], "authoritative")
+
+    def test_snapshot_lineage_marks_missing_price_observation_only_without_hiding_fallback(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Price Gap", "broker": "Demo", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        account_id = create_resp.json()["id"]
+        self.client.post(
+            "/api/v1/portfolio/trades",
+            json={
+                "account_id": account_id,
+                "symbol": "AAPL",
+                "trade_date": "2026-01-01",
+                "side": "buy",
+                "quantity": 10,
+                "price": 100.0,
+                "market": "us",
+                "currency": "USD",
+            },
+        )
+
+        snapshot_resp = self.client.get(
+            "/api/v1/portfolio/snapshot",
+            params={"account_id": account_id, "as_of": "2026-01-02", "cost_method": "fifo"},
+        )
+        self.assertEqual(snapshot_resp.status_code, 200)
+        payload = snapshot_resp.json()
+        position = payload["accounts"][0]["positions"][0]
+
+        self.assertTrue(position["is_price_fallback"])
+        self.assertEqual(position["price_source"], "avg_cost_fallback")
+        self.assertEqual(payload["price_lineage"]["status"], "missing")
+        self.assertEqual(payload["price_lineage"]["score_authority"], "observation_only")
+        self.assertEqual(payload["price_lineage"]["counts"]["missing"], 1)
+        self.assertEqual(payload["price_lineage"]["affected_symbols"]["missing"], ["AAPL"])
+        self.assertEqual(payload["valuation_snapshot_lineage"]["status"], "partial")
+        self.assertEqual(payload["valuation_snapshot_lineage"]["score_authority"], "observation_only")
+        self.assertEqual(payload["analytics_readiness"]["valuation"], "partial")
+        self.assertEqual(payload["analytics_readiness"]["score_authority"], "observation_only")
+
+    def test_snapshot_lineage_marks_missing_fx_partial_and_affected_currency(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "FX Gap", "broker": "Demo", "market": "global", "base_currency": "CNY"},
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        account_id = create_resp.json()["id"]
+        self.client.post(
+            "/api/v1/portfolio/trades",
+            json={
+                "account_id": account_id,
+                "symbol": "AAPL",
+                "trade_date": "2026-01-01",
+                "side": "buy",
+                "quantity": 2,
+                "price": 100.0,
+                "market": "us",
+                "currency": "USD",
+            },
+        )
+        self._save_close("AAPL", date(2026, 1, 2), 130.0)
+
+        snapshot_resp = self.client.get(
+            "/api/v1/portfolio/snapshot",
+            params={"account_id": account_id, "as_of": "2026-01-02", "cost_method": "fifo"},
+        )
+        self.assertEqual(snapshot_resp.status_code, 200)
+        payload = snapshot_resp.json()
+
+        self.assertEqual(payload["price_lineage"]["status"], "available")
+        self.assertEqual(payload["fx_lineage"]["status"], "missing")
+        self.assertEqual(payload["fx_lineage"]["score_authority"], "observation_only")
+        self.assertEqual(payload["fx_lineage"]["counts"]["missing"], 1)
+        self.assertEqual(payload["fx_lineage"]["counts"]["fallback"], 1)
+        self.assertEqual(payload["fx_lineage"]["affected_currencies"]["missing"], ["USD"])
+        self.assertEqual(payload["fx_lineage"]["affected_currencies"]["fallback"], ["USD"])
+        self.assertEqual(payload["valuation_snapshot_lineage"]["status"], "partial")
+        self.assertIn("USD/CNY", payload["valuation_snapshot_lineage"]["blocked_by"]["fx_pairs"])
+        self.assertEqual(payload["analytics_readiness"]["risk"], "partial")
+
+    def test_snapshot_lineage_marks_stale_fx_partial_without_price_downgrade(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "FX Stale", "broker": "Demo", "market": "global", "base_currency": "CNY"},
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        account_id = create_resp.json()["id"]
+        self.client.post(
+            "/api/v1/portfolio/trades",
+            json={
+                "account_id": account_id,
+                "symbol": "AAPL",
+                "trade_date": "2026-01-01",
+                "side": "buy",
+                "quantity": 2,
+                "price": 100.0,
+                "market": "us",
+                "currency": "USD",
+            },
+        )
+        self._save_close("AAPL", date(2026, 1, 2), 130.0)
+        PortfolioService().repo.save_fx_rate(
+            from_currency="USD",
+            to_currency="CNY",
+            rate_date=date(2026, 1, 2),
+            rate=7.0,
+            source="manual",
+            is_stale=True,
+        )
+
+        snapshot_resp = self.client.get(
+            "/api/v1/portfolio/snapshot",
+            params={"account_id": account_id, "as_of": "2026-01-02", "cost_method": "fifo"},
+        )
+        self.assertEqual(snapshot_resp.status_code, 200)
+        payload = snapshot_resp.json()
+
+        self.assertEqual(payload["price_lineage"]["status"], "available")
+        self.assertEqual(payload["fx_lineage"]["status"], "stale")
+        self.assertEqual(payload["fx_lineage"]["score_authority"], "observation_only")
+        self.assertEqual(payload["fx_lineage"]["counts"]["stale"], 1)
+        self.assertEqual(payload["fx_lineage"]["affected_currencies"]["stale"], ["USD"])
+        self.assertEqual(payload["valuation_snapshot_lineage"]["status"], "partial")
+        self.assertEqual(payload["analytics_readiness"]["score_authority"], "observation_only")
+
     def test_snapshot_and_risk_contract_distinguishes_no_account(self) -> None:
         snapshot_resp = self.client.get(
             "/api/v1/portfolio/snapshot",
