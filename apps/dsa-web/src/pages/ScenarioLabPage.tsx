@@ -77,7 +77,7 @@ const SCENARIO_PRESETS: ScenarioPreset[] = [
     label: { zh: 'Gamma 缺口', en: 'Gamma gap' },
     summary: {
       zh: '验证 Gamma 证据缺口下，情景结论应保持受限。',
-      en: 'Verify that scenario outputs stay capped when gamma evidence remains unavailable.',
+      en: 'Verify that scenario outputs stay capped while gamma evidence is missing.',
     },
   },
 ];
@@ -104,22 +104,22 @@ const SCENARIO_UNAVAILABLE_COPY: Record<Locale, {
   secondaryCta: string;
 }> = {
   zh: {
-    stateTitle: '当前市场状态数据不完整',
-    stateBody: '当前市场状态数据不完整，暂无法进行情景分析。',
-    nextStep: '建议先查看市场概览，确认市场状态、驱动证据和数据新鲜度。',
+    stateTitle: '情景待更新',
+    stateBody: '基准待确认，暂不展开输出。',
+    nextStep: '待补证据：市场框架、驱动证据、数据新鲜度。',
     boundaryNote: '研究观察',
-    summaryFallback: '等待市场状态数据补齐后，再返回情景实验室查看该情景的观察摘要。',
-    evidenceFallback: '当前先回到市场概览确认市场状态、驱动证据和数据新鲜度。',
+    summaryFallback: '情景待更新',
+    evidenceFallback: '待补证据：市场框架、驱动证据、数据新鲜度。',
     primaryCta: '查看市场概览',
     secondaryCta: '返回研究雷达',
   },
   en: {
-    stateTitle: 'Market state data is incomplete',
-    stateBody: 'The current market state data is incomplete, so scenario analysis is not available yet.',
-    nextStep: 'Open Market Overview first to confirm the market state, driver evidence, and data freshness.',
+    stateTitle: 'Scenario pending',
+    stateBody: 'Baseline pending; output stays compact.',
+    nextStep: 'Next evidence: market frame, driver evidence, freshness.',
     boundaryNote: 'Research observation',
-    summaryFallback: 'Return after the market state data is complete to review this scenario summary.',
-    evidenceFallback: 'Use Market Overview first to confirm the market state, driver evidence, and data freshness.',
+    summaryFallback: 'Scenario pending',
+    evidenceFallback: 'Next evidence: market frame, driver evidence, freshness.',
     primaryCta: 'Open Market Overview',
     secondaryCta: 'Back to Research Radar',
   },
@@ -290,7 +290,7 @@ export default function ScenarioLabPage() {
       setScenarioResult(scenarioPayload);
     } catch (err) {
       setError(getParsedApiError(err) || createParsedApiError({
-        title: locale === 'en' ? 'Scenario lab unavailable' : '情景实验室暂不可用',
+        title: locale === 'en' ? 'Scenario lab pending' : '情景实验室待更新',
         message: locale === 'en'
           ? 'Please retry after the market context and scenario contract respond again.'
           : '请在市场上下文与情景契约恢复后重试。',
@@ -338,6 +338,23 @@ export default function ScenarioLabPage() {
 
   const scenarioUnavailable = scenarioResult?.scenarioRegime.status === 'unavailable' || !scenarioResult?.changedDrivers.length;
   const scenarioUnavailableCopy = SCENARIO_UNAVAILABLE_COPY[locale];
+  const firstReadDriverText = scenarioUnavailable
+    ? (locale === 'en' ? 'Scenario pending' : '情景待更新')
+    : changedDriverRows.slice(0, 2).map((item) => `${item.label} ${item.value}`).join(' / ');
+  const firstReadBoundaryText = scenarioUnavailable
+    ? (locale === 'en' ? 'Baseline pending' : '基准待确认')
+    : [
+      localizedConfidence(scenarioResult?.baseRegime.confidence, locale),
+      localizedConfidence(scenarioResult?.scenarioRegime.confidence, locale),
+    ].filter(Boolean).join(' -> ');
+  const firstReadNextEvidence = scenarioUnavailable
+    ? (locale === 'en' ? 'Market frame, driver evidence, freshness' : '市场框架、驱动证据、数据新鲜度')
+    : (
+      sanitizeScenarioNarrativeList([
+        ...(scenarioResult?.whatWouldConfirm ?? []),
+        ...(scenarioResult?.evidenceLimits ?? []),
+      ], locale)[0] ?? (locale === 'en' ? 'Continue evidence review' : '继续补充确认线索')
+    );
   const scenarioUnavailableActions = (
     <div className="flex flex-col gap-2 sm:flex-row">
       <Link
@@ -439,6 +456,53 @@ export default function ScenarioLabPage() {
             ) : null}
             {scenarioResult ? (
               <>
+                <section
+                  aria-label={locale === 'en' ? 'Scenario summary' : '情景摘要'}
+                  className="p-3"
+                  data-testid="scenario-lab-first-read-summary"
+                >
+                  <RoughSectionCard eyebrow={locale === 'en' ? 'First read' : '首读'} title={locale === 'en' ? 'Scenario summary' : '情景摘要'}>
+                    <div className="grid gap-2 text-xs md:grid-cols-5">
+                      <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 px-3 py-2">
+                        <div className="text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Current frame' : '当前框架'}</div>
+                        <div className="mt-1 font-semibold text-[color:var(--wolfy-text-primary)]">
+                          {localizedRegime(scenarioResult.baseRegime.regime, locale)}
+                        </div>
+                        <div className="mt-0.5 text-[color:var(--wolfy-text-muted)]">
+                          {localizedConfidence(scenarioResult.baseRegime.confidence, locale)}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 px-3 py-2">
+                        <div className="text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Scenario' : '情景摘要'}</div>
+                        <div className="mt-1 font-semibold text-[color:var(--wolfy-text-primary)]">{selectedLabel}</div>
+                        <div className="mt-0.5 text-[color:var(--wolfy-text-muted)]">
+                          {scenarioUnavailable ? scenarioUnavailableCopy.summaryFallback : localizedRegime(scenarioResult.scenarioRegime.regime, locale)}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 px-3 py-2">
+                        <div className="text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Driver shifts' : '驱动变化'}</div>
+                        <div className="mt-1 font-semibold text-[color:var(--wolfy-text-primary)]">
+                          {firstReadDriverText || (locale === 'en' ? 'Scenario pending' : '情景待更新')}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 px-3 py-2">
+                        <div className="text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Evidence boundary' : '证据边界'}</div>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          <TerminalChip variant={scenarioUnavailable ? 'caution' : 'info'}>
+                            {firstReadBoundaryText || (locale === 'en' ? 'Baseline pending' : '基准待确认')}
+                          </TerminalChip>
+                          <TerminalChip variant="info">
+                            {formatDelta(scenarioResult.confidenceDelta)}
+                          </TerminalChip>
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 px-3 py-2">
+                        <div className="text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Next evidence' : '待补证据'}</div>
+                        <div className="mt-1 font-semibold text-[color:var(--wolfy-text-primary)]">{firstReadNextEvidence}</div>
+                      </div>
+                    </div>
+                  </RoughSectionCard>
+                </section>
                 <ConsoleStatusStrip
                   items={[
                     {
@@ -521,15 +585,16 @@ export default function ScenarioLabPage() {
                     />
                   </RoughSectionCard>
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Scenario output' : '情景输出'} title={scenarioUnavailable
-                    ? (locale === 'en' ? 'Scenario is currently unavailable' : '当前情景暂不可生成')
+                    ? (locale === 'en' ? 'Scenario pending' : '情景待更新')
                     : (locale === 'en' ? 'Projected research frame' : '情景后的研究框架')}>
                     {scenarioUnavailable ? (
                       <TerminalEmptyState
                         title={scenarioUnavailableCopy.stateTitle}
                         action={scenarioUnavailableActions}
+                        className="min-h-0 items-start"
                         data-testid="scenario-lab-unavailable-state"
                       >
-                        <div className="space-y-1">
+                        <div className="space-y-0.5">
                           <p>{scenarioUnavailableCopy.stateBody}</p>
                           <p>{scenarioUnavailableCopy.nextStep}</p>
                           <p>{scenarioUnavailableCopy.boundaryNote}</p>
