@@ -16,6 +16,7 @@ import { TerminalButton, TerminalChip, TerminalEmptyState } from '../components/
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
 import {
   stocksApi,
+  type StockQuote,
   type SymbolResearchPacket,
   type StockPeerCorrelationSnapshot,
   type StockStructureDecisionResponse,
@@ -222,6 +223,213 @@ function periodLabel(period: string | null | undefined, language: 'zh' | 'en'): 
   if (normalized === 'daily') return language === 'en' ? 'Daily' : '日线';
   if (normalized === 'weekly') return language === 'en' ? 'Weekly' : '周线';
   return String(period);
+}
+
+const QUOTE_TIMESTAMP_FORMATTERS = {
+  en: new Intl.DateTimeFormat('en-US', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }),
+  zh: new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }),
+} as const;
+
+type QuoteBoundaryChipVariant = 'success' | 'caution' | 'danger' | 'info' | 'neutral';
+
+type QuoteBoundaryChip = {
+  label: string;
+  variant: QuoteBoundaryChipVariant;
+};
+
+type QuoteBoundaryView = {
+  title: string;
+  detail: string;
+  chips: QuoteBoundaryChip[];
+};
+
+function formatQuoteTimestamp(value: string | null | undefined, language: 'zh' | 'en'): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return QUOTE_TIMESTAMP_FORMATTERS[language].format(date);
+}
+
+function normalizeQuoteBoundaryToken(value: string | null | undefined): string {
+  return String(value || '').trim().toLowerCase().replace(/[-\s]+/g, '_');
+}
+
+function quoteBoundaryStateLabel(quote: StockQuote, language: 'zh' | 'en'): { label: string; variant: QuoteBoundaryChipVariant } {
+  const sourceConfidence = quote.sourceConfidence;
+  const freshness = normalizeQuoteBoundaryToken(sourceConfidence?.freshness || quote.freshness);
+  const synthetic = Boolean(sourceConfidence?.isSynthetic || quote.isSynthetic || freshness === 'synthetic');
+  const stale = Boolean(sourceConfidence?.isStale || quote.isStale || freshness === 'stale' || freshness === 'delayed');
+  const unavailable = Boolean(sourceConfidence?.isUnavailable || freshness === 'unavailable');
+  const partial = Boolean(sourceConfidence?.isPartial || quote.isPartial);
+
+  if (synthetic) {
+    return {
+      label: language === 'en' ? 'Sample quote' : '样本报价',
+      variant: 'info',
+    };
+  }
+  if (unavailable) {
+    return {
+      label: language === 'en' ? 'Quote needed' : '报价待补',
+      variant: 'caution',
+    };
+  }
+  if (stale || partial) {
+    return {
+      label: language === 'en' ? 'Quote may be delayed' : '报价可能延迟',
+      variant: 'caution',
+    };
+  }
+  if (normalizeQuoteBoundaryToken(quote.freshness) || quote.currentPrice != null) {
+    return {
+      label: language === 'en' ? 'Quote ready' : '报价可用',
+      variant: 'success',
+    };
+  }
+  return {
+    label: language === 'en' ? 'Quote pending' : '报价待确认',
+    variant: 'caution',
+  };
+}
+
+function quoteBoundarySourceLabel(quote: StockQuote, language: 'zh' | 'en'): { label: string; variant: QuoteBoundaryChipVariant } {
+  const sourceConfidence = quote.sourceConfidence;
+  if (!sourceConfidence) {
+    return {
+      label: language === 'en' ? 'Source pending' : '来源待确认',
+      variant: 'caution',
+    };
+  }
+
+  if (sourceConfidence.isSynthetic || normalizeQuoteBoundaryToken(sourceConfidence.freshness) === 'synthetic') {
+    return {
+      label: language === 'en' ? 'Sample / demo' : '样本 / 演示',
+      variant: 'info',
+    };
+  }
+  if (sourceConfidence.isUnavailable || sourceConfidence.isPartial) {
+    return {
+      label: language === 'en' ? 'Source pending' : '来源待确认',
+      variant: 'caution',
+    };
+  }
+  if (sourceConfidence.isStale || normalizeQuoteBoundaryToken(sourceConfidence.freshness) === 'stale') {
+    return {
+      label: language === 'en' ? 'Source may be delayed' : '来源可能延迟',
+      variant: 'caution',
+    };
+  }
+  return {
+    label: language === 'en' ? 'Source confirmed' : '来源已确认',
+    variant: 'success',
+  };
+}
+
+function quoteBoundaryFreshnessLabel(quote: StockQuote, language: 'zh' | 'en'): { label: string; variant: QuoteBoundaryChipVariant } {
+  const sourceConfidence = quote.sourceConfidence;
+  const freshness = normalizeQuoteBoundaryToken(sourceConfidence?.freshness || quote.freshness);
+
+  if (sourceConfidence?.isSynthetic || freshness === 'synthetic') {
+    return {
+      label: language === 'en' ? 'Sample / demo' : '样本 / 演示',
+      variant: 'info',
+    };
+  }
+  if (sourceConfidence?.isUnavailable || freshness === 'unavailable') {
+    return {
+      label: language === 'en' ? 'Unavailable' : '暂不可用',
+      variant: 'danger',
+    };
+  }
+  if (sourceConfidence?.isStale || quote.isStale || freshness === 'stale' || freshness === 'delayed') {
+    return {
+      label: language === 'en' ? 'May be delayed' : '可能延迟',
+      variant: 'caution',
+    };
+  }
+  if (freshness === 'live' || freshness === 'fresh') {
+    return {
+      label: language === 'en' ? 'Latest available' : '最新可用',
+      variant: 'success',
+    };
+  }
+  return {
+    label: language === 'en' ? 'Freshness pending' : '新鲜度待确认',
+    variant: 'caution',
+  };
+}
+
+function buildQuoteBoundaryView(
+  quote: StockQuote | null,
+  quoteFailed: boolean,
+  language: 'zh' | 'en',
+): QuoteBoundaryView | null {
+  if (!quote && !quoteFailed) return null;
+  if (!quote) {
+    return {
+      title: language === 'en' ? 'Quote boundary unavailable' : '报价边界暂不可用',
+      detail: language === 'en'
+        ? 'The quote boundary is unavailable, so keep this symbol in observation mode.'
+        : '报价边界暂不可用，先按观察处理。',
+      chips: [
+        {
+          label: language === 'en' ? 'Source pending' : '来源待确认',
+          variant: 'caution',
+        },
+        {
+          label: language === 'en' ? 'Observation only' : '仅观察',
+          variant: 'neutral',
+        },
+      ],
+    };
+  }
+
+  const state = quoteBoundaryStateLabel(quote, language);
+  const source = quoteBoundarySourceLabel(quote, language);
+  const freshness = quoteBoundaryFreshnessLabel(quote, language);
+  const asOf = formatQuoteTimestamp(
+    quote.sourceConfidence?.asOf || quote.marketTimestamp || quote.observedAt || quote.updateTime || null,
+    language,
+  );
+  const detail = source.label === (language === 'en' ? 'Sample / demo' : '样本 / 演示')
+    ? (language === 'en'
+      ? 'Sample or demo data is visible for observation only.'
+      : '当前为样本/演示数据，仅供观察。')
+    : source.label === (language === 'en' ? 'Source pending' : '来源待确认')
+      ? (language === 'en'
+        ? 'The quote was returned, but the source boundary was not provided.'
+        : '报价已返回，但来源边界未提供。')
+      : state.label === (language === 'en' ? 'Quote may be delayed' : '报价可能延迟')
+        ? (language === 'en'
+          ? 'The quote boundary may be delayed, so read it as observation only.'
+          : '报价边界可能延迟，先按观察处理。')
+        : (language === 'en'
+          ? 'This quote boundary is for research observation only.'
+          : '该报价边界仅供研究观察。');
+
+  return {
+    title: language === 'en' ? 'Quote source and freshness' : '报价来源与新鲜度',
+    detail,
+    chips: [
+      state,
+      source,
+      freshness,
+      asOf ? {
+        label: `${language === 'en' ? 'Updated' : '更新'} ${asOf}`,
+        variant: 'neutral',
+      } : null,
+    ].filter(Boolean) as QuoteBoundaryChip[],
+  };
 }
 
 function barsRangeLabel(min: unknown, max: unknown, language: 'zh' | 'en'): string | null {
@@ -1128,6 +1336,8 @@ export default function StockStructureDecisionPage() {
   const [data, setData] = useState<StockStructureDecisionResponse | null>(null);
   const [researchPacket, setResearchPacket] = useState<SymbolResearchPacket | null>(null);
   const [researchPacketFailed, setResearchPacketFailed] = useState(false);
+  const [quote, setQuote] = useState<StockQuote | null>(null);
+  const [quoteFailed, setQuoteFailed] = useState(false);
   const [comparePacket, setComparePacket] = useState<StockSymbolCompareEvidencePacket | null>(null);
   const [symbolNotFound, setSymbolNotFound] = useState<SymbolNotFoundState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1139,6 +1349,8 @@ export default function StockStructureDecisionPage() {
     setSymbolNotFound(null);
     setResearchPacket(null);
     setResearchPacketFailed(false);
+    setQuote(null);
+    setQuoteFailed(false);
     try {
       if (isCompareRequest) {
         const [packetResult, responseResult] = await Promise.allSettled([
@@ -1177,12 +1389,19 @@ export default function StockStructureDecisionPage() {
           });
           return;
         }
-        const [packetResult, responseResult] = await Promise.allSettled([
+        const [quoteResult, packetResult, responseResult] = await Promise.allSettled([
+          stocksApi.getQuote(primarySymbol),
           stocksApi.getResearchPacket(primarySymbol),
           stocksApi.getStructureDecision(primarySymbol),
         ]);
+        if (quoteResult.status === 'fulfilled') {
+          setQuote(quoteResult.value);
+        } else {
+          setQuoteFailed(true);
+        }
         if (packetResult.status === 'fulfilled') {
           setResearchPacket(packetResult.value);
+          setResearchPacketFailed(false);
         } else {
           setResearchPacketFailed(true);
         }
@@ -1273,6 +1492,10 @@ export default function StockStructureDecisionPage() {
       detail: level.value != null ? safeOptionalConsumerText(level.description, locale) || undefined : undefined,
     }))
     .filter((row) => row.value != null && row.value !== '') : [];
+  const quoteBoundaryView = useMemo(
+    () => buildQuoteBoundaryView(quote, quoteFailed, locale),
+    [locale, quote, quoteFailed],
+  );
   const compareWithPeerPath = data && comparablePeerSymbol && !isCompareRequest
     ? localize(buildComparePath([data.ticker || primarySymbol, comparablePeerSymbol]))
     : null;
@@ -1362,6 +1585,24 @@ export default function StockStructureDecisionPage() {
                 symbol={symbolNotFound.symbol}
                 localize={localize}
               />
+            ) : null}
+            {quoteBoundaryView ? (
+              <div className="p-3 md:p-4">
+                <RoughSectionCard
+                  data-testid="stock-quote-boundary-panel"
+                  eyebrow={locale === 'en' ? 'Quote boundary' : '报价边界'}
+                  title={quoteBoundaryView.title}
+                >
+                  <div className="flex flex-wrap gap-2">
+                    {quoteBoundaryView.chips.map((chip) => (
+                      <StatusBadge key={chip.label} status={chip.variant} label={chip.label} size="sm" />
+                    ))}
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+                    {quoteBoundaryView.detail}
+                  </p>
+                </RoughSectionCard>
+              </div>
             ) : null}
             {data ? (
               <>
