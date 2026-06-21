@@ -332,109 +332,72 @@ type StockResearchFact = {
   detail?: string;
 };
 
-type PacketFamily = 'quote' | 'history' | 'structure' | 'fundamentals' | 'events' | 'peer';
+type EvidenceStackBucket = 'available' | 'missing' | 'partial' | 'stale';
 
-type PacketFamilyRow = {
-  key: PacketFamily;
+type EvidenceStackRow = {
+  key: string;
   label: string;
   value: string;
+  bucket: EvidenceStackBucket;
 };
 
-function researchStatusLabel(value: string | null | undefined, language: 'zh' | 'en'): string {
+function evidenceStateBucket(value: string | null | undefined): EvidenceStackBucket {
   const token = normalizeStockConsumerToken(value);
-  const labels: Record<string, { zh: string; en: string }> = {
-    ready: { zh: '可研究', en: 'Research ready' },
-    partial: { zh: '部分可用', en: 'Partially ready' },
-    blocked: { zh: '数据待补', en: 'Data needed' },
-    unknown: { zh: '待确认', en: 'Needs confirmation' },
-  };
-  return labels[token]?.[language] ?? labels.unknown[language];
+  if (token === 'available' || token === 'ready') return 'available';
+  if (token === 'stale' || token === 'delayed') return 'stale';
+  if (token === 'partial' || token === 'insufficient') return 'partial';
+  return 'missing';
 }
 
-function packetFamilyStateLabel(
-  family: PacketFamily,
-  value: string | null | undefined,
-  language: 'zh' | 'en',
-): string {
+function quoteEvidenceLabel(value: string | null | undefined, language: 'zh' | 'en'): string {
+  const bucket = evidenceStateBucket(value);
+  if (bucket === 'available') return language === 'en' ? 'Quote ready' : '报价可用';
+  if (bucket === 'stale') return language === 'en' ? 'Quote may be delayed' : '报价可能延迟';
+  return language === 'en' ? 'Quote needed' : '报价待补';
+}
+
+function historyEvidenceLabel(value: string | null | undefined, language: 'zh' | 'en'): string {
+  const bucket = evidenceStateBucket(value);
+  if (bucket === 'available') return language === 'en' ? 'History ready' : '历史可用';
+  if (bucket === 'stale') return language === 'en' ? 'History may be stale' : '历史可能延迟';
+  return language === 'en' ? 'History needed' : '历史待补';
+}
+
+function identityEvidenceLabel(bucket: EvidenceStackBucket, language: 'zh' | 'en'): string {
+  return bucket === 'available'
+    ? (language === 'en' ? 'Symbol context ready' : '标的上下文可用')
+    : (language === 'en' ? 'Symbol context needed' : '标的上下文待补');
+}
+
+function fundamentalsEvidenceLabel(value: string | null | undefined, language: 'zh' | 'en'): string {
+  return evidenceStateBucket(value) === 'available'
+    ? (language === 'en' ? 'Fundamentals ready' : '基本面可用')
+    : (language === 'en' ? 'Fundamentals needed' : '基本面待补');
+}
+
+function newsEvidenceLabel(value: string | null | undefined, hasLatest: boolean, language: 'zh' | 'en'): string {
+  return evidenceStateBucket(value) === 'available' || hasLatest
+    ? (language === 'en' ? 'News leads ready' : '新闻线索可用')
+    : (language === 'en' ? 'News leads needed' : '新闻线索待补');
+}
+
+function riskEvidenceLabel(bucket: EvidenceStackBucket, language: 'zh' | 'en'): string {
+  return bucket === 'available'
+    ? (language === 'en' ? 'Risk source ready' : '风险来源可用')
+    : (language === 'en' ? 'Risk source needed' : '风险来源待补');
+}
+
+function marketEvidenceLabel(bucket: EvidenceStackBucket, language: 'zh' | 'en'): string {
+  return bucket === 'available'
+    ? (language === 'en' ? 'Market context ready' : '市场线索可用')
+    : (language === 'en' ? 'Market context needed' : '市场线索待补');
+}
+
+function researchPacketEvidenceLabel(value: string | null | undefined, language: 'zh' | 'en'): string {
   const token = normalizeStockConsumerToken(value);
-  const zhLabels: Record<PacketFamily, Record<string, string>> = {
-    quote: {
-      available: '报价可用',
-      missing: '报价待补',
-      stale: '报价待确认',
-      unknown: '报价待确认',
-    },
-    history: {
-      available: '历史可用',
-      missing: '历史待补',
-      stale: '历史待确认',
-      unknown: '历史待确认',
-    },
-    structure: {
-      available: '结构可用',
-      insufficient: '结构待补',
-      missing: '结构待补',
-      unknown: '结构待确认',
-    },
-    fundamentals: {
-      available: '基本面可用',
-      missing: '基本面待补',
-      not_integrated: '基本面待接入',
-      unknown: '基本面待补',
-    },
-    events: {
-      available: '事件可用',
-      missing: '事件待补',
-      not_integrated: '事件待接入',
-      unknown: '事件待补',
-    },
-    peer: {
-      available: '同业可用',
-      insufficient: '同业待补',
-      missing: '同业待补',
-      unknown: '同业待确认',
-    },
-  };
-  const enLabels: Record<PacketFamily, Record<string, string>> = {
-    quote: {
-      available: 'Quote ready',
-      missing: 'Quote needed',
-      stale: 'Quote needs confirmation',
-      unknown: 'Quote needs confirmation',
-    },
-    history: {
-      available: 'History ready',
-      missing: 'History needed',
-      stale: 'History needs confirmation',
-      unknown: 'History needs confirmation',
-    },
-    structure: {
-      available: 'Structure ready',
-      insufficient: 'Structure needed',
-      missing: 'Structure needed',
-      unknown: 'Structure needs confirmation',
-    },
-    fundamentals: {
-      available: 'Fundamentals ready',
-      missing: 'Fundamentals needed',
-      not_integrated: 'Fundamentals pending',
-      unknown: 'Fundamentals needed',
-    },
-    events: {
-      available: 'Events ready',
-      missing: 'Events needed',
-      not_integrated: 'Events pending',
-      unknown: 'Events needed',
-    },
-    peer: {
-      available: 'Peer ready',
-      insufficient: 'Peer needed',
-      missing: 'Peer needed',
-      unknown: 'Peer needs confirmation',
-    },
-  };
-  const labels = language === 'en' ? enLabels : zhLabels;
-  return labels[family][token] ?? labels[family].unknown;
+  return token === 'blocked' || token === 'unknown'
+    ? (language === 'en' ? 'Research packet pending' : '研究包待生成')
+    : (language === 'en' ? 'Research packet ready' : '研究包可用');
 }
 
 function missingDataLabel(value: string, language: 'zh' | 'en'): string {
@@ -454,65 +417,131 @@ function missingDataLabel(value: string, language: 'zh' | 'en'): string {
   return labels[token]?.[language] ?? (language === 'en' ? 'data' : '资料');
 }
 
-function packetMissingDataSummary(packet: SymbolResearchPacket, language: 'zh' | 'en'): string | null {
-  const labels = compactUnique(packet.missingData.map((item) => missingDataLabel(item, language)));
-  if (!labels.length) return null;
-  return language === 'en'
-    ? `Needed: ${labels.slice(0, 4).join(', ')}`
-    : `待补：${labels.slice(0, 4).join('、')}`;
-}
-
 function hasMissingData(packet: SymbolResearchPacket, tokens: string[]): boolean {
   const normalized = packet.missingData.map(normalizeStockConsumerToken);
   return tokens.some((token) => normalized.includes(token));
 }
 
-function compactNextDataAction(packet: SymbolResearchPacket, language: 'zh' | 'en'): string {
-  if (hasMissingData(packet, ['quote', 'price_history', 'history'])) {
-    return language === 'en' ? 'Add quote and history' : '补报价与历史';
-  }
-  if (hasMissingData(packet, ['fundamentals', 'filing_event_catalyst', 'events', 'peer_benchmark', 'peer'])) {
-    return language === 'en' ? 'Add fundamentals, events, and peer data' : '补基本面、事件、同业';
-  }
-  if (normalizeStockConsumerToken(packet.researchStatus) === 'ready') {
-    return language === 'en' ? 'Continue data review' : '继续复核数据';
-  }
-  return language === 'en' ? 'Add data' : '补数据';
+function buildEvidenceGapLabels(packet: SymbolResearchPacket, language: 'zh' | 'en'): string[] {
+  const labels = packet.missingData.map((item) => {
+    const token = normalizeStockConsumerToken(item);
+    if (token === 'quote') return language === 'en' ? 'Quote needed' : '报价待补';
+    if (token === 'history' || token === 'price_history') return language === 'en' ? 'History needed' : '历史待补';
+    if (token === 'fundamentals') return language === 'en' ? 'Fundamentals needed' : '基本面待补';
+    if (token === 'events' || token === 'filing_event_catalyst') return language === 'en' ? 'News leads needed' : '新闻线索待补';
+    if (token === 'peer' || token === 'peer_benchmark' || token === 'market_context') return language === 'en' ? 'Market context needed' : '市场线索待补';
+    if (token === 'structure' || token === 'risk') return language === 'en' ? 'Risk source needed' : '风险来源待补';
+    return language === 'en' ? `${missingDataLabel(item, language)} needed` : `${missingDataLabel(item, language)}待补`;
+  });
+  return compactUnique(labels).slice(0, 5);
 }
 
-function buildPacketFamilyRows(packet: SymbolResearchPacket, language: 'zh' | 'en'): PacketFamilyRow[] {
+function buildEvidenceStackRows(packet: SymbolResearchPacket, language: 'zh' | 'en'): EvidenceStackRow[] {
+  const hasSymbolContext = Boolean(
+    packet.identity.name
+      || packet.identity.exchange
+      || packet.identity.sector
+      || packet.identity.industry,
+  );
+  const hasMarketContext = Boolean(
+    packet.identity.exchange
+      || packet.identity.sector
+      || packet.identity.industry
+      || packet.peer.benchmark,
+  ) && !hasMissingData(packet, ['peer_benchmark', 'market_context']);
+  const riskBucket = evidenceStateBucket(packet.structure.state);
+  const packetBucket = evidenceStateBucket(packet.researchStatus);
   return [
     {
       key: 'quote',
       label: language === 'en' ? 'Quote' : '报价',
-      value: packetFamilyStateLabel('quote', packet.quote.state, language),
+      value: quoteEvidenceLabel(packet.quote.state, language),
+      bucket: evidenceStateBucket(packet.quote.state),
+    },
+    {
+      key: 'symbol-context',
+      label: language === 'en' ? 'Symbol context' : '标的上下文',
+      value: identityEvidenceLabel(hasSymbolContext ? 'available' : 'missing', language),
+      bucket: hasSymbolContext ? 'available' : 'missing',
     },
     {
       key: 'history',
       label: language === 'en' ? 'History' : '历史',
-      value: packetFamilyStateLabel('history', packet.history.state, language),
-    },
-    {
-      key: 'structure',
-      label: language === 'en' ? 'Structure' : '结构',
-      value: packetFamilyStateLabel('structure', packet.structure.state, language),
+      value: historyEvidenceLabel(packet.history.state, language),
+      bucket: evidenceStateBucket(packet.history.state),
     },
     {
       key: 'fundamentals',
       label: language === 'en' ? 'Fundamentals' : '基本面',
-      value: packetFamilyStateLabel('fundamentals', packet.fundamentals.state, language),
+      value: fundamentalsEvidenceLabel(packet.fundamentals.state, language),
+      bucket: evidenceStateBucket(packet.fundamentals.state),
     },
     {
-      key: 'events',
-      label: language === 'en' ? 'Events' : '事件',
-      value: packetFamilyStateLabel('events', packet.events.state, language),
+      key: 'news',
+      label: language === 'en' ? 'News / events' : '新闻 / 事件',
+      value: newsEvidenceLabel(packet.events.state, packet.events.latest.length > 0, language),
+      bucket: packet.events.latest.length > 0 ? 'available' : evidenceStateBucket(packet.events.state),
     },
     {
-      key: 'peer',
-      label: language === 'en' ? 'Peer' : '同业',
-      value: packetFamilyStateLabel('peer', packet.peer.state, language),
+      key: 'risk',
+      label: language === 'en' ? 'Risk source' : '风险来源',
+      value: riskEvidenceLabel(riskBucket, language),
+      bucket: riskBucket,
+    },
+    {
+      key: 'market-context',
+      label: language === 'en' ? 'Market context' : '市场线索',
+      value: marketEvidenceLabel(hasMarketContext ? 'available' : 'missing', language),
+      bucket: hasMarketContext ? 'available' : 'missing',
+    },
+    {
+      key: 'research-packet',
+      label: language === 'en' ? 'Research packet' : '研究包',
+      value: researchPacketEvidenceLabel(packet.researchStatus, language),
+      bucket: packetBucket,
     },
   ];
+}
+
+function evidenceStackCounts(rows: EvidenceStackRow[]): Record<EvidenceStackBucket, number> {
+  return rows.reduce<Record<EvidenceStackBucket, number>>((counts, row) => ({
+    ...counts,
+    [row.bucket]: counts[row.bucket] + 1,
+  }), {
+    available: 0,
+    missing: 0,
+    partial: 0,
+    stale: 0,
+  });
+}
+
+function evidenceCompletenessLabel(counts: Record<EvidenceStackBucket, number>, language: 'zh' | 'en'): string {
+  const complete = counts.missing === 0 && counts.partial === 0 && counts.stale === 0;
+  return complete
+    ? (language === 'en' ? 'Evidence complete' : '证据完整')
+    : (language === 'en' ? 'Evidence partially ready' : '证据部分可用');
+}
+
+function evidenceAuthorityLabels(packet: SymbolResearchPacket, language: 'zh' | 'en'): string[] {
+  if (packet.observationOnly || !packet.decisionGrade) {
+    return [
+      language === 'en' ? 'Observation only' : '仅观察',
+      language === 'en' ? 'Score needs confirmation' : '评分待确认',
+    ];
+  }
+  return [language === 'en' ? 'Authoritative' : '权威证据可用'];
+}
+
+function evidenceCountLabels(counts: Record<EvidenceStackBucket, number>, language: 'zh' | 'en'): string[] {
+  const labels = [
+    [counts.available, language === 'en' ? 'ready' : '可用'],
+    [counts.missing, language === 'en' ? 'needed' : '待补'],
+    [counts.partial, language === 'en' ? 'partial' : '部分'],
+    [counts.stale, language === 'en' ? 'delayed' : '延迟'],
+  ] as const;
+  return labels
+    .filter(([count]) => count > 0)
+    .map(([count, label]) => language === 'en' ? `${count} ${label}` : `${label} ${count}`);
 }
 
 function isSymbolNotFoundValidation(
@@ -773,42 +802,46 @@ function StockResearchPacketPanel({
 
   if (!packet) return null;
 
-  const familyRows = buildPacketFamilyRows(packet, language);
+  const stackRows = buildEvidenceStackRows(packet, language);
+  const counts = evidenceStackCounts(stackRows);
+  const countLabels = evidenceCountLabels(counts, language);
+  const authorityLabels = evidenceAuthorityLabels(packet, language);
+  const gapLabels = buildEvidenceGapLabels(packet, language);
   const identityLabel = [
     safeOptionalConsumerText(packet.identity.name, language),
     safeOptionalConsumerText(packet.market, language),
   ].filter(Boolean).join(' · ') || packet.symbol;
-  const missingSummary = packetMissingDataSummary(packet, language);
-  const nextAction = compactNextDataAction(packet, language);
 
   return (
     <div className="grid gap-3 border-t border-[color:var(--wolfy-divider)] p-3" data-testid="stock-research-packet-panel">
       <RoughSectionCard
-        eyebrow={isEnglish ? 'Research packet' : '研究包'}
-        title={isEnglish ? 'Readiness snapshot' : '研究就绪快照'}
+        eyebrow={isEnglish ? 'Evidence stack' : '证据栈'}
+        title={evidenceCompletenessLabel(counts, language)}
       >
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <TerminalChip variant="info">{packet.symbol}</TerminalChip>
           <TerminalChip variant="neutral">{identityLabel}</TerminalChip>
-          <TerminalChip variant={normalizeStockConsumerToken(packet.researchStatus) === 'ready' ? 'success' : 'caution'}>
-            {researchStatusLabel(packet.researchStatus, language)}
-          </TerminalChip>
-          <TerminalChip variant="neutral">{isEnglish ? 'Research record' : '研究记录'}</TerminalChip>
-          <TerminalChip variant="neutral">{isEnglish ? 'No trade instruction' : '非交易指令'}</TerminalChip>
+          {authorityLabels.map((label) => (
+            <TerminalChip key={label} variant="neutral">{label}</TerminalChip>
+          ))}
+          {countLabels.map((label) => (
+            <TerminalChip key={label} variant="info">{label}</TerminalChip>
+          ))}
         </div>
         <RoughKeyValueRows
-          rows={familyRows.map((row) => ({
+          rows={stackRows.map((row) => ({
             key: row.key,
             label: row.label,
             value: row.value,
           }))}
         />
       </RoughSectionCard>
-      {(missingSummary || nextAction) ? (
-        <RoughSectionCard eyebrow={isEnglish ? 'Data action' : '数据动作'} title={isEnglish ? 'Next data step' : '下一步数据'}>
+      {gapLabels.length ? (
+        <RoughSectionCard eyebrow={isEnglish ? 'Next evidence gaps' : '下一证据缺口'} title={isEnglish ? 'What remains missing' : '仍需补齐'}>
           <div className="flex flex-wrap gap-2">
-            {missingSummary ? <TerminalChip variant="caution">{missingSummary}</TerminalChip> : null}
-            {nextAction ? <TerminalChip variant="info">{nextAction}</TerminalChip> : null}
+            {gapLabels.map((label) => (
+              <TerminalChip key={label} variant="caution">{label}</TerminalChip>
+            ))}
           </div>
         </RoughSectionCard>
       ) : null}

@@ -341,6 +341,43 @@ describe('stocksApi', () => {
     expect(payload.noAdviceDisclosure).toContain('Observation-only research packet');
   });
 
+  it('keeps research packet readiness fields backward compatible when families are omitted', async () => {
+    const { stocksApi } = await import('../stocks');
+
+    get.mockResolvedValueOnce({
+      data: {
+        symbol: 'MSFT',
+        market: 'us',
+        identity: {
+          name: 'Microsoft',
+        },
+        research_status: null,
+        observation_only: true,
+        decision_grade: false,
+      },
+    });
+
+    const payload = await stocksApi.getResearchPacket('MSFT');
+
+    expect(payload.symbol).toBe('MSFT');
+    expect(payload.identity).toEqual({
+      name: 'Microsoft',
+      exchange: null,
+      sector: null,
+      industry: null,
+    });
+    expect(payload.quote.state).toBe('unknown');
+    expect(payload.history.state).toBe('unknown');
+    expect(payload.structure.state).toBe('unknown');
+    expect(payload.fundamentals).toEqual({ state: 'unknown', fieldsAvailable: [] });
+    expect(payload.events).toEqual({ state: 'unknown', latest: [] });
+    expect(payload.peer).toEqual({ state: 'unknown', benchmark: null });
+    expect(payload.missingData).toEqual([]);
+    expect(payload.researchStatus).toBe('unknown');
+    expect(payload.observationOnly).toBe(true);
+    expect(payload.decisionGrade).toBe(false);
+  });
+
   it('normalizes consumer-safe stock validation status fields', async () => {
     const { stocksApi } = await import('../stocks');
 
