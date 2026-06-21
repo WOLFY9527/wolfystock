@@ -111,6 +111,16 @@ type WatchlistRowStatus = {
   researchStatusVariant: ComponentProps<typeof TerminalChip>['variant'];
   missingSummary: string | null;
 };
+type WatchlistRowDecisionContextChip = {
+  label: string;
+  variant: ComponentProps<typeof TerminalChip>['variant'];
+};
+type WatchlistRowDecisionContext = {
+  chips: WatchlistRowDecisionContextChip[];
+  evidenceGapSummary: string | null;
+  evidenceStackLabel: string;
+  evidenceStackAriaLabel: string;
+};
 type WatchlistConclusionModel = {
   title: string;
   detail: string;
@@ -138,6 +148,7 @@ type BatchProgress = {
 type WatchlistMonitoringTone = 'success' | 'caution' | 'neutral';
 
 const ROW_SELECTION_BUTTON_CLASS = 'inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-lg border transition hover:border-white/30 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/35';
+const WATCHLIST_ADVICE_OR_TRADE_WORDS = /建议(买入|卖出|加仓|减仓|持有)|买入|卖出|下单|交易建议|操作建议|投资建议|止损|止盈|目标价|仓位建议|\b(buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing|trade advice|investment advice)\b/i;
 
 function normalizeText(value?: string | null): string {
   return String(value || '').trim();
@@ -1136,6 +1147,186 @@ function buildWatchlistRowResearchPacketView(
   language: 'zh' | 'en',
 ): WatchlistRowResearchPacketConsumerCopy | null {
   return getWatchlistRowResearchPacketConsumerCopy(item.rowResearchPacket ?? null, language);
+}
+
+function normalizeRowPacketState(value?: string | null): string {
+  return normalizeToken(value).replace(/\s+/g, '_');
+}
+
+function getPacketGapLabels(missingData: string[] | null | undefined, language: 'zh' | 'en'): string[] {
+  const labels: string[] = [];
+  const addLabel = (label: string) => {
+    if (!labels.includes(label)) labels.push(label);
+  };
+
+  for (const raw of missingData || []) {
+    if (!raw || hasInternalConsumerCopy(raw) || WATCHLIST_ADVICE_OR_TRADE_WORDS.test(raw)) {
+      continue;
+    }
+    const token = normalizeRowPacketState(raw);
+    if (['quote', 'price_history', 'history', 'price-history evidence'].includes(token)) {
+      addLabel(language === 'en' ? 'quote and history' : '报价与历史');
+    } else if (token.includes('fundamental')) {
+      addLabel(language === 'en' ? 'fundamentals' : '基本面');
+    } else if (token.includes('filing') || token.includes('event') || token.includes('catalyst')) {
+      addLabel(language === 'en' ? 'events' : '事件');
+    } else if (token.includes('peer') || token.includes('benchmark')) {
+      addLabel(language === 'en' ? 'peers' : '同业');
+    } else if (token.includes('structure')) {
+      addLabel(language === 'en' ? 'structure' : '结构');
+    } else if (token.includes('scanner') || token.includes('score')) {
+      addLabel(language === 'en' ? 'score' : '评分');
+    } else {
+      addLabel(language === 'en' ? 'research context' : '研究上下文');
+    }
+  }
+
+  return labels;
+}
+
+function getDecisionQuoteLabel(
+  quoteState: string,
+  language: 'zh' | 'en',
+): WatchlistRowDecisionContextChip {
+  if (quoteState === 'available') {
+    return {
+      label: language === 'en' ? 'Quote ready' : '报价可用',
+      variant: 'success',
+    };
+  }
+  if (quoteState === 'stale') {
+    return {
+      label: language === 'en' ? 'Quote may be delayed' : '报价可能延迟',
+      variant: 'caution',
+    };
+  }
+  return {
+    label: language === 'en' ? 'Quote needed' : '报价待补',
+    variant: 'caution',
+  };
+}
+
+function getDecisionResearchPacketLabel(
+  researchStatus: string,
+  language: 'zh' | 'en',
+): WatchlistRowDecisionContextChip {
+  if (researchStatus === 'ready') {
+    return {
+      label: language === 'en' ? 'Research packet ready' : '研究包可用',
+      variant: 'success',
+    };
+  }
+  if (researchStatus === 'partial') {
+    return {
+      label: language === 'en' ? 'Research packet partial' : '研究包部分可用',
+      variant: 'info',
+    };
+  }
+  return {
+    label: language === 'en' ? 'Research packet pending' : '研究包待生成',
+    variant: 'caution',
+  };
+}
+
+function getDecisionDataReadinessLabel(
+  researchStatus: string,
+  evidenceGapCount: number,
+  language: 'zh' | 'en',
+): WatchlistRowDecisionContextChip {
+  if (researchStatus === 'ready' && evidenceGapCount === 0) {
+    return {
+      label: language === 'en' ? 'Evidence ready' : '证据可用',
+      variant: 'success',
+    };
+  }
+  if (researchStatus === 'partial' || evidenceGapCount > 0) {
+    return {
+      label: language === 'en' ? 'Evidence partially ready' : '证据部分可用',
+      variant: 'info',
+    };
+  }
+  return {
+    label: language === 'en' ? 'Evidence needed' : '证据待补',
+    variant: 'caution',
+  };
+}
+
+function hasPacketScannerScoreEvidence(item: WatchlistItem): boolean {
+  const lineage = item.rowResearchPacket?.scannerLineage;
+  return Boolean(lineage?.runId != null || lineage?.rank != null || lineage?.score != null || lineage?.lastScoredAt);
+}
+
+function getDecisionRiskContextLabel(
+  researchStatus: string,
+  evidenceGapLabels: string[],
+  hasScoreEvidence: boolean,
+  language: 'zh' | 'en',
+): WatchlistRowDecisionContextChip {
+  const joined = evidenceGapLabels.join('|');
+  const needsRiskContext = language === 'en'
+    ? /peers|structure|research context/.test(joined)
+    : /同业|结构|研究上下文/.test(joined);
+  if (!needsRiskContext && (researchStatus === 'ready' || researchStatus === 'partial' || hasScoreEvidence)) {
+    return {
+      label: language === 'en' ? 'Risk context ready' : '风险线索可用',
+      variant: 'info',
+    };
+  }
+  return {
+    label: language === 'en' ? 'Risk context needed' : '风险线索待补',
+    variant: 'caution',
+  };
+}
+
+function buildWatchlistRowDecisionContext(
+  item: WatchlistItem,
+  language: 'zh' | 'en',
+): WatchlistRowDecisionContext | null {
+  const packet = item.rowResearchPacket;
+  if (!packet) return null;
+
+  const quoteState = normalizeRowPacketState(packet.quote?.state);
+  const researchStatus = normalizeRowPacketState(packet.researchStatus);
+  const evidenceGapLabels = getPacketGapLabels(packet.missingData, language);
+  const hasScoreEvidence = hasPacketScannerScoreEvidence(item);
+  const chips: WatchlistRowDecisionContextChip[] = [
+    getDecisionQuoteLabel(quoteState, language),
+    getDecisionResearchPacketLabel(researchStatus, language),
+    getDecisionDataReadinessLabel(researchStatus, evidenceGapLabels.length, language),
+  ];
+
+  if (evidenceGapLabels.length > 0) {
+    chips.push({
+      label: language === 'en' ? `${evidenceGapLabels.length} evidence gaps` : `待补证据 ${evidenceGapLabels.length}项`,
+      variant: 'caution',
+    });
+  }
+
+  chips.push(
+    getDecisionRiskContextLabel(researchStatus, evidenceGapLabels, hasScoreEvidence, language),
+    {
+      label: hasScoreEvidence
+        ? (language === 'en' ? 'Score recorded' : '评分已记录')
+        : (language === 'en' ? 'Score pending' : '评分待确认'),
+      variant: hasScoreEvidence ? 'info' : 'caution',
+    },
+  );
+
+  if (packet.observationOnly) {
+    chips.push({
+      label: language === 'en' ? 'Observation only' : '仅观察',
+      variant: 'neutral',
+    });
+  }
+
+  return {
+    chips,
+    evidenceGapSummary: evidenceGapLabels.length
+      ? `${language === 'en' ? 'Needed' : '待补'}：${evidenceGapLabels.join(language === 'en' ? ', ' : '、')}`
+      : null,
+    evidenceStackLabel: language === 'en' ? 'View evidence stack' : '查看证据栈',
+    evidenceStackAriaLabel: `${language === 'en' ? 'View evidence stack' : '查看证据栈'} ${item.symbol}`,
+  };
 }
 
 function formatBacktestStatus(item: WatchlistItem, failure?: BatchFailure): string {
@@ -2407,6 +2598,7 @@ const WatchlistPage: React.FC = () => {
                         )
                       : null;
                     const rowPacketView = buildWatchlistRowResearchPacketView(item, language);
+                    const rowDecisionContext = rowPacketView ? buildWatchlistRowDecisionContext(item, language) : null;
                     const rowObservation = rowPacketView
                       ? rowPacketView.missingSummary || rowPacketView.researchStatusLabel
                       : buildObservationSummary(item, language);
@@ -2551,6 +2743,34 @@ const WatchlistPage: React.FC = () => {
                               ) : null}
                             </div>
                             <p className="truncate text-xs font-mono text-white/55">{rowStateLine || `${copy.score} ${formatScore(score)}`}</p>
+                            {rowDecisionContext ? (
+                              <div
+                                data-testid={`watchlist-row-decision-context-${item.symbol}`}
+                                className="rounded-lg border border-white/10 bg-white/[0.025] px-2.5 py-2"
+                              >
+                                <div className="mb-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
+                                  <span className="text-[11px] text-white/45">
+                                    {language === 'en' ? 'Research state' : '研究状态'}
+                                  </span>
+                                  {rowDecisionContext.chips.map((chip) => (
+                                    <TerminalChip key={chip.label} variant={chip.variant}>{chip.label}</TerminalChip>
+                                  ))}
+                                </div>
+                                <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/58">
+                                  {rowDecisionContext.evidenceGapSummary ? (
+                                    <span>{rowDecisionContext.evidenceGapSummary}</span>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    aria-label={rowDecisionContext.evidenceStackAriaLabel}
+                                    className="inline-flex min-h-[28px] items-center rounded-md border border-cyan-300/20 px-2 text-cyan-100/85 transition hover:border-cyan-200/40 hover:bg-cyan-300/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/35"
+                                    onClick={() => navigate(buildStockStructurePath(item, language))}
+                                  >
+                                    {rowDecisionContext.evidenceStackLabel}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : null}
                             <p className="text-sm leading-6 text-white/72">{rowObservation}</p>
                             <p className="text-xs text-white/58">{language === 'en' ? 'Next' : '下一步'} {rowNextAction}</p>
                             {rowNotes ? (

@@ -897,6 +897,82 @@ describe('WatchlistPage', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/zh/stocks/600519/structure-decision');
   });
 
+  it('renders row decision context for partial packets without raw diagnostics or advice wording', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [makeItem({
+        id: 19,
+        symbol: 'AAPL',
+        market: 'us',
+        name: 'Apple',
+        source: 'manual',
+        scannerRunId: null,
+        scannerRank: null,
+        scannerScore: null,
+        lastScoredAt: null,
+        scoreSource: null,
+        scoreStatus: null,
+        intelligence: undefined,
+        rowResearchPacket: {
+          symbol: 'AAPL',
+          market: 'us',
+          identity: {
+            name: 'Apple',
+            exchange: 'NASDAQ',
+            sector: 'Technology',
+            industry: 'Consumer Electronics',
+          },
+          savedItemSource: 'manual',
+          quote: {
+            state: 'stale',
+            price: 190.25,
+            changePercent: -0.42,
+            asOf: '2026-05-01T11:00:00Z',
+          },
+          scannerLineage: {
+            runId: null,
+            rank: null,
+            score: null,
+            status: null,
+            lastScoredAt: null,
+          },
+          researchStatus: 'partial',
+          missingData: [
+            'fundamentals',
+            'filing_event_catalyst',
+            'peer_benchmark',
+            'provider_runtime_trace',
+            'sourceAuthority',
+            'buy setup',
+          ],
+          nextDataAction: 'Add fundamentals, filing/event/catalyst, and peer evidence before marking the packet ready.',
+          observationOnly: true,
+          noAdviceDisclosure: 'Observation-only research packet; not personalized financial advice and not an instruction.',
+        },
+        createdAt: '2026-04-10T08:00:00Z',
+        updatedAt: '2026-05-01T10:05:00Z',
+      })],
+    });
+
+    renderWatchlist();
+
+    const row = await screen.findByTestId('watchlist-row-AAPL');
+    const context = within(row).getByTestId('watchlist-row-decision-context-AAPL');
+
+    expect(row).toHaveTextContent('$190.3');
+    expect(context).toHaveTextContent('研究状态');
+    expect(context).toHaveTextContent('报价可能延迟');
+    expect(context).toHaveTextContent('研究包部分可用');
+    expect(context).toHaveTextContent('证据部分可用');
+    expect(context).toHaveTextContent('待补证据 3项');
+    expect(context).toHaveTextContent('风险线索待补');
+    expect(context).toHaveTextContent('评分待确认');
+    expect(context).toHaveTextContent('仅观察');
+    expect(context).toHaveTextContent('待补：基本面、事件、同业');
+    expect(context).toHaveTextContent('查看证据栈');
+    expect(within(row).getByRole('button', { name: '查看证据栈 AAPL' })).toBeInTheDocument();
+    expect(row).not.toHaveTextContent(/provider|runtime|credential|sourceAuthority|fallback|debug|Alpaca|回退观察|buy setup|financial advice|instruction|买入建议|卖出建议|持有建议|目标价|止损|仓位建议|交易建议|操作建议/i);
+  });
+
   it('renders derived workflow strips from watchlist item fields without durable or trading wording', async () => {
     listWatchlistItems.mockResolvedValue({
       items: [
