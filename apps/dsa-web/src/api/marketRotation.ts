@@ -265,15 +265,28 @@ export type MarketRotationAlpacaQuoteAuthorityReadiness = {
   scoreContributionAllowed?: boolean;
 };
 
+type MarketRotationQuoteReadinessVariant = 'success' | 'info' | 'caution' | 'neutral';
+
+export type MarketRotationQuoteCoverageFamilyView = {
+  key: string;
+  label: string;
+  statusLabel: string;
+  variant: MarketRotationQuoteReadinessVariant;
+  countsLabel: string;
+  scoringLabel: string;
+};
+
 export type MarketRotationAlpacaQuoteAuthorityReadinessView = {
   label: string;
-  variant: 'success' | 'info' | 'caution' | 'neutral';
+  variant: MarketRotationQuoteReadinessVariant;
   chips: Array<{
     key: string;
     label: string;
-    variant: 'success' | 'info' | 'caution' | 'neutral';
+    variant: MarketRotationQuoteReadinessVariant;
   }>;
   detail: string;
+  summaryItems: string[];
+  familyRows: MarketRotationQuoteCoverageFamilyView[];
 };
 
 export type MarketRotationAlertCandidate = {
@@ -713,15 +726,158 @@ function normalizeAlpacaQuoteAuthorityReadiness(
   };
 }
 
+function safeCount(value: unknown, defaultValue = 0): number {
+  if (value === undefined || value === null || value === '') {
+    return defaultValue;
+  }
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? Math.round(numeric) : defaultValue;
+}
+
+function countSymbols(values?: string[]): number {
+  return Array.isArray(values) ? values.filter(Boolean).length : 0;
+}
+
+function summarizeQuoteCoverage(readiness?: MarketRotationAlpacaQuoteAuthorityReadiness | null): Required<MarketRotationQuoteCoverageSummary> {
+  const families = Array.isArray(readiness?.quoteCoverageByFamily) ? readiness.quoteCoverageByFamily : [];
+  const summary = readiness?.coverageSummary || {};
+  const familyTotals = families.reduce<Required<MarketRotationQuoteCoverageSummary>>(
+    (acc, family) => ({
+      configuredCount: acc.configuredCount + safeCount(family.configuredCount, countSymbols(family.configuredSymbols)),
+      availableCount: acc.availableCount + safeCount(family.availableCount, countSymbols(family.availableSymbols)),
+      missingCount: acc.missingCount + safeCount(family.missingCount, countSymbols(family.missingSymbols)),
+      staleCount: acc.staleCount + safeCount(family.staleCount, countSymbols(family.staleSymbols)),
+      scoreAuthorityAllowedCount: acc.scoreAuthorityAllowedCount
+        + safeCount(family.scoreAuthorityAllowedCount, countSymbols(family.scoreAuthorityAllowedSymbols)),
+      observationOnlyCount: acc.observationOnlyCount
+        + safeCount(family.observationOnlyCount, countSymbols(family.observationOnlySymbols)),
+    }),
+    {
+      configuredCount: 0,
+      availableCount: 0,
+      missingCount: 0,
+      staleCount: 0,
+      scoreAuthorityAllowedCount: 0,
+      observationOnlyCount: 0,
+    },
+  );
+  return {
+    configuredCount: safeCount(summary.configuredCount, familyTotals.configuredCount),
+    availableCount: safeCount(summary.availableCount, familyTotals.availableCount),
+    missingCount: safeCount(
+      summary.missingCount,
+      familyTotals.missingCount || countSymbols(readiness?.missingSymbols) || countSymbols(readiness?.quoteCoverage?.missingSymbols),
+    ),
+    staleCount: safeCount(summary.staleCount, familyTotals.staleCount || countSymbols(readiness?.staleSymbols)),
+    scoreAuthorityAllowedCount: safeCount(
+      summary.scoreAuthorityAllowedCount,
+      familyTotals.scoreAuthorityAllowedCount || countSymbols(readiness?.scoreAuthorityAllowedSymbols),
+    ),
+    observationOnlyCount: safeCount(
+      summary.observationOnlyCount,
+      familyTotals.observationOnlyCount || countSymbols(readiness?.observationOnlySymbols),
+    ),
+  };
+}
+
+function quoteCoverageFamilyLabel(family?: MarketRotationQuoteCoverageFamily | null): string {
+  switch (family?.familyId) {
+    case 'broad_us_market':
+      return '大盘代理覆盖';
+    case 'sector_etfs':
+      return '行业ETF覆盖';
+    case 'volatility_risk':
+      return '风险代理覆盖';
+    default:
+      return '代理覆盖';
+  }
+}
+
+function quoteCoverageFamilyStatus(
+  family: MarketRotationQuoteCoverageFamily,
+): { label: string; variant: MarketRotationQuoteReadinessVariant } {
+  const configuredCount = safeCount(family.configuredCount, countSymbols(family.configuredSymbols));
+  const availableCount = safeCount(family.availableCount, countSymbols(family.availableSymbols));
+  const missingCount = safeCount(family.missingCount, countSymbols(family.missingSymbols));
+  const staleCount = safeCount(family.staleCount, countSymbols(family.staleSymbols));
+  const scoreCount = safeCount(family.scoreAuthorityAllowedCount, countSymbols(family.scoreAuthorityAllowedSymbols));
+  const observationCount = safeCount(family.observationOnlyCount, countSymbols(family.observationOnlySymbols));
+  const limited = missingCount > 0 || staleCount > 0 || observationCount > 0 || scoreCount < configuredCount;
+  if (configuredCount <= 0 || availableCount <= 0 || missingCount >= configuredCount) {
+    return { label: '报价待补', variant: 'caution' };
+  }
+  if (family.familyId === 'sector_etfs') {
+    return limited ? { label: 'ETF引用部分可用', variant: 'info' } : { label: 'ETF引用可用', variant: 'success' };
+  }
+  if (limited || scoreCount < configuredCount) {
+    return { label: '代理覆盖有限', variant: 'caution' };
+  }
+  return { label: '代理覆盖可用', variant: 'success' };
+}
+
+function buildQuoteCoverageFamilyRows(
+  readiness?: MarketRotationAlpacaQuoteAuthorityReadiness | null,
+): MarketRotationQuoteCoverageFamilyView[] {
+  const families = Array.isArray(readiness?.quoteCoverageByFamily) ? readiness.quoteCoverageByFamily : [];
+  return families.map((family) => {
+    const configuredCount = safeCount(family.configuredCount, countSymbols(family.configuredSymbols));
+    const availableCount = safeCount(family.availableCount, countSymbols(family.availableSymbols));
+    const missingCount = safeCount(family.missingCount, countSymbols(family.missingSymbols));
+    const staleCount = safeCount(family.staleCount, countSymbols(family.staleSymbols));
+    const scoreCount = safeCount(family.scoreAuthorityAllowedCount, countSymbols(family.scoreAuthorityAllowedSymbols));
+    const observationCount = safeCount(family.observationOnlyCount, countSymbols(family.observationOnlySymbols));
+    const status = quoteCoverageFamilyStatus(family);
+    const availableLabel = family.familyId === 'sector_etfs' ? 'ETF引用可用' : '代理覆盖可用';
+    return {
+      key: family.familyId || quoteCoverageFamilyLabel(family),
+      label: quoteCoverageFamilyLabel(family),
+      statusLabel: status.label,
+      variant: status.variant,
+      countsLabel: `${availableLabel} ${availableCount}/${configuredCount} · 报价待补 ${missingCount} · 报价可能延迟 ${staleCount}`,
+      scoringLabel: scoreCount > 0
+        ? `评分可用 ${scoreCount} · 仅观察 ${observationCount}`
+        : `评分待确认 · 仅观察 ${observationCount}`,
+    };
+  });
+}
+
+function uniqueReadinessChips(
+  chips: MarketRotationAlpacaQuoteAuthorityReadinessView['chips'],
+): MarketRotationAlpacaQuoteAuthorityReadinessView['chips'] {
+  const seen = new Set<string>();
+  return chips.filter((chip) => {
+    if (seen.has(chip.label)) {
+      return false;
+    }
+    seen.add(chip.label);
+    return true;
+  });
+}
+
 export function buildAlpacaQuoteAuthorityReadinessView(
   readiness?: MarketRotationAlpacaQuoteAuthorityReadiness | null,
 ): MarketRotationAlpacaQuoteAuthorityReadinessView {
+  const coverage = summarizeQuoteCoverage(readiness);
+  const summaryItems = [
+    `报价待补 ${coverage.missingCount}`,
+    `报价可能延迟 ${coverage.staleCount}`,
+    `评分可用 ${coverage.scoreAuthorityAllowedCount}`,
+    `仅观察 ${coverage.observationOnlyCount}`,
+  ];
+  const familyRows = buildQuoteCoverageFamilyRows(readiness);
+
   if (!readiness) {
     return {
-      label: '来源待确认',
-      variant: 'neutral',
-      chips: [{ key: 'readiness', label: '来源待确认', variant: 'neutral' }],
-      detail: 'ETF 引用状态待确认，当前先保持观察。',
+      label: 'ETF引用待补',
+      variant: 'caution',
+      chips: [
+        { key: 'readiness', label: 'ETF引用待补', variant: 'caution' },
+        { key: 'missing', label: '报价待补', variant: 'caution' },
+        { key: 'score', label: '评分待确认', variant: 'neutral' },
+      ],
+      detail: 'ETF 引用状态待补，当前先保持观察。',
+      summaryItems,
+      familyRows,
     };
   }
 
@@ -732,20 +888,32 @@ export function buildAlpacaQuoteAuthorityReadinessView(
       ? { label: 'ETF引用部分可用', variant: 'info' as const }
       : state === 'unavailable' || readiness.providerConfigured === false
         ? { label: 'ETF引用待补', variant: 'caution' as const }
-        : { label: '来源待确认', variant: 'neutral' as const };
+        : { label: 'ETF引用待补', variant: 'neutral' as const };
 
-  const limited = readiness.fallbackUsed === true || readiness.scoreContributionAllowed === false;
-  const chips = [
+  const limited = readiness.scoreContributionAllowed === false
+    || coverage.observationOnlyCount > 0
+    || familyRows.some((family) => family.statusLabel === '代理覆盖有限');
+  const chips = uniqueReadinessChips([
     { key: 'readiness', label: primary.label, variant: primary.variant },
-    ...(readiness.fallbackUsed ? [{ key: 'fallback', label: '备用样本观察', variant: 'caution' as const }] : []),
+    ...(limited ? [{ key: 'limitedCoverage', label: '代理覆盖有限', variant: 'caution' as const }] : []),
+    ...(coverage.staleCount > 0 ? [{ key: 'stale', label: '报价可能延迟', variant: 'caution' as const }] : []),
     ...(limited ? [{ key: 'limited', label: '仅观察', variant: 'neutral' as const }] : []),
-  ];
+    {
+      key: 'score',
+      label: coverage.scoreAuthorityAllowedCount > 0 && readiness.scoreContributionAllowed !== false
+        ? '评分可用'
+        : '评分待确认',
+      variant: coverage.scoreAuthorityAllowedCount > 0 && readiness.scoreContributionAllowed !== false ? 'success' as const : 'neutral' as const,
+    },
+  ]);
 
   return {
     label: primary.label,
     variant: primary.variant,
     chips,
     detail: limited ? '当前仅作观察，不纳入评分。' : 'ETF 引用状态可用于主题强弱观察。',
+    summaryItems,
+    familyRows,
   };
 }
 

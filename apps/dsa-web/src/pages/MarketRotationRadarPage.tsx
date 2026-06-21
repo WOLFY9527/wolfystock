@@ -1843,6 +1843,29 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
             ))}
           </div>
         </div>
+        {alpacaReadiness.summaryItems.length ? (
+          <div className="mt-3 flex min-w-0 flex-wrap gap-1.5 text-[11px] leading-5 text-white/52">
+            {alpacaReadiness.summaryItems.map((item) => (
+              <span key={item} className="rounded-md border border-white/[0.06] bg-black/10 px-2 py-0.5">
+                {item}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        {alpacaReadiness.familyRows.length ? (
+          <div className="mt-3 grid gap-2 lg:grid-cols-3">
+            {alpacaReadiness.familyRows.map((family) => (
+              <div key={family.key} className="min-w-0 rounded-md border border-white/[0.06] bg-black/10 p-2">
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                  <p className="text-[11px] font-medium text-white/60">{family.label}</p>
+                  <TerminalChip variant={family.variant}>{family.statusLabel}</TerminalChip>
+                </div>
+                <p className="mt-1 text-[11px] leading-5 text-white/52">{family.countsLabel}</p>
+                <p className="text-[11px] leading-5 text-white/48">{family.scoringLabel}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {familyViews.length ? (
