@@ -72,26 +72,41 @@ def run_bounded_parameter_grid_diagnostic(
         code=code,
     )
     if validation_error is not None:
-        return _reject(result, validation_error["reasonCode"], validation_error)
+        return _reject(
+            result,
+            validation_error["reasonCode"],
+            validation_error,
+            requests=_request_descriptors(request_bundle),
+        )
 
     requests = _request_descriptors(request_bundle)
     path_error = _validate_request_parameter_paths(requests)
     if path_error is not None:
-        return _reject(result, path_error["reasonCode"], path_error)
+        return _reject(result, path_error["reasonCode"], path_error, requests=requests)
     path_application_error = _validate_strategy_parameter_application(
         parsed_strategy=parsed_strategy,
         requests=requests,
     )
     if path_application_error is not None:
-        return _reject(result, path_application_error["reasonCode"], path_application_error)
+        return _reject(
+            result,
+            path_application_error["reasonCode"],
+            path_application_error,
+            requests=requests,
+        )
 
     timeout_budget = _normalize_timeout_budget(total_timeout_seconds)
     if timeout_budget == 0:
-        return _timeout_result(result, reason_code="total_timeout_budget_exhausted_before_execution")
+        return _timeout_result(
+            result,
+            reason_code="total_timeout_budget_exhausted_before_execution",
+            requests=requests,
+        )
 
     resolved_engine = engine or RuleBacktestEngine()
     started_at = time.monotonic()
     run_results_for_surface: list[dict[str, Any]] = []
+    executed_request_ids: set[str] = set()
 
     for request in requests:
         if _timeout_budget_exhausted(started_at=started_at, total_timeout_seconds=timeout_budget):
@@ -103,6 +118,7 @@ def run_bounded_parameter_grid_diagnostic(
         planned_run_id = str(request.get("planned_run_id") or "")
         request_index = int(request.get("request_index") or len(result["requestResults"]) + 1)
         run_strategy = _copy_strategy_with_parameter_values(parsed_strategy, parameter_values)
+        executed_request_ids.add(planned_run_id)
         engine_result = resolved_engine.run(
             code=str(code),
             parsed_strategy=run_strategy,
@@ -115,20 +131,23 @@ def run_bounded_parameter_grid_diagnostic(
             end_date=end_date,
         )
         payload = _engine_result_to_dict(engine_result)
-        run_state = "no_result" if payload.get("no_result_reason") else "completed"
+        run_state = "blocked" if payload.get("no_result_reason") else "completed"
         metrics = copy.deepcopy(dict(payload.get("metrics") or {}))
-        result["requestResults"].append(
-            {
-                "requestIndex": request_index,
-                "plannedRunId": planned_run_id,
-                "state": run_state,
-                "parameterValues": parameter_values,
-                "metrics": metrics,
-                "noResultReason": payload.get("no_result_reason"),
-                "noResultMessage": payload.get("no_result_message"),
-                "warningCount": len(list(payload.get("warnings") or [])),
-            }
-        )
+        row = {
+            "requestIndex": request_index,
+            "plannedRunId": planned_run_id,
+            "state": run_state,
+            "parameterValues": parameter_values,
+            "metrics": metrics,
+            "reasonCode": payload.get("no_result_reason"),
+            "reasonMessage": payload.get("no_result_message"),
+            "noResultReason": payload.get("no_result_reason"),
+            "noResultMessage": payload.get("no_result_message"),
+            "warningCount": len(list(payload.get("warnings") or [])),
+        }
+        result["requestResults"].append(row)
+        if run_state == "blocked":
+            result["blockedRows"].append(copy.deepcopy(row))
         run_results_for_surface.append(
             {
                 "planned_run_id": planned_run_id,
@@ -137,12 +156,23 @@ def run_bounded_parameter_grid_diagnostic(
             }
         )
 
-    result["gridExecutionCount"] = len(result["requestResults"])
-    result["skippedRequestCount"] = max(0, result["acceptedRequestCount"] - result["gridExecutionCount"])
+    _append_skipped_rows(
+        result,
+        requests=requests,
+        executed_request_ids=executed_request_ids,
+        reason_code=(
+            "total_timeout_budget_exhausted"
+            if result["timeout"]["exhausted"]
+            else "not_executed"
+        ),
+    )
+    _finalize_counts(result)
     if result["timeout"]["exhausted"]:
         result["state"] = "timeout_budget_exhausted"
-    elif result["gridExecutionCount"] == result["acceptedRequestCount"]:
+    elif result["summary"]["completedCount"] == result["acceptedRequestCount"]:
         result["state"] = "completed"
+    elif result["summary"]["blockedCount"] == result["acceptedRequestCount"]:
+        result["state"] = "blocked"
     elif result["gridExecutionCount"] > 0:
         result["state"] = "partial"
     else:
@@ -197,6 +227,19 @@ def _base_result(
         "gridExecutionCount": 0,
         "skippedRequestCount": len(requests),
         "requestResults": [],
+        "skippedRows": [],
+        "failedRows": [],
+        "blockedRows": [],
+        "summary": {
+            "totalParameterSets": len(requests),
+            "runCount": 0,
+            "executedCount": 0,
+            "completedCount": 0,
+            "blockedCount": 0,
+            "failedCount": 0,
+            "noResultCount": 0,
+            "skippedCount": len(requests),
+        },
         "parameterStabilitySurface": None,
         "parameterStabilityAggregation": {
             "state": "pending",
@@ -379,13 +422,14 @@ def _set_strategy_spec_path(strategy_spec: dict[str, Any], path_parts: Sequence[
         raise ValueError("safe parameter path must target a strategy_spec leaf.")
     target = strategy_spec
     for part in path_parts[:-1]:
+        if part not in target:
+            raise ValueError("safe parameter path must target an existing strategy_spec field.")
         current = target.get(part)
-        if current is None:
-            current = {}
-            target[part] = current
         if not isinstance(current, dict):
             raise ValueError("safe parameter path conflicts with a non-mapping strategy_spec value.")
         target = current
+    if str(path_parts[-1]) not in target:
+        raise ValueError("safe parameter path must target an existing strategy_spec field.")
     target[str(path_parts[-1])] = copy.deepcopy(value)
 
 
@@ -409,10 +453,23 @@ def _timeout_budget_exhausted(*, started_at: float, total_timeout_seconds: float
     return (time.monotonic() - started_at) >= float(total_timeout_seconds)
 
 
-def _reject(result: dict[str, Any], reason_code: str, diagnostics: Mapping[str, Any]) -> dict[str, Any]:
+def _reject(
+    result: dict[str, Any],
+    reason_code: str,
+    diagnostics: Mapping[str, Any],
+    *,
+    requests: Sequence[Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
     result["state"] = "rejected"
     result["failClosedReasonCode"] = reason_code
     result["failClosedDiagnostics"] = copy.deepcopy(dict(diagnostics))
+    _append_skipped_rows(
+        result,
+        requests=list(requests or []),
+        executed_request_ids=set(),
+        reason_code=reason_code,
+    )
+    _finalize_counts(result)
     result["parameterStabilityAggregation"] = {
         "state": "skipped",
         "reasonCode": reason_code,
@@ -420,16 +477,81 @@ def _reject(result: dict[str, Any], reason_code: str, diagnostics: Mapping[str, 
     return result
 
 
-def _timeout_result(result: dict[str, Any], *, reason_code: str) -> dict[str, Any]:
+def _timeout_result(
+    result: dict[str, Any],
+    *,
+    reason_code: str,
+    requests: Sequence[Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
     result["state"] = "timeout_budget_exhausted"
     result["timeout"]["exhausted"] = True
     result["timeout"]["reasonCode"] = reason_code
     result["failClosedReasonCode"] = reason_code
+    _append_skipped_rows(
+        result,
+        requests=list(requests or []),
+        executed_request_ids=set(),
+        reason_code=reason_code,
+    )
+    _finalize_counts(result)
     result["parameterStabilityAggregation"] = {
         "state": "skipped",
         "reasonCode": reason_code,
     }
     return result
+
+
+def _append_skipped_rows(
+    result: dict[str, Any],
+    *,
+    requests: Sequence[Mapping[str, Any]],
+    executed_request_ids: set[str],
+    reason_code: str,
+) -> None:
+    existing = {
+        str(row.get("plannedRunId") or "")
+        for row in list(result.get("skippedRows") or [])
+    }
+    for request in requests:
+        planned_run_id = str(request.get("planned_run_id") or "")
+        if planned_run_id in executed_request_ids or planned_run_id in existing:
+            continue
+        row = {
+            "requestIndex": int(request.get("request_index") or 0),
+            "plannedRunId": planned_run_id,
+            "state": "skipped",
+            "parameterValues": copy.deepcopy(dict(request.get("parameter_values") or {})),
+            "metrics": {},
+            "reasonCode": reason_code,
+            "reasonMessage": "Parameter set was not executed by the bounded diagnostic runner.",
+            "warningCount": 0,
+        }
+        result["skippedRows"].append(row)
+        existing.add(planned_run_id)
+
+
+def _finalize_counts(result: dict[str, Any]) -> None:
+    rows = list(result.get("requestResults") or [])
+    skipped_rows = list(result.get("skippedRows") or [])
+    failed_rows = list(result.get("failedRows") or [])
+    blocked_rows = list(result.get("blockedRows") or [])
+    completed_count = sum(1 for row in rows if str(row.get("state") or "") == "completed")
+    blocked_count = len(blocked_rows)
+    failed_count = len(failed_rows)
+    executed_count = len(rows)
+    skipped_count = len(skipped_rows)
+    result["gridExecutionCount"] = executed_count
+    result["skippedRequestCount"] = skipped_count
+    result["summary"] = {
+        "totalParameterSets": int(result.get("acceptedRequestCount") or 0),
+        "runCount": executed_count,
+        "executedCount": executed_count,
+        "completedCount": completed_count,
+        "blockedCount": blocked_count,
+        "failedCount": failed_count,
+        "noResultCount": blocked_count,
+        "skippedCount": skipped_count,
+    }
 
 
 __all__ = [
