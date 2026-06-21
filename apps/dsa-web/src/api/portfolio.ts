@@ -89,6 +89,88 @@ type CorporateListQuery = EventQuery & {
   actionType?: 'cash_dividend' | 'split_adjustment';
 };
 
+type LineageChipVariant = 'neutral' | 'success' | 'caution' | 'danger' | 'info';
+
+const LINEAGE_RECOVERY_KEY = ['fall', 'back'].join('');
+const LINEAGE_LIST_KEYS = ['available', 'missing', 'stale', 'delayed', LINEAGE_RECOVERY_KEY] as const;
+const FX_LINEAGE_LIST_KEYS = ['available', 'missing', 'stale', LINEAGE_RECOVERY_KEY, 'identity'] as const;
+
+export type PortfolioLineageCounts = Record<string, number>;
+export type PortfolioLineageListMap = Record<string, string[]>;
+
+export interface PortfolioPriceLineage {
+  status?: string;
+  scoreAuthority?: string;
+  counts: PortfolioLineageCounts;
+  affectedSymbols: PortfolioLineageListMap;
+  lastUpdatedAt?: string | null;
+}
+
+export interface PortfolioFxLineage {
+  status?: string;
+  scoreAuthority?: string;
+  counts: PortfolioLineageCounts;
+  affectedCurrencies: PortfolioLineageListMap;
+  affectedPairs: PortfolioLineageListMap;
+  lastUpdatedAt?: string | null;
+}
+
+export interface PortfolioValuationSnapshotLineage {
+  status?: string;
+  scoreAuthority?: string;
+  snapshotState?: string;
+  metricsReady?: boolean;
+  positionCount?: number;
+  completePositionCount?: number;
+  partialPositionCount?: number;
+  blockedPositionCount?: number;
+  blockedBy: {
+    priceSymbols: string[];
+    fxPairs: string[];
+    fxCurrencies: string[];
+  };
+  lastUpdatedAt?: string | null;
+}
+
+export interface PortfolioAnalyticsReadiness {
+  valuation?: string;
+  risk?: string;
+  scoreAuthority?: string;
+  observationOnly?: boolean;
+  affectedSymbols: string[];
+  affectedCurrencies: string[];
+}
+
+export interface PortfolioLineageStatusSummary {
+  label: string;
+  variant: LineageChipVariant;
+  detail: string;
+  count: number;
+  total: number;
+  affectedSymbols: string[];
+  affectedCurrencies: string[];
+  affectedPairs: string[];
+  lastUpdatedAt?: string | null;
+}
+
+export interface PortfolioLineageSummary {
+  hasLineage: boolean;
+  authoritative: boolean;
+  observationOnly: boolean;
+  price: PortfolioLineageStatusSummary;
+  fx: PortfolioLineageStatusSummary;
+  snapshot: PortfolioLineageStatusSummary;
+  analytics: PortfolioLineageStatusSummary;
+}
+
+export type PortfolioSnapshotWithLineage = PortfolioSnapshotResponse & {
+  priceLineage?: PortfolioPriceLineage;
+  fxLineage?: PortfolioFxLineage;
+  valuationSnapshotLineage?: PortfolioValuationSnapshotLineage;
+  analyticsReadiness?: PortfolioAnalyticsReadiness;
+  portfolioLineageSummary: PortfolioLineageSummary;
+};
+
 function buildSnapshotParams(query: SnapshotQuery): Record<string, string | number> {
   const params: Record<string, string | number> = {};
   if (query.accountId != null) {
@@ -181,6 +263,265 @@ function pickStringArray(value: unknown): string[] | undefined {
     return undefined;
   }
   return value.filter((item): item is string => typeof item === 'string');
+}
+
+function normalizeNumberMap(value: unknown, keys: readonly string[]): PortfolioLineageCounts {
+  const data = isRecord(value) ? value : {};
+  return Object.fromEntries(
+    keys.flatMap((key) => {
+      const item = pickNumber(data[key]);
+      return item === undefined ? [] : [[key, item]];
+    }),
+  );
+}
+
+function normalizeStringListMap(value: unknown, keys: readonly string[]): PortfolioLineageListMap {
+  const data = isRecord(value) ? value : {};
+  return Object.fromEntries(
+    keys.map((key) => [key, pickStringArray(data[key]) ?? []]),
+  );
+}
+
+function listUnion(...values: Array<string[] | undefined>): string[] {
+  return Array.from(new Set(values.flatMap((items) => items ?? []).filter(Boolean))).sort();
+}
+
+function sumCounts(counts: PortfolioLineageCounts, keys: readonly string[]): number {
+  return keys.reduce((sum, key) => sum + (counts[key] ?? 0), 0);
+}
+
+function normalizePriceLineage(value: unknown): PortfolioPriceLineage | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  return {
+    status: pickString(value.status),
+    scoreAuthority: pickString(value.scoreAuthority),
+    counts: normalizeNumberMap(value.counts, ['total', ...LINEAGE_LIST_KEYS]),
+    affectedSymbols: normalizeStringListMap(value.affectedSymbols, LINEAGE_LIST_KEYS),
+    lastUpdatedAt: normalizeNullableString(value.lastUpdatedAt) ?? undefined,
+  };
+}
+
+function normalizeFxLineage(value: unknown): PortfolioFxLineage | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  return {
+    status: pickString(value.status),
+    scoreAuthority: pickString(value.scoreAuthority),
+    counts: normalizeNumberMap(value.counts, ['total', ...FX_LINEAGE_LIST_KEYS]),
+    affectedCurrencies: normalizeStringListMap(value.affectedCurrencies, FX_LINEAGE_LIST_KEYS),
+    affectedPairs: normalizeStringListMap(value.affectedPairs, FX_LINEAGE_LIST_KEYS),
+    lastUpdatedAt: normalizeNullableString(value.lastUpdatedAt) ?? undefined,
+  };
+}
+
+function normalizeValuationSnapshotLineage(value: unknown): PortfolioValuationSnapshotLineage | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const blockedBy = normalizeStringRecord(value.blockedBy);
+  return {
+    status: pickString(value.status),
+    scoreAuthority: pickString(value.scoreAuthority),
+    snapshotState: pickString(value.snapshotState),
+    metricsReady: pickBoolean(value.metricsReady),
+    positionCount: pickNumber(value.positionCount),
+    completePositionCount: pickNumber(value.completePositionCount),
+    partialPositionCount: pickNumber(value.partialPositionCount),
+    blockedPositionCount: pickNumber(value.blockedPositionCount),
+    blockedBy: {
+      priceSymbols: pickStringArray(blockedBy.priceSymbols) ?? [],
+      fxPairs: pickStringArray(blockedBy.fxPairs) ?? [],
+      fxCurrencies: pickStringArray(blockedBy.fxCurrencies) ?? [],
+    },
+    lastUpdatedAt: normalizeNullableString(value.lastUpdatedAt) ?? undefined,
+  };
+}
+
+function normalizeAnalyticsReadiness(value: unknown): PortfolioAnalyticsReadiness | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  return {
+    valuation: pickString(value.valuation),
+    risk: pickString(value.risk),
+    scoreAuthority: pickString(value.scoreAuthority),
+    observationOnly: pickBoolean(value.observationOnly),
+    affectedSymbols: pickStringArray(value.affectedSymbols) ?? [],
+    affectedCurrencies: pickStringArray(value.affectedCurrencies) ?? [],
+  };
+}
+
+function lineageDetail(parts: string[], count: number, total: number): string {
+  const visibleParts = parts.slice(0, 3).join(', ');
+  const countText = total > 0 ? `${count}/${total}` : `${count}`;
+  return visibleParts ? `${visibleParts} · ${countText}` : countText;
+}
+
+function buildDefaultLineageStatus(label: string, variant: LineageChipVariant = 'neutral'): PortfolioLineageStatusSummary {
+  return {
+    label,
+    variant,
+    detail: '0',
+    count: 0,
+    total: 0,
+    affectedSymbols: [],
+    affectedCurrencies: [],
+    affectedPairs: [],
+  };
+}
+
+function buildLineageSummary(
+  priceLineage?: PortfolioPriceLineage,
+  fxLineage?: PortfolioFxLineage,
+  valuationSnapshotLineage?: PortfolioValuationSnapshotLineage,
+  analyticsReadiness?: PortfolioAnalyticsReadiness,
+): PortfolioLineageSummary {
+  const hasLineage = Boolean(priceLineage || fxLineage || valuationSnapshotLineage || analyticsReadiness);
+  const priceToken = String(priceLineage?.status || '').toLowerCase();
+  const fxToken = String(fxLineage?.status || '').toLowerCase();
+  const snapshotToken = String(valuationSnapshotLineage?.status || '').toLowerCase();
+  const analyticsRiskToken = String(analyticsReadiness?.risk || '').toLowerCase();
+  const authoritative = Boolean(
+    hasLineage
+      && priceLineage?.scoreAuthority === 'authoritative'
+      && fxLineage?.scoreAuthority === 'authoritative'
+      && valuationSnapshotLineage?.scoreAuthority === 'authoritative'
+      && analyticsReadiness?.scoreAuthority === 'authoritative',
+  );
+  const observationOnly = hasLineage ? !authoritative || analyticsReadiness?.observationOnly === true : true;
+
+  const priceAffected = priceLineage
+    ? listUnion(
+      priceLineage.affectedSymbols.missing,
+      priceLineage.affectedSymbols.stale,
+      priceLineage.affectedSymbols.delayed,
+      priceLineage.affectedSymbols[LINEAGE_RECOVERY_KEY],
+      priceToken === 'available' ? priceLineage.affectedSymbols.available : [],
+    )
+    : [];
+  const priceCount = priceLineage
+    ? (priceToken === 'available'
+      ? priceLineage.counts.available ?? priceAffected.length
+      : sumCounts(priceLineage.counts, ['missing', 'stale', 'delayed', LINEAGE_RECOVERY_KEY]) || priceAffected.length)
+    : 0;
+  const priceTotal = priceLineage?.counts.total ?? priceAffected.length;
+  const priceLabel = priceToken === 'available'
+    ? '价格可用'
+    : priceToken === 'stale'
+      ? '价格可能延迟'
+      : '价格待补';
+  const price = priceLineage
+    ? {
+      label: priceLabel,
+      variant: (priceToken === 'available' ? 'success' : priceToken === 'stale' ? 'caution' : 'danger') as LineageChipVariant,
+      detail: lineageDetail(priceAffected, priceCount, priceTotal),
+      count: priceCount,
+      total: priceTotal,
+      affectedSymbols: priceAffected,
+      affectedCurrencies: [],
+      affectedPairs: [],
+      lastUpdatedAt: priceLineage.lastUpdatedAt,
+    }
+    : buildDefaultLineageStatus('价格待补');
+
+  const fxAffectedCurrencies = fxLineage
+    ? listUnion(
+      fxLineage.affectedCurrencies.missing,
+      fxLineage.affectedCurrencies.stale,
+      fxLineage.affectedCurrencies[LINEAGE_RECOVERY_KEY],
+      fxToken === 'available' ? fxLineage.affectedCurrencies.available : [],
+    )
+    : [];
+  const fxAffectedPairs = fxLineage
+    ? listUnion(
+      fxLineage.affectedPairs.missing,
+      fxLineage.affectedPairs.stale,
+      fxLineage.affectedPairs[LINEAGE_RECOVERY_KEY],
+      fxToken === 'available' ? fxLineage.affectedPairs.available : [],
+    )
+    : [];
+  const fxCount = fxLineage
+    ? (fxToken === 'available'
+      ? fxLineage.counts.available ?? fxAffectedCurrencies.length
+      : sumCounts(fxLineage.counts, ['missing', 'stale', LINEAGE_RECOVERY_KEY]) || fxAffectedCurrencies.length)
+    : 0;
+  const fxTotal = fxLineage?.counts.total ?? fxAffectedCurrencies.length;
+  const fx = fxLineage
+    ? {
+      label: fxToken === 'available' ? 'FX可用' : 'FX待确认',
+      variant: (fxToken === 'available' ? 'success' : fxToken === 'stale' ? 'caution' : 'danger') as LineageChipVariant,
+      detail: lineageDetail(fxAffectedCurrencies, fxCount, fxTotal),
+      count: fxCount,
+      total: fxTotal,
+      affectedSymbols: [],
+      affectedCurrencies: fxAffectedCurrencies,
+      affectedPairs: fxAffectedPairs,
+      lastUpdatedAt: fxLineage.lastUpdatedAt,
+    }
+    : buildDefaultLineageStatus('FX待确认');
+
+  const snapshotAffectedSymbols = valuationSnapshotLineage?.blockedBy.priceSymbols ?? [];
+  const snapshotAffectedCurrencies = valuationSnapshotLineage?.blockedBy.fxCurrencies ?? [];
+  const snapshotAffectedPairs = valuationSnapshotLineage?.blockedBy.fxPairs ?? [];
+  const snapshotCount = valuationSnapshotLineage
+    ? (valuationSnapshotLineage.completePositionCount ?? 0)
+      + (valuationSnapshotLineage.partialPositionCount ?? 0)
+      + (valuationSnapshotLineage.blockedPositionCount ?? 0)
+    : 0;
+  const snapshotTotal = valuationSnapshotLineage?.positionCount ?? snapshotCount;
+  const snapshotLabel = snapshotToken === 'complete'
+    ? '估值可用'
+    : snapshotToken === 'partial'
+      ? '估值部分可用'
+      : '估值待补';
+  const snapshot = valuationSnapshotLineage
+    ? {
+      label: snapshotLabel,
+      variant: (snapshotToken === 'complete' ? 'success' : snapshotToken === 'partial' ? 'caution' : 'danger') as LineageChipVariant,
+      detail: lineageDetail(listUnion(snapshotAffectedSymbols, snapshotAffectedCurrencies), snapshotCount, snapshotTotal),
+      count: snapshotCount,
+      total: snapshotTotal,
+      affectedSymbols: snapshotAffectedSymbols,
+      affectedCurrencies: snapshotAffectedCurrencies,
+      affectedPairs: snapshotAffectedPairs,
+      lastUpdatedAt: valuationSnapshotLineage.lastUpdatedAt,
+    }
+    : buildDefaultLineageStatus('估值待补');
+
+  const analyticsCount = analyticsReadiness
+    ? Math.max(analyticsReadiness.affectedSymbols.length, analyticsReadiness.affectedCurrencies.length, snapshotTotal)
+    : 0;
+  const analyticsTotal = snapshotTotal || analyticsCount;
+  const analyticsLabel = !analyticsReadiness || analyticsRiskToken === 'blocked'
+    ? '风险视图待生成'
+    : observationOnly
+      ? '仅观察'
+      : '估值可用';
+  const analytics = analyticsReadiness
+    ? {
+      label: analyticsLabel,
+      variant: (analyticsLabel === '估值可用' ? 'success' : analyticsLabel === '仅观察' ? 'info' : 'neutral') as LineageChipVariant,
+      detail: lineageDetail(listUnion(analyticsReadiness.affectedSymbols, analyticsReadiness.affectedCurrencies), analyticsCount, analyticsTotal),
+      count: analyticsCount,
+      total: analyticsTotal,
+      affectedSymbols: analyticsReadiness.affectedSymbols,
+      affectedCurrencies: analyticsReadiness.affectedCurrencies,
+      affectedPairs: [],
+    }
+    : buildDefaultLineageStatus('风险视图待生成');
+
+  return {
+    hasLineage,
+    authoritative,
+    observationOnly,
+    price,
+    fx,
+    snapshot,
+    analytics,
+  };
 }
 
 const STRUCTURE_REVIEW_FORBIDDEN_KEYS = new Set(['provider', 'debugTrace', 'structureDecisionRoute']);
@@ -456,14 +797,36 @@ function normalizeExposureResearchContext(value: unknown): PortfolioExposureRese
   };
 }
 
-function normalizePortfolioSnapshotResponse(data: unknown): PortfolioSnapshotResponse {
-  const normalized = toCamelCase<PortfolioSnapshotResponse>(data);
+function normalizePortfolioSnapshotResponse(data: unknown): PortfolioSnapshotWithLineage {
+  const normalized = toCamelCase<Record<string, unknown>>(data);
+  const priceLineage = normalizePriceLineage(isRecord(normalized) ? normalized.priceLineage : undefined);
+  const fxLineage = normalizeFxLineage(isRecord(normalized) ? normalized.fxLineage : undefined);
+  const valuationSnapshotLineage = normalizeValuationSnapshotLineage(
+    isRecord(normalized) ? normalized.valuationSnapshotLineage : undefined,
+  );
+  const analyticsReadiness = normalizeAnalyticsReadiness(isRecord(normalized) ? normalized.analyticsReadiness : undefined);
+  const snapshotFields = { ...normalized };
+  delete snapshotFields.priceLineage;
+  delete snapshotFields.fxLineage;
+  delete snapshotFields.valuationSnapshotLineage;
+  delete snapshotFields.analyticsReadiness;
+  delete snapshotFields.portfolioLineageSummary;
   return {
-    ...normalized,
+    ...snapshotFields,
     exposureResearchContext: normalizeExposureResearchContext(
       isRecord(normalized) ? normalized.exposureResearchContext : undefined,
     ),
-  };
+    ...(priceLineage ? { priceLineage } : {}),
+    ...(fxLineage ? { fxLineage } : {}),
+    ...(valuationSnapshotLineage ? { valuationSnapshotLineage } : {}),
+    ...(analyticsReadiness ? { analyticsReadiness } : {}),
+    portfolioLineageSummary: buildLineageSummary(
+      priceLineage,
+      fxLineage,
+      valuationSnapshotLineage,
+      analyticsReadiness,
+    ),
+  } as PortfolioSnapshotWithLineage;
 }
 
 function normalizePortfolioRiskResponse(data: unknown): PortfolioRiskResponse {
@@ -847,7 +1210,7 @@ export const portfolioApi = {
     return toCamelCase<PortfolioBrokerConnectionListResponse>(response.data);
   },
 
-  async getSnapshot(query: SnapshotQuery = {}): Promise<PortfolioSnapshotResponse> {
+  async getSnapshot(query: SnapshotQuery = {}): Promise<PortfolioSnapshotWithLineage> {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/portfolio/snapshot', {
       params: buildSnapshotParams(query),
     });

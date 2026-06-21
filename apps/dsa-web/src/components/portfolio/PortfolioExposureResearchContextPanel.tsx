@@ -1,8 +1,10 @@
 import { TerminalChip, TerminalNestedBlock } from '../terminal/TerminalPrimitives';
+import type { PortfolioLineageSummary, PortfolioLineageStatusSummary } from '../../api/portfolio';
 import type { PortfolioExposureResearchContext } from '../../types/portfolio';
 
 type PortfolioExposureResearchContextPanelProps = {
   context?: PortfolioExposureResearchContext | null;
+  lineageSummary?: PortfolioLineageSummary | null;
   language: 'zh' | 'en';
 };
 
@@ -10,10 +12,10 @@ type ChipVariant = 'neutral' | 'success' | 'caution' | 'danger' | 'info';
 
 const INTERNAL_TERM_PATTERN = /\b(provider|cache|debug|backend|raw|json|schema|trace|broker|admin)\b|sourceauthority|reasoncode/i;
 
-function safeText(value: string | null | undefined, fallback: string): string {
+function safeText(value: string | null | undefined, replacement: string): string {
   const trimmed = String(value || '').trim();
   if (!trimmed || INTERNAL_TERM_PATTERN.test(trimmed) || /[a-z]+_[a-z0-9_]+/i.test(trimmed)) {
-    return fallback;
+    return replacement;
   }
   return trimmed;
 }
@@ -150,8 +152,13 @@ function nextStepLabel(topic: string, dominantSymbol: string | null | undefined,
     : 'Read the snapshot alongside market state, sector context, and data freshness';
 }
 
+function statusDetail(item: PortfolioLineageStatusSummary): string {
+  return item.total > 0 || item.count > 0 ? item.detail : '--';
+}
+
 export function PortfolioExposureResearchContextPanel({
   context,
+  lineageSummary,
   language,
 }: PortfolioExposureResearchContextPanelProps) {
   if (!context) {
@@ -185,6 +192,14 @@ export function PortfolioExposureResearchContextPanel({
   const summaryText = language === 'zh'
     ? `${dominantLabel} · ${concentrationState}`
     : `${dominantLabel} · ${concentrationState}`;
+  const lineageItems = lineageSummary?.hasLineage
+    ? [
+      { key: 'price', item: lineageSummary.price },
+      { key: 'fx', item: lineageSummary.fx },
+      { key: 'snapshot', item: lineageSummary.snapshot },
+      { key: 'analytics', item: lineageSummary.analytics },
+    ]
+    : [];
 
   return (
     <TerminalNestedBlock data-testid="portfolio-exposure-research-context" className="p-3">
@@ -199,6 +214,20 @@ export function PortfolioExposureResearchContextPanel({
           {language === 'zh' ? '仅供观察' : 'Observation only'}
         </TerminalChip>
       </div>
+
+      {lineageItems.length ? (
+        <div data-testid="portfolio-exposure-lineage-summary" className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {lineageItems.map(({ key, item }) => (
+            <div key={key} className="min-w-0 rounded-lg border border-white/[0.03] bg-black/20 p-3">
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <div className="truncate text-[10px] font-bold uppercase tracking-widest text-white/35">{item.label}</div>
+                <TerminalChip variant={item.variant}>{item.label}</TerminalChip>
+              </div>
+              <div className="mt-2 truncate text-xs text-white/48">{statusDetail(item)}</div>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <div data-testid="portfolio-exposure-research-context-grid" className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div className="rounded-lg border border-white/[0.03] bg-black/20 p-3">

@@ -345,6 +345,199 @@ describe('portfolioApi scenario risk adapter', () => {
     }
   });
 
+  it('normalizes DATA-018 portfolio lineage into bounded consumer-safe fields', async () => {
+    const { portfolioApi } = await import('../portfolio');
+
+    get.mockResolvedValueOnce({
+      data: {
+        as_of: '2026-03-20',
+        cost_method: 'fifo',
+        currency: 'CNY',
+        total_cash: 1000,
+        total_market_value: 2000,
+        total_equity: 3000,
+        realized_pnl: 0,
+        unrealized_pnl: 120,
+        fee_total: 0,
+        tax_total: 0,
+        fx_stale: false,
+        price_lineage: {
+          status: 'stale',
+          score_authority: 'observation_only',
+          counts: { total: 2, available: 2, stale: 1, delayed: 1, missing: 0 },
+          affected_symbols: { available: ['AAPL', 'MSFT'], stale: ['AAPL'], delayed: ['MSFT'] },
+          last_updated_at: '2026-03-19',
+          provider: 'must-not-leak',
+          raw_payload: { debug_trace: 'must-not-leak' },
+        },
+        fx_lineage: {
+          status: 'missing',
+          score_authority: 'observation_only',
+          counts: { total: 1, available: 0, missing: 1 },
+          affected_currencies: { missing: ['USD'] },
+          affected_pairs: { missing: ['USD/CNY'] },
+          last_updated_at: null,
+          admin_diagnostics: { provider: 'must-not-leak' },
+        },
+        valuation_snapshot_lineage: {
+          status: 'partial',
+          score_authority: 'observation_only',
+          snapshot_state: 'ready',
+          metrics_ready: true,
+          position_count: 2,
+          complete_position_count: 0,
+          partial_position_count: 2,
+          blocked_position_count: 0,
+          blocked_by: {
+            price_symbols: ['AAPL'],
+            fx_pairs: ['USD/CNY'],
+            fx_currencies: ['USD'],
+          },
+          last_updated_at: '2026-03-20',
+          source_refs: ['must-not-leak'],
+        },
+        analytics_readiness: {
+          valuation: 'partial',
+          risk: 'partial',
+          score_authority: 'observation_only',
+          observation_only: true,
+          read_model_boundary: 'no_advice',
+          affected_symbols: ['AAPL'],
+          affected_currencies: ['USD'],
+          warning_codes: ['single_currency_gt_80'],
+          debug_trace: 'must-not-leak',
+        },
+        accounts: [],
+      },
+    });
+
+    const payload = await portfolioApi.getSnapshot();
+
+    expect(payload.priceLineage).toMatchObject({
+      status: 'stale',
+      scoreAuthority: 'observation_only',
+      counts: { total: 2, available: 2, missing: 0, stale: 1, delayed: 1 },
+      affectedSymbols: {
+        available: ['AAPL', 'MSFT'],
+        missing: [],
+        stale: ['AAPL'],
+        delayed: ['MSFT'],
+      },
+      lastUpdatedAt: '2026-03-19',
+    });
+    expect(payload.fxLineage).toMatchObject({
+      status: 'missing',
+      scoreAuthority: 'observation_only',
+      counts: { total: 1, available: 0, missing: 1 },
+      affectedCurrencies: { available: [], missing: ['USD'], stale: [] },
+      affectedPairs: { available: [], missing: ['USD/CNY'], stale: [] },
+    });
+    expect(payload.valuationSnapshotLineage).toMatchObject({
+      status: 'partial',
+      scoreAuthority: 'observation_only',
+      metricsReady: true,
+      positionCount: 2,
+      partialPositionCount: 2,
+      blockedBy: {
+        priceSymbols: ['AAPL'],
+        fxPairs: ['USD/CNY'],
+        fxCurrencies: ['USD'],
+      },
+      lastUpdatedAt: '2026-03-20',
+    });
+    expect(payload.analyticsReadiness).toMatchObject({
+      valuation: 'partial',
+      risk: 'partial',
+      scoreAuthority: 'observation_only',
+      observationOnly: true,
+      affectedSymbols: ['AAPL'],
+      affectedCurrencies: ['USD'],
+    });
+    expect(payload.portfolioLineageSummary).toMatchObject({
+      hasLineage: true,
+      observationOnly: true,
+      price: {
+        label: '价格可能延迟',
+        affectedSymbols: ['AAPL', 'MSFT'],
+        count: 2,
+        total: 2,
+      },
+      fx: {
+        label: 'FX待确认',
+        affectedCurrencies: ['USD'],
+        affectedPairs: ['USD/CNY'],
+        count: 1,
+        total: 1,
+      },
+      snapshot: {
+        label: '估值部分可用',
+        affectedSymbols: ['AAPL'],
+        affectedCurrencies: ['USD'],
+        affectedPairs: ['USD/CNY'],
+        count: 2,
+        total: 2,
+      },
+      analytics: {
+        label: '仅观察',
+        affectedSymbols: ['AAPL'],
+        affectedCurrencies: ['USD'],
+        count: 2,
+        total: 2,
+      },
+    });
+
+    const keys = new Set(walkKeys(payload));
+    for (const forbiddenKey of [
+      'price_lineage',
+      'fx_lineage',
+      'valuation_snapshot_lineage',
+      'analytics_readiness',
+      'adminDiagnostics',
+      'sourceRefs',
+      'rawPayload',
+      'debugTrace',
+      'provider',
+    ]) {
+      expect(keys.has(forbiddenKey)).toBe(false);
+    }
+  });
+
+  it('keeps legacy snapshots compatible when DATA-018 lineage is absent', async () => {
+    const { portfolioApi } = await import('../portfolio');
+
+    get.mockResolvedValueOnce({
+      data: {
+        as_of: '2026-03-20',
+        cost_method: 'fifo',
+        currency: 'CNY',
+        total_cash: 1000,
+        total_market_value: 2000,
+        total_equity: 3000,
+        realized_pnl: 0,
+        unrealized_pnl: 120,
+        fee_total: 0,
+        tax_total: 0,
+        fx_stale: false,
+        accounts: [],
+      },
+    });
+
+    const payload = await portfolioApi.getSnapshot();
+
+    expect(payload.priceLineage).toBeUndefined();
+    expect(payload.fxLineage).toBeUndefined();
+    expect(payload.valuationSnapshotLineage).toBeUndefined();
+    expect(payload.analyticsReadiness).toBeUndefined();
+    expect(payload.portfolioLineageSummary).toMatchObject({
+      hasLineage: false,
+      observationOnly: true,
+      price: { label: '价格待补', affectedSymbols: [], count: 0, total: 0 },
+      fx: { label: 'FX待确认', affectedCurrencies: [], affectedPairs: [], count: 0, total: 0 },
+      snapshot: { label: '估值待补', affectedSymbols: [], affectedCurrencies: [], affectedPairs: [], count: 0, total: 0 },
+      analytics: { label: '风险视图待生成', affectedSymbols: [], affectedCurrencies: [], count: 0, total: 0 },
+    });
+  });
+
   it('normalizes portfolio risk exposure research context with the same bounded projection', async () => {
     const { portfolioApi } = await import('../portfolio');
 

@@ -144,6 +144,7 @@ function makeSnapshot(options: {
   accountCount?: number;
   includePosition?: boolean;
   exposureResearchContext?: Record<string, unknown> | null;
+  portfolioLineageSummary?: Record<string, unknown> | null;
   valuationLineageState?: string | null;
   positionOverrides?: Record<string, unknown>;
   fxRates?: Array<{
@@ -235,6 +236,7 @@ function makeSnapshot(options: {
     taxTotal: 0,
     fxStale: options.fxStale ?? true,
     ...(options.exposureResearchContext !== undefined ? { exposureResearchContext: options.exposureResearchContext } : {}),
+    ...(options.portfolioLineageSummary !== undefined ? { portfolioLineageSummary: options.portfolioLineageSummary } : {}),
     ...(options.valuationLineageState !== undefined ? { valuationLineageState: options.valuationLineageState } : {}),
     fxRates: options.fxRates ?? [
       {
@@ -373,6 +375,54 @@ function makeExposureResearchContext(overrides: Record<string, unknown> = {}) {
       { topic: 'currency_context', check: 'Verify FX and valuation freshness before using aggregate currency context.' },
       { topic: 'comparative_context', check: 'Map benchmark and factor evidence before using comparative research context.' },
     ],
+    ...overrides,
+  };
+}
+
+function makePortfolioLineageSummary(overrides: Record<string, unknown> = {}) {
+  return {
+    hasLineage: true,
+    authoritative: false,
+    observationOnly: true,
+    price: {
+      label: '价格可能延迟',
+      variant: 'caution',
+      detail: 'AAPL, MSFT · 2/2',
+      affectedSymbols: ['AAPL', 'MSFT'],
+      count: 2,
+      total: 2,
+      lastUpdatedAt: '2026-03-19',
+    },
+    fx: {
+      label: 'FX待确认',
+      variant: 'danger',
+      detail: 'USD · 1/1',
+      affectedCurrencies: ['USD'],
+      affectedPairs: ['USD/CNY'],
+      count: 1,
+      total: 1,
+      lastUpdatedAt: null,
+    },
+    snapshot: {
+      label: '估值部分可用',
+      variant: 'caution',
+      detail: 'AAPL, USD · 2/2',
+      affectedSymbols: ['AAPL'],
+      affectedCurrencies: ['USD'],
+      affectedPairs: ['USD/CNY'],
+      count: 2,
+      total: 2,
+      lastUpdatedAt: '2026-03-20',
+    },
+    analytics: {
+      label: '仅观察',
+      variant: 'info',
+      detail: 'AAPL, USD · 2/2',
+      affectedSymbols: ['AAPL'],
+      affectedCurrencies: ['USD'],
+      count: 2,
+      total: 2,
+    },
     ...overrides,
   };
 }
@@ -1723,6 +1773,42 @@ describe('PortfolioPage FX refresh', () => {
     expect(Boolean(context.compareDocumentPosition(screen.getByTestId('portfolio-scenario-risk-disclosure')) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(context.textContent || '').not.toMatch(
       /sourceAuthority|warningCodes|providerRoutingChanged|externalProviderCallsAdded|provider|cache|debug|backend|raw|schema|trace|sourceRef|buy|sell|target|stop|position[- ]?sizing|买入|卖出|下单|仓位建议|持仓建议/i,
+    );
+  });
+
+  it('renders DATA-018 valuation lineage status in the first viewport and research context without raw labels', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({
+      includePosition: true,
+      fxStale: false,
+      exposureResearchContext: makeExposureResearchContext(),
+      portfolioLineageSummary: makePortfolioLineageSummary(),
+    }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const researchStatePreview = screen.getByTestId('portfolio-research-state-preview');
+    expect(researchStatePreview).toHaveTextContent('价格可能延迟');
+    expect(researchStatePreview).toHaveTextContent('FX待确认');
+    expect(researchStatePreview).toHaveTextContent('估值部分可用');
+    expect(researchStatePreview).toHaveTextContent('仅观察');
+    expect(researchStatePreview).toHaveTextContent('AAPL');
+    expect(researchStatePreview).toHaveTextContent('USD');
+
+    const riskCard = screen.getByTestId('portfolio-risk-card');
+    const context = within(riskCard).getByTestId('portfolio-exposure-research-context');
+    const lineageSummary = within(context).getByTestId('portfolio-exposure-lineage-summary');
+    expect(lineageSummary).toHaveTextContent('价格可能延迟');
+    expect(lineageSummary).toHaveTextContent('FX待确认');
+    expect(lineageSummary).toHaveTextContent('估值部分可用');
+    expect(lineageSummary).toHaveTextContent('仅观察');
+    expect(lineageSummary).toHaveTextContent('AAPL');
+    expect(lineageSummary).toHaveTextContent('USD');
+
+    const combinedText = `${researchStatePreview.textContent || ''} ${lineageSummary.textContent || ''}`;
+    expect(combinedText).not.toMatch(
+      /sourceAuthority|reasonCode|provider|cache|debug|backend|raw|sourceRefs|adminDiagnostics|riskDiagnostics|confidenceCap|fallback_1_to_1|provider_timeout|target price|stop-loss|position sizing|目标价|止损|仓位建议|建仓建议|加仓建议|减仓建议|买入建议|卖出建议|持有建议|交易建议|操作建议/i,
     );
   });
 
