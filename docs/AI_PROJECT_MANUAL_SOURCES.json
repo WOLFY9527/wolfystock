@@ -1,17 +1,17 @@
 {
   "discovery": {
-    "candidateMarkdownAfterPolicy": 285,
+    "candidateMarkdownAfterPolicy": 236,
     "excludedByReason": {
       "ai_governance_mirror": 5,
-      "archive_provenance": 55,
-      "codex_point_in_time_audit": 54,
+      "archive_provenance": 88,
+      "codex_point_in_time_audit": 25,
       "fixture_local_doc": 3,
       "language_or_broad_duplicate": 13,
       "legacy_or_external_product_doc": 3,
       "task_progress_log": 10
     },
-    "includedSourceCount": 53,
-    "markdownDiscovered": 428,
+    "includedSourceCount": 75,
+    "markdownDiscovered": 383,
     "prunedDirectoryNames": [
       ".cache",
       ".codex",
@@ -58,8 +58,8 @@
     "path": "scripts/build_ai_project_manual.py",
     "readsProductionDataPaths": false,
     "requiresApiKeys": false,
-    "sha256": "53b8154cfa7eceb72a1307c1805e077580d04bb31a51c27e28576943c75e95fe",
-    "version": 2
+    "sha256": "366fc4ff77c90177ebc4b184a915c9538c18de8eace55a4fc784e2e8c2c9a124",
+    "version": 3
   },
   "includedSources": [
     {
@@ -111,15 +111,15 @@
       "title": "🚀 部署指南"
     },
     {
-      "bytes": 12663,
+      "bytes": 13898,
       "categories": [
         "governance",
         "sources"
       ],
-      "lineCount": 169,
+      "lineCount": 184,
       "path": "docs/DOCS_INDEX.md",
       "purpose": "current documentation navigation and authority map",
-      "sha256": "f105b713a9da47efb87ba96b05ff45e170f80e5db6e82ad05659a11f3089bdfe",
+      "sha256": "0b3e5c3231e073306d4228ccc2e58172f1e5e2d83c01be92763b72089c952e0f",
       "title": "WolfyStock Documentation Index"
     },
     {
@@ -268,15 +268,15 @@
       "title": "Data Quality User Disclosure Policy"
     },
     {
-      "bytes": 32542,
+      "bytes": 35434,
       "categories": [
         "launch",
         "validation"
       ],
-      "lineCount": 582,
+      "lineCount": 625,
       "path": "docs/audits/deployment-readiness-checklist.md",
       "purpose": "release-candidate checklist and final gates",
-      "sha256": "31c773c6bd568195141c7f858604f3d917b1c1ee331a89a6029831b3bddd1d0b",
+      "sha256": "85803e7a84a0cb190151698981f6ea036219cbde20a59d49e6e530b8543fb307",
       "title": "Public Multi-user Deployment Readiness Checklist"
     },
     {
@@ -317,15 +317,15 @@
       "title": "Security / RBAC / MFA Audit Index"
     },
     {
-      "bytes": 17941,
+      "bytes": 21580,
       "categories": [
         "launch",
         "validation"
       ],
-      "lineCount": 255,
+      "lineCount": 283,
       "path": "docs/audits/launch-acceptance-evidence-pack.md",
       "purpose": "sanitized launch evidence contract",
-      "sha256": "8905038f856494e3817e7745478710248e52e6485204070b728e0638626d254a",
+      "sha256": "c01840458f581bf91bdd4204b381691a965007a66050806f4f4d6ef98a15e1f7",
       "title": "Launch Acceptance Evidence Pack"
     },
     {
@@ -341,49 +341,49 @@
       "title": "Options Provider Adapter Contract"
     },
     {
-      "bytes": 11799,
+      "bytes": 13291,
       "categories": [
         "deployment",
         "launch"
       ],
-      "lineCount": 159,
+      "lineCount": 165,
       "path": "docs/audits/private-beta-readiness.md",
       "purpose": "private beta boundary and non-approved areas",
-      "sha256": "24088c87b76772a0619d0f00cb190e716d6770d983afffd0dacbd7b47ae439a1",
+      "sha256": "799fca4ecb0954f14273d4a4406ae1c85c00c4a4d8544147f6288fbeb00ce238",
       "title": "Private Beta Readiness Report"
     },
     {
-      "bytes": 32153,
+      "bytes": 37397,
       "categories": [
         "launch"
       ],
-      "lineCount": 202,
+      "lineCount": 220,
       "path": "docs/audits/public-launch-gap-register.md",
       "purpose": "detailed launch blocker register",
-      "sha256": "4cbab05c40daa707320ba60071ca891b1b5f394d093b5be2679cf3c0f1b33d1f",
+      "sha256": "5902ed2315fac1c331bb288d454deffbe090e9dc88c10b4b5c4e2a6c1d307b54",
       "title": "Public Launch Gap Register"
     },
     {
-      "bytes": 14059,
+      "bytes": 14271,
       "categories": [
         "launch"
       ],
-      "lineCount": 196,
+      "lineCount": 199,
       "path": "docs/audits/public-launch-readiness-master.md",
       "purpose": "executive public launch NO-GO verdict",
-      "sha256": "48c127aa56c736968a4605125daec8dbb0f486048e8ab9e4fc0b3e85e5f35d95",
+      "sha256": "e3901077cc54ab22705e4194209b619b82533465bcdd21071aa55f7aedfdb646",
       "title": "Public Launch Readiness Master"
     },
     {
-      "bytes": 9345,
+      "bytes": 11105,
       "categories": [
         "cost",
         "quota"
       ],
-      "lineCount": 248,
+      "lineCount": 283,
       "path": "docs/audits/quota-reserve-release-operator-evidence-checklist.md",
       "purpose": "quota reserve/release operator evidence",
-      "sha256": "9bf9b074e400e980fdcfe5a44a778df14f19a44819891dd6dcbb199253d2bbf0",
+      "sha256": "40834799e260a728b5be1ac970fcd31961afe426e034f061b4e55128b66edd16",
       "title": "Quota Reserve/Release Operator Evidence Checklist"
     },
     {
@@ -448,15 +448,27 @@
       "title": "Backtest System"
     },
     {
-      "bytes": 10675,
+      "bytes": 11092,
       "categories": [
         "backtest"
       ],
-      "lineCount": 156,
+      "lineCount": 162,
       "path": "docs/backtest/README.md",
       "purpose": "backtest domain entry point and v1 semantics freeze",
-      "sha256": "ff4ac95618699c58e2a2a9da8418b8b613b13959eca2b6658fbb742adaf7e7c0",
+      "sha256": "e3e0f5784d819cad12a0e8813e61134d11ecc841719cabd94d68031a4fdba511",
       "title": "WolfyStock Backtest Docs"
+    },
+    {
+      "bytes": 9622,
+      "categories": [
+        "product-safety",
+        "validation"
+      ],
+      "lineCount": 210,
+      "path": "docs/codex/NO_ADVICE_REGRESSION_GUARDS.md",
+      "purpose": "no-advice regression guards and grep policy",
+      "sha256": "a65fec1facf2a9127538ae1678522e1563f011b8c2166bba967e8a42952a7be1",
+      "title": "No-Advice Regression Guards"
     },
     {
       "bytes": 6037,
@@ -480,6 +492,30 @@
       "purpose": "backtest universe local-only guardrails",
       "sha256": "58091bbbbba4970211793748da877e47c2201880f3fa4f66b07423ca51b4af32",
       "title": "WolfyStock Backtest Universe Rules"
+    },
+    {
+      "bytes": 5387,
+      "categories": [
+        "validation",
+        "workflow"
+      ],
+      "lineCount": 131,
+      "path": "docs/codex/WOLFYSTOCK_CODEX_DISCOVERY_PROTOCOL.md",
+      "purpose": "Codex discovery protocol for compact prompts",
+      "sha256": "0c4b30f4f9e2cbf6858cd8fb67e16354ff568f4839e5a51da31a8e381ba8faf7",
+      "title": "WolfyStock Codex Discovery Protocol"
+    },
+    {
+      "bytes": 10736,
+      "categories": [
+        "validation",
+        "workflow"
+      ],
+      "lineCount": 340,
+      "path": "docs/codex/WOLFYSTOCK_CODEX_EXECUTION_POLICY.md",
+      "purpose": "Codex execution policy for task modes and prompt compression",
+      "sha256": "bda8c4dce320363e145efdf3b9a12537ea4bfc1e1b4dbb9527aed13322157619",
+      "title": "WolfyStock Codex Execution Policy"
     },
     {
       "bytes": 5611,
@@ -554,14 +590,26 @@
       "title": "Provider Source-Confidence Contract"
     },
     {
-      "bytes": 5014,
+      "bytes": 19406,
+      "categories": [
+        "data",
+        "roadmap"
+      ],
+      "lineCount": 249,
+      "path": "docs/data/market-source-activation-blueprint.md",
+      "purpose": "official risk and quote source activation roadmap",
+      "sha256": "bc09c0fc6a9523e4b15d6f76dc9cc1f6182f28a5b48f1b92dfabaa1c6d9706ed",
+      "title": "Market Source Activation Blueprint"
+    },
+    {
+      "bytes": 7131,
       "categories": [
         "frontend"
       ],
-      "lineCount": 101,
+      "lineCount": 143,
       "path": "docs/frontend/README.md",
       "purpose": "current frontend route-family and visual authority entry point",
-      "sha256": "fe05230128ccf4f601282c54735f403d0aa00292ce2df6fd8a96ec22f4833ed2",
+      "sha256": "992ccb95cafb9b6295ff56828e63d5fa98e1d1c4aa4236bd0777b9d9fc2b4087",
       "title": "WolfyStock Frontend Docs"
     },
     {
@@ -601,15 +649,15 @@
       "title": "WolfyStock Frontend Noise Budget"
     },
     {
-      "bytes": 12631,
+      "bytes": 13821,
       "categories": [
         "frontend",
         "validation"
       ],
-      "lineCount": 373,
+      "lineCount": 404,
       "path": "docs/frontend/validation-playbook.md",
       "purpose": "frontend/browser evidence and visual validation expectations",
-      "sha256": "cda4fff48cd8dcfb6321560bef6d373d6a8f233420d0030d85b0d30ffddf3fdc",
+      "sha256": "9f1f630c93905f63392473c2e8b7384425d7b8b6c820a9857c1449d40539106e",
       "title": "WolfyStock Frontend Validation Playbook"
     },
     {
@@ -625,6 +673,30 @@
       "title": "WolfyStock Frontend Visual System"
     },
     {
+      "bytes": 4792,
+      "categories": [
+        "liquidity",
+        "product"
+      ],
+      "lineCount": 84,
+      "path": "docs/liquidity/README.md",
+      "purpose": "liquidity domain entry point and boundary rules",
+      "sha256": "1f8ebc5a4419b3d6d2762176d340b59ac66040242ee929bb69da5ff5ab74b933",
+      "title": "WolfyStock Liquidity Docs"
+    },
+    {
+      "bytes": 3057,
+      "categories": [
+        "market-overview",
+        "product"
+      ],
+      "lineCount": 55,
+      "path": "docs/market-overview/README.md",
+      "purpose": "market overview domain entry point and boundary rules",
+      "sha256": "03b628b2c2b6255e1eb32215c32de6fa46dd52538fcf0b6f5fdd717b5dc2a0a4",
+      "title": "WolfyStock Market Overview Docs"
+    },
+    {
       "bytes": 4008,
       "categories": [
         "runtime",
@@ -635,6 +707,18 @@
       "purpose": "process-local async and first queue boundary",
       "sha256": "083a2097aa874395d1043980ce564cec3b2bfa4edd4fb67a63c30c9113f43a8d",
       "title": "Background Job Queue Boundary"
+    },
+    {
+      "bytes": 11468,
+      "categories": [
+        "data",
+        "provider"
+      ],
+      "lineCount": 225,
+      "path": "docs/operations/provider-capability-metadata.md",
+      "purpose": "provider capability metadata and inert source-confidence contract",
+      "sha256": "5caaebd93a6011008cedbfea03197f5d928fb461094ee35a394dc4ce881b67e8",
+      "title": "Provider Capability Metadata"
     },
     {
       "bytes": 4252,
@@ -671,6 +755,162 @@
       "title": "WolfyStock Portfolio Docs"
     },
     {
+      "bytes": 15201,
+      "categories": [
+        "acceptance",
+        "product-recovery"
+      ],
+      "lineCount": 127,
+      "path": "docs/product-recovery/DATA011_PACKET_CONSUMPTION_ACCEPTANCE.md",
+      "purpose": "packet consumption acceptance for first-read recovery",
+      "sha256": "e2e80cef22591caa9a141d61bf2a0caac2c0ee7323ae8573630fddf824aeac5a",
+      "title": "DATA-011 Packet Consumption Product Acceptance"
+    },
+    {
+      "bytes": 12172,
+      "categories": [
+        "acceptance",
+        "product-recovery"
+      ],
+      "lineCount": 129,
+      "path": "docs/product-recovery/DATA016_FOCUSED_ACCEPTANCE.md",
+      "purpose": "focused first-read recovery acceptance",
+      "sha256": "9aa353008633e8d1de3dad0afd8495daf6c5fe4215af4aa4c38ed916ee51e027",
+      "title": "DATA-016 Focused Acceptance After First-Read Recovery"
+    },
+    {
+      "bytes": 13691,
+      "categories": [
+        "acceptance",
+        "product-recovery"
+      ],
+      "lineCount": 217,
+      "path": "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md",
+      "purpose": "real data value acceptance and remaining blockers",
+      "sha256": "caecbe0a11f9ad63de359228c6bdeb04cc414695cd917ee00a829c18b013a076",
+      "title": "DATA-021 Real Data Value Acceptance"
+    },
+    {
+      "bytes": 33340,
+      "categories": [
+        "product-recovery",
+        "roadmap"
+      ],
+      "lineCount": 239,
+      "path": "docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md",
+      "purpose": "professional data source roadmap",
+      "sha256": "a59613ffebd861d35532f9770c3cc85c85cd3b3636b5c3d298aac58ea8e462f8",
+      "title": "DATA-030 Professional Data Source Roadmap"
+    },
+    {
+      "bytes": 24703,
+      "categories": [
+        "backtest",
+        "product-recovery"
+      ],
+      "lineCount": 179,
+      "path": "docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md",
+      "purpose": "backtest professional upgrade audit",
+      "sha256": "32d116552224d2e096a991797340530985ad84574ecba141844c899abc0d8856",
+      "title": "DATA-031 Backtest Professional Upgrade Audit"
+    },
+    {
+      "bytes": 5096,
+      "categories": [
+        "evidence",
+        "product-recovery"
+      ],
+      "lineCount": 144,
+      "path": "docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md",
+      "purpose": "target-environment evidence harness",
+      "sha256": "fe53494e9823ada4c438783838041cb1623d44f1e8c9f087ce2be6da5bf8761c",
+      "title": "DATA-033 Target Environment Evidence Harness"
+    },
+    {
+      "bytes": 19727,
+      "categories": [
+        "options",
+        "product-recovery"
+      ],
+      "lineCount": 181,
+      "path": "docs/product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md",
+      "purpose": "options provider entitlement decision",
+      "sha256": "906f98a9d4a9991b2cf4b7e4217a55b39e372af08f738442de2d65d87c9485c4",
+      "title": "DATA-034 Options Provider Entitlement Decision"
+    },
+    {
+      "bytes": 20596,
+      "categories": [
+        "product-recovery",
+        "scenario"
+      ],
+      "lineCount": 394,
+      "path": "docs/product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md",
+      "purpose": "scenario durable baseline snapshot plan",
+      "sha256": "63a472d850938f5a2c47390840ff055d13d4489f992c06d5eb273d401323cf35",
+      "title": "DATA-035 Scenario Durable Baseline Snapshot Plan"
+    },
+    {
+      "bytes": 34319,
+      "categories": [
+        "data",
+        "product-recovery"
+      ],
+      "lineCount": 559,
+      "path": "docs/product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md",
+      "purpose": "authorized quote spine contract",
+      "sha256": "2bbd937531ca30a76d9046c1e4284cea3c742b036e00aa7782dd6eb2237e3c35",
+      "title": "DATA-038 Authorized Quote Spine Contract"
+    },
+    {
+      "bytes": 19849,
+      "categories": [
+        "backtest",
+        "product-recovery"
+      ],
+      "lineCount": 303,
+      "path": "docs/product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md",
+      "purpose": "backtest dataset lineage gate contract",
+      "sha256": "02b2034edfc71af0d091e6fb07c6006220d76920c5ab7d30cc2f344ec520e27c",
+      "title": "DATA-039 Backtest Dataset Lineage Gate Contract"
+    },
+    {
+      "bytes": 45943,
+      "categories": [
+        "data",
+        "product-recovery"
+      ],
+      "lineCount": 445,
+      "path": "docs/product-recovery/DATA_COVERAGE_MATRIX.md",
+      "purpose": "repo-grounded data coverage matrix for product recovery",
+      "sha256": "b0abba1dc3d873b72bd8103e18826a5c8bc8d81e649e43f337dcb676baec7101",
+      "title": "WolfyStock Data Coverage Matrix"
+    },
+    {
+      "bytes": 12147,
+      "categories": [
+        "packet",
+        "product-recovery"
+      ],
+      "lineCount": 246,
+      "path": "docs/product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md",
+      "purpose": "minimum symbol research packet contract",
+      "sha256": "eead46d0dce4ca52d04a4d63cc92d9707a6c9e1d800a1d105c818f85f6e2f53f",
+      "title": "Symbol Research Packet Contract"
+    },
+    {
+      "bytes": 20079,
+      "categories": [
+        "product",
+        "product-recovery"
+      ],
+      "lineCount": 457,
+      "path": "docs/product-recovery/WOLFYSTOCK_PRODUCT_RECOVERY_PLAN.md",
+      "purpose": "canonical product recovery plan and recovery posture",
+      "sha256": "bf1c4bc706e1c2d8547392d0a96b7f4557309e82ed55477244eaa818dbb8ec6c",
+      "title": "WolfyStock Product Recovery Plan"
+    },
+    {
       "bytes": 4009,
       "categories": [
         "data",
@@ -693,12 +933,36 @@
       "purpose": "DuckDB diagnostic-only engine posture",
       "sha256": "f40a2121dd27c900e14f96734518dbf1a5b99392381f28ff6bc1a4d010e9b244",
       "title": "DuckDB Quant Engine"
+    },
+    {
+      "bytes": 6465,
+      "categories": [
+        "product",
+        "rotation"
+      ],
+      "lineCount": 106,
+      "path": "docs/rotation/README.md",
+      "purpose": "rotation domain entry point and boundary rules",
+      "sha256": "faf655eeed08502e4a58e911c59ba80ebd23218a5484d84bb286e70badf77a1a",
+      "title": "WolfyStock Rotation Docs"
+    },
+    {
+      "bytes": 1686,
+      "categories": [
+        "product",
+        "scanner"
+      ],
+      "lineCount": 33,
+      "path": "docs/scanner/README.md",
+      "purpose": "scanner and watchlist domain entry point and boundary rules",
+      "sha256": "b5e8ab6e42f83b70688d787166f543c4b2140f56684f7c8419cc08c8ef1c7729",
+      "title": "WolfyStock Scanner Docs"
     }
   ],
   "outputs": {
     "manifest": "docs/AI_PROJECT_MANUAL_SOURCES.json",
     "manual": "docs/AI_PROJECT_MANUAL.md",
-    "manualSha256": "7aaea435af540b343e5a1f25123d1c8406a1625d376e7c576ea1444c84348d09"
+    "manualSha256": "44f7a05891f8bdc7ca5a1d5b3fe5ff4e9ca87d418cacdebfc135c1cb78cb8472"
   },
   "schemaVersion": 1,
   "sections": [
@@ -727,6 +991,59 @@
       "title": "Product Purpose And Current Deployment Boundary",
       "updateTrigger": "Product positioning, deployment mode, private beta, no-advice, or launch verdict changes.",
       "validation": "Docs-only validation for docs changes; release/UAT evidence for deployment posture changes."
+    },
+    {
+      "key": "hard-stops",
+      "sources": [
+        "AGENTS.md",
+        "docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md",
+        "docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md",
+        "docs/codex/NO_ADVICE_REGRESSION_GUARDS.md",
+        "docs/audits/trading-no-advice-product-policy.md",
+        "docs/data-reliability/provider-source-confidence-contract.md",
+        "docs/operations/provider-capability-metadata.md"
+      ],
+      "title": "Protected Domains And Hard Stops",
+      "updateTrigger": "Protected-domain boundaries, no-advice policy, provider/source confidence, or hard-stop validation rules change.",
+      "validation": "Read the guard docs first; then use focused tests and the smallest validation tier that proves the protected semantic stayed intact."
+    },
+    {
+      "key": "product-surfaces-data-reality",
+      "sources": [
+        "README.md",
+        "docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md",
+        "docs/market-overview/README.md",
+        "docs/scanner/README.md",
+        "docs/liquidity/README.md",
+        "docs/rotation/README.md",
+        "docs/options/README.md",
+        "docs/portfolio/README.md",
+        "docs/backtest/README.md",
+        "docs/backtest-system.md",
+        "docs/product-recovery/WOLFYSTOCK_PRODUCT_RECOVERY_PLAN.md",
+        "docs/product-recovery/DATA_COVERAGE_MATRIX.md",
+        "docs/product-recovery/DATA011_PACKET_CONSUMPTION_ACCEPTANCE.md",
+        "docs/product-recovery/DATA016_FOCUSED_ACCEPTANCE.md",
+        "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md",
+        "docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md",
+        "docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md",
+        "docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md",
+        "docs/product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md",
+        "docs/product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md",
+        "docs/product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md",
+        "docs/product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md",
+        "docs/product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md",
+        "docs/data/market-source-activation-blueprint.md",
+        "docs/data-reliability/provider-source-confidence-contract.md",
+        "docs/operations/provider-capability-metadata.md",
+        "docs/audits/data-quality-user-disclosure-policy.md",
+        "docs/audits/options-provider-adapter-contract.md",
+        "docs/audits/backtest-portfolio-public-safety-audit.md",
+        "docs/audits/trading-no-advice-product-policy.md"
+      ],
+      "title": "Product Surfaces And Data Reality",
+      "updateTrigger": "Surface maps, data-roadmap boundaries, or any professional data family readiness change.",
+      "validation": "Use the source docs and current code/tests to classify every surface and family as ready, partial, blocked, missing, unauthorized, or observation-only before editing anything else."
     },
     {
       "key": "architecture-surfaces",
@@ -822,15 +1139,18 @@
       "key": "validation-workflow",
       "sources": [
         "AGENTS.md",
+        "docs/codex/WOLFYSTOCK_CODEX_DISCOVERY_PROTOCOL.md",
+        "docs/codex/WOLFYSTOCK_CODEX_EXECUTION_POLICY.md",
         "docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md",
         "docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md",
         "docs/codex/WOLFYSTOCK_CODEX_VALIDATION_MATRIX.md",
         "docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md",
+        "docs/codex/NO_ADVICE_REGRESSION_GUARDS.md",
         "docs/frontend/validation-playbook.md"
       ],
-      "title": "Validation Profiles And Task Workflow",
+      "title": "Codex Workflow, Validation, And Reporting",
       "updateTrigger": "Task modes, prompt fields, validation matrix, final report format, or frontend evidence rules change.",
-      "validation": "Run the task-required commands; docs-only changes use diff-check/status/secret scan unless task says otherwise."
+      "validation": "Run the smallest validation that proves the touched files, then record the command, exit status, and any blocker in the final report."
     },
     {
       "key": "launch-no-go",
@@ -859,6 +1179,52 @@
       "title": "Known Experimental And Demo-Only Surfaces",
       "updateTrigger": "Any diagnostic/demo/fixture/dry-run surface becomes runtime, production, or user-visible decision authority.",
       "validation": "Fail-closed tests, no-live-call proof, redaction checks, docs wording review, and task-specific runtime evidence."
+    },
+    {
+      "key": "source-truth-index",
+      "sources": [
+        "AGENTS.md",
+        "docs/DOCS_INDEX.md",
+        "docs/ARCHIVE_INDEX.md",
+        "docs/WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md",
+        "docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md",
+        "docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md",
+        "docs/codex/WOLFYSTOCK_CODEX_DISCOVERY_PROTOCOL.md",
+        "docs/codex/WOLFYSTOCK_CODEX_EXECUTION_POLICY.md",
+        "docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md",
+        "docs/codex/WOLFYSTOCK_CODEX_VALIDATION_MATRIX.md",
+        "docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md",
+        "docs/codex/NO_ADVICE_REGRESSION_GUARDS.md",
+        "docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md",
+        "docs/data-reliability/provider-source-confidence-contract.md",
+        "docs/operations/provider-capability-metadata.md",
+        "docs/data/market-source-activation-blueprint.md",
+        "docs/product-recovery/WOLFYSTOCK_PRODUCT_RECOVERY_PLAN.md",
+        "docs/product-recovery/DATA_COVERAGE_MATRIX.md",
+        "docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md",
+        "docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md",
+        "docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md",
+        "docs/product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md",
+        "docs/product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md",
+        "docs/product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md",
+        "docs/product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md",
+        "docs/product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md",
+        "docs/market-overview/README.md",
+        "docs/scanner/README.md",
+        "docs/liquidity/README.md",
+        "docs/rotation/README.md",
+        "docs/options/README.md",
+        "docs/portfolio/README.md",
+        "docs/backtest/README.md",
+        "docs/backtest-system.md",
+        "docs/audits/data-quality-user-disclosure-policy.md",
+        "docs/audits/options-provider-adapter-contract.md",
+        "docs/audits/backtest-portfolio-public-safety-audit.md",
+        "docs/audits/trading-no-advice-product-policy.md"
+      ],
+      "title": "Source-Of-Truth Index",
+      "updateTrigger": "Canonical source maps, source curation, or topic ownership changes.",
+      "validation": "Read the canonical doc first, then supporting docs, and use the class label to decide whether the topic is policy, contract, roadmap, historical, or generated manual source."
     },
     {
       "key": "source-policy",
