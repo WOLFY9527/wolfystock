@@ -125,6 +125,39 @@ const partialResearchPacket = () => ({
   noAdviceDisclosure: 'Observation-only research packet; not personalized financial advice and not an instruction.',
 });
 
+const completeResearchPacket = () => ({
+  ...partialResearchPacket(),
+  identity: {
+    name: 'Apple',
+    exchange: 'NASDAQ',
+    sector: 'Technology',
+    industry: 'Consumer electronics',
+  },
+  structure: {
+    state: 'available',
+    label: 'breakout',
+    confidence: 'medium',
+    asOf: '2026-05-28',
+  },
+  fundamentals: {
+    state: 'available',
+    fieldsAvailable: ['revenue', 'margin'],
+  },
+  events: {
+    state: 'available',
+    latest: [
+      { title: 'Earnings update', asOf: '2026-05-28' },
+    ],
+  },
+  peer: {
+    state: 'available',
+    benchmark: 'QQQ',
+  },
+  missingData: [],
+  researchStatus: 'ready',
+  nextDataAction: 'Review the next data refresh.',
+});
+
 describe('StockStructureDecisionPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -145,7 +178,7 @@ describe('StockStructureDecisionPage', () => {
     }));
   });
 
-  it('requests and renders the symbol research packet with compact consumer labels', async () => {
+  it('requests and renders the symbol research packet as a professional evidence stack', async () => {
     getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
 
     renderRoutePattern(
@@ -158,20 +191,27 @@ describe('StockStructureDecisionPage', () => {
     const panel = await within(page).findByTestId('stock-research-packet-panel');
 
     expect(getResearchPacketMock).toHaveBeenCalledWith('AAPL');
-    expect(panel).toHaveTextContent('研究就绪快照');
+    expect(panel).toHaveTextContent('证据栈');
     expect(panel).toHaveTextContent('AAPL');
     expect(panel).toHaveTextContent('Apple');
-    expect(panel).toHaveTextContent('部分可用');
+    expect(panel).toHaveTextContent('证据部分可用');
+    expect(panel).toHaveTextContent('仅观察');
+    expect(panel).toHaveTextContent('评分待确认');
+    expect(panel).toHaveTextContent('可用 3');
+    expect(panel).toHaveTextContent('待补 3');
+    expect(panel).toHaveTextContent('部分 2');
     expect(panel).toHaveTextContent('报价可用');
     expect(panel).toHaveTextContent('历史可用');
-    expect(panel).toHaveTextContent('结构待补');
-    expect(panel).toHaveTextContent('基本面待接入');
-    expect(panel).toHaveTextContent('事件待补');
-    expect(panel).toHaveTextContent('同业待补');
-    expect(panel).toHaveTextContent('待补：基本面、事件、同业');
-    expect(panel).toHaveTextContent('补基本面、事件、同业');
-    expect(panel).toHaveTextContent('研究记录');
-    expect(panel).toHaveTextContent('非交易指令');
+    expect(panel).toHaveTextContent('标的上下文可用');
+    expect(panel).toHaveTextContent('基本面待补');
+    expect(panel).toHaveTextContent('新闻线索待补');
+    expect(panel).toHaveTextContent('风险来源待补');
+    expect(panel).toHaveTextContent('市场线索待补');
+    expect(panel).toHaveTextContent('研究包可用');
+    expect(panel).toHaveTextContent('下一证据缺口');
+    expect(panel).toHaveTextContent('基本面待补');
+    expect(panel).toHaveTextContent('新闻线索待补');
+    expect(panel).toHaveTextContent('市场线索待补');
     expect(findConsumerRawLeakage(page.textContent || '', {
       extraForbiddenPatterns: [
         /\bavailable\b/i,
@@ -184,6 +224,94 @@ describe('StockStructureDecisionPage', () => {
     })).toEqual([]);
     expect(page.textContent || '').not.toMatch(/available|not_integrated|insufficient|blocked|observationOnly|not personalized financial advice/i);
     expect(page.textContent || '').not.toMatch(/buy|sell|hold|target price|stop-loss|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
+  });
+
+  it('renders a complete evidence stack when all existing packet families are available', async () => {
+    getResearchPacketMock.mockResolvedValue(completeResearchPacket());
+    getStructureDecisionMock.mockResolvedValue({
+      ...baseStructureDecision(),
+      researchNotes: {
+        watchNext: ['Review the next close.'],
+        needsMoreEvidence: [],
+        riskFlags: ['Volatility remains elevated.'],
+      },
+      missingEvidence: [],
+    });
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const panel = await within(page).findByTestId('stock-research-packet-panel');
+
+    expect(panel).toHaveTextContent('证据完整');
+    expect(panel).toHaveTextContent('报价可用');
+    expect(panel).toHaveTextContent('基本面可用');
+    expect(panel).toHaveTextContent('新闻线索可用');
+    expect(panel).toHaveTextContent('风险来源可用');
+    expect(panel).toHaveTextContent('市场线索可用');
+    expect(panel).toHaveTextContent('研究包可用');
+    expect(panel).not.toHaveTextContent('下一证据缺口');
+    expect(findConsumerRawLeakage(page.textContent || '', {
+      extraForbiddenPatterns: [
+        /\bavailable\b/i,
+        /\bobservationOnly\b/i,
+      ],
+    })).toEqual([]);
+  });
+
+  it('renders delayed, missing, and partial evidence with consumer-safe labels', async () => {
+    getResearchPacketMock.mockResolvedValue({
+      ...partialResearchPacket(),
+      quote: {
+        state: 'stale',
+        price: null,
+        changePercent: null,
+        asOf: null,
+      },
+      history: {
+        state: 'missing',
+        bars: null,
+        period: 'daily',
+        asOf: null,
+      },
+      nextDataAction: 'provider runtime fallback sourceAuthority debug buy now target price',
+      missingData: ['quote', 'price_history', 'fundamentals', 'filing_event_catalyst', 'peer_benchmark'],
+    });
+    getStructureDecisionMock.mockResolvedValue({
+      ...baseStructureDecision(),
+      dataQuality: {
+        ...baseStructureDecision().dataQuality,
+        status: 'partial',
+        usableBars: 0,
+      },
+    });
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const panel = await within(page).findByTestId('stock-research-packet-panel');
+
+    expect(panel).toHaveTextContent('证据部分可用');
+    expect(panel).toHaveTextContent('报价可能延迟');
+    expect(panel).toHaveTextContent('历史待补');
+    expect(panel).toHaveTextContent('基本面待补');
+    expect(panel).toHaveTextContent('新闻线索待补');
+    expect(panel).toHaveTextContent('风险来源待补');
+    expect(panel).toHaveTextContent('市场线索待补');
+    expect(panel).toHaveTextContent('延迟 1');
+    expect(panel).toHaveTextContent('下一证据缺口');
+    expect(panel).toHaveTextContent('报价待补');
+    expect(panel).toHaveTextContent('历史待补');
+    expect(page.textContent || '').not.toMatch(/provider|runtime|fallback|sourceAuthority|debug|buy now|target price/i);
+    expect(page.textContent || '').not.toMatch(/买入建议|卖出建议|持有建议|目标价|止损|仓位建议|交易建议|操作建议/);
   });
 
   it('shows a compact packet fallback without hiding existing structure facts', async () => {
