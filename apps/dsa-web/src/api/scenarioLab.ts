@@ -49,11 +49,19 @@ export type ScenarioLabBaselineReadiness = {
   lastUpdated?: string | null;
 };
 
+export type ScenarioLabBaselineReadinessSummary = {
+  baselineSnapshot: string;
+  marketFrame: string;
+  driverInputs: string;
+  boundary: string;
+};
+
 export type ScenarioLabResponse = {
   schemaVersion: string;
   baseRegime: ScenarioLabRegime;
   scenarioRegime: ScenarioLabRegime;
   baselineReadiness?: ScenarioLabBaselineReadiness | null;
+  baselineReadinessSummary: ScenarioLabBaselineReadinessSummary;
   readinessLabels: string[];
   confidenceDelta: number;
   driverDeltas: Record<string, number>;
@@ -77,14 +85,29 @@ const SAFE_READINESS_LABELS = {
   baselineReady: '基准可用',
   baselinePending: '基准待确认',
   baselinePartial: '基准部分可用',
+  baselineEvidenceMissing: '基线证据待补齐',
+  baselineSnapshotMissing: '基线快照待补齐',
+  baselineSnapshotPartial: '基线快照部分可用',
+  baselineSnapshotStale: '基线快照已过期',
   marketFrameReady: '当前框架可用',
+  marketFrameMissing: '市场框架待补齐',
+  marketFramePartial: '市场框架部分可用',
+  marketFrameStale: '市场框架已过期',
   driversPending: '驱动待补',
+  driversPartial: '驱动证据部分可用',
   evidenceBoundary: '证据边界',
   scenarioPending: '情景待更新',
   demoSample: '演示样本',
   observationOnly: '仅观察',
   scenarioSummaryReady: '情景摘要可用',
 } as const;
+
+const SAFE_BASELINE_READINESS_SUMMARY: ScenarioLabBaselineReadinessSummary = {
+  baselineSnapshot: '基线证据待补齐',
+  marketFrame: '市场框架待补齐',
+  driverInputs: '驱动证据待补齐',
+  boundary: '仅观察 / 非决策级',
+};
 
 function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : [];
@@ -151,6 +174,70 @@ function normalizeBaselineReadiness(value: ScenarioLabBaselineReadiness | null |
   };
 }
 
+function baselineSnapshotSummaryLabel(readiness: ScenarioLabBaselineReadiness, state: string | null): string {
+  switch (state) {
+    case 'available':
+      return readiness.status === 'ready' && readiness.scoreAuthority === 'authoritative'
+        ? SAFE_READINESS_LABELS.baselineReady
+        : SAFE_READINESS_LABELS.baselinePending;
+    case 'partial':
+      return SAFE_READINESS_LABELS.baselineSnapshotPartial;
+    case 'stale':
+      return SAFE_READINESS_LABELS.baselineSnapshotStale;
+    case 'missing':
+      return SAFE_READINESS_LABELS.baselineSnapshotMissing;
+    default:
+      return SAFE_BASELINE_READINESS_SUMMARY.baselineSnapshot;
+  }
+}
+
+function marketFrameSummaryLabel(state: string | null): string {
+  switch (state) {
+    case 'available':
+      return SAFE_READINESS_LABELS.marketFrameReady;
+    case 'partial':
+      return SAFE_READINESS_LABELS.marketFramePartial;
+    case 'stale':
+      return SAFE_READINESS_LABELS.marketFrameStale;
+    case 'missing':
+      return SAFE_READINESS_LABELS.marketFrameMissing;
+    default:
+      return SAFE_BASELINE_READINESS_SUMMARY.marketFrame;
+  }
+}
+
+function driverInputsSummaryLabel(state: string | null): string {
+  switch (state) {
+    case 'available':
+      return '驱动证据可用';
+    case 'partial':
+      return SAFE_READINESS_LABELS.driversPartial;
+    default:
+      return SAFE_BASELINE_READINESS_SUMMARY.driverInputs;
+  }
+}
+
+function buildBaselineReadinessSummary(readiness: ScenarioLabBaselineReadiness | null): ScenarioLabBaselineReadinessSummary {
+  if (!readiness) {
+    return SAFE_BASELINE_READINESS_SUMMARY;
+  }
+
+  const baselineSnapshotState = readiness.baselineSnapshot?.state ?? null;
+  const marketFrameState = readiness.marketFrame?.state ?? null;
+  const driverInputsState = readiness.driverInputs?.state ?? null;
+
+  const boundary = readiness.observationOnly === false && readiness.scoreAuthority === 'authoritative' && readiness.status === 'ready'
+    ? '可复用基线'
+    : SAFE_BASELINE_READINESS_SUMMARY.boundary;
+
+  return {
+    baselineSnapshot: baselineSnapshotSummaryLabel(readiness, baselineSnapshotState),
+    marketFrame: marketFrameSummaryLabel(marketFrameState),
+    driverInputs: driverInputsSummaryLabel(driverInputsState),
+    boundary,
+  };
+}
+
 function pushUnique(labels: string[], label: string) {
   if (!labels.includes(label)) {
     labels.push(label);
@@ -159,7 +246,10 @@ function pushUnique(labels: string[], label: string) {
 
 function buildReadinessLabels(readiness: ScenarioLabBaselineReadiness | null): string[] {
   if (!readiness) {
-    return [];
+    return [
+      SAFE_READINESS_LABELS.baselineEvidenceMissing,
+      SAFE_READINESS_LABELS.observationOnly,
+    ];
   }
   const labels: string[] = [];
   const baselineState = readiness.baselineSnapshot?.state;
@@ -172,13 +262,23 @@ function buildReadinessLabels(readiness: ScenarioLabBaselineReadiness | null): s
     pushUnique(labels, SAFE_READINESS_LABELS.baselineReady);
   } else if (baselineState === 'partial' || baselineState === 'stale') {
     pushUnique(labels, SAFE_READINESS_LABELS.baselinePartial);
+  } else if (baselineState === 'missing') {
+    pushUnique(labels, SAFE_READINESS_LABELS.baselineEvidenceMissing);
   } else {
     pushUnique(labels, SAFE_READINESS_LABELS.baselinePending);
   }
   if (marketFrameState === 'available') {
     pushUnique(labels, SAFE_READINESS_LABELS.marketFrameReady);
+  } else if (marketFrameState === 'partial') {
+    pushUnique(labels, SAFE_READINESS_LABELS.marketFramePartial);
+  } else if (marketFrameState === 'stale') {
+    pushUnique(labels, SAFE_READINESS_LABELS.marketFrameStale);
+  } else if (marketFrameState === 'missing') {
+    pushUnique(labels, SAFE_READINESS_LABELS.marketFrameMissing);
   }
-  if (driverState !== 'available') {
+  if (driverState === 'partial') {
+    pushUnique(labels, SAFE_READINESS_LABELS.driversPartial);
+  } else if (driverState !== 'available') {
     pushUnique(labels, SAFE_READINESS_LABELS.driversPending);
   }
   if (evidenceState !== 'ready' || readiness.scoreAuthority !== 'authoritative') {
@@ -217,6 +317,7 @@ function normalizeScenarioLabResponse(payload: unknown): ScenarioLabResponse {
       status: normalized.scenarioRegime?.status ?? null,
     },
     baselineReadiness,
+    baselineReadinessSummary: buildBaselineReadinessSummary(baselineReadiness),
     readinessLabels: buildReadinessLabels(baselineReadiness),
     confidenceDelta: normalized.confidenceDelta ?? 0,
     driverDeltas: normalized.driverDeltas ?? {},

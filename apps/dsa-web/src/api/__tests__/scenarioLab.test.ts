@@ -108,7 +108,13 @@ describe('scenarioLabApi', () => {
     expect(payload.baselineReadiness?.status).toBe('blocked');
     expect(payload.baselineReadiness?.baselineSnapshot?.state).toBe('missing');
     expect(payload.baselineReadiness?.driverInputs?.affectedDriverKeys).toEqual(['dealerGamma']);
-    expect(payload.readinessLabels).toEqual(['基准待确认', '当前框架可用', '驱动待补', '证据边界', '情景待更新', '仅观察']);
+    expect(payload.baselineReadinessSummary).toEqual({
+      baselineSnapshot: '基线快照待补齐',
+      marketFrame: '当前框架可用',
+      driverInputs: '驱动证据部分可用',
+      boundary: '仅观察 / 非决策级',
+    });
+    expect(payload.readinessLabels).toEqual(['基线证据待补齐', '当前框架可用', '驱动证据部分可用', '证据边界', '情景待更新', '仅观察']);
     expect(payload.driverDeltas.breadthParticipation).toBe(-75);
     expect(payload.driverDeltas.volatilityStructure).toBe(-145);
     expect(payload.evidenceLimits).toEqual(['Gamma evidence remains capped.']);
@@ -157,7 +163,13 @@ describe('scenarioLabApi', () => {
     expect(payload.noAdviceDisclosure).toBeNull();
     expect(payload.evidenceLimits).toEqual(['Base regime evidence is missing.']);
     expect(payload.baselineReadiness).toBeNull();
-    expect(payload.readinessLabels).toEqual([]);
+    expect(payload.baselineReadinessSummary).toEqual({
+      baselineSnapshot: '基线证据待补齐',
+      marketFrame: '市场框架待补齐',
+      driverInputs: '驱动证据待补齐',
+      boundary: '仅观察 / 非决策级',
+    });
+    expect(payload.readinessLabels).toEqual(['基线证据待补齐', '仅观察']);
   });
 
   it('maps demo or sample readiness into consumer-safe labels only', async () => {
@@ -228,12 +240,18 @@ describe('scenarioLabApi', () => {
     expect(payload.readinessLabels).toEqual([
       '基准部分可用',
       '当前框架可用',
-      '驱动待补',
+      '驱动证据部分可用',
       '证据边界',
       '演示样本',
       '仅观察',
       '情景摘要可用',
     ]);
+    expect(payload.baselineReadinessSummary).toEqual({
+      baselineSnapshot: '基线快照部分可用',
+      marketFrame: '当前框架可用',
+      driverInputs: '驱动证据部分可用',
+      boundary: '仅观察 / 非决策级',
+    });
     expect(payload.readinessLabels.join(' ')).not.toMatch(/sourceAuthority|observation_only|demo_static_sample|sample/i);
   });
 });
