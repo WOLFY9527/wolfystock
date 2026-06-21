@@ -973,31 +973,87 @@ describe('OptionsLabPage', () => {
       expect(analyzer).toHaveTextContent('研究记录');
       expect(analyzer).toHaveTextContent('非交易指令');
       expect(analyzer).toHaveTextContent('仅观察');
+      expect(analyzer).toHaveTextContent('观察型诊断，不形成结论');
       expect(analyzer).toHaveTextContent('宽跨式多头');
     });
 
     expect(analyzer).toHaveTextContent('净支出');
     expect(analyzer).toHaveTextContent('$758.00');
     expect(analyzer).toHaveTextContent('最大亏损');
+    expect(analyzer).toHaveTextContent('收益上限');
     expect(analyzer).toHaveTextContent('盈亏平衡');
     expect(analyzer).toHaveTextContent('$42.42 / $62.58');
+    expect(within(analyzer).getByTestId('options-lab-strategy-analyzer-summary-metrics')).toHaveTextContent('核心风险摘要');
+    expect(within(analyzer).getByTestId('options-lab-strategy-payoff-preview')).toHaveTextContent('收益表预览');
+    expect(within(analyzer).getByTestId('options-lab-strategy-payoff-preview')).toHaveTextContent('只显示关键情景点');
+    expect(within(analyzer).getByTestId('options-lab-strategy-payoff-preview')).toHaveTextContent('标的价');
+    expect(within(analyzer).getByTestId('options-lab-strategy-payoff-preview')).toHaveTextContent('净收益');
     expect(analyzer).toHaveTextContent('收益表摘要');
     expect(analyzer).toHaveTextContent('-$758.00 到 $242.00');
     expect(analyzer).toHaveTextContent('敏感度合计');
     expect(analyzer).toHaveTextContent('Delta 0.06 · Theta -0.09 · Vega 0.21');
+    expect(within(analyzer).getByTestId('options-lab-strategy-boundary-summary')).toHaveTextContent('模型边界');
+    expect(within(analyzer).getByTestId('options-lab-strategy-boundary-summary')).toHaveTextContent('聚合敏感度来自当前可用腿');
     expect(analyzer).toHaveTextContent('模型受限概率');
     expect(analyzer).toHaveTextContent('41.2%');
-    expect(analyzer).toHaveTextContent('假设模型，不是历史胜率');
+    expect(analyzer).toHaveTextContent('模型受限概率，仅来自当前假设');
     expect(analyzer).toHaveTextContent('历史胜率不可用');
-    expect(analyzer).toHaveTextContent('历史期权链未接入');
+    expect(analyzer).toHaveTextContent('缺少授权历史期权链与点时回放证据');
+    expect(analyzer).toHaveTextContent('历史胜率不可用：缺少授权历史期权链与点时回放证据');
     expect(analyzer).toHaveTextContent('仅使用当前已加载合约链和情景输入；缺腿时不生成模拟腿或占位结果。');
 
     const analyzerText = analyzer.textContent || '';
-    expect(analyzerText).not.toMatch(/provider|requestId|traceId|rawPayload|debug|probability_model_version|sourceAuthority|scoreAuthority|scoreContributionAllowed/i);
-    expect(analyzerText).not.toMatch(/recommended|best strategy|best contract|buy now|sell now|position sizing|stop loss|target price|下单|买入|卖出|推荐|最优|首选/);
+    expect(analyzerText).not.toMatch(/provider|internal|cache|requestId|traceId|rawPayload|debug|probability_model_version|sourceAuthority|scoreAuthority|scoreContributionAllowed/i);
+    expect(analyzerText).not.toMatch(/recommended|recommendation|best strategy|winner|optimal|best contract|buy now|sell now|place order|order CTA|position sizing|stop loss|target price|下单|买入|卖出|推荐|最优|首选|赢家/);
     expect(findConsumerRawLeakage(analyzerText, {
       extraForbiddenPatterns: SYNTHETIC_DIAGNOSTIC_GUARD_PATTERNS,
     })).toEqual([]);
+  });
+
+  it('keeps unavailable analyzer probability, Greeks, and payoff table visibly fail-closed', async () => {
+    const response = buildStrategyAnalyzerResponse();
+    const baseAnalysis = response.analyses[0];
+    vi.mocked(optionsLabApi.analyzeStrategies).mockResolvedValueOnce({
+      ...response,
+      analyses: [
+        {
+          ...baseAnalysis,
+          payoffTable: [],
+          aggregateGreeks: null,
+          missingGreeksBlockers: ['missing_greeks'],
+          modelImpliedProbability: {
+            state: 'unavailable',
+            modelImpliedProbabilityOfProfit: null,
+            inputs: {
+              probability_model_version: 'debug-model-v1',
+            },
+            blockers: ['debug_inputs'],
+          },
+          historicalWinRate: {
+            state: 'unavailable',
+            value: null,
+            blockers: ['historical_options_chain_data_unavailable'],
+          },
+        },
+      ],
+    } as never);
+
+    renderPage();
+
+    const analyzer = await screen.findByTestId('options-lab-strategy-analyzer');
+    await waitFor(() => {
+      expect(analyzer).toHaveTextContent('敏感度合计不可用');
+      expect(analyzer).toHaveTextContent('缺口：敏感度缺失');
+      expect(analyzer).toHaveTextContent('模型概率不可用');
+      expect(analyzer).toHaveTextContent('模型输入不完整，不显示概率');
+      expect(analyzer).toHaveTextContent('收益表暂不可用；不会补占位行。');
+      expect(analyzer).toHaveTextContent('历史胜率不可用');
+      expect(analyzer).toHaveTextContent('观察型诊断，不形成结论');
+    });
+
+    const analyzerText = analyzer.textContent || '';
+    expect(analyzerText).not.toMatch(/probability_model_version|debug_inputs|requestId|traceId|rawPayload|sourceAuthority/i);
+    expect(analyzerText).not.toMatch(/recommended|recommendation|best strategy|winner|optimal|place order|下单|买入|卖出|推荐|最优|首选|赢家/i);
   });
 
   it('sends strategy analyzer requests only from loaded chain evidence and current scenario inputs', async () => {
@@ -1073,12 +1129,14 @@ describe('OptionsLabPage', () => {
 
     const analyzer = await screen.findByTestId('options-lab-strategy-analyzer');
     await waitFor(() => {
-      expect(analyzer).toHaveTextContent('策略分析请求已阻断');
+      expect(analyzer).toHaveTextContent('策略分析器保持阻断');
       expect(analyzer).toHaveTextContent('缺少可用期权腿或必要输入');
-      expect(analyzer).toHaveTextContent('不会生成模拟腿或占位结果');
+      expect(analyzer).toHaveTextContent('缺少可用期权腿、到期日、标的现价或假设价格时');
+      expect(analyzer).toHaveTextContent('不生成模拟腿、占位收益表或替代结果');
+      expect(analyzer).toHaveTextContent('观察型诊断，不形成结论');
     });
     expect(vi.mocked(optionsLabApi.analyzeStrategies)).not.toHaveBeenCalled();
-    expect(analyzer.textContent || '').not.toMatch(/recommended|best strategy|provider|requestId|traceId|rawPayload|debug|synthetic_fixture|下单|买入|卖出|推荐|最优|首选/i);
+    expect(analyzer.textContent || '').not.toMatch(/recommended|recommendation|best strategy|winner|optimal|provider|internal|cache|requestId|traceId|rawPayload|debug|synthetic_fixture|place order|下单|买入|卖出|推荐|最优|首选|赢家/i);
   });
 
   it('keeps synthetic options diagnostics out of member scenario evidence and collapsed details', async () => {
@@ -3064,10 +3122,10 @@ describe('OptionsLabPage', () => {
     expect(optionsLabPageSource).toContain('假设价格');
     expect(optionsLabPageSource).toContain('专业结构：');
     expect(optionsLabPageSource).toContain('策略分析器');
-    expect(optionsLabPageSource).toContain('策略分析请求已阻断');
+    expect(optionsLabPageSource).toContain('策略分析器保持阻断');
     expect(optionsLabPageSource).toContain('模型受限概率');
     expect(optionsLabPageSource).toContain('历史胜率不可用');
-    expect(optionsLabPageSource).toContain('不会生成模拟腿或占位结果');
+    expect(optionsLabPageSource).toContain('不生成模拟腿、占位收益表或替代结果');
     expect(optionsLabPageSource).toContain('xl:col-start-2 xl:row-start-1');
 
     [

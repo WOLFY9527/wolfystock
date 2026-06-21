@@ -18,6 +18,7 @@ import {
   type OptionsStrategyAnalysis,
   type OptionsStrategyAnalyzerResponse,
   type OptionsStrategyAnalyzerTemplate,
+  type OptionsStrategyPayoffRow,
   type OptionsStrategyCompareResponse,
   type OptionsStrategyComparison,
   type OptionsStrategyType,
@@ -128,8 +129,12 @@ const OPTIONS_DEMO_BOUNDARY_COPY = '演示数据：当前数据延迟，仅用�
 const OPTIONS_DEMO_GREEKS_PLACEHOLDER = '敏感度暂未提供';
 const OPTIONS_DEMO_GREEKS_EXPLANATION = '演示链未提供真实敏感度数值，仅保留结构与风险边界。';
 const OPTIONS_IV_GREEKS_LABEL = 'IV / 希腊值';
-const STRATEGY_ANALYZER_BLOCKED_COPY = '策略分析请求已阻断';
-const STRATEGY_ANALYZER_MISSING_LEGS_COPY = '缺少可用期权腿或必要输入。不会生成模拟腿或占位结果。';
+const STRATEGY_ANALYZER_BLOCKED_COPY = '策略分析器保持阻断';
+const STRATEGY_ANALYZER_MISSING_LEGS_COPY = '缺少可用期权腿、到期日、标的现价或假设价格时，面板只显示阻断原因，不生成模拟腿、占位收益表或替代结果。';
+const STRATEGY_ANALYZER_OBSERVATION_DIAGNOSTIC_COPY = '观察型诊断，不形成结论';
+const STRATEGY_ANALYZER_MODEL_LIMITED_COPY = '模型受限概率，仅来自当前假设';
+const STRATEGY_ANALYZER_HISTORICAL_UNAVAILABLE_COPY = '历史胜率不可用：缺少授权历史期权链与点时回放证据';
+const STRATEGY_ANALYZER_GREEKS_UNAVAILABLE_COPY = '敏感度合计不可用';
 
 const fieldShellClass = 'group flex min-h-[4rem] min-w-0 flex-col justify-center gap-1.5 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-input)_92%,transparent)] px-3 py-2 transition-colors focus-within:border-[color:var(--wolfy-accent)]';
 const fieldClass = 'h-6 w-full border-0 bg-transparent p-0 font-mono text-sm text-[color:var(--wolfy-text-primary)] outline-none placeholder:text-[color:var(--wolfy-text-muted)]';
@@ -1039,21 +1044,32 @@ function analyzerPayoffSummary(analysis: OptionsStrategyAnalysis): string {
 
 function analyzerGreeksSummary(analysis: OptionsStrategyAnalysis): string {
   const greeks = analysis.aggregateGreeks;
-  if (!greeks) return OPTIONS_DEMO_GREEKS_PLACEHOLDER;
+  if (!greeks) return STRATEGY_ANALYZER_GREEKS_UNAVAILABLE_COPY;
   const delta = finiteNumber(greeks.delta);
   const theta = finiteNumber(greeks.theta);
   const vega = finiteNumber(greeks.vega);
-  if (delta == null && theta == null && vega == null) return OPTIONS_DEMO_GREEKS_PLACEHOLDER;
+  if (delta == null && theta == null && vega == null) return STRATEGY_ANALYZER_GREEKS_UNAVAILABLE_COPY;
   return `Delta ${number(delta, 2)} · Theta ${number(theta, 2)} · Vega ${number(vega, 2)}`;
+}
+
+function analyzerGreeksDetail(analysis: OptionsStrategyAnalysis): string {
+  if (analyzerGreeksSummary(analysis) !== STRATEGY_ANALYZER_GREEKS_UNAVAILABLE_COPY) {
+    return '聚合敏感度来自当前可用腿。';
+  }
+  const blockers = asArray(analysis.missingGreeksBlockers).map(warningLabel).slice(0, 2);
+  return blockers.length
+    ? `缺口：${blockers.join(' · ')}`
+    : '缺少可聚合的敏感度输入。';
 }
 
 function analyzerProbabilityValue(analysis: OptionsStrategyAnalysis): React.ReactNode {
   const probability = finiteNumber(analysis.modelImpliedProbability?.modelImpliedProbabilityOfProfit);
+  const state = analysis.modelImpliedProbability?.state;
   return (
     <span className="inline-flex flex-col gap-1">
       <span>{probability == null ? '模型概率不可用' : ratio(probability)}</span>
       <span className="whitespace-normal font-sans text-xs font-medium leading-5 text-[color:var(--wolfy-text-muted)]">
-        假设模型，不是历史胜率
+        {state === 'unavailable' ? '模型输入不完整，不显示概率' : STRATEGY_ANALYZER_MODEL_LIMITED_COPY}
       </span>
     </span>
   );
@@ -1069,7 +1085,7 @@ function analyzerHistoricalWinRateValue(analysis: OptionsStrategyAnalysis): Reac
     <span className="inline-flex flex-col gap-1">
       <span>历史胜率不可用</span>
       <span className="whitespace-normal font-sans text-xs font-medium leading-5 text-[color:var(--wolfy-text-muted)]">
-        历史期权链未接入
+        缺少授权历史期权链与点时回放证据
       </span>
     </span>
   );
@@ -1096,6 +1112,17 @@ function analyzerNetCostMetric(analysis: OptionsStrategyAnalysis): CompactMetric
     label: '净支出',
     value: '--',
   };
+}
+
+function analyzerPayoffPreviewRows(analysis: OptionsStrategyAnalysis): OptionsStrategyPayoffRow[] {
+  const rows = asArray(analysis.payoffTable)
+    .filter((row) => finiteNumber(row.underlyingPrice) != null && finiteNumber(row.netPayoff) != null);
+  if (rows.length <= 4) return rows;
+  const candidates = [rows[0], rows[Math.floor(rows.length / 2)], rows[rows.length - 1]]
+    .filter((row): row is OptionsStrategyPayoffRow => Boolean(row));
+  return candidates.filter((row, index, items) => (
+    items.findIndex((item) => item.underlyingPrice === row.underlyingPrice && item.netPayoff === row.netPayoff) === index
+  ));
 }
 
 function isUsableAnalyzerContract(contract: OptionContract): boolean {
@@ -2301,7 +2328,7 @@ const StrategyComparisonPanel: React.FC<{
 
 const StrategyAnalysisCard: React.FC<{ analysis: OptionsStrategyAnalysis; index: number }> = ({ analysis, index }) => {
   const maxProfit = finiteNumber(analysis.maxProfit);
-  const metrics: CompactMetricListItem[] = [
+  const summaryMetrics: CompactMetricListItem[] = [
     analyzerNetCostMetric(analysis),
     {
       label: '最大亏损',
@@ -2317,6 +2344,8 @@ const StrategyAnalysisCard: React.FC<{ analysis: OptionsStrategyAnalysis; index:
       label: '盈亏平衡',
       value: analyzerBreakevens(analysis.breakevens),
     },
+  ];
+  const boundaryMetrics: CompactMetricListItem[] = [
     {
       label: '收益表摘要',
       value: analyzerPayoffSummary(analysis),
@@ -2338,6 +2367,7 @@ const StrategyAnalysisCard: React.FC<{ analysis: OptionsStrategyAnalysis; index:
       tone: 'text-[color:var(--wolfy-text-secondary)]',
     },
   ];
+  const payoffPreviewRows = analyzerPayoffPreviewRows(analysis);
 
   return (
     <article className={cn(innerBlockClass, 'p-4')}>
@@ -2353,12 +2383,60 @@ const StrategyAnalysisCard: React.FC<{ analysis: OptionsStrategyAnalysis; index:
         </div>
         <div className="flex flex-wrap gap-2 sm:justify-end">
           <Pill tone="info">{analysis.readiness?.observationOnly ? OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY : OPTIONS_OBSERVE_ONLY_COPY}</Pill>
+          <Pill tone="neutral">{STRATEGY_ANALYZER_OBSERVATION_DIAGNOSTIC_COPY}</Pill>
           <Pill tone="warn">{analysis.readiness?.decisionGrade ? '需复核边界' : '不形成结论'}</Pill>
         </div>
       </div>
       <CompactMetricList
-        title="策略分析指标"
-        items={metrics}
+        title="核心风险摘要"
+        items={summaryMetrics}
+        testId="options-lab-strategy-analyzer-summary-metrics"
+        className="mt-4"
+        desktopColumnsClassName="lg:grid-cols-2 2xl:grid-cols-4"
+      />
+      <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.92fr)]">
+        <div className={cn(innerBlockClass, 'p-3')} data-testid="options-lab-strategy-payoff-preview">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+            <p className={labelClass}>收益表预览</p>
+            <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">只显示关键情景点</p>
+          </div>
+          {payoffPreviewRows.length ? (
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[18rem] text-left text-xs">
+                <thead className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
+                  <tr>
+                    <th className="py-1 pr-3">标的价</th>
+                    <th className="py-1 pr-3">总收益</th>
+                    <th className="py-1 text-right">净收益</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payoffPreviewRows.map((row) => (
+                    <tr key={`${row.underlyingPrice}-${row.netPayoff}`} className="border-t border-[color:var(--wolfy-divider)]">
+                      <td className="py-2 pr-3 font-mono text-[color:var(--wolfy-text-primary)]">{money(row.underlyingPrice)}</td>
+                      <td className="py-2 pr-3 font-mono text-[color:var(--wolfy-text-secondary)]">{analyzerMoney(row.grossPayoff)}</td>
+                      <td className={cn('py-2 text-right font-mono font-semibold', metricTone(row.netPayoff))}>{analyzerMoney(row.netPayoff)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">收益表暂不可用；不会补占位行。</p>
+          )}
+        </div>
+        <div className={cn(innerBlockClass, 'p-3')} data-testid="options-lab-strategy-boundary-summary">
+          <p className={labelClass}>模型边界</p>
+          <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{analyzerGreeksDetail(analysis)}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Pill tone="info">{STRATEGY_ANALYZER_MODEL_LIMITED_COPY}</Pill>
+            <Pill tone="neutral">{STRATEGY_ANALYZER_HISTORICAL_UNAVAILABLE_COPY}</Pill>
+          </div>
+        </div>
+      </div>
+      <CompactMetricList
+        title="模型边界指标"
+        items={boundaryMetrics}
         testId="options-lab-strategy-analyzer-metrics"
         className="mt-4"
         desktopColumnsClassName="lg:grid-cols-2 2xl:grid-cols-4"
@@ -2388,10 +2466,13 @@ const StrategyAnalyzerPanel: React.FC<{
         仅使用当前已加载合约链和情景输入；缺腿时不生成模拟腿或占位结果。
       </p>
       {analyzerState.blockedReason ? (
-        <div className={cn(innerBlockClass, 'mt-5 border-dashed p-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')}>
-          <p className="font-semibold text-[color:var(--wolfy-text-primary)]">{STRATEGY_ANALYZER_BLOCKED_COPY}</p>
-          <p className="mt-2">{analyzerState.blockedReason}</p>
-          <p className="mt-1">{STRATEGY_ANALYZER_MISSING_LEGS_COPY}</p>
+        <div className={cn(innerBlockClass, 'mt-5 border-dashed p-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')} data-testid="options-lab-strategy-analyzer-blocked">
+          <div className="flex flex-wrap gap-2">
+            <Pill tone="risk">{STRATEGY_ANALYZER_BLOCKED_COPY}</Pill>
+            <Pill tone="neutral">{STRATEGY_ANALYZER_OBSERVATION_DIAGNOSTIC_COPY}</Pill>
+          </div>
+          <p className="mt-3 font-semibold text-[color:var(--wolfy-text-primary)]">{analyzerState.blockedReason}</p>
+          <p className="mt-2">{STRATEGY_ANALYZER_MISSING_LEGS_COPY}</p>
         </div>
       ) : null}
       {!analyzerState.blockedReason && analyzerState.loading ? (
@@ -2404,6 +2485,7 @@ const StrategyAnalyzerPanel: React.FC<{
         <div className="mt-5 grid gap-4">
           <div className="flex flex-wrap gap-2">
             <Pill tone={observationOnly ? 'info' : 'warn'}>{observationOnly ? OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY : OPTIONS_OBSERVE_ONLY_COPY}</Pill>
+            <Pill tone="neutral">{STRATEGY_ANALYZER_OBSERVATION_DIAGNOSTIC_COPY}</Pill>
             <Pill tone={decisionGrade ? 'warn' : 'neutral'}>{decisionGrade ? '需复核边界' : '不形成结论'}</Pill>
             <Pill tone="neutral">历史胜率不可用</Pill>
           </div>
