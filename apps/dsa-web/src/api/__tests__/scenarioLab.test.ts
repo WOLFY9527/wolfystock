@@ -32,6 +32,44 @@ describe('scenarioLabApi', () => {
           confidence_score: 0.43,
           status: 'partial',
         },
+        baseline_readiness: {
+          status: 'blocked',
+          baseline_snapshot: {
+            state: 'missing',
+            available: false,
+            affected_components: ['baselineSnapshot'],
+          },
+          market_frame: {
+            state: 'available',
+            available: true,
+            last_updated: '2026-06-15T09:30:00Z',
+            affected_components: [],
+          },
+          driver_inputs: {
+            state: 'partial',
+            available_driver_keys: ['breadthParticipation', 'volatilityStructure'],
+            partial_driver_keys: [],
+            missing_driver_keys: ['dealerGamma'],
+            affected_driver_keys: ['dealerGamma'],
+          },
+          evidence_completeness: {
+            state: 'blocked',
+            gaps: ['baselineSnapshot', 'dealerGamma', 'scoreAuthority'],
+          },
+          data_state: 'request_supplied',
+          sample_state: 'none',
+          score_authority: 'observation_only',
+          source_authority_allowed: false,
+          authoritative: false,
+          observation_only: true,
+          ready: false,
+          partial: false,
+          blocked: true,
+          affected_baseline_components: ['baselineSnapshot'],
+          affected_driver_keys: ['dealerGamma'],
+          evidence_gaps: ['baselineSnapshot', 'dealerGamma', 'scoreAuthority'],
+          last_updated: '2026-06-15T09:30:00Z',
+        },
         confidence_delta: -0.25,
         driver_deltas: {
           breadth_participation: -75,
@@ -67,6 +105,10 @@ describe('scenarioLabApi', () => {
     expect(payload.schemaVersion).toBe('market_scenario_lab_engine.v1');
     expect(payload.baseRegime.confidenceScore).toBe(0.68);
     expect(payload.scenarioRegime.status).toBe('partial');
+    expect(payload.baselineReadiness?.status).toBe('blocked');
+    expect(payload.baselineReadiness?.baselineSnapshot?.state).toBe('missing');
+    expect(payload.baselineReadiness?.driverInputs?.affectedDriverKeys).toEqual(['dealerGamma']);
+    expect(payload.readinessLabels).toEqual(['基准待确认', '当前框架可用', '驱动待补', '证据边界', '情景待更新', '仅观察']);
     expect(payload.driverDeltas.breadthParticipation).toBe(-75);
     expect(payload.driverDeltas.volatilityStructure).toBe(-145);
     expect(payload.evidenceLimits).toEqual(['Gamma evidence remains capped.']);
@@ -114,5 +156,84 @@ describe('scenarioLabApi', () => {
     expect(payload.whatWouldInvalidate).toEqual([]);
     expect(payload.noAdviceDisclosure).toBeNull();
     expect(payload.evidenceLimits).toEqual(['Base regime evidence is missing.']);
+    expect(payload.baselineReadiness).toBeNull();
+    expect(payload.readinessLabels).toEqual([]);
+  });
+
+  it('maps demo or sample readiness into consumer-safe labels only', async () => {
+    const { scenarioLabApi } = await import('../scenarioLab');
+
+    post.mockResolvedValueOnce({
+      data: {
+        schema_version: 'market_scenario_lab_engine.v1',
+        base_regime: {
+          regime: 'riskOn',
+          confidence: 'medium',
+          confidence_score: 0.62,
+        },
+        scenario_regime: {
+          regime: 'mixed',
+          confidence: 'low',
+          confidence_score: 0.42,
+        },
+        baseline_readiness: {
+          status: 'partial',
+          baseline_snapshot: {
+            state: 'partial',
+            available: false,
+            affected_components: ['baselineSnapshot'],
+          },
+          market_frame: {
+            state: 'available',
+            available: true,
+            affected_components: [],
+          },
+          driver_inputs: {
+            state: 'partial',
+            available_driver_keys: ['breadthParticipation'],
+            partial_driver_keys: [],
+            missing_driver_keys: ['eventCatalyst'],
+            affected_driver_keys: ['eventCatalyst'],
+          },
+          evidence_completeness: {
+            state: 'partial',
+            gaps: ['scenarioDataBoundary', 'eventCatalyst'],
+          },
+          data_state: 'demo_static_sample',
+          sample_state: 'sample',
+          score_authority: 'observation_only',
+          source_authority_allowed: false,
+          authoritative: false,
+          observation_only: true,
+          ready: false,
+          partial: true,
+          blocked: false,
+          affected_baseline_components: ['baselineSnapshot'],
+          affected_driver_keys: ['eventCatalyst'],
+          evidence_gaps: ['scenarioDataBoundary', 'eventCatalyst'],
+        },
+        confidence_delta: -0.2,
+        driver_deltas: {},
+        changed_drivers: [],
+        scenario_summary: [],
+        what_would_confirm: [],
+        what_would_invalidate: [],
+        evidence_limits: [],
+        no_advice_disclosure: 'Research planning only; not a personalized decision basis.',
+      },
+    });
+
+    const payload = await scenarioLabApi.runScenarioLab({ scenarioName: 'volatilitySpike' });
+
+    expect(payload.readinessLabels).toEqual([
+      '基准部分可用',
+      '当前框架可用',
+      '驱动待补',
+      '证据边界',
+      '演示样本',
+      '仅观察',
+      '情景摘要可用',
+    ]);
+    expect(payload.readinessLabels.join(' ')).not.toMatch(/sourceAuthority|observation_only|demo_static_sample|sample/i);
   });
 });

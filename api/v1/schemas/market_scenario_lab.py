@@ -94,6 +94,47 @@ class MarketScenarioLabBaseContext(_MarketScenarioLabModel):
     scoringDriverCount: int
 
 
+class MarketScenarioLabReadinessComponent(_MarketScenarioLabModel):
+    state: str
+    available: bool
+    lastUpdated: str | None = None
+    affectedComponents: List[str] = Field(default_factory=list)
+
+
+class MarketScenarioLabDriverInputsReadiness(_MarketScenarioLabModel):
+    state: Literal["available", "partial", "missing"]
+    availableDriverKeys: List[str] = Field(default_factory=list)
+    partialDriverKeys: List[str] = Field(default_factory=list)
+    missingDriverKeys: List[str] = Field(default_factory=list)
+    affectedDriverKeys: List[str] = Field(default_factory=list)
+
+
+class MarketScenarioLabEvidenceCompleteness(_MarketScenarioLabModel):
+    state: Literal["ready", "partial", "blocked"]
+    gaps: List[str] = Field(default_factory=list)
+
+
+class MarketScenarioLabBaselineReadiness(_MarketScenarioLabModel):
+    status: Literal["ready", "partial", "blocked"]
+    baselineSnapshot: MarketScenarioLabReadinessComponent
+    marketFrame: MarketScenarioLabReadinessComponent
+    driverInputs: MarketScenarioLabDriverInputsReadiness
+    evidenceCompleteness: MarketScenarioLabEvidenceCompleteness
+    dataState: Literal["real_cached", "demo_static_sample", "request_supplied", "unavailable"]
+    sampleState: Literal["none", "fixture", "demo", "sample", "static", "fallback"]
+    scoreAuthority: Literal["authoritative", "observation_only"]
+    sourceAuthorityAllowed: bool
+    authoritative: bool
+    observationOnly: bool
+    ready: bool
+    partial: bool
+    blocked: bool
+    affectedBaselineComponents: List[str] = Field(default_factory=list)
+    affectedDriverKeys: List[str] = Field(default_factory=list)
+    evidenceGaps: List[str] = Field(default_factory=list)
+    lastUpdated: str | None = None
+
+
 class MarketScenarioLabScenarioOutput(_MarketScenarioLabModel):
     scenarioRegime: MarketScenarioLabRegime
     confidenceDelta: float
@@ -147,6 +188,7 @@ class MarketScenarioLabResponse(_MarketScenarioLabModel):
     selectedScenario: MarketScenarioLabScenarioPreset
     scenarioPresets: List[MarketScenarioLabScenarioPreset]
     baseMarketContext: MarketScenarioLabBaseContext
+    baselineReadiness: MarketScenarioLabBaselineReadiness
     baseRegime: MarketScenarioLabRegime
     scenarioRegime: MarketScenarioLabRegime
     scenarioOutput: MarketScenarioLabScenarioOutput

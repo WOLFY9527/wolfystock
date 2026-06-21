@@ -104,6 +104,40 @@ def _base_regime() -> dict[str, Any]:
     }
 
 
+def _ready_base_regime() -> dict[str, Any]:
+    base = copy.deepcopy(_base_regime())
+    base.update(
+        {
+            "dataSourceClass": "cached",
+            "sourceAuthorityAllowed": True,
+            "generatedAt": "2026-06-15T09:30:00Z",
+            "baselineSnapshot": {
+                "state": "available",
+                "asOf": "2026-06-15T09:30:00Z",
+                "available": True,
+            },
+            "marketFrame": {
+                "state": "available",
+                "asOf": "2026-06-15T09:30:00Z",
+                "available": True,
+            },
+            "dataQuality": {
+                "availableDriverCount": 8,
+                "scoringDriverCount": 8,
+                "missingDriverCount": 0,
+                "sourceAuthorityAllowed": True,
+                "scoreAuthorityAllowed": True,
+                "confidenceCapReasons": [],
+            },
+            "missingEvidence": [],
+        }
+    )
+    for driver in base["driverScores"].values():
+        driver["evidenceState"] = "score_grade"
+        driver["score"] = driver["score"] or 15
+    return base
+
+
 def _serialized_values(payload: object) -> str:
     values: list[str] = []
 
@@ -286,6 +320,7 @@ def test_market_scenario_lab_accepts_base_regime_and_named_scenario_without_muta
         "selectedScenario",
         "scenarioPresets",
         "baseMarketContext",
+        "baselineReadiness",
         "baseRegime",
         "scenarioRegime",
         "scenarioOutput",
@@ -323,6 +358,13 @@ def test_market_scenario_lab_accepts_base_regime_and_named_scenario_without_muta
         "evidenceState": "degraded",
         "scoringDriverCount": 6,
     }
+    assert payload["baselineReadiness"]["status"] == "blocked"
+    assert payload["baselineReadiness"]["baselineSnapshot"]["state"] == "missing"
+    assert payload["baselineReadiness"]["marketFrame"]["state"] == "available"
+    assert payload["baselineReadiness"]["driverInputs"]["state"] == "partial"
+    assert payload["baselineReadiness"]["dataState"] == "request_supplied"
+    assert payload["baselineReadiness"]["scoreAuthority"] == "observation_only"
+    assert payload["baselineReadiness"]["observationOnly"] is True
     assert payload["baseRegime"]["regime"] == "riskOn"
     assert payload["scenarioRegime"]["regime"] in {"mixed", "riskOff", "downsideAccelerationRisk"}
     assert payload["scenarioOutput"]["scenarioRegime"] == payload["scenarioRegime"]
@@ -404,6 +446,12 @@ def test_market_scenario_lab_fails_closed_when_required_base_evidence_is_missing
         "observationOnly": True,
         "decisionGrade": False,
     }
+    assert payload["baselineReadiness"]["status"] == "blocked"
+    assert payload["baselineReadiness"]["baselineSnapshot"]["state"] == "missing"
+    assert payload["baselineReadiness"]["marketFrame"]["state"] == "missing"
+    assert payload["baselineReadiness"]["driverInputs"]["state"] == "missing"
+    assert payload["baselineReadiness"]["dataState"] == "unavailable"
+    assert payload["baselineReadiness"]["scoreAuthority"] == "observation_only"
     assert payload["observationOnly"] is True
     assert payload["decisionGrade"] is False
     assert payload["selectedScenario"]["name"] == "liquidityStress"
@@ -443,6 +491,10 @@ def test_market_scenario_lab_fixture_path_runs_volatility_spike_observation() ->
     assert response.status_code == 200
     payload = response.json()
     _assert_fixture_response(payload, "volatilitySpike")
+    assert payload["baselineReadiness"]["status"] == "blocked"
+    assert payload["baselineReadiness"]["dataState"] == "demo_static_sample"
+    assert payload["baselineReadiness"]["sampleState"] == "fixture"
+    assert payload["baselineReadiness"]["scoreAuthority"] == "observation_only"
     assert payload["confidenceDelta"] < 0
     assert payload["driverDeltas"]["volatilityStructure"] < 0
 
@@ -459,8 +511,56 @@ def test_market_scenario_lab_fixture_path_runs_risk_on_confirmation_observation(
     assert response.status_code == 200
     payload = response.json()
     _assert_fixture_response(payload, "riskOnConfirmation")
+    assert payload["baselineReadiness"]["dataState"] == "demo_static_sample"
+    assert payload["baselineReadiness"]["sampleState"] == "sample"
     assert payload["driverDeltas"]["breadthParticipation"] > 0
     assert payload["driverDeltas"]["liquidityCredit"] > 0
+
+
+def test_market_scenario_lab_exposes_authoritative_readiness_for_complete_cached_baseline() -> None:
+    response = _client().post(
+        "/api/v1/market/scenario-lab",
+        json={
+            "baseRegime": _ready_base_regime(),
+            "scenarioName": "riskOnConfirmation",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    readiness = payload["baselineReadiness"]
+    assert readiness["status"] == "ready"
+    assert readiness["baselineSnapshot"]["state"] == "available"
+    assert readiness["marketFrame"]["state"] == "available"
+    assert readiness["driverInputs"]["state"] == "available"
+    assert readiness["evidenceCompleteness"] == {"state": "ready", "gaps": []}
+    assert readiness["dataState"] == "real_cached"
+    assert readiness["scoreAuthority"] == "authoritative"
+    assert readiness["authoritative"] is True
+    assert readiness["observationOnly"] is False
+    assert readiness["lastUpdated"] == "2026-06-15T09:30:00Z"
+
+
+def test_market_scenario_lab_marks_stale_baseline_readiness_as_partial() -> None:
+    base = _ready_base_regime()
+    base["baselineSnapshot"]["state"] = "stale"
+    base["baselineSnapshot"]["isStale"] = True
+
+    response = _client().post(
+        "/api/v1/market/scenario-lab",
+        json={
+            "baseRegime": base,
+            "scenarioName": "liquidityStress",
+        },
+    )
+
+    assert response.status_code == 200
+    readiness = response.json()["baselineReadiness"]
+    assert readiness["status"] == "partial"
+    assert readiness["baselineSnapshot"]["state"] == "stale"
+    assert readiness["evidenceCompleteness"]["state"] == "partial"
+    assert readiness["scoreAuthority"] == "observation_only"
+    assert "baselineSnapshot" in readiness["affectedBaselineComponents"]
 
 
 def test_market_scenario_lab_rejects_unsupported_named_scenario() -> None:
