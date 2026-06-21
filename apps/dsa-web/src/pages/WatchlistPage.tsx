@@ -54,6 +54,7 @@ import {
   normalizeResearchWorkspaceSource,
   parseResearchWorkspaceSearch,
 } from '../utils/researchWorkspaceRoute';
+import { getWatchlistRowResearchPacketConsumerCopy, type WatchlistRowResearchPacketConsumerCopy } from '../utils/researchQueueConsumerCopy';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 
 type SortKey = 'newest' | 'scannerScore' | 'backtestReturn' | 'historicalHitRate' | 'recentlyScored' | 'recentlyBacktested' | 'symbol' | 'market';
@@ -168,7 +169,7 @@ function formatMarket(value?: string | null): string {
 }
 
 function buildWatchlistIdentityLabel(item: WatchlistItem, language: 'zh' | 'en'): string {
-  const name = normalizeText(item.name);
+  const name = normalizeText(item.rowResearchPacket?.identity?.name || item.name);
   if (name) return name;
   const symbol = normalizeText(item.symbol).toUpperCase();
   const market = formatMarket(item.market);
@@ -272,6 +273,9 @@ function getWatchlistPriceValue(item: WatchlistItem): number | null {
   const priceKeys = ['price', 'lastPrice', 'latestPrice', 'currentPrice', 'close', 'lastClose'];
   const direct = readNumericField(item, priceKeys);
   if (direct !== null) return direct;
+  const packetQuote = item.rowResearchPacket?.quote;
+  const packetPrice = readNumericField(packetQuote, priceKeys);
+  if (packetPrice !== null) return packetPrice;
   const record = item as unknown as Record<string, unknown>;
   return readNumericField(record.quote, priceKeys)
     ?? readNumericField(record.marketData, priceKeys)
@@ -335,6 +339,8 @@ function hasFailureOrNoData(item: WatchlistItem): boolean {
 
 function getLatestIntelligenceTime(item: WatchlistItem): string | null {
   const values = [
+    item.rowResearchPacket?.quote?.asOf,
+    item.rowResearchPacket?.scannerLineage?.lastScoredAt,
     item.intelligence?.backtest?.testedAt,
     item.intelligence?.scanner?.lastScannedAt,
     item.lastScoredAt,
@@ -1123,6 +1129,13 @@ function buildWatchlistRowStatus(item: WatchlistItem, language: 'zh' | 'en'): Wa
     researchStatusVariant,
     missingSummary,
   };
+}
+
+function buildWatchlistRowResearchPacketView(
+  item: WatchlistItem,
+  language: 'zh' | 'en',
+): WatchlistRowResearchPacketConsumerCopy | null {
+  return getWatchlistRowResearchPacketConsumerCopy(item.rowResearchPacket ?? null, language);
 }
 
 function formatBacktestStatus(item: WatchlistItem, failure?: BatchFailure): string {
@@ -2393,21 +2406,45 @@ const WatchlistPage: React.FC = () => {
                           { language },
                         )
                       : null;
-                    const rowObservation = buildObservationSummary(item, language);
-                    const rowNextAction = buildNextActionLabel(item, language);
+                    const rowPacketView = buildWatchlistRowResearchPacketView(item, language);
+                    const rowObservation = rowPacketView
+                      ? rowPacketView.missingSummary || rowPacketView.researchStatusLabel
+                      : buildObservationSummary(item, language);
+                    const rowNextAction = rowPacketView ? rowPacketView.nextDataActionLabel : buildNextActionLabel(item, language);
                     const rowStatus = buildWatchlistRowStatus(item, language);
                     const identityLabel = buildWatchlistIdentityLabel(item, language);
                     const workflowSteps = buildWatchlistWorkflowSteps(item, language);
-                    const rowStateLine = [
-                      `${copy.score} ${formatScore(score)}`,
-                      typeof avgForward === 'number' ? `${copy.historyPrefix} ${formatPct(avgForward)}` : null,
-                      typeof hitRate === 'number' ? `${copy.hitPrefix} ${Math.round(hitRate * 100)}%` : null,
-                    ].filter(Boolean).join(' · ');
-                    const rowNotes = [
-                      rowStatus.missingSummary,
-                      !rowStatus.missingSummary ? rowRiskNote : null,
-                      scannerLineageCue?.detail,
-                    ].filter(Boolean).join(' ');
+                    const rowStateLine = rowPacketView
+                      ? [
+                          rowPacketView.quoteStateLabel,
+                          rowPacketView.researchStatusLabel,
+                          rowPacketView.scannerLineageLabel,
+                        ].filter(Boolean).join(' · ')
+                      : [
+                          `${copy.score} ${formatScore(score)}`,
+                          typeof avgForward === 'number' ? `${copy.historyPrefix} ${formatPct(avgForward)}` : null,
+                          typeof hitRate === 'number' ? `${copy.hitPrefix} ${Math.round(hitRate * 100)}%` : null,
+                        ].filter(Boolean).join(' · ');
+                    const rowNotes = rowPacketView
+                      ? [
+                          rowPacketView.missingSummary,
+                          rowPacketView.nextDataActionLabel,
+                        ].filter(Boolean).join(' · ')
+                      : [
+                          rowStatus.missingSummary,
+                          !rowStatus.missingSummary ? rowRiskNote : null,
+                          scannerLineageCue?.detail,
+                        ].filter(Boolean).join(' ');
+                    const priceLabel = rowPacketView
+                      ? rowPacketView.quotePrice !== null
+                        ? formatPriceValue(rowPacketView.quotePrice, item.market)
+                        : rowPacketView.quoteStateLabel
+                      : rowStatus.priceLabel;
+                    const updateLabel = rowPacketView
+                      ? rowPacketView.quoteAsOf
+                        ? `${language === 'en' ? 'Updated' : '更新'} ${formatDateTime(rowPacketView.quoteAsOf, language)}`
+                        : (language === 'en' ? 'Quote time pending' : '报价时间待确认')
+                      : rowStatus.updateLabel;
 
                     return (
                       <article
@@ -2463,17 +2500,25 @@ const WatchlistPage: React.FC = () => {
                             <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
                               {language === 'en' ? 'Price / update' : '价格 / 更新'}
                             </p>
-                            <p className="text-sm font-medium text-white/82">{rowStatus.priceLabel}</p>
-                            <p className="font-mono text-xs text-white/55">{rowStatus.updateLabel}</p>
+                            <p className="text-sm font-medium text-white/82">{priceLabel}</p>
+                            <p className="font-mono text-xs text-white/55">{updateLabel}</p>
                             <div
                               data-testid={`watchlist-row-workflow-${item.symbol}`}
                               className="flex min-w-0 flex-wrap items-center gap-1.5"
                               aria-label={language === 'zh' ? `${item.symbol} 研究流程` : `${item.symbol} research workflow`}
                             >
                               <span className="text-[11px] text-white/38">{language === 'zh' ? '研究流程' : 'Workflow'}</span>
-                              {workflowSteps.map((step) => (
-                                <TerminalChip key={step.key} variant={step.variant}>{step.label}</TerminalChip>
-                              ))}
+                              {rowPacketView ? (
+                                <>
+                                  <TerminalChip variant={rowPacketView.quoteStateVariant}>{rowPacketView.quoteStateLabel}</TerminalChip>
+                                  <TerminalChip variant={rowPacketView.researchStatusVariant}>{rowPacketView.researchStatusLabel}</TerminalChip>
+                                  <TerminalChip variant={rowPacketView.scannerLineageVariant}>{rowPacketView.scannerLineageLabel}</TerminalChip>
+                                </>
+                              ) : (
+                                workflowSteps.map((step) => (
+                                  <TerminalChip key={step.key} variant={step.variant}>{step.label}</TerminalChip>
+                                ))
+                              )}
                             </div>
                           </div>
 
@@ -2482,11 +2527,23 @@ const WatchlistPage: React.FC = () => {
                               {language === 'en' ? 'Research / next' : '研究 / 下一步'}
                             </p>
                             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                              <TerminalChip variant={rowStatus.researchStatusVariant}>{rowStatus.researchStatusLabel}</TerminalChip>
-                              <TerminalChip variant={backtestStatusVariant}>{backtestStatusLabel}</TerminalChip>
-                              {scannerLineageCue ? (
-                                <TerminalChip variant="neutral">{scannerLineageCue.label}</TerminalChip>
-                              ) : null}
+                              {rowPacketView ? (
+                                <>
+                                  <TerminalChip variant={rowPacketView.researchStatusVariant}>{rowPacketView.researchStatusLabel}</TerminalChip>
+                                  <TerminalChip variant={rowPacketView.scannerLineageVariant}>{rowPacketView.scannerLineageLabel}</TerminalChip>
+                                  {rowPacketView.noAdviceLabel ? (
+                                    <TerminalChip variant="neutral">{rowPacketView.noAdviceLabel}</TerminalChip>
+                                  ) : null}
+                                </>
+                              ) : (
+                                <>
+                                  <TerminalChip variant={rowStatus.researchStatusVariant}>{rowStatus.researchStatusLabel}</TerminalChip>
+                                  <TerminalChip variant={backtestStatusVariant}>{backtestStatusLabel}</TerminalChip>
+                                  {scannerLineageCue ? (
+                                    <TerminalChip variant="neutral">{scannerLineageCue.label}</TerminalChip>
+                                  ) : null}
+                                </>
+                              )}
                               {batchDisplayStatus ? (
                                 <TerminalChip variant={terminalChipVariant(batchDisplayStatus.tone)} className="font-mono">
                                   {batchDisplayStatus.label}
