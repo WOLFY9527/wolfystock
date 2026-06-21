@@ -6,7 +6,7 @@ Task title: Windows frontend validation parity audit
 
 Mode: READ-ONLY-AUDIT with one explicitly allowed audit artifact.
 
-Allowed artifact: `docs/codex/audits/WFE-002-windows-frontend-validation-parity-audit.md`
+Allowed artifact: `docs/codex/audits/archive/2026-06/WFE-002-windows-frontend-validation-parity-audit.md`
 
 Observed workspace:
 

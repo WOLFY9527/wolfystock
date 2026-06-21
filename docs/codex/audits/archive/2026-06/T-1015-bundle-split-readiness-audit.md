@@ -4,7 +4,7 @@ Task: T-1015-AUDIT Bundle split execution readiness audit
 
 Mode: READ-ONLY-AUDIT with one explicitly allowed audit artifact.
 
-Allowed artifact: `docs/codex/audits/T-1015-bundle-split-readiness-audit.md`
+Allowed artifact: `docs/codex/audits/archive/2026-06/T-1015-bundle-split-readiness-audit.md`
 
 Observed workspace during audit:
 
@@ -65,12 +65,12 @@ Docs and policy inspected:
 - `docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md`
 - `docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md`
 - `docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`
-- `docs/codex/audits/T-995-bundle-codesplitting-audit.md`
+- `docs/codex/audits/archive/2026-06/T-995-bundle-codesplitting-audit.md`
 - remote `origin/main:docs/codex/audits/T-1012-mobile-readability-touch-target-audit.md`
 
 Note: the prompt named `T-995-bundle-code-splitting-audit.md`; the exact path is
 not present in this branch. The available prior bundle audit is
-`docs/codex/audits/T-995-bundle-codesplitting-audit.md`.
+`docs/codex/audits/archive/2026-06/T-995-bundle-codesplitting-audit.md`.
 
 Frontend files inspected:
 

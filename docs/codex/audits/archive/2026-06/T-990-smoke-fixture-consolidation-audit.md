@@ -4,7 +4,7 @@ Task: T-990 Smoke fixture consolidation audit
 
 Mode: READ-ONLY-AUDIT with one explicitly allowed audit artifact.
 
-Allowed artifact: `docs/codex/audits/T-990-smoke-fixture-consolidation-audit.md`
+Allowed artifact: `docs/codex/audits/archive/2026-06/T-990-smoke-fixture-consolidation-audit.md`
 
 Observed HEAD during audit: `4d435916` (`T-988: harden Scanner Home React paths`)
 
@@ -44,7 +44,7 @@ Files inspected:
 - `apps/dsa-web/e2e/fixtures/productAuth.ts`
 - `apps/dsa-web/e2e/fixtures/portfolioSmoke.ts`
 - `apps/dsa-web/playwright.config.ts`
-- `docs/codex/audits/T-987-post-wave-react-doctor-smoke-stability-audit.md`
+- `docs/codex/audits/archive/2026-06/T-987-post-wave-react-doctor-smoke-stability-audit.md`
 
 Parallel scouting note:
 

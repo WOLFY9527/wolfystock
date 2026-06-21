@@ -251,6 +251,6 @@ The write is bounded to one page and can be visually verified, but Home is the p
 
 This audit creates only:
 
-- `docs/codex/audits/T-1037-ui-spacing-card-grid-taxonomy-write-readiness-audit.md`
+- `docs/codex/audits/archive/2026-06/T-1037-ui-spacing-card-grid-taxonomy-write-readiness-audit.md`
 
 No source, tests, config, package, lockfile, route, auth, backend, API, provider, cache, runtime, scanner, portfolio, options, backtest, market, admin behavior, screenshots, or generated assets are changed.

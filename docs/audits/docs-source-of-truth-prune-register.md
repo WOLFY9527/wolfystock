@@ -135,7 +135,7 @@ These are candidates for future consolidation. None are deletion approvals.
 | Cost/quota/LLM observability | `docs/audits/cost-*.md`, `docs/audits/duplicate-cost-*.md`, `docs/audits/llm-*.md`, `docs/audits/quota-cost-notification-release-guide.md` | `docs/audits/index-cost-quota-observability.md`. |
 | DB/WS2/deployment | `docs/audits/db-*.md`, `docs/audits/ws2-*.md`, deployment readiness docs | `docs/audits/index-db-ws2-deployment.md`, preserving launch master and gap register. |
 | Provider/data/options | Provider runbooks, source candidate worksheets, Options phase/design docs | `docs/audits/index-provider-data-options.md`, `docs/provider-data/README.md`, and `docs/options/README.md`. |
-| Markdown retention governance | `docs/audits/archive/markdown-inventory.md`, `docs/audits/archive/markdown-consolidation-plan.md`, `docs/codex/audits/T-1247-docs-retention-cleanup-audit.md`, this register | This register plus `docs/ARCHIVE_INDEX.md` and domain indexes after references are updated. |
+| Markdown retention governance | `docs/audits/archive/markdown-inventory.md`, `docs/audits/archive/markdown-consolidation-plan.md`, `docs/codex/audits/archive/2026-06/T-1247-docs-retention-cleanup-audit.md`, this register | This register plus `docs/ARCHIVE_INDEX.md` and domain indexes after references are updated. |
 | Language/version duplicates | `docs/*_EN.md`, `docs/*_CHT.md`, `docs/full-guide*.md`, `docs/README_EN.md`, `docs/README_CHT.md`, `docs/INDEX_EN.md` | Bilingual/public-doc policy decision. Do not remove one language without owner decision. |
 
 ### Archive Candidates

@@ -3,7 +3,7 @@
 Task ID: T-1247
 Task title: Docs retention cleanup audit
 Mode: READ-ONLY-AUDIT with one task-authorized report artifact
-Report path: `docs/codex/audits/T-1247-docs-retention-cleanup-audit.md`
+Report path: `docs/codex/audits/archive/2026-06/T-1247-docs-retention-cleanup-audit.md`
 Audit date: 2026-06-08
 
 ## Scope and method

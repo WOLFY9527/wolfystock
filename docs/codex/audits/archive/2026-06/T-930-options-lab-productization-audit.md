@@ -36,7 +36,7 @@ This audit followed:
 - `docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md`
 - `docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md`
 - `docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`
-- `docs/codex/audits/T-892-research-os-product-gap-audit.md`
+- `docs/codex/audits/archive/2026-06/T-892-research-os-product-gap-audit.md`
 
 Task-specific constraints:
 
@@ -575,7 +575,7 @@ changing runtime behavior.
 
 Suggested allowed final diff:
 
-- `docs/codex/audits/T-935-options-lab-workflow-ia-contract.md`
+- `docs/codex/audits/archive/2026-06/T-935-options-lab-workflow-ia-contract.md`
 - Optional focused tests only if the task explicitly moves from docs to
   execution.
 

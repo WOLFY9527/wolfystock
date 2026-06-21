@@ -6,7 +6,7 @@ Task title: Admin system-control rail policy write-readiness audit
 
 Mode: READ-ONLY-AUDIT with one explicitly allowed docs artifact.
 
-Allowed artifact: `docs/codex/audits/T-1074-admin-system-control-rail-policy-write-readiness-audit.md`
+Allowed artifact: `docs/codex/audits/archive/2026-06/T-1074-admin-system-control-rail-policy-write-readiness-audit.md`
 
 Observed workspace:
 
@@ -147,7 +147,7 @@ Not recommended now:
 
 Allowed final diff for this audit:
 
-- `docs/codex/audits/T-1074-admin-system-control-rail-policy-write-readiness-audit.md`
+- `docs/codex/audits/archive/2026-06/T-1074-admin-system-control-rail-policy-write-readiness-audit.md`
 
 Forbidden final diff observed:
 

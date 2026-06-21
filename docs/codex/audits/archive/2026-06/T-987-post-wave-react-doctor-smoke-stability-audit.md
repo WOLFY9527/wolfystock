@@ -4,7 +4,7 @@ Task: T-987 Post-wave React Doctor and smoke stability audit
 
 Mode: SERIAL-MAIN with one explicitly allowed audit artifact.
 
-Allowed artifact: `docs/codex/audits/T-987-post-wave-react-doctor-smoke-stability-audit.md`
+Allowed artifact: `docs/codex/audits/archive/2026-06/T-987-post-wave-react-doctor-smoke-stability-audit.md`
 
 Observed HEAD during audit: `9a9a8b4f` (`T-986: refine Scanner workflow hierarchy`)
 

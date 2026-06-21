@@ -8,7 +8,7 @@ Mode: READ-ONLY-AUDIT with one explicitly allowed docs artifact.
 
 Allowed artifact:
 
-`docs/codex/audits/T-1082-mobile-visual-overlap-reconciliation-audit.md`
+`docs/codex/audits/archive/2026-06/T-1082-mobile-visual-overlap-reconciliation-audit.md`
 
 Observed workspace:
 
