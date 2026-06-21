@@ -158,6 +158,170 @@ export type QuantDuckDBBuildFactorsResponse = {
   error?: string | null;
 };
 
+export type QuantFactorResearchBoundary = {
+  purpose: string;
+  researchOnly: boolean;
+  diagnosticOnly: boolean;
+  suppliedObservationsOnly: boolean;
+  portfolioOptimizer: boolean;
+  professionalReadinessClaimed: boolean;
+  forwardReturnsRequiredForPerformance: boolean;
+  externalDataHydrationExecuted: boolean;
+  liveQuoteHydrationExecuted: boolean;
+  forwardReturnsComputed: boolean;
+};
+
+export type QuantFactorResearchWindow = {
+  asOfStart?: string | null;
+  asOfEnd?: string | null;
+  asOfCount: number;
+  observationCount: number;
+};
+
+export type QuantFactorResearchCoverageItem = {
+  factorId: string;
+  observationCount: number;
+  symbolCount: number;
+  window: QuantFactorResearchWindow;
+};
+
+export type QuantFactorResearchMetricEstimate = {
+  horizon?: string | null;
+  value?: number | null;
+  sampleSize: number;
+  insufficientReason?: string | null;
+};
+
+export type QuantFactorResearchDecayPoint = {
+  horizon: string;
+  icValue?: number | null;
+  decayRatio?: number | null;
+  sampleSize: number;
+  insufficientReason?: string | null;
+};
+
+export type QuantFactorResearchPeerCorrelation = {
+  peerFactorId: string;
+  value?: number | null;
+  sampleSize: number;
+  insufficientReason?: string | null;
+};
+
+export type QuantFactorResearchMetricsSummary = {
+  factorId: string;
+  window: QuantFactorResearchWindow;
+  ic: QuantFactorResearchMetricEstimate[];
+  rankIc: QuantFactorResearchMetricEstimate[];
+  decay: QuantFactorResearchDecayPoint[];
+  turnover: QuantFactorResearchMetricEstimate;
+  factorCorrelation: QuantFactorResearchPeerCorrelation[];
+};
+
+export type QuantFactorResearchNeutralizationSummary = {
+  factorId: string;
+  axis: string;
+  neutralizationMethod: string;
+  sampleSize: number;
+  totalObservations: number;
+  neutralizedObservations: number;
+  missingGroupMetadata: number;
+  insufficientGroupObservations: number;
+  invalidObservationValues: number;
+  warnings: string[];
+};
+
+export type QuantFactorResearchExposureSummary = {
+  scope: string;
+  factorId: string;
+  exposure?: number | null;
+  weightedExposure: number;
+  grossExposure: number;
+  netExposure: number;
+  sampleSize: number;
+  coverage: number;
+  missingFactorCount: number;
+  window: QuantFactorResearchWindow;
+  warnings: string[];
+  longExposure?: number | null;
+  shortExposure?: number | null;
+};
+
+export type QuantFactorResearchMissingDataReason = {
+  section: string;
+  reason: string;
+  factorId?: string | null;
+  context?: string | null;
+};
+
+export type QuantFactorResearchReportBody = {
+  window: QuantFactorResearchWindow;
+  factorCoverage: QuantFactorResearchCoverageItem[];
+  metricsSummary: QuantFactorResearchMetricsSummary[];
+  neutralizationSummary: QuantFactorResearchNeutralizationSummary[];
+  exposureSummary: QuantFactorResearchExposureSummary[];
+  missingDataReasons: QuantFactorResearchMissingDataReason[];
+  warnings: string[];
+};
+
+export type QuantFactorResearchRegistryMetadata = {
+  factorId: string;
+  registryState: string;
+  label?: string | null;
+  description?: string | null;
+  family?: string | null;
+  direction?: string | null;
+  unit?: string | null;
+  defaultLookbackDays?: number | null;
+  expectedRangeMin?: number | null;
+  expectedRangeMax?: number | null;
+  tags?: string[];
+  neutralization?: Record<string, unknown> | null;
+  [key: string]: unknown;
+};
+
+export type QuantFactorResearchInputShape = {
+  observationCount: number;
+  metricObservationCount: number;
+  forwardReturnObservationCount: number;
+  factorCount: number;
+  factorIds: string[];
+  symbolCount: number;
+  symbols: string[];
+  asOfStart?: string | null;
+  asOfEnd?: string | null;
+  asOfCount: number;
+  forwardReturnHorizons: string[];
+  portfolioWeightCount: number;
+  longWeightCount: number;
+  shortWeightCount: number;
+  neutralizationAxes: string[];
+  minGroupSize: number;
+  marketCapBucketCount: number;
+  hashAlgorithm: string;
+  inputContentHash: string;
+};
+
+export type QuantFactorResearchReportRequest = {
+  observations: Array<Record<string, unknown>>;
+  metricObservations: Array<Record<string, unknown>>;
+  portfolioWeights?: Array<Record<string, unknown>> | null;
+  longWeights?: Array<Record<string, unknown>> | null;
+  shortWeights?: Array<Record<string, unknown>> | null;
+  neutralizationAxes?: string[];
+  minGroupSize?: number;
+  marketCapBucketCount?: number;
+};
+
+export type QuantFactorResearchReportResponse = {
+  status: string;
+  boundary: QuantFactorResearchBoundary;
+  factorMetadata: QuantFactorResearchRegistryMetadata[];
+  inputShape: QuantFactorResearchInputShape;
+  report: QuantFactorResearchReportBody;
+  missingDataReasons: QuantFactorResearchMissingDataReason[];
+  warnings: string[];
+};
+
 export type QuantDuckDBBenchmarkRequest = {
   symbolLimit?: number;
   startDate?: string;
@@ -284,5 +448,22 @@ export const quantApi = {
       }),
     );
     return toCamelCase<QuantDuckDBBuildFactorsResponse>(response.data);
+  },
+
+  async buildFactorResearchReport(payload: QuantFactorResearchReportRequest): Promise<QuantFactorResearchReportResponse> {
+    const response = await apiClient.post<Record<string, unknown>>(
+      '/api/v1/quant/factor-research/report',
+      withoutEmptyValues({
+        observations: payload.observations,
+        metricObservations: payload.metricObservations,
+        portfolioWeights: payload.portfolioWeights,
+        longWeights: payload.longWeights,
+        shortWeights: payload.shortWeights,
+        neutralizationAxes: payload.neutralizationAxes,
+        minGroupSize: payload.minGroupSize,
+        marketCapBucketCount: payload.marketCapBucketCount,
+      }),
+    );
+    return toCamelCase<QuantFactorResearchReportResponse>(response.data);
   },
 };
