@@ -9,11 +9,13 @@ const {
   languageState,
   verifyTickerExistsMock,
   getStructureDecisionMock,
+  getResearchPacketMock,
   getStructureDecisionsBatchMock,
 } = vi.hoisted(() => ({
   languageState: { value: 'zh' as 'zh' | 'en' },
   verifyTickerExistsMock: vi.fn(),
   getStructureDecisionMock: vi.fn(),
+  getResearchPacketMock: vi.fn(),
   getStructureDecisionsBatchMock: vi.fn(),
 }));
 
@@ -28,6 +30,7 @@ vi.mock('../../api/stocks', () => ({
   stocksApi: {
     verifyTickerExists: (...args: unknown[]) => verifyTickerExistsMock(...args),
     getStructureDecision: (...args: unknown[]) => getStructureDecisionMock(...args),
+    getResearchPacket: (...args: unknown[]) => getResearchPacketMock(...args),
     getStructureDecisionsBatch: (...args: unknown[]) => getStructureDecisionsBatchMock(...args),
   },
 }));
@@ -39,6 +42,88 @@ const renderRoutePattern = (ui: React.ReactElement, path: string, pattern: strin
     </Routes>
   </MemoryRouter>,
 );
+
+const baseStructureDecision = () => ({
+  schemaVersion: 'stock_structure_decision_api_v1',
+  ticker: 'AAPL',
+  structureState: 'breakout',
+  confidence: 'medium',
+  componentScores: {
+    trend: 78,
+    relativeStrength: 71,
+  },
+  explanation: {
+    whyThisStructure: 'Price stayed above the recent range.',
+    whatConfirmsIt: ['Volume remained constructive.'],
+    whatInvalidatesIt: ['Closes fall back into the prior range.'],
+    keyLevels: [],
+  },
+  researchNotes: {
+    watchNext: ['Review the next close.'],
+    needsMoreEvidence: ['Need broader peer evidence.'],
+    riskFlags: [],
+  },
+  dataQuality: {
+    status: 'available',
+    source: 'local_db',
+    period: 'daily',
+    requestedDays: 90,
+    observedBars: 60,
+    usableBars: 60,
+    reason: 'history_available',
+  },
+  missingEvidence: [
+    { kind: 'peer_evidence_missing', message: 'Need broader peer evidence.' },
+  ],
+  noAdviceDisclosure: 'Observation-only research context.',
+});
+
+const partialResearchPacket = () => ({
+  symbol: 'AAPL',
+  market: 'us',
+  identity: {
+    name: 'Apple',
+    exchange: null,
+    sector: null,
+    industry: null,
+  },
+  quote: {
+    state: 'available',
+    price: 214.55,
+    changePercent: 1.11,
+    asOf: '2026-05-28T09:30:00Z',
+  },
+  history: {
+    state: 'available',
+    bars: 60,
+    period: 'daily',
+    asOf: '2026-05-28',
+  },
+  structure: {
+    state: 'insufficient',
+    label: 'breakout',
+    confidence: 'medium',
+    asOf: null,
+  },
+  fundamentals: {
+    state: 'not_integrated',
+    fieldsAvailable: [],
+  },
+  events: {
+    state: 'missing',
+    latest: [],
+  },
+  peer: {
+    state: 'insufficient',
+    benchmark: null,
+  },
+  missingData: ['fundamentals', 'filing_event_catalyst', 'peer_benchmark'],
+  researchStatus: 'partial',
+  nextDataAction: 'Add fundamentals, filing/event/catalyst, and peer evidence before marking the packet ready.',
+  observationOnly: true,
+  decisionGrade: false,
+  noAdviceDisclosure: 'Observation-only research packet; not personalized financial advice and not an instruction.',
+});
 
 describe('StockStructureDecisionPage', () => {
   beforeEach(() => {
@@ -54,6 +139,70 @@ describe('StockStructureDecisionPage', () => {
       stockName: 'Oracle',
       message: 'Symbol verified.',
     });
+    getResearchPacketMock.mockImplementation((symbol: string) => Promise.resolve({
+      ...partialResearchPacket(),
+      symbol,
+    }));
+  });
+
+  it('requests and renders the symbol research packet with compact consumer labels', async () => {
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const panel = await within(page).findByTestId('stock-research-packet-panel');
+
+    expect(getResearchPacketMock).toHaveBeenCalledWith('AAPL');
+    expect(panel).toHaveTextContent('研究就绪快照');
+    expect(panel).toHaveTextContent('AAPL');
+    expect(panel).toHaveTextContent('Apple');
+    expect(panel).toHaveTextContent('部分可用');
+    expect(panel).toHaveTextContent('报价可用');
+    expect(panel).toHaveTextContent('历史可用');
+    expect(panel).toHaveTextContent('结构待补');
+    expect(panel).toHaveTextContent('基本面待接入');
+    expect(panel).toHaveTextContent('事件待补');
+    expect(panel).toHaveTextContent('同业待补');
+    expect(panel).toHaveTextContent('待补：基本面、事件、同业');
+    expect(panel).toHaveTextContent('补基本面、事件、同业');
+    expect(panel).toHaveTextContent('研究记录');
+    expect(panel).toHaveTextContent('非交易指令');
+    expect(findConsumerRawLeakage(page.textContent || '', {
+      extraForbiddenPatterns: [
+        /\bavailable\b/i,
+        /\bnot_integrated\b/i,
+        /\binsufficient\b/i,
+        /\bblocked\b/i,
+        /\bobservationOnly\b/i,
+        /not personalized financial advice/i,
+      ],
+    })).toEqual([]);
+    expect(page.textContent || '').not.toMatch(/available|not_integrated|insufficient|blocked|observationOnly|not personalized financial advice/i);
+    expect(page.textContent || '').not.toMatch(/buy|sell|hold|target price|stop-loss|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
+  });
+
+  it('shows a compact packet fallback without hiding existing structure facts', async () => {
+    getResearchPacketMock.mockRejectedValue(new Error('packet unavailable'));
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const panel = await within(page).findByTestId('stock-research-packet-panel');
+
+    expect(panel).toHaveTextContent('研究包待更新');
+    expect(page).toHaveTextContent('突破观察');
+    expect(page).toHaveTextContent('主要结构线索');
+    expect(page.textContent || '').not.toMatch(/sorry|apology|available|not_integrated|observationOnly/i);
   });
 
   it('maps internal stock structure and peer evidence terms to consumer-safe labels', async () => {

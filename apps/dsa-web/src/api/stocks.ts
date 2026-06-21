@@ -108,6 +108,73 @@ export type StockValidationResponse = {
   message?: string;
 };
 
+export type SymbolResearchAvailabilityState = 'available' | 'missing' | 'stale' | 'unknown' | string;
+export type SymbolResearchStructureAvailabilityState = 'available' | 'insufficient' | 'missing' | 'unknown' | string;
+export type SymbolResearchIntegratedState = 'available' | 'missing' | 'not_integrated' | 'unknown' | string;
+export type SymbolResearchPeerState = 'available' | 'insufficient' | 'missing' | 'unknown' | string;
+export type SymbolResearchStatus = 'ready' | 'partial' | 'blocked' | 'unknown' | string;
+
+export type SymbolResearchIdentity = {
+  name?: string | null;
+  exchange?: string | null;
+  sector?: string | null;
+  industry?: string | null;
+};
+
+export type SymbolResearchQuoteState = {
+  state: SymbolResearchAvailabilityState;
+  price?: number | null;
+  changePercent?: number | null;
+  asOf?: string | null;
+};
+
+export type SymbolResearchHistoryState = {
+  state: SymbolResearchAvailabilityState;
+  bars?: number | null;
+  period?: string | null;
+  asOf?: string | null;
+};
+
+export type SymbolResearchStructureState = {
+  state: SymbolResearchStructureAvailabilityState;
+  label?: string | null;
+  confidence?: string | null;
+  asOf?: string | null;
+};
+
+export type SymbolResearchFundamentalsState = {
+  state: SymbolResearchIntegratedState;
+  fieldsAvailable: string[];
+};
+
+export type SymbolResearchEventsState = {
+  state: SymbolResearchIntegratedState;
+  latest: Array<Record<string, unknown>>;
+};
+
+export type SymbolResearchPeerCoverageState = {
+  state: SymbolResearchPeerState;
+  benchmark?: string | null;
+};
+
+export type SymbolResearchPacket = {
+  symbol: string;
+  market: string;
+  identity: SymbolResearchIdentity;
+  quote: SymbolResearchQuoteState;
+  history: SymbolResearchHistoryState;
+  structure: SymbolResearchStructureState;
+  fundamentals: SymbolResearchFundamentalsState;
+  events: SymbolResearchEventsState;
+  peer: SymbolResearchPeerCoverageState;
+  missingData: string[];
+  researchStatus: SymbolResearchStatus;
+  nextDataAction: string;
+  observationOnly: boolean;
+  decisionGrade: boolean;
+  noAdviceDisclosure: string;
+};
+
 export type StockStructureDecisionKeyLevel = {
   kind?: string | null;
   value?: number | null;
@@ -355,6 +422,58 @@ function normalizeStockIntradayResponse(payload: unknown): StockIntradayResponse
     range: normalized.range,
     source: normalized.source ?? null,
     data: Array.isArray(normalized.data) ? normalized.data : [],
+  };
+}
+
+function normalizeSymbolResearchPacket(payload: unknown): SymbolResearchPacket {
+  const normalized = toCamelCase<SymbolResearchPacket>(payload);
+  return {
+    symbol: normalized.symbol,
+    market: normalized.market,
+    identity: {
+      name: normalized.identity?.name ?? null,
+      exchange: normalized.identity?.exchange ?? null,
+      sector: normalized.identity?.sector ?? null,
+      industry: normalized.identity?.industry ?? null,
+    },
+    quote: {
+      state: normalized.quote?.state ?? 'unknown',
+      price: normalized.quote?.price ?? null,
+      changePercent: normalized.quote?.changePercent ?? null,
+      asOf: normalized.quote?.asOf ?? null,
+    },
+    history: {
+      state: normalized.history?.state ?? 'unknown',
+      bars: normalized.history?.bars ?? null,
+      period: normalized.history?.period ?? 'daily',
+      asOf: normalized.history?.asOf ?? null,
+    },
+    structure: {
+      state: normalized.structure?.state ?? 'unknown',
+      label: normalized.structure?.label ?? null,
+      confidence: normalized.structure?.confidence ?? null,
+      asOf: normalized.structure?.asOf ?? null,
+    },
+    fundamentals: {
+      state: normalized.fundamentals?.state ?? 'unknown',
+      fieldsAvailable: Array.isArray(normalized.fundamentals?.fieldsAvailable)
+        ? normalized.fundamentals.fieldsAvailable
+        : [],
+    },
+    events: {
+      state: normalized.events?.state ?? 'unknown',
+      latest: Array.isArray(normalized.events?.latest) ? normalized.events.latest : [],
+    },
+    peer: {
+      state: normalized.peer?.state ?? 'unknown',
+      benchmark: normalized.peer?.benchmark ?? null,
+    },
+    missingData: Array.isArray(normalized.missingData) ? normalized.missingData : [],
+    researchStatus: normalized.researchStatus ?? 'unknown',
+    nextDataAction: normalized.nextDataAction ?? '',
+    observationOnly: Boolean(normalized.observationOnly),
+    decisionGrade: Boolean(normalized.decisionGrade),
+    noAdviceDisclosure: normalized.noAdviceDisclosure ?? '',
   };
 }
 
@@ -677,6 +796,11 @@ export const stocksApi = {
   async getStructureDecision(stockCode: string): Promise<StockStructureDecisionResponse> {
     const response = await apiClient.get(`/api/v1/stocks/${encodeURIComponent(stockCode)}/structure-decision`);
     return normalizeStockStructureDecisionResponse(response.data);
+  },
+
+  async getResearchPacket(stockCode: string): Promise<SymbolResearchPacket> {
+    const response = await apiClient.get(`/api/v1/stocks/${encodeURIComponent(stockCode)}/research-packet`);
+    return normalizeSymbolResearchPacket(response.data);
   },
 
   async getStructureDecisionsBatch(params: StockStructureDecisionBatchRequest): Promise<StockStructureDecisionBatchResponse> {

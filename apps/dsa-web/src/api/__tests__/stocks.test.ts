@@ -268,6 +268,79 @@ describe('stocksApi', () => {
     expect(JSON.stringify(payload.peerCorrelationSnapshot)).not.toMatch(/provider|raw|debug|trace|must-not-emit/i);
   });
 
+  it('calls the research packet endpoint and normalizes readiness fields', async () => {
+    const { stocksApi } = await import('../stocks');
+
+    get.mockResolvedValueOnce({
+      data: {
+        symbol: 'AAPL',
+        market: 'us',
+        identity: {
+          name: 'Apple',
+          exchange: null,
+          sector: null,
+          industry: null,
+        },
+        quote: {
+          state: 'available',
+          price: 214.55,
+          change_percent: 1.11,
+          as_of: '2026-05-28T09:30:00Z',
+        },
+        history: {
+          state: 'available',
+          bars: 60,
+          period: 'daily',
+          as_of: '2026-05-28',
+        },
+        structure: {
+          state: 'insufficient',
+          label: 'breakout',
+          confidence: 'medium',
+          as_of: null,
+        },
+        fundamentals: {
+          state: 'not_integrated',
+          fields_available: [],
+        },
+        events: {
+          state: 'missing',
+          latest: [],
+        },
+        peer: {
+          state: 'insufficient',
+          benchmark: null,
+        },
+        missing_data: ['fundamentals', 'filing_event_catalyst', 'peer_benchmark'],
+        research_status: 'partial',
+        next_data_action: 'Add fundamentals, filing/event/catalyst, and peer evidence before marking the packet ready.',
+        observation_only: true,
+        decision_grade: false,
+        no_advice_disclosure: 'Observation-only research packet; no personalized action instruction.',
+      },
+    });
+
+    const payload = await stocksApi.getResearchPacket('AAPL');
+
+    expect(get).toHaveBeenCalledWith('/api/v1/stocks/AAPL/research-packet');
+    expect(payload.symbol).toBe('AAPL');
+    expect(payload.market).toBe('us');
+    expect(payload.identity.name).toBe('Apple');
+    expect(payload.quote.changePercent).toBe(1.11);
+    expect(payload.quote.asOf).toBe('2026-05-28T09:30:00Z');
+    expect(payload.history.asOf).toBe('2026-05-28');
+    expect(payload.structure.state).toBe('insufficient');
+    expect(payload.fundamentals.state).toBe('not_integrated');
+    expect(payload.fundamentals.fieldsAvailable).toEqual([]);
+    expect(payload.events.latest).toEqual([]);
+    expect(payload.peer.state).toBe('insufficient');
+    expect(payload.missingData).toEqual(['fundamentals', 'filing_event_catalyst', 'peer_benchmark']);
+    expect(payload.researchStatus).toBe('partial');
+    expect(payload.observationOnly).toBe(true);
+    expect(payload.decisionGrade).toBe(false);
+    expect(payload.noAdviceDisclosure).toContain('Observation-only research packet');
+  });
+
   it('normalizes consumer-safe stock validation status fields', async () => {
     const { stocksApi } = await import('../stocks');
 

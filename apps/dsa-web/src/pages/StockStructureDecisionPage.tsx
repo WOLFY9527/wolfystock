@@ -16,6 +16,7 @@ import { TerminalButton, TerminalChip, TerminalEmptyState } from '../components/
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
 import {
   stocksApi,
+  type SymbolResearchPacket,
   type StockPeerCorrelationSnapshot,
   type StockStructureDecisionResponse,
   type StockValidationResponse,
@@ -171,9 +172,9 @@ function statusLabel(status: string | null | undefined, language: 'zh' | 'en'): 
   }
   const normalized = String(status || '').toLowerCase();
   const labels: Record<string, { zh: string; en: string }> = {
-    available: { zh: '可用', en: 'Available' },
+    available: { zh: '可用', en: 'Ready' },
     partial: { zh: '部分可用', en: 'Partial' },
-    unavailable: { zh: '不可用', en: 'Unavailable' },
+    unavailable: { zh: '不可用', en: 'Not ready' },
     degraded: { zh: '降级', en: 'Degraded' },
   };
   const mapped = labels[normalized]?.[language];
@@ -202,13 +203,13 @@ function stockStructureStateLabel(value: string | null | undefined, language: 'z
     breakdown: { zh: '结构走弱', en: 'Structure under pressure' },
     breakout: { zh: '突破观察', en: 'Breakout watch' },
     distribution: { zh: '派发压力', en: 'Distribution pressure' },
-    low_confidence: { zh: '证据不足', en: 'Evidence insufficient' },
+    low_confidence: { zh: '证据不足', en: 'Evidence limited' },
     mixed: { zh: '结构分化', en: 'Mixed structure' },
     neutral: { zh: '结构中性', en: 'Neutral structure' },
     pullback: { zh: '回撤观察', en: 'Pullback watch' },
     range: { zh: '区间震荡', en: 'Range-bound' },
-    insufficient_evidence: { zh: '证据不足', en: 'Evidence insufficient' },
-    unavailable: { zh: '数据暂缺', en: 'Data temporarily unavailable' },
+    insufficient_evidence: { zh: '证据不足', en: 'Evidence limited' },
+    unavailable: { zh: '数据暂缺', en: 'Data temporarily missing' },
   };
   const mapped = labels[token]?.[language];
   if (mapped) return mapped;
@@ -261,7 +262,7 @@ function freshnessMeta(item: StockSymbolCompareFreshness | undefined, language: 
 
 function safeEvidenceValue(value: string | number | null | undefined, language: 'zh' | 'en'): string {
   const mapped = typeof value === 'string' ? stockStructureStateLabel(value, language) : null;
-  return mapped || safeConsumerText(value, language, language === 'en' ? 'Evidence unavailable' : '证据暂不可用');
+  return mapped || safeConsumerText(value, language, language === 'en' ? 'Evidence pending' : '证据暂不可用');
 }
 
 function missingEvidenceCopy(
@@ -330,6 +331,189 @@ type StockResearchFact = {
   value: string;
   detail?: string;
 };
+
+type PacketFamily = 'quote' | 'history' | 'structure' | 'fundamentals' | 'events' | 'peer';
+
+type PacketFamilyRow = {
+  key: PacketFamily;
+  label: string;
+  value: string;
+};
+
+function researchStatusLabel(value: string | null | undefined, language: 'zh' | 'en'): string {
+  const token = normalizeStockConsumerToken(value);
+  const labels: Record<string, { zh: string; en: string }> = {
+    ready: { zh: '可研究', en: 'Research ready' },
+    partial: { zh: '部分可用', en: 'Partially ready' },
+    blocked: { zh: '数据待补', en: 'Data needed' },
+    unknown: { zh: '待确认', en: 'Needs confirmation' },
+  };
+  return labels[token]?.[language] ?? labels.unknown[language];
+}
+
+function packetFamilyStateLabel(
+  family: PacketFamily,
+  value: string | null | undefined,
+  language: 'zh' | 'en',
+): string {
+  const token = normalizeStockConsumerToken(value);
+  const zhLabels: Record<PacketFamily, Record<string, string>> = {
+    quote: {
+      available: '报价可用',
+      missing: '报价待补',
+      stale: '报价待确认',
+      unknown: '报价待确认',
+    },
+    history: {
+      available: '历史可用',
+      missing: '历史待补',
+      stale: '历史待确认',
+      unknown: '历史待确认',
+    },
+    structure: {
+      available: '结构可用',
+      insufficient: '结构待补',
+      missing: '结构待补',
+      unknown: '结构待确认',
+    },
+    fundamentals: {
+      available: '基本面可用',
+      missing: '基本面待补',
+      not_integrated: '基本面待接入',
+      unknown: '基本面待补',
+    },
+    events: {
+      available: '事件可用',
+      missing: '事件待补',
+      not_integrated: '事件待接入',
+      unknown: '事件待补',
+    },
+    peer: {
+      available: '同业可用',
+      insufficient: '同业待补',
+      missing: '同业待补',
+      unknown: '同业待确认',
+    },
+  };
+  const enLabels: Record<PacketFamily, Record<string, string>> = {
+    quote: {
+      available: 'Quote ready',
+      missing: 'Quote needed',
+      stale: 'Quote needs confirmation',
+      unknown: 'Quote needs confirmation',
+    },
+    history: {
+      available: 'History ready',
+      missing: 'History needed',
+      stale: 'History needs confirmation',
+      unknown: 'History needs confirmation',
+    },
+    structure: {
+      available: 'Structure ready',
+      insufficient: 'Structure needed',
+      missing: 'Structure needed',
+      unknown: 'Structure needs confirmation',
+    },
+    fundamentals: {
+      available: 'Fundamentals ready',
+      missing: 'Fundamentals needed',
+      not_integrated: 'Fundamentals pending',
+      unknown: 'Fundamentals needed',
+    },
+    events: {
+      available: 'Events ready',
+      missing: 'Events needed',
+      not_integrated: 'Events pending',
+      unknown: 'Events needed',
+    },
+    peer: {
+      available: 'Peer ready',
+      insufficient: 'Peer needed',
+      missing: 'Peer needed',
+      unknown: 'Peer needs confirmation',
+    },
+  };
+  const labels = language === 'en' ? enLabels : zhLabels;
+  return labels[family][token] ?? labels[family].unknown;
+}
+
+function missingDataLabel(value: string, language: 'zh' | 'en'): string {
+  const token = normalizeStockConsumerToken(value);
+  const labels: Record<string, { zh: string; en: string }> = {
+    quote: { zh: '报价', en: 'quote' },
+    price_history: { zh: '历史', en: 'history' },
+    history: { zh: '历史', en: 'history' },
+    structure_analysis: { zh: '结构', en: 'structure' },
+    structure: { zh: '结构', en: 'structure' },
+    fundamentals: { zh: '基本面', en: 'fundamentals' },
+    filing_event_catalyst: { zh: '事件', en: 'events' },
+    events: { zh: '事件', en: 'events' },
+    peer_benchmark: { zh: '同业', en: 'peer' },
+    peer: { zh: '同业', en: 'peer' },
+  };
+  return labels[token]?.[language] ?? (language === 'en' ? 'data' : '资料');
+}
+
+function packetMissingDataSummary(packet: SymbolResearchPacket, language: 'zh' | 'en'): string | null {
+  const labels = compactUnique(packet.missingData.map((item) => missingDataLabel(item, language)));
+  if (!labels.length) return null;
+  return language === 'en'
+    ? `Needed: ${labels.slice(0, 4).join(', ')}`
+    : `待补：${labels.slice(0, 4).join('、')}`;
+}
+
+function hasMissingData(packet: SymbolResearchPacket, tokens: string[]): boolean {
+  const normalized = packet.missingData.map(normalizeStockConsumerToken);
+  return tokens.some((token) => normalized.includes(token));
+}
+
+function compactNextDataAction(packet: SymbolResearchPacket, language: 'zh' | 'en'): string {
+  if (hasMissingData(packet, ['quote', 'price_history', 'history'])) {
+    return language === 'en' ? 'Add quote and history' : '补报价与历史';
+  }
+  if (hasMissingData(packet, ['fundamentals', 'filing_event_catalyst', 'events', 'peer_benchmark', 'peer'])) {
+    return language === 'en' ? 'Add fundamentals, events, and peer data' : '补基本面、事件、同业';
+  }
+  if (normalizeStockConsumerToken(packet.researchStatus) === 'ready') {
+    return language === 'en' ? 'Continue data review' : '继续复核数据';
+  }
+  return language === 'en' ? 'Add data' : '补数据';
+}
+
+function buildPacketFamilyRows(packet: SymbolResearchPacket, language: 'zh' | 'en'): PacketFamilyRow[] {
+  return [
+    {
+      key: 'quote',
+      label: language === 'en' ? 'Quote' : '报价',
+      value: packetFamilyStateLabel('quote', packet.quote.state, language),
+    },
+    {
+      key: 'history',
+      label: language === 'en' ? 'History' : '历史',
+      value: packetFamilyStateLabel('history', packet.history.state, language),
+    },
+    {
+      key: 'structure',
+      label: language === 'en' ? 'Structure' : '结构',
+      value: packetFamilyStateLabel('structure', packet.structure.state, language),
+    },
+    {
+      key: 'fundamentals',
+      label: language === 'en' ? 'Fundamentals' : '基本面',
+      value: packetFamilyStateLabel('fundamentals', packet.fundamentals.state, language),
+    },
+    {
+      key: 'events',
+      label: language === 'en' ? 'Events' : '事件',
+      value: packetFamilyStateLabel('events', packet.events.state, language),
+    },
+    {
+      key: 'peer',
+      label: language === 'en' ? 'Peer' : '同业',
+      value: packetFamilyStateLabel('peer', packet.peer.state, language),
+    },
+  ];
+}
 
 function isSymbolNotFoundValidation(
   validation: StockValidationResponse | null | undefined,
@@ -494,12 +678,12 @@ function StockStructureCannotResearchState({
         <div className="space-y-1">
           <p>
             {isEnglish
-              ? 'Insufficient facts for a research packet.'
+              ? 'Limited facts for a research packet.'
               : '个股事实不足，暂不能组成研究包。'}
           </p>
           <p>
             {summary || (isEnglish
-              ? 'Return after price or comparable evidence becomes available.'
+              ? 'Return after price or comparable evidence is ready.'
               : '价格或可比证据可用后，从研究队列重新进入。')}
           </p>
           <p>
@@ -559,6 +743,73 @@ function StockMinimumResearchPacket({
           title={isEnglish ? 'Missing data summarized once' : '缺失资料汇总'}
         >
           <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{missingSummary}</p>
+        </RoughSectionCard>
+      ) : null}
+    </div>
+  );
+}
+
+function StockResearchPacketPanel({
+  packet,
+  failed,
+  language,
+}: {
+  packet: SymbolResearchPacket | null;
+  failed: boolean;
+  language: 'zh' | 'en';
+}) {
+  const isEnglish = language === 'en';
+  if (failed) {
+    return (
+      <div className="border-t border-[color:var(--wolfy-divider)] p-3" data-testid="stock-research-packet-panel">
+        <RoughSectionCard eyebrow={isEnglish ? 'Research packet' : '研究包'} title={isEnglish ? 'Research packet pending' : '研究包待更新'}>
+          <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+            {isEnglish ? 'Refresh the packet after the stock data endpoint updates.' : '待个股数据接口更新后再复核。'}
+          </p>
+        </RoughSectionCard>
+      </div>
+    );
+  }
+
+  if (!packet) return null;
+
+  const familyRows = buildPacketFamilyRows(packet, language);
+  const identityLabel = [
+    safeOptionalConsumerText(packet.identity.name, language),
+    safeOptionalConsumerText(packet.market, language),
+  ].filter(Boolean).join(' · ') || packet.symbol;
+  const missingSummary = packetMissingDataSummary(packet, language);
+  const nextAction = compactNextDataAction(packet, language);
+
+  return (
+    <div className="grid gap-3 border-t border-[color:var(--wolfy-divider)] p-3" data-testid="stock-research-packet-panel">
+      <RoughSectionCard
+        eyebrow={isEnglish ? 'Research packet' : '研究包'}
+        title={isEnglish ? 'Readiness snapshot' : '研究就绪快照'}
+      >
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <TerminalChip variant="info">{packet.symbol}</TerminalChip>
+          <TerminalChip variant="neutral">{identityLabel}</TerminalChip>
+          <TerminalChip variant={normalizeStockConsumerToken(packet.researchStatus) === 'ready' ? 'success' : 'caution'}>
+            {researchStatusLabel(packet.researchStatus, language)}
+          </TerminalChip>
+          <TerminalChip variant="neutral">{isEnglish ? 'Research record' : '研究记录'}</TerminalChip>
+          <TerminalChip variant="neutral">{isEnglish ? 'No trade instruction' : '非交易指令'}</TerminalChip>
+        </div>
+        <RoughKeyValueRows
+          rows={familyRows.map((row) => ({
+            key: row.key,
+            label: row.label,
+            value: row.value,
+          }))}
+        />
+      </RoughSectionCard>
+      {(missingSummary || nextAction) ? (
+        <RoughSectionCard eyebrow={isEnglish ? 'Data action' : '数据动作'} title={isEnglish ? 'Next data step' : '下一步数据'}>
+          <div className="flex flex-wrap gap-2">
+            {missingSummary ? <TerminalChip variant="caution">{missingSummary}</TerminalChip> : null}
+            {nextAction ? <TerminalChip variant="info">{nextAction}</TerminalChip> : null}
+          </div>
         </RoughSectionCard>
       ) : null}
     </div>
@@ -684,7 +935,7 @@ function SymbolCompareEvidencePacketPanel({
             <p>
               {isSingleSymbol
                 ? (language === 'en'
-                  ? `Only ${symbolLabel} is available, so shared evidence or divergence evidence cannot be formed yet.`
+                  ? `Only ${symbolLabel} is present, so shared evidence or divergence evidence cannot be formed yet.`
                   : `当前只有 ${symbolLabel}，暂时不能形成标的间共享证据或分歧证据。`)
                 : (language === 'en'
                   ? 'Shared evidence or divergence evidence is still missing for this symbol set.'
@@ -753,7 +1004,7 @@ function SymbolCompareEvidencePacketPanel({
               <span className="ml-2 text-[color:var(--wolfy-text-muted)]">{sharedEvidenceMeta(item, language)}</span>
             </span>
           ))}
-          emptyText={language === 'en' ? 'No shared evidence is available across these symbols yet.' : '这些标的之间暂无共同证据。'}
+          emptyText={language === 'en' ? 'No shared evidence is ready across these symbols yet.' : '这些标的之间暂无共同证据。'}
         />
       </RoughSectionCard>
 
@@ -771,7 +1022,7 @@ function SymbolCompareEvidencePacketPanel({
               </span>
             );
           })}
-          emptyText={language === 'en' ? 'No divergence is available in this packet.' : '当前证据包暂无分歧观察。'}
+          emptyText={language === 'en' ? 'No divergence is ready in this packet.' : '当前证据包暂无分歧观察。'}
         />
       </RoughSectionCard>
 
@@ -804,7 +1055,7 @@ function SymbolCompareEvidencePacketPanel({
 
       <RoughSectionCard title={language === 'en' ? 'Freshness by symbol' : '新鲜度'}>
         <RoughKeyValueRows
-          emptyText={language === 'en' ? 'No freshness summary available yet.' : '暂无新鲜度摘要。'}
+          emptyText={language === 'en' ? 'No freshness summary yet.' : '暂无新鲜度摘要。'}
           rows={displaySymbols.map((symbol) => ({
             key: `freshness-${symbol}`,
             label: symbol,
@@ -842,6 +1093,8 @@ export default function StockStructureDecisionPage() {
   const primarySymbol = requestedSymbols[0] || symbolSegment.toUpperCase();
   const titleSymbol = isCompareRequest ? requestedSymbols.join(' / ') : primarySymbol;
   const [data, setData] = useState<StockStructureDecisionResponse | null>(null);
+  const [researchPacket, setResearchPacket] = useState<SymbolResearchPacket | null>(null);
+  const [researchPacketFailed, setResearchPacketFailed] = useState(false);
   const [comparePacket, setComparePacket] = useState<StockSymbolCompareEvidencePacket | null>(null);
   const [symbolNotFound, setSymbolNotFound] = useState<SymbolNotFoundState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -851,13 +1104,27 @@ export default function StockStructureDecisionPage() {
     setLoading(true);
     setError(null);
     setSymbolNotFound(null);
+    setResearchPacket(null);
+    setResearchPacketFailed(false);
     try {
       if (isCompareRequest) {
-        const response = await stocksApi.getStructureDecisionsBatch({
-          stockCodes: requestedSymbols,
-          benchmark,
-          maxItems,
-        });
+        const [packetResult, responseResult] = await Promise.allSettled([
+          stocksApi.getResearchPacket(primarySymbol),
+          stocksApi.getStructureDecisionsBatch({
+            stockCodes: requestedSymbols,
+            benchmark,
+            maxItems,
+          }),
+        ]);
+        if (packetResult.status === 'fulfilled') {
+          setResearchPacket(packetResult.value);
+        } else {
+          setResearchPacketFailed(true);
+        }
+        if (responseResult.status === 'rejected') {
+          throw responseResult.reason;
+        }
+        const response = responseResult.value;
         setData(response.items[0] ?? null);
         setComparePacket(response.symbolCompareEvidencePacket ?? null);
       } else {
@@ -869,13 +1136,27 @@ export default function StockStructureDecisionPage() {
         }
         if (isSymbolNotFoundValidation(validation)) {
           setData(null);
+          setResearchPacket(null);
+          setResearchPacketFailed(false);
           setComparePacket(null);
           setSymbolNotFound({
             symbol: validation.normalizedSymbol || validation.stockCode || primarySymbol,
           });
           return;
         }
-        const response = await stocksApi.getStructureDecision(primarySymbol);
+        const [packetResult, responseResult] = await Promise.allSettled([
+          stocksApi.getResearchPacket(primarySymbol),
+          stocksApi.getStructureDecision(primarySymbol),
+        ]);
+        if (packetResult.status === 'fulfilled') {
+          setResearchPacket(packetResult.value);
+        } else {
+          setResearchPacketFailed(true);
+        }
+        if (responseResult.status === 'rejected') {
+          throw responseResult.reason;
+        }
+        const response = responseResult.value;
         setData(response);
         setComparePacket(null);
       }
@@ -883,7 +1164,7 @@ export default function StockStructureDecisionPage() {
       setComparePacket(null);
       setSymbolNotFound(null);
       setError(getParsedApiError(err) || createParsedApiError({
-        title: locale === 'en' ? 'Structure panel unavailable' : '结构面板暂不可用',
+        title: locale === 'en' ? 'Structure panel pending' : '结构面板暂不可用',
         message: locale === 'en' ? 'Please retry after the stock structure API responds again.' : '请在个股结构接口恢复后重试。',
       }));
     } finally {
@@ -970,7 +1251,7 @@ export default function StockStructureDecisionPage() {
       ? 'Check the code or return to a research entrypoint.'
       : '请检查代码是否正确，或返回研究入口重新选择。')
     : (locale === 'en'
-      ? 'Assembles available stock fact summaries.'
+      ? 'Assembles known stock fact summaries.'
       : '汇总可用个股事实。');
   const railContent = data && hasResearchPacket ? (
     <ConsoleContextRail className="flex flex-col gap-3 p-3">
@@ -1051,6 +1332,11 @@ export default function StockStructureDecisionPage() {
             ) : null}
             {data ? (
               <>
+                <StockResearchPacketPanel
+                  packet={researchPacket}
+                  failed={researchPacketFailed}
+                  language={locale}
+                />
                 {hasResearchPacket ? (
                   <>
                     <ConsoleStatusStrip
