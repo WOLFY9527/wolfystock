@@ -388,3 +388,100 @@ class StrategyCompareResultModel:
     strategies: list[StrategyComparisonModel] = field(default_factory=list)
     limitations: list[str] = field(default_factory=list)
     metadata: OptionsLabMetadataModel = field(default_factory=OptionsLabMetadataModel)
+
+
+@dataclass
+class StrategyAnalyzerLegModel:
+    leg_action: str
+    side: str
+    contract_symbol: str
+    expiration: str
+    strike: float
+    mid: float
+    quantity: int = 1
+
+
+@dataclass
+class StrategyAnalyzerPayoffRowModel:
+    underlying_price: float
+    gross_payoff: float
+    net_payoff: float
+
+
+@dataclass
+class StrategyAnalyzerGreeksModel:
+    delta: float
+    gamma: float
+    theta: float
+    vega: float
+    rho: Optional[float] = None
+
+
+@dataclass
+class StrategyProbabilityModel:
+    state: str
+    model_implied_probability_of_profit: Optional[float] = None
+    inputs: dict[str, Any] = field(default_factory=dict)
+    blockers: list[str] = field(default_factory=list)
+
+
+@dataclass
+class StrategyHistoricalWinRateModel:
+    state: str = "unavailable"
+    value: Optional[float] = None
+    blockers: list[str] = field(default_factory=lambda: ["historical_options_chain_data_unavailable"])
+
+
+@dataclass
+class StrategyAnalyzerReadinessModel:
+    strategy_structure_state: str
+    chain_data_state: str
+    analysis_state: str
+    observation_only: bool = True
+    decision_grade: bool = False
+    data_blockers: list[str] = field(default_factory=list)
+
+
+@dataclass
+class StrategyAnalysisModel:
+    strategy_type: str
+    legs: list[StrategyAnalyzerLegModel] = field(default_factory=list)
+    net_debit: Optional[float] = None
+    net_credit: Optional[float] = None
+    max_profit: Optional[float] = None
+    max_loss: Optional[float] = None
+    breakevens: list[float] = field(default_factory=list)
+    payoff_table: list[StrategyAnalyzerPayoffRowModel] = field(default_factory=list)
+    aggregate_greeks: Optional[StrategyAnalyzerGreeksModel] = None
+    missing_greeks_blockers: list[str] = field(default_factory=list)
+    model_implied_probability: StrategyProbabilityModel = field(
+        default_factory=lambda: StrategyProbabilityModel(state="unavailable")
+    )
+    historical_win_rate: StrategyHistoricalWinRateModel = field(default_factory=StrategyHistoricalWinRateModel)
+    readiness: StrategyAnalyzerReadinessModel = field(
+        default_factory=lambda: StrategyAnalyzerReadinessModel(
+            strategy_structure_state="blocked",
+            chain_data_state="blocked",
+            analysis_state="blocked",
+        )
+    )
+    limitations: list[str] = field(default_factory=list)
+
+
+@dataclass
+class StrategyAnalyzerResultModel:
+    symbol: str
+    underlying: dict[str, Any]
+    assumptions: dict[str, Any]
+    analyses: list[StrategyAnalysisModel] = field(default_factory=list)
+    strategy_readiness: StrategyAnalyzerReadinessModel = field(
+        default_factory=lambda: StrategyAnalyzerReadinessModel(
+            strategy_structure_state="blocked",
+            chain_data_state="blocked",
+            analysis_state="blocked",
+        )
+    )
+    limitations: list[str] = field(default_factory=list)
+    observation_only: bool = True
+    decision_grade: bool = False
+    metadata: OptionsLabMetadataModel = field(default_factory=OptionsLabMetadataModel)

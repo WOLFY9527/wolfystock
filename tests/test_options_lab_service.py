@@ -637,6 +637,173 @@ def test_bear_put_spread_math_and_target_payoff_are_deterministic() -> None:
     assert spread.risk_reward_ratio == 2.85
 
 
+def test_strategy_analyzer_long_straddle_computes_payoff_and_greeks() -> None:
+    response = _service().analyze_strategies(
+        {
+            "symbol": "TEM",
+            "expiration": "2026-06-19",
+            "strategies": ["long_straddle"],
+            "scenarioPrices": [40, 50, 60],
+        }
+    )
+
+    straddle = response.analyses[0]
+    assert straddle.strategy_type == "long_straddle"
+    assert [(leg.leg_action, leg.side, leg.strike) for leg in straddle.legs] == [
+        ("long", "call", 50.0),
+        ("long", "put", 50.0),
+    ]
+    assert straddle.net_debit == 750
+    assert straddle.net_credit is None
+    assert straddle.max_loss == 750
+    assert straddle.max_profit is None
+    assert straddle.breakevens == [42.5, 57.5]
+    assert [(row.underlying_price, row.net_payoff) for row in straddle.payoff_table] == [
+        (40.0, 250.0),
+        (50.0, -750.0),
+        (60.0, 250.0),
+    ]
+    assert straddle.aggregate_greeks is not None
+    assert straddle.aggregate_greeks.delta == 0.22
+    assert straddle.aggregate_greeks.gamma == 0.091
+    assert straddle.aggregate_greeks.theta == -0.133
+    assert straddle.aggregate_greeks.vega == 0.234
+    assert straddle.missing_greeks_blockers == []
+
+
+def test_strategy_analyzer_long_strangle_computes_debit_loss_and_breakevens() -> None:
+    response = _service().analyze_strategies(
+        {
+            "symbol": "TEM",
+            "expiration": "2026-06-19",
+            "strategies": ["long_strangle"],
+        }
+    )
+
+    strangle = response.analyses[0]
+    assert [(leg.leg_action, leg.side, leg.strike) for leg in strangle.legs] == [
+        ("long", "call", 55.0),
+        ("long", "put", 50.0),
+    ]
+    assert strangle.net_debit == 520
+    assert strangle.max_loss == 520
+    assert strangle.max_profit is None
+    assert strangle.breakevens == [44.8, 60.2]
+
+
+def test_strategy_analyzer_vertical_spread_computes_risk_and_payoff_table() -> None:
+    response = _service().analyze_strategies(
+        {
+            "symbol": "TEM",
+            "expiration": "2026-06-19",
+            "strategies": ["bull_call_spread"],
+            "scenarioPrices": [50, 52.3, 55, 60],
+        }
+    )
+
+    spread = response.analyses[0]
+    assert spread.strategy_type == "bull_call_spread"
+    assert [(leg.leg_action, leg.side, leg.strike) for leg in spread.legs] == [
+        ("long", "call", 50.0),
+        ("short", "call", 55.0),
+    ]
+    assert spread.net_debit == 230
+    assert spread.net_credit is None
+    assert spread.max_profit == 270
+    assert spread.max_loss == 230
+    assert spread.breakevens == [52.3]
+    assert [(row.underlying_price, row.net_payoff) for row in spread.payoff_table] == [
+        (50.0, -230.0),
+        (52.3, 0.0),
+        (55.0, 270.0),
+        (60.0, 270.0),
+    ]
+
+
+def test_strategy_analyzer_iron_condor_computes_credit_bounded_risk_and_breakevens() -> None:
+    response = _service().analyze_strategies(
+        {
+            "symbol": "TEM",
+            "expiration": "2026-06-19",
+            "strategies": ["iron_condor"],
+            "scenarioPrices": [40, 52.4, 70],
+        }
+    )
+
+    condor = response.analyses[0]
+    assert condor.strategy_type == "iron_condor"
+    assert [(leg.leg_action, leg.side, leg.strike) for leg in condor.legs] == [
+        ("long", "put", 45.0),
+        ("short", "put", 50.0),
+        ("short", "call", 55.0),
+        ("long", "call", 65.0),
+    ]
+    assert condor.net_debit is None
+    assert condor.net_credit == 345
+    assert condor.max_profit == 345
+    assert condor.max_loss == 655
+    assert condor.breakevens == [46.55, 58.45]
+    assert [(row.underlying_price, row.net_payoff) for row in condor.payoff_table] == [
+        (40.0, -155.0),
+        (52.4, 345.0),
+        (70.0, -655.0),
+    ]
+
+
+def test_strategy_analyzer_probability_and_history_fail_closed_when_inputs_missing(tmp_path: Path) -> None:
+    fixture = json.loads(Path("tests/fixtures/options/tem_chain.json").read_text(encoding="utf-8"))
+    fixture["underlying"].pop("price", None)
+    fixture["expirations"][0]["dte"] = 0
+    for contract in fixture["contracts"]:
+        contract.pop("impliedVolatility", None)
+        contract.pop("greeks", None)
+    path = tmp_path / "tem_missing_probability_inputs.json"
+    path.write_text(json.dumps(fixture), encoding="utf-8")
+
+    response = OptionsLabService(fixture_path=path).analyze_strategies(
+        {
+            "symbol": "TEM",
+            "expiration": "2026-06-19",
+            "strategies": ["long_straddle"],
+        }
+    )
+
+    analysis = response.analyses[0]
+    assert analysis.aggregate_greeks is None
+    assert analysis.missing_greeks_blockers
+    assert analysis.model_implied_probability.state == "unavailable"
+    assert set(analysis.model_implied_probability.blockers) >= {
+        "missing_underlying_price",
+        "missing_dte",
+        "missing_implied_volatility",
+    }
+    assert analysis.historical_win_rate.state == "unavailable"
+    assert analysis.historical_win_rate.blockers == ["historical_options_chain_data_unavailable"]
+    assert analysis.readiness.chain_data_state == "partial"
+    assert analysis.readiness.observation_only is True
+    assert analysis.readiness.decision_grade is False
+
+
+def test_strategy_analyzer_demo_chain_stays_observation_only_and_no_advice() -> None:
+    response = _service().analyze_strategies(
+        {
+            "symbol": "TEM",
+            "expiration": "2026-06-19",
+            "strategies": ["long_straddle", "iron_condor"],
+        }
+    )
+
+    assert response.observation_only is True
+    assert response.decision_grade is False
+    assert response.metadata.fixture_backed is True
+    assert response.metadata.live_provider_enabled is False
+    assert response.strategy_readiness.observation_only is True
+    assert response.strategy_readiness.analysis_state == "observation_only"
+    text = _json_text(response).lower()
+    for blocked in FORBIDDEN_TERMS:
+        assert blocked.lower() not in text
+
+
 def test_strategy_compare_max_premium_filters_net_debit() -> None:
     response = _service().compare_strategies(
         {
