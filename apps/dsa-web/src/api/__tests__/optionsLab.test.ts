@@ -409,6 +409,164 @@ describe('optionsLabApi fixture fallback boundaries', () => {
     });
   });
 
+  it('posts strategy analyzer requests and normalizes observation-only response fields', async () => {
+    vi.mocked(apiClient.post).mockResolvedValueOnce({
+      data: {
+        symbol: 'TEM',
+        underlying: {
+          price: 52.34,
+          freshness: 'synthetic_delayed',
+        },
+        assumptions: {
+          scenario_prices: [45, 52.34, 65],
+          risk_free_rate: 0.04,
+        },
+        analyses: [
+          {
+            strategy_type: 'long_strangle',
+            legs: [
+              {
+                leg_action: 'long',
+                side: 'call',
+                contract_symbol: 'TEM260619C00055000',
+                expiration: '2026-06-19',
+                strike: 55,
+                mid: 4.23,
+                quantity: 1,
+              },
+              {
+                leg_action: 'long',
+                side: 'put',
+                contract_symbol: 'TEM260619P00050000',
+                expiration: '2026-06-19',
+                strike: 50,
+                mid: 3.35,
+                quantity: 1,
+              },
+            ],
+            net_debit: 758,
+            net_credit: null,
+            max_profit: null,
+            max_loss: 758,
+            breakevens: [42.42, 62.58],
+            payoff_table: [
+              {
+                underlying_price: 45,
+                gross_payoff: 500,
+                net_payoff: -258,
+              },
+            ],
+            aggregate_greeks: {
+              delta: 0.06,
+              gamma: 0.08,
+              theta: -0.09,
+              vega: 0.21,
+              rho: 0.01,
+            },
+            missing_greeks_blockers: [],
+            model_implied_probability: {
+              state: 'available',
+              model_implied_probability_of_profit: 0.4123,
+              inputs: {
+                risk_free_rate: 0.04,
+              },
+              blockers: [],
+            },
+            historical_win_rate: {
+              state: 'unavailable',
+              value: null,
+              blockers: ['historical_options_chain_data_unavailable'],
+            },
+            readiness: {
+              strategy_structure_state: 'available',
+              chain_data_state: 'partial',
+              analysis_state: 'observation_only',
+              observation_only: true,
+              decision_grade: false,
+              data_blockers: ['historical_options_chain_data_unavailable'],
+            },
+            limitations: ['model_implied_probability_is_assumption_based'],
+          },
+        ],
+        strategy_readiness: {
+          strategy_structure_state: 'available',
+          chain_data_state: 'partial',
+          analysis_state: 'observation_only',
+          observation_only: true,
+          decision_grade: false,
+          data_blockers: ['historical_options_chain_data_unavailable'],
+        },
+        limitations: ['analysis_only_not_advice'],
+        observation_only: true,
+        decision_grade: false,
+        metadata: {
+          read_only: true,
+          no_order_placement: true,
+          no_broker_connection: true,
+          no_portfolio_mutation: true,
+          no_trading_recommendation: true,
+        },
+      },
+    } as never);
+
+    await expect(optionsLabApi.analyzeStrategies({
+      symbol: 'tem',
+      expiration: '2026-06-19',
+      strategies: ['long_strangle'],
+      scenarioPrices: [45, 52.34, 65],
+    })).resolves.toMatchObject({
+      symbol: 'TEM',
+      observationOnly: true,
+      decisionGrade: false,
+      strategyReadiness: {
+        analysisState: 'observation_only',
+        observationOnly: true,
+        decisionGrade: false,
+      },
+      analyses: [
+        {
+          strategyType: 'long_strangle',
+          netDebit: 758,
+          breakevens: [42.42, 62.58],
+          payoffTable: [
+            {
+              underlyingPrice: 45,
+              netPayoff: -258,
+            },
+          ],
+          aggregateGreeks: {
+            delta: 0.06,
+            theta: -0.09,
+          },
+          modelImpliedProbability: {
+            modelImpliedProbabilityOfProfit: 0.4123,
+            inputs: {
+              riskFreeRate: 0.04,
+            },
+          },
+          historicalWinRate: {
+            state: 'unavailable',
+            value: null,
+            blockers: ['historical_options_chain_data_unavailable'],
+          },
+          readiness: {
+            dataBlockers: ['historical_options_chain_data_unavailable'],
+          },
+        },
+      ],
+      metadata: {
+        readOnly: true,
+        noOrderPlacement: true,
+      },
+    });
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/options/strategies/analyze', expect.objectContaining({
+      symbol: 'TEM',
+      expiration: '2026-06-19',
+      strategies: ['long_strangle'],
+      scenarioPrices: [45, 52.34, 65],
+    }));
+  });
+
   it('posts decision evaluation and keeps network-error fallback demo-only', async () => {
     vi.mocked(apiClient.post).mockResolvedValueOnce({
       data: {

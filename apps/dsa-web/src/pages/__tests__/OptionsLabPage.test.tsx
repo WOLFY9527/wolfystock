@@ -16,6 +16,7 @@ vi.mock('../../api/optionsLab', () => ({
     getExpirations: vi.fn(),
     getOptionChain: vi.fn(),
     compareStrategies: vi.fn(),
+    analyzeStrategies: vi.fn(),
     evaluateDecision: vi.fn(),
   },
 }));
@@ -228,6 +229,110 @@ function buildSyntheticDiagnosticsScenarioFrame() {
   });
 }
 
+function buildStrategyAnalyzerResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    symbol: 'TEM',
+    underlying: {
+      price: 52.34,
+      freshness: 'synthetic_delayed',
+    },
+    assumptions: {
+      scenarioPrices: [45, 52.34, 65],
+      riskFreeRate: 0.04,
+    },
+    analyses: [
+      {
+        strategyType: 'long_strangle',
+        legs: [
+          {
+            legAction: 'long',
+            side: 'call',
+            contractSymbol: 'TEM260619C00055000',
+            expiration: '2026-06-19',
+            strike: 55,
+            mid: 4.23,
+            quantity: 1,
+          },
+          {
+            legAction: 'long',
+            side: 'put',
+            contractSymbol: 'TEM260619P00050000',
+            expiration: '2026-06-19',
+            strike: 50,
+            mid: 3.35,
+            quantity: 1,
+          },
+        ],
+        netDebit: 758,
+        netCredit: null,
+        maxProfit: null,
+        maxLoss: 758,
+        breakevens: [42.42, 62.58],
+        payoffTable: [
+          { underlyingPrice: 45, grossPayoff: 500, netPayoff: -258 },
+          { underlyingPrice: 52.34, grossPayoff: 0, netPayoff: -758 },
+          { underlyingPrice: 65, grossPayoff: 1000, netPayoff: 242 },
+        ],
+        aggregateGreeks: {
+          delta: 0.06,
+          gamma: 0.08,
+          theta: -0.09,
+          vega: 0.21,
+          rho: 0.01,
+        },
+        missingGreeksBlockers: [],
+        modelImpliedProbability: {
+          state: 'available',
+          modelImpliedProbabilityOfProfit: 0.4123,
+          inputs: {
+            riskFreeRate: 0.04,
+            probability_model_version: 'debug-model-v1',
+            providerName: 'provider.example.invalid',
+            requestId: 'req-synth-123',
+          },
+          blockers: ['debug_inputs', 'traceId=req-synth-123'],
+        },
+        historicalWinRate: {
+          state: 'unavailable',
+          value: null,
+          blockers: ['historical_options_chain_data_unavailable'],
+        },
+        readiness: {
+          strategyStructureState: 'available',
+          chainDataState: 'partial',
+          analysisState: 'observation_only',
+          observationOnly: true,
+          decisionGrade: false,
+          dataBlockers: ['historical_options_chain_data_unavailable'],
+        },
+        limitations: ['model_implied_probability_is_assumption_based'],
+      },
+    ],
+    strategyReadiness: {
+      strategyStructureState: 'available',
+      chainDataState: 'partial',
+      analysisState: 'observation_only',
+      observationOnly: true,
+      decisionGrade: false,
+      dataBlockers: ['historical_options_chain_data_unavailable'],
+    },
+    limitations: ['analysis_only_not_advice'],
+    observationOnly: true,
+    decisionGrade: false,
+    metadata: {
+      readOnly: true,
+      noOrderPlacement: true,
+      noBrokerConnection: true,
+      noPortfolioMutation: true,
+      noTradingRecommendation: true,
+      requestId: 'req-synth-123',
+      traceId: 'trace-synth-123',
+      rawPayload: 'provider.example raw payload token=abc',
+    },
+    ...overrides,
+  };
+}
+
 function mockHappyPath(
   readiness?: OptionsResearchReadiness | null,
   optionsChainReadinessView?: Record<string, unknown> | null,
@@ -380,7 +485,7 @@ function mockHappyPath(
     },
     optionsChainReadinessView: optionsChainReadinessView ?? null,
   }, readiness));
-  vi.mocked(optionsLabApi.compareStrategies).mockResolvedValue(withOptionsReadiness({
+	  vi.mocked(optionsLabApi.compareStrategies).mockResolvedValue(withOptionsReadiness({
     symbol: 'TEM',
     underlying: {
       price: 52.34,
@@ -510,6 +615,7 @@ function mockHappyPath(
       forceRefreshIgnored: true,
     },
   }, readiness));
+  vi.mocked(optionsLabApi.analyzeStrategies).mockResolvedValue(buildStrategyAnalyzerResponse());
   vi.mocked(optionsLabApi.evaluateDecision).mockResolvedValue(withOptionsReadiness({
     symbol: 'TEM',
     strategy: 'bull_call_spread',
@@ -856,6 +962,123 @@ describe('OptionsLabPage', () => {
     expect(within(decisionSection).getAllByText('$7.50').length).toBeGreaterThan(0);
     expect(within(decisionSection).getAllByText('$230.00').length).toBeGreaterThan(0);
     expect(within(decisionSection).getAllByText(/专业结构：牛市看涨价差/).length).toBeGreaterThan(0);
+  });
+
+  it('renders observation-only strategy analyzer output without advice or diagnostic leakage', async () => {
+    renderPage();
+
+    const analyzer = await screen.findByTestId('options-lab-strategy-analyzer');
+    await waitFor(() => {
+      expect(analyzer).toHaveTextContent('策略分析器');
+      expect(analyzer).toHaveTextContent('研究记录');
+      expect(analyzer).toHaveTextContent('非交易指令');
+      expect(analyzer).toHaveTextContent('仅观察');
+      expect(analyzer).toHaveTextContent('宽跨式多头');
+    });
+
+    expect(analyzer).toHaveTextContent('净支出');
+    expect(analyzer).toHaveTextContent('$758.00');
+    expect(analyzer).toHaveTextContent('最大亏损');
+    expect(analyzer).toHaveTextContent('盈亏平衡');
+    expect(analyzer).toHaveTextContent('$42.42 / $62.58');
+    expect(analyzer).toHaveTextContent('收益表摘要');
+    expect(analyzer).toHaveTextContent('-$758.00 到 $242.00');
+    expect(analyzer).toHaveTextContent('敏感度合计');
+    expect(analyzer).toHaveTextContent('Delta 0.06 · Theta -0.09 · Vega 0.21');
+    expect(analyzer).toHaveTextContent('模型受限概率');
+    expect(analyzer).toHaveTextContent('41.2%');
+    expect(analyzer).toHaveTextContent('假设模型，不是历史胜率');
+    expect(analyzer).toHaveTextContent('历史胜率不可用');
+    expect(analyzer).toHaveTextContent('历史期权链未接入');
+    expect(analyzer).toHaveTextContent('仅使用当前已加载合约链和情景输入；缺腿时不生成模拟腿或占位结果。');
+
+    const analyzerText = analyzer.textContent || '';
+    expect(analyzerText).not.toMatch(/provider|requestId|traceId|rawPayload|debug|probability_model_version|sourceAuthority|scoreAuthority|scoreContributionAllowed/i);
+    expect(analyzerText).not.toMatch(/recommended|best strategy|best contract|buy now|sell now|position sizing|stop loss|target price|下单|买入|卖出|推荐|最优|首选/);
+    expect(findConsumerRawLeakage(analyzerText, {
+      extraForbiddenPatterns: SYNTHETIC_DIAGNOSTIC_GUARD_PATTERNS,
+    })).toEqual([]);
+  });
+
+  it('sends strategy analyzer requests only from loaded chain evidence and current scenario inputs', async () => {
+    renderPage();
+
+    await screen.findByTestId('options-lab-strategy-analyzer');
+    await waitFor(() => {
+      expect(vi.mocked(optionsLabApi.analyzeStrategies)).toHaveBeenCalledWith(expect.objectContaining({
+        symbol: 'TEM',
+        expiration: '2026-06-19',
+        strategies: ['long_strangle'],
+        scenarioPrices: expect.arrayContaining([52.34, 65]),
+        scenarioAssumptions: expect.objectContaining({
+          direction: 'bullish',
+          riskProfile: 'balanced',
+          targetDate: '2026-08-21',
+          inputSource: 'loaded_options_chain',
+        }),
+        forceRefresh: true,
+      }));
+    });
+    expect(vi.mocked(optionsLabApi.analyzeStrategies)).not.toHaveBeenCalledWith(expect.objectContaining({
+      marketDataProvider: expect.any(String),
+    }));
+  });
+
+  it('fails closed when strategy analyzer legs are missing and does not create fallback payloads', async () => {
+    vi.mocked(optionsLabApi.analyzeStrategies).mockClear();
+    vi.mocked(optionsLabApi.getOptionChain).mockResolvedValueOnce(withOptionsReadiness({
+      symbol: 'TEM',
+      expiration: '2026-06-19',
+      underlying: {
+        price: 52.34,
+        changePct: 1.2,
+        source: 'fixture',
+        asOf: '2026-05-06T09:45:00-04:00',
+        freshness: 'mock',
+      },
+      calls: [
+        {
+          contractSymbol: 'TEM260619C00055000',
+          side: 'call',
+          strike: 55,
+          bid: 4.1,
+          ask: 4.35,
+          mid: 4.23,
+          volume: 830,
+          openInterest: 6120,
+          impliedVolatility: 0.54,
+          delta: 0.42,
+          theta: -0.05,
+          spreadPct: 5.9,
+          moneyness: 'otm',
+          liquidityScore: 82,
+        },
+      ],
+      puts: [],
+      filtersApplied: {
+        minOpenInterest: 100,
+        maxSpreadPct: 20,
+      },
+      chainAsOf: '2026-05-06T09:45:00-04:00',
+      source: 'fixture',
+      limitations: ['provider_validation_required'],
+      metadata: {
+        readOnly: true,
+        noExternalCallsInTests: true,
+        limitations: ['mocked_frontend_shell'],
+      },
+    }));
+
+    renderPage();
+
+    const analyzer = await screen.findByTestId('options-lab-strategy-analyzer');
+    await waitFor(() => {
+      expect(analyzer).toHaveTextContent('策略分析请求已阻断');
+      expect(analyzer).toHaveTextContent('缺少可用期权腿或必要输入');
+      expect(analyzer).toHaveTextContent('不会生成模拟腿或占位结果');
+    });
+    expect(vi.mocked(optionsLabApi.analyzeStrategies)).not.toHaveBeenCalled();
+    expect(analyzer.textContent || '').not.toMatch(/recommended|best strategy|provider|requestId|traceId|rawPayload|debug|synthetic_fixture|下单|买入|卖出|推荐|最优|首选/i);
   });
 
   it('keeps synthetic options diagnostics out of member scenario evidence and collapsed details', async () => {
@@ -2834,14 +3057,24 @@ describe('OptionsLabPage', () => {
     expect(optionsLabPageSource).toContain('未设上沿');
     expect(optionsLabPageSource).toContain('break-words text-sm font-medium leading-6');
     expect(optionsLabPageSource).toContain('options-lab-strategy-metric-list');
+    expect(optionsLabPageSource).toContain('options-lab-strategy-analyzer');
     expect(optionsLabPageSource).toContain('options-lab-decision-metric-list');
     expect(optionsLabPageSource).toContain('风险指标');
     expect(optionsLabPageSource).toContain('判断指标');
     expect(optionsLabPageSource).toContain('假设价格');
     expect(optionsLabPageSource).toContain('专业结构：');
+    expect(optionsLabPageSource).toContain('策略分析器');
+    expect(optionsLabPageSource).toContain('策略分析请求已阻断');
+    expect(optionsLabPageSource).toContain('模型受限概率');
+    expect(optionsLabPageSource).toContain('历史胜率不可用');
+    expect(optionsLabPageSource).toContain('不会生成模拟腿或占位结果');
     expect(optionsLabPageSource).toContain('xl:col-start-2 xl:row-start-1');
 
     [
+      'recommended strategy',
+      'best strategy',
+      '首选策略',
+      '最优策略',
       'trade quality',
       '决策实验室',
       '可成交性',

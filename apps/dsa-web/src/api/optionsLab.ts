@@ -331,6 +331,100 @@ export type OptionsStrategyCompareResponse = {
   optionsConsumerScenarioFrame?: OptionsConsumerScenarioFrame | null;
 };
 
+export type OptionsStrategyAnalyzerTemplate =
+  | 'long_straddle'
+  | 'long_strangle'
+  | 'bull_call_spread'
+  | 'bear_put_spread'
+  | 'iron_condor'
+  | 'long_call'
+  | 'long_put';
+
+export type OptionsStrategyAnalyzerRequest = {
+  symbol: string;
+  expiration?: string;
+  strategies?: OptionsStrategyAnalyzerTemplate[];
+  scenarioPrices?: number[];
+  riskFreeRate?: number;
+  scenarioAssumptions?: Record<string, unknown>;
+  forceRefresh?: boolean;
+};
+
+export type OptionsStrategyAnalyzerLeg = {
+  legAction: 'long' | 'short' | string;
+  side: OptionSide;
+  contractSymbol: string;
+  expiration: string;
+  strike: number;
+  mid: number;
+  quantity: number;
+};
+
+export type OptionsStrategyPayoffRow = {
+  underlyingPrice: number;
+  grossPayoff: number;
+  netPayoff: number;
+};
+
+export type OptionsStrategyAggregateGreeks = {
+  delta?: number | null;
+  gamma?: number | null;
+  theta?: number | null;
+  vega?: number | null;
+  rho?: number | null;
+};
+
+export type OptionsModelImpliedProbability = {
+  state: 'available' | 'partial' | 'unavailable' | string;
+  modelImpliedProbabilityOfProfit?: number | null;
+  inputs?: Record<string, unknown> | null;
+  blockers?: string[] | null;
+};
+
+export type OptionsHistoricalWinRate = {
+  state: 'available' | 'unavailable' | string;
+  value?: number | null;
+  blockers?: string[] | null;
+};
+
+export type OptionsStrategyAnalyzerReadiness = {
+  strategyStructureState: 'available' | 'blocked' | string;
+  chainDataState: 'sufficient' | 'partial' | 'blocked' | string;
+  analysisState: 'analysis_ready' | 'observation_only' | 'blocked' | string;
+  observationOnly: boolean;
+  decisionGrade: boolean;
+  dataBlockers?: string[] | null;
+};
+
+export type OptionsStrategyAnalysis = {
+  strategyType: OptionsStrategyAnalyzerTemplate;
+  legs: OptionsStrategyAnalyzerLeg[];
+  netDebit?: number | null;
+  netCredit?: number | null;
+  maxProfit?: number | null;
+  maxLoss?: number | null;
+  breakevens: number[];
+  payoffTable: OptionsStrategyPayoffRow[];
+  aggregateGreeks?: OptionsStrategyAggregateGreeks | null;
+  missingGreeksBlockers?: string[] | null;
+  modelImpliedProbability: OptionsModelImpliedProbability;
+  historicalWinRate: OptionsHistoricalWinRate;
+  readiness: OptionsStrategyAnalyzerReadiness;
+  limitations: string[];
+};
+
+export type OptionsStrategyAnalyzerResponse = {
+  symbol: string;
+  underlying: Record<string, unknown>;
+  assumptions: Record<string, unknown>;
+  analyses: OptionsStrategyAnalysis[];
+  strategyReadiness: OptionsStrategyAnalyzerReadiness;
+  limitations: string[];
+  observationOnly: boolean;
+  decisionGrade: boolean;
+  metadata: OptionsStrategyCompareMetadata;
+};
+
 export type OptionsDecisionLeg = {
   action: 'buy' | 'sell';
   side: OptionSide;
@@ -877,6 +971,15 @@ export const optionsLabApi = {
     };
     return apiClient.post<Record<string, unknown>>('/api/v1/options/strategies/compare', payload)
       .then((response) => toCamelCase<OptionsStrategyCompareResponse>(response.data));
+  },
+  analyzeStrategies(request: OptionsStrategyAnalyzerRequest): Promise<OptionsStrategyAnalyzerResponse> {
+    const normalized = normalizeSymbol(request.symbol);
+    const payload: OptionsStrategyAnalyzerRequest = {
+      ...request,
+      symbol: normalized,
+    };
+    return apiClient.post<Record<string, unknown>>('/api/v1/options/strategies/analyze', payload)
+      .then((response) => toCamelCase<OptionsStrategyAnalyzerResponse>(response.data));
   },
   evaluateDecision(request: OptionsDecisionRequest): Promise<OptionsDecisionResponse> {
     const normalized = normalizeSymbol(request.symbol);

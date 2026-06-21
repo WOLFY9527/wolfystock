@@ -15,6 +15,9 @@ import {
   type OptionsExpirationsResponse,
   type OptionsRiskProfile,
   type OptionsStructureSignalPacket,
+  type OptionsStrategyAnalysis,
+  type OptionsStrategyAnalyzerResponse,
+  type OptionsStrategyAnalyzerTemplate,
   type OptionsStrategyCompareResponse,
   type OptionsStrategyComparison,
   type OptionsStrategyType,
@@ -59,6 +62,19 @@ type DecisionState = {
   loading: boolean;
   error: string | null;
   decision: OptionsDecisionResponse | null;
+};
+
+type StrategyAnalyzerState = {
+  loading: boolean;
+  error: string | null;
+  analysis: OptionsStrategyAnalyzerResponse | null;
+  blockedReason: string | null;
+};
+
+type StrategyAnalyzerPlan = {
+  blocker: string | null;
+  strategies: OptionsStrategyAnalyzerTemplate[];
+  scenarioPrices: number[];
 };
 
 type ScenarioEvidenceView = {
@@ -112,6 +128,8 @@ const OPTIONS_DEMO_BOUNDARY_COPY = '演示数据：当前数据延迟，仅用�
 const OPTIONS_DEMO_GREEKS_PLACEHOLDER = '敏感度暂未提供';
 const OPTIONS_DEMO_GREEKS_EXPLANATION = '演示链未提供真实敏感度数值，仅保留结构与风险边界。';
 const OPTIONS_IV_GREEKS_LABEL = 'IV / 希腊值';
+const STRATEGY_ANALYZER_BLOCKED_COPY = '策略分析请求已阻断';
+const STRATEGY_ANALYZER_MISSING_LEGS_COPY = '缺少可用期权腿或必要输入。不会生成模拟腿或占位结果。';
 
 const fieldShellClass = 'group flex min-h-[4rem] min-w-0 flex-col justify-center gap-1.5 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-input)_92%,transparent)] px-3 py-2 transition-colors focus-within:border-[color:var(--wolfy-accent)]';
 const fieldClass = 'h-6 w-full border-0 bg-transparent p-0 font-mono text-sm text-[color:var(--wolfy-text-primary)] outline-none placeholder:text-[color:var(--wolfy-text-muted)]';
@@ -985,6 +1003,152 @@ type IvVisualModel = {
 
 function finiteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function strategyAnalyzerLabel(value: OptionsStrategyAnalyzerTemplate | string): string {
+  const labels: Record<OptionsStrategyAnalyzerTemplate, string> = {
+    long_straddle: '跨式多头',
+    long_strangle: '宽跨式多头',
+    bull_call_spread: '牛市看涨价差',
+    bear_put_spread: '熊市看跌价差',
+    iron_condor: '铁鹰结构',
+    long_call: '看涨期权多头',
+    long_put: '看跌期权多头',
+  };
+  return labels[value as OptionsStrategyAnalyzerTemplate] || '期权结构';
+}
+
+function analyzerMoney(value?: number | null): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
+  const absoluteValue = Math.abs(value);
+  return value < 0 ? `-$${formatNumber(absoluteValue, 2)}` : `$${formatNumber(value, 2)}`;
+}
+
+function analyzerBreakevens(values?: number[] | null): string {
+  const breakevens = asArray(values).filter((value) => Number.isFinite(value));
+  return breakevens.length ? breakevens.map((value) => money(value)).join(' / ') : '暂不可用';
+}
+
+function analyzerPayoffSummary(analysis: OptionsStrategyAnalysis): string {
+  const payoffs = asArray(analysis.payoffTable)
+    .map((row) => finiteNumber(row.netPayoff))
+    .filter((value): value is number => value != null);
+  if (!payoffs.length) return '收益表暂不可用';
+  return `${analyzerMoney(Math.min(...payoffs))} 到 ${analyzerMoney(Math.max(...payoffs))}`;
+}
+
+function analyzerGreeksSummary(analysis: OptionsStrategyAnalysis): string {
+  const greeks = analysis.aggregateGreeks;
+  if (!greeks) return OPTIONS_DEMO_GREEKS_PLACEHOLDER;
+  const delta = finiteNumber(greeks.delta);
+  const theta = finiteNumber(greeks.theta);
+  const vega = finiteNumber(greeks.vega);
+  if (delta == null && theta == null && vega == null) return OPTIONS_DEMO_GREEKS_PLACEHOLDER;
+  return `Delta ${number(delta, 2)} · Theta ${number(theta, 2)} · Vega ${number(vega, 2)}`;
+}
+
+function analyzerProbabilityValue(analysis: OptionsStrategyAnalysis): React.ReactNode {
+  const probability = finiteNumber(analysis.modelImpliedProbability?.modelImpliedProbabilityOfProfit);
+  return (
+    <span className="inline-flex flex-col gap-1">
+      <span>{probability == null ? '模型概率不可用' : ratio(probability)}</span>
+      <span className="whitespace-normal font-sans text-xs font-medium leading-5 text-[color:var(--wolfy-text-muted)]">
+        假设模型，不是历史胜率
+      </span>
+    </span>
+  );
+}
+
+function analyzerHistoricalWinRateValue(analysis: OptionsStrategyAnalysis): React.ReactNode {
+  const value = finiteNumber(analysis.historicalWinRate?.value);
+  const isAvailable = analysis.historicalWinRate?.state === 'available' && value != null;
+  if (isAvailable) {
+    return ratio(value);
+  }
+  return (
+    <span className="inline-flex flex-col gap-1">
+      <span>历史胜率不可用</span>
+      <span className="whitespace-normal font-sans text-xs font-medium leading-5 text-[color:var(--wolfy-text-muted)]">
+        历史期权链未接入
+      </span>
+    </span>
+  );
+}
+
+function analyzerNetCostMetric(analysis: OptionsStrategyAnalysis): CompactMetricListItem {
+  const netDebit = finiteNumber(analysis.netDebit);
+  const netCredit = finiteNumber(analysis.netCredit);
+  if (netDebit != null && netDebit > 0) {
+    return {
+      label: '净支出',
+      value: money(netDebit),
+      tone: 'text-[color:var(--wolfy-market-down)]',
+    };
+  }
+  if (netCredit != null && netCredit > 0) {
+    return {
+      label: '净收入',
+      value: money(netCredit),
+      tone: 'text-[color:var(--wolfy-market-up)]',
+    };
+  }
+  return {
+    label: '净支出',
+    value: '--',
+  };
+}
+
+function isUsableAnalyzerContract(contract: OptionContract): boolean {
+  const strike = finiteNumber(contract.strike);
+  const mid = finiteNumber(contract.mid);
+  return Boolean(contract.contractSymbol && strike != null && strike > 0 && mid != null && mid > 0);
+}
+
+function roundScenarioPrice(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function buildStrategyAnalyzerPlan(
+  chain: OptionsChainResponse | null,
+  targetPrice: string,
+  selectedExpiration: string,
+): StrategyAnalyzerPlan {
+  if (!chain) {
+    return { blocker: '等待合约链加载', strategies: [], scenarioPrices: [] };
+  }
+  if (!selectedExpiration || chain.expiration !== selectedExpiration) {
+    return { blocker: '等待所选到期合约链加载', strategies: [], scenarioPrices: [] };
+  }
+
+  const targetPriceValue = finiteNumber(Number(targetPrice));
+  if (targetPriceValue == null || targetPriceValue <= 0) {
+    return { blocker: '缺少假设价格', strategies: [], scenarioPrices: [] };
+  }
+
+  const underlyingPrice = finiteNumber(chain.underlying?.price);
+  if (underlyingPrice == null || underlyingPrice <= 0) {
+    return { blocker: '缺少标的现价', strategies: [], scenarioPrices: [] };
+  }
+
+  const usableCalls = asArray(chain.calls).filter(isUsableAnalyzerContract);
+  const usablePuts = asArray(chain.puts).filter(isUsableAnalyzerContract);
+  if (!usableCalls.length || !usablePuts.length) {
+    return { blocker: '缺少可用期权腿或必要输入', strategies: [], scenarioPrices: [] };
+  }
+
+  const strategies: OptionsStrategyAnalyzerTemplate[] = ['long_strangle'];
+  const callStrikes = new Set(usableCalls.map((contract) => contract.strike));
+  const hasSharedStrike = usablePuts.some((contract) => callStrikes.has(contract.strike));
+  if (hasSharedStrike) strategies.push('long_straddle');
+  if (usableCalls.length >= 2) strategies.push('bull_call_spread');
+  if (usablePuts.length >= 2) strategies.push('bear_put_spread');
+  if (usableCalls.length >= 2 && usablePuts.length >= 2) strategies.push('iron_condor');
+
+  const scenarioPrices = [underlyingPrice, targetPriceValue]
+    .map(roundScenarioPrice)
+    .filter((value, index, values) => values.indexOf(value) === index);
+
+  return { blocker: null, strategies, scenarioPrices };
 }
 
 function padDomain(minimum: number, maximum: number, ratioValue: number, defaultPadding = 1): [number, number] {
@@ -2135,6 +2299,127 @@ const StrategyComparisonPanel: React.FC<{
   );
 };
 
+const StrategyAnalysisCard: React.FC<{ analysis: OptionsStrategyAnalysis; index: number }> = ({ analysis, index }) => {
+  const maxProfit = finiteNumber(analysis.maxProfit);
+  const metrics: CompactMetricListItem[] = [
+    analyzerNetCostMetric(analysis),
+    {
+      label: '最大亏损',
+      value: money(analysis.maxLoss),
+      tone: 'text-[color:var(--wolfy-market-down)]',
+    },
+    {
+      label: '收益上限',
+      value: maxProfit == null ? '未设上沿' : money(maxProfit),
+      tone: maxProfit == null ? 'text-[color:var(--wolfy-text-secondary)]' : 'text-[color:var(--wolfy-market-up)]',
+    },
+    {
+      label: '盈亏平衡',
+      value: analyzerBreakevens(analysis.breakevens),
+    },
+    {
+      label: '收益表摘要',
+      value: analyzerPayoffSummary(analysis),
+      tone: 'text-[color:var(--wolfy-text-secondary)]',
+    },
+    {
+      label: '敏感度合计',
+      value: analyzerGreeksSummary(analysis),
+      tone: 'text-[color:var(--wolfy-accent-soft)]',
+    },
+    {
+      label: '模型受限概率',
+      value: analyzerProbabilityValue(analysis),
+      tone: 'text-[color:var(--wolfy-accent-soft)]',
+    },
+    {
+      label: '历史胜率',
+      value: analyzerHistoricalWinRateValue(analysis),
+      tone: 'text-[color:var(--wolfy-text-secondary)]',
+    },
+  ];
+
+  return (
+    <article className={cn(innerBlockClass, 'p-4')}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="font-mono text-xs text-[color:var(--wolfy-text-muted)]">分析 #{index + 1}</p>
+          <h3 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">
+            {strategyAnalyzerLabel(analysis.strategyType)}
+          </h3>
+          <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+            当前结构由已加载合约链支持，仅用于观察记录。
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 sm:justify-end">
+          <Pill tone="info">{analysis.readiness?.observationOnly ? OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY : OPTIONS_OBSERVE_ONLY_COPY}</Pill>
+          <Pill tone="warn">{analysis.readiness?.decisionGrade ? '需复核边界' : '不形成结论'}</Pill>
+        </div>
+      </div>
+      <CompactMetricList
+        title="策略分析指标"
+        items={metrics}
+        testId="options-lab-strategy-analyzer-metrics"
+        className="mt-4"
+        desktopColumnsClassName="lg:grid-cols-2 2xl:grid-cols-4"
+      />
+    </article>
+  );
+};
+
+const StrategyAnalyzerPanel: React.FC<{
+  analyzerState: StrategyAnalyzerState;
+  className?: string;
+}> = ({ analyzerState, className }) => {
+  const analyses = asArray(analyzerState.analysis?.analyses).slice(0, 3);
+  const observationOnly = analyzerState.analysis?.observationOnly !== false;
+  const decisionGrade = analyzerState.analysis?.decisionGrade === true;
+
+  return (
+    <section className={cn(panelClass, className)} data-testid="options-lab-strategy-analyzer">
+      <SectionHeader eyebrow="策略分析" title="策略分析器" icon={Layers3}>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Pill tone="info">{OPTIONS_RESEARCH_RECORD_COPY}</Pill>
+          <Pill tone="warn">{OPTIONS_NON_TRADING_INSTRUCTION_COPY}</Pill>
+          <Pill tone="neutral">{OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY}</Pill>
+        </div>
+      </SectionHeader>
+      <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+        仅使用当前已加载合约链和情景输入；缺腿时不生成模拟腿或占位结果。
+      </p>
+      {analyzerState.blockedReason ? (
+        <div className={cn(innerBlockClass, 'mt-5 border-dashed p-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')}>
+          <p className="font-semibold text-[color:var(--wolfy-text-primary)]">{STRATEGY_ANALYZER_BLOCKED_COPY}</p>
+          <p className="mt-2">{analyzerState.blockedReason}</p>
+          <p className="mt-1">{STRATEGY_ANALYZER_MISSING_LEGS_COPY}</p>
+        </div>
+      ) : null}
+      {!analyzerState.blockedReason && analyzerState.loading ? (
+        <p className={cn(innerBlockClass, 'mt-5 px-4 py-5 font-mono text-sm text-[color:var(--wolfy-accent-soft)]')}>正在计算策略分析器...</p>
+      ) : null}
+      {!analyzerState.blockedReason && !analyzerState.loading && analyzerState.error ? (
+        <TerminalNotice variant="danger" className="mt-5">{analyzerState.error}</TerminalNotice>
+      ) : null}
+      {!analyzerState.blockedReason && !analyzerState.loading && !analyzerState.error && analyzerState.analysis ? (
+        <div className="mt-5 grid gap-4">
+          <div className="flex flex-wrap gap-2">
+            <Pill tone={observationOnly ? 'info' : 'warn'}>{observationOnly ? OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY : OPTIONS_OBSERVE_ONLY_COPY}</Pill>
+            <Pill tone={decisionGrade ? 'warn' : 'neutral'}>{decisionGrade ? '需复核边界' : '不形成结论'}</Pill>
+            <Pill tone="neutral">历史胜率不可用</Pill>
+          </div>
+          {analyses.length ? analyses.map((analysis, index) => (
+            <StrategyAnalysisCard key={`${analysis.strategyType}-${index}`} analysis={analysis} index={index} />
+          )) : (
+            <TerminalEmptyState title="暂无策略分析结果">
+              当前响应没有可展示的观察型策略分析。
+            </TerminalEmptyState>
+          )}
+        </div>
+      ) : null}
+    </section>
+  );
+};
+
 const ScenarioEvidencePanel: React.FC<{
   frame: OptionsConsumerScenarioFrame;
   className?: string;
@@ -2523,7 +2808,7 @@ const RiskBoundaryPanel: React.FC<{
         <div className="rounded-md border border-[color:color-mix(in_srgb,var(--wolfy-market-down)_34%,transparent)] bg-[color:color-mix(in_srgb,var(--wolfy-market-down)_10%,transparent)] p-3">
           <p className={labelClass}>观察边界</p>
           <p className="mt-2 text-sm font-semibold text-[color:var(--wolfy-market-down)]">{topState}</p>
-          <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{boundaryCopy || '仅供观察，暂不形成结论。'}</p>
+          <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{boundaryCopy || OPTIONS_OBSERVE_ONLY_COPY}</p>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           <div className={cn(innerBlockClass, 'p-3')}>
@@ -2732,6 +3017,12 @@ const OptionsLabPageContent: React.FC = () => {
     error: null,
     decision: null,
   });
+  const [strategyAnalyzerState, setStrategyAnalyzerState] = useState<StrategyAnalyzerState>({
+    loading: false,
+    error: null,
+    analysis: null,
+    blockedReason: '等待合约链加载',
+  });
 
   useEffect(() => {
     let ignored = false;
@@ -2909,6 +3200,95 @@ const OptionsLabPageContent: React.FC = () => {
   }, [
     activeSymbol,
     riskBudget,
+    selectedExpiration,
+    state.chain,
+    state.error,
+    state.expirations,
+    state.loading,
+    state.summary,
+    targetDate,
+    targetPrice,
+  ]);
+
+  useEffect(() => {
+    let ignored = false;
+
+    async function loadStrategyAnalysis() {
+      const baseReady = !state.loading && !state.error && state.summary && state.expirations && state.chain;
+      if (!baseReady) {
+        setStrategyAnalyzerState({
+          loading: false,
+          error: null,
+          analysis: null,
+          blockedReason: state.loading
+            ? '正在加载基础数据，稍后将自动计算策略分析器。'
+            : state.error
+              ? '期权链暂不可用，策略分析已暂停。'
+              : '等待合约链加载',
+        });
+        return;
+      }
+
+      const plan = buildStrategyAnalyzerPlan(state.chain, targetPrice, selectedExpiration);
+      if (plan.blocker) {
+        setStrategyAnalyzerState({
+          loading: false,
+          error: null,
+          analysis: null,
+          blockedReason: plan.blocker,
+        });
+        return;
+      }
+
+      setStrategyAnalyzerState({
+        loading: true,
+        error: null,
+        analysis: null,
+        blockedReason: null,
+      });
+
+      try {
+        const analysis = await optionsLabApi.analyzeStrategies({
+          symbol: activeSymbol,
+          expiration: selectedExpiration,
+          strategies: plan.strategies,
+          scenarioPrices: plan.scenarioPrices,
+          scenarioAssumptions: {
+            direction,
+            riskProfile,
+            targetDate,
+            targetPrice: Number(targetPrice),
+            inputSource: 'loaded_options_chain',
+          },
+          forceRefresh: true,
+        });
+        if (ignored) return;
+        setStrategyAnalyzerState({
+          loading: false,
+          error: null,
+          analysis,
+          blockedReason: null,
+        });
+      } catch {
+        if (ignored) return;
+        setStrategyAnalyzerState({
+          loading: false,
+          error: '策略分析器暂不可用。请稍后重试或调整输入。',
+          analysis: null,
+          blockedReason: null,
+        });
+      }
+    }
+
+    void loadStrategyAnalysis();
+
+    return () => {
+      ignored = true;
+    };
+  }, [
+    activeSymbol,
+    direction,
+    riskProfile,
     selectedExpiration,
     state.chain,
     state.error,
@@ -3097,6 +3477,10 @@ const OptionsLabPageContent: React.FC = () => {
                   hasChainRows={hasChainRows}
                   className="xl:col-start-2 xl:row-start-2"
                 />
+                <StrategyAnalyzerPanel
+                  analyzerState={strategyAnalyzerState}
+                  className="xl:col-start-2 xl:row-start-3"
+                />
                 <ResearchVisualsPanel
                   decision={decisionState.decision}
                   comparison={comparisonState.comparison}
@@ -3106,7 +3490,7 @@ const OptionsLabPageContent: React.FC = () => {
                 />
                 <StructureSignalPacketPanel
                   packet={state.chain?.optionsStructureSignalPacket}
-                  className="xl:col-start-2 xl:row-start-3"
+                  className="xl:col-start-2 xl:row-start-4"
                 />
                 {scenarioEvidenceFrame ? (
                   <ScenarioEvidencePanel frame={scenarioEvidenceFrame} className="xl:col-start-1 xl:row-start-4" />
