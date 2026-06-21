@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import apiClient from '../index';
-import { marketRotationApi } from '../marketRotation';
+import { buildAlpacaQuoteAuthorityReadinessView, marketRotationApi } from '../marketRotation';
 
 vi.mock('../index', () => ({
   default: {
@@ -11,6 +11,54 @@ vi.mock('../index', () => ({
 describe('marketRotationApi', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('normalizes Alpaca quote authority readiness into consumer-facing labels', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: {
+        endpoint: '/api/v1/market/rotation-radar',
+        generated_at: '2026-05-07T09:50:00Z',
+        source: 'computed',
+        freshness: 'delayed',
+        is_fallback: false,
+        is_stale: false,
+        no_advice_disclosure: '仅用于观察资金轮动迹象，非买卖建议。',
+        metadata: {
+          no_external_calls: true,
+        },
+        benchmarks: {},
+        etf_leadership_diagnostics: {
+          enabled: false,
+          evidence: [],
+        },
+        summary: {
+          strongest_themes: [],
+          accelerating_themes: [],
+          fading_themes: [],
+          watchlist_signals: [],
+          safe_wording: [],
+        },
+        themes: [],
+        alpaca_quote_authority_readiness: {
+          provider_configured: false,
+          source_authority: 'unavailable',
+          fallback_used: true,
+          score_contribution_allowed: false,
+        },
+      },
+    } as never);
+
+    const payload = await marketRotationApi.getRotationRadar();
+    const view = buildAlpacaQuoteAuthorityReadinessView(payload.alpacaQuoteAuthorityReadiness);
+
+    expect(payload.alpacaQuoteAuthorityReadiness?.providerConfigured).toBe(false);
+    expect(payload.alpacaQuoteAuthorityReadiness?.sourceAuthority).toBe('unavailable');
+    expect(payload.alpacaQuoteAuthorityReadiness?.fallbackUsed).toBe(true);
+    expect(view.label).toBe('Alpaca待配置');
+    expect(view.chips.map((chip) => chip.label)).toEqual(['Alpaca待配置', '回退观察', '仅观察']);
+    expect(`${view.label} ${view.detail}`).not.toMatch(
+      /authorized|unavailable|partial|unknown|fallbackUsed|providerConfigured|sourceAuthority|scoreContributionAllowed|provider|runtime|credential/i,
+    );
   });
 
   it('loads and normalizes the rotation radar response without raw provider details', async () => {

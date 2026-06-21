@@ -56,6 +56,7 @@ vi.mock('../../api/market', async (importOriginal) => {
       getMarketBriefing: vi.fn(),
       getFutures: vi.fn(),
       getCnShortSentiment: vi.fn(),
+      getDataReadiness: vi.fn(),
       cryptoStreamUrl: vi.fn(() => '/api/v1/market/crypto/stream'),
       normalizeCryptoStreamPayload: vi.fn((payload) => payload),
     },
@@ -126,6 +127,21 @@ const denseQuotePanel = (panelName: string, items: ReturnType<typeof quoteItem>[
   source: source === 'mixed' ? 'mixed' : source,
   sourceLabel: source === 'mixed' ? 'Sina + Yahoo Finance' : source === 'sina' ? 'Sina' : 'Yahoo Finance',
   items,
+});
+
+const officialRiskReadinessPayload = () => ({
+  readinessStatus: 'ready',
+  diagnosticOnly: true,
+  providerRuntimeCalled: false,
+  networkCallsEnabled: false,
+  representativeSymbols: [],
+  checks: [],
+  officialRiskSourceReadiness: {
+    bundleState: 'partial',
+    vix: { state: 'ready', freshness: 'live' },
+    rates: { state: 'stale', freshness: 'stale' },
+    fedLiquidity: { state: 'blocked', freshness: 'unavailable' },
+  },
 });
 
 const macroPanel = () => ({
@@ -1939,6 +1955,23 @@ describe('MarketOverviewPage', () => {
     vi.mocked(marketApi.getMarketBriefing).mockResolvedValue(briefingPayload());
     vi.mocked(marketApi.getFutures).mockResolvedValue(futuresPayload());
     vi.mocked(marketApi.getCnShortSentiment).mockResolvedValue(cnShortSentimentPayload());
+    vi.mocked(marketApi.getDataReadiness).mockResolvedValue(officialRiskReadinessPayload());
+  });
+
+  it('renders compact official risk source readiness labels without raw enums or advice wording', async () => {
+    vi.mocked(marketApi.getDataReadiness).mockResolvedValueOnce(officialRiskReadinessPayload());
+
+    render(createElement(MarketOverviewPage));
+
+    const strip = await screen.findByTestId('market-overview-source-readiness');
+    await waitFor(() => expect(strip).toHaveTextContent('官方风险源部分可用'));
+    expect(strip).toHaveTextContent('VIX可用');
+    expect(strip).toHaveTextContent('利率待更新');
+    expect(strip).toHaveTextContent('Fed流动性待补');
+    expect(strip.textContent || '').not.toMatch(
+      /authorized|unavailable|partial|unknown|fallbackUsed|providerConfigured|sourceAuthority|scoreContributionAllowed|provider|runtime|credential/i,
+    );
+    expect(strip.textContent || '').not.toMatch(/buy|sell|hold|target price|stop-loss|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
   });
 
   it('renders the MarketMonitor boundary with stable controls and collapsed diagnostics', async () => {

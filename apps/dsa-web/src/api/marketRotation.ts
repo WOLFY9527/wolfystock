@@ -193,6 +193,36 @@ export type MarketRotationConsumerEvidenceSnapshot = {
   rotationFamilyRollup: MarketRotationFamilyRollupItem[];
 };
 
+export type MarketRotationAlpacaQuoteAuthorityReadiness = {
+  providerConfigured?: boolean;
+  dataFeed?: string | null;
+  probeSymbols?: string[];
+  quoteCoverage?: {
+    covered?: number;
+    total?: number;
+    ratio?: number;
+    missingSymbols?: string[];
+  };
+  freshestAsOf?: string | null;
+  sourceAuthority?: 'authorized' | 'partial' | 'unavailable' | 'unknown' | string;
+  fallbackUsed?: boolean;
+  blockerBucket?: string | null;
+  consumerSummary?: string | null;
+  nextDataAction?: string | null;
+  scoreContributionAllowed?: boolean;
+};
+
+export type MarketRotationAlpacaQuoteAuthorityReadinessView = {
+  label: string;
+  variant: 'success' | 'info' | 'caution' | 'neutral';
+  chips: Array<{
+    key: string;
+    label: string;
+    variant: 'success' | 'info' | 'caution' | 'neutral';
+  }>;
+  detail: string;
+};
+
 export type MarketRotationAlertCandidate = {
   themeId?: string;
   themeName?: string;
@@ -478,6 +508,7 @@ export type MarketRotationRadarResponse = {
   };
   themes: MarketRotationTheme[];
   consumerEvidenceSnapshot?: MarketRotationConsumerEvidenceSnapshot;
+  alpacaQuoteAuthorityReadiness?: MarketRotationAlpacaQuoteAuthorityReadiness;
   metadata: Record<string, unknown>;
 };
 
@@ -552,6 +583,72 @@ function normalizeRotationConsumerEvidenceSnapshot(
         .map((item) => normalizeRotationFamilyRollupItem(item))
         .filter((item): item is MarketRotationFamilyRollupItem => Boolean(item))
       : [],
+  };
+}
+
+function normalizeAlpacaQuoteAuthorityReadiness(
+  readiness?: MarketRotationAlpacaQuoteAuthorityReadiness | null,
+): MarketRotationAlpacaQuoteAuthorityReadiness | undefined {
+  if (!readiness || typeof readiness !== 'object') {
+    return undefined;
+  }
+  return {
+    providerConfigured: readiness.providerConfigured,
+    dataFeed: readiness.dataFeed || null,
+    probeSymbols: Array.isArray(readiness.probeSymbols) ? readiness.probeSymbols.filter(Boolean) : [],
+    quoteCoverage: readiness.quoteCoverage
+      ? {
+        covered: readiness.quoteCoverage.covered,
+        total: readiness.quoteCoverage.total,
+        ratio: readiness.quoteCoverage.ratio,
+        missingSymbols: Array.isArray(readiness.quoteCoverage.missingSymbols)
+          ? readiness.quoteCoverage.missingSymbols.filter(Boolean)
+          : [],
+      }
+      : undefined,
+    freshestAsOf: readiness.freshestAsOf || null,
+    sourceAuthority: readiness.sourceAuthority || 'unknown',
+    fallbackUsed: readiness.fallbackUsed === true,
+    blockerBucket: readiness.blockerBucket || null,
+    consumerSummary: readiness.consumerSummary || null,
+    nextDataAction: readiness.nextDataAction || null,
+    scoreContributionAllowed: readiness.scoreContributionAllowed,
+  };
+}
+
+export function buildAlpacaQuoteAuthorityReadinessView(
+  readiness?: MarketRotationAlpacaQuoteAuthorityReadiness | null,
+): MarketRotationAlpacaQuoteAuthorityReadinessView {
+  if (!readiness) {
+    return {
+      label: '来源待确认',
+      variant: 'neutral',
+      chips: [{ key: 'readiness', label: '来源待确认', variant: 'neutral' }],
+      detail: 'ETF 引用状态待确认，当前先保持观察。',
+    };
+  }
+
+  const state = readiness.sourceAuthority;
+  const primary = state === 'authorized' && readiness.providerConfigured !== false
+    ? { label: 'Alpaca可用', variant: 'success' as const }
+    : state === 'partial'
+      ? { label: 'Alpaca部分可用', variant: 'info' as const }
+      : state === 'unavailable' || readiness.providerConfigured === false
+        ? { label: 'Alpaca待配置', variant: 'caution' as const }
+        : { label: '来源待确认', variant: 'neutral' as const };
+
+  const limited = readiness.fallbackUsed === true || readiness.scoreContributionAllowed === false;
+  const chips = [
+    { key: 'readiness', label: primary.label, variant: primary.variant },
+    ...(readiness.fallbackUsed ? [{ key: 'fallback', label: '回退观察', variant: 'caution' as const }] : []),
+    ...(limited ? [{ key: 'limited', label: '仅观察', variant: 'neutral' as const }] : []),
+  ];
+
+  return {
+    label: primary.label,
+    variant: primary.variant,
+    chips,
+    detail: limited ? '当前仅作观察，不纳入评分。' : 'ETF 引用状态可用于主题强弱观察。',
   };
 }
 
@@ -658,6 +755,10 @@ export const marketRotationApi = {
         safeWording: normalized.summary?.safeWording || [],
       },
       consumerEvidenceSnapshot: normalizeRotationConsumerEvidenceSnapshot(normalized.consumerEvidenceSnapshot),
+      alpacaQuoteAuthorityReadiness: normalizeAlpacaQuoteAuthorityReadiness(
+        normalized.alpacaQuoteAuthorityReadiness
+        || (normalized.metadata?.alpacaQuoteAuthorityReadiness as MarketRotationAlpacaQuoteAuthorityReadiness | undefined),
+      ),
       metadata: normalized.metadata || {},
     };
   },

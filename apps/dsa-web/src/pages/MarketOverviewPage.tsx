@@ -6,8 +6,10 @@ import type {
   MarketBriefingResponse,
   MarketFuturesResponse,
   MarketTemperatureResponse,
+  OfficialRiskSourceReadiness,
 } from '../api/market';
 import {
+  buildOfficialRiskSourceReadinessView,
   marketApi,
   normalizeCnShortSentimentConsumerCopy,
   normalizeMarketBriefingConsumerCopy,
@@ -22,7 +24,7 @@ import {
   type PanelState,
 } from '../components/market-overview/MarketOverviewWorkbench';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
-import { TerminalPageHeading } from '../components/terminal/TerminalPrimitives';
+import { TerminalChip, TerminalPageHeading } from '../components/terminal/TerminalPrimitives';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 
@@ -661,11 +663,40 @@ function subscribeToCryptoStream(subscriber: CryptoStreamSubscriber): () => void
   };
 }
 
+const OfficialRiskSourceReadinessStrip = ({
+  readiness,
+}: {
+  readiness?: OfficialRiskSourceReadiness | null;
+}) => {
+  const view = buildOfficialRiskSourceReadinessView(readiness);
+
+  return (
+    <section
+      data-testid="market-overview-source-readiness"
+      className="rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2.5"
+    >
+      <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-white/48">官方风险源</p>
+          <p className="mt-1 text-sm font-semibold text-white/84">{view.bundleLabel}</p>
+        </div>
+        <div className="flex min-w-0 flex-wrap gap-1.5 md:justify-end">
+          <TerminalChip variant={view.bundleVariant}>{view.bundleLabel}</TerminalChip>
+          {view.chips.map((chip) => (
+            <TerminalChip key={chip.key} variant={chip.variant}>{chip.label}</TerminalChip>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
 const MarketOverviewPage = () => {
   const { language } = useI18n();
   const { isAdminMode, canReadProviders } = useProductSurface();
   const [initialLocalSnapshot] = useState(() => buildInitialPanelsFromLocalSnapshot());
   const [panels, setPanels] = useState<PanelState>(initialLocalSnapshot.panels);
+  const [officialRiskSourceReadiness, setOfficialRiskSourceReadiness] = useState<OfficialRiskSourceReadiness | null>(null);
   const [loading, setLoading] = useState(initialLocalSnapshot.source !== 'local');
   const [localSnapshotSavedAt, setLocalSnapshotSavedAt] = useState<string | undefined>(initialLocalSnapshot.savedAt);
   const [refreshErrors, setRefreshErrors] = useState<Record<string, string>>({});
@@ -861,6 +892,29 @@ const MarketOverviewPage = () => {
   }, [loadPanels]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadSourceReadiness() {
+      try {
+        const payload = await marketApi.getDataReadiness();
+        if (!cancelled) {
+          setOfficialRiskSourceReadiness(payload?.officialRiskSourceReadiness || null);
+        }
+      } catch {
+        if (!cancelled) {
+          setOfficialRiskSourceReadiness(null);
+        }
+      }
+    }
+
+    void loadSourceReadiness();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     writeLocalMarketOverviewSnapshot(panels);
     setLocalSnapshotSavedAt(new Date().toISOString());
   }, [panels]);
@@ -923,6 +977,7 @@ const MarketOverviewPage = () => {
         data-testid="market-overview-shell"
         className="flex min-h-0 flex-1 flex-col gap-4 md:gap-6"
       >
+        <OfficialRiskSourceReadinessStrip readiness={officialRiskSourceReadiness} />
         <MarketOverviewWorkbench
           heading={(
             <TerminalPageHeading

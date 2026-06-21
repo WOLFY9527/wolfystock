@@ -6,11 +6,15 @@ import MarketRotationRadarPage from '../MarketRotationRadarPage';
 import { marketRotationApi } from '../../api/marketRotation';
 import type { MarketRotationRadarResponse, MarketRotationSummaryItem } from '../../api/marketRotation';
 
-vi.mock('../../api/marketRotation', () => ({
-  marketRotationApi: {
-    getRotationRadar: vi.fn(),
-  },
-}));
+vi.mock('../../api/marketRotation', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../api/marketRotation')>();
+  return {
+    ...actual,
+    marketRotationApi: {
+      getRotationRadar: vi.fn(),
+    },
+  };
+});
 
 afterEach(() => {
   vi.useRealTimers();
@@ -22,7 +26,7 @@ const forbiddenTradingActionPattern =
 
 const rawI18nKeyPattern = /\b(?:rotationRadar|marketRotationRadar|marketIntelligence)\.[A-Za-z0-9_.-]+/;
 const consumerDiagnosticLeakPattern =
-  /alpaca|alpaca_etf_authority_spine|Alpaca SIP|bounded_etf_authority_active|missing_required_windows|ineligible_bounded_etf|entitlement|reasonCodes?|reasonFamilies|sourceAuthorityAllowed|scoreContributionAllowed|observationOnly|local_taxonomy|taxonomy-only|fallback_static|synthetic_fixture|official_public|authorized_licensed_feed|public_proxy|unofficial_proxy|provider|quote provider|提供方运维|数据源设置|原始来源|原因代码|ETF 权威|ETF 代理|权威来源|权威检查|权威可计分|可计分证据|代理缺口|代理过期|代理完整|proxy_quote_missing|proxy_stale|backend|raw_payload|provider_payload|debug|trace/i;
+  /alpaca_etf_authority_spine|Alpaca SIP|bounded_etf_authority_active|missing_required_windows|ineligible_bounded_etf|entitlement|reasonCodes?|reasonFamilies|sourceAuthorityAllowed|scoreContributionAllowed|observationOnly|local_taxonomy|taxonomy-only|fallback_static|synthetic_fixture|official_public|authorized_licensed_feed|public_proxy|unofficial_proxy|provider|quote provider|提供方运维|数据源设置|原始来源|原因代码|ETF 权威|ETF 代理|权威来源|权威检查|权威可计分|可计分证据|代理缺口|代理过期|代理完整|proxy_quote_missing|proxy_stale|backend|raw_payload|provider_payload|debug|trace/i;
 const consumerMetadataLeakPattern =
   /schema[_\s-]?version|reasonCodes?|sourceAuthorityAllowed|scoreContributionAllowed|providerState|runtime|cache|debug|trace|internal|synthetic|partial_source|raw_payload|provider_payload/i;
 const reactDuplicateKeyPattern = /Encountered two children with the same key/i;
@@ -1193,6 +1197,42 @@ describe('MarketRotationRadarPage', () => {
     expect(shell).toHaveClass('py-5', 'md:py-6');
   });
 
+  it('maps Alpaca quote authority readiness into consumer labels and fallback observation copy', async () => {
+    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce({
+      ...radarFixture(),
+      alpacaQuoteAuthorityReadiness: {
+        providerConfigured: true,
+        dataFeed: 'alpaca_sip',
+        probeSymbols: ['SPY', 'QQQ'],
+        quoteCoverage: {
+          covered: 4,
+          total: 6,
+          ratio: 0.67,
+          missingSymbols: ['IWM', 'IGV'],
+        },
+        freshestAsOf: '2026-05-07T09:45:00Z',
+        sourceAuthority: 'partial',
+        fallbackUsed: true,
+        blockerBucket: 'coverage_gap',
+        consumerSummary: 'ETF 引用状态仅用于观察。',
+        nextDataAction: '等待更多样本补齐。',
+        scoreContributionAllowed: false,
+      },
+    });
+
+    render(<MarketRotationRadarPage />);
+
+    const strip = await screen.findByTestId('rotation-alpaca-quote-readiness');
+    await waitFor(() => expect(strip).toHaveTextContent('Alpaca部分可用'));
+    expect(strip).toHaveTextContent('回退观察');
+    expect(strip).toHaveTextContent('仅观察');
+    expect(strip).toHaveTextContent('当前仅作观察，不纳入评分。');
+    expect(strip.textContent || '').not.toMatch(
+      /authorized|unavailable|partial|unknown|fallbackUsed|providerConfigured|sourceAuthority|scoreContributionAllowed|provider|runtime|credential/i,
+    );
+    expect(strip.textContent || '').not.toMatch(/buy|sell|hold|target price|stop-loss|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
+  });
+
   it('renders a compact consumer default view without diagnostic surfaces', async () => {
     render(<MarketRotationRadarPage />);
 
@@ -1381,7 +1421,7 @@ describe('MarketRotationRadarPage', () => {
     const collapsedRow = screen.getByTestId('rotation-family-rollup-collapsed-row-defensive_zero');
     expect(collapsedRow).toHaveTextContent('低信号防御');
     expect(collapsedRow).toHaveTextContent('0/1 个有信号');
-    expect(collapsedRow).toHaveTextContent('默认折叠保留查阅入口');
+    expect(collapsedRow).toHaveTextContent('默认折叠');
     expect(collapsedRow.textContent || '').not.toMatch(consumerDiagnosticLeakPattern);
     expect(collapsedRow.textContent || '').not.toMatch(forbiddenTradingActionPattern);
   });

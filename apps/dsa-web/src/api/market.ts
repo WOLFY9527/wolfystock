@@ -446,6 +446,41 @@ export type ConsumerEvidenceReadinessMatrix = {
   items: ConsumerEvidenceReadinessItem[];
 };
 
+export type OfficialRiskSourceReadinessState = 'ready' | 'partial' | 'blocked' | 'unknown' | string;
+
+export type OfficialRiskSourceReadinessPillarState = 'ready' | 'partial' | 'blocked' | 'unknown' | 'stale' | 'missing' | string;
+
+export type OfficialRiskSourceReadinessPillar = {
+  state?: OfficialRiskSourceReadinessPillarState;
+  freshness?: MarketDataMeta['freshness'];
+  latestDate?: string | null;
+  asOf?: string | null;
+  coveredSeriesCount?: number | null;
+  blocker?: string | null;
+};
+
+export type OfficialRiskSourceReadiness = {
+  bundleState?: OfficialRiskSourceReadinessState;
+  vix?: OfficialRiskSourceReadinessPillar | null;
+  rates?: OfficialRiskSourceReadinessPillar | null;
+  fedLiquidity?: OfficialRiskSourceReadinessPillar | null;
+  consumerSummary?: string | null;
+  nextDataAction?: string | null;
+};
+
+export type OfficialRiskSourceReadinessChip = {
+  key: string;
+  label: string;
+  variant: 'success' | 'info' | 'caution' | 'neutral';
+};
+
+export type OfficialRiskSourceReadinessView = {
+  bundleLabel: string;
+  bundleVariant: 'success' | 'info' | 'caution' | 'neutral';
+  chips: OfficialRiskSourceReadinessChip[];
+  note?: string;
+};
+
 export type MarketDataReadinessResponse = {
   readinessStatus: MarketDataReadinessStatus;
   diagnosticOnly: boolean;
@@ -454,6 +489,7 @@ export type MarketDataReadinessResponse = {
   representativeSymbols: string[];
   checks: MarketDataReadinessCheck[];
   consumerEvidenceReadinessMatrix?: ConsumerEvidenceReadinessMatrix;
+  officialRiskSourceReadiness?: OfficialRiskSourceReadiness;
 };
 
 function normalizeReadinessSymbols(symbols?: string[] | string | null): string | undefined {
@@ -522,6 +558,75 @@ function normalizeMarketDataReadinessPayload(rawPayload: Record<string, unknown>
         })),
       },
     } : {}),
+    ...(payload.officialRiskSourceReadiness ? {
+      officialRiskSourceReadiness: {
+        bundleState: payload.officialRiskSourceReadiness.bundleState || 'unknown',
+        vix: payload.officialRiskSourceReadiness.vix ? { ...payload.officialRiskSourceReadiness.vix } : undefined,
+        rates: payload.officialRiskSourceReadiness.rates ? { ...payload.officialRiskSourceReadiness.rates } : undefined,
+        fedLiquidity: payload.officialRiskSourceReadiness.fedLiquidity
+          ? { ...payload.officialRiskSourceReadiness.fedLiquidity }
+          : undefined,
+        consumerSummary: payload.officialRiskSourceReadiness.consumerSummary || null,
+        nextDataAction: payload.officialRiskSourceReadiness.nextDataAction || null,
+      },
+    } : {}),
+  };
+}
+
+function officialRiskSourceBundleLabel(state?: OfficialRiskSourceReadinessState): OfficialRiskSourceReadinessView['bundleLabel'] {
+  if (state === 'ready') return '官方风险源可用';
+  if (state === 'partial') return '官方风险源部分可用';
+  if (state === 'blocked') return '官方风险源待补';
+  return '来源待确认';
+}
+
+function officialRiskSourceBundleVariant(state?: OfficialRiskSourceReadinessState): OfficialRiskSourceReadinessView['bundleVariant'] {
+  if (state === 'ready') return 'success';
+  if (state === 'partial') return 'info';
+  if (state === 'blocked') return 'caution';
+  return 'neutral';
+}
+
+function officialRiskSourcePillarLabel(
+  title: string,
+  pillar?: OfficialRiskSourceReadinessPillar | null,
+): OfficialRiskSourceReadinessChip {
+  const state = pillar?.state;
+  const freshness = pillar?.freshness;
+  if (state === 'ready') {
+    return { key: title, label: `${title}可用`, variant: 'success' };
+  }
+  if (state === 'partial') {
+    return { key: title, label: `${title}部分可用`, variant: 'info' };
+  }
+  if (state === 'stale' || freshness === 'stale' || freshness === 'fallback') {
+    return { key: title, label: `${title}待更新`, variant: 'caution' };
+  }
+  return { key: title, label: `${title}待补`, variant: 'neutral' };
+}
+
+export function buildOfficialRiskSourceReadinessView(
+  readiness?: OfficialRiskSourceReadiness | null,
+): OfficialRiskSourceReadinessView {
+  if (!readiness) {
+    return {
+      bundleLabel: '来源待确认',
+      bundleVariant: 'neutral',
+      chips: [],
+    };
+  }
+
+  const chips = [
+    officialRiskSourcePillarLabel('VIX', readiness.vix),
+    officialRiskSourcePillarLabel('利率', readiness.rates),
+    officialRiskSourcePillarLabel('Fed流动性', readiness.fedLiquidity),
+  ];
+  const note = readiness.consumerSummary || readiness.nextDataAction || undefined;
+  return {
+    bundleLabel: officialRiskSourceBundleLabel(readiness.bundleState),
+    bundleVariant: officialRiskSourceBundleVariant(readiness.bundleState),
+    chips,
+    ...(note ? { note } : {}),
   };
 }
 
