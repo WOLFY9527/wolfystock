@@ -5,20 +5,126 @@ import type {
   ScannerRunDetail,
   ScannerScoreExplainability,
 } from '../../types/scanner';
+import type { ScannerRunDetailWithDataReadiness } from '../scanner';
 
-const { get } = vi.hoisted(() => ({
+const { get, post } = vi.hoisted(() => ({
   get: vi.fn(),
+  post: vi.fn(),
 }));
 
 vi.mock('../index', () => ({
   default: {
     get,
+    post,
   },
 }));
 
 describe('scannerApi investor signal normalization', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('normalizes scanner dataReadiness from run detail and status payloads', async () => {
+    const { scannerApi } = await import('../scanner');
+    get
+      .mockResolvedValueOnce({
+        data: {
+          id: 45,
+          market: 'us',
+          profile: 'us_preopen_v1',
+          status: 'empty',
+          universe_name: 'US pre-open',
+          shortlist_size: 0,
+          universe_size: 0,
+          preselected_size: 0,
+          evaluated_size: 0,
+          universe_notes: [],
+          scoring_notes: [],
+          universe_type: 'default',
+          requested_symbols_count: 0,
+          accepted_symbols_count: 0,
+          rejected_symbols: [],
+          diagnostics: {
+            data_readiness: {
+              state: 'blocked',
+              market: 'us',
+              profile: 'us_preopen_v1',
+              universe_size: 0,
+              quote_coverage: 'unknown',
+              history_coverage: 'unknown',
+              freshness: 'unknown',
+              blocker_bucket: 'missing_quote_snapshot',
+              next_data_action: 'Refresh quote snapshots.',
+            },
+          },
+          notification: {
+            attempted: false,
+            status: 'skipped',
+            channels: [],
+          },
+          comparison_to_previous: {
+            available: false,
+            new_count: 0,
+            retained_count: 0,
+            dropped_count: 0,
+            new_symbols: [],
+            retained_symbols: [],
+            dropped_symbols: [],
+          },
+          review_summary: {
+            available: false,
+            review_window_days: 5,
+            review_status: 'pending',
+            candidate_count: 0,
+            reviewed_count: 0,
+            pending_count: 0,
+            strong_count: 0,
+            mixed_count: 0,
+            weak_count: 0,
+          },
+          shortlist: [],
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          market: 'us',
+          profile: 'us_preopen_v1',
+          watchlist_date: '2026-06-21',
+          today_trading_day: false,
+          schedule_enabled: false,
+          schedule_run_immediately: false,
+          notification_enabled: false,
+          quality_summary: {
+            available: false,
+            review_window_days: 5,
+            run_count: 0,
+            reviewed_run_count: 0,
+            reviewed_candidate_count: 0,
+            strong_count: 0,
+            mixed_count: 0,
+            weak_count: 0,
+          },
+          data_readiness: {
+            state: 'not_run',
+            market: 'us',
+            profile: 'us_preopen_v1',
+            blocker_bucket: 'unknown',
+            quote_coverage: 'unknown',
+            history_coverage: 'unknown',
+            freshness: 'unknown',
+          },
+        },
+      });
+
+    const detail: ScannerRunDetailWithDataReadiness = await scannerApi.getRun(45);
+    const status = await scannerApi.getStatus({ market: 'us', profile: 'us_preopen_v1' });
+
+    expect(detail.diagnostics.dataReadiness?.state).toBe('blocked');
+    expect(detail.diagnostics.dataReadiness?.blockerBucket).toBe('missing_quote_snapshot');
+    expect(detail.diagnostics.dataReadiness?.quoteCoverage).toBe('unknown');
+    expect(detail.diagnostics.dataReadiness?.nextDataAction).toBe('Refresh quote snapshots.');
+    expect(status.dataReadiness?.state).toBe('not_run');
+    expect(status.dataReadiness?.blockerBucket).toBe('unknown');
   });
 
   it('converts consumer_diagnostics investor_signal into typed camelCase fields', async () => {

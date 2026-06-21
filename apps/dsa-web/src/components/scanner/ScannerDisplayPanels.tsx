@@ -483,6 +483,8 @@ export function ScannerConclusionBand({
   scopeLabel,
   dataStateLabel,
   latestLabel,
+  dataReadinessChips = [],
+  nextDataLabel = null,
   language,
 }: {
   model: {
@@ -498,6 +500,8 @@ export function ScannerConclusionBand({
   scopeLabel: string;
   dataStateLabel: string;
   latestLabel: string;
+  dataReadinessChips?: ScannerLabeledValue[];
+  nextDataLabel?: string | null;
   language: 'zh' | 'en';
 }) {
   const toneVariant: ComponentProps<typeof TerminalChip>['variant'] = model.tone === 'success'
@@ -571,6 +575,25 @@ export function ScannerConclusionBand({
             <p className="mt-1 text-xs leading-relaxed text-white/58">
               {trustNotice}
             </p>
+          </div>
+        ) : null}
+        {dataReadinessChips.length || nextDataLabel ? (
+          <div className="border-t border-white/8 pt-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+              {language === 'en' ? 'Data readiness' : '数据就绪'}
+            </p>
+            {dataReadinessChips.length ? (
+              <div className="mt-1 flex min-w-0 flex-wrap gap-1.5">
+                {dataReadinessChips.map((item) => (
+                  <FieldChip key={`${item.label}-${item.value}`} label={item.label} value={item.value} />
+                ))}
+              </div>
+            ) : null}
+            {nextDataLabel ? (
+              <p className="mt-1 text-xs leading-relaxed text-white/58">
+                {nextDataLabel}
+              </p>
+            ) : null}
           </div>
         ) : null}
       </div>

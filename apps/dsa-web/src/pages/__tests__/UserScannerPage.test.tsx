@@ -20,6 +20,7 @@ import { findConsumerRawLeakage } from '../../test-utils/consumerRawLeakageGuard
 const {
   getRuns,
   getRun,
+  getStatus,
   getThemes,
   getStrategySimulation,
   createTheme,
@@ -33,6 +34,7 @@ const {
 } = vi.hoisted(() => ({
   getRuns: vi.fn(),
   getRun: vi.fn(),
+  getStatus: vi.fn(),
   getThemes: vi.fn(),
   getStrategySimulation: vi.fn(),
   createTheme: vi.fn(),
@@ -54,6 +56,7 @@ vi.mock('../../api/scanner', () => ({
   scannerApi: {
     getRuns,
     getRun,
+    getStatus,
     getThemes,
     createTheme,
     getStrategySimulation,
@@ -1103,6 +1106,34 @@ describe('UserScannerPage', () => {
     });
     getRuns.mockResolvedValue(makeHistoryResponse());
     getRun.mockResolvedValue(makeRunDetail());
+    getStatus.mockResolvedValue({
+      market: 'cn',
+      profile: 'cn_preopen_v1',
+      watchlistDate: '2026-04-22',
+      todayTradingDay: true,
+      scheduleEnabled: false,
+      scheduleRunImmediately: false,
+      notificationEnabled: false,
+      qualitySummary: {
+        available: false,
+        reviewWindowDays: 5,
+        runCount: 0,
+        reviewedRunCount: 0,
+        reviewedCandidateCount: 0,
+        strongCount: 0,
+        mixedCount: 0,
+        weakCount: 0,
+      },
+      dataReadiness: {
+        state: 'unknown',
+        market: 'cn',
+        profile: 'cn_preopen_v1',
+        blockerBucket: 'unknown',
+        quoteCoverage: 'unknown',
+        historyCoverage: 'unknown',
+        freshness: 'unknown',
+      },
+    });
     getStrategySimulation.mockResolvedValue({
       theme: 'crypto_miners',
       profile: 'us_preopen_v1',
@@ -1648,6 +1679,96 @@ describe('UserScannerPage', () => {
     expect(band).toHaveTextContent('候选 0');
     expect(band).toHaveTextContent('覆盖与淘汰分布');
     expect(band).not.toHaveTextContent('不代表市场没有机会');
+  });
+
+  it('renders data readiness labels from run detail blocker buckets without raw strings', async () => {
+    getRun.mockResolvedValue(makeRunDetail({
+      status: 'empty',
+      shortlist: [],
+      selected: [],
+      candidates: [],
+      diagnostics: {
+        dataReadiness: {
+          state: 'blocked',
+          market: 'cn',
+          profile: 'cn_preopen_v1',
+          universeSize: 0,
+          quoteCoverage: 'unknown',
+          historyCoverage: 'unknown',
+          freshness: 'unknown',
+          blockerBucket: 'missing_quote_snapshot',
+          consumerSummary: '报价快照待补。',
+          nextDataAction: '补充报价快照后重新运行。',
+        },
+      },
+      summary: {
+        universeCount: 0,
+        submittedCount: 0,
+        evaluatedCount: 0,
+        selectedCount: 0,
+        rejectedCount: 0,
+        dataFailedCount: 0,
+        skippedCount: 0,
+        errorCount: 0,
+        limitedByResultCap: false,
+      },
+    }));
+
+    const { container } = renderUserScannerPage();
+
+    const band = await screen.findByTestId('scanner-conclusion-band');
+    expect(band).toHaveTextContent('数据待补');
+    expect(band).toHaveTextContent('报价快照待补');
+    expect(band).toHaveTextContent('补充报价快照后重新运行。');
+    expect(container).not.toHaveTextContent(/missing_quote_snapshot|0ms|0\s*\/\s*0\s*\/\s*0/);
+    expect(container).not.toHaveTextContent(/buy|sell|hold|target price|stop-loss|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
+  });
+
+  it('uses scanner status data readiness when no run detail is available', async () => {
+    getRuns.mockResolvedValue(makeHistoryResponse([]));
+    getRun.mockResolvedValue(null as never);
+    getStatus.mockResolvedValue({
+      market: 'cn',
+      profile: 'cn_preopen_v1',
+      watchlistDate: '2026-04-22',
+      todayTradingDay: true,
+      scheduleEnabled: false,
+      scheduleRunImmediately: false,
+      notificationEnabled: false,
+      qualitySummary: {
+        available: false,
+        reviewWindowDays: 5,
+        runCount: 0,
+        reviewedRunCount: 0,
+        reviewedCandidateCount: 0,
+        strongCount: 0,
+        mixedCount: 0,
+        weakCount: 0,
+      },
+      dataReadiness: {
+        state: 'blocked',
+        market: 'cn',
+        profile: 'cn_preopen_v1',
+        universeSize: 0,
+        quoteCoverage: 'unknown',
+        historyCoverage: 'unknown',
+        freshness: 'unknown',
+        blockerBucket: 'missing_history',
+        consumerSummary: '历史数据待补。',
+        nextDataAction: '补充历史数据后再扫描。',
+      },
+    });
+
+    renderUserScannerPage();
+
+    const band = await screen.findByTestId('scanner-conclusion-band');
+    expect(band).toHaveTextContent('数据待补');
+    expect(band).toHaveTextContent('历史数据待补');
+    expect(band).toHaveTextContent('补充历史数据后再扫描。');
+    expect(screen.getByTestId('scanner-status-strip')).toHaveTextContent('数据待补');
+    expect(screen.getByTestId('scanner-status-strip')).toHaveTextContent('历史数据待补');
+    expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent('历史数据待补');
+    expect(screen.getByTestId('scanner-workbench-empty-state')).not.toHaveTextContent(/missing_history|0ms|0\s*\/\s*0\s*\/\s*0/);
   });
 
   it('does not present a zero-duration empty payload as a completed scanner run', async () => {
