@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import logging
@@ -20,7 +21,10 @@ from src.repositories.rule_backtest_repo import RuleBacktestRepository
 from src.services.backtest_response_contract import build_rule_run_contract
 from src.services.backtest_data_source_guard import assess_backtest_data_source_eligibility
 from src.services.backtest_bounded_grid_runner import run_bounded_parameter_grid_diagnostic
-from src.services.backtest_parameter_stability import build_parameter_stability_evidence_from_compare_summary
+from src.services.backtest_parameter_stability import (
+    build_parameter_stability_evidence_from_compare_summary,
+    build_parameter_stability_plan,
+)
 from src.services.backtest_professional_readiness import build_backtest_professional_readiness
 from src.services.rule_backtest_execution_model_registry import (
     RuleBacktestExecutionModelUnsupportedError,
@@ -2059,6 +2063,7 @@ class RuleBacktestService:
         parameter_grid_descriptor: Mapping[str, Any],
         parameter_grid_request_bundle: Mapping[str, Any],
         parameter_stability_plan: Optional[Mapping[str, Any]] = None,
+        total_timeout_seconds: Optional[float] = None,
     ) -> Dict[str, Any]:
         normalized_start_date, normalized_end_date = self._normalize_date_range(
             start_date=start_date,
@@ -2080,7 +2085,314 @@ class RuleBacktestService:
         }
         if parameter_stability_plan is not None:
             runner_kwargs["parameter_stability_plan"] = parameter_stability_plan
+        if total_timeout_seconds is not None:
+            runner_kwargs["total_timeout_seconds"] = float(total_timeout_seconds)
         return run_bounded_parameter_grid_diagnostic(**runner_kwargs)
+
+    def run_parameter_sweep_pilot(
+        self,
+        *,
+        code: str,
+        strategy_text: str,
+        parsed_strategy: Optional[Dict[str, Any]] = None,
+        start_date: Optional[Any] = None,
+        end_date: Optional[Any] = None,
+        lookback_bars: int = 252,
+        initial_capital: float = 100000.0,
+        fee_bps: float = 0.0,
+        slippage_bps: float = 0.0,
+        execution_model: Optional[Any] = None,
+        confirmed: bool = False,
+        parameter_grid: Optional[Mapping[str, Sequence[Any]]] = None,
+        max_combinations: int = 10,
+        total_timeout_seconds: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Run a response-only, local-data bounded parameter sweep pilot."""
+
+        normalized_code = str(code or "").strip()
+        raw_text = str(strategy_text or "").strip()
+        if not normalized_code:
+            return self._parameter_sweep_fail_closed("code_required")
+        if not raw_text:
+            return self._parameter_sweep_fail_closed("strategy_text_required", code=normalized_code)
+        if parsed_strategy is None:
+            return self._parameter_sweep_fail_closed("parsed_strategy_required", code=normalized_code)
+        try:
+            self._resolve_execution_model_request(execution_model)
+            normalized_start_date, normalized_end_date = self._normalize_date_range(
+                start_date=start_date,
+                end_date=end_date,
+            )
+        except ValueError as exc:
+            return self._parameter_sweep_fail_closed(
+                "invalid_parameter_sweep_request",
+                code=normalized_code,
+                diagnostics={"message": str(exc)},
+            )
+        if normalized_start_date is None or normalized_end_date is None:
+            return self._parameter_sweep_fail_closed("fixed_start_date_end_date_required", code=normalized_code)
+
+        try:
+            parsed = self._dict_to_parsed_strategy(parsed_strategy, raw_text)
+            parsed = self._normalize_parsed_strategy(
+                parsed,
+                code=normalized_code,
+                start_date=normalized_start_date,
+                end_date=normalized_end_date,
+                initial_capital=initial_capital,
+                fee_bps=fee_bps,
+                slippage_bps=slippage_bps,
+            )
+        except (TypeError, ValueError) as exc:
+            return self._parameter_sweep_fail_closed(
+                "invalid_parsed_strategy",
+                code=normalized_code,
+                diagnostics={"message": str(exc)},
+            )
+        if parsed.needs_confirmation and not confirmed:
+            return self._parameter_sweep_fail_closed("strategy_confirmation_required", code=normalized_code)
+
+        try:
+            plan = build_parameter_stability_plan(
+                strategy_id=self._parameter_sweep_strategy_id(normalized_code, raw_text, parsed),
+                dataset_id=self._parameter_sweep_dataset_id(
+                    normalized_code,
+                    normalized_start_date,
+                    normalized_end_date,
+                ),
+                base_parameters={},
+                parameter_grid=parameter_grid or {},
+                metric_keys=["total_return_pct", "max_drawdown_pct", "trade_count"],
+                primary_metric="total_return_pct",
+                risk_metric="max_drawdown_pct",
+                min_completed_runs=1,
+                max_combinations=int(max_combinations),
+                overflow_policy="reject",
+            )
+        except (TypeError, ValueError) as exc:
+            return self._parameter_sweep_fail_closed(
+                "invalid_parameter_grid",
+                code=normalized_code,
+                diagnostics={"message": str(exc)},
+            )
+
+        requests = list((plan.get("parameter_grid_request_bundle") or {}).get("requests") or [])
+        insufficient_data = dict(plan.get("insufficient_data") or {})
+        if insufficient_data and not requests:
+            return self._parameter_sweep_fail_closed(
+                str(insufficient_data.get("reason_code") or "invalid_parameter_grid"),
+                code=normalized_code,
+                plan=plan,
+                diagnostics=insufficient_data,
+            )
+
+        bars = list(self.stock_repo.get_range(normalized_code, normalized_start_date, normalized_end_date))
+        if not bars:
+            return self._parameter_sweep_fail_closed(
+                "blocked_missing_local_data",
+                code=normalized_code,
+                plan=plan,
+                diagnostics={
+                    "reasonCode": "blocked_missing_local_data",
+                    "message": "No local bars were available for the requested fixed window.",
+                },
+            )
+
+        runner_result = self._run_bounded_parameter_grid_diagnostic_with_supplied_bars(
+            parsed_strategy=parsed,
+            bars=bars,
+            code=normalized_code,
+            start_date=normalized_start_date,
+            end_date=normalized_end_date,
+            lookback_bars=lookback_bars,
+            initial_capital=initial_capital,
+            fee_bps=fee_bps,
+            slippage_bps=slippage_bps,
+            parameter_grid_descriptor=plan["parameter_grid_descriptor"],
+            parameter_grid_request_bundle=plan["parameter_grid_request_bundle"],
+            parameter_stability_plan=plan,
+            total_timeout_seconds=total_timeout_seconds,
+        )
+        return self._parameter_sweep_response(
+            code=normalized_code,
+            parsed_strategy=parsed,
+            plan=plan,
+            runner_result=runner_result,
+            bars=bars,
+        )
+
+    @staticmethod
+    def _parameter_sweep_strategy_id(code: str, strategy_text: str, parsed: ParsedStrategy) -> str:
+        payload = {
+            "code": str(code),
+            "strategy_text": str(strategy_text),
+            "strategy_kind": str(parsed.strategy_kind),
+            "strategy_spec": dict(parsed.strategy_spec or {}),
+        }
+        digest = hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:16]
+        return f"rule_sweep_{digest}"
+
+    @staticmethod
+    def _parameter_sweep_dataset_id(code: str, start_date: date, end_date: date) -> str:
+        payload = f"{code}:{start_date.isoformat()}:{end_date.isoformat()}"
+        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+        return f"local_bars_{digest}"
+
+    def _parameter_sweep_fail_closed(
+        self,
+        reason_code: str,
+        *,
+        code: Optional[str] = None,
+        plan: Optional[Mapping[str, Any]] = None,
+        diagnostics: Optional[Mapping[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        plan_payload = dict(plan or {})
+        request_bundle = dict(plan_payload.get("parameter_grid_request_bundle") or {})
+        requests = [dict(item or {}) for item in list(request_bundle.get("requests") or [])]
+        skipped_rows = [
+            {
+                "parameterSetId": str(request.get("planned_run_id") or ""),
+                "state": "skipped",
+                "parameterValues": copy.deepcopy(dict(request.get("parameter_values") or {})),
+                "reasonCode": str(reason_code),
+                "reasonMessage": "Parameter set was not executed by the response-only sweep pilot.",
+            }
+            for request in requests
+        ]
+        runner_result = {
+            "state": "rejected",
+            "summary": {
+                "totalParameterSets": len(requests),
+                "runCount": 0,
+                "executedCount": 0,
+                "completedCount": 0,
+                "blockedCount": 0,
+                "failedCount": 0,
+                "noResultCount": 0,
+                "skippedCount": len(skipped_rows),
+            },
+            "requestResults": [],
+            "skippedRows": [
+                {
+                    "plannedRunId": row["parameterSetId"],
+                    "state": "skipped",
+                    "parameterValues": copy.deepcopy(row["parameterValues"]),
+                    "reasonCode": row["reasonCode"],
+                    "reasonMessage": row["reasonMessage"],
+                }
+                for row in skipped_rows
+            ],
+            "blockedRows": [],
+            "failedRows": [],
+            "failClosedReasonCode": str(reason_code),
+            "failClosedDiagnostics": copy.deepcopy(dict(diagnostics or {"reasonCode": reason_code})),
+            "parameterStabilitySurface": None,
+        }
+        return self._parameter_sweep_response(
+            code=str(code or ""),
+            parsed_strategy=None,
+            plan=plan_payload,
+            runner_result=runner_result,
+            bars=[],
+        )
+
+    def _parameter_sweep_response(
+        self,
+        *,
+        code: str,
+        parsed_strategy: Optional[ParsedStrategy],
+        plan: Mapping[str, Any],
+        runner_result: Mapping[str, Any],
+        bars: Sequence[Any],
+    ) -> Dict[str, Any]:
+        summary = dict(runner_result.get("summary") or {})
+        parameter_rows = [
+            self._parameter_sweep_row_from_runner(row)
+            for row in list(runner_result.get("requestResults") or [])
+        ]
+        skipped_rows = [
+            self._parameter_sweep_row_from_runner(row)
+            for row in list(runner_result.get("skippedRows") or [])
+        ]
+        blocked_rows = [
+            self._parameter_sweep_row_from_runner(row)
+            for row in list(runner_result.get("blockedRows") or [])
+        ]
+        failed_rows = [
+            self._parameter_sweep_row_from_runner(row)
+            for row in list(runner_result.get("failedRows") or [])
+        ]
+        return {
+            "contractKind": "rule_backtest_parameter_sweep_pilot",
+            "contractVersion": "v1",
+            "state": str(runner_result.get("state") or "rejected"),
+            "diagnosticOnly": True,
+            "researchOnly": True,
+            "notOptimizer": True,
+            "winnerPromotion": False,
+            "decisionGrade": False,
+            "code": str(code or ""),
+            "strategyFamily": (
+                str(parsed_strategy.strategy_kind)
+                if parsed_strategy is not None
+                else None
+            ),
+            "engine": {"version": "v1", "path": "RuleBacktestEngine.run"},
+            "executionAssumptions": {
+                "callerSuppliedParameterGridOnly": True,
+                "localBarsOnly": True,
+                "providerCallsExecuted": False,
+                "marketCacheAccessed": False,
+                "storageMutation": False,
+                "portfolioMutation": False,
+                "optimizerExecuted": False,
+                "winnerPromotion": False,
+                "decisionGrade": False,
+            },
+            "datasetMetadata": {
+                "localDataOnly": True,
+                "barCount": len(list(bars or [])),
+                "datasetId": plan.get("dataset_id"),
+                "providerCallsExecuted": False,
+                "marketCacheAccessed": False,
+            },
+            "storage": {"mode": "response_only", "storedReadbackAvailable": False},
+            "summary": {
+                "totalParameterSets": int(summary.get("totalParameterSets") or 0),
+                "runCount": int(summary.get("runCount") or summary.get("executedCount") or 0),
+                "executedCount": int(summary.get("executedCount") or summary.get("runCount") or 0),
+                "completedCount": int(summary.get("completedCount") or 0),
+                "blockedCount": int(summary.get("blockedCount") or 0),
+                "failedCount": int(summary.get("failedCount") or 0),
+                "skippedCount": int(summary.get("skippedCount") or 0),
+            },
+            "parameterRows": parameter_rows,
+            "skippedRows": skipped_rows,
+            "blockedRows": blocked_rows,
+            "failedRows": failed_rows,
+            "failClosedReasonCode": runner_result.get("failClosedReasonCode"),
+            "failClosedDiagnostics": copy.deepcopy(dict(runner_result.get("failClosedDiagnostics") or {})),
+            "parameterStabilitySurface": copy.deepcopy(runner_result.get("parameterStabilitySurface")),
+            "reproducibilityMetadata": {
+                "state": "deterministic",
+                "plan": copy.deepcopy(dict(plan.get("reproducibility") or {})),
+                "requestBundleId": (plan.get("parameter_grid_request_bundle") or {}).get("request_bundle_id"),
+                "gridDescriptorHashSha256": (plan.get("parameter_grid_descriptor") or {}).get(
+                    "grid_descriptor_hash_sha256"
+                ),
+            },
+        }
+
+    @staticmethod
+    def _parameter_sweep_row_from_runner(row: Mapping[str, Any]) -> Dict[str, Any]:
+        return {
+            "parameterSetId": str(row.get("plannedRunId") or row.get("planned_run_id") or ""),
+            "state": str(row.get("state") or "missing"),
+            "parameterValues": copy.deepcopy(dict(row.get("parameterValues") or row.get("parameter_values") or {})),
+            "metrics": copy.deepcopy(dict(row.get("metrics") or {})),
+            "reasonCode": row.get("reasonCode") or row.get("reason_code"),
+            "reasonMessage": row.get("reasonMessage") or row.get("reason_message"),
+        }
 
     def _execute_rule_backtest(
         self,
