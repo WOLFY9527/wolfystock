@@ -685,6 +685,238 @@ def test_structure_signal_packet_marks_missing_bid_ask_liquidity_partial() -> No
     assert liquidity["state"] == "partial"
 
 
+def _readiness_contract(
+    *,
+    contract_symbol: str,
+    side: str,
+    expiration: str = "2026-06-19",
+    strike: float = 55.0,
+    bid: float | None = 4.1,
+    ask: float | None = 4.3,
+    last: float | None = 4.2,
+    volume: int | None = 240,
+    open_interest: int | None = 920,
+    implied_volatility: float | None = 0.62,
+    greeks: OptionGreeks | None = None,
+    greeks_missing: bool = False,
+) -> OptionContract:
+    return OptionContract(
+        symbol="TEM",
+        contractSymbol=contract_symbol,
+        side=side,
+        expiration=expiration,
+        strike=strike,
+        bid=bid,
+        ask=ask,
+        last=last,
+        volume=volume,
+        openInterest=open_interest,
+        impliedVolatility=implied_volatility,
+        greeks=None
+        if greeks_missing
+        else (
+            greeks
+            if greeks is not None
+            else OptionGreeks(
+                delta=0.51 if side == "call" else -0.42,
+                gamma=0.03,
+                theta=-0.02,
+                vega=0.12,
+                rho=0.01,
+            )
+        ),
+        dte=44,
+        asOf="2026-05-06T13:45:00Z",
+        source="review_live_snapshot",
+        freshness="live",
+        spreadPct=4.8,
+    )
+
+
+def _authorized_chain_payload(
+    *,
+    calls: list[OptionContract] | None = None,
+    puts: list[OptionContract] | None = None,
+    metadata: OptionsMetadata | None = None,
+    source: str = "review_live_snapshot",
+    freshness: str = "live",
+) -> dict:
+    return OptionChainResponse(
+        symbol="TEM",
+        market="US",
+        underlying={"price": 52.4, "freshness": freshness},
+        expiration=None,
+        calls=calls
+        if calls is not None
+        else [
+            _readiness_contract(contract_symbol="TEM260619C00050000", side="call", strike=50.0),
+            _readiness_contract(contract_symbol="TEM260619C00055000", side="call", strike=55.0),
+            _readiness_contract(contract_symbol="TEM260821C00060000", side="call", expiration="2026-08-21", strike=60.0),
+        ],
+        puts=puts
+        if puts is not None
+        else [
+            _readiness_contract(contract_symbol="TEM260619P00050000", side="put", strike=50.0),
+            _readiness_contract(contract_symbol="TEM260619P00045000", side="put", strike=45.0),
+            _readiness_contract(contract_symbol="TEM260821P00045000", side="put", expiration="2026-08-21", strike=45.0),
+        ],
+        filtersApplied={},
+        chainAsOf="2026-05-06T13:45:00Z",
+        source=source,
+        metadata=metadata
+        or OptionsMetadata(
+            fixtureBacked=False,
+            syntheticData=False,
+            providerName="review_live_snapshot",
+            liveProviderEnabled=True,
+            providerCapabilities={
+                "sourceType": "live",
+                "fixtureOnly": False,
+                "liveEnabled": True,
+                "tradeableData": True,
+                "authorityTier": "decision_grade",
+                "supportsExpirations": True,
+                "supportsChain": True,
+                "supportsBidAsk": True,
+                "supportsIv": True,
+                "supportsGreeks": True,
+                "supportsOpenInterest": True,
+                "supportsVolume": True,
+            },
+        ),
+    ).model_dump(by_alias=True)
+
+
+def test_chain_readiness_marks_complete_authorized_chain_ready() -> None:
+    payload = _authorized_chain_payload()
+
+    readiness = payload["optionsChainReadiness"]
+    assert readiness["contractVersion"] == "options-chain-readiness-v1"
+    assert readiness["overallState"] == "ready"
+    assert readiness["chainState"] == "available"
+    assert readiness["configurationState"] == "available"
+    assert readiness["dataBoundary"] == "provider_backed"
+    assert readiness["authorityState"] == "authoritative"
+    assert readiness["scoreAuthority"] == "authoritative"
+    assert readiness["expirationCoverage"] == {
+        "state": "available",
+        "expirationCount": 2,
+        "missingCount": 0,
+        "coveredExpirations": ["2026-06-19", "2026-08-21"],
+    }
+    assert readiness["strikeCoverage"] == {
+        "state": "available",
+        "strikeCount": 4,
+        "sparseCount": 0,
+    }
+    for key in ("iv", "greeks", "openInterest", "volume", "quote"):
+        assert readiness["fieldCompleteness"][key]["state"] == "available"
+    assert readiness["blockingReasons"] == []
+    assert readiness["nextEvidenceNeeded"] == []
+
+
+def test_chain_readiness_missing_configuration_blocks_and_observes_only() -> None:
+    payload = _authorized_chain_payload(
+        metadata=OptionsMetadata(
+            fixtureBacked=False,
+            syntheticData=False,
+            providerName="review_snapshot",
+            liveProviderEnabled=False,
+            providerCapabilities={},
+        )
+    )
+
+    readiness = payload["optionsChainReadiness"]
+    assert readiness["overallState"] == "blocked"
+    assert readiness["configurationState"] == "missing"
+    assert readiness["authorityState"] == "observation_only"
+    assert readiness["scoreAuthority"] == "observation_only"
+    assert "missing_provider_configuration" in readiness["blockingReasons"]
+    assert "provider_not_authoritative" in readiness["blockingReasons"]
+
+
+def test_chain_readiness_demo_sample_chain_is_observation_only() -> None:
+    client = _client()
+    try:
+        response = client.get(
+            "/api/v1/options/underlyings/TEM/chain",
+            params={"expiration": "2026-06-19", "includeGreeks": "true"},
+        )
+        assert response.status_code == 200
+        payload = response.json()
+
+        readiness = payload["optionsChainReadiness"]
+        assert readiness["chainState"] == "available"
+        assert readiness["dataBoundary"] == "demo_sample"
+        assert readiness["authorityState"] == "observation_only"
+        assert readiness["overallState"] == "blocked"
+        assert "demo_sample_data" in readiness["blockingReasons"]
+        assert readiness["fieldCompleteness"]["iv"]["state"] == "available"
+        assert readiness["fieldCompleteness"]["greeks"]["state"] == "available"
+    finally:
+        client.close()
+
+
+def test_chain_readiness_marks_missing_iv_greeks_oi_volume_and_quotes_partial() -> None:
+    payload = _authorized_chain_payload(
+        calls=[
+            _readiness_contract(contract_symbol="TEM260619C00050000", side="call", strike=50.0),
+            _readiness_contract(
+                contract_symbol="TEM260619C00055000",
+                side="call",
+                strike=55.0,
+                bid=None,
+                ask=None,
+                last=None,
+                volume=None,
+                open_interest=None,
+                implied_volatility=None,
+                greeks_missing=True,
+            ),
+        ],
+        puts=[],
+    )
+
+    readiness = payload["optionsChainReadiness"]
+    assert readiness["overallState"] == "partial"
+    assert readiness["chainState"] == "partial"
+    assert readiness["fieldCompleteness"]["iv"]["state"] == "partial"
+    assert readiness["fieldCompleteness"]["greeks"]["state"] == "partial"
+    assert readiness["fieldCompleteness"]["openInterest"]["state"] == "partial"
+    assert readiness["fieldCompleteness"]["volume"]["state"] == "partial"
+    assert readiness["fieldCompleteness"]["quote"]["state"] == "partial"
+    assert set(readiness["blockingReasons"]) >= {
+        "partial_iv",
+        "partial_greeks",
+        "partial_open_interest",
+        "partial_volume",
+        "partial_quote",
+    }
+
+
+def test_chain_readiness_marks_sparse_expiration_and_strike_coverage_limited() -> None:
+    payload = _authorized_chain_payload(
+        calls=[_readiness_contract(contract_symbol="TEM260619C00055000", side="call", strike=55.0)],
+        puts=[],
+    )
+
+    readiness = payload["optionsChainReadiness"]
+    assert readiness["overallState"] == "partial"
+    assert readiness["expirationCoverage"] == {
+        "state": "limited",
+        "expirationCount": 1,
+        "missingCount": 1,
+        "coveredExpirations": ["2026-06-19"],
+    }
+    assert readiness["strikeCoverage"] == {
+        "state": "limited",
+        "strikeCount": 1,
+        "sparseCount": 1,
+    }
+    assert "limited_expiration_coverage" in readiness["blockingReasons"]
+    assert "limited_strike_coverage" in readiness["blockingReasons"]
+
+
 def test_nvda_fixture_underlying_summary_expirations_and_chain_are_observation_only() -> None:
     client = _client()
     try:
