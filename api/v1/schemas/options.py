@@ -196,6 +196,7 @@ class OptionChainResponse(_OptionsModel):
         default=None,
         alias="optionsStructureSignalPacket",
     )
+    options_chain_readiness: Optional[OptionsChainReadiness] = Field(default=None, alias="optionsChainReadiness")
 
     @model_validator(mode="after")
     def _populate_options_readiness(self) -> "OptionChainResponse":
@@ -219,6 +220,14 @@ class OptionChainResponse(_OptionsModel):
                 source_hint=self.source,
                 freshness_hint=str(self.underlying.get("freshness") or ""),
             )
+        if self.options_chain_readiness is None:
+            self.options_chain_readiness = _build_options_chain_readiness(
+                metadata=self.metadata,
+                contracts=contracts,
+                source_hint=self.source,
+                freshness_hint=str(self.underlying.get("freshness") or ""),
+                selected_expiration=self.expiration,
+            )
         return self
 
 
@@ -240,6 +249,13 @@ OptionsStructureSkewState = Literal["observed", "insufficient"]
 OptionsStructureLiquidityState = Literal["complete", "partial", "missing"]
 OptionsStructureExpirationState = Literal["single_expiration", "multi_expiration", "missing"]
 OptionsStructureBoundaryState = Literal["live", "demo_or_stale"]
+OptionsChainOverallState = Literal["ready", "partial", "blocked"]
+OptionsChainAvailabilityState = Literal["available", "partial", "stale", "missing"]
+OptionsChainConfigurationState = Literal["available", "missing"]
+OptionsChainCoverageState = Literal["available", "limited", "missing"]
+OptionsChainCompletenessState = Literal["available", "partial", "missing"]
+OptionsChainDataBoundaryState = Literal["provider_backed", "demo_sample", "unavailable"]
+OptionsChainAuthorityState = Literal["authoritative", "observation_only"]
 
 _READY_FRESHNESS_VALUES = {"fresh", "live", "realtime", "real_time", "real-time"}
 _DELAYED_FRESHNESS_VALUES = {"delayed", "cached", "stale", "delayed_usable"}
@@ -364,6 +380,50 @@ class OptionsStructureSignalPacket(_OptionsModel):
     stale_or_demo_boundary: OptionsStaleOrDemoBoundary = Field(alias="staleOrDemoBoundary")
     observation_boundary: OptionsObservationBoundary = Field(alias="observationBoundary")
     research_next_steps: List[str] = Field(default_factory=list, alias="researchNextSteps")
+
+
+class OptionsChainExpirationCoverageReadiness(_OptionsModel):
+    state: OptionsChainCoverageState
+    expiration_count: int = Field(alias="expirationCount")
+    missing_count: int = Field(alias="missingCount")
+    covered_expirations: List[str] = Field(default_factory=list, alias="coveredExpirations")
+
+
+class OptionsChainStrikeCoverageReadiness(_OptionsModel):
+    state: OptionsChainCoverageState
+    strike_count: int = Field(alias="strikeCount")
+    sparse_count: int = Field(alias="sparseCount")
+
+
+class OptionsChainFieldCompleteness(_OptionsModel):
+    state: OptionsChainCompletenessState
+    available_count: int = Field(alias="availableCount")
+    missing_count: int = Field(alias="missingCount")
+    total_count: int = Field(alias="totalCount")
+
+
+class OptionsChainCompletenessReadiness(_OptionsModel):
+    iv: OptionsChainFieldCompleteness
+    greeks: OptionsChainFieldCompleteness
+    open_interest: OptionsChainFieldCompleteness = Field(alias="openInterest")
+    volume: OptionsChainFieldCompleteness
+    quote: OptionsChainFieldCompleteness
+
+
+class OptionsChainReadiness(_OptionsModel):
+    contract_version: str = Field(default="options-chain-readiness-v1", alias="contractVersion")
+    overall_state: OptionsChainOverallState = Field(alias="overallState")
+    chain_state: OptionsChainAvailabilityState = Field(alias="chainState")
+    configuration_state: OptionsChainConfigurationState = Field(alias="configurationState")
+    data_boundary: OptionsChainDataBoundaryState = Field(alias="dataBoundary")
+    authority_state: OptionsChainAuthorityState = Field(alias="authorityState")
+    score_authority: OptionsChainAuthorityState = Field(alias="scoreAuthority")
+    expiration_coverage: OptionsChainExpirationCoverageReadiness = Field(alias="expirationCoverage")
+    strike_coverage: OptionsChainStrikeCoverageReadiness = Field(alias="strikeCoverage")
+    field_completeness: OptionsChainCompletenessReadiness = Field(alias="fieldCompleteness")
+    blocking_reasons: List[str] = Field(default_factory=list, alias="blockingReasons")
+    warnings: List[str] = Field(default_factory=list)
+    next_evidence_needed: List[str] = Field(default_factory=list, alias="nextEvidenceNeeded")
 
 
 def _dedupe_codes(values: List[str]) -> List[str]:
@@ -837,6 +897,245 @@ def _build_options_structure_signal_packet(
             "Confirm non-demo chain freshness before elevating confidence.",
             "Review thin-liquidity rows before comparing structures.",
         ],
+    )
+
+
+def _chain_data_boundary(
+    metadata: Optional["OptionsMetadata"],
+    source_hint: str = "",
+    freshness_hint: str = "",
+) -> OptionsChainDataBoundaryState:
+    text = _source_text(source_hint, freshness_hint, getattr(metadata, "provider_name", ""))
+    if metadata is not None and (metadata.fixture_backed or metadata.synthetic_data):
+        return "demo_sample"
+    if any(marker in text for marker in ("fixture", "synthetic", "mock", "demo", "fallback")):
+        return "demo_sample"
+    return "provider_backed"
+
+
+def _chain_configuration_state(metadata: Optional["OptionsMetadata"]) -> OptionsChainConfigurationState:
+    caps = _provider_caps(metadata)
+    if not caps:
+        return "missing"
+    if caps.get("supportsChain") is False:
+        return "missing"
+    return "available"
+
+
+def _chain_authority_state(
+    metadata: Optional["OptionsMetadata"],
+    *,
+    data_boundary: OptionsChainDataBoundaryState,
+    source_hint: str = "",
+) -> OptionsChainAuthorityState:
+    if data_boundary != "provider_backed":
+        return "observation_only"
+    provider_authority = _provider_authority_from_metadata(metadata, source_hint=source_hint)
+    return "authoritative" if provider_authority == "scoreGradeAllowed" else "observation_only"
+
+
+def _field_completeness(
+    contracts: List["OptionContract"],
+    predicate: Any,
+) -> OptionsChainFieldCompleteness:
+    total = len(contracts)
+    if total == 0:
+        return OptionsChainFieldCompleteness(state="missing", availableCount=0, missingCount=0, totalCount=0)
+    available = sum(1 for contract in contracts if predicate(contract))
+    missing = total - available
+    if available == total:
+        state: OptionsChainCompletenessState = "available"
+    elif available == 0:
+        state = "missing"
+    else:
+        state = "partial"
+    return OptionsChainFieldCompleteness(
+        state=state,
+        availableCount=available,
+        missingCount=missing,
+        totalCount=total,
+    )
+
+
+def _greeks_complete(contract: "OptionContract") -> bool:
+    if contract.greeks is None:
+        return False
+    return all(getattr(contract.greeks, name) is not None for name in ("delta", "gamma", "theta", "vega", "rho"))
+
+
+def _quote_complete(contract: "OptionContract") -> bool:
+    return contract.bid is not None and contract.ask is not None and contract.last is not None
+
+
+def _chain_field_completeness(contracts: List["OptionContract"]) -> OptionsChainCompletenessReadiness:
+    return OptionsChainCompletenessReadiness(
+        iv=_field_completeness(contracts, lambda contract: contract.implied_volatility is not None),
+        greeks=_field_completeness(contracts, _greeks_complete),
+        openInterest=_field_completeness(contracts, lambda contract: contract.open_interest is not None),
+        volume=_field_completeness(contracts, lambda contract: contract.volume is not None),
+        quote=_field_completeness(contracts, _quote_complete),
+    )
+
+
+def _chain_expiration_coverage(
+    contracts: List["OptionContract"],
+    *,
+    selected_expiration: Optional[str] = None,
+) -> OptionsChainExpirationCoverageReadiness:
+    expirations = sorted({str(contract.expiration or "") for contract in contracts if str(contract.expiration or "")})
+    count = len(expirations)
+    missing_count = 0 if selected_expiration and count == 1 else max(0, 2 - count)
+    if count == 0:
+        state: OptionsChainCoverageState = "missing"
+    elif missing_count:
+        state = "limited"
+    else:
+        state = "available"
+    return OptionsChainExpirationCoverageReadiness(
+        state=state,
+        expirationCount=count,
+        missingCount=missing_count,
+        coveredExpirations=expirations,
+    )
+
+
+def _chain_strike_coverage(contracts: List["OptionContract"]) -> OptionsChainStrikeCoverageReadiness:
+    strikes = {float(contract.strike) for contract in contracts if contract.strike is not None and float(contract.strike) > 0}
+    by_expiration: Dict[str, set[float]] = {}
+    for contract in contracts:
+        expiration = str(contract.expiration or "")
+        if not expiration or contract.strike is None:
+            continue
+        by_expiration.setdefault(expiration, set()).add(float(contract.strike))
+    sparse_count = sum(1 for values in by_expiration.values() if len(values) < 2)
+    if not strikes:
+        state: OptionsChainCoverageState = "missing"
+    elif len(strikes) < 3 or sparse_count:
+        state = "limited"
+    else:
+        state = "available"
+    return OptionsChainStrikeCoverageReadiness(
+        state=state,
+        strikeCount=len(strikes),
+        sparseCount=sparse_count,
+    )
+
+
+def _chain_completeness_blockers(completeness: OptionsChainCompletenessReadiness) -> List[str]:
+    blockers: List[str] = []
+    for key, value in (
+        ("iv", completeness.iv),
+        ("greeks", completeness.greeks),
+        ("open_interest", completeness.open_interest),
+        ("volume", completeness.volume),
+        ("quote", completeness.quote),
+    ):
+        if value.state == "missing":
+            blockers.append(f"missing_{key}")
+        elif value.state == "partial":
+            blockers.append(f"partial_{key}")
+    return blockers
+
+
+def _chain_next_evidence(blocking_reasons: List[str]) -> List[str]:
+    items: List[str] = []
+    if any(code in blocking_reasons for code in ("missing_provider_configuration", "provider_not_authoritative")):
+        items.append("补充授权链路与评分边界证据")
+    if any(code in blocking_reasons for code in ("missing_chain", "stale_chain", "demo_sample_data")):
+        items.append("补充真实可用期权链与新鲜度证据")
+    if "limited_expiration_coverage" in blocking_reasons:
+        items.append("补充更多到期日覆盖")
+    if "limited_strike_coverage" in blocking_reasons:
+        items.append("补充更完整行权价覆盖")
+    if any("iv" in code or "greeks" in code for code in blocking_reasons):
+        items.append("补充 IV 与 Greeks 覆盖")
+    if any("open_interest" in code or "volume" in code for code in blocking_reasons):
+        items.append("补充 OI 与成交量覆盖")
+    if any("quote" in code for code in blocking_reasons):
+        items.append("补充 bid/ask/last 报价字段")
+    return _dedupe_codes(items)
+
+
+def _build_options_chain_readiness(
+    *,
+    metadata: Optional["OptionsMetadata"],
+    contracts: List["OptionContract"],
+    source_hint: str = "",
+    freshness_hint: str = "",
+    selected_expiration: Optional[str] = None,
+) -> OptionsChainReadiness:
+    configuration_state = _chain_configuration_state(metadata)
+    data_boundary = _chain_data_boundary(metadata, source_hint=source_hint, freshness_hint=freshness_hint)
+    authority_state = _chain_authority_state(
+        metadata,
+        data_boundary=data_boundary,
+        source_hint=source_hint,
+    )
+    expiration_coverage = _chain_expiration_coverage(contracts, selected_expiration=selected_expiration)
+    strike_coverage = _chain_strike_coverage(contracts)
+    field_completeness = _chain_field_completeness(contracts)
+    completeness_blockers = _chain_completeness_blockers(field_completeness)
+    freshness = str(freshness_hint or "").strip().lower()
+    blocking_reasons: List[str] = []
+    if configuration_state == "missing":
+        blocking_reasons.append("missing_provider_configuration")
+    if not contracts:
+        blocking_reasons.append("missing_chain")
+    if data_boundary == "demo_sample":
+        blocking_reasons.append("demo_sample_data")
+    if authority_state != "authoritative":
+        blocking_reasons.append("provider_not_authoritative")
+    if freshness in {"stale", "cached"}:
+        blocking_reasons.append("stale_chain")
+    if expiration_coverage.state != "available":
+        blocking_reasons.append("limited_expiration_coverage")
+    if strike_coverage.state != "available":
+        blocking_reasons.append("limited_strike_coverage")
+    blocking_reasons.extend(completeness_blockers)
+    blocking_reasons = _dedupe_codes(blocking_reasons)
+    critical_missing = any(
+        code in blocking_reasons
+        for code in (
+            "missing_chain",
+            "missing_quote",
+            "missing_iv",
+            "missing_greeks",
+            "missing_open_interest",
+            "missing_volume",
+        )
+    )
+    if not contracts:
+        chain_state: OptionsChainAvailabilityState = "missing"
+    elif "stale_chain" in blocking_reasons:
+        chain_state = "stale"
+    elif expiration_coverage.state != "available" or strike_coverage.state != "available" or completeness_blockers:
+        chain_state = "partial"
+    else:
+        chain_state = "available"
+    if (
+        configuration_state == "missing"
+        or data_boundary == "demo_sample"
+        or authority_state != "authoritative"
+        or critical_missing
+    ):
+        overall_state: OptionsChainOverallState = "blocked"
+    elif chain_state == "available":
+        overall_state = "ready"
+    else:
+        overall_state = "partial"
+    return OptionsChainReadiness(
+        overallState=overall_state,
+        chainState=chain_state,
+        configurationState=configuration_state,
+        dataBoundary=data_boundary,
+        authorityState=authority_state,
+        scoreAuthority=authority_state,
+        expirationCoverage=expiration_coverage,
+        strikeCoverage=strike_coverage,
+        fieldCompleteness=field_completeness,
+        blockingReasons=blocking_reasons,
+        warnings=[],
+        nextEvidenceNeeded=_chain_next_evidence(blocking_reasons),
     )
 
 
