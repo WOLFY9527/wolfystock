@@ -24,6 +24,7 @@ from typing import Any, Mapping
 SCHEMA_VERSION = "wolfystock_target_environment_evidence_harness_v1"
 ARTIFACT_VERSION = "wolfystock_data033_target_environment_evidence_v1"
 SCENARIO_BASELINE_ARTIFACT_VERSION = "wolfystock_data042_scenario_baseline_evidence_v1"
+MANIFEST_ARTIFACT_VERSION = "wolfystock_data046_target_evidence_manifest_v1"
 REDACTION_VERSION = "target_environment_evidence_redaction_v1"
 REDACTED = "<redacted>"
 DEFAULT_TIMEOUT_SECONDS = 3.0
@@ -129,6 +130,32 @@ _SCENARIO_SAFE_READINESS_KEYS = {
     "evidenceGaps",
     "lastUpdated",
 }
+_UNSAFE_MANIFEST_TEXT_MARKERS = (
+    "advice",
+    "buy now",
+    "cache debug",
+    "debug",
+    "investment advice",
+    "providerdiagnostics",
+    "providerpayload",
+    "providerruntime",
+    "rawpayload",
+    "requestid",
+    "requesturl",
+    "runtimecache",
+    "sell now",
+    "source_ref",
+    "sourceref",
+    "stacktrace",
+    "stop loss",
+    "target price",
+    "traceid",
+    "trading advice",
+    "买入建议",
+    "卖出建议",
+    "目标价",
+    "止损",
+)
 
 
 @dataclass(frozen=True)
@@ -595,6 +622,12 @@ def _scenario_artifact_path(output_dir: Path, generated_at: str, output_path: Pa
     return output_dir / f"scenario_baseline_evidence_{_timestamp_for_filename(generated_at)}.json"
 
 
+def _manifest_artifact_path(output_dir: Path, generated_at: str, output_path: Path | None = None) -> Path:
+    if output_path is not None:
+        return output_path
+    return output_dir / f"target_evidence_manifest_{_timestamp_for_filename(generated_at)}.json"
+
+
 def _safe_environment_label(value: str | None) -> str:
     text = str(value or "local_operator").strip() or "local_operator"
     stats = RedactionStats()
@@ -812,6 +845,260 @@ def run_scenario_baseline_evidence_export(
     return artifact
 
 
+def _is_unsafe_manifest_text(value: Any) -> bool:
+    text = str(value or "")
+    lowered = text.lower()
+    compacted = _compact(text)
+    marker_matches = []
+    for marker in _UNSAFE_MANIFEST_TEXT_MARKERS:
+        compacted_marker = _compact(marker)
+        marker_matches.append(marker in lowered or (bool(compacted_marker) and compacted_marker in compacted))
+    return (
+        _is_sensitive_value(text)
+        or _is_scenario_unsafe_key(text)
+        or any(marker_matches)
+    )
+
+
+def _safe_artifact_label(path: Path) -> str:
+    label = path.name if path.name not in {"", ".", ".."} else "artifact.json"
+    if Path(label).name != label or _is_unsafe_manifest_text(label):
+        return "[redacted-artifact]"
+    return label
+
+
+def _load_local_artifact(path: Path) -> Any:
+    if not path.exists():
+        raise ValueError(f"artifact path does not exist: {_safe_artifact_label(path)}")
+    if not path.is_file():
+        raise ValueError(f"artifact path is not a file: {_safe_artifact_label(path)}")
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"artifact JSON is invalid: {_safe_artifact_label(path)}") from exc
+
+
+def _state_bucket(status: Any, readiness_status: Any = None) -> str:
+    values = {str(item or "").strip().lower() for item in (status, readiness_status)}
+    if values & {"readiness_available", "ready", "available", "authoritative", "authorized"}:
+        return "ready"
+    if values & {"readiness_partial", "partial", "limited", "stale"}:
+        return "partial"
+    if values & {
+        "readiness_blocked",
+        "blocked",
+        "missing",
+        "missing_readiness_fields",
+        "endpoint_unavailable",
+        "access_blocked",
+        "request_failed",
+        "unavailable",
+    }:
+        return "blocked"
+    return "unknown"
+
+
+def _safe_missing_evidence(value: Any) -> list[str]:
+    return _dedupe([item for item in _safe_list(value) if not _is_unsafe_manifest_text(item)])
+
+
+def _manifest_summary_item(
+    *,
+    artifact_label: str,
+    surface: str,
+    surface_label: str,
+    status: str,
+    readiness_status: str,
+    missing_evidence: list[str],
+    observation_only: bool,
+) -> dict[str, Any]:
+    return {
+        "artifactLabel": artifact_label,
+        "surface": surface,
+        "surfaceLabel": surface_label,
+        "status": status,
+        "readinessStatus": readiness_status,
+        "missingEvidence": missing_evidence,
+        "observationOnly": observation_only,
+    }
+
+
+def _summarize_target_artifact(artifact: Mapping[str, Any], artifact_label: str) -> list[dict[str, Any]]:
+    surfaces = artifact.get("surfaces")
+    if not isinstance(surfaces, Mapping):
+        return []
+    summaries: list[dict[str, Any]] = []
+    for surface_id, raw_surface in surfaces.items():
+        if not isinstance(raw_surface, Mapping):
+            continue
+        surface_name = str(raw_surface.get("surface") or surface_id or "unknown_artifact")
+        status = str(raw_surface.get("surfaceStatus") or "unknown")
+        readiness_status = str(raw_surface.get("readinessStatus") or "unknown")
+        summaries.append(
+            _manifest_summary_item(
+                artifact_label=artifact_label,
+                surface=surface_name,
+                surface_label=str(raw_surface.get("label") or surface_name),
+                status=status,
+                readiness_status=readiness_status,
+                missing_evidence=_safe_missing_evidence(raw_surface.get("missingEvidence")),
+                observation_only=readiness_status.strip().lower() in {"observation_only", "observation-only"},
+            )
+        )
+    return summaries
+
+
+def _summarize_scenario_artifact(artifact: Mapping[str, Any], artifact_label: str) -> list[dict[str, Any]]:
+    evidence = artifact.get("scenarioBaselineEvidence")
+    if not isinstance(evidence, Mapping):
+        return []
+    status = str(evidence.get("baselineReadinessState") or "unknown")
+    readiness = evidence.get("baselineReadiness") if isinstance(evidence.get("baselineReadiness"), Mapping) else {}
+    readiness_status = str(readiness.get("status") or status)
+    return [
+        _manifest_summary_item(
+            artifact_label=artifact_label,
+            surface="scenario_baseline_readiness",
+            surface_label="Scenario baseline readiness",
+            status=status,
+            readiness_status=readiness_status,
+            missing_evidence=_safe_missing_evidence(evidence.get("staleMissingBlockedReasonCodes")),
+            observation_only=bool(evidence.get("observationOnly") is True),
+        )
+    ]
+
+
+def _unknown_artifact_summary(artifact_label: str) -> dict[str, Any]:
+    return _manifest_summary_item(
+        artifact_label=artifact_label,
+        surface="unknown_artifact",
+        surface_label="Unknown evidence artifact",
+        status="unknown",
+        readiness_status="unknown",
+        missing_evidence=["unknown_artifact_shape"],
+        observation_only=False,
+    )
+
+
+def _summarize_manifest_artifact(artifact: Any, artifact_label: str) -> list[dict[str, Any]]:
+    if not isinstance(artifact, Mapping):
+        return [_unknown_artifact_summary(artifact_label)]
+    artifact_version = artifact.get("artifactVersion")
+    if artifact_version == ARTIFACT_VERSION:
+        summaries = _summarize_target_artifact(artifact, artifact_label)
+        return summaries or [_unknown_artifact_summary(artifact_label)]
+    if artifact_version == SCENARIO_BASELINE_ARTIFACT_VERSION:
+        summaries = _summarize_scenario_artifact(artifact, artifact_label)
+        return summaries or [_unknown_artifact_summary(artifact_label)]
+    return [_unknown_artifact_summary(artifact_label)]
+
+
+def _manifest_state_counts(summaries: list[dict[str, Any]]) -> dict[str, int]:
+    counts = {
+        "ready": 0,
+        "partial": 0,
+        "blocked": 0,
+        "observationOnly": 0,
+        "unknown": 0,
+    }
+    for item in summaries:
+        bucket = _state_bucket(item.get("status"), item.get("readinessStatus"))
+        if bucket == "ready" and item.get("observationOnly") is True:
+            bucket = "blocked"
+        if bucket not in {"ready", "partial", "blocked"}:
+            bucket = "unknown"
+            counts["blocked"] += 1
+        counts[bucket] += 1
+        if item.get("observationOnly") is True:
+            counts["observationOnly"] += 1
+    return counts
+
+
+def _artifact_redaction_summary(artifact: Any) -> tuple[int, int]:
+    if not isinstance(artifact, Mapping):
+        return 0, 0
+    summary = artifact.get("redactionSummary")
+    if not isinstance(summary, Mapping):
+        return 0, 0
+    return (
+        int(summary.get("redactedKeyCount") or 0),
+        int(summary.get("redactedValueCount") or 0),
+    )
+
+
+def run_target_evidence_manifest_export(
+    *,
+    artifact_paths: list[str | Path],
+    output_dir: str | Path,
+    generated_at: str | None = None,
+    output_path: str | Path | None = None,
+) -> dict[str, Any]:
+    if not artifact_paths:
+        raise ValueError("at least one artifact path is required")
+    generated = generated_at or _now_iso()
+    stats = RedactionStats()
+    surface_summaries: list[dict[str, Any]] = []
+    artifact_key_count = 0
+    artifact_value_count = 0
+    artifact_labels: list[str] = []
+
+    for raw_path in artifact_paths:
+        artifact_path = Path(raw_path)
+        artifact_label = _safe_artifact_label(artifact_path)
+        artifact_labels.append(artifact_label)
+        raw_artifact = _load_local_artifact(artifact_path)
+        sanitized_artifact = _redact_scenario_input(raw_artifact, stats)
+        key_count, value_count = _artifact_redaction_summary(sanitized_artifact)
+        artifact_key_count += key_count
+        artifact_value_count += value_count
+        surface_summaries.extend(_summarize_manifest_artifact(sanitized_artifact, artifact_label))
+
+    missing_evidence = _dedupe(
+        [
+            reason
+            for summary in surface_summaries
+            for reason in _safe_missing_evidence(summary.get("missingEvidence"))
+        ]
+    )
+    artifact_file = _manifest_artifact_path(
+        Path(output_dir),
+        generated,
+        Path(output_path) if output_path is not None else None,
+    )
+    manifest = {
+        "schemaVersion": SCHEMA_VERSION,
+        "artifactVersion": MANIFEST_ARTIFACT_VERSION,
+        "generatedAt": generated,
+        "artifactPath": str(artifact_file),
+        "artifactCount": len(artifact_paths),
+        "artifactLabels": artifact_labels,
+        "executionBoundary": {
+            "readOnly": True,
+            "localOperatorRun": True,
+            "localFilesOnly": True,
+            "noApiCalls": True,
+            "noProviderCalls": True,
+            "noDataMutation": True,
+            "noNetworkBehaviorChanged": True,
+            "providerRoutingChanged": False,
+            "liveProviderSuccessClaimed": False,
+        },
+        "surfaceStatusSummary": surface_summaries,
+        "stateCounts": _manifest_state_counts(surface_summaries),
+        "missingEvidenceFamilies": missing_evidence,
+        "redactionSummary": {
+            "redactionVersion": REDACTION_VERSION,
+            "redactedKeyCount": stats.redacted_key_count,
+            "redactedValueCount": stats.redacted_value_count,
+            "artifactRedactedKeyCount": artifact_key_count,
+            "artifactRedactedValueCount": artifact_value_count,
+        },
+    }
+    artifact_file.parent.mkdir(parents=True, exist_ok=True)
+    artifact_file.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return manifest
+
+
 def _operator_next_steps_for_scenario(evidence: Mapping[str, Any]) -> list[str]:
     if evidence.get("baselineReadinessState") == "ready" and not evidence.get("observationOnly"):
         return ["Archive this sanitized local evidence artifact with operator review."]
@@ -984,6 +1271,25 @@ def _build_scenario_baseline_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _build_manifest_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Summarize existing sanitized target-environment evidence artifacts into one local manifest.",
+    )
+    parser.add_argument(
+        "--artifact",
+        action="append",
+        default=[],
+        help="Path to an existing sanitized target-environment evidence JSON artifact. Repeat for multiple artifacts.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="artifacts/target-environment-evidence",
+        help="Directory for timestamped manifest JSON output.",
+    )
+    parser.add_argument("--output", default=None, help="Exact JSON output path. Overrides --output-dir filename.")
+    return parser
+
+
 def _scenario_baseline_main(argv: list[str]) -> int:
     parser = _build_scenario_baseline_parser()
     args = parser.parse_args(argv)
@@ -1009,10 +1315,37 @@ def _scenario_baseline_main(argv: list[str]) -> int:
     return 0
 
 
+def _manifest_main(argv: list[str]) -> int:
+    parser = _build_manifest_parser()
+    args = parser.parse_args(argv)
+    try:
+        manifest = run_target_evidence_manifest_export(
+            artifact_paths=[Path(path) for path in args.artifact],
+            output_dir=args.output_dir,
+            output_path=args.output,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
+    print(
+        json.dumps(
+            {
+                "artifactPath": manifest["artifactPath"],
+                "artifactCount": manifest["artifactCount"],
+                "stateCounts": manifest["stateCounts"],
+                "missingEvidenceFamilies": manifest["missingEvidenceFamilies"],
+            },
+            ensure_ascii=False,
+        )
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     raw_argv = list(argv if argv is not None else sys.argv[1:])
     if raw_argv[:1] == ["scenario-baseline"]:
         return _scenario_baseline_main(raw_argv[1:])
+    if raw_argv[:1] == ["manifest"]:
+        return _manifest_main(raw_argv[1:])
     parser = _build_parser()
     args = parser.parse_args(raw_argv)
     specs = _default_specs()

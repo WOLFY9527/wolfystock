@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 import scripts.target_environment_evidence_harness as harness
 
 
@@ -54,6 +56,264 @@ def _run_with_client(
         client=client,
         captured_at=captured_at,
     )
+
+
+def _write_artifact(path: Path, payload: dict[str, Any]) -> Path:
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def _safe_harness_artifact() -> dict[str, Any]:
+    return {
+        "schemaVersion": harness.SCHEMA_VERSION,
+        "artifactVersion": harness.ARTIFACT_VERSION,
+        "redactionSummary": {
+            "redactionVersion": harness.REDACTION_VERSION,
+            "redactedKeyCount": 1,
+            "redactedValueCount": 2,
+        },
+        "surfaces": {
+            "rotation_quote_readiness": {
+                "surface": "rotation_quote_readiness",
+                "label": "Rotation Radar quote readiness",
+                "surfaceStatus": "readiness_available",
+                "readinessStatus": "available",
+                "missingEvidence": [],
+                "collectedFields": {
+                    "alpacaQuoteAuthorityReadiness": {
+                        "authorityState": "available",
+                        "scoreContributionAllowed": True,
+                    }
+                },
+            },
+            "portfolio_lineage": {
+                "surface": "portfolio_lineage",
+                "label": "Portfolio price and FX lineage",
+                "surfaceStatus": "readiness_partial",
+                "readinessStatus": "partial",
+                "missingEvidence": ["fx_lineage"],
+                "collectedFields": {
+                    "valuation_snapshot_lineage": {"status": "partial"},
+                    "analytics_readiness": {"valuation": "partial"},
+                },
+            },
+        },
+    }
+
+
+def _safe_scenario_artifact() -> dict[str, Any]:
+    return {
+        "schemaVersion": harness.SCHEMA_VERSION,
+        "artifactVersion": harness.SCENARIO_BASELINE_ARTIFACT_VERSION,
+        "redactionSummary": {
+            "redactionVersion": harness.REDACTION_VERSION,
+            "redactedKeyCount": 2,
+            "redactedValueCount": 1,
+        },
+        "scenarioBaselineEvidence": {
+            "baselineReadinessState": "blocked",
+            "baselineSnapshotComponentState": "missing",
+            "marketFrameState": "available",
+            "driverInputState": "partial",
+            "evidenceCompletenessState": "blocked",
+            "staleMissingBlockedReasonCodes": ["baselineSnapshot"],
+            "observationOnly": True,
+            "diagnosticOnly": True,
+            "baselineReadiness": {
+                "status": "blocked",
+                "scoreAuthority": "observation_only",
+                "sourceAuthorityAllowed": False,
+                "authoritative": False,
+            },
+        },
+    }
+
+
+def test_manifest_mode_summarizes_multiple_safe_artifacts(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    harness_artifact = _write_artifact(tmp_path / "target.json", _safe_harness_artifact())
+    scenario_artifact = _write_artifact(tmp_path / "scenario.json", _safe_scenario_artifact())
+    output_path = tmp_path / "manifest.json"
+
+    result = harness.main(
+        [
+            "manifest",
+            "--artifact",
+            str(harness_artifact),
+            "--artifact",
+            str(scenario_artifact),
+            "--output",
+            str(output_path),
+        ]
+    )
+
+    assert result == 0
+    stdout = json.loads(capsys.readouterr().out)
+    manifest = json.loads(output_path.read_text(encoding="utf-8"))
+    assert stdout["artifactPath"] == str(output_path)
+    assert manifest["artifactVersion"] == harness.MANIFEST_ARTIFACT_VERSION
+    assert manifest["artifactCount"] == 2
+    assert manifest["stateCounts"] == {
+        "ready": 1,
+        "partial": 1,
+        "blocked": 1,
+        "observationOnly": 1,
+        "unknown": 0,
+    }
+    assert manifest["missingEvidenceFamilies"] == ["fx_lineage", "baselineSnapshot"]
+    assert [item["surface"] for item in manifest["surfaceStatusSummary"]] == [
+        "rotation_quote_readiness",
+        "portfolio_lineage",
+        "scenario_baseline_readiness",
+    ]
+    assert manifest["redactionSummary"]["artifactRedactedKeyCount"] == 3
+    assert manifest["redactionSummary"]["artifactRedactedValueCount"] == 3
+    assert manifest["executionBoundary"]["localFilesOnly"] is True
+    assert manifest["executionBoundary"]["noApiCalls"] is True
+
+
+def test_manifest_invalid_artifact_path_fails_closed(tmp_path: Path) -> None:
+    output_path = tmp_path / "manifest.json"
+
+    with pytest.raises(ValueError, match="artifact path does not exist"):
+        harness.run_target_evidence_manifest_export(
+            artifact_paths=[tmp_path / "missing.json"],
+            output_dir=tmp_path,
+            output_path=output_path,
+            generated_at="2026-06-21T03:04:05+00:00",
+        )
+
+    assert not output_path.exists()
+
+
+def test_manifest_unknown_artifact_shape_is_unknown_and_blocked(tmp_path: Path) -> None:
+    unknown_artifact = _write_artifact(
+        tmp_path / "unknown.json",
+        {
+            "schemaVersion": harness.SCHEMA_VERSION,
+            "artifactVersion": "unrecognized_shape_v1",
+            "status": "ready",
+        },
+    )
+
+    manifest = harness.run_target_evidence_manifest_export(
+        artifact_paths=[unknown_artifact],
+        output_dir=tmp_path,
+        generated_at="2026-06-21T03:04:05+00:00",
+    )
+
+    assert manifest["stateCounts"] == {
+        "ready": 0,
+        "partial": 0,
+        "blocked": 1,
+        "observationOnly": 0,
+        "unknown": 1,
+    }
+    assert manifest["missingEvidenceFamilies"] == ["unknown_artifact_shape"]
+    assert manifest["surfaceStatusSummary"] == [
+        {
+            "artifactLabel": "unknown.json",
+            "surface": "unknown_artifact",
+            "surfaceLabel": "Unknown evidence artifact",
+            "status": "unknown",
+            "readinessStatus": "unknown",
+            "missingEvidence": ["unknown_artifact_shape"],
+            "observationOnly": False,
+        }
+    ]
+
+
+def test_manifest_does_not_promote_observation_only_ready_state(tmp_path: Path) -> None:
+    artifact = _safe_scenario_artifact()
+    evidence = artifact["scenarioBaselineEvidence"]
+    evidence["baselineReadinessState"] = "ready"
+    evidence["observationOnly"] = True
+    evidence["baselineReadiness"] = {
+        "status": "ready",
+        "scoreAuthority": "observation_only",
+        "sourceAuthorityAllowed": False,
+        "authoritative": False,
+        "dataState": "demo_static_sample",
+        "sampleState": "fallback",
+    }
+    artifact_path = _write_artifact(tmp_path / "observation-only-ready.json", artifact)
+
+    manifest = harness.run_target_evidence_manifest_export(
+        artifact_paths=[artifact_path],
+        output_dir=tmp_path,
+        generated_at="2026-06-21T03:04:05+00:00",
+    )
+
+    assert manifest["stateCounts"]["ready"] == 0
+    assert manifest["stateCounts"]["blocked"] == 1
+    assert manifest["stateCounts"]["observationOnly"] == 1
+
+
+def test_manifest_redacts_or_omits_unsafe_raw_fields(tmp_path: Path) -> None:
+    artifact = _safe_harness_artifact()
+    artifact["providerPayload"] = {"url": "https://example.invalid/path?token=raw-token"}
+    artifact["runtimeCacheDebug"] = "runtime cache debug traceId=raw"
+    artifact["surfaces"]["rotation_quote_readiness"]["collectedFields"]["debug"] = "provider runtime cache debug"
+    artifact_path = _write_artifact(tmp_path / "unsafe.json", artifact)
+
+    manifest = harness.run_target_evidence_manifest_export(
+        artifact_paths=[artifact_path],
+        output_dir=tmp_path,
+        generated_at="2026-06-21T03:04:05+00:00",
+    )
+    output = json.dumps(manifest, ensure_ascii=False, sort_keys=True)
+
+    forbidden = [
+        "providerPayload",
+        "runtimeCacheDebug",
+        "raw-token",
+        "traceId",
+        "runtime cache debug",
+        "provider runtime cache debug",
+    ]
+    assert all(term not in output for term in forbidden)
+    assert manifest["redactionSummary"]["redactedKeyCount"] >= 2
+    assert manifest["redactionSummary"]["redactedValueCount"] >= 2
+
+
+def test_manifest_has_no_advice_or_raw_internal_leaks(tmp_path: Path) -> None:
+    artifact = _safe_scenario_artifact()
+    artifact["operatorNotes"] = "buy now, target price, provider runtime cache debug"
+    artifact["scenarioBaselineEvidence"]["staleMissingBlockedReasonCodes"] = [
+        "baselineSnapshot",
+        "target price",
+        "traceId",
+        "runtime cache debug",
+    ]
+    artifact_path = _write_artifact(tmp_path / "traceId-token-scenario.json", artifact)
+
+    manifest = harness.run_target_evidence_manifest_export(
+        artifact_paths=[artifact_path],
+        output_dir=tmp_path,
+        generated_at="2026-06-21T03:04:05+00:00",
+    )
+    output = json.dumps(manifest, ensure_ascii=False, sort_keys=True).lower()
+
+    forbidden_terms = [
+        "trading advice",
+        "investment advice",
+        "buy now",
+        "sell now",
+        "target price",
+        "stop loss",
+        "providerpayload",
+        "providerruntime",
+        "runtimecache",
+        "cache debug",
+        "traceid",
+        "requestid",
+        "raw_payload",
+        "买入" + "建议",
+        "卖出" + "建议",
+        "目标" + "价",
+    ]
+    assert all(term not in output for term in forbidden_terms)
+    assert manifest["artifactLabels"] == ["[redacted-artifact]"]
+    assert manifest["missingEvidenceFamilies"] == ["baselineSnapshot"]
 
 
 def test_redaction_removes_sensitive_values_and_headers(tmp_path: Path) -> None:
