@@ -290,6 +290,117 @@ describe('backtestApi support export contract exposure', () => {
     });
   });
 
+  it('serializes bounded parameter sweep request to backend snake_case request fields', async () => {
+    vi.mocked(apiClient.post).mockResolvedValueOnce({
+      data: {
+        contract_kind: 'rule_backtest_parameter_sweep_pilot',
+        contract_version: 'v1',
+        state: 'completed',
+        diagnostic_only: true,
+        research_only: true,
+        not_optimizer: true,
+        winner_promotion: false,
+        decision_grade: false,
+        code: 'AAPL',
+        engine: { version: 'v1' },
+        execution_assumptions: {},
+        dataset_metadata: {},
+        dataset_lineage_readiness: {
+          contract_kind: 'rule_backtest_parameter_sweep_dataset_lineage_readiness',
+          contract_version: 'v1',
+          readiness_state: 'diagnostic-only',
+        },
+        storage: { mode: 'response_only' },
+        summary: {
+          total_parameter_sets: 2,
+          run_count: 2,
+          skipped_count: 0,
+          blocked_count: 0,
+        },
+        parameter_rows: [],
+        skipped_rows: [],
+        blocked_rows: [],
+        failed_rows: [],
+        reproducibility_metadata: {
+          state: 'deterministic',
+          grid_descriptor_hash_sha256: 'grid-hash',
+        },
+      },
+    } as never);
+
+    await backtestApi.runRuleParameterSweep({
+      code: 'AAPL',
+      strategyText: 'buy when close > sma(20)',
+      parsedStrategy: {
+        version: 'rule_v1',
+        timeframe: '1d',
+        sourceText: 'buy when close > sma(20)',
+        normalizedText: 'buy when close > sma(20)',
+        entry: { type: 'comparison' },
+        exit: { type: 'comparison' },
+        confidence: 0.91,
+        needsConfirmation: false,
+        ambiguities: [],
+        summary: {},
+        maxLookback: 20,
+      } as never,
+      startDate: '2024-01-01',
+      endDate: '2024-02-01',
+      lookbackBars: 20,
+      initialCapital: 100000,
+      feeBps: 0,
+      slippageBps: 0,
+      confirmed: true,
+      parameterGrid: {
+        'strategy_spec.signal.fast_period': [2, 3],
+        'strategy_spec.signal.slow_period': [5],
+      },
+      maxCombinations: 6,
+      totalTimeoutSeconds: 30,
+      bars: [
+        {
+          code: 'AAPL',
+          date: '2024-01-02',
+          open: 100,
+          high: 101,
+          low: 99,
+          close: 100.5,
+          volume: 1000,
+        },
+      ],
+    } as never);
+
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/backtest/rule/parameter-sweep', {
+      code: 'AAPL',
+      strategy_text: 'buy when close > sma(20)',
+      parsed_strategy: expect.any(Object),
+      start_date: '2024-01-01',
+      end_date: '2024-02-01',
+      lookback_bars: 20,
+      initial_capital: 100000,
+      fee_bps: 0,
+      slippage_bps: 0,
+      confirmed: true,
+      parameter_grid: {
+        'strategy_spec.signal.fast_period': [2, 3],
+        'strategy_spec.signal.slow_period': [5],
+      },
+      max_combinations: 6,
+      total_timeout_seconds: 30,
+      bars: [
+        {
+          code: 'AAPL',
+          date: '2024-01-02',
+          open: 100,
+          high: 101,
+          low: 99,
+          close: 100.5,
+          volume: 1000,
+        },
+      ],
+    });
+  });
+
   it('loads the rule backtest support export index with camel-cased fields', async () => {
     vi.mocked(apiClient.get).mockResolvedValueOnce({
       data: {
