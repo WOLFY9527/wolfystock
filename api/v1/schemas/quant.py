@@ -7,6 +7,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from api.v1.schemas.factors import FactorObservation
+
 
 class QuantDuckDBHealthResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -274,3 +276,53 @@ class QuantDuckDBBenchmarkResponse(BaseModel):
     end_date: Optional[str] = Field(None, alias="endDate")
     top_results: list[QuantDuckDBBenchmarkTopResult] = Field(default_factory=list, alias="topResults")
     error: Optional[str] = None
+
+
+class QuantFactorResearchWeight(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    symbol: str = Field(..., min_length=1)
+    weight: float
+
+
+class QuantFactorResearchObservationInput(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    observation: FactorObservation
+    sector: Optional[str] = None
+    market_cap: Optional[float] = Field(None, alias="marketCap")
+
+
+class QuantFactorResearchMetricObservationInput(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    observation: FactorObservation
+    forward_returns: dict[str, Optional[float]] = Field(default_factory=dict, alias="forwardReturns")
+
+
+class QuantFactorResearchReportRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    observations: list[QuantFactorResearchObservationInput] = Field(default_factory=list)
+    metric_observations: list[QuantFactorResearchMetricObservationInput] = Field(
+        default_factory=list,
+        alias="metricObservations",
+    )
+    portfolio_weights: Optional[list[QuantFactorResearchWeight]] = Field(None, alias="portfolioWeights")
+    long_weights: Optional[list[QuantFactorResearchWeight]] = Field(None, alias="longWeights")
+    short_weights: Optional[list[QuantFactorResearchWeight]] = Field(None, alias="shortWeights")
+    neutralization_axes: list[str] = Field(default_factory=list, alias="neutralizationAxes")
+    min_group_size: int = Field(2, ge=1, alias="minGroupSize")
+    market_cap_bucket_count: int = Field(5, ge=1, alias="marketCapBucketCount")
+
+
+class QuantFactorResearchReportResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    status: str
+    boundary: dict[str, Any] = Field(default_factory=dict)
+    factor_metadata: list[dict[str, Any]] = Field(default_factory=list, alias="factorMetadata")
+    input_shape: dict[str, Any] = Field(default_factory=dict, alias="inputShape")
+    report: dict[str, Any] = Field(default_factory=dict)
+    missing_data_reasons: list[dict[str, Any]] = Field(default_factory=list, alias="missingDataReasons")
+    warnings: list[str] = Field(default_factory=list)

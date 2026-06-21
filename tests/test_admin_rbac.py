@@ -630,7 +630,7 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
                 "market.py": 1,
                 "market_provider_operations.py": 1,
                 "provider_usage_ledger.py": 1,
-                "quant.py": 9,
+                "quant.py": 10,
                 "scanner.py": 3,
                 "system_config.py": 9,
                 "usage.py": 1,
@@ -643,7 +643,7 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertEqual(6, quant_source.count('require_admin_capability("quant:admin:read")'))
+        self.assertEqual(7, quant_source.count('require_admin_capability("quant:admin:read")'))
         self.assertEqual(3, quant_source.count('require_admin_capability("quant:admin:write")'))
         self.assertNotIn("Depends(require_admin_user)", quant_source)
 
