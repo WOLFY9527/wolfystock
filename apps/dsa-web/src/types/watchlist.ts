@@ -90,6 +90,42 @@ export interface WatchlistIntelligence {
   catalystExposures?: WatchlistCatalystExposure[] | null;
 }
 
+export interface WatchlistRowResearchIdentity {
+  name?: string | null;
+  exchange?: string | null;
+  sector?: string | null;
+  industry?: string | null;
+}
+
+export interface WatchlistRowResearchQuote {
+  state: 'available' | 'missing' | 'stale' | 'unknown' | string;
+  price?: number | null;
+  changePercent?: number | null;
+  asOf?: string | null;
+}
+
+export interface WatchlistRowScannerLineage {
+  runId?: number | null;
+  rank?: number | null;
+  score?: number | null;
+  status?: string | null;
+  lastScoredAt?: string | null;
+}
+
+export interface WatchlistRowResearchPacketResponse {
+  symbol: string;
+  market: string;
+  identity: WatchlistRowResearchIdentity;
+  savedItemSource: string;
+  quote: WatchlistRowResearchQuote;
+  scannerLineage: WatchlistRowScannerLineage;
+  researchStatus: 'ready' | 'partial' | 'blocked' | 'unknown' | string;
+  missingData: string[];
+  nextDataAction: string;
+  observationOnly: true;
+  noAdviceDisclosure: string;
+}
+
 export interface WatchlistItem {
   id: number;
   symbol: string;
@@ -110,6 +146,7 @@ export interface WatchlistItem {
   universeType?: string | null;
   notes?: string | null;
   intelligence?: WatchlistIntelligence | null;
+  rowResearchPacket?: WatchlistRowResearchPacketResponse | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 }

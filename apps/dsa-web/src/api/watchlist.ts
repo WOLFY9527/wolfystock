@@ -11,6 +11,7 @@ import type {
   WatchlistResearchPriorityEvidenceAge,
   WatchlistResearchPriorityQueueItem,
   WatchlistResearchPriorityTier,
+  WatchlistRowResearchPacketResponse,
   WatchlistScoreRefreshRequest,
   WatchlistScoreRefreshResponse,
   WatchlistScoreRefreshStatus,
@@ -46,6 +47,9 @@ const SAFE_RESEARCH_PRIORITY_TIERS = new Set<WatchlistResearchPriorityTier>([
   'monitor',
 ]);
 
+const SAFE_ROW_RESEARCH_QUOTE_STATES = new Set(['available', 'missing', 'stale', 'unknown']);
+const SAFE_ROW_RESEARCH_STATUS = new Set(['ready', 'partial', 'blocked', 'unknown']);
+
 function normalizeOptionalText(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const normalized = value.trim();
@@ -76,6 +80,15 @@ function normalizeOptionalStringList(value: unknown, allowList: Set<string>): st
 
 function normalizeOptionalBoolean(value: unknown): boolean | null {
   return typeof value === 'boolean' ? value : null;
+}
+
+function normalizeOptionalNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
 }
 
 function normalizeConsumerTextList(value: unknown): string[] {
@@ -153,15 +166,67 @@ function normalizeCatalystExposure(
   };
 }
 
+function normalizeRowResearchPacket(
+  packet: WatchlistRowResearchPacketResponse | Record<string, unknown> | null | undefined,
+): WatchlistRowResearchPacketResponse | null {
+  if (!packet || typeof packet !== 'object') return null;
+  const record = toCamelCase<WatchlistRowResearchPacketResponse>(packet);
+  const symbol = normalizeOptionalText(record.symbol)?.toUpperCase();
+  const market = normalizeOptionalText(record.market)?.toLowerCase();
+  const identity = record.identity && typeof record.identity === 'object' ? record.identity as unknown as Record<string, unknown> : {};
+  const quote = record.quote && typeof record.quote === 'object' ? record.quote as unknown as Record<string, unknown> : {};
+  const scannerLineage = record.scannerLineage && typeof record.scannerLineage === 'object'
+    ? record.scannerLineage as unknown as Record<string, unknown>
+    : {};
+  const researchStatus = normalizeOptionalText(record.researchStatus)?.toLowerCase() ?? 'unknown';
+  if (!symbol || !market) return null;
+
+  return {
+    symbol,
+    market,
+    identity: {
+      name: normalizeOptionalText(identity.name),
+      exchange: normalizeOptionalText(identity.exchange),
+      sector: normalizeOptionalText(identity.sector),
+      industry: normalizeOptionalText(identity.industry),
+    },
+    savedItemSource: normalizeOptionalText(record.savedItemSource) ?? 'unknown',
+    quote: {
+      state: SAFE_ROW_RESEARCH_QUOTE_STATES.has(normalizeOptionalText(quote.state)?.toLowerCase() ?? '')
+        ? (normalizeOptionalText(quote.state)?.toLowerCase() as 'available' | 'missing' | 'stale' | 'unknown')
+        : 'unknown',
+      price: normalizeOptionalNumber(quote.price),
+      changePercent: normalizeOptionalNumber(quote.changePercent),
+      asOf: normalizeOptionalText(quote.asOf),
+    },
+    scannerLineage: {
+      runId: normalizeOptionalNumber(scannerLineage.runId),
+      rank: normalizeOptionalNumber(scannerLineage.rank),
+      score: normalizeOptionalNumber(scannerLineage.score),
+      status: normalizeOptionalText(scannerLineage.status),
+      lastScoredAt: normalizeOptionalText(scannerLineage.lastScoredAt),
+    },
+    researchStatus: SAFE_ROW_RESEARCH_STATUS.has(researchStatus)
+      ? researchStatus as 'ready' | 'partial' | 'blocked' | 'unknown'
+      : 'unknown',
+    missingData: normalizeConsumerTextList(record.missingData),
+    nextDataAction: normalizeOptionalText(record.nextDataAction) ?? '',
+    observationOnly: true,
+    noAdviceDisclosure: normalizeOptionalText(record.noAdviceDisclosure) ?? '',
+  };
+}
+
 function normalizeWatchlistItem(item: WatchlistItem): WatchlistItem {
   const catalystExposures = Array.isArray(item.intelligence?.catalystExposures)
     ? item.intelligence.catalystExposures
       .map((exposure) => normalizeCatalystExposure(exposure))
       .filter((exposure): exposure is WatchlistCatalystExposure => Boolean(exposure))
     : item.intelligence?.catalystExposures;
+  const rowResearchPacket = normalizeRowResearchPacket(item.rowResearchPacket);
 
   return {
     ...item,
+    rowResearchPacket,
     intelligence: item.intelligence
       ? {
         ...item.intelligence,

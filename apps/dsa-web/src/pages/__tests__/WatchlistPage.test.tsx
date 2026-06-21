@@ -794,6 +794,46 @@ describe('WatchlistPage', () => {
           strategySimulation: { status: 'unknown' },
           backtest: {},
         },
+        rowResearchPacket: {
+          symbol: '600519',
+          market: 'cn',
+          identity: {
+            name: null,
+            exchange: null,
+            sector: null,
+            industry: null,
+          },
+          savedItemSource: 'manual',
+          quote: {
+            state: 'missing',
+            price: null,
+            changePercent: null,
+            asOf: null,
+          },
+          scannerLineage: {
+            runId: null,
+            rank: null,
+            score: null,
+            status: null,
+            lastScoredAt: null,
+          },
+          researchStatus: 'blocked',
+          missingData: [
+            'quote',
+            'price_history',
+            'fundamentals',
+            'filing_event_catalyst',
+            'peer_benchmark',
+            'Missing evidence needs review',
+            'Price-history evidence',
+            'Scanner score evidence',
+            'evidence_gap',
+            'not_integrated',
+          ],
+          nextDataAction: 'Add quote and daily price history evidence before marking the packet ready.',
+          observationOnly: true,
+          noAdviceDisclosure: 'Observation-only research packet; not personalized financial advice and not an instruction.',
+        },
         createdAt: '2026-04-10T08:00:00Z',
         updatedAt: '2026-05-01T10:05:00Z',
       })],
@@ -830,18 +870,25 @@ describe('WatchlistPage', () => {
     const primaryRegion = screen.getByTestId('watchlist-board-shell');
     expect(row).toHaveTextContent('600519');
     expect(row).toHaveTextContent('A股 600519');
-    expect(row).toHaveTextContent('价格暂缺');
-    expect(row).toHaveTextContent(/更新 05\/01/);
-    expect(row).toHaveTextContent('研究待复核');
-    expect(row).toHaveTextContent('下一步 查看个股结构');
+    expect(row).toHaveTextContent('报价待补');
+    expect(row).toHaveTextContent('数据待补');
+    expect(row).toHaveTextContent('待扫描');
+    expect(row).toHaveTextContent('报价与历史待补');
+    expect(row).toHaveTextContent('基本面、事件、同业待补');
+    expect(row).toHaveTextContent('下一步 补报价与历史');
+    expect(row).toHaveTextContent('仅供观察');
     const queue = await screen.findByTestId('watchlist-research-queue');
     expect(queue).toHaveTextContent('研究上下文待补');
     expect(queue).toHaveTextContent('价格与历史数据待补');
     expect(queue).toHaveTextContent('扫描评分待更新');
     expect(within(row).getByRole('button', { name: '查看个股结构 600519' })).toBeInTheDocument();
     expect(within(row).getByRole('button', { name: '打开扫描器 600519' })).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: '分析' })).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: '回测' })).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: '复制代码 600519' })).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: '移除 600519' })).toBeInTheDocument();
     expect(row).not.toHaveTextContent('--');
-    expect(primaryRegion).not.toHaveTextContent(/证据缺口|Missing evidence needs review|Price-history evidence|Scanner score evidence|provider|cache|runtime|schema|requestId|traceId|fallback|proxy|sourceAuthority|score-grade|observation-only|insufficient_evidence/i);
+    expect(primaryRegion).not.toHaveTextContent(/证据缺口|Missing evidence needs review|Price-history evidence|Scanner score evidence|evidence_gap|available|missing|stale|unknown|not_integrated|insufficient|ready|partial|blocked|observationOnly|noAdviceDisclosure|provider|cache|runtime|schema|requestId|traceId|fallback|proxy|sourceAuthority|score-grade|observation-only|insufficient_evidence|not personalized financial advice|not an instruction/i);
     expect(queue).not.toHaveTextContent(/Missing evidence needs review|Price-history evidence|Scanner score evidence|provider|cache|runtime|schema|requestId|traceId|fallback|proxy|sourceAuthority|score-grade|observation-only|insufficient_evidence/i);
     expect(primaryRegion).not.toHaveTextContent(/买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓|buy|sell|hold|target price|stop-loss|position sizing/i);
 
