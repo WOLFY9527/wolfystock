@@ -457,13 +457,13 @@ describe('portfolioApi scenario risk adapter', () => {
       hasLineage: true,
       observationOnly: true,
       price: {
-        label: '价格可能延迟',
+        label: '价格延迟',
         affectedSymbols: ['AAPL', 'MSFT'],
         count: 2,
         total: 2,
       },
       fx: {
-        label: 'FX待确认',
+        label: '汇率缺失',
         affectedCurrencies: ['USD'],
         affectedPairs: ['USD/CNY'],
         count: 1,
@@ -531,9 +531,9 @@ describe('portfolioApi scenario risk adapter', () => {
     expect(payload.portfolioLineageSummary).toMatchObject({
       hasLineage: false,
       observationOnly: true,
-      price: { label: '价格待补', affectedSymbols: [], count: 0, total: 0 },
-      fx: { label: 'FX待确认', affectedCurrencies: [], affectedPairs: [], count: 0, total: 0 },
-      snapshot: { label: '估值待补', affectedSymbols: [], affectedCurrencies: [], affectedPairs: [], count: 0, total: 0 },
+      price: { label: '价格缺失', affectedSymbols: [], count: 0, total: 0 },
+      fx: { label: '汇率缺失', affectedCurrencies: [], affectedPairs: [], count: 0, total: 0 },
+      snapshot: { label: '估值不可用', affectedSymbols: [], affectedCurrencies: [], affectedPairs: [], count: 0, total: 0 },
       analytics: { label: '风险视图待生成', affectedSymbols: [], affectedCurrencies: [], count: 0, total: 0 },
     });
   });
