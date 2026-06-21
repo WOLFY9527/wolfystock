@@ -67,6 +67,29 @@ function buildOptionsResearchReadiness(
   };
 }
 
+function buildOptionsChainReadinessView(overrides: Record<string, unknown> = {}) {
+  const labels = [
+    '链部分可用',
+    '到期覆盖可用',
+    '演示样本',
+    '仅观察',
+  ];
+  const blockerLabels = [
+    '行权价覆盖有限',
+    'IV待补',
+    '希腊值待补',
+    'OI/成交待补',
+    '报价字段待补',
+  ];
+
+  return {
+    labels,
+    blockerLabels,
+    allLabels: [...labels, ...blockerLabels],
+    ...overrides,
+  };
+}
+
 function withOptionsReadiness<T extends object>(
   payload: T,
   readiness?: OptionsResearchReadiness | null,
@@ -205,7 +228,10 @@ function buildSyntheticDiagnosticsScenarioFrame() {
   });
 }
 
-function mockHappyPath(readiness?: OptionsResearchReadiness | null) {
+function mockHappyPath(
+  readiness?: OptionsResearchReadiness | null,
+  optionsChainReadinessView?: Record<string, unknown> | null,
+) {
   vi.mocked(optionsLabApi.getUnderlyingSummary).mockResolvedValue(withOptionsReadiness({
     symbol: 'TEM',
     market: 'us',
@@ -352,6 +378,7 @@ function mockHappyPath(readiness?: OptionsResearchReadiness | null) {
         'Review thin-liquidity rows before comparing structures.',
       ],
     },
+    optionsChainReadinessView: optionsChainReadinessView ?? null,
   }, readiness));
   vi.mocked(optionsLabApi.compareStrategies).mockResolvedValue(withOptionsReadiness({
     symbol: 'TEM',
@@ -1254,6 +1281,31 @@ describe('OptionsLabPage', () => {
     expect(hero.textContent || '').not.toContain('provider_authority_tier_observation_only');
     expect(hero.textContent || '').not.toContain('wide_bid_ask_spread');
     expect(screen.queryByTestId('options-lab-readiness-gate-summary')).not.toBeInTheDocument();
+  });
+
+  it('shows options chain readiness in the first read without raw internal labels', async () => {
+    mockHappyPath(buildOptionsResearchReadiness(), buildOptionsChainReadinessView());
+    renderPage();
+
+    const hero = await screen.findByTestId('options-lab-product-hero');
+    [
+      '链部分可用',
+      '到期覆盖可用',
+      '行权价覆盖有限',
+      'IV待补',
+      '希腊值待补',
+      'OI/成交待补',
+      '报价字段待补',
+      '演示样本',
+      '仅观察',
+    ].forEach((label) => {
+      expect(hero).toHaveTextContent(label);
+    });
+
+    const heroText = hero.textContent || '';
+    expect(heroText).not.toMatch(/provider_backed|demo_sample|observation_only|partial_iv|partial_greeks|partial_open_interest|partial_volume|partial_quote|limited_strike_coverage/i);
+    expect(heroText).not.toMatch(SYNTHETIC_DIAGNOSTIC_MARKERS);
+    expect(heroText).not.toMatch(/sourceAuthority|fallback|target price|stop loss|position sizing|目标价|止损|仓位建议|交易建议|操作建议/i);
   });
 
   it('maps internal scenario and readiness reason codes into consumer-safe copy', async () => {

@@ -173,6 +173,242 @@ describe('optionsLabApi fixture fallback boundaries', () => {
     });
   });
 
+  it('normalizes complete options chain readiness into consumer-safe labels', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: {
+        symbol: 'TEM',
+        expiration: '2026-06-19',
+        underlying: null,
+        calls: [],
+        puts: [],
+        filters_applied: {},
+        chain_as_of: '2026-05-06T13:45:00Z',
+        source: 'authorized_snapshot',
+        limitations: [],
+        metadata: {
+          read_only: true,
+        },
+        options_chain_readiness: {
+          contract_version: 'options-chain-readiness-v1',
+          overall_state: 'ready',
+          chain_state: 'available',
+          configuration_state: 'available',
+          data_boundary: 'provider_backed',
+          authority_state: 'authoritative',
+          score_authority: 'authoritative',
+          expiration_coverage: {
+            state: 'available',
+            expiration_count: 2,
+            missing_count: 0,
+            covered_expirations: ['2026-06-19', '2026-08-21'],
+          },
+          strike_coverage: {
+            state: 'available',
+            strike_count: 12,
+            sparse_count: 0,
+          },
+          field_completeness: {
+            iv: { state: 'available', available_count: 12, missing_count: 0, total_count: 12 },
+            greeks: { state: 'available', available_count: 12, missing_count: 0, total_count: 12 },
+            open_interest: { state: 'available', available_count: 12, missing_count: 0, total_count: 12 },
+            volume: { state: 'available', available_count: 12, missing_count: 0, total_count: 12 },
+            quote: { state: 'available', available_count: 12, missing_count: 0, total_count: 12 },
+          },
+          blocking_reasons: [],
+          warnings: [],
+          next_evidence_needed: [],
+        },
+      },
+    } as never);
+
+    await expect(optionsLabApi.getOptionChain('tem', '2026-06-19')).resolves.toMatchObject({
+      symbol: 'TEM',
+      optionsChainReadiness: {
+        contractVersion: 'options-chain-readiness-v1',
+        overallState: 'ready',
+        chainState: 'available',
+        dataBoundary: 'provider_backed',
+        authorityState: 'authoritative',
+        expirationCoverage: {
+          coveredExpirations: ['2026-06-19', '2026-08-21'],
+        },
+        fieldCompleteness: {
+          openInterest: {
+            totalCount: 12,
+          },
+        },
+      },
+      optionsChainReadinessView: {
+        labels: ['链可用', '到期覆盖可用', '结构比较可用'],
+        blockerLabels: [],
+        allLabels: ['链可用', '到期覆盖可用', '结构比较可用'],
+      },
+    });
+  });
+
+  it('maps demo sample options chain readiness to observation labels', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: {
+        symbol: 'TEM',
+        expiration: '2026-06-19',
+        underlying: null,
+        calls: [],
+        puts: [],
+        filters_applied: {},
+        chain_as_of: '2026-05-06T13:45:00Z',
+        source: 'synthetic_options_lab_fixture',
+        limitations: [],
+        metadata: {
+          read_only: true,
+        },
+        options_chain_readiness: {
+          contract_version: 'options-chain-readiness-v1',
+          overall_state: 'blocked',
+          chain_state: 'available',
+          configuration_state: 'available',
+          data_boundary: 'demo_sample',
+          authority_state: 'observation_only',
+          score_authority: 'observation_only',
+          expiration_coverage: {
+            state: 'available',
+            expiration_count: 1,
+            missing_count: 0,
+            covered_expirations: ['2026-06-19'],
+          },
+          strike_coverage: {
+            state: 'available',
+            strike_count: 4,
+            sparse_count: 0,
+          },
+          field_completeness: {
+            iv: { state: 'available', available_count: 4, missing_count: 0, total_count: 4 },
+            greeks: { state: 'available', available_count: 4, missing_count: 0, total_count: 4 },
+            open_interest: { state: 'available', available_count: 4, missing_count: 0, total_count: 4 },
+            volume: { state: 'available', available_count: 4, missing_count: 0, total_count: 4 },
+            quote: { state: 'available', available_count: 4, missing_count: 0, total_count: 4 },
+          },
+          blocking_reasons: ['demo_sample_data', 'provider_not_authoritative'],
+          warnings: [],
+          next_evidence_needed: ['补充授权链路证据'],
+        },
+      },
+    } as never);
+
+    const response = await optionsLabApi.getOptionChain('tem', '2026-06-19');
+
+    expect(response.optionsChainReadinessView?.allLabels).toEqual([
+      '链可用',
+      '到期覆盖可用',
+      '演示样本',
+      '仅观察',
+    ]);
+    expect(response.optionsChainReadinessView?.allLabels.join(' ')).not.toMatch(/demo_sample|observation_only|provider_not_authoritative/);
+  });
+
+  it('maps partial missing chain fields into compact blockers', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: {
+        symbol: 'TEM',
+        expiration: '2026-06-19',
+        underlying: null,
+        calls: [],
+        puts: [],
+        filters_applied: {},
+        chain_as_of: '2026-05-06T13:45:00Z',
+        source: 'authorized_snapshot',
+        limitations: [],
+        metadata: {
+          read_only: true,
+        },
+        options_chain_readiness: {
+          contract_version: 'options-chain-readiness-v1',
+          overall_state: 'partial',
+          chain_state: 'partial',
+          configuration_state: 'available',
+          data_boundary: 'provider_backed',
+          authority_state: 'authoritative',
+          score_authority: 'authoritative',
+          expiration_coverage: {
+            state: 'available',
+            expiration_count: 2,
+            missing_count: 0,
+            covered_expirations: ['2026-06-19', '2026-08-21'],
+          },
+          strike_coverage: {
+            state: 'limited',
+            strike_count: 2,
+            sparse_count: 1,
+          },
+          field_completeness: {
+            iv: { state: 'partial', available_count: 1, missing_count: 1, total_count: 2 },
+            greeks: { state: 'partial', available_count: 1, missing_count: 1, total_count: 2 },
+            open_interest: { state: 'partial', available_count: 1, missing_count: 1, total_count: 2 },
+            volume: { state: 'partial', available_count: 1, missing_count: 1, total_count: 2 },
+            quote: { state: 'partial', available_count: 1, missing_count: 1, total_count: 2 },
+          },
+          blocking_reasons: [
+            'limited_strike_coverage',
+            'partial_iv',
+            'partial_greeks',
+            'partial_open_interest',
+            'partial_volume',
+            'partial_quote',
+          ],
+          warnings: [],
+          next_evidence_needed: [
+            '补充 IV 与 Greeks 覆盖',
+            '补充 OI 与成交量覆盖',
+            '补充 bid/ask/last 报价字段',
+          ],
+        },
+      },
+    } as never);
+
+    const response = await optionsLabApi.getOptionChain('tem', '2026-06-19');
+
+    expect(response.optionsChainReadinessView?.labels).toEqual([
+      '链部分可用',
+      '到期覆盖可用',
+    ]);
+    expect(response.optionsChainReadinessView?.blockerLabels).toEqual([
+      '行权价覆盖有限',
+      'IV待补',
+      '希腊值待补',
+      'OI/成交待补',
+      '报价字段待补',
+    ]);
+    expect(response.optionsChainReadinessView?.allLabels.join(' ')).not.toMatch(/partial_iv|partial_greeks|partial_open_interest|partial_volume|partial_quote|limited_strike_coverage/);
+  });
+
+  it('keeps missing options chain readiness backward compatible', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: {
+        symbol: 'TEM',
+        expiration: '2026-06-19',
+        underlying: null,
+        calls: [],
+        puts: [],
+        filters_applied: {},
+        chain_as_of: '2026-05-06T13:45:00Z',
+        source: 'legacy_snapshot',
+        limitations: [],
+        metadata: {
+          read_only: true,
+        },
+      },
+    } as never);
+
+    await expect(optionsLabApi.getOptionChain('tem', '2026-06-19')).resolves.toMatchObject({
+      symbol: 'TEM',
+      optionsChainReadiness: null,
+      optionsChainReadinessView: {
+        labels: [],
+        blockerLabels: [],
+        allLabels: [],
+      },
+    });
+  });
+
   it('posts decision evaluation and keeps network-error fallback demo-only', async () => {
     vi.mocked(apiClient.post).mockResolvedValueOnce({
       data: {
