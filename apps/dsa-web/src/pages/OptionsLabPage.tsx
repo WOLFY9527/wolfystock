@@ -1,10 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, BarChart3, ChevronDown, Layers3, LineChart, Search, ShieldCheck } from 'lucide-react';
 import {
-  buildConsumerResearchReadinessView,
-  convertOptionsReadiness,
   extractOptionsResearchReadiness,
-  inferOptionsResearchReadiness,
 } from '../api/researchReadiness';
 import {
   optionsLabApi,
@@ -24,8 +21,6 @@ import {
   type OptionsUnderlyingSummaryResponse,
 } from '../api/optionsLab';
 import type { OptionsResearchReadiness } from '../types/researchReadiness';
-import ConsumerResearchReadinessStrip from '../components/common/ConsumerResearchReadinessStrip';
-import OptionsReadinessGateSummary from '../components/options/OptionsReadinessGateSummary';
 import {
   CompactFilterBar,
   ConsoleDisclosure,
@@ -109,11 +104,9 @@ const OPTIONS_INSUFFICIENT_COPY = '当前期权信号数据不足，仅供观察
 const OPTIONS_UPDATING_COPY = '数据更新中，稍后将自动刷新。';
 const OPTIONS_UNAVAILABLE_COPY = '本模块暂不可用，请稍后重试。';
 const OPTIONS_NO_CONCLUSION_COPY = '数据不足，暂不形成结论';
-const OPTIONS_SAFE_INSTRUCTION_COPY = '仅做只读情景分析，不构成执行指令。';
-const OPTIONS_NON_ADVICE_COPY = '不构成买卖建议';
-const OPTIONS_NO_ORDER_COPY = '不会触发外部执行';
-const OPTIONS_NO_BROKER_COPY = '不连接外部执行通道';
-const OPTIONS_NO_PORTFOLIO_MUTATION_COPY = '不改动投资组合';
+const OPTIONS_RESEARCH_RECORD_COPY = '研究记录';
+const OPTIONS_NON_TRADING_INSTRUCTION_COPY = '非交易指令';
+const OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY = '仅观察';
 const OPTIONS_OBSERVE_ONLY_COPY = '仅供观察，不作为结论依据';
 const OPTIONS_DEMO_BOUNDARY_COPY = '演示数据：当前数据延迟，仅用于界面与情景验证，不作为结论依据。';
 const OPTIONS_DEMO_GREEKS_PLACEHOLDER = '敏感度暂未提供';
@@ -615,10 +608,9 @@ function buildScenarioEvidenceView(frame?: OptionsConsumerScenarioFrame | null):
     typeof frame.riskEvidence?.requiredMovePct === 'number' ? `所需波动：${ratio(frame.riskEvidence.requiredMovePct)}` : null,
   ].filter((item): item is string => Boolean(item)).slice(0, 4);
   const boundaryLines = [
-    frame.frameState === 'observe_only' || frame.frameState === 'blocked' || frame.frameState === 'insufficient' ? '仅观察' : null,
-    frame.noTradingBoundary?.noOrderPlacement ? '不触发执行动作' : null,
-    frame.noTradingBoundary?.noPortfolioMutation ? '不改动现有持仓' : null,
-    frame.noTradingBoundary?.analyticalOnly || frame.noTradingBoundary?.noTradingRecommendation ? '研究记录' : null,
+    frame.noTradingBoundary?.analyticalOnly || frame.noTradingBoundary?.noTradingRecommendation ? OPTIONS_RESEARCH_RECORD_COPY : null,
+    frame.noTradingBoundary?.noOrderPlacement || frame.noTradingBoundary?.noBrokerExecution ? OPTIONS_NON_TRADING_INSTRUCTION_COPY : null,
+    frame.frameState === 'observe_only' || frame.frameState === 'blocked' || frame.frameState === 'insufficient' ? OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY : null,
   ].filter((item): item is string => Boolean(item));
 
   return {
@@ -725,14 +717,12 @@ const DataQualityBanner: React.FC<{
       className="mt-4 rounded-lg border border-amber-300/25 bg-amber-300/[0.07] px-3 py-3"
     >
       <div className="flex flex-wrap gap-2">
-        <Pill tone="warn">仅供观察</Pill>
-        <Pill tone="warn">当前不是实时期权链</Pill>
+        <Pill tone="warn">演示样本</Pill>
+        <Pill tone="warn">波动结构待确认</Pill>
+        <Pill tone="info">{OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY}</Pill>
         <Pill tone="neutral">{availability.freshnessLabel}</Pill>
-        <Pill tone="risk">不形成可用于判断的结论</Pill>
+        <Pill tone="risk">风险边界</Pill>
       </div>
-      <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-        当前显示演示、延迟或本地验证快照；可用于理解页面结构与情景边界，不用于真实判断或外部执行。
-      </p>
     </div>
   );
 };
@@ -1419,7 +1409,7 @@ const ResearchVisualsPanel: React.FC<{
         </div>
       </div>
       <div className="mt-4 flex flex-wrap gap-2 text-xs text-[color:var(--wolfy-text-muted)]">
-        {[OPTIONS_SAFE_INSTRUCTION_COPY, OPTIONS_NON_ADVICE_COPY, OPTIONS_NO_ORDER_COPY, OPTIONS_NO_BROKER_COPY, OPTIONS_NO_PORTFOLIO_MUTATION_COPY].map((line) => (
+        {[OPTIONS_RESEARCH_RECORD_COPY, OPTIONS_NON_TRADING_INSTRUCTION_COPY, OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY].map((line) => (
           <Pill key={line} tone="neutral">{line}</Pill>
         ))}
       </div>
@@ -1498,7 +1488,7 @@ const AssumptionPanel: React.FC<{
         <SectionHeader eyebrow="情景控制台" title="期权情景输入" icon={Search}>
           <div className="flex flex-wrap gap-2">
             <Pill tone="info">只读观察</Pill>
-            <Pill tone="neutral">门控优先</Pill>
+            <Pill tone="neutral">情景输入</Pill>
           </div>
         </SectionHeader>
       </div>
@@ -1612,58 +1602,6 @@ function firstObservationStrategy(
   return asArray(comparison?.strategies)[0]?.strategyType ?? null;
 }
 
-function heroSummaryLine(
-  availability: ConsumerAvailabilitySummary,
-  decision: OptionsDecisionResponse | null,
-  comparison: OptionsStrategyCompareResponse | null,
-  hasChainRows: boolean,
-): string {
-  if (!hasChainRows) return '等待期权链加载';
-  if (availability.stateKey === 'UPDATING') return '情景更新中';
-  if (availability.stateKey === 'UNAVAILABLE' || availability.stateKey === 'PAUSED') {
-    return '等待数据刷新';
-  }
-
-  const observationStrategy = firstObservationStrategy(decision, comparison);
-  if (isNonDecisionGrade(decision)) {
-    return observationStrategy
-      ? '观察结构可用，等待更完整数据'
-      : '记录风险边界';
-  }
-
-  if (observationStrategy) {
-    return '查看结构样例的风险边界';
-  }
-
-  return availability.explanation;
-}
-
-function heroPrimaryTask(
-  availability: ConsumerAvailabilitySummary,
-  decision: OptionsDecisionResponse | null,
-  comparison: OptionsStrategyCompareResponse | null,
-  hasChainRows: boolean,
-): string {
-  if (!hasChainRows) return '等待期权链加载';
-  if (availability.stateKey === 'UPDATING') return '等待刷新完成';
-  if (availability.stateKey === 'UNAVAILABLE' || availability.stateKey === 'PAUSED') {
-    return '等待数据刷新';
-  }
-
-  const observationStrategy = firstObservationStrategy(decision, comparison);
-  if (isNonDecisionGrade(decision)) {
-    return observationStrategy
-      ? '查看首个结构的风险边界'
-      : '完成情景输入';
-  }
-
-  if (observationStrategy) {
-    return '复核风险边界，下钻图形与链表';
-  }
-
-  return '设定情景参数';
-}
-
 function heroObservationScope(
   hasChainRows: boolean,
   decision: OptionsDecisionResponse | null,
@@ -1682,6 +1620,88 @@ type SummaryStripItem = {
   meta?: string;
 };
 
+type FirstReadChip = {
+  label: string;
+  tone: 'neutral' | 'info' | 'warn' | 'risk' | 'good';
+};
+
+function hasStrategyComparison(comparison: OptionsStrategyCompareResponse | null, decision: OptionsDecisionResponse | null): boolean {
+  return asArray(comparison?.strategies).length > 0 || Boolean(firstObservationStrategy(decision, comparison));
+}
+
+function firstReadChips(
+  summary: OptionsUnderlyingSummaryResponse | null,
+  chain: OptionsChainResponse | null,
+  decision: OptionsDecisionResponse | null,
+  comparison: OptionsStrategyCompareResponse | null,
+  hasChainRows: boolean,
+): FirstReadChip[] {
+  const chips: FirstReadChip[] = [];
+  const packet = chain?.optionsStructureSignalPacket;
+  const hasComparison = hasStrategyComparison(comparison, decision);
+  const hasGreekGap = asArray(packet?.missingGreeks).length > 0
+    || packet?.ivCoverageState === 'missing'
+    || packet?.gammaCoverageState === 'missing'
+    || decision?.ivGreeks?.ivRankStatus !== 'available';
+
+  chips.push(hasChainRows ? { label: '策略结构可比', tone: hasComparison ? 'good' : 'info' } : { label: '链待接入', tone: 'warn' });
+
+  if (hasDemoOrStalePayload(summary, chain, decision)) {
+    chips.push({ label: '演示样本', tone: 'warn' });
+  }
+
+  chips.push({ label: hasGreekGap ? '希腊值待补' : '波动结构待确认', tone: 'warn' });
+  chips.push({ label: '波动结构待确认', tone: 'info' });
+
+  if (!chain?.expiration || !hasChainRows) {
+    chips.push({ label: '到期/行权价待选', tone: 'warn' });
+  }
+
+  chips.push({ label: '风险边界', tone: 'risk' });
+
+  return [...new Map(chips.map((chip) => [chip.label, chip])).values()];
+}
+
+function firstReadStructureLine(
+  decision: OptionsDecisionResponse | null,
+  comparison: OptionsStrategyCompareResponse | null,
+): string {
+  const strategy = firstObservationStrategy(decision, comparison);
+  if (strategy) {
+    return `可观察结构：${strategyChineseLabel(strategy)} · 先读最大亏损、盈亏平衡与情景估算。`;
+  }
+  return '可观察结构：等待策略结构可比。';
+}
+
+function nextEvidenceLabel(value: string): string {
+  const normalized = value.toLowerCase();
+  if (normalized.includes('authority') || normalized.includes('chain') || normalized.includes('链路')) {
+    return '补齐链路接入证据';
+  }
+  if (normalized.includes('greek') || normalized.includes('iv') || normalized.includes('希腊')) {
+    return '补齐 IV / 希腊值';
+  }
+  if (normalized.includes('oi') || normalized.includes('open interest') || normalized.includes('成交量') || normalized.includes('价差')) {
+    return '补齐成交深度与价差';
+  }
+  return scenarioNextEvidenceLabel(value);
+}
+
+function firstReadNextEvidence(
+  readiness: OptionsResearchReadiness | null,
+  decision: OptionsDecisionResponse | null,
+  comparison: OptionsStrategyCompareResponse | null,
+): string[] {
+  const frame = decision?.optionsConsumerScenarioFrame || comparison?.optionsConsumerScenarioFrame;
+  const values = [
+    ...asArray(readiness?.nextEvidenceNeeded),
+    ...asArray(frame?.nextEvidenceNeeded),
+    ...asArray(frame?.missingEvidence),
+  ];
+  const labels = [...new Set(values.map(nextEvidenceLabel))].filter((value) => value !== '等待证据更新');
+  return (labels.length ? labels : ['补齐链路接入证据', '补齐 IV / 希腊值', '补齐成交深度与价差']).slice(0, 3);
+}
+
 const ProductHero: React.FC<{
   availability: ConsumerAvailabilitySummary;
   summary: OptionsUnderlyingSummaryResponse | null;
@@ -1690,15 +1710,15 @@ const ProductHero: React.FC<{
   comparison: OptionsStrategyCompareResponse | null;
   hasChainRows: boolean;
   readinessGates: OptionsResearchReadiness | null;
-  readiness: ReturnType<typeof buildConsumerResearchReadinessView>;
-}> = ({ availability, summary, chain, decision, comparison, hasChainRows, readinessGates, readiness }) => {
+}> = ({ availability, summary, chain, decision, comparison, hasChainRows, readinessGates }) => {
   const underlying = summary?.underlying || chain?.underlying;
   const changeClass = metricTone(underlying?.changePct);
-  const summaryLine = heroSummaryLine(availability, decision, comparison, hasChainRows);
-  const primaryTask = heroPrimaryTask(availability, decision, comparison, hasChainRows);
   const observationScope = heroObservationScope(hasChainRows, decision, comparison);
   const displayName = underlyingDisplayName(summary, chain);
   const contextLine = underlyingContextLine(summary, chain);
+  const chips = firstReadChips(summary, chain, decision, comparison, hasChainRows);
+  const nextEvidence = firstReadNextEvidence(readinessGates, decision, comparison);
+  const structureLine = firstReadStructureLine(decision, comparison);
 
   return (
     <section
@@ -1708,27 +1728,11 @@ const ProductHero: React.FC<{
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className={labelClass}>情景分析台</p>
-            <Pill tone={availability.stateTone}>{availability.stateLabel}</Pill>
-            <Pill tone={availability.confidenceTone}>{availability.confidenceLabel}</Pill>
+            <p className={labelClass}>期权研究首读</p>
+            {[OPTIONS_RESEARCH_RECORD_COPY, OPTIONS_NON_TRADING_INSTRUCTION_COPY, OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY].map((label) => (
+              <Pill key={label} tone="neutral">{label}</Pill>
+            ))}
           </div>
-          <ConsumerResearchReadinessStrip
-            readiness={readiness}
-            title="研究就绪度"
-            testId="options-lab-research-readiness-strip"
-            className="mt-3"
-          />
-          <OptionsReadinessGateSummary
-            readiness={readinessGates}
-            testId="options-lab-readiness-gate-summary"
-            className="mt-4"
-          />
-          <DataQualityBanner
-            availability={availability}
-            summary={summary}
-            chain={chain}
-            decision={decision}
-          />
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <div className="min-w-0">
               <p className={labelClass}>当前标的</p>
@@ -1741,10 +1745,20 @@ const ProductHero: React.FC<{
               {decisionStatusLabel(decision)}
             </span>
           </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {chips.map((chip) => (
+              <Pill key={chip.label} tone={chip.tone}>{chip.label}</Pill>
+            ))}
+          </div>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-            {summaryLine}
+            {structureLine}
           </p>
-          <p className="mt-2 text-xs text-[color:var(--wolfy-text-muted)]">{availability.freshnessLabel}</p>
+          <DataQualityBanner
+            availability={availability}
+            summary={summary}
+            chain={chain}
+            decision={decision}
+          />
         </div>
 
         <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:min-w-[21rem]">
@@ -1756,16 +1770,21 @@ const ProductHero: React.FC<{
             <p className={cn('mt-1 text-sm', changeClass)}>{ratio(underlying?.changePct)}</p>
           </div>
           <div className={cn(innerBlockClass, 'p-3')} data-testid="options-lab-consumer-availability">
-            <p className={labelClass}>当前主任务</p>
+            <p className={labelClass}>当前可读</p>
             <p className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
-              {primaryTask}
-            </p>
-            <p className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
-              当前状态：{availability.explanation}
-            </p>
-            <p className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
               {observationScope}
             </p>
+            <p className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
+              {availability.freshnessLabel}
+            </p>
+          </div>
+          <div className={cn(innerBlockClass, 'p-3 sm:col-span-2')}>
+            <p className={labelClass}>下一步证据</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {nextEvidence.map((label) => (
+                <Pill key={label} tone="warn">{label}</Pill>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -2249,8 +2268,8 @@ const StructureSignalPacketPanel: React.FC<{
     <section className={cn(panelClass, className)} data-testid="options-lab-structure-signal-packet">
       <SectionHeader eyebrow="结构观察" title="结构信号包" icon={Layers3}>
         <div className="flex flex-wrap justify-end gap-2">
-          <Pill tone="info">仅供研究观察</Pill>
-          <Pill tone="warn">不触发执行</Pill>
+          <Pill tone="info">{OPTIONS_RESEARCH_RECORD_COPY}</Pill>
+          <Pill tone="warn">{OPTIONS_NON_TRADING_INSTRUCTION_COPY}</Pill>
         </div>
       </SectionHeader>
       <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
@@ -2281,10 +2300,11 @@ const StructureSignalPacketPanel: React.FC<{
         <div className={cn(innerBlockClass, 'p-4')}>
           <p className={labelClass}>观察边界</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {packet.observationBoundary?.researchOnly ? <Pill tone="info">仅供研究观察</Pill> : null}
-            {packet.observationBoundary?.orderPlacement === false ? <Pill tone="warn">不触发执行</Pill> : null}
-            {packet.observationBoundary?.brokerExecution === false ? <Pill tone="warn">不连接外部执行通道</Pill> : null}
-            {packet.observationBoundary?.portfolioMutation === false ? <Pill tone="neutral">不改动投资组合</Pill> : null}
+            {packet.observationBoundary?.researchOnly ? <Pill tone="info">{OPTIONS_RESEARCH_RECORD_COPY}</Pill> : null}
+            {packet.observationBoundary?.orderPlacement === false || packet.observationBoundary?.brokerExecution === false ? (
+              <Pill tone="warn">{OPTIONS_NON_TRADING_INSTRUCTION_COPY}</Pill>
+            ) : null}
+            {packet.observationBoundary?.portfolioMutation === false ? <Pill tone="neutral">{OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY}</Pill> : null}
           </div>
         </div>
       </div>
@@ -2972,13 +2992,6 @@ const OptionsLabPageContent: React.FC = () => {
     ),
     [comparisonState.comparison, decisionState.decision, state.chain, state.expirations, state.summary],
   );
-  const optionsResearchReadinessView = useMemo(
-    () => buildConsumerResearchReadinessView(
-      convertOptionsReadiness(optionsResearchReadiness) || inferOptionsResearchReadiness(decisionState.decision),
-      'zh',
-    ),
-    [decisionState.decision, optionsResearchReadiness],
-  );
   const scenarioEvidenceFrame = useMemo(
     () => decisionState.decision?.optionsConsumerScenarioFrame || comparisonState.comparison?.optionsConsumerScenarioFrame || null,
     [comparisonState.comparison, decisionState.decision],
@@ -2994,8 +3007,9 @@ const OptionsLabPageContent: React.FC = () => {
             title="期权实验室"
             action={(
               <div className="flex flex-wrap justify-end gap-2">
-                <Pill tone="info">门控优先</Pill>
-                <Pill tone="warn">不构成执行指令</Pill>
+                <Pill tone="info">{OPTIONS_RESEARCH_RECORD_COPY}</Pill>
+                <Pill tone="warn">{OPTIONS_NON_TRADING_INSTRUCTION_COPY}</Pill>
+                <Pill tone="neutral">{OPTIONS_OBSERVATION_ONLY_BOUNDARY_COPY}</Pill>
               </div>
             )}
           />
@@ -3008,7 +3022,6 @@ const OptionsLabPageContent: React.FC = () => {
               comparison={comparisonState.comparison}
               hasChainRows={hasChainRows}
               readinessGates={optionsResearchReadiness}
-              readiness={optionsResearchReadinessView}
             />
 
             <WorkspaceRegion
