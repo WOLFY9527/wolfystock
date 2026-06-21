@@ -4,8 +4,9 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LiquidityMonitorPage from '../LiquidityMonitorPage';
 
-const { getLiquidityMonitor, useProductSurfaceMock } = vi.hoisted(() => ({
+const { getLiquidityMonitor, getDataReadiness, useProductSurfaceMock } = vi.hoisted(() => ({
   getLiquidityMonitor: vi.fn(),
+  getDataReadiness: vi.fn(),
   useProductSurfaceMock: vi.fn(),
 }));
 
@@ -14,6 +15,17 @@ vi.mock('../../api/liquidityMonitor', () => ({
     getLiquidityMonitor,
   },
 }));
+
+vi.mock('../../api/market', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../api/market')>();
+  return {
+    ...actual,
+    marketApi: {
+      ...actual.marketApi,
+      getDataReadiness,
+    },
+  };
+});
 
 vi.mock('../../contexts/UiLanguageContext', () => ({
   useI18n: () => ({
@@ -721,6 +733,20 @@ describe('LiquidityMonitorPage', () => {
       isAdminMode: false,
       canReadProviders: false,
     });
+    getDataReadiness.mockResolvedValue({
+      readinessStatus: 'ready',
+      diagnosticOnly: true,
+      providerRuntimeCalled: false,
+      networkCallsEnabled: false,
+      representativeSymbols: [],
+      checks: [],
+      officialRiskSourceReadiness: {
+        bundleState: 'ready',
+        vix: { state: 'ready', freshness: 'live' },
+        rates: { state: 'ready', freshness: 'live' },
+        fedLiquidity: { state: 'ready', freshness: 'live' },
+      },
+    });
   });
 
   async function expandLiquidityDetails(): Promise<HTMLElement> {
@@ -760,7 +786,7 @@ describe('LiquidityMonitorPage', () => {
     expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('当前仍有 3 项线索可观察');
     expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('待补充指标');
     expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('下一步观察');
-    expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('对照 Market Overview / Rotation Radar');
+    expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('等待刷新后确认主线是否一致');
     const disclosure = screen.getByTestId('liquidity-monitor-consumer-details');
     expect(disclosure).toHaveAttribute('data-terminal-primitive', 'disclosure');
     expect(disclosure).not.toHaveAttribute('open');
@@ -772,6 +798,35 @@ describe('LiquidityMonitorPage', () => {
       /provider_unavailable|fallback_source|score_contribution_not_allowed|sourceAuthorityAllowed|scoreContributionAllowed|observationOnly|observationOnlyCount|scoreContribution|sourceAuthorityRouteRejected|routeRejectedReasonCodes|外部调用|运行顺序|缓存写入|来源覆盖诊断|来源与约束|查看提供方覆盖|前往数据源设置|marketCache|runtime|backend|证据覆盖|缺失证据|观察证据|可计分证据|fallback|stale|proxy|决策就绪|就绪度|置信度/i,
     );
     expect(guidancePanel.textContent || '').not.toMatch(/计分|评分|官方曲线缺口|官方利差|数据源|提供方/);
+  });
+
+  it('uses official risk source readiness without exposing raw provider details', async () => {
+    getLiquidityMonitor.mockResolvedValueOnce(payload);
+    getDataReadiness.mockResolvedValueOnce({
+      readinessStatus: 'ready',
+      diagnosticOnly: true,
+      providerRuntimeCalled: false,
+      networkCallsEnabled: false,
+      representativeSymbols: [],
+      checks: [],
+      officialRiskSourceReadiness: {
+        bundleState: 'partial',
+        vix: { state: 'ready', freshness: 'live' },
+        rates: { state: 'stale', freshness: 'stale' },
+        fedLiquidity: { state: 'blocked', freshness: 'unavailable' },
+      },
+    });
+
+    render(<LiquidityMonitorPage />);
+
+    const strip = await screen.findByTestId('liquidity-official-risk-readiness');
+    await waitFor(() => expect(strip).toHaveTextContent('官方风险源部分可用'));
+    expect(strip).toHaveTextContent('VIX可用');
+    expect(strip).toHaveTextContent('利率待更新');
+    expect(strip).toHaveTextContent('Fed流动性待补');
+    expect(strip.textContent || '').not.toMatch(
+      /authorized|unavailable|partial|unknown|fallbackUsed|providerConfigured|sourceAuthority|scoreContributionAllowed|provider|runtime|credential/i,
+    );
   });
 
   it('renders the liquidity impulse synthesis header with evidence rows inside admin details', async () => {
@@ -1159,10 +1214,10 @@ describe('LiquidityMonitorPage', () => {
 
     render(<LiquidityMonitorPage />);
     await screen.findByTestId('liquidity-decision-readiness');
-    await waitFor(() => expect(screen.getByTestId('liquidity-decision-readiness')).toHaveTextContent('数据不足，暂不判断；保留最近一次流动性状态。'));
+    await waitFor(() => expect(screen.getByTestId('liquidity-decision-readiness')).toHaveTextContent('仍可观察的资金面线索'));
     const unavailableBand = screen.getByTestId('liquidity-decision-readiness');
     const unavailablePosture = screen.getByTestId('liquidity-visual-posture');
-    expect(unavailableBand).toHaveTextContent('数据不足，暂不判断；保留最近一次流动性状态。');
+    expect(unavailableBand).toHaveTextContent('数据不足');
     expect(unavailablePosture).toHaveTextContent('--');
     expect(unavailablePosture).not.toHaveTextContent('50');
     expect(unavailableBand).toHaveTextContent('仍可观察的资金面线索');
@@ -1188,7 +1243,7 @@ describe('LiquidityMonitorPage', () => {
     expect(summaryStrip).not.toHaveTextContent('中性观察');
     expect(screen.getByTestId('liquidity-visual-posture')).toHaveTextContent('无明显方向');
     expect(screen.getByTestId('liquidity-visual-coverage')).toHaveTextContent('可参考');
-    expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('对照 Market Overview / Rotation Radar');
+    expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('等待刷新后确认主线是否一致');
     expect(document.body.textContent || '').not.toContain('No Clear Edge');
   });
 
@@ -1432,13 +1487,13 @@ describe('LiquidityMonitorPage', () => {
 
     fireEvent.click(within(diagnostics).getByRole('button', { name: '展开 来源覆盖诊断' }));
 
-    expect(diagnostics).toHaveTextContent('Official');
-    expect(diagnostics).toHaveTextContent('Score-eligible');
-    expect(diagnostics).toHaveTextContent('Observation-only');
-    expect(diagnostics).toHaveTextContent('Fallback');
-    expect(diagnostics).toHaveTextContent('Rejected');
+    expect(diagnostics).toHaveTextContent('官方来源');
+    expect(diagnostics).toHaveTextContent('可计分');
+    expect(diagnostics).toHaveTextContent('仅观察');
+    expect(diagnostics).toHaveTextContent('备用');
+    expect(diagnostics).toHaveTextContent('已拒绝');
     expect(diagnostics).toHaveTextContent('provider_forbidden_for_use_case');
-    expect(diagnostics).toHaveTextContent('As-of 2026-05-06');
+    expect(diagnostics).toHaveTextContent('截至 2026-05-06');
     expect(within(diagnostics).getByText(/provider_forbidden_for_use_case/, { selector: 'p' })).toBeVisible();
   });
 

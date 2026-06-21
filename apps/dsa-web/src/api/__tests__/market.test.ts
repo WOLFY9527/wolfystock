@@ -27,6 +27,37 @@ describe('market API path join hygiene', () => {
 });
 
 describe('market temperature evidence normalization', () => {
+  it('normalizes official risk source readiness and maps it to consumer labels', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({
+      data: {
+        readiness_status: 'ready',
+        diagnostic_only: true,
+        provider_runtime_called: false,
+        network_calls_enabled: false,
+        representative_symbols: [],
+        checks: [],
+        official_risk_source_readiness: {
+          bundle_state: 'partial',
+          vix: { state: 'ready', freshness: 'live' },
+          rates: { state: 'stale', freshness: 'stale' },
+          fed_liquidity: { state: 'blocked', freshness: 'unavailable' },
+        },
+      },
+    });
+
+    const payload = await marketModule.marketApi.getDataReadiness();
+    const view = marketModule.buildOfficialRiskSourceReadinessView(payload.officialRiskSourceReadiness);
+
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/market/data-readiness', {});
+    expect(payload.officialRiskSourceReadiness?.bundleState).toBe('partial');
+    expect(payload.officialRiskSourceReadiness?.fedLiquidity?.state).toBe('blocked');
+    expect(view.bundleLabel).toBe('官方风险源部分可用');
+    expect(view.chips.map((chip) => chip.label)).toEqual(['VIX可用', '利率待更新', 'Fed流动性待补']);
+    expect(`${view.bundleLabel} ${view.chips.map((chip) => chip.label).join(' ')}`).not.toMatch(
+      /authorized|unavailable|partial|unknown|fallbackUsed|providerConfigured|sourceAuthority|scoreContributionAllowed|provider|runtime|credential/i,
+    );
+  });
+
   it('projects raw provider and runtime source labels into canonical consumer data states', () => {
     const cases = [
       ['PROVIDER ALTERNATIVE_ME', '可用'],

@@ -23,6 +23,7 @@ import {
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
 import {
+  buildAlpacaQuoteAuthorityReadinessView,
   marketRotationApi,
   type MarketRotationEvidenceQuality,
   type MarketRotationFamilyRollupItem,
@@ -1741,6 +1742,7 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
   const guidance = rotationGuidance(payload);
   const conclusion = deriveRotationConclusion(payload, tiers);
   const decisionSummary = buildRotationDecisionReadiness(payload);
+  const alpacaReadiness = buildAlpacaQuoteAuthorityReadinessView(payload.alpacaQuoteAuthorityReadiness);
   const capitalSummary = deriveCapitalRotationSummary(payload);
   const primaryThemes = derivePrimaryDisplayThemes(payload, tiers);
   const selectedTheme = primaryThemes[0];
@@ -1823,6 +1825,24 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
             <p className="mt-2 text-[11px] leading-5 text-white/58">{card.detail}</p>
           </div>
         ))}
+      </div>
+
+      <div
+        data-testid="rotation-alpaca-quote-readiness"
+        className="mt-3 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2.5"
+      >
+        <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium text-white/48">ETF 引用状态</p>
+            <p className="mt-1 text-sm font-semibold text-white/84">{alpacaReadiness.label}</p>
+            <p className="mt-1 text-[11px] leading-5 text-white/52">{alpacaReadiness.detail}</p>
+          </div>
+          <div className="flex min-w-0 flex-wrap gap-1.5 md:justify-end">
+            {alpacaReadiness.chips.map((chip) => (
+              <TerminalChip key={chip.key} variant={chip.variant}>{chip.label}</TerminalChip>
+            ))}
+          </div>
+        </div>
       </div>
 
       {familyViews.length ? (

@@ -12,6 +12,11 @@ import {
   type LiquidityMonitorRegime,
   type LiquidityMonitorResponse,
 } from '../api/liquidityMonitor';
+import {
+  buildOfficialRiskSourceReadinessView,
+  marketApi,
+  type OfficialRiskSourceReadiness,
+} from '../api/market';
 import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import {
   LiquidityImpulseSynthesisHeader,
@@ -1776,6 +1781,32 @@ const ConsumerDisclosure: React.FC<{
   );
 };
 
+const OfficialRiskSourceReadinessStrip: React.FC<{
+  readiness?: OfficialRiskSourceReadiness | null;
+}> = ({ readiness }) => {
+  const view = buildOfficialRiskSourceReadinessView(readiness);
+
+  return (
+    <section
+      data-testid="liquidity-official-risk-readiness"
+      className="rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2.5"
+    >
+      <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-white/48">官方风险源</p>
+          <p className="mt-1 text-sm font-semibold text-white/84">{view.bundleLabel}</p>
+        </div>
+        <div className="flex min-w-0 flex-wrap gap-1.5 md:justify-end">
+          <TerminalChip variant={view.bundleVariant}>{view.bundleLabel}</TerminalChip>
+          {view.chips.map((chip) => (
+            <TerminalChip key={chip.key} variant={chip.variant}>{chip.label}</TerminalChip>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
 const CapitalFlowSignalPanel: React.FC<{
   signal?: LiquidityCapitalFlowSignal;
 }> = ({ signal }) => {
@@ -2433,6 +2464,7 @@ const LiquidityGuidancePanel: React.FC<{
 const LiquidityMonitorPage: React.FC = () => {
   const { isAdminMode, canReadProviders } = useProductSurface();
   const [data, setData] = useState<LiquidityMonitorResponse | null>(null);
+  const [officialRiskSourceReadiness, setOfficialRiskSourceReadiness] = useState<OfficialRiskSourceReadiness | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -2459,6 +2491,29 @@ const LiquidityMonitorPage: React.FC = () => {
     }
 
     void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSourceReadiness() {
+      try {
+        const payload = await marketApi.getDataReadiness();
+        if (!cancelled) {
+          setOfficialRiskSourceReadiness(payload?.officialRiskSourceReadiness || null);
+        }
+      } catch {
+        if (!cancelled) {
+          setOfficialRiskSourceReadiness(null);
+        }
+      }
+    }
+
+    void loadSourceReadiness();
 
     return () => {
       cancelled = true;
@@ -2524,6 +2579,7 @@ const LiquidityMonitorPage: React.FC = () => {
       {data && regimeGauge && readinessSummary ? (
         <TerminalGrid>
           <div className="flex flex-col gap-4 xl:col-span-12">
+            <OfficialRiskSourceReadinessStrip readiness={officialRiskSourceReadiness} />
             <LiquidityGuidancePanel
               coverageSummary={coverageSummary}
               synthesisView={synthesisView}
