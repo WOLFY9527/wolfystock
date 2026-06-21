@@ -157,6 +157,34 @@ class RuleBacktestParameterSweepPilotServiceTest(unittest.TestCase):
         self.assertEqual(result["datasetMetadata"]["localDataOnly"], True)
         self.assertEqual(result["engine"]["version"], "v1")
         self.assertEqual(result["storage"]["mode"], "response_only")
+        lineage = result["datasetLineageReadiness"]
+        self.assertEqual(lineage["readinessState"], "diagnostic-only")
+        self.assertFalse(lineage["professionalReadinessApproved"])
+        self.assertFalse(lineage["decisionGrade"])
+        self.assertEqual(lineage["barBoundary"]["barSource"], "local_stock_daily_rows")
+        self.assertTrue(lineage["barBoundary"]["localBars"])
+        self.assertTrue(lineage["barBoundary"]["suppliedBarsToRunner"])
+        self.assertFalse(lineage["barBoundary"]["acceptedAsProviderAuthority"])
+        self.assertFalse(lineage["barBoundary"]["providerCallsExecuted"])
+        self.assertEqual(lineage["lineageFields"]["adjustedBasis"]["state"], "unknown")
+        self.assertEqual(lineage["lineageFields"]["corporateActionPolicy"]["state"], "unknown")
+        self.assertEqual(lineage["lineageFields"]["calendarSessionPolicy"]["state"], "unknown")
+        self.assertEqual(lineage["lineageFields"]["pointInTimeMembershipStatus"]["state"], "unknown")
+        self.assertEqual(lineage["lineageFields"]["survivorshipBiasMarker"]["state"], "unknown")
+        self.assertEqual(lineage["sourceAuthority"]["authorityStatus"], "unknown")
+        self.assertIn("adjustedBasis", lineage["missingLineageFields"])
+        self.assertIn("corporateActionPolicy", lineage["missingLineageFields"])
+        self.assertIn("calendarSessionPolicy", lineage["missingLineageFields"])
+        self.assertIn("pointInTimeMembershipStatus", lineage["missingLineageFields"])
+        self.assertIn("sourceAuthority", lineage["missingLineageFields"])
+        self.assertEqual(
+            lineage["reproducibility"]["gridDescriptorHashSha256"],
+            result["reproducibilityMetadata"]["gridDescriptorHashSha256"],
+        )
+        self.assertEqual(
+            lineage["parameterSetBoundary"]["parameterSetIds"],
+            [row["parameterSetId"] for row in result["parameterRows"]],
+        )
         self.assertEqual(len(result["parameterRows"]), 2)
         self.assertEqual(len({row["parameterSetId"] for row in result["parameterRows"]}), 2)
         for row in result["parameterRows"]:
@@ -197,6 +225,9 @@ class RuleBacktestParameterSweepPilotServiceTest(unittest.TestCase):
         self.assertEqual(result["failClosedReasonCode"], "max_combinations_rejected")
         self.assertEqual(result["summary"]["completedCount"], 0)
         self.assertEqual(result["summary"]["failedCount"], 0)
+        self.assertEqual(result["datasetLineageReadiness"]["readinessState"], "blocked")
+        self.assertEqual(result["datasetLineageReadiness"]["barBoundary"]["barSource"], "not_loaded_fail_closed")
+        self.assertFalse(result["datasetLineageReadiness"]["barBoundary"]["providerCallsExecuted"])
 
     def test_parameter_sweep_rejects_empty_grid(self) -> None:
         service = RuleBacktestService(self.db)
@@ -207,6 +238,8 @@ class RuleBacktestParameterSweepPilotServiceTest(unittest.TestCase):
         self.assertEqual(result["failClosedReasonCode"], "parameter_grid_empty")
         self.assertEqual(result["summary"]["completedCount"], 0)
         self.assertEqual(result["summary"]["skippedCount"], 0)
+        self.assertEqual(result["datasetLineageReadiness"]["readinessState"], "blocked")
+        self.assertEqual(result["datasetLineageReadiness"]["barBoundary"]["barSource"], "not_loaded_fail_closed")
 
     def test_parameter_sweep_rejects_parameter_paths_not_owned_by_strategy(self) -> None:
         service = RuleBacktestService(self.db)
@@ -218,6 +251,9 @@ class RuleBacktestParameterSweepPilotServiceTest(unittest.TestCase):
         self.assertEqual(result["state"], "rejected")
         self.assertEqual(result["failClosedReasonCode"], "parameter_path_application_failed")
         self.assertEqual(result["summary"]["completedCount"], 0)
+        self.assertEqual(result["datasetLineageReadiness"]["readinessState"], "blocked")
+        self.assertEqual(result["datasetLineageReadiness"]["barBoundary"]["barSource"], "local_stock_daily_rows")
+        self.assertFalse(result["datasetLineageReadiness"]["barBoundary"]["acceptedAsProviderAuthority"])
 
     def test_parameter_sweep_rejects_unsafe_parameter_path(self) -> None:
         service = RuleBacktestService(self.db)
@@ -227,6 +263,9 @@ class RuleBacktestParameterSweepPilotServiceTest(unittest.TestCase):
         self.assertEqual(result["state"], "rejected")
         self.assertEqual(result["failClosedReasonCode"], "unsafe_parameter_path")
         self.assertEqual(result["summary"]["completedCount"], 0)
+        self.assertEqual(result["datasetLineageReadiness"]["readinessState"], "blocked")
+        self.assertEqual(result["datasetLineageReadiness"]["barBoundary"]["barSource"], "local_stock_daily_rows")
+        self.assertFalse(result["datasetLineageReadiness"]["barBoundary"]["acceptedAsProviderAuthority"])
 
     def test_parameter_sweep_missing_local_bars_skips_requested_sets(self) -> None:
         service = RuleBacktestService(self.db)
@@ -238,6 +277,12 @@ class RuleBacktestParameterSweepPilotServiceTest(unittest.TestCase):
         self.assertEqual(result["summary"]["skippedCount"], 2)
         self.assertEqual(len(result["skippedRows"]), 2)
         self.assertTrue(all(row["reasonCode"] == "blocked_missing_local_data" for row in result["skippedRows"]))
+        lineage = result["datasetLineageReadiness"]
+        self.assertEqual(lineage["readinessState"], "blocked")
+        self.assertEqual(lineage["barBoundary"]["barSource"], "unavailable_local_bars")
+        self.assertFalse(lineage["barBoundary"]["localBars"])
+        self.assertFalse(lineage["barBoundary"]["acceptedAsProviderAuthority"])
+        self.assertFalse(lineage["barBoundary"]["providerCallsExecuted"])
 
     def test_parameter_sweep_response_has_no_public_decision_copy(self) -> None:
         service = RuleBacktestService(self.db)
