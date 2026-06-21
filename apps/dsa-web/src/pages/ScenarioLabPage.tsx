@@ -125,6 +125,13 @@ const SCENARIO_UNAVAILABLE_COPY: Record<Locale, {
   },
 };
 
+const FALLBACK_BASELINE_READINESS_SUMMARY = {
+  baselineSnapshot: '基线证据待补齐',
+  marketFrame: '市场框架待补齐',
+  driverInputs: '驱动证据待补齐',
+  boundary: '仅观察 / 非决策级',
+} as const;
+
 function presetForKey(raw: string | null): ScenarioPreset {
   return SCENARIO_PRESETS.find((item) => item.key === raw || item.scenarioName === raw) ?? SCENARIO_PRESETS[0];
 }
@@ -321,6 +328,7 @@ export default function ScenarioLabPage() {
       })),
     [scenarioResult?.driverDeltas, locale],
   );
+  const baselineReadinessSummary = scenarioResult?.baselineReadinessSummary ?? FALLBACK_BASELINE_READINESS_SUMMARY;
 
   const baseDriverRows = useMemo(
     () => Object.entries(cockpit?.marketRegimeDecision?.driverScores ?? {})
@@ -500,6 +508,12 @@ export default function ScenarioLabPage() {
                           <TerminalChip variant="info">
                             {formatDelta(scenarioResult.confidenceDelta)}
                           </TerminalChip>
+                        </div>
+                        <div className="mt-2 grid gap-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)] sm:grid-cols-2">
+                          <div>{locale === 'en' ? 'Baseline snapshot' : '基线快照'}：{baselineReadinessSummary.baselineSnapshot}</div>
+                          <div>{locale === 'en' ? 'Market frame' : '市场框架'}：{baselineReadinessSummary.marketFrame}</div>
+                          <div>{locale === 'en' ? 'Driver evidence' : '驱动证据'}：{baselineReadinessSummary.driverInputs}</div>
+                          <div>{locale === 'en' ? 'Boundary' : '边界'}：{baselineReadinessSummary.boundary}</div>
                         </div>
                       </div>
                       <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 px-3 py-2">

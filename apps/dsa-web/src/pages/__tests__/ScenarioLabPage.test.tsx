@@ -102,7 +102,52 @@ describe('ScenarioLabPage', () => {
         confidence: 'low',
         confidenceScore: 0.43,
       },
-      readinessLabels: ['基准部分可用', '当前框架可用', '驱动待补', '证据边界', '仅观察'],
+      baselineReadiness: {
+        status: 'partial',
+        baselineSnapshot: {
+          state: 'partial',
+          available: false,
+          lastUpdated: '2026-06-15T09:30:00Z',
+          affectedComponents: ['baselineSnapshot'],
+        },
+        marketFrame: {
+          state: 'available',
+          available: true,
+          lastUpdated: '2026-06-15T09:30:00Z',
+          affectedComponents: [],
+        },
+        driverInputs: {
+          state: 'partial',
+          availableDriverKeys: ['breadthParticipation', 'volatilityStructure'],
+          partialDriverKeys: [],
+          missingDriverKeys: ['dealerGamma'],
+          affectedDriverKeys: ['dealerGamma'],
+        },
+        evidenceCompleteness: {
+          state: 'partial',
+          gaps: ['baselineSnapshot', 'dealerGamma', 'scoreAuthority'],
+        },
+        dataState: 'request_supplied',
+        sampleState: 'none',
+        scoreAuthority: 'observation_only',
+        sourceAuthorityAllowed: false,
+        authoritative: false,
+        observationOnly: true,
+        ready: false,
+        partial: true,
+        blocked: false,
+        affectedBaselineComponents: ['baselineSnapshot'],
+        affectedDriverKeys: ['dealerGamma'],
+        evidenceGaps: ['baselineSnapshot', 'dealerGamma', 'scoreAuthority'],
+        lastUpdated: '2026-06-15T09:30:00Z',
+      },
+      baselineReadinessSummary: {
+        baselineSnapshot: '基线快照部分可用',
+        marketFrame: '当前框架可用',
+        driverInputs: '驱动证据部分可用',
+        boundary: '仅观察 / 非决策级',
+      },
+      readinessLabels: ['基准部分可用', '当前框架可用', '驱动证据部分可用', '证据边界', '仅观察'],
       confidenceDelta: -0.25,
       driverDeltas: {
         dealerGamma: 0,
@@ -140,11 +185,12 @@ describe('ScenarioLabPage', () => {
     expect(firstRead).toHaveTextContent('波动结构 -145');
     expect(firstRead).toHaveTextContent('证据边界');
     expect(firstRead).toHaveTextContent('中 -> 低');
-    expect(firstRead).toHaveTextContent('基准部分可用');
+    expect(firstRead).toHaveTextContent('基线快照部分可用');
     expect(firstRead).toHaveTextContent('当前框架可用');
-    expect(firstRead).toHaveTextContent('驱动待补');
+    expect(firstRead).toHaveTextContent('驱动证据部分可用');
     expect(firstRead).toHaveTextContent('待补证据');
     expect(firstRead).toHaveTextContent('需要更高质量证据共同确认受压驱动是否同向变化。');
+    expect(firstRead).toHaveTextContent('仅观察 / 非决策级');
     expect(screen.getByRole('button', { name: '波动冲击' })).toBeInTheDocument();
     expect(page).toHaveTextContent('情景后的研究框架');
     expect(page).toHaveTextContent('所选压力情景下，市场广度会较快转弱。');
@@ -185,7 +231,7 @@ describe('ScenarioLabPage', () => {
         confidenceScore: 0,
         status: 'unavailable',
       },
-      readinessLabels: ['基准待确认', '驱动待补', '证据边界', '情景待更新', '仅观察'],
+      readinessLabels: ['基线证据待补齐', '仅观察'],
       confidenceDelta: 0,
       driverDeltas: {},
       changedDrivers: [],
@@ -213,11 +259,10 @@ describe('ScenarioLabPage', () => {
     expect(firstRead).toHaveTextContent('驱动变化');
     expect(firstRead).toHaveTextContent('情景待更新');
     expect(firstRead).toHaveTextContent('证据边界');
-    expect(firstRead).toHaveTextContent('基准待确认');
-    expect(firstRead).toHaveTextContent('驱动待补');
-    expect(firstRead).toHaveTextContent('证据边界');
-    expect(firstRead).toHaveTextContent('待补证据');
-    expect(firstRead).toHaveTextContent('市场框架、驱动证据、数据新鲜度');
+    expect(firstRead).toHaveTextContent('基线证据待补齐');
+    expect(firstRead).toHaveTextContent('市场框架待补齐');
+    expect(firstRead).toHaveTextContent('驱动证据待补齐');
+    expect(firstRead).toHaveTextContent('仅观察 / 非决策级');
     expect(Boolean(firstRead.compareDocumentPosition(secondaryState) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(secondaryState).toHaveTextContent('情景待更新');
     expect(secondaryState).toHaveTextContent('基准待确认，暂不展开输出。');
@@ -230,5 +275,214 @@ describe('ScenarioLabPage', () => {
     expect(visibleText).not.toMatch(/unavailable|degraded|insufficient|provider|runtime|credential|sourceAuthority|debug/i);
     expect(visibleText).not.toMatch(/not personalized financial advice|not an instruction|buy|sell|hold|target price|stop-loss|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
     expect(findConsumerRawLeakage(visibleText)).toEqual([]);
+  });
+
+  it('shows stale market frame and partial baseline copy without claiming a durable baseline', async () => {
+    mockDecisionCockpit({
+      marketRegimeDecision: {
+        regime: 'mixed',
+        confidence: 'medium',
+        confidenceScore: 0.52,
+        driverScores: {
+          dealerGamma: { score: 0, evidenceState: 'unavailable' },
+          breadthParticipation: { score: 44, evidenceState: 'score_grade' },
+          volatilityStructure: { score: 48, evidenceState: 'score_grade' },
+          ratesDollar: { score: 32, evidenceState: 'score_grade' },
+          liquidityCredit: { score: 38, evidenceState: 'score_grade' },
+          crossAssetRisk: { score: 34, evidenceState: 'score_grade' },
+        },
+      },
+      dataQuality: { status: 'partial' },
+    });
+    runScenarioLabMock.mockResolvedValue({
+      schemaVersion: 'market_scenario_lab_engine.v1',
+      baseRegime: {
+        regime: 'mixed',
+        confidence: 'medium',
+        confidenceScore: 0.52,
+      },
+      scenarioRegime: {
+        regime: 'mixed',
+        confidence: 'medium',
+        confidenceScore: 0.41,
+      },
+      baselineReadiness: {
+        status: 'partial',
+        baselineSnapshot: {
+          state: 'partial',
+          available: false,
+          affectedComponents: ['baselineSnapshot'],
+        },
+        marketFrame: {
+          state: 'stale',
+          available: false,
+          affectedComponents: ['marketFrame'],
+        },
+        driverInputs: {
+          state: 'partial',
+          availableDriverKeys: ['breadthParticipation', 'volatilityStructure', 'ratesDollar'],
+          partialDriverKeys: ['liquidityCredit'],
+          missingDriverKeys: ['dealerGamma'],
+          affectedDriverKeys: ['liquidityCredit', 'dealerGamma'],
+        },
+        evidenceCompleteness: {
+          state: 'partial',
+          gaps: ['baselineSnapshot', 'marketFrame', 'liquidityCredit'],
+        },
+        dataState: 'request_supplied',
+        sampleState: 'none',
+        scoreAuthority: 'observation_only',
+        sourceAuthorityAllowed: false,
+        authoritative: false,
+        observationOnly: true,
+        ready: false,
+        partial: true,
+        blocked: false,
+        affectedBaselineComponents: ['baselineSnapshot', 'marketFrame'],
+        affectedDriverKeys: ['liquidityCredit', 'dealerGamma'],
+        evidenceGaps: ['baselineSnapshot', 'marketFrame', 'liquidityCredit', 'scoreAuthority'],
+        lastUpdated: '2026-06-15T09:30:00Z',
+      },
+      baselineReadinessSummary: {
+        baselineSnapshot: '基线快照部分可用',
+        marketFrame: '市场框架已过期',
+        driverInputs: '驱动证据部分可用',
+        boundary: '仅观察 / 非决策级',
+      },
+      readinessLabels: ['基线快照部分可用', '市场框架已过期', '驱动证据部分可用', '证据边界', '仅观察'],
+      confidenceDelta: -0.11,
+      driverDeltas: {
+        breadthParticipation: -12,
+        volatilityStructure: -8,
+        liquidityCredit: -24,
+      },
+      changedDrivers: ['breadthParticipation', 'volatilityStructure', 'liquidityCredit'],
+      scenarioSummary: ['市场框架已过期，当前情景只能保留观察。'],
+      whatWouldConfirm: ['补齐最新市场框架后，再复核基线是否可复用。'],
+      whatWouldInvalidate: ['如果驱动证据继续缺失，情景仍保持观察级。'],
+      evidenceLimits: ['市场框架已过期，需补充最新基准证据。'],
+      noAdviceDisclosure: 'Research planning only; not a personalized decision basis.',
+    });
+
+    renderRoute(<ScenarioLabPage />);
+
+    const firstRead = await screen.findByTestId('scenario-lab-first-read-summary');
+
+    expect(firstRead).toHaveTextContent('基线快照部分可用');
+    expect(firstRead).toHaveTextContent('市场框架已过期');
+    expect(firstRead).toHaveTextContent('驱动证据部分可用');
+    expect(firstRead).toHaveTextContent('仅观察 / 非决策级');
+    expect(firstRead).toHaveTextContent('待补证据');
+    expect(firstRead).toHaveTextContent('补齐最新市场框架后，再复核基线是否可复用。');
+  });
+
+  it('renders authoritative baseline copy without observation-only overclaiming', async () => {
+    mockDecisionCockpit({
+      marketRegimeDecision: {
+        regime: 'riskOn',
+        confidence: 'high',
+        confidenceScore: 0.84,
+        driverScores: {
+          dealerGamma: { score: 18, evidenceState: 'score_grade' },
+          breadthParticipation: { score: 64, evidenceState: 'score_grade' },
+          volatilityStructure: { score: 71, evidenceState: 'score_grade' },
+          ratesDollar: { score: 53, evidenceState: 'score_grade' },
+          liquidityCredit: { score: 61, evidenceState: 'score_grade' },
+          crossAssetRisk: { score: 49, evidenceState: 'score_grade' },
+          sectorThemeRotation: { score: 57, evidenceState: 'score_grade' },
+          eventCatalyst: { score: 42, evidenceState: 'score_grade' },
+        },
+      },
+      dataQuality: { status: 'ready' },
+    });
+    runScenarioLabMock.mockResolvedValue({
+      schemaVersion: 'market_scenario_lab_engine.v1',
+      baseRegime: {
+        regime: 'riskOn',
+        confidence: 'high',
+        confidenceScore: 0.84,
+      },
+      scenarioRegime: {
+        regime: 'riskOn',
+        confidence: 'high',
+        confidenceScore: 0.82,
+      },
+      baselineReadiness: {
+        status: 'ready',
+        baselineSnapshot: {
+          state: 'available',
+          available: true,
+          lastUpdated: '2026-06-15T09:30:00Z',
+          affectedComponents: [],
+        },
+        marketFrame: {
+          state: 'available',
+          available: true,
+          lastUpdated: '2026-06-15T09:30:00Z',
+          affectedComponents: [],
+        },
+        driverInputs: {
+          state: 'available',
+          availableDriverKeys: [
+            'dealerGamma',
+            'breadthParticipation',
+            'volatilityStructure',
+            'ratesDollar',
+            'liquidityCredit',
+            'crossAssetRisk',
+            'sectorThemeRotation',
+            'eventCatalyst',
+          ],
+          partialDriverKeys: [],
+          missingDriverKeys: [],
+          affectedDriverKeys: [],
+        },
+        evidenceCompleteness: {
+          state: 'ready',
+          gaps: [],
+        },
+        dataState: 'real_cached',
+        sampleState: 'none',
+        scoreAuthority: 'authoritative',
+        sourceAuthorityAllowed: true,
+        authoritative: true,
+        observationOnly: false,
+        ready: true,
+        partial: false,
+        blocked: false,
+        affectedBaselineComponents: [],
+        affectedDriverKeys: [],
+        evidenceGaps: [],
+        lastUpdated: '2026-06-15T09:30:00Z',
+      },
+      baselineReadinessSummary: {
+        baselineSnapshot: '基准可用',
+        marketFrame: '当前框架可用',
+        driverInputs: '驱动证据可用',
+        boundary: '可复用基线',
+      },
+      readinessLabels: ['基准可用', '当前框架可用', '驱动证据可用', '情景摘要可用'],
+      confidenceDelta: -0.02,
+      driverDeltas: {
+        breadthParticipation: 4,
+        volatilityStructure: 2,
+      },
+      changedDrivers: ['breadthParticipation', 'volatilityStructure'],
+      scenarioSummary: ['基线可复用，情景仅做小幅观察。'],
+      whatWouldConfirm: ['高质量证据持续保持完整。'],
+      whatWouldInvalidate: ['若基线失去可复用性，则情景边界应回到观察级。'],
+      evidenceLimits: ['暂无额外证据限制。'],
+      noAdviceDisclosure: 'Research planning only; not a personalized decision basis.',
+    });
+
+    renderRoute(<ScenarioLabPage />);
+
+    const firstRead = await screen.findByTestId('scenario-lab-first-read-summary');
+
+    expect(firstRead).toHaveTextContent('基准可用');
+    expect(firstRead).toHaveTextContent('当前框架可用');
+    expect(firstRead).toHaveTextContent('驱动证据可用');
+    expect(firstRead).toHaveTextContent('可复用基线');
+    expect(firstRead).not.toHaveTextContent('仅观察 / 非决策级');
   });
 });
