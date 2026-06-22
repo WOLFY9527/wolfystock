@@ -11,7 +11,7 @@ Related docs: `docs/audits/public-launch-gap-register.md`,
 `docs/audits/operator-evidence-real-runbook.md`,
 `docs/audits/operator-evidence-dry-run-handoff.md`,
 `docs/audits/operator-evidence-redaction-checklist.md`,
-`docs/audits/archive/final-pre-push-audit.md`,
+`docs/archive/audits/final-pre-push-audit.md`,
 `docs/audits/known-test-warnings-register.md`
 
 Mode: launch readiness summary. The current docs hygiene pass updates launch
@@ -195,5 +195,5 @@ registered warnings.
 
 Do not treat archived historical audit docs as current launch control. Any
 future consolidation should follow
-`docs/audits/archive/markdown-consolidation-plan.md` in a separate approved
+`docs/archive/audits/markdown-consolidation-plan.md` in a separate approved
 task.

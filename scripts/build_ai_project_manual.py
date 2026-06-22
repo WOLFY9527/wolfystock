@@ -94,11 +94,9 @@ class GeneratedOutputs:
 SOURCE_REFS = [
     SourceRef("AGENTS.md", "canonical repository AI-agent rules", ("workflow", "governance")),
     SourceRef("README.md", "product purpose, feature set, stack, entry points", ("product", "architecture")),
+    SourceRef("docs/codex/WOLFYSTOCK_SURFACE_MAP.md", "stable product surface to file/test map", ("product", "architecture")),
     SourceRef("docs/product-recovery/WOLFYSTOCK_PRODUCT_RECOVERY_PLAN.md", "canonical product recovery plan and recovery posture", ("product-recovery", "product")),
     SourceRef("docs/product-recovery/DATA_COVERAGE_MATRIX.md", "repo-grounded data coverage matrix for product recovery", ("product-recovery", "data")),
-    SourceRef("docs/product-recovery/DATA011_PACKET_CONSUMPTION_ACCEPTANCE.md", "packet consumption acceptance for first-read recovery", ("product-recovery", "acceptance")),
-    SourceRef("docs/product-recovery/DATA016_FOCUSED_ACCEPTANCE.md", "focused first-read recovery acceptance", ("product-recovery", "acceptance")),
-    SourceRef("docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md", "real data value acceptance and remaining blockers", ("product-recovery", "acceptance")),
     SourceRef("docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md", "professional data source roadmap", ("product-recovery", "roadmap")),
     SourceRef("docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md", "backtest professional upgrade audit", ("product-recovery", "backtest")),
     SourceRef("docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md", "target-environment evidence harness", ("product-recovery", "evidence")),
@@ -277,11 +275,9 @@ SECTIONS = [
             "docs/portfolio/README.md",
             "docs/backtest/README.md",
             "docs/backtest-system.md",
+            "docs/codex/WOLFYSTOCK_SURFACE_MAP.md",
             "docs/product-recovery/WOLFYSTOCK_PRODUCT_RECOVERY_PLAN.md",
             "docs/product-recovery/DATA_COVERAGE_MATRIX.md",
-            "docs/product-recovery/DATA011_PACKET_CONSUMPTION_ACCEPTANCE.md",
-            "docs/product-recovery/DATA016_FOCUSED_ACCEPTANCE.md",
-            "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md",
             "docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md",
             "docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md",
             "docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md",
@@ -535,6 +531,7 @@ SECTIONS = [
             "docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md",
             "docs/codex/NO_ADVICE_REGRESSION_GUARDS.md",
             "docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md",
+            "docs/codex/WOLFYSTOCK_SURFACE_MAP.md",
             "docs/data-reliability/provider-source-confidence-contract.md",
             "docs/operations/provider-capability-metadata.md",
             "docs/data/market-source-activation-blueprint.md",
@@ -835,7 +832,6 @@ PRODUCT_SURFACE_ROWS = [
             (
                 "docs/options/README.md",
                 "docs/product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md",
-                "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md",
                 "docs/audits/options-provider-adapter-contract.md",
             )
         ),
@@ -893,7 +889,6 @@ PRODUCT_SURFACE_ROWS = [
             (
                 "docs/product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md",
                 "docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md",
-                "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md",
             )
         ),
     ),
@@ -907,7 +902,6 @@ PRODUCT_SURFACE_ROWS = [
             (
                 "docs/portfolio/README.md",
                 "docs/product-recovery/DATA_COVERAGE_MATRIX.md",
-                "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md",
                 "docs/audits/backtest-portfolio-public-safety-audit.md",
             )
         ),
@@ -921,7 +915,6 @@ PRODUCT_SURFACE_ROWS = [
         source_list(
             (
                 "docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md",
-                "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md",
             )
         ),
     ),
@@ -1015,7 +1008,6 @@ PROFESSIONAL_DATA_FAMILY_ROWS = [
         source_list(
             (
                 "docs/product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md",
-                "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md",
                 "docs/audits/options-provider-adapter-contract.md",
             )
         ),
@@ -1029,7 +1021,6 @@ PROFESSIONAL_DATA_FAMILY_ROWS = [
             (
                 "docs/product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md",
                 "docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md",
-                "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md",
             )
         ),
     ),
@@ -1065,10 +1056,18 @@ SOURCE_TRUTH_INDEX_ROWS = [
     (
         "AI onboarding and navigation",
         manual_link("docs/AI_PROJECT_MANUAL.md"),
-        source_list(("AGENTS.md", "docs/DOCS_INDEX.md", "scripts/build_ai_project_manual.py")),
+        source_list(("AGENTS.md", "docs/DOCS_INDEX.md", "docs/codex/WOLFYSTOCK_SURFACE_MAP.md", "scripts/build_ai_project_manual.py")),
         "repo-wide AI maintenance",
         "first five minutes of any task",
         "generated manual source",
+    ),
+    (
+        "Product surface map",
+        manual_link("docs/codex/WOLFYSTOCK_SURFACE_MAP.md"),
+        source_list(("docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md", "docs/DOCS_INDEX.md")),
+        "routes / APIs / tests",
+        "when a prompt names a surface but not exact files",
+        "active reference",
     ),
     (
         "Repository AI rules",
@@ -1122,7 +1121,7 @@ SOURCE_TRUTH_INDEX_ROWS = [
     (
         "Symbol research packet",
         manual_link("docs/product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md"),
-        source_list(("docs/product-recovery/DATA_COVERAGE_MATRIX.md", "docs/product-recovery/DATA011_PACKET_CONSUMPTION_ACCEPTANCE.md")),
+        source_list(("docs/product-recovery/DATA_COVERAGE_MATRIX.md", "docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md")),
         "watchlist / stock detail",
         "before assembling row-level research packets",
         "contract",
@@ -1146,7 +1145,7 @@ SOURCE_TRUTH_INDEX_ROWS = [
     (
         "Options entitlement and no-advice",
         manual_link("docs/product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md"),
-        source_list(("docs/options/README.md", "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md", "docs/audits/options-provider-adapter-contract.md", "docs/audits/trading-no-advice-product-policy.md")),
+        source_list(("docs/options/README.md", "docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md", "docs/audits/options-provider-adapter-contract.md", "docs/audits/trading-no-advice-product-policy.md")),
         "options lab",
         "before touching options chain, Greeks, or strategy copy",
         "decision record",
@@ -1154,7 +1153,7 @@ SOURCE_TRUTH_INDEX_ROWS = [
     (
         "Scenario baseline evidence",
         manual_link("docs/product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md"),
-        source_list(("docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md", "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md")),
+        source_list(("docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md", "docs/product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md")),
         "scenario lab / target-env evidence",
         "before scenario baseline or operator evidence work",
         "plan",

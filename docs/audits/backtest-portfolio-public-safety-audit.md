@@ -48,8 +48,8 @@ Out of scope for this audit:
 | --- | --- |
 | Deployment readiness | `docs/audits/deployment-readiness-checklist.md` |
 | Backtest service contract | `docs/backtest-system.md` |
-| Backtest rendered-route audit | `docs/audits/archive/frontend/wolfystock-backtest-dom-verification.md` |
-| Portfolio populated holdings QA | `docs/qa/archive/wolfystock-portfolio-populated-holdings-qa.md` |
+| Backtest rendered-route audit | `docs/archive/audits/frontend/wolfystock-backtest-dom-verification.md` |
+| Portfolio populated holdings QA | `docs/archive/qa/wolfystock-portfolio-populated-holdings-qa.md` |
 | Standard task guard | `docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md` |
 
 ## 4. Backtest safety review

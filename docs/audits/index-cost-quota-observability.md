@@ -6,8 +6,8 @@ documentation index
 Related docs: `docs/audits/public-launch-readiness-master.md`,
 `docs/audits/public-launch-gap-register.md`,
 `docs/audits/deployment-readiness-checklist.md`,
-`docs/audits/archive/markdown-consolidation-plan.md`,
-`docs/audits/archive/markdown-inventory.md`
+`docs/archive/audits/markdown-consolidation-plan.md`,
+`docs/archive/audits/markdown-inventory.md`
 
 Mode: docs-only navigation index. No runtime cost, quota, or provider-circuit
 behavior is changed by this index.

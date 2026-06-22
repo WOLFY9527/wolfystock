@@ -31,11 +31,11 @@ Read-first inputs:
 - `docs/operations/parallel-codex-playbook.md`
 - `docs/checks/design-guard.md`
 - `docs/checks/ci-gate-clarity.md`
-- `docs/audits/archive/frontend/wolfystock-global-codebase-audit.md`
-- `docs/audits/archive/frontend/wolfystock-phase0-bundle-design-inventory.md`
-- `docs/audits/archive/frontend/wolfystock-bundle-composition-report.md`
-- `docs/frontend/archive/css-ownership-inventory-2026-05-05.md`
-- `docs/frontend/archive/css-selector-usage-verification-2026-05-05.md`
+- `docs/archive/audits/frontend/wolfystock-global-codebase-audit.md`
+- `docs/archive/audits/frontend/wolfystock-phase0-bundle-design-inventory.md`
+- `docs/archive/audits/frontend/wolfystock-bundle-composition-report.md`
+- `docs/archive/frontend/css-ownership-inventory-2026-05-05.md`
+- `docs/archive/frontend/css-selector-usage-verification-2026-05-05.md`
 
 Commands run:
 

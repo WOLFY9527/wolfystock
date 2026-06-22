@@ -73,17 +73,17 @@ Real-machine WorkBuddy audit facts supplied for PR-001:
 
 Repository evidence incorporated:
 
-- `docs/product-audit/archive/qw003-screenshot-ux-qa-pass.md` concluded that
+- `docs/archive/product-audit/qw003-screenshot-ux-qa-pass.md` concluded that
   the UI is built on a strong defensive architecture but reads like an internal
   research diagnostic console. It identified data-poor defaults, three
   competing design languages, 495+ chip/badge usages across 26 page files,
   disclaimer overload, fragmented onboarding, internal wording leakage, and
   opaque observation-only language.
-- `docs/product-audit/archive/qw006-consumer-internal-wording-sweep.md` found
+- `docs/archive/product-audit/qw006-consumer-internal-wording-sweep.md` found
   23 remaining consumer-visible wording issues after quick wins, including
   provider/cache/runtime/schema/internal/debug terms on consumer-accessible
   surfaces.
-- `docs/product-recovery/archive/PR003A_CORE_DATA_REALITY_PATH_ROOT_CAUSE.md`
+- `docs/archive/product-recovery/PR003A_CORE_DATA_REALITY_PATH_ROOT_CAUSE.md`
   mapped the core path as Market Overview -> Scanner -> Watchlist / Stock page.
   It found that the route and service pieces existed but the data wiring was
   fragmented; Scanner was the bridge from market context into durable saved

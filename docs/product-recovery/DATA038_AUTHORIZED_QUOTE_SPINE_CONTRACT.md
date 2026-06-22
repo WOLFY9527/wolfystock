@@ -161,7 +161,7 @@ coverage, missing symbols, fallback usage, and activation state
 (`src/services/rotation_radar_quote_provider.py:1660`,
 `src/services/rotation_radar_quote_provider.py:1674`). DATA-021 accepted this
 as bounded quote readiness, not target-environment entitlement proof
-(`docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md:47`).
+(`docs/archive/product-recovery/acceptance/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md:47`).
 
 Market Overview still has yfinance-style quote proxy paths for some index and
 volatility panels. Tests assert yfinance proxy rows must not claim live/fresh
@@ -183,8 +183,8 @@ Existing repository contracts already separate degraded states:
   (`docs/provider-data/README.md:41`, `docs/provider-data/README.md:51`);
 - Options and Scenario readiness contracts distinguish sample/demo or
   request-supplied inputs from authoritative baseline inputs
-  (`docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md:103`,
-  `docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md:121`);
+  (`docs/archive/product-recovery/acceptance/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md:103`,
+  `docs/archive/product-recovery/acceptance/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md:121`);
 - tests cover source-confidence and provider-freshness fail-closed behavior for
   fallback, mock, synthetic, stale, partial, unavailable, and ambiguous states
   (`tests/test_source_confidence_contract.py:67`,

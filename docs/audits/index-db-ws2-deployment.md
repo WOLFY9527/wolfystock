@@ -6,8 +6,8 @@ index
 Related docs: `docs/audits/public-launch-readiness-master.md`,
 `docs/audits/public-launch-gap-register.md`,
 `docs/audits/deployment-readiness-checklist.md`,
-`docs/audits/archive/markdown-consolidation-plan.md`,
-`docs/audits/archive/markdown-inventory.md`
+`docs/archive/audits/markdown-consolidation-plan.md`,
+`docs/archive/audits/markdown-inventory.md`
 
 Mode: docs-only navigation index. No runtime DB, WS2, deployment, or restore
 behavior is changed by this index.
@@ -30,7 +30,7 @@ restore, deployment, or runtime cutover work.
 - `docs/operations/queue-ws2-metrics-production-readiness.md`: compact
   topology crosswalk for process-local queue, WS2 foundations, MarketCache
   Redis mirror boundary, and deferred metrics/runtime enablement.
-- `docs/audits/archive/release-integration-plan-main-ahead.md`: archived
+- `docs/archive/audits/release-integration-plan-main-ahead.md`: archived
   point-in-time main/ahead integration plan for the earlier local-ahead train.
 - `docs/audits/release-rollback-runbook.md`: operational rollback runbook.
 - `docs/audits/ci-postgres-gate-triage-guide.md`: CI/PostgreSQL triage runbook.
@@ -53,7 +53,7 @@ restore, deployment, or runtime cutover work.
 
 ## Superseded docs
 
-- `docs/audits/archive/db-index-migration-plan-auth-task-log.md`: Batch A appears
+- `docs/archive/audits/db-index-migration-plan-auth-task-log.md`: Batch A appears
   implemented; keep as historical plan unless Batch A detail is needed.
 
 ## Deferred docs

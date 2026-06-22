@@ -2,7 +2,7 @@
 
 Status: Deferred
 Owner domain: Production security
-Related docs: `docs/audits/archive/security-admin-mfa-backend-foundation.md`, `docs/audits/production-security-hardening-audit.md`
+Related docs: `docs/archive/audits/security-admin-mfa-backend-foundation.md`, `docs/audits/production-security-hardening-audit.md`
 
 Date: 2026-05-07
 Branch checked: `main`
@@ -446,7 +446,7 @@ Branch: main
 
 Read first:
 - docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md
-- docs/audits/archive/security-admin-mfa-backend-foundation.md
+- docs/archive/audits/security-admin-mfa-backend-foundation.md
 - docs/audits/security-password-kdf-upgrade-plan.md
 - docs/audits/security-mfa-secret-storage-hardening-plan.md
 - src/services/admin_mfa_service.py

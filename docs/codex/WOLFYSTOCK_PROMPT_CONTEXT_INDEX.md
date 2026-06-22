@@ -151,5 +151,5 @@ For UI work:
 1. approved WolfyStock Linear mockup;
 2. `docs/frontend/visual-system.md`;
 3. `docs/frontend/README.md`;
-4. `DESIGN.md` as reference only;
+4. `docs/archive/design/DESIGN.md` as reference only;
 5. installed design skills as execution aids.

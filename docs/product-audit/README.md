@@ -30,10 +30,9 @@ tasks that refined the contract live in other docs lanes:
 ## Historical Codex Audit Reports
 
 Point-in-time Codex audit reports that no longer need to live in the active
-audit lane are retained under `docs/codex/audits/` (active) and
-`docs/codex/audits/archive/` (historical provenance only). They are not
-current authority unless a current index or handbook points to them for a
-specific question.
+audit lane are retained under `docs/archive/codex/audits/` for historical
+provenance only. They are not current authority unless a current index or
+handbook points to them for a specific question.
 
 ## Scope Note
 
