@@ -12,14 +12,32 @@ from tests.helpers.packet_redaction_fuzzer import assert_packet_output_redacted
 
 
 FORBIDDEN_KEYS = {
+    "apiKeyPresent",
+    "attemptedAt",
+    "calendarAssumption",
+    "caBundleSource",
+    "diagnosticOnly",
+    "endpointHost",
+    "exceptionChain",
+    "exceptionClass",
+    "freshnessPolicy",
+    "maxAcceptedBusinessLagDays",
+    "maxAcceptedLagDays",
+    "officialOverlayFailureDetails",
+    "providerAttempted",
+    "providerClass",
     "provider",
     "providerTier",
     "providerName",
     "providerObservation",
+    "requestedSeries",
+    "scoreContributionAllowed",
+    "sourceAuthorityAllowed",
     "sourceRef",
     "sourceRefs",
     "sourceType",
     "sourceTier",
+    "timeoutSeconds",
     "sourceAuthorityDiagnostics",
     "sourceAuthorityRouter",
     "forbiddenProviders",
@@ -62,12 +80,34 @@ def test_project_consumer_api_payload_recursively_removes_forbidden_diagnostic_k
 
     payload = {
         "schemaVersion": "consumer_payload_v9",
+        "diagnosticOnly": True,
         "provider": "alpaca",
+        "providerAttempted": True,
+        "providerClass": "official_daily",
         "sourceType": "unofficial_proxy",
         "sourceTier": "tier_1_configured",
+        "sourceAuthorityAllowed": False,
+        "scoreContributionAllowed": False,
         "debugRef": "market:temperature",
         "requestId": "REQ-123",
         "trace": {"traceId": "TRACE-123"},
+        "officialOverlayFailureDetails": {
+            "endpointHost": "api.stlouisfed.org",
+            "apiKeyPresent": True,
+            "requestedSeries": "VIXCLS",
+            "exceptionClass": "SSLCertVerificationError",
+            "exceptionChain": ["URLError", "SSLCertVerificationError"],
+            "timeoutSeconds": 0.5,
+            "caBundleSource": "certifi",
+            "attemptedAt": "2026-05-19T00:00:00Z",
+        },
+        "sourceFreshnessEvidence": {
+            "freshness": "delayed",
+            "freshnessPolicy": "official_daily_us_weekday_t_plus_1",
+            "calendarAssumption": "US/Eastern weekdays; holidays not modeled",
+            "maxAcceptedLagDays": 3,
+            "maxAcceptedBusinessLagDays": 1,
+        },
         "nested": [
             {
                 "rawPayload": {"providerName": "fallback_source"},
@@ -91,8 +131,15 @@ def test_project_consumer_api_payload_recursively_removes_forbidden_diagnostic_k
         "fallback_source",
         "benchmark_missing",
         "provider_timeout",
+        "api.stlouisfed.org",
+        "VIXCLS",
+        "SSLCertVerificationError",
+        "certifi",
+        "official_daily_us_weekday_t_plus_1",
+        "US/Eastern weekdays",
     ):
         assert forbidden_value not in serialized
+    assert projected["sourceFreshnessEvidence"]["freshness"] == "delayed"
     assert projected["consumerSafeSourceLabel"] == "部分数据源暂不可用"
     assert projected["dataQualityState"] == "limited"
     assert projected["freshnessState"] == "limited"

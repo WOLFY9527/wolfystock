@@ -107,6 +107,7 @@ EXPECTED_CONTROL_PLANE_GROUP_ROUTE_COUNTS = {
     "admin.notifications.write": 5,
     "admin.cost.read": 4,
     "admin.providers.read": 8,
+    "market.operator_diagnostics": 3,
     "system.config.read": 2,
     "system.config.validate": 1,
     "system.config.write": 3,
@@ -501,6 +502,9 @@ def _is_control_plane_route(route: dict[str, str | None]) -> bool:
         "/api/v1/quant/duckdb/compare-runtime-context",
         "/api/v1/quant/duckdb/coverage",
         "/api/v1/quant/duckdb/benchmark",
+        "/api/v1/market/data-readiness",
+        "/api/v1/market/data-source-gap-registry",
+        "/api/v1/market/cn-provider-health",
     }
 
 
@@ -692,7 +696,10 @@ def test_backend_route_surface_classification_vocabulary_and_no_go_markers_are_e
             "no_go_marker",
             "transitional_note",
         }
-        if classification in {"unclassified", "operator_diagnostic", "debug_or_schema_surface", "public_fixture_analysis"}:
+        if classification in {"unclassified", "debug_or_schema_surface", "public_fixture_analysis"}:
+            marker = entry.get("no_go_marker")
+            assert marker and "TODO/NO-GO" in marker, entry["route_id"]
+        if classification == "operator_diagnostic" and entry["auth_dependency_label"] == "public":
             marker = entry.get("no_go_marker")
             assert marker and "TODO/NO-GO" in marker, entry["route_id"]
         if classification == "public_fixture_analysis":
@@ -753,8 +760,14 @@ def test_docs_openapi_and_operator_diagnostic_surfaces_are_not_product_routes() 
     for signature in EXPECTED_OPERATOR_DIAGNOSTIC_ROUTE_CLASSIFICATIONS:
         entry = classifications[signature]
         assert entry["surface_classification"] == "operator_diagnostic"
-        assert entry["auth_dependency_label"] == "public"
-        assert "NO-GO" in entry["no_go_marker"]
+        if signature[1].startswith("/api/v1/market/"):
+            assert entry["auth_dependency_label"] == "admin_capability"
+            assert entry["capability_label"] == "ops:providers:read"
+            assert entry["no_go_marker"] is None
+            assert entry["transitional_note"]
+        else:
+            assert entry["auth_dependency_label"] == "public"
+            assert "NO-GO" in entry["no_go_marker"]
 
     for signature, expected_capability in EXPECTED_T1463_MIGRATED_ROUTE_CAPABILITIES.items():
         entry = classifications[signature]
