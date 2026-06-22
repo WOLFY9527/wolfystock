@@ -55,6 +55,54 @@ def test_data_source_gap_registry_is_deterministic_and_fail_closed() -> None:
     assert families["portfolio_valuation_lineage"]["authorityState"] == "blocked"
     assert families["portfolio_valuation_lineage"]["providerHydrationAllowed"] is True
     assert families["portfolio_valuation_lineage"]["scoreTradingAuthorityAllowed"] is False
+    assert all(
+        impact["impactState"]
+        in {"unlocked", "degraded", "observation-only", "blocked", "planned", "unknown"}
+        for family in families.values()
+        for impact in family["surfaceImpactMatrix"]
+    )
+
+    quote_surfaces = {
+        impact["surfaceKey"]: impact["impactState"]
+        for impact in families["stock_quote_spine"]["surfaceImpactMatrix"]
+    }
+    assert quote_surfaces["watchlist"] == "degraded"
+    assert quote_surfaces["stock_detail"] == "degraded"
+    assert quote_surfaces["portfolio"] == "degraded"
+    assert quote_surfaces["backtest_parameter_sweep"] == "observation-only"
+
+    for family_key in (
+        "options_chains",
+        "options_strategy_analytics",
+        "gamma_dealer_positioning",
+    ):
+        assert all(
+            impact["impactState"] != "unlocked"
+            for impact in families[family_key]["surfaceImpactMatrix"]
+        )
+
+    backtest_impacts = families["backtest_dataset_lineage"]["surfaceImpactMatrix"]
+    assert {impact["surfaceKey"] for impact in backtest_impacts} == {
+        "backtest_parameter_sweep",
+        "factor_research",
+    }
+    assert {impact["impactState"] for impact in backtest_impacts} == {
+        "observation-only",
+    }
+
+    scenario_impacts = {
+        impact["surfaceKey"]: impact["impactState"]
+        for impact in families["scenario_baselines"]["surfaceImpactMatrix"]
+    }
+    assert scenario_impacts["scenario_lab"] == "planned"
+    assert scenario_impacts["evidence_harness"] == "planned"
+
+    portfolio_impacts = {
+        impact["surfaceKey"]: impact
+        for impact in families["portfolio_valuation_lineage"]["surfaceImpactMatrix"]
+    }
+    assert portfolio_impacts["portfolio"]["impactState"] == "degraded"
+    assert "估值置信度" in portfolio_impacts["portfolio"]["affectedCapability"]
 
     assert first["summary"]["readyCount"] == 0
     assert first["summary"]["scoreTradingAuthorityAllowedCount"] == 0

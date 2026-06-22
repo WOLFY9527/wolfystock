@@ -17,6 +17,26 @@ DATA_SOURCE_GAP_REGISTRY_CONTRACT_VERSION = "data_source_gap_registry_v1"
 
 
 @dataclass(frozen=True, slots=True)
+class DataSourceSurfaceImpact:
+    surface_key: str
+    consumer_label: str
+    impact_state: str
+    impact_reason: str
+    affected_capability: str
+    next_evidence_step: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "surfaceKey": self.surface_key,
+            "consumerLabel": self.consumer_label,
+            "impactState": self.impact_state,
+            "impactReason": self.impact_reason,
+            "affectedCapability": self.affected_capability,
+            "nextEvidenceStep": self.next_evidence_step,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class DataSourceGapRegistryFamily:
     family_key: str
     consumer_label: str
@@ -30,6 +50,7 @@ class DataSourceGapRegistryFamily:
     provider_hydration_allowed: bool
     score_trading_authority_allowed: bool
     consumer_safe_description: str
+    surface_impact_matrix: tuple[DataSourceSurfaceImpact, ...]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -45,7 +66,28 @@ class DataSourceGapRegistryFamily:
             "providerHydrationAllowed": self.provider_hydration_allowed,
             "scoreTradingAuthorityAllowed": self.score_trading_authority_allowed,
             "consumerSafeDescription": self.consumer_safe_description,
+            "surfaceImpactMatrix": [
+                impact.to_dict() for impact in self.surface_impact_matrix
+            ],
         }
+
+
+def _impact(
+    surface_key: str,
+    consumer_label: str,
+    impact_state: str,
+    impact_reason: str,
+    affected_capability: str,
+    next_evidence_step: str,
+) -> DataSourceSurfaceImpact:
+    return DataSourceSurfaceImpact(
+        surface_key=surface_key,
+        consumer_label=consumer_label,
+        impact_state=impact_state,
+        impact_reason=impact_reason,
+        affected_capability=affected_capability,
+        next_evidence_step=next_evidence_step,
+    )
 
 
 _FAMILIES: tuple[DataSourceGapRegistryFamily, ...] = (
@@ -64,6 +106,48 @@ _FAMILIES: tuple[DataSourceGapRegistryFamily, ...] = (
         consumer_safe_description=(
             "Quote and OHLCV paths exist, but they are not yet a durable professional spine."
         ),
+        surface_impact_matrix=(
+            _impact(
+                "scanner",
+                "Scanner",
+                "degraded",
+                "报价、日线和成交量血缘不统一，候选池只能保守解释缺口。",
+                "候选发现、成交量过滤、空跑阻断桶",
+                "补齐有界报价和日线快照，并记录来源权限、时效和覆盖状态。",
+            ),
+            _impact(
+                "watchlist",
+                "Watchlist",
+                "degraded",
+                "保存标的不能从分散报价路径推断行级新鲜度。",
+                "行级价格、更新时间、研究状态",
+                "让 watchlist row packet 引用明确的报价/日线快照 ID。",
+            ),
+            _impact(
+                "stock_detail",
+                "Stock Detail",
+                "degraded",
+                "个股研究包缺少统一报价、历史和 as-of 血缘。",
+                "个股价格、趋势、结构研究输入",
+                "把报价、历史和证据引用合并为最小研究包。",
+            ),
+            _impact(
+                "portfolio",
+                "Portfolio",
+                "degraded",
+                "组合估值不能把价格来源、时效和 FX 血缘一起证明。",
+                "持仓估值可信度、P&L 读数说明",
+                "接入价格和 FX lineage 后再提升估值置信说明。",
+            ),
+            _impact(
+                "backtest_parameter_sweep",
+                "Backtest / Parameter Sweep",
+                "observation-only",
+                "历史 bars 的来源、调整基准和可复现快照仍不完整。",
+                "研究级回测数据边界、参数扫读回边界",
+                "补齐数据集 ID、调整基准、交易日历和缺失 bars 策略。",
+            ),
+        ),
     ),
     DataSourceGapRegistryFamily(
         family_key="fundamentals",
@@ -79,6 +163,32 @@ _FAMILIES: tuple[DataSourceGapRegistryFamily, ...] = (
         score_trading_authority_allowed=False,
         consumer_safe_description=(
             "Fundamental coverage exists in pieces, but period and lineage proof is incomplete."
+        ),
+        surface_impact_matrix=(
+            _impact(
+                "stock_detail",
+                "Stock Detail",
+                "degraded",
+                "基本面期间、来源和重述处理未形成统一研究包。",
+                "估值、盈利能力、成长性摘要",
+                "按期间和来源归一化财务字段并记录缺失项。",
+            ),
+            _impact(
+                "watchlist",
+                "Watchlist",
+                "planned",
+                "行级基本面/事件提示需要先有标准化研究包。",
+                "保存标的研究优先级、催化因素摘要",
+                "将已验证基本面字段接入 row research packet。",
+            ),
+            _impact(
+                "factor_research",
+                "Factor Research",
+                "unknown",
+                "点时基本面和 forward-return 血缘未证明。",
+                "因子暴露、分组研究输入",
+                "先补齐点时字段、观察时间和收益标签血缘。",
+            ),
         ),
     ),
     DataSourceGapRegistryFamily(
@@ -96,6 +206,32 @@ _FAMILIES: tuple[DataSourceGapRegistryFamily, ...] = (
         consumer_safe_description=(
             "ETF and index quotes are partially available, but membership authority is incomplete."
         ),
+        surface_impact_matrix=(
+            _impact(
+                "market_overview",
+                "Market Overview",
+                "degraded",
+                "指数/ETF 报价可作部分市场上下文，成分和权重仍待证明。",
+                "宽基市场读数、风险摘要",
+                "补齐授权指数/ETF 报价和成分权重快照。",
+            ),
+            _impact(
+                "scanner",
+                "Scanner",
+                "planned",
+                "行业/主题覆盖尚未统一，不能扩展为完整 universe 证据。",
+                "行业/主题过滤、候选上下文",
+                "接入稳定的成分和行业映射版本。",
+            ),
+            _impact(
+                "portfolio",
+                "Portfolio",
+                "degraded",
+                "基准和成分映射不足会限制组合暴露解释。",
+                "基准映射、行业暴露、相对表现说明",
+                "补齐 benchmark 与 ETF/index membership lineage。",
+            ),
+        ),
     ),
     DataSourceGapRegistryFamily(
         family_key="macro_rates",
@@ -111,6 +247,32 @@ _FAMILIES: tuple[DataSourceGapRegistryFamily, ...] = (
         score_trading_authority_allowed=False,
         consumer_safe_description=(
             "Macro and rates readiness is available only as a diagnostic contract today."
+        ),
+        surface_impact_matrix=(
+            _impact(
+                "market_overview",
+                "Market Overview",
+                "observation-only",
+                "官方宏观行还不是完整产品数据包，风险读数只能保持边界说明。",
+                "利率压力、宏观风险摘要",
+                "持久化官方宏观序列并附覆盖和时效状态。",
+            ),
+            _impact(
+                "liquidity_monitor",
+                "Liquidity Monitor",
+                "observation-only",
+                "利率和信用输入仍是诊断契约，不能支撑强流动性结论。",
+                "资金面压力、利率传导观察",
+                "补齐官方利率/Fed 流动性 bundle 的 freshness 证据。",
+            ),
+            _impact(
+                "scenario_lab",
+                "Scenario Lab",
+                "planned",
+                "情景基线缺少可复现宏观输入引用。",
+                "利率冲击、宏观驱动输入",
+                "让 durable baseline 引用已存储的宏观快照。",
+            ),
         ),
     ),
     DataSourceGapRegistryFamily(
@@ -128,6 +290,32 @@ _FAMILIES: tuple[DataSourceGapRegistryFamily, ...] = (
         consumer_safe_description=(
             "Fed liquidity evidence is contract-shaped, but not yet a durable product spine."
         ),
+        surface_impact_matrix=(
+            _impact(
+                "market_overview",
+                "Market Overview",
+                "observation-only",
+                "周频流动性行尚未作为完整 bundle 持久化。",
+                "流动性背景、风险第一读",
+                "持久化必需序列并标注滞后状态。",
+            ),
+            _impact(
+                "liquidity_monitor",
+                "Liquidity Monitor",
+                "degraded",
+                "Fed 流动性缺口会限制资金面压力解释。",
+                "流动性评分边界、官方风险输入",
+                "补齐覆盖、时效和缺失序列说明。",
+            ),
+            _impact(
+                "scenario_lab",
+                "Scenario Lab",
+                "planned",
+                "缺少可复现的 baseline liquidity input。",
+                "流动性冲击基线",
+                "将流动性快照作为 scenario baseline 引用。",
+            ),
+        ),
     ),
     DataSourceGapRegistryFamily(
         family_key="credit_stress",
@@ -143,6 +331,24 @@ _FAMILIES: tuple[DataSourceGapRegistryFamily, ...] = (
         score_trading_authority_allowed=False,
         consumer_safe_description=(
             "Credit stress is represented through bounded context, not score-grade evidence."
+        ),
+        surface_impact_matrix=(
+            _impact(
+                "market_overview",
+                "Market Overview",
+                "observation-only",
+                "信用压力仍是受限上下文，不能提升风险结论强度。",
+                "信用压力观察、风险摘要边界",
+                "接入持久化信用压力序列和 freshness policy。",
+            ),
+            _impact(
+                "liquidity_monitor",
+                "Liquidity Monitor",
+                "observation-only",
+                "信用压力缺口会限制资金面压力解释。",
+                "信用压力观察、流动性边界",
+                "补齐来源和覆盖证据后再提升显示状态。",
+            ),
         ),
     ),
     DataSourceGapRegistryFamily(
@@ -160,6 +366,32 @@ _FAMILIES: tuple[DataSourceGapRegistryFamily, ...] = (
         consumer_safe_description=(
             "Volatility evidence exists, but full professional source authority is still blocked."
         ),
+        surface_impact_matrix=(
+            _impact(
+                "market_overview",
+                "Market Overview",
+                "degraded",
+                "波动率证据部分存在，但官方行和权限元数据未统一。",
+                "风险温度、波动压力摘要",
+                "接入官方波动率行并保持 fail-closed freshness gates。",
+            ),
+            _impact(
+                "liquidity_monitor",
+                "Liquidity Monitor",
+                "degraded",
+                "VIX/波动率缺口会限制压力分层和流动性解释。",
+                "波动压力、风险状态",
+                "将官方波动率快照纳入风险 bundle。",
+            ),
+            _impact(
+                "scenario_lab",
+                "Scenario Lab",
+                "planned",
+                "情景冲击缺少可复现波动率基线。",
+                "波动率冲击输入",
+                "让 Scenario baseline 引用已验证波动率快照。",
+            ),
+        ),
     ),
     DataSourceGapRegistryFamily(
         family_key="breadth_flows_positioning",
@@ -175,6 +407,40 @@ _FAMILIES: tuple[DataSourceGapRegistryFamily, ...] = (
         score_trading_authority_allowed=False,
         consumer_safe_description=(
             "Breadth has partial evidence; flow and positioning remain review-bound."
+        ),
+        surface_impact_matrix=(
+            _impact(
+                "market_overview",
+                "Market Overview",
+                "degraded",
+                "广度部分可用，资金流和持仓来源仍待评审。",
+                "市场参与度、风险摘要",
+                "先分离广度证明，再评审资金流和持仓来源。",
+            ),
+            _impact(
+                "scanner",
+                "Scanner",
+                "planned",
+                "广度和成交参与度不能替代 symbol 级报价/历史证据。",
+                "候选环境过滤、市场宽度背景",
+                "接入覆盖分母和 symbol 级输入后再影响候选解释。",
+            ),
+            _impact(
+                "liquidity_monitor",
+                "Liquidity Monitor",
+                "observation-only",
+                "资金流/持仓未授权时只能作为观察边界。",
+                "资金流压力、持仓观察",
+                "完成授权来源和 freshness 评审。",
+            ),
+            _impact(
+                "scenario_lab",
+                "Scenario Lab",
+                "planned",
+                "baseline driver 中的广度/资金流输入缺少 durable refs。",
+                "参与度与资金流冲击输入",
+                "让情景基线引用已验证快照或保持缺失。",
+            ),
         ),
     ),
     DataSourceGapRegistryFamily(
@@ -194,6 +460,32 @@ _FAMILIES: tuple[DataSourceGapRegistryFamily, ...] = (
         consumer_safe_description=(
             "Options chains remain unavailable until authorized chain evidence exists."
         ),
+        surface_impact_matrix=(
+            _impact(
+                "options_lab",
+                "Options Lab",
+                "blocked",
+                "授权期权链、展示权、存储权和字段覆盖未证明。",
+                "链、IV、Greeks、OI、成交量观察",
+                "先补齐权益证明包和字段覆盖证据。",
+            ),
+            _impact(
+                "stock_detail",
+                "Stock Detail",
+                "unknown",
+                "个股页不能从缺失期权链推断期权结构。",
+                "标的期权观察入口",
+                "仅在授权链路通过后再接入观察摘要。",
+            ),
+            _impact(
+                "scenario_lab",
+                "Scenario Lab",
+                "planned",
+                "期权链未授权时不得成为情景 baseline 输入。",
+                "期权敏感度情景输入",
+                "保持缺失，直到授权链和方法证据齐备。",
+            ),
+        ),
     ),
     DataSourceGapRegistryFamily(
         family_key="options_strategy_analytics",
@@ -211,6 +503,24 @@ _FAMILIES: tuple[DataSourceGapRegistryFamily, ...] = (
         score_trading_authority_allowed=False,
         consumer_safe_description=(
             "Options strategy analytics remain blocked by missing authorized inputs."
+        ),
+        surface_impact_matrix=(
+            _impact(
+                "options_lab",
+                "Options Lab",
+                "blocked",
+                "策略分析不能先于授权链、历史数据和方法输入毕业。",
+                "策略结构观察、历史回放边界",
+                "先证明授权链、历史链和方法版本。",
+            ),
+            _impact(
+                "backtest_parameter_sweep",
+                "Backtest / Parameter Sweep",
+                "blocked",
+                "没有点时期权历史链和权益证明，不能形成期权历史研究输出。",
+                "期权历史研究边界",
+                "补齐历史链、权利和回放规则后再评估。",
+            ),
         ),
     ),
     DataSourceGapRegistryFamily(
@@ -230,6 +540,32 @@ _FAMILIES: tuple[DataSourceGapRegistryFamily, ...] = (
         consumer_safe_description=(
             "Gamma, GEX, vanna, charm, and dealer positioning remain blocked."
         ),
+        surface_impact_matrix=(
+            _impact(
+                "options_lab",
+                "Options Lab",
+                "blocked",
+                "Gamma 家族和 dealer positioning 缺少授权输入、持仓假设和方法批准。",
+                "Gamma/GEX/vanna/charm/dealer positioning 观察",
+                "完成权利、字段覆盖、符号假设和方法版本评审。",
+            ),
+            _impact(
+                "market_overview",
+                "Market Overview",
+                "unknown",
+                "未证明的期权结构不能进入市场风险第一读。",
+                "期权结构风险背景",
+                "在 Options Lab 方法通过前保持未知。",
+            ),
+            _impact(
+                "scenario_lab",
+                "Scenario Lab",
+                "blocked",
+                "dealer/gamma 输入缺失时不能构成情景基线驱动。",
+                "Gamma 情景驱动",
+                "保持 blocked，直到授权输入和方法证据存在。",
+            ),
+        ),
     ),
     DataSourceGapRegistryFamily(
         family_key="backtest_dataset_lineage",
@@ -245,6 +581,24 @@ _FAMILIES: tuple[DataSourceGapRegistryFamily, ...] = (
         score_trading_authority_allowed=False,
         consumer_safe_description=(
             "Backtest readback is research-useful, but professional dataset lineage is incomplete."
+        ),
+        surface_impact_matrix=(
+            _impact(
+                "backtest_parameter_sweep",
+                "Backtest / Parameter Sweep",
+                "observation-only",
+                "数据集身份、调整基准、交易日历和 PIT membership 不完整。",
+                "回测结果可信边界、参数扫读回",
+                "补齐 dataset ID、adjusted basis、calendar 和 reproducibility manifest。",
+            ),
+            _impact(
+                "factor_research",
+                "Factor Research",
+                "observation-only",
+                "因子面板和 forward-return 血缘缺失时只能诊断研究边界。",
+                "因子 IC、分组收益、长短组合研究边界",
+                "建立 factor panel lineage、as-of join 和 forward-return manifest。",
+            ),
         ),
     ),
     DataSourceGapRegistryFamily(
@@ -262,6 +616,24 @@ _FAMILIES: tuple[DataSourceGapRegistryFamily, ...] = (
         consumer_safe_description=(
             "Scenario baselines are planned, but stored baseline inputs are not integrated."
         ),
+        surface_impact_matrix=(
+            _impact(
+                "scenario_lab",
+                "Scenario Lab",
+                "planned",
+                "存储化 baseline snapshot 尚未接入，常规路径仍偏 request/snapshot 驱动。",
+                "基线复现、市场/组合冲击输入",
+                "存储 baseline snapshot IDs 并附输入 freshness/authority 摘要。",
+            ),
+            _impact(
+                "evidence_harness",
+                "Evidence Harness",
+                "planned",
+                "target environment 证据需要引用可脱敏的 baseline artifact。",
+                "目标环境基线证据",
+                "生成面向用户的证据摘要，仅保留可公开解释的信息。",
+            ),
+        ),
     ),
     DataSourceGapRegistryFamily(
         family_key="portfolio_valuation_lineage",
@@ -277,6 +649,32 @@ _FAMILIES: tuple[DataSourceGapRegistryFamily, ...] = (
         score_trading_authority_allowed=False,
         consumer_safe_description=(
             "Portfolio valuation is partially traced, but source lineage still needs hardening."
+        ),
+        surface_impact_matrix=(
+            _impact(
+                "portfolio",
+                "Portfolio",
+                "degraded",
+                "价格来源、FX 时效、估值快照和分析 readiness 仍不完整。",
+                "持仓估值置信度、风险/暴露读数",
+                "持久化 price、FX、valuation、benchmark 和 factor lineage。",
+            ),
+            _impact(
+                "scenario_lab",
+                "Scenario Lab",
+                "planned",
+                "组合情景输入缺少稳定估值和 FX baseline 引用。",
+                "组合冲击基线",
+                "让 Scenario baseline 引用组合估值快照 ID。",
+            ),
+            _impact(
+                "backtest_parameter_sweep",
+                "Backtest / Parameter Sweep",
+                "unknown",
+                "组合分配回测需要单独 accounting/benchmark gate，当前不应推断。",
+                "组合分配研究边界",
+                "先保留未知，等待独立组合回测合同。",
+            ),
         ),
     ),
 )
@@ -328,6 +726,7 @@ def build_data_source_gap_registry() -> dict[str, Any]:
 
 __all__ = [
     "DATA_SOURCE_GAP_REGISTRY_CONTRACT_VERSION",
+    "DataSourceSurfaceImpact",
     "DataSourceGapRegistryFamily",
     "build_data_source_gap_registry",
 ]

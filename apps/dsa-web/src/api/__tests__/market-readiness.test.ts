@@ -199,6 +199,24 @@ describe('marketApi.getDataSourceGapRegistry', () => {
             provider_hydration_allowed: true,
             score_trading_authority_allowed: false,
             consumer_safe_description: 'Quote paths exist, but lineage is incomplete.',
+            surface_impact_matrix: [
+              {
+                surface_key: 'watchlist',
+                consumer_label: 'Watchlist',
+                impact_state: 'degraded',
+                impact_reason: '保存标的不能从分散报价路径推断行级新鲜度。',
+                affected_capability: '行级价格、更新时间、研究状态',
+                next_evidence_step: '让 watchlist row packet 引用明确的报价/日线快照 ID。',
+              },
+              {
+                surface_key: 'backtest_parameter_sweep',
+                consumer_label: 'Backtest / Parameter Sweep',
+                impact_state: 'observation-only',
+                impact_reason: '历史 bars 的来源、调整基准和可复现快照仍不完整。',
+                affected_capability: '研究级回测数据边界、参数扫读回边界',
+                next_evidence_step: '补齐数据集 ID、调整基准、交易日历和缺失 bars 策略。',
+              },
+            ],
           },
           {
             family_key: 'macro_rates',
@@ -211,6 +229,16 @@ describe('marketApi.getDataSourceGapRegistry', () => {
             provider_hydration_allowed: true,
             score_trading_authority_allowed: false,
             consumer_safe_description: 'Diagnostic only.',
+            surface_impact_matrix: [
+              {
+                surface_key: 'market_overview',
+                consumer_label: 'Market Overview',
+                impact_state: 'observation-only',
+                impact_reason: '官方宏观行还不是完整产品数据包。',
+                affected_capability: '利率压力、宏观风险摘要',
+                next_evidence_step: '持久化官方宏观序列并附覆盖和时效状态。',
+              },
+            ],
           },
           {
             family_key: 'options_chains',
@@ -225,6 +253,16 @@ describe('marketApi.getDataSourceGapRegistry', () => {
             provider_hydration_allowed: false,
             score_trading_authority_allowed: false,
             consumer_safe_description: 'Options chains remain unavailable.',
+            surface_impact_matrix: [
+              {
+                surface_key: 'options_lab',
+                consumer_label: 'Options Lab',
+                impact_state: 'blocked',
+                impact_reason: '授权期权链、展示权、存储权和字段覆盖未证明。',
+                affected_capability: '链、IV、Greeks、OI、成交量观察',
+                next_evidence_step: '先补齐权益证明包和字段覆盖证据。',
+              },
+            ],
           },
           {
             family_key: 'gamma_dealer_positioning',
@@ -239,6 +277,16 @@ describe('marketApi.getDataSourceGapRegistry', () => {
             provider_hydration_allowed: false,
             score_trading_authority_allowed: false,
             consumer_safe_description: 'Gamma remains blocked.',
+            surface_impact_matrix: [
+              {
+                surface_key: 'market_overview',
+                consumer_label: 'Market Overview',
+                impact_state: 'unknown',
+                impact_reason: '未证明的期权结构不能进入市场风险第一读。',
+                affected_capability: '期权结构风险背景',
+                next_evidence_step: '在 Options Lab 方法通过前保持未知。',
+              },
+            ],
           },
         ],
         metadata: {
@@ -279,8 +327,24 @@ describe('marketApi.getDataSourceGapRegistry', () => {
       dataHydrationAllowed: '允许',
       scoreTradingAuthorityAllowed: '不允许',
     });
+    expect(view.families.find((family) => family.familyKey === 'stock_quote_spine')?.surfaceImpactMatrix).toMatchObject([
+      {
+        surfaceKey: 'watchlist',
+        surfaceLabel: 'Watchlist',
+        impactState: { label: '降级', variant: 'caution' },
+        affectedCapability: '行级价格、更新时间、研究状态',
+      },
+      {
+        surfaceKey: 'backtest_parameter_sweep',
+        surfaceLabel: '回测 / 参数扫描',
+        impactState: { label: '仅观察', variant: 'neutral' },
+      },
+    ]);
     expect(view.families.find((family) => family.familyKey === 'options_chains')?.scoreTradingAuthorityAllowed).toBe('不允许');
+    expect(view.families.find((family) => family.familyKey === 'options_chains')?.surfaceImpactMatrix[0].impactState.label).toBe('阻断');
     expect(view.families.find((family) => family.familyKey === 'gamma_dealer_positioning')?.dataHydrationAllowed).toBe('不允许');
+    expect(view.families.find((family) => family.familyKey === 'gamma_dealer_positioning')?.surfaceImpactMatrix[0].impactState.label).toBe('待补证');
+    expect(JSON.stringify(view)).not.toMatch(/requestId|traceId|rawProviderPayload|cacheKey|credential|env|debug|api[_-]?key|buy|sell|target price|stop loss|position sizing|买入|卖出|目标价|止损|仓位/i);
   });
 
   it('keeps missing registry family fields fail-closed instead of overclaiming readiness', async () => {
@@ -296,6 +360,16 @@ describe('marketApi.getDataSourceGapRegistry', () => {
           {
             family_key: 'unknown_new_family',
             consumer_label: 'Unknown New Family',
+            surface_impact_matrix: [
+              {
+                surface_key: 'unknown_surface',
+                consumer_label: 'requestId secret surface',
+                impact_state: 'unlocked',
+                impact_reason: 'rawProviderPayload requestId traceId',
+                affected_capability: 'debug cacheKey capability',
+                next_evidence_step: 'token=secret next step',
+              },
+            ],
           },
         ],
       },
@@ -312,7 +386,16 @@ describe('marketApi.getDataSourceGapRegistry', () => {
     expect(family.dataHydrationAllowed).toBe('待补证');
     expect(family.scoreTradingAuthorityAllowed).toBe('待补证');
     expect(family.consumerSafeDescription).toBe('数据说明待补证。');
+    expect(family.surfaceImpactMatrix).toMatchObject([
+      {
+        surfaceLabel: '影响面待补证',
+        impactState: { label: '待补证', variant: 'caution' },
+        impactReason: '影响原因待补证。',
+        affectedCapability: '影响能力待补证。',
+        nextEvidenceStep: '下一证据步骤待补证。',
+      },
+    ]);
     expect(view.groups.find((group) => group.groupId === 'other')?.families[0]?.familyKey).toBe('unknown_new_family');
-    expect(JSON.stringify(view)).not.toMatch(/已就绪|权限 可用|新鲜/);
+    expect(JSON.stringify(view)).not.toMatch(/已就绪|已解锁|权限 可用|新鲜|requestId|traceId|rawProviderPayload|cacheKey|token|secret|debug/i);
   });
 });

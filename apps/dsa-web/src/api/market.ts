@@ -538,6 +538,24 @@ export type DataSourceGapRegistryFreshnessState =
   | 'unknown'
   | string;
 
+export type DataSourceSurfaceImpactState =
+  | 'unlocked'
+  | 'degraded'
+  | 'observation-only'
+  | 'blocked'
+  | 'planned'
+  | 'unknown'
+  | string;
+
+export type DataSourceSurfaceImpact = {
+  surfaceKey: string;
+  consumerLabel: string;
+  impactState: DataSourceSurfaceImpactState;
+  impactReason: string;
+  affectedCapability: string;
+  nextEvidenceStep: string;
+};
+
 export type DataSourceGapRegistryFamily = {
   familyKey: string;
   consumerLabel: string;
@@ -551,6 +569,7 @@ export type DataSourceGapRegistryFamily = {
   providerHydrationAllowed?: boolean;
   scoreTradingAuthorityAllowed?: boolean;
   consumerSafeDescription: string;
+  surfaceImpactMatrix?: DataSourceSurfaceImpact[];
 };
 
 export type DataSourceGapRegistrySummary = {
@@ -600,6 +619,16 @@ export type DataSourceGapRegistryFamilyView = {
   scoreTradingAuthorityAllowed: string;
   scoreTradingAuthorityVariant: DataSourceGapRegistryStatusView['variant'];
   consumerSafeDescription: string;
+  surfaceImpactMatrix: DataSourceSurfaceImpactView[];
+};
+
+export type DataSourceSurfaceImpactView = {
+  surfaceKey: string;
+  surfaceLabel: string;
+  impactState: DataSourceGapRegistryStatusView;
+  impactReason: string;
+  affectedCapability: string;
+  nextEvidenceStep: string;
 };
 
 export type DataSourceGapRegistryGroupId =
@@ -898,6 +927,24 @@ const DATA_SOURCE_GAP_FAMILY_GROUP: Record<string, DataSourceGapRegistryGroupId>
   breadth_flows_positioning: 'positioning_flows',
 };
 
+const DATA_SOURCE_IMPACT_SURFACE_LABELS: Record<string, string> = {
+  market_overview: 'Market Overview',
+  scanner: 'Scanner',
+  watchlist: 'Watchlist',
+  stock_detail: 'Stock Detail',
+  options_lab: 'Options Lab',
+  liquidity_monitor: 'Liquidity Monitor',
+  backtest_parameter_sweep: '回测 / 参数扫描',
+  factor_research: 'Factor Research',
+  scenario_lab: 'Scenario Lab',
+  portfolio: 'Portfolio',
+  admin_diagnostics: 'Admin / Diagnostics',
+  evidence_harness: 'Evidence Harness',
+};
+
+const DATA_SOURCE_GAP_UNSAFE_TEXT_PATTERN =
+  /request[_ -]?id|trace[_ -]?id|raw[_ -]?(payload|diagnostic|dump)|cache[_ -]?key|credential|env\b|debug|token|secret|cookie|api[_-]?key/i;
+
 function normalizeGapToken(value?: string | null): string {
   return String(value || '').trim().toLowerCase();
 }
@@ -937,6 +984,22 @@ function dataSourceGapFreshnessView(state?: string | null): DataSourceGapRegistr
   return { label: '待补证', variant: 'caution' };
 }
 
+function dataSourceGapImpactStateView(state?: string | null): DataSourceGapRegistryStatusView {
+  const normalized = normalizeGapToken(state);
+  if (normalized === 'unlocked') return { label: '已解锁', variant: 'success' };
+  if (normalized === 'degraded') return { label: '降级', variant: 'caution' };
+  if (normalized === 'observation-only') return { label: '仅观察', variant: 'neutral' };
+  if (normalized === 'blocked') return { label: '阻断', variant: 'danger' };
+  if (normalized === 'planned') return { label: '计划中', variant: 'neutral' };
+  return { label: '待补证', variant: 'caution' };
+}
+
+function dataSourceGapSafeText(value?: string | null, fallback = '待补证'): string {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text || DATA_SOURCE_GAP_UNSAFE_TEXT_PATTERN.test(text)) return fallback;
+  return text.slice(0, 140);
+}
+
 function dataSourceGapBooleanView(value: boolean | undefined): Pick<DataSourceGapRegistryFamilyView, 'dataHydrationAllowed' | 'dataHydrationVariant'> {
   if (value === true) return { dataHydrationAllowed: '允许', dataHydrationVariant: 'success' };
   if (value === false) return { dataHydrationAllowed: '不允许', dataHydrationVariant: 'caution' };
@@ -972,6 +1035,16 @@ function normalizeDataSourceGapRegistryPayload(rawPayload: Record<string, unknow
       providerHydrationAllowed: typeof family.providerHydrationAllowed === 'boolean' ? family.providerHydrationAllowed : undefined,
       scoreTradingAuthorityAllowed: typeof family.scoreTradingAuthorityAllowed === 'boolean' ? family.scoreTradingAuthorityAllowed : undefined,
       consumerSafeDescription: family.consumerSafeDescription || '',
+      surfaceImpactMatrix: Array.isArray(family.surfaceImpactMatrix)
+        ? family.surfaceImpactMatrix.map((impact) => ({
+          surfaceKey: impact.surfaceKey || 'unknown_surface',
+          consumerLabel: impact.consumerLabel || '影响面待补证',
+          impactState: impact.impactState || 'unknown',
+          impactReason: impact.impactReason || '',
+          affectedCapability: impact.affectedCapability || '',
+          nextEvidenceStep: impact.nextEvidenceStep || '',
+        }))
+        : [],
     })) : [],
     metadata: payload.metadata || {},
   };
@@ -989,6 +1062,21 @@ export function buildDataSourceGapRegistryView(
     const scoreAuthority = dataSourceGapScoreAuthorityView(family.scoreTradingAuthorityAllowed);
     const groupId = DATA_SOURCE_GAP_FAMILY_GROUP[familyKey] || 'other';
     const groupLabel = DATA_SOURCE_GAP_GROUPS.find((group) => group.id === groupId)?.label || '其他待补证';
+    const surfaceImpactMatrix = (family.surfaceImpactMatrix || []).map((impact) => {
+      const surfaceKey = impact.surfaceKey || 'unknown_surface';
+      const impactState = normalizeGapToken(impact.impactState) === 'unlocked'
+        && (normalizeGapToken(family.status) !== 'ready' || normalizeGapToken(family.authorityState) !== 'allowed')
+        ? 'unknown'
+        : impact.impactState;
+      return {
+        surfaceKey,
+        surfaceLabel: DATA_SOURCE_IMPACT_SURFACE_LABELS[surfaceKey] || dataSourceGapSafeText(impact.consumerLabel, '影响面待补证'),
+        impactState: dataSourceGapImpactStateView(impactState),
+        impactReason: dataSourceGapSafeText(impact.impactReason, '影响原因待补证。'),
+        affectedCapability: dataSourceGapSafeText(impact.affectedCapability, '影响能力待补证。'),
+        nextEvidenceStep: dataSourceGapSafeText(impact.nextEvidenceStep, '下一证据步骤待补证。'),
+      };
+    });
     return {
       familyKey,
       familyLabel: DATA_SOURCE_GAP_FAMILY_LABELS[familyKey] || family.consumerLabel || '数据家族',
@@ -1006,6 +1094,7 @@ export function buildDataSourceGapRegistryView(
       scoreTradingAuthorityAllowed: scoreAuthority.scoreTradingAuthorityAllowed,
       scoreTradingAuthorityVariant: scoreAuthority.scoreTradingAuthorityVariant,
       consumerSafeDescription: DATA_SOURCE_GAP_DESCRIPTIONS[familyKey] || (family.consumerSafeDescription ? '已返回说明，需人工复核后展示。' : '数据说明待补证。'),
+      surfaceImpactMatrix,
     };
   });
   const groups = [

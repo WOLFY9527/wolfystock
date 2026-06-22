@@ -2123,6 +2123,51 @@ const DataSourceGapRegistryPanel: React.FC<{
                               <TerminalChip variant={family.scoreTradingAuthorityVariant}>计分/交易权限 {family.scoreTradingAuthorityAllowed}</TerminalChip>
                             </div>
                           </div>
+                          <div
+                            className="rounded-md border border-white/[0.06] bg-black/10 px-3 py-3"
+                            data-testid={`data-source-gap-registry-impact-matrix-${family.familyKey}`}
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div>
+                                <p className="text-[10px] font-medium uppercase tracking-widest text-white/34">surface impact</p>
+                                <p className="mt-1 text-xs font-semibold text-white/78">影响产品面与研究能力</p>
+                              </div>
+                              <TerminalChip variant="neutral">{formatNumber(family.surfaceImpactMatrix.length, 0)} 个影响项</TerminalChip>
+                            </div>
+                            {family.surfaceImpactMatrix.length ? (
+                              <div className="mt-3 grid gap-2">
+                                {family.surfaceImpactMatrix.map((impact) => (
+                                  <div
+                                    key={`${family.familyKey}-${impact.surfaceKey}-${impact.affectedCapability}`}
+                                    className="rounded-md border border-white/[0.05] bg-white/[0.025] px-3 py-2.5"
+                                  >
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      <TerminalChip variant={impact.impactState.variant}>{impact.impactState.label}</TerminalChip>
+                                      <p className="text-xs font-semibold text-white/82">{impact.surfaceLabel}</p>
+                                    </div>
+                                    <dl className="mt-2 grid gap-1.5 text-[11px] leading-5 text-white/58">
+                                      <div>
+                                        <dt className="text-white/34">影响能力</dt>
+                                        <dd>{impact.affectedCapability}</dd>
+                                      </div>
+                                      <div>
+                                        <dt className="text-white/34">影响原因</dt>
+                                        <dd>{impact.impactReason}</dd>
+                                      </div>
+                                      <div>
+                                        <dt className="text-white/34">下一证据步骤</dt>
+                                        <dd>{impact.nextEvidenceStep}</dd>
+                                      </div>
+                                    </dl>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="mt-3 text-[11px] leading-5 text-white/48">
+                                影响产品面待补证；前端不根据缺失字段推断解锁、降级或阻断状态。
+                              </p>
+                            )}
+                          </div>
                           <dl className="grid gap-2 text-[11px] leading-5 text-white/58">
                             <div>
                               <dt className="text-white/34">权益 / 授权阻断</dt>
