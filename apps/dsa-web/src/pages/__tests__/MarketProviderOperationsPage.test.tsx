@@ -625,6 +625,68 @@ const dataSourceGapRegistryPayload = {
     providerHydrationAllowedCount: 2,
     scoreTradingAuthorityAllowedCount: 0,
   },
+  acquisitionPriorityQueue: [
+    {
+      familyKey: 'options_chains',
+      familyLabel: 'Options Chains',
+      priority: 'critical',
+      priorityReason: '关键队列：影响 2 个产品面，1 项能力阻断或降级；当前行动为 确认期权链授权。',
+      readinessState: 'unauthorized',
+      primaryBlockerType: 'entitlement',
+      affectedSurfaceCount: 2,
+      blockedOrDegradedCapabilityCount: 1,
+      externalEntitlementRequired: true,
+      protectedDomainReviewRequired: true,
+      nextConcreteStep: '收集授权与字段覆盖证据，不接入数据源运行链路。',
+      requiredEvidence: ['授权证明', '字段覆盖清单'],
+      consumerSafeWarning: '工程补数队列；当前不是决策级证据，不生成交易指令。',
+    },
+    {
+      familyKey: 'stock_quote_spine',
+      familyLabel: 'Stock Quote Spine',
+      priority: 'high',
+      priorityReason: '高优先级队列：影响 4 个产品面，3 项能力阻断或降级；当前行动为 补齐报价骨架集成。',
+      readinessState: 'partial',
+      primaryBlockerType: 'provider-integration',
+      affectedSurfaceCount: 4,
+      blockedOrDegradedCapabilityCount: 3,
+      externalEntitlementRequired: false,
+      protectedDomainReviewRequired: true,
+      nextConcreteStep: '定义报价/OHLCV 快照读模型并补齐来源权限字段。',
+      requiredEvidence: ['授权报价快照', '日线 as-of 血缘'],
+      consumerSafeWarning: '工程补数队列；当前不是决策级证据，不生成交易指令。',
+    },
+    {
+      familyKey: 'scenario_baselines',
+      familyLabel: 'Scenario Baselines',
+      priority: 'medium',
+      priorityReason: '中优先级队列：影响 1 个产品面，0 项能力阻断或降级；当前行动为 补齐数据契约。',
+      readinessState: 'planned',
+      primaryBlockerType: 'schema-contract',
+      affectedSurfaceCount: 1,
+      blockedOrDegradedCapabilityCount: 0,
+      externalEntitlementRequired: false,
+      protectedDomainReviewRequired: true,
+      nextConcreteStep: '存储 baseline snapshot IDs 并附输入 freshness/authority 摘要。',
+      requiredEvidence: ['字段契约', '缺失状态定义'],
+      consumerSafeWarning: '工程补数队列；当前不是决策级证据，不生成交易指令。',
+    },
+    {
+      familyKey: 'macro_rates',
+      familyLabel: 'Macro / Rates',
+      priority: 'low',
+      priorityReason: '低优先级监控：影响 1 个产品面，0 项能力阻断或降级；当前行动为 保持证据监控。',
+      readinessState: 'observation-only',
+      primaryBlockerType: 'unknown',
+      affectedSurfaceCount: 1,
+      blockedOrDegradedCapabilityCount: 0,
+      externalEntitlementRequired: false,
+      protectedDomainReviewRequired: false,
+      nextConcreteStep: '持久化官方宏观序列并附覆盖和时效状态。',
+      requiredEvidence: ['覆盖证据'],
+      consumerSafeWarning: '工程补数队列；当前不是决策级证据，不生成交易指令。',
+    },
+  ],
   families: [
     {
       familyKey: 'stock_quote_spine',
@@ -1169,6 +1231,20 @@ describe('MarketProviderOperationsPage', () => {
     expect(panel).toHaveTextContent('阻断');
     expect(panel).toHaveTextContent('仅观察');
     expect(panel).toHaveTextContent('计划中');
+    expect(panel).toHaveTextContent('数据接入优先队列');
+    expect(screen.getByTestId('data-source-acquisition-priority-queue')).toHaveTextContent('工程补数排序');
+    expect(screen.getByTestId('data-source-acquisition-priority-options_chains')).toHaveTextContent('关键');
+    expect(screen.getByTestId('data-source-acquisition-priority-stock_quote_spine')).toHaveTextContent('高');
+    expect(screen.getByTestId('data-source-acquisition-priority-scenario_baselines')).toHaveTextContent('中');
+    expect(screen.getByTestId('data-source-acquisition-priority-macro_rates')).toHaveTextContent('低');
+    expect(screen.getByTestId('data-source-acquisition-priority-options_chains')).toHaveTextContent('授权阻断');
+    expect(screen.getByTestId('data-source-acquisition-priority-stock_quote_spine')).toHaveTextContent('数据接入');
+    expect(screen.getByTestId('data-source-acquisition-priority-scenario_baselines')).toHaveTextContent('契约补齐');
+    expect(screen.getByTestId('data-source-acquisition-priority-macro_rates')).toHaveTextContent('阻断待确认');
+    expect(screen.getByTestId('data-source-acquisition-priority-options_chains')).toHaveTextContent('影响面 2');
+    expect(screen.getByTestId('data-source-acquisition-priority-stock_quote_spine')).toHaveTextContent('阻断/降级能力 3');
+    expect(screen.getByTestId('data-source-acquisition-priority-scenario_baselines')).toHaveTextContent('所需证据');
+    expect(screen.getByTestId('data-source-acquisition-priority-macro_rates')).toHaveTextContent('当前不是决策级证据，不生成交易指令');
     expect(screen.getByTestId('data-source-gap-registry-group-quote_market')).toHaveTextContent('报价 / 市场骨架');
     expect(screen.getByTestId('data-source-gap-registry-group-options')).toHaveTextContent('期权与衍生结构');
     expect(screen.getByTestId('data-source-gap-registry-group-macro_liquidity_credit')).toHaveTextContent('宏观 / 流动性 / 信用');
@@ -1244,6 +1320,17 @@ describe('MarketProviderOperationsPage', () => {
     getDataSourceGapRegistry.mockResolvedValue({
       ...dataSourceGapRegistryPayload,
       summary: { totalFamilies: 1 },
+      acquisitionPriorityQueue: [
+        {
+          familyKey: 'unknown_new_family',
+          familyLabel: 'Unknown New Family',
+          priorityReason: 'rawProviderPayload requestId traceId',
+          primaryBlockerType: 'provider-integration',
+          nextConcreteStep: 'token=secret next step',
+          requiredEvidence: ['api_key secret evidence'],
+          consumerSafeWarning: 'debug raw dump',
+        },
+      ],
       families: [
         {
           familyKey: 'unknown_new_family',
@@ -1282,6 +1369,16 @@ describe('MarketProviderOperationsPage', () => {
     const unknownActionPlan = screen.getByTestId('data-source-gap-registry-action-plan-unknown_new_family');
     expect(unknownActionPlan).toHaveTextContent('行动计划待补证');
     expect(unknownActionPlan).not.toHaveTextContent(/requestId|traceId|rawProviderPayload|cacheKey|token|secret|debug/i);
+    const unknownQueueItem = screen.getByTestId('data-source-acquisition-priority-unknown_new_family');
+    expect(unknownQueueItem).toHaveTextContent('中');
+    expect(unknownQueueItem).toHaveTextContent('待补证');
+    expect(unknownQueueItem).toHaveTextContent('数据接入');
+    expect(unknownQueueItem).toHaveTextContent('影响面 0');
+    expect(unknownQueueItem).toHaveTextContent('阻断/降级能力 0');
+    expect(unknownQueueItem).toHaveTextContent('下一步待补证。');
+    expect(unknownQueueItem).toHaveTextContent('证据待补证');
+    expect(unknownQueueItem).toHaveTextContent('工程补数队列；当前不是决策级证据。');
+    expect(unknownQueueItem).not.toHaveTextContent(/requestId|traceId|rawProviderPayload|cacheKey|token|secret|debug/i);
     expect(row).not.toHaveTextContent('已就绪');
     expect(row).not.toHaveTextContent('权限 可用');
     expect(row).not.toHaveTextContent('时效 新鲜');

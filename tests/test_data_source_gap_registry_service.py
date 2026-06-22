@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 
+from src.services import data_source_gap_registry_service as registry_service
 from src.services.data_source_gap_registry_service import build_data_source_gap_registry
 
 
@@ -24,6 +25,21 @@ EXPECTED_FAMILY_KEYS = {
     "scenario_baselines",
     "portfolio_valuation_lineage",
 }
+EXPECTED_QUEUE_FIELDS = {
+    "familyKey",
+    "familyLabel",
+    "priority",
+    "priorityReason",
+    "readinessState",
+    "primaryBlockerType",
+    "affectedSurfaceCount",
+    "blockedOrDegradedCapabilityCount",
+    "externalEntitlementRequired",
+    "protectedDomainReviewRequired",
+    "nextConcreteStep",
+    "requiredEvidence",
+    "consumerSafeWarning",
+}
 
 
 def test_data_source_gap_registry_is_deterministic_and_fail_closed() -> None:
@@ -36,6 +52,35 @@ def test_data_source_gap_registry_is_deterministic_and_fail_closed() -> None:
     assert first["providerRuntimeCalled"] is False
     assert first["networkCallsEnabled"] is False
     assert first["scoreAuthorityAllowed"] is False
+
+    queue = first["acquisitionPriorityQueue"]
+    assert [item["familyKey"] for item in queue] == [
+        item["familyKey"] for item in second["acquisitionPriorityQueue"]
+    ]
+    assert {item["familyKey"] for item in queue} == EXPECTED_FAMILY_KEYS
+    assert all(set(item) == EXPECTED_QUEUE_FIELDS for item in queue)
+    queue_by_key = {item["familyKey"]: item for item in queue}
+    assert queue_by_key["stock_quote_spine"]["priority"] == "critical"
+    assert queue_by_key["stock_quote_spine"]["primaryBlockerType"] == (
+        "provider-integration"
+    )
+    assert queue_by_key["stock_quote_spine"]["affectedSurfaceCount"] == 5
+    assert (
+        queue_by_key["stock_quote_spine"]["blockedOrDegradedCapabilityCount"] == 4
+    )
+    assert queue_by_key["stock_quote_spine"]["externalEntitlementRequired"] is False
+    assert queue_by_key["stock_quote_spine"]["protectedDomainReviewRequired"] is True
+    assert "5 个产品面" in queue_by_key["stock_quote_spine"]["priorityReason"]
+    assert "工程补数队列" in queue_by_key["stock_quote_spine"]["consumerSafeWarning"]
+    assert queue_by_key["portfolio_valuation_lineage"]["priority"] == "high"
+    assert (
+        queue.index(queue_by_key["stock_quote_spine"])
+        < queue.index(queue_by_key["portfolio_valuation_lineage"])
+    )
+    assert queue_by_key["scenario_baselines"]["primaryBlockerType"] == (
+        "schema-contract"
+    )
+    assert queue_by_key["scenario_baselines"]["priority"] == "medium"
 
     families = {item["familyKey"]: item for item in first["families"]}
     assert set(families) == EXPECTED_FAMILY_KEYS
@@ -117,6 +162,22 @@ def test_data_source_gap_registry_is_deterministic_and_fail_closed() -> None:
         )
         for action in families[family_key]["integrationActionPlan"]
     )
+    for family_key in (
+        "options_chains",
+        "options_strategy_analytics",
+        "gamma_dealer_positioning",
+    ):
+        assert queue_by_key[family_key]["priority"] == "critical"
+        assert queue_by_key[family_key]["primaryBlockerType"] == "entitlement"
+        assert queue_by_key[family_key]["readinessState"] in {
+            "blocked",
+            "unauthorized",
+        }
+        assert queue_by_key[family_key]["externalEntitlementRequired"] is True
+        assert queue_by_key[family_key]["protectedDomainReviewRequired"] is True
+        assert "授权" in queue_by_key[family_key]["nextConcreteStep"]
+        assert "已就绪" not in queue_by_key[family_key]["priorityReason"]
+        assert "ready" not in queue_by_key[family_key]["priorityReason"].lower()
     assert {
         action["actionType"]
         for action in families["stock_quote_spine"]["integrationActionPlan"]
@@ -199,5 +260,64 @@ def test_data_source_gap_registry_is_deterministic_and_fail_closed() -> None:
         "tushare",
         "akshare",
         "finnhub",
+        "trading advice",
+        "investment advice",
+        "recommended",
+        "winner",
     ):
         assert forbidden not in serialized
+
+
+def test_ready_family_only_produces_low_priority_monitoring_queue_item(
+    monkeypatch,
+) -> None:
+    ready_family = registry_service.DataSourceGapRegistryFamily(
+        family_key="ready_family",
+        consumer_label="Ready Family",
+        status="ready",
+        authority_state="allowed",
+        freshness_state="fresh",
+        entitlement_or_licensing_blocker=None,
+        integration_blocker=None,
+        source_evidence_state="validated",
+        next_integration_step="Keep monitoring.",
+        provider_hydration_allowed=True,
+        score_trading_authority_allowed=True,
+        consumer_safe_description="Ready data family.",
+        surface_impact_matrix=(
+            registry_service.DataSourceSurfaceImpact(
+                surface_key="market_overview",
+                consumer_label="Market Overview",
+                impact_state="unlocked",
+                impact_reason="Validated.",
+                affected_capability="Validated capability.",
+                next_evidence_step="Keep monitoring.",
+            ),
+        ),
+    )
+    monkeypatch.setattr(registry_service, "_FAMILIES", (ready_family,))
+
+    payload = registry_service.build_data_source_gap_registry()
+
+    assert payload["summary"]["readyCount"] == 1
+    assert payload["acquisitionPriorityQueue"] == [
+        {
+            "familyKey": "ready_family",
+            "familyLabel": "Ready Family",
+            "priority": "low",
+            "priorityReason": (
+                "低优先级监控：影响 1 个产品面，0 项能力阻断或降级；"
+                "当前行动为 保持证据监控。"
+            ),
+            "readinessState": "ready",
+            "primaryBlockerType": "evidence-validation",
+            "affectedSurfaceCount": 1,
+            "blockedOrDegradedCapabilityCount": 0,
+            "externalEntitlementRequired": False,
+            "protectedDomainReviewRequired": False,
+            "nextConcreteStep": "保持只读监控，不新增阻断行动。",
+            "requiredEvidence": ["周期性 freshness 检查"],
+            "consumerSafeWarning": "当前家族已就绪，仅保留工程监控。",
+        }
+    ]
+    assert payload["acquisitionPriorityQueue"][0]["priority"] != "critical"

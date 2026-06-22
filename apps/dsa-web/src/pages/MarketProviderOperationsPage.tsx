@@ -1996,6 +1996,7 @@ const DataSourceGapRegistryPanel: React.FC<{
 }> = ({ registry, isLoading, error }) => {
   const view = buildDataSourceGapRegistryView(registry);
   const families = view.families;
+  const acquisitionQueue = view.acquisitionPriorityQueue;
 
   return (
     <TerminalPanel as="section" className="col-span-12" data-testid="data-source-gap-registry-panel">
@@ -2063,6 +2064,70 @@ const DataSourceGapRegistryPanel: React.FC<{
               {view.scoreAuthorityAllowed ? '计分权限待核对' : '不授予计分权限'}
             </TerminalChip>
           </div>
+
+          <TerminalNestedBlock
+            className="mt-4 bg-black/10 px-3 py-3"
+            data-testid="data-source-acquisition-priority-queue"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white/86">数据接入优先队列</p>
+                <p className="mt-1 text-[11px] leading-5 text-white/48">
+                  工程补数排序，只用于定位接入、授权、证据和保护域复核，不生成交易指令。
+                </p>
+              </div>
+              <TerminalChip variant="neutral">{formatNumber(acquisitionQueue.length, 0)} 个队列项</TerminalChip>
+            </div>
+            {acquisitionQueue.length ? (
+              <div className="mt-3 grid gap-2">
+                {acquisitionQueue.map((item) => (
+                  <div
+                    key={`${item.familyKey}-acquisition-priority`}
+                    className="rounded-md border border-white/[0.05] bg-white/[0.025] px-3 py-2.5"
+                    data-testid={`data-source-acquisition-priority-${item.familyKey}`}
+                  >
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <TerminalChip variant={item.priority.variant}>{item.priority.label}</TerminalChip>
+                      <TerminalChip variant={item.primaryBlockerType.variant}>{item.primaryBlockerType.label}</TerminalChip>
+                      <TerminalChip variant={item.readinessState.variant}>{item.readinessState.label}</TerminalChip>
+                      <TerminalChip variant={item.externalEntitlementVariant}>{item.externalEntitlementRequired}</TerminalChip>
+                      <TerminalChip variant={item.protectedDomainReviewVariant}>{item.protectedDomainReviewRequired}</TerminalChip>
+                    </div>
+                    <div className="mt-2 grid gap-2 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-white/82">{item.familyLabel}</p>
+                        <p className="mt-1 text-[11px] leading-5 text-white/52">{item.priorityReason}</p>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          <TerminalChip variant="neutral">影响面 {formatNumber(item.affectedSurfaceCount, 0)}</TerminalChip>
+                          <TerminalChip variant={item.blockedOrDegradedCapabilityCount > 0 ? 'caution' : 'neutral'}>
+                            阻断/降级能力 {formatNumber(item.blockedOrDegradedCapabilityCount, 0)}
+                          </TerminalChip>
+                        </div>
+                      </div>
+                      <dl className="grid gap-1.5 text-[11px] leading-5 text-white/58">
+                        <div>
+                          <dt className="text-white/34">下一步</dt>
+                          <dd>{item.nextConcreteStep}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-white/34">所需证据</dt>
+                          <dd>{item.requiredEvidence.join('、')}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-white/34">边界</dt>
+                          <dd>{item.consumerSafeWarning}</dd>
+                        </div>
+                      </dl>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-[11px] leading-5 text-white/48">
+                优先队列待补证；前端不根据缺失字段推断接入顺序或 readiness。
+              </p>
+            )}
+          </TerminalNestedBlock>
 
           <div className="mt-4 grid gap-3" data-testid="data-source-gap-registry-groups">
             {view.groups.map((group) => (

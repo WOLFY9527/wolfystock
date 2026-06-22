@@ -577,6 +577,16 @@ export type DataSourceGapActionStatus =
   | 'not-required'
   | string;
 
+export type DataSourceAcquisitionBlockerType =
+  | 'entitlement'
+  | 'provider-integration'
+  | 'evidence-validation'
+  | 'schema-contract'
+  | 'frontend-consumption'
+  | 'protected-review'
+  | 'unknown'
+  | string;
+
 export type DataSourceGapRegistryActionPlanItem = {
   actionKey: string;
   actionLabel: string;
@@ -609,6 +619,22 @@ export type DataSourceGapRegistryFamily = {
   integrationActionPlan?: DataSourceGapRegistryActionPlanItem[];
 };
 
+export type DataSourceAcquisitionPriorityQueueItem = {
+  familyKey: string;
+  familyLabel: string;
+  priority: DataSourceGapActionPriority;
+  priorityReason: string;
+  readinessState: DataSourceGapRegistryStatus;
+  primaryBlockerType: DataSourceAcquisitionBlockerType;
+  affectedSurfaceCount?: number;
+  blockedOrDegradedCapabilityCount?: number;
+  externalEntitlementRequired?: boolean;
+  protectedDomainReviewRequired?: boolean;
+  nextConcreteStep: string;
+  requiredEvidence?: string[];
+  consumerSafeWarning: string;
+};
+
 export type DataSourceGapRegistrySummary = {
   totalFamilies: number;
   readyCount: number;
@@ -630,6 +656,7 @@ export type DataSourceGapRegistryResponse = {
   networkCallsEnabled: boolean;
   scoreAuthorityAllowed: boolean;
   summary: DataSourceGapRegistrySummary;
+  acquisitionPriorityQueue?: DataSourceAcquisitionPriorityQueueItem[];
   families: DataSourceGapRegistryFamily[];
   metadata?: Record<string, unknown>;
 };
@@ -686,6 +713,24 @@ export type DataSourceGapRegistryActionPlanItemView = {
   protectedDomainReviewVariant: DataSourceGapRegistryStatusView['variant'];
 };
 
+export type DataSourceAcquisitionPriorityQueueItemView = {
+  familyKey: string;
+  familyLabel: string;
+  priority: DataSourceGapRegistryStatusView;
+  priorityReason: string;
+  readinessState: DataSourceGapRegistryStatusView;
+  primaryBlockerType: DataSourceGapRegistryStatusView;
+  affectedSurfaceCount: number;
+  blockedOrDegradedCapabilityCount: number;
+  externalEntitlementRequired: string;
+  externalEntitlementVariant: DataSourceGapRegistryStatusView['variant'];
+  protectedDomainReviewRequired: string;
+  protectedDomainReviewVariant: DataSourceGapRegistryStatusView['variant'];
+  nextConcreteStep: string;
+  requiredEvidence: string[];
+  consumerSafeWarning: string;
+};
+
 export type DataSourceGapRegistryGroupId =
   | 'quote_market'
   | 'options'
@@ -709,6 +754,7 @@ export type DataSourceGapRegistryView = {
   networkCallsEnabled: boolean;
   scoreAuthorityAllowed: boolean;
   summary: DataSourceGapRegistrySummary;
+  acquisitionPriorityQueue: DataSourceAcquisitionPriorityQueueItemView[];
   families: DataSourceGapRegistryFamilyView[];
   groups: DataSourceGapRegistryGroupView[];
 };
@@ -1081,6 +1127,21 @@ function dataSourceGapActionStatusView(status?: string | null): DataSourceGapReg
   return { label: '计划中', variant: 'neutral' };
 }
 
+function dataSourceAcquisitionBlockerTypeView(blockerType?: string | null): DataSourceGapRegistryStatusView {
+  const normalized = normalizeGapToken(blockerType);
+  if (normalized === 'entitlement') return { label: '授权阻断', variant: 'danger' };
+  if (normalized === 'provider-integration') return { label: '数据接入', variant: 'info' };
+  if (normalized === 'evidence-validation') return { label: '证据验证', variant: 'info' };
+  if (normalized === 'schema-contract') return { label: '契约补齐', variant: 'caution' };
+  if (normalized === 'frontend-consumption') return { label: '前端消费', variant: 'info' };
+  if (normalized === 'protected-review') return { label: '保护域复核', variant: 'caution' };
+  return { label: '阻断待确认', variant: 'neutral' };
+}
+
+function dataSourceGapSafeCount(value: number | undefined): number {
+  return Number.isFinite(value) && value !== undefined ? Math.max(0, Math.floor(value)) : 0;
+}
+
 function dataSourceGapSafeText(value?: string | null, fallback = '待补证'): string {
   const text = String(value || '').replace(/\s+/g, ' ').trim();
   if (!text || DATA_SOURCE_GAP_UNSAFE_TEXT_PATTERN.test(text)) return fallback;
@@ -1131,6 +1192,30 @@ function dataSourceGapProtectedReviewView(
     return { protectedDomainReview: '无需保护域复核', protectedDomainReviewVariant: 'neutral' };
   }
   return { protectedDomainReview: '保护域复核待确认', protectedDomainReviewVariant: 'caution' };
+}
+
+function dataSourceAcquisitionEntitlementView(
+  value: boolean | undefined,
+): Pick<DataSourceAcquisitionPriorityQueueItemView, 'externalEntitlementRequired' | 'externalEntitlementVariant'> {
+  if (value === true) {
+    return { externalEntitlementRequired: '需要外部授权', externalEntitlementVariant: 'danger' };
+  }
+  if (value === false) {
+    return { externalEntitlementRequired: '无需外部授权', externalEntitlementVariant: 'neutral' };
+  }
+  return { externalEntitlementRequired: '外部授权待确认', externalEntitlementVariant: 'caution' };
+}
+
+function dataSourceAcquisitionProtectedReviewView(
+  value: boolean | undefined,
+): Pick<DataSourceAcquisitionPriorityQueueItemView, 'protectedDomainReviewRequired' | 'protectedDomainReviewVariant'> {
+  if (value === true) {
+    return { protectedDomainReviewRequired: '需要保护域复核', protectedDomainReviewVariant: 'caution' };
+  }
+  if (value === false) {
+    return { protectedDomainReviewRequired: '无需保护域复核', protectedDomainReviewVariant: 'neutral' };
+  }
+  return { protectedDomainReviewRequired: '保护域复核待确认', protectedDomainReviewVariant: 'caution' };
 }
 
 function dataSourceGapFallbackActionPlan(familyKey: string): DataSourceGapRegistryActionPlanItemView[] {
@@ -1202,6 +1287,46 @@ function buildDataSourceGapActionPlanView(
   return views.length ? views.slice(0, 4) : dataSourceGapFallbackActionPlan(familyKey);
 }
 
+function buildDataSourceAcquisitionPriorityQueueView(
+  queue?: DataSourceAcquisitionPriorityQueueItem[] | null,
+): DataSourceAcquisitionPriorityQueueItemView[] {
+  if (!Array.isArray(queue)) return [];
+
+  return queue.flatMap((item) => {
+    const familyKey = dataSourceGapSafeText(item.familyKey, '');
+    const familyLabel = dataSourceGapSafeText(item.familyLabel, '数据家族');
+    if (!familyKey) return [];
+    const entitlement = dataSourceAcquisitionEntitlementView(
+      typeof item.externalEntitlementRequired === 'boolean'
+        ? item.externalEntitlementRequired
+        : undefined,
+    );
+    const protectedReview = dataSourceAcquisitionProtectedReviewView(
+      typeof item.protectedDomainReviewRequired === 'boolean'
+        ? item.protectedDomainReviewRequired
+        : undefined,
+    );
+    return [{
+      familyKey,
+      familyLabel: DATA_SOURCE_GAP_FAMILY_LABELS[familyKey] || familyLabel,
+      priority: dataSourceGapActionPriorityView(item.priority),
+      priorityReason: dataSourceGapSafeText(item.priorityReason, '排序原因待补证。'),
+      readinessState: dataSourceGapStatusView(item.readinessState),
+      primaryBlockerType: dataSourceAcquisitionBlockerTypeView(item.primaryBlockerType),
+      affectedSurfaceCount: dataSourceGapSafeCount(item.affectedSurfaceCount),
+      blockedOrDegradedCapabilityCount: dataSourceGapSafeCount(item.blockedOrDegradedCapabilityCount),
+      ...entitlement,
+      ...protectedReview,
+      nextConcreteStep: dataSourceGapSafeText(item.nextConcreteStep, '下一步待补证。'),
+      requiredEvidence: dataSourceGapSafeList(item.requiredEvidence, '证据待补证'),
+      consumerSafeWarning: dataSourceGapSafeText(
+        item.consumerSafeWarning,
+        '工程补数队列；当前不是决策级证据。',
+      ),
+    }];
+  }).slice(0, 12);
+}
+
 function normalizeDataSourceGapRegistryPayload(rawPayload: Record<string, unknown>): DataSourceGapRegistryResponse {
   const payload = toCamelCase<DataSourceGapRegistryResponse>(rawPayload);
   const rawSummary = payload.summary || DEFAULT_DATA_SOURCE_GAP_REGISTRY_SUMMARY;
@@ -1258,6 +1383,31 @@ function normalizeDataSourceGapRegistryPayload(rawPayload: Record<string, unknow
         }))
         : [],
     })) : [],
+    acquisitionPriorityQueue: Array.isArray(payload.acquisitionPriorityQueue)
+      ? payload.acquisitionPriorityQueue.map((item) => ({
+        familyKey: item.familyKey || '',
+        familyLabel: item.familyLabel || '',
+        priority: item.priority || 'medium',
+        priorityReason: item.priorityReason || '',
+        readinessState: item.readinessState || 'missing',
+        primaryBlockerType: item.primaryBlockerType || 'unknown',
+        affectedSurfaceCount: Number.isFinite(item.affectedSurfaceCount)
+          ? Number(item.affectedSurfaceCount)
+          : undefined,
+        blockedOrDegradedCapabilityCount: Number.isFinite(item.blockedOrDegradedCapabilityCount)
+          ? Number(item.blockedOrDegradedCapabilityCount)
+          : undefined,
+        externalEntitlementRequired: typeof item.externalEntitlementRequired === 'boolean'
+          ? item.externalEntitlementRequired
+          : undefined,
+        protectedDomainReviewRequired: typeof item.protectedDomainReviewRequired === 'boolean'
+          ? item.protectedDomainReviewRequired
+          : undefined,
+        nextConcreteStep: item.nextConcreteStep || '',
+        requiredEvidence: Array.isArray(item.requiredEvidence) ? item.requiredEvidence : [],
+        consumerSafeWarning: item.consumerSafeWarning || '',
+      }))
+      : [],
     metadata: payload.metadata || {},
   };
 }
@@ -1267,6 +1417,9 @@ export function buildDataSourceGapRegistryView(
 ): DataSourceGapRegistryView {
   const summary = registry?.summary || DEFAULT_DATA_SOURCE_GAP_REGISTRY_SUMMARY;
   const families = Array.isArray(registry?.families) ? registry.families : [];
+  const acquisitionPriorityQueue = buildDataSourceAcquisitionPriorityQueueView(
+    registry?.acquisitionPriorityQueue,
+  );
   const familyViews = families.map((family) => {
     const familyKey = family.familyKey || 'unknown_family';
     const blockerCopy = DATA_SOURCE_GAP_BLOCKERS[familyKey] || {};
@@ -1336,6 +1489,7 @@ export function buildDataSourceGapRegistryView(
     networkCallsEnabled: registry?.networkCallsEnabled === true,
     scoreAuthorityAllowed: registry?.scoreAuthorityAllowed === true,
     summary,
+    acquisitionPriorityQueue,
     families: familyViews,
     groups,
   };
