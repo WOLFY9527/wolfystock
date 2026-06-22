@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useState } from 'react';
-import { AlertTriangle, Play, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Copy, Download, Play, ShieldCheck } from 'lucide-react';
 import { backtestApi } from '../../api/backtest';
 import type {
   RuleBacktestParameterSweepBar,
@@ -32,12 +32,46 @@ type PanelState = {
   message: string | null;
   reasonCode: string | null;
   response: RuleBacktestParameterSweepResponse | null;
+  requestSnapshot: SweepEvidenceRequestSnapshot | null;
 };
 
 const containerClass = 'rounded-xl border border-white/5 bg-black/20 p-4';
 const fieldClass = 'w-full min-w-0 min-h-[42px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-white outline-none transition-all focus:border-blue-500/50 focus:bg-white/[0.05]';
 const labelClass = 'text-[10px] font-bold uppercase tracking-widest text-white/40';
 const primaryButtonClass = 'inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] transition-all hover:from-blue-500 hover:to-purple-500 disabled:cursor-not-allowed disabled:opacity-45';
+const secondaryButtonClass = 'inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-semibold text-white/78 transition-all hover:border-white/20 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45';
+const UNKNOWN_ZH = '待补证';
+const UNKNOWN_EN = 'unknown';
+
+type SweepEvidenceRequestSnapshot = {
+  symbol: string;
+  strategy: {
+    provided: boolean;
+    confirmed: boolean;
+    parseFresh: boolean;
+    parsedVersion: string;
+    timeframe: string;
+    executable: boolean | string;
+  };
+  dateRange: {
+    startDate: string;
+    endDate: string;
+  };
+  executionInputs: {
+    lookbackBars: number;
+    initialCapital: number;
+    feeBps: number;
+    slippageBps: number;
+  };
+  parameterGrid: Record<string, Array<string | number | boolean | null>>;
+  maxCombinations: number;
+  requestedCombinations: number;
+  suppliedBars: {
+    rowCount: number;
+    firstDate: string;
+    lastDate: string;
+  };
+};
 
 const missingLineageFieldLabels: Record<string, { zh: string; en: string }> = {
   adjustedBasis: { zh: '复权基础', en: 'adjustment basis' },
@@ -55,6 +89,9 @@ const missingLineageFieldLabels: Record<string, { zh: string; en: string }> = {
   sweepDatasetReference: { zh: '扫描数据集引用', en: 'sweep dataset reference' },
 };
 
+const forbiddenExportKeyPattern = /request(id|_id)?$|trace|debug|raw|payload|provider|credential|secret|token|cache/i;
+const forbiddenResultKeyPattern = /request|trace|debug|raw|payload|provider|credential|secret|token|cache|target|stop|position|recommend|winner|optimal|best/i;
+
 function formatHash(value: unknown): string {
   const text = String(value || '').trim();
   if (!text) return '--';
@@ -63,6 +100,210 @@ function formatHash(value: unknown): string {
 
 function toSafeLabel(field: string, language: BacktestLanguage): string {
   return missingLineageFieldLabels[field]?.[language] || (language === 'en' ? 'other lineage gap' : '其他谱系缺口');
+}
+
+function unknownLabel(language: BacktestLanguage): string {
+  return language === 'en' ? UNKNOWN_EN : UNKNOWN_ZH;
+}
+
+function valueOrUnknown(value: unknown, language: BacktestLanguage): unknown {
+  if (value == null || value === '') return unknownLabel(language);
+  return value;
+}
+
+function booleanOrUnknown(value: unknown, language: BacktestLanguage): boolean | string {
+  return typeof value === 'boolean' ? value : unknownLabel(language);
+}
+
+function sortedRecord<T>(record: Record<string, T>): Record<string, T> {
+  return Object.keys(record)
+    .sort((left, right) => left.localeCompare(right))
+    .reduce<Record<string, T>>((acc, key) => {
+      acc[key] = record[key];
+      return acc;
+    }, {});
+}
+
+function safePrimitiveRecord(record: unknown, options: { allowForbiddenKeys?: boolean } = {}): Record<string, unknown> {
+  if (!record || typeof record !== 'object' || Array.isArray(record)) return {};
+  return sortedRecord(Object.entries(record as Record<string, unknown>).reduce<Record<string, unknown>>((acc, [key, value]) => {
+    if (!options.allowForbiddenKeys && forbiddenResultKeyPattern.test(key)) return acc;
+    if (isPrimitiveValue(value)) {
+      acc[key] = value;
+    }
+    return acc;
+  }, {}));
+}
+
+function buildRequestSnapshot(params: {
+  code: string;
+  startDate: string;
+  endDate: string;
+  lookbackBars: number;
+  initialCapital: number;
+  feeBps: number;
+  slippageBps: number;
+  parameterGrid: Record<string, Array<string | number | boolean | null>>;
+  maxCombinations: number;
+  bars: RuleBacktestParameterSweepBar[];
+  parsedStrategy: RuleBacktestParseResponse;
+  confirmed: boolean;
+  parseStale: boolean;
+  strategyText: string;
+}): SweepEvidenceRequestSnapshot {
+  const sortedGrid = sortedRecord(params.parameterGrid);
+  return {
+    symbol: params.code.trim().toUpperCase(),
+    strategy: {
+      provided: Boolean(params.strategyText.trim()),
+      confirmed: params.confirmed,
+      parseFresh: !params.parseStale,
+      parsedVersion: params.parsedStrategy.parsedStrategy?.version || UNKNOWN_ZH,
+      timeframe: params.parsedStrategy.parsedStrategy?.timeframe || UNKNOWN_ZH,
+      executable: typeof params.parsedStrategy.executable === 'boolean' ? params.parsedStrategy.executable : UNKNOWN_ZH,
+    },
+    dateRange: {
+      startDate: params.startDate || UNKNOWN_ZH,
+      endDate: params.endDate || UNKNOWN_ZH,
+    },
+    executionInputs: {
+      lookbackBars: params.lookbackBars,
+      initialCapital: params.initialCapital,
+      feeBps: params.feeBps,
+      slippageBps: params.slippageBps,
+    },
+    parameterGrid: sortedGrid,
+    maxCombinations: params.maxCombinations,
+    requestedCombinations: countCombinations(sortedGrid),
+    suppliedBars: {
+      rowCount: params.bars.length,
+      firstDate: params.bars[0]?.date || UNKNOWN_ZH,
+      lastDate: params.bars.at(-1)?.date || UNKNOWN_ZH,
+    },
+  };
+}
+
+function canExportEvidencePack(state: PanelState): state is PanelState & {
+  response: RuleBacktestParameterSweepResponse;
+  requestSnapshot: SweepEvidenceRequestSnapshot;
+} {
+  return state.status === 'diagnostic'
+    && Boolean(state.response)
+    && Boolean(state.requestSnapshot)
+    && state.response?.state !== 'rejected'
+    && state.response?.datasetLineageReadiness?.readinessState !== 'blocked'
+    && !state.response?.failClosedReasonCode;
+}
+
+function buildEvidencePack(
+  response: RuleBacktestParameterSweepResponse,
+  requestSnapshot: SweepEvidenceRequestSnapshot,
+  language: BacktestLanguage,
+): Record<string, unknown> {
+  const lineage = response.datasetLineageReadiness || {};
+  const summary = response.summary || {};
+  const parameterRows = Array.isArray(response.parameterRows) ? response.parameterRows : [];
+  const rowCount = parameterRows.length;
+  const scenarioCount = typeof summary.totalParameterSets === 'number'
+    ? summary.totalParameterSets
+    : (rowCount > 0 ? rowCount : unknownLabel(language));
+
+  return {
+    schemaVersion: 'backtest-sweep-evidence-pack.v1',
+    generatedAt: new Date().toISOString(),
+    appSurface: 'Backtest / Parameter Sweep',
+    suppliedInputs: {
+      symbol: requestSnapshot.symbol || unknownLabel(language),
+      dateRange: requestSnapshot.dateRange,
+      strategy: requestSnapshot.strategy,
+      executionInputs: requestSnapshot.executionInputs,
+      parameterGrid: requestSnapshot.parameterGrid,
+      suppliedBars: requestSnapshot.suppliedBars,
+    },
+    parameterBounds: {
+      maxCombinations: requestSnapshot.maxCombinations,
+      requestedCombinations: requestSnapshot.requestedCombinations,
+      parameterKeys: Object.keys(requestSnapshot.parameterGrid),
+      constraints: {
+        boundedSweep: true,
+        externalHydration: false,
+        storedRunIdentity: response.storage?.mode === 'response_only' ? 'response_only' : unknownLabel(language),
+      },
+    },
+    datasetLineageReadiness: {
+      readinessState: valueOrUnknown(lineage.readinessState, language),
+      diagnosticOnly: booleanOrUnknown(lineage.diagnosticOnly ?? response.diagnosticOnly, language),
+      decisionGrade: booleanOrUnknown(lineage.decisionGrade ?? response.decisionGrade, language),
+      barBoundary: {
+        suppliedBarsToRunner: booleanOrUnknown(lineage.barBoundary?.suppliedBarsToRunner, language),
+        externalDataCallsExecuted: booleanOrUnknown(lineage.barBoundary?.providerCallsExecuted, language),
+        localBars: booleanOrUnknown(lineage.barBoundary?.localBars, language),
+        barCount: valueOrUnknown(lineage.barBoundary?.barCount ?? requestSnapshot.suppliedBars.rowCount, language),
+      },
+      provenanceState: valueOrUnknown(lineage.provenanceStatus?.state, language),
+      missingLineageFields: Array.isArray(lineage.missingLineageFields) && lineage.missingLineageFields.length > 0
+        ? lineage.missingLineageFields.map((field) => toSafeLabel(String(field), language))
+        : [],
+      reproducibility: {
+        inputShapeHash: valueOrUnknown(lineage.reproducibility?.inputShapeHashSha256, language),
+        gridDescriptorHash: valueOrUnknown(
+          response.reproducibilityMetadata?.gridDescriptorHashSha256 || lineage.reproducibility?.gridDescriptorHashSha256,
+          language,
+        ),
+      },
+    },
+    evidenceWarnings: {
+      failClosedReasonCode: valueOrUnknown(response.failClosedReasonCode, language),
+      missingLineageFields: Array.isArray(lineage.missingLineageFields) && lineage.missingLineageFields.length > 0
+        ? lineage.missingLineageFields.map((field) => toSafeLabel(String(field), language))
+        : [],
+    },
+    resultCounts: {
+      rowCount,
+      scenarioCount,
+      runCount: valueOrUnknown(summary.runCount, language),
+      executedCount: valueOrUnknown(summary.executedCount, language),
+      completedCount: valueOrUnknown(summary.completedCount, language),
+      blockedCount: valueOrUnknown(summary.blockedCount, language),
+      failedCount: valueOrUnknown(summary.failedCount, language),
+      skippedCount: valueOrUnknown(summary.skippedCount, language),
+    },
+    resultSummary: {
+      state: valueOrUnknown(response.state, language),
+      diagnosticOnly: Boolean(response.diagnosticOnly),
+      researchOnly: Boolean(response.researchOnly),
+      decisionGrade: Boolean(response.decisionGrade),
+      sampleRows: parameterRows.slice(0, 5).map((row) => ({
+        parameterSetId: valueOrUnknown(row.parameterSetId, language),
+        state: valueOrUnknown(row.state, language),
+        parameterValues: safePrimitiveRecord(row.parameterValues, { allowForbiddenKeys: true }),
+        metrics: safePrimitiveRecord(row.metrics),
+      })),
+    },
+    sourceStates: {
+      externalHydration: false,
+      storedReadback: booleanOrUnknown(lineage.provenanceStatus?.storedReadbackAvailable, language),
+      dataHydration: booleanOrUnknown(lineage.provenanceStatus?.providerHydrationExecuted, language),
+      unknownFieldsPolicy: unknownLabel(language),
+    },
+  };
+}
+
+function stringifyEvidencePack(pack: Record<string, unknown>): string {
+  return JSON.stringify(pack, (key, value) => {
+    if (forbiddenExportKeyPattern.test(key)) return undefined;
+    return value;
+  }, 2);
+}
+
+function downloadJsonFile(filename: string, content: string): void {
+  const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function formatLineageState(value: unknown, language: BacktestLanguage): string {
@@ -177,6 +418,7 @@ function getInitialState(): PanelState {
     message: null,
     reasonCode: null,
     response: null,
+    requestSnapshot: null,
   };
 }
 
@@ -186,6 +428,7 @@ function makeBlockedState(message: string, reasonCode: string, response: RuleBac
     message,
     reasonCode,
     response,
+    requestSnapshot: null,
   };
 }
 
@@ -215,6 +458,9 @@ const ParameterSweepPanel: React.FC<ParameterSweepPanelProps> = ({
   const reproducibility = response?.reproducibilityMetadata || {};
   const barBoundary = lineage.barBoundary || {};
   const provenance = lineage.provenanceStatus || {};
+  const exportableEvidencePack = canExportEvidencePack(state)
+    ? stringifyEvidencePack(buildEvidencePack(state.response, state.requestSnapshot, language))
+    : null;
 
   const readinessChips = [
     response?.diagnosticOnly ? (language === 'en' ? 'diagnostic only' : '诊断仅') : null,
@@ -310,9 +556,26 @@ const ParameterSweepPanel: React.FC<ParameterSweepPanelProps> = ({
       message: null,
       reasonCode: null,
       response: null,
+      requestSnapshot: null,
     });
 
     try {
+      const requestSnapshot = buildRequestSnapshot({
+        code,
+        startDate,
+        endDate,
+        lookbackBars: lookback,
+        initialCapital: capital,
+        feeBps: fee,
+        slippageBps: slippage,
+        parameterGrid: gridResult.data,
+        maxCombinations,
+        bars: barsResult.data,
+        parsedStrategy,
+        confirmed,
+        parseStale,
+        strategyText,
+      });
       const result = await runApi({
         code: code.trim().toUpperCase(),
         strategyText,
@@ -336,6 +599,7 @@ const ParameterSweepPanel: React.FC<ParameterSweepPanelProps> = ({
             : '扫描返回了 fail-closed 诊断状态。',
           reasonCode: result.failClosedReasonCode || result.datasetLineageReadiness?.stateReasonCode || 'blocked',
           response: result,
+          requestSnapshot,
         });
         return;
       }
@@ -344,6 +608,7 @@ const ParameterSweepPanel: React.FC<ParameterSweepPanelProps> = ({
         message: null,
         reasonCode: null,
         response: result,
+        requestSnapshot,
       });
     } catch {
       setState(makeBlockedState(
@@ -368,6 +633,17 @@ const ParameterSweepPanel: React.FC<ParameterSweepPanelProps> = ({
       <span>{String(value ?? '--')}</span>
     </span>
   );
+
+  const handleCopyEvidencePack = async () => {
+    if (!exportableEvidencePack || !navigator.clipboard?.writeText) return;
+    await navigator.clipboard.writeText(exportableEvidencePack);
+  };
+
+  const handleDownloadEvidencePack = () => {
+    if (!exportableEvidencePack || !state.requestSnapshot) return;
+    const symbol = state.requestSnapshot.symbol || 'UNKNOWN';
+    downloadJsonFile(`backtest-sweep-evidence-pack-${symbol}.json`, exportableEvidencePack);
+  };
 
   return (
     <section data-testid="pro-parameter-sweep-panel" className="flex min-w-0 flex-col gap-4">
@@ -547,6 +823,38 @@ const ParameterSweepPanel: React.FC<ParameterSweepPanelProps> = ({
               <div className="rounded-lg border border-amber-400/20 bg-amber-400/10 p-3 text-sm text-amber-50">
                 <p className="font-semibold">{language === 'en' ? 'Fail-closed response' : 'fail-closed 响应'}</p>
                 <p className="mt-1 text-amber-50/80">{response.failClosedReasonCode}</p>
+              </div>
+            ) : null}
+            {exportableEvidencePack ? (
+              <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-white/5 bg-white/[0.02] p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className={labelClass}>{language === 'en' ? 'Evidence pack' : '研究证据包'}</p>
+                  <p className="mt-1 text-sm text-white/62">
+                    {language === 'en'
+                      ? 'JSON export of supplied inputs, bounded parameters, lineage, warnings, and compact result counts.'
+                      : 'JSON 导出已输入条件、有界参数、谱系、告警与紧凑结果计数。'}
+                  </p>
+                </div>
+                <div className="flex min-w-0 flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className={secondaryButtonClass}
+                    onClick={() => void handleCopyEvidencePack()}
+                    data-testid="pro-parameter-sweep-evidence-copy"
+                  >
+                    <Copy className="size-4" />
+                    {language === 'en' ? 'Copy evidence pack' : '复制证据包'}
+                  </button>
+                  <button
+                    type="button"
+                    className={secondaryButtonClass}
+                    onClick={handleDownloadEvidencePack}
+                    data-testid="pro-parameter-sweep-evidence-download"
+                  >
+                    <Download className="size-4" />
+                    {language === 'en' ? 'Export evidence pack' : '导出研究证据包'}
+                  </button>
+                </div>
               </div>
             ) : null}
           </div>
