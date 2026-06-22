@@ -2,8 +2,10 @@ import type React from 'react';
 import { useEffect, useState } from 'react';
 import { Activity, ExternalLink } from 'lucide-react';
 import {
+  buildDataSourceGapRegistryView,
   marketApi,
   type ConsumerEvidenceReadinessItem,
+  type DataSourceGapRegistryResponse,
   type MarketDataReadinessCheck,
   type MarketDataReadinessResponse,
 } from '../api/market';
@@ -1987,6 +1989,142 @@ const ProviderOperationsMatrixPanel: React.FC<{
   );
 };
 
+const DataSourceGapRegistryPanel: React.FC<{
+  registry: DataSourceGapRegistryResponse | null;
+  isLoading: boolean;
+  error: ParsedApiError | null;
+}> = ({ registry, isLoading, error }) => {
+  const view = buildDataSourceGapRegistryView(registry);
+  const families = view.families;
+
+  return (
+    <TerminalPanel as="section" className="col-span-12" data-testid="data-source-gap-registry-panel">
+      <TerminalSectionHeader
+        eyebrow="数据地图"
+        title="专业数据地图"
+        action={(
+          <div className="flex flex-wrap gap-1.5">
+            <TerminalChip variant="neutral">{formatNumber(view.summary.totalFamilies, 0)} 个数据家族</TerminalChip>
+            <TerminalChip variant={view.diagnosticOnly ? 'info' : 'caution'}>{view.diagnosticOnly ? '只读诊断' : '只读待确认'}</TerminalChip>
+          </div>
+        )}
+      />
+      <p className="mt-2 text-[11px] leading-5 text-white/46">
+        只消费后端数据源缺口登记表，展示数据家族、状态、权限、时效、证据和下一步；缺字段统一保持待补证，不在前端推断就绪。
+      </p>
+
+      {error ? (
+        <div className="mt-4">
+          <TerminalEmptyState title="专业数据地图待补证">登记表接口暂不可用，保持紧凑阻断态，不使用本地替代数据。</TerminalEmptyState>
+        </div>
+      ) : null}
+
+      {isLoading && !registry ? (
+        <div className="mt-4">
+          <TerminalEmptyState title="正在读取专业数据地图">保持只读；不会触发数据源运行或外部网络调用。</TerminalEmptyState>
+        </div>
+      ) : null}
+
+      {!isLoading && !error && !families.length ? (
+        <div className="mt-4">
+          <TerminalEmptyState title="专业数据地图待补证">登记表没有返回数据家族，不在前端推断 readiness。</TerminalEmptyState>
+        </div>
+      ) : null}
+
+      {!error && families.length ? (
+        <>
+          <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
+            {[
+              ['已就绪', view.summary.readyCount, 'success'],
+              ['部分可用', view.summary.partialCount, 'info'],
+              ['待补证', view.summary.missingCount, 'caution'],
+              ['阻断', view.summary.blockedCount, 'danger'],
+              ['未授权', view.summary.unauthorizedCount, 'danger'],
+              ['待更新', view.summary.staleCount, 'caution'],
+              ['仅观察', view.summary.observationOnlyCount, 'neutral'],
+              ['计划中', view.summary.plannedCount, 'neutral'],
+            ].map(([label, value, variant]) => (
+              <div key={String(label)} className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
+                <p className="text-[10px] font-medium text-white/42">{label}</p>
+                <p className="mt-1 text-sm font-semibold text-white/84">{formatNumber(Number(value), 0)}</p>
+                <TerminalChip variant={variant as 'neutral' | 'success' | 'caution' | 'danger' | 'info'}>{String(label)}</TerminalChip>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            <TerminalChip variant={view.runtimeCalled ? 'caution' : 'success'}>
+              {view.runtimeCalled ? '运行边界待核对' : '未触发数据运行'}
+            </TerminalChip>
+            <TerminalChip variant={view.networkCallsEnabled ? 'caution' : 'success'}>
+              {view.networkCallsEnabled ? '网络调用待核对' : '网络调用关闭'}
+            </TerminalChip>
+            <TerminalChip variant={view.scoreAuthorityAllowed ? 'caution' : 'success'}>
+              {view.scoreAuthorityAllowed ? '计分权限待核对' : '不授予计分权限'}
+            </TerminalChip>
+          </div>
+
+          <div className="mt-4">
+            <TerminalDenseTable data-testid="data-source-gap-registry-table" className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+              <table className="min-w-[66rem] table-fixed">
+                <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
+                  <tr className="border-b border-white/5 text-left">
+                    <th className="w-[14rem] px-3 py-3 font-medium">数据家族</th>
+                    <th className="w-[12rem] px-3 py-3 font-medium">状态 / 权限 / 时效</th>
+                    <th className="w-[18rem] px-3 py-3 font-medium">阻断项</th>
+                    <th className="w-[14rem] px-3 py-3 font-medium">证据与边界</th>
+                    <th className="px-3 py-3 font-medium">下一步</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {families.map((family) => (
+                    <tr
+                      key={family.familyKey}
+                      data-testid={`data-source-gap-registry-row-${family.familyKey}`}
+                      className="border-b border-white/[0.04] align-top"
+                    >
+                      <td className="px-3 py-3">
+                        <p className="text-sm font-semibold text-white/88">{family.familyLabel}</p>
+                        <p className="mt-1 break-all font-mono text-[11px] text-white/42">{family.familyKey}</p>
+                        <p className="mt-2 text-[11px] leading-5 text-white/58">{family.consumerSafeDescription}</p>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex flex-wrap gap-1.5">
+                          <TerminalChip variant={family.status.variant}>{family.status.label}</TerminalChip>
+                          <TerminalChip variant={family.authorityState.variant}>权限 {family.authorityState.label}</TerminalChip>
+                          <TerminalChip variant={family.freshnessState.variant}>时效 {family.freshnessState.label}</TerminalChip>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <p className="text-[11px] leading-5 text-white/58">
+                          <span className="text-white/34">权益：</span>{family.entitlementOrLicensingBlocker}
+                        </p>
+                        <p className="mt-1 text-[11px] leading-5 text-white/58">
+                          <span className="text-white/34">集成：</span>{family.integrationBlocker}
+                        </p>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex flex-wrap gap-1.5">
+                          <TerminalChip variant="neutral">证据 {family.sourceEvidenceState}</TerminalChip>
+                          <TerminalChip variant={family.dataHydrationVariant}>补数 {family.dataHydrationAllowed}</TerminalChip>
+                          <TerminalChip variant={family.scoreTradingAuthorityVariant}>计分权限 {family.scoreTradingAuthorityAllowed}</TerminalChip>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <p className="text-[11px] leading-5 text-white/62">{family.nextIntegrationStep}</p>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </TerminalDenseTable>
+          </div>
+        </>
+      ) : null}
+    </TerminalPanel>
+  );
+};
+
 const ProviderOperationsTable: React.FC<{
   items: MarketProviderOperationItem[];
   selectedKey: string | null;
@@ -2435,15 +2573,18 @@ const MarketProviderOperationsPage: React.FC = () => {
   const [response, setResponse] = useState<MarketProviderOperationsResponse | null>(null);
   const [matrixResponse, setMatrixResponse] = useState<ProviderOperationsMatrixResponse | null>(null);
   const [readiness, setReadiness] = useState<MarketDataReadinessResponse | null>(null);
+  const [gapRegistry, setGapRegistry] = useState<DataSourceGapRegistryResponse | null>(null);
   const [selectedProviderKey, setSelectedProviderKey] = useState<string | null>(null);
   const [readinessSymbolsInput, setReadinessSymbolsInput] = useState('');
   const [submittedReadinessSymbols, setSubmittedReadinessSymbols] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isMatrixLoading, setIsMatrixLoading] = useState(true);
   const [isReadinessLoading, setIsReadinessLoading] = useState(true);
+  const [isGapRegistryLoading, setIsGapRegistryLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [matrixError, setMatrixError] = useState<ParsedApiError | null>(null);
   const [readinessError, setReadinessError] = useState<ParsedApiError | null>(null);
+  const [gapRegistryError, setGapRegistryError] = useState<ParsedApiError | null>(null);
 
   useEffect(() => {
     document.title = language === 'en' ? 'Provider Ops - WolfyStock' : '数据源运维 - WolfyStock';
@@ -2508,6 +2649,26 @@ const MarketProviderOperationsPage: React.FC = () => {
       cancelled = true;
     };
   }, [submittedReadinessSymbols]);
+
+  useEffect(() => {
+    let cancelled = false;
+    marketApi.getDataSourceGapRegistry()
+      .then((payload) => {
+        if (!cancelled) setGapRegistry(payload);
+      })
+      .catch((apiError) => {
+        if (!cancelled) {
+          const parsed = getParsedApiError(apiError);
+          setGapRegistryError({ ...parsed, title: '读取专业数据地图失败' });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsGapRegistryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const submitReadinessSymbols = () => {
     setReadinessError(null);
@@ -2676,6 +2837,11 @@ const MarketProviderOperationsPage: React.FC = () => {
               description="这一组只重排既有来源缺口、配置动作和完整矩阵，不改变评分、fallback、数据源顺序或就绪语义。"
               action={<TerminalChip variant="info">{formatNumber(matrixRows.length, 0)} 条矩阵行</TerminalChip>}
               className={ADMIN_SECTION_HEADING_CLASSNAME}
+            />
+            <DataSourceGapRegistryPanel
+              registry={gapRegistry}
+              isLoading={isGapRegistryLoading}
+              error={gapRegistryError}
             />
             <ProviderOperationsMatrixPanel
               response={matrixResponse}

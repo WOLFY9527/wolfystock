@@ -15,6 +15,10 @@ const { getDataReadiness } = vi.hoisted(() => ({
   getDataReadiness: vi.fn(),
 }));
 
+const { getDataSourceGapRegistry } = vi.hoisted(() => ({
+  getDataSourceGapRegistry: vi.fn(),
+}));
+
 vi.mock('../../api/marketProviderOperations', () => ({
   marketProviderOperationsApi: {
     getOperations,
@@ -22,11 +26,16 @@ vi.mock('../../api/marketProviderOperations', () => ({
   },
 }));
 
-vi.mock('../../api/market', () => ({
-  marketApi: {
-    getDataReadiness,
-  },
-}));
+vi.mock('../../api/market', async () => {
+  const actual = await vi.importActual<typeof import('../../api/market')>('../../api/market');
+  return {
+    ...actual,
+    marketApi: {
+      getDataReadiness,
+      getDataSourceGapRegistry,
+    },
+  };
+});
 
 vi.mock('../../contexts/UiLanguageContext', () => ({
   useI18n: () => ({
@@ -597,12 +606,128 @@ const operationsMatrixPayload = {
   },
 };
 
+const dataSourceGapRegistryPayload = {
+  contractVersion: 'data_source_gap_registry_v1',
+  diagnosticOnly: true,
+  providerRuntimeCalled: false,
+  networkCallsEnabled: false,
+  scoreAuthorityAllowed: false,
+  summary: {
+    totalFamilies: 6,
+    readyCount: 0,
+    partialCount: 1,
+    missingCount: 0,
+    blockedCount: 2,
+    unauthorizedCount: 1,
+    staleCount: 0,
+    observationOnlyCount: 1,
+    plannedCount: 1,
+    providerHydrationAllowedCount: 2,
+    scoreTradingAuthorityAllowedCount: 0,
+  },
+  families: [
+    {
+      familyKey: 'stock_quote_spine',
+      consumerLabel: 'Stock Quote Spine',
+      status: 'partial',
+      authorityState: 'blocked',
+      freshnessState: 'delayed',
+      entitlementOrLicensingBlocker: null,
+      integrationBlocker: 'Durable quote/OHLCV snapshots and unified as-of lineage are still missing.',
+      sourceEvidenceState: 'fragmented_runtime_evidence',
+      nextIntegrationStep: 'Land bounded quote and OHLCV snapshot storage with authority metadata.',
+      providerHydrationAllowed: true,
+      scoreTradingAuthorityAllowed: false,
+      consumerSafeDescription: 'Quote and OHLCV paths exist, but they are not yet a durable professional spine.',
+    },
+    {
+      familyKey: 'macro_rates',
+      consumerLabel: 'Macro / Rates',
+      status: 'observation-only',
+      authorityState: 'observation-only',
+      freshnessState: 'cached',
+      entitlementOrLicensingBlocker: null,
+      integrationBlocker: 'Durable official macro rows are not yet surfaced as a complete product bundle.',
+      sourceEvidenceState: 'diagnostic_contract',
+      nextIntegrationStep: 'Persist official macro rows with freshness and coverage metadata.',
+      providerHydrationAllowed: true,
+      scoreTradingAuthorityAllowed: false,
+      consumerSafeDescription: 'Macro and rates readiness is available only as a diagnostic contract today.',
+    },
+    {
+      familyKey: 'options_chains',
+      consumerLabel: 'Options Chains',
+      status: 'unauthorized',
+      authorityState: 'unauthorized',
+      freshnessState: 'unavailable',
+      entitlementOrLicensingBlocker: 'OPRA rights and display rights are not proven.',
+      integrationBlocker: 'No authorized live or delayed chain store is integrated.',
+      sourceEvidenceState: 'rights_unproven',
+      nextIntegrationStep: 'Attach an entitlement proof bundle before chain promotion.',
+      providerHydrationAllowed: false,
+      scoreTradingAuthorityAllowed: false,
+      consumerSafeDescription: 'Options chains remain unavailable until authorized chain evidence exists.',
+    },
+    {
+      familyKey: 'options_strategy_analytics',
+      consumerLabel: 'Options Strategy Analytics',
+      status: 'blocked',
+      authorityState: 'unauthorized',
+      freshnessState: 'unavailable',
+      entitlementOrLicensingBlocker: 'Authorized chain inputs and historical replay rights are not proven.',
+      integrationBlocker: 'Strategy analytics cannot graduate before chain authority and history exist.',
+      sourceEvidenceState: 'rights_unproven',
+      nextIntegrationStep: 'Prove authorized chain, history, and methodology inputs first.',
+      providerHydrationAllowed: false,
+      scoreTradingAuthorityAllowed: false,
+      consumerSafeDescription: 'Options strategy analytics remain blocked by missing authorized inputs.',
+    },
+    {
+      familyKey: 'gamma_dealer_positioning',
+      consumerLabel: 'Gamma / Dealer Positioning',
+      status: 'blocked',
+      authorityState: 'unauthorized',
+      freshnessState: 'unavailable',
+      entitlementOrLicensingBlocker: 'Options rights, methodology approval, and dealer positioning evidence are not proven.',
+      integrationBlocker: 'No approved exposure methodology or rights-backed input set is integrated.',
+      sourceEvidenceState: 'rights_unproven',
+      nextIntegrationStep: 'Approve rights, inputs, and methodology before exposing gamma-family outputs.',
+      providerHydrationAllowed: false,
+      scoreTradingAuthorityAllowed: false,
+      consumerSafeDescription: 'Gamma, GEX, vanna, charm, and dealer positioning remain blocked.',
+    },
+    {
+      familyKey: 'scenario_baselines',
+      consumerLabel: 'Scenario Baselines',
+      status: 'planned',
+      authorityState: 'planned',
+      freshnessState: 'unknown',
+      entitlementOrLicensingBlocker: null,
+      integrationBlocker: 'Durable baseline snapshot storage is not yet integrated.',
+      sourceEvidenceState: 'not_integrated',
+      nextIntegrationStep: 'Store baseline snapshot IDs for market and portfolio scenario inputs.',
+      providerHydrationAllowed: false,
+      scoreTradingAuthorityAllowed: false,
+      consumerSafeDescription: 'Scenario baselines are planned, but stored baseline inputs are not integrated.',
+    },
+  ],
+  metadata: {
+    requestId: 'req-secret',
+    traceId: 'trace-secret',
+    rawProviderPayloadsIncluded: false,
+    cacheKey: 'internal-cache-key',
+    credentialEnvName: 'SECRET_DATA_KEY',
+    debugDump: { hidden: true },
+  },
+};
+
 describe('MarketProviderOperationsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.history.replaceState({}, '', '/zh/admin/market-providers');
     getDataReadiness.mockResolvedValue(readinessPayload);
     getOperationsMatrix.mockResolvedValue(operationsMatrixPayload);
+    getDataSourceGapRegistry.mockResolvedValue(dataSourceGapRegistryPayload);
   });
 
   afterEach(() => {
@@ -724,7 +849,7 @@ describe('MarketProviderOperationsPage', () => {
     expect(pageRoot).not.toHaveTextContent('Provider Ops / system diagnostics');
     expect(pageRoot).not.toHaveTextContent('provider runtime');
     expect(screen.getByText('本地行情就绪诊断')).toBeInTheDocument();
-    expect(screen.getByText('只读诊断')).toBeInTheDocument();
+    expect(screen.getAllByText('只读诊断').length).toBeGreaterThan(0);
     expect(screen.getByText('运行时调用')).toBeInTheDocument();
     expect(screen.getByText('网络调用')).toBeInTheDocument();
     expect(screen.getByText('未配置')).toBeInTheDocument();
@@ -772,6 +897,26 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.getAllByText('查看 Admin Logs').length).toBeGreaterThan(0);
     expect(screen.getAllByText('熔断状态').length).toBeGreaterThan(0);
     expect(screen.getAllByText('已脱敏').length).toBeGreaterThan(0);
+    const dataMap = screen.getByTestId('data-source-gap-registry-panel');
+    expect(dataMap).toHaveTextContent('专业数据地图');
+    expect(dataMap).toHaveTextContent('股票报价骨架');
+    expect(dataMap).toHaveTextContent('stock_quote_spine');
+    expect(dataMap).toHaveTextContent('期权链');
+    expect(dataMap).toHaveTextContent('options_chains');
+    expect(dataMap).toHaveTextContent('Gamma / Dealer Positioning');
+    expect(dataMap).toHaveTextContent('gamma_dealer_positioning');
+    expect(dataMap).toHaveTextContent('部分可用');
+    expect(dataMap).toHaveTextContent('未授权');
+    expect(dataMap).toHaveTextContent('阻断');
+    expect(dataMap).toHaveTextContent('仅观察');
+    expect(dataMap).toHaveTextContent('计划中');
+    expect(dataMap).toHaveTextContent('计分权限 不允许');
+    expect(dataMap).not.toHaveTextContent('OPRA');
+    expect(dataMap).not.toHaveTextContent('requestId');
+    expect(dataMap).not.toHaveTextContent('traceId');
+    expect(dataMap).not.toHaveTextContent('rawProviderPayloadsIncluded');
+    expect(dataMap).not.toHaveTextContent('internal-cache-key');
+    expect(dataMap).not.toHaveTextContent('SECRET_DATA_KEY');
     expect(screen.getByText('TickFlow A股宽度')).toBeInTheDocument();
     expect(screen.getByText('Key 已配置')).toBeInTheDocument();
     expect(screen.getByText('可达')).toBeInTheDocument();
@@ -809,6 +954,95 @@ describe('MarketProviderOperationsPage', () => {
     expect(matrixDisclosure).toHaveTextContent('sourceAuthority=false');
     expect(matrixDisclosure).toHaveTextContent('score=false');
     expect(matrixDisclosure).toHaveTextContent('cache-required');
+  });
+
+  it('renders the backend data source gap registry as a fail-closed professional data map', async () => {
+    getOperations.mockResolvedValue(populatedPayload);
+
+    render(<MarketProviderOperationsPage />);
+
+    const panel = await screen.findByTestId('data-source-gap-registry-panel');
+    expect(panel).toHaveTextContent('专业数据地图');
+    expect(panel).toHaveTextContent('只消费后端数据源缺口登记表');
+    expect(panel).toHaveTextContent('未触发数据运行');
+    expect(panel).toHaveTextContent('网络调用关闭');
+    expect(panel).toHaveTextContent('不授予计分权限');
+    expect(panel).toHaveTextContent('已就绪');
+    expect(panel).toHaveTextContent('部分可用');
+    expect(panel).toHaveTextContent('未授权');
+    expect(panel).toHaveTextContent('阻断');
+    expect(panel).toHaveTextContent('仅观察');
+    expect(panel).toHaveTextContent('计划中');
+
+    const quoteRow = screen.getByTestId('data-source-gap-registry-row-stock_quote_spine');
+    expect(quoteRow).toHaveTextContent('股票报价骨架');
+    expect(quoteRow).toHaveTextContent('stock_quote_spine');
+    expect(quoteRow).toHaveTextContent('部分可用');
+    expect(quoteRow).toHaveTextContent('权限 阻断');
+    expect(quoteRow).toHaveTextContent('时效 延迟');
+    expect(quoteRow).toHaveTextContent('补数 允许');
+    expect(quoteRow).toHaveTextContent('计分权限 不允许');
+    expect(quoteRow).toHaveTextContent('落地报价与日线快照');
+
+    const optionsRow = screen.getByTestId('data-source-gap-registry-row-options_chains');
+    expect(optionsRow).toHaveTextContent('期权链');
+    expect(optionsRow).toHaveTextContent('未授权');
+    expect(optionsRow).toHaveTextContent('权限 未授权');
+    expect(optionsRow).toHaveTextContent('时效 不可用');
+    expect(optionsRow).toHaveTextContent('补数 不允许');
+    expect(optionsRow).toHaveTextContent('计分权限 不允许');
+    expect(optionsRow).not.toHaveTextContent('已就绪');
+
+    const gammaRow = screen.getByTestId('data-source-gap-registry-row-gamma_dealer_positioning');
+    expect(gammaRow).toHaveTextContent('Gamma / Dealer Positioning');
+    expect(gammaRow).toHaveTextContent('阻断');
+    expect(gammaRow).toHaveTextContent('权限 未授权');
+    expect(gammaRow).toHaveTextContent('时效 不可用');
+    expect(gammaRow).not.toHaveTextContent('已就绪');
+
+    const panelText = panel.textContent || '';
+    expect(panelText).not.toMatch(/requestId|traceId|rawProviderPayload|cacheKey|credential|env|debug|raw dump|api[_-]?key|SECRET_DATA_KEY/i);
+    expect(panelText).not.toMatch(/buy|sell|hold|best|recommended|recommendation|optimal|winner|target price|stop loss|position sizing|买入|卖出|持有|目标价|止损|仓位|推荐|最佳|最优|赢家/i);
+  });
+
+  it('keeps missing registry fields unknown instead of crashing or overclaiming readiness', async () => {
+    getOperations.mockResolvedValue(populatedPayload);
+    getDataSourceGapRegistry.mockResolvedValue({
+      ...dataSourceGapRegistryPayload,
+      summary: { totalFamilies: 1 },
+      families: [
+        {
+          familyKey: 'unknown_new_family',
+          consumerLabel: 'Unknown New Family',
+        },
+      ],
+    });
+
+    render(<MarketProviderOperationsPage />);
+
+    await screen.findByTestId('data-source-gap-registry-panel');
+    const row = screen.getByTestId('data-source-gap-registry-row-unknown_new_family');
+    expect(row).toHaveTextContent('Unknown New Family');
+    expect(row).toHaveTextContent('unknown_new_family');
+    expect(row).toHaveTextContent('待补证');
+    expect(row).toHaveTextContent('补数 待补证');
+    expect(row).toHaveTextContent('计分权限 待补证');
+    expect(row).not.toHaveTextContent('已就绪');
+    expect(row).not.toHaveTextContent('权限 可用');
+    expect(row).not.toHaveTextContent('时效 新鲜');
+  });
+
+  it('renders compact blocked copy when the data source gap registry API is unavailable', async () => {
+    getOperations.mockResolvedValue(populatedPayload);
+    getDataSourceGapRegistry.mockRejectedValue(new Error('registry unavailable'));
+
+    render(<MarketProviderOperationsPage />);
+
+    const panel = await screen.findByTestId('data-source-gap-registry-panel');
+    expect(panel).toHaveTextContent('专业数据地图待补证');
+    expect(panel).toHaveTextContent('登记表接口暂不可用');
+    expect(panel).not.toHaveTextContent('股票报价骨架');
+    expect(panel).not.toHaveTextContent('期权链');
   });
 
   it('renders a provider setup checklist with grouped affected surfaces, safe badges, and curated guidance only', async () => {
