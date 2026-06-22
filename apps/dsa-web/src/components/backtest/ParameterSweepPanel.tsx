@@ -1,7 +1,8 @@
 import type React from 'react';
 import { useState } from 'react';
-import { AlertTriangle, Copy, Download, Play, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Play, ShieldCheck } from 'lucide-react';
 import { backtestApi } from '../../api/backtest';
+import ResearchArtifactRegistry, { type ResearchArtifactRegistryEntry } from '../research/ResearchArtifactRegistry';
 import type {
   RuleBacktestParameterSweepBar,
   RuleBacktestParameterSweepResponse,
@@ -39,7 +40,6 @@ const containerClass = 'rounded-xl border border-white/5 bg-black/20 p-4';
 const fieldClass = 'w-full min-w-0 min-h-[42px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-white outline-none transition-all focus:border-blue-500/50 focus:bg-white/[0.05]';
 const labelClass = 'text-[10px] font-bold uppercase tracking-widest text-white/40';
 const primaryButtonClass = 'inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] transition-all hover:from-blue-500 hover:to-purple-500 disabled:cursor-not-allowed disabled:opacity-45';
-const secondaryButtonClass = 'inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-semibold text-white/78 transition-all hover:border-white/20 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45';
 const UNKNOWN_ZH = '待补证';
 const UNKNOWN_EN = 'unknown';
 
@@ -296,16 +296,6 @@ function stringifyEvidencePack(pack: Record<string, unknown>): string {
   }, 2);
 }
 
-function downloadJsonFile(filename: string, content: string): void {
-  const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
 function formatLineageState(value: unknown, language: BacktestLanguage): string {
   const state = String(value || '').trim();
   if (state === 'blocked') return language === 'en' ? 'blocked' : '阻断';
@@ -461,6 +451,32 @@ const ParameterSweepPanel: React.FC<ParameterSweepPanelProps> = ({
   const exportableEvidencePack = canExportEvidencePack(state)
     ? stringifyEvidencePack(buildEvidencePack(state.response, state.requestSnapshot, language))
     : null;
+  const artifactState: ResearchArtifactRegistryEntry['state'] = exportableEvidencePack
+    ? 'available'
+    : (state.status === 'blocked' ? 'blocked' : 'unavailable');
+  const artifactFileName = state.requestSnapshot?.symbol
+    ? `backtest-sweep-evidence-pack-${state.requestSnapshot.symbol}.json`
+    : 'backtest-sweep-evidence-pack.json';
+  const artifactRegistryEntry: ResearchArtifactRegistryEntry = {
+    packKey: 'backtest-sweep-evidence-pack',
+    label: language === 'en' ? 'Backtest Sweep evidence pack' : 'Backtest Sweep 研究证据包',
+    schemaVersion: 'backtest-sweep-evidence-pack.v1',
+    sourceSurface: 'Backtest Sweep',
+    state: artifactState,
+    description: language === 'en'
+      ? 'JSON export for supplied inputs, bounded parameters, lineage, warnings, and compact result counts.'
+      : 'JSON 导出已输入条件、有界参数、谱系、告警与紧凑结果计数。',
+    contents: language === 'en'
+      ? ['supplied inputs', 'bounded parameters', 'lineage readiness', 'compact result counts']
+      : ['已输入条件、有界参数、谱系、告警与紧凑结果计数'],
+    exportContent: exportableEvidencePack,
+    fileName: artifactFileName,
+    copyLabel: language === 'en' ? 'Copy evidence pack' : '复制证据包',
+    downloadLabel: language === 'en' ? 'Export evidence pack' : '导出研究证据包',
+    copyTestId: 'pro-parameter-sweep-evidence-copy',
+    downloadTestId: 'pro-parameter-sweep-evidence-download',
+    blockedCopyTestId: 'pro-parameter-sweep-registry-copy-blocked',
+  };
 
   const readinessChips = [
     response?.diagnosticOnly ? (language === 'en' ? 'diagnostic only' : '诊断仅') : null,
@@ -633,17 +649,6 @@ const ParameterSweepPanel: React.FC<ParameterSweepPanelProps> = ({
       <span>{String(value ?? '--')}</span>
     </span>
   );
-
-  const handleCopyEvidencePack = async () => {
-    if (!exportableEvidencePack || !navigator.clipboard?.writeText) return;
-    await navigator.clipboard.writeText(exportableEvidencePack);
-  };
-
-  const handleDownloadEvidencePack = () => {
-    if (!exportableEvidencePack || !state.requestSnapshot) return;
-    const symbol = state.requestSnapshot.symbol || 'UNKNOWN';
-    downloadJsonFile(`backtest-sweep-evidence-pack-${symbol}.json`, exportableEvidencePack);
-  };
 
   return (
     <section data-testid="pro-parameter-sweep-panel" className="flex min-w-0 flex-col gap-4">
@@ -825,39 +830,20 @@ const ParameterSweepPanel: React.FC<ParameterSweepPanelProps> = ({
                 <p className="mt-1 text-amber-50/80">{response.failClosedReasonCode}</p>
               </div>
             ) : null}
-            {exportableEvidencePack ? (
-              <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-white/5 bg-white/[0.02] p-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <p className={labelClass}>{language === 'en' ? 'Evidence pack' : '研究证据包'}</p>
-                  <p className="mt-1 text-sm text-white/62">
-                    {language === 'en'
-                      ? 'JSON export of supplied inputs, bounded parameters, lineage, warnings, and compact result counts.'
-                      : 'JSON 导出已输入条件、有界参数、谱系、告警与紧凑结果计数。'}
-                  </p>
-                </div>
-                <div className="flex min-w-0 flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className={secondaryButtonClass}
-                    onClick={() => void handleCopyEvidencePack()}
-                    data-testid="pro-parameter-sweep-evidence-copy"
-                  >
-                    <Copy className="size-4" />
-                    {language === 'en' ? 'Copy evidence pack' : '复制证据包'}
-                  </button>
-                  <button
-                    type="button"
-                    className={secondaryButtonClass}
-                    onClick={handleDownloadEvidencePack}
-                    data-testid="pro-parameter-sweep-evidence-download"
-                  >
-                    <Download className="size-4" />
-                    {language === 'en' ? 'Export evidence pack' : '导出研究证据包'}
-                  </button>
-                </div>
-              </div>
-            ) : null}
+            <ResearchArtifactRegistry
+              locale={language}
+              entries={[artifactRegistryEntry]}
+              testId="pro-parameter-sweep-artifact-registry"
+            />
           </div>
+        ) : null}
+        {!response ? (
+          <ResearchArtifactRegistry
+            locale={language}
+            entries={[artifactRegistryEntry]}
+            testId="pro-parameter-sweep-artifact-registry"
+            className="mt-4"
+          />
         ) : null}
       </div>
 

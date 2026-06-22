@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Copy, Download } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import {
@@ -23,6 +22,7 @@ import {
   type ScenarioLabExpectedDriverImpact,
   type ScenarioLabResponse,
 } from '../api/scenarioLab';
+import ResearchArtifactRegistry, { type ResearchArtifactRegistryEntry } from '../components/research/ResearchArtifactRegistry';
 import { useI18n } from '../contexts/UiLanguageContext';
 import {
   getConsumerStatusLabel,
@@ -351,16 +351,6 @@ function sanitizeExpectedDriverImpact(impact: ScenarioLabExpectedDriverImpact, l
   };
 }
 
-function downloadJsonFile(filename: string, content: string): void {
-  const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
 function canExportScenarioEvidencePack(result: ScenarioLabResponse | null): result is ScenarioLabResponse {
   if (!result) {
     return false;
@@ -519,7 +509,6 @@ export default function ScenarioLabPage() {
   const [scenarioResult, setScenarioResult] = useState<ScenarioLabResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
-  const [evidencePackStatus, setEvidencePackStatus] = useState<string | null>(null);
 
   useEffect(() => {
     setSelectedPreset(initialPreset);
@@ -536,7 +525,6 @@ export default function ScenarioLabPage() {
         scenarioName: preset.scenarioName,
       });
       setScenarioResult(scenarioPayload);
-      setEvidencePackStatus(null);
     } catch (err) {
       setError(getParsedApiError(err) || createParsedApiError({
         title: locale === 'en' ? 'Scenario lab pending' : '情景实验室待更新',
@@ -612,6 +600,30 @@ export default function ScenarioLabPage() {
     }
     return stringifyScenarioEvidencePack(buildScenarioEvidencePack(scenarioResult, selectedPreset, locale));
   }, [locale, scenarioResult, selectedPreset]);
+  const scenarioArtifactState: ResearchArtifactRegistryEntry['state'] = exportableEvidencePack
+    ? 'available'
+    : (scenarioResult?.baselineReadiness?.blocked || scenarioResult?.baselineReadiness?.status === 'blocked' ? 'blocked' : 'unavailable');
+  const scenarioKey = scenarioResult?.selectedScenario?.presetId || selectedPreset.key || 'scenario';
+  const scenarioArtifactRegistryEntry: ResearchArtifactRegistryEntry = {
+    packKey: 'scenario-lab-evidence-pack',
+    label: locale === 'en' ? 'Scenario Lab evidence pack' : 'Scenario Lab 研究证据包',
+    schemaVersion: SCENARIO_EVIDENCE_PACK_SCHEMA_VERSION,
+    sourceSurface: 'Scenario Lab',
+    state: scenarioArtifactState,
+    description: locale === 'en'
+      ? 'JSON export for scenario, baseline state, driver changes, evidence boundary, and compact result summary.'
+      : 'JSON 导出情景、基线状态、驱动变化、证据边界与紧凑结果摘要。',
+    contents: locale === 'en'
+      ? ['scenario', 'baseline state', 'driver changes', 'evidence boundary', 'compact summary']
+      : ['情景、基线状态、驱动变化、证据边界与紧凑结果摘要'],
+    exportContent: exportableEvidencePack,
+    fileName: `scenario-evidence-pack-${scenarioKey}.json`,
+    copyLabel: locale === 'en' ? 'Copy scenario evidence pack' : '复制情景证据包',
+    downloadLabel: locale === 'en' ? 'Export scenario evidence pack' : '导出情景证据包',
+    copyTestId: 'scenario-evidence-pack-copy',
+    downloadTestId: 'scenario-evidence-pack-download',
+    blockedCopyTestId: 'scenario-evidence-pack-registry-copy-blocked',
+  };
   const scenarioUnavailableActions = (
     <div className="flex flex-col gap-2 sm:flex-row">
       <Link
@@ -629,50 +641,6 @@ export default function ScenarioLabPage() {
     </div>
   );
   const selectedLabel = selectedPreset.label[locale];
-
-  const handleCopyEvidencePack = useCallback(async () => {
-    if (!exportableEvidencePack || !navigator.clipboard?.writeText) {
-      setEvidencePackStatus(locale === 'en' ? 'Evidence pack pending.' : '证据包待补证。');
-      return;
-    }
-    await navigator.clipboard.writeText(exportableEvidencePack);
-    setEvidencePackStatus(locale === 'en' ? 'Evidence pack copied.' : '情景证据包已复制。');
-  }, [exportableEvidencePack, locale]);
-
-  const handleDownloadEvidencePack = useCallback(() => {
-    if (!exportableEvidencePack) {
-      setEvidencePackStatus(locale === 'en' ? 'Evidence pack pending.' : '证据包待补证。');
-      return;
-    }
-    const scenarioKey = scenarioResult?.selectedScenario?.presetId || selectedPreset.key || 'scenario';
-    downloadJsonFile(`scenario-evidence-pack-${scenarioKey}.json`, exportableEvidencePack);
-    setEvidencePackStatus(locale === 'en' ? 'Evidence pack exported.' : '情景证据包已导出。');
-  }, [exportableEvidencePack, locale, scenarioResult?.selectedScenario?.presetId, selectedPreset.key]);
-
-  const evidencePackAction = exportableEvidencePack ? (
-    <div className="flex flex-wrap items-center gap-2" data-testid="scenario-evidence-pack-controls">
-      <TerminalButton
-        variant="compact"
-        onClick={() => void handleCopyEvidencePack()}
-        data-testid="scenario-evidence-pack-copy"
-      >
-        <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-        {locale === 'en' ? 'Copy scenario evidence pack' : '复制情景证据包'}
-      </TerminalButton>
-      <TerminalButton
-        variant="compact"
-        onClick={handleDownloadEvidencePack}
-        data-testid="scenario-evidence-pack-download"
-      >
-        <Download className="h-3.5 w-3.5" aria-hidden="true" />
-        {locale === 'en' ? 'Export scenario evidence pack' : '导出情景证据包'}
-      </TerminalButton>
-    </div>
-  ) : scenarioResult ? (
-    <TerminalChip variant="caution" data-testid="scenario-evidence-pack-fail-closed">
-      {locale === 'en' ? 'Evidence pack pending' : '证据包待补证'}
-    </TerminalChip>
-  ) : null;
 
   return (
     <ConsumerWorkspaceScope className="flex min-h-0 flex-1">
@@ -765,7 +733,6 @@ export default function ScenarioLabPage() {
                   <RoughSectionCard
                     eyebrow={locale === 'en' ? 'First read' : '首读'}
                     title={locale === 'en' ? 'Scenario summary' : '情景摘要'}
-                    action={evidencePackAction}
                   >
                     <div className="grid gap-2 text-xs md:grid-cols-5">
                       <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 px-3 py-2">
@@ -817,11 +784,11 @@ export default function ScenarioLabPage() {
                         <div className="mt-1 font-semibold text-[color:var(--wolfy-text-primary)]">{firstReadNextEvidence}</div>
                       </div>
                     </div>
-                    {evidencePackStatus ? (
-                      <div className="text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]" data-testid="scenario-evidence-pack-status">
-                        {evidencePackStatus}
-                      </div>
-                    ) : null}
+                    <ResearchArtifactRegistry
+                      locale={locale}
+                      entries={[scenarioArtifactRegistryEntry]}
+                      testId="scenario-evidence-pack-registry"
+                    />
                   </RoughSectionCard>
                 </section>
                 <ConsoleStatusStrip
