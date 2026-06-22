@@ -185,6 +185,68 @@ describe('marketApi.getDataSourceGapRegistry', () => {
           provider_hydration_allowed_count: 2,
           score_trading_authority_allowed_count: 0,
         },
+        acquisition_priority_queue: [
+          {
+            family_key: 'options_chains',
+            family_label: 'Options Chains',
+            priority: 'critical',
+            priority_reason: '关键队列：影响 1 个产品面，1 项能力阻断或降级；当前行动为 确认期权链授权。',
+            readiness_state: 'unauthorized',
+            primary_blocker_type: 'entitlement',
+            affected_surface_count: 1,
+            blocked_or_degraded_capability_count: 1,
+            external_entitlement_required: true,
+            protected_domain_review_required: true,
+            next_concrete_step: '收集授权与字段覆盖证据，不接入数据源运行链路。',
+            required_evidence: ['授权证明', '字段覆盖清单'],
+            consumer_safe_warning: '工程补数队列；当前不是决策级证据，不生成交易指令。',
+          },
+          {
+            family_key: 'stock_quote_spine',
+            family_label: 'Stock Quote Spine',
+            priority: 'high',
+            priority_reason: '高优先级队列：影响 2 个产品面，1 项能力阻断或降级；当前行动为 补齐报价骨架集成。',
+            readiness_state: 'partial',
+            primary_blocker_type: 'provider-integration',
+            affected_surface_count: 2,
+            blocked_or_degraded_capability_count: 1,
+            external_entitlement_required: false,
+            protected_domain_review_required: true,
+            next_concrete_step: '定义报价/OHLCV 快照读模型并补齐来源权限字段。',
+            required_evidence: ['授权报价快照', '日线 as-of 血缘'],
+            consumer_safe_warning: '工程补数队列；当前不是决策级证据，不生成交易指令。',
+          },
+          {
+            family_key: 'macro_rates',
+            family_label: 'Macro / Rates',
+            priority: 'medium',
+            priority_reason: '中优先级队列：影响 1 个产品面，0 项能力阻断或降级；当前行动为 补齐数据集成证据。',
+            readiness_state: 'observation-only',
+            primary_blocker_type: 'provider-integration',
+            affected_surface_count: 1,
+            blocked_or_degraded_capability_count: 0,
+            external_entitlement_required: false,
+            protected_domain_review_required: true,
+            next_concrete_step: '持久化官方宏观序列并附覆盖和时效状态。',
+            required_evidence: ['覆盖证据'],
+            consumer_safe_warning: '工程补数队列；当前不是决策级证据，不生成交易指令。',
+          },
+          {
+            family_key: 'ready_family',
+            family_label: 'Ready Family',
+            priority: 'low',
+            priority_reason: '低优先级监控：影响 1 个产品面，0 项能力阻断或降级；当前行动为 保持证据监控。',
+            readiness_state: 'ready',
+            primary_blocker_type: 'unknown',
+            affected_surface_count: 1,
+            blocked_or_degraded_capability_count: 0,
+            external_entitlement_required: false,
+            protected_domain_review_required: false,
+            next_concrete_step: '保持只读监控，不新增阻断行动。',
+            required_evidence: ['周期性 freshness 检查'],
+            consumer_safe_warning: '当前家族已就绪，仅保留工程监控。',
+          },
+        ],
         families: [
           {
             family_key: 'stock_quote_spine',
@@ -411,6 +473,29 @@ describe('marketApi.getDataSourceGapRegistry', () => {
     expect(view.families.find((family) => family.familyKey === 'options_chains')?.surfaceImpactMatrix[0].impactState.label).toBe('阻断');
     expect(view.families.find((family) => family.familyKey === 'gamma_dealer_positioning')?.dataHydrationAllowed).toBe('不允许');
     expect(view.families.find((family) => family.familyKey === 'gamma_dealer_positioning')?.surfaceImpactMatrix[0].impactState.label).toBe('待补证');
+    expect(view.acquisitionPriorityQueue.map((item) => item.priority.label)).toEqual([
+      '关键',
+      '高',
+      '中',
+      '低',
+    ]);
+    expect(view.acquisitionPriorityQueue[0]).toMatchObject({
+      familyKey: 'options_chains',
+      familyLabel: '期权链',
+      primaryBlockerType: { label: '授权阻断', variant: 'danger' },
+      readinessState: { label: '未授权', variant: 'danger' },
+      affectedSurfaceCount: 1,
+      blockedOrDegradedCapabilityCount: 1,
+      externalEntitlementRequired: '需要外部授权',
+      protectedDomainReviewRequired: '需要保护域复核',
+      requiredEvidence: ['授权证明', '字段覆盖清单'],
+    });
+    expect(view.acquisitionPriorityQueue[1]).toMatchObject({
+      familyKey: 'stock_quote_spine',
+      primaryBlockerType: { label: '数据接入', variant: 'info' },
+      priorityReason: '高优先级队列：影响 2 个产品面，1 项能力阻断或降级；当前行动为 补齐报价骨架集成。',
+      nextConcreteStep: '定义报价/OHLCV 快照读模型并补齐来源权限字段。',
+    });
     expect(JSON.stringify(view)).not.toMatch(/requestId|traceId|rawProviderPayload|cacheKey|credential|env|debug|api[_-]?key|buy|sell|target price|stop loss|position sizing|买入|卖出|目标价|止损|仓位/i);
   });
 
@@ -455,6 +540,17 @@ describe('marketApi.getDataSourceGapRegistry', () => {
             ],
           },
         ],
+        acquisition_priority_queue: [
+          {
+            family_key: 'unknown_new_family',
+            family_label: 'Unknown New Family',
+            priority_reason: 'rawProviderPayload requestId traceId',
+            primary_blocker_type: 'provider-integration',
+            next_concrete_step: 'token=secret next step',
+            required_evidence: ['api_key secret evidence'],
+            consumer_safe_warning: 'debug raw dump',
+          },
+        ],
       },
     });
 
@@ -490,6 +586,20 @@ describe('marketApi.getDataSourceGapRegistry', () => {
         blockedBy: ['阻断项待补证'],
         affectedSurfacesOrCapabilities: ['影响面待补证'],
         nextConcreteStep: '下一步待补证。',
+      },
+    ]);
+    expect(view.acquisitionPriorityQueue).toMatchObject([
+      {
+        familyKey: 'unknown_new_family',
+        familyLabel: 'Unknown New Family',
+        priority: { label: '中', variant: 'info' },
+        readinessState: { label: '待补证', variant: 'caution' },
+        primaryBlockerType: { label: '数据接入', variant: 'info' },
+        affectedSurfaceCount: 0,
+        blockedOrDegradedCapabilityCount: 0,
+        nextConcreteStep: '下一步待补证。',
+        requiredEvidence: ['证据待补证'],
+        consumerSafeWarning: '工程补数队列；当前不是决策级证据。',
       },
     ]);
     expect(view.groups.find((group) => group.groupId === 'other')?.families[0]?.familyKey).toBe('unknown_new_family');

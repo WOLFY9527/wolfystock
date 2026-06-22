@@ -112,6 +112,42 @@ class DataSourceGapRegistryFamily:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class DataSourceAcquisitionPriorityQueueItem:
+    family_key: str
+    family_label: str
+    priority: str
+    priority_reason: str
+    readiness_state: str
+    primary_blocker_type: str
+    affected_surface_count: int
+    blocked_or_degraded_capability_count: int
+    external_entitlement_required: bool
+    protected_domain_review_required: bool
+    next_concrete_step: str
+    required_evidence: tuple[str, ...]
+    consumer_safe_warning: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "familyKey": self.family_key,
+            "familyLabel": self.family_label,
+            "priority": self.priority,
+            "priorityReason": self.priority_reason,
+            "readinessState": self.readiness_state,
+            "primaryBlockerType": self.primary_blocker_type,
+            "affectedSurfaceCount": self.affected_surface_count,
+            "blockedOrDegradedCapabilityCount": (
+                self.blocked_or_degraded_capability_count
+            ),
+            "externalEntitlementRequired": self.external_entitlement_required,
+            "protectedDomainReviewRequired": self.protected_domain_review_required,
+            "nextConcreteStep": self.next_concrete_step,
+            "requiredEvidence": list(self.required_evidence),
+            "consumerSafeWarning": self.consumer_safe_warning,
+        }
+
+
 def _impact(
     surface_key: str,
     consumer_label: str,
@@ -435,6 +471,203 @@ def _integration_action_plan_for_family(
             external_license=bool(family.entitlement_or_licensing_blocker),
             protected_review=True,
         ),
+    )
+
+
+_ACTION_PRIORITY_SCORE = {
+    "critical": 400,
+    "high": 300,
+    "medium": 200,
+    "low": 100,
+}
+
+_STATUS_PRIORITY_SCORE = {
+    "unauthorized": 80,
+    "blocked": 75,
+    "missing": 65,
+    "partial": 50,
+    "stale": 40,
+    "observation-only": 25,
+    "planned": 20,
+    "ready": 0,
+}
+
+_BLOCKER_TYPE_BY_ACTION_TYPE = {
+    "provider-entitlement": "entitlement",
+    "provider-integration": "provider-integration",
+    "evidence-validation": "evidence-validation",
+    "schema-contract": "schema-contract",
+    "frontend-consumption": "frontend-consumption",
+}
+
+
+def _primary_action(
+    actions: tuple[DataSourceGapRegistryActionPlanItem, ...],
+) -> DataSourceGapRegistryActionPlanItem | None:
+    if not actions:
+        return None
+    return max(
+        enumerate(actions),
+        key=lambda indexed_action: (
+            _ACTION_PRIORITY_SCORE.get(indexed_action[1].priority, 0),
+            indexed_action[1].requires_external_provider_license_work,
+            indexed_action[1].requires_protected_domain_review,
+            -indexed_action[0],
+        ),
+    )[1]
+
+
+def _primary_blocker_type(
+    family: DataSourceGapRegistryFamily,
+    action: DataSourceGapRegistryActionPlanItem | None,
+) -> str:
+    if family.authority_state == "unauthorized" or (
+        action and action.requires_external_provider_license_work
+    ):
+        return "entitlement"
+    if action and action.action_type in _BLOCKER_TYPE_BY_ACTION_TYPE:
+        return _BLOCKER_TYPE_BY_ACTION_TYPE[action.action_type]
+    if action and action.requires_protected_domain_review:
+        return "protected-review"
+    return "unknown"
+
+
+def _queue_priority(
+    family: DataSourceGapRegistryFamily,
+    action: DataSourceGapRegistryActionPlanItem | None,
+    affected_surface_count: int,
+    blocked_or_degraded_capability_count: int,
+) -> tuple[str, int]:
+    if family.status == "ready" and family.authority_state == "allowed":
+        return "low", 0
+
+    action_score = _ACTION_PRIORITY_SCORE.get(action.priority if action else "low", 100)
+    status_score = _STATUS_PRIORITY_SCORE.get(family.status, 30)
+    impact_score = affected_surface_count * 10 + blocked_or_degraded_capability_count * 20
+    entitlement_score = (
+        30
+        if family.entitlement_or_licensing_blocker
+        or (action and action.requires_external_provider_license_work)
+        else 0
+    )
+    protected_score = (
+        10 if action and action.requires_protected_domain_review else 0
+    )
+    score = action_score + status_score + impact_score + entitlement_score + protected_score
+
+    if action and action.priority == "critical":
+        return "critical", score
+    if score >= 420:
+        return "critical", score
+    if score >= 320:
+        return "high", score
+    if score >= 210:
+        return "medium", score
+    return "low", score
+
+
+def _priority_reason(
+    priority: str,
+    affected_surface_count: int,
+    blocked_or_degraded_capability_count: int,
+    action: DataSourceGapRegistryActionPlanItem | None,
+) -> str:
+    action_label = action.action_label if action else "行动项待复核"
+    if priority == "critical":
+        prefix = "关键队列"
+    elif priority == "high":
+        prefix = "高优先级队列"
+    elif priority == "medium":
+        prefix = "中优先级队列"
+    else:
+        prefix = "低优先级监控"
+    return (
+        f"{prefix}：影响 {affected_surface_count} 个产品面，"
+        f"{blocked_or_degraded_capability_count} 项能力阻断或降级；"
+        f"当前行动为 {action_label}。"
+    )
+
+
+def _acquisition_priority_queue(
+    families: tuple[DataSourceGapRegistryFamily, ...],
+) -> tuple[DataSourceAcquisitionPriorityQueueItem, ...]:
+    queue: list[tuple[int, DataSourceAcquisitionPriorityQueueItem]] = []
+    for family in families:
+        actions = _integration_action_plan_for_family(family)
+        action = _primary_action(actions)
+        surface_keys = {
+            impact.surface_key
+            for impact in family.surface_impact_matrix
+            if impact.surface_key
+        }
+        blocked_or_degraded_capabilities = {
+            impact.affected_capability
+            for impact in family.surface_impact_matrix
+            if impact.affected_capability
+            and impact.impact_state in {"blocked", "degraded"}
+        }
+        affected_surface_count = len(surface_keys)
+        blocked_or_degraded_count = len(blocked_or_degraded_capabilities)
+        priority, score = _queue_priority(
+            family,
+            action,
+            affected_surface_count,
+            blocked_or_degraded_count,
+        )
+        required_evidence = (
+            action.required_evidence
+            if action and action.required_evidence
+            else ("证据待补证",)
+        )
+        external_entitlement_required = bool(
+            family.entitlement_or_licensing_blocker
+            or (action and action.requires_external_provider_license_work)
+        )
+        protected_review_required = bool(
+            action and action.requires_protected_domain_review
+        )
+        is_decision_grade = (
+            family.status == "ready"
+            and family.authority_state == "allowed"
+            and family.score_trading_authority_allowed
+        )
+        item = DataSourceAcquisitionPriorityQueueItem(
+            family_key=family.family_key,
+            family_label=family.consumer_label,
+            priority=priority,
+            priority_reason=_priority_reason(
+                priority,
+                affected_surface_count,
+                blocked_or_degraded_count,
+                action,
+            ),
+            readiness_state=family.status,
+            primary_blocker_type=_primary_blocker_type(family, action),
+            affected_surface_count=affected_surface_count,
+            blocked_or_degraded_capability_count=blocked_or_degraded_count,
+            external_entitlement_required=external_entitlement_required,
+            protected_domain_review_required=protected_review_required,
+            next_concrete_step=(
+                action.next_concrete_step if action else family.next_integration_step
+            ),
+            required_evidence=required_evidence[:4],
+            consumer_safe_warning=(
+                "工程补数队列；当前不是决策级证据，不生成交易指令。"
+                if not is_decision_grade
+                else "当前家族已就绪，仅保留工程监控。"
+            ),
+        )
+        queue.append((score, item))
+
+    return tuple(
+        item
+        for _, item in sorted(
+            queue,
+            key=lambda scored_item: (
+                -scored_item[0],
+                scored_item[1].family_key,
+            ),
+        )
     )
 
 
@@ -1060,6 +1293,9 @@ def build_data_source_gap_registry() -> dict[str, Any]:
         "networkCallsEnabled": False,
         "scoreAuthorityAllowed": False,
         "summary": _summary(families),
+        "acquisitionPriorityQueue": [
+            item.to_dict() for item in _acquisition_priority_queue(families)
+        ],
         "families": [family.to_dict() for family in families],
         "metadata": {
             "source": "static_contract_registry",
@@ -1074,6 +1310,7 @@ def build_data_source_gap_registry() -> dict[str, Any]:
 
 __all__ = [
     "DATA_SOURCE_GAP_REGISTRY_CONTRACT_VERSION",
+    "DataSourceAcquisitionPriorityQueueItem",
     "DataSourceSurfaceImpact",
     "DataSourceGapRegistryFamily",
     "build_data_source_gap_registry",

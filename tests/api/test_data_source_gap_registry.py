@@ -18,6 +18,7 @@ EXPECTED_TOP_LEVEL_FIELDS = {
     "networkCallsEnabled",
     "scoreAuthorityAllowed",
     "summary",
+    "acquisitionPriorityQueue",
     "families",
     "metadata",
 }
@@ -51,6 +52,21 @@ EXPECTED_ACTION_FIELDS = {
     "requiresExternalProviderLicenseWork",
     "requiresProtectedDomainReview",
 }
+EXPECTED_QUEUE_FIELDS = {
+    "familyKey",
+    "familyLabel",
+    "priority",
+    "priorityReason",
+    "readinessState",
+    "primaryBlockerType",
+    "affectedSurfaceCount",
+    "blockedOrDegradedCapabilityCount",
+    "externalEntitlementRequired",
+    "protectedDomainReviewRequired",
+    "nextConcreteStep",
+    "requiredEvidence",
+    "consumerSafeWarning",
+}
 
 
 def _client() -> TestClient:
@@ -79,6 +95,14 @@ def test_data_source_gap_registry_returns_static_fail_closed_family_inventory() 
     assert payload["providerRuntimeCalled"] is False
     assert payload["networkCallsEnabled"] is False
     assert payload["scoreAuthorityAllowed"] is False
+    assert all(
+        set(item) == EXPECTED_QUEUE_FIELDS
+        for item in payload["acquisitionPriorityQueue"]
+    )
+    queue_by_key = {
+        item["familyKey"]: item
+        for item in payload["acquisitionPriorityQueue"]
+    }
 
     families = {item["familyKey"]: item for item in payload["families"]}
     assert {
@@ -112,6 +136,26 @@ def test_data_source_gap_registry_returns_static_fail_closed_family_inventory() 
     assert families["portfolio_valuation_lineage"]["status"] == "partial"
     assert families["portfolio_valuation_lineage"]["providerHydrationAllowed"] is True
     assert families["portfolio_valuation_lineage"]["scoreTradingAuthorityAllowed"] is False
+    assert set(queue_by_key) == set(families)
+    assert queue_by_key["stock_quote_spine"]["priority"] == "critical"
+    assert queue_by_key["stock_quote_spine"]["primaryBlockerType"] == (
+        "provider-integration"
+    )
+    assert queue_by_key["stock_quote_spine"]["affectedSurfaceCount"] == 5
+    assert queue_by_key["stock_quote_spine"]["blockedOrDegradedCapabilityCount"] == 4
+    assert queue_by_key["stock_quote_spine"]["protectedDomainReviewRequired"] is True
+    assert queue_by_key["portfolio_valuation_lineage"]["priority"] == "high"
+    assert (
+        payload["acquisitionPriorityQueue"].index(
+            queue_by_key["stock_quote_spine"]
+        )
+        < payload["acquisitionPriorityQueue"].index(
+            queue_by_key["portfolio_valuation_lineage"]
+        )
+    )
+    assert queue_by_key["scenario_baselines"]["primaryBlockerType"] == (
+        "schema-contract"
+    )
     assert all(
         family["integrationActionPlan"]
         for family in families.values()
@@ -124,6 +168,21 @@ def test_data_source_gap_registry_returns_static_fail_closed_family_inventory() 
     assert families["options_chains"]["integrationActionPlan"][0]["actionType"] == "provider-entitlement"
     assert families["options_chains"]["integrationActionPlan"][0]["status"] == "waiting-entitlement"
     assert families["options_chains"]["integrationActionPlan"][0]["requiresExternalProviderLicenseWork"] is True
+    for family_key in (
+        "options_chains",
+        "options_strategy_analytics",
+        "gamma_dealer_positioning",
+    ):
+        assert queue_by_key[family_key]["priority"] == "critical"
+        assert queue_by_key[family_key]["primaryBlockerType"] == "entitlement"
+        assert queue_by_key[family_key]["readinessState"] in {
+            "blocked",
+            "unauthorized",
+        }
+        assert queue_by_key[family_key]["externalEntitlementRequired"] is True
+        assert queue_by_key[family_key]["protectedDomainReviewRequired"] is True
+        assert "已就绪" not in queue_by_key[family_key]["priorityReason"]
+        assert "ready" not in queue_by_key[family_key]["priorityReason"].lower()
     assert all(
         action["status"] != "ready-to-start"
         for family_key in (
@@ -187,5 +246,9 @@ def test_data_source_gap_registry_returns_static_fail_closed_family_inventory() 
         "akshare",
         "finnhub",
         "marketstack",
+        "trading advice",
+        "investment advice",
+        "recommended",
+        "winner",
     ):
         assert forbidden not in serialized

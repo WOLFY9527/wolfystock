@@ -63,6 +63,15 @@ DataSourceGapActionStatus = Literal[
     "planned",
     "not-required",
 ]
+DataSourceAcquisitionBlockerType = Literal[
+    "entitlement",
+    "provider-integration",
+    "evidence-validation",
+    "schema-contract",
+    "frontend-consumption",
+    "protected-review",
+    "unknown",
+]
 
 
 class DataSourceSurfaceImpact(BaseModel):
@@ -112,6 +121,24 @@ class DataSourceGapRegistryFamily(BaseModel):
     integrationActionPlan: List[DataSourceGapRegistryActionPlanItem]
 
 
+class DataSourceAcquisitionPriorityQueueItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    familyKey: str
+    familyLabel: str
+    priority: DataSourceGapActionPriority
+    priorityReason: str
+    readinessState: DataSourceGapStatus
+    primaryBlockerType: DataSourceAcquisitionBlockerType
+    affectedSurfaceCount: int
+    blockedOrDegradedCapabilityCount: int
+    externalEntitlementRequired: bool
+    protectedDomainReviewRequired: bool
+    nextConcreteStep: str
+    requiredEvidence: List[str]
+    consumerSafeWarning: str
+
+
 class DataSourceGapRegistrySummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -137,5 +164,6 @@ class DataSourceGapRegistryResponse(BaseModel):
     networkCallsEnabled: bool
     scoreAuthorityAllowed: bool
     summary: DataSourceGapRegistrySummary
+    acquisitionPriorityQueue: List[DataSourceAcquisitionPriorityQueueItem]
     families: List[DataSourceGapRegistryFamily]
     metadata: Dict[str, Any]
