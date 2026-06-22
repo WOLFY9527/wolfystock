@@ -1,6 +1,6 @@
 import type React from 'react';
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
-import { BrowserRouter as Router, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { AppErrorBoundary } from './components/common/AppErrorBoundary';
 import { BrandedLoadingScreen } from './components/common/BrandedLoadingScreen';
 import { ConsumerProtectedFrame } from './components/layout/ConsumerWorkspaceShell';
@@ -243,6 +243,7 @@ function isAdminSurfacePath(pathname: string): boolean {
 
 function isStockStructureDecisionPath(pathname: string): boolean {
   return pathname === '/stocks/structure-decision'
+    || /^\/stock\/[^/]+(?:\/)?$/i.test(pathname)
     || /^\/stocks\/[^/]+\/structure-decision(?:\/)?$/i.test(pathname);
 }
 
@@ -251,6 +252,7 @@ function isProtectedProductPath(pathname: string): boolean {
     || pathname === '/options'
     || pathname === '/scanner'
     || isPathMatch(pathname, '/portfolio')
+    || isPathMatch(pathname, '/radar')
     || isPathMatch(pathname, '/research/radar')
     || isPathMatch(pathname, '/scenario-lab')
     || isPathMatch(pathname, '/watchlist')
@@ -451,6 +453,16 @@ const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }
   );
 };
 
+const StockStructureDecisionLegacyRedirect: React.FC = () => {
+  const location = useLocation();
+  const { stockCode = '' } = useParams<{ stockCode: string }>();
+  const routeLocale = parseLocaleFromPathname(location.pathname);
+  const canonicalPath = `/stocks/${encodeURIComponent(stockCode)}/structure-decision${location.search}${location.hash}`;
+  const to = routeLocale ? buildLocalizedPath(canonicalPath, routeLocale) : canonicalPath;
+
+  return <Navigate to={to} replace />;
+};
+
 export const AppContent: React.FC = () => {
   const location = useLocation();
   const { authEnabled, loggedIn, isLoading, loadError, refreshStatus, setupState } = useAuth();
@@ -523,6 +535,7 @@ export const AppContent: React.FC = () => {
           <Route path="/admin/ai" element={<Navigate to="/settings/system" replace />} />
           <Route path="/admin/system-logs" element={<Navigate to="/admin/logs" replace />} />
           <Route path="/cockpit" element={<Navigate to="/market/decision-cockpit" replace />} />
+          <Route path="/radar" element={<Navigate to="/research/radar" replace />} />
           <Route path="/research-radar" element={<Navigate to="/research/radar" replace />} />
           <Route path="/liquidity" element={<Navigate to="/market/liquidity-monitor" replace />} />
           <Route path="/rotation" element={<Navigate to="/market/rotation-radar" replace />} />
@@ -536,6 +549,7 @@ export const AppContent: React.FC = () => {
           <Route path="/market/decision-cockpit" element={<MarketDecisionCockpitPage />} />
           <Route path="/market/liquidity-monitor" element={<LiquidityMonitorPage />} />
           <Route path="/market/rotation-radar" element={<MarketRotationRadarPage />} />
+          <Route path="/stock/:stockCode" element={<StockStructureDecisionLegacyRedirect />} />
           <Route path="/stocks/structure-decision" element={<StockStructureDecisionEntryPage />} />
           <Route path="/stocks/:stockCode/structure-decision" element={<StockStructureDecisionPage />} />
           <Route path="/research/radar" element={<RegisteredSurfaceRoute><ResearchRadarPage /></RegisteredSurfaceRoute>} />
@@ -572,6 +586,7 @@ export const AppContent: React.FC = () => {
           <Route path="admin/ai" element={<Navigate to="../settings/system" replace />} />
           <Route path="admin/system-logs" element={<Navigate to="../admin/logs" replace />} />
           <Route path="cockpit" element={<Navigate to="../market/decision-cockpit" replace />} />
+          <Route path="radar" element={<Navigate to="../research/radar" replace />} />
           <Route path="research-radar" element={<Navigate to="../research/radar" replace />} />
           <Route path="liquidity" element={<Navigate to="../market/liquidity-monitor" replace />} />
           <Route path="rotation" element={<Navigate to="../market/rotation-radar" replace />} />
@@ -585,6 +600,7 @@ export const AppContent: React.FC = () => {
           <Route path="market/decision-cockpit" element={<MarketDecisionCockpitPage />} />
           <Route path="market/liquidity-monitor" element={<LiquidityMonitorPage />} />
           <Route path="market/rotation-radar" element={<MarketRotationRadarPage />} />
+          <Route path="stock/:stockCode" element={<StockStructureDecisionLegacyRedirect />} />
           <Route path="stocks/structure-decision" element={<StockStructureDecisionEntryPage />} />
           <Route path="stocks/:stockCode/structure-decision" element={<StockStructureDecisionPage />} />
           <Route path="research/radar" element={<RegisteredSurfaceRoute><ResearchRadarPage /></RegisteredSurfaceRoute>} />
