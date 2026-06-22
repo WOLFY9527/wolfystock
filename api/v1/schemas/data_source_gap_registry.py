@@ -45,6 +45,24 @@ DataSourceSurfaceImpactState = Literal[
     "planned",
     "unknown",
 ]
+DataSourceGapActionType = Literal[
+    "provider-entitlement",
+    "provider-integration",
+    "evidence-validation",
+    "schema-contract",
+    "frontend-consumption",
+    "manual-review",
+    "blocked",
+]
+DataSourceGapActionPriority = Literal["critical", "high", "medium", "low"]
+DataSourceGapActionStatus = Literal[
+    "ready-to-start",
+    "blocked",
+    "waiting-entitlement",
+    "waiting-evidence",
+    "planned",
+    "not-required",
+]
 
 
 class DataSourceSurfaceImpact(BaseModel):
@@ -56,6 +74,23 @@ class DataSourceSurfaceImpact(BaseModel):
     impactReason: str
     affectedCapability: str
     nextEvidenceStep: str
+
+
+class DataSourceGapRegistryActionPlanItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    actionKey: str
+    actionLabel: str
+    actionType: DataSourceGapActionType
+    priority: DataSourceGapActionPriority
+    status: DataSourceGapActionStatus
+    reason: str
+    requiredEvidence: List[str]
+    blockedBy: List[str]
+    affectedSurfacesOrCapabilities: List[str]
+    nextConcreteStep: str
+    requiresExternalProviderLicenseWork: bool
+    requiresProtectedDomainReview: bool
 
 
 class DataSourceGapRegistryFamily(BaseModel):
@@ -74,6 +109,7 @@ class DataSourceGapRegistryFamily(BaseModel):
     scoreTradingAuthorityAllowed: bool
     consumerSafeDescription: str
     surfaceImpactMatrix: List[DataSourceSurfaceImpact]
+    integrationActionPlan: List[DataSourceGapRegistryActionPlanItem]
 
 
 class DataSourceGapRegistrySummary(BaseModel):

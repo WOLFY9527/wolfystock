@@ -56,6 +56,82 @@ def test_data_source_gap_registry_is_deterministic_and_fail_closed() -> None:
     assert families["portfolio_valuation_lineage"]["providerHydrationAllowed"] is True
     assert families["portfolio_valuation_lineage"]["scoreTradingAuthorityAllowed"] is False
     assert all(
+        family["integrationActionPlan"]
+        for family in families.values()
+    )
+    assert all(
+        set(action) == {
+            "actionKey",
+            "actionLabel",
+            "actionType",
+            "priority",
+            "status",
+            "reason",
+            "requiredEvidence",
+            "blockedBy",
+            "affectedSurfacesOrCapabilities",
+            "nextConcreteStep",
+            "requiresExternalProviderLicenseWork",
+            "requiresProtectedDomainReview",
+        }
+        for family in families.values()
+        for action in family["integrationActionPlan"]
+    )
+    assert {
+        action["actionType"]
+        for family_key in (
+            "options_chains",
+            "options_strategy_analytics",
+            "gamma_dealer_positioning",
+        )
+        for action in families[family_key]["integrationActionPlan"]
+    } <= {"provider-entitlement", "evidence-validation", "manual-review", "blocked"}
+    assert {
+        action["status"]
+        for family_key in (
+            "options_chains",
+            "options_strategy_analytics",
+            "gamma_dealer_positioning",
+        )
+        for action in families[family_key]["integrationActionPlan"]
+    } <= {"waiting-entitlement", "waiting-evidence", "planned", "blocked"}
+    assert all(
+        action["requiresExternalProviderLicenseWork"] is True
+        for family_key in (
+            "options_chains",
+            "options_strategy_analytics",
+            "gamma_dealer_positioning",
+        )
+        for action in families[family_key]["integrationActionPlan"]
+        if action["actionType"] == "provider-entitlement"
+    )
+    assert all(
+        "ready" not in action["actionKey"]
+        and "unlocked" not in action["actionKey"]
+        and "就绪" not in action["actionLabel"]
+        and "解锁" not in action["actionLabel"]
+        for family_key in (
+            "options_chains",
+            "options_strategy_analytics",
+            "gamma_dealer_positioning",
+        )
+        for action in families[family_key]["integrationActionPlan"]
+    )
+    assert {
+        action["actionType"]
+        for action in families["stock_quote_spine"]["integrationActionPlan"]
+    } >= {"provider-integration", "evidence-validation"}
+    assert {
+        action["actionType"]
+        for action in families["portfolio_valuation_lineage"]["integrationActionPlan"]
+    } >= {"provider-integration", "evidence-validation"}
+    assert all(
+        action["actionType"] != "blocked" or action["priority"] not in {"critical", "high"}
+        for family in families.values()
+        if family["status"] == "ready"
+        for action in family["integrationActionPlan"]
+    )
+    assert all(
         impact["impactState"]
         in {"unlocked", "degraded", "observation-only", "blocked", "planned", "unknown"}
         for family in families.values()
