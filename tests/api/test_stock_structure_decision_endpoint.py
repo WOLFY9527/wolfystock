@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from types import SimpleNamespace
 from typing import Any
 
@@ -12,7 +14,10 @@ from fastapi.testclient import TestClient
 
 from api.v1.endpoints import stocks as stocks_endpoint
 from src.services import symbol_research_packet_service
-from src.services.stock_structure_decision_service import STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION
+from src.services.stock_structure_decision_service import (
+    STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION,
+    StockStructureDecisionService,
+)
 
 
 FORBIDDEN_ADVICE_TOKENS = (
@@ -168,6 +173,19 @@ class _FakeStockEvidenceService:
     def get_stock_evidence(self, symbols: list[str], **_: Any) -> dict[str, Any]:
         self.calls.append(symbols)
         return self.payload
+
+
+class _BlockingHistoryService:
+    def __init__(self) -> None:
+        self.started = threading.Event()
+        self.release = threading.Event()
+        self.calls: list[dict[str, Any]] = []
+
+    def get_history_data(self, stock_code: str, period: str = "daily", days: int = 30) -> dict[str, Any]:
+        self.calls.append({"stock_code": stock_code, "period": period, "days": days})
+        self.started.set()
+        self.release.wait(timeout=2.0)
+        return _history_payload()
 
 
 def _client() -> TestClient:
@@ -519,6 +537,50 @@ def test_structure_decision_endpoint_returns_low_confidence_unavailable_payload(
     assert "history_unavailable" not in consumer_copy
     assert "daily_ohlcv" not in consumer_copy
     serialized = json.dumps(payload, ensure_ascii=False).lower()
+    for forbidden in FORBIDDEN_ADVICE_TOKENS:
+        assert forbidden not in serialized
+
+
+def test_structure_decision_endpoint_returns_controlled_unavailable_payload_on_latency_boundary(monkeypatch) -> None:
+    blocking_history = _BlockingHistoryService()
+    monkeypatch.setattr(
+        stocks_endpoint,
+        "StockStructureDecisionService",
+        lambda: StockStructureDecisionService(
+            history_service=blocking_history,
+            timeout_seconds=0.01,
+        ),
+        raising=False,
+    )
+
+    started_at = time.monotonic()
+    try:
+        response = _client().get("/api/v1/stocks/AAPL/structure-decision")
+    finally:
+        blocking_history.release.set()
+    elapsed = time.monotonic() - started_at
+
+    assert response.status_code == 200
+    assert blocking_history.started.is_set()
+    assert elapsed < 0.5
+    payload = response.json()
+    assert payload["structureState"] == "lowConfidence"
+    assert payload["confidence"] == "low"
+    assert payload["dataQuality"]["status"] == "unavailable"
+    assert payload["dataQuality"]["source"] == "unavailable"
+    assert payload["dataQuality"]["period"] == "daily"
+    assert payload["dataQuality"]["requestedDays"] == 90
+    assert payload["dataQuality"]["observedBars"] == 0
+    assert payload["dataQuality"]["usableBars"] == 0
+    assert payload["dataQuality"]["reason"] == "Evidence is limited for this observation."
+    assert payload["degradedInputs"][0]["section"] == "structureEvidence"
+    assert payload["degradedInputs"][0]["status"] == "unavailable"
+    assert payload["degradedInputs"][0]["reason"] == "Evidence is limited for this observation."
+    assert payload["consumerIssues"][0]["label"] == "Structure evidence unavailable"
+    serialized = json.dumps(payload, ensure_ascii=False).lower()
+    assert "traceback" not in serialized
+    assert "exception" not in serialized
+    assert "secret" not in serialized
     for forbidden in FORBIDDEN_ADVICE_TOKENS:
         assert forbidden not in serialized
 
