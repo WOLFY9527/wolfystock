@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
+import { Copy, Download } from 'lucide-react';
 import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import {
   ConsoleBoard,
@@ -549,6 +550,21 @@ type EvidenceStackRow = {
   bucket: EvidenceStackBucket;
 };
 
+type SingleStockEvidencePackEntry = {
+  packKey: string;
+  label: string;
+  state: 'available' | 'unavailable';
+  description: string;
+  contents: string[];
+  exportContent: string | null;
+  fileName: string;
+  copyLabel: string;
+  downloadLabel: string;
+  copyTestId: string;
+  downloadTestId: string;
+  blockedCopyTestId: string;
+};
+
 function evidenceStateBucket(value: string | null | undefined): EvidenceStackBucket {
   const token = normalizeStockConsumerToken(value);
   if (token === 'available' || token === 'ready') return 'available';
@@ -750,6 +766,260 @@ function evidenceCountLabels(counts: Record<EvidenceStackBucket, number>, langua
   return labels
     .filter(([count]) => count > 0)
     .map(([count, label]) => language === 'en' ? `${count} ${label}` : `${label} ${count}`);
+}
+
+function evidencePackUnknown(language: 'zh' | 'en'): string {
+  return language === 'en' ? 'unknown' : '待补证';
+}
+
+function evidencePackValue<T extends string | number | boolean>(
+  value: T | null | undefined,
+  language: 'zh' | 'en',
+): T | string {
+  if (value === null || value === undefined || value === '') return evidencePackUnknown(language);
+  return value;
+}
+
+function isQuoteExportable(quote: StockQuote | null): quote is StockQuote {
+  if (!quote) return false;
+  const freshness = normalizeQuoteBoundaryToken(quote.sourceConfidence?.freshness || quote.freshness);
+  return !(
+    quote.sourceConfidence?.isUnavailable
+    || quote.sourceConfidence?.isSynthetic
+    || quote.isSynthetic
+    || freshness === 'unavailable'
+    || freshness === 'synthetic'
+  );
+}
+
+function compactEvidencePackSummary(facts: StockResearchFact[], language: 'zh' | 'en') {
+  const rows = facts.map((fact) => ({
+    label: fact.label,
+    value: safeConsumerText(fact.value, language, evidencePackUnknown(language)),
+  }));
+  return rows.length ? rows : [
+    {
+      label: language === 'en' ? 'Research state' : '研究状态',
+      value: evidencePackUnknown(language),
+    },
+  ];
+}
+
+function buildSingleStockEvidencePackContent({
+  data,
+  quote,
+  researchPacket,
+  facts,
+  stackRows,
+  counts,
+  language,
+}: {
+  data: StockStructureDecisionResponse;
+  quote: StockQuote;
+  researchPacket: SymbolResearchPacket | null;
+  facts: StockResearchFact[];
+  stackRows: EvidenceStackRow[];
+  counts: Record<EvidenceStackBucket, number>;
+  language: 'zh' | 'en';
+}): string {
+  const sourceConfidence = quote.sourceConfidence;
+  const asOf = sourceConfidence?.asOf || quote.marketTimestamp || quote.observedAt || quote.updateTime || researchPacket?.quote.asOf;
+  const freshness = sourceConfidence?.freshness || quote.freshness;
+  const warnings = compactUnique([
+    ...buildEvidenceGapLabels(researchPacket ?? {
+      symbol: data.ticker,
+      market: '',
+      identity: {},
+      quote: { state: 'unknown' },
+      history: { state: 'unknown' },
+      structure: { state: 'unknown' },
+      fundamentals: { state: 'unknown', fieldsAvailable: [] },
+      events: { state: 'unknown', latest: [] },
+      peer: { state: 'unknown' },
+      missingData: [],
+      researchStatus: 'unknown',
+      nextDataAction: '',
+      observationOnly: true,
+      decisionGrade: false,
+      noAdviceDisclosure: '',
+    }, language),
+    ...(data.confidenceState?.reasons ? safeConsumerList(data.confidenceState.reasons, language) : []),
+    ...(data.researchNotes.needsMoreEvidence ? safeConsumerList(data.researchNotes.needsMoreEvidence, language).slice(0, 3) : []),
+  ]);
+  const stateLabels = stackRows.map((row) => ({
+    key: row.key,
+    label: row.label,
+    state: row.value,
+  }));
+  const pack = {
+    schemaVersion: 'single-stock-evidence-pack.v1',
+    generatedAt: new Date().toISOString(),
+    appSurface: 'Single Stock / Structure',
+    symbol: data.ticker,
+    suppliedSymbol: data.ticker,
+    quoteLineage: {
+      asOf: evidencePackValue(asOf, language),
+      sourceLabel: evidencePackValue(safeOptionalConsumerText(sourceConfidence?.sourceLabel, language), language),
+      freshness: evidencePackValue(freshness, language),
+      confidenceWeight: evidencePackValue(sourceConfidence?.confidenceWeight, language),
+      coverage: evidencePackValue(sourceConfidence?.coverage, language),
+      stale: Boolean(sourceConfidence?.isStale || quote.isStale),
+      partial: Boolean(sourceConfidence?.isPartial || quote.isPartial),
+    },
+    dataReadiness: {
+      quoteState: researchPacket ? quoteEvidenceLabel(researchPacket.quote.state, language) : quoteBoundaryStateLabel(quote, language).label,
+      researchState: evidenceCompletenessLabel(counts, language),
+      evidenceStates: stateLabels,
+      observationOnly: researchPacket?.observationOnly ?? true,
+      decisionGrade: researchPacket?.decisionGrade ?? false,
+    },
+    warnings: warnings.length ? warnings : [evidencePackUnknown(language)],
+    visibleResearchSummary: compactEvidencePackSummary(facts, language),
+  };
+  return JSON.stringify(pack, null, 2);
+}
+
+function buildSingleStockEvidencePackEntry({
+  data,
+  quote,
+  quoteFailed,
+  researchPacket,
+  facts,
+  language,
+}: {
+  data: StockStructureDecisionResponse;
+  quote: StockQuote | null;
+  quoteFailed: boolean;
+  researchPacket: SymbolResearchPacket | null;
+  facts: StockResearchFact[];
+  language: 'zh' | 'en';
+}): SingleStockEvidencePackEntry {
+  const stackRows = researchPacket ? buildEvidenceStackRows(researchPacket, language) : [];
+  const counts = evidenceStackCounts(stackRows);
+  const canExport = isQuoteExportable(quote);
+  const contents = [
+    language === 'en' ? 'Quote lineage' : '报价',
+    language === 'en' ? 'Freshness' : '新鲜度',
+    language === 'en' ? 'Evidence state' : '证据状态',
+    ...(quoteFailed || !quote ? [language === 'en' ? 'Pending quote evidence' : '报价待补证'] : []),
+  ];
+
+  return {
+    packKey: 'single-stock-evidence-pack',
+    label: language === 'en' ? 'Single stock evidence pack' : '个股证据包',
+    state: canExport ? 'available' : 'unavailable',
+    description: canExport
+      ? (language === 'en'
+        ? 'Copy or download a consumer-safe JSON artifact for this stock research view.'
+        : '复制或导出该个股研究视图的消费者安全 JSON 证据包。')
+      : (language === 'en'
+        ? 'Quote evidence is pending, so no evidence artifact is generated.'
+        : '报价证据待补证，不生成证据包。'),
+    contents,
+    exportContent: canExport
+      ? buildSingleStockEvidencePackContent({
+        data,
+        quote,
+        researchPacket,
+        facts,
+        stackRows,
+        counts,
+        language,
+      })
+      : null,
+    fileName: `single-stock-evidence-pack-${data.ticker || 'symbol'}.json`,
+    copyLabel: language === 'en' ? 'Copy stock evidence pack' : '复制个股证据包',
+    downloadLabel: language === 'en' ? 'Export stock evidence pack' : '导出个股证据包',
+    copyTestId: 'single-stock-evidence-pack-copy',
+    downloadTestId: 'single-stock-evidence-pack-download',
+    blockedCopyTestId: 'single-stock-evidence-pack-copy-blocked',
+  };
+}
+
+function downloadSingleStockEvidencePack(filename: string, content: string): void {
+  const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function SingleStockEvidencePackControls({
+  entry,
+  language,
+}: {
+  entry: SingleStockEvidencePackEntry;
+  language: 'zh' | 'en';
+}) {
+  const [status, setStatus] = useState<string | null>(null);
+  const canExport = entry.state === 'available' && Boolean(entry.exportContent);
+  const actionClass = 'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs font-semibold text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] disabled:cursor-not-allowed disabled:opacity-45';
+
+  const copy = async () => {
+    if (!canExport || !entry.exportContent || !navigator.clipboard?.writeText) {
+      setStatus(language === 'en' ? 'Evidence pack pending; nothing copied.' : '证据包待补证，未复制。');
+      return;
+    }
+    await navigator.clipboard.writeText(entry.exportContent);
+    setStatus(language === 'en' ? 'Evidence pack copied.' : '证据包已复制。');
+  };
+
+  const download = () => {
+    if (!canExport || !entry.exportContent) {
+      setStatus(language === 'en' ? 'Evidence pack pending; nothing exported.' : '证据包待补证，未导出。');
+      return;
+    }
+    downloadSingleStockEvidencePack(entry.fileName, entry.exportContent);
+    setStatus(language === 'en' ? 'Evidence pack exported.' : '证据包已导出。');
+  };
+
+  return (
+    <section
+      data-testid="single-stock-evidence-pack-registry"
+      className="rounded-lg border border-white/5 bg-white/[0.02] p-3"
+    >
+      <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h4 className="text-sm font-semibold text-white/88">{entry.label}</h4>
+            <TerminalChip variant={canExport ? 'success' : 'caution'}>
+              {canExport ? (language === 'en' ? 'Available' : '可用') : (language === 'en' ? 'Pending evidence' : '待补证')}
+            </TerminalChip>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-white/58">{entry.description}</p>
+          <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+            {entry.contents.map((item) => (
+              <TerminalChip key={item} variant="neutral">{item}</TerminalChip>
+            ))}
+          </div>
+          {status ? (
+            <p className="mt-2 text-[11px] leading-5 text-white/52">{status}</p>
+          ) : null}
+        </div>
+        <div className="flex min-w-0 flex-wrap gap-2">
+          {canExport ? (
+            <>
+              <button type="button" className={actionClass} onClick={() => void copy()} data-testid={entry.copyTestId}>
+                <Copy className="size-3.5" aria-hidden="true" />
+                {entry.copyLabel}
+              </button>
+              <button type="button" className={actionClass} onClick={download} data-testid={entry.downloadTestId}>
+                <Download className="size-3.5" aria-hidden="true" />
+                {entry.downloadLabel}
+              </button>
+            </>
+          ) : (
+            <button type="button" className={actionClass} disabled data-testid={entry.blockedCopyTestId}>
+              <Copy className="size-3.5" aria-hidden="true" />
+              {language === 'en' ? 'Copy pending evidence' : '复制待补证'}
+            </button>
+          )}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function isSymbolNotFoundValidation(
@@ -1443,7 +1713,10 @@ export default function StockStructureDecisionPage() {
     [data?.peerCorrelationSnapshot, data?.ticker, primarySymbol],
   );
   const hasResearchPacket = data ? hasMinimumResearchPacket(data, scoreRows, locale) : false;
-  const packetFacts = data ? buildPacketFacts(data, scoreRows, locale) : [];
+  const packetFacts = useMemo(
+    () => (data ? buildPacketFacts(data, scoreRows, locale) : []),
+    [data, locale, scoreRows],
+  );
   const missingDataSummary = data ? buildMissingDataSummary(data, locale) : null;
   const safeDisclosure = data
     ? safeConsumerText(
@@ -1495,6 +1768,17 @@ export default function StockStructureDecisionPage() {
   const quoteBoundaryView = useMemo(
     () => buildQuoteBoundaryView(quote, quoteFailed, locale),
     [locale, quote, quoteFailed],
+  );
+  const singleStockEvidencePackEntry = useMemo(
+    () => (data ? buildSingleStockEvidencePackEntry({
+      data,
+      quote,
+      quoteFailed,
+      researchPacket,
+      facts: packetFacts,
+      language: locale,
+    }) : null),
+    [data, locale, packetFacts, quote, quoteFailed, researchPacket],
   );
   const compareWithPeerPath = data && comparablePeerSymbol && !isCompareRequest
     ? localize(buildComparePath([data.ticker || primarySymbol, comparablePeerSymbol]))
@@ -1602,6 +1886,14 @@ export default function StockStructureDecisionPage() {
                     {quoteBoundaryView.detail}
                   </p>
                 </RoughSectionCard>
+              </div>
+            ) : null}
+            {singleStockEvidencePackEntry ? (
+              <div className="p-3 md:p-4">
+                <SingleStockEvidencePackControls
+                  entry={singleStockEvidencePackEntry}
+                  language={locale}
+                />
               </div>
             ) : null}
             {data ? (
