@@ -1,9 +1,11 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
-import { Activity, ExternalLink } from 'lucide-react';
+import { Activity, Clipboard, Download, ExternalLink } from 'lucide-react';
 import {
   buildDataSourceGapRegistryView,
   marketApi,
+  type DataSourceAcquisitionPriorityQueueItem,
+  type DataSourceAcquisitionPriorityQueueItemView,
   type ConsumerEvidenceReadinessItem,
   type DataSourceGapRegistryResponse,
   type MarketDataReadinessCheck,
@@ -112,6 +114,9 @@ const MATRIX_SUMMARY_DEFAULTS = {
 };
 const ADMIN_SECTION_HEADING_CLASSNAME =
   '[&_[data-terminal-primitive=section-header]_p]:text-[12px] [&_[data-terminal-primitive=section-header]_p]:font-medium [&_[data-terminal-primitive=section-header]_h2]:text-lg [&_[data-terminal-primitive=section-header]_h2]:font-semibold md:[&_[data-terminal-primitive=section-header]_h2]:text-xl';
+const DATA_ACQUISITION_ACTION_PACK_SCHEMA_VERSION = 'data_acquisition_action_pack_v1';
+const DATA_ACQUISITION_ACTION_PACK_SOURCE_SURFACE = '数据源运维 / 数据接入优先队列';
+const ACTION_PACK_UNKNOWN = 'unknown/待补证';
 
 function safeFiniteNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -1989,6 +1994,214 @@ const ProviderOperationsMatrixPanel: React.FC<{
   );
 };
 
+type DataAcquisitionActionPackField = string | number | boolean;
+
+type DataAcquisitionActionPackItem = {
+  familyKey: string;
+  familyLabel: string;
+  readinessState: string;
+  statusState: string;
+  priority: string;
+  priorityReason: string;
+  primaryBlockerType: string;
+  affectedSurfaceCount: DataAcquisitionActionPackField;
+  blockedOrDegradedCapabilityCount: DataAcquisitionActionPackField;
+  externalEntitlementRequired: DataAcquisitionActionPackField;
+  protectedDomainReviewRequired: DataAcquisitionActionPackField;
+  nextConcreteStep: string;
+  requiredEvidence: string[];
+  consumerSafeWarning: string;
+};
+
+type DataAcquisitionActionPackGroup = {
+  groupKey: string;
+  groupLabel: string;
+  itemCount: number;
+  items: DataAcquisitionActionPackItem[];
+};
+
+type DataAcquisitionActionPack = {
+  schemaVersion: string;
+  generatedAt: string;
+  sourceSurface: string;
+  totalQueueItemCount: number;
+  groupedByPriority: DataAcquisitionActionPackGroup[];
+  groupedByBlockerType: DataAcquisitionActionPackGroup[];
+  items: DataAcquisitionActionPackItem[];
+};
+
+function actionPackText(value?: string | null): string {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  return text || ACTION_PACK_UNKNOWN;
+}
+
+function actionPackList(values?: string[] | null): string[] {
+  const list = Array.isArray(values)
+    ? values.flatMap((value) => {
+        const text = actionPackText(value);
+        return text === ACTION_PACK_UNKNOWN ? [] : [text];
+      })
+    : [];
+  return list.length ? list : [ACTION_PACK_UNKNOWN];
+}
+
+function actionPackCount(value: number | undefined): DataAcquisitionActionPackField {
+  return Number.isFinite(value) && value !== undefined ? Math.max(0, Math.floor(value)) : ACTION_PACK_UNKNOWN;
+}
+
+function actionPackFlag(value: boolean | undefined): DataAcquisitionActionPackField {
+  return typeof value === 'boolean' ? value : ACTION_PACK_UNKNOWN;
+}
+
+function actionPackGroupKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/gi, '_') || 'unknown';
+}
+
+function groupActionPackItems(
+  items: DataAcquisitionActionPackItem[],
+  readGroupLabel: (item: DataAcquisitionActionPackItem) => string,
+): DataAcquisitionActionPackGroup[] {
+  const groupMap = new Map<string, DataAcquisitionActionPackGroup>();
+  items.forEach((item) => {
+    const groupLabel = actionPackText(readGroupLabel(item));
+    const groupKey = actionPackGroupKey(groupLabel);
+    const existing = groupMap.get(groupKey);
+    if (existing) {
+      existing.items.push(item);
+      existing.itemCount = existing.items.length;
+      return;
+    }
+    groupMap.set(groupKey, {
+      groupKey,
+      groupLabel,
+      itemCount: 1,
+      items: [item],
+    });
+  });
+  return Array.from(groupMap.values());
+}
+
+function buildDataAcquisitionActionPack(
+  queue: DataSourceAcquisitionPriorityQueueItemView[],
+  rawQueue?: DataSourceAcquisitionPriorityQueueItem[] | null,
+  generatedAt = new Date().toISOString(),
+): DataAcquisitionActionPack {
+  const rawByFamily = new Map(
+    Array.isArray(rawQueue)
+      ? rawQueue.map((item) => [item.familyKey, item] as const)
+      : [],
+  );
+  const items = queue.map((item) => {
+    const rawItem = rawByFamily.get(item.familyKey);
+    return {
+      familyKey: actionPackText(item.familyKey),
+      familyLabel: actionPackText(item.familyLabel),
+      readinessState: actionPackText(item.readinessState.label),
+      statusState: actionPackText(item.readinessState.label),
+      priority: actionPackText(item.priority.label),
+      priorityReason: actionPackText(item.priorityReason),
+      primaryBlockerType: actionPackText(item.primaryBlockerType.label),
+      affectedSurfaceCount: actionPackCount(rawItem?.affectedSurfaceCount),
+      blockedOrDegradedCapabilityCount: actionPackCount(rawItem?.blockedOrDegradedCapabilityCount),
+      externalEntitlementRequired: actionPackFlag(rawItem?.externalEntitlementRequired),
+      protectedDomainReviewRequired: actionPackFlag(rawItem?.protectedDomainReviewRequired),
+      nextConcreteStep: actionPackText(item.nextConcreteStep),
+      requiredEvidence: actionPackList(item.requiredEvidence),
+      consumerSafeWarning: actionPackText(item.consumerSafeWarning),
+    };
+  });
+  return {
+    schemaVersion: DATA_ACQUISITION_ACTION_PACK_SCHEMA_VERSION,
+    generatedAt,
+    sourceSurface: DATA_ACQUISITION_ACTION_PACK_SOURCE_SURFACE,
+    totalQueueItemCount: items.length,
+    groupedByPriority: groupActionPackItems(items, (item) => item.priority),
+    groupedByBlockerType: groupActionPackItems(items, (item) => item.primaryBlockerType),
+    items,
+  };
+}
+
+function stringifyDataAcquisitionActionPack(
+  queue: DataSourceAcquisitionPriorityQueueItemView[],
+  rawQueue?: DataSourceAcquisitionPriorityQueueItem[] | null,
+): string {
+  return `${JSON.stringify(buildDataAcquisitionActionPack(queue, rawQueue), null, 2)}\n`;
+}
+
+const DataSourceAcquisitionActionPackControls: React.FC<{
+  queue: DataSourceAcquisitionPriorityQueueItemView[];
+  rawQueue?: DataSourceAcquisitionPriorityQueueItem[] | null;
+  unavailableReason?: string | null;
+}> = ({ queue, rawQueue, unavailableReason }) => {
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const disabled = Boolean(unavailableReason) || queue.length === 0;
+  const unavailableCopy = unavailableReason || '优先队列待补证，导出接入行动包不可用。';
+
+  const buildJson = () => stringifyDataAcquisitionActionPack(queue, rawQueue);
+
+  const handleCopy = async () => {
+    if (disabled) return;
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('clipboard unavailable');
+      }
+      await navigator.clipboard.writeText(buildJson());
+      setCopyState('copied');
+    } catch {
+      setCopyState('failed');
+    }
+  };
+
+  const handleDownload = () => {
+    if (disabled) return;
+    const blob = new Blob([buildJson()], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'data-acquisition-action-pack.json';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2" data-testid="data-acquisition-action-pack-controls">
+      <p className="min-w-0 text-[11px] leading-5 text-white/48">
+        {disabled
+          ? unavailableCopy
+          : '导出接入行动包：工程 / 数据接入规划 JSON，包含授权、证据、契约与保护域复核队列。'}
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        <TerminalButton
+          variant="compact"
+          disabled={disabled}
+          onClick={handleCopy}
+          aria-label="复制导出接入行动包 JSON"
+        >
+          <Clipboard className="h-3.5 w-3.5" aria-hidden="true" />
+          复制 JSON
+        </TerminalButton>
+        <TerminalButton
+          variant="compact"
+          disabled={disabled}
+          onClick={handleDownload}
+          aria-label="下载导出接入行动包 JSON"
+        >
+          <Download className="h-3.5 w-3.5" aria-hidden="true" />
+          下载 JSON
+        </TerminalButton>
+      </div>
+      {copyState === 'copied' ? (
+        <p className="basis-full text-[11px] text-emerald-200/80">接入行动包 JSON 已复制。</p>
+      ) : null}
+      {copyState === 'failed' ? (
+        <p className="basis-full text-[11px] text-amber-200/80">复制不可用，请使用下载 JSON。</p>
+      ) : null}
+    </div>
+  );
+};
+
 const DataSourceGapRegistryPanel: React.FC<{
   registry: DataSourceGapRegistryResponse | null;
   isLoading: boolean;
@@ -1997,6 +2210,14 @@ const DataSourceGapRegistryPanel: React.FC<{
   const view = buildDataSourceGapRegistryView(registry);
   const families = view.families;
   const acquisitionQueue = view.acquisitionPriorityQueue;
+  const rawAcquisitionQueue = registry?.acquisitionPriorityQueue;
+  const actionPackUnavailableReason = error
+    ? '登记表接口暂不可用，导出接入行动包不可用；不使用本地替代队列。'
+    : !isLoading && !families.length
+      ? '登记表没有返回数据家族，导出接入行动包不可用；缺字段保持待补证。'
+      : acquisitionQueue.length
+        ? null
+        : '优先队列待补证，导出接入行动包不可用；前端不推断接入顺序。';
 
   return (
     <TerminalPanel as="section" className="col-span-12" data-testid="data-source-gap-registry-panel">
@@ -2030,6 +2251,30 @@ const DataSourceGapRegistryPanel: React.FC<{
         <div className="mt-4">
           <TerminalEmptyState title="专业数据地图待补证">登记表没有返回数据家族，不在前端推断 readiness。</TerminalEmptyState>
         </div>
+      ) : null}
+
+      {!isLoading && (error || !families.length) ? (
+        <TerminalNestedBlock
+          className="mt-4 bg-black/10 px-3 py-3"
+          data-testid="data-source-acquisition-priority-queue"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white/86">数据接入优先队列</p>
+              <p className="mt-1 text-[11px] leading-5 text-white/48">
+                工程补数排序，只用于定位接入、授权、证据和保护域复核，不生成交易指令。
+              </p>
+            </div>
+            <TerminalChip variant="neutral">0 个队列项</TerminalChip>
+          </div>
+          <div className="mt-3">
+            <DataSourceAcquisitionActionPackControls
+              queue={acquisitionQueue}
+              rawQueue={rawAcquisitionQueue}
+              unavailableReason={actionPackUnavailableReason}
+            />
+          </div>
+        </TerminalNestedBlock>
       ) : null}
 
       {!error && families.length ? (
@@ -2077,6 +2322,13 @@ const DataSourceGapRegistryPanel: React.FC<{
                 </p>
               </div>
               <TerminalChip variant="neutral">{formatNumber(acquisitionQueue.length, 0)} 个队列项</TerminalChip>
+            </div>
+            <div className="mt-3">
+              <DataSourceAcquisitionActionPackControls
+                queue={acquisitionQueue}
+                rawQueue={rawAcquisitionQueue}
+                unavailableReason={actionPackUnavailableReason}
+              />
             </div>
             {acquisitionQueue.length ? (
               <div className="mt-3 grid gap-2">

@@ -1315,7 +1315,76 @@ describe('MarketProviderOperationsPage', () => {
     expect(panelText).not.toMatch(/buy|sell|hold|best|recommended|recommendation|optimal|winner|target price|stop loss|position sizing|买入|卖出|持有|目标价|止损|仓位|推荐|最佳|最优|赢家/i);
   });
 
+  it('copies a deterministic engineering action pack from the acquisition priority queue', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    getOperations.mockResolvedValue(populatedPayload);
+
+    render(<MarketProviderOperationsPage />);
+
+    const controls = await screen.findByTestId('data-acquisition-action-pack-controls');
+    expect(controls).toHaveTextContent('导出接入行动包');
+    expect(screen.getByTestId('data-source-acquisition-priority-options_chains')).toHaveTextContent('授权阻断');
+    expect(screen.getByTestId('data-source-acquisition-priority-stock_quote_spine')).toHaveTextContent('数据接入');
+
+    fireEvent.click(within(controls).getByRole('button', { name: '复制导出接入行动包 JSON' }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const actionPack = JSON.parse(writeText.mock.calls[0][0]);
+    expect(actionPack).toMatchObject({
+      schemaVersion: 'data_acquisition_action_pack_v1',
+      sourceSurface: '数据源运维 / 数据接入优先队列',
+      totalQueueItemCount: 4,
+    });
+    expect(actionPack.generatedAt).toEqual(expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/));
+    expect(actionPack.groupedByPriority).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        groupLabel: '关键',
+        itemCount: 1,
+      }),
+      expect.objectContaining({
+        groupLabel: '高',
+        itemCount: 1,
+      }),
+    ]));
+    expect(actionPack.groupedByBlockerType).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        groupLabel: '授权阻断',
+        itemCount: 1,
+      }),
+      expect.objectContaining({
+        groupLabel: '数据接入',
+        itemCount: 1,
+      }),
+    ]));
+    expect(actionPack.items[0]).toMatchObject({
+      familyKey: 'options_chains',
+      familyLabel: '期权链',
+      readinessState: '未授权',
+      statusState: '未授权',
+      priority: '关键',
+      primaryBlockerType: '授权阻断',
+      affectedSurfaceCount: 2,
+      blockedOrDegradedCapabilityCount: 1,
+      externalEntitlementRequired: true,
+      protectedDomainReviewRequired: true,
+      nextConcreteStep: '收集授权与字段覆盖证据，不接入数据源运行链路。',
+      requiredEvidence: ['授权证明', '字段覆盖清单'],
+      consumerSafeWarning: '工程补数队列；当前不是决策级证据，不生成交易指令。',
+    });
+    expect(writeText.mock.calls[0][0]).not.toMatch(/requestId|traceId|rawProviderPayload|cacheKey|credential|env|debug|raw dump|api[_-]?key|SECRET_DATA_KEY/i);
+    expect(writeText.mock.calls[0][0]).not.toMatch(/buy|sell|hold|best|recommended|recommendation|optimal|winner|target price|stop loss|position sizing|买入|卖出|持有|目标价|止损|仓位|推荐|最佳|最优|赢家/i);
+  });
+
   it('keeps missing registry fields unknown instead of crashing or overclaiming readiness', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
     getOperations.mockResolvedValue(populatedPayload);
     getDataSourceGapRegistry.mockResolvedValue({
       ...dataSourceGapRegistryPayload,
@@ -1382,6 +1451,25 @@ describe('MarketProviderOperationsPage', () => {
     expect(row).not.toHaveTextContent('已就绪');
     expect(row).not.toHaveTextContent('权限 可用');
     expect(row).not.toHaveTextContent('时效 新鲜');
+
+    fireEvent.click(screen.getByRole('button', { name: '复制导出接入行动包 JSON' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const actionPack = JSON.parse(writeText.mock.calls[0][0]);
+    expect(actionPack.items).toMatchObject([
+      {
+        familyKey: 'unknown_new_family',
+        familyLabel: 'Unknown New Family',
+        readinessState: '待补证',
+        affectedSurfaceCount: 'unknown/待补证',
+        blockedOrDegradedCapabilityCount: 'unknown/待补证',
+        externalEntitlementRequired: 'unknown/待补证',
+        protectedDomainReviewRequired: 'unknown/待补证',
+        nextConcreteStep: '下一步待补证。',
+        requiredEvidence: ['证据待补证'],
+        consumerSafeWarning: '工程补数队列；当前不是决策级证据。',
+      },
+    ]);
+    expect(writeText.mock.calls[0][0]).not.toMatch(/已就绪|已解锁|权限 可用|新鲜|requestId|traceId|rawProviderPayload|cacheKey|token|secret|debug/i);
   });
 
   it('renders compact blocked copy when the data source gap registry API is unavailable', async () => {
@@ -1393,6 +1481,9 @@ describe('MarketProviderOperationsPage', () => {
     const panel = await screen.findByTestId('data-source-gap-registry-panel');
     expect(panel).toHaveTextContent('专业数据地图待补证');
     expect(panel).toHaveTextContent('登记表接口暂不可用');
+    expect(screen.getByTestId('data-acquisition-action-pack-controls')).toHaveTextContent('导出接入行动包不可用');
+    expect(screen.getByRole('button', { name: '复制导出接入行动包 JSON' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '下载导出接入行动包 JSON' })).toBeDisabled();
     expect(panel).not.toHaveTextContent('股票报价骨架');
     expect(panel).not.toHaveTextContent('期权链');
   });
