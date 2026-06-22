@@ -1,5 +1,5 @@
 import type React from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import StockStructureDecisionPage from '../StockStructureDecisionPage';
@@ -203,6 +203,11 @@ const completeResearchPacket = () => ({
 describe('StockStructureDecisionPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
     languageState.value = 'zh';
     verifyTickerExistsMock.mockResolvedValue({
       stockCode: 'ORCL',
@@ -299,6 +304,162 @@ describe('StockStructureDecisionPage', () => {
     expect(quotePanel).toHaveTextContent('更新');
     expect(page.textContent || '').not.toMatch(/alpaca|provider_runtime|source_confidence|requestId|traceId|cache|debug/i);
     expect(page.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+  });
+
+  it('copies a single stock evidence pack JSON with quote lineage, readiness, warnings, and visible research state', async () => {
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const registry = await within(page).findByTestId('single-stock-evidence-pack-registry');
+
+    expect(registry).toHaveTextContent('个股证据包');
+    expect(registry).toHaveTextContent('复制个股证据包');
+    expect(registry).toHaveTextContent('导出个股证据包');
+    expect(registry).toHaveTextContent('报价');
+    expect(registry).toHaveTextContent('新鲜度');
+    expect(registry).toHaveTextContent('证据状态');
+
+    fireEvent.click(within(registry).getByTestId('single-stock-evidence-pack-copy'));
+
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalled());
+    const copied = String((navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] || '');
+    const pack = JSON.parse(copied);
+
+    expect(pack.schemaVersion).toBe('single-stock-evidence-pack.v1');
+    expect(pack.generatedAt).toEqual(expect.any(String));
+    expect(pack.appSurface).toBe('Single Stock / Structure');
+    expect(pack.symbol).toBe('AAPL');
+    expect(pack.quoteLineage).toMatchObject({
+      asOf: '2026-05-28T09:30:00Z',
+      sourceLabel: 'Alpaca',
+      freshness: 'live',
+      confidenceWeight: 1,
+      coverage: 1,
+    });
+    expect(pack.dataReadiness).toMatchObject({
+      quoteState: '报价可用',
+      researchState: '证据部分可用',
+      observationOnly: true,
+      decisionGrade: false,
+    });
+    expect(pack.warnings).toEqual(expect.arrayContaining(['基本面待补', '新闻线索待补', '市场线索待补']));
+    expect(pack.visibleResearchSummary).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: '标的', value: 'AAPL' }),
+      expect.objectContaining({ label: '技术状态', value: '突破观察' }),
+    ]));
+    expect(copied).not.toMatch(/recommend|winner|best|optimal|buy|sell|hold|target price|stop loss|position sizing/i);
+    expect(copied).not.toMatch(/requestId|traceId|debug|rawPayload|providerPayload|credential|sourceType|provider_runtime/i);
+    expect(copied).not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位|最优|赢家/);
+  });
+
+  it('exports unknown fields as 待补证 instead of inferring quote lineage', async () => {
+    getQuoteMock.mockResolvedValue({
+      ...baseQuote(),
+      updateTime: null,
+      marketTimestamp: null,
+      observedAt: null,
+      freshness: null,
+      source: null,
+      sourceType: null,
+      sourceConfidence: {
+        source: null,
+        sourceLabel: null,
+        asOf: null,
+        freshness: null,
+        isFallback: false,
+        isStale: false,
+        isPartial: false,
+        isSynthetic: false,
+        isUnavailable: false,
+        confidenceWeight: null,
+        coverage: null,
+        degradationReason: null,
+        capReason: null,
+      },
+    });
+    getResearchPacketMock.mockResolvedValue({
+      ...partialResearchPacket(),
+      quote: {
+        state: 'unknown',
+        price: null,
+        changePercent: null,
+        asOf: null,
+      },
+    });
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const registry = await screen.findByTestId('single-stock-evidence-pack-registry');
+    fireEvent.click(within(registry).getByTestId('single-stock-evidence-pack-copy'));
+
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalled());
+    const copied = String((navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] || '');
+    const pack = JSON.parse(copied);
+
+    expect(pack.quoteLineage).toMatchObject({
+      asOf: '待补证',
+      sourceLabel: '待补证',
+      freshness: '待补证',
+      confidenceWeight: '待补证',
+      coverage: '待补证',
+    });
+    expect(pack.dataReadiness.quoteState).toBe('报价待补');
+  });
+
+  it('does not export fake evidence when quote evidence is unavailable', async () => {
+    getQuoteMock.mockRejectedValueOnce(new Error('quote unavailable'));
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const registry = await within(page).findByTestId('single-stock-evidence-pack-registry');
+
+    expect(registry).toHaveTextContent('待补证');
+    expect(within(registry).getByTestId('single-stock-evidence-pack-copy-blocked')).toBeDisabled();
+    expect(within(registry).queryByTestId('single-stock-evidence-pack-copy')).not.toBeInTheDocument();
+    expect(within(registry).queryByTestId('single-stock-evidence-pack-download')).not.toBeInTheDocument();
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
+  });
+
+  it('does not show evidence pack export controls when the stock result is unsupported', async () => {
+    verifyTickerExistsMock.mockResolvedValueOnce({
+      stockCode: 'BAD',
+      normalizedSymbol: 'BAD',
+      market: 'unknown',
+      status: 'unsupported_market',
+      valid: false,
+      exists: false,
+      stockName: null,
+      message: 'unsupported',
+    });
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/BAD/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+
+    expect(await within(page).findByTestId('stock-structure-symbol-not-found-state')).toBeInTheDocument();
+    expect(within(page).queryByTestId('single-stock-evidence-pack-registry')).not.toBeInTheDocument();
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
   });
 
   it('renders sample, stale, and missing lineage states as observation only', async () => {
