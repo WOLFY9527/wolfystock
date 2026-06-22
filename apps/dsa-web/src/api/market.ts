@@ -506,6 +506,109 @@ export type MarketDataReadinessResponse = {
   officialRiskSourceReadiness?: OfficialRiskSourceReadiness;
 };
 
+export type DataSourceGapRegistryStatus =
+  | 'ready'
+  | 'partial'
+  | 'missing'
+  | 'blocked'
+  | 'unauthorized'
+  | 'stale'
+  | 'observation-only'
+  | 'planned'
+  | string;
+
+export type DataSourceGapRegistryAuthorityState =
+  | 'allowed'
+  | 'blocked'
+  | 'unauthorized'
+  | 'observation-only'
+  | 'planned'
+  | string;
+
+export type DataSourceGapRegistryFreshnessState =
+  | 'fresh'
+  | 'live'
+  | 'delayed'
+  | 'cached'
+  | 'stale'
+  | 'partial'
+  | 'fallback'
+  | 'synthetic'
+  | 'unavailable'
+  | 'unknown'
+  | string;
+
+export type DataSourceGapRegistryFamily = {
+  familyKey: string;
+  consumerLabel: string;
+  status: DataSourceGapRegistryStatus;
+  authorityState: DataSourceGapRegistryAuthorityState;
+  freshnessState: DataSourceGapRegistryFreshnessState;
+  entitlementOrLicensingBlocker?: string | null;
+  integrationBlocker?: string | null;
+  sourceEvidenceState: string;
+  nextIntegrationStep: string;
+  providerHydrationAllowed?: boolean;
+  scoreTradingAuthorityAllowed?: boolean;
+  consumerSafeDescription: string;
+};
+
+export type DataSourceGapRegistrySummary = {
+  totalFamilies: number;
+  readyCount: number;
+  partialCount: number;
+  missingCount: number;
+  blockedCount: number;
+  unauthorizedCount: number;
+  staleCount: number;
+  observationOnlyCount: number;
+  plannedCount: number;
+  providerHydrationAllowedCount: number;
+  scoreTradingAuthorityAllowedCount: number;
+};
+
+export type DataSourceGapRegistryResponse = {
+  contractVersion: string;
+  diagnosticOnly: boolean;
+  providerRuntimeCalled: boolean;
+  networkCallsEnabled: boolean;
+  scoreAuthorityAllowed: boolean;
+  summary: DataSourceGapRegistrySummary;
+  families: DataSourceGapRegistryFamily[];
+  metadata?: Record<string, unknown>;
+};
+
+export type DataSourceGapRegistryStatusView = {
+  label: string;
+  variant: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
+};
+
+export type DataSourceGapRegistryFamilyView = {
+  familyKey: string;
+  familyLabel: string;
+  status: DataSourceGapRegistryStatusView;
+  authorityState: DataSourceGapRegistryStatusView;
+  freshnessState: DataSourceGapRegistryStatusView;
+  entitlementOrLicensingBlocker: string;
+  integrationBlocker: string;
+  sourceEvidenceState: string;
+  nextIntegrationStep: string;
+  dataHydrationAllowed: string;
+  dataHydrationVariant: DataSourceGapRegistryStatusView['variant'];
+  scoreTradingAuthorityAllowed: string;
+  scoreTradingAuthorityVariant: DataSourceGapRegistryStatusView['variant'];
+  consumerSafeDescription: string;
+};
+
+export type DataSourceGapRegistryView = {
+  diagnosticOnly: boolean;
+  runtimeCalled: boolean;
+  networkCallsEnabled: boolean;
+  scoreAuthorityAllowed: boolean;
+  summary: DataSourceGapRegistrySummary;
+  families: DataSourceGapRegistryFamilyView[];
+};
+
 function normalizeReadinessSymbols(symbols?: string[] | string | null): string | undefined {
   if (Array.isArray(symbols)) {
     const sanitized = symbols.flatMap((symbol) => {
@@ -584,6 +687,250 @@ function normalizeMarketDataReadinessPayload(rawPayload: Record<string, unknown>
         nextDataAction: payload.officialRiskSourceReadiness.nextDataAction || null,
       },
     } : {}),
+  };
+}
+
+const DEFAULT_DATA_SOURCE_GAP_REGISTRY_SUMMARY: DataSourceGapRegistrySummary = {
+  totalFamilies: 0,
+  readyCount: 0,
+  partialCount: 0,
+  missingCount: 0,
+  blockedCount: 0,
+  unauthorizedCount: 0,
+  staleCount: 0,
+  observationOnlyCount: 0,
+  plannedCount: 0,
+  providerHydrationAllowedCount: 0,
+  scoreTradingAuthorityAllowedCount: 0,
+};
+
+const DATA_SOURCE_GAP_FAMILY_LABELS: Record<string, string> = {
+  stock_quote_spine: '股票报价骨架',
+  fundamentals: '基本面与财报',
+  etf_index_coverage: 'ETF / 指数覆盖',
+  macro_rates: '宏观与利率',
+  fed_liquidity: 'Fed 流动性',
+  credit_stress: '信用压力',
+  vix_volatility: 'VIX / 波动率',
+  breadth_flows_positioning: '广度 / 资金流 / 持仓',
+  options_chains: '期权链',
+  options_strategy_analytics: '期权策略分析',
+  gamma_dealer_positioning: 'Gamma / Dealer Positioning',
+  backtest_dataset_lineage: '回测数据集血缘',
+  scenario_baselines: '情景基线',
+  portfolio_valuation_lineage: '组合估值血缘',
+};
+
+const DATA_SOURCE_GAP_DESCRIPTIONS: Record<string, string> = {
+  stock_quote_spine: '报价与日线链路已有基础，但尚未形成统一、可追溯的专业数据骨架。',
+  fundamentals: '基本面数据已分散接入，期间、重述与来源血缘仍需补证。',
+  etf_index_coverage: 'ETF 和指数报价部分可用，成分、权重与展示权仍未完整证明。',
+  macro_rates: '宏观与利率目前仅作为诊断契约展示，尚未形成完整产品数据包。',
+  fed_liquidity: 'Fed 流动性证据已有契约形态，但还不是稳定产品数据骨架。',
+  credit_stress: '信用压力仍是受限上下文，不作为可计分证据。',
+  vix_volatility: '波动率证据已有部分路径，但专业来源权限仍需补证。',
+  breadth_flows_positioning: '广度已有部分证据，资金流与持仓仍处于评审边界内。',
+  options_chains: '期权链在授权、展示、存储和使用权证明前保持不可用。',
+  options_strategy_analytics: '期权策略分析在授权输入和历史链路证明前保持阻断。',
+  gamma_dealer_positioning: 'Gamma、GEX、vanna、charm 与 dealer positioning 在权利、输入和方法批准前保持阻断。',
+  backtest_dataset_lineage: '回测读回已有研究价值，但专业数据集血缘仍不完整。',
+  scenario_baselines: '情景基线处于计划状态，存储化基线输入尚未接入。',
+  portfolio_valuation_lineage: '组合估值已有部分追踪，价格、FX、基准与因子血缘仍需硬化。',
+};
+
+const DATA_SOURCE_GAP_NEXT_STEPS: Record<string, string> = {
+  stock_quote_spine: '落地报价与日线快照，并附带来源权限与 as-of 血缘。',
+  fundamentals: '按期间和来源归一化基本面、报表与公告血缘。',
+  etf_index_coverage: '接入官方成分、权重快照与基准映射证据。',
+  macro_rates: '持久化官方宏观行，并补齐时效与覆盖元数据。',
+  fed_liquidity: '持久化所需流动性序列，并记录覆盖与滞后状态。',
+  credit_stress: '用存储化信用压力序列替换仅代理上下文。',
+  vix_volatility: '接入官方波动率行，并保持时效门槛 fail-closed。',
+  breadth_flows_positioning: '拆分广度证明、资金流证明和持仓来源评审。',
+  options_chains: '先补齐期权链权益证明包，再考虑提升链路状态。',
+  options_strategy_analytics: '先证明授权期权链、历史数据和方法输入。',
+  gamma_dealer_positioning: '先完成权利、输入和方法评审，再暴露 gamma 家族输出。',
+  backtest_dataset_lineage: '持久化数据集 ID、调整基准证据与复现实验清单。',
+  scenario_baselines: '存储市场与组合情景输入的基线快照 ID。',
+  portfolio_valuation_lineage: '把价格、FX、估值、基准和因子血缘一起持久化。',
+};
+
+const DATA_SOURCE_GAP_BLOCKERS: Record<string, { entitlement?: string; integration?: string; sourceEvidence?: string }> = {
+  stock_quote_spine: {
+    integration: '缺少持久化报价 / 日线快照和统一 as-of 血缘。',
+    sourceEvidence: '证据分散',
+  },
+  fundamentals: {
+    integration: '点时覆盖和重述安全归一化尚未完成。',
+    sourceEvidence: '证据分散',
+  },
+  etf_index_coverage: {
+    entitlement: '官方成分与权重展示权尚未证明。',
+    integration: '成分、权重、基准和广度链接尚未统一。',
+    sourceEvidence: '证据分散',
+  },
+  macro_rates: {
+    integration: '官方宏观行尚未作为完整产品数据包展示。',
+    sourceEvidence: '诊断契约',
+  },
+  fed_liquidity: {
+    integration: '周频流动性行尚未形成完整产品数据包。',
+    sourceEvidence: '诊断契约',
+  },
+  credit_stress: {
+    integration: '持久化信用压力序列尚未接入。',
+    sourceEvidence: '诊断契约',
+  },
+  vix_volatility: {
+    integration: '官方波动率行和权限元数据尚未统一。',
+    sourceEvidence: '证据分散',
+  },
+  breadth_flows_positioning: {
+    entitlement: '资金流与持仓授权尚未证明。',
+    integration: '广度部分可用；资金流与持仓家族仍不完整。',
+    sourceEvidence: '证据分散',
+  },
+  options_chains: {
+    entitlement: '期权链访问、展示、存储和使用权尚未证明。',
+    integration: '未接入授权的实时或延迟期权链存储。',
+    sourceEvidence: '权益待证',
+  },
+  options_strategy_analytics: {
+    entitlement: '授权期权链输入和历史回放权尚未证明。',
+    integration: '策略分析不能先于期权链权限和历史数据毕业。',
+    sourceEvidence: '权益待证',
+  },
+  gamma_dealer_positioning: {
+    entitlement: '期权权利、方法批准和持仓证据尚未证明。',
+    integration: '未接入批准的方法或有权利支撑的输入集。',
+    sourceEvidence: '权益待证',
+  },
+  backtest_dataset_lineage: {
+    integration: '数据集身份、调整基准、交易日历和 PIT 成分仍不完整。',
+    sourceEvidence: '诊断契约',
+  },
+  scenario_baselines: {
+    integration: '持久化基线快照存储尚未接入。',
+    sourceEvidence: '尚未接入',
+  },
+  portfolio_valuation_lineage: {
+    integration: '价格来源、FX 时效、基准和因子血缘仍不完整。',
+    sourceEvidence: '证据分散',
+  },
+};
+
+function normalizeGapToken(value?: string | null): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+function dataSourceGapStatusView(status?: string | null): DataSourceGapRegistryStatusView {
+  const normalized = normalizeGapToken(status);
+  if (normalized === 'ready') return { label: '已就绪', variant: 'success' };
+  if (normalized === 'partial') return { label: '部分可用', variant: 'info' };
+  if (normalized === 'blocked') return { label: '阻断', variant: 'danger' };
+  if (normalized === 'unauthorized') return { label: '未授权', variant: 'danger' };
+  if (normalized === 'observation-only') return { label: '仅观察', variant: 'neutral' };
+  if (normalized === 'planned') return { label: '计划中', variant: 'neutral' };
+  if (normalized === 'stale') return { label: '待更新', variant: 'caution' };
+  if (normalized === 'missing') return { label: '待补证', variant: 'caution' };
+  return { label: '待补证', variant: 'caution' };
+}
+
+function dataSourceGapAuthorityView(state?: string | null): DataSourceGapRegistryStatusView {
+  const normalized = normalizeGapToken(state);
+  if (normalized === 'allowed') return { label: '可用', variant: 'success' };
+  if (normalized === 'blocked') return { label: '阻断', variant: 'danger' };
+  if (normalized === 'unauthorized') return { label: '未授权', variant: 'danger' };
+  if (normalized === 'observation-only') return { label: '仅观察', variant: 'neutral' };
+  if (normalized === 'planned') return { label: '计划中', variant: 'neutral' };
+  return { label: '待补证', variant: 'caution' };
+}
+
+function dataSourceGapFreshnessView(state?: string | null): DataSourceGapRegistryStatusView {
+  const normalized = normalizeGapToken(state);
+  if (normalized === 'fresh' || normalized === 'live') return { label: '新鲜', variant: 'success' };
+  if (normalized === 'delayed') return { label: '延迟', variant: 'info' };
+  if (normalized === 'cached') return { label: '缓存', variant: 'info' };
+  if (normalized === 'partial') return { label: '部分', variant: 'info' };
+  if (normalized === 'stale') return { label: '待更新', variant: 'caution' };
+  if (normalized === 'fallback' || normalized === 'synthetic') return { label: '待补证', variant: 'caution' };
+  if (normalized === 'unavailable') return { label: '不可用', variant: 'danger' };
+  return { label: '待补证', variant: 'caution' };
+}
+
+function dataSourceGapBooleanView(value: boolean | undefined): Pick<DataSourceGapRegistryFamilyView, 'dataHydrationAllowed' | 'dataHydrationVariant'> {
+  if (value === true) return { dataHydrationAllowed: '允许', dataHydrationVariant: 'success' };
+  if (value === false) return { dataHydrationAllowed: '不允许', dataHydrationVariant: 'caution' };
+  return { dataHydrationAllowed: '待补证', dataHydrationVariant: 'neutral' };
+}
+
+function dataSourceGapScoreAuthorityView(value: boolean | undefined): Pick<DataSourceGapRegistryFamilyView, 'scoreTradingAuthorityAllowed' | 'scoreTradingAuthorityVariant'> {
+  if (value === true) return { scoreTradingAuthorityAllowed: '允许', scoreTradingAuthorityVariant: 'success' };
+  if (value === false) return { scoreTradingAuthorityAllowed: '不允许', scoreTradingAuthorityVariant: 'caution' };
+  return { scoreTradingAuthorityAllowed: '待补证', scoreTradingAuthorityVariant: 'neutral' };
+}
+
+function normalizeDataSourceGapRegistryPayload(rawPayload: Record<string, unknown>): DataSourceGapRegistryResponse {
+  const payload = toCamelCase<DataSourceGapRegistryResponse>(rawPayload);
+  const rawSummary = payload.summary || DEFAULT_DATA_SOURCE_GAP_REGISTRY_SUMMARY;
+  return {
+    contractVersion: payload.contractVersion || 'data_source_gap_registry_unknown',
+    diagnosticOnly: payload.diagnosticOnly !== false,
+    providerRuntimeCalled: payload.providerRuntimeCalled === true,
+    networkCallsEnabled: payload.networkCallsEnabled === true,
+    scoreAuthorityAllowed: payload.scoreAuthorityAllowed === true,
+    summary: { ...DEFAULT_DATA_SOURCE_GAP_REGISTRY_SUMMARY, ...rawSummary },
+    families: Array.isArray(payload.families) ? payload.families.map((family) => ({
+      familyKey: family.familyKey || 'unknown_family',
+      consumerLabel: family.consumerLabel || '数据家族',
+      status: family.status || 'missing',
+      authorityState: family.authorityState || 'blocked',
+      freshnessState: family.freshnessState || 'unknown',
+      entitlementOrLicensingBlocker: family.entitlementOrLicensingBlocker || null,
+      integrationBlocker: family.integrationBlocker || null,
+      sourceEvidenceState: family.sourceEvidenceState || 'unknown',
+      nextIntegrationStep: family.nextIntegrationStep || '',
+      providerHydrationAllowed: typeof family.providerHydrationAllowed === 'boolean' ? family.providerHydrationAllowed : undefined,
+      scoreTradingAuthorityAllowed: typeof family.scoreTradingAuthorityAllowed === 'boolean' ? family.scoreTradingAuthorityAllowed : undefined,
+      consumerSafeDescription: family.consumerSafeDescription || '',
+    })) : [],
+    metadata: payload.metadata || {},
+  };
+}
+
+export function buildDataSourceGapRegistryView(
+  registry?: DataSourceGapRegistryResponse | null,
+): DataSourceGapRegistryView {
+  const summary = registry?.summary || DEFAULT_DATA_SOURCE_GAP_REGISTRY_SUMMARY;
+  const families = Array.isArray(registry?.families) ? registry.families : [];
+  return {
+    diagnosticOnly: registry?.diagnosticOnly !== false,
+    runtimeCalled: registry?.providerRuntimeCalled === true,
+    networkCallsEnabled: registry?.networkCallsEnabled === true,
+    scoreAuthorityAllowed: registry?.scoreAuthorityAllowed === true,
+    summary,
+    families: families.map((family) => {
+      const familyKey = family.familyKey || 'unknown_family';
+      const blockerCopy = DATA_SOURCE_GAP_BLOCKERS[familyKey] || {};
+      const hydration = dataSourceGapBooleanView(family.providerHydrationAllowed);
+      const scoreAuthority = dataSourceGapScoreAuthorityView(family.scoreTradingAuthorityAllowed);
+      return {
+        familyKey,
+        familyLabel: DATA_SOURCE_GAP_FAMILY_LABELS[familyKey] || family.consumerLabel || '数据家族',
+        status: dataSourceGapStatusView(family.status),
+        authorityState: dataSourceGapAuthorityView(family.authorityState),
+        freshnessState: dataSourceGapFreshnessView(family.freshnessState),
+        entitlementOrLicensingBlocker: blockerCopy.entitlement || (family.entitlementOrLicensingBlocker ? '权益或授权阻断待复核。' : '暂无'),
+        integrationBlocker: blockerCopy.integration || (family.integrationBlocker ? '集成阻断待复核。' : '暂无'),
+        sourceEvidenceState: blockerCopy.sourceEvidence || '待补证',
+        nextIntegrationStep: DATA_SOURCE_GAP_NEXT_STEPS[familyKey] || (family.nextIntegrationStep ? '按既有集成路径补证后再展示。' : '待补证'),
+        dataHydrationAllowed: hydration.dataHydrationAllowed,
+        dataHydrationVariant: hydration.dataHydrationVariant,
+        scoreTradingAuthorityAllowed: scoreAuthority.scoreTradingAuthorityAllowed,
+        scoreTradingAuthorityVariant: scoreAuthority.scoreTradingAuthorityVariant,
+        consumerSafeDescription: DATA_SOURCE_GAP_DESCRIPTIONS[familyKey] || (family.consumerSafeDescription ? '已返回说明，需人工复核后展示。' : '数据说明待补证。'),
+      };
+    }),
   };
 }
 
@@ -834,6 +1181,10 @@ export const marketApi = {
       ...(params ? { params: { symbols: params } } : {}),
     });
     return normalizeMarketDataReadinessPayload(response.data);
+  },
+  getDataSourceGapRegistry: async (): Promise<DataSourceGapRegistryResponse> => {
+    const response = await apiClient.get<Record<string, unknown>>(buildMarketApiPath('data-source-gap-registry'));
+    return normalizeDataSourceGapRegistryPayload(response.data);
   },
 };
 
