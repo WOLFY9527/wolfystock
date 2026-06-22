@@ -2,305 +2,278 @@
 
 > GENERATED FILE. DO NOT EDIT DIRECTLY.
 >
-> Edit source docs or `scripts/build_ai_project_manual.py`, then run `python scripts/build_ai_project_manual.py`.
+> Edit `scripts/build_ai_project_manual.py` or the tiny canonical source files, then run `python scripts/build_ai_project_manual.py`.
 > Check freshness with `python scripts/build_ai_project_manual.py --check`.
 
-Status: generated AI maintenance onboarding manual.
-Audience: Codex workers, review agents, integrators, and humans assigning AI work.
-Authority: navigation and operating guide only; `AGENTS.md` remains the repository AI-collaboration source of truth.
-Do not use as: launch approval, protected-domain authorization, stale audit authority, or replacement for current source/test inspection.
+Status: generated comprehensive project handbook after the DOCS-006 hard Markdown collapse.
+Audience: future AI models, Codex workers, review agents, maintainers, and humans assigning AI work.
+Authority: operational handbook and source map; `AGENTS.md` remains the repository AI-collaboration rule source.
+Do not use as: launch approval, protected-domain authorization, stale audit authority, trading advice, or replacement for current source/test inspection.
 
 ## Table Of Contents
 
-- [Start Here: Authority And Operating Posture](#start-here-authority-and-operating-posture)
-- [Product Purpose And Current Deployment Boundary](#product-purpose-and-current-deployment-boundary)
-- [Protected Domains And Hard Stops](#protected-domains-and-hard-stops)
-- [Product Surfaces And Data Reality](#product-surfaces-and-data-reality)
-- [Architecture And Major Surfaces](#architecture-and-major-surfaces)
-- [Auth, RBAC, And MFA](#auth-rbac-and-mfa)
-- [Portfolio And Backtest](#portfolio-and-backtest)
-- [Provider, Quota, And Cost](#provider-quota-and-cost)
-- [WS2 And Durable Runtime](#ws2-and-durable-runtime)
-- [Options And Data Pipeline](#options-and-data-pipeline)
-- [Frontend IA And UI Conventions](#frontend-ia-and-ui-conventions)
-- [Codex Workflow, Validation, And Reporting](#codex-workflow-validation-and-reporting)
-- [Public Launch NO-GO Blockers](#public-launch-no-go-blockers)
-- [Known Experimental And Demo-Only Surfaces](#known-experimental-and-demo-only-surfaces)
-- [Source-Of-Truth Index](#source-of-truth-index)
-- [Source Inclusion And Exclusion Policy](#source-inclusion-and-exclusion-policy)
+- [Project Identity And Product Purpose](#project-identity-and-product-purpose)
+- [Architecture Overview](#architecture-overview)
+- [Frontend Surfaces](#frontend-surfaces)
+- [Backend API And Service Structure](#backend-api-and-service-structure)
+- [Data Providers And Data Reality Boundaries](#data-providers-and-data-reality-boundaries)
+- [Market, Options, Macro, Liquidity, Backtest, Scenario, And Portfolio Domains](#market-options-macro-liquidity-backtest-scenario-and-portfolio-domains)
+- [Professional Analytics Roadmap And Readiness](#professional-analytics-roadmap-and-readiness)
+- [Protected Domains And Safety Rules](#protected-domains-and-safety-rules)
+- [No-Advice Policy](#no-advice-policy)
+- [Validation Matrix](#validation-matrix)
+- [Codex Workflow And Landing Changes](#codex-workflow-and-landing-changes)
+- [Current Canonical File Map](#current-canonical-file-map)
+- [Compressed Project History](#compressed-project-history)
+- [AI Onboarding Checklist](#ai-onboarding-checklist)
 - [Source Map](#source-map)
 - [JSON Manifest](#json-manifest)
 
-## Start Here: Authority And Operating Posture
+## Project Identity And Product Purpose
 
-Use this generated manual as the first navigation layer for AI-assisted work. It is not a new rule source and does not replace current source inspection, tests, or task-specific prompt boundaries.
+WolfyStock is a professional financial research terminal for market operators, discretionary research, and portfolio workflows across US, CN, and HK markets. It combines market context, scanner discovery, watchlists, rule backtesting, portfolio tracking, provider diagnostics, admin observability, and AI-assisted research in a Python/FastAPI plus React/TypeScript codebase.
 
-- Current user prompts and explicit allowed/forbidden diffs come first.
-- `AGENTS.md` remains the repository AI-collaboration source of truth.
-- Current code, scripts, tests, and active docs beat memory, stale screenshots, old audits, and generated artifacts.
-- If a task is near protected semantics, stop unless the prompt explicitly scopes that domain and gives a validation path.
-- Read-only tasks mean no edits, no artifacts, no staging, no commits, and no pushes.
+The product solves the problem of fragmented research evidence: market regime, quote/history readiness, portfolio exposure, scenario shocks, options context, and backtest evidence are easy to confuse when they come from different providers and freshness levels. WolfyStock's durable direction is to show the evidence, source authority, lineage, and readiness boundary before any research conclusion.
 
-Source provenance: [`AGENTS.md`](../AGENTS.md), [`docs/DOCS_INDEX.md`](DOCS_INDEX.md), [`docs/WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md`](WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md), [`docs/architecture/file-governance-taxonomy.md`](architecture/file-governance-taxonomy.md).
+It is not a broker, order-entry surface, retail trading game, or unconstrained LLM wrapper. All user-visible research must stay analytical and no-advice.
 
-## Product Purpose And Current Deployment Boundary
+Source provenance: [`README.md`](../README.md), [`AGENTS.md`](../AGENTS.md).
 
-WolfyStock is a professional financial research terminal. It combines market overview, scanner discovery, watchlists, rule backtesting, portfolio tracking, AI-assisted analysis, provider diagnostics, and admin observability.
+## Architecture Overview
 
-It is not a broker, order-entry surface, generic retail trading app, or unbounded LLM wrapper. Public launch remains NO-GO until security, provider/data, WS2, cost/quota, portfolio/backtest safety, and deployment evidence gates are accepted. Treat private-beta and local tooling as reviewed integration surfaces, not launch approval.
+Main runtime entrypoints are `main.py` for analysis/local automation, `server.py` and `api/app.py` for the FastAPI app, `api/v1/router.py` for API grouping, `src/services/` for business services, `src/repositories/` for persistence boundaries, `src/schemas/` for DTO/schema contracts, `data_provider/` for provider adapters and fallback normalization, `bot/` for notification integrations, `apps/dsa-web/` for the web terminal, `apps/dsa-desktop/` for the Electron wrapper, `scripts/` for local and CI utilities, and `.github/workflows/` for CI/release automation.
 
-Current safe posture is analytical and no-advice. Do not add buy/sell/order affordances, broker execution, or personalized financial advice unless a separate safety-reviewed task explicitly scopes that change.
+Maintain bounded contexts. Consumers should call public facades, API clients, schemas, DTOs, validators, and documented commands. Do not reach into private engines, repositories, provider clients, cache keys, ledger internals, or mutation code from another domain just to make a local task easier.
 
-Source provenance: [`README.md`](../README.md), [`docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md`](WOLFYSTOCK_SYSTEM_HANDBOOK.md), [`docs/DEPLOY.md`](DEPLOY.md), [`docs/audits/private-beta-readiness.md`](audits/private-beta-readiness.md), [`docs/audits/public-launch-readiness-master.md`](audits/public-launch-readiness-master.md), [`docs/audits/trading-no-advice-product-policy.md`](audits/trading-no-advice-product-policy.md).
+Shared contracts, schema changes, root config, CI, dependency files, auth, provider runtime, broker/accounting, DB migrations, and frontend route-entry behavior are high-risk and require explicit task scope.
 
-## Protected Domains And Hard Stops
+Source provenance: [`AGENTS.md`](../AGENTS.md), [`README.md`](../README.md).
 
-Treat these as hard stops unless the task explicitly scopes them and gives a focused validation path:
+## Frontend Surfaces
 
-- provider order, credentials, live-call paths, cache/freshness labels, source authority, score contribution, and right-to-display;
-- scanner scoring, selection, thresholds, ranking, sorting, and live/fallback labels;
-- backtest math, fills, costs, metrics, benchmarks, stored result semantics, and parameter/winner semantics;
-- portfolio accounting, cash, holdings, P&L, FX/native currency, cost basis, sync/import/replay, and ledger semantics;
-- auth/RBAC/security, sessions, CSRF/CORS, password/token handling, MFA, and admin protection;
-- DB migrations, package/config/env, and external network behavior;
-- direct trading advice, buy/sell/order CTAs, target prices, position sizing, or synthetic readiness claims.
+| Surface | Purpose | Primary ownership | Readiness boundary |
+| --- | --- | --- | --- |
+| Market Overview | Regime, breadth, official risk, and macro first read | `api/v1/endpoints/market_overview.py`, `src/services/market_overview_service.py`, `apps/dsa-web/src/pages/MarketOverviewPage.tsx` | Partial until official risk, quote authority, and target-environment evidence are proven. |
+| Scanner | Candidate discovery and watchlist handoff | `api/v1/endpoints/scanner.py`, `src/services/market_scanner_service.py`, `apps/dsa-web/src/pages/UserScannerPage.tsx` | Partial; quote, history, universe, freshness, turnover, and packet readiness must fail closed. |
+| Watchlist | Saved symbols and row-level research queue | `api/v1/endpoints/watchlist.py`, `src/services/watchlist_service.py`, `src/services/watchlist_research_overlay_service.py`, `apps/dsa-web/src/pages/WatchlistPage.tsx` | Partial; row packets may lack quote freshness, catalyst age, or scanner lineage and must say so. |
+| Stock Detail | Symbol research packet and structure decision | `api/v1/endpoints/stocks.py`, `src/services/stock_service.py`, `src/services/stock_structure_decision_service.py` | Partial; no invented quote, fundamental, event, SEC, peer, or catalyst evidence. |
+| Liquidity Monitor | Capital pressure and stress context | `api/v1/endpoints/liquidity_monitor.py`, `src/services/liquidity_monitor_service.py`, `apps/dsa-web/src/pages/LiquidityMonitorPage.tsx` | Partial; macro, flow, and proxy rows remain capped unless official source authority exists. |
+| Rotation Radar | ETF/index family rotation context | `api/v1/endpoints/market.py`, rotation services, `apps/dsa-web/src/pages/MarketRotationRadarPage.tsx` | Partial; quote coverage, membership, and official source authority gate headline claims. |
+| Options Lab | Read-only options research console | `api/v1/endpoints/options.py`, `src/services/options_lab_service.py`, `apps/dsa-web/src/pages/OptionsLabPage.tsx` | Observation-only unless entitlement, redisplay, chain, Greeks, IV, OI, volume, and methodology proof exist. |
+| Scenario Lab | Bounded shock comparison | `api/v1/endpoints/market.py`, `src/services/market_scenario_lab_engine.py`, `apps/dsa-web/src/pages/ScenarioLabPage.tsx` | Partial; sample, request-supplied, fallback, or static baselines are observation-only. |
+| Backtest | Deterministic rule backtest and stored readback | `api/v1/endpoints/backtest.py`, `src/core/rule_backtest_engine.py`, `src/services/backtest_service.py`, `apps/dsa-web/src/pages/BacktestPage.tsx` | Research-useful v1 semantics; no optimizer, winner, allocation, or fake performance semantics. |
+| Portfolio | Accounts, holdings, cash, FX, ledger, risk, and attribution | `api/v1/endpoints/portfolio.py`, `src/services/portfolio_service.py`, `apps/dsa-web/src/pages/PortfolioPage.tsx` | Accounting authority is protected; price/FX lineage and broker/order implications must stay explicit. |
+| Admin/Ops | Operator observability and protected diagnostics | `api/v1/endpoints/admin/*`, `src/services/admin_*`, `apps/dsa-web/src/pages/Admin*` | Manual-review-gated; never leak raw provider, credential, security, or internal payload details. |
 
-No fake data, no fallback promotion, no hidden compatibility layer, and no advice. Changes in these areas need the matching guard docs and focused validation before anyone should call the result safe.
+Frontend work should preserve the operator-terminal posture: dense but legible, route-first, evidence-first, and calm. Prefer tables, rows, rails, drawers, strips, and explicit disclosure states over generic card sprawl. Each route should make the primary research task visible in the first viewport and should keep raw provider, cache, schema, debug, credential, and fallback internals out of consumer copy.
 
-Source provenance: [`AGENTS.md`](../AGENTS.md), [`docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md`](codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md), [`docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md`](codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md), [`docs/codex/NO_ADVICE_REGRESSION_GUARDS.md`](codex/NO_ADVICE_REGRESSION_GUARDS.md), [`docs/audits/trading-no-advice-product-policy.md`](audits/trading-no-advice-product-policy.md), [`docs/data-reliability/provider-source-confidence-contract.md`](data-reliability/provider-source-confidence-contract.md), [`docs/operations/provider-capability-metadata.md`](operations/provider-capability-metadata.md).
+Source provenance: [`README.md`](../README.md), [`AGENTS.md`](../AGENTS.md).
 
-## Product Surfaces And Data Reality
+## Backend API And Service Structure
 
-WolfyStock is for professional market and stock research support. It is not generic stock-app filler, a broker surface, or a direct advice engine.
+Backend/API work should keep API routers thin, services authoritative for business semantics, repositories responsible for persistence, schemas/DTOs explicit, and provider adapters isolated behind provider-runtime boundaries. FastAPI endpoints should not embed scanner ranking math, portfolio accounting, provider fallback ordering, auth policy, or report rendering internals.
 
-| Surface | User-visible purpose | Main ownership | Current data readiness boundary | Major fail-closed states | Deeper source docs |
-| --- | --- | --- | --- | --- | --- |
-| Market Overview | Regime, breadth, and risk first read | `api/v1/endpoints/market_overview.py`; `src/services/market_overview_service.py`; `apps/dsa-web/src/pages/MarketOverviewPage.tsx` | partial; official risk bundle and quote authority still gate the first screen | fallback/static, stale, proxy-only, missing official risk rows -> `mixed_no_clear_edge` or unavailable | [`docs/market-overview/README.md`](market-overview/README.md), [`docs/data/market-source-activation-blueprint.md`](data/market-source-activation-blueprint.md), [`docs/provider-data/README.md`](provider-data/README.md), [`docs/audits/data-quality-user-disclosure-policy.md`](audits/data-quality-user-disclosure-policy.md) |
-| Scanner | Candidate discovery and watchlist handoff | `api/v1/endpoints/scanner.py`; `src/services/market_scanner_service.py`; `src/repositories/scanner_repo.py`; `apps/dsa-web/src/pages/UserScannerPage.tsx` | partial; useful only when universe, quote, history, turnover, and evidence packet inputs exist | empty runs from missing local data, blocked input readiness, stale/fallback quote/history | [`docs/scanner/README.md`](scanner/README.md), [`docs/product-recovery/DATA_COVERAGE_MATRIX.md`](product-recovery/DATA_COVERAGE_MATRIX.md), [`docs/product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md`](product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md) |
-| Watchlist | Saved symbols and research queue | `api/v1/endpoints/watchlist.py`; `src/services/watchlist_service.py`; `src/services/watchlist_research_overlay_service.py`; `apps/dsa-web/src/pages/WatchlistPage.tsx` | partial; row packet still missing quote/freshness/catalyst refs in many cases | missing quote freshness, missing research packet, missing catalyst age, stale scanner lineage | [`docs/product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md`](product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md), [`docs/product-recovery/DATA_COVERAGE_MATRIX.md`](product-recovery/DATA_COVERAGE_MATRIX.md), [`docs/scanner/README.md`](scanner/README.md) |
-| Stock Detail | Symbol research packet and structure decision | `api/v1/endpoints/stocks.py`; `src/services/stock_service.py`; `src/services/stock_structure_decision_service.py` | partial; stock packet assembly is not yet fully durable | missing quote/history/fundamentals/events/peer, parser-only SEC facts, observation-only structure | [`docs/product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md`](product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md), [`docs/product-recovery/DATA_COVERAGE_MATRIX.md`](product-recovery/DATA_COVERAGE_MATRIX.md), [`docs/audits/data-quality-user-disclosure-policy.md`](audits/data-quality-user-disclosure-policy.md) |
-| Options Lab | Read-only experiment console | `api/v1/endpoints/options.py`; `src/services/options_lab_service.py`; `apps/dsa-web/src/pages/OptionsLabPage.tsx` | observation-only / partial; fixture and dry-run default, no live provider authority proven | missing chain/IV/Greeks/OI/volume, missing entitlement/redisplay, no strategy ranking or trade workflow | [`docs/options/README.md`](options/README.md), [`docs/product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md`](product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md), [`docs/audits/options-provider-adapter-contract.md`](audits/options-provider-adapter-contract.md) |
-| Liquidity Monitor | Capital pressure and market stress | `api/v1/endpoints/liquidity_monitor.py`; `src/services/liquidity_monitor_service.py`; `apps/dsa-web/src/pages/LiquidityMonitorPage.tsx` | partial; official risk bundle and coverage contract still gate score-grade | proxy-only flow, stale or missing official macro rows, observation-only CN/HK flow | [`docs/liquidity/README.md`](liquidity/README.md), [`docs/data/market-source-activation-blueprint.md`](data/market-source-activation-blueprint.md), [`docs/provider-data/README.md`](provider-data/README.md) |
-| Backtest / Parameter Sweep | Deterministic rule backtest and stored readback | `api/v1/endpoints/backtest.py`; `src/core/rule_backtest_engine.py`; `src/services/backtest_service.py`; `apps/dsa-web/src/pages/BacktestPage.tsx` | research-useful; v1 deterministic engine is live, parameter sweep remains diagnostic for professional claims | no optimizer/winner semantics, no portfolio allocation, no live provider hydration, no fake performance | [`docs/backtest/README.md`](backtest/README.md), [`docs/backtest-system.md`](backtest-system.md), [`docs/product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md`](product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md), [`docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md`](product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md) |
-| Factor Research | Offline factor helpers and backtest bridge | `src/services/factor_metrics.py`; `src/services/factor_exposure.py`; `src/services/backtest_factor_research_bridge.py` | diagnostic-only; no public factor panel, no long-short return backtest, no PIT universe | missing forward returns, no PIT membership, no survivorship control, no winner promotion | [`docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md`](product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md), [`docs/product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md`](product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md), [`docs/backtest/README.md`](backtest/README.md) |
-| Scenario Lab | Bounded shock comparison | `api/v1/endpoints/market.py`; `src/services/market_scenario_lab_engine.py`; `apps/dsa-web/src/pages/ScenarioLabPage.tsx` | partial; request/snapshot driven, authoritative only when real cached baseline inputs exist | sample/demo/fallback/static/request-supplied-only state stays observation-only, no execution-readiness implication | [`docs/product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md`](product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md), [`docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md`](product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md) |
-| Portfolio | Holdings, P&L, FX, ledger, risk | `api/v1/endpoints/portfolio.py`; `src/services/portfolio_service.py`; `apps/dsa-web/src/pages/PortfolioPage.tsx` | partial; accounting is real, valuation lineage and FX freshness still gate credibility | stale or missing FX, missing price lineage, no order/broker semantics, manual forms are ledger records only | [`docs/portfolio/README.md`](portfolio/README.md), [`docs/product-recovery/DATA_COVERAGE_MATRIX.md`](product-recovery/DATA_COVERAGE_MATRIX.md), [`docs/audits/backtest-portfolio-public-safety-audit.md`](audits/backtest-portfolio-public-safety-audit.md) |
-| Evidence Harness / target env artifacts | Sanitized operator evidence for readiness | `scripts/target_environment_evidence_harness.py`; `scripts/ws2_target_environment_evidence_check.py` | read-only / observation-only; captures evidence, does not prove acceptance | secrets, raw payloads, unavailable endpoints, readiness blocked vs endpoint unavailable conflation | [`docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md`](product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md) |
-| Admin / diagnostics | Operator-facing observability | `api/v1/endpoints/admin/*`; `src/services/admin_*`; `apps/dsa-web/src/pages/Admin*` | manual-review-gated; operational only | raw provider/internal leakage, security evidence, cross-domain semantic changes | [`docs/frontend/WOLFYSTOCK_ADMIN_MAINTENANCE_OS.md`](frontend/WOLFYSTOCK_ADMIN_MAINTENANCE_OS.md), [`docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md`](codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md), [`docs/audits/README.md`](audits/README.md) |
+Core API families include auth, analysis, history, stocks, scanner, watchlist, market overview, market/scenario, liquidity, rotation, options, portfolio, backtest, quant, system, usage, admin, and diagnostics. Additive fields are preferred over breaking response contracts; deleted or renamed fields require client compatibility review.
 
-| Family | Readiness | Current reality | Fail-closed rule | Deeper source docs |
-| --- | --- | --- | --- | --- |
-| Official risk bundle | partial | VIX, rates, Fed liquidity, and credit stress are the first credibility layer, but target-environment activation still needs proof. | Do not relabel proxy rows as official or live. | [`docs/data/market-source-activation-blueprint.md`](data/market-source-activation-blueprint.md), [`docs/provider-data/README.md`](provider-data/README.md), [`docs/data-reliability/provider-source-confidence-contract.md`](data-reliability/provider-source-confidence-contract.md) |
-| ETF / index quote and membership coverage | partial | US index / ETF quote coverage and official membership / weight proofs are still incomplete for broad market and rotation claims. | No headline Rotation or Market Overview claim from proxy membership alone. | [`docs/data/market-source-activation-blueprint.md`](data/market-source-activation-blueprint.md), [`docs/product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md`](product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md), [`docs/product-recovery/DATA_COVERAGE_MATRIX.md`](product-recovery/DATA_COVERAGE_MATRIX.md) |
-| Authorized quote spine | partial | Durable US/CN/HK quote and daily OHLCV snapshots still need a unified store and explicit display rights. | No fake live quotes or fallback promotion. | [`docs/product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md`](product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md), [`docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md`](product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md), [`docs/product-recovery/DATA_COVERAGE_MATRIX.md`](product-recovery/DATA_COVERAGE_MATRIX.md) |
-| Breadth, flows, and positioning | partial / observation-only | Real flow and positioning remain unproven; proxy breadth and quote-derived flow stay bounded and explicitly capped. | No score-grade flow or positioning claim from proxy data. | [`docs/data/market-source-activation-blueprint.md`](data/market-source-activation-blueprint.md), [`docs/liquidity/README.md`](liquidity/README.md), [`docs/provider-data/README.md`](provider-data/README.md) |
-| Fundamentals, filings, and events | partial | Fundamental fields, filings, catalysts, and normalized events are fragmented and still need a durable research packet. | No invented catalysts, ratios, or event freshness. | [`docs/product-recovery/DATA_COVERAGE_MATRIX.md`](product-recovery/DATA_COVERAGE_MATRIX.md), [`docs/product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md`](product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md), [`docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md`](product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md) |
-| Options chains and Greeks | blocked / observation-only | No authorized live provider or rights proof exists for production use, and methodology approval is still missing for gamma-family outputs. | No strategy ranking, GEX, vanna, charm, or order CTA. | [`docs/product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md`](product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md), [`docs/audits/options-provider-adapter-contract.md`](audits/options-provider-adapter-contract.md) |
-| Scenario baselines | partial | Scenario Lab is still request/snapshot driven until durable baseline snapshots and target-environment proof exist. | No execution-readiness implication from scenario comparisons. | [`docs/product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md`](product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md), [`docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md`](product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md) |
-| Backtest dataset lineage | partial / research-useful | v1 backtests exist, but the professional lineage gate is incomplete and still needs adjusted basis, calendar, PIT, and reproducibility proof. | No optimizer/winner semantics or fake performance. | [`docs/product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md`](product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md), [`docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md`](product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md), [`docs/backtest/README.md`](backtest/README.md) |
-| Factor research lineage | diagnostic-only | Offline factor helpers exist, but there is no PIT universe or long-short return backtest contract yet. | No lookahead or winner promotion. | [`docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md`](product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md), [`docs/product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md`](product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md), [`docs/backtest/README.md`](backtest/README.md) |
+For Python changes, prefer `./scripts/ci_gate.sh`. At minimum run `python -m py_compile <changed_python_files>` and the closest deterministic tests. Protected semantic changes need focused regression evidence.
 
-Roadmap order:
-- Official VIX / volatility.
-- Macro / rates / Fed liquidity.
-- US index / ETF quote coverage.
-- Scanner universe / history / quote readiness.
-- Watchlist row packet and Stock research packet.
-- Portfolio price / FX lineage.
-- Options rights and methodology proof.
-- Scenario baseline snapshots.
-- Backtest dataset lineage.
-- Factor research lineage.
+Source provenance: [`AGENTS.md`](../AGENTS.md), [`README.md`](../README.md).
 
-Missing families stay missing, blocked, partial, or observation-only. Do not turn proxy, cached, synthetic, fallback, or fixture data into live, fresh, decision-grade evidence. Do not output direct trading advice.
+## Data Providers And Data Reality Boundaries
 
-Source provenance: [`README.md`](../README.md), [`docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md`](WOLFYSTOCK_SYSTEM_HANDBOOK.md), [`docs/market-overview/README.md`](market-overview/README.md), [`docs/scanner/README.md`](scanner/README.md), [`docs/liquidity/README.md`](liquidity/README.md), [`docs/rotation/README.md`](rotation/README.md), [`docs/options/README.md`](options/README.md), [`docs/portfolio/README.md`](portfolio/README.md), [`docs/backtest/README.md`](backtest/README.md), [`docs/backtest-system.md`](backtest-system.md), [`docs/codex/WOLFYSTOCK_SURFACE_MAP.md`](codex/WOLFYSTOCK_SURFACE_MAP.md), [`docs/product-recovery/WOLFYSTOCK_PRODUCT_RECOVERY_PLAN.md`](product-recovery/WOLFYSTOCK_PRODUCT_RECOVERY_PLAN.md), [`docs/product-recovery/DATA_COVERAGE_MATRIX.md`](product-recovery/DATA_COVERAGE_MATRIX.md), [`docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md`](product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md), [`docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md`](product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md), [`docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md`](product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md), [`docs/product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md`](product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md), [`docs/product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md`](product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md), [`docs/product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md`](product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md), [`docs/product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md`](product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md), [`docs/product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md`](product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md), [`docs/data/market-source-activation-blueprint.md`](data/market-source-activation-blueprint.md), [`docs/data-reliability/provider-source-confidence-contract.md`](data-reliability/provider-source-confidence-contract.md), [`docs/operations/provider-capability-metadata.md`](operations/provider-capability-metadata.md), [`docs/audits/data-quality-user-disclosure-policy.md`](audits/data-quality-user-disclosure-policy.md), [`docs/audits/options-provider-adapter-contract.md`](audits/options-provider-adapter-contract.md), [`docs/audits/backtest-portfolio-public-safety-audit.md`](audits/backtest-portfolio-public-safety-audit.md), [`docs/audits/trading-no-advice-product-policy.md`](audits/trading-no-advice-product-policy.md).
+Provider runtime owns provider order, fallback, retry/circuit behavior, timeout posture, freshness labels, source authority, display rights, optional enrichment budgets, sanitized diagnostics, and cache/local-first behavior. Do not reorder providers, deepen live fallback, add broad optional fanout, or expose raw provider payloads without explicit scope.
 
-## Architecture And Major Surfaces
+Fallback, cached, proxy, repaired, inferred, fixture, synthetic, dry-run, parser-only, request-supplied, and observation-only data must remain visibly not-live and not-decision-grade. Missing data stays missing; do not fabricate quote, fundamental, event, IV, Greek, bid/ask, OI, volume, FX, benchmark, or source-freshness fields.
 
-Maintain WolfyStock as bounded-context modules with narrow public interfaces. Consumers should call facades, schemas, DTOs, API clients, validators, and documented commands instead of private engines, repositories, provider clients, cache keys, or mutation internals.
+| Data family | Readiness | Operational boundary |
+| --- | --- | --- |
+| Official risk and volatility | Partial | VIX/volatility, rates, Fed liquidity, credit stress, and official macro rows must be source-authorized before score-grade claims. |
+| Authorized quote spine | Partial | US/CN/HK quote and daily OHLCV snapshots need durable lineage, freshness, and redisplay/display authority. |
+| Index/ETF membership | Partial | Rotation and market claims need official membership and weighting proof, not proxy-only membership. |
+| Scanner universe/history | Partial | Universe, local history, quote freshness, turnover, and evidence packets must gate scanner summaries. |
+| Fundamentals/filings/events | Partial | Ratios, filings, catalysts, events, and peers are fragmented; missing values remain missing. |
+| Options chains/Greeks | Blocked or observation-only | No production-grade claims without provider entitlement, redisplay rights, methodology proof, and chain/Greek completeness. |
+| Scenario baselines | Partial | Durable baseline snapshots and target-environment evidence are required before scenario state can be authoritative. |
+| Backtest lineage | Partial but research-useful | Adjusted basis, calendar, point-in-time universe, reproducibility, and stored-result authority gate professional claims. |
+| Factor research lineage | Diagnostic-only | No PIT universe or long-short factor-return contract yet; do not promote factor helpers as ranking truth. |
+| Portfolio price/FX lineage | Partial | Valuation is only as credible as quote, FX, timestamp, source, and account/ledger provenance. |
 
-Major runtime surfaces are `main.py`, `server.py`, `api/app.py`, `api/v1/router.py`, `src/services/`, `src/repositories/`, `data_provider/`, `apps/dsa-web/`, `apps/dsa-desktop/`, `scripts/`, and `.github/workflows/`.
+Source provenance: [`AGENTS.md`](../AGENTS.md), [`README.md`](../README.md).
 
-Main product routes include Home, Scanner, Watchlist, Market Overview, Liquidity Monitor, Rotation Radar, Portfolio, Backtest, Options Lab, Settings, and Admin/Ops pages. API groups live under `/api/v1` for auth, analysis, history, stocks, backtest, scanner, system, usage, portfolio, watchlist, market, quant, options, and admin families.
+## Market, Options, Macro, Liquidity, Backtest, Scenario, And Portfolio Domains
 
-Source provenance: [`docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md`](WOLFYSTOCK_SYSTEM_HANDBOOK.md), [`docs/architecture/WOLFYSTOCK_MODULE_ARCHITECTURE.md`](architecture/WOLFYSTOCK_MODULE_ARCHITECTURE.md), [`docs/architecture/backend-frontend-modular-maintenance-handbook.md`](architecture/backend-frontend-modular-maintenance-handbook.md), [`README.md`](../README.md).
+Market Overview, Liquidity, and Rotation depend on official risk, macro, ETF/index quote coverage, and membership authority. They may show bounded context, but they must not convert proxy breadth or quote-derived approximations into score-grade institutional claims.
 
-## Auth, RBAC, And MFA
+Options Lab is a read-only experiment console. It is not an execution surface, strategy-ranking engine, or order workflow. Fixture/dry-run providers and disabled live stubs must fail closed until entitlement, redisplay rights, chain completeness, Greeks/IV/OI/volume methodology, and display authority are proven.
 
-Auth/RBAC/security is a protected domain. Do not alter dependencies, capabilities, admin route protection, session behavior, CSRF/CORS/security middleware, password/token handling, or MFA behavior as a side effect.
+Scenario Lab compares bounded shocks. Request-supplied, fallback, static, sample, or stale baselines are observation-only and must not imply execution readiness.
 
-Current launch posture remains manual-review-gated. Production MFA secret custody/recovery, staged MFA enforcement, route/capability inventory, coarse fallback removal, role governance, and rollback evidence are not launch-accepted as broad public controls.
-
-Security evidence must be sanitized. Never include raw cookies, Authorization headers, session IDs, request bodies, provider payloads, password hashes, or secret values in docs, logs, screenshots, reports, or release artifacts.
-
-Source provenance: [`docs/audits/index-security-rbac-mfa.md`](audits/index-security-rbac-mfa.md), [`docs/audits/auth-rbac-release-security-guide.md`](audits/auth-rbac-release-security-guide.md), [`docs/audits/admin-rbac-r5-coarse-fallback-removal-plan.md`](audits/admin-rbac-r5-coarse-fallback-removal-plan.md), [`docs/audits/security-mfa-secret-storage-hardening-plan.md`](audits/security-mfa-secret-storage-hardening-plan.md), [`docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md`](codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md).
-
-## Portfolio And Backtest
+Backtest owns deterministic rule evaluation, stored result readback, exports, compare workflows, and research-useful v1 semantics. Do not change fills, costs, metrics, benchmark semantics, parameter/winner meaning, local-only universe execution, or stored-result authority without explicit versioning and focused tests.
 
 Portfolio owns accounts, holdings, cash, transactions, P&L, FX/native currency, cost basis, broker sync/import overlays, ledger mutations, and read projections. UI work must not recalculate accounting authority or imply broker order execution.
 
-Backtest owns standard historical evaluation, deterministic rule backtests, calculation math, stored-first readback, support exports, compare workflows, universe diagnostics, and professional-readiness disclosures. The deterministic rule backtest lane is frozen as v1 semantics unless a future task explicitly versions and tests a new execution model.
+Source provenance: [`AGENTS.md`](../AGENTS.md), [`README.md`](../README.md).
 
-Do not change portfolio accounting, mutation semantics, owner isolation, backtest fills, costs, metrics, benchmark semantics, stored-result authority, or local-only universe execution without explicit scope and focused regression evidence.
+## Professional Analytics Roadmap And Readiness
 
-Source provenance: [`docs/portfolio/README.md`](portfolio/README.md), [`docs/backtest/README.md`](backtest/README.md), [`docs/backtest-system.md`](backtest-system.md), [`docs/audits/backtest-portfolio-public-safety-audit.md`](audits/backtest-portfolio-public-safety-audit.md), [`docs/codex/WOLFYSTOCK_BACKTEST_UNIVERSE_RULES.md`](codex/WOLFYSTOCK_BACKTEST_UNIVERSE_RULES.md).
+The professional roadmap is not a promise that a family is live. It is an ordered readiness map:
 
-## Provider, Quota, And Cost
+1. Official VIX/volatility and macro/rates/Fed-liquidity source authority.
+2. Authorized US/CN/HK quote spine with lineage, freshness, and display rights.
+3. US index/ETF quote coverage and official membership/weight proofs.
+4. Scanner universe, history, turnover, and quote-readiness gates.
+5. Watchlist row packet and single-stock research packet completeness.
+6. Portfolio price and FX lineage.
+7. Options provider entitlement, redisplay rights, and methodology proof.
+8. Scenario durable baseline snapshots and target-environment evidence.
+9. Backtest dataset lineage, adjusted basis, calendar, PIT universe, and reproducibility gates.
+10. Factor research lineage with PIT membership and return contracts.
 
-Provider runtime owns provider order, fallback, retry/circuit posture, freshness labels, optional enrichment budgets, source disclosure, sanitized diagnostics, and cache/local-first behavior. Keep stale, fallback, mock, synthetic, fixture, repaired, or inferred data clearly not-live.
+Each step must expose blocked, partial, missing, unauthorized, stale, or observation-only states rather than hiding them behind positive copy.
 
-Quota and cost tooling is mostly advisory, dry-run, or pilot-bound unless a prompt explicitly scopes live route-boundary enforcement. Cost dashboards and ledgers are useful observability surfaces, but they are not billing-authoritative without accepted provider invoice/export reconciliation.
+Source provenance: [`README.md`](../README.md), [`AGENTS.md`](../AGENTS.md).
 
-Do not reorder providers, deepen live fallback, add broad optional fanout, print raw provider payloads, or expose request URLs, headers, credentials, query strings, tokens, stack traces, or raw ledger internals.
+## Protected Domains And Safety Rules
 
-Source provenance: [`docs/provider-data/README.md`](provider-data/README.md), [`docs/codex/WOLFYSTOCK_PROVIDER_BUDGET_AND_ROUTING_RULES.md`](codex/WOLFYSTOCK_PROVIDER_BUDGET_AND_ROUTING_RULES.md), [`docs/audits/index-provider-data-options.md`](audits/index-provider-data-options.md), [`docs/audits/index-cost-quota-observability.md`](audits/index-cost-quota-observability.md), [`docs/audits/quota-reserve-release-operator-evidence-checklist.md`](audits/quota-reserve-release-operator-evidence-checklist.md).
+Stop before editing these domains unless the prompt explicitly authorizes the scope and validation path:
 
-## WS2 And Durable Runtime
+- provider adapters, provider order, fallback, freshness, cache semantics, live-call behavior, credentials, and source authority;
+- scanner scoring, selection, thresholds, ranking, sorting, score contribution, and live/fallback labels;
+- backtest fills, costs, metrics, benchmarks, parameter/winner semantics, universe execution, and stored readback;
+- portfolio accounting, cash, holdings, transactions, P&L, FX/native currency, cost basis, broker sync/import, and ledger semantics;
+- auth/RBAC/security, sessions, cookies, CSRF/CORS, password/token handling, MFA, and admin protection;
+- DB migrations, root config, package/lock files, CI, dependency updates, env templates, and external network behavior;
+- broker/order execution, trading CTAs, target prices, position sizing, and personalized financial advice.
 
-Current async/background behavior remains process-local or route/script-specific. `AnalysisTaskQueue` futures and analysis-task SSE are process-local; durable rows, progress polling, and synthetic worker prototypes are evidence foundations, not production multi-instance recovery.
+Do not introduce fake data, fallback payloads, placeholder readiness, hidden compatibility layers, raw provider leakage, or one-off Markdown reports as a way to satisfy a task.
 
-Public multi-instance deployment remains NO-GO until API A/B route switching, worker lease/retry/failure handling, owner isolation, durable polling replay, SSE limitation handling, and sanitized operator evidence are accepted.
+Source provenance: [`AGENTS.md`](../AGENTS.md).
 
-Do not add Redis, Celery, RQ, Kafka, broker dependencies, worker cutovers, migrations, provider/LLM calls, or runtime queue behavior from docs/generator work.
+## No-Advice Policy
 
-Source provenance: [`docs/operations/background-job-queue-boundary.md`](operations/background-job-queue-boundary.md), [`docs/operations/queue-ws2-metrics-production-readiness.md`](operations/queue-ws2-metrics-production-readiness.md), [`docs/audits/ws2-multi-instance-smoke-test-design.md`](audits/ws2-multi-instance-smoke-test-design.md), [`docs/audits/ws2-multi-user-runtime-cost-control-design.md`](audits/ws2-multi-user-runtime-cost-control-design.md).
+WolfyStock may provide research context, evidence, readiness state, scenario comparison, risk disclosure, and operational diagnostics. It must not provide direct instructions to buy, sell, hold, short, add, reduce, execute, route, or size positions for a user.
 
-## Options And Data Pipeline
+Avoid user-facing copy that implies investment recommendation, guaranteed outcome, target price, execution readiness, risk-free action, or personalized suitability. Safer patterns are observation-only labels, evidence boundaries, uncertainty, data-source/freshness/lineage, and explicit no-advice wording. The Chinese no-advice anchor `数据不足，暂不形成结论。` is intentionally retained where product copy needs a compact blocked-state sentence.
 
-Options Lab is an ExperimentConsole, not an execution surface. Current providers are fixture/dry-run contracts; live provider stubs are disabled by default and must fail closed. Do not add broker/order paths, portfolio mutation, live provider calls, global market-provider fallback changes, or tradeable-data claims without explicit safety review.
+No-advice review should classify grep hits. Tests, negative assertions, source-code identifiers, and policy docs may contain forbidden words as guardrails; visible UI and generated reports need stricter review.
 
-Data Pipeline R2 treats optional news, sentiment, and detailed fundamentals as progressive enrichment metadata. Optional enrichment gaps must be sanitized and non-blocking; late async merge is future work and should update only bounded metadata unless a separate reviewed recalculation path exists.
+Source provenance: [`AGENTS.md`](../AGENTS.md).
 
-Missing provider values must stay missing. Do not fabricate Greeks, IV, bid/ask, volume, open interest, fundamentals, or freshness to make data appear decision-grade.
+## Validation Matrix
 
-Source provenance: [`docs/options/README.md`](options/README.md), [`docs/audits/options-provider-adapter-contract.md`](audits/options-provider-adapter-contract.md), [`docs/audits/data-pipeline-r2-progressive-enrichment.md`](audits/data-pipeline-r2-progressive-enrichment.md), [`docs/audits/data-quality-user-disclosure-policy.md`](audits/data-quality-user-disclosure-policy.md), [`docs/audits/trading-no-advice-product-policy.md`](audits/trading-no-advice-product-policy.md).
+Use the smallest validation set that proves the touched behavior:
 
-## Frontend IA And UI Conventions
+- Docs/manual/generator: `python -m py_compile scripts/build_ai_project_manual.py`, `python scripts/build_ai_project_manual.py`, `python scripts/build_ai_project_manual.py --check`, `python -m pytest -q tests/scripts/test_build_ai_project_manual.py`, `python scripts/check_ai_assets.py`, `git diff --check`, `bash scripts/release_secret_scan.sh --base-ref origin/main`, inventory counts, and link sanity.
+- Backend Python: `./scripts/ci_gate.sh` when feasible; otherwise `python -m py_compile <changed_python_files>` plus closest deterministic pytest.
+- API/schema/auth/provider/protected contracts: backend focused tests, compatibility review, redaction/leakage checks, and wider gates when shared contracts are touched.
+- Web frontend: from `apps/dsa-web`, run dependency install only when needed, then `npm run lint`, `npm run build`, and concrete Vitest paths. Use browser/screenshot smoke when layout or visible UX changes.
+- Desktop: build web first, then desktop build where platform allows.
+- Workflow/scripts/Docker: run the closest local deterministic script or syntax check and report unexecuted remote/infra gaps.
 
-WolfyStock frontend follows a Reflect-Linear / Linear OS product language: calm, precise, data-rich, route-first, and workbench-oriented. Prefer rows, tables, strips, rails, drawers, and disclosures before card-first dashboards.
+Never claim tests passed unless the command actually ran in this workspace and succeeded.
 
-Each major route should reveal its primary task in the first viewport. User routes keep raw provider/cache/schema/debug terms collapsed by default; admin/ops pages may be denser but still start with operator state, impact, recommended action, evidence, then details.
+Source provenance: [`AGENTS.md`](../AGENTS.md), [`README.md`](../README.md).
 
-New user-facing material should prefer `apps/dsa-web/src/components/linear/`. Existing `Terminal*` names are compatibility adapters, not permission to create a parallel terminal UI system.
+## Codex Workflow And Landing Changes
 
-Source provenance: [`docs/frontend/README.md`](frontend/README.md), [`docs/frontend/visual-system.md`](frontend/visual-system.md), [`docs/frontend/validation-playbook.md`](frontend/validation-playbook.md), [`docs/frontend/WOLFYSTOCK_FRONTEND_NOISE_BUDGET.md`](frontend/WOLFYSTOCK_FRONTEND_NOISE_BUDGET.md), [`docs/frontend/WOLFYSTOCK_CONSUMER_DATA_QUALITY_UX.md`](frontend/WOLFYSTOCK_CONSUMER_DATA_QUALITY_UX.md), [`docs/frontend/WOLFYSTOCK_ADMIN_MAINTENANCE_OS.md`](frontend/WOLFYSTOCK_ADMIN_MAINTENANCE_OS.md).
+Start with read-only discovery. Confirm `pwd`, branch, and `git status`; read the current prompt, `AGENTS.md`, `README.md`, this manual, and the smallest code/docs context required. Respect task mode and workspace. In a `WORKTREE-WORKER` task, stay inside the specified worktree and branch.
 
-## Codex Workflow, Validation, And Reporting
+Do not push unless explicitly authorized. Do not commit unless the task asks for a commit or the current instruction grants auto-commit. Do not rebase, merge, delete branches/worktrees, or rewrite history unless the task explicitly requires it. If a task requires fetch/rebase before final report, run `git fetch origin`, rebase onto `origin/main`, rerun focused validation, and only then commit/report.
 
-Pick the smallest validation set that proves the current change. Docs/generator tasks use docs diff-checks plus secret scan; frontend source changes need route-aware tests and browser evidence; backend/API/auth/provider changes need focused tests and wider gates when protected or shared contracts are near scope.
+Before final delivery: inspect `git diff`, run `git diff --check`, run required tests/checks, confirm no unexpected files or secrets, and report exact commands and results. Final reports should include status, changed files, validation, risk, final base commit, commit hash when created, final `git status`, and rollback command.
 
-Use the task mode and workspace the prompt actually names. `WORKTREE-WORKER` means stay inside the prompt workspace and branch. `SERIAL-MAIN` is only for an explicit shared-main task. Do not push unless the prompt authorizes it, and keep the branch name exactly aligned with the task contract.
+Source provenance: [`AGENTS.md`](../AGENTS.md), [`docs/DOCS_INDEX.md`](DOCS_INDEX.md).
 
-Before final reporting, fetch the latest `origin/main` when the task contract requires it, rebase onto it, rerun the focused validation, and confirm the branch is clean, ahead of `origin/main`, and not behind.
+## Current Canonical File Map
 
-Cleanup happens after the final report is captured, not before. Do not create one-off task report markdown when the canonical final report template already exists. Do not broaden validation just to look thorough, and do not treat green tests on a different surface as proof for this one.
+After DOCS-006, the repository intentionally avoids a large Markdown corpus. The canonical reading path should be:
 
-If docs are changed, change the docs because the source-of-truth moved or the behavior did, not because the task needs a separate story file.
+1. `README.md` for the human product entrypoint and run commands.
+2. `AGENTS.md` for current AI-agent rules and hard safety boundaries.
+3. `docs/AI_PROJECT_MANUAL.md` for the comprehensive project handbook.
 
-Source provenance: [`AGENTS.md`](../AGENTS.md), [`docs/codex/WOLFYSTOCK_CODEX_DISCOVERY_PROTOCOL.md`](codex/WOLFYSTOCK_CODEX_DISCOVERY_PROTOCOL.md), [`docs/codex/WOLFYSTOCK_CODEX_EXECUTION_POLICY.md`](codex/WOLFYSTOCK_CODEX_EXECUTION_POLICY.md), [`docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md`](codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md), [`docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md`](codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md), [`docs/codex/WOLFYSTOCK_CODEX_VALIDATION_MATRIX.md`](codex/WOLFYSTOCK_CODEX_VALIDATION_MATRIX.md), [`docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`](codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md), [`docs/codex/NO_ADVICE_REGRESSION_GUARDS.md`](codex/NO_ADVICE_REGRESSION_GUARDS.md), [`docs/frontend/validation-playbook.md`](frontend/validation-playbook.md).
+Retained Markdown categories:
 
-## Public Launch NO-GO Blockers
+| File or lane | Why retained |
+| --- | --- |
+| `README.md` | Short human entrypoint and run-command starter. |
+| `AGENTS.md` | Repository AI-collaboration source of truth and protected-domain hard rules. |
+| `CLAUDE.md` | Required symlink to `AGENTS.md` for Claude compatibility; retained because `scripts/check_ai_assets.py` enforces it. |
+| `docs/AI_PROJECT_MANUAL.md` | Generated comprehensive handbook for AI workers and maintainers. |
+| `docs/DOCS_INDEX.md` | Tiny pointer to canonical docs; no archive lane or broad index. |
+| `docs/CHANGELOG.md` | Short compatibility file retained because release tooling still reads this path. |
+| `.github/*.md` | GitHub Copilot/instruction/issue/PR workflow assets. |
+| `.claude/skills/*.md` | Required repository skill assets checked by AI governance tooling. |
 
-Current public launch status is NO-GO. Existing foundations and offline validators are useful review plumbing, but they do not approve launch and do not replace target-environment operator evidence.
+`docs/AI_PROJECT_MANUAL_SOURCES.json` is not Markdown; it records deterministic source hashes, generator metadata, discovery counts, and section provenance. `docs/DOCS_INDEX.md` should stay tiny and only point to canonical files. Archive and product-recovery Markdown lanes are no longer retained as active project knowledge.
 
-Main blocker families are security/MFA/RBAC, provider/options/data quality, portfolio/backtest safety, WS2 multi-instance runtime, cost/quota/provider circuit enforcement, deployment/backup/rollback, and final release-candidate gates.
+Source provenance: [`README.md`](../README.md), [`AGENTS.md`](../AGENTS.md), [`docs/DOCS_INDEX.md`](DOCS_INDEX.md).
 
-Machine-readable launch evidence and operator bundles must remain sanitized and manual-review-only. `releaseApproved=false` remains the safe default unless every hard blocker has accepted external/manual evidence.
+## Compressed Project History
 
-Source provenance: [`docs/audits/README.md`](audits/README.md), [`docs/audits/public-launch-readiness-master.md`](audits/public-launch-readiness-master.md), [`docs/audits/public-launch-gap-register.md`](audits/public-launch-gap-register.md), [`docs/audits/deployment-readiness-checklist.md`](audits/deployment-readiness-checklist.md), [`docs/audits/launch-acceptance-evidence-pack.md`](audits/launch-acceptance-evidence-pack.md).
+WolfyStock began as a scheduled stock-analysis and notification project, then accumulated web, desktop, provider, backtest, portfolio, admin, and AI-assisted research surfaces. Later work shifted the architecture toward bounded contexts, provider/source readiness, route-level research workbenches, and protected semantics around scanner, portfolio, backtest, auth/RBAC, broker/accounting, and provider runtime.
 
-## Known Experimental And Demo-Only Surfaces
+Product-recovery and DATA-series work established the durable lesson that visible research value depends on real source authority: official risk/macro, authorized quote spine, scanner/watchlist packets, portfolio price/FX lineage, options entitlement, scenario baselines, and backtest dataset lineage must be explicit. Old audits, acceptance reports, launch checklists, design notes, and progress logs were useful for their moment, but their durable content now lives in this manual.
 
-Treat fixture-only, demo-only, dry-run, no-send, local-only, diagnostic-only, disabled-by-default, synthetic, fallback, cache-only, and advisory-only labels as hard safety signals.
+DOCS-006 hard-collapsed the Markdown corpus: keep a short README, a short AGENTS rule entrypoint, this generated manual, the manifest, and required governance/workflow mirrors. Do not recreate old index/archive lanes for routine tasks.
 
-Current examples include Options fixture/dry-run providers, disabled live options stubs, DuckDB diagnostic/local-only posture, WS2 synthetic worker and process-local SSE limitations, provider source-confidence helpers, optional enrichment metadata, and alert/notification dry-run surfaces.
+Source provenance: [`README.md`](../README.md), [`docs/DOCS_INDEX.md`](DOCS_INDEX.md).
 
-Do not present these as production-grade, launch-approved, live, billing-authoritative, decision-grade, or tradeable capabilities without separate approval and current validation.
+## AI Onboarding Checklist
 
-Source provenance: [`docs/audits/options-provider-adapter-contract.md`](audits/options-provider-adapter-contract.md), [`docs/quant-duckdb-engine.md`](quant-duckdb-engine.md), [`docs/alerts/README.md`](alerts/README.md), [`docs/operations/background-job-queue-boundary.md`](operations/background-job-queue-boundary.md), [`docs/operations/queue-ws2-metrics-production-readiness.md`](operations/queue-ws2-metrics-production-readiness.md), [`docs/data-reliability/provider-source-confidence-contract.md`](data-reliability/provider-source-confidence-contract.md), [`docs/audits/data-pipeline-r2-progressive-enrichment.md`](audits/data-pipeline-r2-progressive-enrichment.md).
+For a new task:
 
-## Source-Of-Truth Index
+1. Confirm CWD, branch, and `git status --short --branch`.
+2. Read the user's task contract and protected/forbidden scope.
+3. Read `AGENTS.md`, `README.md`, and this manual.
+4. Run read-only discovery with `rg`, `rg --files`, source files, tests, and scripts. Do not edit during discovery.
+5. Classify the task as docs, backend, frontend, API/schema, provider, auth, portfolio, backtest, workflow, or review.
+6. If the task touches a protected domain, stop unless explicit scope and validation are present.
+7. Make the smallest relevant change; avoid new docs, indexes, archive lanes, or parallel implementations.
+8. Run the focused validation that proves the touched area.
+9. Inspect diff/status, secret scan when required, and link/Markdown sanity for docs work.
+10. If the prompt requires rebase, fetch/rebase and rerun focused validation before final report or commit.
 
-Use this compact index to jump to the canonical doc for a topic, then read the supporting docs only as needed. If a topic is historical or archive-only, say so explicitly and do not treat it as current authority.
+For docs tasks, the default answer is to update this manual/generator and delete stale Markdown after durable knowledge is absorbed.
 
-| Topic | Canonical doc | Supporting docs | Owner / surface | When an AI should read it | Type |
-| --- | --- | --- | --- | --- | --- |
-| AI onboarding and navigation | [`docs/AI_PROJECT_MANUAL.md`](AI_PROJECT_MANUAL.md) | [`AGENTS.md`](../AGENTS.md), [`docs/DOCS_INDEX.md`](DOCS_INDEX.md), [`docs/codex/WOLFYSTOCK_SURFACE_MAP.md`](codex/WOLFYSTOCK_SURFACE_MAP.md), [`scripts/build_ai_project_manual.py`](../scripts/build_ai_project_manual.py) | repo-wide AI maintenance | first five minutes of any task | generated manual source |
-| Product surface map | [`docs/codex/WOLFYSTOCK_SURFACE_MAP.md`](codex/WOLFYSTOCK_SURFACE_MAP.md) | [`docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md`](WOLFYSTOCK_SYSTEM_HANDBOOK.md), [`docs/DOCS_INDEX.md`](DOCS_INDEX.md) | routes / APIs / tests | when a prompt names a surface but not exact files | active reference |
-| Repository AI rules | [`AGENTS.md`](../AGENTS.md) | [`docs/WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md`](WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md), [`docs/DOCS_INDEX.md`](DOCS_INDEX.md) | repo-wide | before any edit, commit, or validation | policy |
-| Codex workflow and reporting | [`docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md`](codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md) | [`docs/codex/WOLFYSTOCK_CODEX_DISCOVERY_PROTOCOL.md`](codex/WOLFYSTOCK_CODEX_DISCOVERY_PROTOCOL.md), [`docs/codex/WOLFYSTOCK_CODEX_EXECUTION_POLICY.md`](codex/WOLFYSTOCK_CODEX_EXECUTION_POLICY.md), [`docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md`](codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md), [`docs/codex/WOLFYSTOCK_CODEX_VALIDATION_MATRIX.md`](codex/WOLFYSTOCK_CODEX_VALIDATION_MATRIX.md), [`docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`](codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md), [`docs/codex/NO_ADVICE_REGRESSION_GUARDS.md`](codex/NO_ADVICE_REGRESSION_GUARDS.md) | Codex workers | before any execution-class task | policy |
-| Protected backend domains | [`docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md`](codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md) | [`docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md`](WOLFYSTOCK_SYSTEM_HANDBOOK.md), [`docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md`](codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md) | scanner / backtest / portfolio / provider / auth / options | before touching protected runtime semantics | policy |
-| Provider source confidence | [`docs/data-reliability/provider-source-confidence-contract.md`](data-reliability/provider-source-confidence-contract.md) | [`docs/provider-data/README.md`](provider-data/README.md), [`docs/operations/provider-capability-metadata.md`](operations/provider-capability-metadata.md), [`docs/audits/data-quality-user-disclosure-policy.md`](audits/data-quality-user-disclosure-policy.md) | provider / data | before reasoning about freshness, coverage, or authority | contract |
-| Official risk and quote activation | [`docs/data/market-source-activation-blueprint.md`](data/market-source-activation-blueprint.md) | [`docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md`](product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md), [`docs/product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md`](product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md) | market overview / liquidity / rotation | before activating official VIX, rates, or quote coverage | roadmap |
-| Symbol research packet | [`docs/product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md`](product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md) | [`docs/product-recovery/DATA_COVERAGE_MATRIX.md`](product-recovery/DATA_COVERAGE_MATRIX.md), [`docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md`](product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md) | watchlist / stock detail | before assembling row-level research packets | contract |
-| Quote spine and target env evidence | [`docs/product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md`](product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md) | [`docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md`](product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md), [`docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md`](product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md) | scanner / watchlist / stock / portfolio / market / rotation | before quote or history lineage changes | contract |
-| Backtest dataset lineage | [`docs/product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md`](product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md) | [`docs/backtest/README.md`](backtest/README.md), [`docs/backtest-system.md`](backtest-system.md), [`docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md`](product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md) | backtest / factor research | before adjusting backtest lineage or sweep storage | contract |
-| Options entitlement and no-advice | [`docs/product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md`](product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md) | [`docs/options/README.md`](options/README.md), [`docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md`](product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md), [`docs/audits/options-provider-adapter-contract.md`](audits/options-provider-adapter-contract.md), [`docs/audits/trading-no-advice-product-policy.md`](audits/trading-no-advice-product-policy.md) | options lab | before touching options chain, Greeks, or strategy copy | decision record |
-| Scenario baseline evidence | [`docs/product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md`](product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md) | [`docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md`](product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md), [`docs/product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md`](product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md) | scenario lab / target-env evidence | before scenario baseline or operator evidence work | plan |
-| Market data recovery summary | [`docs/product-recovery/WOLFYSTOCK_PRODUCT_RECOVERY_PLAN.md`](product-recovery/WOLFYSTOCK_PRODUCT_RECOVERY_PLAN.md) | [`docs/product-recovery/DATA_COVERAGE_MATRIX.md`](product-recovery/DATA_COVERAGE_MATRIX.md), [`docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md`](product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md) | recovery program | before any product-recovery task | roadmap |
-| Surface entry docs | [`docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md`](WOLFYSTOCK_SYSTEM_HANDBOOK.md) | [`docs/market-overview/README.md`](market-overview/README.md), [`docs/scanner/README.md`](scanner/README.md), [`docs/liquidity/README.md`](liquidity/README.md), [`docs/rotation/README.md`](rotation/README.md), [`docs/portfolio/README.md`](portfolio/README.md), [`docs/backtest/README.md`](backtest/README.md), [`docs/options/README.md`](options/README.md) | route families | before touching a user-facing route | entry point |
-| Historical / archive only | [`docs/ARCHIVE_INDEX.md`](ARCHIVE_INDEX.md) | [`docs/audits/README.md`](audits/README.md), [`docs/architecture/file-governance-taxonomy.md`](architecture/file-governance-taxonomy.md) | provenance only | only to trace prior decisions or retired evidence | historical |
-| Current documentation navigation | [`docs/DOCS_INDEX.md`](DOCS_INDEX.md) | [`docs/WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md`](WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md), [`docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md`](WOLFYSTOCK_SYSTEM_HANDBOOK.md) | maintainers | when you need the current doc tree | index |
-
-The canonical doc should be the first stop. Supporting docs are there to narrow scope, validate edge cases, or explain why a path is blocked, partial, or observation-only.
-
-Source provenance: [`AGENTS.md`](../AGENTS.md), [`docs/DOCS_INDEX.md`](DOCS_INDEX.md), [`docs/ARCHIVE_INDEX.md`](ARCHIVE_INDEX.md), [`docs/WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md`](WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md), [`docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md`](WOLFYSTOCK_SYSTEM_HANDBOOK.md), [`docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md`](codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md), [`docs/codex/WOLFYSTOCK_CODEX_DISCOVERY_PROTOCOL.md`](codex/WOLFYSTOCK_CODEX_DISCOVERY_PROTOCOL.md), [`docs/codex/WOLFYSTOCK_CODEX_EXECUTION_POLICY.md`](codex/WOLFYSTOCK_CODEX_EXECUTION_POLICY.md), [`docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md`](codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md), [`docs/codex/WOLFYSTOCK_CODEX_VALIDATION_MATRIX.md`](codex/WOLFYSTOCK_CODEX_VALIDATION_MATRIX.md), [`docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`](codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md), [`docs/codex/NO_ADVICE_REGRESSION_GUARDS.md`](codex/NO_ADVICE_REGRESSION_GUARDS.md), [`docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md`](codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md), [`docs/codex/WOLFYSTOCK_SURFACE_MAP.md`](codex/WOLFYSTOCK_SURFACE_MAP.md), [`docs/data-reliability/provider-source-confidence-contract.md`](data-reliability/provider-source-confidence-contract.md), [`docs/operations/provider-capability-metadata.md`](operations/provider-capability-metadata.md), [`docs/data/market-source-activation-blueprint.md`](data/market-source-activation-blueprint.md), [`docs/product-recovery/WOLFYSTOCK_PRODUCT_RECOVERY_PLAN.md`](product-recovery/WOLFYSTOCK_PRODUCT_RECOVERY_PLAN.md), [`docs/product-recovery/DATA_COVERAGE_MATRIX.md`](product-recovery/DATA_COVERAGE_MATRIX.md), [`docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md`](product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md), [`docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md`](product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md), [`docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md`](product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md), [`docs/product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md`](product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md), [`docs/product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md`](product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md), [`docs/product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md`](product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md), [`docs/product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md`](product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md), [`docs/product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md`](product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md), [`docs/market-overview/README.md`](market-overview/README.md), [`docs/scanner/README.md`](scanner/README.md), [`docs/liquidity/README.md`](liquidity/README.md), [`docs/rotation/README.md`](rotation/README.md), [`docs/options/README.md`](options/README.md), [`docs/portfolio/README.md`](portfolio/README.md), [`docs/backtest/README.md`](backtest/README.md), [`docs/backtest-system.md`](backtest-system.md), [`docs/audits/data-quality-user-disclosure-policy.md`](audits/data-quality-user-disclosure-policy.md), [`docs/audits/options-provider-adapter-contract.md`](audits/options-provider-adapter-contract.md), [`docs/audits/backtest-portfolio-public-safety-audit.md`](audits/backtest-portfolio-public-safety-audit.md), [`docs/audits/trading-no-advice-product-policy.md`](audits/trading-no-advice-product-policy.md).
-
-## Source Inclusion And Exclusion Policy
-
-The generator discovers Markdown files but only includes curated high-signal sources in the manual. This prevents the manual from exceeding practical AI context size and avoids treating old evidence as current truth.
-
-Default inclusions are current authority docs, domain entry points, launch/blocker indexes, Codex workflow docs, and a few targeted domain contracts. Default exclusions are archive lanes, local/generated evidence, task audit dumps, language duplicates, fixture-local READMEs, AI-governance mirrors, and broad legacy guides unless a current source explicitly promotes them.
-
-When source docs conflict, prefer the current prompt, `AGENTS.md`, current code/tests/scripts, and active authority docs. Use archives for provenance only.
-
-Source provenance: [`docs/DOCS_INDEX.md`](DOCS_INDEX.md), [`docs/architecture/file-governance-taxonomy.md`](architecture/file-governance-taxonomy.md), [`docs/ARCHIVE_INDEX.md`](ARCHIVE_INDEX.md), [`docs/audits/README.md`](audits/README.md).
+Source provenance: [`AGENTS.md`](../AGENTS.md), [`README.md`](../README.md), [`docs/DOCS_INDEX.md`](DOCS_INDEX.md).
 
 ## Source Map
 
-This map is generated from the curated source allowlist. It is a lookup aid, not a replacement for reading the linked sources before editing a domain.
+This map is generated from the hard-collapse source set. The manual contains absorbed durable knowledge from retired docs, but only these canonical files remain source-tracked.
 
-| Manual section | Primary sources | Update trigger | Validation |
+| Manual section | Tracked sources | Update trigger | Validation |
 | --- | --- | --- | --- |
-| Start Here: Authority And Operating Posture | `AGENTS.md`<br>`docs/DOCS_INDEX.md`<br>`docs/WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md`<br>`docs/architecture/file-governance-taxonomy.md` | AI governance, source authority, archive policy, or generated-artifact policy changes. | Docs/generator validation plus `python scripts/check_ai_assets.py` when AI governance assets change. |
-| Product Purpose And Current Deployment Boundary | `README.md`<br>`docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md`<br>`docs/DEPLOY.md`<br>`docs/audits/private-beta-readiness.md`<br>`docs/audits/public-launch-readiness-master.md`<br>`docs/audits/trading-no-advice-product-policy.md` | Product positioning, deployment mode, private beta, no-advice, or launch verdict changes. | Docs-only validation for docs changes; release/UAT evidence for deployment posture changes. |
-| Protected Domains And Hard Stops | `AGENTS.md`<br>`docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md`<br>`docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md`<br>`docs/codex/NO_ADVICE_REGRESSION_GUARDS.md`<br>`docs/audits/trading-no-advice-product-policy.md`<br>`docs/data-reliability/provider-source-confidence-contract.md`<br>`docs/operations/provider-capability-metadata.md` | Protected-domain boundaries, no-advice policy, provider/source confidence, or hard-stop validation rules change. | Read the guard docs first; then use focused tests and the smallest validation tier that proves the protected semantic stayed intact. |
-| Product Surfaces And Data Reality | `README.md`<br>`docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md`<br>`docs/market-overview/README.md`<br>`docs/scanner/README.md`<br>`docs/liquidity/README.md`<br>`docs/rotation/README.md`<br>`docs/options/README.md`<br>`docs/portfolio/README.md`<br>`docs/backtest/README.md`<br>`docs/backtest-system.md`<br>`docs/codex/WOLFYSTOCK_SURFACE_MAP.md`<br>`docs/product-recovery/WOLFYSTOCK_PRODUCT_RECOVERY_PLAN.md`<br>`docs/product-recovery/DATA_COVERAGE_MATRIX.md`<br>`docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md`<br>`docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md`<br>`docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md`<br>`docs/product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md`<br>`docs/product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md`<br>`docs/product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md`<br>`docs/product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md`<br>`docs/product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md`<br>`docs/data/market-source-activation-blueprint.md`<br>`docs/data-reliability/provider-source-confidence-contract.md`<br>`docs/operations/provider-capability-metadata.md`<br>`docs/audits/data-quality-user-disclosure-policy.md`<br>`docs/audits/options-provider-adapter-contract.md`<br>`docs/audits/backtest-portfolio-public-safety-audit.md`<br>`docs/audits/trading-no-advice-product-policy.md` | Surface maps, data-roadmap boundaries, or any professional data family readiness change. | Use the source docs and current code/tests to classify every surface and family as ready, partial, blocked, missing, unauthorized, or observation-only before editing anything else. |
-| Architecture And Major Surfaces | `docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md`<br>`docs/architecture/WOLFYSTOCK_MODULE_ARCHITECTURE.md`<br>`docs/architecture/backend-frontend-modular-maintenance-handbook.md`<br>`README.md` | Route map, API group, module ownership, dependency direction, or first-files debug flow changes. | Focused validation for touched surface; architecture docs-only validation for handbook-only changes. |
-| Auth, RBAC, And MFA | `docs/audits/index-security-rbac-mfa.md`<br>`docs/audits/auth-rbac-release-security-guide.md`<br>`docs/audits/admin-rbac-r5-coarse-fallback-removal-plan.md`<br>`docs/audits/security-mfa-secret-storage-hardening-plan.md`<br>`docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md` | Any auth, session, capability, MFA, security evidence, admin route, or role-governance change. | Focused auth/RBAC tests, route-capability inventory, redaction checks, and wider gates when enforcement changes. |
-| Portfolio And Backtest | `docs/portfolio/README.md`<br>`docs/backtest/README.md`<br>`docs/backtest-system.md`<br>`docs/audits/backtest-portfolio-public-safety-audit.md`<br>`docs/codex/WOLFYSTOCK_BACKTEST_UNIVERSE_RULES.md` | Portfolio accounting/read models, backtest execution/readback/export, public-safety, or owner-isolation changes. | Portfolio/backtest focused tests, golden fixtures, mutation guards, no-advice checks, and owner-isolation evidence when applicable. |
-| Provider, Quota, And Cost | `docs/provider-data/README.md`<br>`docs/codex/WOLFYSTOCK_PROVIDER_BUDGET_AND_ROUTING_RULES.md`<br>`docs/audits/index-provider-data-options.md`<br>`docs/audits/index-cost-quota-observability.md`<br>`docs/audits/quota-reserve-release-operator-evidence-checklist.md` | Provider routing/fallback/freshness/cache, quota, circuit, budget, cost, or provider diagnostics changes. | Provider/cache/freshness tests, quota lifecycle tests, no-live-call proof when scoped, and redaction checks. |
-| WS2 And Durable Runtime | `docs/operations/background-job-queue-boundary.md`<br>`docs/operations/queue-ws2-metrics-production-readiness.md`<br>`docs/audits/ws2-multi-instance-smoke-test-design.md`<br>`docs/audits/ws2-multi-user-runtime-cost-control-design.md` | Analysis task queue, SSE, durable polling, worker, broker, multi-instance, or WS2 readiness changes. | Synthetic/local smoke first; staging/API A-B evidence and operator artifacts only when deployment posture changes. |
-| Options And Data Pipeline | `docs/options/README.md`<br>`docs/audits/options-provider-adapter-contract.md`<br>`docs/audits/data-pipeline-r2-progressive-enrichment.md`<br>`docs/audits/data-quality-user-disclosure-policy.md`<br>`docs/audits/trading-no-advice-product-policy.md` | Options providers, chain/Greeks, scenario copy, optional enrichment, data-quality, or no-advice changes. | Options/data-quality focused tests, fixture/mocked-provider tests, no-order scans, and redaction checks. |
-| Frontend IA And UI Conventions | `docs/frontend/README.md`<br>`docs/frontend/visual-system.md`<br>`docs/frontend/validation-playbook.md`<br>`docs/frontend/WOLFYSTOCK_FRONTEND_NOISE_BUDGET.md`<br>`docs/frontend/WOLFYSTOCK_CONSUMER_DATA_QUALITY_UX.md`<br>`docs/frontend/WOLFYSTOCK_ADMIN_MAINTENANCE_OS.md` | Frontend route taxonomy, primitives, route IA, visual system, consumer/admin disclosure, or browser-evidence rules change. | Frontend focused tests plus lint/build/browser evidence when UI source or visual behavior changes. |
-| Codex Workflow, Validation, And Reporting | `AGENTS.md`<br>`docs/codex/WOLFYSTOCK_CODEX_DISCOVERY_PROTOCOL.md`<br>`docs/codex/WOLFYSTOCK_CODEX_EXECUTION_POLICY.md`<br>`docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md`<br>`docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md`<br>`docs/codex/WOLFYSTOCK_CODEX_VALIDATION_MATRIX.md`<br>`docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`<br>`docs/codex/NO_ADVICE_REGRESSION_GUARDS.md`<br>`docs/frontend/validation-playbook.md` | Task modes, prompt fields, validation matrix, final report format, or frontend evidence rules change. | Run the smallest validation that proves the touched files, then record the command, exit status, and any blocker in the final report. |
-| Public Launch NO-GO Blockers | `docs/audits/README.md`<br>`docs/audits/public-launch-readiness-master.md`<br>`docs/audits/public-launch-gap-register.md`<br>`docs/audits/deployment-readiness-checklist.md`<br>`docs/audits/launch-acceptance-evidence-pack.md` | Launch verdict, blocker register, release checklist, operator evidence contract, or launch acceptance process changes. | Docs-only validation for launch docs; release-grade gates and sanitized operator evidence for actual launch posture changes. |
-| Known Experimental And Demo-Only Surfaces | `docs/audits/options-provider-adapter-contract.md`<br>`docs/quant-duckdb-engine.md`<br>`docs/alerts/README.md`<br>`docs/operations/background-job-queue-boundary.md`<br>`docs/operations/queue-ws2-metrics-production-readiness.md`<br>`docs/data-reliability/provider-source-confidence-contract.md`<br>`docs/audits/data-pipeline-r2-progressive-enrichment.md` | Any diagnostic/demo/fixture/dry-run surface becomes runtime, production, or user-visible decision authority. | Fail-closed tests, no-live-call proof, redaction checks, docs wording review, and task-specific runtime evidence. |
-| Source-Of-Truth Index | `AGENTS.md`<br>`docs/DOCS_INDEX.md`<br>`docs/ARCHIVE_INDEX.md`<br>`docs/WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md`<br>`docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md`<br>`docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md`<br>`docs/codex/WOLFYSTOCK_CODEX_DISCOVERY_PROTOCOL.md`<br>`docs/codex/WOLFYSTOCK_CODEX_EXECUTION_POLICY.md`<br>`docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md`<br>`docs/codex/WOLFYSTOCK_CODEX_VALIDATION_MATRIX.md`<br>`docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`<br>`docs/codex/NO_ADVICE_REGRESSION_GUARDS.md`<br>`docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md`<br>`docs/codex/WOLFYSTOCK_SURFACE_MAP.md`<br>`docs/data-reliability/provider-source-confidence-contract.md`<br>`docs/operations/provider-capability-metadata.md`<br>`docs/data/market-source-activation-blueprint.md`<br>`docs/product-recovery/WOLFYSTOCK_PRODUCT_RECOVERY_PLAN.md`<br>`docs/product-recovery/DATA_COVERAGE_MATRIX.md`<br>`docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md`<br>`docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md`<br>`docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md`<br>`docs/product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md`<br>`docs/product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md`<br>`docs/product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md`<br>`docs/product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md`<br>`docs/product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md`<br>`docs/market-overview/README.md`<br>`docs/scanner/README.md`<br>`docs/liquidity/README.md`<br>`docs/rotation/README.md`<br>`docs/options/README.md`<br>`docs/portfolio/README.md`<br>`docs/backtest/README.md`<br>`docs/backtest-system.md`<br>`docs/audits/data-quality-user-disclosure-policy.md`<br>`docs/audits/options-provider-adapter-contract.md`<br>`docs/audits/backtest-portfolio-public-safety-audit.md`<br>`docs/audits/trading-no-advice-product-policy.md` | Canonical source maps, source curation, or topic ownership changes. | Read the canonical doc first, then supporting docs, and use the class label to decide whether the topic is policy, contract, roadmap, historical, or generated manual source. |
-| Source Inclusion And Exclusion Policy | `docs/DOCS_INDEX.md`<br>`docs/architecture/file-governance-taxonomy.md`<br>`docs/ARCHIVE_INDEX.md`<br>`docs/audits/README.md` | Docs taxonomy, archive policy, generated artifact policy, or manual source curation changes. | Run this generator twice and prove deterministic output; run docs diff-check and secret scan. |
+| Project Identity And Product Purpose | `README.md`<br>`AGENTS.md` | Product positioning, target audience, or no-advice posture changes. | Docs-only validation plus no-advice grep when user-visible wording changes. |
+| Architecture Overview | `AGENTS.md`<br>`README.md` | Runtime entrypoints, module ownership, public contracts, or high-risk boundary rules change. | Run the focused gate for the touched module plus `python scripts/check_ai_assets.py` for AI-governance edits. |
+| Frontend Surfaces | `README.md`<br>`AGENTS.md` | Route map, page ownership, consumer copy, route IA, or visual system changes. | Frontend tests/lint/build plus browser or screenshot evidence when UI source changes. |
+| Backend API And Service Structure | `AGENTS.md`<br>`README.md` | API families, service boundaries, schema contracts, report payloads, or validation routing changes. | Backend gate or closest pytest/py_compile evidence; wider gates for protected/shared contracts. |
+| Data Providers And Data Reality Boundaries | `AGENTS.md`<br>`README.md` | Provider routing, source authority, data readiness, freshness, lineage, or professional-roadmap changes. | Provider/cache/freshness tests, no-live-call proof when relevant, and raw-provider leakage scans. |
+| Market, Options, Macro, Liquidity, Backtest, Scenario, And Portfolio Domains | `AGENTS.md`<br>`README.md` | Any domain readiness, public copy, protected math/accounting, options authority, or macro/liquidity source change. | Domain-focused tests plus no-advice and leakage checks; never use unrelated green tests as proof. |
+| Professional Analytics Roadmap And Readiness | `README.md`<br>`AGENTS.md` | Professional data roadmap, readiness labels, or evidence-harness expectations change. | Docs/generator validation for handbook changes; domain validation for implementation changes. |
+| Protected Domains And Safety Rules | `AGENTS.md` | Any protected boundary or safety policy changes. | Focused tests for the exact protected semantic plus diff/status/secret/no-advice checks before reporting completion. |
+| No-Advice Policy | `AGENTS.md` | User-facing research copy, generated reports, product policy, options/backtest/portfolio wording, or no-advice guards change. | Focused grep/classification plus relevant page/report tests. |
+| Validation Matrix | `AGENTS.md`<br>`README.md` | Validation commands, CI gates, protected test expectations, or docs/generator workflow changes. | Run the validation relevant to this manual/generator when edited. |
+| Codex Workflow And Landing Changes | `AGENTS.md`<br>`docs/DOCS_INDEX.md` | Task modes, git policy, final-report requirements, or AI workflow rules change. | Docs/generator check and `python scripts/check_ai_assets.py` when governance assets change. |
+| Current Canonical File Map | `README.md`<br>`AGENTS.md`<br>`docs/DOCS_INDEX.md` | Canonical docs set, retained Markdown policy, or AI asset governance changes. | Inventory before/after counts, link sanity, generator `--check`, and `python scripts/check_ai_assets.py`. |
+| Compressed Project History | `README.md`<br>`docs/DOCS_INDEX.md` | Major project direction, docs-retention policy, or historical context changes. | Docs-only validation and inventory count check. |
+| AI Onboarding Checklist | `AGENTS.md`<br>`README.md`<br>`docs/DOCS_INDEX.md` | Onboarding order, docs model, or task execution policy changes. | Generator check plus AI asset check. |
 
 ## JSON Manifest
 
-The machine-readable manifest is generated at `docs/AI_PROJECT_MANUAL_SOURCES.json`. It records source paths, titles, purposes, categories, SHA-256 hashes, byte counts, line counts, manual sections, and discovery/exclusion statistics.
+The machine-readable manifest is generated at `docs/AI_PROJECT_MANUAL_SOURCES.json`. It records source paths, source hashes, generator metadata, section provenance, and Markdown discovery statistics.
 
 Current discovery summary:
 
-- Markdown discovered after pruned directory rules: 383
-- Candidate Markdown after exclusion policy: 232
-- Curated sources included in this manual: 73
+- Markdown discovered after pruned directory rules, excluding this generated manual: 19
+- Candidate Markdown after hard-collapse policy: 3
+- Curated sources included in this manual: 3
 
 Exclusion policy:
 
-- `.git/**`
-- `node_modules/**`
-- `dist/**`
-- `static/**`
-- `coverage/**`
-- `reports/** unless explicitly high-value`
-- `worktree_archives/**`
-- `archive folders unless explicitly allowlisted`
-- `docs/codex/audits/** task reports unless explicitly promoted by a current source`
-- `local/generated evidence such as .codex/**, .claude/reviews/**, artifacts/**, screenshots/**, and test-results/**`
-- `AI-governance mirrors such as CLAUDE.md and .github/copilot-instructions.md when AGENTS.md is available`
-- `language duplicates and broad translated guides unless generating a language-specific manual`
+- Keep the manual source set intentionally tiny: AGENTS.md, README.md, and docs/DOCS_INDEX.md.
+- Do not rediscover archive lanes, task reports, stale audits, old plans, or one-off acceptance snapshots as manual sources.
+- Keep .github and .claude Markdown files as governance/workflow mirrors when required by scripts/check_ai_assets.py, but do not treat them as handbook sources.
+- Keep issue and PR templates as GitHub workflow assets, not project handbook chapters.
+- Exclude generated outputs, local evidence, fixture READMEs, language duplicates, broad legacy guides, and dependency/build/cache folders.
+- When durable knowledge is needed, merge it into this deterministic generator/manual instead of adding another index or archive file.
