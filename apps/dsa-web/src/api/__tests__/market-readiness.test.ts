@@ -258,12 +258,27 @@ describe('marketApi.getDataSourceGapRegistry', () => {
     expect(payload.networkCallsEnabled).toBe(false);
     expect(payload.scoreAuthorityAllowed).toBe(false);
     expect(view.summary.totalFamilies).toBe(4);
+    expect(view.groups.map((group) => [group.groupId, group.groupLabel, group.families.length])).toEqual([
+      ['quote_market', '报价 / 市场骨架', 1],
+      ['options', '期权与衍生结构', 2],
+      ['macro_liquidity_credit', '宏观 / 流动性 / 信用', 1],
+      ['backtest_research', '回测 / 研究血缘', 0],
+      ['scenario', '情景基线', 0],
+      ['portfolio', '组合估值', 0],
+      ['positioning_flows', '持仓 / 资金流', 0],
+    ]);
     expect(view.families.map((family) => [family.familyKey, family.familyLabel, family.status.label])).toEqual([
       ['stock_quote_spine', '股票报价骨架', '部分可用'],
       ['macro_rates', '宏观与利率', '仅观察'],
       ['options_chains', '期权链', '未授权'],
       ['gamma_dealer_positioning', 'Gamma / Dealer Positioning', '阻断'],
     ]);
+    expect(view.families.find((family) => family.familyKey === 'stock_quote_spine')).toMatchObject({
+      groupId: 'quote_market',
+      groupLabel: '报价 / 市场骨架',
+      dataHydrationAllowed: '允许',
+      scoreTradingAuthorityAllowed: '不允许',
+    });
     expect(view.families.find((family) => family.familyKey === 'options_chains')?.scoreTradingAuthorityAllowed).toBe('不允许');
     expect(view.families.find((family) => family.familyKey === 'gamma_dealer_positioning')?.dataHydrationAllowed).toBe('不允许');
   });
@@ -297,6 +312,7 @@ describe('marketApi.getDataSourceGapRegistry', () => {
     expect(family.dataHydrationAllowed).toBe('待补证');
     expect(family.scoreTradingAuthorityAllowed).toBe('待补证');
     expect(family.consumerSafeDescription).toBe('数据说明待补证。');
+    expect(view.groups.find((group) => group.groupId === 'other')?.families[0]?.familyKey).toBe('unknown_new_family');
     expect(JSON.stringify(view)).not.toMatch(/已就绪|权限 可用|新鲜/);
   });
 });

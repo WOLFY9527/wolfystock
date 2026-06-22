@@ -586,6 +586,8 @@ export type DataSourceGapRegistryStatusView = {
 export type DataSourceGapRegistryFamilyView = {
   familyKey: string;
   familyLabel: string;
+  groupId: DataSourceGapRegistryGroupId;
+  groupLabel: string;
   status: DataSourceGapRegistryStatusView;
   authorityState: DataSourceGapRegistryStatusView;
   freshnessState: DataSourceGapRegistryStatusView;
@@ -600,6 +602,23 @@ export type DataSourceGapRegistryFamilyView = {
   consumerSafeDescription: string;
 };
 
+export type DataSourceGapRegistryGroupId =
+  | 'quote_market'
+  | 'options'
+  | 'macro_liquidity_credit'
+  | 'backtest_research'
+  | 'scenario'
+  | 'portfolio'
+  | 'positioning_flows'
+  | 'other';
+
+export type DataSourceGapRegistryGroupView = {
+  groupId: DataSourceGapRegistryGroupId;
+  groupLabel: string;
+  groupDescription: string;
+  families: DataSourceGapRegistryFamilyView[];
+};
+
 export type DataSourceGapRegistryView = {
   diagnosticOnly: boolean;
   runtimeCalled: boolean;
@@ -607,6 +626,7 @@ export type DataSourceGapRegistryView = {
   scoreAuthorityAllowed: boolean;
   summary: DataSourceGapRegistrySummary;
   families: DataSourceGapRegistryFamilyView[];
+  groups: DataSourceGapRegistryGroupView[];
 };
 
 function normalizeReadinessSymbols(symbols?: string[] | string | null): string | undefined {
@@ -819,6 +839,65 @@ const DATA_SOURCE_GAP_BLOCKERS: Record<string, { entitlement?: string; integrati
   },
 };
 
+const DATA_SOURCE_GAP_GROUPS: Array<{
+  id: DataSourceGapRegistryGroupId;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: 'quote_market',
+    label: '报价 / 市场骨架',
+    description: '报价、指数、ETF 和波动率输入的专业数据骨架。',
+  },
+  {
+    id: 'options',
+    label: '期权与衍生结构',
+    description: '期权链、策略分析、Gamma 与 dealer positioning 权益边界。',
+  },
+  {
+    id: 'macro_liquidity_credit',
+    label: '宏观 / 流动性 / 信用',
+    description: '利率、Fed 流动性、信用压力等官方风险输入。',
+  },
+  {
+    id: 'backtest_research',
+    label: '回测 / 研究血缘',
+    description: '回测数据集、研究输入和复现实验血缘。',
+  },
+  {
+    id: 'scenario',
+    label: '情景基线',
+    description: '情景实验所需的可复现基线输入。',
+  },
+  {
+    id: 'portfolio',
+    label: '组合估值',
+    description: '组合价格、FX、估值、基准与因子血缘。',
+  },
+  {
+    id: 'positioning_flows',
+    label: '持仓 / 资金流',
+    description: '广度、资金流和持仓来源评审边界。',
+  },
+];
+
+const DATA_SOURCE_GAP_FAMILY_GROUP: Record<string, DataSourceGapRegistryGroupId> = {
+  stock_quote_spine: 'quote_market',
+  etf_index_coverage: 'quote_market',
+  vix_volatility: 'quote_market',
+  fundamentals: 'quote_market',
+  options_chains: 'options',
+  options_strategy_analytics: 'options',
+  gamma_dealer_positioning: 'options',
+  macro_rates: 'macro_liquidity_credit',
+  fed_liquidity: 'macro_liquidity_credit',
+  credit_stress: 'macro_liquidity_credit',
+  backtest_dataset_lineage: 'backtest_research',
+  scenario_baselines: 'scenario',
+  portfolio_valuation_lineage: 'portfolio',
+  breadth_flows_positioning: 'positioning_flows',
+};
+
 function normalizeGapToken(value?: string | null): string {
   return String(value || '').trim().toLowerCase();
 }
@@ -903,34 +982,56 @@ export function buildDataSourceGapRegistryView(
 ): DataSourceGapRegistryView {
   const summary = registry?.summary || DEFAULT_DATA_SOURCE_GAP_REGISTRY_SUMMARY;
   const families = Array.isArray(registry?.families) ? registry.families : [];
+  const familyViews = families.map((family) => {
+    const familyKey = family.familyKey || 'unknown_family';
+    const blockerCopy = DATA_SOURCE_GAP_BLOCKERS[familyKey] || {};
+    const hydration = dataSourceGapBooleanView(family.providerHydrationAllowed);
+    const scoreAuthority = dataSourceGapScoreAuthorityView(family.scoreTradingAuthorityAllowed);
+    const groupId = DATA_SOURCE_GAP_FAMILY_GROUP[familyKey] || 'other';
+    const groupLabel = DATA_SOURCE_GAP_GROUPS.find((group) => group.id === groupId)?.label || '其他待补证';
+    return {
+      familyKey,
+      familyLabel: DATA_SOURCE_GAP_FAMILY_LABELS[familyKey] || family.consumerLabel || '数据家族',
+      groupId,
+      groupLabel,
+      status: dataSourceGapStatusView(family.status),
+      authorityState: dataSourceGapAuthorityView(family.authorityState),
+      freshnessState: dataSourceGapFreshnessView(family.freshnessState),
+      entitlementOrLicensingBlocker: blockerCopy.entitlement || (family.entitlementOrLicensingBlocker ? '权益或授权阻断待复核。' : '暂无'),
+      integrationBlocker: blockerCopy.integration || (family.integrationBlocker ? '集成阻断待复核。' : '暂无'),
+      sourceEvidenceState: blockerCopy.sourceEvidence || '待补证',
+      nextIntegrationStep: DATA_SOURCE_GAP_NEXT_STEPS[familyKey] || (family.nextIntegrationStep ? '按既有集成路径补证后再展示。' : '待补证'),
+      dataHydrationAllowed: hydration.dataHydrationAllowed,
+      dataHydrationVariant: hydration.dataHydrationVariant,
+      scoreTradingAuthorityAllowed: scoreAuthority.scoreTradingAuthorityAllowed,
+      scoreTradingAuthorityVariant: scoreAuthority.scoreTradingAuthorityVariant,
+      consumerSafeDescription: DATA_SOURCE_GAP_DESCRIPTIONS[familyKey] || (family.consumerSafeDescription ? '已返回说明，需人工复核后展示。' : '数据说明待补证。'),
+    };
+  });
+  const groups = [
+    ...DATA_SOURCE_GAP_GROUPS,
+    {
+      id: 'other' as DataSourceGapRegistryGroupId,
+      label: '其他待补证',
+      description: '后端新增但前端尚未归类的数据家族。',
+    },
+  ]
+    .map((group) => ({
+      groupId: group.id,
+      groupLabel: group.label,
+      groupDescription: group.description,
+      families: familyViews.filter((family) => family.groupId === group.id),
+    }))
+    .filter((group) => group.families.length > 0 || group.groupId !== 'other');
+
   return {
     diagnosticOnly: registry?.diagnosticOnly !== false,
     runtimeCalled: registry?.providerRuntimeCalled === true,
     networkCallsEnabled: registry?.networkCallsEnabled === true,
     scoreAuthorityAllowed: registry?.scoreAuthorityAllowed === true,
     summary,
-    families: families.map((family) => {
-      const familyKey = family.familyKey || 'unknown_family';
-      const blockerCopy = DATA_SOURCE_GAP_BLOCKERS[familyKey] || {};
-      const hydration = dataSourceGapBooleanView(family.providerHydrationAllowed);
-      const scoreAuthority = dataSourceGapScoreAuthorityView(family.scoreTradingAuthorityAllowed);
-      return {
-        familyKey,
-        familyLabel: DATA_SOURCE_GAP_FAMILY_LABELS[familyKey] || family.consumerLabel || '数据家族',
-        status: dataSourceGapStatusView(family.status),
-        authorityState: dataSourceGapAuthorityView(family.authorityState),
-        freshnessState: dataSourceGapFreshnessView(family.freshnessState),
-        entitlementOrLicensingBlocker: blockerCopy.entitlement || (family.entitlementOrLicensingBlocker ? '权益或授权阻断待复核。' : '暂无'),
-        integrationBlocker: blockerCopy.integration || (family.integrationBlocker ? '集成阻断待复核。' : '暂无'),
-        sourceEvidenceState: blockerCopy.sourceEvidence || '待补证',
-        nextIntegrationStep: DATA_SOURCE_GAP_NEXT_STEPS[familyKey] || (family.nextIntegrationStep ? '按既有集成路径补证后再展示。' : '待补证'),
-        dataHydrationAllowed: hydration.dataHydrationAllowed,
-        dataHydrationVariant: hydration.dataHydrationVariant,
-        scoreTradingAuthorityAllowed: scoreAuthority.scoreTradingAuthorityAllowed,
-        scoreTradingAuthorityVariant: scoreAuthority.scoreTradingAuthorityVariant,
-        consumerSafeDescription: DATA_SOURCE_GAP_DESCRIPTIONS[familyKey] || (family.consumerSafeDescription ? '已返回说明，需人工复核后展示。' : '数据说明待补证。'),
-      };
-    }),
+    families: familyViews,
+    groups,
   };
 }
 
