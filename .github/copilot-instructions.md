@@ -3,34 +3,34 @@
 Canonical source: [`AGENTS.md`](../AGENTS.md).
 
 If any instruction in this file conflicts with `AGENTS.md`, follow `AGENTS.md`.
+`CLAUDE.md` must remain a symlink to `AGENTS.md`. Repository skills retained for
+Claude-compatible workflows live in `.claude/skills/`.
 
 ## Core Rules
 
+- Use `README.md` for the human entrypoint and `docs/AI_PROJECT_MANUAL.md` for
+  the comprehensive project handbook.
 - Respect directory boundaries:
   - Backend: `src/`, `data_provider/`, `api/`, `bot/`
   - Web: `apps/dsa-web/`
   - Desktop: `apps/dsa-desktop/`
   - Deployment/workflows: `scripts/`, `.github/workflows/`, `docker/`
-- Do not run `git commit`, `git tag`, or `git push` without explicit user confirmation.
-- Do not hardcode secrets, accounts, ports, model names, absolute environment-specific paths, or environment-specific branches.
-- Reuse existing modules, configuration entrypoints, scripts, and tests instead of adding parallel implementations.
-- For user-visible behavior changes, CLI/API changes, deployment changes, notification changes, or report-structure changes, update the relevant docs and `docs/CHANGELOG.md`.
-- Use `README.md` for getting started, runtime/deployment, and high-level capability summaries; put detailed module behavior, page interaction, and troubleshooting guidance in the appropriate `docs/*.md` file.
-- If `README.md` is not updated, explain why and point to the document that was updated instead.
-- When config semantics change, sync `.env.example` and assess impact on local runs, Docker, GitHub Actions, API, Web, and Desktop.
+- Do not run `git commit`, `git tag`, `git push`, `git merge`, or `git rebase`
+  without explicit task authorization.
+- Do not hardcode secrets, accounts, tokens, ports, model names, private URLs,
+  or absolute environment-specific paths.
+- Reuse existing modules, configuration entrypoints, scripts, and tests instead
+  of adding parallel implementations.
+- Do not modify provider order, fallback behavior, auth, accounting, broker,
+  DB migrations, package/config files, CI, or other protected domains unless the
+  task explicitly scopes them.
 
 ## Validation
 
-- Backend changes: prefer `./scripts/ci_gate.sh`; at minimum run `python -m py_compile` on changed Python files and the closest deterministic tests.
-- Web changes: run `cd apps/dsa-web && npm ci && npm run lint && npm run build`.
-- Desktop changes: build web first, then desktop if feasible.
-- Review work should prioritize CI evidence (`gh pr checks`, workflow logs) before re-running local validation.
-- AI governance changes: run `python scripts/check_ai_assets.py`.
-
-## AI Asset Governance
-
-- `AGENTS.md` is the single source of truth for repository AI collaboration rules.
-- `CLAUDE.md` must remain a symlink to `AGENTS.md`.
-- Use `.github/instructions/*.instructions.md` for path-specific guidance.
-- Current repository collaboration skills live in `.claude/skills/`; keep them aligned with `AGENTS.md`.
-- Use `docs/architecture/file-governance-taxonomy.md` for archive/delete, active-doc authority, generated-artifact, and `.claude/skills` versus `.agents` governance.
+- Backend: prefer `./scripts/ci_gate.sh`; otherwise run `python -m py_compile`
+  on changed files plus the closest deterministic tests.
+- Web: `cd apps/dsa-web && npm ci && npm run lint && npm run build` when
+  frontend source changes.
+- Desktop: build Web first, then desktop when feasible.
+- AI/docs governance: run `python scripts/build_ai_project_manual.py --check`
+  and `python scripts/check_ai_assets.py`.

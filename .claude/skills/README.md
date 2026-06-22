@@ -1,11 +1,13 @@
 # Repository Claude Skills
 
-本目录存放仓库级协作 skills，属于版本库资产。
+This directory contains the repository-level skill assets retained for
+Claude-compatible workflows.
 
-- 规则真源：仓库根目录 `AGENTS.md`
-- 兼容入口：根目录 `CLAUDE.md`（应为指向 `AGENTS.md` 的软链接）
-- 本目录中的 skill 需要与 `AGENTS.md` 保持一致
-- `.claude/reviews/` 属于本地分析产物，不作为规则真源
-- 文件归档、删除、`.agents` 镜像与本目录边界参考 `docs/architecture/file-governance-taxonomy.md`
+- Rule source: repository root `AGENTS.md`
+- Compatibility entry: root `CLAUDE.md`, which must be a symlink to `AGENTS.md`
+- Project handbook: `docs/AI_PROJECT_MANUAL.md`
+- Local review artifacts: `.claude/reviews/` and similar generated evidence are
+  local artifacts, not rule sources
 
-如果未来需要兼容其他 agent 目录（如 `.agents/skills/` 或 `.github/skills/`），应先明确单一真源，再通过脚本或镜像同步，而不是手工长期维护多份同义内容。
+Keep these skills aligned with `AGENTS.md`. Do not add parallel skill mirrors or
+new Markdown report lanes unless a task explicitly requires them.

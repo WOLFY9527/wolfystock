@@ -32,8 +32,8 @@
 - 根据 issue 结论定位相关文件
 - 优先复用现有模块、配置入口、脚本和测试
 - 保持默认行为向后兼容，避免破坏 fallback / fail-open
-- 如果修复涉及用户可见行为、配置语义、CLI/API、部署、通知、报告结构，要同步更新相关文档、`docs/CHANGELOG.md`、`.env.example`
-- `README.md` 主要承载入门、运行、部署和高层能力说明；更细的模块行为、页面交互或专题说明，优先更新对应 `docs/*.md`
+- 如果修复涉及用户可见行为、配置语义、CLI/API、部署、通知或报告结构，要同步更新 `README.md`、`docs/AI_PROJECT_MANUAL.md` 的生成源、任务指定的 canonical 文档和 `.env.example`（如涉及配置）
+- `README.md` 主要承载入门、运行和高层能力说明；更完整的项目知识优先落到 `docs/AI_PROJECT_MANUAL.md` 的生成源
 - 如果没有更新 `README.md`，要在交付说明或 PR 描述里写清原因和实际文档落点
 
 ### Step 4: 按改动面验证
