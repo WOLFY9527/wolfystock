@@ -496,6 +496,42 @@ describe('marketApi.getDataSourceGapRegistry', () => {
       priorityReason: '高优先级队列：影响 2 个产品面，1 项能力阻断或降级；当前行动为 补齐报价骨架集成。',
       nextConcreteStep: '定义报价/OHLCV 快照读模型并补齐来源权限字段。',
     });
+    expect(view.workbench.blockedMissingPartialFamilyCount).toBe(2);
+    expect(view.workbench.urgentQueueCount).toBe(3);
+    expect(view.workbench.blockerTypeCounts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'entitlement', label: '授权阻断', count: 1 }),
+      expect.objectContaining({ key: 'provider-integration', label: '数据接入', count: 2 }),
+      expect.objectContaining({ key: 'unknown', label: '阻断待确认', count: 0 }),
+    ]));
+    expect(view.workbench.priorityCounts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'critical', label: '关键', count: 1 }),
+      expect.objectContaining({ key: 'high', label: '高', count: 1 }),
+      expect.objectContaining({ key: 'medium', label: '中', count: 1 }),
+    ]));
+    expect(view.workbench.topNextActions.map((item) => item.familyKey)).toEqual([
+      'options_chains',
+      'stock_quote_spine',
+      'macro_rates',
+    ]);
+    expect(view.workbench.topNextActions[0]).toMatchObject({
+      familyKey: 'options_chains',
+      priorityKey: 'critical',
+      affectedSurfaceCount: 1,
+      nextConcreteStep: '收集授权与字段覆盖证据，不接入数据源运行链路。',
+    });
+    expect(view.workbench.lanes.find((lane) => lane.key === 'protected-review')?.items.map((item) => item.familyKey)).toEqual([
+      'options_chains',
+      'stock_quote_spine',
+      'macro_rates',
+    ]);
+    expect(view.workbench.lanes.find((lane) => lane.key === 'external-entitlement')?.items.map((item) => item.familyKey)).toEqual([
+      'options_chains',
+    ]);
+    expect(view.workbench.lanes.find((lane) => lane.key === 'evidence-validation')?.items.map((item) => item.familyKey)).toEqual([
+      'stock_quote_spine',
+    ]);
+    expect(view.workbench.topNextActions.map((item) => item.familyKey)).not.toContain('ready_family');
+    expect(JSON.stringify(view.workbench)).not.toMatch(/ready_family|requestId|traceId|rawProviderPayload|cacheKey|credential|env|debug|buy|sell|hold|target price|stop loss|position sizing|买入|卖出|目标价|止损|仓位|推荐|最佳|最优|赢家/i);
     expect(JSON.stringify(view)).not.toMatch(/requestId|traceId|rawProviderPayload|cacheKey|credential|env|debug|api[_-]?key|buy|sell|target price|stop loss|position sizing|买入|卖出|目标价|止损|仓位/i);
   });
 

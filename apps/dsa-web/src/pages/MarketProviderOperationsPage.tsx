@@ -6,6 +6,8 @@ import {
   marketApi,
   type DataSourceAcquisitionPriorityQueueItem,
   type DataSourceAcquisitionPriorityQueueItemView,
+  type DataSourceAcquisitionWorkbenchLane,
+  type DataSourceAcquisitionWorkbenchAction,
   type ConsumerEvidenceReadinessItem,
   type DataSourceGapRegistryResponse,
   type MarketDataReadinessCheck,
@@ -2202,6 +2204,165 @@ const DataSourceAcquisitionActionPackControls: React.FC<{
   );
 };
 
+const DataSourceAcquisitionWorkbenchActionRow: React.FC<{
+  action: DataSourceAcquisitionWorkbenchAction;
+}> = ({ action }) => (
+  <div className="rounded-md border border-white/[0.05] bg-white/[0.025] px-3 py-2.5">
+    <div className="flex flex-wrap items-center gap-1.5">
+      <TerminalChip variant={action.priority.variant}>{action.priority.label}</TerminalChip>
+      <TerminalChip variant={action.primaryBlockerType.variant}>{action.primaryBlockerType.label}</TerminalChip>
+      <TerminalChip variant="neutral">影响面 {formatNumber(action.affectedSurfaceCount, 0)}</TerminalChip>
+    </div>
+    <p className="mt-2 text-xs font-semibold text-white/84">{action.familyLabel}</p>
+    <dl className="mt-2 grid gap-1.5 text-[11px] leading-5 text-white/58">
+      <div>
+        <dt className="text-white/34">下一步</dt>
+        <dd>{action.nextConcreteStep}</dd>
+      </div>
+      <div>
+        <dt className="text-white/34">影响面</dt>
+        <dd>{action.affectedSurfaces.join('、')}</dd>
+      </div>
+      <div>
+        <dt className="text-white/34">所需证据</dt>
+        <dd>{action.requiredEvidence.join('、')}</dd>
+      </div>
+    </dl>
+  </div>
+);
+
+const DataSourceAcquisitionWorkbenchLaneBlock: React.FC<{
+  lane: DataSourceAcquisitionWorkbenchLane;
+}> = ({ lane }) => (
+  <div
+    className="rounded-md border border-white/[0.06] bg-black/10 px-3 py-3"
+    data-testid={`data-source-acquisition-workbench-lane-${lane.key}`}
+  >
+    <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="min-w-0">
+        <p className="text-xs font-semibold text-white/82">{lane.label}</p>
+        <p className="mt-1 text-[11px] leading-5 text-white/48">{lane.description}</p>
+      </div>
+      <TerminalChip variant={lane.variant}>{formatNumber(lane.count, 0)} 项</TerminalChip>
+    </div>
+    {lane.items.length ? (
+      <div className="mt-3 grid gap-2">
+        {lane.items.slice(0, 3).map((item) => (
+          <DataSourceAcquisitionWorkbenchActionRow
+            key={`${lane.key}-${item.familyKey}`}
+            action={item}
+          />
+        ))}
+      </div>
+    ) : (
+      <p className="mt-3 text-[11px] leading-5 text-white/48">{lane.emptyCopy}</p>
+    )}
+  </div>
+);
+
+const DataSourceAcquisitionWorkbench: React.FC<{
+  view: ReturnType<typeof buildDataSourceGapRegistryView>['workbench'];
+  unavailableReason?: string | null;
+}> = ({ view, unavailableReason }) => (
+  <TerminalNestedBlock
+    className="mt-4 bg-black/10 px-3 py-3"
+    data-testid="data-source-acquisition-workbench"
+  >
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-white/86">接入执行工作台</p>
+        <p className="mt-1 text-[11px] leading-5 text-white/48">
+          从优先队列、行动计划和影响矩阵派生，只用于工程补数排程；不生成交易指令或方向判断。
+        </p>
+      </div>
+      <TerminalChip variant={unavailableReason ? 'caution' : 'info'}>
+        {unavailableReason ? '工作台待补证' : `${formatNumber(view.urgentQueueCount, 0)} 项待处理`}
+      </TerminalChip>
+    </div>
+
+    {unavailableReason ? (
+      <TerminalNotice variant="caution" className="mt-3">
+        登记表不可用：{unavailableReason} 工作台保持 fail-closed，不使用本地替代队列。
+      </TerminalNotice>
+    ) : (
+      <>
+        <div className="mt-3 grid gap-2 md:grid-cols-3">
+          <div className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
+            <p className="text-[10px] font-medium text-white/42">阻断/缺失/部分家族</p>
+            <p className="mt-1 text-lg font-semibold text-white/88">{formatNumber(view.blockedMissingPartialFamilyCount, 0)}</p>
+          </div>
+          <div className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
+            <p className="text-[10px] font-medium text-white/42">待处理队列</p>
+            <p className="mt-1 text-lg font-semibold text-white/88">{formatNumber(view.urgentQueueCount, 0)}</p>
+          </div>
+          <div className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
+            <p className="text-[10px] font-medium text-white/42">未知/待补证字段</p>
+            <p className="mt-1 text-lg font-semibold text-white/88">{formatNumber(view.unknownFieldCount, 0)}</p>
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">blocker type</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {view.blockerTypeCounts.map((count) => (
+                <TerminalChip key={count.key} variant={count.variant}>
+                  {count.label} {formatNumber(count.count, 0)}
+                </TerminalChip>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">priority</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {view.priorityCounts.map((count) => (
+                <TerminalChip key={count.key} variant={count.variant}>
+                  {count.label} {formatNumber(count.count, 0)}
+                </TerminalChip>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <TerminalNotice variant="caution" className="mt-3">
+          非决策级队列：{view.consumerSafeWarning}
+        </TerminalNotice>
+
+        <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+          <div
+            className="rounded-md border border-white/[0.06] bg-black/10 px-3 py-3"
+            data-testid="data-source-acquisition-workbench-top-actions"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-widest text-white/34">next actions</p>
+                <p className="mt-1 text-xs font-semibold text-white/78">前三项下一步</p>
+              </div>
+              <TerminalChip variant="neutral">{formatNumber(view.topNextActions.length, 0)} 项</TerminalChip>
+            </div>
+            {view.topNextActions.length ? (
+              <div className="mt-3 grid gap-2">
+                {view.topNextActions.map((action) => (
+                  <DataSourceAcquisitionWorkbenchActionRow key={`top-${action.familyKey}`} action={action} />
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-[11px] leading-5 text-white/48">
+                暂无可排序下一步；保持待补证，不推断 ready。
+              </p>
+            )}
+          </div>
+          <div className="grid gap-3">
+            {view.lanes.map((lane) => (
+              <DataSourceAcquisitionWorkbenchLaneBlock key={lane.key} lane={lane} />
+            ))}
+          </div>
+        </div>
+      </>
+    )}
+  </TerminalNestedBlock>
+);
+
 const DataSourceGapRegistryPanel: React.FC<{
   registry: DataSourceGapRegistryResponse | null;
   isLoading: boolean;
@@ -2254,27 +2415,33 @@ const DataSourceGapRegistryPanel: React.FC<{
       ) : null}
 
       {!isLoading && (error || !families.length) ? (
-        <TerminalNestedBlock
-          className="mt-4 bg-black/10 px-3 py-3"
-          data-testid="data-source-acquisition-priority-queue"
-        >
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-white/86">数据接入优先队列</p>
-              <p className="mt-1 text-[11px] leading-5 text-white/48">
-                工程补数排序，只用于定位接入、授权、证据和保护域复核，不生成交易指令。
-              </p>
+        <>
+          <DataSourceAcquisitionWorkbench
+            view={view.workbench}
+            unavailableReason={actionPackUnavailableReason}
+          />
+          <TerminalNestedBlock
+            className="mt-4 bg-black/10 px-3 py-3"
+            data-testid="data-source-acquisition-priority-queue"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white/86">数据接入优先队列</p>
+                <p className="mt-1 text-[11px] leading-5 text-white/48">
+                  工程补数排序，只用于定位接入、授权、证据和保护域复核，不生成交易指令。
+                </p>
+              </div>
+              <TerminalChip variant="neutral">0 个队列项</TerminalChip>
             </div>
-            <TerminalChip variant="neutral">0 个队列项</TerminalChip>
-          </div>
-          <div className="mt-3">
-            <DataSourceAcquisitionActionPackControls
-              queue={acquisitionQueue}
-              rawQueue={rawAcquisitionQueue}
-              unavailableReason={actionPackUnavailableReason}
-            />
-          </div>
-        </TerminalNestedBlock>
+            <div className="mt-3">
+              <DataSourceAcquisitionActionPackControls
+                queue={acquisitionQueue}
+                rawQueue={rawAcquisitionQueue}
+                unavailableReason={actionPackUnavailableReason}
+              />
+            </div>
+          </TerminalNestedBlock>
+        </>
       ) : null}
 
       {!error && families.length ? (
@@ -2309,6 +2476,8 @@ const DataSourceGapRegistryPanel: React.FC<{
               {view.scoreAuthorityAllowed ? '计分权限待核对' : '不授予计分权限'}
             </TerminalChip>
           </div>
+
+          <DataSourceAcquisitionWorkbench view={view.workbench} />
 
           <TerminalNestedBlock
             className="mt-4 bg-black/10 px-3 py-3"
