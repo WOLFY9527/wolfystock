@@ -2064,60 +2064,90 @@ const DataSourceGapRegistryPanel: React.FC<{
             </TerminalChip>
           </div>
 
-          <div className="mt-4">
-            <TerminalDenseTable data-testid="data-source-gap-registry-table" className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-              <table className="min-w-[66rem] table-fixed">
-                <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
-                  <tr className="border-b border-white/5 text-left">
-                    <th className="w-[14rem] px-3 py-3 font-medium">数据家族</th>
-                    <th className="w-[12rem] px-3 py-3 font-medium">状态 / 权限 / 时效</th>
-                    <th className="w-[18rem] px-3 py-3 font-medium">阻断项</th>
-                    <th className="w-[14rem] px-3 py-3 font-medium">证据与边界</th>
-                    <th className="px-3 py-3 font-medium">下一步</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {families.map((family) => (
-                    <tr
+          <div className="mt-4 grid gap-3" data-testid="data-source-gap-registry-groups">
+            {view.groups.map((group) => (
+              <TerminalNestedBlock
+                key={group.groupId}
+                data-testid={`data-source-gap-registry-group-${group.groupId}`}
+                className="bg-black/10 px-3 py-3"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-white/86">{group.groupLabel}</p>
+                    <p className="mt-1 text-[11px] leading-5 text-white/48">{group.groupDescription}</p>
+                  </div>
+                  <TerminalChip variant="neutral">{formatNumber(group.families.length, 0)} 个家族</TerminalChip>
+                </div>
+                <div className="mt-3 grid gap-2">
+                  {group.families.map((family) => (
+                    <TerminalDisclosure
                       key={family.familyKey}
                       data-testid={`data-source-gap-registry-row-${family.familyKey}`}
-                      className="border-b border-white/[0.04] align-top"
+                      title={family.familyLabel}
+                      summary={`${family.status.label} · 权限 ${family.authorityState.label} · 时效 ${family.freshnessState.label}`}
+                      className="bg-white/[0.025]"
                     >
-                      <td className="px-3 py-3">
-                        <p className="text-sm font-semibold text-white/88">{family.familyLabel}</p>
-                        <p className="mt-1 break-all font-mono text-[11px] text-white/42">{family.familyKey}</p>
-                        <p className="mt-2 text-[11px] leading-5 text-white/58">{family.consumerSafeDescription}</p>
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex flex-wrap gap-1.5">
-                          <TerminalChip variant={family.status.variant}>{family.status.label}</TerminalChip>
-                          <TerminalChip variant={family.authorityState.variant}>权限 {family.authorityState.label}</TerminalChip>
-                          <TerminalChip variant={family.freshnessState.variant}>时效 {family.freshnessState.label}</TerminalChip>
+                      <div className="grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap gap-1.5">
+                            <TerminalChip variant={family.status.variant}>{family.status.label}</TerminalChip>
+                            <TerminalChip variant={family.authorityState.variant}>权限 {family.authorityState.label}</TerminalChip>
+                            <TerminalChip variant={family.freshnessState.variant}>时效 {family.freshnessState.label}</TerminalChip>
+                          </div>
+                          <dl className="mt-3 grid gap-2 text-[11px] leading-5 text-white/58">
+                            <div>
+                              <dt className="text-white/34">Family key</dt>
+                              <dd className="break-all font-mono text-white/54">{family.familyKey}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-white/34">消费者标签</dt>
+                              <dd>{family.familyLabel}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-white/34">安全说明</dt>
+                              <dd>{family.consumerSafeDescription}</dd>
+                            </div>
+                          </dl>
                         </div>
-                      </td>
-                      <td className="px-3 py-3">
-                        <p className="text-[11px] leading-5 text-white/58">
-                          <span className="text-white/34">权益：</span>{family.entitlementOrLicensingBlocker}
-                        </p>
-                        <p className="mt-1 text-[11px] leading-5 text-white/58">
-                          <span className="text-white/34">集成：</span>{family.integrationBlocker}
-                        </p>
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex flex-wrap gap-1.5">
-                          <TerminalChip variant="neutral">证据 {family.sourceEvidenceState}</TerminalChip>
-                          <TerminalChip variant={family.dataHydrationVariant}>补数 {family.dataHydrationAllowed}</TerminalChip>
-                          <TerminalChip variant={family.scoreTradingAuthorityVariant}>计分权限 {family.scoreTradingAuthorityAllowed}</TerminalChip>
+                        <div className="min-w-0 space-y-3">
+                          <div
+                            className="grid gap-2 sm:grid-cols-2"
+                            data-testid={`data-source-gap-registry-permissions-${family.familyKey}`}
+                          >
+                            <div className="rounded-md border border-white/[0.06] bg-black/10 px-3 py-2">
+                              <p className="text-[10px] font-medium text-white/36">Provider hydration</p>
+                              <TerminalChip variant={family.dataHydrationVariant}>补数权限 {family.dataHydrationAllowed}</TerminalChip>
+                            </div>
+                            <div className="rounded-md border border-white/[0.06] bg-black/10 px-3 py-2">
+                              <p className="text-[10px] font-medium text-white/36">Score / trading authority</p>
+                              <TerminalChip variant={family.scoreTradingAuthorityVariant}>计分/交易权限 {family.scoreTradingAuthorityAllowed}</TerminalChip>
+                            </div>
+                          </div>
+                          <dl className="grid gap-2 text-[11px] leading-5 text-white/58">
+                            <div>
+                              <dt className="text-white/34">权益 / 授权阻断</dt>
+                              <dd>{family.entitlementOrLicensingBlocker}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-white/34">集成阻断</dt>
+                              <dd>{family.integrationBlocker}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-white/34">来源证据状态</dt>
+                              <dd>{family.sourceEvidenceState}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-white/34">下一集成步骤</dt>
+                              <dd>{family.nextIntegrationStep}</dd>
+                            </div>
+                          </dl>
                         </div>
-                      </td>
-                      <td className="px-3 py-3">
-                        <p className="text-[11px] leading-5 text-white/62">{family.nextIntegrationStep}</p>
-                      </td>
-                    </tr>
+                      </div>
+                    </TerminalDisclosure>
                   ))}
-                </tbody>
-              </table>
-            </TerminalDenseTable>
+                </div>
+              </TerminalNestedBlock>
+            ))}
           </div>
         </>
       ) : null}
