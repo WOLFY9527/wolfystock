@@ -34,6 +34,7 @@ EXPECTED_FAMILY_FIELDS = {
     "providerHydrationAllowed",
     "scoreTradingAuthorityAllowed",
     "consumerSafeDescription",
+    "surfaceImpactMatrix",
 }
 
 
@@ -96,6 +97,31 @@ def test_data_source_gap_registry_returns_static_fail_closed_family_inventory() 
     assert families["portfolio_valuation_lineage"]["status"] == "partial"
     assert families["portfolio_valuation_lineage"]["providerHydrationAllowed"] is True
     assert families["portfolio_valuation_lineage"]["scoreTradingAuthorityAllowed"] is False
+    assert families["stock_quote_spine"]["surfaceImpactMatrix"][0] == {
+        "surfaceKey": "scanner",
+        "consumerLabel": "Scanner",
+        "impactState": "degraded",
+        "impactReason": "报价、日线和成交量血缘不统一，候选池只能保守解释缺口。",
+        "affectedCapability": "候选发现、成交量过滤、空跑阻断桶",
+        "nextEvidenceStep": "补齐有界报价和日线快照，并记录来源权限、时效和覆盖状态。",
+    }
+    assert {
+        impact["surfaceKey"]: impact["impactState"]
+        for impact in families["stock_quote_spine"]["surfaceImpactMatrix"]
+    }["portfolio"] == "degraded"
+    assert all(
+        impact["impactState"] != "unlocked"
+        for family_key in (
+            "options_chains",
+            "options_strategy_analytics",
+            "gamma_dealer_positioning",
+        )
+        for impact in families[family_key]["surfaceImpactMatrix"]
+    )
+    assert {
+        impact["surfaceKey"]: impact["impactState"]
+        for impact in families["scenario_baselines"]["surfaceImpactMatrix"]
+    }["scenario_lab"] == "planned"
     assert payload["summary"]["readyCount"] == 0
     assert payload["summary"]["scoreTradingAuthorityAllowedCount"] == 0
 

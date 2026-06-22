@@ -37,6 +37,25 @@ DataSourceGapFreshnessState = Literal[
     "unavailable",
     "unknown",
 ]
+DataSourceSurfaceImpactState = Literal[
+    "unlocked",
+    "degraded",
+    "observation-only",
+    "blocked",
+    "planned",
+    "unknown",
+]
+
+
+class DataSourceSurfaceImpact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    surfaceKey: str
+    consumerLabel: str
+    impactState: DataSourceSurfaceImpactState
+    impactReason: str
+    affectedCapability: str
+    nextEvidenceStep: str
 
 
 class DataSourceGapRegistryFamily(BaseModel):
@@ -54,6 +73,7 @@ class DataSourceGapRegistryFamily(BaseModel):
     providerHydrationAllowed: bool
     scoreTradingAuthorityAllowed: bool
     consumerSafeDescription: str
+    surfaceImpactMatrix: List[DataSourceSurfaceImpact]
 
 
 class DataSourceGapRegistrySummary(BaseModel):

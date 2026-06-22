@@ -639,6 +639,40 @@ const dataSourceGapRegistryPayload = {
       providerHydrationAllowed: true,
       scoreTradingAuthorityAllowed: false,
       consumerSafeDescription: 'Quote and OHLCV paths exist, but they are not yet a durable professional spine.',
+      surfaceImpactMatrix: [
+        {
+          surfaceKey: 'watchlist',
+          consumerLabel: 'Watchlist',
+          impactState: 'degraded',
+          impactReason: '保存标的不能从分散报价路径推断行级新鲜度。',
+          affectedCapability: '行级价格、更新时间、研究状态',
+          nextEvidenceStep: '让 watchlist row packet 引用明确的报价/日线快照 ID。',
+        },
+        {
+          surfaceKey: 'stock_detail',
+          consumerLabel: 'Stock Detail',
+          impactState: 'degraded',
+          impactReason: '个股研究包缺少统一报价、历史和 as-of 血缘。',
+          affectedCapability: '个股价格、趋势、结构研究输入',
+          nextEvidenceStep: '把报价、历史和证据引用合并为最小研究包。',
+        },
+        {
+          surfaceKey: 'portfolio',
+          consumerLabel: 'Portfolio',
+          impactState: 'degraded',
+          impactReason: '组合估值不能把价格来源、时效和 FX 血缘一起证明。',
+          affectedCapability: '持仓估值可信度、P&L 读数说明',
+          nextEvidenceStep: '接入价格和 FX lineage 后再提升估值置信说明。',
+        },
+        {
+          surfaceKey: 'backtest_parameter_sweep',
+          consumerLabel: 'Backtest / Parameter Sweep',
+          impactState: 'observation-only',
+          impactReason: '历史 bars 的来源、调整基准和可复现快照仍不完整。',
+          affectedCapability: '研究级回测数据边界、参数扫读回边界',
+          nextEvidenceStep: '补齐数据集 ID、调整基准、交易日历和缺失 bars 策略。',
+        },
+      ],
     },
     {
       familyKey: 'macro_rates',
@@ -653,6 +687,16 @@ const dataSourceGapRegistryPayload = {
       providerHydrationAllowed: true,
       scoreTradingAuthorityAllowed: false,
       consumerSafeDescription: 'Macro and rates readiness is available only as a diagnostic contract today.',
+      surfaceImpactMatrix: [
+        {
+          surfaceKey: 'market_overview',
+          consumerLabel: 'Market Overview',
+          impactState: 'observation-only',
+          impactReason: '官方宏观行还不是完整产品数据包，风险读数只能保持边界说明。',
+          affectedCapability: '利率压力、宏观风险摘要',
+          nextEvidenceStep: '持久化官方宏观序列并附覆盖和时效状态。',
+        },
+      ],
     },
     {
       familyKey: 'options_chains',
@@ -660,13 +704,31 @@ const dataSourceGapRegistryPayload = {
       status: 'unauthorized',
       authorityState: 'unauthorized',
       freshnessState: 'unavailable',
-      entitlementOrLicensingBlocker: 'OPRA rights and display rights are not proven.',
+      entitlementOrLicensingBlocker: 'Options-chain rights and display rights are not proven.',
       integrationBlocker: 'No authorized live or delayed chain store is integrated.',
       sourceEvidenceState: 'rights_unproven',
       nextIntegrationStep: 'Attach an entitlement proof bundle before chain promotion.',
       providerHydrationAllowed: false,
       scoreTradingAuthorityAllowed: false,
       consumerSafeDescription: 'Options chains remain unavailable until authorized chain evidence exists.',
+      surfaceImpactMatrix: [
+        {
+          surfaceKey: 'options_lab',
+          consumerLabel: 'Options Lab',
+          impactState: 'blocked',
+          impactReason: '授权期权链、展示权、存储权和字段覆盖未证明。',
+          affectedCapability: '链、IV、Greeks、OI、成交量观察',
+          nextEvidenceStep: '先补齐权益证明包和字段覆盖证据。',
+        },
+        {
+          surfaceKey: 'scenario_lab',
+          consumerLabel: 'Scenario Lab',
+          impactState: 'planned',
+          impactReason: '期权链未授权时不得成为情景 baseline 输入。',
+          affectedCapability: '期权敏感度情景输入',
+          nextEvidenceStep: '保持缺失，直到授权链和方法证据齐备。',
+        },
+      ],
     },
     {
       familyKey: 'options_strategy_analytics',
@@ -681,6 +743,16 @@ const dataSourceGapRegistryPayload = {
       providerHydrationAllowed: false,
       scoreTradingAuthorityAllowed: false,
       consumerSafeDescription: 'Options strategy analytics remain blocked by missing authorized inputs.',
+      surfaceImpactMatrix: [
+        {
+          surfaceKey: 'options_lab',
+          consumerLabel: 'Options Lab',
+          impactState: 'blocked',
+          impactReason: '策略分析不能先于授权链、历史数据和方法输入毕业。',
+          affectedCapability: '策略结构观察、历史回放边界',
+          nextEvidenceStep: '先证明授权链、历史链和方法版本。',
+        },
+      ],
     },
     {
       familyKey: 'gamma_dealer_positioning',
@@ -695,6 +767,24 @@ const dataSourceGapRegistryPayload = {
       providerHydrationAllowed: false,
       scoreTradingAuthorityAllowed: false,
       consumerSafeDescription: 'Gamma, GEX, vanna, charm, and dealer positioning remain blocked.',
+      surfaceImpactMatrix: [
+        {
+          surfaceKey: 'options_lab',
+          consumerLabel: 'Options Lab',
+          impactState: 'blocked',
+          impactReason: 'Gamma 家族和 dealer positioning 缺少授权输入、持仓假设和方法批准。',
+          affectedCapability: 'Gamma/GEX/vanna/charm/dealer positioning 观察',
+          nextEvidenceStep: '完成权利、字段覆盖、符号假设和方法版本评审。',
+        },
+        {
+          surfaceKey: 'market_overview',
+          consumerLabel: 'Market Overview',
+          impactState: 'unknown',
+          impactReason: '未证明的期权结构不能进入市场风险第一读。',
+          affectedCapability: '期权结构风险背景',
+          nextEvidenceStep: '在 Options Lab 方法通过前保持未知。',
+        },
+      ],
     },
     {
       familyKey: 'scenario_baselines',
@@ -709,6 +799,16 @@ const dataSourceGapRegistryPayload = {
       providerHydrationAllowed: false,
       scoreTradingAuthorityAllowed: false,
       consumerSafeDescription: 'Scenario baselines are planned, but stored baseline inputs are not integrated.',
+      surfaceImpactMatrix: [
+        {
+          surfaceKey: 'scenario_lab',
+          consumerLabel: 'Scenario Lab',
+          impactState: 'planned',
+          impactReason: '存储化 baseline snapshot 尚未接入，常规路径仍偏 request/snapshot 驱动。',
+          affectedCapability: '基线复现、市场/组合冲击输入',
+          nextEvidenceStep: '存储 baseline snapshot IDs 并附输入 freshness/authority 摘要。',
+        },
+      ],
     },
   ],
   metadata: {
@@ -918,6 +1018,18 @@ describe('MarketProviderOperationsPage', () => {
     expect(quoteDrilldown).toHaveTextContent('消费者标签');
     expect(quoteDrilldown).toHaveTextContent('Provider hydration');
     expect(quoteDrilldown).toHaveTextContent('Score / trading authority');
+    const quoteImpactMatrix = screen.getByTestId('data-source-gap-registry-impact-matrix-stock_quote_spine');
+    expect(quoteImpactMatrix).toHaveTextContent('影响产品面与研究能力');
+    expect(quoteImpactMatrix).toHaveTextContent('4 个影响项');
+    expect(quoteImpactMatrix).toHaveTextContent('Watchlist');
+    expect(quoteImpactMatrix).toHaveTextContent('Stock Detail');
+    expect(quoteImpactMatrix).toHaveTextContent('Portfolio');
+    expect(quoteImpactMatrix).toHaveTextContent('回测 / 参数扫描');
+    expect(quoteImpactMatrix).toHaveTextContent('降级');
+    expect(quoteImpactMatrix).toHaveTextContent('仅观察');
+    expect(quoteImpactMatrix).toHaveTextContent('行级价格、更新时间、研究状态');
+    expect(quoteImpactMatrix).toHaveTextContent('组合估值不能把价格来源、时效和 FX 血缘一起证明。');
+    expect(quoteImpactMatrix).toHaveTextContent('补齐数据集 ID、调整基准、交易日历和缺失 bars 策略。');
     expect(dataMap).not.toHaveTextContent('OPRA');
     expect(dataMap).not.toHaveTextContent('requestId');
     expect(dataMap).not.toHaveTextContent('traceId');
@@ -1011,6 +1123,12 @@ describe('MarketProviderOperationsPage', () => {
     expect(optionsRow).toHaveTextContent('补数权限 不允许');
     expect(optionsRow).toHaveTextContent('计分/交易权限 不允许');
     expect(optionsRow).not.toHaveTextContent('已就绪');
+    const optionsImpactMatrix = screen.getByTestId('data-source-gap-registry-impact-matrix-options_chains');
+    expect(optionsImpactMatrix).toHaveTextContent('Options Lab');
+    expect(optionsImpactMatrix).toHaveTextContent('Scenario Lab');
+    expect(optionsImpactMatrix).toHaveTextContent('阻断');
+    expect(optionsImpactMatrix).toHaveTextContent('计划中');
+    expect(optionsImpactMatrix).not.toHaveTextContent('已解锁');
 
     const gammaRow = screen.getByTestId('data-source-gap-registry-row-gamma_dealer_positioning');
     fireEvent.click(within(gammaRow).getByRole('button', { name: '展开 Gamma / Dealer Positioning' }));
@@ -1020,6 +1138,12 @@ describe('MarketProviderOperationsPage', () => {
     expect(gammaRow).toHaveTextContent('权限 未授权');
     expect(gammaRow).toHaveTextContent('时效 不可用');
     expect(gammaRow).not.toHaveTextContent('已就绪');
+    const gammaImpactMatrix = screen.getByTestId('data-source-gap-registry-impact-matrix-gamma_dealer_positioning');
+    expect(gammaImpactMatrix).toHaveTextContent('Options Lab');
+    expect(gammaImpactMatrix).toHaveTextContent('Market Overview');
+    expect(gammaImpactMatrix).toHaveTextContent('阻断');
+    expect(gammaImpactMatrix).toHaveTextContent('待补证');
+    expect(gammaImpactMatrix).not.toHaveTextContent('已解锁');
 
     const panelText = panel.textContent || '';
     expect(panelText).not.toMatch(/requestId|traceId|rawProviderPayload|cacheKey|credential|env|debug|raw dump|api[_-]?key|SECRET_DATA_KEY/i);
@@ -1035,6 +1159,16 @@ describe('MarketProviderOperationsPage', () => {
         {
           familyKey: 'unknown_new_family',
           consumerLabel: 'Unknown New Family',
+          surfaceImpactMatrix: [
+            {
+              surfaceKey: 'unknown_surface',
+              consumerLabel: 'requestId secret surface',
+              impactState: 'unlocked',
+              impactReason: 'rawProviderPayload requestId traceId',
+              affectedCapability: 'debug cacheKey capability',
+              nextEvidenceStep: 'token=secret next step',
+            },
+          ],
         },
       ],
     });
@@ -1050,6 +1184,12 @@ describe('MarketProviderOperationsPage', () => {
     expect(row).toHaveTextContent('待补证');
     expect(row).toHaveTextContent('补数权限 待补证');
     expect(row).toHaveTextContent('计分/交易权限 待补证');
+    const unknownImpact = screen.getByTestId('data-source-gap-registry-impact-matrix-unknown_new_family');
+    expect(unknownImpact).toHaveTextContent('影响面待补证');
+    expect(unknownImpact).toHaveTextContent('待补证');
+    expect(unknownImpact).toHaveTextContent('影响原因待补证。');
+    expect(unknownImpact).not.toHaveTextContent('已解锁');
+    expect(unknownImpact).not.toHaveTextContent(/requestId|traceId|rawProviderPayload|cacheKey|token|secret|debug/i);
     expect(row).not.toHaveTextContent('已就绪');
     expect(row).not.toHaveTextContent('权限 可用');
     expect(row).not.toHaveTextContent('时效 新鲜');
