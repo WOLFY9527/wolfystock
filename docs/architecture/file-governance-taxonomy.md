@@ -15,7 +15,7 @@ remain the final authority when docs disagree with reality.
 | `AGENTS.md` | AI collaboration source of truth | Canonical repository rules for Codex, Claude compatibility, Copilot mirrors, and skill governance. |
 | `CLAUDE.md` | Compatibility shim | Must remain a symlink to `AGENTS.md`. |
 | `SKILL.md` | Product/external integration | Describes the stock analyzer skill behavior, not repository collaboration governance. |
-| `DESIGN.md` | Legacy/imported design asset | Not current WolfyStock UI authority unless a current design index explicitly says so. |
+| `docs/archive/design/DESIGN.md` | Archived legacy/imported design asset | Not current WolfyStock UI authority unless a current design index explicitly says so. |
 | `.github/copilot-instructions.md` and `.github/instructions/*.instructions.md` | Agent mirrors | May summarize or layer `AGENTS.md`; conflicts resolve to `AGENTS.md`. |
 | `.claude/skills/` | Tracked repository skills | Versioned collaboration assets aligned with `AGENTS.md`. |
 
@@ -27,7 +27,7 @@ remain the final authority when docs disagree with reality.
 | System operations | `docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md`, `docs/WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md` | Human and AI maintenance entry layer. |
 | Architecture | `docs/architecture/` | Current module, storage, source-of-truth, provider/scoring, and database design. |
 | Current audits | `docs/audits/` | Current launch posture, domain indexes, safety policies, accepted support audits, and active runbooks. |
-| Archived audits | `docs/audits/archive/`, `docs/architecture/archive/`, `docs/qa/archive/` | Provenance only. Do not treat archived reports as current authority. |
+| Historical archive | `docs/archive/` | Central provenance lane. Do not treat archived reports as current authority. |
 | Frontend | `docs/frontend/` | Current Reflect-Linear source of truth, route taxonomy, validation, UI primitives, and frontend archive navigation. |
 | Design assets | `docs/design/` | Current frontend reference image and non-frontend design notes. |
 | Operations | `docs/operations/` | Runbooks, artifact cleanup policy, provider metadata, and operator procedures. |
@@ -55,7 +55,7 @@ unless an active doc explicitly re-promotes that evidence.
   cost/quota/observability, and provider/data/options docs.
 - Move point-in-time UI, DOM, CSS, bundle, QA, and route proof reports to an
   archive lane after a current handbook/index supersedes them.
-- Keep historical audit archives linked from `docs/ARCHIVE_INDEX.md`; avoid
+- Keep historical audit archives under `docs/archive/` and linked from `docs/ARCHIVE_INDEX.md`; avoid
   listing every archived detail in `docs/audits/README.md`.
 - If a stale report is still cited by an active checklist, keep it active only
   as narrowly labeled support evidence, not visual or launch authority.
@@ -69,11 +69,11 @@ Current frontend visual authority is:
 - `docs/frontend/validation-playbook.md`
 - `docs/design/reference/wolfystock-reflect-linear-home-mockup.png`
 
-Older deep-space, ghost-glass, OLED terminal, bento-first, card-first, or
-generic Linear-only wording is historical unless one of the current docs above
-keeps it intentionally. Future frontend tasks should start from the current
-frontend docs and inspect the live route/source before citing archived
-screenshots or old DOM reports.
+Older deep-space, ghost-glass, OLED terminal, bento-first, card-first, generic
+Linear-only wording, and `docs/archive/design/DESIGN.md` are historical unless
+one of the current docs above keeps them intentionally. Future frontend tasks
+should start from the current frontend docs and inspect the live route/source
+before citing archived screenshots or old DOM reports.
 
 ## Backend Architecture And Provider Lanes
 

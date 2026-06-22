@@ -352,7 +352,7 @@ Treat shell route modifiers such as `theme-shell--*`,
 `shell-content-frame--*`, `shell-main-column--*`, and active report/backtest
 primitives as protected until route visual coverage proves an edit is safe.
 
-Archived CSS audits under `docs/frontend/archive/` preserve provenance only;
+Archived CSS audits under `docs/archive/frontend/` preserve provenance only;
 use this playbook and current source/tests for current deletion decisions.
 
 ## Required Report Fields

@@ -5,10 +5,10 @@ Date: 2026-05-07
 Branch checked: `main`
 Owner domain: Release readiness
 Related docs: `docs/audits/public-launch-readiness-master.md`,
-`docs/audits/archive/final-pre-push-audit.md`,
-`docs/audits/archive/wolfystock-final-admin-security-options-qa.md`,
-`docs/qa/archive/wolfystock-portfolio-populated-holdings-qa.md`,
-`docs/audits/archive/frontend/wolfystock-echarts-chart-workspace-audit.md`
+`docs/archive/audits/final-pre-push-audit.md`,
+`docs/archive/audits/wolfystock-final-admin-security-options-qa.md`,
+`docs/archive/qa/wolfystock-portfolio-populated-holdings-qa.md`,
+`docs/archive/audits/frontend/wolfystock-echarts-chart-workspace-audit.md`
 
 Mode: docs-only warning register. No warning filters, production code, tests,
 scripts, frontend app files, provider configuration, or changelog files were

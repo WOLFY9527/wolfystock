@@ -5,8 +5,8 @@ Owner domain: Security, RBAC, and MFA documentation index
 Related docs: `docs/audits/public-launch-readiness-master.md`,
 `docs/audits/public-launch-gap-register.md`,
 `docs/audits/deployment-readiness-checklist.md`,
-`docs/audits/archive/markdown-consolidation-plan.md`,
-`docs/audits/archive/markdown-inventory.md`
+`docs/archive/audits/markdown-consolidation-plan.md`,
+`docs/archive/audits/markdown-inventory.md`
 
 Mode: docs-only navigation index. No runtime security, RBAC, or MFA behavior is
 changed by this index.
@@ -47,11 +47,11 @@ navigable while public launch remains **NO-GO** in
 
 ## Superseded docs
 
-- `docs/audits/archive/admin-rbac-final-qa-report.md`: historical QA evidence; use only
+- `docs/archive/audits/admin-rbac-final-qa-report.md`: historical QA evidence; use only
   as supporting proof until launch docs cite the accepted result.
-- `docs/audits/archive/security-admin-mfa-backend-foundation.md`: backend foundation
+- `docs/archive/audits/security-admin-mfa-backend-foundation.md`: backend foundation
   summary superseded by the production secret-storage hardening plan.
-- `docs/audits/archive/wolfystock-final-admin-security-options-qa.md`: historical
+- `docs/archive/audits/wolfystock-final-admin-security-options-qa.md`: historical
   cross-domain QA; useful evidence, not the current security source of truth.
 
 ## Deferred docs

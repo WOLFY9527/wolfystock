@@ -28,7 +28,7 @@ Future implementation tasks should stay small, serializable where shared seams a
 | `docs/audits/guest-preview-reuse-design.md` | completed | Privacy-safe short-TTL guest preview reuse design. | Guest preview reuse must wait for duplicate counters and read-only reports, stay guest-session scoped, respect `force_refresh`, and disclose freshness. |
 | `docs/audits/duplicate-cost-admin-summary-api-design.md` | completed | Future admin-only read-only duplicate-cost summary API design. | Backend summary should aggregate existing accounting/logs plus future counters, use synthetic tests only, and never call providers or LLMs. |
 | `docs/audits/scanner-ai-interpretation-cache-design.md` | completed | Optional scanner AI interpretation cache design. | Scanner AI cache work must remain additive and must not alter ranking, selection, score, thresholds, actionability, CSV headers, provider behavior, or prompt/routing logic. |
-| `docs/audits/archive/frontend/wolfystock-post-batch-integration-qa.md` | completed | QA closure for recent dashboard, request-staging, scanner dedupe, localization, and cost-audit docs. | Confirms the current direction: read-only admin surfaces, instrumentation first, and no behavior changes to provider runtime, MarketCache, scanner, AI, or UI during cost planning. |
+| `docs/archive/audits/frontend/wolfystock-post-batch-integration-qa.md` | completed | QA closure for recent dashboard, request-staging, scanner dedupe, localization, and cost-audit docs. | Confirms the current direction: read-only admin surfaces, instrumentation first, and no behavior changes to provider runtime, MarketCache, scanner, AI, or UI during cost planning. |
 | `docs/audits/ws2-provider-quota-circuit-breaker-policy-design.md` | completed | Provider quota/circuit policy design with retained provider fallback measurement constraints. | Provider fallback measurement should cover fallback depth, quota-risk buckets, cache hits/misses, and inflight joins without changing ordering, fallback, timeout, retry, circuit behavior, or probe posture. |
 | `docs/audits/market-overview-cache-reporting-design.md` | pending parallel task | Expected MarketCache hit/stale/miss reporting design. | Treat as not yet available in this checkout. MarketCache instrumentation below must preserve TTL, SWR, background refresh, cold-start timeout, fallback factory, and snapshot semantics. |
 | `docs/audits/llm-report-output-cache-design.md` | pending parallel task | Expected LLM report output cache design. | Treat as not yet available in this checkout. Do not implement report output caching until metrics and read-only reporting exist and the cache key/freshness model is approved. |
@@ -54,7 +54,7 @@ Existing protections:
 
 Completed QA status:
 
-- `docs/audits/archive/frontend/wolfystock-post-batch-integration-qa.md` reports PASS for the recent read-only dashboard, request staging, scanner initial request dedupe, Backtest Chinese labels, design check, lint, build, full `./scripts/ci_gate.sh`, and browser QA performed in that prior QA run.
+- `docs/archive/audits/frontend/wolfystock-post-batch-integration-qa.md` reports PASS for the recent read-only dashboard, request staging, scanner initial request dedupe, Backtest Chinese labels, design check, lint, build, full `./scripts/ci_gate.sh`, and browser QA performed in that prior QA run.
 - That QA doc also states the working tree was clean before creating the QA report. This roadmap run also started from a clean worktree.
 
 Current no-go areas:

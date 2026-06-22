@@ -2,7 +2,7 @@
 
 ## Audit housekeeping decisions
 
-- Root-level staged audit artifacts should not accumulate indefinitely; historical one-off reports belong under `docs/architecture/archive/audits/`.
+- Root-level staged audit artifacts should not accumulate indefinitely; historical one-off reports belong under `docs/archive/architecture/audits/`.
 - Temporary smoke outputs should stay under `tmp/` and remain untracked.
 - Slice handoff JSON artifacts should remain ignored local artifacts instead of committed repository state.
 - Pre-deployment cleanup should favor documentation consolidation and dead-artifact removal before deeper runtime refactors.

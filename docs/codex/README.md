@@ -75,5 +75,6 @@ and score-weight budget for scoring copy.
 Frontend implementation, route taxonomy, visual system, primitive policy, and
 browser-evidence rules now live in `../frontend/README.md`.
 
-Historical Codex audit reports that no longer need to live in the active audit
-lane are retained under `audits/archive/`.
+Historical Codex audit reports and retired goal-progress notes live under
+`../archive/codex/`. `docs/codex/` should contain durable workflow, prompt,
+validation, protected-domain, surface-map, and reporting references only.

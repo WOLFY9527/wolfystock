@@ -37,8 +37,8 @@ The frontend lane replaces these former active documents:
 - `docs/audits/frontend-domain-education-copy-pack.md`
 - `docs/audits/frontend-ux-density-audit-harness.md`
 
-Point-in-time frontend audit and CSS evidence moved to
-`docs/frontend/archive/` or remains under `docs/audits/archive/frontend/`.
+Point-in-time frontend audit and CSS evidence lives under
+`docs/archive/frontend/` or `docs/archive/audits/frontend/`.
 
 ## Route Families
 
@@ -134,10 +134,11 @@ as current UI acceptance.
 
 Current frontend archive lanes:
 
-- `docs/frontend/archive/`: historical frontend docs moved out of active lanes
+- `docs/archive/frontend/`: historical frontend docs moved out of active lanes
   during domain consolidation.
-- `docs/audits/archive/frontend/`: older DOM, CSS, bundle, route, scroll, and
+- `docs/archive/audits/frontend/`: older DOM, CSS, bundle, route, scroll, and
   old launch UX evidence retained for provenance.
-- Historical design-transition provenance is indexed via `docs/ARCHIVE_INDEX.md`
-  and retained under current archive lanes when present; do not assume a
-  standalone design-archive lane exists here.
+- `docs/archive/design/`: archived legacy design assets that are not current
+  implementation authority.
+
+Use `docs/ARCHIVE_INDEX.md` for archive provenance and safe-use rules.

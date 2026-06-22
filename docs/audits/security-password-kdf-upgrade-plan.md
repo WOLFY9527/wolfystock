@@ -439,7 +439,7 @@ Safety:
 
 Read first:
 - docs/audits/security-password-kdf-upgrade-plan.md
-- docs/audits/archive/admin-rbac-final-qa-report.md
+- docs/archive/audits/admin-rbac-final-qa-report.md
 - docs/audits/admin-rbac-capability-model-design.md
 - src/auth.py
 - src/repositories/auth_repo.py

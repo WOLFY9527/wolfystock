@@ -63,9 +63,15 @@ Useful entry points:
 
 Related docs:
 
+- [AI Project Manual](docs/AI_PROJECT_MANUAL.md)
 - [Docs Index](docs/DOCS_INDEX.md)
+- [Surface Map](docs/codex/WOLFYSTOCK_SURFACE_MAP.md)
 - [WolfyStock System Handbook](docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md)
 - [WolfyStock AI Maintenance Manual](docs/WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md)
+- [Archive Index](docs/ARCHIVE_INDEX.md)
+
+Legacy/public guides kept for external readers:
+
 - [Market Scanner](docs/market-scanner.md)
 - [Full Guide](docs/full-guide.md)
 - [FAQ](docs/FAQ.md)

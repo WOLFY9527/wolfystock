@@ -1,184 +1,149 @@
 # WolfyStock Documentation Index
 
-This is the starting navigation map for maintainers. It points to the current
-source-of-truth documents and separates active authority from historical
-evidence, local artifacts, and older inherited guides.
+Status: canonical documentation navigation map.
+
+This file is the active map for AI and human maintainers. It separates current
+authority from generated manuals, active references, externally referenced
+legacy docs, and historical archive material.
 
 ## Start Here
 
-- [WolfyStock AI Project Manual](./AI_PROJECT_MANUAL.md): generated AI worker
-  onboarding and navigation manual for project purpose, surfaces, data reality,
-  protected domains, validation, and source-of-truth routing.
-- [WolfyStock System Handbook](./WOLFYSTOCK_SYSTEM_HANDBOOK.md): product,
-  module, route, API, provider, validation, troubleshooting, and safe-change
-  overview.
-- [WolfyStock AI Maintenance Manual](./WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md):
-  Codex worker rules, protected domains, validation expectations, stale-doc
-  traps, and AI-assisted maintenance workflow.
-- [Archive Index](./ARCHIVE_INDEX.md): retained historical evidence and audit
-  provenance that must not be treated as current authority unless another
-  current doc says so.
-- [File Governance Taxonomy](./architecture/file-governance-taxonomy.md):
-  active-vs-archive rules, docs lanes, asset/fixture policy, and AI navigation
-  rules.
-- [Operations Runbook](./operations/WOLFYSTOCK_RUNBOOK.md): operator runbook
-  skeleton and links to current operational guides.
-- [README](../README.md): repository overview, local run commands, and product
-  orientation.
-- [Changelog](./CHANGELOG.md): user-visible, operational, and documentation
-  navigation changes.
+Future AI workers should read no more than these six primary Markdown files
+before narrowing into a task-specific domain:
 
-## Directory Guides
+| Order | File | Class | Purpose |
+| ---: | --- | --- | --- |
+| 1 | [README](../README.md) | canonical entrypoint | Product purpose, stack, run commands, and human orientation. |
+| 2 | [AGENTS](../AGENTS.md) | canonical entrypoint | Repository AI collaboration rules and hard safety boundaries. |
+| 3 | [AI Project Manual](./AI_PROJECT_MANUAL.md) | generated canonical output | Main AI onboarding manual for purpose, architecture, surfaces, data reality, protected domains, validation, and source map. |
+| 4 | [Docs Index](./DOCS_INDEX.md) | canonical entrypoint | Current doc navigation and Markdown classification map. |
+| 5 | [Surface Map](./codex/WOLFYSTOCK_SURFACE_MAP.md) | active reference | Stable product surface to endpoint/service/page/test lookup. |
+| 6 | [Codex Execution Policy](./codex/WOLFYSTOCK_CODEX_EXECUTION_POLICY.md) | canonical manual source | Compact task-mode, validation, commit/push, and final-report policy. |
 
-- [Audit Index](./audits/README.md): current audit, launch, and operator
-  evidence navigation.
-- [Architecture Docs](./architecture/README.md): current backend, storage, and
-  portfolio architecture navigation.
-- [Codex Docs](./codex/README.md): current Codex workflow and prompt
-  navigation.
-- [Design Docs](./design/README.md): current design asset navigation.
-- [Operations Docs](./operations/README.md): current operator runbook and
-  artifact-handling navigation.
-- [Frontend Docs](./frontend/README.md): current frontend visual, route,
-  primitive, validation, and archived-evidence navigation.
-- [Backend Docs](./backend/README.md): current backend architecture and
-  protected-domain navigation.
-- [Provider And Data Docs](./provider-data/README.md): current provider,
-  freshness, source-confidence, and data-quality navigation.
-- [Scanner Docs](./scanner/README.md): current scanner/watchlist navigation.
-- [Market Overview Docs](./market-overview/README.md): current market monitor
-  navigation.
-- [Rotation Docs](./rotation/README.md): current rotation-radar navigation.
-- [Liquidity Docs](./liquidity/README.md): current liquidity-monitor navigation.
-- [Portfolio Docs](./portfolio/README.md): current portfolio/ledger navigation.
-- [Backtest Docs](./backtest/README.md): current backtest navigation.
-- [Options Docs](./options/README.md): current Options Lab navigation.
-- [Admin And Ops Docs](./admin-ops/README.md): current admin/operator
-  navigation.
-- [AI And LLM Docs](./ai-llm/README.md): current AI/LLM navigation.
-- [Product Audit Docs](./product-audit/README.md): current standalone
-  product-level diagnostic audits, including the T-1758 market-data P0
-  root-cause map.
-- [Data Reliability Docs](./data-reliability/README.md): current evidence
-  readiness matrix, data coverage contract, and provider source-confidence
-  contract.
+## Agent Rules
 
-## Current Authority
-
-Use these documents before changing code, tests, routes, API contracts, or
-operator workflows.
-
-| Area | Current source |
-| --- | --- |
-| AI project onboarding | [AI Project Manual](./AI_PROJECT_MANUAL.md) |
-| System overview | [System Handbook](./WOLFYSTOCK_SYSTEM_HANDBOOK.md) |
-| AI-assisted maintenance | [AI Maintenance Manual](./WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md) |
-| Module boundaries | [Modular Architecture Manual](./architecture/WOLFYSTOCK_MODULE_ARCHITECTURE.md) |
-| Backend/frontend maintenance map | [Backend / Frontend Modular Maintenance Handbook](./architecture/backend-frontend-modular-maintenance-handbook.md) |
-| Protected backend domains | [Backend Protected Domains](./codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md) |
-| Codex task guard | [Codex Standard Guard](./codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md) |
-| Codex runtime modes | [Codex Task Runtime Rules](./codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md) |
-| Codex final reports | [Codex Final Report Template](./codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md) |
-| Prompt compression and task examples | [Compact Prompt Protocol](./codex/WOLFYSTOCK_CODEX_COMPACT_PROMPT_PROTOCOL.md) and [Compact Task Examples](./codex/WOLFYSTOCK_CODEX_COMPACT_TASK_EXAMPLES.md) |
-| Model routing | [Model Routing](./codex/WOLFYSTOCK_CODEX_MODEL_ROUTING.md) |
-| Prompt context lookup | [Prompt Context Index](./codex/WOLFYSTOCK_PROMPT_CONTEXT_INDEX.md) |
-| File/docs governance | [File Governance Taxonomy](./architecture/file-governance-taxonomy.md) |
-| Frontend design, route taxonomy, primitive policy | [Frontend Docs](./frontend/README.md) and [Frontend Visual System](./frontend/visual-system.md) |
-| Frontend validation | [Frontend Validation Playbook](./frontend/validation-playbook.md) |
-| Launch readiness | [Audit Index](./audits/README.md), [Public Launch Readiness Master](./audits/public-launch-readiness-master.md), and [Public Launch Gap Register](./audits/public-launch-gap-register.md) |
-| Market-data P0 root-cause map | [T-1758 Market Data P0 Root-cause Map](./product-audit/t1758-market-data-p0-root-cause-map.md) |
-| Evidence readiness stop/go | [Evidence Readiness Matrix](./data-reliability/evidence-readiness-matrix.md) |
-| Data coverage contract | [Data Coverage Matrix v1](./data-reliability/data-coverage-matrix-v1.md) |
-| Provider source-confidence contract | [Provider Source-Confidence Contract](./data-reliability/provider-source-confidence-contract.md) |
-| Market-data diagnostic lineage index | [Codex Docs — Canonical Project Index](./codex/README.md#canonical-project-documentation-index) |
-
-## Module References
-
-| Module or workflow | Start with | Supporting docs |
+| File | Class | Use |
 | --- | --- | --- |
-| Analysis and reports | [Full Guide](./full-guide.md), [AI Decision Engine](./ai-decision-engine.md) | [LLM Config Guide](./LLM_CONFIG_GUIDE.md), [Image Extract Prompt](./image-extract-prompt.md) |
-| Scanner and watchlist | [Scanner Docs](./scanner/README.md) | [Market Scanner](./market-scanner.md), [Scanner export label policy](./product/wolfystock-scanner-export-label-policy.md) |
-| Backtest | [Backtest Docs](./backtest/README.md) | [Backtest System](./backtest-system.md), [Backtest helper maintenance](./backtest-helper-maintenance.md), [Transaction cost and slippage readiness](./backtest/transaction-cost-slippage-readiness.md), [Execution model versioning contract](./backtest/execution-model-versioning-contract.md), [Regime attribution readiness contract](./backtest/regime-attribution-readiness-contract.md), [PIT universe and adjusted data readiness](./backtest/pit-universe-adjusted-data-readiness.md), [Rule backtest reopen trust status](./architecture/rule-backtest-reopen-trustworthiness-p0-status-index-2026-04-22.md), [Rust compute-core boundary](./operations/rust-compute-core-boundary.md) |
-| Bot commands and notifications | [Bot Integration Guide](./bot-command_EN.md) | [Discord bot config](./bot/discord-bot-config.md), [DingTalk bot config](./bot/dingding-bot-config.md), [Feishu bot config](./bot/feishu-bot-config.md) |
-| Portfolio | [Portfolio Docs](./portfolio/README.md) | [Phase F decisions](./architecture/phase-f/decisions.md), [Phase F status](./architecture/phase-f/status.md), [Phase F runbook](./architecture/phase-f/runbook.md) |
-| Provider and freshness | [Provider And Data Docs](./provider-data/README.md) | [Provider Data Freshness Reliability Guide](./audits/provider-data-freshness-reliability-guide.md), [Provider Capability Metadata](./operations/provider-capability-metadata.md), [Market Data Provider Upgrade Matrix](./audits/market-data-provider-upgrade-decision-matrix.md), [Provider Incident Runbook](./audits/provider-data-incident-runbook.md) |
-| Provider operations dashboard | [Market Provider Operations Dashboard](./design/wolfystock-market-provider-operations-dashboard.md) | [Provider Capability Metadata](./operations/provider-capability-metadata.md), [Provider Budget And Routing Rules](./codex/WOLFYSTOCK_PROVIDER_BUDGET_AND_ROUTING_RULES.md) |
-| Options Lab | [Options Docs](./options/README.md) | [Options provider adapter contract](./audits/options-provider-adapter-contract.md), [Options Lab phase 0 design](./audits/options-lab-phase0-design.md), [Trading no-advice policy](./audits/trading-no-advice-product-policy.md) |
-| Admin, security, RBAC | [Admin And Ops Docs](./admin-ops/README.md) | [Auth/RBAC release security guide](./audits/auth-rbac-release-security-guide.md), [Admin RBAC capability model](./audits/admin-rbac-capability-model-design.md), [Admin role governance plan](./audits/admin-role-governance-plan.md), [Production security hardening audit](./audits/production-security-hardening-audit.md) |
-| Cost, quota, observability | [Admin And Ops Docs](./admin-ops/README.md) and [AI And LLM Docs](./ai-llm/README.md) | [Cost observability roadmap](./audits/cost-observability-implementation-roadmap.md), [Quota/cost notification release guide](./audits/quota-cost-notification-release-guide.md) |
-| DuckDB quant diagnostics | [Quant DuckDB Engine](./quant-duckdb-engine.md) | [DuckDB Operator Smoke Guide](./operations/duckdb-operator-smoke-guide.md), [DuckDB Production Readiness Checklist](./operations/duckdb-production-readiness-checklist.md) |
-| Deployment | [Deploy Guide](./DEPLOY.md) | [Deployment readiness checklist](./audits/deployment-readiness-checklist.md), [Release rollback runbook](./audits/release-rollback-runbook.md), [Zeabur deployment](./docker/zeabur-deployment.md) |
-| Desktop package | [Desktop package guide](./desktop-package.md) | [Deploy Guide](./DEPLOY.md) |
+| [AGENTS](../AGENTS.md) | canonical entrypoint | Source of truth for repository AI rules. |
+| [AI Maintenance Manual](./WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md) | canonical manual source | Worker modes, stale-doc traps, validation expectations, and handoff checklist. |
+| [Codex Standard Guard](./codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md) | canonical manual source | Operating guard for bounded Codex work. |
+| [Codex Runtime Rules](./codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md) | canonical manual source | Workspace, mode, branch, commit, and push rules. |
+| [Codex Final Report Template](./codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md) | canonical manual source | Required final report evidence contract. |
+| [Codex Prompt Context Index](./codex/WOLFYSTOCK_PROMPT_CONTEXT_INDEX.md) | active reference | Prompt authoring and context compression guide. |
 
-## Operations And Runbooks
+`CLAUDE.md`, `.github/copilot-instructions.md`,
+`.github/instructions/*.instructions.md`, `.claude/skills/**`, and
+`.agents/skills/**` are kept because external agent tools reference those paths.
+They are mirrors or compatibility assets, not higher authority than
+`AGENTS.md`.
 
-- [WolfyStock Operations Runbook](./operations/WOLFYSTOCK_RUNBOOK.md):
-  high-level operator flow and triage skeleton.
-- [Backend Local Runbook](./operations/backend-local-runbook.md):
-  canonical `.venv` backend startup, local proxy block, and health checks.
-- [Artifact Cleanup Policy](./operations/ARTIFACT_CLEANUP_POLICY.md):
-  tracked-vs-generated artifact ownership and cleanup timing rules.
-- [Parallel Codex Operator Playbook](./operations/parallel-codex-playbook.md):
-  same-repo and parallel worker safety.
-- [Provider Data Incident Runbook](./audits/provider-data-incident-runbook.md):
-  provider outage and freshness incident response.
-- [Operator Evidence Real Runbook](./audits/operator-evidence-real-runbook.md):
-  sanitized real-operator evidence collection.
-- [Operator Evidence Dry-Run Handoff](./audits/operator-evidence-dry-run-handoff.md):
-  synthetic rehearsal flow for evidence workflow.
-- [Release Evidence Operator Handoff](./audits/release-evidence-operator-handoff.md):
-  current foundation-vs-launch-evidence release handoff checklist.
-- [Operator Evidence Redaction Checklist](./audits/operator-evidence-redaction-checklist.md):
-  redaction before handoff.
-- [Release Rollback Runbook](./audits/release-rollback-runbook.md):
-  release rollback decisioning.
-- [CI Gate Usage](./audits/ci-gate-usage.md): when to use fast worker gates
-  versus full release gates.
-- [CI PostgreSQL Gate Triage](./audits/ci-postgres-gate-triage-guide.md):
-  PostgreSQL CI triage.
-- [DuckDB Operator Smoke Guide](./operations/duckdb-operator-smoke-guide.md):
-  local DuckDB diagnostics only.
-- [Provider Observability And Metrics Readiness](./operations/provider-observability-metrics-readiness.md):
-  current provider/admin observability posture and the gap to a real metrics stack.
-- [Queue / WS2 / Metrics Production Readiness](./operations/queue-ws2-metrics-production-readiness.md):
-  topology crosswalk separating repo-local foundations from deferred production runtime and metrics-stack enablement.
+## Product Architecture
 
-## Historical Evidence
+| File | Class | Use |
+| --- | --- | --- |
+| [System Handbook](./WOLFYSTOCK_SYSTEM_HANDBOOK.md) | canonical manual source | Product, route, API, provider, validation, and troubleshooting overview. |
+| [Surface Map](./codex/WOLFYSTOCK_SURFACE_MAP.md) | active reference | Endpoint/schema/service/page/test lookup by surface. |
+| [Module Architecture](./architecture/WOLFYSTOCK_MODULE_ARCHITECTURE.md) | canonical manual source | Bounded contexts, dependency rules, and protected domain ownership. |
+| [Backend / Frontend Maintenance Handbook](./architecture/backend-frontend-modular-maintenance-handbook.md) | canonical manual source | Module owners, first files, invariants, and debug flow. |
+| [File Governance Taxonomy](./architecture/file-governance-taxonomy.md) | canonical manual source | Active-vs-archive rules and docs asset governance. |
 
-Historical docs are useful for provenance and prior decisions, but they are not
-current authority unless a current index or handbook points to them for that
-specific question.
+Task-specific product entry points remain active because they route directly to
+current surface rules:
 
-- [Archive Index](./ARCHIVE_INDEX.md): consolidated historical evidence map.
-- [Audit Index](./audits/README.md): current audit navigation, launch posture,
-  and archived audit warnings.
-- `docs/audits/archive/`: archived audit and consolidation notes.
-- `docs/audits/archive/backtest/`: archived backtest maintenance evidence and
-  machine-readable audit bundles.
-- `docs/audits/archive/frontend/`: archived frontend DOM/CSS/bundle/old launch
-  UX evidence.
-- `docs/frontend/archive/`: archived frontend docs moved out of active lanes by
-  domain consolidation.
-- `docs/architecture/archive/`: archived architecture and Phase F evidence.
-- `docs/qa/archive/`: archived point-in-time QA reports.
-- `docs/frontend/archive/`: archived frontend consolidation and transitional UI
-  replacement notes.
+- [Market Overview](./market-overview/README.md)
+- [Scanner and Watchlist](./scanner/README.md)
+- [Liquidity](./liquidity/README.md)
+- [Rotation](./rotation/README.md)
+- [Portfolio](./portfolio/README.md)
+- [Backtest](./backtest/README.md)
+- [Options](./options/README.md)
+- [Frontend](./frontend/README.md)
+- [Operations](./operations/README.md)
+- [Provider/Data](./provider-data/README.md)
 
-## Local Or Ignored Docs Excluded From Authority
+## Data And Professional Analytics
 
-These paths can be useful during local work, but they are not repository
-authority and should not be cited as current system truth without a tracked
-source document:
+| File | Class | Use |
+| --- | --- | --- |
+| [Product Recovery Plan](./product-recovery/WOLFYSTOCK_PRODUCT_RECOVERY_PLAN.md) | canonical manual source | Current recovery posture and product value constraints. |
+| [Data Coverage Matrix](./product-recovery/DATA_COVERAGE_MATRIX.md) | canonical manual source | Repo-grounded data-family readiness and gaps. |
+| [Professional Data Source Roadmap](./product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md) | canonical manual source | Current professional source roadmap. |
+| [Authorized Quote Spine Contract](./product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md) | canonical manual source | Future bounded quote/OHLCV backbone contract. |
+| [Backtest Dataset Lineage Gate Contract](./product-recovery/DATA039_BACKTEST_DATASET_LINEAGE_GATE_CONTRACT.md) | canonical manual source | Backtest/factor dataset lineage gate. |
+| [Symbol Research Packet Contract](./product-recovery/SYMBOL_RESEARCH_PACKET_CONTRACT.md) | canonical manual source | Watchlist and stock packet readiness contract. |
+| [Options Provider Entitlement Decision](./product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md) | canonical manual source | Options rights and no-advice boundary. |
+| [Scenario Baseline Snapshot Plan](./product-recovery/DATA035_SCENARIO_DURABLE_BASELINE_SNAPSHOT_PLAN.md) | canonical manual source | Scenario durable baseline requirements. |
+| [Evidence Harness](./product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md) | canonical manual source | Sanitized target-environment evidence harness. |
+| [Market Source Activation Blueprint](./data/market-source-activation-blueprint.md) | canonical manual source | Official risk and quote source activation roadmap. |
+| [Provider Source-Confidence Contract](./data-reliability/provider-source-confidence-contract.md) | canonical manual source | Provider confidence, freshness, and fail-closed boundary. |
+| [Provider Capability Metadata](./operations/provider-capability-metadata.md) | canonical manual source | Inert provider metadata and source-confidence rules. |
 
-- `.claude/reviews/`: local analysis/review outputs.
-- `.codex/` and `.codex-artifacts/`: local Codex runtime artifacts.
-- `reports/`: generated local reports.
-- `test-results/`, `playwright-report/`, `blob-report/`, and `screenshots/`:
-  generated test/browser/visual artifacts.
-- `coverage/`, `.coverage`, and generated coverage output.
-- `repo_archive/`, `repo_trash/`, and packaged/exported archives unless a
-  current tracked doc explicitly references the artifact.
+`DATA011`, `DATA016`, and `DATA021` acceptance snapshots are archived under
+`docs/archive/product-recovery/acceptance/`; their durable conclusions are
+absorbed into the generated AI manual and the active product-recovery contracts
+above.
 
-`AGENTS.md` remains the repository AI-collaboration source of truth. `.claude`
-skills may be tracked collaboration assets, but local review outputs under
-`.claude/reviews/` are intentionally not authority.
+## Validation And Protected Domains
+
+| File | Class | Use |
+| --- | --- | --- |
+| [Backend Protected Domains](./codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md) | canonical manual source | Scanner, backtest, portfolio, provider, AI, auth, notification, cache, API, and stored-contract hard stops. |
+| [Validation Matrix](./codex/WOLFYSTOCK_CODEX_VALIDATION_MATRIX.md) | canonical manual source | Smallest-safe validation selection by changed surface. |
+| [No-Advice Regression Guards](./codex/NO_ADVICE_REGRESSION_GUARDS.md) | canonical manual source | No-advice, no-order, raw-provider, and consumer copy guards. |
+| [Provider Budget And Routing Rules](./codex/WOLFYSTOCK_PROVIDER_BUDGET_AND_ROUTING_RULES.md) | canonical manual source | Provider budget, quota, and routing guardrails. |
+| [Backtest Universe Rules](./codex/WOLFYSTOCK_BACKTEST_UNIVERSE_RULES.md) | canonical manual source | Backtest universe local-only and professional-readiness guardrails. |
+| [Frontend Validation Playbook](./frontend/validation-playbook.md) | canonical manual source | Browser and frontend evidence expectations. |
+| [Audit Index](./audits/README.md) | active reference | Current launch, safety, domain, and operator-evidence navigation. |
+
+## Active Reference Lanes
+
+| Lane | Class | Purpose |
+| --- | --- | --- |
+| `docs/architecture/` | active reference | Current architecture, database, and module docs. Historical architecture reports live in `docs/archive/architecture/`. |
+| `docs/audits/` | active reference | Current launch, safety, operator, security, provider, cost, and deployment references. Point-in-time reports live in `docs/archive/audits/`. |
+| `docs/frontend/` | active reference | Current frontend visual system, validation, IA, and UX policy. Historical frontend audits live in `docs/archive/frontend/` and `docs/archive/audits/frontend/`. |
+| `docs/operations/` | active reference | Current runbooks, artifact cleanup, queue/WS2 notes, provider metadata, and operator procedures. |
+| `docs/product-recovery/` | canonical manual source | Durable current recovery contracts and roadmaps only. Historical snapshots live in `docs/archive/product-recovery/`. |
+| `docs/codex/` | canonical manual source | Durable Codex workflow, validation, prompt, protected-domain, and report docs only. Task reports live in `docs/archive/codex/`. |
+| `docs/backtest/`, `docs/options/`, `docs/portfolio/`, `docs/scanner/`, `docs/rotation/`, `docs/liquidity/`, `docs/market-overview/` | active reference | Current surface-specific rules and entry docs. |
+
+Legacy or externally referenced docs such as `docs/full-guide*.md`,
+`docs/README_EN.md`, `docs/README_CHT.md`, `docs/INDEX_EN.md`, `SKILL.md`, and
+`docs/openclaw-skill-integration.md` are kept because public links, bilingual
+docs, or external skill consumers may reference them. Prefer the six-file start
+path for AI onboarding.
+
+## Markdown Classification Rules
+
+Classify Markdown files by the first matching rule:
+
+| Class | Rule |
+| --- | --- |
+| canonical entrypoint | `README.md`, `AGENTS.md`, `docs/DOCS_INDEX.md` |
+| generated canonical output | `docs/AI_PROJECT_MANUAL.md` |
+| canonical manual source | Files curated by `scripts/build_ai_project_manual.py` and listed in `docs/AI_PROJECT_MANUAL_SOURCES.json` |
+| active reference | Current surface, architecture, audit index, operations, frontend, product, and provider docs linked from this index |
+| historical task report | Point-in-time audits, QA passes, goal-progress notes, acceptance snapshots, and retired Codex task reports under `docs/archive/` |
+| outdated recovery note | Superseded recovery or root-cause snapshots under `docs/archive/product-recovery/` |
+| duplicate/covered by manual | Legacy broad guides or translated duplicates when the AI manual already covers the maintenance path |
+| archive-only | Any file under `docs/archive/` |
+| keep because externally referenced | Agent mirrors, public bilingual docs, root `SKILL.md`, OpenClaw skill integration, issue/PR templates |
+| candidate for deletion only if safe | Generated, duplicate, or superseded docs with no active references and no historical value |
+
+## Historical Archive
+
+Use [Archive Index](./ARCHIVE_INDEX.md) for archive lanes and safe-use rules.
+All historical Markdown moved by DOCS-005 now lives under:
+
+- `docs/archive/audits/`
+- `docs/archive/architecture/`
+- `docs/archive/codex/`
+- `docs/archive/design/`
+- `docs/archive/frontend/`
+- `docs/archive/product-audit/`
+- `docs/archive/product-recovery/`
+- `docs/archive/qa/`
+
+Archive docs preserve provenance only. They are not current launch, provider,
+security, portfolio, backtest, API, frontend, or product-readiness authority
+unless an active doc explicitly re-promotes them for a specific question.

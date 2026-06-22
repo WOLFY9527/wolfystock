@@ -1,16 +1,14 @@
 {
   "discovery": {
-    "candidateMarkdownAfterPolicy": 236,
+    "candidateMarkdownAfterPolicy": 232,
     "excludedByReason": {
       "ai_governance_mirror": 5,
-      "archive_provenance": 88,
-      "codex_point_in_time_audit": 25,
+      "archive_provenance": 128,
       "fixture_local_doc": 3,
       "language_or_broad_duplicate": 13,
-      "legacy_or_external_product_doc": 3,
-      "task_progress_log": 10
+      "legacy_or_external_product_doc": 2
     },
-    "includedSourceCount": 75,
+    "includedSourceCount": 73,
     "markdownDiscovered": 383,
     "prunedDirectoryNames": [
       ".cache",
@@ -58,7 +56,7 @@
     "path": "scripts/build_ai_project_manual.py",
     "readsProductionDataPaths": false,
     "requiresApiKeys": false,
-    "sha256": "366fc4ff77c90177ebc4b184a915c9538c18de8eace55a4fc784e2e8c2c9a124",
+    "sha256": "64e961234090cad664f0c65caea95cd60fdb5f66dcc2a70e37410eb0ba3c0398",
     "version": 3
   },
   "includedSources": [
@@ -75,27 +73,27 @@
       "title": "AGENTS.md"
     },
     {
-      "bytes": 9923,
+      "bytes": 10117,
       "categories": [
         "architecture",
         "product"
       ],
-      "lineCount": 253,
+      "lineCount": 259,
       "path": "README.md",
       "purpose": "product purpose, feature set, stack, entry points",
-      "sha256": "571a95356850104aaf6e4e31f6e585c0bbcd544bd69e99f971c9859e2a8c1490",
+      "sha256": "508019197a9798e3b6a7ff4983bad8ffd974a3da7859be321e5f9020cc25e496",
       "title": "WolfyStock"
     },
     {
-      "bytes": 7717,
+      "bytes": 4897,
       "categories": [
         "governance",
         "sources"
       ],
-      "lineCount": 148,
+      "lineCount": 105,
       "path": "docs/ARCHIVE_INDEX.md",
       "purpose": "archive lanes and safe-use rules",
-      "sha256": "b8844ab4321266a3d994c228fb340f6d95cd0d7fc0db8d8482fa119028807aae",
+      "sha256": "e01da533982b677cf14ee5a1ebe101326cd7237868e504c87735003680381d4c",
       "title": "WolfyStock Archive And Historical Evidence Index"
     },
     {
@@ -111,15 +109,15 @@
       "title": "🚀 部署指南"
     },
     {
-      "bytes": 13898,
+      "bytes": 11031,
       "categories": [
         "governance",
         "sources"
       ],
-      "lineCount": 184,
+      "lineCount": 149,
       "path": "docs/DOCS_INDEX.md",
       "purpose": "current documentation navigation and authority map",
-      "sha256": "0b3e5c3231e073306d4228ccc2e58172f1e5e2d83c01be92763b72089c952e0f",
+      "sha256": "31735cf0209c81418ca32fb211297c7359af6b3bc96747d52a6aed3fbddcc0aa",
       "title": "WolfyStock Documentation Index"
     },
     {
@@ -179,11 +177,11 @@
       "lineCount": 383,
       "path": "docs/architecture/backend-frontend-modular-maintenance-handbook.md",
       "purpose": "module owners, first files, invariants, debug flow",
-      "sha256": "2fe81d4aabc75a3f42a18b102413f576f3ec32b4b67ccfe45e1b59484a7c1a78",
+      "sha256": "8785e32db43fa71432356484c13f4f17156becf54d5738013104e408a5024764",
       "title": "Backend / Frontend Modular Maintenance Handbook"
     },
     {
-      "bytes": 9169,
+      "bytes": 9215,
       "categories": [
         "governance",
         "sources"
@@ -191,19 +189,19 @@
       "lineCount": 167,
       "path": "docs/architecture/file-governance-taxonomy.md",
       "purpose": "active-vs-archive and generated artifact policy",
-      "sha256": "0749aa456f9b75d969d50c231095d8db49a5cc6314da258f5e0439fb5dc46cfa",
+      "sha256": "690cdbb5b9514a78202100bbfbc6193a68bd957685dce9778d3961605301e50d",
       "title": "WolfyStock File Governance Taxonomy"
     },
     {
-      "bytes": 5252,
+      "bytes": 5242,
       "categories": [
         "launch",
         "sources"
       ],
-      "lineCount": 130,
+      "lineCount": 131,
       "path": "docs/audits/README.md",
       "purpose": "active audit and launch authority index",
-      "sha256": "3780e9f6da4c18d5af01e8c061f93d0dc211ebd660d201243b42ab9b7c4efdd5",
+      "sha256": "dd073a76ff497e77d9dbbbc1e94ab038e33cb78acd45f586990c079f9918b85f",
       "title": "Audit Index"
     },
     {
@@ -240,7 +238,7 @@
       "lineCount": 205,
       "path": "docs/audits/backtest-portfolio-public-safety-audit.md",
       "purpose": "portfolio/backtest public safety evidence",
-      "sha256": "5a7a3197c5c469c1738e1f6c56a67df1f898141654150ad614970ad052bd6a83",
+      "sha256": "5dfc6de1bf8caba952aed926f49a56ecd2438847216381d0218c1bb7a5b2ac4d",
       "title": "Backtest and Portfolio Public Safety Audit"
     },
     {
@@ -288,7 +286,7 @@
       "lineCount": 90,
       "path": "docs/audits/index-cost-quota-observability.md",
       "purpose": "cost, quota, provider budget, observability index",
-      "sha256": "5b846d0883a4e0a34f0d1d7b617cda27867ba659e0b34921648a6b031bfb73ee",
+      "sha256": "b45dbd8acd8ae12f164f84722b367aae76e037c47717e65d65025befc6b991ae",
       "title": "Cost / Quota / Observability Audit Index"
     },
     {
@@ -301,7 +299,7 @@
       "lineCount": 87,
       "path": "docs/audits/index-provider-data-options.md",
       "purpose": "provider/data/options readiness index",
-      "sha256": "4d788f6faecf75d5c9c9512789825ba7c6f08da697e641bd1f505a7216402cb2",
+      "sha256": "2b69ebf21b066c32d1f43bdcfbc311c8f954e4f8f591ae813a4d871d602eca41",
       "title": "Provider / Data / Options Audit Index"
     },
     {
@@ -313,7 +311,7 @@
       "lineCount": 88,
       "path": "docs/audits/index-security-rbac-mfa.md",
       "purpose": "security, RBAC, role-governance, MFA doc index",
-      "sha256": "1e736c9c0b71d222479c140eb5241baa14c7e7105781ce20d126873abfd65ea7",
+      "sha256": "93c61338b0dd4c7b62200b73157a4af92fbc36f21f65e6834cf665aa6806dff7",
       "title": "Security / RBAC / MFA Audit Index"
     },
     {
@@ -360,7 +358,7 @@
       "lineCount": 220,
       "path": "docs/audits/public-launch-gap-register.md",
       "purpose": "detailed launch blocker register",
-      "sha256": "5902ed2315fac1c331bb288d454deffbe090e9dc88c10b4b5c4e2a6c1d307b54",
+      "sha256": "b9594e4ce5eb9209e74c299129e7c8a9aa25416a2391ab8da2da144d024fefa1",
       "title": "Public Launch Gap Register"
     },
     {
@@ -371,7 +369,7 @@
       "lineCount": 199,
       "path": "docs/audits/public-launch-readiness-master.md",
       "purpose": "executive public launch NO-GO verdict",
-      "sha256": "e3901077cc54ab22705e4194209b619b82533465bcdd21071aa55f7aedfdb646",
+      "sha256": "75e8ff9bc383f888dc3162aa55364d5424d6c017ea82d14517637e5ec99482e0",
       "title": "Public Launch Readiness Master"
     },
     {
@@ -395,7 +393,7 @@
       "lineCount": 495,
       "path": "docs/audits/security-mfa-secret-storage-hardening-plan.md",
       "purpose": "deferred MFA secret and recovery hardening plan",
-      "sha256": "7e4175b5169594fca5fdb93df95a2711cbfb2e11e9fcd807ec51ce50e75e3389",
+      "sha256": "1c598907f6c1101fafca06958d3356f3f8ecbb9215721d187696ffb81b7ade75",
       "title": "Security MFA Secret Storage Hardening Plan"
     },
     {
@@ -578,6 +576,18 @@
       "title": "WolfyStock Provider Budget and Routing Rules"
     },
     {
+      "bytes": 7228,
+      "categories": [
+        "architecture",
+        "product"
+      ],
+      "lineCount": 36,
+      "path": "docs/codex/WOLFYSTOCK_SURFACE_MAP.md",
+      "purpose": "stable product surface to file/test map",
+      "sha256": "da85c10b7de0a336e2789ebcc4ae051211ce5d2fb3da44ace098833181891065",
+      "title": "WolfyStock Surface Map"
+    },
+    {
       "bytes": 14993,
       "categories": [
         "data",
@@ -602,14 +612,14 @@
       "title": "Market Source Activation Blueprint"
     },
     {
-      "bytes": 7131,
+      "bytes": 7097,
       "categories": [
         "frontend"
       ],
-      "lineCount": 143,
+      "lineCount": 144,
       "path": "docs/frontend/README.md",
       "purpose": "current frontend route-family and visual authority entry point",
-      "sha256": "992ccb95cafb9b6295ff56828e63d5fa98e1d1c4aa4236bd0777b9d9fc2b4087",
+      "sha256": "5d03c72e259f0375a9e98d4d11c74e9b99d0c96579a6bd0cc547e2cf03d0b094",
       "title": "WolfyStock Frontend Docs"
     },
     {
@@ -657,7 +667,7 @@
       "lineCount": 404,
       "path": "docs/frontend/validation-playbook.md",
       "purpose": "frontend/browser evidence and visual validation expectations",
-      "sha256": "9f1f630c93905f63392473c2e8b7384425d7b8b6c820a9857c1449d40539106e",
+      "sha256": "2381abc32af1992c02ef606052832d673ab81457cb9256ceae38ada9eb69c099",
       "title": "WolfyStock Frontend Validation Playbook"
     },
     {
@@ -755,43 +765,7 @@
       "title": "WolfyStock Portfolio Docs"
     },
     {
-      "bytes": 15201,
-      "categories": [
-        "acceptance",
-        "product-recovery"
-      ],
-      "lineCount": 127,
-      "path": "docs/product-recovery/DATA011_PACKET_CONSUMPTION_ACCEPTANCE.md",
-      "purpose": "packet consumption acceptance for first-read recovery",
-      "sha256": "e2e80cef22591caa9a141d61bf2a0caac2c0ee7323ae8573630fddf824aeac5a",
-      "title": "DATA-011 Packet Consumption Product Acceptance"
-    },
-    {
-      "bytes": 12172,
-      "categories": [
-        "acceptance",
-        "product-recovery"
-      ],
-      "lineCount": 129,
-      "path": "docs/product-recovery/DATA016_FOCUSED_ACCEPTANCE.md",
-      "purpose": "focused first-read recovery acceptance",
-      "sha256": "9aa353008633e8d1de3dad0afd8495daf6c5fe4215af4aa4c38ed916ee51e027",
-      "title": "DATA-016 Focused Acceptance After First-Read Recovery"
-    },
-    {
-      "bytes": 13691,
-      "categories": [
-        "acceptance",
-        "product-recovery"
-      ],
-      "lineCount": 217,
-      "path": "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md",
-      "purpose": "real data value acceptance and remaining blockers",
-      "sha256": "caecbe0a11f9ad63de359228c6bdeb04cc414695cd917ee00a829c18b013a076",
-      "title": "DATA-021 Real Data Value Acceptance"
-    },
-    {
-      "bytes": 33340,
+      "bytes": 33492,
       "categories": [
         "product-recovery",
         "roadmap"
@@ -799,7 +773,7 @@
       "lineCount": 239,
       "path": "docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md",
       "purpose": "professional data source roadmap",
-      "sha256": "a59613ffebd861d35532f9770c3cc85c85cd3b3636b5c3d298aac58ea8e462f8",
+      "sha256": "83d46259e4abd14413313d1694fa95706f71921cce1e9cc230109fcce6d9c322",
       "title": "DATA-030 Professional Data Source Roadmap"
     },
     {
@@ -827,7 +801,7 @@
       "title": "DATA-033 Target Environment Evidence Harness"
     },
     {
-      "bytes": 19727,
+      "bytes": 19746,
       "categories": [
         "options",
         "product-recovery"
@@ -835,7 +809,7 @@
       "lineCount": 181,
       "path": "docs/product-recovery/DATA034_OPTIONS_PROVIDER_ENTITLEMENT_DECISION.md",
       "purpose": "options provider entitlement decision",
-      "sha256": "906f98a9d4a9991b2cf4b7e4217a55b39e372af08f738442de2d65d87c9485c4",
+      "sha256": "4ac71b011c52048cb4e04002950e9b7cbd9c200a255a64b435cf716596847a8c",
       "title": "DATA-034 Options Provider Entitlement Decision"
     },
     {
@@ -851,7 +825,7 @@
       "title": "DATA-035 Scenario Durable Baseline Snapshot Plan"
     },
     {
-      "bytes": 34319,
+      "bytes": 34376,
       "categories": [
         "data",
         "product-recovery"
@@ -859,7 +833,7 @@
       "lineCount": 559,
       "path": "docs/product-recovery/DATA038_AUTHORIZED_QUOTE_SPINE_CONTRACT.md",
       "purpose": "authorized quote spine contract",
-      "sha256": "2bbd937531ca30a76d9046c1e4284cea3c742b036e00aa7782dd6eb2237e3c35",
+      "sha256": "6c3f62bb03ebb4c00053cd7a97c848b2bbe763df7f0cea399657dc8449b006e9",
       "title": "DATA-038 Authorized Quote Spine Contract"
     },
     {
@@ -907,7 +881,7 @@
       "lineCount": 457,
       "path": "docs/product-recovery/WOLFYSTOCK_PRODUCT_RECOVERY_PLAN.md",
       "purpose": "canonical product recovery plan and recovery posture",
-      "sha256": "bf1c4bc706e1c2d8547392d0a96b7f4557309e82ed55477244eaa818dbb8ec6c",
+      "sha256": "7e840875f7744bbb8b9c41a5f7a3611ce0da855ba65e7c6212528636a709ff46",
       "title": "WolfyStock Product Recovery Plan"
     },
     {
@@ -962,7 +936,7 @@
   "outputs": {
     "manifest": "docs/AI_PROJECT_MANUAL_SOURCES.json",
     "manual": "docs/AI_PROJECT_MANUAL.md",
-    "manualSha256": "44f7a05891f8bdc7ca5a1d5b3fe5ff4e9ca87d418cacdebfc135c1cb78cb8472"
+    "manualSha256": "79e66c7e938f0b7ac3775dc12d94ef28928570efdbf0eb25a3be9463b7d34920"
   },
   "schemaVersion": 1,
   "sections": [
@@ -1020,11 +994,9 @@
         "docs/portfolio/README.md",
         "docs/backtest/README.md",
         "docs/backtest-system.md",
+        "docs/codex/WOLFYSTOCK_SURFACE_MAP.md",
         "docs/product-recovery/WOLFYSTOCK_PRODUCT_RECOVERY_PLAN.md",
         "docs/product-recovery/DATA_COVERAGE_MATRIX.md",
-        "docs/product-recovery/DATA011_PACKET_CONSUMPTION_ACCEPTANCE.md",
-        "docs/product-recovery/DATA016_FOCUSED_ACCEPTANCE.md",
-        "docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md",
         "docs/product-recovery/DATA030_PROFESSIONAL_DATA_SOURCE_ROADMAP.md",
         "docs/product-recovery/DATA031_BACKTEST_PROFESSIONAL_UPGRADE_AUDIT.md",
         "docs/product-recovery/DATA033_TARGET_ENVIRONMENT_EVIDENCE_HARNESS.md",
@@ -1196,6 +1168,7 @@
         "docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md",
         "docs/codex/NO_ADVICE_REGRESSION_GUARDS.md",
         "docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md",
+        "docs/codex/WOLFYSTOCK_SURFACE_MAP.md",
         "docs/data-reliability/provider-source-confidence-contract.md",
         "docs/operations/provider-capability-metadata.md",
         "docs/data/market-source-activation-blueprint.md",

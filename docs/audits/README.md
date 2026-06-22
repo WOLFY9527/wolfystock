@@ -94,8 +94,8 @@ Admin data and governance designs:
 Frontend guidance:
 
 Current frontend guidance now lives in `docs/frontend/`. Historical frontend
-audit evidence lives in `docs/frontend/archive/` and
-`docs/audits/archive/frontend/`.
+audit evidence lives in `docs/archive/frontend/` and
+`docs/archive/audits/frontend/`.
 
 Use [Frontend Docs](../frontend/README.md) and
 [Frontend Validation Playbook](../frontend/validation-playbook.md) for current
@@ -111,16 +111,17 @@ frontend work.
 
 ## Archive Pointers
 
-- `docs/audits/archive/`: historical audit and consolidation notes.
-- `docs/audits/archive/backtest/`: archived backtest helper maintenance evidence
-  and machine-readable audit bundles.
-- `docs/audits/archive/frontend/`: retired frontend DOM, CSS, bundle, route, and old launch UX reports.
-- `docs/qa/archive/`: point-in-time QA reports retained for provenance.
-- `docs/architecture/archive/`: historical architecture and Phase F evidence.
-- `docs/frontend/archive/`: frontend consolidation and transitional UI
+- `docs/archive/audits/`: historical audit, consolidation, goal-progress, and
+  support notes.
+- `docs/archive/audits/frontend/`: retired frontend DOM, CSS, bundle, route,
+  and old launch UX reports.
+- `docs/archive/qa/`: point-in-time QA reports retained for provenance.
+- `docs/archive/architecture/`: historical architecture and Phase F evidence.
+- `docs/archive/frontend/`: frontend consolidation and transitional UI
   replacement notes, not active design authority.
+- `docs/archive/codex/`: retired Codex task reports and goal-progress notes.
 
-Use `docs/ARCHIVE_INDEX.md` for the archive inventory and safe-use rules.
+Use `docs/ARCHIVE_INDEX.md` for the complete archive map and safe-use rules.
 
 ## Reuse Warning
 

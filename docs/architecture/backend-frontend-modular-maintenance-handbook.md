@@ -365,7 +365,7 @@ python3 scripts/database_doctor_smoke.py --real-pg-bundle --write
 
 - `src/postgres_phase_{a..g}.py`
   - compatibility shims, not confirmed-dead runtime waste
-- `docs/architecture/archive/phase-f/*`
+- `docs/archive/architecture/phase-f/*`
   - reviewer/audit history, not temp trash
 - `apps/dsa-web/src/pages/SystemSettingsPage.tsx` and `apps/dsa-web/src/components/layout/AdminNav.tsx`
   - active route-split files for the admin control plane, not duplicate trash

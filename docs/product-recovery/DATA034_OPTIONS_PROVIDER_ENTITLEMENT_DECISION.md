@@ -11,7 +11,7 @@ Repository basis:
 - `docs/product-recovery/DATA_COVERAGE_MATRIX.md` says Options contracts and
   normalizers exist, but no repository path proves an authorized live options
   provider is enabled.
-- `docs/product-recovery/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md` accepts the
+- `docs/archive/product-recovery/acceptance/DATA021_REAL_DATA_VALUE_ACCEPTANCE.md` accepts the
   Options Lab chain readiness boundary only. It does not add a live provider,
   OPRA/vendor rights proof, redisplay approval, strategy ranking,
   GEX/vanna/charm, or trade workflow.
