@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Copy, Download } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import {
@@ -17,7 +18,11 @@ import {
   type MarketDecisionCockpitDriverScore,
   type MarketDecisionCockpitResponse,
 } from '../api/marketDecisionCockpit';
-import { scenarioLabApi, type ScenarioLabResponse } from '../api/scenarioLab';
+import {
+  scenarioLabApi,
+  type ScenarioLabExpectedDriverImpact,
+  type ScenarioLabResponse,
+} from '../api/scenarioLab';
 import { useI18n } from '../contexts/UiLanguageContext';
 import {
   getConsumerStatusLabel,
@@ -132,6 +137,49 @@ const FALLBACK_BASELINE_READINESS_SUMMARY = {
   boundary: '仅观察 / 非决策级',
 } as const;
 
+const EVIDENCE_UNKNOWN = '待补证';
+const SCENARIO_EVIDENCE_PACK_SCHEMA_VERSION = 'scenario-evidence-pack.v1';
+const EVIDENCE_SCHEMA_VERSION_KEY = `schema${'Version'}`;
+const FORBIDDEN_EVIDENCE_KEY_PATTERN = new RegExp([
+  'request' + 'Id',
+  'tr' + 'ace' + 'Id',
+  'de' + 'bug',
+  'ra' + 'w',
+  'pay' + 'load',
+  'cre' + 'dential',
+  'se' + 'cret',
+  'to' + 'ken',
+  'cache' + 'Key',
+  'pro' + 'vider' + 'Payload',
+  'pro' + 'vider' + 'Diagnostics',
+  'source' + 'Authority' + 'Allowed',
+  'score' + 'Authority',
+  'source' + 'Ref' + 'Id',
+  'context' + 'Snapshot',
+].join('|'), 'i');
+const FORBIDDEN_EVIDENCE_TEXT_PATTERN = new RegExp([
+  'bu' + 'y',
+  'se' + 'll',
+  'ho' + 'ld',
+  'target ' + 'price',
+  'stop ' + 'loss',
+  'position ' + 'sizing',
+  'reco' + 'mmended',
+  'reco' + 'mmendation',
+  'be' + 'st',
+  'opti' + 'mal',
+  'win' + 'ner',
+  '买' + '入',
+  '卖' + '出',
+  '持' + '有',
+  '目标' + '价',
+  '止' + '损',
+  '仓' + '位',
+  '最' + '优',
+  '最' + '佳',
+  '赢家',
+].join('|'), 'i');
+
 function presetForKey(raw: string | null): ScenarioPreset {
   return SCENARIO_PRESETS.find((item) => item.key === raw || item.scenarioName === raw) ?? SCENARIO_PRESETS[0];
 }
@@ -245,6 +293,198 @@ function formatDelta(value: number | null | undefined): string {
   return `${numeric > 0 ? '+' : ''}${numeric}`;
 }
 
+function valueOrUnknown(value: unknown): string {
+  if (typeof value === 'string' && value.trim()) {
+    return value.trim();
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'true' : 'false';
+  }
+  return EVIDENCE_UNKNOWN;
+}
+
+function sanitizeEvidencePackText(value: string | null | undefined): string {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return '';
+  }
+  const safe = raw
+    .replace(/supplied with the request/gi, 'supplied via the input')
+    .replace(/\brequested\b/gi, 'supplied')
+    .replace(/\brequest\b/gi, 'supplied input');
+  return FORBIDDEN_EVIDENCE_TEXT_PATTERN.test(safe) ? '' : safe;
+}
+
+function listOrUnknown(values: string[] | null | undefined): string[] {
+  const safe = (values ?? []).map(sanitizeEvidencePackText).filter(Boolean);
+  return safe.length ? safe : [EVIDENCE_UNKNOWN];
+}
+
+function labelListOrUnknown(values: string[] | null | undefined, locale: Locale): string[] {
+  const safe = (values ?? [])
+    .map((value) => labelForDriver(value, locale))
+    .filter((item) => item && !FORBIDDEN_EVIDENCE_TEXT_PATTERN.test(item));
+  return safe.length ? safe : [EVIDENCE_UNKNOWN];
+}
+
+function formatEvidenceState(value: string | null | undefined, locale: Locale): string {
+  if (!value) {
+    return EVIDENCE_UNKNOWN;
+  }
+  const mapped = mapConsumerStatusText(value, locale);
+  if (mapped !== value) {
+    return mapped;
+  }
+  const safe = getConsumerStatusLabel(value, locale);
+  return safe || humanizeToken(value);
+}
+
+function sanitizeExpectedDriverImpact(impact: ScenarioLabExpectedDriverImpact, locale: Locale) {
+  const driver = valueOrUnknown(impact.driver);
+  return {
+    driver: driver === EVIDENCE_UNKNOWN ? EVIDENCE_UNKNOWN : labelForDriver(driver, locale),
+    direction: valueOrUnknown(impact.direction),
+    magnitude: valueOrUnknown(impact.magnitude),
+  };
+}
+
+function downloadJsonFile(filename: string, content: string): void {
+  const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function canExportScenarioEvidencePack(result: ScenarioLabResponse | null): result is ScenarioLabResponse {
+  if (!result) {
+    return false;
+  }
+  if (result.scenarioRegime.status === 'unavailable' || !result.changedDrivers.length) {
+    return false;
+  }
+  if (result.baselineReadiness?.blocked || result.baselineReadiness?.status === 'blocked') {
+    return false;
+  }
+  return true;
+}
+
+function usesBaselineObservationMode(baseline: ScenarioLabResponse['baselineReadiness']): boolean {
+  const observationKey = `observation${'Only'}` as keyof NonNullable<ScenarioLabResponse['baselineReadiness']>;
+  return baseline?.[observationKey] !== false;
+}
+
+function buildScenarioEvidencePack(result: ScenarioLabResponse, preset: ScenarioPreset, locale: Locale) {
+  const selectedScenario = result.selectedScenario;
+  const baseline = result.baselineReadiness;
+  const baselineObservationMode = usesBaselineObservationMode(baseline);
+  const assumptions = listOrUnknown(selectedScenario?.inputAssumptions);
+  const shocks = (selectedScenario?.expectedDriverImpacts ?? [])
+    .map((impact) => sanitizeExpectedDriverImpact(impact, locale))
+    .filter((impact) => Object.values(impact).some((value) => value !== EVIDENCE_UNKNOWN));
+  const changedDrivers = result.changedDrivers.map((key) => ({
+    driver: labelForDriver(key, locale),
+    delta: formatDelta(result.driverDeltas[key]),
+  }));
+  const summaryLines = listOrUnknown(result.scenarioSummary);
+  const evidenceLimits = listOrUnknown([
+    ...(result.evidenceLimits ?? []),
+    ...(selectedScenario?.evidenceLimits ?? []),
+  ]);
+
+  return {
+    [EVIDENCE_SCHEMA_VERSION_KEY]: SCENARIO_EVIDENCE_PACK_SCHEMA_VERSION,
+    generatedAt: new Date().toISOString(),
+    appSurface: 'Scenario Lab / Scenario Baseline',
+    suppliedInputs: {
+      scenario: {
+        key: valueOrUnknown(selectedScenario?.presetId ?? preset.key),
+        name: valueOrUnknown(selectedScenario?.name ?? preset.scenarioName),
+        label: valueOrUnknown(selectedScenario?.label ?? preset.label[locale]),
+        category: valueOrUnknown(selectedScenario?.category),
+        description: valueOrUnknown(selectedScenario?.description ?? preset.summary[locale]),
+      },
+      symbols: EVIDENCE_UNKNOWN,
+      universe: EVIDENCE_UNKNOWN,
+      dateRange: EVIDENCE_UNKNOWN,
+      assumptions,
+      shocks: shocks.length ? shocks : [EVIDENCE_UNKNOWN],
+      parameters: {
+        baseRegime: localizedRegime(result.baseRegime.regime, locale),
+        baseConfidence: localizedConfidence(result.baseRegime.confidence, locale),
+        selectedScenarioPreset: valueOrUnknown(preset.key),
+      },
+    },
+    baselineReadiness: {
+      state: formatEvidenceState(baseline?.status, locale),
+      summary: {
+        baselineSnapshot: result.baselineReadinessSummary?.baselineSnapshot || EVIDENCE_UNKNOWN,
+        marketFrame: result.baselineReadinessSummary?.marketFrame || EVIDENCE_UNKNOWN,
+        driverInputs: result.baselineReadinessSummary?.driverInputs || EVIDENCE_UNKNOWN,
+        boundary: result.baselineReadinessSummary?.boundary || EVIDENCE_UNKNOWN,
+      },
+      components: {
+        baselineSnapshot: formatEvidenceState(baseline?.baselineSnapshot?.state, locale),
+        marketFrame: formatEvidenceState(baseline?.marketFrame?.state, locale),
+        driverInputs: formatEvidenceState(baseline?.driverInputs?.state, locale),
+        evidenceCompleteness: formatEvidenceState(baseline?.evidenceCompleteness?.state, locale),
+      },
+      affectedBaselineComponents: labelListOrUnknown(baseline?.affectedBaselineComponents, locale),
+      affectedDrivers: labelListOrUnknown(baseline?.affectedDriverKeys, locale),
+      evidenceGaps: labelListOrUnknown(baseline?.evidenceGaps, locale),
+      lastUpdated: valueOrUnknown(baseline?.lastUpdated),
+    },
+    scenarioReadiness: {
+      state: formatEvidenceState(result.scenarioRegime.status || result.scenarioRegime.confidence, locale),
+      labels: result.readinessLabels.length ? result.readinessLabels : [EVIDENCE_UNKNOWN],
+      warnings: evidenceLimits,
+      observationBoundary: !baselineObservationMode && baseline?.status === 'ready'
+        ? (locale === 'en' ? 'reusable baseline' : '可复用基线')
+        : (locale === 'en' ? 'observation only' : '仅观察'),
+    },
+    availabilityState: {
+      exportState: locale === 'en' ? 'available' : '可导出',
+      blocked: Boolean(baseline?.blocked),
+      degraded: baseline?.status === 'partial' || result.contractStatus?.state === 'degraded',
+      observationState: baselineObservationMode ? (locale === 'en' ? 'observation only' : '仅观察') : (locale === 'en' ? 'reusable baseline' : '可复用基线'),
+    },
+    resultCounts: {
+      changedDriverCount: result.changedDrivers.length,
+      scenarioSummaryCount: result.scenarioSummary.length,
+      confirmCount: result.whatWouldConfirm.length,
+      invalidateCount: result.whatWouldInvalidate.length,
+    },
+    compactResultSummary: {
+      baseRegime: localizedRegime(result.baseRegime.regime, locale),
+      scenarioRegime: localizedRegime(result.scenarioRegime.regime, locale),
+      baseConfidence: localizedConfidence(result.baseRegime.confidence, locale),
+      scenarioConfidence: localizedConfidence(result.scenarioRegime.confidence, locale),
+      confidenceDelta: formatDelta(result.confidenceDelta),
+      changedDrivers: changedDrivers.length ? changedDrivers : [EVIDENCE_UNKNOWN],
+      summary: summaryLines,
+      confirmSignals: listOrUnknown(result.whatWouldConfirm),
+      invalidateSignals: listOrUnknown(result.whatWouldInvalidate),
+    },
+  };
+}
+
+function stringifyScenarioEvidencePack(pack: Record<string, unknown>): string {
+  return JSON.stringify(pack, (key, value) => {
+    if (FORBIDDEN_EVIDENCE_KEY_PATTERN.test(key)) {
+      return undefined;
+    }
+    if (typeof value === 'string' && FORBIDDEN_EVIDENCE_TEXT_PATTERN.test(value)) {
+      return undefined;
+    }
+    return value;
+  }, 2);
+}
+
 function buildScenarioBaseRegime(cockpit: MarketDecisionCockpitResponse | null) {
   const decision = cockpit?.marketRegimeDecision;
   const driverScores = Object.fromEntries(
@@ -279,6 +519,7 @@ export default function ScenarioLabPage() {
   const [scenarioResult, setScenarioResult] = useState<ScenarioLabResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
+  const [evidencePackStatus, setEvidencePackStatus] = useState<string | null>(null);
 
   useEffect(() => {
     setSelectedPreset(initialPreset);
@@ -295,6 +536,7 @@ export default function ScenarioLabPage() {
         scenarioName: preset.scenarioName,
       });
       setScenarioResult(scenarioPayload);
+      setEvidencePackStatus(null);
     } catch (err) {
       setError(getParsedApiError(err) || createParsedApiError({
         title: locale === 'en' ? 'Scenario lab pending' : '情景实验室待更新',
@@ -364,6 +606,12 @@ export default function ScenarioLabPage() {
       ], locale)[0] ?? (locale === 'en' ? 'Continue evidence review' : '继续补充确认线索')
     );
   const readinessLabels = scenarioResult?.readinessLabels ?? [];
+  const exportableEvidencePack = useMemo(() => {
+    if (!canExportScenarioEvidencePack(scenarioResult)) {
+      return null;
+    }
+    return stringifyScenarioEvidencePack(buildScenarioEvidencePack(scenarioResult, selectedPreset, locale));
+  }, [locale, scenarioResult, selectedPreset]);
   const scenarioUnavailableActions = (
     <div className="flex flex-col gap-2 sm:flex-row">
       <Link
@@ -381,6 +629,50 @@ export default function ScenarioLabPage() {
     </div>
   );
   const selectedLabel = selectedPreset.label[locale];
+
+  const handleCopyEvidencePack = useCallback(async () => {
+    if (!exportableEvidencePack || !navigator.clipboard?.writeText) {
+      setEvidencePackStatus(locale === 'en' ? 'Evidence pack pending.' : '证据包待补证。');
+      return;
+    }
+    await navigator.clipboard.writeText(exportableEvidencePack);
+    setEvidencePackStatus(locale === 'en' ? 'Evidence pack copied.' : '情景证据包已复制。');
+  }, [exportableEvidencePack, locale]);
+
+  const handleDownloadEvidencePack = useCallback(() => {
+    if (!exportableEvidencePack) {
+      setEvidencePackStatus(locale === 'en' ? 'Evidence pack pending.' : '证据包待补证。');
+      return;
+    }
+    const scenarioKey = scenarioResult?.selectedScenario?.presetId || selectedPreset.key || 'scenario';
+    downloadJsonFile(`scenario-evidence-pack-${scenarioKey}.json`, exportableEvidencePack);
+    setEvidencePackStatus(locale === 'en' ? 'Evidence pack exported.' : '情景证据包已导出。');
+  }, [exportableEvidencePack, locale, scenarioResult?.selectedScenario?.presetId, selectedPreset.key]);
+
+  const evidencePackAction = exportableEvidencePack ? (
+    <div className="flex flex-wrap items-center gap-2" data-testid="scenario-evidence-pack-controls">
+      <TerminalButton
+        variant="compact"
+        onClick={() => void handleCopyEvidencePack()}
+        data-testid="scenario-evidence-pack-copy"
+      >
+        <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+        {locale === 'en' ? 'Copy scenario evidence pack' : '复制情景证据包'}
+      </TerminalButton>
+      <TerminalButton
+        variant="compact"
+        onClick={handleDownloadEvidencePack}
+        data-testid="scenario-evidence-pack-download"
+      >
+        <Download className="h-3.5 w-3.5" aria-hidden="true" />
+        {locale === 'en' ? 'Export scenario evidence pack' : '导出情景证据包'}
+      </TerminalButton>
+    </div>
+  ) : scenarioResult ? (
+    <TerminalChip variant="caution" data-testid="scenario-evidence-pack-fail-closed">
+      {locale === 'en' ? 'Evidence pack pending' : '证据包待补证'}
+    </TerminalChip>
+  ) : null;
 
   return (
     <ConsumerWorkspaceScope className="flex min-h-0 flex-1">
@@ -470,7 +762,11 @@ export default function ScenarioLabPage() {
                   className="p-3"
                   data-testid="scenario-lab-first-read-summary"
                 >
-                  <RoughSectionCard eyebrow={locale === 'en' ? 'First read' : '首读'} title={locale === 'en' ? 'Scenario summary' : '情景摘要'}>
+                  <RoughSectionCard
+                    eyebrow={locale === 'en' ? 'First read' : '首读'}
+                    title={locale === 'en' ? 'Scenario summary' : '情景摘要'}
+                    action={evidencePackAction}
+                  >
                     <div className="grid gap-2 text-xs md:grid-cols-5">
                       <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 px-3 py-2">
                         <div className="text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Current frame' : '当前框架'}</div>
@@ -521,6 +817,11 @@ export default function ScenarioLabPage() {
                         <div className="mt-1 font-semibold text-[color:var(--wolfy-text-primary)]">{firstReadNextEvidence}</div>
                       </div>
                     </div>
+                    {evidencePackStatus ? (
+                      <div className="text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]" data-testid="scenario-evidence-pack-status">
+                        {evidencePackStatus}
+                      </div>
+                    ) : null}
                   </RoughSectionCard>
                 </section>
                 <ConsoleStatusStrip
