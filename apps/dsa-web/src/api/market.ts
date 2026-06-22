@@ -699,7 +699,9 @@ export type DataSourceSurfaceImpactView = {
 export type DataSourceGapRegistryActionPlanItemView = {
   actionKey: string;
   actionLabel: string;
+  actionTypeKey: string;
   actionType: DataSourceGapRegistryStatusView;
+  priorityKey: string;
   priority: DataSourceGapRegistryStatusView;
   status: DataSourceGapRegistryStatusView;
   reason: string;
@@ -716,9 +718,12 @@ export type DataSourceGapRegistryActionPlanItemView = {
 export type DataSourceAcquisitionPriorityQueueItemView = {
   familyKey: string;
   familyLabel: string;
+  priorityKey: string;
   priority: DataSourceGapRegistryStatusView;
   priorityReason: string;
+  readinessStateKey: string;
   readinessState: DataSourceGapRegistryStatusView;
+  primaryBlockerTypeKey: string;
   primaryBlockerType: DataSourceGapRegistryStatusView;
   affectedSurfaceCount: number;
   blockedOrDegradedCapabilityCount: number;
@@ -729,6 +734,35 @@ export type DataSourceAcquisitionPriorityQueueItemView = {
   nextConcreteStep: string;
   requiredEvidence: string[];
   consumerSafeWarning: string;
+};
+
+export type DataSourceAcquisitionWorkbenchCount = {
+  key: string;
+  label: string;
+  count: number;
+  variant: DataSourceGapRegistryStatusView['variant'];
+};
+
+export type DataSourceAcquisitionWorkbenchAction = {
+  familyKey: string;
+  familyLabel: string;
+  priorityKey: string;
+  priority: DataSourceGapRegistryStatusView;
+  primaryBlockerType: DataSourceGapRegistryStatusView;
+  affectedSurfaceCount: number;
+  nextConcreteStep: string;
+  requiredEvidence: string[];
+  affectedSurfaces: string[];
+};
+
+export type DataSourceAcquisitionWorkbenchLane = {
+  key: 'protected-review' | 'external-entitlement' | 'evidence-validation';
+  label: string;
+  description: string;
+  count: number;
+  variant: DataSourceGapRegistryStatusView['variant'];
+  items: DataSourceAcquisitionWorkbenchAction[];
+  emptyCopy: string;
 };
 
 export type DataSourceGapRegistryGroupId =
@@ -754,6 +788,16 @@ export type DataSourceGapRegistryView = {
   networkCallsEnabled: boolean;
   scoreAuthorityAllowed: boolean;
   summary: DataSourceGapRegistrySummary;
+  workbench: {
+    blockedMissingPartialFamilyCount: number;
+    urgentQueueCount: number;
+    unknownFieldCount: number;
+    consumerSafeWarning: string;
+    blockerTypeCounts: DataSourceAcquisitionWorkbenchCount[];
+    priorityCounts: DataSourceAcquisitionWorkbenchCount[];
+    topNextActions: DataSourceAcquisitionWorkbenchAction[];
+    lanes: DataSourceAcquisitionWorkbenchLane[];
+  };
   acquisitionPriorityQueue: DataSourceAcquisitionPriorityQueueItemView[];
   families: DataSourceGapRegistryFamilyView[];
   groups: DataSourceGapRegistryGroupView[];
@@ -1045,9 +1089,59 @@ const DATA_SOURCE_IMPACT_SURFACE_LABELS: Record<string, string> = {
 
 const DATA_SOURCE_GAP_UNSAFE_TEXT_PATTERN =
   /request[_ -]?id|trace[_ -]?id|raw[_ -]?(payload|diagnostic|dump)|cache[_ -]?key|credential|env\b|debug|token|secret|cookie|api[_-]?key/i;
+const DATA_SOURCE_ACQUISITION_BLOCKER_TYPE_KEYS = [
+  'entitlement',
+  'provider-integration',
+  'evidence-validation',
+  'schema-contract',
+  'frontend-consumption',
+  'protected-review',
+  'unknown',
+] as const;
+const DATA_SOURCE_ACQUISITION_PRIORITY_KEYS = ['critical', 'high', 'medium', 'low'] as const;
+const DATA_SOURCE_ACQUISITION_PRIORITY_WEIGHT: Record<string, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+  unknown: 4,
+};
 
 function normalizeGapToken(value?: string | null): string {
   return String(value || '').trim().toLowerCase();
+}
+
+function normalizeDataSourceAcquisitionBlockerTypeKey(value?: string | null): string {
+  const normalized = normalizeGapToken(value);
+  return DATA_SOURCE_ACQUISITION_BLOCKER_TYPE_KEYS.includes(
+    normalized as (typeof DATA_SOURCE_ACQUISITION_BLOCKER_TYPE_KEYS)[number],
+  )
+    ? normalized
+    : 'unknown';
+}
+
+function normalizeDataSourceAcquisitionPriorityKey(value?: string | null): string {
+  const normalized = normalizeGapToken(value);
+  return DATA_SOURCE_ACQUISITION_PRIORITY_KEYS.includes(
+    normalized as (typeof DATA_SOURCE_ACQUISITION_PRIORITY_KEYS)[number],
+  )
+    ? normalized
+    : 'unknown';
+}
+
+function normalizeDataSourceGapActionTypeKey(value?: string | null): string {
+  const normalized = normalizeGapToken(value);
+  return [
+    'provider-entitlement',
+    'provider-integration',
+    'evidence-validation',
+    'schema-contract',
+    'frontend-consumption',
+    'manual-review',
+    'blocked',
+  ].includes(normalized)
+    ? normalized
+    : 'manual-review';
 }
 
 function dataSourceGapStatusView(status?: string | null): DataSourceGapRegistryStatusView {
@@ -1223,7 +1317,9 @@ function dataSourceGapFallbackActionPlan(familyKey: string): DataSourceGapRegist
     {
       actionKey: `${familyKey || 'unknown_family'}.manual_review`,
       actionLabel: '行动项待复核',
+      actionTypeKey: 'manual-review',
       actionType: dataSourceGapActionTypeView('manual-review'),
+      priorityKey: 'medium',
       priority: dataSourceGapActionPriorityView('medium'),
       status: dataSourceGapActionStatusView('planned'),
       reason: '原因待补证。',
@@ -1268,7 +1364,9 @@ function buildDataSourceGapActionPlanView(
     return [{
       actionKey,
       actionLabel,
+      actionTypeKey: normalizeDataSourceGapActionTypeKey(action.actionType),
       actionType: dataSourceGapActionTypeView(action.actionType),
+      priorityKey: normalizeDataSourceAcquisitionPriorityKey(action.priority),
       priority: dataSourceGapActionPriorityView(action.priority),
       status: dataSourceGapActionStatusView(action.status),
       reason,
@@ -1296,6 +1394,9 @@ function buildDataSourceAcquisitionPriorityQueueView(
     const familyKey = dataSourceGapSafeText(item.familyKey, '');
     const familyLabel = dataSourceGapSafeText(item.familyLabel, '数据家族');
     if (!familyKey) return [];
+    const priorityKey = normalizeDataSourceAcquisitionPriorityKey(item.priority);
+    const readinessStateKey = normalizeGapToken(item.readinessState) || 'missing';
+    const primaryBlockerTypeKey = normalizeDataSourceAcquisitionBlockerTypeKey(item.primaryBlockerType);
     const entitlement = dataSourceAcquisitionEntitlementView(
       typeof item.externalEntitlementRequired === 'boolean'
         ? item.externalEntitlementRequired
@@ -1309,9 +1410,12 @@ function buildDataSourceAcquisitionPriorityQueueView(
     return [{
       familyKey,
       familyLabel: DATA_SOURCE_GAP_FAMILY_LABELS[familyKey] || familyLabel,
+      priorityKey,
       priority: dataSourceGapActionPriorityView(item.priority),
       priorityReason: dataSourceGapSafeText(item.priorityReason, '排序原因待补证。'),
+      readinessStateKey,
       readinessState: dataSourceGapStatusView(item.readinessState),
+      primaryBlockerTypeKey,
       primaryBlockerType: dataSourceAcquisitionBlockerTypeView(item.primaryBlockerType),
       affectedSurfaceCount: dataSourceGapSafeCount(item.affectedSurfaceCount),
       blockedOrDegradedCapabilityCount: dataSourceGapSafeCount(item.blockedOrDegradedCapabilityCount),
@@ -1325,6 +1429,185 @@ function buildDataSourceAcquisitionPriorityQueueView(
       ),
     }];
   }).slice(0, 12);
+}
+
+function dataSourceAcquisitionWorkbenchPriorityWeight(priorityKey: string): number {
+  return DATA_SOURCE_ACQUISITION_PRIORITY_WEIGHT[priorityKey] ?? DATA_SOURCE_ACQUISITION_PRIORITY_WEIGHT.unknown;
+}
+
+function dataSourceAcquisitionWorkbenchSurfaceLabels(
+  family: DataSourceGapRegistryFamilyView,
+  item: DataSourceAcquisitionPriorityQueueItemView,
+): string[] {
+  const labels = family.surfaceImpactMatrix.map((impact) => impact.surfaceLabel);
+  const fallback = item.familyLabel || family.familyLabel || '待补证';
+  return labels.length ? labels.slice(0, 4) : [fallback];
+}
+
+function buildDataSourceAcquisitionWorkbenchAction(
+  family: DataSourceGapRegistryFamilyView,
+  item: DataSourceAcquisitionPriorityQueueItemView,
+): DataSourceAcquisitionWorkbenchAction {
+  return {
+    familyKey: item.familyKey,
+    familyLabel: item.familyLabel || family.familyLabel,
+    priorityKey: item.priorityKey,
+    priority: item.priority,
+    primaryBlockerType: item.primaryBlockerType,
+    affectedSurfaceCount: item.affectedSurfaceCount > 0
+      ? item.affectedSurfaceCount
+      : family.surfaceImpactMatrix.length || 0,
+    nextConcreteStep: item.nextConcreteStep || family.nextIntegrationStep || '下一步待补证。',
+    requiredEvidence: item.requiredEvidence.length ? item.requiredEvidence : ['证据待补证'],
+    affectedSurfaces: dataSourceAcquisitionWorkbenchSurfaceLabels(family, item),
+  };
+}
+
+function buildDataSourceAcquisitionWorkbenchLane(
+  key: DataSourceAcquisitionWorkbenchLane['key'],
+  label: string,
+  description: string,
+  variant: DataSourceGapRegistryStatusView['variant'],
+  emptyCopy: string,
+  actions: DataSourceAcquisitionWorkbenchAction[],
+): DataSourceAcquisitionWorkbenchLane {
+  return {
+    key,
+    label,
+    description,
+    count: actions.length,
+    variant,
+    items: actions,
+    emptyCopy,
+  };
+}
+
+function buildDataSourceAcquisitionWorkbenchView(
+  registry: DataSourceGapRegistryResponse | null | undefined,
+  familyViews: DataSourceGapRegistryFamilyView[],
+  acquisitionPriorityQueue: DataSourceAcquisitionPriorityQueueItemView[],
+): DataSourceGapRegistryView['workbench'] {
+  const familyViewByKey = new Map(familyViews.map((family) => [family.familyKey, family] as const));
+  const queueItems = acquisitionPriorityQueue.filter((item) => item.readinessStateKey !== 'ready');
+  const queueItemsByKey = new Map(queueItems.map((item) => [item.familyKey, item] as const));
+  const familyBlockedCount = (registry?.summary.blockedCount || 0)
+    + (registry?.summary.missingCount || 0)
+    + (registry?.summary.partialCount || 0);
+  const unknownFieldCount = queueItems.filter((item) => item.primaryBlockerTypeKey === 'unknown').length
+    + queueItems.filter((item) => item.priorityKey === 'unknown').length;
+
+  const normalizedActions = queueItems
+    .map((item) => {
+      const family = familyViewByKey.get(item.familyKey);
+      if (!family) return null;
+      return buildDataSourceAcquisitionWorkbenchAction(family, item);
+    })
+    .filter((item): item is DataSourceAcquisitionWorkbenchAction => Boolean(item))
+    .sort((left, right) => (
+      dataSourceAcquisitionWorkbenchPriorityWeight(left.priorityKey) - dataSourceAcquisitionWorkbenchPriorityWeight(right.priorityKey)
+      || right.affectedSurfaceCount - left.affectedSurfaceCount
+      || left.familyLabel.localeCompare(right.familyLabel)
+    ));
+
+  const blockerTypeCounts = DATA_SOURCE_ACQUISITION_BLOCKER_TYPE_KEYS.map((key) => {
+    const count = queueItems.filter((item) => item.primaryBlockerTypeKey === key).length;
+    const variant: DataSourceGapRegistryStatusView['variant'] = key === 'entitlement' || key === 'protected-review'
+      ? 'danger'
+      : key === 'evidence-validation' || key === 'schema-contract'
+        ? 'caution'
+        : key === 'provider-integration' || key === 'frontend-consumption'
+          ? 'info'
+          : 'neutral';
+    return {
+      key,
+      label: dataSourceAcquisitionBlockerTypeView(key).label,
+      count,
+      variant,
+    };
+  }).filter((item) => item.count > 0 || item.key === 'unknown');
+
+  const priorityCounts = DATA_SOURCE_ACQUISITION_PRIORITY_KEYS.map((key) => {
+    const count = queueItems.filter((item) => item.priorityKey === key).length;
+    const variant: DataSourceGapRegistryStatusView['variant'] = key === 'critical'
+      ? 'danger'
+      : key === 'high'
+        ? 'caution'
+        : key === 'medium'
+          ? 'info'
+          : 'neutral';
+    return {
+      key,
+      label: dataSourceGapActionPriorityView(key).label,
+      count,
+      variant,
+    };
+  }).filter((item) => item.count > 0);
+
+  const protectedReviewItems = normalizedActions.filter((action) => {
+    const family = familyViewByKey.get(action.familyKey);
+    const queueItem = queueItemsByKey.get(action.familyKey);
+    return Boolean(
+      family?.integrationActionPlan.some((entry) => (
+        entry.actionLabel !== '行动项待复核'
+        && entry.protectedDomainReviewVariant === 'caution'
+      ))
+      || queueItem?.protectedDomainReviewRequired === '需要保护域复核'
+      || queueItem?.primaryBlockerTypeKey === 'protected-review'
+      || action.primaryBlockerType.label === '保护域复核',
+    );
+  });
+  const externalEntitlementItems = normalizedActions.filter((action) => {
+    const queueItem = queueItemsByKey.get(action.familyKey);
+    return Boolean(queueItem?.externalEntitlementRequired === '需要外部授权' || action.primaryBlockerType.label === '授权阻断');
+  });
+  const evidenceValidationItems = normalizedActions.filter((action) => {
+    const family = familyViewByKey.get(action.familyKey);
+    const queueItem = queueItemsByKey.get(action.familyKey);
+    return Boolean(
+      family?.integrationActionPlan.some((entry) => entry.actionTypeKey === 'evidence-validation')
+      || queueItem?.primaryBlockerTypeKey === 'evidence-validation'
+      || action.primaryBlockerType.label === '证据验证',
+    );
+  });
+
+  const topNextActions = normalizedActions.slice(0, 3);
+
+  return {
+    blockedMissingPartialFamilyCount: familyBlockedCount,
+    urgentQueueCount: queueItems.length,
+    unknownFieldCount,
+    consumerSafeWarning: queueItems[0]?.consumerSafeWarning
+      || '工程补数队列；当前不是决策级证据，不生成交易指令。',
+    blockerTypeCounts,
+    priorityCounts,
+    topNextActions,
+    lanes: [
+      buildDataSourceAcquisitionWorkbenchLane(
+        'protected-review',
+        '保护域复核',
+        '保留期权链、Gamma、dealer positioning 和其他受保护数据面在复核之后再推进。',
+        'caution',
+        '暂无需要保护域复核的队列项。',
+        protectedReviewItems,
+      ),
+      buildDataSourceAcquisitionWorkbenchLane(
+        'external-entitlement',
+        '外部授权',
+        '显示需要 provider entitlement / licensing work 的队列项，只做工程补数。',
+        'danger',
+        '暂无需要外部授权的队列项。',
+        externalEntitlementItems,
+      ),
+      buildDataSourceAcquisitionWorkbenchLane(
+        'evidence-validation',
+        '证据验证',
+        '显示需要字段覆盖、时效、授权和可复核证据的队列项。',
+        'info',
+        '暂无需要证据验证的队列项。',
+        evidenceValidationItems,
+      ),
+    ],
+  };
 }
 
 function normalizeDataSourceGapRegistryPayload(rawPayload: Record<string, unknown>): DataSourceGapRegistryResponse {
@@ -1489,6 +1772,11 @@ export function buildDataSourceGapRegistryView(
     networkCallsEnabled: registry?.networkCallsEnabled === true,
     scoreAuthorityAllowed: registry?.scoreAuthorityAllowed === true,
     summary,
+    workbench: buildDataSourceAcquisitionWorkbenchView(
+      registry,
+      familyViews,
+      acquisitionPriorityQueue,
+    ),
     acquisitionPriorityQueue,
     families: familyViews,
     groups,
