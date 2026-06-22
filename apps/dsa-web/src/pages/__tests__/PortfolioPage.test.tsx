@@ -427,6 +427,67 @@ function makePortfolioLineageSummary(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function makeValuationEvidenceSnapshot(overrides: Record<string, unknown> = {}) {
+  return {
+    ...makeSnapshot({
+      includePosition: true,
+      fxStale: false,
+      portfolioLineageSummary: makePortfolioLineageSummary(),
+      positionOverrides: {
+        provider: 'raw-provider-must-not-leak',
+        requestId: 'request-id-must-not-leak',
+        debugTrace: 'debug-trace-must-not-leak',
+      },
+    }),
+    priceLineage: {
+      status: 'stale',
+      scoreAuthority: 'observation_only',
+      counts: { total: 2, available: 0, missing: 1, stale: 1, delayed: 0 },
+      affectedSymbols: {
+        available: [],
+        missing: ['MSFT'],
+        stale: ['AAPL'],
+        delayed: [],
+        fallback: ['MSFT'],
+      },
+      lastUpdatedAt: '2026-03-19T10:00:00Z',
+    },
+    fxLineage: {
+      status: 'stale',
+      scoreAuthority: 'observation_only',
+      counts: { total: 1, available: 0, missing: 0, stale: 1, fallback: 0, identity: 0 },
+      affectedCurrencies: { available: [], missing: [], stale: ['USD'], fallback: [], identity: [] },
+      affectedPairs: { available: [], missing: [], stale: ['USD/CNY'], fallback: [], identity: [] },
+      lastUpdatedAt: null,
+    },
+    valuationSnapshotLineage: {
+      status: 'partial',
+      scoreAuthority: 'observation_only',
+      snapshotState: 'ready',
+      metricsReady: true,
+      positionCount: 2,
+      completePositionCount: 1,
+      partialPositionCount: 1,
+      blockedPositionCount: 0,
+      blockedBy: {
+        priceSymbols: ['MSFT'],
+        fxPairs: ['USD/CNY'],
+        fxCurrencies: ['USD'],
+      },
+      lastUpdatedAt: '2026-03-20T00:00:00Z',
+    },
+    analyticsReadiness: {
+      valuation: 'partial',
+      risk: 'partial',
+      scoreAuthority: 'observation_only',
+      observationOnly: true,
+      affectedSymbols: ['AAPL', 'MSFT'],
+      affectedCurrencies: ['USD'],
+    },
+    ...overrides,
+  };
+}
+
 function makeStructureReview(options: {
   status?: 'available' | 'partial' | 'unavailable';
   holdingState?: string;
@@ -1128,6 +1189,137 @@ describe('PortfolioPage FX refresh', () => {
     expect(risk).toHaveTextContent('主币种');
     expect(risk).toHaveTextContent('主市场');
     expect(risk).toHaveTextContent('最大持仓偏高');
+  });
+
+  it('copies a consumer-safe portfolio valuation evidence pack for active valuation data', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    getSnapshot.mockResolvedValue(makeValuationEvidenceSnapshot());
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const panel = screen.getByTestId('portfolio-valuation-evidence-pack');
+    expect(panel).toHaveTextContent('估值证据包');
+    expect(within(panel).getByRole('button', { name: '复制估值证据包' })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: '导出估值证据包' })).toBeInTheDocument();
+
+    fireEvent.click(within(panel).getByRole('button', { name: '复制估值证据包' }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const exported = JSON.parse(writeText.mock.calls[0][0]);
+    expect(exported).toMatchObject({
+      schemaVersion: 'portfolio_valuation_evidence_pack_v1',
+      appSurface: 'Portfolio valuation',
+      holdingsCount: 1,
+      valuationAsOf: '2026-03-19',
+      account: {
+        scope: 'all_accounts',
+        label: '全部账户',
+      },
+      priceLineage: {
+        label: '价格延迟',
+        missingQuoteCount: 1,
+        staleQuoteCount: 1,
+        totalQuoteCount: 2,
+        lastUpdatedAt: '2026-03-19T10:00:00Z',
+      },
+      fxLineage: {
+        label: '汇率待确认',
+        affectedCurrencies: ['USD'],
+        affectedPairs: ['USD/CNY'],
+        lastUpdatedAt: 'unknown/待补证',
+      },
+      valuationLineage: {
+        label: '估值部分可用',
+        positionCount: 2,
+        completePositionCount: 1,
+        partialPositionCount: 1,
+        blockedPositionCount: 0,
+      },
+      valuationSummary: {
+        totalMarketValue: 'CNY 2,000.00',
+        totalEquity: 'CNY 3,000.00',
+        totalCash: 'CNY 1,000.00',
+        unrealizedPnl: 'CNY 100.00',
+      },
+    });
+    expect(exported.generatedAt).toEqual(expect.any(String));
+    expect(exported.warnings).toEqual(expect.arrayContaining([
+      '单一标的占比较高',
+      '单一币种占比较高',
+      '单一市场占比较高',
+      '价格延迟',
+      '汇率待确认',
+      '估值部分可用',
+    ]));
+    expect(JSON.stringify(exported)).toContain('unknown/待补证');
+    expect(JSON.stringify(exported)).not.toMatch(/raw-provider-must-not-leak|request-id-must-not-leak|debug-trace-must-not-leak/i);
+    expect(JSON.stringify(exported)).not.toMatch(/provider|runtime|credential|requestId|trace|debug|raw|cacheKey/i);
+    expect(JSON.stringify(exported)).not.toMatch(/\b(buy|sell|hold|target|best|recommended|optimal|winner)\b|stop loss|position sizing|买入|卖出|持有|目标价|止损|仓位建议|最佳|推荐|赢家/i);
+  });
+
+  it('does not show valuation evidence export controls without portfolio valuation data', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: false }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    expect(screen.queryByTestId('portfolio-valuation-evidence-pack')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '复制估值证据包' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '导出估值证据包' })).not.toBeInTheDocument();
+  });
+
+  it('fails closed instead of exporting fake valuation evidence for blocked valuation results', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    getSnapshot.mockResolvedValue(makeValuationEvidenceSnapshot({
+      portfolioLineageSummary: makePortfolioLineageSummary({
+        snapshot: {
+          label: '估值不可用',
+          variant: 'danger',
+          detail: '0/1',
+          affectedSymbols: ['MSFT'],
+          affectedCurrencies: [],
+          affectedPairs: [],
+          count: 0,
+          total: 1,
+          lastUpdatedAt: null,
+        },
+      }),
+      valuationSnapshotLineage: {
+        status: 'blocked',
+        scoreAuthority: 'observation_only',
+        snapshotState: 'blocked',
+        metricsReady: false,
+        positionCount: 1,
+        completePositionCount: 0,
+        partialPositionCount: 0,
+        blockedPositionCount: 1,
+        blockedBy: { priceSymbols: ['MSFT'], fxPairs: [], fxCurrencies: [] },
+        lastUpdatedAt: null,
+      },
+    }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const panel = screen.getByTestId('portfolio-valuation-evidence-pack');
+    expect(panel).toHaveTextContent('估值证据包暂不可导出');
+    expect(panel).toHaveTextContent('待补证');
+    expect(within(panel).queryByRole('button', { name: '复制估值证据包' })).not.toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: '导出估值证据包' })).not.toBeInTheDocument();
+    expect(writeText).not.toHaveBeenCalled();
+    expect(panel.textContent || '').not.toMatch(/fake|sample|mock|placeholder|provider|request|trace|debug|推荐|赢家|目标价|止损|仓位建议/i);
   });
 
   it('renders a consumer-safe portfolio structure review section with evidence gaps and structure detail links', async () => {

@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { MoreHorizontal, PenSquare, RefreshCw, Trash2 } from 'lucide-react';
-import { portfolioApi, type PortfolioLineageStatusSummary, type PortfolioLineageSummary, type PortfolioSnapshotWithLineage } from '../api/portfolio';
+import { Copy, Download, MoreHorizontal, PenSquare, RefreshCw, Trash2 } from 'lucide-react';
+import { portfolioApi, type PortfolioFxLineage, type PortfolioLineageStatusSummary, type PortfolioLineageSummary, type PortfolioPriceLineage, type PortfolioSnapshotWithLineage, type PortfolioValuationSnapshotLineage } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
@@ -91,6 +91,8 @@ const FX_CURRENCY_OPTIONS = ['USD', 'CNY', 'HKD', 'EUR', 'JPY', 'GBP'] as const;
 const LEGACY_RECOVERY_TOKEN = ['fall', 'back'].join('');
 const LEGACY_PRICE_RECOVERY_TOKEN = ['price', LEGACY_RECOVERY_TOKEN].join('_');
 const LEGACY_FX_RECOVERY_TOKEN = ['fx', LEGACY_RECOVERY_TOKEN, '1', 'to', '1'].join('_');
+const PORTFOLIO_VALUATION_EVIDENCE_PACK_SCHEMA = 'portfolio_valuation_evidence_pack_v1';
+const UNKNOWN_EVIDENCE_VALUE = 'unknown/待补证';
 
 const DEFAULT_PAGE_SIZE = 20;
 const FALLBACK_BROKERS: PortfolioImportBrokerItem[] = [
@@ -214,6 +216,56 @@ type AccountFormState = {
   broker: string;
   market: 'cn' | 'hk' | 'us' | 'global';
   baseCurrency: string;
+};
+
+type PortfolioValuationEvidencePack = {
+  schemaVersion: string;
+  generatedAt: string;
+  appSurface: string;
+  account: {
+    scope: 'all_accounts' | 'selected_account';
+    label: string;
+  };
+  holdingsCount: number;
+  valuationAsOf: string;
+  priceLineage: {
+    label: string;
+    freshness: string;
+    priceSourceLabels: string[];
+    missingQuoteCount: number | string;
+    staleQuoteCount: number | string;
+    totalQuoteCount: number | string;
+    affectedSymbols: string[];
+    lastUpdatedAt: string;
+  };
+  fxLineage: {
+    label: string;
+    affectedCurrencies: string[];
+    affectedPairs: string[];
+    lastUpdatedAt: string;
+  };
+  valuationLineage: {
+    label: string;
+    positionCount: number | string;
+    completePositionCount: number | string;
+    partialPositionCount: number | string;
+    blockedPositionCount: number | string;
+    blockedBy: {
+      priceSymbols: string[];
+      fxPairs: string[];
+      fxCurrencies: string[];
+    };
+    lastUpdatedAt: string;
+  };
+  valuationSummary: {
+    totalMarketValue: string;
+    totalEquity: string;
+    totalCash: string;
+    unrealizedPnl: string;
+    currency: string;
+  };
+  warnings: string[];
+  consumerBoundary: string;
 };
 
 function hasLimitedValuationConfidence(position: Pick<PortfolioPositionItem, 'valuationConfidence'>): boolean {
@@ -633,6 +685,129 @@ function lineageTrustItem(
 
 function hasPortfolioLineage(summary: PortfolioLineageSummary | null | undefined): summary is PortfolioLineageSummary {
   return Boolean(summary?.hasLineage);
+}
+
+function safeEvidenceString(value: string | null | undefined): string {
+  return value && value.trim() ? value : UNKNOWN_EVIDENCE_VALUE;
+}
+
+function safeEvidenceNumber(value: number | null | undefined): number | string {
+  return typeof value === 'number' && Number.isFinite(value) ? value : UNKNOWN_EVIDENCE_VALUE;
+}
+
+function uniqueSafeEvidenceList(values: Array<string | null | undefined>): string[] {
+  return Array.from(new Set(values.map((value) => String(value || '').trim()).filter(Boolean))).sort();
+}
+
+function hasBlockedValuationEvidence(
+  summary: PortfolioLineageSummary | null | undefined,
+  valuationLineage: PortfolioValuationSnapshotLineage | undefined,
+  hasFxUnavailable: boolean,
+): boolean {
+  const status = normalizeTrustToken(valuationLineage?.status || valuationLineage?.snapshotState);
+  if (hasFxUnavailable) {
+    return true;
+  }
+  if (status.includes('blocked') || status.includes('unavailable')) {
+    return true;
+  }
+  return summary?.snapshot?.label === '估值不可用';
+}
+
+function buildPortfolioValuationEvidencePack(options: {
+  snapshot: PortfolioSnapshotWithLineage;
+  language: PortfolioLanguage;
+  accountScope: 'all_accounts' | 'selected_account';
+  accountLabel: string;
+  positions: PortfolioPositionItem[];
+  summary: PortfolioLineageSummary | null;
+  priceLineage?: PortfolioPriceLineage;
+  fxLineage?: PortfolioFxLineage;
+  valuationLineage?: PortfolioValuationSnapshotLineage;
+  totalMarketValue: number;
+  totalEquity: number;
+  totalCash: number;
+  unrealizedPnl: number;
+  currency: string;
+  warnings: string[];
+}): PortfolioValuationEvidencePack {
+  const priceLabels = uniqueSafeEvidenceList(options.positions.map((position) => (
+    sanitizePortfolioConsumerLabel(position.priceSourceLabel, options.language)
+    || positionPriceFreshnessLabel(position, options.language)
+  )));
+  const priceAsOfSummary = summarizePortfolioPriceAsOf(options.positions, options.language);
+  const priceFreshnessSummary = summarizePortfolioPriceFreshness(options.positions, options.language);
+  const priceSummary = options.summary?.price;
+  const fxSummary = options.summary?.fx;
+  const valuationSummary = options.summary?.snapshot;
+  const valuationLineage = options.valuationLineage;
+  const priceLineage = options.priceLineage;
+  const fxLineage = options.fxLineage;
+  const safeWarnings = uniqueSafeEvidenceList(options.warnings);
+
+  return {
+    schemaVersion: PORTFOLIO_VALUATION_EVIDENCE_PACK_SCHEMA,
+    generatedAt: new Date().toISOString(),
+    appSurface: 'Portfolio valuation',
+    account: {
+      scope: options.accountScope,
+      label: safeEvidenceString(options.accountLabel),
+    },
+    holdingsCount: options.positions.length,
+    valuationAsOf: safeEvidenceString(options.snapshot.asOf),
+    priceLineage: {
+      label: safeEvidenceString(priceSummary?.label || priceFreshnessSummary?.label),
+      freshness: safeEvidenceString(priceAsOfSummary?.label || priceFreshnessSummary?.label),
+      priceSourceLabels: priceLabels.length ? priceLabels : [UNKNOWN_EVIDENCE_VALUE],
+      missingQuoteCount: safeEvidenceNumber(priceLineage?.counts.missing),
+      staleQuoteCount: safeEvidenceNumber(priceLineage?.counts.stale),
+      totalQuoteCount: safeEvidenceNumber(priceLineage?.counts.total ?? priceSummary?.total),
+      affectedSymbols: uniqueSafeEvidenceList([
+        ...(priceSummary?.affectedSymbols ?? []),
+        ...(priceLineage?.affectedSymbols.missing ?? []),
+        ...(priceLineage?.affectedSymbols.stale ?? []),
+      ]),
+      lastUpdatedAt: safeEvidenceString(priceLineage?.lastUpdatedAt ?? priceSummary?.lastUpdatedAt),
+    },
+    fxLineage: {
+      label: safeEvidenceString(fxSummary?.label),
+      affectedCurrencies: uniqueSafeEvidenceList([
+        ...(fxSummary?.affectedCurrencies ?? []),
+        ...(fxLineage?.affectedCurrencies.missing ?? []),
+        ...(fxLineage?.affectedCurrencies.stale ?? []),
+      ]),
+      affectedPairs: uniqueSafeEvidenceList([
+        ...(fxSummary?.affectedPairs ?? []),
+        ...(fxLineage?.affectedPairs.missing ?? []),
+        ...(fxLineage?.affectedPairs.stale ?? []),
+      ]),
+      lastUpdatedAt: safeEvidenceString(fxLineage?.lastUpdatedAt ?? fxSummary?.lastUpdatedAt),
+    },
+    valuationLineage: {
+      label: safeEvidenceString(valuationSummary?.label),
+      positionCount: safeEvidenceNumber(valuationLineage?.positionCount ?? valuationSummary?.total),
+      completePositionCount: safeEvidenceNumber(valuationLineage?.completePositionCount),
+      partialPositionCount: safeEvidenceNumber(valuationLineage?.partialPositionCount),
+      blockedPositionCount: safeEvidenceNumber(valuationLineage?.blockedPositionCount),
+      blockedBy: {
+        priceSymbols: uniqueSafeEvidenceList(valuationLineage?.blockedBy.priceSymbols ?? []),
+        fxPairs: uniqueSafeEvidenceList(valuationLineage?.blockedBy.fxPairs ?? []),
+        fxCurrencies: uniqueSafeEvidenceList(valuationLineage?.blockedBy.fxCurrencies ?? []),
+      },
+      lastUpdatedAt: safeEvidenceString(valuationLineage?.lastUpdatedAt ?? valuationSummary?.lastUpdatedAt),
+    },
+    valuationSummary: {
+      totalMarketValue: formatMoney(options.totalMarketValue, options.currency),
+      totalEquity: formatMoney(options.totalEquity, options.currency),
+      totalCash: formatMoney(options.totalCash, options.currency),
+      unrealizedPnl: formatMoney(options.unrealizedPnl, options.currency),
+      currency: options.currency,
+    },
+    warnings: safeWarnings.length ? safeWarnings : [UNKNOWN_EVIDENCE_VALUE],
+    consumerBoundary: options.language === 'zh'
+      ? '仅导出估值证据，不包含交易指令。'
+      : 'Exports valuation evidence only; no trade instruction is included.',
+  };
 }
 
 function PortfolioSegmentedControl({
@@ -1513,6 +1688,7 @@ const PortfolioPage: React.FC = () => {
   const [writeWarning, setWriteWarning] = useState<string | null>(null);
   const [tradeSubmitting, setTradeSubmitting] = useState(false);
   const [tradeFeedback, setTradeFeedback] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
+  const [valuationEvidenceFeedback, setValuationEvidenceFeedback] = useState<string | null>(null);
 
   const [brokers, setBrokers] = useState<PortfolioImportBrokerItem[]>([]);
   const [brokerConnections, setBrokerConnections] = useState<PortfolioBrokerConnectionItem[]>([]);
@@ -2966,6 +3142,68 @@ const PortfolioPage: React.FC = () => {
       : (language === 'zh'
         ? '下一步：先接入持仓，再确认价格与汇率。'
         : 'Next step: connect holdings first, then confirm price and FX.');
+  const valuationEvidenceBlocked = Boolean(
+    snapshot
+    && hasHoldings
+    && hasBlockedValuationEvidence(portfolioLineageSummary, snapshot.valuationSnapshotLineage, hasFxUnavailable),
+  );
+  const valuationEvidenceWarnings = [
+    ...safeRiskWarningLabels,
+    consumerDataNotice,
+    ...valuationTrustItems.map((item) => item.label),
+  ].filter((item): item is string => Boolean(item));
+  const portfolioValuationEvidencePack = snapshot && hasHoldings && !valuationEvidenceBlocked
+    ? buildPortfolioValuationEvidencePack({
+      snapshot,
+      language,
+      accountScope: selectedAccount === 'all' ? 'all_accounts' : 'selected_account',
+      accountLabel: selectedAccount === 'all'
+        ? copy.allAccounts
+        : formatConsumerAccountLabel(scopedAccount?.name, language),
+      positions: positionRows,
+      summary: portfolioLineageSummary,
+      priceLineage: snapshot.priceLineage,
+      fxLineage: snapshot.fxLineage,
+      valuationLineage: snapshot.valuationSnapshotLineage,
+      totalMarketValue,
+      totalEquity,
+      totalCash,
+      unrealizedPnl: totalUnrealizedPnl,
+      currency: snapshotCurrency,
+      warnings: valuationEvidenceWarnings,
+    })
+    : null;
+  const portfolioValuationEvidenceJson = portfolioValuationEvidencePack
+    ? JSON.stringify(portfolioValuationEvidencePack, null, 2)
+    : null;
+  const handleCopyValuationEvidence = useCallback(async () => {
+    if (!portfolioValuationEvidenceJson) {
+      setValuationEvidenceFeedback(language === 'zh' ? '估值证据待补证，暂不可复制。' : 'Valuation evidence is pending and cannot be copied yet.');
+      return;
+    }
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+      setValuationEvidenceFeedback(language === 'zh' ? '当前浏览器暂不支持复制，请使用导出。' : 'Clipboard is unavailable; use export instead.');
+      return;
+    }
+    await navigator.clipboard.writeText(portfolioValuationEvidenceJson);
+    setValuationEvidenceFeedback(language === 'zh' ? '估值证据包已复制。' : 'Valuation evidence pack copied.');
+  }, [language, portfolioValuationEvidenceJson]);
+  const handleDownloadValuationEvidence = useCallback(() => {
+    if (!portfolioValuationEvidenceJson || typeof document === 'undefined' || typeof Blob === 'undefined' || typeof URL === 'undefined') {
+      setValuationEvidenceFeedback(language === 'zh' ? '估值证据待补证，暂不可导出。' : 'Valuation evidence is pending and cannot be exported yet.');
+      return;
+    }
+    const blob = new Blob([portfolioValuationEvidenceJson], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `portfolio-valuation-evidence-${snapshot?.asOf || 'unknown'}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setValuationEvidenceFeedback(language === 'zh' ? '估值证据包已导出 JSON。' : 'Valuation evidence JSON exported.');
+  }, [language, portfolioValuationEvidenceJson, snapshot?.asOf]);
   const researchStateNextAction = !hasHoldings
     ? (language === 'zh' ? '补持仓或导入流水' : 'Add records or import ledger')
     : hasFxUnavailable || snapshot?.fxStale
@@ -4103,6 +4341,43 @@ const PortfolioPage: React.FC = () => {
                       items={valuationTrustItems.slice(0, 3)}
                       data-testid="portfolio-valuation-trust-strip"
                     />
+                  ) : null}
+                  {hasHoldings ? (
+                    <div data-testid="portfolio-valuation-evidence-pack" className="rounded-xl border border-white/[0.04] bg-black/20 p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+                            {language === 'zh' ? '估值证据包' : 'Valuation evidence pack'}
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-white/50">
+                            {portfolioValuationEvidencePack
+                              ? (language === 'zh'
+                                ? 'JSON 仅包含当前页面已展示或可安全派生的估值、价格与汇率证据。'
+                                : 'JSON includes only valuation, price, and FX evidence already visible or safely derived on this page.')
+                              : (language === 'zh'
+                                ? '估值证据包暂不可导出：估值不可用或仍待补证。'
+                                : 'Valuation evidence pack cannot be exported yet: valuation is unavailable or pending evidence.')}
+                          </p>
+                        </div>
+                        {portfolioValuationEvidencePack ? (
+                          <div className="flex shrink-0 flex-wrap gap-2">
+                            <TerminalButton type="button" variant="secondary" className="h-9 px-3" onClick={handleCopyValuationEvidence}>
+                              <Copy className="size-3.5" aria-hidden="true" />
+                              {language === 'zh' ? '复制估值证据包' : 'Copy valuation evidence'}
+                            </TerminalButton>
+                            <TerminalButton type="button" variant="secondary" className="h-9 px-3" onClick={handleDownloadValuationEvidence}>
+                              <Download className="size-3.5" aria-hidden="true" />
+                              {language === 'zh' ? '导出估值证据包' : 'Export valuation evidence'}
+                            </TerminalButton>
+                          </div>
+                        ) : (
+                          <TerminalChip variant="caution">{language === 'zh' ? '待补证' : 'Evidence pending'}</TerminalChip>
+                        )}
+                      </div>
+                      {valuationEvidenceFeedback ? (
+                        <div className="mt-2 text-xs leading-5 text-cyan-100/70">{valuationEvidenceFeedback}</div>
+                      ) : null}
+                    </div>
                   ) : null}
                 </TerminalPanel>
 
