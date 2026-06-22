@@ -336,6 +336,14 @@ describe('ParameterSweepPanel', () => {
   it('shows evidence pack export controls only after bounded sweep data exists', async () => {
     renderPanel();
 
+    const initialRegistry = screen.getByTestId('pro-parameter-sweep-artifact-registry');
+    expect(initialRegistry).toHaveTextContent('研究证据包注册中心');
+    expect(initialRegistry).toHaveTextContent('backtest-sweep-evidence-pack');
+    expect(initialRegistry).toHaveTextContent('backtest-sweep-evidence-pack.v1');
+    expect(initialRegistry).toHaveTextContent('Backtest Sweep');
+    expect(initialRegistry).toHaveTextContent('待补证');
+    expect(initialRegistry).toHaveTextContent('已输入条件、有界参数、谱系、告警与紧凑结果计数');
+
     expect(screen.queryByTestId('pro-parameter-sweep-evidence-copy')).not.toBeInTheDocument();
     expect(screen.queryByTestId('pro-parameter-sweep-evidence-download')).not.toBeInTheDocument();
 
@@ -351,6 +359,11 @@ describe('ParameterSweepPanel', () => {
 
     fireEvent.click(screen.getByTestId('pro-parameter-sweep-run-button'));
 
+    const registry = await screen.findByTestId('pro-parameter-sweep-artifact-registry');
+    expect(registry).toHaveTextContent('可用');
+    expect(registry).toHaveTextContent('Artifact key');
+    expect(registry).toHaveTextContent('Schema version');
+    expect(registry).toHaveTextContent('Source surface');
     expect(await screen.findByTestId('pro-parameter-sweep-evidence-copy')).toHaveTextContent('复制证据包');
     expect(screen.getByTestId('pro-parameter-sweep-evidence-download')).toHaveTextContent('导出研究证据包');
   });
@@ -458,6 +471,11 @@ describe('ParameterSweepPanel', () => {
     fireEvent.click(screen.getByTestId('pro-parameter-sweep-run-button'));
 
     await screen.findByTestId('pro-parameter-sweep-blocked');
+    const registry = screen.getByTestId('pro-parameter-sweep-artifact-registry');
+    expect(registry).toHaveTextContent('阻断');
+    expect(registry).toHaveTextContent('backtest-sweep-evidence-pack');
+    expect(screen.getByTestId('pro-parameter-sweep-registry-copy-blocked')).toBeDisabled();
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
     expect(screen.queryByTestId('pro-parameter-sweep-evidence-copy')).not.toBeInTheDocument();
     expect(screen.queryByTestId('pro-parameter-sweep-evidence-download')).not.toBeInTheDocument();
   });
