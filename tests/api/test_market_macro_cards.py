@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 import unittest
 from unittest.mock import MagicMock, patch
@@ -228,7 +229,7 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
                 self.assertTrue(payload["fallbackUsed"])
                 self.assertTrue(payload["items"])
 
-    def test_volatility_api_payload_includes_safe_official_overlay_failure_details_for_vix(self) -> None:
+    def test_volatility_api_payload_omits_official_overlay_failure_details_for_vix(self) -> None:
         failure = OfficialMacroTransportError(
             "transport_error",
             "FRED transport failed",
@@ -272,19 +273,22 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
 
         vix = next(item for item in payload["items"] if item["symbol"] == "VIX")
         self.assertEqual(vix["officialOverlayFailureReason"], "transport_error")
-        details = vix["officialOverlayFailureDetails"]
-        self.assertEqual(details["providerName"], "fred")
-        self.assertEqual(details["requestedSeries"], "VIXCLS")
-        self.assertEqual(details["endpointHost"], "api.stlouisfed.org")
-        self.assertTrue(details["apiKeyPresent"])
-        self.assertTrue(details["configPresent"])
-        self.assertEqual(details["exceptionClass"], "SSLCertVerificationError")
-        self.assertEqual(details["exceptionChain"], ["URLError", "SSLCertVerificationError"])
-        self.assertEqual(details["caBundleSource"], "certifi")
-        self.assertNotIn("api_key", str(details))
-        self.assertNotIn("SECRET", str(details))
+        serialized = json.dumps(payload, ensure_ascii=False)
+        for forbidden in (
+            "officialOverlayFailureDetails",
+            "providerName",
+            "requestedSeries",
+            "endpointHost",
+            "apiKeyPresent",
+            "exceptionClass",
+            "exceptionChain",
+            "caBundleSource",
+        ):
+            self.assertNotIn(forbidden, serialized)
+        self.assertNotIn("api_key", serialized)
+        self.assertNotIn("SECRET", serialized)
 
-    def test_rates_api_payload_includes_safe_official_overlay_failure_details_for_dgs10(self) -> None:
+    def test_rates_api_payload_omits_official_overlay_failure_details_for_dgs10(self) -> None:
         failure = OfficialMacroTransportError(
             "transport_error",
             "FRED transport failed",
@@ -318,14 +322,18 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
 
         us10y = next(item for item in payload["items"] if item["symbol"] == "US10Y")
         self.assertEqual(us10y["officialOverlayFailureReason"], "transport_error")
-        details = us10y["officialOverlayFailureDetails"]
-        self.assertEqual(details["providerName"], "fred")
-        self.assertEqual(details["requestedSeries"], "DGS10")
-        self.assertEqual(details["exceptionClass"], "SSLCertVerificationError")
-        self.assertEqual(details["exceptionChain"], ["URLError", "SSLCertVerificationError"])
-        self.assertEqual(details["caBundleSource"], "certifi")
-        self.assertNotIn("api_key", str(details))
-        self.assertNotIn("SECRET", str(details))
+        serialized = json.dumps(payload, ensure_ascii=False)
+        for forbidden in (
+            "officialOverlayFailureDetails",
+            "providerName",
+            "requestedSeries",
+            "exceptionClass",
+            "exceptionChain",
+            "caBundleSource",
+        ):
+            self.assertNotIn(forbidden, serialized)
+        self.assertNotIn("api_key", serialized)
+        self.assertNotIn("SECRET", serialized)
 
     def test_rates_and_macro_panels_expose_official_macro_metadata_when_available(self) -> None:
         service = MarketOverviewService()

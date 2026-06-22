@@ -20,16 +20,32 @@ OBSERVATION_BOUNDARY = "Observation-only research context; no personalized actio
 FORBIDDEN_CONSUMER_DIAGNOSTIC_KEYS = frozenset(
     {
         "authoritydiagnostics",
+        "activationhint",
+        "apikeypresent",
+        "attemptedat",
+        "cabundlesource",
         "cache",
+        "cachekey",
+        "calendarassumption",
         "debug",
         "debugref",
+        "diagnosticonly",
         "diagnosticref",
+        "endpointhost",
+        "exceptionchain",
+        "exceptionclass",
         "fallbacksource",
         "forbiddenproviders",
+        "freshnesspolicy",
         "internalroute",
         "localdb",
+        "maxacceptedbusinesslagdays",
+        "maxacceptedlagdays",
+        "officialoverlayfailuredetails",
         "policyversion",
         "provider",
+        "providerattempted",
+        "providerclass",
         "providername",
         "providerobservation",
         "providertier",
@@ -38,16 +54,20 @@ FORBIDDEN_CONSUMER_DIAGNOSTIC_KEYS = frozenset(
         "rawpayload",
         "reasoncode",
         "reasoncodes",
+        "requestedseries",
         "requestid",
         "runtime",
         "schemaversion",
+        "scorecontributionallowed",
         "sourceauthoritydiagnostics",
+        "sourceauthorityallowed",
         "sourceauthorityrouter",
         "sourceconfidence",
         "sourceref",
         "sourcerefs",
         "sourcetier",
         "sourcetype",
+        "timeoutseconds",
         "trace",
         "traceid",
     }
@@ -191,6 +211,8 @@ def _is_forbidden_key(key: str) -> bool:
     if normalized.endswith("reasoncode") or normalized.endswith("reasoncodes"):
         return True
     if normalized.startswith("provider"):
+        return True
+    if normalized.endswith("apikeypresent") or normalized.endswith("cachekey"):
         return True
     if normalized.startswith("debug") or normalized.startswith("trace") or normalized.startswith("raw"):
         return True

@@ -262,6 +262,15 @@
       "transitional_note": "Deprecated hidden provider-fit diagnostic route under the market namespace; capability-gated and not public-safe."
     },
     {
+      "route_id": "market.operator_diagnostics",
+      "path_pattern": "^/api/v1/market/(?:data-readiness|data-source-gap-registry|cn-provider-health)$",
+      "methods": ["GET"],
+      "surface": "market_operator_diagnostics",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "transitional_note": "Operator market diagnostics remain available to provider-read admins and are no longer anonymous consumer surfaces."
+    },
+    {
       "route_id": "system.config.read",
       "path_pattern": "^/api/v1/system/config(?:/schema)?$",
       "methods": ["GET"],
@@ -373,30 +382,30 @@
       "path": "/api/v1/market/data-readiness",
       "method": "GET",
       "surface_classification": "operator_diagnostic",
-      "auth_dependency_label": "public",
-      "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: operator readiness diagnostics are not public-ingress safe while route-level auth remains absent.",
-      "transitional_note": "Fixture-only classification; no route guard is changed by this inventory."
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "no_go_marker": null,
+      "transitional_note": "Provider-read admin gate preserves operator diagnostics outside consumer market responses."
     },
     {
       "route_id": "market.data_source_gap_registry",
       "path": "/api/v1/market/data-source-gap-registry",
       "method": "GET",
       "surface_classification": "operator_diagnostic",
-      "auth_dependency_label": "public",
-      "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: registry diagnostics are not public-ingress safe while route-level auth remains absent.",
-      "transitional_note": "Fixture-only classification; no registry runtime behavior is changed by this inventory."
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "no_go_marker": null,
+      "transitional_note": "Provider-read admin gate preserves operator diagnostics outside consumer market responses."
     },
     {
       "route_id": "market.cn_provider_health",
       "path": "/api/v1/market/cn-provider-health",
       "method": "GET",
       "surface_classification": "operator_diagnostic",
-      "auth_dependency_label": "public",
-      "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: provider-health diagnostics are not public-ingress safe while route-level auth remains absent.",
-      "transitional_note": "Fixture-only classification; no provider runtime behavior is changed by this inventory."
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "no_go_marker": null,
+      "transitional_note": "Provider-read admin gate preserves operator diagnostics outside consumer market responses."
     },
     {
       "route_id": "market.provider_fit_advisor",
