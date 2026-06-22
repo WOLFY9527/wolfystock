@@ -17,6 +17,7 @@ from typing import Optional
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
 
 from api.v1.consumer_safe_response import consumer_safe_json_response
+from api.v1.errors import safe_api_error
 from api.v1.schemas.stocks import (
     ExtractFromImageResponse,
     ExtractItem,
@@ -46,7 +47,11 @@ from src.services.import_parser import (
 from src.services.agent_stock_evidence_service import StockEvidenceService
 from src.services.stock_service import StockService
 from src.services.stock_structure_decision_service import StockStructureDecisionService
-from src.services.symbol_research_packet_service import build_symbol_research_packet, consumer_safe_stock_name
+from src.services.symbol_research_packet_service import (
+    _ReadOnlyEvidenceFetcherManager,
+    build_symbol_research_packet,
+    consumer_safe_stock_name,
+)
 from src.utils.symbol_validation import (
     ConsumerSymbolPrecheck,
     validate_consumer_symbol_precheck,
@@ -61,6 +66,7 @@ ALLOWED_MIME_STR = ", ".join(ALLOWED_MIME)
 _VALIDATION_UNAVAILABLE_MESSAGE = "Symbol validation is temporarily unavailable. Try again later."
 _VALIDATION_VERIFIED_MESSAGE = "Symbol verified."
 _VALIDATION_UNKNOWN_MESSAGE = "Symbol format is supported, but verification is not confirmed yet."
+_STOCK_EVIDENCE_INTERNAL_ERROR_MESSAGE = "Stock evidence is temporarily unavailable. Please retry later."
 
 
 def _stock_validation_response(
@@ -448,14 +454,13 @@ def get_stock_evidence(stock_code: str) -> StockEvidenceResponse:
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"获取股票证据失败: {e}", exc_info=True)
-        raise HTTPException(
+        logger.error("获取股票证据失败: %s", e, exc_info=True)
+        raise safe_api_error(
             status_code=500,
-            detail={
-                "error": "internal_error",
-                "message": f"获取股票证据失败: {str(e)}",
-            },
-        )
+            error="internal_error",
+            message=_STOCK_EVIDENCE_INTERNAL_ERROR_MESSAGE,
+            retryable=True,
+        ) from e
 
 
 @router.get(

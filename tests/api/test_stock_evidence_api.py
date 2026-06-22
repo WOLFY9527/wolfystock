@@ -531,6 +531,53 @@ def test_stock_evidence_endpoint_preserves_unknown_symbol_degraded_payload(
     assert data["items"][0]["fundamental"]["status"] == "missing"
 
 
+def test_stock_evidence_endpoint_internal_error_is_consumer_safe(
+    monkeypatch,
+) -> None:
+    raw_error = (
+        "Traceback NameError _ReadOnlyEvidenceFetcherManager /srv/wolfystock/internal.py "
+        "requestId=req-raw traceId=trace-raw cacheKey=cache-raw raw payload "
+        "credential token API_KEY=secret"
+    )
+
+    class _FailingStockEvidenceService:
+        quote_adapter = SimpleNamespace(fetcher_manager=object())
+        fetcher_manager = object()
+
+        def get_stock_evidence(self, symbols: list[str], **_: Any) -> dict[str, Any]:
+            raise RuntimeError(raw_error)
+
+    monkeypatch.setattr(
+        stocks_endpoint,
+        "StockEvidenceService",
+        _FailingStockEvidenceService,
+        raising=False,
+    )
+
+    response = _client().get("/api/v1/stocks/ORCL/evidence")
+
+    assert response.status_code == 500
+    payload = response.json()["detail"]
+    assert payload["error"] == "internal_error"
+    assert payload["message"] == "Stock evidence is temporarily unavailable. Please retry later."
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    for marker in (
+        "Traceback",
+        "NameError",
+        "_ReadOnlyEvidenceFetcherManager",
+        "/srv/wolfystock/internal.py",
+        "requestId",
+        "traceId",
+        "cacheKey",
+        "raw payload",
+        "credential",
+        "token",
+        "API_KEY",
+        "secret",
+    ):
+        assert marker not in serialized
+
+
 def test_stock_evidence_endpoint_preserves_quote_diagnostic_metadata_and_readonly_seam(
     monkeypatch,
 ) -> None:
