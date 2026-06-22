@@ -673,6 +673,36 @@ const dataSourceGapRegistryPayload = {
           nextEvidenceStep: '补齐数据集 ID、调整基准、交易日历和缺失 bars 策略。',
         },
       ],
+      integrationActionPlan: [
+        {
+          actionKey: 'stock_quote_spine.provider_integration',
+          actionLabel: '补齐报价骨架集成',
+          actionType: 'provider-integration',
+          priority: 'high',
+          status: 'ready-to-start',
+          reason: '报价、日线和成交量血缘不统一。',
+          requiredEvidence: ['授权报价快照', '日线 as-of 血缘'],
+          blockedBy: ['持久化快照缺口'],
+          affectedSurfacesOrCapabilities: ['Watchlist 行级价格', 'Portfolio 估值'],
+          nextConcreteStep: '定义报价/OHLCV 快照读模型并补齐来源权限字段。',
+          requiresExternalProviderLicenseWork: false,
+          requiresProtectedDomainReview: true,
+        },
+        {
+          actionKey: 'stock_quote_spine.evidence_validation',
+          actionLabel: '验证报价血缘证据',
+          actionType: 'evidence-validation',
+          priority: 'high',
+          status: 'waiting-evidence',
+          reason: '需要证明来源权限、时效和覆盖范围。',
+          requiredEvidence: ['覆盖率摘要', 'freshness evidence'],
+          blockedBy: ['目标环境证据未齐'],
+          affectedSurfacesOrCapabilities: ['Scanner 候选解释'],
+          nextConcreteStep: '在目标环境采集脱敏覆盖和时效证据。',
+          requiresExternalProviderLicenseWork: false,
+          requiresProtectedDomainReview: true,
+        },
+      ],
     },
     {
       familyKey: 'macro_rates',
@@ -729,6 +759,22 @@ const dataSourceGapRegistryPayload = {
           nextEvidenceStep: '保持缺失，直到授权链和方法证据齐备。',
         },
       ],
+      integrationActionPlan: [
+        {
+          actionKey: 'options_chains.provider_entitlement',
+          actionLabel: '确认期权链授权',
+          actionType: 'provider-entitlement',
+          priority: 'critical',
+          status: 'waiting-entitlement',
+          reason: '期权链访问、展示、存储和使用权尚未证明。',
+          requiredEvidence: ['授权证明', '字段覆盖清单'],
+          blockedBy: ['权益证明缺失'],
+          affectedSurfacesOrCapabilities: ['Options Lab 链观察'],
+          nextConcreteStep: '收集授权与字段覆盖证据，不接入数据源运行链路。',
+          requiresExternalProviderLicenseWork: true,
+          requiresProtectedDomainReview: true,
+        },
+      ],
     },
     {
       familyKey: 'options_strategy_analytics',
@@ -783,6 +829,22 @@ const dataSourceGapRegistryPayload = {
           impactReason: '未证明的期权结构不能进入市场风险第一读。',
           affectedCapability: '期权结构风险背景',
           nextEvidenceStep: '在 Options Lab 方法通过前保持未知。',
+        },
+      ],
+      integrationActionPlan: [
+        {
+          actionKey: 'gamma_dealer_positioning.provider_entitlement',
+          actionLabel: '确认 Gamma 输入授权',
+          actionType: 'provider-entitlement',
+          priority: 'critical',
+          status: 'waiting-entitlement',
+          reason: '期权权利、方法批准和持仓证据尚未证明。',
+          requiredEvidence: ['授权证明', '方法版本记录'],
+          blockedBy: ['权益证明缺失', '方法评审未完成'],
+          affectedSurfacesOrCapabilities: ['Options Lab Gamma 观察', 'Scenario Lab Gamma 驱动'],
+          nextConcreteStep: '先完成授权、字段覆盖、符号假设和方法版本评审。',
+          requiresExternalProviderLicenseWork: true,
+          requiresProtectedDomainReview: true,
         },
       ],
     },
@@ -1030,6 +1092,18 @@ describe('MarketProviderOperationsPage', () => {
     expect(quoteImpactMatrix).toHaveTextContent('行级价格、更新时间、研究状态');
     expect(quoteImpactMatrix).toHaveTextContent('组合估值不能把价格来源、时效和 FX 血缘一起证明。');
     expect(quoteImpactMatrix).toHaveTextContent('补齐数据集 ID、调整基准、交易日历和缺失 bars 策略。');
+    const quoteActionPlan = screen.getByTestId('data-source-gap-registry-action-plan-stock_quote_spine');
+    expect(quoteActionPlan).toHaveTextContent('行动计划');
+    expect(quoteActionPlan).toHaveTextContent('补齐报价骨架集成');
+    expect(quoteActionPlan).toHaveTextContent('高');
+    expect(quoteActionPlan).toHaveTextContent('Provider integration');
+    expect(quoteActionPlan).toHaveTextContent('可开始');
+    expect(quoteActionPlan).toHaveTextContent('授权报价快照');
+    expect(quoteActionPlan).toHaveTextContent('日线 as-of 血缘');
+    expect(quoteActionPlan).toHaveTextContent('持久化快照缺口');
+    expect(quoteActionPlan).toHaveTextContent('Watchlist 行级价格');
+    expect(quoteActionPlan).toHaveTextContent('定义报价/OHLCV 快照读模型并补齐来源权限字段。');
+    expect(quoteActionPlan).toHaveTextContent('保护域复核');
     expect(dataMap).not.toHaveTextContent('OPRA');
     expect(dataMap).not.toHaveTextContent('requestId');
     expect(dataMap).not.toHaveTextContent('traceId');
@@ -1129,6 +1203,16 @@ describe('MarketProviderOperationsPage', () => {
     expect(optionsImpactMatrix).toHaveTextContent('阻断');
     expect(optionsImpactMatrix).toHaveTextContent('计划中');
     expect(optionsImpactMatrix).not.toHaveTextContent('已解锁');
+    const optionsActionPlan = screen.getByTestId('data-source-gap-registry-action-plan-options_chains');
+    expect(optionsActionPlan).toHaveTextContent('确认期权链授权');
+    expect(optionsActionPlan).toHaveTextContent('关键');
+    expect(optionsActionPlan).toHaveTextContent('Provider entitlement');
+    expect(optionsActionPlan).toHaveTextContent('等待授权');
+    expect(optionsActionPlan).toHaveTextContent('授权证明');
+    expect(optionsActionPlan).toHaveTextContent('权益证明缺失');
+    expect(optionsActionPlan).toHaveTextContent('Options Lab 链观察');
+    expect(optionsActionPlan).toHaveTextContent('外部授权');
+    expect(optionsActionPlan).toHaveTextContent('保护域复核');
 
     const gammaRow = screen.getByTestId('data-source-gap-registry-row-gamma_dealer_positioning');
     fireEvent.click(within(gammaRow).getByRole('button', { name: '展开 Gamma / Dealer Positioning' }));
@@ -1144,6 +1228,11 @@ describe('MarketProviderOperationsPage', () => {
     expect(gammaImpactMatrix).toHaveTextContent('阻断');
     expect(gammaImpactMatrix).toHaveTextContent('待补证');
     expect(gammaImpactMatrix).not.toHaveTextContent('已解锁');
+    const gammaActionPlan = screen.getByTestId('data-source-gap-registry-action-plan-gamma_dealer_positioning');
+    expect(gammaActionPlan).toHaveTextContent('确认 Gamma 输入授权');
+    expect(gammaActionPlan).toHaveTextContent('等待授权');
+    expect(gammaActionPlan).toHaveTextContent('方法版本记录');
+    expect(gammaActionPlan).toHaveTextContent('方法评审未完成');
 
     const panelText = panel.textContent || '';
     expect(panelText).not.toMatch(/requestId|traceId|rawProviderPayload|cacheKey|credential|env|debug|raw dump|api[_-]?key|SECRET_DATA_KEY/i);
@@ -1190,6 +1279,9 @@ describe('MarketProviderOperationsPage', () => {
     expect(unknownImpact).toHaveTextContent('影响原因待补证。');
     expect(unknownImpact).not.toHaveTextContent('已解锁');
     expect(unknownImpact).not.toHaveTextContent(/requestId|traceId|rawProviderPayload|cacheKey|token|secret|debug/i);
+    const unknownActionPlan = screen.getByTestId('data-source-gap-registry-action-plan-unknown_new_family');
+    expect(unknownActionPlan).toHaveTextContent('行动计划待补证');
+    expect(unknownActionPlan).not.toHaveTextContent(/requestId|traceId|rawProviderPayload|cacheKey|token|secret|debug/i);
     expect(row).not.toHaveTextContent('已就绪');
     expect(row).not.toHaveTextContent('权限 可用');
     expect(row).not.toHaveTextContent('时效 新鲜');

@@ -217,6 +217,36 @@ describe('marketApi.getDataSourceGapRegistry', () => {
                 next_evidence_step: '补齐数据集 ID、调整基准、交易日历和缺失 bars 策略。',
               },
             ],
+            integration_action_plan: [
+              {
+                action_key: 'stock_quote_spine.provider_integration',
+                action_label: '补齐报价骨架集成',
+                action_type: 'provider-integration',
+                priority: 'high',
+                status: 'ready-to-start',
+                reason: '报价和日线血缘尚未统一。',
+                required_evidence: ['授权报价快照', '日线 as-of 血缘'],
+                blocked_by: ['持久化快照缺口'],
+                affected_surfaces_or_capabilities: ['Watchlist 行级价格', 'Portfolio 估值'],
+                next_concrete_step: '定义报价/OHLCV 快照读模型并补齐来源权限字段。',
+                requires_external_provider_license_work: false,
+                requires_protected_domain_review: true,
+              },
+              {
+                action_key: 'stock_quote_spine.evidence_validation',
+                action_label: '验证报价血缘证据',
+                action_type: 'evidence-validation',
+                priority: 'high',
+                status: 'waiting-evidence',
+                reason: '需要证明来源权限、时效和覆盖范围。',
+                required_evidence: ['覆盖率摘要', 'freshness evidence'],
+                blocked_by: ['目标环境证据未齐'],
+                affected_surfaces_or_capabilities: ['Scanner 候选解释'],
+                next_concrete_step: '在目标环境采集脱敏覆盖和时效证据。',
+                requires_external_provider_license_work: false,
+                requires_protected_domain_review: true,
+              },
+            ],
           },
           {
             family_key: 'macro_rates',
@@ -261,6 +291,22 @@ describe('marketApi.getDataSourceGapRegistry', () => {
                 impact_reason: '授权期权链、展示权、存储权和字段覆盖未证明。',
                 affected_capability: '链、IV、Greeks、OI、成交量观察',
                 next_evidence_step: '先补齐权益证明包和字段覆盖证据。',
+              },
+            ],
+            integration_action_plan: [
+              {
+                action_key: 'options_chains.provider_entitlement',
+                action_label: '确认期权链授权',
+                action_type: 'provider-entitlement',
+                priority: 'critical',
+                status: 'waiting-entitlement',
+                reason: '期权链访问、展示、存储和使用权尚未证明。',
+                required_evidence: ['授权证明', '字段覆盖清单'],
+                blocked_by: ['权益证明缺失'],
+                affected_surfaces_or_capabilities: ['Options Lab 链观察'],
+                next_concrete_step: '收集授权与字段覆盖证据，不接入数据源运行链路。',
+                requires_external_provider_license_work: true,
+                requires_protected_domain_review: true,
               },
             ],
           },
@@ -340,6 +386,27 @@ describe('marketApi.getDataSourceGapRegistry', () => {
         impactState: { label: '仅观察', variant: 'neutral' },
       },
     ]);
+    expect(view.families.find((family) => family.familyKey === 'stock_quote_spine')?.integrationActionPlan[0]).toMatchObject(
+      {
+        actionKey: 'stock_quote_spine.provider_integration',
+        actionLabel: '补齐报价骨架集成',
+        actionType: { label: 'Provider integration', variant: 'info' },
+        priority: { label: '高', variant: 'caution' },
+        status: { label: '可开始', variant: 'info' },
+        requiredEvidence: ['授权报价快照', '日线 as-of 血缘'],
+        blockedBy: ['持久化快照缺口'],
+        affectedSurfacesOrCapabilities: ['Watchlist 行级价格', 'Portfolio 估值'],
+        externalProviderLicenseWork: '不需要外部授权',
+        protectedDomainReview: '需要保护域复核',
+      },
+    );
+    expect(view.families.find((family) => family.familyKey === 'options_chains')?.integrationActionPlan[0]).toMatchObject({
+      actionType: { label: 'Provider entitlement', variant: 'danger' },
+      priority: { label: '关键', variant: 'danger' },
+      status: { label: '等待授权', variant: 'danger' },
+      externalProviderLicenseWork: '需要外部授权',
+      protectedDomainReview: '需要保护域复核',
+    });
     expect(view.families.find((family) => family.familyKey === 'options_chains')?.scoreTradingAuthorityAllowed).toBe('不允许');
     expect(view.families.find((family) => family.familyKey === 'options_chains')?.surfaceImpactMatrix[0].impactState.label).toBe('阻断');
     expect(view.families.find((family) => family.familyKey === 'gamma_dealer_positioning')?.dataHydrationAllowed).toBe('不允许');
@@ -370,6 +437,22 @@ describe('marketApi.getDataSourceGapRegistry', () => {
                 next_evidence_step: 'token=secret next step',
               },
             ],
+            integration_action_plan: [
+              {
+                action_key: 'rawProviderPayload requestId',
+                action_label: 'debug cacheKey action',
+                action_type: 'provider-integration',
+                priority: 'critical',
+                status: 'ready-to-start',
+                reason: 'traceId raw dump',
+                required_evidence: ['api_key secret evidence'],
+                blocked_by: ['cookie blocker'],
+                affected_surfaces_or_capabilities: ['debug surface'],
+                next_concrete_step: 'token=secret next step',
+                requires_external_provider_license_work: true,
+                requires_protected_domain_review: true,
+              },
+            ],
           },
         ],
       },
@@ -393,6 +476,20 @@ describe('marketApi.getDataSourceGapRegistry', () => {
         impactReason: '影响原因待补证。',
         affectedCapability: '影响能力待补证。',
         nextEvidenceStep: '下一证据步骤待补证。',
+      },
+    ]);
+    expect(family.integrationActionPlan).toMatchObject([
+      {
+        actionKey: 'unknown_new_family.manual_review',
+        actionLabel: '行动项待复核',
+        actionType: { label: 'Manual review', variant: 'neutral' },
+        priority: { label: '中', variant: 'info' },
+        status: { label: '计划中', variant: 'neutral' },
+        reason: '原因待补证。',
+        requiredEvidence: ['证据待补证'],
+        blockedBy: ['阻断项待补证'],
+        affectedSurfacesOrCapabilities: ['影响面待补证'],
+        nextConcreteStep: '下一步待补证。',
       },
     ]);
     expect(view.groups.find((group) => group.groupId === 'other')?.families[0]?.familyKey).toBe('unknown_new_family');

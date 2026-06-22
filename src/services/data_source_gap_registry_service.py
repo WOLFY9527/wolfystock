@@ -37,6 +37,42 @@ class DataSourceSurfaceImpact:
 
 
 @dataclass(frozen=True, slots=True)
+class DataSourceGapRegistryActionPlanItem:
+    action_key: str
+    action_label: str
+    action_type: str
+    priority: str
+    status: str
+    reason: str
+    required_evidence: tuple[str, ...]
+    blocked_by: tuple[str, ...]
+    affected_surfaces_or_capabilities: tuple[str, ...]
+    next_concrete_step: str
+    requires_external_provider_license_work: bool
+    requires_protected_domain_review: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "actionKey": self.action_key,
+            "actionLabel": self.action_label,
+            "actionType": self.action_type,
+            "priority": self.priority,
+            "status": self.status,
+            "reason": self.reason,
+            "requiredEvidence": list(self.required_evidence),
+            "blockedBy": list(self.blocked_by),
+            "affectedSurfacesOrCapabilities": list(
+                self.affected_surfaces_or_capabilities
+            ),
+            "nextConcreteStep": self.next_concrete_step,
+            "requiresExternalProviderLicenseWork": (
+                self.requires_external_provider_license_work
+            ),
+            "requiresProtectedDomainReview": self.requires_protected_domain_review,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class DataSourceGapRegistryFamily:
     family_key: str
     consumer_label: str
@@ -69,6 +105,10 @@ class DataSourceGapRegistryFamily:
             "surfaceImpactMatrix": [
                 impact.to_dict() for impact in self.surface_impact_matrix
             ],
+            "integrationActionPlan": [
+                action.to_dict()
+                for action in _integration_action_plan_for_family(self)
+            ],
         }
 
 
@@ -87,6 +127,314 @@ def _impact(
         impact_reason=impact_reason,
         affected_capability=affected_capability,
         next_evidence_step=next_evidence_step,
+    )
+
+
+def _action(
+    family_key: str,
+    suffix: str,
+    label: str,
+    action_type: str,
+    priority: str,
+    status: str,
+    reason: str,
+    required_evidence: tuple[str, ...],
+    blocked_by: tuple[str, ...],
+    affected: tuple[str, ...],
+    next_step: str,
+    *,
+    external_license: bool,
+    protected_review: bool,
+) -> DataSourceGapRegistryActionPlanItem:
+    return DataSourceGapRegistryActionPlanItem(
+        action_key=f"{family_key}.{suffix}",
+        action_label=label,
+        action_type=action_type,
+        priority=priority,
+        status=status,
+        reason=reason,
+        required_evidence=required_evidence,
+        blocked_by=blocked_by,
+        affected_surfaces_or_capabilities=affected,
+        next_concrete_step=next_step,
+        requires_external_provider_license_work=external_license,
+        requires_protected_domain_review=protected_review,
+    )
+
+
+def _affected_capabilities(
+    family: DataSourceGapRegistryFamily,
+    fallback: str,
+) -> tuple[str, ...]:
+    capabilities = tuple(
+        dict.fromkeys(
+            impact.affected_capability
+            for impact in family.surface_impact_matrix
+            if impact.affected_capability
+        )
+    )
+    return capabilities[:4] or (fallback,)
+
+
+def _integration_action_plan_for_family(
+    family: DataSourceGapRegistryFamily,
+) -> tuple[DataSourceGapRegistryActionPlanItem, ...]:
+    family_key = family.family_key
+    affected = _affected_capabilities(family, family.consumer_label)
+    integration_blocker = family.integration_blocker or "当前集成阻断待复核。"
+    entitlement_blocker = (
+        family.entitlement_or_licensing_blocker or "当前权益或授权状态待复核。"
+    )
+    source_evidence = family.source_evidence_state or "source evidence pending"
+
+    if family_key == "stock_quote_spine":
+        return (
+            _action(
+                family_key,
+                "provider_integration",
+                "补齐报价骨架集成",
+                "provider-integration",
+                "high",
+                "ready-to-start",
+                "报价、日线和成交量血缘尚未统一。",
+                ("授权报价快照", "日线 as-of 血缘", "覆盖率摘要"),
+                (integration_blocker,),
+                affected,
+                "定义报价/OHLCV 快照读模型并补齐来源权限字段。",
+                external_license=False,
+                protected_review=True,
+            ),
+            _action(
+                family_key,
+                "evidence_validation",
+                "验证报价血缘证据",
+                "evidence-validation",
+                "high",
+                "waiting-evidence",
+                "需要证明来源权限、时效和覆盖范围后再提升产品解释。",
+                ("目标环境覆盖证据", "freshness 证据", "来源权限摘要"),
+                ("目标环境证据未齐",),
+                affected,
+                "采集脱敏覆盖、时效和来源权限证据，并保持计分权限关闭。",
+                external_license=False,
+                protected_review=True,
+            ),
+        )
+
+    if family_key == "portfolio_valuation_lineage":
+        return (
+            _action(
+                family_key,
+                "provider_integration",
+                "补齐组合估值血缘集成",
+                "provider-integration",
+                "high",
+                "ready-to-start",
+                "价格来源、FX 时效、估值快照和分析 readiness 仍不完整。",
+                ("价格来源血缘", "FX freshness 证据", "估值快照 ID"),
+                (integration_blocker,),
+                affected,
+                "把 price、FX、valuation、benchmark 和 factor lineage 一起持久化。",
+                external_license=False,
+                protected_review=True,
+            ),
+            _action(
+                family_key,
+                "evidence_validation",
+                "验证组合估值证据",
+                "evidence-validation",
+                "high",
+                "waiting-evidence",
+                "组合读数需要证明价格、FX、基准和因子血缘后才能提升置信说明。",
+                ("估值快照证据", "FX freshness 证据", "benchmark lineage"),
+                ("估值证据未齐",),
+                affected,
+                "生成脱敏估值 lineage 摘要，不改变 portfolio accounting。",
+                external_license=False,
+                protected_review=True,
+            ),
+        )
+
+    if family_key in {
+        "options_chains",
+        "options_strategy_analytics",
+        "gamma_dealer_positioning",
+    }:
+        label_by_family = {
+            "options_chains": "确认期权链授权",
+            "options_strategy_analytics": "确认期权策略输入授权",
+            "gamma_dealer_positioning": "确认 Gamma 输入授权",
+        }
+        next_step_by_family = {
+            "options_chains": "收集授权、展示、存储和字段覆盖证据，不接入数据源运行链路。",
+            "options_strategy_analytics": "先证明授权链、历史链和方法输入，再评估分析契约。",
+            "gamma_dealer_positioning": "先完成授权、字段覆盖、符号假设和方法版本评审。",
+        }
+        secondary_type = (
+            "manual-review"
+            if family_key == "gamma_dealer_positioning"
+            else "evidence-validation"
+        )
+        secondary_status = (
+            "planned"
+            if secondary_type == "manual-review"
+            else "waiting-evidence"
+        )
+        return (
+            _action(
+                family_key,
+                "provider_entitlement",
+                label_by_family[family_key],
+                "provider-entitlement",
+                "critical",
+                "waiting-entitlement",
+                entitlement_blocker,
+                ("授权证明", "字段覆盖清单", "展示/存储/使用边界"),
+                (entitlement_blocker,),
+                affected,
+                next_step_by_family[family_key],
+                external_license=True,
+                protected_review=True,
+            ),
+            _action(
+                family_key,
+                "evidence_or_manual_review",
+                "复核期权方法与证据边界",
+                secondary_type,
+                "high",
+                secondary_status,
+                "授权输入和方法证据缺失时只能保持阻断或计划状态。",
+                ("方法版本记录", "输入字段覆盖", "观察边界说明"),
+                (integration_blocker,),
+                affected,
+                "完成方法和证据复核前，不暴露 ready、unlocked 或计分权限。",
+                external_license=True,
+                protected_review=True,
+            ),
+        )
+
+    if family_key in {"etf_index_coverage", "breadth_flows_positioning"}:
+        return (
+            _action(
+                family_key,
+                "provider_entitlement",
+                "确认展示权与授权边界",
+                "provider-entitlement",
+                "high",
+                "waiting-entitlement",
+                entitlement_blocker,
+                ("授权或展示权证明", "覆盖清单", "来源边界说明"),
+                (entitlement_blocker,),
+                affected,
+                "完成权益证明后再评估接入，不从 proxy 或 partial 状态推断就绪。",
+                external_license=True,
+                protected_review=True,
+            ),
+            _action(
+                family_key,
+                "manual_review",
+                "拆分覆盖与来源评审",
+                "manual-review",
+                "high",
+                "planned",
+                integration_blocker,
+                ("覆盖分母", "source authority 摘要", "影响面清单"),
+                (integration_blocker,),
+                affected,
+                family.next_integration_step,
+                external_license=True,
+                protected_review=True,
+            ),
+        )
+
+    if family_key in {
+        "fundamentals",
+        "backtest_dataset_lineage",
+        "scenario_baselines",
+    }:
+        return (
+            _action(
+                family_key,
+                "schema_contract",
+                "补齐数据契约",
+                "schema-contract",
+                "high" if family_key != "scenario_baselines" else "medium",
+                "planned",
+                integration_blocker,
+                ("字段契约", "as-of / lineage 规则", "缺失状态定义"),
+                (integration_blocker,),
+                affected,
+                family.next_integration_step,
+                external_license=False,
+                protected_review=True,
+            ),
+            _action(
+                family_key,
+                "evidence_validation",
+                "验证证据边界",
+                "evidence-validation",
+                "medium",
+                "waiting-evidence",
+                f"当前证据状态为 {source_evidence}，需要补齐可复核证据。",
+                ("脱敏证据摘要", "覆盖与缺失清单"),
+                ("证据未齐",),
+                affected,
+                "完成证据采集和 contract 测试后再开放前端消费。",
+                external_license=False,
+                protected_review=True,
+            ),
+        )
+
+    if family.status == "ready" and family.authority_state == "allowed":
+        return (
+            _action(
+                family_key,
+                "validation_monitoring",
+                "保持证据监控",
+                "evidence-validation",
+                "low",
+                "not-required",
+                "当前家族已就绪，仅需持续监控证据新鲜度。",
+                ("周期性 freshness 检查",),
+                (),
+                affected,
+                "保持只读监控，不新增阻断行动。",
+                external_license=False,
+                protected_review=False,
+            ),
+        )
+
+    return (
+        _action(
+            family_key,
+            "provider_integration",
+            "补齐数据集成证据",
+            "provider-integration",
+            "medium",
+            "ready-to-start" if family.provider_hydration_allowed else "planned",
+            integration_blocker,
+            ("覆盖证据", "freshness 证据", "source authority 摘要"),
+            (integration_blocker,),
+            affected,
+            family.next_integration_step,
+            external_license=bool(family.entitlement_or_licensing_blocker),
+            protected_review=True,
+        ),
+        _action(
+            family_key,
+            "evidence_validation",
+            "验证数据证据",
+            "evidence-validation",
+            "medium",
+            "waiting-evidence",
+            f"当前证据状态为 {source_evidence}，需要可复核摘要。",
+            ("脱敏证据摘要", "影响面清单"),
+            ("证据未齐",),
+            affected,
+            "补齐证据后再进入前端消费评审。",
+            external_license=bool(family.entitlement_or_licensing_blocker),
+            protected_review=True,
+        ),
     )
 
 

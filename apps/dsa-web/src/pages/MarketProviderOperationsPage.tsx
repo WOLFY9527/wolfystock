@@ -2168,6 +2168,66 @@ const DataSourceGapRegistryPanel: React.FC<{
                               </p>
                             )}
                           </div>
+                          <div
+                            className="rounded-md border border-white/[0.06] bg-black/10 px-3 py-3"
+                            data-testid={`data-source-gap-registry-action-plan-${family.familyKey}`}
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div>
+                                <p className="text-[10px] font-medium uppercase tracking-widest text-white/34">action plan</p>
+                                <p className="mt-1 text-xs font-semibold text-white/78">
+                                  {family.integrationActionPlan.length === 1
+                                    && family.integrationActionPlan[0].actionLabel === '行动项待复核'
+                                    ? '行动计划待补证'
+                                    : '行动计划'}
+                                </p>
+                              </div>
+                              <TerminalChip variant="neutral">{formatNumber(family.integrationActionPlan.length, 0)} 个行动项</TerminalChip>
+                            </div>
+                            <div className="mt-3 grid gap-2">
+                              {family.integrationActionPlan.map((action) => (
+                                <div
+                                  key={`${family.familyKey}-${action.actionKey}`}
+                                  className="rounded-md border border-white/[0.05] bg-white/[0.025] px-3 py-2.5"
+                                >
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <TerminalChip variant={action.priority.variant}>{action.priority.label}</TerminalChip>
+                                    <TerminalChip variant={action.actionType.variant}>{action.actionType.label}</TerminalChip>
+                                    <TerminalChip variant={action.status.variant}>{action.status.label}</TerminalChip>
+                                    <TerminalChip variant={action.externalProviderLicenseWorkVariant}>
+                                      {action.externalProviderLicenseWork}
+                                    </TerminalChip>
+                                    <TerminalChip variant={action.protectedDomainReviewVariant}>
+                                      {action.protectedDomainReview}
+                                    </TerminalChip>
+                                  </div>
+                                  <p className="mt-2 text-xs font-semibold text-white/82">{action.actionLabel}</p>
+                                  <dl className="mt-2 grid gap-1.5 text-[11px] leading-5 text-white/58">
+                                    <div>
+                                      <dt className="text-white/34">原因</dt>
+                                      <dd>{action.reason}</dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-white/34">所需证据</dt>
+                                      <dd>{action.requiredEvidence.join('、')}</dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-white/34">阻断项</dt>
+                                      <dd>{action.blockedBy.join('、')}</dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-white/34">影响面 / 能力</dt>
+                                      <dd>{action.affectedSurfacesOrCapabilities.join('、')}</dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-white/34">下一步</dt>
+                                      <dd>{action.nextConcreteStep}</dd>
+                                    </div>
+                                  </dl>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                           <dl className="grid gap-2 text-[11px] leading-5 text-white/58">
                             <div>
                               <dt className="text-white/34">权益 / 授权阻断</dt>

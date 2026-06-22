@@ -35,6 +35,21 @@ EXPECTED_FAMILY_FIELDS = {
     "scoreTradingAuthorityAllowed",
     "consumerSafeDescription",
     "surfaceImpactMatrix",
+    "integrationActionPlan",
+}
+EXPECTED_ACTION_FIELDS = {
+    "actionKey",
+    "actionLabel",
+    "actionType",
+    "priority",
+    "status",
+    "reason",
+    "requiredEvidence",
+    "blockedBy",
+    "affectedSurfacesOrCapabilities",
+    "nextConcreteStep",
+    "requiresExternalProviderLicenseWork",
+    "requiresProtectedDomainReview",
 }
 
 
@@ -97,6 +112,35 @@ def test_data_source_gap_registry_returns_static_fail_closed_family_inventory() 
     assert families["portfolio_valuation_lineage"]["status"] == "partial"
     assert families["portfolio_valuation_lineage"]["providerHydrationAllowed"] is True
     assert families["portfolio_valuation_lineage"]["scoreTradingAuthorityAllowed"] is False
+    assert all(
+        family["integrationActionPlan"]
+        for family in families.values()
+    )
+    assert all(
+        set(action) == EXPECTED_ACTION_FIELDS
+        for family in families.values()
+        for action in family["integrationActionPlan"]
+    )
+    assert families["options_chains"]["integrationActionPlan"][0]["actionType"] == "provider-entitlement"
+    assert families["options_chains"]["integrationActionPlan"][0]["status"] == "waiting-entitlement"
+    assert families["options_chains"]["integrationActionPlan"][0]["requiresExternalProviderLicenseWork"] is True
+    assert all(
+        action["status"] != "ready-to-start"
+        for family_key in (
+            "options_chains",
+            "options_strategy_analytics",
+            "gamma_dealer_positioning",
+        )
+        for action in families[family_key]["integrationActionPlan"]
+    )
+    assert {
+        action["actionType"]
+        for action in families["stock_quote_spine"]["integrationActionPlan"]
+    } >= {"provider-integration", "evidence-validation"}
+    assert {
+        action["actionType"]
+        for action in families["portfolio_valuation_lineage"]["integrationActionPlan"]
+    } >= {"provider-integration", "evidence-validation"}
     assert families["stock_quote_spine"]["surfaceImpactMatrix"][0] == {
         "surfaceKey": "scanner",
         "consumerLabel": "Scanner",
