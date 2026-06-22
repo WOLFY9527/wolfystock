@@ -32,6 +32,34 @@ describe('scenarioLabApi', () => {
           confidence_score: 0.43,
           status: 'partial',
         },
+        contract_status: {
+          state: 'degraded',
+          label: 'Scenario constrained by evidence gaps',
+          message: 'Scenario comparison is available, but incomplete evidence keeps the result observation-only.',
+        },
+        selected_scenario: {
+          preset_id: 'volatilitySpike',
+          name: 'volatilitySpike',
+          label: 'Volatility stress observation',
+          category: 'Volatility stress',
+          description: 'Stress volatility and breadth inputs to compare research-context sensitivity.',
+          input_assumptions: [
+            'Uses market context supplied with the request.',
+            'Compares deterministic driver changes without fetching fresh market data.',
+          ],
+          expected_driver_impacts: [
+            { driver: 'Volatility structure', direction: 'pressure', magnitude: 'high' },
+            { driver: 'Breadth participation', direction: 'pressure', magnitude: 'medium' },
+          ],
+          evidence_limits: ['Breadth and volatility observations need fresh confirmation.'],
+          raw_payload: { debug: true },
+        },
+        base_market_context: {
+          label: 'Decision Cockpit market context',
+          message: 'Base regime context was supplied by the request and is treated as observation-only evidence.',
+          evidence_state: 'degraded',
+          scoring_driver_count: 6,
+        },
         baseline_readiness: {
           status: 'blocked',
           baseline_snapshot: {
@@ -103,6 +131,26 @@ describe('scenarioLabApi', () => {
       scenarioName: 'volatilitySpike',
     });
     expect(payload.schemaVersion).toBe('market_scenario_lab_engine.v1');
+    expect(payload.contractStatus?.state).toBe('degraded');
+    expect(payload.selectedScenario).toMatchObject({
+      presetId: 'volatilitySpike',
+      name: 'volatilitySpike',
+      label: 'Volatility stress observation',
+      inputAssumptions: [
+        'Uses market context supplied with the request.',
+        'Compares deterministic driver changes without fetching fresh market data.',
+      ],
+      expectedDriverImpacts: [
+        { driver: 'Volatility structure', direction: 'pressure', magnitude: 'high' },
+        { driver: 'Breadth participation', direction: 'pressure', magnitude: 'medium' },
+      ],
+    });
+    expect(JSON.stringify(payload.selectedScenario)).not.toMatch(/raw_payload|debug/i);
+    expect(payload.baseMarketContext).toMatchObject({
+      label: 'Decision Cockpit market context',
+      evidenceState: 'degraded',
+      scoringDriverCount: 6,
+    });
     expect(payload.baseRegime.confidenceScore).toBe(0.68);
     expect(payload.scenarioRegime.status).toBe('partial');
     expect(payload.baselineReadiness?.status).toBe('blocked');

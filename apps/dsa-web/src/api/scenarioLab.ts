@@ -56,8 +56,41 @@ export type ScenarioLabBaselineReadinessSummary = {
   boundary: string;
 };
 
+export type ScenarioLabExpectedDriverImpact = {
+  driver?: string | null;
+  direction?: string | null;
+  magnitude?: string | null;
+};
+
+export type ScenarioLabSelectedScenario = {
+  presetId?: string | null;
+  name?: string | null;
+  label?: string | null;
+  category?: string | null;
+  description?: string | null;
+  inputAssumptions: string[];
+  expectedDriverImpacts: ScenarioLabExpectedDriverImpact[];
+  evidenceLimits: string[];
+};
+
+export type ScenarioLabContractStatus = {
+  state?: string | null;
+  label?: string | null;
+  message?: string | null;
+};
+
+export type ScenarioLabBaseMarketContext = {
+  label?: string | null;
+  message?: string | null;
+  evidenceState?: string | null;
+  scoringDriverCount?: number | null;
+};
+
 export type ScenarioLabResponse = {
   schemaVersion: string;
+  contractStatus?: ScenarioLabContractStatus | null;
+  selectedScenario?: ScenarioLabSelectedScenario | null;
+  baseMarketContext?: ScenarioLabBaseMarketContext | null;
   baseRegime: ScenarioLabRegime;
   scenarioRegime: ScenarioLabRegime;
   baselineReadiness?: ScenarioLabBaselineReadiness | null;
@@ -145,6 +178,58 @@ function normalizeEvidenceCompleteness(value: ScenarioLabEvidenceCompleteness | 
   return {
     state: value.state ?? null,
     gaps: asStringArray(value.gaps),
+  };
+}
+
+function normalizeExpectedDriverImpacts(value: ScenarioLabExpectedDriverImpact[] | null | undefined): ScenarioLabExpectedDriverImpact[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((item): item is ScenarioLabExpectedDriverImpact => Boolean(item) && typeof item === 'object')
+    .map((item) => ({
+      driver: item.driver ?? null,
+      direction: item.direction ?? null,
+      magnitude: item.magnitude ?? null,
+    }));
+}
+
+function normalizeSelectedScenario(value: ScenarioLabSelectedScenario | null | undefined): ScenarioLabSelectedScenario | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  return {
+    presetId: value.presetId ?? null,
+    name: value.name ?? null,
+    label: value.label ?? null,
+    category: value.category ?? null,
+    description: value.description ?? null,
+    inputAssumptions: asStringArray(value.inputAssumptions),
+    expectedDriverImpacts: normalizeExpectedDriverImpacts(value.expectedDriverImpacts),
+    evidenceLimits: asStringArray(value.evidenceLimits),
+  };
+}
+
+function normalizeContractStatus(value: ScenarioLabContractStatus | null | undefined): ScenarioLabContractStatus | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  return {
+    state: value.state ?? null,
+    label: value.label ?? null,
+    message: value.message ?? null,
+  };
+}
+
+function normalizeBaseMarketContext(value: ScenarioLabBaseMarketContext | null | undefined): ScenarioLabBaseMarketContext | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  return {
+    label: value.label ?? null,
+    message: value.message ?? null,
+    evidenceState: value.evidenceState ?? null,
+    scoringDriverCount: typeof value.scoringDriverCount === 'number' ? value.scoringDriverCount : null,
   };
 }
 
@@ -304,6 +389,9 @@ function normalizeScenarioLabResponse(payload: unknown): ScenarioLabResponse {
   const baselineReadiness = normalizeBaselineReadiness(normalized.baselineReadiness);
   return {
     schemaVersion: normalized.schemaVersion,
+    contractStatus: normalizeContractStatus(normalized.contractStatus),
+    selectedScenario: normalizeSelectedScenario(normalized.selectedScenario),
+    baseMarketContext: normalizeBaseMarketContext(normalized.baseMarketContext),
     baseRegime: {
       regime: normalized.baseRegime?.regime ?? null,
       confidence: normalized.baseRegime?.confidence ?? null,
