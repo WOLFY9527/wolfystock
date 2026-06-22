@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import math
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from collections.abc import Mapping, Sequence
 from datetime import date
 from typing import Any
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION = "stock_structure_decision_api_v1"
 SYMBOL_COMPARE_EVIDENCE_PACKET_VERSION = "symbol_compare_evidence_packet_v1"
 DEFAULT_STRUCTURE_DECISION_HISTORY_DAYS = 90
+DEFAULT_STRUCTURE_DECISION_TIMEOUT_SECONDS = 2.5
 DEFAULT_STRUCTURE_DECISION_BATCH_MAX_ITEMS = 25
 MAX_STRUCTURE_DECISION_BATCH_ITEMS = 50
 PEER_CORRELATION_HISTORY_DAYS = 60
@@ -96,14 +98,25 @@ _STRUCTURE_PARTIAL_ISSUE = {
     "severity": "info",
     "category": "evidence",
 }
+_STRUCTURE_DECISION_TIMEOUT_REASON = "structure_decision_timeout"
+_STRUCTURE_DECISION_TIMEOUT_MESSAGE = (
+    "Structure decision inputs did not return within the latency boundary."
+)
 
 
 class StockStructureDecisionService:
     """Build observation-only stock structure decisions from existing OHLCV access."""
 
-    def __init__(self, history_service: Any | None = None, stock_repo: Any | None = None) -> None:
+    def __init__(
+        self,
+        history_service: Any | None = None,
+        stock_repo: Any | None = None,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> None:
         self.history_service = history_service or StockService()
         self.stock_repo = stock_repo
+        self.timeout_seconds = _normalize_timeout_seconds(timeout_seconds)
 
     def get_structure_decision(
         self,
@@ -123,8 +136,9 @@ class StockStructureDecisionService:
                 symbol_issue=precheck.message,
             )
 
+        payload = self._build_structure_decision_with_latency_boundary(normalized_ticker)
         return _finalize_structure_contract(
-            self._build_structure_decision(normalized_ticker),
+            payload,
             source_context=_build_source_context(
                 context_source=context_source,
                 context_section=context_section,
@@ -133,6 +147,24 @@ class StockStructureDecisionService:
             source_context_issue=_source_context_issue(context_source=context_source, context_section=context_section),
             symbol_issue=None,
         )
+
+    def _build_structure_decision_with_latency_boundary(self, ticker: str) -> dict[str, Any]:
+        executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="stock_structure_decision")
+        future = executor.submit(self._build_structure_decision, ticker)
+        timeout_triggered = False
+        try:
+            return future.result(timeout=self.timeout_seconds)
+        except FuturesTimeoutError:
+            timeout_triggered = True
+            future.cancel()
+            logger.warning(
+                "Stock structure decision exceeded latency boundary for %s after %.3fs",
+                ticker,
+                self.timeout_seconds,
+            )
+            return _latency_boundary_payload(ticker)
+        finally:
+            executor.shutdown(wait=not timeout_triggered, cancel_futures=timeout_triggered)
 
     def get_structure_decisions_batch(
         self,
@@ -468,6 +500,43 @@ def _precheck_fail_closed_payload(ticker: str, precheck: Any) -> dict[str, Any]:
                 "message": str(getattr(precheck, "message", "") or "Review the symbol before retrying this structure read."),
             }
         ],
+        "noAdviceDisclosure": engine_result.get("noAdviceDisclosure") or NO_ADVICE_DISCLOSURE,
+    }
+
+
+def _latency_boundary_payload(ticker: str) -> dict[str, Any]:
+    engine_result = build_stock_structure_decision([])
+    return {
+        "schemaVersion": STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION,
+        "ticker": ticker,
+        "structureState": engine_result.get("structureState", "lowConfidence"),
+        "confidence": engine_result.get("confidence", "low"),
+        "componentScores": engine_result.get("componentScores", {}),
+        "explanation": engine_result.get("explanation", {}),
+        "researchNotes": engine_result.get("researchNotes", {}),
+        "dataQuality": {
+            "status": "unavailable",
+            "source": "unavailable",
+            "period": "daily",
+            "requestedDays": DEFAULT_STRUCTURE_DECISION_HISTORY_DAYS,
+            "observedBars": 0,
+            "usableBars": 0,
+            "reason": _STRUCTURE_DECISION_TIMEOUT_REASON,
+        },
+        "missingEvidence": [
+            {
+                "kind": "daily_ohlcv",
+                "message": _STRUCTURE_DECISION_TIMEOUT_MESSAGE,
+            },
+            {
+                "kind": "benchmark_ohlcv",
+                "message": "Benchmark OHLCV is not included in this endpoint yet, so relative-strength evidence is neutral.",
+            },
+        ],
+        "peerCorrelationSnapshot": _insufficient_peer_correlation_snapshot(
+            ticker,
+            missing_inputs=["Peer correlation was not evaluated because structure evidence exceeded the latency boundary."],
+        ),
         "noAdviceDisclosure": engine_result.get("noAdviceDisclosure") or NO_ADVICE_DISCLOSURE,
     }
 
@@ -955,6 +1024,18 @@ def _bounded_batch_max_items(value: int | None) -> int:
     except (TypeError, ValueError):
         return DEFAULT_STRUCTURE_DECISION_BATCH_MAX_ITEMS
     return max(1, min(requested, MAX_STRUCTURE_DECISION_BATCH_ITEMS))
+
+
+def _normalize_timeout_seconds(value: float | None) -> float:
+    if value is None:
+        return DEFAULT_STRUCTURE_DECISION_TIMEOUT_SECONDS
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return DEFAULT_STRUCTURE_DECISION_TIMEOUT_SECONDS
+    if not math.isfinite(parsed) or parsed <= 0:
+        return DEFAULT_STRUCTURE_DECISION_TIMEOUT_SECONDS
+    return parsed
 
 
 def _history_bars(history: Mapping[str, Any]) -> list[Mapping[str, Any]]:

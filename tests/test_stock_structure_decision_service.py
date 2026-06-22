@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from typing import Any
 
 from src.services.stock_structure_decision_service import (
@@ -63,6 +65,25 @@ class _FakeMultiHistoryService:
                 "diagnostics": {"status": "unavailable", "reason": "history_unavailable"},
             },
         )
+
+
+class _BlockingHistoryService:
+    def __init__(self) -> None:
+        self.started = threading.Event()
+        self.release = threading.Event()
+        self.calls: list[dict[str, Any]] = []
+
+    def get_history_data(self, stock_code: str, period: str = "daily", days: int = 30) -> dict[str, Any]:
+        self.calls.append({"stock_code": stock_code, "period": period, "days": days})
+        self.started.set()
+        self.release.wait(timeout=2.0)
+        return {
+            "stock_code": stock_code,
+            "period": "daily",
+            "data": _trend_breakout_history(),
+            "source": "local_db",
+            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 55},
+        }
 
 
 class _FakePeerRepository:
@@ -435,6 +456,51 @@ def test_service_fails_closed_when_history_lookup_raises() -> None:
     assert payload["dataQuality"]["reason"] == "history_lookup_failed"
     assert payload["missingEvidence"][0]["kind"] == "daily_ohlcv"
     assert payload["consumerIssues"][0]["label"] == "Structure evidence unavailable"
+
+
+def test_service_returns_unavailable_when_structure_decision_dependency_exceeds_latency_boundary() -> None:
+    blocking_history = _BlockingHistoryService()
+    service = StockStructureDecisionService(
+        history_service=blocking_history,
+        timeout_seconds=0.01,
+    )
+
+    started_at = time.monotonic()
+    try:
+        payload = service.get_structure_decision("AAPL")
+    finally:
+        blocking_history.release.set()
+    elapsed = time.monotonic() - started_at
+
+    assert blocking_history.started.is_set()
+    assert elapsed < 0.5
+    _assert_required_contract(payload)
+    assert payload["structureState"] == "lowConfidence"
+    assert payload["confidence"] == "low"
+    assert payload["dataQuality"] == {
+        "status": "unavailable",
+        "source": "unavailable",
+        "period": "daily",
+        "requestedDays": 90,
+        "observedBars": 0,
+        "usableBars": 0,
+        "reason": "structure_decision_timeout",
+    }
+    assert payload["missingEvidence"][0] == {
+        "kind": "daily_ohlcv",
+        "message": "Structure decision inputs did not return within the latency boundary.",
+    }
+    assert payload["degradedInputs"][0] == {
+        "section": "structureEvidence",
+        "status": "unavailable",
+        "reason": "structure_decision_timeout",
+    }
+    assert payload["consumerIssues"][0]["label"] == "Structure evidence unavailable"
+    serialized = json.dumps(payload, ensure_ascii=False).lower()
+    assert "traceback" not in serialized
+    assert "exception" not in serialized
+    for forbidden in FORBIDDEN_ADVICE_TOKENS:
+        assert forbidden not in serialized
 
 
 def test_service_fails_closed_before_history_lookup_for_invalid_symbol_format() -> None:
