@@ -438,7 +438,7 @@ describe('ScenarioLabPage', () => {
       selectedScenario: null,
       baselineReadiness: null,
       baselineReadinessSummary: undefined,
-      readinessLabels: [],
+      readinessLabels: undefined,
       whatWouldConfirm: [],
       whatWouldInvalidate: [],
       evidenceLimits: [],

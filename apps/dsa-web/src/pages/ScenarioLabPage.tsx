@@ -355,7 +355,7 @@ function canExportScenarioEvidencePack(result: ScenarioLabResponse | null): resu
   if (!result) {
     return false;
   }
-  if (result.scenarioRegime.status === 'unavailable' || !result.changedDrivers.length) {
+  if (result.scenarioRegime.status === 'unavailable' || !(result.changedDrivers ?? []).length) {
     return false;
   }
   if (result.baselineReadiness?.blocked || result.baselineReadiness?.status === 'blocked') {
@@ -373,15 +373,21 @@ function buildScenarioEvidencePack(result: ScenarioLabResponse, preset: Scenario
   const selectedScenario = result.selectedScenario;
   const baseline = result.baselineReadiness;
   const baselineObservationMode = usesBaselineObservationMode(baseline);
+  const readinessLabels = result.readinessLabels ?? [];
+  const changedDriverKeys = result.changedDrivers ?? [];
+  const driverDeltas = result.driverDeltas ?? {};
+  const scenarioSummary = result.scenarioSummary ?? [];
+  const confirmSignals = result.whatWouldConfirm ?? [];
+  const invalidateSignals = result.whatWouldInvalidate ?? [];
   const assumptions = listOrUnknown(selectedScenario?.inputAssumptions);
   const shocks = (selectedScenario?.expectedDriverImpacts ?? [])
     .map((impact) => sanitizeExpectedDriverImpact(impact, locale))
     .filter((impact) => Object.values(impact).some((value) => value !== EVIDENCE_UNKNOWN));
-  const changedDrivers = result.changedDrivers.map((key) => ({
+  const changedDrivers = changedDriverKeys.map((key) => ({
     driver: labelForDriver(key, locale),
-    delta: formatDelta(result.driverDeltas[key]),
+    delta: formatDelta(driverDeltas[key]),
   }));
-  const summaryLines = listOrUnknown(result.scenarioSummary);
+  const summaryLines = listOrUnknown(scenarioSummary);
   const evidenceLimits = listOrUnknown([
     ...(result.evidenceLimits ?? []),
     ...(selectedScenario?.evidenceLimits ?? []),
@@ -431,7 +437,7 @@ function buildScenarioEvidencePack(result: ScenarioLabResponse, preset: Scenario
     },
     scenarioReadiness: {
       state: formatEvidenceState(result.scenarioRegime.status || result.scenarioRegime.confidence, locale),
-      labels: result.readinessLabels.length ? result.readinessLabels : [EVIDENCE_UNKNOWN],
+      labels: readinessLabels.length ? readinessLabels : [EVIDENCE_UNKNOWN],
       warnings: evidenceLimits,
       observationBoundary: !baselineObservationMode && baseline?.status === 'ready'
         ? (locale === 'en' ? 'reusable baseline' : '可复用基线')
@@ -444,10 +450,10 @@ function buildScenarioEvidencePack(result: ScenarioLabResponse, preset: Scenario
       observationState: baselineObservationMode ? (locale === 'en' ? 'observation only' : '仅观察') : (locale === 'en' ? 'reusable baseline' : '可复用基线'),
     },
     resultCounts: {
-      changedDriverCount: result.changedDrivers.length,
-      scenarioSummaryCount: result.scenarioSummary.length,
-      confirmCount: result.whatWouldConfirm.length,
-      invalidateCount: result.whatWouldInvalidate.length,
+      changedDriverCount: changedDriverKeys.length,
+      scenarioSummaryCount: scenarioSummary.length,
+      confirmCount: confirmSignals.length,
+      invalidateCount: invalidateSignals.length,
     },
     compactResultSummary: {
       baseRegime: localizedRegime(result.baseRegime.regime, locale),
@@ -457,8 +463,8 @@ function buildScenarioEvidencePack(result: ScenarioLabResponse, preset: Scenario
       confidenceDelta: formatDelta(result.confidenceDelta),
       changedDrivers: changedDrivers.length ? changedDrivers : [EVIDENCE_UNKNOWN],
       summary: summaryLines,
-      confirmSignals: listOrUnknown(result.whatWouldConfirm),
-      invalidateSignals: listOrUnknown(result.whatWouldInvalidate),
+      confirmSignals: listOrUnknown(confirmSignals),
+      invalidateSignals: listOrUnknown(invalidateSignals),
     },
   };
 }
@@ -574,7 +580,8 @@ export default function ScenarioLabPage() {
     [cockpit?.marketRegimeDecision?.driverScores, locale],
   );
 
-  const scenarioUnavailable = scenarioResult?.scenarioRegime.status === 'unavailable' || !scenarioResult?.changedDrivers.length;
+  const scenarioChangedDrivers = scenarioResult?.changedDrivers ?? [];
+  const scenarioUnavailable = scenarioResult?.scenarioRegime.status === 'unavailable' || scenarioChangedDrivers.length === 0;
   const scenarioUnavailableCopy = SCENARIO_UNAVAILABLE_COPY[locale];
   const firstReadDriverText = scenarioUnavailable
     ? (locale === 'en' ? 'Scenario pending' : '情景待更新')
@@ -908,7 +915,7 @@ export default function ScenarioLabPage() {
                           {
                             key: 'changed-drivers',
                             label: locale === 'en' ? 'Changed drivers' : '变化驱动',
-                            value: scenarioResult.changedDrivers.length,
+                            value: scenarioChangedDrivers.length,
                           },
                         ]}
                       />

@@ -620,6 +620,9 @@ describe('AppContent route flows', () => {
     ['/research-radar', '/research/radar', 'auth-guard:Research Radar'],
     ['/zh/research-radar', '/zh/research/radar', 'auth-guard:研究雷达'],
     ['/en/research-radar', '/en/research/radar', 'auth-guard:Research Radar'],
+    ['/radar', '/research/radar', 'auth-guard:Research Radar'],
+    ['/zh/radar', '/zh/research/radar', 'auth-guard:研究雷达'],
+    ['/en/radar', '/en/research/radar', 'auth-guard:Research Radar'],
   ])('redirects legacy research IA alias %s to canonical route %s', async (path, expectedPath, expectedText) => {
     renderAtWithLocationProbe(path);
 
@@ -633,6 +636,19 @@ describe('AppContent route flows', () => {
 
     expect(await screen.findByText('stock-structure-decision-page')).toBeInTheDocument();
     expect(screen.getByTestId('location-path')).toHaveTextContent('/stocks/AAPL/structure-decision');
+    expect(screen.queryByText('auth-guard:Stock Structure Panel')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['/stock/AAPL', '/stocks/AAPL/structure-decision'],
+    ['/zh/stock/AAPL', '/zh/stocks/AAPL/structure-decision'],
+    ['/en/stock/AAPL', '/en/stocks/AAPL/structure-decision'],
+  ])('redirects legacy stock route %s to the stock research surface', async (path, expectedPath) => {
+    renderAtWithLocationProbe(path);
+
+    expect(await screen.findByText('stock-structure-decision-page')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(expectedPath));
+    expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
     expect(screen.queryByText('auth-guard:Stock Structure Panel')).not.toBeInTheDocument();
   });
 
@@ -868,6 +884,25 @@ describe('AppContent route flows', () => {
     expect(await screen.findByText(expectedGateText)).toBeInTheDocument();
     expect(screen.getByTestId('location-path')).toHaveTextContent(path);
     expect(screen.queryByText('scanner-surface-page')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['/options-lab', 'options-lab-page'],
+    ['/scenario-lab', 'scenario-lab-page'],
+    ['/backtest', 'backtest-page'],
+    ['/research/radar', 'research-radar-page'],
+    ['/radar', 'research-radar-page'],
+  ])('renders UAT-072 core research route %s first viewport for signed-in users', async (path, expectedText) => {
+    mockSignedInConsumer();
+
+    renderAtWithLocationProbe(path);
+
+    expect(await screen.findByText(expectedText)).toBeInTheDocument();
+    expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
+    expect(screen.queryByText(/auth-guard:/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('shell-admin-primary-nav')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('shell-admin-utility-menu')).not.toBeInTheDocument();
+    expect(document.body.textContent || '').not.toMatch(/provider|runtime|credential|sourceAuthority|debug|requestId|traceId|token|bearer|\b(buy|sell|hold|recommend|winner|target price|stop-loss|position sizing)\b|买入|卖出|持有|推荐|赢家|目标价|止损|仓位|建仓|加仓|减仓/i);
   });
 
   it('redirects legacy /chat guest access to the market overview surface', async () => {
