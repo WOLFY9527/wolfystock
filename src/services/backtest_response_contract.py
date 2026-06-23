@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 BACKTEST_NO_ADVICE_DISCLOSURE = (
     "Research diagnostic only; not personalized financial advice and not an executable instruction."
 )
+BACKTEST_EXECUTION_READINESS_CONTRACT_VERSION = "backtest_execution_readiness_v1"
 
 
 def _clean_text(value: Any) -> Optional[str]:
@@ -92,6 +93,93 @@ def _apply_sufficiency_contract(
     return data_status, calculation_status, sample_status
 
 
+def _reason_codes(payload: Dict[str, Any], data_sufficiency: Dict[str, Any]) -> List[str]:
+    reasons: List[str] = []
+    for value in data_sufficiency.get("missing_requirements") or []:
+        _append_unique(reasons, value)
+    for value in data_sufficiency.get("blocked_reasons") or []:
+        _append_unique(reasons, value)
+    for value in data_sufficiency.get("degraded_reasons") or []:
+        _append_unique(reasons, value)
+    _append_unique(reasons, payload.get("no_result_reason"))
+    return reasons
+
+
+def build_execution_readiness_contract(
+    payload: Dict[str, Any],
+    *,
+    data_status: Optional[str] = None,
+    calculation_status: Optional[str] = None,
+    sample_status: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Return a compact consumer-safe execution readiness projection."""
+
+    data_sufficiency = _data_sufficiency(payload)
+    input_states = data_sufficiency.get("input_states") if isinstance(data_sufficiency.get("input_states"), dict) else {}
+    reason_codes = _reason_codes(payload, data_sufficiency)
+    no_result_reason = str(payload.get("no_result_reason") or "").strip().lower()
+    engine_state = str(payload.get("engine_state") or "").strip().lower()
+    data_status = str(data_status or payload.get("data_status") or "").strip().lower()
+    calculation_status = str(calculation_status or payload.get("calculation_status") or "").strip().lower()
+    sample_status = str(sample_status or payload.get("sample_status") or "").strip().lower()
+    benchmark_state = str(input_states.get("benchmark") or "").strip().lower() or (
+        "missing" if "missing_benchmark" in reason_codes else "not_requested"
+    )
+
+    if engine_state == "disabled" or no_result_reason == "engine_disabled":
+        state = "engine_disabled"
+        result_contract_available = False
+        engine_state = "disabled"
+    elif no_result_reason in {"no_analysis_history", "no_samples", "no_samples_prepared"} or "samples_missing" in reason_codes:
+        state = "no_samples"
+        result_contract_available = False
+        engine_state = engine_state or "enabled"
+    elif any(item in reason_codes for item in ("provider_missing", "entitlement_required")):
+        state = "data_disabled"
+        result_contract_available = False
+        engine_state = engine_state or "enabled"
+    elif "insufficient_history" in reason_codes or no_result_reason in {"insufficient_history", "insufficient_data"}:
+        state = "data_insufficient"
+        result_contract_available = False
+        engine_state = engine_state or "enabled"
+    elif calculation_status == "ready":
+        degraded = [
+            item
+            for item in reason_codes
+            if item in {"missing_benchmark", "missing_adjustments", "stale_data", "missing_factor_inputs"}
+        ]
+        state = "degraded" if degraded else "executable"
+        result_contract_available = True
+        engine_state = engine_state or "enabled"
+    elif data_sufficiency.get("calculation_state") == "degraded":
+        state = "degraded"
+        result_contract_available = True
+        engine_state = engine_state or "enabled"
+    elif calculation_status in {"insufficient_sample", "data_unavailable"}:
+        state = "data_insufficient"
+        result_contract_available = False
+        engine_state = engine_state or "enabled"
+    else:
+        state = "calculation_unavailable"
+        result_contract_available = False
+        engine_state = engine_state or "enabled"
+
+    return {
+        "contract_version": BACKTEST_EXECUTION_READINESS_CONTRACT_VERSION,
+        "state": state,
+        "result_contract_available": result_contract_available,
+        "engine_state": engine_state,
+        "data_status": data_status or "unknown",
+        "calculation_status": calculation_status or "unknown",
+        "sample_status": sample_status or "unknown",
+        "benchmark_state": benchmark_state or "unknown",
+        "reason_codes": reason_codes,
+        "observation_only": True,
+        "consumer_safe": True,
+        "no_advice_disclosure": BACKTEST_NO_ADVICE_DISCLOSURE,
+    }
+
+
 def _status_contract(
     *,
     data_status: str,
@@ -100,6 +188,7 @@ def _status_contract(
     source_window: Optional[Dict[str, Any]] = None,
     as_of: Optional[str] = None,
     limitations: Optional[List[str]] = None,
+    execution_readiness: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     return {
         "data_status": data_status,
@@ -108,6 +197,7 @@ def _status_contract(
         "source_window": dict(source_window or {}),
         "as_of": as_of,
         "limitations": list(limitations or []),
+        "execution_readiness": dict(execution_readiness or {}),
         "no_advice_disclosure": BACKTEST_NO_ADVICE_DISCLOSURE,
     }
 
@@ -164,6 +254,12 @@ def build_performance_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
         source_window={key: value for key, value in source_window.items() if value is not None},
         as_of=computed_at,
         limitations=limitations,
+        execution_readiness=build_execution_readiness_contract(
+            payload,
+            data_status=data_status,
+            calculation_status=calculation_status,
+            sample_status=sample_status,
+        ),
     )
 
 
@@ -182,7 +278,13 @@ def build_standard_run_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
     _append_unique(limitations, payload.get("no_result_message"))
     _append_unique(limitations, payload.get("excluded_recent_message"))
 
-    if processed <= 0:
+    no_result_reason = str(payload.get("no_result_reason") or "").strip().lower()
+    if no_result_reason == "engine_disabled":
+        data_status = "engine_disabled"
+        calculation_status = "engine_disabled"
+        sample_status = "engine_disabled"
+        limitations.append("Backtest engine is disabled; no result contract was produced.")
+    elif processed <= 0:
         data_status = "data_unavailable"
         calculation_status = "calculation_unavailable"
         sample_status = "data_unavailable"
@@ -219,6 +321,12 @@ def build_standard_run_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
         source_window={key: value for key, value in source_window.items() if value is not None},
         as_of=_clean_text(payload.get("run_at") or payload.get("completed_at")),
         limitations=limitations,
+        execution_readiness=build_execution_readiness_contract(
+            payload,
+            data_status=data_status,
+            calculation_status=calculation_status,
+            sample_status=sample_status,
+        ),
     )
 
 
@@ -278,6 +386,12 @@ def build_standard_result_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
         },
         as_of=_clean_text(payload.get("evaluated_at")),
         limitations=limitations,
+        execution_readiness=build_execution_readiness_contract(
+            payload,
+            data_status=data_status,
+            calculation_status=calculation_status,
+            sample_status=sample_status,
+        ),
     )
 
 
@@ -360,4 +474,10 @@ def build_rule_run_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
         source_window={key: value for key, value in source_window.items() if value is not None},
         as_of=_clean_text(payload.get("completed_at") or payload.get("run_at")),
         limitations=limitations,
+        execution_readiness=build_execution_readiness_contract(
+            payload,
+            data_status=data_status,
+            calculation_status=calculation_status,
+            sample_status=sample_status,
+        ),
     )

@@ -16,6 +16,7 @@ from src.core.backtest_engine import OVERALL_SENTINEL_CODE, BacktestEngine, Eval
 from src.repositories.backtest_repo import BacktestRepository
 from src.repositories.stock_repo import StockRepository
 from src.services.backtest_response_contract import (
+    build_execution_readiness_contract,
     build_performance_contract,
     build_standard_result_contract,
     build_standard_run_contract,
@@ -87,6 +88,12 @@ class BacktestService:
             eval_window_days=eval_window_days,
             min_age_days=min_age_days,
         )
+        if not bool(getattr(config, "backtest_enabled", True)):
+            return self._engine_disabled_run_payload(
+                code=code,
+                force=force,
+                settings=settings,
+            )
         cutoff_dt = datetime.now() - timedelta(days=settings.min_age_days)
         run_at = datetime.now()
         resolved_owner_id = self.db.require_user_id(self.owner_id)
@@ -422,6 +429,8 @@ class BacktestService:
 
     def get_sample_status(self, *, code: Optional[str]) -> Dict[str, Any]:
         settings = self._resolve_runtime_settings()
+        if not self._backtest_engine_enabled():
+            return self._engine_disabled_sample_status(code=code, settings=settings)
         if not str(code or "").strip():
             return self._get_aggregate_sample_status(settings=settings)
         rows = self.repo.get_sample_rows(code=code, **self._owner_kwargs())
@@ -474,6 +483,11 @@ class BacktestService:
             "pricing_fallback_used": source_metadata.fallback_used,
             "sample_readiness_state": sample_state,
             "sample_blocking_reasons": sample_reasons,
+            "execution_readiness": self._sample_execution_readiness(
+                sample_state=sample_state,
+                sample_reasons=sample_reasons,
+                ohlcv_readiness=ohlcv_readiness,
+            ),
             "historicalOhlcvReadiness": ohlcv_readiness,
         }
 
@@ -557,6 +571,12 @@ class BacktestService:
             eval_window_days=eval_window_days,
             min_age_days=min_age_days,
         )
+        if not self._backtest_engine_enabled():
+            return self._engine_disabled_prepare_payload(
+                code=normalized_code,
+                sample_count=sample_count,
+                settings=settings,
+            )
         sample_count = max(1, int(sample_count))
 
         market_rows_saved, warmup_source_metadata = self._ensure_market_history(
@@ -575,6 +595,16 @@ class BacktestService:
                 runtime_sources=["DatabaseCache"] if rows else [],
                 fallback_used=False,
             )
+            ohlcv_readiness = self._build_historical_ohlcv_readiness(
+                code=normalized_code,
+                rows=rows,
+                required_bars=settings.eval_window_days,
+            )
+            sample_state, sample_reasons = self._sample_readiness_from_inputs(
+                prepared_count=0,
+                ohlcv_readiness=ohlcv_readiness,
+                sample_observability={},
+            )
             return {
                 "code": normalized_code,
                 "sample_count": sample_count,
@@ -589,6 +619,13 @@ class BacktestService:
                 "requested_mode": source_metadata.requested_mode,
                 "resolved_source": source_metadata.resolved_source,
                 "fallback_used": source_metadata.fallback_used,
+                "pricing_resolved_source": source_metadata.resolved_source,
+                "pricing_fallback_used": source_metadata.fallback_used,
+                "execution_readiness": self._sample_execution_readiness(
+                    sample_state=sample_state,
+                    sample_reasons=sample_reasons,
+                    ohlcv_readiness=ohlcv_readiness,
+                ),
             }
 
         selected_rows = candidate_rows[-sample_count:]
@@ -668,6 +705,16 @@ class BacktestService:
             sample_rows=self.repo.get_sample_rows(code=normalized_code, **self._owner_kwargs()),
             stock_rows=rows,
         )
+        ohlcv_readiness = self._build_historical_ohlcv_readiness(
+            code=normalized_code,
+            rows=rows,
+            required_bars=settings.eval_window_days,
+        )
+        sample_state, sample_reasons = self._sample_readiness_from_inputs(
+            prepared_count=prepared + skipped_existing,
+            ohlcv_readiness=ohlcv_readiness,
+            sample_observability=sample_observability,
+        )
 
         return {
             "code": normalized_code,
@@ -698,6 +745,11 @@ class BacktestService:
             "fallback_used": source_metadata.fallback_used,
             "pricing_resolved_source": source_metadata.resolved_source,
             "pricing_fallback_used": source_metadata.fallback_used,
+            "execution_readiness": self._sample_execution_readiness(
+                sample_state=sample_state,
+                sample_reasons=sample_reasons,
+                ohlcv_readiness=ohlcv_readiness,
+            ),
         }
 
     @staticmethod
@@ -731,6 +783,132 @@ class BacktestService:
             engine_version=str(getattr(resolved_config, "backtest_engine_version", "v1")),
             neutral_band_pct=float(getattr(resolved_config, "backtest_neutral_band_pct", 2.0)),
         )
+
+    @staticmethod
+    def _backtest_engine_enabled() -> bool:
+        return bool(getattr(get_config(), "backtest_enabled", True))
+
+    def _engine_disabled_run_payload(
+        self,
+        *,
+        code: Optional[str],
+        force: bool,
+        settings: BacktestRuntimeSettings,
+    ) -> Dict[str, Any]:
+        payload = {
+            "run_id": None,
+            "run_at": datetime.now().isoformat(),
+            "processed": 0,
+            "saved": 0,
+            "completed": 0,
+            "insufficient": 0,
+            "errors": 0,
+            "candidate_count": 0,
+            "no_result_reason": "engine_disabled",
+            "no_result_message": "Backtest engine is disabled by configuration; no samples or results were evaluated.",
+            "latest_prepared_sample_date": None,
+            "latest_eligible_sample_date": None,
+            "excluded_recent_reason": None,
+            "excluded_recent_message": None,
+            "evaluation_mode": "engine_disabled",
+            "evaluation_window_trading_bars": settings.eval_window_days,
+            "maturity_calendar_days": settings.min_age_days,
+            "requested_mode": self._requested_mode_for_code(code),
+            "resolved_source": "engine_disabled",
+            "fallback_used": False,
+            "pricing_resolved_source": "engine_disabled",
+            "pricing_fallback_used": False,
+            "execution_assumptions": self._signal_evaluation_assumptions(),
+            "engine_state": "disabled",
+            "force": bool(force),
+        }
+        payload.update(build_standard_run_contract(payload))
+        return payload
+
+    def _engine_disabled_prepare_payload(
+        self,
+        *,
+        code: str,
+        sample_count: int,
+        settings: BacktestRuntimeSettings,
+    ) -> Dict[str, Any]:
+        return {
+            "code": code,
+            "sample_count": max(1, int(sample_count)),
+            "prepared": 0,
+            "skipped_existing": 0,
+            "market_rows_saved": 0,
+            "candidate_rows": 0,
+            "eval_window_days": settings.eval_window_days,
+            "min_age_days": settings.min_age_days,
+            "no_result_reason": "engine_disabled",
+            "no_result_message": "Backtest engine is disabled by configuration; no samples were prepared.",
+            "evaluation_window_trading_bars": settings.eval_window_days,
+            "maturity_calendar_days": settings.min_age_days,
+            "requested_mode": self._requested_mode_for_code(code),
+            "resolved_source": "engine_disabled",
+            "fallback_used": False,
+            "pricing_resolved_source": "engine_disabled",
+            "pricing_fallback_used": False,
+            "execution_readiness": build_execution_readiness_contract(
+                {"engine_state": "disabled", "no_result_reason": "engine_disabled"},
+                data_status="engine_disabled",
+                calculation_status="engine_disabled",
+                sample_status="engine_disabled",
+            ),
+        }
+
+    def _engine_disabled_sample_status(
+        self,
+        *,
+        code: Optional[str],
+        settings: BacktestRuntimeSettings,
+    ) -> Dict[str, Any]:
+        normalized_code = str(code or "").strip()
+        scope = "single" if normalized_code else "aggregate"
+        display_code = normalized_code or "__all__"
+        readiness = HistoricalOhlcvReadinessService().assess_supplied_history(
+            HistoricalOhlcvReadinessRequest(
+                symbol=display_code,
+                market="unknown",
+                timeframe="1d",
+                lookback_bars=settings.eval_window_days,
+                required_bars=settings.eval_window_days,
+            ),
+            [],
+            source_available=False,
+            unavailable_reason="provider_missing",
+        ).readiness
+        return {
+            "code": display_code,
+            "scope": scope,
+            "prepared_count": 0,
+            "prepared_start_date": None,
+            "prepared_end_date": None,
+            "latest_prepared_at": None,
+            "latest_prepared_sample_date": None,
+            "latest_eligible_sample_date": None,
+            "excluded_recent_reason": "engine_disabled",
+            "excluded_recent_message": "Backtest engine is disabled by configuration.",
+            "eval_window_days": settings.eval_window_days,
+            "min_age_days": settings.min_age_days,
+            "evaluation_window_trading_bars": settings.eval_window_days,
+            "maturity_calendar_days": settings.min_age_days,
+            "requested_mode": self._requested_mode_for_code(normalized_code),
+            "resolved_source": "engine_disabled",
+            "fallback_used": False,
+            "pricing_resolved_source": "engine_disabled",
+            "pricing_fallback_used": False,
+            "sample_readiness_state": "engine_disabled",
+            "sample_blocking_reasons": ["engine_disabled"],
+            "execution_readiness": build_execution_readiness_contract(
+                {"engine_state": "disabled", "no_result_reason": "engine_disabled"},
+                data_status="engine_disabled",
+                calculation_status="engine_disabled",
+                sample_status="engine_disabled",
+            ),
+            "historicalOhlcvReadiness": readiness,
+        }
 
     @staticmethod
     def _resolve_run_no_result(
@@ -983,6 +1161,51 @@ class BacktestService:
             return "stale" if "stale_data" in deduped or "stale_or_incomplete_sample_window" in deduped else "blocked", deduped
         return "ready", deduped
 
+    @staticmethod
+    def _sample_execution_readiness(
+        *,
+        sample_state: str,
+        sample_reasons: List[str],
+        ohlcv_readiness: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        reasons = [str(item) for item in sample_reasons if str(item or "").strip()]
+        no_result_reason = "insufficient_history" if "insufficient_history" in reasons else None
+        data_sufficiency = assess_backtest_data_sufficiency(
+            {
+                "no_result_reason": no_result_reason,
+                "data_quality": {"historicalOhlcvReadiness": ohlcv_readiness},
+            }
+        )
+        if sample_state == "ready":
+            data_status = "ready"
+            calculation_status = "ready"
+            sample_status = "ready"
+        elif any(item in reasons for item in ("provider_missing", "entitlement_required")):
+            data_status = "provider_missing" if "provider_missing" in reasons else "entitlement_required"
+            calculation_status = "calculation_unavailable"
+            sample_status = data_status
+        elif "insufficient_history" in reasons:
+            data_status = "data_unavailable"
+            calculation_status = "insufficient_sample"
+            sample_status = "insufficient_sample"
+        elif sample_state == "missing":
+            data_status = "data_unavailable"
+            calculation_status = "calculation_unavailable"
+            sample_status = "data_unavailable"
+        else:
+            data_status = sample_state or "unknown"
+            calculation_status = "degraded"
+            sample_status = sample_state or "unknown"
+        return build_execution_readiness_contract(
+            {
+                "no_result_reason": no_result_reason,
+                "data_sufficiency": data_sufficiency,
+            },
+            data_status=data_status,
+            calculation_status=calculation_status,
+            sample_status=sample_status,
+        )
+
     def _get_aggregate_sample_status(self, *, settings: BacktestRuntimeSettings) -> Dict[str, Any]:
         with self.db.get_session() as session:
             rows = session.execute(
@@ -1040,6 +1263,11 @@ class BacktestService:
             "pricing_fallback_used": False,
             "sample_readiness_state": state,
             "sample_blocking_reasons": reasons,
+            "execution_readiness": self._sample_execution_readiness(
+                sample_state=state,
+                sample_reasons=reasons,
+                ohlcv_readiness=readiness,
+            ),
             "historicalOhlcvReadiness": readiness,
         }
 

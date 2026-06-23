@@ -1454,6 +1454,10 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(response["data_status"], "provider_missing")
         self.assertEqual(response["calculation_status"], "calculation_unavailable")
         self.assertEqual(response["sample_status"], "provider_missing")
+        self.assertEqual(response["execution_readiness"]["state"], "data_disabled")
+        self.assertFalse(response["execution_readiness"]["result_contract_available"])
+        self.assertIn("provider_missing", response["execution_readiness"]["reason_codes"])
+        self.assertIn("insufficient_history", response["execution_readiness"]["reason_codes"])
         self.assertEqual(response["source_window"]["requested_start"], "2024-01-01")
         self.assertEqual(response["source_window"]["requested_end"], "2024-01-31")
         self.assertTrue(response["limitations"])
@@ -1778,7 +1782,16 @@ class RuleBacktestTestCase(unittest.TestCase):
             )
 
         self.assertEqual(response["total_return_pct"], baseline["total_return_pct"])
+        self.assertIsNone(response["benchmark_return_pct"])
+        self.assertIsNone(response["excess_return_vs_benchmark_pct"])
+        self.assertEqual(response["data_sufficiency"]["status"], "missing_benchmark")
+        self.assertEqual(response["data_sufficiency"]["input_states"]["benchmark"], "missing")
+        self.assertEqual(response["execution_readiness"]["state"], "degraded")
+        self.assertEqual(response["execution_readiness"]["benchmark_state"], "missing")
+        self.assertTrue(response["execution_readiness"]["result_contract_available"])
+        self.assertIn("missing_benchmark", response["execution_readiness"]["reason_codes"])
         self.assertTrue(any(warning["code"] == "benchmark_data_missing" for warning in response["data_quality"]["warnings"]))
+        self._assert_public_backtest_text_is_analytical(json.dumps(response, ensure_ascii=False, sort_keys=True))
 
     def test_service_run_backtest_fetches_missing_us_history_via_shared_local_first_helper(self) -> None:
         self._allow_market_history_fetch()
