@@ -440,6 +440,127 @@ class OptionsChainReadiness(_OptionsModel):
     next_evidence_needed: List[str] = Field(default_factory=list, alias="nextEvidenceNeeded")
 
 
+OptionsStructureAvailabilityState = Literal["available", "degraded", "not_available"]
+OptionsStructureCalculationState = Literal["available", "degraded", "not_available"]
+OptionsStructureBucketState = Literal["available", "not_available"]
+
+
+class OptionContractStructureRow(_OptionsModel):
+    contract_version: str = Field(default="option-contract-structure-row-v1", alias="contractVersion")
+    contract_symbol: str = Field(alias="contractSymbol")
+    side: Literal["call", "put"]
+    expiration: str
+    strike: float
+    multiplier: Optional[int] = 100
+    open_interest: Optional[int] = Field(default=None, alias="openInterest")
+    volume: Optional[int] = None
+    implied_volatility: Optional[float] = Field(default=None, alias="impliedVolatility")
+    delta: Optional[float] = None
+    gamma: Optional[float] = None
+    vega: Optional[float] = None
+    theta: Optional[float] = None
+    charm: Optional[float] = None
+    vanna: Optional[float] = None
+    dealer_gamma_exposure: Optional[float] = Field(default=None, alias="dealerGammaExposure")
+    as_of: Optional[str] = Field(default=None, alias="asOf")
+    freshness: str = "unknown"
+    missing_inputs: List[str] = Field(default_factory=list, alias="missingInputs")
+
+
+class OptionChainSnapshot(_OptionsModel):
+    contract_version: str = Field(default="option-chain-snapshot-v1", alias="contractVersion")
+    symbol: str
+    spot_price: Optional[float] = Field(default=None, alias="spotPrice")
+    as_of: Optional[str] = Field(default=None, alias="asOf")
+    freshness: str = "unknown"
+    contracts: List[OptionContractStructureRow] = Field(default_factory=list)
+    missing_inputs: List[str] = Field(default_factory=list, alias="missingInputs")
+
+
+class OptionsNearestExpirationBucket(_OptionsModel):
+    expiration: str
+    dte: Optional[int] = None
+    contract_count: int = Field(default=0, alias="contractCount")
+
+
+class OptionsZeroDteConcentration(_OptionsModel):
+    state: OptionsStructureBucketState
+    expiration: Optional[str] = None
+    dte: Optional[int] = None
+    contract_count: int = Field(default=0, alias="contractCount")
+    call_open_interest: int = Field(default=0, alias="callOpenInterest")
+    put_open_interest: int = Field(default=0, alias="putOpenInterest")
+    call_volume: int = Field(default=0, alias="callVolume")
+    put_volume: int = Field(default=0, alias="putVolume")
+    open_interest_share: Optional[float] = Field(default=None, alias="openInterestShare")
+    volume_share: Optional[float] = Field(default=None, alias="volumeShare")
+
+
+class OptionsGammaFlipLevel(_OptionsModel):
+    state: OptionsStructureBucketState = "not_available"
+    level: Optional[float] = None
+    reason: str = "gamma_flip_requires_authorized_methodology"
+
+
+class OptionsStrikeExposureSummary(_OptionsModel):
+    strike: float
+    expiration: Optional[str] = None
+    contract_count: int = Field(default=0, alias="contractCount")
+    call_open_interest: int = Field(default=0, alias="callOpenInterest")
+    put_open_interest: int = Field(default=0, alias="putOpenInterest")
+    call_volume: int = Field(default=0, alias="callVolume")
+    put_volume: int = Field(default=0, alias="putVolume")
+    call_dealer_gamma_exposure: Optional[float] = Field(default=None, alias="callDealerGammaExposure")
+    put_dealer_gamma_exposure: Optional[float] = Field(default=None, alias="putDealerGammaExposure")
+    net_dealer_gamma_exposure: Optional[float] = Field(default=None, alias="netDealerGammaExposure")
+    calculation_state: OptionsStructureCalculationState = Field(alias="calculationState")
+    missing_inputs: List[str] = Field(default_factory=list, alias="missingInputs")
+
+
+class OptionsExpirationExposureSummary(_OptionsModel):
+    expiration: str
+    dte: Optional[int] = None
+    is_zero_dte: bool = Field(default=False, alias="isZeroDte")
+    strike_count: int = Field(default=0, alias="strikeCount")
+    contract_count: int = Field(default=0, alias="contractCount")
+    call_open_interest: int = Field(default=0, alias="callOpenInterest")
+    put_open_interest: int = Field(default=0, alias="putOpenInterest")
+    call_volume: int = Field(default=0, alias="callVolume")
+    put_volume: int = Field(default=0, alias="putVolume")
+    net_dealer_gamma_exposure: Optional[float] = Field(default=None, alias="netDealerGammaExposure")
+    calculation_state: OptionsStructureCalculationState = Field(alias="calculationState")
+    missing_inputs: List[str] = Field(default_factory=list, alias="missingInputs")
+
+
+class OptionsStructureSummary(_OptionsModel):
+    contract_version: str = Field(default="options-structure-summary-v1", alias="contractVersion")
+    symbol: str
+    status: OptionsStructureAvailabilityState
+    calculation_state: OptionsStructureCalculationState = Field(alias="calculationState")
+    observation_only: bool = Field(default=True, alias="observationOnly")
+    decision_grade: bool = Field(default=False, alias="decisionGrade")
+    provider_configured: bool = Field(default=False, alias="providerConfigured")
+    spot_price: Optional[float] = Field(default=None, alias="spotPrice")
+    as_of: Optional[str] = Field(default=None, alias="asOf")
+    freshness: str = "unknown"
+    snapshot: OptionChainSnapshot
+    strike_summaries: List[OptionsStrikeExposureSummary] = Field(default_factory=list, alias="strikeSummaries")
+    expiration_summaries: List[OptionsExpirationExposureSummary] = Field(
+        default_factory=list,
+        alias="expirationSummaries",
+    )
+    nearest_expirations: List[OptionsNearestExpirationBucket] = Field(
+        default_factory=list,
+        alias="nearestExpirations",
+    )
+    zero_dte: OptionsZeroDteConcentration = Field(alias="zeroDte")
+    gamma_flip_level: OptionsGammaFlipLevel = Field(default_factory=OptionsGammaFlipLevel, alias="gammaFlipLevel")
+    total_dealer_gamma_exposure: Optional[float] = Field(default=None, alias="totalDealerGammaExposure")
+    blocking_reasons: List[str] = Field(default_factory=list, alias="blockingReasons")
+    warnings: List[str] = Field(default_factory=list)
+    next_evidence_needed: List[str] = Field(default_factory=list, alias="nextEvidenceNeeded")
+
+
 def _dedupe_codes(values: List[str]) -> List[str]:
     seen: set[str] = set()
     ordered: List[str] = []
