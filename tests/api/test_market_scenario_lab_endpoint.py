@@ -289,14 +289,14 @@ def test_market_scenario_lab_route_is_exposed() -> None:
     app.include_router(market.router, prefix="/api/v1/market")
     routes = {
         (method, route.path)
-        for route in app.routes
+        for route in market.router.routes
         if hasattr(route, "methods")
         for method in (route.methods or set())
         if method not in {"HEAD", "OPTIONS"}
     }
 
-    assert [route for route in routes if route == ("POST", "/api/v1/market/scenario-lab")] == [
-        ("POST", "/api/v1/market/scenario-lab")
+    assert [route for route in routes if route == ("POST", "/scenario-lab")] == [
+        ("POST", "/scenario-lab")
     ]
 
 
@@ -321,6 +321,7 @@ def test_market_scenario_lab_accepts_base_regime_and_named_scenario_without_muta
         "scenarioPresets",
         "baseMarketContext",
         "baselineReadiness",
+        "scenarioBaselineSnapshot",
         "baseRegime",
         "scenarioRegime",
         "scenarioOutput",
@@ -365,6 +366,8 @@ def test_market_scenario_lab_accepts_base_regime_and_named_scenario_without_muta
     assert payload["baselineReadiness"]["dataState"] == "request_supplied"
     assert payload["baselineReadiness"]["scoreAuthority"] == "observation_only"
     assert payload["baselineReadiness"]["observationOnly"] is True
+    assert payload["scenarioBaselineSnapshot"]["status"] == "not_available"
+    assert payload["scenarioBaselineSnapshot"]["reasonCode"] == "baseline_missing"
     assert payload["baseRegime"]["regime"] == "riskOn"
     assert payload["scenarioRegime"]["regime"] in {"mixed", "riskOff", "downsideAccelerationRisk"}
     assert payload["scenarioOutput"]["scenarioRegime"] == payload["scenarioRegime"]
@@ -452,6 +455,8 @@ def test_market_scenario_lab_fails_closed_when_required_base_evidence_is_missing
     assert payload["baselineReadiness"]["driverInputs"]["state"] == "missing"
     assert payload["baselineReadiness"]["dataState"] == "unavailable"
     assert payload["baselineReadiness"]["scoreAuthority"] == "observation_only"
+    assert payload["scenarioBaselineSnapshot"]["status"] == "not_available"
+    assert payload["scenarioBaselineSnapshot"]["reasonCode"] == "baseline_missing"
     assert payload["observationOnly"] is True
     assert payload["decisionGrade"] is False
     assert payload["selectedScenario"]["name"] == "liquidityStress"
@@ -561,6 +566,71 @@ def test_market_scenario_lab_marks_stale_baseline_readiness_as_partial() -> None
     assert readiness["evidenceCompleteness"]["state"] == "partial"
     assert readiness["scoreAuthority"] == "observation_only"
     assert "baselineSnapshot" in readiness["affectedBaselineComponents"]
+
+
+def test_market_scenario_lab_exposes_consumer_safe_baseline_snapshot_without_internal_markers() -> None:
+    base = _ready_base_regime()
+    base["scenarioBaselineSnapshot"] = {
+        "snapshotId": "baseline-api-redaction",
+        "scope": {"type": "symbol", "value": "MSFT"},
+        "createdAt": "2026-06-15T09:30:00Z",
+        "source": {
+            "providerClass": "InternalProvider",
+            "providerName": "secret-provider",
+            "apiKey": "secret",
+            "env": "LOCAL_ENV",
+            "token": "secret-token",
+            "credential": "secret-credential",
+            "requestId": "req-1",
+            "traceId": "trace-1",
+            "cacheKey": "cache-key",
+            "rawPayload": {"price": 123.45},
+            "exceptionClass": "ProviderError",
+            "exceptionChain": ["boom"],
+            "freshness": "fresh",
+        },
+        "categories": {
+            "price": {"state": "available"},
+            "volatility": {"state": "degraded"},
+        },
+        "labels": ["providerName must not leak", "Safe baseline"],
+        "notes": "traceId providerClass rawPayload token must not leak.",
+    }
+
+    response = _client().post(
+        "/api/v1/market/scenario-lab",
+        json={
+            "baseRegime": base,
+            "scenarioName": "riskOnConfirmation",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    snapshot = payload["scenarioBaselineSnapshot"]
+    assert snapshot["snapshotId"] == "baseline-api-redaction"
+    assert snapshot["scope"] == {"type": "symbol", "value": "MSFT"}
+    assert snapshot["availableDataCategories"] == ["market_price"]
+    assert snapshot["degradedDataCategories"] == ["volatility"]
+    assert snapshot["labels"] == ["Safe baseline"]
+    assert snapshot["notes"] == "Baseline snapshot note omitted."
+    serialized = json.dumps(snapshot, ensure_ascii=False, sort_keys=True)
+    for marker in (
+        "providerClass",
+        "providerName",
+        "apiKey",
+        "env",
+        "token",
+        "credential",
+        "requestId",
+        "traceId",
+        "cacheKey",
+        "rawPayload",
+        "exceptionClass",
+        "exceptionChain",
+    ):
+        assert marker not in serialized
+        assert marker.lower() not in serialized.lower()
 
 
 def test_market_scenario_lab_rejects_unsupported_named_scenario() -> None:

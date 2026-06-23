@@ -12,6 +12,7 @@ from copy import deepcopy
 from typing import Any, Mapping, Sequence
 
 from src.services.consumer_issue_labels import build_consumer_issues
+from src.services.scenario_baseline_snapshot_service import ScenarioBaselineSnapshotService
 
 
 SCHEMA_VERSION = "market_scenario_lab_engine.v1"
@@ -384,6 +385,7 @@ class MarketScenarioLabEngine:
             "scenarioPresets": _scenario_presets(),
             "baseMarketContext": _base_market_context(base),
             "baselineReadiness": baseline_readiness,
+            "scenarioBaselineSnapshot": _scenario_baseline_snapshot(base),
             "baseRegime": {
                 "regime": base["regime"],
                 "confidence": base["confidence"],
@@ -466,6 +468,7 @@ def _base_from_inputs(
         "baselineSnapshot": _mapping_or_empty(
             decision.get("baselineSnapshot") or decision.get("baselineMarketSnapshot") or decision.get("snapshot")
         ),
+        "scenarioBaselineSnapshot": _scenario_baseline_snapshot_input(decision),
         "marketFrame": _mapping_or_empty(decision.get("marketFrame") or decision.get("currentMarketFrame")),
         "lastUpdated": _first_text(
             decision.get("lastUpdated"),
@@ -821,6 +824,30 @@ def _contract_status_payload(*, state: str, label: str, message: str) -> dict[st
     }
 
 
+def _scenario_baseline_snapshot_input(decision: Mapping[str, Any]) -> dict[str, Any]:
+    for key in ("scenarioBaselineSnapshot", "scenario_baseline_snapshot"):
+        value = decision.get(key)
+        if isinstance(value, Mapping):
+            return dict(value)
+    baseline_snapshot = decision.get("baselineSnapshot")
+    if isinstance(baseline_snapshot, Mapping) and (
+        baseline_snapshot.get("snapshotId")
+        or baseline_snapshot.get("snapshot_id")
+        or baseline_snapshot.get("categories")
+        or baseline_snapshot.get("dataCategories")
+    ):
+        return dict(baseline_snapshot)
+    return {}
+
+
+def _scenario_baseline_snapshot(base: Mapping[str, Any]) -> dict[str, Any]:
+    service = ScenarioBaselineSnapshotService()
+    snapshot_input = base.get("scenarioBaselineSnapshot")
+    if isinstance(snapshot_input, Mapping) and snapshot_input:
+        return service.create_snapshot(snapshot_input)
+    return service.missing_snapshot(scope={"type": "market", "value": "US"})
+
+
 def _unavailable_payload(
     base: Mapping[str, Any],
     scenario: Mapping[str, Any],
@@ -848,6 +875,7 @@ def _unavailable_payload(
             evidence_limits=evidence_limits,
             fixture_source_class=fixture_source_class,
         ),
+        "scenarioBaselineSnapshot": _scenario_baseline_snapshot(base),
         "baseRegime": {
             "regime": base["regime"],
             "confidence": base["confidence"],

@@ -355,6 +355,7 @@ def test_volatility_spike_scenario_reclassifies_base_decision_without_mutating_i
         "scenarioPresets",
         "baseMarketContext",
         "baselineReadiness",
+        "scenarioBaselineSnapshot",
         "baseRegime",
         "scenarioRegime",
         "scenarioOutput",
@@ -399,6 +400,8 @@ def test_volatility_spike_scenario_reclassifies_base_decision_without_mutating_i
     assert payload["baselineReadiness"]["evidenceCompleteness"]["state"] == "blocked"
     assert payload["baselineReadiness"]["scoreAuthority"] == "observation_only"
     assert payload["baselineReadiness"]["observationOnly"] is True
+    assert payload["scenarioBaselineSnapshot"]["status"] == "not_available"
+    assert payload["scenarioBaselineSnapshot"]["reasonCode"] == "baseline_missing"
     assert "baselineSnapshot" in payload["baselineReadiness"]["evidenceGaps"]
     assert "dealerGamma" in payload["baselineReadiness"]["affectedDriverKeys"]
     assert payload["baseRegime"] == {"regime": "riskOn", "confidence": "medium", "confidenceScore": 0.68}
@@ -504,6 +507,8 @@ def test_missing_base_evidence_returns_degraded_unavailable_payload() -> None:
     assert payload["baselineReadiness"]["evidenceCompleteness"]["state"] == "blocked"
     assert payload["baselineReadiness"]["dataState"] == "unavailable"
     assert payload["baselineReadiness"]["scoreAuthority"] == "observation_only"
+    assert payload["scenarioBaselineSnapshot"]["status"] == "not_available"
+    assert payload["scenarioBaselineSnapshot"]["reasonCode"] == "baseline_missing"
     assert payload["observationOnly"] is True
     assert payload["decisionGrade"] is False
     assert payload["selectedScenario"]["name"] == "riskOnConfirmation"
