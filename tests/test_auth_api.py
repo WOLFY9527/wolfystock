@@ -199,6 +199,73 @@ class AuthApiTestCase(unittest.TestCase):
         self.assertFalse(me_response["isAdmin"])
         self.assertTrue(me_response["isAuthenticated"])
 
+    def test_uat_consumer_fixture_accounts_login_as_non_admin_users(self) -> None:
+        from scripts.seed_uat_consumer_test_accounts import (
+            UAT_CONSUMER_TEST_ACCOUNT_USERNAMES,
+            seed_uat_consumer_test_accounts,
+            uat_consumer_test_login_value,
+        )
+
+        missing_response = asyncio.run(
+            auth_endpoint.auth_login(
+                self._build_request(),
+                auth_endpoint.LoginRequest(
+                    username=UAT_CONSUMER_TEST_ACCOUNT_USERNAMES[0],
+                    password=uat_consumer_test_login_value(),
+                ),
+            )
+        )
+        self.assertEqual(missing_response.status_code, 401)
+
+        seed_result = seed_uat_consumer_test_accounts()
+
+        self.assertEqual(seed_result["status"], "seeded")
+        self.assertEqual(
+            [item["username"] for item in seed_result["accounts"]],
+            list(UAT_CONSUMER_TEST_ACCOUNT_USERNAMES),
+        )
+
+        for username in UAT_CONSUMER_TEST_ACCOUNT_USERNAMES:
+            response = asyncio.run(
+                auth_endpoint.auth_login(
+                    self._build_request(),
+                    auth_endpoint.LoginRequest(
+                        username=username,
+                        password=uat_consumer_test_login_value(),
+                    ),
+                )
+            )
+            self.assertEqual(response.status_code, 200)
+            payload = self._json_response_body(response)
+            current_user = payload["currentUser"]
+            self.assertTrue(payload["ok"])
+            self.assertFalse(payload["createdUser"])
+            self.assertEqual(current_user["username"], username)
+            self.assertEqual(current_user["role"], "user")
+            self.assertFalse(current_user["isAdmin"])
+            self.assertEqual(current_user["adminCapabilities"], [])
+            self.assertFalse(current_user["canReadUsers"])
+            self.assertFalse(current_user["canWriteUserSecurity"])
+
+        wrong_password_response = asyncio.run(
+            auth_endpoint.auth_login(
+                self._build_request(),
+                auth_endpoint.LoginRequest(
+                    username=UAT_CONSUMER_TEST_ACCOUNT_USERNAMES[0],
+                    password="852259",
+                ),
+            )
+        )
+        self.assertEqual(wrong_password_response.status_code, 401)
+        self.assertEqual(self._json_response_body(wrong_password_response)["error"], "invalid_login")
+
+        admin_response = self._login_admin(password="adminpass123")
+        self.assertEqual(admin_response.status_code, 200)
+        admin_user = self._json_response_body(admin_response)["currentUser"]
+        self.assertEqual(admin_user["username"], "admin")
+        self.assertEqual(admin_user["role"], "admin")
+        self.assertTrue(admin_user["isAdmin"])
+
     def test_admin_current_user_exposes_safe_sorted_capability_summary(self) -> None:
         response = self._login_admin(password="secret123")
         self.assertEqual(response.status_code, 200)
