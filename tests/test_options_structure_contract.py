@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import socket
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -11,6 +12,9 @@ from fastapi.testclient import TestClient
 from api.v1.endpoints import options
 from api.v1.schemas.options import OptionChainSnapshot, OptionContractStructureRow
 from src.services.options_structure_service import (
+    OptionsStructureProviderGateway,
+    OptionsStructureProviderRequest,
+    OptionsStructureProviderUnavailableResult,
     OptionsStructureService,
     aggregate_options_structure_snapshot,
 )
@@ -19,6 +23,9 @@ from src.services.options_structure_service import (
 FORBIDDEN_PUBLIC_MARKERS = (
     "rawPayload",
     "raw_provider_payload",
+    "providerClass",
+    "providerName",
+    "apiKey",
     "credential",
     "api_key",
     "apikey",
@@ -30,6 +37,8 @@ FORBIDDEN_PUBLIC_MARKERS = (
     "traceId",
     "cacheKey",
     "cache_key",
+    "exceptionClass",
+    "exceptionChain",
     "provider.example",
     "OPTIONS_LIVE",
     "TRADIER_API",
@@ -116,6 +125,30 @@ def _complete_snapshot() -> OptionChainSnapshot:
             ),
         ],
     )
+
+
+class _InMemoryOptionsStructureProvider:
+    def __init__(
+        self,
+        result: OptionChainSnapshot | OptionsStructureProviderUnavailableResult,
+    ) -> None:
+        self.result = result
+        self.calls: list[OptionsStructureProviderRequest] = []
+
+    def fetch_options_structure(
+        self,
+        request: OptionsStructureProviderRequest,
+    ) -> OptionChainSnapshot | OptionsStructureProviderUnavailableResult:
+        self.calls.append(request)
+        return self.result
+
+
+class _LeakyFailingOptionsStructureProvider:
+    def fetch_options_structure(
+        self,
+        request: OptionsStructureProviderRequest,
+    ) -> OptionChainSnapshot | OptionsStructureProviderUnavailableResult:
+        raise RuntimeError("providerName=tradier apiKey=secret traceId=abc exceptionClass=RuntimeError")
 
 
 def test_option_structure_snapshot_schema_serializes_provider_neutral_fields() -> None:
@@ -221,6 +254,131 @@ def test_not_available_service_response_is_consumer_safe() -> None:
     assert payload["strikeSummaries"] == []
     assert payload["expirationSummaries"] == []
     assert "options_structure_provider_missing" in payload["blockingReasons"]
+    assert "provider_missing" in payload["blockingReasons"]
+    _assert_no_public_leaks(payload)
+
+
+def test_gateway_returns_provider_missing_without_network_when_no_provider(monkeypatch) -> None:
+    def fail_network(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise AssertionError("options structure gateway must not open network sockets")
+
+    monkeypatch.setattr(socket, "create_connection", fail_network)
+
+    payload = OptionsStructureProviderGateway().get_structure("AAPL").model_dump(by_alias=True)
+
+    assert payload["status"] == "not_available"
+    assert payload["calculationState"] == "not_available"
+    assert payload["providerConfigured"] is False
+    assert payload["snapshot"]["contracts"] == []
+    assert "provider_missing" in payload["blockingReasons"]
+    assert "configure_authorized_options_structure_provider" in payload["nextEvidenceNeeded"]
+    _assert_no_public_leaks(payload)
+
+
+def test_gateway_normalizes_in_memory_provider_snapshot_into_structure_summary() -> None:
+    provider = _InMemoryOptionsStructureProvider(_complete_snapshot().model_copy(update={"symbol": "AAPL"}))
+
+    payload = OptionsStructureService(provider=provider).get_structure(
+        "AAPL",
+        as_of="2026-06-19T14:30:00Z",
+        expiration_filters=["2026-06-19"],
+    ).model_dump(by_alias=True)
+
+    assert provider.calls == [
+        OptionsStructureProviderRequest(
+            symbol="AAPL",
+            as_of="2026-06-19T14:30:00Z",
+            expiration_filters=("2026-06-19",),
+        )
+    ]
+    assert payload["status"] == "available"
+    assert payload["providerConfigured"] is True
+    assert payload["snapshot"]["symbol"] == "AAPL"
+    assert len(payload["snapshot"]["contracts"]) == 2
+    assert payload["totalDealerGammaExposure"] == 125.0
+    assert payload["zeroDte"]["state"] == "available"
+    _assert_no_public_leaks(payload)
+
+
+def test_gateway_degrades_provider_snapshot_with_missing_greeks_or_oi() -> None:
+    snapshot = OptionChainSnapshot(
+        symbol="AAPL",
+        spotPrice=50.0,
+        asOf="2026-06-19T14:30:00Z",
+        freshness="fresh",
+        contracts=[
+            OptionContractStructureRow(
+                contractSymbol="AAPL260619C00050000",
+                side="call",
+                expiration="2026-06-19",
+                strike=50.0,
+                multiplier=100,
+                openInterest=None,
+                volume=4,
+                gamma=0.02,
+            ),
+            OptionContractStructureRow(
+                contractSymbol="AAPL260619P00050000",
+                side="put",
+                expiration="2026-06-19",
+                strike=50.0,
+                multiplier=100,
+                openInterest=5,
+                volume=3,
+                gamma=None,
+            ),
+        ],
+    )
+
+    payload = OptionsStructureService(
+        provider=_InMemoryOptionsStructureProvider(snapshot),
+    ).get_structure("AAPL").model_dump(by_alias=True)
+
+    assert payload["status"] == "degraded"
+    assert payload["calculationState"] == "not_available"
+    assert payload["providerConfigured"] is True
+    assert payload["totalDealerGammaExposure"] is None
+    assert "missing_open_interest" in payload["blockingReasons"]
+    assert "missing_gamma" in payload["blockingReasons"]
+    assert "gex_calculation_not_available" in payload["blockingReasons"]
+    _assert_no_public_leaks(payload)
+
+
+def test_gateway_returns_entitlement_required_without_provider_diagnostic_leaks() -> None:
+    provider = _InMemoryOptionsStructureProvider(
+        OptionsStructureProviderUnavailableResult(
+            reason_code="entitlement_required",
+            blocking_reasons=(
+                "entitlement_required",
+                "providerName",
+                "apiKey",
+                "requestId",
+                "traceId",
+                "rawPayload",
+                "exceptionClass",
+            ),
+        )
+    )
+
+    payload = OptionsStructureService(provider=provider).get_structure("AAPL").model_dump(by_alias=True)
+
+    assert payload["status"] == "not_available"
+    assert payload["providerConfigured"] is True
+    assert "entitlement_required" in payload["blockingReasons"]
+    assert "options_structure_provider_missing" not in payload["blockingReasons"]
+    assert "provider_missing" not in payload["blockingReasons"]
+    assert "obtain_options_structure_provider_entitlement" in payload["nextEvidenceNeeded"]
+    _assert_no_public_leaks(payload)
+
+
+def test_gateway_catches_provider_exceptions_without_leaking_exception_details() -> None:
+    payload = OptionsStructureService(
+        provider=_LeakyFailingOptionsStructureProvider(),
+    ).get_structure("AAPL").model_dump(by_alias=True)
+
+    assert payload["status"] == "not_available"
+    assert payload["providerConfigured"] is True
+    assert payload["blockingReasons"] == ["provider_unavailable"]
     _assert_no_public_leaks(payload)
 
 
@@ -234,4 +392,20 @@ def test_options_structure_api_returns_not_available_contract_without_leaks() ->
     assert payload["status"] == "not_available"
     assert payload["providerConfigured"] is False
     assert payload["snapshot"]["contracts"] == []
+    _assert_no_public_leaks(payload)
+
+
+def test_options_structure_api_routes_through_gateway_with_in_memory_provider(monkeypatch) -> None:
+    provider = _InMemoryOptionsStructureProvider(_complete_snapshot().model_copy(update={"symbol": "AAPL"}))
+    service = OptionsStructureService(provider=provider)
+    monkeypatch.setattr(options, "_structure_service", lambda: service)
+
+    response = _client().get("/api/v1/options/underlyings/AAPL/structure")
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert provider.calls == [OptionsStructureProviderRequest(symbol="AAPL")]
+    assert payload["status"] == "available"
+    assert payload["providerConfigured"] is True
+    assert payload["totalDealerGammaExposure"] == 325.0
     _assert_no_public_leaks(payload)
