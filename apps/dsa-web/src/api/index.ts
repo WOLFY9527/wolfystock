@@ -24,13 +24,24 @@ const TIMEOUT_TIER_MS: Record<ApiTimeoutTier, number> = {
 };
 
 const STREAMING_PATH_RE = /\/(stream|sse)(?:\/|$)|\/tasks\/stream(?:\/|$)/i;
+const SHORT_WINDOW_GET_CACHE_TTL_MS = 750;
+const SHORT_WINDOW_GET_CACHE_PATHS = new Set([
+  '/api/v1/auth/status',
+  '/api/v1/market/market-briefing',
+]);
 type InFlightGetRequest = {
   promise: Promise<AxiosResponse>;
   resolve: (response: AxiosResponse) => void;
   reject: (error: unknown) => void;
 };
+type ShortWindowGetCacheEntry = {
+  path: string;
+  expiresAt: number;
+  response: AxiosResponse;
+};
 
 const inFlightGetRequests = new Map<string, InFlightGetRequest>();
+const shortWindowGetResponses = new Map<string, ShortWindowGetCacheEntry>();
 
 function resolveRequestLanguage(): string {
   if (typeof document !== 'undefined') {
@@ -92,6 +103,17 @@ function buildDedupeKey(config: InternalAxiosRequestConfig): string {
   ].join('|');
 }
 
+function resolveRequestPath(config: InternalAxiosRequestConfig): string {
+  const requestUrl = config.url ?? '';
+  const baseUrl = config.baseURL || 'https://wolfystock.invalid';
+
+  try {
+    return new URL(requestUrl, baseUrl).pathname;
+  } catch {
+    return requestUrl.split('?')[0] ?? requestUrl;
+  }
+}
+
 function isStreamingRequest(config: InternalAxiosRequestConfig): boolean {
   if (config.responseType === 'stream') {
     return true;
@@ -106,6 +128,53 @@ function shouldDedupeRequest(config: InternalAxiosRequestConfig): boolean {
     && !isStreamingRequest(config);
 }
 
+function shouldUseShortWindowCache(config: InternalAxiosRequestConfig): boolean {
+  return shouldDedupeRequest(config) && SHORT_WINDOW_GET_CACHE_PATHS.has(resolveRequestPath(config));
+}
+
+function getShortWindowCachedResponse(dedupeKey: string): AxiosResponse | null {
+  const cached = shortWindowGetResponses.get(dedupeKey);
+  if (!cached) {
+    return null;
+  }
+
+  if (Date.now() >= cached.expiresAt) {
+    shortWindowGetResponses.delete(dedupeKey);
+    return null;
+  }
+
+  return cached.response;
+}
+
+function storeShortWindowCachedResponse(
+  config: InternalAxiosRequestConfig,
+  dedupeKey: string,
+  response: AxiosResponse
+): void {
+  if (!shouldUseShortWindowCache(config)) {
+    return;
+  }
+
+  shortWindowGetResponses.set(dedupeKey, {
+    path: resolveRequestPath(config),
+    expiresAt: Date.now() + SHORT_WINDOW_GET_CACHE_TTL_MS,
+    response,
+  });
+}
+
+export function invalidateApiShortWindowCache(path?: string): void {
+  if (!path) {
+    shortWindowGetResponses.clear();
+    return;
+  }
+
+  for (const [key, entry] of shortWindowGetResponses.entries()) {
+    if (entry.path === path) {
+      shortWindowGetResponses.delete(key);
+    }
+  }
+}
+
 function applyTimeoutTier(config: InternalAxiosRequestConfig): void {
   if (config.timeoutTier) {
     config.timeout = TIMEOUT_TIER_MS[config.timeoutTier];
@@ -118,6 +187,12 @@ function wrapGetDedupeAdapter(config: InternalAxiosRequestConfig): void {
   }
 
   const dedupeKey = buildDedupeKey(config);
+  const cachedResponse = getShortWindowCachedResponse(dedupeKey);
+  if (cachedResponse) {
+    config.adapter = async () => cachedResponse;
+    return;
+  }
+
   const existingRequest = inFlightGetRequests.get(dedupeKey);
   if (existingRequest) {
     config.adapter = () => existingRequest.promise;
@@ -140,7 +215,10 @@ function wrapGetDedupeAdapter(config: InternalAxiosRequestConfig): void {
   config.adapter = (adapterConfig) => {
     try {
       originalAdapter(adapterConfig)
-        .then(entry.resolve, entry.reject)
+        .then((response) => {
+          storeShortWindowCachedResponse(config, dedupeKey, response);
+          entry.resolve(response);
+        }, entry.reject)
         .finally(() => {
           if (inFlightGetRequests.get(dedupeKey) === entry) {
             inFlightGetRequests.delete(dedupeKey);

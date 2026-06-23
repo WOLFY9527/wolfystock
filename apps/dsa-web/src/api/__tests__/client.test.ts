@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import apiClient from '../index';
+import apiClient, { invalidateApiShortWindowCache } from '../index';
 import { getParsedApiError, isTimeoutError } from '../error';
 
 function createDeferredResponse(data: Record<string, unknown> = {}) {
@@ -36,6 +36,11 @@ async function waitForAdapterDispatch() {
     setTimeout(resolve, 0);
   });
 }
+
+afterEach(() => {
+  invalidateApiShortWindowCache();
+  vi.useRealTimers();
+});
 
 describe('apiClient auth redirect handling', () => {
   const originalLocation = window.location;
@@ -143,6 +148,77 @@ describe('apiClient auth redirect handling', () => {
     expect(second.data).toEqual({ call: 2 });
   });
 
+  it('reuses a settled auth status response inside the short stampede window', async () => {
+    const adapter = vi.fn(async (config) => ({
+      config,
+      data: { call: adapter.mock.calls.length, loggedIn: false },
+      headers: {},
+      status: 200,
+      statusText: 'OK',
+    }));
+
+    const first = await apiClient.get('/api/v1/auth/status', { adapter });
+    const second = await apiClient.get('/api/v1/auth/status', { adapter });
+
+    expect(adapter).toHaveBeenCalledTimes(1);
+    expect(first.data).toEqual({ call: 1, loggedIn: false });
+    expect(second.data).toEqual({ call: 1, loggedIn: false });
+  });
+
+  it('reuses a settled market briefing response inside the short stampede window', async () => {
+    const adapter = vi.fn(async (config) => ({
+      config,
+      data: { call: adapter.mock.calls.length, summary: 'briefing' },
+      headers: {},
+      status: 200,
+      statusText: 'OK',
+    }));
+
+    const first = await apiClient.get('/api/v1/market/market-briefing', { adapter });
+    const second = await apiClient.get('/api/v1/market/market-briefing', { adapter });
+
+    expect(adapter).toHaveBeenCalledTimes(1);
+    expect(first.data).toEqual({ call: 1, summary: 'briefing' });
+    expect(second.data).toEqual({ call: 1, summary: 'briefing' });
+  });
+
+  it('does not reuse settled responses for non-stampede GET paths', async () => {
+    const adapter = vi.fn(async (config) => ({
+      config,
+      data: { call: adapter.mock.calls.length },
+      headers: {},
+      status: 200,
+      statusText: 'OK',
+    }));
+
+    const first = await apiClient.get('/api/v1/market/temperature', { adapter });
+    const second = await apiClient.get('/api/v1/market/temperature', { adapter });
+
+    expect(adapter).toHaveBeenCalledTimes(2);
+    expect(first.data).toEqual({ call: 1 });
+    expect(second.data).toEqual({ call: 2 });
+  });
+
+  it('expires the short stampede window quickly for auth status', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-23T00:00:00.000Z'));
+    const adapter = vi.fn(async (config) => ({
+      config,
+      data: { call: adapter.mock.calls.length },
+      headers: {},
+      status: 200,
+      statusText: 'OK',
+    }));
+
+    const first = await apiClient.get('/api/v1/auth/status', { adapter });
+    vi.setSystemTime(new Date('2026-06-23T00:00:00.800Z'));
+    const second = await apiClient.get('/api/v1/auth/status', { adapter });
+
+    expect(adapter).toHaveBeenCalledTimes(2);
+    expect(first.data).toEqual({ call: 1 });
+    expect(second.data).toEqual({ call: 2 });
+  });
+
   it('never dedupes POST requests', async () => {
     const deferred = createDeferredResponse({ ok: true });
     const adapter = vi.fn((config) => deferred.promise.then(() => ({
@@ -181,6 +257,23 @@ describe('apiClient auth redirect handling', () => {
 
     deferred.resolve({});
     await Promise.all([first, second]);
+  });
+
+  it('does not reuse settled streaming GET responses inside the short stampede window', async () => {
+    const adapter = vi.fn(async (config) => ({
+      config,
+      data: { call: adapter.mock.calls.length },
+      headers: {},
+      status: 200,
+      statusText: 'OK',
+    }));
+
+    const first = await apiClient.get('/api/v1/analysis/tasks/stream', { adapter });
+    const second = await apiClient.get('/api/v1/analysis/tasks/stream', { adapter });
+
+    expect(adapter).toHaveBeenCalledTimes(2);
+    expect(first.data).toEqual({ call: 1 });
+    expect(second.data).toEqual({ call: 2 });
   });
 
   it('applies timeout tiers without changing the default timeout', async () => {
