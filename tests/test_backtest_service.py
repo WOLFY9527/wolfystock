@@ -27,9 +27,11 @@ class BacktestServiceTestCase(unittest.TestCase):
         self._original_database_path = os.environ.get("DATABASE_PATH")
         self._original_eval_window = os.environ.get("BACKTEST_EVAL_WINDOW_DAYS")
         self._original_min_age = os.environ.get("BACKTEST_MIN_AGE_DAYS")
+        self._original_backtest_enabled = os.environ.get("BACKTEST_ENABLED")
         os.environ["DATABASE_PATH"] = self._db_path
         os.environ["BACKTEST_EVAL_WINDOW_DAYS"] = "3"
         os.environ["BACKTEST_MIN_AGE_DAYS"] = "14"
+        os.environ["BACKTEST_ENABLED"] = "true"
 
         Config._instance = None
         DatabaseManager.reset_instance()
@@ -101,6 +103,10 @@ class BacktestServiceTestCase(unittest.TestCase):
             os.environ.pop("BACKTEST_MIN_AGE_DAYS", None)
         else:
             os.environ["BACKTEST_MIN_AGE_DAYS"] = self._original_min_age
+        if self._original_backtest_enabled is None:
+            os.environ.pop("BACKTEST_ENABLED", None)
+        else:
+            os.environ["BACKTEST_ENABLED"] = self._original_backtest_enabled
         self._temp_dir.cleanup()
 
     def _count_results(self) -> int:
@@ -132,6 +138,48 @@ class BacktestServiceTestCase(unittest.TestCase):
         stats3 = service.run_backtest(code="600519", force=True, eval_window_days=3, min_age_days=0, limit=10)
         self.assertEqual(stats3["saved"], 1)
         self.assertEqual(self._count_results(), 1)
+
+    def test_engine_disabled_returns_distinct_readiness_without_processing_samples(self) -> None:
+        os.environ["BACKTEST_ENABLED"] = "false"
+        Config._instance = None
+        service = BacktestService(self.db)
+
+        stats = service.run_backtest(code="600519", force=False, eval_window_days=3, min_age_days=0, limit=10)
+        status = service.get_sample_status(code="600519")
+
+        self.assertEqual(stats["processed"], 0)
+        self.assertEqual(stats["saved"], 0)
+        self.assertEqual(stats["no_result_reason"], "engine_disabled")
+        self.assertEqual(stats["calculation_status"], "engine_disabled")
+        self.assertEqual(stats["sample_status"], "engine_disabled")
+        self.assertEqual(stats["execution_readiness"]["state"], "engine_disabled")
+        self.assertFalse(stats["execution_readiness"]["result_contract_available"])
+        self.assertNotIn("insufficient_history", stats["execution_readiness"]["reason_codes"])
+        self.assertEqual(status["sample_readiness_state"], "engine_disabled")
+        self.assertEqual(status["execution_readiness"]["state"], "engine_disabled")
+
+    def test_sample_status_without_provider_or_bars_reports_data_disabled_readiness(self) -> None:
+        service = BacktestService(self.db)
+
+        status = service.get_sample_status(code="NODATA")
+
+        self.assertEqual(status["sample_readiness_state"], "blocked")
+        self.assertEqual(status["execution_readiness"]["state"], "data_disabled")
+        self.assertFalse(status["execution_readiness"]["result_contract_available"])
+        self.assertIn("provider_missing", status["execution_readiness"]["reason_codes"])
+        self.assertIn("insufficient_history", status["execution_readiness"]["reason_codes"])
+
+    def test_fixture_local_bars_return_executable_readiness_and_safe_result_contract(self) -> None:
+        service = BacktestService(self.db)
+
+        stats = service.run_backtest(code="600519", force=True, eval_window_days=3, min_age_days=0, limit=10)
+
+        self.assertEqual(stats["completed"], 1)
+        self.assertEqual(stats["calculation_status"], "ready")
+        self.assertEqual(stats["execution_readiness"]["state"], "executable")
+        self.assertTrue(stats["execution_readiness"]["result_contract_available"])
+        self.assertTrue(stats["execution_readiness"]["observation_only"])
+        self.assertIn("Research diagnostic only", stats["no_advice_disclosure"])
 
     def _run_and_get_result(self) -> BacktestResult:
         """Helper: run backtest and return the single BacktestResult row."""

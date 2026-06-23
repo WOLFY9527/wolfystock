@@ -18,6 +18,7 @@ class BacktestResponseContractFields(BaseModel):
     source_window: Dict[str, Any] = Field(default_factory=dict)
     as_of: Optional[str] = None
     limitations: List[str] = Field(default_factory=list)
+    execution_readiness: Dict[str, Any] = Field(default_factory=dict)
     no_advice_disclosure: str = BACKTEST_NO_ADVICE_DISCLOSURE
 
 
@@ -88,6 +89,7 @@ class PrepareBacktestSamplesResponse(BaseModel):
     fallback_used: Optional[bool] = None
     pricing_resolved_source: Optional[str] = None
     pricing_fallback_used: Optional[bool] = None
+    execution_readiness: Dict[str, Any] = Field(default_factory=dict)
 
 
 class BacktestCodeRequest(BaseModel):
@@ -163,6 +165,7 @@ class BacktestSampleStatusResponse(BaseModel):
     pricing_fallback_used: Optional[bool] = None
     sample_readiness_state: Optional[str] = None
     sample_blocking_reasons: List[str] = Field(default_factory=list)
+    execution_readiness: Dict[str, Any] = Field(default_factory=dict)
     historicalOhlcvReadiness: Dict[str, Any] = Field(default_factory=dict)
 
 
