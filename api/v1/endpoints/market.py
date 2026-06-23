@@ -20,6 +20,10 @@ from api.v1.schemas.market_briefing import MarketOverviewBriefingResponse
 from api.v1.schemas.market_scenario_lab import MarketScenarioLabRequest, MarketScenarioLabResponse
 from api.v1.schemas.market_rotation import MarketRotationRadarResponse
 from api.v1.schemas.market_temperature import MarketTemperatureConsumedSubsetResponse
+from api.v1.schemas.professional_data_capabilities import (
+    ProfessionalDataCapabilityRegistryAdminResponse,
+    ProfessionalDataCapabilityRegistryResponse,
+)
 from src.services.cn_provider_health_service import CNProviderHealthService
 from src.services.consumer_api_diagnostic_redaction import (
     sanitize_consumer_diagnostic_text,
@@ -33,6 +37,9 @@ from src.services.market_decision_cockpit_service import MarketDecisionCockpitSe
 from src.services.market_data_readiness_diagnostics import build_market_data_readiness_diagnostics
 from src.services.market_overview_service import MarketOverviewService
 from src.services.market_rotation_radar_service import MarketRotationRadarService
+from src.services.professional_data_capability_registry_service import (
+    build_professional_data_capability_registry,
+)
 from src.services.provider_fit_advisor_service import build_provider_fit_advisor_snapshot
 from src.services.rotation_radar_quote_provider import get_rotation_radar_quote_provider
 from src.services.daily_intelligence_service import DailyIntelligenceService
@@ -413,3 +420,25 @@ def get_data_source_gap_registry(
     _: CurrentUser = Depends(require_admin_capability("ops:providers:read")),
 ) -> dict[str, Any]:
     return build_data_source_gap_registry()
+
+
+@router.get(
+    "/professional-data-capabilities",
+    response_model=ProfessionalDataCapabilityRegistryResponse,
+    summary="Get consumer-safe professional data capability registry",
+)
+def get_professional_data_capabilities() -> dict[str, Any]:
+    return build_professional_data_capability_registry()
+
+
+@router.get(
+    "/professional-data-capabilities/admin",
+    response_model=ProfessionalDataCapabilityRegistryAdminResponse,
+    summary="Get admin-gated professional data capability diagnostics",
+)
+def get_professional_data_capabilities_admin(
+    _: CurrentUser = Depends(require_admin_capability("ops:providers:read")),
+) -> dict[str, Any]:
+    return build_professional_data_capability_registry(
+        include_admin_diagnostics=True
+    )
