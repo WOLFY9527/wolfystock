@@ -257,6 +257,9 @@ function isProtectedProductPath(pathname: string): boolean {
   return pathname === '/settings'
     || pathname === '/options'
     || pathname === '/scanner'
+    || pathname === '/holdings'
+    || pathname === '/radar'
+    || pathname === '/research-radar'
     || isPathMatch(pathname, '/portfolio')
     || isPathMatch(pathname, '/radar')
     || isPathMatch(pathname, '/research/radar')
@@ -271,6 +274,8 @@ function isPublicSafePath(pathname: string): boolean {
   return pathname === '/'
     || pathname === '/guest'
     || pathname === '/market'
+    || pathname === '/cockpit'
+    || pathname === '/decision-cockpit'
     || pathname === '/market-overview'
     || pathname === '/liquidity'
     || pathname === '/rotation'
@@ -542,16 +547,18 @@ export const AppContent: React.FC = () => {
           <Route path="/admin/system" element={<Navigate to="/settings/system" replace />} />
           <Route path="/admin/provider" element={<Navigate to="/admin/market-providers" replace />} />
           <Route path="/admin/providers" element={<Navigate to="/admin/market-providers" replace />} />
-          <Route path="/admin/evidence" element={<Navigate to="/admin/evidence-workflow" replace />} />
-          <Route path="/admin/costs" element={<Navigate to="/admin/cost-observability" replace />} />
-          <Route path="/admin/ai" element={<Navigate to="/settings/system" replace />} />
-          <Route path="/admin/system-logs" element={<Navigate to="/admin/logs" replace />} />
-          <Route path="/cockpit" element={<Navigate to="/market/decision-cockpit" replace />} />
-          <Route path="/radar" element={<Navigate to="/research/radar" replace />} />
-          <Route path="/research-radar" element={<Navigate to="/research/radar" replace />} />
-          <Route path="/liquidity" element={<Navigate to="/market/liquidity-monitor" replace />} />
-          <Route path="/rotation" element={<Navigate to="/market/rotation-radar" replace />} />
-          <Route path="/options" element={<Navigate to="/options-lab" replace />} />
+        <Route path="/admin/evidence" element={<Navigate to="/admin/evidence-workflow" replace />} />
+        <Route path="/admin/costs" element={<Navigate to="/admin/cost-observability" replace />} />
+        <Route path="/admin/ai" element={<Navigate to="/settings/system" replace />} />
+        <Route path="/admin/system-logs" element={<Navigate to="/admin/logs" replace />} />
+        <Route path="/cockpit" element={<Navigate to="/market/decision-cockpit" replace />} />
+        <Route path="/decision-cockpit" element={<Navigate to="/market/decision-cockpit" replace />} />
+        <Route path="/radar" element={<Navigate to="/research/radar" replace />} />
+        <Route path="/research-radar" element={<Navigate to="/research/radar" replace />} />
+        <Route path="/holdings" element={<Navigate to="/portfolio" replace />} />
+        <Route path="/liquidity" element={<Navigate to="/market/liquidity-monitor" replace />} />
+        <Route path="/rotation" element={<Navigate to="/market/rotation-radar" replace />} />
+        <Route path="/options" element={<Navigate to="/options-lab" replace />} />
           <Route path="/" element={<HomeSurfacePage />} />
           <Route path="/guest" element={guestHomeElement} />
           <Route path="/scanner" element={<RegisteredSurfaceRoute><ScannerSurfacePage /></RegisteredSurfaceRoute>} />
@@ -597,8 +604,10 @@ export const AppContent: React.FC = () => {
           <Route path="admin/ai" element={<Navigate to="../settings/system" replace />} />
           <Route path="admin/system-logs" element={<Navigate to="../admin/logs" replace />} />
           <Route path="cockpit" element={<Navigate to="../market/decision-cockpit" replace />} />
+          <Route path="decision-cockpit" element={<Navigate to="../market/decision-cockpit" replace />} />
           <Route path="radar" element={<Navigate to="../research/radar" replace />} />
           <Route path="research-radar" element={<Navigate to="../research/radar" replace />} />
+          <Route path="holdings" element={<Navigate to="../portfolio" replace />} />
           <Route path="liquidity" element={<Navigate to="../market/liquidity-monitor" replace />} />
           <Route path="rotation" element={<Navigate to="../market/rotation-radar" replace />} />
           <Route path="options" element={<Navigate to="../options-lab" replace />} />

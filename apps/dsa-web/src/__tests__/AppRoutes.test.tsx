@@ -617,6 +617,9 @@ describe('AppContent route flows', () => {
     ['/cockpit', '/market/decision-cockpit', 'market-decision-cockpit-page'],
     ['/zh/cockpit', '/zh/market/decision-cockpit', 'market-decision-cockpit-page'],
     ['/en/cockpit', '/en/market/decision-cockpit', 'market-decision-cockpit-page'],
+    ['/decision-cockpit', '/market/decision-cockpit', 'market-decision-cockpit-page'],
+    ['/zh/decision-cockpit', '/zh/market/decision-cockpit', 'market-decision-cockpit-page'],
+    ['/en/decision-cockpit', '/en/market/decision-cockpit', 'market-decision-cockpit-page'],
     ['/research-radar', '/research/radar', 'auth-guard:Research Radar'],
     ['/zh/research-radar', '/zh/research/radar', 'auth-guard:研究雷达'],
     ['/en/research-radar', '/en/research/radar', 'auth-guard:Research Radar'],
@@ -629,6 +632,33 @@ describe('AppContent route flows', () => {
     expect(await screen.findByText(expectedText)).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(expectedPath));
     expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['/holdings', '/portfolio', 'auth-guard:Portfolio'],
+    ['/zh/holdings', '/zh/portfolio', 'auth-guard:持仓管理'],
+    ['/en/holdings', '/en/portfolio', 'auth-guard:Portfolio'],
+  ])('redirects holdings alias %s to canonical portfolio route %s', async (path, expectedPath, expectedText) => {
+    renderAtWithLocationProbe(path);
+
+    expect(await screen.findByText(expectedText)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(expectedPath));
+    expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['/holdings', '/portfolio'],
+    ['/zh/holdings', '/zh/portfolio'],
+    ['/en/holdings', '/en/portfolio'],
+  ])('renders holdings alias %s through canonical portfolio route %s for signed-in users', async (path, expectedPath) => {
+    mockSignedInConsumer();
+
+    renderAtWithLocationProbe(path);
+
+    expect(await screen.findByText('portfolio-page')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(expectedPath));
+    expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
+    expect(screen.queryByText(/auth-guard:/)).not.toBeInTheDocument();
   });
 
   it('keeps guest access on the stock structure route protected with a stock-specific gate', async () => {
