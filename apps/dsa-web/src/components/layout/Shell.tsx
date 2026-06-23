@@ -90,7 +90,7 @@ function resolveMobileRouteLabel(pathname: string, t: (key: string) => string, l
   if (pathname === '/' || pathname === '') {
     return t('nav.home');
   }
-  if (pathname.startsWith('/market/decision-cockpit')) {
+  if (pathname === '/cockpit' || pathname === '/decision-cockpit' || pathname.startsWith('/market/decision-cockpit')) {
     return language === 'en' ? 'Market Decision Cockpit' : '市场决策驾驶舱';
   }
   if (pathname === '/stocks/structure-decision') {
@@ -99,7 +99,7 @@ function resolveMobileRouteLabel(pathname: string, t: (key: string) => string, l
   if (/^\/stocks\/[^/]+\/structure-decision(?:\/)?$/i.test(pathname)) {
     return language === 'en' ? 'Stock Structure Panel' : '个股结构面板';
   }
-  if (pathname.startsWith('/research/radar')) {
+  if (pathname === '/radar' || pathname === '/research-radar' || pathname.startsWith('/research/radar')) {
     return language === 'en' ? 'Research Radar' : '研究雷达';
   }
   if (pathname.startsWith('/scenario-lab')) {
@@ -115,7 +115,7 @@ function resolveMobileRouteLabel(pathname: string, t: (key: string) => string, l
   if (pathname.startsWith('/scanner')) {
     return t('nav.scanner');
   }
-  if (pathname.startsWith('/portfolio')) {
+  if (pathname === '/holdings' || pathname.startsWith('/portfolio')) {
     return t('nav.portfolio');
   }
   if (pathname.startsWith('/market-overview')) {
@@ -353,15 +353,19 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const isHomeRoute = surfacePathname === '/' || surfacePathname === '';
   const isBacktestRoute = surfacePathname.startsWith('/backtest');
   const isMarketOverviewRoute = surfacePathname.startsWith('/market-overview');
-  const isMarketDecisionCockpitRoute = surfacePathname.startsWith('/market/decision-cockpit');
+  const isMarketDecisionCockpitRoute = surfacePathname === '/cockpit'
+    || surfacePathname === '/decision-cockpit'
+    || surfacePathname.startsWith('/market/decision-cockpit');
   const isLiquidityMonitorRoute = surfacePathname.startsWith('/market/liquidity-monitor');
   const isRotationRadarRoute = surfacePathname.startsWith('/market/rotation-radar');
   const isStockStructureDecisionRoute = surfacePathname === '/stocks/structure-decision'
     || /^\/stocks\/[^/]+\/structure-decision(?:\/)?$/i.test(surfacePathname);
   const isScannerRoute = surfacePathname.startsWith('/scanner');
-  const isResearchRadarRoute = surfacePathname.startsWith('/research/radar');
+  const isResearchRadarRoute = surfacePathname === '/radar'
+    || surfacePathname === '/research-radar'
+    || surfacePathname.startsWith('/research/radar');
   const isWatchlistRoute = surfacePathname.startsWith('/watchlist');
-  const isPortfolioRoute = surfacePathname.startsWith('/portfolio');
+  const isPortfolioRoute = surfacePathname === '/holdings' || surfacePathname.startsWith('/portfolio');
   const isOptionsLabRoute = surfacePathname.startsWith('/options-lab');
   const isScenarioLabRoute = surfacePathname.startsWith('/scenario-lab');
   const isSystemControlRoute = isAdminOpsRoute(surfacePathname);

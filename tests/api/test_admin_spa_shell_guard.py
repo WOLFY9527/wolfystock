@@ -34,6 +34,7 @@ def auth_enabled_spa_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     assets_dir = static_dir / "assets"
     assets_dir.mkdir(parents=True)
     (static_dir / "index.html").write_text("<html>admin-spa-shell</html>", encoding="utf-8")
+    (static_dir / "favicon.ico").write_text("icon", encoding="utf-8")
     (assets_dir / "app.js").write_text("console.log('asset');\n", encoding="utf-8")
 
     db_path = tmp_path / "admin-spa-shell.db"
@@ -123,6 +124,32 @@ def test_authenticated_admin_keeps_direct_admin_spa_shell_access(auth_enabled_sp
 @pytest.mark.parametrize(
     "path",
     [
+        "/backtest",
+        "/scanner",
+        "/watchlist",
+        "/holdings",
+        "/scenario-lab",
+        "/market-overview",
+        "/research-radar",
+        "/stock/600519",
+        "/decision-cockpit",
+    ],
+)
+def test_core_direct_spa_routes_serve_shell_for_refresh_and_deep_links(
+    auth_enabled_spa_client,
+    path: str,
+) -> None:
+    client, _ = auth_enabled_spa_client
+
+    response = client.get(path, follow_redirects=False)
+
+    assert response.status_code == 200
+    assert response.text == "<html>admin-spa-shell</html>"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
         "/",
         "/guest",
         "/login",
@@ -145,12 +172,36 @@ def test_admin_spa_guard_preserves_api_and_static_asset_behavior(auth_enabled_sp
     client, _ = auth_enabled_spa_client
 
     bare_api = client.get("/api", follow_redirects=False)
+    health = client.get("/api/health", follow_redirects=False)
+    scanner_status = client.get("/api/v1/scanner/status", follow_redirects=False)
     private_admin_api = client.get("/api/v1/admin/market-providers/operations", follow_redirects=False)
     asset = client.get("/assets/app.js", follow_redirects=False)
+    favicon = client.get("/favicon.ico", follow_redirects=False)
 
     assert bare_api.status_code == 404
     assert bare_api.json() == {"error": "not_found", "message": "API endpoint /api not found"}
+    assert health.status_code in {200, 503}
+    assert health.headers["content-type"].startswith("application/json")
+    assert "status" in health.json()
+    assert scanner_status.status_code == 401
+    assert scanner_status.json() == {"error": "unauthorized", "message": "Login required"}
     assert private_admin_api.status_code == 401
     assert private_admin_api.json() == {"error": "unauthorized", "message": "Login required"}
     assert asset.status_code == 200
     assert asset.text == "console.log('asset');\n"
+    assert favicon.status_code == 200
+    assert favicon.text == "icon"
+
+
+def test_admin_spa_guard_preserves_docs_and_openapi_routes(auth_enabled_spa_client) -> None:
+    client, db = auth_enabled_spa_client
+    _set_admin_cookie(client, db)
+
+    docs = client.get("/docs", follow_redirects=False)
+    openapi = client.get("/openapi.json", follow_redirects=False)
+
+    assert docs.status_code == 200
+    assert "Swagger UI" in docs.text
+    assert openapi.status_code == 200
+    assert openapi.headers["content-type"].startswith("application/json")
+    assert "paths" in openapi.json()
