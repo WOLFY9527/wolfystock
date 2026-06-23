@@ -57,6 +57,7 @@ vi.mock('../../api/market', async (importOriginal) => {
       getFutures: vi.fn(),
       getCnShortSentiment: vi.fn(),
       getDataReadiness: vi.fn(),
+      getProfessionalDataCapabilities: vi.fn(),
       cryptoStreamUrl: vi.fn(() => '/api/v1/market/crypto/stream'),
       normalizeCryptoStreamPayload: vi.fn((payload) => payload),
     },
@@ -142,6 +143,83 @@ const officialRiskReadinessPayload = () => ({
     rates: { state: 'stale', freshness: 'stale' },
     fedLiquidity: { state: 'blocked', freshness: 'unavailable' },
   },
+});
+
+const professionalDataCapabilitiesPayload = () => ({
+  contractVersion: 'professional_data_capability_registry_v1',
+  consumerSafe: true,
+  summary: {
+    totalCapabilities: 6,
+    liveCount: 1,
+    degradedCount: 2,
+    entitlementRequiredCount: 1,
+    configuredMissingCount: 1,
+    notImplementedCount: 1,
+  },
+  categories: [
+    'options_structure',
+    'market_breadth_flows',
+    'sector_rotation',
+    'macro_cross_asset_regime',
+    'stock_research_data',
+    'backtest_data_availability',
+  ],
+  capabilities: [
+    {
+      capabilityId: 'options.chain',
+      label: 'Options chain',
+      category: 'options_structure',
+      status: 'entitlement_required',
+      sourceLabel: 'Options Lab readiness boundary',
+      reason: 'Display is blocked until entitlement evidence is verified.',
+      freshness: 'Unavailable until rights are proven.',
+    },
+    {
+      capabilityId: 'market.breadth_flows',
+      label: 'Market breadth and flows',
+      category: 'market_breadth_flows',
+      status: 'degraded',
+      sourceLabel: 'Market readiness registry',
+      reason: 'Breadth context exists with incomplete source authority.',
+      freshness: 'Partial and delayed.',
+    },
+    {
+      capabilityId: 'market.sector_rotation',
+      label: 'Sector rotation',
+      category: 'sector_rotation',
+      status: 'degraded',
+      sourceLabel: 'Market rotation readiness registry',
+      reason: 'Membership and quote authority remain incomplete.',
+      freshness: 'Partial and delayed.',
+    },
+    {
+      capabilityId: 'macro.cross_asset_regime',
+      label: 'Macro and cross-asset regime',
+      category: 'macro_cross_asset_regime',
+      status: 'live',
+      sourceLabel: 'Macro readiness registry',
+      reason: 'Stored macro rows are available for observation.',
+      freshness: 'Stored or delayed observations.',
+    },
+    {
+      capabilityId: 'stock.news',
+      label: 'Stock news and catalysts',
+      category: 'stock_research_data',
+      status: 'configured_missing',
+      sourceLabel: 'Single-stock readiness registry',
+      reason: 'Catalyst evidence is not consistently configured.',
+      freshness: 'Missing or inconsistent across symbols.',
+    },
+    {
+      capabilityId: 'backtest.data_availability',
+      label: 'Backtest data availability',
+      category: 'backtest_data_availability',
+      status: 'not_implemented',
+      sourceLabel: 'Backtest readiness registry',
+      reason: 'Point-in-time lineage remains incomplete.',
+      freshness: 'Research-useful, but lineage is incomplete.',
+    },
+  ],
 });
 
 const macroPanel = () => ({
@@ -1956,6 +2034,7 @@ describe('MarketOverviewPage', () => {
     vi.mocked(marketApi.getFutures).mockResolvedValue(futuresPayload());
     vi.mocked(marketApi.getCnShortSentiment).mockResolvedValue(cnShortSentimentPayload());
     vi.mocked(marketApi.getDataReadiness).mockResolvedValue(officialRiskReadinessPayload());
+    vi.mocked(marketApi.getProfessionalDataCapabilities).mockResolvedValue(professionalDataCapabilitiesPayload());
   });
 
   it('renders compact official risk source readiness labels without raw enums or advice wording', async () => {
@@ -2012,7 +2091,7 @@ describe('MarketOverviewPage', () => {
     render(createElement(MarketOverviewPage));
 
     const boundary = await screen.findByTestId('market-overview-evidence-boundary');
-    expect(boundary).toHaveTextContent('证据可用');
+    await waitFor(() => expect(boundary).toHaveTextContent('证据可用'));
     expect(boundary).toHaveTextContent('市场总览读数可用');
     expect(boundary).toHaveTextContent('市场广度待补');
     expect(boundary).toHaveTextContent('板块轮动待更新');
@@ -2021,6 +2100,62 @@ describe('MarketOverviewPage', () => {
     expect(boundary.textContent || '').not.toMatch(
       /contractVersion|market_overview|market_regime|confidenceCapReason|sourceAuthority|freshnessReason|nextDiagnostic|consumerSafeSummary|provider|runtime|credential|cache|debug|raw|buy|sell|hold|target price|position sizing|买入|卖出|持有|目标价|止损|仓位/i,
     );
+  });
+
+  it('renders professional data capability coverage grouped by consumer-safe categories', async () => {
+    render(createElement(MarketOverviewPage));
+
+    const coverage = await screen.findByTestId('professional-data-capability-coverage');
+    await waitFor(() => expect(coverage).toHaveTextContent('按能力族查看当前专业数据覆盖'));
+
+    expect(coverage).toHaveTextContent('期权结构');
+    expect(coverage).toHaveTextContent('广度 / 资金流');
+    expect(coverage).toHaveTextContent('板块 / 市场状态');
+    expect(coverage).toHaveTextContent('宏观 / 跨资产');
+    expect(coverage).toHaveTextContent('个股研究');
+    expect(coverage).toHaveTextContent('回测数据');
+    expect(coverage).toHaveTextContent('Options chain');
+    expect(coverage).toHaveTextContent('需授权');
+    expect(coverage).toHaveTextContent('Market breadth and flows');
+    expect(coverage).toHaveTextContent('降级');
+    expect(coverage).toHaveTextContent('Macro and cross-asset regime');
+    expect(coverage).toHaveTextContent('可用');
+    expect(coverage).toHaveTextContent('Stock news and catalysts');
+    expect(coverage).toHaveTextContent('配置待补');
+    expect(coverage).toHaveTextContent('Backtest data availability');
+    expect(coverage).toHaveTextContent('未实现');
+    expect(coverage).toHaveTextContent('Options Lab readiness boundary');
+    expect(coverage).toHaveTextContent('Display is blocked until entitlement evidence is verified.');
+    expect(coverage.textContent || '').not.toMatch(
+      /providerClass|providerName|providerAttempted|requiredProviderClass|sourceAuthorityRouter|endpointHost|apiKeyPresent|exceptionClass|exceptionChain|requestId|traceId|cacheKey|rawPayload|credential|token|env/i,
+    );
+  });
+
+  it('shows a professional data capability loading skeleton while the registry is pending', () => {
+    vi.mocked(marketApi.getProfessionalDataCapabilities).mockReturnValueOnce(new Promise(() => {}));
+
+    render(createElement(MarketOverviewPage));
+
+    const coverage = screen.getByTestId('professional-data-capability-coverage');
+    expect(coverage).toHaveTextContent('正在加载覆盖状态');
+    expect(screen.getByTestId('professional-data-capability-skeleton')).toBeInTheDocument();
+  });
+
+  it('shows a degraded professional data capability state when the registry request fails', async () => {
+    vi.mocked(marketApi.getProfessionalDataCapabilities).mockRejectedValueOnce(
+      new Error('providerClass requestId rawPayload should stay hidden'),
+    );
+
+    render(createElement(MarketOverviewPage));
+
+    const errorState = await screen.findByTestId('professional-data-capability-error');
+    expect(errorState).toHaveTextContent('专业数据覆盖暂不可用，请稍后重试。');
+    expect(errorState.textContent || '').not.toMatch(/providerClass|requestId|rawPayload|token|credential|env/i);
+
+    fireEvent.click(within(errorState).getByRole('button', { name: '重试' }));
+    await waitFor(() => {
+      expect(marketApi.getProfessionalDataCapabilities).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('renders the MarketMonitor boundary with stable controls and collapsed diagnostics', async () => {

@@ -4,6 +4,7 @@ import { marketOverviewApi } from '../api/marketOverview';
 import type {
   ConsumerEvidenceReadinessMatrix,
   CnShortSentimentResponse,
+  ProfessionalDataCapabilityRegistryView,
   MarketBriefingResponse,
   MarketFuturesResponse,
   MarketTemperatureResponse,
@@ -12,6 +13,7 @@ import type {
 import {
   buildConsumerEvidenceBoundaryView,
   buildOfficialRiskSourceReadinessView,
+  buildProfessionalDataCapabilityRegistryView,
   marketApi,
   normalizeCnShortSentimentConsumerCopy,
   normalizeMarketBriefingConsumerCopy,
@@ -26,7 +28,7 @@ import {
   type PanelState,
 } from '../components/market-overview/MarketOverviewWorkbench';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
-import { TerminalChip, TerminalPageHeading } from '../components/terminal/TerminalPrimitives';
+import { TerminalButton, TerminalChip, TerminalPageHeading } from '../components/terminal/TerminalPrimitives';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 
@@ -723,6 +725,123 @@ const MarketOverviewEvidenceBoundaryStrip = ({
   );
 };
 
+const PROFESSIONAL_DATA_CAPABILITY_GROUP_ORDER = [
+  'options_structure',
+  'market_breadth_flows',
+  'sector_rotation',
+  'macro_cross_asset_regime',
+  'stock_research_data',
+  'backtest_data_availability',
+] as const;
+
+function professionalDataCapabilityGroupLabel(categoryKey: string): string {
+  const labels: Record<string, string> = {
+    options_structure: '期权结构',
+    market_breadth_flows: '广度 / 资金流',
+    sector_rotation: '板块 / 市场状态',
+    macro_cross_asset_regime: '宏观 / 跨资产',
+    stock_research_data: '个股研究',
+    backtest_data_availability: '回测数据',
+  };
+  return labels[categoryKey] || '其他专业数据';
+}
+
+const ProfessionalDataCapabilityCoverageStrip = ({
+  view,
+  loading,
+  error,
+  onRetry,
+}: {
+  view: ProfessionalDataCapabilityRegistryView | null;
+  loading: boolean;
+  error: string | null;
+  onRetry: () => void;
+}) => {
+  const categories = view?.categories || [];
+  const statusCounts = view?.statusCounts || [];
+  const hasItems = Boolean(view?.hasItems && categories.length);
+
+  return (
+    <section
+      data-testid="professional-data-capability-coverage"
+      className="rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2.5"
+    >
+      <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-white/48">专业数据覆盖</p>
+          <p className="mt-1 text-sm font-semibold text-white/84">
+            {loading
+              ? '正在加载覆盖状态'
+              : error
+                ? '专业数据覆盖暂不可用'
+                : '按能力族查看当前专业数据覆盖'}
+          </p>
+        </div>
+        <div className="flex min-w-0 flex-wrap gap-1.5 md:justify-end">
+          {statusCounts.map((chip) => (
+            <TerminalChip key={chip.key} variant={chip.variant}>{chip.label}</TerminalChip>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div data-testid="professional-data-capability-skeleton" className="mt-3 grid gap-2 md:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="h-20 animate-pulse rounded-md border border-white/[0.05] bg-white/[0.03]" />
+          ))}
+        </div>
+      ) : error ? (
+        <div data-testid="professional-data-capability-error" className="mt-3 flex items-center justify-between gap-3 rounded-md border border-amber-300/20 bg-amber-400/8 px-3 py-2">
+          <p className="min-w-0 text-xs leading-5 text-amber-100/80">
+            {error}
+          </p>
+          <TerminalButton variant="compact" onClick={onRetry}>
+            重试
+          </TerminalButton>
+        </div>
+      ) : hasItems ? (
+        <div className="mt-3 grid gap-3">
+          {PROFESSIONAL_DATA_CAPABILITY_GROUP_ORDER.map((categoryKey) => {
+            const category = categories.find((item) => item.categoryKey === categoryKey);
+            if (!category) {
+              return null;
+            }
+            return (
+              <section key={categoryKey} className="rounded-md border border-white/[0.05] bg-white/[0.02] px-3 py-2.5">
+                <div className="flex min-w-0 flex-col gap-1 md:flex-row md:items-baseline md:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-medium text-white/48">{professionalDataCapabilityGroupLabel(categoryKey)}</p>
+                    <p className="mt-1 text-xs text-white/56">{category.description}</p>
+                  </div>
+                  <p className="text-[11px] text-white/36">{category.items.length} 项</p>
+                </div>
+                <div className="mt-2 grid gap-2">
+                  {category.items.map((item) => (
+                    <div key={item.capabilityId} className="rounded-md border border-white/[0.04] bg-black/10 px-3 py-2">
+                      <div className="flex min-w-0 items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-white/86">{item.label}</p>
+                          <p className="mt-1 text-[11px] leading-5 text-white/48">{item.sourceLabel}</p>
+                        </div>
+                        <TerminalChip variant={item.status.variant}>{item.status.label}</TerminalChip>
+                      </div>
+                      <p className="mt-1 text-[11px] leading-5 text-white/42">{item.detail}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      ) : (
+        <div data-testid="professional-data-capability-empty" className="mt-3 rounded-md border border-white/[0.05] bg-white/[0.02] px-3 py-2 text-xs leading-5 text-white/52">
+          暂无专业数据覆盖项。
+        </div>
+      )}
+    </section>
+  );
+};
+
 const MarketOverviewPage = () => {
   const { language } = useI18n();
   const { isAdminMode, canReadProviders } = useProductSurface();
@@ -730,6 +849,9 @@ const MarketOverviewPage = () => {
   const [panels, setPanels] = useState<PanelState>(initialLocalSnapshot.panels);
   const [officialRiskSourceReadiness, setOfficialRiskSourceReadiness] = useState<OfficialRiskSourceReadiness | null>(null);
   const [consumerEvidenceReadinessMatrix, setConsumerEvidenceReadinessMatrix] = useState<ConsumerEvidenceReadinessMatrix | null>(null);
+  const [professionalDataCapabilities, setProfessionalDataCapabilities] = useState<ProfessionalDataCapabilityRegistryView | null>(null);
+  const [professionalDataCapabilitiesLoading, setProfessionalDataCapabilitiesLoading] = useState(true);
+  const [professionalDataCapabilitiesError, setProfessionalDataCapabilitiesError] = useState<string | null>(null);
   const [loading, setLoading] = useState(initialLocalSnapshot.source !== 'local');
   const [localSnapshotSavedAt, setLocalSnapshotSavedAt] = useState<string | undefined>(initialLocalSnapshot.savedAt);
   const [refreshErrors, setRefreshErrors] = useState<Record<string, string>>({});
@@ -949,6 +1071,34 @@ const MarketOverviewPage = () => {
     };
   }, []);
 
+  const loadProfessionalDataCapabilities = useCallback(async (cancelledRef?: { current: boolean }) => {
+    setProfessionalDataCapabilitiesLoading(true);
+    setProfessionalDataCapabilitiesError(null);
+    try {
+      const payload = await marketApi.getProfessionalDataCapabilities();
+      if (!cancelledRef?.current) {
+        setProfessionalDataCapabilities(buildProfessionalDataCapabilityRegistryView(payload));
+      }
+    } catch {
+      if (!cancelledRef?.current) {
+        setProfessionalDataCapabilities(null);
+        setProfessionalDataCapabilitiesError('专业数据覆盖暂不可用，请稍后重试。');
+      }
+    } finally {
+      if (!cancelledRef?.current) {
+        setProfessionalDataCapabilitiesLoading(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const cancelledRef = { current: false };
+    void loadProfessionalDataCapabilities(cancelledRef);
+    return () => {
+      cancelledRef.current = true;
+    };
+  }, [loadProfessionalDataCapabilities]);
+
   useEffect(() => {
     writeLocalMarketOverviewSnapshot(panels);
     setLocalSnapshotSavedAt(new Date().toISOString());
@@ -1014,6 +1164,14 @@ const MarketOverviewPage = () => {
       >
         <OfficialRiskSourceReadinessStrip readiness={officialRiskSourceReadiness} />
         <MarketOverviewEvidenceBoundaryStrip matrix={consumerEvidenceReadinessMatrix} />
+        <ProfessionalDataCapabilityCoverageStrip
+          view={professionalDataCapabilities}
+          loading={professionalDataCapabilitiesLoading}
+          error={professionalDataCapabilitiesError}
+          onRetry={() => {
+            void loadProfessionalDataCapabilities();
+          }}
+        />
         <MarketOverviewWorkbench
           heading={(
             <TerminalPageHeading

@@ -26,6 +26,120 @@ describe('market API path join hygiene', () => {
   });
 });
 
+describe('professional data capability registry normalization', () => {
+  it('normalizes categories, statuses, and consumer-safe fields from the registry endpoint', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({
+      data: {
+        contract_version: 'professional_data_capability_registry_v1',
+        consumer_safe: true,
+        summary: {
+          total_capabilities: 6,
+          live_count: 1,
+          degraded_count: 1,
+          entitlement_required_count: 1,
+          configured_missing_count: 1,
+          not_implemented_count: 2,
+        },
+        categories: [
+          'options_structure',
+          'market_breadth_flows',
+          'sector_rotation',
+          'macro_cross_asset_regime',
+          'stock_research_data',
+          'backtest_data_availability',
+        ],
+        capabilities: [
+          {
+            capability_id: 'options.chain',
+            label: 'Options chain',
+            category: 'options_structure',
+            status: 'entitlement_required',
+            source_label: 'Options Lab readiness boundary',
+            reason: 'Options chain display is blocked until entitlement evidence is verified.',
+            freshness: 'Unavailable until rights are proven.',
+            providerClass: 'Must never render',
+          },
+          {
+            capability_id: 'market.breadth_flows',
+            label: 'Market breadth and flows',
+            category: 'market_breadth_flows',
+            status: 'degraded',
+            source_label: 'Market readiness registry',
+            reason: 'Breadth context exists with incomplete source authority.',
+            freshness: 'Partial and delayed.',
+          },
+          {
+            capability_id: 'market.sector_rotation',
+            label: 'Sector rotation',
+            category: 'sector_rotation',
+            status: 'degraded',
+            source_label: 'Market rotation readiness registry',
+            reason: 'Membership and quote authority remain incomplete.',
+            freshness: 'Partial and delayed.',
+          },
+          {
+            capability_id: 'macro.cross_asset_regime',
+            label: 'Macro and cross-asset regime',
+            category: 'macro_cross_asset_regime',
+            status: 'live',
+            source_label: 'Macro readiness registry',
+            reason: 'Stored macro rows are available for observation.',
+            freshness: 'Stored or delayed observations.',
+          },
+          {
+            capability_id: 'stock.news',
+            label: 'Stock news and catalysts',
+            category: 'stock_research_data',
+            status: 'configured_missing',
+            source_label: 'Single-stock readiness registry',
+            reason: 'Catalyst evidence is not consistently configured.',
+            freshness: 'Missing or inconsistent across symbols.',
+          },
+          {
+            capability_id: 'backtest.data_availability',
+            label: 'Backtest data availability',
+            category: 'backtest_data_availability',
+            status: 'not_implemented',
+            source_label: 'Backtest readiness registry',
+            reason: 'requestId rawPayload token should be redacted',
+            freshness: 'Research-useful, but lineage is incomplete.',
+          },
+        ],
+      },
+    });
+
+    const payload = await marketModule.marketApi.getProfessionalDataCapabilities();
+    const view = marketModule.buildProfessionalDataCapabilityRegistryView(payload);
+
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/market/professional-data-capabilities');
+    expect(view.summary.totalCapabilities).toBe(6);
+    expect(view.categories.map((category) => category.categoryKey)).toEqual([
+      'options_structure',
+      'market_breadth_flows',
+      'sector_rotation',
+      'macro_cross_asset_regime',
+      'stock_research_data',
+      'backtest_data_availability',
+    ]);
+    expect(view.categories[0].items[0]).toMatchObject({
+      label: 'Options chain',
+      status: { key: 'entitlement_required', label: '需授权', variant: 'danger' },
+      sourceLabel: 'Options Lab readiness boundary',
+    });
+    expect(view.categories[5].items[0].detail).toBe('Research-useful, but lineage is incomplete.');
+    expect(view.statusCounts.map((item) => item.label)).toEqual([
+      '可用 1',
+      '降级 1',
+      '需授权 1',
+      '配置待补 1',
+      '未实现 2',
+    ]);
+    expect(JSON.stringify(view)).not.toMatch(
+      /providerClass|providerName|providerAttempted|requiredProviderClass|sourceAuthorityRouter|endpointHost|apiKeyPresent|exceptionClass|exceptionChain|requestId|traceId|cacheKey|rawPayload|credential|token|env/i,
+    );
+  });
+});
+
 describe('market temperature evidence normalization', () => {
   it('normalizes official risk source readiness and maps it to consumer labels', async () => {
     vi.spyOn(apiClient, 'get').mockResolvedValueOnce({

@@ -803,6 +803,79 @@ export type DataSourceGapRegistryView = {
   groups: DataSourceGapRegistryGroupView[];
 };
 
+export type ProfessionalDataCapabilityStatus =
+  | 'live'
+  | 'degraded'
+  | 'entitlement_required'
+  | 'configured_missing'
+  | 'not_implemented'
+  | string;
+
+export type ProfessionalDataCapabilityCategory =
+  | 'options_structure'
+  | 'market_breadth_flows'
+  | 'sector_rotation'
+  | 'macro_cross_asset_regime'
+  | 'stock_research_data'
+  | 'backtest_data_availability'
+  | string;
+
+export type ProfessionalDataCapability = {
+  capabilityId: string;
+  label: string;
+  category: ProfessionalDataCapabilityCategory;
+  status: ProfessionalDataCapabilityStatus;
+  sourceLabel: string;
+  reason?: string | null;
+  freshness?: string | null;
+};
+
+export type ProfessionalDataCapabilitySummary = {
+  totalCapabilities: number;
+  liveCount: number;
+  degradedCount: number;
+  entitlementRequiredCount: number;
+  configuredMissingCount: number;
+  notImplementedCount: number;
+};
+
+export type ProfessionalDataCapabilityRegistryResponse = {
+  contractVersion: string;
+  consumerSafe: boolean;
+  summary: ProfessionalDataCapabilitySummary;
+  categories: ProfessionalDataCapabilityCategory[];
+  capabilities: ProfessionalDataCapability[];
+};
+
+export type ProfessionalDataCapabilityStatusView = {
+  key: string;
+  label: string;
+  variant: DataSourceGapRegistryStatusView['variant'];
+};
+
+export type ProfessionalDataCapabilityViewItem = {
+  capabilityId: string;
+  label: string;
+  status: ProfessionalDataCapabilityStatusView;
+  sourceLabel: string;
+  detail: string;
+};
+
+export type ProfessionalDataCapabilityCategoryView = {
+  categoryKey: ProfessionalDataCapabilityCategory;
+  label: string;
+  description: string;
+  items: ProfessionalDataCapabilityViewItem[];
+};
+
+export type ProfessionalDataCapabilityRegistryView = {
+  hasItems: boolean;
+  contractVersion: string;
+  summary: ProfessionalDataCapabilitySummary;
+  statusCounts: ProfessionalDataCapabilityStatusView[];
+  categories: ProfessionalDataCapabilityCategoryView[];
+};
+
 function normalizeReadinessSymbols(symbols?: string[] | string | null): string | undefined {
   if (Array.isArray(symbols)) {
     const sanitized = symbols.flatMap((symbol) => {
@@ -1089,6 +1162,8 @@ const DATA_SOURCE_IMPACT_SURFACE_LABELS: Record<string, string> = {
 
 const DATA_SOURCE_GAP_UNSAFE_TEXT_PATTERN =
   /request[_ -]?id|trace[_ -]?id|raw[_ -]?(payload|diagnostic|dump)|cache[_ -]?key|credential|env\b|debug|token|secret|cookie|api[_-]?key/i;
+const PROFESSIONAL_DATA_CAPABILITY_UNSAFE_TEXT_PATTERN =
+  /provider\s*class|providerClass|provider\s*name|providerName|provider\s*attempted|providerAttempted|required\s*provider\s*class|requiredProviderClass|source\s*authority\s*router|sourceAuthorityRouter|endpoint\s*host|endpointHost|api\s*key\s*present|apiKeyPresent|exception\s*class|exceptionClass|exception\s*chain|exceptionChain|request[_ -]?id|requestId|trace[_ -]?id|traceId|cache[_ -]?key|cacheKey|raw[_ -]?payload|rawPayload|credential|token|env\b/i;
 const DATA_SOURCE_ACQUISITION_BLOCKER_TYPE_KEYS = [
   'entitlement',
   'provider-integration',
@@ -1240,6 +1315,12 @@ function dataSourceGapSafeText(value?: string | null, fallback = '待补证'): s
   const text = String(value || '').replace(/\s+/g, ' ').trim();
   if (!text || DATA_SOURCE_GAP_UNSAFE_TEXT_PATTERN.test(text)) return fallback;
   return text.slice(0, 140);
+}
+
+function professionalCapabilitySafeText(value?: string | null, fallback = '待补证'): string {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text || PROFESSIONAL_DATA_CAPABILITY_UNSAFE_TEXT_PATTERN.test(text)) return fallback;
+  return text.slice(0, 180);
 }
 
 function dataSourceGapSafeList(values?: string[] | null, fallback = '证据待补证'): string[] {
@@ -1695,6 +1776,118 @@ function normalizeDataSourceGapRegistryPayload(rawPayload: Record<string, unknow
   };
 }
 
+const DEFAULT_PROFESSIONAL_DATA_CAPABILITY_SUMMARY: ProfessionalDataCapabilitySummary = {
+  totalCapabilities: 0,
+  liveCount: 0,
+  degradedCount: 0,
+  entitlementRequiredCount: 0,
+  configuredMissingCount: 0,
+  notImplementedCount: 0,
+};
+
+const PROFESSIONAL_DATA_CAPABILITY_CATEGORY_META: Record<string, { label: string; description: string }> = {
+  options_structure: {
+    label: '期权结构',
+    description: '期权链、Greeks、Gamma 与 0DTE 等结构输入。',
+  },
+  market_breadth_flows: {
+    label: '广度 / 资金流',
+    description: '市场参与度、资金流和 positioning 观察。',
+  },
+  sector_rotation: {
+    label: '板块 / 市场状态',
+    description: 'ETF、指数、板块轮动和市场 regime 证据。',
+  },
+  macro_cross_asset_regime: {
+    label: '宏观 / 跨资产',
+    description: '利率、波动率、流动性和信用压力输入。',
+  },
+  stock_research_data: {
+    label: '个股研究',
+    description: '基本面、技术面、新闻和催化剂覆盖。',
+  },
+  backtest_data_availability: {
+    label: '回测数据',
+    description: '数据集血缘、调整基准、日历和 PIT 证据。',
+  },
+};
+
+function normalizeProfessionalDataCapabilityStatus(status?: string | null): ProfessionalDataCapabilityStatus {
+  const normalized = normalizeGapToken(status);
+  if ([
+    'live',
+    'degraded',
+    'entitlement_required',
+    'configured_missing',
+    'not_implemented',
+  ].includes(normalized)) {
+    return normalized;
+  }
+  return 'degraded';
+}
+
+function professionalDataCapabilityStatusView(status?: string | null): ProfessionalDataCapabilityStatusView {
+  const normalized = normalizeProfessionalDataCapabilityStatus(status);
+  if (normalized === 'live') return { key: normalized, label: '可用', variant: 'success' };
+  if (normalized === 'degraded') return { key: normalized, label: '降级', variant: 'caution' };
+  if (normalized === 'entitlement_required') return { key: normalized, label: '需授权', variant: 'danger' };
+  if (normalized === 'configured_missing') return { key: normalized, label: '配置待补', variant: 'caution' };
+  if (normalized === 'not_implemented') return { key: normalized, label: '未实现', variant: 'neutral' };
+  return { key: 'degraded', label: '降级', variant: 'caution' };
+}
+
+function normalizeProfessionalDataCapabilityRegistryPayload(
+  rawPayload: Record<string, unknown>,
+): ProfessionalDataCapabilityRegistryResponse {
+  const payload = toCamelCase<ProfessionalDataCapabilityRegistryResponse>(rawPayload);
+  const rawSummary = payload.summary || DEFAULT_PROFESSIONAL_DATA_CAPABILITY_SUMMARY;
+  const capabilities = Array.isArray(payload.capabilities)
+    ? payload.capabilities.flatMap((capability) => {
+      const capabilityId = professionalCapabilitySafeText(capability.capabilityId, '');
+      const label = professionalCapabilitySafeText(capability.label, '');
+      const category = professionalCapabilitySafeText(capability.category, '');
+      if (!capabilityId || !label || !category) {
+        return [];
+      }
+      return [{
+        capabilityId,
+        label,
+        category,
+        status: normalizeProfessionalDataCapabilityStatus(capability.status),
+        sourceLabel: professionalCapabilitySafeText(capability.sourceLabel, '来源待补证'),
+        reason: professionalCapabilitySafeText(capability.reason, ''),
+        freshness: professionalCapabilitySafeText(capability.freshness, ''),
+      }];
+    })
+    : [];
+  const categories = Array.isArray(payload.categories)
+    ? payload.categories.flatMap((category) => {
+      const safeCategory = professionalCapabilitySafeText(category, '');
+      return safeCategory ? [safeCategory] : [];
+    })
+    : [];
+
+  return {
+    contractVersion: professionalCapabilitySafeText(
+      payload.contractVersion,
+      'professional_data_capability_registry_unknown',
+    ),
+    consumerSafe: payload.consumerSafe !== false,
+    summary: {
+      ...DEFAULT_PROFESSIONAL_DATA_CAPABILITY_SUMMARY,
+      ...rawSummary,
+      totalCapabilities: dataSourceGapSafeCount(rawSummary.totalCapabilities),
+      liveCount: dataSourceGapSafeCount(rawSummary.liveCount),
+      degradedCount: dataSourceGapSafeCount(rawSummary.degradedCount),
+      entitlementRequiredCount: dataSourceGapSafeCount(rawSummary.entitlementRequiredCount),
+      configuredMissingCount: dataSourceGapSafeCount(rawSummary.configuredMissingCount),
+      notImplementedCount: dataSourceGapSafeCount(rawSummary.notImplementedCount),
+    },
+    categories,
+    capabilities,
+  };
+}
+
 export function buildDataSourceGapRegistryView(
   registry?: DataSourceGapRegistryResponse | null,
 ): DataSourceGapRegistryView {
@@ -1780,6 +1973,59 @@ export function buildDataSourceGapRegistryView(
     acquisitionPriorityQueue,
     families: familyViews,
     groups,
+  };
+}
+
+export function buildProfessionalDataCapabilityRegistryView(
+  registry?: ProfessionalDataCapabilityRegistryResponse | null,
+): ProfessionalDataCapabilityRegistryView {
+  const summary = registry?.summary || DEFAULT_PROFESSIONAL_DATA_CAPABILITY_SUMMARY;
+  const capabilities = Array.isArray(registry?.capabilities) ? registry.capabilities : [];
+  const orderedCategories = [
+    'options_structure',
+    'market_breadth_flows',
+    'sector_rotation',
+    'macro_cross_asset_regime',
+    'stock_research_data',
+    'backtest_data_availability',
+    ...(registry?.categories || []),
+  ].filter((category, index, all) => category && all.indexOf(category) === index);
+  const categoryViews = orderedCategories.map((categoryKey) => {
+    const meta = PROFESSIONAL_DATA_CAPABILITY_CATEGORY_META[categoryKey] || {
+      label: '其他专业数据',
+      description: '后端已返回、前端尚未归类的数据能力。',
+    };
+    return {
+      categoryKey,
+      label: meta.label,
+      description: meta.description,
+      items: capabilities
+        .filter((capability) => capability.category === categoryKey)
+        .map((capability) => ({
+          capabilityId: capability.capabilityId,
+          label: capability.label,
+          status: professionalDataCapabilityStatusView(capability.status),
+          sourceLabel: professionalCapabilitySafeText(capability.sourceLabel, '来源待补证'),
+          detail: [
+            professionalCapabilitySafeText(capability.reason, ''),
+            professionalCapabilitySafeText(capability.freshness, ''),
+          ].filter(Boolean).join(' · ') || '覆盖原因待补证。',
+        })),
+    };
+  }).filter((category) => category.items.length > 0);
+
+  return {
+    hasItems: capabilities.length > 0,
+    contractVersion: registry?.contractVersion || 'professional_data_capability_registry_unknown',
+    summary,
+    statusCounts: [
+      { ...professionalDataCapabilityStatusView('live'), label: `可用 ${summary.liveCount}` },
+      { ...professionalDataCapabilityStatusView('degraded'), label: `降级 ${summary.degradedCount}` },
+      { ...professionalDataCapabilityStatusView('entitlement_required'), label: `需授权 ${summary.entitlementRequiredCount}` },
+      { ...professionalDataCapabilityStatusView('configured_missing'), label: `配置待补 ${summary.configuredMissingCount}` },
+      { ...professionalDataCapabilityStatusView('not_implemented'), label: `未实现 ${summary.notImplementedCount}` },
+    ],
+    categories: categoryViews,
   };
 }
 
@@ -2034,6 +2280,14 @@ export const marketApi = {
   getDataSourceGapRegistry: async (): Promise<DataSourceGapRegistryResponse> => {
     const response = await apiClient.get<Record<string, unknown>>(buildMarketApiPath('data-source-gap-registry'));
     return normalizeDataSourceGapRegistryPayload(response.data);
+  },
+  getProfessionalDataCapabilities: async (): Promise<ProfessionalDataCapabilityRegistryResponse> => {
+    const response = await apiClient.get<Record<string, unknown>>(buildMarketApiPath('professional-data-capabilities'));
+    return normalizeProfessionalDataCapabilityRegistryPayload(response.data);
+  },
+  getProfessionalDataCapabilitiesAdmin: async (): Promise<ProfessionalDataCapabilityRegistryResponse> => {
+    const response = await apiClient.get<Record<string, unknown>>(buildMarketApiPath('professional-data-capabilities/admin'));
+    return normalizeProfessionalDataCapabilityRegistryPayload(response.data);
   },
 };
 
