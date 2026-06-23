@@ -143,6 +143,7 @@ class BacktestRunHistoryResponse(BaseModel):
 
 class BacktestSampleStatusResponse(BaseModel):
     code: str
+    scope: str = "single"
     prepared_count: int
     prepared_start_date: Optional[str] = None
     prepared_end_date: Optional[str] = None
@@ -160,6 +161,9 @@ class BacktestSampleStatusResponse(BaseModel):
     fallback_used: Optional[bool] = None
     pricing_resolved_source: Optional[str] = None
     pricing_fallback_used: Optional[bool] = None
+    sample_readiness_state: Optional[str] = None
+    sample_blocking_reasons: List[str] = Field(default_factory=list)
+    historicalOhlcvReadiness: Dict[str, Any] = Field(default_factory=dict)
 
 
 class BacktestClearResponse(BaseModel):
@@ -1171,6 +1175,7 @@ class RuleBacktestHistoryItem(BacktestResponseContractFields):
     summary: Dict[str, Any] = Field(default_factory=dict)
     data_quality: Dict[str, Any] = Field(default_factory=dict)
     data_sufficiency: Dict[str, Any] = Field(default_factory=dict)
+    historicalOhlcvReadiness: Dict[str, Any] = Field(default_factory=dict)
     robustness_analysis: Dict[str, Any] = Field(default_factory=dict)
     artifact_availability: Dict[str, Any] = Field(default_factory=dict)
     readback_integrity: Dict[str, Any] = Field(default_factory=dict)
@@ -1254,6 +1259,7 @@ class RuleBacktestRunResponse(BacktestResponseContractFields):
     summary: Dict[str, Any] = Field(default_factory=dict)
     data_quality: Dict[str, Any] = Field(default_factory=dict)
     data_sufficiency: Dict[str, Any] = Field(default_factory=dict)
+    historicalOhlcvReadiness: Dict[str, Any] = Field(default_factory=dict)
     robustness_analysis: Dict[str, Any] = Field(default_factory=dict)
     artifact_availability: Dict[str, Any] = Field(default_factory=dict)
     readback_integrity: Dict[str, Any] = Field(default_factory=dict)
@@ -1501,6 +1507,8 @@ class BacktestResultItem(BacktestResponseContractFields):
     simulated_return_pct: Optional[float] = None
     market_data_sources: List[str] = Field(default_factory=list)
     data_quality: Dict[str, Any] = Field(default_factory=dict)
+    data_sufficiency: Dict[str, Any] = Field(default_factory=dict)
+    historicalOhlcvReadiness: Dict[str, Any] = Field(default_factory=dict)
     execution_assumptions: Dict[str, Any] = Field(default_factory=dict)
 
 

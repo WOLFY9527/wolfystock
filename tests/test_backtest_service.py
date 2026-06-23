@@ -290,6 +290,21 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(status["resolved_source"], "Unknown")
         self.assertFalse(status["fallback_used"])
 
+    def test_get_sample_status_without_code_returns_safe_aggregate(self) -> None:
+        service = BacktestService(self.db)
+
+        status = service.get_sample_status(code=None)
+
+        self.assertEqual(status["code"], "__all__")
+        self.assertEqual(status["scope"], "aggregate")
+        self.assertEqual(status["sample_readiness_state"], "blocked")
+        self.assertIn("provider_missing", status["sample_blocking_reasons"])
+        readiness = status["historicalOhlcvReadiness"]
+        self.assertEqual(readiness["providerState"], "provider_missing")
+        self.assertEqual(readiness["requiredBars"], status["eval_window_days"])
+        self.assertEqual(readiness["usableBars"], 0)
+        self.assertEqual(readiness["missingBars"], status["eval_window_days"])
+
     def test_run_history_is_recorded_and_results_can_be_reopened(self) -> None:
         service = BacktestService(self.db)
         stats = service.run_backtest(code="600519", force=False, eval_window_days=3, min_age_days=0, limit=10)
@@ -548,9 +563,9 @@ class BacktestServiceTestCase(unittest.TestCase):
         recent = service.get_recent_evaluations(code="AAPL", eval_window_days=3, limit=10, page=1)
         item = recent["items"][0]
         self.assertEqual(item["eval_status"], "insufficient_data")
-        self.assertEqual(item["data_status"], "data_unavailable")
-        self.assertEqual(item["calculation_status"], "insufficient_sample")
-        self.assertEqual(item["sample_status"], "insufficient_sample")
+        self.assertEqual(item["data_status"], "provider_missing")
+        self.assertEqual(item["calculation_status"], "calculation_unavailable")
+        self.assertEqual(item["sample_status"], "provider_missing")
         self.assertIsNone(item["stock_return_pct"])
         self.assertIsNone(item["simulated_return_pct"])
         self.assertIn("Research diagnostic only", item["no_advice_disclosure"])
