@@ -37,6 +37,7 @@ from api.v1.endpoints.backtest import (  # noqa: E402
     get_rule_backtest_run_status,
     get_rule_backtest_universe_job_diagnostics,
     get_rule_backtest_universe_job_status,
+    get_sample_status,
     list_rule_backtest_universe_job_results,
     router as backtest_router,
     run_rule_backtest,
@@ -44,6 +45,7 @@ from api.v1.endpoints.backtest import (  # noqa: E402
 )
 from api.v1.schemas.backtest import (  # noqa: E402
     BacktestCodeRequest,
+    BacktestSampleStatusResponse,
     RuleBacktestCancelResponse,
     RuleBacktestCompareRequest,
     RuleBacktestCompareResponse,
@@ -1885,6 +1887,45 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertIsNone(response.win_rate_pct)
         self.assertTrue(response.limitations)
         self.assertIn("Research diagnostic only", response.no_advice_disclosure)
+
+    def test_sample_status_without_code_returns_safe_aggregate_status(self) -> None:
+        service = MagicMock()
+        service.get_sample_status.return_value = {
+            "code": "__all__",
+            "scope": "aggregate",
+            "prepared_count": 0,
+            "sample_readiness_state": "missing",
+            "sample_blocking_reasons": ["provider_missing"],
+            "historicalOhlcvReadiness": {
+                "providerState": "provider_missing",
+                "overallState": "blocked",
+                "requiredBars": 10,
+                "usableBars": 0,
+                "missingBars": 10,
+                "missingRequirements": ["provider_missing", "insufficient_history"],
+                "consumerSafe": True,
+            },
+            "eval_window_days": 10,
+            "min_age_days": 14,
+            "evaluation_window_trading_bars": 10,
+            "maturity_calendar_days": 14,
+            "requested_mode": "aggregate",
+            "resolved_source": "Unknown",
+            "fallback_used": False,
+            "pricing_resolved_source": "Unknown",
+            "pricing_fallback_used": False,
+        }
+
+        with patch("api.v1.endpoints.backtest.BacktestService", return_value=service):
+            response = get_sample_status(code=None, db_manager=MagicMock())
+
+        self.assertIsInstance(response, BacktestSampleStatusResponse)
+        self.assertEqual(response.code, "__all__")
+        self.assertEqual(response.scope, "aggregate")
+        self.assertEqual(response.sample_readiness_state, "missing")
+        self.assertEqual(response.sample_blocking_reasons, ["provider_missing"])
+        self.assertEqual(response.historicalOhlcvReadiness["providerState"], "provider_missing")
+        service.get_sample_status.assert_called_once_with(code=None)
 
     def test_rule_backtest_run_response_gates_metrics_until_calculation_ready(self) -> None:
         service = MagicMock()

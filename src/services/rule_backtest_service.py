@@ -21,6 +21,10 @@ from src.repositories.rule_backtest_repo import RuleBacktestRepository
 from src.services.backtest_response_contract import build_rule_run_contract
 from src.services.backtest_data_sufficiency import assess_backtest_data_sufficiency
 from src.services.backtest_data_source_guard import assess_backtest_data_source_eligibility
+from src.services.historical_ohlcv_readiness import (
+    HistoricalOhlcvReadinessRequest,
+    HistoricalOhlcvReadinessService,
+)
 from src.services.backtest_bounded_grid_runner import run_bounded_parameter_grid_diagnostic
 from src.services.backtest_parameter_stability import (
     build_parameter_stability_evidence_from_compare_summary,
@@ -3580,6 +3584,14 @@ class RuleBacktestService:
         missing_bar_count = max((expected_bar_count or 0) - len(window_bars), 0) if expected_bar_count is not None else 0
         anomalies = self._detect_data_quality_anomalies(window_bars)
         benchmark_payload = dict(benchmark_summary or {})
+        historical_ohlcv_readiness = self._build_historical_ohlcv_readiness_payload(
+            code=code,
+            bars=window_bars,
+            requested_start=requested_start,
+            requested_end=requested_end,
+            required_bars=expected_bar_count or len(window_bars),
+            benchmark_summary=benchmark_payload,
+        )
         warnings: List[Dict[str, str]] = []
         if not window_bars:
             warnings.append(self._quality_warning("no_bars", "No market bars were available for the requested window.", "warning"))
@@ -3649,6 +3661,53 @@ class RuleBacktestService:
             "is_complete": bool(window_bars) and missing_bar_count == 0 and not anomalies,
             "quality_score": round(max(0.0, min(1.0, quality_score)), 4),
             "warnings": warnings,
+            "historicalOhlcvReadiness": historical_ohlcv_readiness,
+        }
+
+    def _build_historical_ohlcv_readiness_payload(
+        self,
+        *,
+        code: str,
+        bars: List[Any],
+        requested_start: Optional[date],
+        requested_end: Optional[date],
+        required_bars: int,
+        benchmark_summary: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        benchmark_required = bool(
+            benchmark_summary
+            and str(benchmark_summary.get("resolved_mode") or "").strip().lower()
+            not in {"", "none", "same_symbol_buy_and_hold"}
+        )
+        result = HistoricalOhlcvReadinessService().assess_supplied_history(
+            HistoricalOhlcvReadinessRequest(
+                symbol=code,
+                market=self._market_metadata(code)["market"],
+                timeframe="1d",
+                start=requested_start,
+                end=requested_end,
+                lookback_bars=required_bars,
+                required_bars=max(0, int(required_bars or 0)),
+                require_adjusted=False,
+                benchmark_symbol=benchmark_summary.get("code"),
+                benchmark_required=benchmark_required,
+            ),
+            [self._bar_to_ohlcv_mapping(bar) for bar in bars],
+            source_available=bool(bars),
+            adjustments_available=None,
+            freshness_state="stale" if requested_end and bars and (self._bar_date(bars[-1]) or date.min) < requested_end else None,
+            unavailable_reason="provider_missing" if not bars else None,
+        )
+        return result.readiness
+
+    def _bar_to_ohlcv_mapping(self, bar: Any) -> Dict[str, Any]:
+        return {
+            "date": self._bar_date(bar),
+            "open": getattr(bar, "open", None),
+            "high": getattr(bar, "high", None),
+            "low": getattr(bar, "low", None),
+            "close": getattr(bar, "close", None),
+            "volume": getattr(bar, "volume", 0.0) if getattr(bar, "volume", None) is not None else 0.0,
         }
 
     @staticmethod
@@ -5874,6 +5933,7 @@ class RuleBacktestService:
             "needs_confirmation": bool(row.needs_confirmation),
             **RuleBacktestService._build_single_symbol_readiness_fields(readiness_payload),
             "data_sufficiency": data_sufficiency,
+            "historicalOhlcvReadiness": dict(data_sufficiency.get("ohlcv_readiness") or {}),
             "artifact_availability": dict(artifact_availability or {}),
             "readback_integrity": dict(readback_integrity or {}),
         }
@@ -11032,6 +11092,7 @@ class RuleBacktestService:
             "summary": summary,
             "data_quality": data_quality,
             "data_sufficiency": data_sufficiency,
+            "historicalOhlcvReadiness": dict(data_sufficiency.get("ohlcv_readiness") or {}),
             "robustness_analysis": dict(summary.get("robustness_analysis") or {}),
             "artifact_availability": artifact_availability,
             "readback_integrity": readback_integrity,

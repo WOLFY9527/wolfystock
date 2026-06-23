@@ -480,7 +480,7 @@ def prepare_backtest_samples(
     summary="获取历史分析评估样本状态",
 )
 def get_sample_status(
-    code: str = Query(..., description="股票代码"),
+    code: Optional[str] = Query(None, description="股票代码；省略时返回安全聚合状态"),
     db_manager: DatabaseManager = Depends(get_database_manager),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> BacktestSampleStatusResponse:

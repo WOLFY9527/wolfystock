@@ -20,7 +20,12 @@ from src.services.backtest_response_contract import (
     build_standard_result_contract,
     build_standard_run_contract,
 )
+from src.services.backtest_data_sufficiency import assess_backtest_data_sufficiency
 from src.services.backtest_data_source_guard import assess_backtest_data_source_eligibility
+from src.services.historical_ohlcv_readiness import (
+    HistoricalOhlcvReadinessRequest,
+    HistoricalOhlcvReadinessService,
+)
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback
 from src.storage import AnalysisHistory, BacktestResult, BacktestRun, BacktestSummary, DatabaseManager, StockDaily
 
@@ -415,8 +420,10 @@ class BacktestService:
         items = [self._result_to_dict(r) for r in rows]
         return {"total": total, "page": page, "limit": limit, "items": items}
 
-    def get_sample_status(self, *, code: str) -> Dict[str, Any]:
+    def get_sample_status(self, *, code: Optional[str]) -> Dict[str, Any]:
         settings = self._resolve_runtime_settings()
+        if not str(code or "").strip():
+            return self._get_aggregate_sample_status(settings=settings)
         rows = self.repo.get_sample_rows(code=code, **self._owner_kwargs())
         parsed_dates: List[date] = []
         latest_created_at: Optional[datetime] = None
@@ -433,8 +440,21 @@ class BacktestService:
             sample_rows=rows,
         )
 
+        stock_rows = self._load_stock_daily_rows(code)
+        ohlcv_readiness = self._build_historical_ohlcv_readiness(
+            code=code,
+            rows=stock_rows,
+            required_bars=settings.eval_window_days,
+        )
+        sample_state, sample_reasons = self._sample_readiness_from_inputs(
+            prepared_count=len(rows),
+            ohlcv_readiness=ohlcv_readiness,
+            sample_observability=sample_observability,
+        )
+
         return {
             "code": code,
+            "scope": "single",
             "prepared_count": len(rows),
             "prepared_start_date": min(parsed_dates).isoformat() if parsed_dates else None,
             "prepared_end_date": max(parsed_dates).isoformat() if parsed_dates else None,
@@ -452,6 +472,9 @@ class BacktestService:
             "fallback_used": source_metadata.fallback_used,
             "pricing_resolved_source": source_metadata.resolved_source,
             "pricing_fallback_used": source_metadata.fallback_used,
+            "sample_readiness_state": sample_state,
+            "sample_blocking_reasons": sample_reasons,
+            "historicalOhlcvReadiness": ohlcv_readiness,
         }
 
     def clear_backtest_samples(self, *, code: str) -> Dict[str, Any]:
@@ -800,6 +823,28 @@ class BacktestService:
                 deduped.append(item)
         return deduped
 
+    def _standard_result_ohlcv_rows(
+        self,
+        *,
+        code: str,
+        analysis_date: Optional[date],
+        eval_window_days: int,
+    ) -> List[StockDaily]:
+        if analysis_date is None:
+            return []
+        rows: List[StockDaily] = []
+        start_daily = self.stock_repo.get_start_daily(code=code, analysis_date=analysis_date)
+        if start_daily is not None:
+            rows.append(start_daily)
+        rows.extend(
+            self.stock_repo.get_forward_bars(
+                code=code,
+                analysis_date=analysis_date,
+                eval_window_days=eval_window_days,
+            )
+        )
+        return rows
+
     @staticmethod
     def _standard_result_data_quality(
         *,
@@ -860,6 +905,142 @@ class BacktestService:
             "dividends_handled": "unknown",
             "splits_handled": "unknown",
             "warnings": warnings,
+        }
+
+    def _build_historical_ohlcv_readiness(
+        self,
+        *,
+        code: str,
+        rows: List[StockDaily],
+        required_bars: int,
+        benchmark_required: bool = False,
+        benchmark_symbol: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if rows:
+            start = rows[0].date
+            end = rows[-1].date
+            source_available = True
+        else:
+            start = None
+            end = None
+            source_available = False
+        result = HistoricalOhlcvReadinessService().assess_supplied_history(
+            HistoricalOhlcvReadinessRequest(
+                symbol=code,
+                market="unknown",
+                timeframe="1d",
+                start=start,
+                end=end,
+                lookback_bars=required_bars,
+                required_bars=max(0, int(required_bars or 0)),
+                require_adjusted=False,
+                benchmark_symbol=benchmark_symbol,
+                benchmark_required=benchmark_required,
+            ),
+            [self._stock_daily_to_ohlcv_bar(row) for row in rows],
+            source_available=source_available,
+            adjustments_available=None,
+            unavailable_reason="provider_missing" if not source_available else None,
+        )
+        return result.readiness
+
+    @staticmethod
+    def _stock_daily_to_ohlcv_bar(row: StockDaily) -> Dict[str, Any]:
+        return {
+            "date": row.date,
+            "open": row.open,
+            "high": row.high,
+            "low": row.low,
+            "close": row.close,
+            "volume": row.volume if row.volume is not None else 0.0,
+        }
+
+    @staticmethod
+    def _sample_readiness_from_inputs(
+        *,
+        prepared_count: int,
+        ohlcv_readiness: Dict[str, Any],
+        sample_observability: Dict[str, Any],
+    ) -> tuple[str, List[str]]:
+        reasons = [
+            str(item)
+            for item in (ohlcv_readiness.get("missingRequirements") or [])
+            if str(item or "").strip()
+        ]
+        if prepared_count <= 0:
+            reasons.append("samples_missing")
+        if sample_observability.get("excluded_recent_reason") == "evaluation_window_not_satisfied":
+            reasons.append("stale_or_incomplete_sample_window")
+        deduped: List[str] = []
+        for reason in reasons:
+            if reason not in deduped:
+                deduped.append(reason)
+        if any(reason in deduped for reason in ("provider_missing", "insufficient_history", "entitlement_required")):
+            return "blocked", deduped
+        if "samples_missing" in deduped:
+            return "missing", deduped
+        if any(reason in deduped for reason in ("stale_data", "missing_benchmark", "missing_adjustments", "stale_or_incomplete_sample_window")):
+            return "stale" if "stale_data" in deduped or "stale_or_incomplete_sample_window" in deduped else "blocked", deduped
+        return "ready", deduped
+
+    def _get_aggregate_sample_status(self, *, settings: BacktestRuntimeSettings) -> Dict[str, Any]:
+        with self.db.get_session() as session:
+            rows = session.execute(
+                select(AnalysisHistory).where(
+                    and_(
+                        AnalysisHistory.owner_id == self.db.require_user_id(self.owner_id),
+                        AnalysisHistory.report_type == "backtest_sample",
+                    )
+                )
+            ).scalars().all()
+        parsed_dates: List[date] = []
+        latest_created_at: Optional[datetime] = None
+        for row in rows:
+            parsed = self.repo.parse_analysis_date_from_snapshot(row.context_snapshot)
+            if parsed:
+                parsed_dates.append(parsed)
+            if row.created_at and (latest_created_at is None or row.created_at > latest_created_at):
+                latest_created_at = row.created_at
+        readiness = HistoricalOhlcvReadinessService().assess_supplied_history(
+            HistoricalOhlcvReadinessRequest(
+                symbol="__ALL__",
+                market="unknown",
+                timeframe="1d",
+                lookback_bars=settings.eval_window_days,
+                required_bars=settings.eval_window_days,
+            ),
+            [],
+            source_available=False,
+            unavailable_reason="provider_missing",
+        ).readiness
+        state, reasons = self._sample_readiness_from_inputs(
+            prepared_count=len(rows),
+            ohlcv_readiness=readiness,
+            sample_observability={},
+        )
+        return {
+            "code": "__all__",
+            "scope": "aggregate",
+            "prepared_count": len(rows),
+            "prepared_start_date": min(parsed_dates).isoformat() if parsed_dates else None,
+            "prepared_end_date": max(parsed_dates).isoformat() if parsed_dates else None,
+            "latest_prepared_at": latest_created_at.isoformat() if latest_created_at else None,
+            "latest_prepared_sample_date": max(parsed_dates).isoformat() if parsed_dates else None,
+            "latest_eligible_sample_date": None,
+            "excluded_recent_reason": "aggregate_status_without_symbol",
+            "excluded_recent_message": "Aggregate sample status is safe for admin overview; pass code for symbol-specific readiness.",
+            "eval_window_days": settings.eval_window_days,
+            "min_age_days": settings.min_age_days,
+            "evaluation_window_trading_bars": settings.eval_window_days,
+            "maturity_calendar_days": settings.min_age_days,
+            "requested_mode": "aggregate",
+            "resolved_source": "Unknown",
+            "fallback_used": False,
+            "pricing_resolved_source": "Unknown",
+            "pricing_fallback_used": False,
+            "sample_readiness_state": state,
+            "sample_blocking_reasons": reasons,
+            "historicalOhlcvReadiness": readiness,
         }
 
     def _try_fill_daily_data(self, *, code: str, analysis_date: date, eval_window_days: int) -> Optional[BacktestSourceMetadata]:
@@ -1307,6 +1488,33 @@ class BacktestService:
             analysis_date=row.analysis_date,
             eval_window_days=row.eval_window_days,
         )
+        data_quality = self._standard_result_data_quality(
+            code=row.code,
+            analysis_date=row.analysis_date,
+            eval_window_days=row.eval_window_days,
+            market_data_sources=market_data_sources,
+        )
+        historical_ohlcv_readiness = self._build_historical_ohlcv_readiness(
+            code=row.code,
+            rows=self._standard_result_ohlcv_rows(
+                code=row.code,
+                analysis_date=row.analysis_date,
+                eval_window_days=row.eval_window_days,
+            ),
+            required_bars=row.eval_window_days,
+        )
+        data_quality["historicalOhlcvReadiness"] = historical_ohlcv_readiness
+        data_sufficiency = assess_backtest_data_sufficiency(
+            {
+                "status": row.eval_status,
+                "no_result_reason": (
+                    "insufficient_history"
+                    if str(row.eval_status or "").strip().lower() == "insufficient_data"
+                    else None
+                ),
+                "data_quality": data_quality,
+            }
+        )
         payload = {
             "analysis_history_id": row.analysis_history_id,
             "code": row.code,
@@ -1338,12 +1546,9 @@ class BacktestService:
             "simulated_exit_reason": row.simulated_exit_reason,
             "simulated_return_pct": row.simulated_return_pct,
             "market_data_sources": market_data_sources,
-            "data_quality": self._standard_result_data_quality(
-                code=row.code,
-                analysis_date=row.analysis_date,
-                eval_window_days=row.eval_window_days,
-                market_data_sources=market_data_sources,
-            ),
+            "data_quality": data_quality,
+            "data_sufficiency": data_sufficiency,
+            "historicalOhlcvReadiness": historical_ohlcv_readiness,
             "execution_assumptions": assumptions,
         }
         payload.update(build_standard_result_contract(payload))

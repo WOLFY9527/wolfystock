@@ -51,6 +51,47 @@ def _append_unique(items: List[str], value: Any) -> None:
         items.append(text)
 
 
+def _data_sufficiency(payload: Dict[str, Any]) -> Dict[str, Any]:
+    value = payload.get("data_sufficiency")
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _apply_sufficiency_contract(
+    *,
+    data_sufficiency: Dict[str, Any],
+    data_status: str,
+    calculation_status: str,
+    sample_status: str,
+    limitations: List[str],
+) -> tuple[str, str, str]:
+    status = str(data_sufficiency.get("status") or "").strip()
+    calculation_state = str(data_sufficiency.get("calculation_state") or "").strip()
+    if not status:
+        return data_status, calculation_status, sample_status
+    preserve_fixture_status = data_status == "fixture_or_example_data" and status in {
+        "missing_adjustments",
+        "stale_data",
+        "missing_benchmark",
+        "missing_factor_inputs",
+    }
+    if status != "sufficient":
+        if not preserve_fixture_status:
+            data_status = status
+            sample_status = status
+    if not preserve_fixture_status:
+        if calculation_state == "not_available":
+            calculation_status = "calculation_unavailable"
+        elif calculation_state == "degraded":
+            calculation_status = "degraded"
+        elif calculation_state == "executable":
+            calculation_status = "ready"
+    for reason in data_sufficiency.get("missing_requirements") or []:
+        _append_unique(limitations, f"missing input: {reason}")
+    summary = data_sufficiency.get("consumer_summary")
+    _append_unique(limitations, summary)
+    return data_status, calculation_status, sample_status
+
+
 def _status_contract(
     *,
     data_status: str,
@@ -108,6 +149,14 @@ def build_performance_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
         data_status = "stale_or_cached"
         limitations.append("Metrics are derived from stored or cached backtest outputs; verify freshness before research use.")
 
+    data_status, calculation_status, sample_status = _apply_sufficiency_contract(
+        data_sufficiency=_data_sufficiency(payload),
+        data_status=data_status,
+        calculation_status=calculation_status,
+        sample_status=sample_status,
+        limitations=limitations,
+    )
+
     return _status_contract(
         data_status=data_status,
         calculation_status=calculation_status,
@@ -155,6 +204,14 @@ def build_standard_run_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
         data_status = "stale_or_cached"
         limitations.append("Backtest response is based on stored or cached data.")
 
+    data_status, calculation_status, sample_status = _apply_sufficiency_contract(
+        data_sufficiency=_data_sufficiency(payload),
+        data_status=data_status,
+        calculation_status=calculation_status,
+        sample_status=sample_status,
+        limitations=limitations,
+    )
+
     return _status_contract(
         data_status=data_status,
         calculation_status=calculation_status,
@@ -196,6 +253,14 @@ def build_standard_result_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
     elif data_status == "ready" and _source_indicates_cached(payload):
         data_status = "stale_or_cached"
         limitations.append("Backtest result is based on stored or cached data.")
+
+    data_status, calculation_status, sample_status = _apply_sufficiency_contract(
+        data_sufficiency=_data_sufficiency(payload),
+        data_status=data_status,
+        calculation_status=calculation_status,
+        sample_status=sample_status,
+        limitations=limitations,
+    )
 
     return _status_contract(
         data_status=data_status,
@@ -268,6 +333,14 @@ def build_rule_run_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
     elif data_status == "ready" and _source_indicates_cached(payload):
         data_status = "stale_or_cached"
         limitations.append("Backtest response is based on stored or cached data.")
+
+    data_status, calculation_status, sample_status = _apply_sufficiency_contract(
+        data_sufficiency=_data_sufficiency(payload),
+        data_status=data_status,
+        calculation_status=calculation_status,
+        sample_status=sample_status,
+        limitations=limitations,
+    )
 
     source_window = {
         "code": payload.get("code"),

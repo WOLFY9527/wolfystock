@@ -115,6 +115,35 @@ class BacktestDataSufficiencyGateTestCase(unittest.TestCase):
             "warnings": [],
         }
 
+    @staticmethod
+    def _historical_readiness(
+        *,
+        provider_state: str = "available",
+        overall_state: str = "ready",
+        required_bars: int = 20,
+        usable_bars: int = 20,
+        missing_bars: int = 0,
+        missing_requirements: list[str] | None = None,
+        freshness_state: str = "current",
+        adjustment_state: str = "available",
+        benchmark_state: str = "not_requested",
+    ) -> dict:
+        return {
+            "contractVersion": "historical_ohlcv_readiness_v1",
+            "symbol": "600519",
+            "timeframe": "1d",
+            "requiredBars": required_bars,
+            "usableBars": usable_bars,
+            "missingBars": missing_bars,
+            "providerState": provider_state,
+            "overallState": overall_state,
+            "freshnessState": freshness_state,
+            "adjustmentState": adjustment_state,
+            "benchmarkState": benchmark_state,
+            "missingRequirements": missing_requirements or [],
+            "consumerSafe": True,
+        }
+
     def test_sufficient_fixture_remains_executable(self) -> None:
         service = RuleBacktestService(self.db)
         original_builder = service._build_data_quality_payload
@@ -147,7 +176,7 @@ class BacktestDataSufficiencyGateTestCase(unittest.TestCase):
         self.assertIsNotNone(response["max_drawdown_pct"])
         self.assertEqual(response["summary"]["data_sufficiency"], response["data_sufficiency"])
 
-    def test_insufficient_history_is_not_available_and_does_not_fabricate_metrics(self) -> None:
+    def test_missing_ohlcv_provider_is_not_available_and_does_not_fabricate_metrics(self) -> None:
         service = RuleBacktestService(self.db)
         with patch.object(service, "_ensure_market_history", return_value=0), patch.object(
             service,
@@ -164,8 +193,9 @@ class BacktestDataSufficiencyGateTestCase(unittest.TestCase):
             )
 
         gate = response["data_sufficiency"]
-        self.assertEqual(gate["status"], "insufficient_history")
+        self.assertEqual(gate["status"], "provider_missing")
         self.assertEqual(gate["calculation_state"], "not_available")
+        self.assertIn("provider_missing", gate["blocked_reasons"])
         self.assertIn("insufficient_history", gate["blocked_reasons"])
         for metric in (
             "sharpe_ratio",
@@ -181,6 +211,126 @@ class BacktestDataSufficiencyGateTestCase(unittest.TestCase):
         ):
             self.assertIsNone(response[metric], metric)
         self.assertIn("数据不足，暂不形成结论", response["ai_summary"])
+
+    def test_gate_consumes_historical_ohlcv_readiness_when_provider_is_missing(self) -> None:
+        gate = assess_backtest_data_sufficiency(
+            {
+                "status": "completed",
+                "data_quality": self._sufficient_quality(),
+                "historicalOhlcvReadiness": self._historical_readiness(
+                    provider_state="provider_missing",
+                    overall_state="blocked",
+                    required_bars=30,
+                    usable_bars=0,
+                    missing_bars=30,
+                    missing_requirements=["provider_missing", "insufficient_history"],
+                    freshness_state="unknown",
+                    adjustment_state="not_required",
+                ),
+            }
+        )
+
+        self.assertEqual(gate["status"], "provider_missing")
+        self.assertEqual(gate["calculation_state"], "not_available")
+        self.assertIn("provider_missing", gate["blocked_reasons"])
+        self.assertIn("insufficient_history", gate["blocked_reasons"])
+        self.assertEqual(gate["input_states"]["history"], "missing")
+        self.assertEqual(gate["input_states"]["provider"], "missing")
+        self.assertEqual(gate["ohlcv_readiness"]["requiredBars"], 30)
+        self.assertEqual(gate["ohlcv_readiness"]["usableBars"], 0)
+        self.assertEqual(gate["ohlcv_readiness"]["missingBars"], 30)
+
+    def test_gate_consumes_historical_ohlcv_readiness_bar_counts_and_degraded_states(self) -> None:
+        cases = [
+            (
+                "insufficient_history",
+                self._historical_readiness(
+                    overall_state="blocked",
+                    required_bars=30,
+                    usable_bars=12,
+                    missing_bars=18,
+                    missing_requirements=["insufficient_history"],
+                ),
+                "not_available",
+            ),
+            (
+                "stale_data",
+                self._historical_readiness(
+                    overall_state="degraded",
+                    missing_requirements=["stale_data"],
+                    freshness_state="stale",
+                ),
+                "degraded",
+            ),
+            (
+                "missing_adjustments",
+                self._historical_readiness(
+                    overall_state="degraded",
+                    missing_requirements=["missing_adjustments"],
+                    adjustment_state="missing",
+                ),
+                "degraded",
+            ),
+            (
+                "missing_benchmark",
+                self._historical_readiness(
+                    overall_state="degraded",
+                    missing_requirements=["missing_benchmark"],
+                    benchmark_state="missing",
+                ),
+                "degraded",
+            ),
+            (
+                "entitlement_required",
+                self._historical_readiness(
+                    provider_state="entitlement_required",
+                    overall_state="blocked",
+                    required_bars=30,
+                    usable_bars=0,
+                    missing_bars=30,
+                    missing_requirements=["entitlement_required", "insufficient_history"],
+                    freshness_state="unknown",
+                ),
+                "not_available",
+            ),
+        ]
+
+        for expected_status, readiness, calculation_state in cases:
+            with self.subTest(expected_status=expected_status):
+                gate = assess_backtest_data_sufficiency(
+                    {
+                        "status": "completed",
+                        "data_quality": self._sufficient_quality(),
+                        "historicalOhlcvReadiness": readiness,
+                    }
+                )
+
+                self.assertEqual(gate["status"], expected_status)
+                self.assertEqual(gate["calculation_state"], calculation_state)
+                self.assertEqual(gate["ohlcv_readiness"]["requiredBars"], readiness["requiredBars"])
+                self.assertEqual(gate["ohlcv_readiness"]["usableBars"], readiness["usableBars"])
+                self.assertEqual(gate["ohlcv_readiness"]["missingBars"], readiness["missingBars"])
+
+    def test_gate_redacts_historical_ohlcv_readiness_internal_fields(self) -> None:
+        gate = assess_backtest_data_sufficiency(
+            {
+                "status": "completed",
+                "data_quality": self._sufficient_quality(),
+                "historicalOhlcvReadiness": {
+                    **self._historical_readiness(),
+                    "providerName": "LeakyProvider",
+                    "providerClass": "LeakyProviderClass",
+                    "requestId": "rq-secret",
+                    "traceId": "trace-secret",
+                    "cacheKey": "cache-secret",
+                    "rawPayload": {"token": "secret-token-value"},
+                    "exceptionClass": "RuntimeError",
+                    "endpointHost": "provider.example.test",
+                },
+            }
+        )
+
+        self._assert_no_forbidden_leakage(gate)
 
     def test_missing_benchmark_prevents_benchmark_relative_claims(self) -> None:
         service = RuleBacktestService(self.db)
@@ -244,7 +394,7 @@ class BacktestDataSufficiencyGateTestCase(unittest.TestCase):
                 "provider_missing",
                 {"authority_status": "degraded_fill_only", "authority_source_type": "missing", "authority_reason_codes": ["source_authority_unknown"], "bar_count": 20},
                 {},
-                {"status": "provider_missing", "calculation_state": "degraded"},
+                {"status": "provider_missing", "calculation_state": "not_available"},
             ),
             (
                 "entitlement_required",

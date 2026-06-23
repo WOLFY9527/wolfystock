@@ -19,8 +19,28 @@ SUFFICIENCY_STATUSES = frozenset(
         "entitlement_required",
     }
 )
-_BLOCKING_STATUSES = frozenset({"insufficient_history", "entitlement_required"})
+_BLOCKING_STATUSES = frozenset({"insufficient_history", "provider_missing", "entitlement_required"})
 _ENTITLEMENT_TOKENS = ("entitlement", "unauthorized", "forbidden", "permission", "redisplay")
+_SAFE_OHLCV_READINESS_KEYS = frozenset(
+    {
+        "contractVersion",
+        "symbol",
+        "market",
+        "timeframe",
+        "requestedRange",
+        "lookbackBars",
+        "requiredBars",
+        "usableBars",
+        "missingBars",
+        "freshnessState",
+        "adjustmentState",
+        "benchmarkState",
+        "providerState",
+        "overallState",
+        "missingRequirements",
+        "consumerSafe",
+    }
+)
 
 
 def assess_backtest_data_sufficiency(payload: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -31,6 +51,16 @@ def assess_backtest_data_sufficiency(payload: Mapping[str, Any] | None) -> dict[
     benchmark_summary = _mapping(source.get("benchmark_summary"))
     factor_inputs = _mapping(source.get("factor_inputs") or source.get("factorInputs"))
     professional = _mapping(source.get("professionalReadiness") or source.get("professional_readiness"))
+    ohlcv_readiness = _sanitize_ohlcv_readiness(
+        _mapping(
+            source.get("historicalOhlcvReadiness")
+            or source.get("historical_ohlcv_readiness")
+            or source.get("ohlcv_readiness")
+            or data_quality.get("historicalOhlcvReadiness")
+            or data_quality.get("historical_ohlcv_readiness")
+            or data_quality.get("ohlcv_readiness")
+        )
+    )
     no_result_reason = _text(source.get("no_result_reason")).lower()
     blocked: list[str] = []
     degraded: list[str] = []
@@ -44,6 +74,12 @@ def assess_backtest_data_sufficiency(payload: Mapping[str, Any] | None) -> dict[
         bar_count is not None and bar_count <= 0 and no_result_reason
     ):
         blocked.append("insufficient_history")
+
+    _apply_ohlcv_readiness(
+        ohlcv_readiness,
+        blocked=blocked,
+        degraded=degraded,
+    )
 
     if _has_entitlement_reason(authority_reasons) or _has_entitlement_reason(
         _text_list(data_quality.get("reason_codes"))
@@ -66,7 +102,7 @@ def assess_backtest_data_sufficiency(payload: Mapping[str, Any] | None) -> dict[
 
     status = _primary_status(blocked=blocked, degraded=degraded)
     calculation_state = _calculation_state(status=status, blocked=blocked, degraded=degraded)
-    return {
+    result = {
         "contract_version": "v1",
         "status": status,
         "calculation_state": calculation_state,
@@ -86,6 +122,9 @@ def assess_backtest_data_sufficiency(payload: Mapping[str, Any] | None) -> dict[
         },
         "consumer_safe": True,
     }
+    if ohlcv_readiness:
+        result["ohlcv_readiness"] = ohlcv_readiness
+    return result
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -118,6 +157,64 @@ def _dedupe(values: Sequence[str]) -> list[str]:
         if normalized and normalized not in result:
             result.append(normalized)
     return result
+
+
+def _sanitize_ohlcv_readiness(readiness: Mapping[str, Any]) -> dict[str, Any]:
+    if not readiness:
+        return {}
+    sanitized = {
+        key: value
+        for key, value in readiness.items()
+        if key in _SAFE_OHLCV_READINESS_KEYS
+    }
+    if not sanitized:
+        return {}
+    sanitized["missingRequirements"] = _dedupe(_text_list(sanitized.get("missingRequirements")))
+    for key in ("requiredBars", "usableBars", "missingBars", "lookbackBars"):
+        if key in sanitized:
+            sanitized[key] = _safe_int(sanitized.get(key))
+    sanitized["consumerSafe"] = True
+    return sanitized
+
+
+def _apply_ohlcv_readiness(
+    readiness: Mapping[str, Any],
+    *,
+    blocked: list[str],
+    degraded: list[str],
+) -> None:
+    if not readiness:
+        return
+    provider_state = _text(readiness.get("providerState")).lower()
+    overall_state = _text(readiness.get("overallState")).lower()
+    freshness_state = _text(readiness.get("freshnessState")).lower()
+    adjustment_state = _text(readiness.get("adjustmentState")).lower()
+    benchmark_state = _text(readiness.get("benchmarkState")).lower()
+    missing_bars = _safe_int(readiness.get("missingBars")) or 0
+    missing_requirements = _text_list(readiness.get("missingRequirements"))
+
+    if provider_state == "provider_missing":
+        blocked.append("provider_missing")
+    elif provider_state == "entitlement_required":
+        blocked.append("entitlement_required")
+    elif provider_state in {"provider_unavailable", "not_available", "unavailable"}:
+        degraded.append("provider_missing")
+
+    if missing_bars > 0 or "insufficient_history" in missing_requirements:
+        blocked.append("insufficient_history")
+    if freshness_state == "stale" or "stale_data" in missing_requirements:
+        degraded.append("stale_data")
+    if adjustment_state == "missing" or "missing_adjustments" in missing_requirements:
+        degraded.append("missing_adjustments")
+    if benchmark_state == "missing" or "missing_benchmark" in missing_requirements:
+        degraded.append("missing_benchmark")
+    if "missing_factor_inputs" in missing_requirements:
+        degraded.append("missing_factor_inputs")
+    if overall_state == "blocked" and not any(
+        item in blocked
+        for item in ("provider_missing", "entitlement_required", "insufficient_history")
+    ):
+        degraded.append("provider_missing")
 
 
 def _has_entitlement_reason(values: Sequence[str]) -> bool:
@@ -188,9 +285,9 @@ def _factor_inputs_missing(factor_inputs: Mapping[str, Any]) -> bool:
 
 def _primary_status(*, blocked: Sequence[str], degraded: Sequence[str]) -> str:
     for status in (
-        "insufficient_history",
-        "entitlement_required",
         "provider_missing",
+        "entitlement_required",
+        "insufficient_history",
         "stale_data",
         "missing_benchmark",
         "missing_adjustments",
@@ -228,6 +325,8 @@ def _consumer_summary(status: str, calculation_state: str) -> str:
 def _history_state(*, status: str, bar_count: int | None) -> str:
     if status == "insufficient_history":
         return "insufficient"
+    if status == "provider_missing":
+        return "missing"
     if bar_count is None:
         return "unknown"
     return "available" if bar_count > 0 else "missing"
