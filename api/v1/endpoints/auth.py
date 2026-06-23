@@ -1793,14 +1793,20 @@ async def auth_login(request: Request, body: LoginRequest):
                     is_active=bool(getattr(user_row, "is_active", True)),
                 )
             elif not verify_password_hash_string(password, stored_hash):
-                _record_login_failure_and_audit(
-                    request,
-                    ip=ip,
+                reconciled_row = repo.reconcile_legacy_app_user_for_login(
                     username=username,
-                    outcome="invalid_password",
-                    user_id=str(getattr(user_row, "id", "") or ""),
+                    password=password,
                 )
-                return _generic_login_error()
+                if reconciled_row is None:
+                    _record_login_failure_and_audit(
+                        request,
+                        ip=ip,
+                        username=username,
+                        outcome="invalid_password",
+                        user_id=str(getattr(user_row, "id", "") or ""),
+                    )
+                    return _generic_login_error()
+                user_row = reconciled_row
             else:
                 user_row = _upgrade_app_user_password_hash_if_needed(user_row, password)
 
