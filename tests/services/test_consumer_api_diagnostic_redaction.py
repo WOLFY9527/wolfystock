@@ -253,3 +253,41 @@ def test_project_consumer_api_payload_redacts_internal_diagnostic_code_values() 
     assert projected["ivGreeks"]["ivRankSource"] == "Evidence is limited for this observation."
     assert projected["stock"]["code"] == "AAPL"
     assert projected["strategyType"] == "long_call"
+
+
+def test_project_consumer_api_payload_redacts_internal_field_names_used_as_values() -> None:
+    from src.services.consumer_api_diagnostic_redaction import project_consumer_api_payload
+
+    payload = {
+        "sourceField": "sourceAuthorityAllowed",
+        "hint": "requiredProviderClass official_public.fed_liquidity is unavailable",
+        "metadata": {
+            "requiredProviderClass": "official_public.usd_pressure",
+            "descriptor": {
+                "reason": "sourceAuthorityAllowed blocked this observation",
+                "sourceField": "scoreContributionAllowed",
+            },
+        },
+        "evidenceGaps": [
+            {
+                "label": "证据来源级别不足",
+                "category": "evidence",
+                "sourceField": "sourceAuthorityAllowed",
+            }
+        ],
+    }
+
+    projected = project_consumer_api_payload(payload, surface="unit-test")
+    serialized = json.dumps(projected, ensure_ascii=False)
+
+    assert "requiredProviderClass" not in serialized
+    assert "sourceAuthorityAllowed" not in serialized
+    assert "scoreContributionAllowed" not in serialized
+    assert "official_public" not in serialized
+    assert projected["sourceField"] == "evidence"
+    assert projected["metadata"]["descriptor"]["sourceField"] == "evidence"
+    assert projected["evidenceGaps"][0] == {
+        "label": "证据来源级别不足",
+        "category": "evidence",
+        "sourceField": "evidence",
+    }

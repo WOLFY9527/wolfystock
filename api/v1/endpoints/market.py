@@ -21,6 +21,10 @@ from api.v1.schemas.market_scenario_lab import MarketScenarioLabRequest, MarketS
 from api.v1.schemas.market_rotation import MarketRotationRadarResponse
 from api.v1.schemas.market_temperature import MarketTemperatureConsumedSubsetResponse
 from src.services.cn_provider_health_service import CNProviderHealthService
+from src.services.consumer_api_diagnostic_redaction import (
+    sanitize_consumer_diagnostic_text,
+    sanitize_consumer_field_reference,
+)
 from src.services.crypto_realtime_service import get_crypto_realtime_service
 from src.services.consumer_issue_labels import sanitize_consumer_reason_payload
 from src.services.data_source_gap_registry_service import build_data_source_gap_registry
@@ -60,6 +64,7 @@ _MARKET_CONSUMER_DIAGNOSTIC_KEYS = frozenset(
         "providername",
         "rawpayload",
         "requestid",
+        "requiredproviderclass",
         "requestedseries",
         "scorecontributionallowed",
         "sourceauthorityallowed",
@@ -117,10 +122,19 @@ def _redact_market_consumer_diagnostics(value: Any) -> Any:
             normalized = "".join(ch for ch in str(key).lower() if ch.isalnum())
             if normalized in _MARKET_CONSUMER_DIAGNOSTIC_KEYS:
                 continue
-            redacted[str(key)] = _redact_market_consumer_diagnostics(child)
+            if normalized == "sourcefield" and isinstance(child, str):
+                redacted[str(key)] = sanitize_consumer_field_reference(child)
+                continue
+            projected_child = _redact_market_consumer_diagnostics(child)
+            if normalized == "sourcefield" and isinstance(projected_child, str):
+                redacted[str(key)] = sanitize_consumer_field_reference(projected_child)
+                continue
+            redacted[str(key)] = projected_child
         return redacted
     if isinstance(value, list):
         return [_redact_market_consumer_diagnostics(item) for item in value]
+    if isinstance(value, str):
+        return sanitize_consumer_diagnostic_text(value)
     return value
 
 
