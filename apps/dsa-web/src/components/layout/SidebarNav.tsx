@@ -106,6 +106,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'scanner', labelKey: 'nav.scanner', to: '/scanner', icon: Radar },
   { key: 'watchlist', labelKey: 'nav.watchlist', to: '/watchlist', icon: ListChecks },
   { key: 'portfolio', labelKey: 'nav.portfolio', to: '/portfolio', icon: BriefcaseBusiness },
+  { key: 'backtest', labelKey: 'nav.backtest', to: '/backtest', icon: FileCheck2 },
   { key: 'scenario-lab', labelKey: 'nav.scenarioLab', to: '/scenario-lab', icon: FlaskConical },
 ];
 

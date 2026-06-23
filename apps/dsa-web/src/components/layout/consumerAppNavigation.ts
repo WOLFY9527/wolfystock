@@ -10,6 +10,7 @@ export type ConsumerNavItemKey =
   | 'scanner'
   | 'watchlist'
   | 'portfolio'
+  | 'backtest'
   | 'scenario-lab';
 export type ConsumerRouteKey = ConsumerNavItemKey | 'home' | 'guest' | 'liquidity-monitor' | 'rotation-radar' | 'backtest' | 'options-lab';
 
@@ -63,6 +64,7 @@ export const CONSUMER_NAV_ITEMS: ConsumerNavItem[] = [
   { key: 'scanner', labelKey: 'nav.scanner', to: '/scanner', group: 'context', requiresAuth: true },
   { key: 'watchlist', labelKey: 'nav.watchlist', to: '/watchlist', group: 'context', requiresAuth: true },
   { key: 'portfolio', labelKey: 'nav.portfolio', to: '/portfolio', group: 'context', requiresAuth: true },
+  { key: 'backtest', labelKey: 'nav.backtest', to: '/backtest', group: 'observe', requiresAuth: true },
   { key: 'scenario-lab', labelKey: 'nav.scenarioLab', to: '/scenario-lab', group: 'observe', requiresAuth: true },
 ];
 
