@@ -42,6 +42,44 @@ class CryptoRealtimeWebsocketHardeningTestCase(unittest.TestCase):
         finally:
             loop.close()
 
+    def test_safe_client_connection_handles_missing_terminate_pending_pings_compatibly(self) -> None:
+        from src.services.crypto_realtime_service import _get_safe_websocket_client_connection_class
+        from websockets.protocol import CLOSED
+
+        safe_connection_class = _get_safe_websocket_client_connection_class()
+        self.assertIsNotNone(safe_connection_class)
+
+        class CompatibilityConnection(safe_connection_class):
+            def __getattribute__(self, name: str):
+                if name == "terminate_pending_pings":
+                    raise AttributeError(name)
+                return super().__getattribute__(name)
+
+        loop = asyncio.new_event_loop()
+        try:
+            connection = object.__new__(CompatibilityConnection)
+            protocol = type(
+                "ProtocolStub",
+                (),
+                {
+                    "receive_eof": lambda self: None,
+                    "state": CLOSED,
+                    "close_exc": ConnectionResetError("reset by peer"),
+                },
+            )()
+            connection.protocol = protocol
+            connection.pending_pings = {}
+            connection.keepalive_task = None
+            connection.connection_lost_waiter = loop.create_future()
+            connection.paused = False
+            connection.drain_waiters = collections.deque()
+
+            connection.connection_lost(ConnectionResetError("reset by peer"))
+
+            self.assertTrue(connection.connection_lost_waiter.done())
+        finally:
+            loop.close()
+
     def test_binance_provider_uses_safe_create_connection_when_supported(self) -> None:
         from src.services.crypto_realtime_service import BinanceWsProvider, _get_safe_websocket_client_connection_class
 
@@ -92,6 +130,25 @@ class CryptoRealtimeWebsocketHardeningTestCase(unittest.TestCase):
         self.assertEqual(status["reason"], "connection_failed")
         self.assertEqual(status["failureCount"], 1)
         self.assertEqual(sleep_delays, [0.01])
+
+    def test_disabled_env_does_not_auto_start_service_singleton(self) -> None:
+        import src.services.crypto_realtime_service as crypto_realtime_service
+
+        original_service = crypto_realtime_service._service
+        crypto_realtime_service._service = None
+        try:
+            with patch.dict("os.environ", {"CRYPTO_REALTIME_ENABLED": "0"}, clear=False):
+                with patch.object(
+                    crypto_realtime_service.CryptoRealtimeService,
+                    "start",
+                    side_effect=AssertionError("crypto realtime should not auto-start when disabled"),
+                ):
+                    service = crypto_realtime_service.get_crypto_realtime_service()
+
+            self.assertFalse(service._started)
+            self.assertFalse(service._stop_event.is_set())
+        finally:
+            crypto_realtime_service._service = original_service
 
 
 if __name__ == "__main__":
