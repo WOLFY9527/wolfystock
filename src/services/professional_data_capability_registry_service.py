@@ -96,9 +96,9 @@ _CAPABILITY_SPECS: tuple[_CapabilitySpec, ...] = (
         "Gamma flip",
         "options_structure",
         "gamma_dealer_positioning",
-        "No production data contract exists yet.",
+        "Contract skeleton exists; production provider and methodology integration are not implemented.",
         "Options Lab roadmap",
-        "Gamma flip requires a methodology contract after the base gamma evidence is authorized.",
+        "Gamma flip remains unavailable until authorized GEX inputs and methodology evidence are connected.",
         status="not_implemented",
     ),
     _spec(
@@ -106,9 +106,9 @@ _CAPABILITY_SPECS: tuple[_CapabilitySpec, ...] = (
         "Vanna and charm",
         "options_structure",
         "options_strategy_analytics",
-        "No production data contract exists yet.",
+        "Contract skeleton exists; production provider and methodology integration are not implemented.",
         "Options Lab roadmap",
-        "Vanna and charm require an additional analytics model after base options evidence is authorized.",
+        "Vanna and charm remain unavailable until authorized Greeks and methodology evidence are connected.",
         status="not_implemented",
     ),
     _spec(
@@ -118,7 +118,7 @@ _CAPABILITY_SPECS: tuple[_CapabilitySpec, ...] = (
         "options_strategy_analytics",
         "Unavailable until intraday options completeness and display rights are proven.",
         "Options Lab readiness boundary",
-        "0DTE views are blocked by rights, completeness, and freshness evidence gaps.",
+        "0DTE structure can be represented by the contract, but live views remain blocked by rights, completeness, and freshness evidence gaps.",
     ),
     _spec(
         "market.breadth_flows",

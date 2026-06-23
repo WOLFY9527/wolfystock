@@ -47,6 +47,7 @@ from api.v1.schemas.options import (
     OptionsStrategyCompareRequest,
     OptionsStrategyCompareResponse,
     OptionsStrategyLeg,
+    OptionsStructureSummary,
     OptionUnderlyingSummaryResponse,
 )
 from src.services.options_lab_domain_models import (
@@ -88,12 +89,17 @@ from src.services.options_lab_service import (
     OptionsLabService,
     OptionsLabUnsupportedSymbol,
 )
+from src.services.options_structure_service import OptionsStructureService
 
 router = APIRouter()
 
 
 def _service() -> OptionsLabService:
     return OptionsLabService()
+
+
+def _structure_service() -> OptionsStructureService:
+    return OptionsStructureService()
 
 
 def _unsupported_response(exc: OptionsLabUnsupportedSymbol) -> HTTPException:
@@ -649,6 +655,15 @@ def get_options_chain(
         raise _provider_unavailable_response(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"error": "validation_error", "message": str(exc)}) from exc
+
+
+@router.get(
+    "/underlyings/{symbol}/structure",
+    response_model=OptionsStructureSummary,
+    summary="Get provider-neutral options structure analytics contract",
+)
+def get_options_structure(symbol: str) -> OptionsStructureSummary:
+    return _structure_service().get_structure(symbol)
 
 
 @router.post(
