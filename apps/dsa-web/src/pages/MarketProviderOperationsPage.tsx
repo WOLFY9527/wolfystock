@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Activity, Clipboard, Download, ExternalLink } from 'lucide-react';
 import {
   buildDataSourceGapRegistryView,
+  buildProfessionalDataCapabilityRegistryView,
   marketApi,
   type DataSourceAcquisitionPriorityQueueItem,
   type DataSourceAcquisitionPriorityQueueItemView,
@@ -12,6 +13,7 @@ import {
   type DataSourceGapRegistryResponse,
   type MarketDataReadinessCheck,
   type MarketDataReadinessResponse,
+  type ProfessionalDataCapabilityRegistryResponse,
 } from '../api/market';
 import {
   marketProviderOperationsApi,
@@ -3012,6 +3014,82 @@ const DiagnosticsPanel: React.FC<{
   );
 };
 
+const ProfessionalCapabilityAdminSummaryPanel: React.FC<{
+  registry: ProfessionalDataCapabilityRegistryResponse | null;
+  isLoading: boolean;
+  error: ParsedApiError | null;
+}> = ({ registry, isLoading, error }) => {
+  const view = buildProfessionalDataCapabilityRegistryView(registry);
+
+  return (
+    <TerminalPanel as="section" className="col-span-12" data-testid="professional-capability-admin-summary-panel">
+      <TerminalSectionHeader
+        eyebrow="专业能力覆盖"
+        title="专业数据能力诊断摘要"
+        action={(
+          <div className="flex flex-wrap gap-1.5">
+            <TerminalChip variant="neutral">{formatNumber(view.summary.totalCapabilities, 0)} 项能力</TerminalChip>
+            <TerminalChip variant={registry?.consumerSafe === false ? 'info' : 'neutral'}>
+              {registry?.consumerSafe === false ? 'Admin 诊断' : '待读取'}
+            </TerminalChip>
+          </div>
+        )}
+      />
+      <p className="mt-2 text-[11px] leading-5 text-white/46">
+        读取 admin-gated 专业能力登记表，只显示能力覆盖、状态和安全来源摘要；不展示 provider class、请求追踪、缓存键或原始 payload。
+      </p>
+      {isLoading && !registry ? (
+        <div className="mt-4">
+          <TerminalEmptyState title="正在读取专业能力诊断">只读登记表；不会触发 provider runtime 或外部网络调用。</TerminalEmptyState>
+        </div>
+      ) : null}
+      {error ? (
+        <div className="mt-4">
+          <TerminalEmptyState title="专业能力诊断暂不可用">保持阻断态；不使用本地替代数据。</TerminalEmptyState>
+        </div>
+      ) : null}
+      {!isLoading && !error && !view.hasItems ? (
+        <div className="mt-4">
+          <TerminalEmptyState title="专业能力覆盖待补证">登记表没有返回能力项，不在前端推断 readiness。</TerminalEmptyState>
+        </div>
+      ) : null}
+      {!error && view.hasItems ? (
+        <>
+          <div className="mt-4 flex flex-wrap gap-1.5">
+            {view.statusCounts.map((item) => (
+              <TerminalChip key={item.key} variant={item.variant}>{item.label}</TerminalChip>
+            ))}
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {view.categories.map((category) => (
+              <TerminalNestedBlock key={category.categoryKey} className="bg-black/10">
+                <div className="flex min-w-0 items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-white/84">{category.label}</p>
+                    <p className="mt-1 text-[11px] leading-5 text-white/46">{category.description}</p>
+                  </div>
+                  <TerminalChip variant="neutral">{formatNumber(category.items.length, 0)} 项</TerminalChip>
+                </div>
+                <div className="mt-3 grid gap-2">
+                  {category.items.slice(0, 3).map((item) => (
+                    <div key={item.capabilityId} className="rounded-md border border-white/[0.05] bg-white/[0.025] px-3 py-2">
+                      <div className="flex min-w-0 items-start justify-between gap-2">
+                        <p className="min-w-0 truncate text-xs font-semibold text-white/78">{item.label}</p>
+                        <TerminalChip variant={item.status.variant}>{item.status.label}</TerminalChip>
+                      </div>
+                      <p className="mt-1 text-[11px] leading-5 text-white/46">{item.sourceLabel}</p>
+                    </div>
+                  ))}
+                </div>
+              </TerminalNestedBlock>
+            ))}
+          </div>
+        </>
+      ) : null}
+    </TerminalPanel>
+  );
+};
+
 const MarketDataReadinessPanel: React.FC<{
   data: MarketDataReadinessResponse | null;
   isLoading: boolean;
@@ -3195,6 +3273,7 @@ const MarketProviderOperationsPage: React.FC = () => {
   const [matrixResponse, setMatrixResponse] = useState<ProviderOperationsMatrixResponse | null>(null);
   const [readiness, setReadiness] = useState<MarketDataReadinessResponse | null>(null);
   const [gapRegistry, setGapRegistry] = useState<DataSourceGapRegistryResponse | null>(null);
+  const [professionalCapabilityRegistry, setProfessionalCapabilityRegistry] = useState<ProfessionalDataCapabilityRegistryResponse | null>(null);
   const [selectedProviderKey, setSelectedProviderKey] = useState<string | null>(null);
   const [readinessSymbolsInput, setReadinessSymbolsInput] = useState('');
   const [submittedReadinessSymbols, setSubmittedReadinessSymbols] = useState('');
@@ -3202,10 +3281,12 @@ const MarketProviderOperationsPage: React.FC = () => {
   const [isMatrixLoading, setIsMatrixLoading] = useState(true);
   const [isReadinessLoading, setIsReadinessLoading] = useState(true);
   const [isGapRegistryLoading, setIsGapRegistryLoading] = useState(true);
+  const [isProfessionalCapabilityLoading, setIsProfessionalCapabilityLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [matrixError, setMatrixError] = useState<ParsedApiError | null>(null);
   const [readinessError, setReadinessError] = useState<ParsedApiError | null>(null);
   const [gapRegistryError, setGapRegistryError] = useState<ParsedApiError | null>(null);
+  const [professionalCapabilityError, setProfessionalCapabilityError] = useState<ParsedApiError | null>(null);
 
   useEffect(() => {
     document.title = language === 'en' ? 'Provider Ops - WolfyStock' : '数据源运维 - WolfyStock';
@@ -3285,6 +3366,26 @@ const MarketProviderOperationsPage: React.FC = () => {
       })
       .finally(() => {
         if (!cancelled) setIsGapRegistryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    marketApi.getProfessionalDataCapabilitiesAdmin()
+      .then((payload) => {
+        if (!cancelled) setProfessionalCapabilityRegistry(payload);
+      })
+      .catch((apiError) => {
+        if (!cancelled) {
+          const parsed = getParsedApiError(apiError);
+          setProfessionalCapabilityError({ ...parsed, title: '读取专业能力覆盖诊断失败' });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsProfessionalCapabilityLoading(false);
       });
     return () => {
       cancelled = true;
@@ -3463,6 +3564,11 @@ const MarketProviderOperationsPage: React.FC = () => {
               registry={gapRegistry}
               isLoading={isGapRegistryLoading}
               error={gapRegistryError}
+            />
+            <ProfessionalCapabilityAdminSummaryPanel
+              registry={professionalCapabilityRegistry}
+              isLoading={isProfessionalCapabilityLoading}
+              error={professionalCapabilityError}
             />
             <ProviderOperationsMatrixPanel
               response={matrixResponse}

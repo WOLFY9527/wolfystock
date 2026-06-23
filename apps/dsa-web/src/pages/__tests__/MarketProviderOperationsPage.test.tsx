@@ -19,6 +19,10 @@ const { getDataSourceGapRegistry } = vi.hoisted(() => ({
   getDataSourceGapRegistry: vi.fn(),
 }));
 
+const { getProfessionalDataCapabilitiesAdmin } = vi.hoisted(() => ({
+  getProfessionalDataCapabilitiesAdmin: vi.fn(),
+}));
+
 vi.mock('../../api/marketProviderOperations', () => ({
   marketProviderOperationsApi: {
     getOperations,
@@ -33,6 +37,7 @@ vi.mock('../../api/market', async () => {
     marketApi: {
       getDataReadiness,
       getDataSourceGapRegistry,
+      getProfessionalDataCapabilitiesAdmin,
     },
   };
 });
@@ -945,6 +950,40 @@ const dataSourceGapRegistryPayload = {
   },
 };
 
+const professionalCapabilityAdminPayload = {
+  contractVersion: 'professional_data_capability_registry_v1',
+  consumerSafe: false,
+  summary: {
+    totalCapabilities: 2,
+    liveCount: 0,
+    degradedCount: 1,
+    entitlementRequiredCount: 1,
+    configuredMissingCount: 0,
+    notImplementedCount: 0,
+  },
+  categories: ['options_structure', 'market_breadth_flows'],
+  capabilities: [
+    {
+      capabilityId: 'options.chain',
+      label: 'Options chain',
+      category: 'options_structure',
+      status: 'entitlement_required',
+      sourceLabel: 'Options Lab readiness boundary',
+      reason: 'Entitlement evidence is required.',
+      freshness: 'Unavailable until rights are proven.',
+    },
+    {
+      capabilityId: 'market.breadth_flows',
+      label: 'Market breadth and flows',
+      category: 'market_breadth_flows',
+      status: 'degraded',
+      sourceLabel: 'Market readiness registry',
+      reason: 'Source authority remains incomplete.',
+      freshness: 'Partial and delayed.',
+    },
+  ],
+};
+
 describe('MarketProviderOperationsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -952,6 +991,7 @@ describe('MarketProviderOperationsPage', () => {
     getDataReadiness.mockResolvedValue(readinessPayload);
     getOperationsMatrix.mockResolvedValue(operationsMatrixPayload);
     getDataSourceGapRegistry.mockResolvedValue(dataSourceGapRegistryPayload);
+    getProfessionalDataCapabilitiesAdmin.mockResolvedValue(professionalCapabilityAdminPayload);
   });
 
   afterEach(() => {
@@ -1135,6 +1175,14 @@ describe('MarketProviderOperationsPage', () => {
     expect(dataMap).toHaveTextContent('阻断');
     expect(dataMap).toHaveTextContent('仅观察');
     expect(dataMap).toHaveTextContent('计划中');
+    const capabilityAdminPanel = await screen.findByTestId('professional-capability-admin-summary-panel');
+    expect(capabilityAdminPanel).toHaveTextContent('专业数据能力诊断摘要');
+    expect(capabilityAdminPanel).toHaveTextContent('Options chain');
+    expect(capabilityAdminPanel).toHaveTextContent('Market breadth and flows');
+    expect(capabilityAdminPanel).toHaveTextContent('需授权');
+    expect(capabilityAdminPanel.textContent || '').not.toMatch(
+      /providerClass|providerName|providerAttempted|requiredProviderClass|sourceAuthorityRouter|endpointHost|apiKeyPresent|exceptionClass|exceptionChain|requestId|traceId|cacheKey|rawPayload|credential|token|env/i,
+    );
     const quoteDrilldown = screen.getByTestId('data-source-gap-registry-row-stock_quote_spine');
     fireEvent.click(within(quoteDrilldown).getByRole('button', { name: '展开 股票报价骨架' }));
     expect(dataMap).toHaveTextContent('计分/交易权限 不允许');
