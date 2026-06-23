@@ -5,6 +5,7 @@ import type {
   ConsumerEvidenceReadinessMatrix,
   CnShortSentimentResponse,
   ProfessionalDataCapabilityRegistryView,
+  ProfessionalDataCapabilityViewItem,
   MarketBriefingResponse,
   MarketFuturesResponse,
   MarketTemperatureResponse,
@@ -725,56 +726,285 @@ const MarketOverviewEvidenceBoundaryStrip = ({
   );
 };
 
-const PROFESSIONAL_DATA_CAPABILITY_GROUP_ORDER = [
-  'options_structure',
-  'market_breadth_flows',
-  'sector_rotation',
-  'macro_cross_asset_regime',
-  'stock_research_data',
-  'backtest_data_availability',
-] as const;
+type MarketRegimeReadinessStatus =
+  | 'available'
+  | 'missing provider'
+  | 'entitlement required'
+  | 'degraded'
+  | 'stale'
+  | 'not available';
 
-function professionalDataCapabilityGroupLabel(categoryKey: string): string {
-  const labels: Record<string, string> = {
-    options_structure: '期权结构',
-    market_breadth_flows: '广度 / 资金流',
-    sector_rotation: '板块 / 市场状态',
-    macro_cross_asset_regime: '宏观 / 跨资产',
-    stock_research_data: '个股研究',
-    backtest_data_availability: '回测数据',
-  };
-  return labels[categoryKey] || '其他专业数据';
+type MarketRegimeReadinessCategory = {
+  key: string;
+  label: string;
+  capabilityCategory?: string;
+  match: RegExp;
+  fallbackDetail: string;
+};
+
+type MarketRegimeReadinessItem = {
+  key: string;
+  label: string;
+  status: MarketRegimeReadinessStatus;
+  variant: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
+  detail: string;
+  freshnessLabel: string;
+  asOfLabel?: string;
+};
+
+const MARKET_REGIME_READINESS_CATEGORIES: MarketRegimeReadinessCategory[] = [
+  {
+    key: 'breadth',
+    label: 'breadth',
+    capabilityCategory: 'market_breadth_flows',
+    match: /\bbreadth\b|advance|decline|new highs?|new lows?/i,
+    fallbackDetail: 'Breadth inputs are not returned by the readiness registry.',
+  },
+  {
+    key: 'sector-leadership',
+    label: 'sector/industry leadership',
+    capabilityCategory: 'sector_rotation',
+    match: /sector|industry|rotation|leadership/i,
+    fallbackDetail: 'Sector and industry leadership inputs are not returned by the readiness registry.',
+  },
+  {
+    key: 'volatility-risk',
+    label: 'volatility/risk regime',
+    capabilityCategory: 'macro_cross_asset_regime',
+    match: /volatility|risk|regime|vix|stress/i,
+    fallbackDetail: 'Volatility and risk regime inputs are not returned by the readiness registry.',
+  },
+  {
+    key: 'options-structure',
+    label: 'options structure / gamma inputs',
+    capabilityCategory: 'options_structure',
+    match: /option|chain|greek|gamma|structure/i,
+    fallbackDetail: 'Options structure inputs are not returned by the readiness registry.',
+  },
+  {
+    key: 'flows-positioning',
+    label: 'flows/positioning',
+    capabilityCategory: 'market_breadth_flows',
+    match: /flow|positioning|fund|liquidity|pressure/i,
+    fallbackDetail: 'Flows and positioning inputs are not returned by the readiness registry.',
+  },
+  {
+    key: 'macro-cross-asset',
+    label: 'macro/cross-asset inputs',
+    capabilityCategory: 'macro_cross_asset_regime',
+    match: /macro|cross.?asset|rates?|fx|credit|liquidity/i,
+    fallbackDetail: 'Macro and cross-asset inputs are not returned by the readiness registry.',
+  },
+];
+
+const MARKET_REGIME_DIAGNOSTIC_TOKEN_PATTERN =
+  /providerClass|providerName|providerAttempted|requiredProviderClass|sourceAuthorityRouter|apiKeyPresent|endpointHost|requestId|traceId|cacheKey|rawPayload|exceptionClass|exceptionChain|credential|token|env/gi;
+
+function sanitizeMarketRegimeReadinessText(value?: string | null, fallback = 'freshness pending'): string {
+  const trimmed = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!trimmed) {
+    return fallback;
+  }
+  return trimmed
+    .replace(MARKET_REGIME_DIAGNOSTIC_TOKEN_PATTERN, 'diagnostic hidden')
+    .replace(/\bprovider\b/gi, 'data source')
+    .replace(/\braw\b/gi, 'source')
+    .replace(/\bdebug\b/gi, 'diagnostic')
+    .replace(/\bcache\s*key\b/gi, 'stored reference');
 }
 
-const ProfessionalDataCapabilityCoverageStrip = ({
+function marketRegimeReadinessStatusVariant(
+  status: MarketRegimeReadinessStatus,
+): MarketRegimeReadinessItem['variant'] {
+  if (status === 'available') return 'success';
+  if (status === 'entitlement required') return 'danger';
+  if (status === 'degraded' || status === 'stale' || status === 'missing provider') return 'caution';
+  return 'neutral';
+}
+
+function marketRegimeReadinessStatusFromCapability(
+  item?: ProfessionalDataCapabilityViewItem,
+): MarketRegimeReadinessStatus {
+  if (!item) {
+    return 'missing provider';
+  }
+  const status = item.status.key;
+  const freshness = String(item.freshness || item.detail || '').toLowerCase();
+  if (freshness.includes('stale') || freshness.includes('expired')) {
+    return 'stale';
+  }
+  if (status === 'live') return 'available';
+  if (status === 'entitlement_required') return 'entitlement required';
+  if (status === 'configured_missing') return 'missing provider';
+  if (status === 'not_implemented') return 'not available';
+  return 'degraded';
+}
+
+function marketRegimeReadinessSeverity(status: MarketRegimeReadinessStatus): number {
+  const order: Record<MarketRegimeReadinessStatus, number> = {
+    'entitlement required': 6,
+    'not available': 5,
+    'missing provider': 4,
+    stale: 3,
+    degraded: 2,
+    available: 1,
+  };
+  return order[status];
+}
+
+function formatMarketRegimeReadinessDate(value?: string | null): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const trimmed = String(value).trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const parsed = new Date(trimmed);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+  return trimmed.slice(0, 10);
+}
+
+function capabilityMatchesMarketRegimeCategory(
+  item: ProfessionalDataCapabilityViewItem,
+  category: MarketRegimeReadinessCategory,
+): boolean {
+  const haystack = [
+    item.capabilityId,
+    item.label,
+    item.detail,
+  ].join(' ');
+  return category.match.test(haystack);
+}
+
+function pickMarketRegimeCapability(
+  category: MarketRegimeReadinessCategory,
+  items: ProfessionalDataCapabilityViewItem[],
+): ProfessionalDataCapabilityViewItem | undefined {
+  const exactMatches = items.filter((item) => capabilityMatchesMarketRegimeCategory(item, category));
+  const categoryMatches = category.capabilityCategory
+    ? items.filter((item) => item.categoryKey === category.capabilityCategory)
+    : [];
+  const candidates = exactMatches.length ? exactMatches : categoryMatches;
+  return candidates
+    .map((item) => ({
+      item,
+      status: marketRegimeReadinessStatusFromCapability(item),
+    }))
+    .sort((left, right) => marketRegimeReadinessSeverity(right.status) - marketRegimeReadinessSeverity(left.status))[0]?.item;
+}
+
+function buildVolatilityRiskReadinessFromOfficialRisk(
+  readiness?: OfficialRiskSourceReadiness | null,
+): MarketRegimeReadinessItem | null {
+  if (!readiness) {
+    return null;
+  }
+  const pillars = [readiness.vix, readiness.rates, readiness.fedLiquidity].filter(Boolean);
+  if (!pillars.length) {
+    return null;
+  }
+  const isStale = pillars.some((pillar) => pillar?.state === 'stale' || pillar?.freshness === 'stale' || pillar?.freshness === 'fallback');
+  const isBlocked = pillars.every((pillar) => pillar?.state === 'blocked' || pillar?.state === 'missing' || pillar?.freshness === 'unavailable');
+  const hasReady = pillars.some((pillar) => pillar?.state === 'ready');
+  const status: MarketRegimeReadinessStatus = isStale
+    ? 'stale'
+    : isBlocked
+      ? 'not available'
+      : hasReady
+        ? 'available'
+        : 'degraded';
+  const asOfLabel = formatMarketRegimeReadinessDate(
+    readiness.vix?.asOf || readiness.vix?.latestDate || readiness.rates?.asOf || readiness.rates?.latestDate || readiness.fedLiquidity?.asOf || readiness.fedLiquidity?.latestDate,
+  );
+  return {
+    key: 'volatility-risk',
+    label: 'volatility/risk regime',
+    status,
+    variant: marketRegimeReadinessStatusVariant(status),
+    detail: sanitizeMarketRegimeReadinessText(readiness.consumerSummary || readiness.nextDataAction, 'Official risk inputs are partially returned.'),
+    freshnessLabel: asOfLabel ? `freshness ${asOfLabel}` : 'freshness pending',
+    asOfLabel,
+  };
+}
+
+function buildMarketRegimeReadinessItems(
+  view: ProfessionalDataCapabilityRegistryView | null,
+  riskReadiness?: OfficialRiskSourceReadiness | null,
+): MarketRegimeReadinessItem[] {
+  const capabilityItems = (view?.categories || []).flatMap((category) => category.items);
+  const officialRiskItem = buildVolatilityRiskReadinessFromOfficialRisk(riskReadiness);
+  return MARKET_REGIME_READINESS_CATEGORIES.map((category) => {
+    if (category.key === 'volatility-risk' && officialRiskItem) {
+      const capability = pickMarketRegimeCapability(category, capabilityItems);
+      if (capability) {
+        const capabilityStatus = marketRegimeReadinessStatusFromCapability(capability);
+        if (marketRegimeReadinessSeverity(capabilityStatus) >= marketRegimeReadinessSeverity(officialRiskItem.status)) {
+          const capabilityAsOf = formatMarketRegimeReadinessDate(capability.asOf || capability.updatedAt);
+          return {
+            key: category.key,
+            label: category.label,
+            status: capabilityStatus,
+            variant: marketRegimeReadinessStatusVariant(capabilityStatus),
+            detail: sanitizeMarketRegimeReadinessText(capability.detail, category.fallbackDetail),
+            freshnessLabel: sanitizeMarketRegimeReadinessText(capability.freshness, capabilityAsOf ? `freshness ${capabilityAsOf}` : 'freshness pending'),
+            asOfLabel: capabilityAsOf,
+          };
+        }
+      }
+      return officialRiskItem;
+    }
+
+    const capability = pickMarketRegimeCapability(category, capabilityItems);
+    const status = marketRegimeReadinessStatusFromCapability(capability);
+    const asOfLabel = formatMarketRegimeReadinessDate(capability?.asOf || capability?.updatedAt);
+    return {
+      key: category.key,
+      label: category.label,
+      status,
+      variant: marketRegimeReadinessStatusVariant(status),
+      detail: sanitizeMarketRegimeReadinessText(capability?.detail, category.fallbackDetail),
+      freshnessLabel: sanitizeMarketRegimeReadinessText(capability?.freshness, asOfLabel ? `freshness ${asOfLabel}` : 'freshness pending'),
+      asOfLabel,
+    };
+  });
+}
+
+const MarketRegimeReadinessSurface = ({
   view,
+  riskReadiness,
   loading,
   error,
   onRetry,
 }: {
   view: ProfessionalDataCapabilityRegistryView | null;
+  riskReadiness?: OfficialRiskSourceReadiness | null;
   loading: boolean;
   error: string | null;
   onRetry: () => void;
 }) => {
-  const categories = view?.categories || [];
   const statusCounts = view?.statusCounts || [];
-  const hasItems = Boolean(view?.hasItems && categories.length);
+  const readinessItems = buildMarketRegimeReadinessItems(view, riskReadiness);
 
   return (
     <section
-      data-testid="professional-data-capability-coverage"
+      data-testid="market-regime-readiness-surface"
       className="rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2.5"
     >
       <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
-          <p className="text-[11px] font-medium text-white/48">专业数据覆盖</p>
+          <p className="text-[11px] font-medium text-white/48">Market regime data readiness</p>
           <p className="mt-1 text-sm font-semibold text-white/84">
             {loading
-              ? '正在加载覆盖状态'
+              ? '正在加载市场状态数据'
               : error
-                ? '专业数据覆盖暂不可用'
-                : '按能力族查看当前专业数据覆盖'}
+                ? '市场状态数据可用性暂不可用'
+                : '关键市场状态输入可用性'}
+          </p>
+          <p className="mt-1 text-[11px] leading-5 text-white/42">
+            no fabricated regime score · no fake gamma or flow values
           </p>
         </div>
         <div className="flex min-w-0 flex-wrap gap-1.5 md:justify-end">
@@ -785,13 +1015,13 @@ const ProfessionalDataCapabilityCoverageStrip = ({
       </div>
 
       {loading ? (
-        <div data-testid="professional-data-capability-skeleton" className="mt-3 grid gap-2 md:grid-cols-2">
-          {Array.from({ length: 4 }).map((_, index) => (
+        <div data-testid="market-regime-readiness-skeleton" className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, index) => (
             <div key={index} className="h-20 animate-pulse rounded-md border border-white/[0.05] bg-white/[0.03]" />
           ))}
         </div>
       ) : error ? (
-        <div data-testid="professional-data-capability-error" className="mt-3 flex items-center justify-between gap-3 rounded-md border border-amber-300/20 bg-amber-400/8 px-3 py-2">
+        <div data-testid="market-regime-readiness-error" className="mt-3 flex items-center justify-between gap-3 rounded-md border border-amber-300/20 bg-amber-400/8 px-3 py-2">
           <p className="min-w-0 text-xs leading-5 text-amber-100/80">
             {error}
           </p>
@@ -799,43 +1029,27 @@ const ProfessionalDataCapabilityCoverageStrip = ({
             重试
           </TerminalButton>
         </div>
-      ) : hasItems ? (
-        <div className="mt-3 grid gap-3">
-          {PROFESSIONAL_DATA_CAPABILITY_GROUP_ORDER.map((categoryKey) => {
-            const category = categories.find((item) => item.categoryKey === categoryKey);
-            if (!category) {
-              return null;
-            }
-            return (
-              <section key={categoryKey} className="rounded-md border border-white/[0.05] bg-white/[0.02] px-3 py-2.5">
-                <div className="flex min-w-0 flex-col gap-1 md:flex-row md:items-baseline md:justify-between">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-medium text-white/48">{professionalDataCapabilityGroupLabel(categoryKey)}</p>
-                    <p className="mt-1 text-xs text-white/56">{category.description}</p>
-                  </div>
-                  <p className="text-[11px] text-white/36">{category.items.length} 项</p>
-                </div>
-                <div className="mt-2 grid gap-2">
-                  {category.items.map((item) => (
-                    <div key={item.capabilityId} className="rounded-md border border-white/[0.04] bg-black/10 px-3 py-2">
-                      <div className="flex min-w-0 items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-white/86">{item.label}</p>
-                          <p className="mt-1 text-[11px] leading-5 text-white/48">{item.sourceLabel}</p>
-                        </div>
-                        <TerminalChip variant={item.status.variant}>{item.status.label}</TerminalChip>
-                      </div>
-                      <p className="mt-1 text-[11px] leading-5 text-white/42">{item.detail}</p>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            );
-          })}
-        </div>
       ) : (
-        <div data-testid="professional-data-capability-empty" className="mt-3 rounded-md border border-white/[0.05] bg-white/[0.02] px-3 py-2 text-xs leading-5 text-white/52">
-          暂无专业数据覆盖项。
+        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {readinessItems.map((item) => (
+            <section
+              key={item.key}
+              data-testid={`market-regime-readiness-${item.key}`}
+              className="rounded-md border border-white/[0.05] bg-white/[0.02] px-3 py-2.5"
+            >
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-medium text-white/48">{item.label}</p>
+                  <p className="mt-1 text-sm font-semibold text-white/86">{item.status}</p>
+                </div>
+                <TerminalChip variant={item.variant}>{item.status}</TerminalChip>
+              </div>
+              <p className="mt-2 text-[11px] leading-5 text-white/48">{item.detail}</p>
+              <p className="mt-1 text-[11px] leading-5 text-white/36">
+                {item.asOfLabel ? `${item.freshnessLabel} · as of ${item.asOfLabel}` : item.freshnessLabel}
+              </p>
+            </section>
+          ))}
         </div>
       )}
     </section>
@@ -1082,7 +1296,7 @@ const MarketOverviewPage = () => {
     } catch {
       if (!cancelledRef?.current) {
         setProfessionalDataCapabilities(null);
-        setProfessionalDataCapabilitiesError('专业数据覆盖暂不可用，请稍后重试。');
+        setProfessionalDataCapabilitiesError('市场状态数据可用性暂不可用，请稍后重试。');
       }
     } finally {
       if (!cancelledRef?.current) {
@@ -1164,8 +1378,9 @@ const MarketOverviewPage = () => {
       >
         <OfficialRiskSourceReadinessStrip readiness={officialRiskSourceReadiness} />
         <MarketOverviewEvidenceBoundaryStrip matrix={consumerEvidenceReadinessMatrix} />
-        <ProfessionalDataCapabilityCoverageStrip
+        <MarketRegimeReadinessSurface
           view={professionalDataCapabilities}
+          riskReadiness={officialRiskSourceReadiness}
           loading={professionalDataCapabilitiesLoading}
           error={professionalDataCapabilitiesError}
           onRetry={() => {

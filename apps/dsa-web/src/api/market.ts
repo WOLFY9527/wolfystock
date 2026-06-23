@@ -828,6 +828,8 @@ export type ProfessionalDataCapability = {
   sourceLabel: string;
   reason?: string | null;
   freshness?: string | null;
+  asOf?: string | null;
+  updatedAt?: string | null;
 };
 
 export type ProfessionalDataCapabilitySummary = {
@@ -855,10 +857,14 @@ export type ProfessionalDataCapabilityStatusView = {
 
 export type ProfessionalDataCapabilityViewItem = {
   capabilityId: string;
+  categoryKey: ProfessionalDataCapabilityCategory;
   label: string;
   status: ProfessionalDataCapabilityStatusView;
   sourceLabel: string;
   detail: string;
+  freshness?: string | null;
+  asOf?: string | null;
+  updatedAt?: string | null;
 };
 
 export type ProfessionalDataCapabilityCategoryView = {
@@ -1857,6 +1863,8 @@ function normalizeProfessionalDataCapabilityRegistryPayload(
         sourceLabel: professionalCapabilitySafeText(capability.sourceLabel, '来源待补证'),
         reason: professionalCapabilitySafeText(capability.reason, ''),
         freshness: professionalCapabilitySafeText(capability.freshness, ''),
+        asOf: professionalCapabilitySafeText(capability.asOf, ''),
+        updatedAt: professionalCapabilitySafeText(capability.updatedAt, ''),
       }];
     })
     : [];
@@ -2003,6 +2011,7 @@ export function buildProfessionalDataCapabilityRegistryView(
         .filter((capability) => capability.category === categoryKey)
         .map((capability) => ({
           capabilityId: capability.capabilityId,
+          categoryKey,
           label: capability.label,
           status: professionalDataCapabilityStatusView(capability.status),
           sourceLabel: professionalCapabilitySafeText(capability.sourceLabel, '来源待补证'),
@@ -2010,6 +2019,9 @@ export function buildProfessionalDataCapabilityRegistryView(
             professionalCapabilitySafeText(capability.reason, ''),
             professionalCapabilitySafeText(capability.freshness, ''),
           ].filter(Boolean).join(' · ') || '覆盖原因待补证。',
+          freshness: professionalCapabilitySafeText(capability.freshness, ''),
+          asOf: professionalCapabilitySafeText(capability.asOf, ''),
+          updatedAt: professionalCapabilitySafeText(capability.updatedAt, ''),
         })),
     };
   }).filter((category) => category.items.length > 0);
