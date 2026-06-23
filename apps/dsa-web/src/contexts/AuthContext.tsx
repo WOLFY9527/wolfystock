@@ -1,11 +1,14 @@
 import type React from 'react';
 import { createContext, use, useCallback, useEffect, useState } from 'react';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
+import { invalidateApiShortWindowCache } from '../api';
 import type { CurrentUser } from '../api/auth';
 import { authApi } from '../api/auth';
 import { resetAdminSurfaceMode } from '../hooks/productSurfaceMode';
 import { useStockPoolStore } from '../stores/stockPoolStore';
 import { hardRedirect } from '../utils/browserRedirect';
+
+const AUTH_STATUS_PATH = '/api/v1/auth/status';
 
 const LOCAL_STORAGE_KEYS_TO_CLEAR = [
   'dsa_chat_session_id',
@@ -159,6 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   ): Promise<{ success: boolean; error?: ParsedApiError }> => {
     try {
+      invalidateApiShortWindowCache(AUTH_STATUS_PATH);
       if (!authEnabled) {
         if (setupState === 'no_password') {
           await authApi.updateSettings(true, params.password, params.passwordConfirm);
@@ -170,6 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         await authApi.login(params);
       }
+      invalidateApiShortWindowCache(AUTH_STATUS_PATH);
       await fetchStatus();
       return { success: true };
     } catch (err: unknown) {
@@ -193,6 +198,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     let logoutError: unknown = null;
 
+    invalidateApiShortWindowCache(AUTH_STATUS_PATH);
     try {
       await authApi.logout();
     } catch (err) {
@@ -200,6 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     await clearAuthRelatedBrowserStorage();
+    invalidateApiShortWindowCache(AUTH_STATUS_PATH);
     clearSessionState();
     await wait(100);
     hardRedirect('/guest');

@@ -9,6 +9,7 @@ const {
   updateSettings,
   changePassword,
   logout,
+  invalidateApiShortWindowCache,
   resetDashboardState,
   resetAdminSurfaceMode,
 } = vi.hoisted(() => ({
@@ -17,6 +18,7 @@ const {
   updateSettings: vi.fn(),
   changePassword: vi.fn(),
   logout: vi.fn(),
+  invalidateApiShortWindowCache: vi.fn(),
   resetDashboardState: vi.fn(),
   resetAdminSurfaceMode: vi.fn(),
 }));
@@ -35,6 +37,10 @@ vi.mock('../../api/auth', () => ({
     changePassword,
     logout,
   },
+}));
+
+vi.mock('../../api', () => ({
+  invalidateApiShortWindowCache,
 }));
 
 vi.mock('../../stores/stockPoolStore', () => ({
@@ -109,6 +115,7 @@ describe('AuthContext', () => {
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('logged-in'));
     expect(screen.getByTestId('password-set')).toHaveTextContent('set');
+    expect(invalidateApiShortWindowCache).toHaveBeenCalledWith('/api/v1/auth/status');
   });
 
   it('recognizes an authenticated current user when the top-level loggedIn flag is stale', async () => {
@@ -271,6 +278,7 @@ describe('AuthContext', () => {
     expect(hardRedirectMock).not.toHaveBeenCalled();
     await new Promise((resolve) => window.setTimeout(resolve, 120));
     expect(hardRedirectMock).toHaveBeenCalledWith('/guest');
+    expect(invalidateApiShortWindowCache).toHaveBeenCalledWith('/api/v1/auth/status');
   });
 
   it('does not reset dashboard state when auth is disabled', async () => {
@@ -328,5 +336,6 @@ describe('AuthContext', () => {
     expect(getStatus).toHaveBeenCalledTimes(1);
     await new Promise((resolve) => window.setTimeout(resolve, 120));
     expect(hardRedirectMock).toHaveBeenCalledWith('/guest');
+    expect(invalidateApiShortWindowCache).toHaveBeenCalledWith('/api/v1/auth/status');
   });
 });
