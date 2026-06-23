@@ -490,6 +490,64 @@ class StockStructureDecisionDataQuality(BaseModel):
     reason: str = Field(..., description="数据质量原因码")
 
 
+class HistoricalOhlcvReadinessResponse(BaseModel):
+    """历史 OHLCV 可用性与采集缺口状态。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    contract_version: str = Field(..., alias="contractVersion", description="历史 OHLCV readiness 合约版本")
+    symbol: str = Field(..., description="归一化股票代码")
+    market: str = Field(..., description="市场代码")
+    timeframe: str = Field(..., description="K 线周期")
+    requested_range: Dict[str, Optional[str]] = Field(
+        ...,
+        alias="requestedRange",
+        description="请求日期区间；未指定时字段为空",
+    )
+    lookback_bars: Optional[int] = Field(None, alias="lookbackBars", description="请求回看 K 线数量")
+    required_bars: int = Field(..., alias="requiredBars", description="下游要求的最少可用 K 线数量")
+    usable_bars: int = Field(..., alias="usableBars", description="通过基础 OHLCV 校验的 K 线数量")
+    missing_bars: int = Field(..., alias="missingBars", description="相对 requiredBars 的缺口数量")
+    freshness_state: Literal["current", "stale", "unknown"] = Field(
+        ...,
+        alias="freshnessState",
+        description="历史数据新鲜度状态",
+    )
+    adjustment_state: Literal["available", "missing", "not_required"] = Field(
+        ...,
+        alias="adjustmentState",
+        description="复权/公司行动调整状态",
+    )
+    benchmark_state: Literal["available", "missing", "not_requested"] = Field(
+        ...,
+        alias="benchmarkState",
+        description="基准历史数据状态",
+    )
+    provider_state: Literal[
+        "available",
+        "provider_missing",
+        "provider_unavailable",
+        "entitlement_required",
+    ] = Field(..., alias="providerState", description="provider-neutral 采集状态")
+    overall_state: Literal["ready", "degraded", "blocked"] = Field(
+        ...,
+        alias="overallState",
+        description="整体 OHLCV readiness 状态",
+    )
+    missing_requirements: List[
+        Literal[
+            "provider_missing",
+            "provider_unavailable",
+            "entitlement_required",
+            "insufficient_history",
+            "stale_data",
+            "missing_adjustments",
+            "missing_benchmark",
+        ]
+    ] = Field(default_factory=list, alias="missingRequirements", description="阻断或降级原因")
+    consumer_safe: Literal[True] = Field(True, alias="consumerSafe", description="不包含 provider 内部字段")
+
+
 class StockStructureDecisionMissingEvidence(BaseModel):
     """结构判断缺失证据项。"""
 
@@ -693,6 +751,11 @@ class StockStructureDecisionResponse(BaseModel):
     risk_observations: List[str] = Field(..., alias="riskObservations", description="风险与失效观察")
     evidence_gaps: List[str] = Field(..., alias="evidenceGaps", description="面向消费者的证据缺口")
     data_quality: StockStructureDecisionDataQuality = Field(..., alias="dataQuality", description="输入数据质量")
+    historical_ohlcv_readiness: HistoricalOhlcvReadinessResponse = Field(
+        ...,
+        alias="historicalOhlcvReadiness",
+        description="历史 OHLCV readiness 与采集缺口状态",
+    )
     missing_evidence: List[StockStructureDecisionMissingEvidence] = Field(
         ...,
         alias="missingEvidence",
