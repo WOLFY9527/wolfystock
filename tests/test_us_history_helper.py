@@ -15,6 +15,7 @@ from src.services.us_history_helper import (
     LocalUsHistoryLoadResult,
     fetch_daily_history_with_local_us_fallback,
     get_us_stock_parquet_dir,
+    persist_local_us_daily_history,
 )
 
 
@@ -84,6 +85,49 @@ class UsHistoryHelperTestCase(unittest.TestCase):
             clear=False,
         ):
             self.assertEqual(str(get_us_stock_parquet_dir()), "/tmp/local-priority")
+
+    def test_persist_local_us_daily_history_writes_normalized_parquet_cache(self) -> None:
+        raw = pd.DataFrame(
+            [
+                {
+                    "trade_date": "2026-01-02",
+                    "open": "100.0",
+                    "high": "102.0",
+                    "low": "99.0",
+                    "close": "101.0",
+                    "volume": "12345",
+                    "adjusted_close": "100.5",
+                }
+            ]
+        )
+        written: dict[str, object] = {}
+
+        def fake_to_parquet(self, path, index=False):  # noqa: ANN001
+            written["path"] = path
+            written["index"] = index
+            written["frame"] = self.copy()
+
+        with patch.dict("os.environ", {"LOCAL_US_PARQUET_DIR": "/tmp/us-cache"}, clear=False):
+            with patch.object(pd.DataFrame, "to_parquet", fake_to_parquet):
+                result = persist_local_us_daily_history("aapl", raw)
+
+        self.assertEqual(result.status, "saved")
+        self.assertEqual(result.rows, 1)
+        self.assertEqual(str(written["path"]), "/tmp/us-cache/AAPL.parquet")
+        self.assertEqual(written["index"], False)
+        saved_frame = written["frame"]
+        self.assertEqual(list(saved_frame["date"].dt.strftime("%Y-%m-%d")), ["2026-01-02"])
+        self.assertEqual(float(saved_frame["adjusted_close"].iloc[0]), 100.5)
+
+    def test_persist_local_us_daily_history_rejects_non_us_symbol_without_write(self) -> None:
+        raw = pd.DataFrame(
+            [{"date": "2026-01-02", "open": 1, "high": 1, "low": 1, "close": 1}]
+        )
+
+        with patch.object(pd.DataFrame, "to_parquet", side_effect=AssertionError("should not write")):
+            result = persist_local_us_daily_history("600519", raw)
+
+        self.assertEqual(result.status, "not_applicable")
 
 
 if __name__ == "__main__":

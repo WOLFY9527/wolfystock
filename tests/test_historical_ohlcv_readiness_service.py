@@ -13,6 +13,10 @@ from src.services.historical_ohlcv_readiness import (
 )
 from src.services.historical_ohlcv_runtime_adapter import HistoricalOhlcvRuntimeAdapter
 from src.services.stock_structure_decision_service import StockStructureDecisionService
+from src.services.yfinance_us_ohlcv_cache_provider import (
+    YFINANCE_US_OHLCV_CACHE_SOURCE,
+    YfinanceUsOhlcvCacheProvider,
+)
 
 
 class _FakeOhlcvProvider:
@@ -49,6 +53,44 @@ class _RaisingHistoryService:
         raise RuntimeError("providerName=LeakyProvider token=secret Traceback")
 
 
+class _FakeUsOhlcvCache:
+    def __init__(self, frames: dict[str, Any] | None = None) -> None:
+        self.frames = dict(frames or {})
+        self.load_calls: list[dict[str, Any]] = []
+        self.save_calls: list[dict[str, Any]] = []
+
+    def load(self, symbol: str, *, start_date: str | None = None, end_date: str | None = None, days: int | None = None):
+        self.load_calls.append(
+            {"symbol": symbol, "start_date": start_date, "end_date": end_date, "days": days}
+        )
+        return self.frames.get(symbol)
+
+    def save(self, symbol: str, frame: Any) -> int:
+        self.save_calls.append({"symbol": symbol, "rows": len(frame)})
+        self.frames[symbol] = frame
+        return len(frame)
+
+
+class _FakeDailyFetcher:
+    def __init__(self, frame: Any | None = None, error: Exception | None = None) -> None:
+        self.frame = frame
+        self.error = error
+        self.calls: list[dict[str, Any]] = []
+
+    def get_daily_data(self, stock_code: str, start_date=None, end_date=None, days: int = 30):
+        self.calls.append(
+            {
+                "stock_code": stock_code,
+                "start_date": start_date,
+                "end_date": end_date,
+                "days": days,
+            }
+        )
+        if self.error is not None:
+            raise self.error
+        return self.frame, YFINANCE_US_OHLCV_CACHE_SOURCE
+
+
 def _bars(count: int, *, start: date = date(2026, 1, 1), adjusted: bool = True) -> list[HistoricalOhlcvBar]:
     return [
         HistoricalOhlcvBar(
@@ -82,6 +124,25 @@ def _history_payload(count: int) -> dict[str, Any]:
         "source": "local_db",
         "diagnostics": {"status": "ok", "reason": "history_available"},
     }
+
+
+def _frame(count: int, *, start: date = date(2026, 1, 1), adjusted: bool = True):
+    import pandas as pd
+
+    rows: list[dict[str, Any]] = []
+    for bar in _bars(count, start=start, adjusted=adjusted):
+        row = {
+            "date": bar.date.isoformat(),
+            "open": bar.open,
+            "high": bar.high,
+            "low": bar.low,
+            "close": bar.close,
+            "volume": bar.volume,
+        }
+        if adjusted:
+            row["adjusted_close"] = bar.adjusted_close
+        rows.append(row)
+    return pd.DataFrame(rows)
 
 
 def test_no_provider_configured_returns_provider_missing_readiness_without_bars() -> None:
@@ -360,6 +421,188 @@ def test_runtime_adapter_provider_exception_is_redacted_to_provider_unavailable(
         "token",
     ):
         assert forbidden not in serialized
+
+
+def test_yfinance_us_cache_provider_default_disabled_does_not_call_provider() -> None:
+    cache = _FakeUsOhlcvCache()
+    fetcher = _FakeDailyFetcher(_frame(60))
+    provider = YfinanceUsOhlcvCacheProvider(
+        cache=cache,
+        fetcher=fetcher,
+        provider_fetch_enabled=False,
+    )
+
+    result = provider.fetch_ohlcv_history(
+        HistoricalOhlcvReadinessRequest(symbol="AAPL", market="us", timeframe="1d", required_bars=30)
+    )
+
+    assert result.unavailable_reason == "provider_missing"
+    assert result.bars == ()
+    assert fetcher.calls == []
+    assert cache.save_calls == []
+
+
+def test_yfinance_us_cache_provider_cache_hit_bypasses_provider_call() -> None:
+    cache = _FakeUsOhlcvCache({"AAPL": _frame(45)})
+    fetcher = _FakeDailyFetcher(_frame(60))
+    provider = YfinanceUsOhlcvCacheProvider(
+        cache=cache,
+        fetcher=fetcher,
+        provider_fetch_enabled=False,
+    )
+
+    readiness = HistoricalOhlcvReadinessService(provider=provider).fetch(
+        HistoricalOhlcvReadinessRequest(
+            symbol="AAPL",
+            market="us",
+            timeframe="1d",
+            start=date(2026, 1, 1),
+            end=date(2026, 2, 14),
+            lookback_bars=90,
+            required_bars=30,
+        )
+    ).readiness
+
+    assert readiness["providerState"] == "available"
+    assert readiness["overallState"] == "ready"
+    assert readiness["requiredBars"] == 30
+    assert readiness["usableBars"] == 45
+    assert readiness["missingBars"] == 0
+    assert fetcher.calls == []
+    assert cache.save_calls == []
+
+
+def test_yfinance_us_cache_provider_enabled_fetches_and_persists_sufficient_bars() -> None:
+    cache = _FakeUsOhlcvCache()
+    fetcher = _FakeDailyFetcher(_frame(60))
+    provider = YfinanceUsOhlcvCacheProvider(
+        cache=cache,
+        fetcher=fetcher,
+        provider_fetch_enabled=True,
+    )
+
+    result = HistoricalOhlcvReadinessService(provider=provider).fetch(
+        HistoricalOhlcvReadinessRequest(
+            symbol="NVDA",
+            market="us",
+            timeframe="1d",
+            start=date(2026, 1, 1),
+            end=date(2026, 3, 1),
+            lookback_bars=90,
+            required_bars=50,
+            require_adjusted=True,
+        )
+    )
+
+    assert fetcher.calls == [
+        {"stock_code": "NVDA", "start_date": "2026-01-01", "end_date": "2026-03-01", "days": 90}
+    ]
+    assert cache.save_calls == [{"symbol": "NVDA", "rows": 60}]
+    assert len(result.bars) == 60
+    assert result.readiness["providerState"] == "available"
+    assert result.readiness["overallState"] == "ready"
+    assert result.readiness["missingRequirements"] == []
+
+
+def test_yfinance_us_cache_provider_reports_insufficient_stale_and_missing_adjustments() -> None:
+    cases = [
+        (
+            HistoricalOhlcvReadinessRequest(symbol="ORCL", market="us", timeframe="1d", required_bars=30),
+            _frame(10),
+            "insufficient_history",
+        ),
+        (
+            HistoricalOhlcvReadinessRequest(
+                symbol="ORCL",
+                market="us",
+                timeframe="1d",
+                end=date(2026, 3, 1),
+                required_bars=5,
+            ),
+            _frame(10, start=date(2026, 1, 1)),
+            "stale_data",
+        ),
+        (
+            HistoricalOhlcvReadinessRequest(
+                symbol="ORCL",
+                market="us",
+                timeframe="1d",
+                required_bars=5,
+                require_adjusted=True,
+            ),
+            _frame(10, adjusted=False),
+            "missing_adjustments",
+        ),
+    ]
+
+    for request, frame, expected in cases:
+        provider = YfinanceUsOhlcvCacheProvider(
+            cache=_FakeUsOhlcvCache({"ORCL": frame}),
+            fetcher=_FakeDailyFetcher(_frame(60)),
+            provider_fetch_enabled=False,
+        )
+
+        readiness = HistoricalOhlcvReadinessService(provider=provider).fetch(request).readiness
+
+        assert expected in readiness["missingRequirements"]
+
+
+def test_yfinance_us_cache_provider_redacts_provider_exceptions() -> None:
+    provider = YfinanceUsOhlcvCacheProvider(
+        cache=_FakeUsOhlcvCache(),
+        fetcher=_FakeDailyFetcher(error=RuntimeError("token=secret provider=LeakyProvider Traceback")),
+        provider_fetch_enabled=True,
+    )
+
+    result = provider.fetch_ohlcv_history(
+        HistoricalOhlcvReadinessRequest(symbol="AAPL", market="us", timeframe="1d", required_bars=30)
+    )
+    serialized = json.dumps(result.__dict__, ensure_ascii=False).lower()
+
+    assert result.unavailable_reason == "provider_unavailable"
+    for forbidden in ("secret", "leakyprovider", "traceback", "token"):
+        assert forbidden not in serialized
+
+
+def test_stock_structure_can_route_orcl_and_aapl_through_yfinance_cache_provider() -> None:
+    cache = _FakeUsOhlcvCache({"ORCL": _frame(60), "AAPL": _frame(60)})
+    provider = YfinanceUsOhlcvCacheProvider(
+        cache=cache,
+        fetcher=_FakeDailyFetcher(_frame(60)),
+        provider_fetch_enabled=False,
+    )
+
+    for symbol in ("ORCL", "AAPL"):
+        payload = StockStructureDecisionService(
+            historical_ohlcv_provider=provider,
+            require_adjusted_ohlcv=True,
+        ).get_structure_decision(symbol)
+
+        readiness = payload["historicalOhlcvReadiness"]
+        assert readiness["symbol"] == symbol
+        assert readiness["providerState"] == "available"
+        assert readiness["requiredBars"] > 0
+        assert readiness["usableBars"] >= readiness["requiredBars"]
+        assert readiness["missingBars"] == 0
+        assert "missing_adjustments" not in readiness["missingRequirements"]
+
+
+def test_stock_structure_yfinance_cache_env_wiring_uses_provider_without_history_call(monkeypatch) -> None:
+    provider = _FakeOhlcvProvider(
+        {"AAPL": HistoricalOhlcvProviderResult.available(_bars(60), adjustments_available=True)}
+    )
+    history = _FakeHistoryService(_history_payload(0))
+    monkeypatch.setenv("WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED", "true")
+    monkeypatch.setattr(
+        "src.services.stock_structure_decision_service.YfinanceUsOhlcvCacheProvider.from_env",
+        lambda: provider,
+    )
+
+    payload = StockStructureDecisionService(history_service=history).get_structure_decision("AAPL")
+
+    assert history.calls == []
+    assert [call.symbol for call in provider.calls] == ["AAPL"]
+    assert payload["historicalOhlcvReadiness"]["overallState"] == "ready"
 
 
 def test_stock_structure_payload_includes_historical_ohlcv_readiness() -> None:

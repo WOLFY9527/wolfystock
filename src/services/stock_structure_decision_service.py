@@ -25,6 +25,10 @@ from src.services.stock_structure_decision_engine import (
     NO_ADVICE_DISCLOSURE,
     build_stock_structure_decision,
 )
+from src.services.yfinance_us_ohlcv_cache_provider import (
+    YFINANCE_US_OHLCV_ENABLE_ENV,
+    YfinanceUsOhlcvCacheProvider,
+)
 from src.utils.symbol_validation import validate_consumer_symbol_precheck
 
 
@@ -131,7 +135,9 @@ class StockStructureDecisionService:
         self.history_service = history_service or StockService()
         self.stock_repo = stock_repo
         self.timeout_seconds = _normalize_timeout_seconds(timeout_seconds)
-        if historical_ohlcv_provider is None and _historical_ohlcv_runtime_enabled():
+        if historical_ohlcv_provider is None and _yfinance_us_ohlcv_cache_enabled():
+            historical_ohlcv_provider = YfinanceUsOhlcvCacheProvider.from_env()
+        elif historical_ohlcv_provider is None and _historical_ohlcv_runtime_enabled():
             historical_ohlcv_provider = HistoricalOhlcvRuntimeAdapter(history_runtime=self.history_service)
         self.ohlcv_readiness_service = ohlcv_readiness_service or HistoricalOhlcvReadinessService(
             provider=historical_ohlcv_provider
@@ -1308,6 +1314,15 @@ def _normalize_timeout_seconds(value: float | None) -> float:
 
 def _historical_ohlcv_runtime_enabled() -> bool:
     return str(os.getenv("WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _yfinance_us_ohlcv_cache_enabled() -> bool:
+    return str(os.getenv(YFINANCE_US_OHLCV_ENABLE_ENV) or "").strip().lower() in {
         "1",
         "true",
         "yes",

@@ -37,6 +37,17 @@ class LocalUsHistoryLoadResult:
         return LOCAL_US_PARQUET_SOURCE
 
 
+@dataclass(frozen=True)
+class LocalUsHistoryPersistResult:
+    """Result for normalized local US parquet writes."""
+
+    stock_code: str
+    path: Path
+    status: str
+    rows: int = 0
+    error: Optional[str] = None
+
+
 def get_us_stock_parquet_dir() -> Path:
     """Return the configured US parquet root.
 
@@ -132,6 +143,46 @@ def load_local_us_daily_history(
         path=path,
         status="hit",
         dataframe=filtered.reset_index(drop=True),
+    )
+
+
+def persist_local_us_daily_history(
+    stock_code: str,
+    dataframe: Optional[pd.DataFrame],
+) -> LocalUsHistoryPersistResult:
+    """Persist normalized US daily history to the existing local parquet cache."""
+
+    normalized_code = str(stock_code or "").strip().upper()
+    path = get_local_us_history_path(normalized_code)
+    if not normalized_code or not is_us_stock_code(normalized_code):
+        return LocalUsHistoryPersistResult(
+            stock_code=normalized_code,
+            path=path,
+            status="not_applicable",
+        )
+    normalized = _normalize_local_us_history_frame(dataframe)
+    if normalized is None or normalized.empty:
+        return LocalUsHistoryPersistResult(
+            stock_code=normalized_code,
+            path=path,
+            status="invalid",
+            error="missing required columns or no rows after normalization",
+        )
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        normalized.to_parquet(path, index=False)
+    except Exception as exc:
+        return LocalUsHistoryPersistResult(
+            stock_code=normalized_code,
+            path=path,
+            status="failed",
+            error=type(exc).__name__,
+        )
+    return LocalUsHistoryPersistResult(
+        stock_code=normalized_code,
+        path=path,
+        status="saved",
+        rows=int(len(normalized)),
     )
 
 
@@ -246,7 +297,7 @@ def _normalize_local_us_history_frame(raw_df: Optional[pd.DataFrame]) -> Optiona
     if "volume" not in df.columns:
         df["volume"] = None
 
-    for column in ("open", "high", "low", "close", "volume", "amount", "pct_chg"):
+    for column in ("open", "high", "low", "close", "volume", "amount", "pct_chg", "adjusted_close"):
         if column in df.columns:
             df[column] = pd.to_numeric(df[column], errors="coerce")
 
