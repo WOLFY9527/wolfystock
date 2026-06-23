@@ -22,6 +22,7 @@ from src.services.source_confidence_contract import (
     coerce_source_confidence_contract,
 )
 from src.services.stock_service_provider_adapter import StockServiceProviderAdapter
+from src.services.akshare_cn_ohlcv_cache import AkshareCnOhlcvRuntime, is_cn_a_share_symbol
 from src.services.us_history_helper import LOCAL_US_PARQUET_SOURCE, fetch_daily_history_with_local_us_fallback
 from src.utils.symbol_classification import is_us_stock_code
 from src.utils.yfinance_symbol import to_yfinance_symbol
@@ -189,10 +190,6 @@ class StockService:
             raise ValueError(f"不支持的周期参数: {period}")
         
         try:
-            # 调用数据获取器获取历史数据
-            from data_provider.base import DataFetcherManager
-            
-            manager = DataFetcherManager()
             fetch_days = days
             if period == "weekly":
                 fetch_days = max(days, 180)
@@ -200,6 +197,18 @@ class StockService:
                 fetch_days = max(days, 365)
             elif period == "yearly":
                 fetch_days = max(days, 365 * 5)
+
+            if is_cn_a_share_symbol(stock_code):
+                return self._get_cn_history_data(
+                    stock_code=stock_code,
+                    period=period,
+                    fetch_days=fetch_days,
+                )
+
+            # 调用数据获取器获取历史数据
+            from data_provider.base import DataFetcherManager
+
+            manager = DataFetcherManager()
 
             df = None
             source = None
@@ -387,6 +396,57 @@ class StockService:
                     diagnostics=diagnostics,
                 ),
             }
+
+    def _get_cn_history_data(self, *, stock_code: str, period: str, fetch_days: int) -> Dict[str, Any]:
+        runtime_payload = AkshareCnOhlcvRuntime(repository=self.repo).get_history_data(
+            stock_code=stock_code,
+            period="daily",
+            days=fetch_days,
+        )
+        data = runtime_payload.get("data") if isinstance(runtime_payload.get("data"), list) else []
+        if not data:
+            return {
+                **runtime_payload,
+                "stock_name": None,
+                "period": period,
+            }
+
+        df = pd.DataFrame(data).rename(columns={"change_percent": "pct_chg"})
+        if period != "daily":
+            df = self._aggregate_history_frame(df, period)
+        response_data = []
+        for _, row in df.iterrows():
+            date_val = row.get("date")
+            if hasattr(date_val, "strftime"):
+                date_str = date_val.strftime("%Y-%m-%d")
+            else:
+                date_str = str(date_val)
+            item = {
+                "date": date_str,
+                "open": float(row.get("open", 0)),
+                "high": float(row.get("high", 0)),
+                "low": float(row.get("low", 0)),
+                "close": float(row.get("close", 0)),
+                "volume": float(row.get("volume", 0)) if row.get("volume") is not None else None,
+                "amount": float(row.get("amount", 0)) if row.get("amount") is not None else None,
+                "change_percent": float(row.get("pct_chg", 0)) if row.get("pct_chg") is not None else None,
+            }
+            adjusted_close = row.get("adjustedClose")
+            if adjusted_close is not None:
+                item["adjustedClose"] = float(adjusted_close)
+            response_data.append(item)
+
+        diagnostics = dict(runtime_payload.get("diagnostics") or {})
+        diagnostics["rows"] = len(response_data)
+        return {
+            "stock_code": runtime_payload.get("stock_code") or stock_code,
+            "stock_name": None,
+            "period": period,
+            "data": response_data,
+            "source": runtime_payload.get("source") or "unknown",
+            "diagnostics": diagnostics,
+            "sourceConfidence": runtime_payload.get("sourceConfidence") or {},
+        }
 
     def get_intraday_data(
         self,
