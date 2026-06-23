@@ -4,9 +4,10 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass, field
 from datetime import date, datetime
 import re
-from typing import Iterable
+from typing import Iterable, Literal, Protocol, Sequence
 
 from api.v1.schemas.options import (
     OptionChainSnapshot,
@@ -21,7 +22,77 @@ from api.v1.schemas.options import (
 
 
 OPTIONS_STRUCTURE_PROVIDER_MISSING_REASON = "options_structure_provider_missing"
+OPTIONS_STRUCTURE_PROVIDER_STATE_MISSING = "provider_missing"
+OPTIONS_STRUCTURE_PROVIDER_STATE_ENTITLEMENT_REQUIRED = "entitlement_required"
+OPTIONS_STRUCTURE_PROVIDER_STATE_UNAVAILABLE = "provider_unavailable"
 _CONTRACT_MULTIPLIER_FALLBACK = 100
+_SAFE_PROVIDER_UNAVAILABLE_REASONS = {
+    OPTIONS_STRUCTURE_PROVIDER_STATE_MISSING,
+    OPTIONS_STRUCTURE_PROVIDER_STATE_ENTITLEMENT_REQUIRED,
+    OPTIONS_STRUCTURE_PROVIDER_STATE_UNAVAILABLE,
+    "unsupported_symbol",
+}
+_FORBIDDEN_PUBLIC_REASON_MARKERS = (
+    "apikey",
+    "api_key",
+    "cachekey",
+    "cache_key",
+    "credential",
+    "env",
+    "exceptionchain",
+    "exception_chain",
+    "exceptionclass",
+    "exception_class",
+    "providerclass",
+    "provider_class",
+    "providername",
+    "provider_name",
+    "rawpayload",
+    "raw_payload",
+    "requestid",
+    "request_id",
+    "token",
+    "traceid",
+    "trace_id",
+)
+
+
+OptionsStructureUnavailableReason = Literal[
+    "provider_missing",
+    "entitlement_required",
+    "provider_unavailable",
+    "unsupported_symbol",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class OptionsStructureProviderRequest:
+    """Provider-neutral request passed to future options chain providers."""
+
+    symbol: str
+    as_of: str | None = None
+    expiration_filters: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True, slots=True)
+class OptionsStructureProviderUnavailableResult:
+    """Structured provider result that keeps unavailable states consumer-safe."""
+
+    reason_code: OptionsStructureUnavailableReason = OPTIONS_STRUCTURE_PROVIDER_STATE_UNAVAILABLE
+    blocking_reasons: tuple[str, ...] = field(default_factory=tuple)
+
+
+OptionsStructureProviderResult = OptionChainSnapshot | OptionsStructureProviderUnavailableResult
+
+
+class OptionsStructureProvider(Protocol):
+    """Interface future options chain providers implement behind the gateway."""
+
+    def fetch_options_structure(
+        self,
+        request: OptionsStructureProviderRequest,
+    ) -> OptionsStructureProviderResult:
+        """Return a normalized option-chain snapshot or a structured unavailable result."""
 
 
 def _dedupe_codes(values: Iterable[str]) -> list[str]:
@@ -34,6 +105,19 @@ def _dedupe_codes(values: Iterable[str]) -> list[str]:
         seen.add(text)
         ordered.append(text)
     return ordered
+
+
+def _consumer_safe_reason_codes(values: Iterable[str]) -> list[str]:
+    safe: list[str] = []
+    for value in _dedupe_codes(values):
+        text = re.sub(r"[^A-Za-z0-9_.:-]+", "_", value).strip("_")
+        lowered = text.lower()
+        if not text or len(text) > 80:
+            continue
+        if any(marker in lowered for marker in _FORBIDDEN_PUBLIC_REASON_MARKERS):
+            continue
+        safe.append(text)
+    return _dedupe_codes(safe)
 
 
 def _normalize_symbol(symbol: str) -> str:
@@ -293,8 +377,13 @@ def aggregate_options_structure_snapshot(snapshot: OptionChainSnapshot) -> Optio
 
 def _next_evidence(blocking_reasons: list[str]) -> list[str]:
     items: list[str] = []
-    if OPTIONS_STRUCTURE_PROVIDER_MISSING_REASON in blocking_reasons:
+    if (
+        OPTIONS_STRUCTURE_PROVIDER_MISSING_REASON in blocking_reasons
+        or OPTIONS_STRUCTURE_PROVIDER_STATE_MISSING in blocking_reasons
+    ):
         items.append("configure_authorized_options_structure_provider")
+    if OPTIONS_STRUCTURE_PROVIDER_STATE_ENTITLEMENT_REQUIRED in blocking_reasons:
+        items.append("obtain_options_structure_provider_entitlement")
     if "missing_option_chain_snapshot" in blocking_reasons:
         items.append("provide_option_chain_snapshot")
     if any(reason in blocking_reasons for reason in ("missing_gamma", "missing_open_interest", "missing_multiplier")):
@@ -304,16 +393,29 @@ def _next_evidence(blocking_reasons: list[str]) -> list[str]:
     return _dedupe_codes(items)
 
 
-def build_options_structure_not_available(symbol: str) -> OptionsStructureSummary:
+def build_options_structure_not_available(
+    symbol: str,
+    *,
+    provider_configured: bool = False,
+    blocking_reasons: Iterable[str] | None = None,
+) -> OptionsStructureSummary:
     normalized_symbol = _normalize_symbol(symbol)
-    blocking_reasons = [OPTIONS_STRUCTURE_PROVIDER_MISSING_REASON, "missing_option_chain_snapshot"]
+    reasons = _consumer_safe_reason_codes(
+        [
+            *(blocking_reasons or []),
+            OPTIONS_STRUCTURE_PROVIDER_MISSING_REASON if not provider_configured else "",
+            OPTIONS_STRUCTURE_PROVIDER_STATE_MISSING if not provider_configured else "",
+        ]
+    )
+    if not provider_configured and "missing_option_chain_snapshot" not in reasons:
+        reasons.append("missing_option_chain_snapshot")
     snapshot = OptionChainSnapshot(
         symbol=normalized_symbol,
         spotPrice=None,
         asOf=None,
         freshness="not_available",
         contracts=[],
-        missingInputs=list(blocking_reasons),
+        missingInputs=list(reasons),
     )
     return OptionsStructureSummary(
         symbol=normalized_symbol,
@@ -321,7 +423,7 @@ def build_options_structure_not_available(symbol: str) -> OptionsStructureSummar
         calculationState="not_available",
         observationOnly=True,
         decisionGrade=False,
-        providerConfigured=False,
+        providerConfigured=provider_configured,
         spotPrice=None,
         asOf=None,
         freshness="not_available",
@@ -332,23 +434,133 @@ def build_options_structure_not_available(symbol: str) -> OptionsStructureSummar
         zeroDte=OptionsZeroDteConcentration(state="not_available"),
         gammaFlipLevel=OptionsGammaFlipLevel(),
         totalDealerGammaExposure=None,
-        blockingReasons=blocking_reasons,
+        blockingReasons=reasons,
         warnings=[],
-        nextEvidenceNeeded=_next_evidence(blocking_reasons),
+        nextEvidenceNeeded=_next_evidence(reasons),
     )
 
 
-class OptionsStructureService:
-    """Service entry point for future professional options structure analytics."""
+def _normalize_expiration_filters(expiration_filters: Sequence[str] | None) -> tuple[str, ...]:
+    return tuple(_dedupe_codes(str(item or "").strip() for item in (expiration_filters or []) if str(item or "").strip()))
+
+
+def _filter_snapshot_expirations(
+    snapshot: OptionChainSnapshot,
+    expiration_filters: tuple[str, ...],
+) -> OptionChainSnapshot:
+    if not expiration_filters:
+        return snapshot
+    allowed = set(expiration_filters)
+    contracts = [contract for contract in snapshot.contracts if contract.expiration in allowed]
+    return snapshot.model_copy(update={"contracts": contracts})
+
+
+def _provider_unavailable_summary(
+    symbol: str,
+    *,
+    provider_configured: bool,
+    reason_code: str,
+    blocking_reasons: Iterable[str] | None = None,
+) -> OptionsStructureSummary:
+    safe_reason = (
+        reason_code
+        if reason_code in _SAFE_PROVIDER_UNAVAILABLE_REASONS
+        else OPTIONS_STRUCTURE_PROVIDER_STATE_UNAVAILABLE
+    )
+    reasons = _consumer_safe_reason_codes([safe_reason, *(blocking_reasons or [])])
+    if safe_reason == OPTIONS_STRUCTURE_PROVIDER_STATE_MISSING:
+        reasons.append("missing_option_chain_snapshot")
+    return build_options_structure_not_available(
+        symbol,
+        provider_configured=provider_configured,
+        blocking_reasons=reasons,
+    )
+
+
+class OptionsStructureProviderGateway:
+    """Fail-closed gateway between structure analytics and future providers."""
+
+    def __init__(self, provider: OptionsStructureProvider | None = None) -> None:
+        self.provider = provider
 
     def get_structure(
         self,
         symbol: str,
         *,
+        as_of: str | None = None,
+        expiration_filters: Sequence[str] | None = None,
+    ) -> OptionsStructureSummary:
+        normalized_symbol = _normalize_symbol(symbol)
+        filters = _normalize_expiration_filters(expiration_filters)
+        if self.provider is None:
+            return _provider_unavailable_summary(
+                normalized_symbol,
+                provider_configured=False,
+                reason_code=OPTIONS_STRUCTURE_PROVIDER_STATE_MISSING,
+            )
+
+        request = OptionsStructureProviderRequest(
+            symbol=normalized_symbol,
+            as_of=str(as_of).strip() if as_of else None,
+            expiration_filters=filters,
+        )
+        try:
+            result = self.provider.fetch_options_structure(request)
+        except Exception:
+            return _provider_unavailable_summary(
+                normalized_symbol,
+                provider_configured=True,
+                reason_code=OPTIONS_STRUCTURE_PROVIDER_STATE_UNAVAILABLE,
+            )
+
+        if isinstance(result, OptionsStructureProviderUnavailableResult):
+            return _provider_unavailable_summary(
+                normalized_symbol,
+                provider_configured=True,
+                reason_code=result.reason_code,
+                blocking_reasons=result.blocking_reasons,
+            )
+        if not isinstance(result, OptionChainSnapshot):
+            return _provider_unavailable_summary(
+                normalized_symbol,
+                provider_configured=True,
+                reason_code=OPTIONS_STRUCTURE_PROVIDER_STATE_UNAVAILABLE,
+            )
+
+        snapshot = result
+        if _normalize_symbol(snapshot.symbol) != normalized_symbol:
+            snapshot = snapshot.model_copy(update={"symbol": normalized_symbol})
+        if request.as_of and not snapshot.as_of:
+            snapshot = snapshot.model_copy(update={"as_of": request.as_of})
+        snapshot = _filter_snapshot_expirations(snapshot, filters)
+        return aggregate_options_structure_snapshot(snapshot)
+
+
+class OptionsStructureService:
+    """Service entry point for future professional options structure analytics."""
+
+    def __init__(
+        self,
+        *,
+        provider: OptionsStructureProvider | None = None,
+        gateway: OptionsStructureProviderGateway | None = None,
+    ) -> None:
+        self.gateway = gateway or OptionsStructureProviderGateway(provider=provider)
+
+    def get_structure(
+        self,
+        symbol: str,
+        *,
+        as_of: str | None = None,
+        expiration_filters: Sequence[str] | None = None,
         snapshot: OptionChainSnapshot | None = None,
     ) -> OptionsStructureSummary:
         if snapshot is None:
-            return build_options_structure_not_available(symbol)
+            return self.gateway.get_structure(
+                symbol,
+                as_of=as_of,
+                expiration_filters=expiration_filters,
+            )
         if _normalize_symbol(snapshot.symbol) != _normalize_symbol(symbol):
             snapshot = snapshot.model_copy(update={"symbol": _normalize_symbol(symbol)})
         return aggregate_options_structure_snapshot(snapshot)
@@ -356,6 +568,14 @@ class OptionsStructureService:
 
 __all__ = [
     "OPTIONS_STRUCTURE_PROVIDER_MISSING_REASON",
+    "OPTIONS_STRUCTURE_PROVIDER_STATE_ENTITLEMENT_REQUIRED",
+    "OPTIONS_STRUCTURE_PROVIDER_STATE_MISSING",
+    "OPTIONS_STRUCTURE_PROVIDER_STATE_UNAVAILABLE",
+    "OptionsStructureProvider",
+    "OptionsStructureProviderGateway",
+    "OptionsStructureProviderRequest",
+    "OptionsStructureProviderUnavailableResult",
+    "OptionsStructureProviderResult",
     "OptionsStructureService",
     "aggregate_options_structure_snapshot",
     "build_options_structure_not_available",
