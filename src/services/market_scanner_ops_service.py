@@ -167,6 +167,17 @@ class MarketScannerOperationsService:
         except ValueError as exc:
             message = str(exc)
             if self._is_empty_watchlist_message(message):
+                empty_diagnostics = dict(exc.diagnostics) if isinstance(exc, ScannerRuntimeError) else {}
+                readiness = (
+                    empty_diagnostics.get("dataReadiness")
+                    if isinstance(empty_diagnostics.get("dataReadiness"), dict)
+                    else {}
+                )
+                coverage = (
+                    empty_diagnostics.get("coverage_summary")
+                    if isinstance(empty_diagnostics.get("coverage_summary"), dict)
+                    else {}
+                )
                 detail = self.scanner_service.record_terminal_run(
                     market=resolved_profile.market,
                     profile=resolved_profile.key,
@@ -179,6 +190,7 @@ class MarketScannerOperationsService:
                     watchlist_date=watchlist_date,
                     source_summary="scanner=empty",
                     diagnostics={
+                        **empty_diagnostics,
                         "empty_reason": message,
                     },
                     universe_notes=[
@@ -186,6 +198,13 @@ class MarketScannerOperationsService:
                     ],
                     scoring_notes=self.scanner_service._build_scoring_notes(profile=resolved_profile),
                     shortlist=[],
+                    universe_size=int(
+                        readiness.get("universeSize")
+                        or coverage.get("input_universe_size")
+                        or 0
+                    ),
+                    preselected_size=int(coverage.get("eligible_after_universe_fetch") or 0),
+                    evaluated_size=int(coverage.get("eligible_after_data_availability_filter") or 0),
                     scope=_trigger_scope(trigger_mode),
                 )
             else:

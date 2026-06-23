@@ -13,7 +13,12 @@ from src.services.execution_log_service import ExecutionLogService
 from src.services.market_scanner_ops_service import MarketScannerOperationsService
 from src.services.market_scanner_service import MarketScannerService, ScannerRuntimeError
 from src.storage import DatabaseManager
-from tests.test_market_scanner_service import FakeScannerDataManager, FakeUsScannerDataManager, seed_us_local_history
+from tests.test_market_scanner_service import (
+    FakeScannerDataManager,
+    FakeHistoricalOhlcvProvider,
+    FakeUsScannerDataManager,
+    seed_us_local_history,
+)
 
 
 class FakeNotifier:
@@ -91,7 +96,14 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["quoteCoverage"], "unknown")
         self.assertEqual(readiness["historyCoverage"], "unknown")
         self.assertEqual(readiness["freshness"], "unknown")
-        self.assertEqual(readiness["blockerBucket"], "unknown")
+        self.assertEqual(readiness["blockerBucket"], "universe_missing")
+        self.assertEqual(readiness["universeReadiness"]["state"], "missing")
+        self.assertEqual(readiness["universeReadiness"]["reason"], "universe_missing")
+        self.assertEqual(readiness["quoteReadiness"]["state"], "unknown")
+        self.assertEqual(readiness["historyReadiness"]["state"], "unknown")
+        self.assertEqual(readiness["benchmarkReadiness"]["state"], "unknown")
+        self.assertEqual(readiness["candidateGenerationState"], "blocked")
+        self.assertIn("universe_missing", readiness["candidateGenerationBlockers"])
         self.assertIn("尚未运行", readiness["consumerSummary"])
         self.assertIn("运行 Scanner", readiness["nextDataAction"])
 
@@ -335,6 +347,38 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
         assert persisted is not None
         self.assertEqual(persisted["status"], "empty")
         self.assertEqual(persisted["diagnostics"], detail["diagnostics"])
+
+    def test_fixture_universe_without_history_keeps_universe_count_and_blocks_candidates(self) -> None:
+        us_scanner_service = MarketScannerService(
+            self.db,
+            data_manager=FakeUsScannerDataManager(),
+            historical_ohlcv_provider=FakeHistoricalOhlcvProvider({}),
+        )
+        ops_service = MarketScannerOperationsService(
+            scanner_service=us_scanner_service,
+            config=_make_config(scanner_notification_enabled=False),
+            notifier_factory=lambda: FakeNotifier(available=False),
+        )
+
+        detail = ops_service.run_manual_scan(
+            market="us",
+            profile="us_preopen_v1",
+            universe_type="symbols",
+            symbols=["NVDA", "AAPL"],
+            notify=False,
+        )
+
+        self.assertEqual(detail["status"], "empty")
+        self.assertEqual(detail["shortlist"], [])
+        self.assertEqual(detail["universe_size"], 2)
+        readiness = detail["diagnostics"]["dataReadiness"]
+        self.assertEqual(readiness["universeSize"], 2)
+        self.assertEqual(readiness["universeReadiness"]["state"], "available")
+        self.assertEqual(readiness["historyReadiness"]["state"], "missing")
+        self.assertEqual(readiness["candidateGenerationState"], "blocked")
+        self.assertIn("missing_history", readiness["candidateGenerationBlockers"])
+        self.assertEqual(readiness["selectedCount"], 0)
+        self.assertEqual(readiness["candidateEvaluationCount"], 0)
 
     def test_manual_scan_records_scanner_run_observability_for_admin_logs(self) -> None:
         ops_service = MarketScannerOperationsService(

@@ -2222,16 +2222,18 @@ class MarketScannerService:
         failure_message = str(failure.get("message") or "").strip().lower()
         tokens = " ".join([reason_code, empty_reason, failure_message, *reason_counts.keys()])
 
+        if status == "not_run" and universe_size <= 0:
+            return "universe_missing"
         if any(marker in tokens for marker in ("universe_source_unavailable", "us_universe_unavailable", "hk_universe_unavailable")):
             return "missing_universe"
-        if "扫描宇宙为空" in empty_reason or "empty universe" in tokens:
-            return "empty_universe"
         if any(marker in tokens for marker in ("no_realtime_snapshot_available", "missing_quote_or_snapshot", "snapshot_unavailable")):
             return "missing_quote_snapshot"
         if "stale_history" in tokens:
             return "stale_history"
         if any(marker in tokens for marker in ("missing_history", "insufficient_history", "not_enough_history", "history_coverage")):
             return "missing_history"
+        if "扫描宇宙为空" in empty_reason or "empty universe" in tokens:
+            return "empty_universe"
         if selected_count <= 0 and self._readiness_int(reason_counts.get("filtered_by_profile_constraints")) > 0:
             return "profile_filters_rejected_all"
         if selected_count <= 0 and any(marker in tokens for marker in ("source_quality_capped", "source_cap", "score_cap")):
@@ -2242,8 +2244,14 @@ class MarketScannerService:
 
     @staticmethod
     def _data_readiness_copy(blocker: str, state: str) -> Tuple[str, str]:
+        if state == "not_run":
+            return "Scanner 尚未运行，暂时没有数据准备度结论。", "运行 Scanner 后查看数据准备度。"
         copies = {
             "missing_universe": (
+                "Scanner 缺少可用标的池，暂时无法生成候选。",
+                "补充可扫描标的池后重新运行 Scanner。",
+            ),
+            "universe_missing": (
                 "Scanner 缺少可用标的池，暂时无法生成候选。",
                 "补充可扫描标的池后重新运行 Scanner。",
             ),
@@ -2310,8 +2318,6 @@ class MarketScannerService:
             return "Scanner 数据已满足本轮候选生成。", "继续按当前数据节奏复核扫描结果。"
         if state == "partial":
             return "Scanner 已生成候选，但部分数据覆盖仍需复核。", "补充缺口数据后复核候选稳定性。"
-        if state == "not_run":
-            return "Scanner 尚未运行，暂时没有数据准备度结论。", "运行 Scanner 后查看数据准备度。"
         return "Scanner 数据准备度暂时无法判断。", "补充运行记录后再复核。"
 
     def _build_data_readiness(
@@ -2430,13 +2436,87 @@ class MarketScannerService:
         consumer_summary, next_data_action = self._data_readiness_copy(blocker_hint, state)
         universe_availability = "available" if resolved_universe_size > 0 else "unknown"
         if normalized_status == "not_run":
-            universe_availability = "unknown"
-        elif blocker_hint == "missing_universe":
+            universe_availability = "missing" if resolved_universe_size <= 0 else "available"
+        elif blocker_hint in {"missing_universe", "universe_missing"}:
             universe_availability = "missing"
         elif blocker_hint == "empty_universe":
             universe_availability = "empty"
         elif normalized_status not in {"completed", "empty", "failed"}:
             universe_availability = "unknown"
+
+        benchmark_context = diagnostics.get("benchmark_context") if isinstance(diagnostics.get("benchmark_context"), Mapping) else {}
+        benchmark_code = str(benchmark_context.get("benchmark_code") or "").strip()
+        benchmark_missing = "missing_benchmark" in ohlcv_requirements or (
+            bool(benchmark_code) and benchmark_context.get("available") is not True
+        )
+        if benchmark_missing:
+            benchmark_state = "missing"
+        elif bool(benchmark_code) and benchmark_context.get("available") is True:
+            benchmark_state = "available"
+        else:
+            benchmark_state = "unknown"
+
+        universe_reason = (
+            "universe_missing"
+            if universe_availability == "missing"
+            else "empty_universe"
+            if universe_availability == "empty"
+            else "universe_available"
+            if universe_availability == "available"
+            else "universe_unknown"
+        )
+        quote_reason = (
+            "missing_quote_snapshot"
+            if quote_coverage == "missing"
+            else "quote_partial"
+            if quote_coverage == "partial"
+            else "quote_available"
+            if quote_coverage == "available"
+            else "quote_unknown"
+        )
+        history_reason = (
+            "missing_history"
+            if history_coverage == "missing"
+            else "history_partial"
+            if history_coverage == "partial"
+            else "history_available"
+            if history_coverage == "available"
+            else "history_unknown"
+        )
+        benchmark_reason = (
+            "missing_benchmark"
+            if benchmark_state == "missing"
+            else "benchmark_available"
+            if benchmark_state == "available"
+            else "benchmark_unknown"
+        )
+
+        candidate_generation_blockers: List[str] = []
+        if universe_availability in {"missing", "empty"}:
+            candidate_generation_blockers.append(universe_reason)
+        if quote_coverage == "missing":
+            candidate_generation_blockers.append("missing_quote_snapshot")
+        if history_coverage == "missing":
+            candidate_generation_blockers.append("missing_history")
+        for requirement in ohlcv_requirements:
+            if requirement not in candidate_generation_blockers:
+                candidate_generation_blockers.append(requirement)
+        if benchmark_missing and "missing_benchmark" not in candidate_generation_blockers:
+            candidate_generation_blockers.append("missing_benchmark")
+        if blocker_hint not in {"unknown", *candidate_generation_blockers}:
+            candidate_generation_blockers.append(blocker_hint)
+        candidate_generation_blockers = list(dict.fromkeys(candidate_generation_blockers))
+        if state == "ready" and not candidate_generation_blockers:
+            candidate_generation_state = "ready"
+        elif state == "partial" and not any(
+            item in candidate_generation_blockers
+            for item in ("universe_missing", "empty_universe", "missing_quote_snapshot", "missing_history", "missing_benchmark")
+        ):
+            candidate_generation_state = "degraded"
+        elif normalized_status == "not_run" and not candidate_generation_blockers:
+            candidate_generation_state = "not_run"
+        else:
+            candidate_generation_state = "blocked"
 
         return {
             "state": state,
@@ -2452,6 +2532,34 @@ class MarketScannerService:
             "universeSize": int(resolved_universe_size),
             "quoteCoverage": quote_coverage,
             "historyCoverage": history_coverage,
+            "universeReadiness": {
+                "state": universe_availability,
+                "reason": universe_reason,
+                "universeSize": int(resolved_universe_size),
+                "consumerSafe": True,
+            },
+            "quoteReadiness": {
+                "state": quote_coverage,
+                "reason": quote_reason,
+                "consumerSafe": True,
+            },
+            "historyReadiness": {
+                "state": history_coverage,
+                "reason": history_reason,
+                "requiredBars": int(ohlcv_readiness.get("requiredBars") or 0),
+                "usableBars": int(ohlcv_readiness.get("usableBars") or 0),
+                "missingBars": int(ohlcv_readiness.get("missingBars") or 0),
+                "missingRequirements": ohlcv_requirements,
+                "consumerSafe": True,
+            },
+            "benchmarkReadiness": {
+                "state": benchmark_state,
+                "reason": benchmark_reason,
+                "benchmarkCode": benchmark_code or None,
+                "consumerSafe": True,
+            },
+            "candidateGenerationState": candidate_generation_state,
+            "candidateGenerationBlockers": candidate_generation_blockers,
             "freshness": freshness,
             "requiredBars": int(ohlcv_readiness.get("requiredBars") or 0),
             "usableBars": int(ohlcv_readiness.get("usableBars") or 0),
@@ -2753,7 +2861,138 @@ class MarketScannerService:
                     )
                 )
         if universe_df.empty:
-            raise ValueError(str(market_options["empty_universe_message"]))
+            missing_history_count = int((history_cache.get("history_rollup") or {}).get("skipped_for_history") or 0)
+            if missing_history_count <= 0:
+                raise ValueError(str(market_options["empty_universe_message"]))
+            coverage_summary = self._build_coverage_summary(
+                input_universe_size=int(len(universe_symbols)),
+                eligible_after_universe_fetch=int(universe_diag.get("raw_symbol_count") or len(universe_symbols)),
+                eligible_after_liquidity_filter=0,
+                eligible_after_data_availability_filter=0,
+                ranked_candidate_count=0,
+                shortlisted_count=0,
+                excluded_reason_counts={
+                    "missing_history": missing_history_count,
+                    "filtered_by_profile_constraints": int(
+                        sum(int(value or 0) for value in (universe_diag.get("exclusion_stats") or {}).values())
+                    ),
+                },
+            )
+            failure_diagnostics = {
+                "reason_code": "insufficient_history",
+                "market": profile_config.market,
+                "profile": profile_config.key,
+                "history_mode": str(market_options["history_mode"]),
+                "history_stats": history_cache.get("history_rollup") or {},
+                "benchmark_context": benchmark_context,
+                "universe_filter_stats": {
+                    **universe_diag,
+                    "coverage_strategy": coverage_strategy,
+                    "local_symbol_count": local_symbol_count,
+                    "supplemented_seed_count": supplemented_seed_count,
+                    "resolved_symbol_count": int(universe_resolution.get("final_symbol_count") or len(universe_symbols)),
+                },
+                "coverage_summary": coverage_summary,
+                "scanner_data": {
+                    "universe_resolution": self._public_resolution_diagnostics(universe_resolution),
+                    "snapshot_resolution": {
+                        "source": str(market_options["optional_quote_source"]),
+                        "attempts": [],
+                    },
+                    "degraded_mode_used": False,
+                },
+                "universe_selection": self._public_universe_selection(universe_selection),
+                "candidate_diagnostics": history_cache.get("candidate_diagnostics") or {},
+            }
+            failure_diagnostics = self._attach_data_readiness(
+                failure_diagnostics,
+                market=profile_config.market,
+                profile=profile_config.key,
+                status="empty",
+                universe_size=int(len(universe_symbols)),
+                preselected_size=0,
+                evaluated_size=0,
+                shortlist_size=0,
+                summary={
+                    "universe_count": int(len(universe_symbols)),
+                    "submitted_count": int(len(universe_symbols)),
+                    "evaluated_count": 0,
+                    "selected_count": 0,
+                    "rejected_count": 0,
+                    "data_failed_count": missing_history_count,
+                    "error_count": 0,
+                },
+                candidates=list((history_cache.get("candidate_diagnostics") or {}).values()),
+            )
+            raise ScannerRuntimeError(
+                "insufficient_history",
+                str(market_options["empty_universe_message"]),
+                diagnostics=failure_diagnostics,
+                source_summary=f"scanner=blocked; universe={universe_source}; history=unavailable",
+            )
+
+        if benchmark_context.get("available") is not True:
+            coverage_summary = self._build_coverage_summary(
+                input_universe_size=int(len(universe_symbols)),
+                eligible_after_universe_fetch=int(universe_diag.get("raw_symbol_count") or len(universe_symbols)),
+                eligible_after_liquidity_filter=int(len(universe_df)),
+                eligible_after_data_availability_filter=0,
+                ranked_candidate_count=0,
+                shortlisted_count=0,
+                excluded_reason_counts={"missing_benchmark": int(len(universe_df))},
+            )
+            failure_diagnostics = {
+                "reason_code": "missing_benchmark",
+                "market": profile_config.market,
+                "profile": profile_config.key,
+                "history_mode": str(market_options["history_mode"]),
+                "history_stats": history_cache.get("history_rollup") or {},
+                "benchmark_context": benchmark_context,
+                "universe_filter_stats": {
+                    **universe_diag,
+                    "coverage_strategy": coverage_strategy,
+                    "local_symbol_count": local_symbol_count,
+                    "supplemented_seed_count": supplemented_seed_count,
+                    "resolved_symbol_count": int(universe_resolution.get("final_symbol_count") or len(universe_symbols)),
+                },
+                "coverage_summary": coverage_summary,
+                "scanner_data": {
+                    "universe_resolution": self._public_resolution_diagnostics(universe_resolution),
+                    "snapshot_resolution": {
+                        "source": str(market_options["optional_quote_source"]),
+                        "attempts": [],
+                    },
+                    "degraded_mode_used": False,
+                },
+                "universe_selection": self._public_universe_selection(universe_selection),
+                "candidate_diagnostics": history_cache.get("candidate_diagnostics") or {},
+            }
+            failure_diagnostics = self._attach_data_readiness(
+                failure_diagnostics,
+                market=profile_config.market,
+                profile=profile_config.key,
+                status="failed",
+                universe_size=int(len(universe_df)),
+                preselected_size=0,
+                evaluated_size=0,
+                shortlist_size=0,
+                summary={
+                    "universe_count": int(len(universe_symbols)),
+                    "submitted_count": int(len(universe_symbols)),
+                    "evaluated_count": 0,
+                    "selected_count": 0,
+                    "rejected_count": 0,
+                    "data_failed_count": 0,
+                    "error_count": 0,
+                },
+                candidates=list((history_cache.get("candidate_diagnostics") or {}).values()),
+            )
+            raise ScannerRuntimeError(
+                "missing_benchmark",
+                "Scanner 缺少所需市场基准历史，暂时无法生成候选。",
+                diagnostics=failure_diagnostics,
+                source_summary=f"scanner=blocked; universe={universe_source}; benchmark=missing",
+            )
 
         preselected_df = market_options["compute_pre_rank"](universe_df).head(resolved_detail_limit).reset_index(drop=True)
         evaluated_candidates, quote_diag_rollup = self._evaluate_quote_market_candidates(
@@ -2764,6 +3003,74 @@ class MarketScannerService:
             benchmark_context=benchmark_context,
             profile_config=profile_config,
         )
+        if (
+            self._readiness_int(quote_diag_rollup.get("attempted_candidates")) > 0
+            and self._readiness_int(quote_diag_rollup.get("available_candidates")) <= 0
+        ):
+            snapshot_resolution = self._build_quote_snapshot_resolution(
+                quote_diag_rollup=quote_diag_rollup,
+                history_only_source=str(market_options["history_only_source"]),
+                quote_fetcher=str(market_options["quote_fetcher"]),
+            )
+            coverage_summary = self._build_coverage_summary(
+                input_universe_size=int(len(universe_symbols)),
+                eligible_after_universe_fetch=int(universe_diag.get("raw_symbol_count") or len(universe_symbols)),
+                eligible_after_liquidity_filter=int(len(universe_df)),
+                eligible_after_data_availability_filter=0,
+                ranked_candidate_count=0,
+                shortlisted_count=0,
+                excluded_reason_counts={"missing_quote_or_snapshot": int(quote_diag_rollup.get("unavailable_candidates") or 0)},
+            )
+            failure_diagnostics = {
+                "reason_code": "missing_quote_or_snapshot",
+                "market": profile_config.market,
+                "profile": profile_config.key,
+                "history_mode": str(market_options["history_mode"]),
+                "history_stats": history_cache.get("history_rollup") or {},
+                "live_quote_stats": quote_diag_rollup,
+                "benchmark_context": benchmark_context,
+                "universe_filter_stats": {
+                    **universe_diag,
+                    "coverage_strategy": coverage_strategy,
+                    "local_symbol_count": local_symbol_count,
+                    "supplemented_seed_count": supplemented_seed_count,
+                    "resolved_symbol_count": int(universe_resolution.get("final_symbol_count") or len(universe_symbols)),
+                },
+                "coverage_summary": coverage_summary,
+                "scanner_data": {
+                    "universe_resolution": self._public_resolution_diagnostics(universe_resolution),
+                    "snapshot_resolution": snapshot_resolution,
+                    "degraded_mode_used": False,
+                },
+                "universe_selection": self._public_universe_selection(universe_selection),
+                "candidate_diagnostics": history_cache.get("candidate_diagnostics") or {},
+            }
+            failure_diagnostics = self._attach_data_readiness(
+                failure_diagnostics,
+                market=profile_config.market,
+                profile=profile_config.key,
+                status="failed",
+                universe_size=int(len(universe_df)),
+                preselected_size=int(len(preselected_df)),
+                evaluated_size=0,
+                shortlist_size=0,
+                summary={
+                    "universe_count": int(len(universe_symbols)),
+                    "submitted_count": int(len(universe_symbols)),
+                    "evaluated_count": 0,
+                    "selected_count": 0,
+                    "rejected_count": 0,
+                    "data_failed_count": 0,
+                    "error_count": 0,
+                },
+                candidates=list((history_cache.get("candidate_diagnostics") or {}).values()),
+            )
+            raise ScannerRuntimeError(
+                "missing_quote_or_snapshot",
+                "Scanner 缺少可用报价快照，暂时无法生成候选。",
+                diagnostics=failure_diagnostics,
+                source_summary=f"scanner=blocked; universe={universe_source}; quote=missing",
+            )
         if not evaluated_candidates:
             raise ValueError(str(market_options["no_candidates_message"]))
 
