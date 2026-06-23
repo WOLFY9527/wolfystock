@@ -241,10 +241,16 @@ function isAdminSurfacePath(pathname: string): boolean {
   return isPathMatch(pathname, '/settings/system') || isPathMatch(pathname, '/admin');
 }
 
-function isStockStructureDecisionPath(pathname: string): boolean {
-  return pathname === '/stocks/structure-decision'
-    || /^\/stock\/[^/]+(?:\/)?$/i.test(pathname)
-    || /^\/stocks\/[^/]+\/structure-decision(?:\/)?$/i.test(pathname);
+function isStockStructureDecisionEntryPath(pathname: string): boolean {
+  return pathname === '/stocks/structure-decision';
+}
+
+function isStockStructureDecisionDetailPath(pathname: string): boolean {
+  return /^\/stocks\/[^/]+\/structure-decision(?:\/)?$/i.test(pathname);
+}
+
+function isStockStructureDecisionLegacyPath(pathname: string): boolean {
+  return /^\/stock\/[^/]+(?:\/)?$/i.test(pathname);
 }
 
 function isProtectedProductPath(pathname: string): boolean {
@@ -257,7 +263,8 @@ function isProtectedProductPath(pathname: string): boolean {
     || isPathMatch(pathname, '/scenario-lab')
     || isPathMatch(pathname, '/watchlist')
     || isPathMatch(pathname, '/backtest')
-    || isPathMatch(pathname, '/options-lab');
+    || isPathMatch(pathname, '/options-lab')
+    || isStockStructureDecisionDetailPath(pathname);
 }
 
 function isPublicSafePath(pathname: string): boolean {
@@ -271,7 +278,8 @@ function isPublicSafePath(pathname: string): boolean {
     || pathname === '/market/decision-cockpit'
     || pathname === '/market/liquidity-monitor'
     || pathname === '/market/rotation-radar'
-    || isStockStructureDecisionPath(pathname);
+    || isStockStructureDecisionEntryPath(pathname)
+    || isStockStructureDecisionLegacyPath(pathname);
 }
 
 function getAuthBootstrapRouteKind(pathname: string): AuthBootstrapRouteKind {
@@ -388,6 +396,8 @@ const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ child
     moduleName = language === 'en' ? 'Market Overview' : '市场总览';
   } else if (routePathname.startsWith('/research/radar')) {
     moduleName = language === 'en' ? 'Research Radar' : '研究雷达';
+  } else if (isStockStructureDecisionDetailPath(routePathname)) {
+    moduleName = language === 'en' ? 'Stock Structure Panel' : '个股结构面板';
   } else if (routePathname.startsWith('/scenario-lab')) {
     moduleName = language === 'en' ? 'Scenario Lab' : '情景实验室';
   } else if (routePathname.startsWith('/watchlist')) {
@@ -523,6 +533,8 @@ export const AppContent: React.FC = () => {
         <Route path="/user/scanner" element={<Navigate to="/scanner" replace />} />
         <Route path="/:locale/guest/scanner" element={<Navigate to="../scanner" replace />} />
         <Route path="/:locale/user/scanner" element={<Navigate to="../scanner" replace />} />
+        <Route path="/stock/:stockCode" element={<StockStructureDecisionLegacyRedirect />} />
+        <Route path="/:locale/stock/:stockCode" element={<StockStructureDecisionLegacyRedirect />} />
         <Route element={<Shell />}>
           <Route path="/market" element={<Navigate to="/market-overview" replace />} />
           {/* /settings/system is the canonical admin system settings surface; /admin aliases remain intentional deep links. */}
@@ -549,9 +561,8 @@ export const AppContent: React.FC = () => {
           <Route path="/market/decision-cockpit" element={<MarketDecisionCockpitPage />} />
           <Route path="/market/liquidity-monitor" element={<LiquidityMonitorPage />} />
           <Route path="/market/rotation-radar" element={<MarketRotationRadarPage />} />
-          <Route path="/stock/:stockCode" element={<StockStructureDecisionLegacyRedirect />} />
           <Route path="/stocks/structure-decision" element={<StockStructureDecisionEntryPage />} />
-          <Route path="/stocks/:stockCode/structure-decision" element={<StockStructureDecisionPage />} />
+          <Route path="/stocks/:stockCode/structure-decision" element={<RegisteredSurfaceRoute><StockStructureDecisionPage /></RegisteredSurfaceRoute>} />
           <Route path="/research/radar" element={<RegisteredSurfaceRoute><ResearchRadarPage /></RegisteredSurfaceRoute>} />
           <Route path="/scenario-lab" element={<RegisteredSurfaceRoute><ScenarioLabPage /></RegisteredSurfaceRoute>} />
           <Route path="/watchlist" element={<RegisteredSurfaceRoute><WatchlistPage /></RegisteredSurfaceRoute>} />
@@ -600,9 +611,8 @@ export const AppContent: React.FC = () => {
           <Route path="market/decision-cockpit" element={<MarketDecisionCockpitPage />} />
           <Route path="market/liquidity-monitor" element={<LiquidityMonitorPage />} />
           <Route path="market/rotation-radar" element={<MarketRotationRadarPage />} />
-          <Route path="stock/:stockCode" element={<StockStructureDecisionLegacyRedirect />} />
           <Route path="stocks/structure-decision" element={<StockStructureDecisionEntryPage />} />
-          <Route path="stocks/:stockCode/structure-decision" element={<StockStructureDecisionPage />} />
+          <Route path="stocks/:stockCode/structure-decision" element={<RegisteredSurfaceRoute><StockStructureDecisionPage /></RegisteredSurfaceRoute>} />
           <Route path="research/radar" element={<RegisteredSurfaceRoute><ResearchRadarPage /></RegisteredSurfaceRoute>} />
           <Route path="scenario-lab" element={<RegisteredSurfaceRoute><ScenarioLabPage /></RegisteredSurfaceRoute>} />
           <Route path="watchlist" element={<RegisteredSurfaceRoute><WatchlistPage /></RegisteredSurfaceRoute>} />

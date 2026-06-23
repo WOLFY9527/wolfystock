@@ -516,6 +516,106 @@ async function installOptionsLabMocks(page: Page) {
   });
 }
 
+async function installStockStructureDecisionMocks(page: Page) {
+  await page.route('**/api/v1/stocks/*/validate', async (route) => {
+    const symbol = decodeURIComponent(new URL(route.request().url()).pathname.split('/')[4] || 'AAPL');
+    await fulfillJson(route, {
+      stock_code: symbol,
+      normalized_symbol: symbol,
+      market: 'us',
+      status: 'valid',
+      valid: true,
+      exists: true,
+      stock_name: symbol,
+    });
+  });
+
+  await page.route('**/api/v1/stocks/*/quote', async (route) => {
+    const symbol = decodeURIComponent(new URL(route.request().url()).pathname.split('/')[4] || 'AAPL');
+    await fulfillJson(route, {
+      stock_code: symbol,
+      stock_name: symbol,
+      current_price: 211.32,
+      change: 1.24,
+      change_percent: 0.59,
+      update_time: '2026-06-07T09:45:00-04:00',
+      freshness: 'delayed',
+      source_confidence: {
+        source_label: 'Playwright Fixture',
+        as_of: '2026-06-07T09:45:00-04:00',
+        freshness: 'delayed',
+        is_stale: false,
+        is_partial: false,
+        is_synthetic: false,
+        is_unavailable: false,
+      },
+    });
+  });
+
+  await page.route('**/api/v1/stocks/*/research-packet', async (route) => {
+    const symbol = decodeURIComponent(new URL(route.request().url()).pathname.split('/')[4] || 'AAPL');
+    await fulfillJson(route, {
+      symbol,
+      market: 'us',
+      identity: { name: symbol, exchange: 'NASDAQ', sector: 'Technology', industry: 'Hardware' },
+      quote: { state: 'available', price: 211.32, change_percent: 0.59, as_of: '2026-06-07T09:45:00-04:00' },
+      history: { state: 'available', bars: 90, period: 'daily', as_of: '2026-06-07' },
+      structure: { state: 'available', label: 'Range-bound', confidence: 'medium', as_of: '2026-06-07' },
+      fundamentals: { state: 'not_integrated', fields_available: [] },
+      events: { state: 'missing', latest: [] },
+      peer: { state: 'insufficient', benchmark: 'QQQ' },
+      missing_data: ['peer evidence'],
+      research_status: 'partial',
+      next_data_action: 'Review comparable evidence before drawing conclusions.',
+      observation_only: true,
+      decision_grade: false,
+      no_advice_disclosure: 'Research observation only.',
+    });
+  });
+
+  await page.route('**/api/v1/stocks/*/structure-decision', async (route) => {
+    const symbol = decodeURIComponent(new URL(route.request().url()).pathname.split('/')[4] || 'AAPL');
+    await fulfillJson(route, {
+      schema_version: 'route_truth_stock_structure_fixture_v1',
+      ticker: symbol,
+      structure_state: 'range',
+      confidence: 'medium',
+      confidence_cap: { value: 55, label: 'Medium', reasons: ['Fixture route smoke evidence is bounded.'] },
+      confidence_state: {
+        status: 'partial',
+        label: 'Evidence limited',
+        reasons: ['Peer evidence remains incomplete.'],
+      },
+      component_scores: {
+        trend: 58,
+        relativeStrength: 52,
+        evidenceQuality: 45,
+      },
+      explanation: {
+        why_this_structure: 'Price evidence remains range-bound in the route smoke fixture.',
+        what_confirms_it: ['Fresh price evidence remains available.'],
+        what_invalidates_it: ['Evidence falls out of date.'],
+        key_levels: [{ kind: 'support', value: 198.5, description: 'Fixture support level.' }],
+      },
+      research_notes: {
+        watch_next: ['Refresh quote evidence before deeper review.'],
+        needs_more_evidence: ['Comparable peer evidence.'],
+        risk_flags: ['Evidence is partial.'],
+      },
+      data_quality: {
+        status: 'partial',
+        period: 'daily',
+        requested_days: 120,
+        observed_bars: 90,
+        usable_bars: 90,
+        reason: 'Fixture route smoke coverage.',
+      },
+      missing_evidence: [{ kind: 'peer', message: 'Comparable evidence pending.' }],
+      no_advice_disclosure: 'Research observation only.',
+    });
+  });
+}
+
 async function readBodyText(page: Page) {
   return page.locator('body').innerText();
 }
@@ -610,6 +710,19 @@ appTest.describe('route truth smoke guard - guest', () => {
     await appExpect(page.getByRole('heading', { name: /期权实验室/ })).toBeVisible();
   });
 
+  appTest('redirects guest legacy stock links to the stock auth gate', async ({ page }) => {
+    await page.setViewportSize(desktopViewport);
+    await installGuestSession(page);
+
+    await page.goto('/zh/stock/AAPL?source=bookmark#snapshot');
+    await page.waitForLoadState('domcontentloaded');
+    await appExpect(page).toHaveURL(/\/zh\/stocks\/AAPL\/structure-decision\?source=bookmark#snapshot$/);
+    await appExpect(page.getByTestId('auth-guard-overlay')).toBeVisible({ timeout: 15_000 });
+    await appExpect(page.getByRole('button', { name: /登录 个股结构面板/ })).toBeVisible();
+    await appExpect(page.getByTestId('stock-structure-decision-page')).toHaveCount(0);
+    baseExpect(await readBodyText(page)).not.toMatch(/页面未找到|not found/i);
+  });
+
   appTest('preserves the same route classes on mobile where viewport-specific misreads are likely', async ({ page }) => {
     await page.setViewportSize(mobileViewport);
     await installGuestSession(page);
@@ -673,6 +786,23 @@ appTest.describe('route truth smoke guard - signed-in product', () => {
     await appExpect(page.getByRole('heading', { name: /组合总览/ })).toBeVisible();
     await appExpect(page.getByTestId('market-provider-operations-page')).toHaveCount(0);
     baseExpect(await readBodyText(page)).not.toMatch(/Provider 熔断诊断|数据源运维/i);
+    await expectRootNonEmpty(page);
+    await expectNoHorizontalOverflow(page);
+  });
+
+  appTest('loads the real stock structure page from the legacy stock route for signed-in users', async ({ page }) => {
+    await page.setViewportSize(desktopViewport);
+    await installSignedInSession(page);
+    await installStockStructureDecisionMocks(page);
+
+    await page.goto('/zh/stock/AAPL?source=bookmark#snapshot');
+    await page.waitForLoadState('domcontentloaded');
+
+    await appExpect(page).toHaveURL(/\/zh\/stocks\/AAPL\/structure-decision\?source=bookmark#snapshot$/);
+    await appExpect(page.getByTestId('stock-structure-decision-page')).toBeVisible({ timeout: 15_000 });
+    await appExpect(page.getByRole('heading', { name: /AAPL 结构工作区/ })).toBeVisible();
+    await appExpect(page.getByTestId('auth-guard-overlay')).toHaveCount(0);
+    baseExpect(await readBodyText(page)).not.toMatch(/页面未找到|not found/i);
     await expectRootNonEmpty(page);
     await expectNoHorizontalOverflow(page);
   });
