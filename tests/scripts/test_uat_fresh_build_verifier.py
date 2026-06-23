@@ -302,6 +302,45 @@ def test_main_runs_hygiene_before_frontend_build(monkeypatch, tmp_path: Path) ->
     assert calls == ["hygiene"]
 
 
+def test_run_frontend_build_bootstraps_dependencies_when_node_modules_missing(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    web_dir = tmp_path / "apps" / "dsa-web"
+    web_dir.mkdir(parents=True)
+    (web_dir / "package-lock.json").write_text("{}", encoding="utf-8")
+    commands: list[tuple[str, ...]] = []
+
+    monkeypatch.setattr(verifier.shutil, "which", lambda name: "/usr/local/bin/npm" if name == "npm" else None)
+
+    def _run(command, cwd, check):
+        commands.append(tuple(command))
+        assert cwd == tmp_path
+        assert check is False
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(verifier.subprocess, "run", _run)
+
+    result = verifier.run_frontend_build(tmp_path)
+
+    assert result == 0
+    assert commands == [
+        ("/usr/local/bin/npm", "--prefix", "apps/dsa-web", "ci"),
+        ("/usr/local/bin/npm", "--prefix", "apps/dsa-web", "run", "build"),
+    ]
+    assert "Frontend bootstrap command: npm --prefix apps/dsa-web ci && npm --prefix apps/dsa-web run build" in capsys.readouterr().out
+
+
+def test_run_frontend_build_fails_closed_when_npm_is_missing(monkeypatch, tmp_path: Path, capsys) -> None:
+    monkeypatch.setattr(verifier.shutil, "which", lambda _name: None)
+
+    result = verifier.run_frontend_build(tmp_path)
+
+    assert result == 1
+    assert "npm is unavailable" in capsys.readouterr().err
+
+
 def test_direct_script_help_entrypoint_runs_from_repo_root() -> None:
     result = subprocess.run(
         [sys.executable, "scripts/uat_fresh_build_verifier.py", "--help"],
