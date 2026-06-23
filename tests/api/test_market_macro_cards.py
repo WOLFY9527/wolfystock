@@ -69,9 +69,10 @@ class MarketMacroCardsApiTestCase(unittest.TestCase):
         serialized = str(payload).lower()
         for raw_token in FORBIDDEN_CONSUMER_REASON_TOKENS:
             self.assertNotIn(raw_token, serialized)
+        self.assertNotIn("sourceAuthorityAllowed", str(payload))
         self.assertEqual(
             payload["consumerEvidenceSnapshot"]["reasonFamilies"],
-            [{"label": "证据来源级别不足", "category": "evidence", "sourceField": "sourceAuthorityAllowed"}],
+            [{"label": "证据来源级别不足", "category": "evidence", "sourceField": "evidence"}],
         )
 
     def test_sector_rotation_endpoint_projects_rotation_radar_theme_order_and_scores(self) -> None:

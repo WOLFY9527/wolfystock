@@ -22,6 +22,7 @@ FORBIDDEN_MARKET_DIAGNOSTIC_FIELDS = (
     "providerAttempted",
     "providerName",
     "providerClass",
+    "requiredProviderClass",
     "activationHint",
     "officialOverlayFailureDetails",
     "exceptionClass",
@@ -121,7 +122,10 @@ class _LeakyOverviewService:
                     "providerAttempted": True,
                     "providerName": "fred",
                     "providerClass": "official_daily",
+                    "requiredProviderClass": "official_public.fed_liquidity",
                     "activationHint": "set_fred_api_key",
+                    "sourceField": "sourceAuthorityAllowed",
+                    "hint": "requiredProviderClass official_public.fed_liquidity is required",
                     "officialOverlayFailureDetails": {
                         "endpointHost": "api.stlouisfed.org",
                         "apiKeyPresent": True,
@@ -144,6 +148,14 @@ class _LeakyOverviewService:
                         "requestId": "REQ-raw",
                         "traceId": "TRACE-raw",
                         "cacheKey": "market:vix",
+                        "reason": "sourceAuthorityAllowed blocked this observation",
+                        "evidenceGaps": [
+                            {
+                                "label": "证据来源级别不足",
+                                "category": "evidence",
+                                "sourceField": "sourceAuthorityAllowed",
+                            }
+                        ],
                     },
                 }
             ],
@@ -270,10 +282,15 @@ def test_market_overview_public_endpoints_project_consumer_safe_diagnostics(monk
             assert response.status_code == 200
             payload = response.json()
             _assert_no_forbidden_consumer_terms(payload)
+            serialized = json.dumps(payload, ensure_ascii=False)
+            assert "requiredProviderClass" not in serialized
+            assert "sourceAuthorityAllowed" not in serialized
             assert payload["freshness"] == "delayed"
             assert payload["items"][0]["freshness"] == "delayed"
             assert payload["warning"] == "数据不足，暂不形成结论。"
             assert payload["items"][0]["sourceFreshnessEvidence"]["freshness"] == "delayed"
+            assert payload["items"][0]["sourceField"] == "evidence"
+            assert payload["items"][0]["nested"]["evidenceGaps"][0]["sourceField"] == "evidence"
             assert payload["noAdviceDisclosure"]
 
 

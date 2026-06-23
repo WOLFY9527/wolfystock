@@ -56,6 +56,7 @@ FORBIDDEN_CONSUMER_DIAGNOSTIC_KEYS = frozenset(
         "reasoncodes",
         "requestedseries",
         "requestid",
+        "requiredproviderclass",
         "runtime",
         "schemaversion",
         "scorecontributionallowed",
@@ -96,6 +97,10 @@ _UNSAFE_DIAGNOSTIC_VALUE_RE = re.compile(
     r"^(?:provider|source)_",
     re.IGNORECASE,
 )
+_UNSAFE_FIELD_NAME_VALUE_RE = re.compile(
+    r"\b(?:providerClass|providerName|providerAttempted|requiredProviderClass|"
+    r"scoreContributionAllowed|sourceAuthorityAllowed|sourceAuthorityRouter)\b"
+)
 _ADVICE_RE = re.compile(
     r"\b(?:buy|sell|hold|recommend(?:ation|ed)?|target(?: price)?|stop(?: loss)?|position[-\s]?sizing)\b|"
     r"买入|卖出|持有|推荐|交易建议|投资建议|目标价|止损|止盈|仓位|下单|立即交易|必买|稳赚|保证收益",
@@ -104,6 +109,7 @@ _ADVICE_RE = re.compile(
 
 _HIGH_CONFIDENCE_VALUES = {"high", "strong", "very high", "elevated"}
 _SAFE_LIST_FIELDS = ("missingInputs", "staleInputs", "evidenceGaps")
+_FIELD_REFERENCE_FALLBACK = "evidence"
 
 
 def project_consumer_api_payload(payload: Any, *, surface: str | None = None) -> Any:
@@ -125,6 +131,11 @@ def _project_node(value: Any) -> tuple[Any, dict[str, Any]]:
             if _is_forbidden_key(key_text):
                 _collect_from_removed(key_text, child, context)
                 continue
+            if _is_field_reference_key(key_text) and isinstance(child, str):
+                if _is_unsafe_field_name_text(child):
+                    _collect_from_removed(key_text, child, context)
+                    output[key_text] = _FIELD_REFERENCE_FALLBACK
+                    continue
 
             projected_child, child_context = _project_node(child)
             _merge_context(context, child_context)
@@ -162,6 +173,9 @@ def _project_node(value: Any) -> tuple[Any, dict[str, Any]]:
 
 
 def _apply_context(output: dict[str, Any], context: dict[str, Any]) -> None:
+    if _is_compact_evidence_descriptor(output):
+        return
+
     if context["limited"]:
         for key, value in _SAFE_ROOT_DEFAULTS.items():
             output.setdefault(key, value)
@@ -169,8 +183,8 @@ def _apply_context(output: dict[str, Any], context: dict[str, Any]) -> None:
             output["researchNextSteps"] = ["Review evidence gaps before interpreting this observation."]
 
     for field in _SAFE_LIST_FIELDS:
-        existing = _safe_list(output.get(field))
-        merged = _dedupe([*existing, *context[field]])
+        existing = list(output.get(field)) if isinstance(output.get(field), list) else []
+        merged = _dedupe_preserving_items([*existing, *context[field]])
         if merged:
             output[field] = merged
 
@@ -250,6 +264,10 @@ def _is_diagnostic_code_key(key: str) -> bool:
     }
 
 
+def _is_field_reference_key(key: str) -> bool:
+    return _normalize_key(key) == "sourcefield"
+
+
 def _sanitize_diagnostic_code_value(value: Any, context: dict[str, Any]) -> Any:
     if isinstance(value, str) and _is_internal_diagnostic_code_value(value):
         _collect_from_removed("code", value, context)
@@ -315,10 +333,37 @@ def _is_internal_reason_value(value: str) -> bool:
 
 def _is_unsafe_text(text: str) -> bool:
     return bool(
-        _UNSAFE_VALUE_RE.search(text)
+        _is_unsafe_field_name_text(text)
+        or _UNSAFE_VALUE_RE.search(text)
         or _UNSAFE_DIAGNOSTIC_VALUE_RE.search(text)
         or _ADVICE_RE.search(text)
     )
+
+
+def _is_unsafe_field_name_text(text: str) -> bool:
+    stripped = str(text or "").strip()
+    if not stripped:
+        return False
+    normalized = _normalize_key(stripped)
+    return normalized in FORBIDDEN_CONSUMER_DIAGNOSTIC_KEYS or bool(
+        _UNSAFE_FIELD_NAME_VALUE_RE.search(stripped)
+    )
+
+
+def sanitize_consumer_diagnostic_text(value: str) -> str:
+    """Return consumer-safe text when a string contains internal diagnostic names."""
+
+    if _is_unsafe_text(value):
+        return _safe_text_for(value)
+    return value
+
+
+def sanitize_consumer_field_reference(value: str) -> str:
+    """Return a safe field-reference label without exposing internal source fields."""
+
+    if _is_unsafe_field_name_text(value):
+        return _FIELD_REFERENCE_FALLBACK
+    return value
 
 
 def _safe_text_for(text: str) -> str:
@@ -348,6 +393,14 @@ def _should_cap_confidence(output: dict[str, Any], context: dict[str, Any]) -> b
         return float(score) > 0.75
     except (TypeError, ValueError):
         return False
+
+
+def _is_compact_evidence_descriptor(output: dict[str, Any]) -> bool:
+    keys = set(output)
+    return bool(
+        {"label", "category"}.issubset(keys)
+        and keys.issubset({"label", "category", "sourceField", "severity", "state"})
+    )
 
 
 def _new_context() -> dict[str, Any]:
@@ -401,6 +454,14 @@ def _dedupe(items: list[str]) -> list[str]:
     return deduped
 
 
+def _dedupe_preserving_items(items: list[Any]) -> list[Any]:
+    deduped: list[Any] = []
+    for item in items:
+        if item not in deduped:
+            deduped.append(item)
+    return deduped
+
+
 def _normalize_key(key: str) -> str:
     return "".join(ch for ch in key.lower() if ch.isalnum())
 
@@ -417,4 +478,6 @@ __all__ = [
     "NO_ADVICE_DISCLOSURE",
     "OBSERVATION_BOUNDARY",
     "project_consumer_api_payload",
+    "sanitize_consumer_diagnostic_text",
+    "sanitize_consumer_field_reference",
 ]
