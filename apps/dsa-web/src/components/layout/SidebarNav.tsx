@@ -19,10 +19,12 @@ import {
   Globe,
   LogIn,
   LogOut,
+  Moon,
   Radar,
   ListChecks,
   Settings2,
   ShieldCheck,
+  Sun,
   UsersRound,
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
@@ -34,6 +36,7 @@ import { isAdminMissionControlPrototypeEnabled } from '../../utils/adminCapabili
 import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '../../utils/localeRouting';
 import { BrandLogo, BRAND_WORDMARK_CLASSNAME } from '../common/BrandLogo';
 import { ConfirmDialog } from '../common/ConfirmDialog';
+import { useThemeStyle } from '../theme/themeState';
 
 type SidebarNavProps = {
   layout?: 'header' | 'drawer';
@@ -221,6 +224,7 @@ function useSidebarNavView({
     canReadUsers,
   } = useProductSurface();
   const { language, t, toggleLanguage } = useI18n();
+  const { colorMode, setColorMode } = useThemeStyle();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showAdminMenu, setShowAdminMenu] = useState(false);
   const adminMenuRef = useRef<HTMLDivElement | null>(null);
@@ -414,6 +418,37 @@ function useSidebarNavView({
     </button>
   );
 
+  const nextColorMode = colorMode === 'dark' ? 'light' : 'dark';
+  const ThemeIcon = colorMode === 'dark' ? Sun : Moon;
+  const themeAction = (
+    <button
+      type="button"
+      className={isDrawer ? 'shell-nav-item shell-nav-item--utility' : HEADER_UTILITY_TEXT_CLASS}
+      onClick={() => setColorMode(nextColorMode)}
+      aria-label={t('theme.label')}
+      aria-pressed={colorMode === 'light'}
+      data-theme-mode={colorMode}
+      title={t('theme.label')}
+    >
+      {isDrawer ? (
+        <>
+          <span className="shell-nav-item__icon" aria-hidden="true">
+            <ThemeIcon className="size-4" />
+          </span>
+          <DrawerUtilityLabel
+            label={t('theme.label')}
+            value={colorMode === 'light' ? t('theme.terminal') : t('theme.spacex')}
+          />
+        </>
+      ) : (
+        <span className="inline-flex items-center gap-1.5">
+          <ThemeIcon className="size-3.5" aria-hidden="true" />
+          <span>{colorMode === 'light' ? t('theme.terminal') : t('theme.spacex')}</span>
+        </span>
+      )}
+    </button>
+  );
+
   const settingsAction = !isGuest ? (
     <NavLink
       to="/settings"
@@ -586,6 +621,7 @@ function useSidebarNavView({
       <div className="shell-drawer-footer">
         {archiveAction}
         {languageAction}
+        {themeAction}
         {settingsAction}
         {adminMenuAction}
         {signInAction}
@@ -607,6 +643,7 @@ function useSidebarNavView({
           className="flex items-center gap-0.5 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-1.5 py-1"
         >
           {languageAction}
+          {themeAction}
           {(settingsAction || adminMenuAction || signInAction || logoutAction) ? (
             <div className="h-3 w-px bg-[var(--wolfy-divider)]" data-testid="shell-header-utility-divider" />
           ) : null}

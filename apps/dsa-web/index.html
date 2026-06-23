@@ -8,10 +8,19 @@
     <title>WolfyStock</title>
     <script>
       (() => {
-        const rootTheme = 'spacex';
-        document.documentElement.dataset.theme = rootTheme;
-        document.documentElement.dataset.colorMode = 'dark';
-        document.documentElement.style.setProperty('--preboot-bg', '#000000');
+        const themeStyle = 'spacex';
+        let colorMode = 'dark';
+        try {
+          const storedMode = window.localStorage.getItem('dsa-theme-mode');
+          colorMode = storedMode === 'light' || storedMode === 'dark' ? storedMode : 'dark';
+        } catch {
+          colorMode = 'dark';
+        }
+        document.documentElement.dataset.theme = colorMode;
+        document.documentElement.dataset.themeStyle = themeStyle;
+        document.documentElement.dataset.colorMode = colorMode;
+        document.documentElement.classList.add(colorMode);
+        document.documentElement.style.setProperty('--preboot-bg', colorMode === 'light' ? '#f6f7fb' : '#000000');
       })();
     </script>
     <style>
