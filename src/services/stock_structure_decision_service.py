@@ -12,6 +12,10 @@ from typing import Any
 
 from src.services.consumer_issue_labels import build_consumer_issues
 from src.services.confidence_evidence_consistency import project_confidence_evidence_state
+from src.services.historical_ohlcv_readiness import (
+    HistoricalOhlcvReadinessRequest,
+    HistoricalOhlcvReadinessService,
+)
 from src.services.stock_service import StockService
 from src.services.stock_structure_decision_engine import (
     MIN_REQUIRED_BARS,
@@ -113,10 +117,12 @@ class StockStructureDecisionService:
         stock_repo: Any | None = None,
         *,
         timeout_seconds: float | None = None,
+        ohlcv_readiness_service: HistoricalOhlcvReadinessService | None = None,
     ) -> None:
         self.history_service = history_service or StockService()
         self.stock_repo = stock_repo
         self.timeout_seconds = _normalize_timeout_seconds(timeout_seconds)
+        self.ohlcv_readiness_service = ohlcv_readiness_service or HistoricalOhlcvReadinessService()
 
     def get_structure_decision(
         self,
@@ -247,6 +253,7 @@ class StockStructureDecisionService:
         history = self._load_daily_history(ticker) if bars is None or data_quality is None else {}
         bars = _history_bars(history) if bars is None else list(bars)
         data_quality = _build_data_quality(history, bars) if data_quality is None else data_quality
+        ohlcv_readiness = self._build_historical_ohlcv_readiness(ticker, bars, data_quality)
         engine_result = build_stock_structure_decision(bars, benchmark_ohlcv=benchmark_bars)
         missing_evidence = _missing_evidence(
             data_quality,
@@ -262,6 +269,7 @@ class StockStructureDecisionService:
             "explanation": engine_result.get("explanation", {}),
             "researchNotes": engine_result.get("researchNotes", {}),
             "dataQuality": data_quality,
+            "historicalOhlcvReadiness": ohlcv_readiness,
             "missingEvidence": missing_evidence,
             "peerCorrelationSnapshot": self._build_peer_correlation_snapshot(ticker),
             "noAdviceDisclosure": engine_result.get("noAdviceDisclosure") or NO_ADVICE_DISCLOSURE,
@@ -304,6 +312,30 @@ class StockStructureDecisionService:
                 },
             }
         return payload if isinstance(payload, dict) else {}
+
+    def _build_historical_ohlcv_readiness(
+        self,
+        ticker: str,
+        bars: Sequence[Mapping[str, Any]],
+        data_quality: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        request = HistoricalOhlcvReadinessRequest(
+            symbol=ticker,
+            market="unknown",
+            timeframe="1d",
+            lookback_bars=DEFAULT_STRUCTURE_DECISION_HISTORY_DAYS,
+            required_bars=MIN_REQUIRED_BARS,
+        )
+        status = str(data_quality.get("status") or "")
+        source = str(data_quality.get("source") or "")
+        reason = str(data_quality.get("reason") or "")
+        result = self.ohlcv_readiness_service.assess_supplied_history(
+            request,
+            bars,
+            source_available=status != "unavailable" and source != "unavailable",
+            unavailable_reason=reason if reason in {"provider_missing", "entitlement_required"} else None,
+        )
+        return result.readiness
 
     def _build_peer_correlation_snapshot(self, ticker: str) -> dict[str, Any]:
         peer_group, group_missing = _load_local_peer_group(self.stock_repo, ticker)
@@ -403,6 +435,15 @@ def _finalize_structure_contract(
     missing_evidence = missing_evidence if isinstance(missing_evidence, list) else []
     data_quality = payload.get("dataQuality")
     data_quality = data_quality if isinstance(data_quality, Mapping) else {}
+    historical_ohlcv_readiness = payload.get("historicalOhlcvReadiness")
+    historical_ohlcv_readiness = (
+        historical_ohlcv_readiness
+        if isinstance(historical_ohlcv_readiness, Mapping)
+        else _fallback_historical_ohlcv_readiness(
+            symbol=str(payload.get("ticker") or payload.get("symbol") or ""),
+            data_quality=data_quality,
+        )
+    )
 
     evidence_notes = _safe_text_list(explanation.get("whatConfirmsIt"))
     key_levels = _safe_mapping_list(explanation.get("keyLevels"))
@@ -463,6 +504,7 @@ def _finalize_structure_contract(
             "riskObservations": risk_observations,
             "evidenceGaps": evidence_gaps,
             "degradedInputs": degraded_inputs,
+            "historicalOhlcvReadiness": dict(historical_ohlcv_readiness),
             "peerCorrelationSnapshot": dict(peer_correlation_snapshot),
             "consumerIssues": consumer_issues,
             "observationOnly": True,
@@ -539,6 +581,28 @@ def _latency_boundary_payload(ticker: str) -> dict[str, Any]:
         ),
         "noAdviceDisclosure": engine_result.get("noAdviceDisclosure") or NO_ADVICE_DISCLOSURE,
     }
+
+
+def _fallback_historical_ohlcv_readiness(
+    *,
+    symbol: str,
+    data_quality: Mapping[str, Any],
+) -> dict[str, Any]:
+    request = HistoricalOhlcvReadinessRequest(
+        symbol=symbol,
+        market="unknown",
+        timeframe="1d",
+        lookback_bars=DEFAULT_STRUCTURE_DECISION_HISTORY_DAYS,
+        required_bars=MIN_REQUIRED_BARS,
+    )
+    reason = str(data_quality.get("reason") or "")
+    result = HistoricalOhlcvReadinessService().assess_supplied_history(
+        request,
+        [],
+        source_available=False,
+        unavailable_reason=reason if reason in {"provider_missing", "entitlement_required"} else None,
+    )
+    return result.readiness
 
 
 def _insufficient_peer_correlation_snapshot(
