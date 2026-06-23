@@ -14,8 +14,9 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 
+from api.deps import CurrentUser, get_current_user
 from api.v1.consumer_safe_response import consumer_safe_json_response
 from api.v1.errors import safe_api_error
 from api.v1.schemas.stocks import (
@@ -67,6 +68,21 @@ _VALIDATION_UNAVAILABLE_MESSAGE = "Symbol validation is temporarily unavailable.
 _VALIDATION_VERIFIED_MESSAGE = "Symbol verified."
 _VALIDATION_UNKNOWN_MESSAGE = "Symbol format is supported, but verification is not confirmed yet."
 _STOCK_EVIDENCE_INTERNAL_ERROR_MESSAGE = "Stock evidence is temporarily unavailable. Please retry later."
+
+
+def _consumer_safe_quote_source(result: dict) -> str | None:
+    source_confidence = result.get("sourceConfidence") or result.get("source_confidence")
+    if isinstance(source_confidence, dict):
+        label = str(source_confidence.get("sourceLabel") or "").strip()
+        if label:
+            return label
+    label = str(result.get("sourceLabel") or result.get("source_label") or "").strip()
+    if label:
+        return label
+    source = str(result.get("source") or "").strip()
+    if not source:
+        return None
+    return source.replace("_", " ").title()
 
 
 def _stock_validation_response(
@@ -392,7 +408,9 @@ def get_symbol_research_packet(
 )
 def get_stock_structure_decisions_batch(
     request: StockStructureDecisionBatchRequest,
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> StockStructureDecisionBatchResponse:
+    _ = current_user
     try:
         payload = StockStructureDecisionService().get_structure_decisions_batch(
             request.stock_codes,
@@ -479,7 +497,9 @@ def get_stock_structure_decision(
     context_source: Optional[str] = Query(None, alias="contextSource", description="可选来源上下文：researchRadar / watchlist / portfolio"),
     context_section: Optional[str] = Query(None, alias="contextSection", description="可选来源区段"),
     context_reason: Optional[str] = Query(None, alias="contextReason", description="可选来源原因提示"),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> StockStructureDecisionResponse:
+    _ = current_user
     try:
         payload = StockStructureDecisionService().get_structure_decision(
             stock_code,
@@ -506,6 +526,7 @@ def get_stock_structure_decision(
 @router.get(
     "/{stock_code}/quote",
     response_model=StockQuote,
+    response_model_exclude_none=True,
     responses={
         200: {"description": "行情数据"},
         404: {"description": "股票不存在", "model": ErrorResponse},
@@ -514,7 +535,10 @@ def get_stock_structure_decision(
     summary="获取股票实时行情",
     description="获取指定股票的最新行情数据"
 )
-def get_stock_quote(stock_code: str) -> StockQuote:
+def get_stock_quote(
+    stock_code: str,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> StockQuote:
     """
     获取股票实时行情
     
@@ -529,6 +553,7 @@ def get_stock_quote(stock_code: str) -> StockQuote:
     Raises:
         HTTPException: 404 - 股票不存在
     """
+    _ = current_user
     try:
         service = StockService()
         
@@ -557,8 +582,7 @@ def get_stock_quote(stock_code: str) -> StockQuote:
             volume=result.get("volume"),
             amount=result.get("amount"),
             update_time=result.get("update_time"),
-            source=result.get("source"),
-            source_type=result.get("sourceType") or result.get("source_type"),
+            source=_consumer_safe_quote_source(result),
             market_timestamp=result.get("marketTimestamp") or result.get("market_timestamp"),
             observed_at=result.get("observedAt") or result.get("observed_at"),
             freshness=result.get("freshness"),
@@ -566,7 +590,6 @@ def get_stock_quote(stock_code: str) -> StockQuote:
             is_stale=result.get("isStale") if "isStale" in result else result.get("is_stale"),
             is_partial=result.get("isPartial") if "isPartial" in result else result.get("is_partial"),
             is_synthetic=result.get("isSynthetic") if "isSynthetic" in result else result.get("is_synthetic"),
-            source_confidence=result.get("sourceConfidence") or result.get("source_confidence"),
         )
         
     except HTTPException:

@@ -1,19 +1,52 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
+from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import stocks
 
 
-def _client() -> TestClient:
+def _regular_user() -> CurrentUser:
+    return CurrentUser(
+        user_id="user-1",
+        username="alice",
+        display_name="Alice",
+        role="user",
+        is_admin=False,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+    )
+
+
+def _raise_unauthorized() -> None:
+    raise HTTPException(status_code=401, detail={"error": "unauthorized", "message": "Login required"})
+
+
+def _client(*, authenticated: bool = True) -> TestClient:
     app = FastAPI()
     app.include_router(stocks.router, prefix="/api/v1/stocks")
+    app.dependency_overrides[get_current_user] = _regular_user if authenticated else _raise_unauthorized
     return TestClient(app)
 
 
-def test_quote_endpoint_exposes_provider_source_and_market_timestamp_without_breaking_existing_fields() -> None:
+def test_quote_endpoint_requires_authenticated_user_before_fetching_quote() -> None:
+    service = SimpleNamespace(
+        get_realtime_quote=lambda stock_code: (_ for _ in ()).throw(
+            AssertionError("quote service must not be called without auth")
+        )
+    )
+
+    with patch("api.v1.endpoints.stocks.StockService", return_value=service):
+        response = _client(authenticated=False).get("/api/v1/stocks/AAPL/quote")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": {"error": "unauthorized", "message": "Login required"}}
+
+
+def test_quote_endpoint_exposes_safe_source_label_and_market_timestamp_without_runtime_taxonomy() -> None:
     service = SimpleNamespace(
         get_realtime_quote=lambda stock_code: {
             "stock_code": stock_code,
@@ -64,8 +97,8 @@ def test_quote_endpoint_exposes_provider_source_and_market_timestamp_without_bre
     assert payload["stock_name"] == "Apple"
     assert payload["current_price"] == 214.55
     assert payload["update_time"] == "2026-05-28T09:31:00Z"
-    assert payload["source"] == "alpaca"
-    assert payload["sourceType"] == "provider_runtime"
+    assert payload["source"] == "Alpaca"
+    assert "sourceType" not in payload
     assert payload["marketTimestamp"] == "2026-05-28T09:30:00Z"
     assert payload["observedAt"] == "2026-05-28T09:31:00Z"
     assert payload["freshness"] == "live"
@@ -73,9 +106,10 @@ def test_quote_endpoint_exposes_provider_source_and_market_timestamp_without_bre
     assert payload["isStale"] is False
     assert payload["isPartial"] is False
     assert payload["isSynthetic"] is False
-    assert payload["sourceConfidence"]["source"] == "alpaca"
-    assert payload["sourceConfidence"]["asOf"] == "2026-05-28T09:30:00Z"
-    assert payload["sourceConfidence"]["freshness"] == "live"
+    assert "sourceConfidence" not in payload
+    serialized = response.text
+    for marker in ("provider_runtime", "providerName", "providerClass", "providerAttempted", "traceId", "requestId"):
+        assert marker not in serialized
     assert payload["update_time"] != payload["marketTimestamp"]
 
 
@@ -126,9 +160,10 @@ def test_quote_endpoint_can_surface_non_fresh_placeholder_metadata_without_404()
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["source"] == "placeholder"
-    assert payload["sourceType"] == "synthetic_placeholder"
-    assert payload["marketTimestamp"] is None
+    assert payload["source"] == "Placeholder"
+    assert "sourceType" not in payload
+    assert "sourceConfidence" not in payload
+    assert "marketTimestamp" not in payload
     assert payload["freshness"] == "synthetic"
     assert payload["isFallback"] is False
     assert payload["isPartial"] is True

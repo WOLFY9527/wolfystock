@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -26,7 +27,6 @@ from api.v1.schemas.professional_data_capabilities import (
 )
 from src.services.cn_provider_health_service import CNProviderHealthService
 from src.services.consumer_api_diagnostic_redaction import (
-    sanitize_consumer_diagnostic_text,
     sanitize_consumer_field_reference,
 )
 from src.services.crypto_realtime_service import get_crypto_realtime_service
@@ -56,9 +56,13 @@ _MARKET_CONSUMER_DIAGNOSTIC_KEYS = frozenset(
         "cabundlesource",
         "cachekey",
         "calendarassumption",
+        "credential",
+        "credentialfieldsmissing",
+        "credentialsource",
+        "credentialspresent",
+        "credentials",
         "diagnosticonly",
         "endpointhost",
-        "etfleadershipdiagnostics",
         "exceptionchain",
         "exceptionclass",
         "freshnesspolicy",
@@ -70,14 +74,21 @@ _MARKET_CONSUMER_DIAGNOSTIC_KEYS = frozenset(
         "providerdiagnostics",
         "providername",
         "rawpayload",
+        "rawproviderpayload",
         "requestid",
+        "requestwindowresults",
         "requiredproviderclass",
         "requestedseries",
-        "scorecontributionallowed",
-        "sourceauthorityallowed",
+        "sourceauthorityrouter",
         "timeoutseconds",
         "traceid",
     }
+)
+_MARKET_SENSITIVE_TEXT_RE = re.compile(
+    r"\b(?:providerName|providerClass|providerAttempted|requiredProviderClass|endpointHost|"
+    r"apiKeyPresent|requestId|traceId|cacheKey|rawPayload|raw_provider_payload|missing[_-]?api[_-]?key|"
+    r"api[_-]?key|credentials?|token|password|secret|private[_-]?key|\benv\b|traceback)\b",
+    re.IGNORECASE,
 )
 
 
@@ -129,6 +140,9 @@ def _redact_market_consumer_diagnostics(value: Any) -> Any:
             normalized = "".join(ch for ch in str(key).lower() if ch.isalnum())
             if normalized in _MARKET_CONSUMER_DIAGNOSTIC_KEYS:
                 continue
+            if normalized in {"sourcetype", "sourcetier"} and isinstance(child, str):
+                redacted[str(key)] = child
+                continue
             if normalized == "sourcefield" and isinstance(child, str):
                 redacted[str(key)] = sanitize_consumer_field_reference(child)
                 continue
@@ -141,7 +155,9 @@ def _redact_market_consumer_diagnostics(value: Any) -> Any:
     if isinstance(value, list):
         return [_redact_market_consumer_diagnostics(item) for item in value]
     if isinstance(value, str):
-        return sanitize_consumer_diagnostic_text(value)
+        if _MARKET_SENSITIVE_TEXT_RE.search(value):
+            return "configuration_required"
+        return value
     return value
 
 

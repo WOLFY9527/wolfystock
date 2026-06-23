@@ -181,7 +181,7 @@ class MarketOverviewApiTestCase(unittest.TestCase):
             self.assertNotIn(raw_token, serialized)
         self.assertEqual(
             funds_flow["consumerEvidenceSnapshot"]["reasonFamilies"],
-            [{"label": "证据来源级别不足", "category": "evidence", "sourceField": "sourceAuthorityAllowed"}],
+            [{"label": "证据来源级别不足", "category": "evidence", "sourceField": "evidence"}],
         )
 
     def test_market_overview_consumer_evidence_snapshot_exposes_safe_data_quality(self) -> None:
