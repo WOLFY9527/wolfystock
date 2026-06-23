@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from collections.abc import Mapping, Sequence
 from datetime import date
@@ -13,9 +14,11 @@ from typing import Any
 from src.services.consumer_issue_labels import build_consumer_issues
 from src.services.confidence_evidence_consistency import project_confidence_evidence_state
 from src.services.historical_ohlcv_readiness import (
+    HistoricalOhlcvProvider,
     HistoricalOhlcvReadinessRequest,
     HistoricalOhlcvReadinessService,
 )
+from src.services.historical_ohlcv_runtime_adapter import HistoricalOhlcvRuntimeAdapter
 from src.services.stock_service import StockService
 from src.services.stock_structure_decision_engine import (
     MIN_REQUIRED_BARS,
@@ -118,11 +121,19 @@ class StockStructureDecisionService:
         *,
         timeout_seconds: float | None = None,
         ohlcv_readiness_service: HistoricalOhlcvReadinessService | None = None,
+        historical_ohlcv_provider: HistoricalOhlcvProvider | None = None,
+        require_adjusted_ohlcv: bool = False,
     ) -> None:
         self.history_service = history_service or StockService()
         self.stock_repo = stock_repo
         self.timeout_seconds = _normalize_timeout_seconds(timeout_seconds)
-        self.ohlcv_readiness_service = ohlcv_readiness_service or HistoricalOhlcvReadinessService()
+        if historical_ohlcv_provider is None and _historical_ohlcv_runtime_enabled():
+            historical_ohlcv_provider = HistoricalOhlcvRuntimeAdapter(history_runtime=self.history_service)
+        self.ohlcv_readiness_service = ohlcv_readiness_service or HistoricalOhlcvReadinessService(
+            provider=historical_ohlcv_provider
+        )
+        self.historical_ohlcv_provider = historical_ohlcv_provider
+        self.require_adjusted_ohlcv = bool(require_adjusted_ohlcv)
 
     def get_structure_decision(
         self,
@@ -250,10 +261,24 @@ class StockStructureDecisionService:
         comparative_available: bool = False,
         include_comparative_context: bool = False,
     ) -> dict[str, Any]:
-        history = self._load_daily_history(ticker) if bars is None or data_quality is None else {}
-        bars = _history_bars(history) if bars is None else list(bars)
-        data_quality = _build_data_quality(history, bars) if data_quality is None else data_quality
-        ohlcv_readiness = self._build_historical_ohlcv_readiness(ticker, bars, data_quality)
+        if bars is None or data_quality is None:
+            runtime_result = self._load_runtime_ohlcv(ticker)
+            if runtime_result is not None:
+                bars = [bar.as_dict() for bar in runtime_result.bars]
+                data_quality = _build_data_quality_from_readiness(
+                    runtime_result.readiness,
+                    bars,
+                )
+                ohlcv_readiness = runtime_result.readiness
+            else:
+                history = self._load_daily_history(ticker)
+                bars = _history_bars(history)
+                data_quality = _build_data_quality(history, bars)
+                ohlcv_readiness = self._build_historical_ohlcv_readiness(ticker, bars, data_quality)
+        else:
+            bars = list(bars)
+            data_quality = data_quality
+            ohlcv_readiness = self._build_historical_ohlcv_readiness(ticker, bars, data_quality)
         engine_result = build_stock_structure_decision(bars, benchmark_ohlcv=benchmark_bars)
         missing_evidence = _missing_evidence(
             data_quality,
@@ -292,6 +317,19 @@ class StockStructureDecisionService:
             )
         return _finalize_structure_contract(payload)
 
+    def _load_runtime_ohlcv(self, ticker: str):
+        if self.historical_ohlcv_provider is None:
+            return None
+        request = HistoricalOhlcvReadinessRequest(
+            symbol=ticker,
+            market="unknown",
+            timeframe="1d",
+            lookback_bars=DEFAULT_STRUCTURE_DECISION_HISTORY_DAYS,
+            required_bars=MIN_REQUIRED_BARS,
+            require_adjusted=self.require_adjusted_ohlcv,
+        )
+        return self.ohlcv_readiness_service.fetch(request)
+
     def _load_daily_history(self, ticker: str) -> dict[str, Any]:
         try:
             payload = self.history_service.get_history_data(
@@ -325,6 +363,7 @@ class StockStructureDecisionService:
             timeframe="1d",
             lookback_bars=DEFAULT_STRUCTURE_DECISION_HISTORY_DAYS,
             required_bars=MIN_REQUIRED_BARS,
+            require_adjusted=self.require_adjusted_ohlcv,
         )
         status = str(data_quality.get("status") or "")
         source = str(data_quality.get("source") or "")
@@ -1102,6 +1141,15 @@ def _normalize_timeout_seconds(value: float | None) -> float:
     return parsed
 
 
+def _historical_ohlcv_runtime_enabled() -> bool:
+    return str(os.getenv("WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def _history_bars(history: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     data = history.get("data")
     if not isinstance(data, list):
@@ -1131,6 +1179,49 @@ def _build_data_quality(history: Mapping[str, Any], bars: Sequence[Mapping[str, 
         "usableBars": usable_bars,
         "reason": reason,
     }
+
+
+def _build_data_quality_from_readiness(
+    readiness: Mapping[str, Any],
+    bars: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    provider_state = str(readiness.get("providerState") or "provider_missing")
+    overall_state = str(readiness.get("overallState") or "blocked")
+    observed_bars = len(bars)
+    usable_bars = int(readiness.get("usableBars") or 0)
+    if provider_state != "available":
+        status = "unavailable"
+    elif usable_bars < MIN_REQUIRED_BARS:
+        status = "insufficient"
+    elif overall_state == "degraded" or usable_bars < observed_bars:
+        status = "partial"
+    else:
+        status = "available"
+    return {
+        "status": status,
+        "source": "historical_ohlcv_runtime" if provider_state == "available" else "unavailable",
+        "period": "daily",
+        "requestedDays": DEFAULT_STRUCTURE_DECISION_HISTORY_DAYS,
+        "observedBars": observed_bars,
+        "usableBars": usable_bars,
+        "reason": _data_quality_reason_from_readiness(readiness),
+    }
+
+
+def _data_quality_reason_from_readiness(readiness: Mapping[str, Any]) -> str:
+    missing = readiness.get("missingRequirements")
+    missing = missing if isinstance(missing, list) else []
+    for candidate in (
+        "provider_missing",
+        "entitlement_required",
+        "provider_unavailable",
+        "insufficient_history",
+        "stale_data",
+        "missing_adjustments",
+    ):
+        if candidate in missing:
+            return candidate
+    return "history_available"
 
 
 def _data_quality_status(

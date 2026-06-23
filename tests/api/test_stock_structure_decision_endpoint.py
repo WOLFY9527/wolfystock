@@ -516,6 +516,72 @@ def test_structure_decision_endpoint_returns_required_contract(monkeypatch) -> N
         assert key in payload
 
 
+def test_structure_decision_endpoint_includes_consumer_safe_ohlcv_readiness(monkeypatch) -> None:
+    leaky_payload = {
+        **_payload(),
+        "historicalOhlcvReadiness": {
+            "contractVersion": "historical_ohlcv_readiness_v1",
+            "symbol": "AAPL",
+            "market": "unknown",
+            "timeframe": "1d",
+            "requestedRange": {"start": None, "end": None},
+            "lookbackBars": 90,
+            "requiredBars": 12,
+            "usableBars": 55,
+            "missingBars": 0,
+            "freshnessState": "unknown",
+            "adjustmentState": "not_required",
+            "benchmarkState": "not_requested",
+            "providerState": "available",
+            "overallState": "ready",
+            "missingRequirements": [],
+            "consumerSafe": True,
+        },
+    }
+    fake_service = _FakeStructureDecisionService(leaky_payload)
+    monkeypatch.setattr(
+        stocks_endpoint,
+        "StockStructureDecisionService",
+        lambda: fake_service,
+        raising=False,
+    )
+
+    response = _client().get("/api/v1/stocks/AAPL/structure-decision")
+
+    assert response.status_code == 200
+    payload = response.json()
+    readiness = payload["historicalOhlcvReadiness"]
+    assert readiness["consumerSafe"] is True
+    assert readiness["overallState"] == "ready"
+    assert readiness["usableBars"] >= readiness["requiredBars"]
+    assert readiness["missingBars"] == 0
+    serialized = json.dumps(payload, ensure_ascii=False).lower()
+    for forbidden in (
+        "providername",
+        "providerclass",
+        "providerattempted",
+        "requiredproviderclass",
+        "endpointhost",
+        "apikeypresent",
+        "exceptionclass",
+        "exceptionchain",
+        "requestid",
+        "traceid",
+        "cachekey",
+        "rawpayload",
+        "raw_provider_payload",
+        "credential",
+        "token",
+        "env",
+        "api_key",
+        "password",
+        "secret",
+        "private_key",
+        "traceback",
+    ):
+        assert forbidden not in serialized
+
+
 def test_structure_decision_endpoint_returns_low_confidence_unavailable_payload(monkeypatch) -> None:
     fake_service = _FakeStructureDecisionService(
         _payload(
