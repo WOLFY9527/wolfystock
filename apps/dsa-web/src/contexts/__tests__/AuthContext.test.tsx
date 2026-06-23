@@ -111,6 +111,57 @@ describe('AuthContext', () => {
     expect(screen.getByTestId('password-set')).toHaveTextContent('set');
   });
 
+  it('recognizes an authenticated current user when the top-level loggedIn flag is stale', async () => {
+    getStatus.mockResolvedValueOnce({
+      authEnabled: true,
+      loggedIn: false,
+      passwordSet: true,
+      passwordChangeable: true,
+      setupState: 'enabled',
+      currentUser: {
+        username: 'admin',
+        displayName: 'Admin',
+        isAdmin: true,
+        isAuthenticated: true,
+      },
+    });
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>
+    );
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('logged-in'));
+    expect(resetDashboardState).not.toHaveBeenCalled();
+  });
+
+  it('keeps an unauthenticated bootstrap admin payload fail-closed', async () => {
+    getStatus.mockResolvedValueOnce({
+      authEnabled: true,
+      loggedIn: true,
+      passwordSet: true,
+      passwordChangeable: true,
+      setupState: 'enabled',
+      currentUser: {
+        username: 'admin',
+        displayName: 'Admin',
+        isAdmin: true,
+        isAuthenticated: false,
+      },
+    });
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>
+    );
+
+    await screen.findByTestId('status');
+    expect(screen.getByTestId('status')).toHaveTextContent('logged-out');
+    expect(resetDashboardState).toHaveBeenCalled();
+  });
+
   it('enables auth through settings when bootstrap setup starts with auth disabled', async () => {
     getStatus
       .mockResolvedValueOnce({

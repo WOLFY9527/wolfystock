@@ -1762,6 +1762,7 @@ const WatchlistPage: React.FC = () => {
   const [useSelectedScope, setUseSelectedScope] = useState(false);
   const [activeItemId, setActiveItemId] = useState<number | null>(null);
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
+  const [authRequired, setAuthRequired] = useState(false);
 
   useEffect(() => {
     document.title = language === 'en' ? 'Watchlist - WolfyStock' : '观察列表 - WolfyStock';
@@ -1782,16 +1783,25 @@ const WatchlistPage: React.FC = () => {
   useEffect(() => {
     if (isGuest) return;
     let isMounted = true;
+    setAuthRequired(false);
     setIsLoading(true);
     watchlistApi.listWatchlistItems()
       .then((response) => {
         if (!isMounted) return;
+        setAuthRequired(false);
         setItems(response.items || []);
         setError(null);
       })
       .catch((err) => {
         if (!isMounted) return;
-        setError(getParsedApiError(err));
+        const parsedError = getParsedApiError(err);
+        if (parsedError.isAuthError || parsedError.status === 401 || parsedError.category === 'auth_required') {
+          setAuthRequired(true);
+          setItems([]);
+          setError(null);
+          return;
+        }
+        setError(parsedError);
       })
       .finally(() => {
         if (isMounted) setIsLoading(false);
@@ -1809,8 +1819,12 @@ const WatchlistPage: React.FC = () => {
         if (!isMounted) return;
         setResearchPriorityQueue(response.researchPriorityQueue || []);
       })
-      .catch(() => {
+      .catch((err) => {
         if (!isMounted) return;
+        const parsedError = getParsedApiError(err);
+        if (parsedError.isAuthError || parsedError.status === 401 || parsedError.category === 'auth_required') {
+          setAuthRequired(true);
+        }
         setResearchPriorityQueue([]);
       });
     return () => {
@@ -1826,8 +1840,12 @@ const WatchlistPage: React.FC = () => {
         if (!isMounted) return;
         setRefreshStatus(response);
       })
-      .catch(() => {
+      .catch((err) => {
         if (!isMounted) return;
+        const parsedError = getParsedApiError(err);
+        if (parsedError.isAuthError || parsedError.status === 401 || parsedError.category === 'auth_required') {
+          setAuthRequired(true);
+        }
         setRefreshStatus(null);
       });
     return () => {
@@ -2267,7 +2285,7 @@ const WatchlistPage: React.FC = () => {
     }
   }, [actionItems, backtestSessionKeys, copy.batchBacktestComplete, copy.batchBacktestLabel, isBatchBacktesting]);
 
-  if (isGuest) {
+  if (isGuest || authRequired) {
     return <ConsumerProtectedFrame moduleName={copy.signInModule} />;
   }
 
@@ -2277,7 +2295,7 @@ const WatchlistPage: React.FC = () => {
       ? 'border-amber-300/20 bg-amber-300/5 text-amber-100/80'
       : 'border-emerald-400/20 bg-emerald-400/5 text-emerald-100/80';
   const autoRefreshStatus = describeBooleanEnabled(refreshStatus?.enabled, { language });
-  const isWatchlistEmptyWorkspace = !isLoading && !error && items.length === 0;
+  const isWatchlistEmptyWorkspace = !isLoading && !error && !authRequired && items.length === 0;
   const attentionCount = watchlistConclusion.staleCount + watchlistConclusion.unknownCount + watchlistConclusion.limitedConfidenceCount;
   const monitoringStateLabel = formatMonitoringStateLabel(watchlistConclusion.tone, filteredItems.length, language);
   const statusItems = [
