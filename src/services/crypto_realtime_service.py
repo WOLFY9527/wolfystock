@@ -75,7 +75,7 @@ def _get_safe_websocket_client_connection_class() -> Optional[type[Any]]:
                     self.recv_exc = None
                 self.protocol.receive_eof()
                 self.set_recv_exc(exc)
-                self.terminate_pending_pings()
+                self._terminate_pending_pings_compat(exc)
 
                 if self.keepalive_task is not None:
                     self.keepalive_task.cancel()
@@ -92,6 +92,23 @@ def _get_safe_websocket_client_connection_class() -> Optional[type[Any]]:
                             waiter.set_result(None)
                         else:
                             waiter.set_exception(exc)
+
+            def _terminate_pending_pings_compat(self, exc: Exception | None) -> None:
+                terminate_pending_pings = getattr(type(self), "terminate_pending_pings", None)
+                if callable(terminate_pending_pings):
+                    terminate_pending_pings(self)
+                    return
+
+                pending_pings = getattr(self, "pending_pings", None)
+                if not pending_pings:
+                    return
+
+                close_exc = getattr(self.protocol, "close_exc", None) or exc
+                for pong_received, _ping_timestamp in pending_pings.values():
+                    if not pong_received.done():
+                        pong_received.set_exception(close_exc)
+                    pong_received.cancel()
+                pending_pings.clear()
 
         _SAFE_WEBSOCKET_CLIENT_CONNECTION_CLASS = SafeCryptoRealtimeClientConnection
 
