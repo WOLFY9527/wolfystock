@@ -25,6 +25,20 @@ describe('resolveProductSurfaceRole', () => {
       currentUser: { isAdmin: true },
     })).toBe('admin');
   });
+
+  it('recognizes authenticated current-user payloads even when the top-level loggedIn flag is stale', () => {
+    expect(resolveProductSurfaceRole({
+      authEnabled: true,
+      loggedIn: false,
+      currentUser: { isAdmin: true, isAuthenticated: true },
+    })).toBe('admin');
+
+    expect(resolveProductSurfaceRole({
+      authEnabled: true,
+      loggedIn: false,
+      currentUser: { isAdmin: false, isAuthenticated: true },
+    })).toBe('user');
+  });
 });
 
 describe('useProductSurface locale-aware auth paths', () => {

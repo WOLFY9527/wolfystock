@@ -118,13 +118,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     try {
       const status = await authApi.getStatus();
+      const nextCurrentUser = status.currentUser ?? null;
+      const nextLoggedIn = Boolean(nextCurrentUser?.isAuthenticated ?? status.loggedIn);
       setAuthEnabled(status.authEnabled);
-      setLoggedIn(status.loggedIn);
+      setLoggedIn(nextLoggedIn);
       setPasswordSet(status.passwordSet ?? false);
       setPasswordChangeable(status.passwordChangeable ?? false);
       setSetupState(status.setupState);
-      setCurrentUser(status.currentUser ?? null);
-      if (status.authEnabled && !status.loggedIn) {
+      setCurrentUser(nextCurrentUser);
+      if (status.authEnabled && !nextLoggedIn) {
         useStockPoolStore.getState().resetDashboardState();
       }
     } catch (err) {

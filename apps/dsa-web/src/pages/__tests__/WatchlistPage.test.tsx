@@ -2330,4 +2330,80 @@ describe('WatchlistPage', () => {
     expect(screen.getByText('auth-guard:观察列表')).toBeInTheDocument();
     expect(listWatchlistItems).not.toHaveBeenCalled();
   });
+
+  it('renders authenticated empty state for a logged-in admin without admin-only controls', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: true,
+      isAdminAccount: true,
+      isAdminMode: true,
+      currentUser: {
+        isAdmin: true,
+        isAuthenticated: true,
+        adminCapabilities: ['ops:providers:read', 'users:read'],
+        sessionId: 'raw-session-canary',
+        debugToken: 'bearer-canary',
+      },
+    });
+    listWatchlistItems.mockResolvedValue({ items: [] });
+
+    renderWatchlist();
+
+    const emptyState = await screen.findByTestId('watchlist-compact-empty-state');
+    expect(emptyState).toHaveTextContent('还没有观察标的');
+    expect(screen.queryByText('auth-guard:观察列表')).not.toBeInTheDocument();
+    expect(listWatchlistItems).toHaveBeenCalledTimes(1);
+    expect(document.body.textContent || '').not.toMatch(/adminCapabilities|sessionId|debugToken|raw-session-canary|bearer-canary|Provider Ops|admin|debug|requestId|traceId|token|cookie|bearer/i);
+    expect(document.body.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy now|sell now|hold this|recommended pick|target price|stop loss|position sizing/i);
+  });
+
+  it('renders authenticated empty state for a signed-in user without showing the login prompt', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: false,
+      isAdminAccount: false,
+      currentUser: {
+        isAdmin: false,
+        isAuthenticated: true,
+      },
+    });
+    listWatchlistItems.mockResolvedValue({ items: [] });
+
+    renderWatchlist();
+
+    const emptyState = await screen.findByTestId('watchlist-compact-empty-state');
+    expect(emptyState).toHaveTextContent('还没有观察标的');
+    expect(emptyState).toHaveTextContent('手动研究代码');
+    expect(screen.queryByText('auth-guard:观察列表')).not.toBeInTheDocument();
+    expect(listWatchlistItems).toHaveBeenCalledTimes(1);
+  });
+
+  it('fail-closes to the login-required state when the watchlist API returns 401', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: true,
+      currentUser: {
+        isAdmin: true,
+        isAuthenticated: true,
+      },
+    });
+    const unauthorized = Object.assign(new Error('provider runtime requestId=req-1 token=bearer-secret unauthorized'), {
+      status: 401,
+      parsedError: {
+        title: '登录已失效，请重新登录。',
+        message: '登录已失效，请重新登录。',
+        rawMessage: 'provider runtime requestId=req-1 token=bearer-secret unauthorized',
+        status: 401,
+        category: 'auth_required',
+        isAuthError: true,
+      },
+    });
+    listWatchlistItems.mockRejectedValue(unauthorized);
+
+    renderWatchlist();
+
+    expect(await screen.findByText('auth-guard:观察列表')).toBeInTheDocument();
+    expect(screen.queryByTestId('watchlist-compact-empty-state')).not.toBeInTheDocument();
+    expect(document.body.textContent || '').not.toMatch(/provider runtime|requestId|bearer-secret|rawMessage|traceId|debug|stack/i);
+  });
 });

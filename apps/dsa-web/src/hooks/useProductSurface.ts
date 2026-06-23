@@ -20,9 +20,10 @@ export type { AdminSurfaceMode };
 export function resolveProductSurfaceRole(params: {
   authEnabled: boolean;
   loggedIn: boolean;
-  currentUser: { isAdmin?: boolean } | null;
+  currentUser: { isAdmin?: boolean; isAuthenticated?: boolean } | null;
 }): ProductSurfaceRole {
-  if (!params.loggedIn) {
+  const isAuthenticated = Boolean(params.currentUser?.isAuthenticated ?? params.loggedIn);
+  if (!isAuthenticated) {
     return 'guest';
   }
   if (params.currentUser?.isAdmin) {
