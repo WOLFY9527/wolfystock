@@ -5,7 +5,7 @@
 import type React from 'react';
 import { useEffect, useEffectEvent, useReducer, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowRight, ChevronDown, LockKeyhole, LogOut, Menu, ShieldAlert, ShieldCheck, SlidersHorizontal } from 'lucide-react';
+import { ArrowRight, ChevronDown, LockKeyhole, LogOut, Menu, Moon, ShieldAlert, ShieldCheck, SlidersHorizontal, Sun } from 'lucide-react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { BrandLogo, BRAND_WORDMARK_CLASSNAME } from '../common/BrandLogo';
 import { Button } from '../common/Button';
@@ -22,6 +22,7 @@ import type { UiLanguage } from '../../i18n/core';
 import { cn } from '../../utils/cn';
 import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '../../utils/localeRouting';
 import { useIsDesktopViewport } from './useIsDesktopViewport';
+import { useThemeStyle } from '../theme/themeState';
 
 type ShellProps = {
   children?: React.ReactNode;
@@ -401,6 +402,9 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const isMobileNavVisible = mobileNavOpen;
   const isRailVisible = hasRailContent && railOpen;
   const mobileRouteLabel = resolveMobileRouteLabel(surfacePathname, t, language);
+  const { colorMode, setColorMode } = useThemeStyle();
+  const nextColorMode = colorMode === 'dark' ? 'light' : 'dark';
+  const MobileThemeIcon = colorMode === 'dark' ? Sun : Moon;
   const hasAdminIdentity = isAdminAccount || isAdmin || Boolean(currentUser?.isAdmin);
   const shouldRenderStandardAdminAccountGate = loggedIn && isSystemControlRoute && !hasAdminIdentity;
   const standardAdminAccountGateCopy = shouldRenderStandardAdminAccountGate
@@ -669,7 +673,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                 onOpenArchive={openRail}
               />
             ) : (
-              <div className="shell-mobile-strip">
+              <div className="shell-mobile-strip" data-testid="shell-mobile-strip">
                 <NavLink to="/" end className="shell-mobile-brand shell-brand-link" aria-label="WolfyStock">
                   <span className="inline-flex min-w-0 items-center gap-3">
                     <BrandLogo className="size-8" />
@@ -679,21 +683,40 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                 <span className="shell-mobile-active-route" data-testid="shell-mobile-active-route">
                   {mobileRouteLabel}
                 </span>
-                <button
-                  type="button"
-                  onClick={openMobileNav}
-                  className="shell-mobile-button"
-                  style={{
-                    width: MOBILE_MENU_TOUCH_TARGET_PX,
-                    minWidth: MOBILE_MENU_TOUCH_TARGET_PX,
-                    height: MOBILE_MENU_TOUCH_TARGET_PX,
-                    minHeight: MOBILE_MENU_TOUCH_TARGET_PX,
-                  }}
-                  aria-label={t('shell.openMenu')}
-                  title={t('shell.openMenu')}
-                >
-                  <Menu className="size-4" />
-                </button>
+                <div className="ml-auto flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setColorMode(nextColorMode)}
+                    className="shell-mobile-button"
+                    style={{
+                      width: MOBILE_MENU_TOUCH_TARGET_PX,
+                      minWidth: MOBILE_MENU_TOUCH_TARGET_PX,
+                      height: MOBILE_MENU_TOUCH_TARGET_PX,
+                      minHeight: MOBILE_MENU_TOUCH_TARGET_PX,
+                    }}
+                    aria-label={t('theme.label')}
+                    aria-pressed={colorMode === 'light'}
+                    data-theme-mode={colorMode}
+                    title={t('theme.label')}
+                  >
+                    <MobileThemeIcon className="size-4" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openMobileNav}
+                    className="shell-mobile-button"
+                    style={{
+                      width: MOBILE_MENU_TOUCH_TARGET_PX,
+                      minWidth: MOBILE_MENU_TOUCH_TARGET_PX,
+                      height: MOBILE_MENU_TOUCH_TARGET_PX,
+                      minHeight: MOBILE_MENU_TOUCH_TARGET_PX,
+                    }}
+                    aria-label={t('shell.openMenu')}
+                    title={t('shell.openMenu')}
+                  >
+                    <Menu className="size-4" />
+                  </button>
+                </div>
               </div>
             )}
           </div>

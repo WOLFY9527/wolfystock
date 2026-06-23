@@ -189,6 +189,7 @@ describe('Shell', () => {
     expect(within(primaryNav).queryByRole('link', { name: '轮动雷达' })).not.toBeInTheDocument();
     expect(within(primaryNav).queryByRole('link', { name: '决策台' })).not.toBeInTheDocument();
     expect(within(primaryNav).queryByRole('link', { name: 'Decision Desk' })).not.toBeInTheDocument();
+    expect(within(primaryNav).getAllByRole('link')).toHaveLength(9);
   });
 
   it('keeps consumer IA metadata aligned with the live anonymous Shell navigation', () => {
@@ -522,15 +523,20 @@ describe('Shell', () => {
       </MemoryRouter>
     );
 
-    expect(screen.queryByRole('button', { name: '切换主题' })).not.toBeInTheDocument();
+    const mobileStrip = screen.getByTestId('shell-mobile-strip');
+    const headerThemeButton = within(mobileStrip).getByRole('button', { name: '切换主题' });
+    expect(headerThemeButton).toHaveAttribute('aria-pressed', 'false');
+    expect(headerThemeButton).toHaveAttribute('data-theme-mode', 'dark');
+    fireEvent.click(headerThemeButton);
+    await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme', 'light'));
+    expect(headerThemeButton).toHaveAttribute('aria-pressed', 'true');
+    expect(headerThemeButton).toHaveAttribute('data-theme-mode', 'light');
     expect(screen.queryByRole('button', { name: '切换语言' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '打开导航菜单' }));
 
-    const themeButton = await screen.findByRole('button', { name: '切换主题' });
-    expect(themeButton).toHaveAttribute('aria-pressed', 'false');
-    fireEvent.click(themeButton);
-    await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme', 'light'));
+    const drawer = await screen.findByRole('dialog', { name: '导航菜单' });
+    const themeButton = within(drawer).getByRole('button', { name: '切换主题' });
     expect(themeButton).toHaveAttribute('aria-pressed', 'true');
     expect(await screen.findByRole('button', { name: '切换语言' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
