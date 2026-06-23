@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence
 from src.core.rule_backtest_engine import ExecutionModelConfig, ParsedStrategy, RuleBacktestEngine, RuleBacktestParser, _safe_float
 from src.repositories.rule_backtest_repo import RuleBacktestRepository
 from src.services.backtest_response_contract import build_rule_run_contract
+from src.services.backtest_data_sufficiency import assess_backtest_data_sufficiency
 from src.services.backtest_data_source_guard import assess_backtest_data_source_eligibility
 from src.services.backtest_bounded_grid_runner import run_bounded_parameter_grid_diagnostic
 from src.services.backtest_parameter_stability import (
@@ -3916,24 +3917,24 @@ class RuleBacktestService:
     ):
         metrics = {
             "initial_capital": float(initial_capital),
-            "final_equity": float(initial_capital),
-            "total_return_pct": 0.0,
+            "final_equity": None,
+            "total_return_pct": None,
             "annualized_return_pct": None,
             "sharpe_ratio": None,
             "benchmark_return_pct": None,
             "excess_return_vs_benchmark_pct": None,
-            "buy_and_hold_return_pct": 0.0,
-            "excess_return_vs_buy_and_hold_pct": 0.0,
+            "buy_and_hold_return_pct": None,
+            "excess_return_vs_buy_and_hold_pct": None,
             "trade_count": 0,
             "entry_signal_count": 0,
             "win_count": 0,
             "loss_count": 0,
-            "win_rate_pct": 0.0,
-            "avg_trade_return_pct": 0.0,
-            "max_drawdown_pct": 0.0,
-            "avg_holding_days": 0.0,
-            "avg_holding_bars": 0.0,
-            "avg_holding_calendar_days": 0.0,
+            "win_rate_pct": None,
+            "avg_trade_return_pct": None,
+            "max_drawdown_pct": None,
+            "avg_holding_days": None,
+            "avg_holding_bars": None,
+            "avg_holding_calendar_days": None,
             "bars_used": 0,
             "lookback_bars": int(lookback_bars),
             "period_start": start_date.isoformat() if start_date is not None else None,
@@ -4002,6 +4003,14 @@ class RuleBacktestService:
             execution_model=execution_model_payload,
         )
         data_quality_payload = dict(getattr(result, "data_quality", {}) or {})
+        data_sufficiency_payload = assess_backtest_data_sufficiency(
+            {
+                "status": "completed",
+                "no_result_reason": result.no_result_reason,
+                "data_quality": data_quality_payload,
+                "benchmark_summary": comparison_payload.get("benchmark_summary") or {},
+            }
+        )
         visualization_payload = {
             "benchmark_curve": comparison_payload.get("benchmark_curve") or [],
             "benchmark_summary": comparison_payload.get("benchmark_summary") or {},
@@ -4046,6 +4055,7 @@ class RuleBacktestService:
             execution_model=execution_model_payload,
             execution_assumptions=execution_assumptions_payload,
             data_quality=data_quality_payload,
+            data_sufficiency=data_sufficiency_payload,
             visualization=visualization_payload,
             execution_trace=execution_trace_payload,
             robustness_analysis=robustness_analysis_payload,
@@ -4103,6 +4113,7 @@ class RuleBacktestService:
                 execution_model=summary_patch.get("execution_model"),
                 execution_assumptions=summary_patch.get("execution_assumptions"),
                 data_quality=summary_patch.get("data_quality"),
+                data_sufficiency=summary_patch.get("data_sufficiency"),
                 visualization=summary_patch.get("visualization"),
                 execution_trace=summary_patch.get("execution_trace"),
                 robustness_analysis=summary_patch.get("robustness_analysis"),
@@ -5831,6 +5842,21 @@ class RuleBacktestService:
         readback_integrity: Dict[str, Any],
         readiness_payload: Dict[str, Any],
     ) -> Dict[str, Any]:
+        visualization = summary.get("visualization") if isinstance(summary.get("visualization"), dict) else {}
+        data_sufficiency = assess_backtest_data_sufficiency(
+            {
+                "status": row.status,
+                "no_result_reason": row.no_result_reason,
+                "data_quality": summary.get("data_quality") if isinstance(summary.get("data_quality"), dict) else {},
+                "benchmark_summary": (
+                    visualization.get("benchmark_summary")
+                    if isinstance(visualization.get("benchmark_summary"), dict)
+                    else {}
+                ),
+                "factor_inputs": summary.get("factor_inputs") or summary.get("factorInputs"),
+                "professionalReadiness": readiness_payload,
+            }
+        )
         payload = {
             "id": int(row.id),
             "code": str(row.code),
@@ -5847,6 +5873,7 @@ class RuleBacktestService:
             "parsed_confidence": row.parsed_confidence,
             "needs_confirmation": bool(row.needs_confirmation),
             **RuleBacktestService._build_single_symbol_readiness_fields(readiness_payload),
+            "data_sufficiency": data_sufficiency,
             "artifact_availability": dict(artifact_availability or {}),
             "readback_integrity": dict(readback_integrity or {}),
         }
@@ -7815,6 +7842,7 @@ class RuleBacktestService:
         execution_model: Any = _UNSET,
         execution_assumptions: Any = _UNSET,
         data_quality: Any = _UNSET,
+        data_sufficiency: Any = _UNSET,
         visualization: Any = _UNSET,
         execution_trace: Any = _UNSET,
         robustness_analysis: Any = _UNSET,
@@ -7849,6 +7877,8 @@ class RuleBacktestService:
             )
         if data_quality is not _UNSET:
             payload["data_quality"] = dict(data_quality or {})
+        if data_sufficiency is not _UNSET:
+            payload["data_sufficiency"] = dict(data_sufficiency or {})
         if visualization is not _UNSET:
             payload["visualization"] = visualization
         if execution_trace is not _UNSET:
@@ -7951,6 +7981,8 @@ class RuleBacktestService:
         return float(value) if value is not None else None
 
     def _build_ai_summary(self, parsed: ParsedStrategy, result) -> str:
+        if str(getattr(result, "no_result_reason", "") or "").strip() in {"insufficient_history", "insufficient_data"}:
+            return self._fallback_summary(parsed, result.metrics, result.trades, result)
         prompt = self._build_summary_prompt(
             parsed,
             result.execution_assumptions.to_dict(),
@@ -8001,12 +8033,16 @@ class RuleBacktestService:
             "要求：\n"
             "1. 只基于给定数据，不要编造。\n"
             "2. 明确说明策略在做什么、表现如何、相对所选基准是否有优势；若当前标的买入持有与所选基准不同，也要点出差异。\n"
-            "3. 语气务实，避免空话。\n"
-            "4. 如果交易次数很少，必须点出统计不稳定。\n"
+            "3. 如果 benchmark_return_pct 为 null 或 benchmark_summary.unavailable_reason 存在，不要输出基准相对收益、超额收益或优劣结论，只说明基准数据不可用。\n"
+            "4. 语气务实，避免空话。\n"
+            "5. 如果交易次数很少，必须点出统计不稳定。\n"
             f"数据:\n{json.dumps(payload, ensure_ascii=False, indent=2)}"
         )
 
     def _fallback_summary(self, parsed: ParsedStrategy, metrics: Dict[str, Any], trades: List[Any], result: Any) -> str:
+        no_result_reason = str(getattr(result, "no_result_reason", "") or "").strip()
+        if no_result_reason in {"insufficient_history", "insufficient_data"}:
+            return "数据不足，暂不形成结论。历史行情不足，未生成收益、回撤、胜率或基准相对指标。"
         total_return = metrics.get("total_return_pct", 0.0) or 0.0
         benchmark_return = metrics.get("benchmark_return_pct")
         benchmark_excess = metrics.get("excess_return_vs_benchmark_pct")
@@ -10934,6 +10970,18 @@ class RuleBacktestService:
             execution_model=execution_model,
             result_authority=result_authority,
         )
+        data_sufficiency = assess_backtest_data_sufficiency(
+            {
+                "status": row.status,
+                "no_result_reason": row.no_result_reason,
+                "data_quality": data_quality,
+                "benchmark_summary": benchmark_summary,
+                "factor_inputs": summary.get("factor_inputs") or summary.get("factorInputs"),
+                "professionalReadiness": professional_readiness,
+                "result_authority": result_authority,
+            }
+        )
+        summary["data_sufficiency"] = dict(data_sufficiency)
         payload = {
             "id": row.id,
             "code": row.code,
@@ -10983,6 +11031,7 @@ class RuleBacktestService:
             **self._build_single_symbol_readiness_fields(professional_readiness),
             "summary": summary,
             "data_quality": data_quality,
+            "data_sufficiency": data_sufficiency,
             "robustness_analysis": dict(summary.get("robustness_analysis") or {}),
             "artifact_availability": artifact_availability,
             "readback_integrity": readback_integrity,

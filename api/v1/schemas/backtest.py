@@ -1170,6 +1170,7 @@ class RuleBacktestHistoryItem(BacktestResponseContractFields):
     final_equity: Optional[float] = None
     summary: Dict[str, Any] = Field(default_factory=dict)
     data_quality: Dict[str, Any] = Field(default_factory=dict)
+    data_sufficiency: Dict[str, Any] = Field(default_factory=dict)
     robustness_analysis: Dict[str, Any] = Field(default_factory=dict)
     artifact_availability: Dict[str, Any] = Field(default_factory=dict)
     readback_integrity: Dict[str, Any] = Field(default_factory=dict)
@@ -1252,6 +1253,7 @@ class RuleBacktestRunResponse(BacktestResponseContractFields):
     final_equity: Optional[float] = None
     summary: Dict[str, Any] = Field(default_factory=dict)
     data_quality: Dict[str, Any] = Field(default_factory=dict)
+    data_sufficiency: Dict[str, Any] = Field(default_factory=dict)
     robustness_analysis: Dict[str, Any] = Field(default_factory=dict)
     artifact_availability: Dict[str, Any] = Field(default_factory=dict)
     readback_integrity: Dict[str, Any] = Field(default_factory=dict)
