@@ -214,6 +214,120 @@ export type OptionsStructureSignalPacket = {
   researchNextSteps: string[];
 };
 
+export type OptionsStructureAvailabilityState = 'available' | 'degraded' | 'not_available' | string;
+export type OptionsStructureCalculationState = 'available' | 'degraded' | 'not_available' | string;
+export type OptionsStructureBucketState = 'available' | 'not_available' | string;
+
+export type OptionContractStructureRow = {
+  contractVersion?: string | null;
+  contractSymbol?: string | null;
+  side?: OptionSide | string | null;
+  expiration?: string | null;
+  strike?: number | null;
+  multiplier?: number | null;
+  openInterest?: number | null;
+  volume?: number | null;
+  impliedVolatility?: number | null;
+  delta?: number | null;
+  gamma?: number | null;
+  vega?: number | null;
+  theta?: number | null;
+  charm?: number | null;
+  vanna?: number | null;
+  dealerGammaExposure?: number | null;
+  asOf?: string | null;
+  freshness?: string | null;
+  missingInputs?: string[] | null;
+};
+
+export type OptionChainStructureSnapshot = {
+  contractVersion?: string | null;
+  symbol?: string | null;
+  spotPrice?: number | null;
+  asOf?: string | null;
+  freshness?: string | null;
+  contracts: OptionContractStructureRow[];
+  missingInputs?: string[] | null;
+};
+
+export type OptionsZeroDteConcentration = {
+  state: OptionsStructureBucketState;
+  expiration?: string | null;
+  dte?: number | null;
+  contractCount: number;
+  callOpenInterest: number;
+  putOpenInterest: number;
+  callVolume: number;
+  putVolume: number;
+  openInterestShare?: number | null;
+  volumeShare?: number | null;
+};
+
+export type OptionsGammaFlipLevel = {
+  state: OptionsStructureBucketState;
+  level?: number | null;
+  reason?: string | null;
+};
+
+export type OptionsStrikeExposureSummary = {
+  strike?: number | null;
+  expiration?: string | null;
+  contractCount: number;
+  callOpenInterest: number;
+  putOpenInterest: number;
+  callVolume: number;
+  putVolume: number;
+  callDealerGammaExposure?: number | null;
+  putDealerGammaExposure?: number | null;
+  netDealerGammaExposure?: number | null;
+  calculationState: OptionsStructureCalculationState;
+  missingInputs?: string[] | null;
+};
+
+export type OptionsExpirationExposureSummary = {
+  expiration?: string | null;
+  dte?: number | null;
+  isZeroDte: boolean;
+  strikeCount: number;
+  contractCount: number;
+  callOpenInterest: number;
+  putOpenInterest: number;
+  callVolume: number;
+  putVolume: number;
+  netDealerGammaExposure?: number | null;
+  calculationState: OptionsStructureCalculationState;
+  missingInputs?: string[] | null;
+};
+
+export type OptionsNearestExpirationBucket = {
+  expiration?: string | null;
+  dte?: number | null;
+  contractCount: number;
+};
+
+export type OptionsStructureSummary = {
+  contractVersion?: string | null;
+  symbol: string;
+  status: OptionsStructureAvailabilityState;
+  calculationState: OptionsStructureCalculationState;
+  observationOnly: boolean;
+  decisionGrade: boolean;
+  providerConfigured: boolean;
+  spotPrice?: number | null;
+  asOf?: string | null;
+  freshness?: string | null;
+  snapshot: OptionChainStructureSnapshot;
+  strikeSummaries: OptionsStrikeExposureSummary[];
+  expirationSummaries: OptionsExpirationExposureSummary[];
+  nearestExpirations: OptionsNearestExpirationBucket[];
+  zeroDte: OptionsZeroDteConcentration;
+  gammaFlipLevel: OptionsGammaFlipLevel;
+  totalDealerGammaExposure?: number | null;
+  blockingReasons: string[];
+  warnings: string[];
+  nextEvidenceNeeded: string[];
+};
+
 export type OptionsStrategyCompareRequest = {
   symbol: string;
   direction: OptionsDirection;
@@ -931,6 +1045,171 @@ function normalizeOptionsChainResponse(response: OptionsChainResponse): OptionsC
   };
 }
 
+function normalizeNumberOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function normalizeStringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+}
+
+function normalizeStructureContract(value: unknown): OptionContractStructureRow | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const row = value as Partial<OptionContractStructureRow>;
+  return {
+    contractVersion: row.contractVersion ?? null,
+    contractSymbol: row.contractSymbol ?? null,
+    side: row.side ?? null,
+    expiration: row.expiration ?? null,
+    strike: normalizeNumberOrNull(row.strike),
+    multiplier: normalizeNumberOrNull(row.multiplier),
+    openInterest: normalizeNumberOrNull(row.openInterest),
+    volume: normalizeNumberOrNull(row.volume),
+    impliedVolatility: normalizeNumberOrNull(row.impliedVolatility),
+    delta: normalizeNumberOrNull(row.delta),
+    gamma: normalizeNumberOrNull(row.gamma),
+    vega: normalizeNumberOrNull(row.vega),
+    theta: normalizeNumberOrNull(row.theta),
+    charm: normalizeNumberOrNull(row.charm),
+    vanna: normalizeNumberOrNull(row.vanna),
+    dealerGammaExposure: normalizeNumberOrNull(row.dealerGammaExposure),
+    asOf: row.asOf ?? null,
+    freshness: row.freshness ?? null,
+    missingInputs: normalizeStringList(row.missingInputs),
+  };
+}
+
+function normalizeStructureSnapshot(value: unknown, symbol: string): OptionChainStructureSnapshot {
+  const snapshot = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Partial<OptionChainStructureSnapshot>
+    : {};
+  return {
+    contractVersion: snapshot.contractVersion ?? null,
+    symbol: snapshot.symbol ?? symbol,
+    spotPrice: normalizeNumberOrNull(snapshot.spotPrice),
+    asOf: snapshot.asOf ?? null,
+    freshness: snapshot.freshness ?? null,
+    contracts: Array.isArray(snapshot.contracts)
+      ? snapshot.contracts.map(normalizeStructureContract).filter((row): row is OptionContractStructureRow => Boolean(row))
+      : [],
+    missingInputs: normalizeStringList(snapshot.missingInputs),
+  };
+}
+
+function normalizeZeroDte(value: unknown): OptionsZeroDteConcentration {
+  const bucket = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Partial<OptionsZeroDteConcentration>
+    : {};
+  return {
+    state: bucket.state ?? 'not_available',
+    expiration: bucket.expiration ?? null,
+    dte: normalizeNumberOrNull(bucket.dte),
+    contractCount: normalizeNumberOrNull(bucket.contractCount) ?? 0,
+    callOpenInterest: normalizeNumberOrNull(bucket.callOpenInterest) ?? 0,
+    putOpenInterest: normalizeNumberOrNull(bucket.putOpenInterest) ?? 0,
+    callVolume: normalizeNumberOrNull(bucket.callVolume) ?? 0,
+    putVolume: normalizeNumberOrNull(bucket.putVolume) ?? 0,
+    openInterestShare: normalizeNumberOrNull(bucket.openInterestShare),
+    volumeShare: normalizeNumberOrNull(bucket.volumeShare),
+  };
+}
+
+function normalizeGammaFlipLevel(value: unknown): OptionsGammaFlipLevel {
+  const level = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Partial<OptionsGammaFlipLevel>
+    : {};
+  return {
+    state: level.state ?? 'not_available',
+    level: normalizeNumberOrNull(level.level),
+    reason: level.reason ?? null,
+  };
+}
+
+function normalizeStrikeSummary(value: unknown): OptionsStrikeExposureSummary | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const row = value as Partial<OptionsStrikeExposureSummary>;
+  return {
+    strike: normalizeNumberOrNull(row.strike),
+    expiration: row.expiration ?? null,
+    contractCount: normalizeNumberOrNull(row.contractCount) ?? 0,
+    callOpenInterest: normalizeNumberOrNull(row.callOpenInterest) ?? 0,
+    putOpenInterest: normalizeNumberOrNull(row.putOpenInterest) ?? 0,
+    callVolume: normalizeNumberOrNull(row.callVolume) ?? 0,
+    putVolume: normalizeNumberOrNull(row.putVolume) ?? 0,
+    callDealerGammaExposure: normalizeNumberOrNull(row.callDealerGammaExposure),
+    putDealerGammaExposure: normalizeNumberOrNull(row.putDealerGammaExposure),
+    netDealerGammaExposure: normalizeNumberOrNull(row.netDealerGammaExposure),
+    calculationState: row.calculationState ?? 'not_available',
+    missingInputs: normalizeStringList(row.missingInputs),
+  };
+}
+
+function normalizeExpirationSummary(value: unknown): OptionsExpirationExposureSummary | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const row = value as Partial<OptionsExpirationExposureSummary>;
+  return {
+    expiration: row.expiration ?? null,
+    dte: normalizeNumberOrNull(row.dte),
+    isZeroDte: Boolean(row.isZeroDte),
+    strikeCount: normalizeNumberOrNull(row.strikeCount) ?? 0,
+    contractCount: normalizeNumberOrNull(row.contractCount) ?? 0,
+    callOpenInterest: normalizeNumberOrNull(row.callOpenInterest) ?? 0,
+    putOpenInterest: normalizeNumberOrNull(row.putOpenInterest) ?? 0,
+    callVolume: normalizeNumberOrNull(row.callVolume) ?? 0,
+    putVolume: normalizeNumberOrNull(row.putVolume) ?? 0,
+    netDealerGammaExposure: normalizeNumberOrNull(row.netDealerGammaExposure),
+    calculationState: row.calculationState ?? 'not_available',
+    missingInputs: normalizeStringList(row.missingInputs),
+  };
+}
+
+function normalizeNearestExpiration(value: unknown): OptionsNearestExpirationBucket | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const row = value as Partial<OptionsNearestExpirationBucket>;
+  return {
+    expiration: row.expiration ?? null,
+    dte: normalizeNumberOrNull(row.dte),
+    contractCount: normalizeNumberOrNull(row.contractCount) ?? 0,
+  };
+}
+
+export function normalizeOptionsStructureSummary(payload: unknown): OptionsStructureSummary {
+  const normalized = toCamelCase<Partial<OptionsStructureSummary>>(payload);
+  const symbol = typeof normalized.symbol === 'string' && normalized.symbol.trim()
+    ? normalized.symbol.trim().toUpperCase()
+    : '';
+  return {
+    contractVersion: normalized.contractVersion ?? null,
+    symbol,
+    status: normalized.status ?? 'not_available',
+    calculationState: normalized.calculationState ?? 'not_available',
+    observationOnly: normalized.observationOnly !== false,
+    decisionGrade: normalized.decisionGrade === true,
+    providerConfigured: normalized.providerConfigured === true,
+    spotPrice: normalizeNumberOrNull(normalized.spotPrice),
+    asOf: normalized.asOf ?? null,
+    freshness: normalized.freshness ?? 'unknown',
+    snapshot: normalizeStructureSnapshot(normalized.snapshot, symbol),
+    strikeSummaries: Array.isArray(normalized.strikeSummaries)
+      ? normalized.strikeSummaries.map(normalizeStrikeSummary).filter((row): row is OptionsStrikeExposureSummary => Boolean(row))
+      : [],
+    expirationSummaries: Array.isArray(normalized.expirationSummaries)
+      ? normalized.expirationSummaries.map(normalizeExpirationSummary).filter((row): row is OptionsExpirationExposureSummary => Boolean(row))
+      : [],
+    nearestExpirations: Array.isArray(normalized.nearestExpirations)
+      ? normalized.nearestExpirations.map(normalizeNearestExpiration).filter((row): row is OptionsNearestExpirationBucket => Boolean(row))
+      : [],
+    zeroDte: normalizeZeroDte(normalized.zeroDte),
+    gammaFlipLevel: normalizeGammaFlipLevel(normalized.gammaFlipLevel),
+    totalDealerGammaExposure: normalizeNumberOrNull(normalized.totalDealerGammaExposure),
+    blockingReasons: normalizeStringList(normalized.blockingReasons),
+    warnings: normalizeStringList(normalized.warnings),
+    nextEvidenceNeeded: normalizeStringList(normalized.nextEvidenceNeeded),
+  };
+}
+
 async function getOrFixture<T>(path: string, fixture: T): Promise<T> {
   try {
     const response = await apiClient.get<Record<string, unknown>>(path);
@@ -959,6 +1238,11 @@ export const optionsLabApi = {
       `/api/v1/options/underlyings/${encodeURIComponent(normalized)}/chain?${query.toString()}`,
       fixtureChain(normalized, expiration),
     ).then(normalizeOptionsChainResponse);
+  },
+  getOptionsStructure(symbol: string): Promise<OptionsStructureSummary> {
+    const normalized = normalizeSymbol(symbol);
+    return apiClient.get<Record<string, unknown>>(`/api/v1/options/underlyings/${encodeURIComponent(normalized)}/structure`)
+      .then((response) => normalizeOptionsStructureSummary(response.data));
   },
   compareStrategies(request: OptionsStrategyCompareRequest): Promise<OptionsStrategyCompareResponse> {
     const normalized = normalizeSymbol(request.symbol);

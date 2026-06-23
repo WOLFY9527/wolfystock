@@ -26,6 +26,7 @@ import {
   type StockSymbolCompareEvidencePacket,
   type StockSymbolCompareFreshness,
 } from '../api/stocks';
+import { optionsLabApi, type OptionsStructureSummary, type OptionContractStructureRow } from '../api/optionsLab';
 import { EvidenceGapExplanationList } from '../components/research/EvidenceGapExplanation';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { getConsumerStatusLabel, mapConsumerStatusText } from '../utils/consumerStatusLabels';
@@ -259,6 +260,309 @@ function formatQuoteTimestamp(value: string | null | undefined, language: 'zh' |
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return QUOTE_TIMESTAMP_FORMATTERS[language].format(date);
+}
+
+const OPTIONS_STRUCTURE_NUMBER_FORMATTERS = {
+  en: new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }),
+  zh: new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }),
+} as const;
+
+const OPTIONS_STRUCTURE_INTEGER_FORMATTERS = {
+  en: new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }),
+  zh: new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 }),
+} as const;
+
+const OPTIONS_STRUCTURE_PERCENT_FORMATTERS = {
+  en: new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 1 }),
+  zh: new Intl.NumberFormat('zh-CN', { style: 'percent', maximumFractionDigits: 1 }),
+} as const;
+
+type OptionsStructureMetricRow = {
+  key: string;
+  label: string;
+  value: string;
+  detail: string;
+};
+
+function formatOptionsNumber(value: number | null | undefined, language: 'zh' | 'en'): string | null {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? OPTIONS_STRUCTURE_NUMBER_FORMATTERS[language].format(value)
+    : null;
+}
+
+function formatOptionsInteger(value: number | null | undefined, language: 'zh' | 'en'): string | null {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? OPTIONS_STRUCTURE_INTEGER_FORMATTERS[language].format(value)
+    : null;
+}
+
+function formatOptionsPercent(value: number | null | undefined, language: 'zh' | 'en'): string | null {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? OPTIONS_STRUCTURE_PERCENT_FORMATTERS[language].format(value)
+    : null;
+}
+
+function optionsMissingValue(language: 'zh' | 'en'): string {
+  return language === 'en' ? 'Needs evidence' : '待补证';
+}
+
+function optionsStructureStatusCopy(
+  structure: OptionsStructureSummary,
+  language: 'zh' | 'en',
+): { label: string; detail: string; badge: QuoteBoundaryChipVariant } {
+  const status = normalizeStockConsumerToken(structure.status);
+  if (status === 'available') {
+    return {
+      label: language === 'en' ? 'Structure available' : '结构可用',
+      detail: language === 'en'
+        ? 'Options structure analytics are populated from the current contract.'
+        : '期权结构指标已由当前合约填充。',
+      badge: 'success',
+    };
+  }
+  if (status === 'degraded') {
+    return {
+      label: language === 'en' ? 'Structure degraded' : '结构降级',
+      detail: language === 'en'
+        ? 'Some professional metrics are present, but missing inputs still cap the read.'
+        : '部分专业指标可见，但仍有输入缺口。',
+      badge: 'caution',
+    };
+  }
+  return {
+    label: language === 'en' ? 'Structure not available' : '结构暂不可用',
+    detail: structure.providerConfigured
+      ? (language === 'en'
+        ? 'The structure endpoint is reachable, but usable metrics are not present.'
+        : '结构接口已返回，但可用指标暂未出现。')
+      : (language === 'en'
+        ? 'An authorized options structure source is still needed before metrics populate.'
+        : '仍需配置授权期权结构来源后才会填充指标。'),
+    badge: 'caution',
+  };
+}
+
+function optionsStructureSourceLabel(structure: OptionsStructureSummary, language: 'zh' | 'en'): string {
+  return structure.providerConfigured
+    ? (language === 'en' ? 'Structure source configured' : '结构来源已配置')
+    : (language === 'en' ? 'Structure source needed' : '结构来源待配置');
+}
+
+function optionsStructureFreshnessLabel(structure: OptionsStructureSummary, language: 'zh' | 'en'): string {
+  const timestamp = formatQuoteTimestamp(structure.asOf || structure.snapshot.asOf || null, language);
+  const freshness = normalizeStockConsumerToken(structure.freshness || structure.snapshot.freshness);
+  if (timestamp) return `${language === 'en' ? 'Updated' : '更新'} ${timestamp}`;
+  if (freshness && freshness !== 'unknown') {
+    if (freshness === 'live' || freshness === 'fresh') return language === 'en' ? 'Latest available' : '最新可用';
+    if (freshness === 'stale' || freshness === 'delayed') return language === 'en' ? 'May be delayed' : '可能延迟';
+  }
+  return language === 'en' ? 'Freshness pending' : '新鲜度待确认';
+}
+
+function optionsStructureReasonLabel(value: string, language: 'zh' | 'en'): string {
+  const token = normalizeStockConsumerToken(value);
+  const labels: Record<string, { zh: string; en: string }> = {
+    options_structure_provider_missing: { zh: '结构来源待配置', en: 'Structure source needed' },
+    configure_authorized_options_structure_provider: { zh: '待配置授权结构来源', en: 'Authorized structure source needed' },
+    not_available: { zh: '结构暂不可用', en: 'Structure not available' },
+    degraded: { zh: '结构降级', en: 'Structure degraded' },
+    missing_inputs: { zh: '关键输入待补', en: 'Inputs needed' },
+  };
+  return labels[token]?.[language] ?? (language === 'en' ? 'Evidence needed' : '证据待补');
+}
+
+function optionsStructureReasonLabels(structure: OptionsStructureSummary, language: 'zh' | 'en'): string[] {
+  return compactUnique([
+    ...structure.blockingReasons,
+    ...structure.warnings,
+    ...structure.nextEvidenceNeeded,
+  ].map((value) => optionsStructureReasonLabel(value, language))).slice(0, 4);
+}
+
+function sumContractMetric(
+  contracts: OptionContractStructureRow[],
+  key: 'charm' | 'vanna',
+): number | null {
+  const values = contracts
+    .map((contract) => contract[key])
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  if (!values.length) return null;
+  return values.reduce((total, value) => total + value, 0);
+}
+
+function sumExpirationMetric(
+  structure: OptionsStructureSummary,
+  key: 'callOpenInterest' | 'putOpenInterest' | 'callVolume' | 'putVolume',
+): number | null {
+  if (!structure.expirationSummaries.length) return null;
+  return structure.expirationSummaries.reduce((total, row) => total + (row[key] || 0), 0);
+}
+
+function buildOptionsStructureMetrics(
+  structure: OptionsStructureSummary,
+  language: 'zh' | 'en',
+): OptionsStructureMetricRow[] {
+  const missing = optionsMissingValue(language);
+  const gex = formatOptionsNumber(structure.totalDealerGammaExposure, language);
+  const gammaFlip = structure.gammaFlipLevel.state === 'available'
+    ? formatOptionsNumber(structure.gammaFlipLevel.level, language)
+    : null;
+  const vanna = formatOptionsNumber(sumContractMetric(structure.snapshot.contracts, 'vanna'), language);
+  const charm = formatOptionsNumber(sumContractMetric(structure.snapshot.contracts, 'charm'), language);
+  const zeroDteOiShare = formatOptionsPercent(structure.zeroDte.openInterestShare, language);
+  const zeroDteVolumeShare = formatOptionsPercent(structure.zeroDte.volumeShare, language);
+  const zeroDteValue = structure.zeroDte.state === 'available'
+    ? [
+      zeroDteOiShare ? `OI ${zeroDteOiShare}` : null,
+      zeroDteVolumeShare ? `${language === 'en' ? 'Vol' : '成交'} ${zeroDteVolumeShare}` : null,
+    ].filter(Boolean).join(' · ') || formatOptionsInteger(structure.zeroDte.contractCount, language)
+    : null;
+  const callOpenInterest = sumExpirationMetric(structure, 'callOpenInterest') ?? 0;
+  const putOpenInterest = sumExpirationMetric(structure, 'putOpenInterest') ?? 0;
+  const callVolume = sumExpirationMetric(structure, 'callVolume') ?? 0;
+  const putVolume = sumExpirationMetric(structure, 'putVolume') ?? 0;
+  const totalOi = callOpenInterest + putOpenInterest;
+  const totalVolume = callVolume + putVolume;
+  const hasOiVolume = totalOi > 0 || totalVolume > 0;
+
+  return [
+    {
+      key: 'gex',
+      label: 'GEX',
+      value: gex ?? missing,
+      detail: gex ? 'Dealer gamma exposure' : (language === 'en' ? 'Awaiting authorized inputs' : '等待授权输入'),
+    },
+    {
+      key: 'gamma-flip',
+      label: 'Gamma flip',
+      value: gammaFlip ?? missing,
+      detail: gammaFlip ? (language === 'en' ? 'Flip level populated' : '翻转位置已填充') : (language === 'en' ? 'Methodology evidence needed' : '方法与输入待补'),
+    },
+    {
+      key: 'vanna',
+      label: 'Vanna',
+      value: vanna ?? missing,
+      detail: vanna ? (language === 'en' ? 'Contract values summed' : '合约值汇总') : (language === 'en' ? 'Vanna not present' : 'Vanna 暂缺'),
+    },
+    {
+      key: 'charm',
+      label: 'Charm',
+      value: charm ?? missing,
+      detail: charm ? (language === 'en' ? 'Contract values summed' : '合约值汇总') : (language === 'en' ? 'Charm not present' : 'Charm 暂缺'),
+    },
+    {
+      key: 'zero-dte',
+      label: language === 'en' ? '0DTE concentration' : '0DTE 集中度',
+      value: zeroDteValue ?? missing,
+      detail: structure.zeroDte.state === 'available'
+        ? (language === 'en'
+          ? `${structure.zeroDte.expiration || 'nearest'} · ${structure.zeroDte.contractCount} contracts`
+          : `${structure.zeroDte.expiration || '最近到期'} · ${structure.zeroDte.contractCount} 张合约`)
+        : (language === 'en' ? '0DTE bucket not present' : '0DTE 桶暂缺'),
+    },
+    {
+      key: 'oi-volume',
+      label: language === 'en' ? 'OI / volume' : 'OI / 成交',
+      value: hasOiVolume
+        ? `${formatOptionsInteger(totalOi, language)} / ${formatOptionsInteger(totalVolume, language)}`
+        : missing,
+      detail: language === 'en' ? 'Expiration summaries' : '到期汇总',
+    },
+  ];
+}
+
+function OptionsStructureSurface({
+  structure,
+  failed,
+  loading,
+  language,
+}: {
+  structure: OptionsStructureSummary | null;
+  failed: boolean;
+  loading: boolean;
+  language: 'zh' | 'en';
+}) {
+  if (loading) {
+    return (
+      <div className="p-3 md:p-4">
+        <RoughSectionCard
+          data-testid="stock-options-structure-surface"
+          eyebrow={language === 'en' ? 'Options structure' : '期权结构'}
+          title={language === 'en' ? 'Loading options structure' : '正在载入期权结构'}
+        >
+          <div className="grid gap-2 sm:grid-cols-3">
+            {[0, 1, 2].map((item) => (
+              <div key={item} className="h-16 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-subtle)]" />
+            ))}
+          </div>
+        </RoughSectionCard>
+      </div>
+    );
+  }
+
+  if (failed) {
+    return (
+      <div className="p-3 md:p-4">
+        <RoughSectionCard
+          data-testid="stock-options-structure-surface"
+          eyebrow={language === 'en' ? 'Options structure' : '期权结构'}
+          title={language === 'en' ? 'Options structure unavailable' : '期权结构暂不可用'}
+        >
+          <div className="flex flex-wrap gap-2">
+            <StatusBadge status="caution" label={language === 'en' ? 'Endpoint unavailable' : '接口暂不可用'} size="sm" />
+            <StatusBadge status="neutral" label={language === 'en' ? 'No metrics inferred' : '不推断指标'} size="sm" />
+          </div>
+          <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+            {language === 'en'
+              ? 'The options structure endpoint did not return. GEX, gamma flip, vanna, charm, 0DTE, OI, and volume remain empty.'
+              : '期权结构接口未返回。GEX、gamma flip、vanna、charm、0DTE、OI 与成交量均保持待补。'}
+          </p>
+        </RoughSectionCard>
+      </div>
+    );
+  }
+
+  if (!structure) return null;
+
+  const status = optionsStructureStatusCopy(structure, language);
+  const reasons = optionsStructureReasonLabels(structure, language);
+  const metrics = buildOptionsStructureMetrics(structure, language);
+
+  return (
+    <div className="p-3 md:p-4">
+      <RoughSectionCard
+        data-testid="stock-options-structure-surface"
+        eyebrow={language === 'en' ? 'Options structure' : '期权结构'}
+        title={language === 'en' ? 'Professional structure metrics' : '专业结构指标'}
+      >
+        <div className="flex flex-wrap gap-2">
+          <StatusBadge status={status.badge} label={status.label} size="sm" />
+          <StatusBadge status={structure.providerConfigured ? 'success' : 'caution'} label={optionsStructureSourceLabel(structure, language)} size="sm" />
+          <StatusBadge status="neutral" label={optionsStructureFreshnessLabel(structure, language)} size="sm" />
+          {structure.observationOnly || !structure.decisionGrade ? (
+            <StatusBadge status="neutral" label={language === 'en' ? 'Observation only' : '仅观察'} size="sm" />
+          ) : null}
+        </div>
+        <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{status.detail}</p>
+        {reasons.length ? (
+          <div className="mt-3 flex flex-wrap gap-2" data-testid="stock-options-structure-reasons">
+            {reasons.map((reason) => (
+              <StatusBadge key={reason} status="caution" label={reason} size="sm" />
+            ))}
+          </div>
+        ) : null}
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3" data-testid="stock-options-structure-metrics">
+          {metrics.map((metric) => (
+            <div key={metric.key} className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-subtle)] p-3">
+              <div className="text-[11px] font-semibold uppercase tracking-normal text-[color:var(--wolfy-text-muted)]">{metric.label}</div>
+              <div className="mt-1 text-lg font-semibold text-[color:var(--wolfy-text-primary)]">{metric.value}</div>
+              <div className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{metric.detail}</div>
+            </div>
+          ))}
+        </div>
+      </RoughSectionCard>
+    </div>
+  );
 }
 
 function normalizeQuoteBoundaryToken(value: string | null | undefined): string {
@@ -1608,6 +1912,8 @@ export default function StockStructureDecisionPage() {
   const [researchPacketFailed, setResearchPacketFailed] = useState(false);
   const [quote, setQuote] = useState<StockQuote | null>(null);
   const [quoteFailed, setQuoteFailed] = useState(false);
+  const [optionsStructure, setOptionsStructure] = useState<OptionsStructureSummary | null>(null);
+  const [optionsStructureFailed, setOptionsStructureFailed] = useState(false);
   const [comparePacket, setComparePacket] = useState<StockSymbolCompareEvidencePacket | null>(null);
   const [symbolNotFound, setSymbolNotFound] = useState<SymbolNotFoundState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1621,6 +1927,8 @@ export default function StockStructureDecisionPage() {
     setResearchPacketFailed(false);
     setQuote(null);
     setQuoteFailed(false);
+    setOptionsStructure(null);
+    setOptionsStructureFailed(false);
     try {
       if (isCompareRequest) {
         const [packetResult, responseResult] = await Promise.allSettled([
@@ -1642,6 +1950,8 @@ export default function StockStructureDecisionPage() {
         const response = responseResult.value;
         setData(response.items[0] ?? null);
         setComparePacket(response.symbolCompareEvidencePacket ?? null);
+        setOptionsStructure(null);
+        setOptionsStructureFailed(false);
       } else {
         let validation: StockValidationResponse | null = null;
         try {
@@ -1659,10 +1969,11 @@ export default function StockStructureDecisionPage() {
           });
           return;
         }
-        const [quoteResult, packetResult, responseResult] = await Promise.allSettled([
+        const [quoteResult, packetResult, responseResult, optionsResult] = await Promise.allSettled([
           stocksApi.getQuote(primarySymbol),
           stocksApi.getResearchPacket(primarySymbol),
           stocksApi.getStructureDecision(primarySymbol),
+          optionsLabApi.getOptionsStructure(primarySymbol),
         ]);
         if (quoteResult.status === 'fulfilled') {
           setQuote(quoteResult.value);
@@ -1674,6 +1985,12 @@ export default function StockStructureDecisionPage() {
           setResearchPacketFailed(false);
         } else {
           setResearchPacketFailed(true);
+        }
+        if (optionsResult.status === 'fulfilled') {
+          setOptionsStructure(optionsResult.value);
+          setOptionsStructureFailed(false);
+        } else {
+          setOptionsStructureFailed(true);
         }
         if (responseResult.status === 'rejected') {
           throw responseResult.reason;
@@ -1887,6 +2204,14 @@ export default function StockStructureDecisionPage() {
                   </p>
                 </RoughSectionCard>
               </div>
+            ) : null}
+            {!isCompareRequest && !symbolNotFound ? (
+              <OptionsStructureSurface
+                structure={optionsStructure}
+                failed={optionsStructureFailed}
+                loading={loading && !optionsStructure && !optionsStructureFailed}
+                language={locale}
+              />
             ) : null}
             {singleStockEvidencePackEntry ? (
               <div className="p-3 md:p-4">
