@@ -113,7 +113,7 @@ describe('Shell', () => {
     });
   });
 
-  it('renders the streamlined navigation without the old theme control', async () => {
+  it('renders the streamlined navigation with the restored theme control', async () => {
     render(
       <MemoryRouter initialEntries={['/market-overview']}>
         <ThemeProvider>
@@ -124,7 +124,6 @@ describe('Shell', () => {
       </MemoryRouter>
     );
 
-    expect(screen.queryByRole('button', { name: '切换主题' })).not.toBeInTheDocument();
     const brandLink = screen.getByRole('link', { name: 'WolfyStock' });
     expect(brandLink).toHaveAttribute('href', '/');
     const logo = within(brandLink).getByRole('img', { name: 'WolfyStock logo' });
@@ -135,6 +134,17 @@ describe('Shell', () => {
     expect(screen.getByRole('link', { name: translate('zh', 'nav.marketOverview') })).toHaveClass('text-sm', 'font-bold', 'text-white');
     expect(screen.queryByTestId('chat-completion-badge')).not.toBeInTheDocument();
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
+    const themeButton = within(actionIsland).getByRole('button', { name: '切换主题' });
+    expect(themeButton).toHaveAttribute('aria-pressed', 'false');
+    expect(themeButton).toHaveAttribute('data-theme-mode', 'dark');
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
+    expect(document.documentElement).toHaveAttribute('data-theme-style', 'spacex');
+    fireEvent.click(themeButton);
+    await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme', 'light'));
+    expect(themeButton).toHaveAttribute('aria-pressed', 'true');
+    expect(themeButton).toHaveAttribute('data-theme-mode', 'light');
+    expect(window.localStorage.getItem('dsa-theme-style')).toBe('spacex');
+    expect(window.localStorage.getItem('dsa-theme-mode')).toBe('light');
     expect(await within(actionIsland).findByTestId('shell-account-center-entry')).toBeInTheDocument();
     expect(within(actionIsland).getByRole('button', { name: '账户中心' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
@@ -517,6 +527,11 @@ describe('Shell', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '打开导航菜单' }));
 
+    const themeButton = await screen.findByRole('button', { name: '切换主题' });
+    expect(themeButton).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(themeButton);
+    await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme', 'light'));
+    expect(themeButton).toHaveAttribute('aria-pressed', 'true');
     expect(await screen.findByRole('button', { name: '切换语言' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
   });
