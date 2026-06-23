@@ -390,7 +390,8 @@ def test_options_structure_api_returns_not_available_contract_without_leaks() ->
     assert payload["contractVersion"] == "options-structure-summary-v1"
     assert payload["symbol"] == "AAPL"
     assert payload["status"] == "not_available"
-    assert payload["providerConfigured"] is False
+    assert "providerConfigured" not in payload
+    assert payload["consumerSafeSourceLabel"] == "部分数据源暂不可用"
     assert payload["snapshot"]["contracts"] == []
     _assert_no_public_leaks(payload)
 
@@ -406,6 +407,7 @@ def test_options_structure_api_routes_through_gateway_with_in_memory_provider(mo
     payload = response.json()
     assert provider.calls == [OptionsStructureProviderRequest(symbol="AAPL")]
     assert payload["status"] == "available"
-    assert payload["providerConfigured"] is True
+    assert "providerConfigured" not in payload
+    assert payload["consumerSafeSourceLabel"] == "部分数据源暂不可用"
     assert payload["totalDealerGammaExposure"] == 325.0
     _assert_no_public_leaks(payload)

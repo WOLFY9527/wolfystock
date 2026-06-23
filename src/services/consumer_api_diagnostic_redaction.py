@@ -97,6 +97,11 @@ _UNSAFE_DIAGNOSTIC_VALUE_RE = re.compile(
     r"^(?:provider|source)_",
     re.IGNORECASE,
 )
+_UNSAFE_PROVIDER_VALUE_FRAGMENT_RE = re.compile(
+    r"(?:^|[^A-Za-z0-9])(?:delayed_fixture|fixture_only|provider_validation_required_later|"
+    r"synthetic_fixture|synthetic_options_lab_fixture)(?:[^A-Za-z0-9]|$)",
+    re.IGNORECASE,
+)
 _UNSAFE_FIELD_NAME_VALUE_RE = re.compile(
     r"\b(?:providerClass|providerName|providerAttempted|requiredProviderClass|"
     r"scoreContributionAllowed|sourceAuthorityAllowed|sourceAuthorityRouter)\b"
@@ -336,6 +341,7 @@ def _is_unsafe_text(text: str) -> bool:
         _is_unsafe_field_name_text(text)
         or _UNSAFE_VALUE_RE.search(text)
         or _UNSAFE_DIAGNOSTIC_VALUE_RE.search(text)
+        or _UNSAFE_PROVIDER_VALUE_FRAGMENT_RE.search(text)
         or _ADVICE_RE.search(text)
     )
 

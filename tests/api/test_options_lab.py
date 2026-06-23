@@ -14,7 +14,6 @@ from fastapi.testclient import TestClient
 from api.v1.endpoints import options
 from api.v1.schemas.options import OptionChainResponse, OptionContract, OptionGreeks, OptionsMetadata
 from src.services.consumer_api_diagnostic_redaction import project_consumer_api_payload
-from src.services.market_data_source_registry import project_source_provenance
 from src.services.options_lab_domain_models import (
     AnalyzeCandidateModel,
     AnalyzeResultModel,
@@ -135,6 +134,48 @@ def _assert_no_consumer_diagnostic_leaks(payload) -> None:
         "delayed_fixture",
         "synthetic_fixture",
     ):
+        assert marker not in text
+        assert marker.lower() not in lowered
+
+
+OPTIONS_CONSUMER_FORBIDDEN_MARKERS = (
+    "providerName",
+    "providerClass",
+    "providerAttempted",
+    "requiredProviderClass",
+    "sourceAuthorityRouter",
+    "endpointHost",
+    "apiKeyPresent",
+    "exceptionClass",
+    "exceptionChain",
+    "requestId",
+    "traceId",
+    "cacheKey",
+    "rawPayload",
+    "raw_provider_payload",
+    "credential",
+    "token",
+    "env",
+    "API_KEY",
+    "PASSWORD",
+    "SECRET",
+    "PRIVATE_KEY",
+    "Traceback",
+    "providerCapabilities",
+    "providerAuthority",
+    "providerQuality",
+    "sourceType",
+    "sourceTier",
+    "sourceRef",
+    "synthetic_fixture",
+    "delayed_fixture",
+)
+
+
+def _assert_no_options_consumer_redaction_leaks(payload) -> None:
+    text = _json_text(payload)
+    lowered = text.lower()
+    for marker in OPTIONS_CONSUMER_FORBIDDEN_MARKERS:
         assert marker not in text
         assert marker.lower() not in lowered
 
@@ -294,6 +335,26 @@ def test_summary_endpoint_returns_safe_normalized_fixture_response() -> None:
         assert payload["metadata"]["noOrderPlacement"] is True
         assert payload["limitations"]["optionsAreHighRisk"] is True
         assert payload["limitations"]["dataMayBeDelayedOrStale"] is True
+    finally:
+        client.close()
+
+
+def test_options_consumer_underlying_endpoints_recursively_redact_provider_diagnostics() -> None:
+    client = _client()
+    try:
+        responses = [
+            client.get("/api/v1/options/underlyings/NVDA/summary", params={"forceRefresh": "true"}),
+            client.get(
+                "/api/v1/options/underlyings/NVDA/chain",
+                params={"expiration": "2026-06-19", "includeGreeks": "true"},
+            ),
+            client.get("/api/v1/options/underlyings/NVDA/structure"),
+        ]
+        assert all(response.status_code == 200 for response in responses)
+        for response in responses:
+            payload = response.json()
+            _assert_no_options_consumer_redaction_leaks(payload)
+            assert payload["consumerSafeSourceLabel"] == "部分数据源暂不可用"
     finally:
         client.close()
 
@@ -478,19 +539,12 @@ def test_chain_endpoint_filters_side_expiration_liquidity_and_spread() -> None:
         assert all(item["greeks"] is None for item in payload["calls"])
         assert payload["calls"][0]["multiplier"] == 100
         assert payload["calls"][0]["freshness"] == "synthetic_delayed"
-        assert payload["calls"][0]["providerQuality"] == "synthetic_demo_only"
         assert payload["calls"][0]["dataQuality"]["tradeable"] is False
         assert payload["filtersApplied"]["forceRefresh"] is True
         assert payload["metadata"]["forceRefreshIgnored"] is True
-        assert payload["metadata"]["providerName"] == "synthetic_fixture"
         assert payload["metadata"]["liveProviderEnabled"] is False
-        provenance = project_source_provenance(
-            source=payload["metadata"]["providerName"],
-            freshness=payload["calls"][0]["freshness"],
-        )
-        assert provenance["sourceType"] == "synthetic_fixture"
-        assert provenance["sourceLabel"] == "Synthetic Fixture"
-        assert provenance["freshnessLabel"] != "实时"
+        assert payload["consumerSafeSourceLabel"] == "部分数据源暂不可用"
+        _assert_no_options_consumer_redaction_leaks(payload)
     finally:
         client.close()
 
@@ -850,7 +904,8 @@ def test_chain_readiness_demo_sample_chain_is_observation_only() -> None:
         assert readiness["dataBoundary"] == "demo_sample"
         assert readiness["authorityState"] == "observation_only"
         assert readiness["overallState"] == "blocked"
-        assert "demo_sample_data" in readiness["blockingReasons"]
+        assert readiness["blockingReasons"]
+        assert all("provider" not in reason.lower() for reason in readiness["blockingReasons"])
         assert readiness["fieldCompleteness"]["iv"]["state"] == "available"
         assert readiness["fieldCompleteness"]["greeks"]["state"] == "available"
     finally:
@@ -941,7 +996,6 @@ def test_nvda_fixture_underlying_summary_expirations_and_chain_are_observation_o
         assert summary_payload["metadata"]["syntheticData"] is True
         assert summary_payload["metadata"]["liveProviderEnabled"] is False
         assert summary_payload["metadata"]["noExternalCalls"] is True
-        assert summary_payload["optionsReadiness"]["providerAuthority"] == "observationOnly"
         assert summary_payload["optionsReadiness"]["decisionGrade"] is False
         assert summary_payload["optionsReadiness"]["noTradingBoundary"] == {
             "analyticalOnly": True,
@@ -957,23 +1011,21 @@ def test_nvda_fixture_underlying_summary_expirations_and_chain_are_observation_o
             "2026-06-19",
             "2026-08-21",
         ]
-        assert expirations_payload["optionsReadiness"]["providerAuthority"] == "observationOnly"
         assert expirations_payload["optionsReadiness"]["decisionGrade"] is False
         assert chain_payload["symbol"] == "NVDA"
         assert chain_payload["observationOnly"] is True
         assert chain_payload["decisionGrade"] is False
-        assert chain_payload["source"] == "synthetic_options_lab_fixture"
         assert chain_payload["calls"]
         assert chain_payload["puts"]
         assert chain_payload["calls"][0]["contractSymbol"].startswith("NVDA")
         assert chain_payload["puts"][0]["contractSymbol"].startswith("NVDA")
-        assert chain_payload["optionsReadiness"]["providerAuthority"] == "observationOnly"
         assert chain_payload["optionsReadiness"]["decisionGrade"] is False
         assert chain_payload["metadata"]["liveProviderEnabled"] is False
         for payload in (summary_payload, expirations_payload, chain_payload):
             _assert_consumer_safe_sandbox_metadata(payload)
             _assert_no_execution_implication_fields(payload)
             _assert_no_safety_leaks(payload)
+            _assert_no_options_consumer_redaction_leaks(payload)
     finally:
         client.close()
 
@@ -1020,7 +1072,10 @@ def test_chain_endpoint_matches_service_alias_contract() -> None:
             force_refresh=True,
         )
         assert isinstance(expected_payload, OptionChainResultModel)
-        assert response.json() == options._map_chain_response(expected_payload).model_dump(by_alias=True)
+        assert response.json() == project_consumer_api_payload(
+            options._map_chain_response(expected_payload),
+            surface="options-chain",
+        )
     finally:
         client.close()
 
@@ -1335,7 +1390,8 @@ def test_analyze_endpoint_matches_service_alias_contract() -> None:
 
         expected_payload = options._map_analyze_response(
             OptionsLabService(fixture_path=Path("tests/fixtures/options/tem_chain.json")).analyze(request_payload)
-        ).model_dump(by_alias=True)
+        )
+        expected_payload = project_consumer_api_payload(expected_payload, surface="options-analyze")
         assert response.json() == expected_payload
     finally:
         client.close()
@@ -1420,7 +1476,8 @@ def test_scenario_endpoint_matches_service_alias_contract() -> None:
 
         expected_payload = options._map_scenario_response(
             OptionsLabService(fixture_path=Path("tests/fixtures/options/tem_chain.json")).scenario(request_payload)
-        ).model_dump(by_alias=True)
+        )
+        expected_payload = project_consumer_api_payload(expected_payload, surface="options-scenario")
         assert response.json() == expected_payload
     finally:
         client.close()
@@ -1564,7 +1621,11 @@ def test_strategy_compare_endpoint_matches_service_alias_contract() -> None:
             OptionsLabService(fixture_path=Path("tests/fixtures/options/tem_chain.json")).compare_strategies(
                 request_payload
             )
-        ).model_dump(by_alias=True)
+        )
+        expected_payload = project_consumer_api_payload(
+            expected_payload,
+            surface="options-strategies-compare",
+        )
         assert response.json() == expected_payload
     finally:
         client.close()
