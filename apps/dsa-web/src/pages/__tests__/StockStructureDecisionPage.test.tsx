@@ -11,6 +11,7 @@ const {
   getQuoteMock,
   getStructureDecisionMock,
   getResearchPacketMock,
+  getOptionsStructureMock,
   getStructureDecisionsBatchMock,
 } = vi.hoisted(() => ({
   languageState: { value: 'zh' as 'zh' | 'en' },
@@ -18,6 +19,7 @@ const {
   getQuoteMock: vi.fn(),
   getStructureDecisionMock: vi.fn(),
   getResearchPacketMock: vi.fn(),
+  getOptionsStructureMock: vi.fn(),
   getStructureDecisionsBatchMock: vi.fn(),
 }));
 
@@ -35,6 +37,12 @@ vi.mock('../../api/stocks', () => ({
     getStructureDecision: (...args: unknown[]) => getStructureDecisionMock(...args),
     getResearchPacket: (...args: unknown[]) => getResearchPacketMock(...args),
     getStructureDecisionsBatch: (...args: unknown[]) => getStructureDecisionsBatchMock(...args),
+  },
+}));
+
+vi.mock('../../api/optionsLab', () => ({
+  optionsLabApi: {
+    getOptionsStructure: (...args: unknown[]) => getOptionsStructureMock(...args),
   },
 }));
 
@@ -200,6 +208,136 @@ const completeResearchPacket = () => ({
   nextDataAction: 'Review the next data refresh.',
 });
 
+const optionsStructureNotAvailable = () => ({
+  contractVersion: 'options-structure-summary-v1',
+  symbol: 'AAPL',
+  status: 'not_available',
+  calculationState: 'not_available',
+  observationOnly: true,
+  decisionGrade: false,
+  providerConfigured: false,
+  spotPrice: null,
+  asOf: null,
+  freshness: 'unknown',
+  snapshot: {
+    contractVersion: 'option-chain-snapshot-v1',
+    symbol: 'AAPL',
+    spotPrice: null,
+    asOf: null,
+    freshness: 'unknown',
+    contracts: [],
+    missingInputs: ['providerClass', 'apiKeyPresent', 'requestId'],
+  },
+  strikeSummaries: [],
+  expirationSummaries: [],
+  nearestExpirations: [],
+  zeroDte: {
+    state: 'not_available',
+    expiration: null,
+    dte: null,
+    contractCount: 0,
+    callOpenInterest: 0,
+    putOpenInterest: 0,
+    callVolume: 0,
+    putVolume: 0,
+    openInterestShare: null,
+    volumeShare: null,
+  },
+  gammaFlipLevel: {
+    state: 'not_available',
+    level: null,
+    reason: 'requiredProviderClass',
+  },
+  totalDealerGammaExposure: null,
+  blockingReasons: ['options_structure_provider_missing', 'providerName', 'traceId'],
+  warnings: ['endpointHost', 'rawPayload'],
+  nextEvidenceNeeded: ['configure_authorized_options_structure_provider', 'credential'],
+});
+
+const optionsStructurePopulated = () => ({
+  ...optionsStructureNotAvailable(),
+  status: 'available',
+  calculationState: 'available',
+  providerConfigured: true,
+  spotPrice: 214.55,
+  asOf: '2026-06-19T13:30:00Z',
+  freshness: 'live',
+  snapshot: {
+    contractVersion: 'option-chain-snapshot-v1',
+    symbol: 'AAPL',
+    spotPrice: 214.55,
+    asOf: '2026-06-19T13:30:00Z',
+    freshness: 'live',
+    contracts: [
+      {
+        contractSymbol: 'AAPL260619C00215000',
+        side: 'call',
+        expiration: '2026-06-19',
+        strike: 215,
+        openInterest: 1200,
+        volume: 320,
+        charm: -0.12,
+        vanna: 0.34,
+        dealerGammaExposure: 125000,
+        missingInputs: [],
+      },
+      {
+        contractSymbol: 'AAPL260619P00210000',
+        side: 'put',
+        expiration: '2026-06-19',
+        strike: 210,
+        openInterest: 800,
+        volume: 240,
+        charm: 0.02,
+        vanna: -0.04,
+        dealerGammaExposure: 75000,
+        missingInputs: [],
+      },
+    ],
+    missingInputs: [],
+  },
+  expirationSummaries: [
+    {
+      expiration: '2026-06-19',
+      dte: 0,
+      isZeroDte: true,
+      strikeCount: 2,
+      contractCount: 2,
+      callOpenInterest: 1200,
+      putOpenInterest: 800,
+      callVolume: 320,
+      putVolume: 240,
+      netDealerGammaExposure: 200000,
+      calculationState: 'available',
+      missingInputs: [],
+    },
+  ],
+  nearestExpirations: [
+    { expiration: '2026-06-19', dte: 0, contractCount: 2 },
+  ],
+  zeroDte: {
+    state: 'available',
+    expiration: '2026-06-19',
+    dte: 0,
+    contractCount: 2,
+    callOpenInterest: 1200,
+    putOpenInterest: 800,
+    callVolume: 320,
+    putVolume: 240,
+    openInterestShare: 0.42,
+    volumeShare: 0.35,
+  },
+  gammaFlipLevel: {
+    state: 'available',
+    level: 212.5,
+    reason: 'methodology_available',
+  },
+  totalDealerGammaExposure: 200000,
+  blockingReasons: [],
+  warnings: [],
+  nextEvidenceNeeded: [],
+});
+
 describe('StockStructureDecisionPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -226,6 +364,7 @@ describe('StockStructureDecisionPage', () => {
     getQuoteMock.mockResolvedValue({
       ...baseQuote(),
     });
+    getOptionsStructureMock.mockResolvedValue(optionsStructureNotAvailable());
   });
 
   it('requests and renders the symbol research packet as a professional evidence stack', async () => {
@@ -552,6 +691,91 @@ describe('StockStructureDecisionPage', () => {
     expect(quotePanel).toHaveTextContent('来源待确认');
     expect(page.textContent || '').not.toMatch(/provider|cache|debug|trace|sourceAuthority|raw|fallback/i);
     expect(page.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+  });
+
+  it('shows the options structure provider-missing state without fake analytics', async () => {
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+    getOptionsStructureMock.mockResolvedValue(optionsStructureNotAvailable());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const surface = await within(page).findByTestId('stock-options-structure-surface');
+    const metrics = within(surface).getByTestId('stock-options-structure-metrics');
+
+    expect(getOptionsStructureMock).toHaveBeenCalledWith('AAPL');
+    expect(surface).toHaveTextContent('专业结构指标');
+    expect(surface).toHaveTextContent('结构暂不可用');
+    expect(surface).toHaveTextContent('结构来源待配置');
+    expect(surface).toHaveTextContent('新鲜度待确认');
+    expect(surface).toHaveTextContent('仍需配置授权期权结构来源后才会填充指标。');
+    expect(surface).toHaveTextContent('待配置授权结构来源');
+    expect(metrics).toHaveTextContent('GEX');
+    expect(metrics).toHaveTextContent('Gamma flip');
+    expect(metrics).toHaveTextContent('Vanna');
+    expect(metrics).toHaveTextContent('Charm');
+    expect(metrics).toHaveTextContent('0DTE 集中度');
+    expect(metrics).toHaveTextContent('OI / 成交');
+    expect(metrics.textContent?.match(/待补证/g) ?? []).toHaveLength(6);
+    expect(findConsumerRawLeakage(surface.textContent || '', {
+      extraForbiddenPatterns: [
+        /providerClass|providerName|providerAttempted|requiredProviderClass|sourceAuthorityRouter/i,
+        /endpointHost|apiKeyPresent|exceptionClass|exceptionChain|requestId|traceId|cacheKey|rawPayload/i,
+        /credential|token|env/i,
+        /options_structure_provider_missing|configure_authorized_options_structure_provider/i,
+      ],
+    })).toEqual([]);
+  });
+
+  it('renders populated options structure metrics from fixture data', async () => {
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+    getOptionsStructureMock.mockResolvedValue(optionsStructurePopulated());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const surface = await screen.findByTestId('stock-options-structure-surface');
+    const metrics = within(surface).getByTestId('stock-options-structure-metrics');
+
+    expect(surface).toHaveTextContent('结构可用');
+    expect(surface).toHaveTextContent('结构来源已配置');
+    expect(surface).toHaveTextContent('更新');
+    expect(surface).toHaveTextContent('06/19');
+    expect(metrics).toHaveTextContent('200,000');
+    expect(metrics).toHaveTextContent('212.5');
+    expect(metrics).toHaveTextContent('0.3');
+    expect(metrics).toHaveTextContent('-0.1');
+    expect(metrics).toHaveTextContent('OI 42%');
+    expect(metrics).toHaveTextContent('成交 35%');
+    expect(metrics).toHaveTextContent('2,000 / 560');
+    expect(metrics).not.toHaveTextContent('待补证');
+  });
+
+  it('renders an options structure endpoint failure state without raw diagnostics', async () => {
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+    getOptionsStructureMock.mockRejectedValue(new Error('providerClass requiredProviderClass requestId traceId rawPayload credential token env'));
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const surface = await within(page).findByTestId('stock-options-structure-surface');
+
+    expect(surface).toHaveTextContent('期权结构暂不可用');
+    expect(surface).toHaveTextContent('接口暂不可用');
+    expect(surface).toHaveTextContent('不推断指标');
+    expect(page).toHaveTextContent('突破观察');
+    expect(surface.textContent || '').not.toMatch(/providerClass|requiredProviderClass|requestId|traceId|rawPayload|credential|token|env/i);
   });
 
   it('renders a complete evidence stack when all existing packet families are available', async () => {

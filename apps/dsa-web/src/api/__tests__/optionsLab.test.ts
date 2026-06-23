@@ -246,6 +246,137 @@ describe('optionsLabApi fixture fallback boundaries', () => {
     });
   });
 
+  it('normalizes the options structure summary endpoint without fixture fallback', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: {
+        contract_version: 'options-structure-summary-v1',
+        symbol: 'aapl',
+        status: 'degraded',
+        calculation_state: 'degraded',
+        observation_only: true,
+        decision_grade: false,
+        provider_configured: true,
+        spot_price: 214.55,
+        as_of: '2026-06-19T13:30:00Z',
+        freshness: 'live',
+        snapshot: {
+          contract_version: 'option-chain-snapshot-v1',
+          symbol: 'AAPL',
+          spot_price: 214.55,
+          as_of: '2026-06-19T13:30:00Z',
+          freshness: 'live',
+          contracts: [
+            {
+              contract_symbol: 'AAPL260619C00215000',
+              side: 'call',
+              expiration: '2026-06-19',
+              strike: 215,
+              open_interest: 1200,
+              volume: 320,
+              charm: -0.12,
+              vanna: 0.34,
+              dealer_gamma_exposure: 125000.5,
+              missing_inputs: [],
+            },
+          ],
+        },
+        strike_summaries: [
+          {
+            strike: 215,
+            contract_count: 2,
+            call_open_interest: 1200,
+            put_open_interest: 800,
+            call_volume: 320,
+            put_volume: 240,
+            net_dealer_gamma_exposure: 200000,
+            calculation_state: 'available',
+          },
+        ],
+        expiration_summaries: [
+          {
+            expiration: '2026-06-19',
+            dte: 0,
+            is_zero_dte: true,
+            strike_count: 1,
+            contract_count: 2,
+            call_open_interest: 1200,
+            put_open_interest: 800,
+            call_volume: 320,
+            put_volume: 240,
+            net_dealer_gamma_exposure: 200000,
+            calculation_state: 'available',
+          },
+        ],
+        nearest_expirations: [
+          { expiration: '2026-06-19', dte: 0, contract_count: 2 },
+        ],
+        zero_dte: {
+          state: 'available',
+          expiration: '2026-06-19',
+          dte: 0,
+          contract_count: 2,
+          call_open_interest: 1200,
+          put_open_interest: 800,
+          call_volume: 320,
+          put_volume: 240,
+          open_interest_share: 0.42,
+          volume_share: 0.35,
+        },
+        gamma_flip_level: {
+          state: 'available',
+          level: 212.5,
+          reason: 'methodology_available',
+        },
+        total_dealer_gamma_exposure: 200000,
+        blocking_reasons: ['degraded'],
+        warnings: ['missing_inputs'],
+        next_evidence_needed: ['configure_authorized_options_structure_provider'],
+      },
+    } as never);
+
+    await expect(optionsLabApi.getOptionsStructure('aapl')).resolves.toMatchObject({
+      symbol: 'AAPL',
+      status: 'degraded',
+      calculationState: 'degraded',
+      providerConfigured: true,
+      asOf: '2026-06-19T13:30:00Z',
+      snapshot: {
+        contracts: [
+          {
+            contractSymbol: 'AAPL260619C00215000',
+            openInterest: 1200,
+            volume: 320,
+            charm: -0.12,
+            vanna: 0.34,
+            dealerGammaExposure: 125000.5,
+          },
+        ],
+      },
+      expirationSummaries: [
+        {
+          expiration: '2026-06-19',
+          isZeroDte: true,
+          callOpenInterest: 1200,
+          putVolume: 240,
+        },
+      ],
+      zeroDte: {
+        state: 'available',
+        openInterestShare: 0.42,
+        volumeShare: 0.35,
+      },
+      gammaFlipLevel: {
+        state: 'available',
+        level: 212.5,
+      },
+      totalDealerGammaExposure: 200000,
+      blockingReasons: ['degraded'],
+      warnings: ['missing_inputs'],
+      nextEvidenceNeeded: ['configure_authorized_options_structure_provider'],
+    });
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/options/underlyings/AAPL/structure');
+  });
+
   it('maps demo sample options chain readiness to observation labels', async () => {
     vi.mocked(apiClient.get).mockResolvedValueOnce({
       data: {
