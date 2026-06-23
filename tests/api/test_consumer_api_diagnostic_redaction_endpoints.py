@@ -35,8 +35,6 @@ FORBIDDEN_MARKET_DIAGNOSTIC_FIELDS = (
     "freshnessPolicy",
     "maxAcceptedLagDays",
     "maxAcceptedBusinessLagDays",
-    "sourceAuthorityAllowed",
-    "scoreContributionAllowed",
     "requestId",
     "traceId",
     "cacheKey",
@@ -58,6 +56,7 @@ def _assert_no_forbidden_consumer_terms(payload: Any) -> None:
         "requestId",
         "traceId",
         "rawPayload",
+        "raw_provider_payload",
         "rawJson",
         "schemaVersion",
         "policyVersion",
@@ -68,6 +67,13 @@ def _assert_no_forbidden_consumer_terms(payload: Any) -> None:
         "provider_timeout",
         "tier_1_configured",
         "unofficial_proxy",
+        "credential",
+        "credentials",
+        "api_key",
+        "API_KEY",
+        "token",
+        "env",
+        "missing_api_key",
         *FORBIDDEN_MARKET_DIAGNOSTIC_FIELDS,
     ):
         assert marker not in serialized
@@ -234,6 +240,7 @@ class _LeakyRotationRadarService:
                     "sourceAuthorityAllowed": False,
                     "scoreContributionAllowed": False,
                     "providerName": "alpaca",
+                    "reasonCodes": ["credentials"],
                 },
             },
             "themes": [
@@ -243,6 +250,7 @@ class _LeakyRotationRadarService:
                     "freshness": "delayed",
                     "sourceAuthorityAllowed": False,
                     "scoreContributionAllowed": False,
+                    "reasonCodes": ["credentials"],
                     "providerAttempted": True,
                     "breadthEvidence": {
                         "scoreContributionAllowed": False,
@@ -292,6 +300,23 @@ def test_market_overview_public_endpoints_project_consumer_safe_diagnostics(monk
             assert payload["items"][0]["sourceField"] == "evidence"
             assert payload["items"][0]["nested"]["evidenceGaps"][0]["sourceField"] == "evidence"
             assert payload["noAdviceDisclosure"]
+
+
+def test_market_overview_indices_remains_public_and_sanitized(monkeypatch) -> None:
+    monkeypatch.setattr(market_overview, "MarketOverviewService", lambda: _LeakyOverviewService())
+    app = FastAPI()
+    app.include_router(market_overview.router, prefix="/api/v1/market-overview")
+
+    response = TestClient(app).get("/api/v1/market-overview/indices")
+
+    assert response.status_code == 200
+    payload = response.json()
+    _assert_no_forbidden_consumer_terms(payload)
+    serialized = json.dumps(payload, ensure_ascii=False)
+    assert "requiredProviderClass" not in serialized
+    assert "sourceAuthorityAllowed" not in serialized
+    assert payload["items"][0]["sourceField"] == "evidence"
+    assert payload["noAdviceDisclosure"]
 
 
 def test_market_public_endpoint_projects_provider_diagnostics_without_hiding_quality_labels(
@@ -359,6 +384,9 @@ def test_market_rotation_radar_public_route_removes_provider_diagnostics(monkeyp
     payload = response.json()
     serialized = json.dumps(payload, ensure_ascii=False)
     for marker in FORBIDDEN_MARKET_DIAGNOSTIC_FIELDS:
+        assert marker not in serialized
+        assert marker.lower() not in serialized.lower()
+    for marker in ("credential", "credentials", "API_KEY", "api_key", "token", "env"):
         assert marker not in serialized
         assert marker.lower() not in serialized.lower()
     assert payload["metadata"]["schemaVersion"] == "market_rotation_radar_phase4_v1"

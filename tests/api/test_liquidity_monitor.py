@@ -145,7 +145,7 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
                     "scoreExclusionReason": None,
                     "requiredRealSourceForScore": True,
                     "proxyObservationOnlyReason": None,
-                    "missingProviderReason": None,
+                    "missingProviderReason": "missing_api_key",
                     "paidDataLikelyRequired": False,
                     "sourceTier": "official_public",
                     "freshness": "live",
@@ -275,11 +275,21 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
     assert "cacheBundleDiagnostics" not in evidence_input
     diagnostics = indicator["coverageDiagnostics"]
     assert "cacheBundleDiagnostics" not in diagnostics
-    assert diagnostics["requiredProviderClass"] == "official_public.vix_or_volatility"
     assert diagnostics["requiredInputCount"] == 1
     assert diagnostics["scoreEligibleInputCount"] == 1
     assert diagnostics["realSourceAvailable"] is True
     assert diagnostics["scoreContributionAllowed"] is True
+    serialized = json.dumps(body, ensure_ascii=False)
+    for marker in (
+        "requiredProviderClass",
+        "missing_api_key",
+        "api_key",
+        "API_KEY",
+        "credential",
+        "credentials",
+    ):
+        assert marker not in serialized
+        assert marker.lower() not in serialized.lower()
 
 
 def test_liquidity_monitor_route_exposes_safe_data_quality_for_unavailable_score() -> None:
@@ -501,7 +511,7 @@ def test_liquidity_monitor_route_preserves_evidence_input_authority_metadata() -
                     "isUnavailable": False,
                     "coverage": 1.0,
                     "confidenceWeight": 0.7,
-                    "degradationReason": "proxy_only_missing_real_source",
+                    "degradationReason": "missing_api_key",
                     "capReason": "proxy_only_missing_real_source",
                     "inputs": [
                         {
@@ -627,6 +637,10 @@ def test_liquidity_monitor_route_preserves_evidence_input_authority_metadata() -
     assert indicator["scoreContribution"] == 0
     assert indicator["coverageDiagnostics"]["scoreContributionAllowed"] is False
     assert indicator["coverageDiagnostics"]["contributesToScore"] is False
+    serialized = json.dumps(body, ensure_ascii=False)
+    for marker in ("requiredProviderClass", "missing_api_key", "api_key", "API_KEY", "credential", "credentials"):
+        assert marker not in serialized
+        assert marker.lower() not in serialized.lower()
 
     proxy_input, fallback_input = indicator["evidence"]["inputs"]
     for evidence_input in (proxy_input, fallback_input):
@@ -904,7 +918,7 @@ def test_liquidity_monitor_route_accepts_all_golden_fixture_payloads() -> None:
             response = TestClient(app).get("/api/v1/market/liquidity-monitor")
 
         assert response.status_code == 200
-        assert response.json() == payload
+        assert response.json() == liquidity_monitor._consumer_safe_liquidity_payload(payload)
 
 
 def test_liquidity_monitor_route_accepts_authorized_licensed_source_tier() -> None:

@@ -9,9 +9,10 @@ import time
 from types import SimpleNamespace
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
+from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import stocks as stocks_endpoint
 from src.services import symbol_research_packet_service
 from src.services.stock_structure_decision_service import (
@@ -188,9 +189,27 @@ class _BlockingHistoryService:
         return _history_payload()
 
 
-def _client() -> TestClient:
+def _regular_user() -> CurrentUser:
+    return CurrentUser(
+        user_id="user-1",
+        username="alice",
+        display_name="Alice",
+        role="user",
+        is_admin=False,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+    )
+
+
+def _raise_unauthorized() -> None:
+    raise HTTPException(status_code=401, detail={"error": "unauthorized", "message": "Login required"})
+
+
+def _client(*, authenticated: bool = True) -> TestClient:
     app = FastAPI()
     app.include_router(stocks_endpoint.router, prefix="/api/v1/stocks")
+    app.dependency_overrides[get_current_user] = _regular_user if authenticated else _raise_unauthorized
     return TestClient(app)
 
 
@@ -514,6 +533,22 @@ def test_structure_decision_endpoint_returns_required_contract(monkeypatch) -> N
         "drilldownLinks",
     ):
         assert key in payload
+
+
+def test_structure_decision_endpoint_requires_authenticated_user(monkeypatch) -> None:
+    fake_service = _FakeStructureDecisionService(_payload())
+    monkeypatch.setattr(
+        stocks_endpoint,
+        "StockStructureDecisionService",
+        lambda: fake_service,
+        raising=False,
+    )
+
+    response = _client(authenticated=False).get("/api/v1/stocks/AAPL/structure-decision")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": {"error": "unauthorized", "message": "Login required"}}
+    assert fake_service.calls == []
 
 
 def test_structure_decision_endpoint_includes_consumer_safe_ohlcv_readiness(monkeypatch) -> None:

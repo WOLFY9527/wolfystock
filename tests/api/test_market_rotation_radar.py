@@ -1341,20 +1341,12 @@ def test_market_rotation_radar_timeout_preserves_configured_provider_diagnostics
 
         assert response.status_code == 200
         payload = response.json()
-        diagnostics = payload["metadata"]["quoteProvider"]["providerDiagnostics"]
-        assert diagnostics["configuredProviderAttempted"] is True
-        assert diagnostics["configuredProviderName"] == "alpaca"
-        assert diagnostics["credentialsPresent"] is True
-        assert diagnostics["credentialFieldsMissing"] == []
-        assert diagnostics["credentialSource"] == "env"
-        assert diagnostics["providerConstructed"] is False
-        assert diagnostics["feed"] == "iex"
-        assert diagnostics["feedEntitlementStatus"] == "not_checked"
-        assert diagnostics["providerFailureReason"] == "quote_fetch_failed"
-        assert diagnostics["providerFailureReasons"] == ["quote_fetch_failed"]
-        assert diagnostics["finalSourceTier"] == "fallback_static"
-        assert diagnostics["trustLevel"] == "unavailable"
-        assert "raw-secret-value" not in json.dumps(diagnostics, ensure_ascii=False)
+        assert "providerDiagnostics" not in payload["metadata"]["quoteProvider"]
+        serialized = json.dumps(payload, ensure_ascii=False)
+        for marker in ("credential", "credentials", "env", "configuredProviderName"):
+            assert marker not in serialized
+            assert marker.lower() not in serialized.lower()
+        assert "raw-secret-value" not in serialized
     finally:
         client.close()
 
@@ -1550,8 +1542,21 @@ def test_market_rotation_radar_partial_quote_failures_are_sanitized_in_api_paylo
         assert payload["metadata"]["quoteProvider"]["failedSymbols"] == ["SQ", "IRBT", "X"]
         assert payload["metadata"]["quoteProvider"]["failedSymbolCount"] == 5
         assert payload["metadata"]["quoteProvider"]["unavailableReason"] == "symbol_unavailable"
-        assert payload["metadata"]["quoteProvider"]["providerDiagnostics"]["credentialFieldsMissing"] == ["ALPACA_API_KEY"]
-        assert "requestWindowResults" in payload["metadata"]["quoteProvider"]["providerDiagnostics"]
+        serialized = json.dumps(payload, ensure_ascii=False)
+        for marker in (
+            "credential",
+            "credentials",
+            "ALPACA_API_KEY",
+            "API_KEY",
+            "api_key",
+            "requestWindowResults",
+            "adminDiagnostics",
+            "proxyEnvironment",
+        ):
+            assert marker not in serialized
+            assert marker.lower() not in serialized.lower()
+        assert '"sourceAuthorityRouter"' not in serialized
+        assert "providerDiagnostics" not in payload["metadata"]["quoteProvider"]
         assert "部分主题行情暂不可用" in payload["warning"]
         consumer_snapshot = payload["consumerEvidenceSnapshot"]
         assert consumer_snapshot["isPartial"] is True
@@ -1570,7 +1575,7 @@ def test_market_rotation_radar_partial_quote_failures_are_sanitized_in_api_paylo
         }
         assert consumer_snapshot["providerState"]["coverage"]["usableSymbolCount"] > 0
         assert consumer_snapshot["scoreContributionAllowed"] is False
-        assert "partial_coverage" in consumer_snapshot["reasonCodes"]
+        assert all("credential" not in str(code).lower() for code in consumer_snapshot["reasonCodes"])
         assert "live" not in {consumer_snapshot["freshness"], consumer_snapshot["providerState"]["freshness"]}
         ai_consumer_theme = next(
             theme for theme in consumer_snapshot["themes"] if theme["id"] == "ai_applications"

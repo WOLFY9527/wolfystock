@@ -85,6 +85,7 @@ _SAFE_ROOT_DEFAULTS = {
 _UNSAFE_VALUE_RE = re.compile(
     r"\b(?:provider(?:tier|name|runtime|trace|diagnostics|state|route|payload|_timeout)?|"
     r"request[-_ ]?id|trace[-_ ]?id|debug(?:ref)?|raw[-_ ]?(?:payload|json|diagnostics|result)?|"
+    r"missing[-_ ]?api[-_ ]?key|api[-_ ]?key|credentials?|token|password|secret|private[-_ ]?key|\benv\b|"
     r"schema(?:version)?|source[-_ ]?(?:ref|type|tier|authority|authorityrouter)|"
     r"authoritydiagnostics|runtime|local_db|fallback_source|fallback_static|"
     r"official_public|authorized_licensed_feed|public_proxy|unofficial_proxy|"
