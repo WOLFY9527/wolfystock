@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+from datetime import date, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -189,6 +190,18 @@ class _BlockingHistoryService:
         return _history_payload()
 
 
+class _BlockingPeerRepository:
+    def __init__(self) -> None:
+        self.started = threading.Event()
+        self.release = threading.Event()
+
+    def get_local_peer_group(self, symbol: str) -> dict[str, Any] | None:
+        del symbol
+        self.started.set()
+        self.release.wait(timeout=2.0)
+        return {"label": "local verified peers", "symbols": ["MSFT", "NVDA"]}
+
+
 def _regular_user() -> CurrentUser:
     return CurrentUser(
         user_id="user-1",
@@ -348,6 +361,31 @@ def _history_payload(*, status: str = "ok", source: str = "local_db", rows: int 
             "isSynthetic": False,
             "isUnavailable": not data,
         },
+    }
+
+
+def _history_payload_with_valid_rows(*, rows: int, source: str = "local_db") -> dict[str, Any]:
+    data = []
+    for index in range(rows):
+        bar_date = date(2026, 1, 1) + timedelta(days=index)
+        close = 100.0 + index * 0.5
+        data.append(
+            {
+                "date": bar_date.isoformat(),
+                "open": round(close - 0.2, 4),
+                "high": round(close + 0.5, 4),
+                "low": round(close - 0.5, 4),
+                "close": round(close, 4),
+                "volume": 1000.0 + index,
+            }
+        )
+    return {
+        "stock_code": "AAPL",
+        "stock_name": "Apple",
+        "period": "daily",
+        "data": data,
+        "source": source,
+        "diagnostics": {"status": "ok", "reason": "history_available", "rows": len(data)},
     }
 
 
@@ -703,6 +741,73 @@ def test_structure_decision_endpoint_returns_controlled_unavailable_payload_on_l
     assert "traceback" not in serialized
     assert "exception" not in serialized
     assert "secret" not in serialized
+    for forbidden in FORBIDDEN_ADVICE_TOKENS:
+        assert forbidden not in serialized
+
+
+def test_structure_decision_endpoint_preserves_ohlcv_readiness_when_computation_times_out(monkeypatch) -> None:
+    fake_history = _FakeStockService(
+        quote=None,
+        history=_history_payload_with_valid_rows(rows=55),
+    )
+    blocking_peer_repo = _BlockingPeerRepository()
+    monkeypatch.setattr(
+        stocks_endpoint,
+        "StockStructureDecisionService",
+        lambda: StockStructureDecisionService(
+            history_service=fake_history,
+            stock_repo=blocking_peer_repo,
+            timeout_seconds=0.01,
+        ),
+        raising=False,
+    )
+
+    started_at = time.monotonic()
+    try:
+        response = _client().get("/api/v1/stocks/AAPL/structure-decision")
+    finally:
+        blocking_peer_repo.release.set()
+    elapsed = time.monotonic() - started_at
+
+    assert response.status_code == 200
+    assert fake_history.history_calls == [{"stock_code": "AAPL", "period": "daily", "days": 90}]
+    assert blocking_peer_repo.started.is_set()
+    assert elapsed < 0.5
+    payload = response.json()
+    assert payload["structureState"] == "lowConfidence"
+    assert payload["confidence"] == "low"
+    assert payload["dataQuality"]["status"] == "available"
+    assert payload["dataQuality"]["observedBars"] == 55
+    assert payload["dataQuality"]["usableBars"] == 55
+    readiness = payload["historicalOhlcvReadiness"]
+    assert readiness["overallState"] == "ready"
+    assert readiness["usableBars"] == 55
+    assert readiness["missingBars"] == 0
+    assert readiness["missingRequirements"] == []
+    assert payload["structureComputation"]["status"] == "degraded"
+    assert payload["structureComputation"]["stateReason"] == "timed_out"
+    assert (
+        payload["structureComputation"]["message"]
+        == "Daily OHLCV data is available, but structure computation timed out; this read remains observation-only."
+    )
+    assert any(
+        item.get("section") == "structureComputation"
+        and item.get("status") == "degraded"
+        and item.get("reason") == "Evidence is limited for this observation."
+        for item in payload["degradedInputs"]
+    )
+    serialized = json.dumps(payload, ensure_ascii=False).lower()
+    for forbidden in (
+        "traceback",
+        "exception",
+        "secret",
+        "providerclass",
+        "rawpayload",
+        "requestid",
+        "traceid",
+        "cachekey",
+    ):
+        assert forbidden not in serialized
     for forbidden in FORBIDDEN_ADVICE_TOKENS:
         assert forbidden not in serialized
 
