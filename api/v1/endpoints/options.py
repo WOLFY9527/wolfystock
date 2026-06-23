@@ -573,6 +573,10 @@ def _map_decision_response(result: DecisionEvaluationResult) -> OptionsDecisionR
     )
 
 
+def _options_consumer_response(payload: object, *, surface: str):
+    return consumer_safe_json_response(payload, surface=surface)
+
+
 @router.get(
     "/underlyings/{symbol}/summary",
     response_model=OptionUnderlyingSummaryResponse,
@@ -584,12 +588,15 @@ def get_options_underlying_summary(
     market_data_provider: str = Query(default="synthetic_fixture", alias="marketDataProvider"),
 ) -> OptionUnderlyingSummaryResponse:
     try:
-        return _map_underlying_summary_response(
-            _service().get_summary(
-                symbol,
-                force_refresh=force_refresh,
-                market_data_provider=market_data_provider,
-            )
+        return _options_consumer_response(
+            _map_underlying_summary_response(
+                _service().get_summary(
+                    symbol,
+                    force_refresh=force_refresh,
+                    market_data_provider=market_data_provider,
+                )
+            ),
+            surface="options-underlying-summary",
         )
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
@@ -608,12 +615,15 @@ def get_options_expirations(
     market_data_provider: str = Query(default="synthetic_fixture", alias="marketDataProvider"),
 ) -> OptionExpirationsResponse:
     try:
-        return _map_expirations_response(
-            _service().get_expirations(
-                symbol,
-                force_refresh=force_refresh,
-                market_data_provider=market_data_provider,
-            )
+        return _options_consumer_response(
+            _map_expirations_response(
+                _service().get_expirations(
+                    symbol,
+                    force_refresh=force_refresh,
+                    market_data_provider=market_data_provider,
+                )
+            ),
+            surface="options-expirations",
         )
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
@@ -637,17 +647,20 @@ def get_options_chain(
     market_data_provider: str = Query(default="synthetic_fixture", alias="marketDataProvider"),
 ) -> OptionChainResponse:
     try:
-        return _map_chain_response(
-            _service().get_chain(
-                symbol,
-                expiration=expiration,
-                side=side,
-                min_open_interest=min_open_interest,
-                max_spread_pct=max_spread_pct,
-                include_greeks=include_greeks,
-                force_refresh=force_refresh,
-                market_data_provider=market_data_provider,
-            )
+        return _options_consumer_response(
+            _map_chain_response(
+                _service().get_chain(
+                    symbol,
+                    expiration=expiration,
+                    side=side,
+                    min_open_interest=min_open_interest,
+                    max_spread_pct=max_spread_pct,
+                    include_greeks=include_greeks,
+                    force_refresh=force_refresh,
+                    market_data_provider=market_data_provider,
+                )
+            ),
+            surface="options-chain",
         )
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
@@ -663,7 +676,10 @@ def get_options_chain(
     summary="Get provider-neutral options structure analytics contract",
 )
 def get_options_structure(symbol: str) -> OptionsStructureSummary:
-    return _structure_service().get_structure(symbol)
+    return _options_consumer_response(
+        _structure_service().get_structure(symbol),
+        surface="options-structure",
+    )
 
 
 @router.post(
@@ -673,7 +689,10 @@ def get_options_structure(symbol: str) -> OptionsStructureSummary:
 )
 def analyze_options(request: OptionsAnalyzeRequest) -> OptionsAnalyzeResponse:
     try:
-        return _map_analyze_response(_service().analyze(request))
+        return _options_consumer_response(
+            _map_analyze_response(_service().analyze(request)),
+            surface="options-analyze",
+        )
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
     except OptionsLabProviderUnavailable as exc:
@@ -708,7 +727,10 @@ def evaluate_options_decision(request: OptionsDecisionRequest) -> OptionsDecisio
 )
 def analyze_options_scenario(request: OptionsScenarioRequest) -> OptionsScenarioResponse:
     try:
-        return _map_scenario_response(_service().scenario(request))
+        return _options_consumer_response(
+            _map_scenario_response(_service().scenario(request)),
+            surface="options-scenario",
+        )
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
     except OptionsLabProviderUnavailable as exc:
@@ -724,7 +746,10 @@ def analyze_options_scenario(request: OptionsScenarioRequest) -> OptionsScenario
 )
 def compare_options_strategies(request: OptionsStrategyCompareRequest) -> OptionsStrategyCompareResponse:
     try:
-        return _map_strategy_compare_response(_service().compare_strategies(request))
+        return _options_consumer_response(
+            _map_strategy_compare_response(_service().compare_strategies(request)),
+            surface="options-strategies-compare",
+        )
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
     except OptionsLabProviderUnavailable as exc:
@@ -740,7 +765,10 @@ def compare_options_strategies(request: OptionsStrategyCompareRequest) -> Option
 )
 def analyze_options_strategies(request: OptionsStrategyAnalyzerRequest) -> OptionsStrategyAnalyzerResponse:
     try:
-        return _map_strategy_analyzer_response(_service().analyze_strategies(request))
+        return _options_consumer_response(
+            _map_strategy_analyzer_response(_service().analyze_strategies(request)),
+            surface="options-strategies-analyze",
+        )
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
     except OptionsLabProviderUnavailable as exc:
