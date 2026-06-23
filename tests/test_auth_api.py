@@ -16,6 +16,8 @@ from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 from dotenv import dotenv_values
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from fastapi.responses import Response
 from starlette.requests import Request
 
@@ -247,17 +249,18 @@ class AuthApiTestCase(unittest.TestCase):
             self.assertFalse(current_user["canReadUsers"])
             self.assertFalse(current_user["canWriteUserSecurity"])
 
-        wrong_password_response = asyncio.run(
-            auth_endpoint.auth_login(
-                self._build_request(),
-                auth_endpoint.LoginRequest(
-                    username=UAT_CONSUMER_TEST_ACCOUNT_USERNAMES[0],
-                    password="852259",
-                ),
+        for username in UAT_CONSUMER_TEST_ACCOUNT_USERNAMES:
+            wrong_password_response = asyncio.run(
+                auth_endpoint.auth_login(
+                    self._build_request(),
+                    auth_endpoint.LoginRequest(
+                        username=username,
+                        password="852259",
+                    ),
+                )
             )
-        )
-        self.assertEqual(wrong_password_response.status_code, 401)
-        self.assertEqual(self._json_response_body(wrong_password_response)["error"], "invalid_login")
+            self.assertEqual(wrong_password_response.status_code, 401)
+            self.assertEqual(self._json_response_body(wrong_password_response)["error"], "invalid_login")
 
         admin_response = self._login_admin(password="adminpass123")
         self.assertEqual(admin_response.status_code, 200)
@@ -265,6 +268,54 @@ class AuthApiTestCase(unittest.TestCase):
         self.assertEqual(admin_user["username"], "admin")
         self.assertEqual(admin_user["role"], "admin")
         self.assertTrue(admin_user["isAdmin"])
+
+    def test_uat_consumer_fixture_login_reconciles_stale_phase_a_runtime_store(self) -> None:
+        from api.middlewares.auth import add_auth_middleware
+        from scripts.seed_uat_consumer_test_accounts import (
+            UAT_CONSUMER_TEST_ACCOUNT_USERNAMES,
+            seed_uat_consumer_test_accounts,
+            uat_consumer_test_login_value,
+        )
+        from src.multi_user import ROLE_USER
+
+        seed_result = seed_uat_consumer_test_accounts()
+        self.assertEqual(seed_result["status"], "seeded")
+
+        phase_a_path = self.data_dir / "phase-a-identity.db"
+        os.environ["POSTGRES_PHASE_A_URL"] = f"sqlite:///{phase_a_path}"
+        self.addCleanup(lambda: os.environ.pop("POSTGRES_PHASE_A_URL", None))
+        Config.reset_instance()
+        DatabaseManager.reset_instance()
+
+        runtime_db = DatabaseManager.get_instance()
+        for username in UAT_CONSUMER_TEST_ACCOUNT_USERNAMES:
+            runtime_db.create_or_update_app_user(
+                user_id=f"phase-a-stale-{username}",
+                username=username,
+                display_name=f"Stale {username}",
+                role=ROLE_USER,
+                password_hash=auth.hash_password_for_storage("stale-password"),
+                is_active=True,
+            )
+
+        app = FastAPI()
+        app.include_router(auth_endpoint.router, prefix="/api/v1/auth")
+        add_auth_middleware(app)
+        with TestClient(app) as client:
+            for username in UAT_CONSUMER_TEST_ACCOUNT_USERNAMES:
+                response = client.post(
+                    "/api/v1/auth/login",
+                    json={
+                        "username": username,
+                        "password": uat_consumer_test_login_value(),
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+                current_user = response.json()["currentUser"]
+                self.assertEqual(current_user["username"], username)
+                self.assertEqual(current_user["role"], "user")
+                self.assertFalse(current_user["isAdmin"])
+                self.assertEqual(current_user["adminCapabilities"], [])
 
     def test_admin_current_user_exposes_safe_sorted_capability_summary(self) -> None:
         response = self._login_admin(password="secret123")

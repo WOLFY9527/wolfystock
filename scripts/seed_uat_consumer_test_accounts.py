@@ -19,8 +19,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.auth import hash_password_for_storage, is_production_mode, verify_password_hash_string
+from src.config import setup_env
 from src.multi_user import ROLE_USER
-from src.storage import DatabaseManager
+from src.repositories.auth_repo import AuthRepository
 
 UAT_CONSUMER_TEST_ACCOUNT_USERNAMES: tuple[str, ...] = (
     "uat_consumer_test",
@@ -49,15 +50,15 @@ def _account_id(username: str) -> str:
     return f"uat-consumer-{username.replace('_', '-')}"
 
 
-def _seed_account(*, db: DatabaseManager, username: str, login_value: str) -> dict[str, Any]:
-    existing = db.get_app_user_by_username(username)
+def _seed_account(*, repo: AuthRepository, username: str, login_value: str) -> dict[str, Any]:
+    existing = repo.get_app_user_by_username(username)
     existing_hash = getattr(existing, "password_hash", None) if existing is not None else None
     password_hash = (
         str(existing_hash)
         if existing_hash and verify_password_hash_string(login_value, existing_hash)
         else hash_password_for_storage(login_value)
     )
-    row = db.create_or_update_app_user(
+    row = repo.create_or_update_app_user(
         user_id=str(getattr(existing, "id", "") or _account_id(username)),
         username=username,
         display_name=_display_name(username),
@@ -77,6 +78,7 @@ def _seed_account(*, db: DatabaseManager, username: str, login_value: str) -> di
 
 def seed_uat_consumer_test_accounts() -> dict[str, Any]:
     """Create or repair the local/UAT consumer accounts without admin grants."""
+    setup_env()
     if is_production_mode():
         return {
             "status": "blocked",
@@ -84,10 +86,10 @@ def seed_uat_consumer_test_accounts() -> dict[str, Any]:
             "accounts": [],
         }
 
-    db = DatabaseManager.get_instance()
+    repo = AuthRepository()
     accounts = [
         _seed_account(
-            db=db,
+            repo=repo,
             username=username,
             login_value=uat_consumer_test_login_value(),
         )
