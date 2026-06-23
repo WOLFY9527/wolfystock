@@ -153,6 +153,29 @@ def test_scanner_consumer_payload_recursively_redacts_ohlcv_readiness_forbidden_
                 "state": "blocked",
                 "availabilityState": "not_available",
                 "executionState": "blocked",
+                "universeReadiness": {
+                    "state": "available",
+                    "reason": "fixture_universe",
+                    "providerName": "LeakyProvider",
+                    "rawPayload": {"token": "secret-token"},
+                },
+                "quoteReadiness": {
+                    "state": "missing",
+                    "reason": "provider_error",
+                    "traceId": "trace-secret",
+                },
+                "historyReadiness": {
+                    "state": "missing",
+                    "reason": "provider_unavailable",
+                    "exceptionClass": "RuntimeError",
+                },
+                "benchmarkReadiness": {
+                    "state": "missing",
+                    "reason": "missing_benchmark",
+                    "requestId": "rq-secret",
+                },
+                "candidateGenerationState": "blocked",
+                "candidateGenerationBlockers": ["provider_missing", "missing_benchmark"],
                 "missingRequirements": ["provider_missing"],
                 "ohlcvReadiness": {
                     "providerClass": "LeakyClass",
@@ -223,6 +246,10 @@ def test_scanner_consumer_payload_recursively_redacts_ohlcv_readiness_forbidden_
         "credential",
     ):
         assert forbidden not in serialized
+    assert response["diagnostics"]["dataReadiness"]["universeReadiness"]["state"] == "available"
+    assert response["diagnostics"]["dataReadiness"]["quoteReadiness"]["state"] == "missing"
+    assert response["diagnostics"]["dataReadiness"]["benchmarkReadiness"]["state"] == "missing"
+    assert response["diagnostics"]["dataReadiness"]["candidateGenerationState"] == "blocked"
     readiness = response["shortlist"][0]["historicalOhlcvReadiness"]
     assert readiness["providerState"] == "provider_missing"
     assert readiness["requiredBars"] == 70

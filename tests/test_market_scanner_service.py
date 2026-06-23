@@ -3745,10 +3745,10 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                     _ohlcv_bars(90),
                     adjustments_available=True,
                 )
-                for symbol in ("600001", "600002", "300123", "600003")
+                for symbol in ("SPY", "NVDA", "AAPL", "PLTR")
             }
         )
-        data_manager = NoHistoryScannerDataManager()
+        data_manager = FakeUsScannerDataManager()
         service = MarketScannerService(
             self.db,
             data_manager=data_manager,
@@ -3756,23 +3756,67 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         )
 
         detail = service.run_scan(
-            market="cn",
-            profile="cn_preopen_v1",
+            market="us",
+            profile="us_preopen_v1",
             shortlist_size=2,
             universe_limit=50,
             detail_limit=10,
+            universe_type="symbols",
+            symbols=["NVDA", "AAPL", "PLTR"],
         )
 
         readiness = detail["dataReadiness"]
         self.assertEqual(readiness["availabilityState"], "available")
         self.assertEqual(readiness["executionState"], "executable")
-        self.assertEqual(readiness["requiredBars"], 60)
+        self.assertEqual(readiness["universeReadiness"]["state"], "available")
+        self.assertEqual(readiness["quoteReadiness"]["state"], "available")
+        self.assertEqual(readiness["historyReadiness"]["state"], "available")
+        self.assertEqual(readiness["benchmarkReadiness"]["state"], "available")
+        self.assertEqual(readiness["candidateGenerationState"], "ready")
+        self.assertEqual(readiness["candidateGenerationBlockers"], [])
+        self.assertEqual(readiness["requiredBars"], 70)
         self.assertEqual(readiness["missingBars"], 0)
         self.assertGreater(len(detail["shortlist"]), 0)
         self.assertEqual(data_manager.daily_history_calls, [])
         candidate_readiness = detail["shortlist"][0]["historicalOhlcvReadiness"]
         self.assertEqual(candidate_readiness["overallState"], "ready")
         self.assertEqual(candidate_readiness["providerState"], "available")
+
+    def test_missing_benchmark_blocks_candidate_generation_before_ranking_claims(self) -> None:
+        provider = FakeHistoricalOhlcvProvider(
+            {
+                symbol: HistoricalOhlcvProviderResult.available(
+                    _ohlcv_bars(90),
+                    adjustments_available=True,
+                )
+                for symbol in ("NVDA", "AAPL")
+            }
+        )
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeUsScannerDataManager(),
+            historical_ohlcv_provider=provider,
+        )
+
+        with patch.object(service, "_prepare_shortlist", wraps=service._prepare_shortlist) as prepare_shortlist:
+            with self.assertRaises(ScannerRuntimeError) as ctx:
+                service.run_scan(
+                    market="us",
+                    profile="us_preopen_v1",
+                    shortlist_size=2,
+                    universe_limit=50,
+                    detail_limit=10,
+                    universe_type="symbols",
+                    symbols=["NVDA", "AAPL"],
+                )
+
+        self.assertEqual(ctx.exception.reason_code, "missing_benchmark")
+        prepare_shortlist.assert_not_called()
+        readiness = ctx.exception.diagnostics["dataReadiness"]
+        self.assertEqual(readiness["universeSize"], 2)
+        self.assertEqual(readiness["benchmarkReadiness"]["state"], "missing")
+        self.assertEqual(readiness["candidateGenerationState"], "blocked")
+        self.assertIn("missing_benchmark", readiness["candidateGenerationBlockers"])
 
     def test_no_ohlcv_provider_or_history_records_provider_missing_without_fake_candidates(self) -> None:
         data_manager = NoHistoryScannerDataManager()
@@ -3836,7 +3880,10 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(failure["shortlist"], [])
         self.assertEqual(readiness["availabilityState"], "not_available")
         self.assertEqual(readiness["executionState"], "blocked")
+        self.assertEqual(readiness["historyReadiness"]["state"], "missing")
+        self.assertEqual(readiness["candidateGenerationState"], "blocked")
         self.assertIn("provider_missing", readiness["missingRequirements"])
+        self.assertIn("provider_missing", readiness["candidateGenerationBlockers"])
         self.assertEqual(readiness["requiredBars"], 60)
         self.assertEqual(readiness["usableBars"], 0)
         self.assertEqual(readiness["missingBars"], 60)
