@@ -135,6 +135,37 @@ class MarketScenarioLabBaselineReadiness(_MarketScenarioLabModel):
     lastUpdated: str | None = None
 
 
+class MarketScenarioLabBaselineSnapshotScope(_MarketScenarioLabModel):
+    type: Literal["symbol", "market"]
+    value: str
+
+
+class MarketScenarioLabBaselineSnapshotSource(_MarketScenarioLabModel):
+    dataState: Literal["real_cached", "request_supplied", "demo_static_sample", "unavailable"]
+    freshness: Literal["fresh", "recent", "stale", "unavailable", "unknown", "no_evidence"]
+    asOf: str | None = None
+    sourceAuthorityAllowed: bool
+    observationOnly: bool
+
+
+class MarketScenarioLabBaselineSnapshot(_MarketScenarioLabModel):
+    schemaVersion: str
+    status: Literal["available", "partial", "not_available"]
+    reasonCode: Literal["baseline_available", "baseline_partial", "baseline_missing"]
+    snapshotId: str | None = None
+    scope: MarketScenarioLabBaselineSnapshotScope
+    createdAt: str | None = None
+    source: MarketScenarioLabBaselineSnapshotSource
+    availableDataCategories: List[str] = Field(default_factory=list)
+    missingDataCategories: List[str] = Field(default_factory=list)
+    degradedDataCategories: List[str] = Field(default_factory=list)
+    labels: List[str] = Field(default_factory=list)
+    notes: str
+    observationOnly: bool
+    comparisonReady: bool
+    noAdviceDisclosure: str
+
+
 class MarketScenarioLabScenarioOutput(_MarketScenarioLabModel):
     scenarioRegime: MarketScenarioLabRegime
     confidenceDelta: float
@@ -189,6 +220,7 @@ class MarketScenarioLabResponse(_MarketScenarioLabModel):
     scenarioPresets: List[MarketScenarioLabScenarioPreset]
     baseMarketContext: MarketScenarioLabBaseContext
     baselineReadiness: MarketScenarioLabBaselineReadiness
+    scenarioBaselineSnapshot: MarketScenarioLabBaselineSnapshot
     baseRegime: MarketScenarioLabRegime
     scenarioRegime: MarketScenarioLabRegime
     scenarioOutput: MarketScenarioLabScenarioOutput
