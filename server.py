@@ -19,9 +19,11 @@ Daily Stock Analysis - FastAPI 后端服务入口
 """
 
 import logging
+import os
 
 from src.config import setup_env, get_config
 from src.logging_config import setup_logging
+from src.webui_frontend import prepare_webui_frontend_assets
 
 # 初始化环境变量与日志
 setup_env()
@@ -36,6 +38,19 @@ setup_logging(
     console_level=level,
     extra_quiet_loggers=['uvicorn', 'fastapi'],
 )
+
+
+def _prepare_frontend_assets_for_server_entrypoint() -> None:
+    """Keep direct uvicorn startup aligned with main.py --serve-only."""
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        return
+    if not prepare_webui_frontend_assets():
+        logging.getLogger(__name__).warning(
+            "Frontend static assets are not ready; API will start with the fallback page."
+        )
+
+
+_prepare_frontend_assets_for_server_entrypoint()
 
 # 从 api.app 导入应用实例
 from api.app import app  # noqa: E402

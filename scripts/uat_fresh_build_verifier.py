@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -177,20 +178,24 @@ def resolve_repo_root(start: Path | None = None) -> Path:
 
 def run_frontend_build(repo_root: Path) -> int:
     web_dir = repo_root / "apps" / "dsa-web"
-    node_modules = web_dir / "node_modules"
-    if not node_modules.exists():
-        print(
-            "ERROR: apps/dsa-web/node_modules is missing; run npm ci or create the documented worktree symlink first.",
-            file=sys.stderr,
-        )
+    npm_path = shutil.which("npm")
+    if not npm_path:
+        print("ERROR: npm is unavailable; install Node.js/npm before building the Web UI.", file=sys.stderr)
         return 1
 
-    command = ["npm", "--prefix", "apps/dsa-web", "run", "build"]
-    print(f"Frontend build command: {' '.join(command)}")
-    completed = subprocess.run(command, cwd=repo_root, check=False)
-    if completed.returncode != 0:
-        print("ERROR: frontend build failed; static assets were not accepted for UAT.", file=sys.stderr)
-    return completed.returncode
+    commands: list[list[str]] = []
+    if not (web_dir / "node_modules").exists():
+        install_command = "ci" if (web_dir / "package-lock.json").exists() else "install"
+        commands.append([npm_path, "--prefix", "apps/dsa-web", install_command])
+    commands.append([npm_path, "--prefix", "apps/dsa-web", "run", "build"])
+
+    print("Frontend bootstrap command: " + " && ".join(_display_command(command) for command in commands))
+    for command in commands:
+        completed = subprocess.run(command, cwd=repo_root, check=False)
+        if completed.returncode != 0:
+            print("ERROR: frontend bootstrap failed; static assets were not accepted for UAT.", file=sys.stderr)
+            return int(completed.returncode)
+    return 0
 
 
 def verify_git_preflight(repo_root: Path | str) -> list[str]:
@@ -410,6 +415,13 @@ def _safe_url_for_instruction(value: str) -> str:
         return urlunsplit((parsed.scheme, netloc, parsed.path or "", "", ""))
     except Exception:
         return DEFAULT_ADMIN_OPS_STATUS_URL
+
+
+def _display_command(command: Sequence[str]) -> str:
+    rendered = list(command)
+    if rendered:
+        rendered[0] = "npm" if Path(rendered[0]).name == "npm" else rendered[0]
+    return " ".join(rendered)
 
 
 def _dedupe(values: Sequence[str]) -> list[str]:

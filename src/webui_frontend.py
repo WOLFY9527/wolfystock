@@ -122,6 +122,8 @@ def _run_frontend_commands(commands: Sequence[Sequence[str]], frontend_dir: Path
 
 
 def _manual_build_command(frontend_dir: Path) -> str:
+    if (frontend_dir / "package-lock.json").exists():
+        return f'cd "{frontend_dir}" && npm ci && npm run build'
     return f'cd "{frontend_dir}" && npm install && npm run build'
 
 def prepare_webui_frontend_assets() -> bool:
