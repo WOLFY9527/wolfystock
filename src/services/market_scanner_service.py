@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -33,6 +34,11 @@ from src.services.market_scanner_candidate_evidence import (
 from src.services.market_scanner_candidate_summary import build_scanner_candidate_research_summary_frame
 from src.services.market_scanner_source_provenance_sidecar import build_market_scanner_source_provenance_sidecar
 from src.services.data_source_router import CapabilityResolver, DataSourceRouteRequest, DataSourceRouter
+from src.services.historical_ohlcv_readiness import (
+    HistoricalOhlcvProvider,
+    HistoricalOhlcvReadinessService,
+)
+from src.services.historical_ohlcv_runtime_adapter import HistoricalOhlcvRuntimeAdapter
 from src.services.scanner_ai_service import ScannerAiInterpretationService
 from src.services.scanner_evidence_packet import (
     SCANNER_EVIDENCE_VERSION,
@@ -40,6 +46,12 @@ from src.services.scanner_evidence_packet import (
     build_scanner_evidence_packet,
 )
 from src.services.scanner_factor_observations import attach_scanner_factor_observations
+from src.services.scanner_ohlcv_readiness import (
+    build_scanner_historical_ohlcv_readiness,
+    historical_ohlcv_readiness_blocks_scanner,
+    sanitize_historical_ohlcv_readiness,
+    summarize_scanner_ohlcv_readiness,
+)
 from src.services.provider_capability_matrix import get_provider_capability_support_contract
 from src.services.research_readiness_contract import build_research_readiness_v1
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback, get_us_stock_parquet_dir
@@ -625,6 +637,15 @@ def _scanner_runtime_resolution(diagnostics: Mapping[str, Any], key: str) -> Dic
     return _context_mapping(scanner_data.get(key) or diagnostics.get(key))
 
 
+def _scanner_historical_ohlcv_runtime_enabled() -> bool:
+    return str(os.getenv("WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 class MarketScannerService:
     """End-to-end market scanner orchestration."""
 
@@ -638,6 +659,9 @@ class MarketScannerService:
         *,
         owner_id: Optional[str] = None,
         include_all_owners: bool = False,
+        ohlcv_readiness_service: Optional[HistoricalOhlcvReadinessService] = None,
+        historical_ohlcv_provider: Optional[HistoricalOhlcvProvider] = None,
+        require_adjusted_ohlcv: bool = False,
     ) -> None:
         self.db = db_manager or DatabaseManager.get_instance()
         self.data_manager = data_manager or DataFetcherManager()
@@ -647,6 +671,13 @@ class MarketScannerService:
         self.ai_service = ai_interpretation_service or ScannerAiInterpretationService(owner_user_id=owner_id)
         self.include_all_owners = bool(include_all_owners)
         self.baostock_cn_history_observation_resolver = baostock_cn_history_observation_resolver
+        if historical_ohlcv_provider is None and _scanner_historical_ohlcv_runtime_enabled():
+            historical_ohlcv_provider = HistoricalOhlcvRuntimeAdapter(history_runtime=self.data_manager)
+        self.historical_ohlcv_provider = historical_ohlcv_provider
+        self.ohlcv_readiness_service = ohlcv_readiness_service or HistoricalOhlcvReadinessService(
+            provider=historical_ohlcv_provider
+        )
+        self.require_adjusted_ohlcv = bool(require_adjusted_ohlcv)
         configured_path = local_universe_cache_path or getattr(
             get_config(),
             "scanner_local_universe_path",
@@ -992,10 +1023,12 @@ class MarketScannerService:
         history_source_counts: Dict[str, int] = {}
 
         evaluated_candidates: List[Dict[str, Any]] = []
+        candidate_history_diagnostics: Dict[str, Dict[str, Any]] = {}
         for row, history_df, history_diag in self._load_detail_histories_ordered(
             preselected_rows=preselected_df.to_dict("records"),
             profile=profile_config,
         ):
+            symbol = normalize_stock_code(str(row.get("code") or ""))
             history_source = str(history_diag.get("source") or "")
             if history_source:
                 history_source_counts[history_source] = history_source_counts.get(history_source, 0) + 1
@@ -1007,6 +1040,20 @@ class MarketScannerService:
                 history_diag_rollup["network_failures"] += 1
             if history_diag.get("partial_local_fallback"):
                 history_diag_rollup["partial_local_fallbacks"] += 1
+            readiness = sanitize_historical_ohlcv_readiness(history_diag.get("historicalOhlcvReadiness"))
+            candidate_history_diagnostics[symbol] = {
+                "symbol": symbol,
+                "name": str(row.get("name") or symbol),
+                "status": "skipped",
+                "score": None,
+                "provider": history_source or None,
+                "reason": "not_evaluated",
+                "failed_rules": [],
+                "missing_fields": [],
+                "metrics": {},
+            }
+            if readiness:
+                candidate_history_diagnostics[symbol]["historicalOhlcvReadiness"] = readiness
 
             candidate = self._build_candidate_from_history(
                 snapshot_row=row,
@@ -1018,11 +1065,51 @@ class MarketScannerService:
             )
             if candidate is None:
                 history_diag_rollup["skipped_for_history"] += 1
+                candidate_history_diagnostics[symbol].update(
+                    {
+                        "status": "data_failed",
+                        "reason": "missing price history",
+                        "failed_rules": ["not_enough_history"],
+                        "missing_fields": ["history"],
+                    }
+                )
                 continue
+            candidate_history_diagnostics[symbol].update(
+                {
+                    "status": "evaluated",
+                    "reason": "evaluated",
+                    "failed_rules": [],
+                    "missing_fields": [],
+                    "metrics": self._diagnostic_metrics_from_candidate(candidate),
+                }
+            )
             evaluated_candidates.append(candidate)
 
         if not evaluated_candidates:
-            raise ValueError("详细评估阶段未留下有效候选，请检查历史数据或放宽扫描条件")
+            raise ScannerRuntimeError(
+                "insufficient_history",
+                "详细评估阶段未留下有效候选，请检查历史数据或放宽扫描条件",
+                diagnostics={
+                    "reason_code": "insufficient_history",
+                    "market": profile_config.market,
+                    "profile": profile_config.key,
+                    "history_mode": "local_first",
+                    "history_stats": history_diag_rollup,
+                    "candidate_diagnostics": candidate_history_diagnostics,
+                    "coverage_summary": self._build_coverage_summary(
+                        input_universe_size=int(len(stock_list)),
+                        eligible_after_universe_fetch=int(universe_diag.get("merged_size") or len(universe_df)),
+                        eligible_after_liquidity_filter=int(len(universe_df)),
+                        eligible_after_data_availability_filter=0,
+                        ranked_candidate_count=0,
+                        shortlisted_count=0,
+                        excluded_reason_counts={
+                            "missing_history": int(history_diag_rollup.get("skipped_for_history") or 0),
+                        },
+                    ),
+                },
+                source_summary="scanner=blocked; history=unavailable",
+            )
 
         self._attach_cn_provider_observation_metadata(
             evaluated_candidates,
@@ -1095,6 +1182,7 @@ class MarketScannerService:
                 "degraded_mode_used": bool(snapshot_resolution.get("degraded_mode_used")),
             },
             "universe_selection": self._public_universe_selection(universe_selection),
+            "candidate_diagnostics": candidate_history_diagnostics,
         }
         source_summary = self._build_source_summary(
             universe_source=stock_list_source,
@@ -1807,12 +1895,34 @@ class MarketScannerService:
             ranked_candidate=ranked_candidate,
         )
         diagnostics = dict((ranked_candidate or {}).get("_diagnostics") or {})
+        history_diag = diagnostics.get("history") if isinstance(diagnostics.get("history"), Mapping) else {}
+        ohlcv_readiness = sanitize_historical_ohlcv_readiness(
+            candidate.get("historicalOhlcvReadiness")
+            or history_diag.get("historicalOhlcvReadiness")
+            or diagnostics.get("historicalOhlcvReadiness")
+        )
         score_explainability = dict(diagnostics.get("score_explainability") or {})
         source_confidence = dict(score_explainability.get("source_confidence") or {})
         freshness_category = self._consumer_freshness_category(
             source_confidence.get("freshness"),
             fallback="insufficient" if source_bucket == "insufficient" else "unknown",
         )
+        missing_requirements = [
+            str(item)
+            for item in ohlcv_readiness.get("missingRequirements", [])
+            if str(item).strip()
+        ]
+        if ohlcv_readiness:
+            if historical_ohlcv_readiness_blocks_scanner(ohlcv_readiness):
+                source_bucket = "insufficient"
+                freshness_category = "insufficient"
+            elif missing_requirements:
+                source_bucket = "limited"
+                freshness_category = (
+                    "delayed"
+                    if "stale_data" in missing_requirements
+                    else "unknown"
+                )
         if source_bucket == "score_grade":
             data_quality_state = "ready"
             confidence_category = "high"
@@ -1834,6 +1944,11 @@ class MarketScannerService:
             "freshnessCategory": freshness_category,
             "dataQualityState": data_quality_state,
         }
+        if ohlcv_readiness:
+            consumer_diagnostics["ohlcvReadinessState"] = ohlcv_readiness.get("overallState")
+            consumer_diagnostics["missingEvidence"] = missing_requirements
+            if missing_requirements:
+                consumer_diagnostics["warningFlags"] = missing_requirements
         return {
             "consumerReasonBucket": reason_bucket,
             "consumerReasonLabel": copy["label"],
@@ -1903,6 +2018,11 @@ class MarketScannerService:
                 cn_provider_observation = dict((ranked.get("_diagnostics") or {}).get("cn_provider_observation") or {})
                 provider = quote_context.get("source") or ranked.get("snapshot_source") or ranked.get("history_source")
                 reason = "passed" if status == "selected" else str(ranked.get("reason_summary") or failed_rules[0])
+                history_diag = dict((ranked.get("_diagnostics") or {}).get("history") or {})
+                ohlcv_readiness = sanitize_historical_ohlcv_readiness(
+                    history_diag.get("historicalOhlcvReadiness")
+                    or (ranked.get("_diagnostics") or {}).get("historicalOhlcvReadiness")
+                )
                 base.update(
                     {
                         "symbol": symbol,
@@ -1916,6 +2036,8 @@ class MarketScannerService:
                         "metrics": self._diagnostic_metrics_from_candidate(ranked),
                     }
                 )
+                if ohlcv_readiness:
+                    base["historicalOhlcvReadiness"] = ohlcv_readiness
                 if cn_provider_observation:
                     base["cn_provider_observation"] = cn_provider_observation
             else:
@@ -2137,6 +2259,34 @@ class MarketScannerService:
                 "历史行情覆盖不足，Scanner 暂时无法完成候选生成。",
                 "补充历史行情覆盖后重新运行 Scanner。",
             ),
+            "insufficient_history": (
+                "历史行情覆盖不足，Scanner 暂时无法完成候选生成。",
+                "补充 required bars 后重新运行 Scanner。",
+            ),
+            "provider_missing": (
+                "历史行情 provider 未配置，Scanner 暂时无法生成可执行候选。",
+                "配置显式 OHLCV runtime/provider 或补充本地历史后重新运行 Scanner。",
+            ),
+            "provider_unavailable": (
+                "历史行情 provider 当前不可用，Scanner 暂时无法生成可执行候选。",
+                "恢复 OHLCV 数据源后重新运行 Scanner。",
+            ),
+            "entitlement_required": (
+                "历史行情需要额外授权，Scanner 暂时无法生成可执行候选。",
+                "确认数据授权后重新运行 Scanner。",
+            ),
+            "stale_data": (
+                "历史行情不够新，Scanner 只能给出受限结果。",
+                "刷新历史行情后再复核 Scanner。",
+            ),
+            "missing_adjustments": (
+                "历史行情缺少复权/公司行动处理，Scanner 结果仅可观察。",
+                "补充复权历史后再复核 Scanner。",
+            ),
+            "missing_benchmark": (
+                "Scanner 缺少所需市场基准历史，结果仅可观察。",
+                "补充 benchmark 历史后再复核 Scanner。",
+            ),
             "stale_history": (
                 "历史行情不够新，Scanner 只能给出受限结果。",
                 "刷新历史行情后再复核 Scanner。",
@@ -2239,6 +2389,44 @@ class MarketScannerService:
             blocker=blocker_hint,
             diagnostics=diagnostics,
         )
+        ohlcv_readiness = summarize_scanner_ohlcv_readiness(
+            market=market,
+            profile=profile,
+            diagnostics=diagnostics,
+            candidates=candidates,
+        )
+        ohlcv_requirements = [
+            str(item)
+            for item in ohlcv_readiness.get("missingRequirements", [])
+            if str(item).strip()
+        ]
+        ohlcv_availability = str(ohlcv_readiness.get("availabilityState") or "unknown")
+        ohlcv_execution = str(ohlcv_readiness.get("executionState") or "unknown")
+        if ohlcv_execution == "blocked" and normalized_status != "not_run":
+            state = "blocked"
+            for requirement in (
+                "provider_missing",
+                "provider_unavailable",
+                "entitlement_required",
+                "insufficient_history",
+            ):
+                if requirement in ohlcv_requirements:
+                    blocker_hint = requirement
+                    break
+            history_coverage = "missing"
+            if "provider_missing" in ohlcv_requirements or "provider_unavailable" in ohlcv_requirements:
+                quote_coverage = quote_coverage if quote_coverage != "unknown" else "unknown"
+        elif ohlcv_execution == "degraded" and state == "ready":
+            state = "partial"
+            for requirement in ("stale_data", "missing_adjustments", "missing_benchmark"):
+                if requirement in ohlcv_requirements:
+                    blocker_hint = requirement
+                    break
+            if "stale_data" in ohlcv_requirements:
+                freshness = "stale"
+            history_coverage = "partial" if history_coverage == "available" else history_coverage
+        if "stale_data" in ohlcv_requirements:
+            freshness = "stale"
         consumer_summary, next_data_action = self._data_readiness_copy(blocker_hint, state)
         universe_availability = "available" if resolved_universe_size > 0 else "unknown"
         if normalized_status == "not_run":
@@ -2252,6 +2440,12 @@ class MarketScannerService:
 
         return {
             "state": state,
+            "availabilityState": ohlcv_availability if ohlcv_availability != "unknown" else (
+                "available" if state == "ready" else "degraded" if state == "partial" else "not_available" if state == "blocked" else "unknown"
+            ),
+            "executionState": ohlcv_execution if ohlcv_execution != "unknown" else (
+                "executable" if state == "ready" else "degraded" if state == "partial" else "blocked" if state == "blocked" else "unknown"
+            ),
             "market": str(market or "").strip().lower() or "unknown",
             "profile": str(profile or "").strip() or "unknown",
             "universeAvailability": universe_availability,
@@ -2259,6 +2453,13 @@ class MarketScannerService:
             "quoteCoverage": quote_coverage,
             "historyCoverage": history_coverage,
             "freshness": freshness,
+            "requiredBars": int(ohlcv_readiness.get("requiredBars") or 0),
+            "usableBars": int(ohlcv_readiness.get("usableBars") or 0),
+            "missingBars": int(ohlcv_readiness.get("missingBars") or 0),
+            "missingRequirements": ohlcv_requirements,
+            "blockedSymbols": list(ohlcv_readiness.get("blockedSymbols") or []),
+            "degradedSymbols": list(ohlcv_readiness.get("degradedSymbols") or []),
+            "ohlcvReadiness": ohlcv_readiness,
             "candidateEvaluationCount": int(candidate_evaluation_count),
             "selectedCount": int(selected_count),
             "rejectedCount": int(rejected_count),
@@ -2451,6 +2652,7 @@ class MarketScannerService:
             "requested_symbols_count": public_universe_selection["requested_symbols_count"],
             "accepted_symbols_count": public_universe_selection["accepted_symbols_count"],
             "rejected_symbols": public_universe_selection["rejected_symbols"],
+            "dataReadiness": finalized_diagnostics.get("dataReadiness"),
             "diagnostics": finalized_diagnostics,
             "scannerContextFrame": scanner_context_frame,
             "theme": theme_payload,
@@ -5273,6 +5475,7 @@ class MarketScannerService:
             "requested_symbols_count": universe_selection["requested_symbols_count"],
             "accepted_symbols_count": universe_selection["accepted_symbols_count"],
             "rejected_symbols": universe_selection["rejected_symbols"],
+            "dataReadiness": diagnostics_payload.get("dataReadiness"),
             "diagnostics": diagnostics_payload,
             "scannerContextFrame": scanner_context_frame,
             "notification": self._normalize_notification_result(diagnostics.get("notification")),
@@ -6621,6 +6824,11 @@ class MarketScannerService:
 
         for index, row in enumerate(rows):
             normalized_code = normalize_stock_code(str(row["code"]))
+            provider_result = self._load_history_from_ohlcv_provider(code=normalized_code, profile=profile)
+            if provider_result is not None:
+                history_df, history_diag = provider_result
+                results[index] = (row, history_df, history_diag)
+                continue
             local_df = self._load_local_history(normalized_code, history_days=profile.history_days)
             if self._is_history_sufficient(local_df, profile=profile):
                 latest_trade_date = (
@@ -6628,10 +6836,11 @@ class MarketScannerService:
                     if not local_df.empty and "date" in local_df.columns
                     else None
                 )
-                results[index] = (
-                    row,
-                    local_df,
-                    {
+                ready_df, ready_diag = self._with_historical_ohlcv_readiness(
+                    code=normalized_code,
+                    profile=profile,
+                    history_df=local_df,
+                    history_diag={
                         "source": "local_db",
                         "rows": int(len(local_df)),
                         "latest_trade_date": latest_trade_date,
@@ -6640,6 +6849,7 @@ class MarketScannerService:
                         "partial_local_fallback": False,
                     },
                 )
+                results[index] = (row, ready_df, ready_diag)
                 continue
             remote_tasks.append((index, row, normalized_code, local_df))
 
@@ -6677,6 +6887,10 @@ class MarketScannerService:
         profile: ScannerMarketProfile,
     ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         normalized_code = normalize_stock_code(code)
+        provider_result = self._load_history_from_ohlcv_provider(code=normalized_code, profile=profile)
+        if provider_result is not None:
+            return provider_result
+
         local_df = self._load_local_history(normalized_code, history_days=profile.history_days)
         if self._is_history_sufficient(local_df, profile=profile):
             latest_trade_date = (
@@ -6684,14 +6898,19 @@ class MarketScannerService:
                 if not local_df.empty and "date" in local_df.columns
                 else None
             )
-            return local_df, {
+            return self._with_historical_ohlcv_readiness(
+                code=normalized_code,
+                profile=profile,
+                history_df=local_df,
+                history_diag={
                 "source": "local_db",
                 "rows": int(len(local_df)),
                 "latest_trade_date": latest_trade_date,
                 "network_used": False,
                 "network_failed": False,
                 "partial_local_fallback": False,
-            }
+                },
+            )
 
         return self._load_history_remote_after_local(
             code=normalized_code,
@@ -6726,14 +6945,19 @@ class MarketScannerService:
                         if "date" in normalized_remote_df.columns
                         else None
                     )
-                    return normalized_remote_df, {
+                    return self._with_historical_ohlcv_readiness(
+                        code=normalized_code,
+                        profile=profile,
+                        history_df=normalized_remote_df,
+                        history_diag={
                         "source": remote_source,
                         "rows": int(len(normalized_remote_df)),
                         "latest_trade_date": latest_trade_date,
                         "network_used": remote_source != "local_us_parquet",
                         "network_failed": False,
                         "partial_local_fallback": False,
-                    }
+                        },
+                    )
             except Exception as exc:
                 logger.warning("US scanner history fetch failed for %s: %s", normalized_code, exc)
                 if len(local_df) >= 40:
@@ -6742,7 +6966,11 @@ class MarketScannerService:
                         if not local_df.empty and "date" in local_df.columns
                         else None
                     )
-                    return local_df, {
+                    return self._with_historical_ohlcv_readiness(
+                        code=normalized_code,
+                        profile=profile,
+                        history_df=local_df,
+                        history_diag={
                         "source": "local_partial_fallback",
                         "rows": int(len(local_df)),
                         "latest_trade_date": latest_trade_date,
@@ -6750,15 +6978,21 @@ class MarketScannerService:
                         "network_failed": True,
                         "partial_local_fallback": True,
                         "warning": str(exc),
-                    }
-                return pd.DataFrame(), {
+                        },
+                    )
+                return self._with_historical_ohlcv_readiness(
+                    code=normalized_code,
+                    profile=profile,
+                    history_df=pd.DataFrame(),
+                    history_diag={
                     "source": "unavailable",
                     "rows": int(len(local_df)),
                     "network_used": True,
                     "network_failed": True,
                     "partial_local_fallback": False,
                     "warning": str(exc),
-                }
+                    },
+                )
 
         try:
             remote_df, remote_source = self.data_manager.get_daily_data(
@@ -6774,14 +7008,19 @@ class MarketScannerService:
                     if "date" in normalized_remote_df.columns
                     else None
                 )
-                return normalized_remote_df, {
+                return self._with_historical_ohlcv_readiness(
+                    code=normalized_code,
+                    profile=profile,
+                    history_df=normalized_remote_df,
+                    history_diag={
                     "source": remote_source,
                     "rows": int(len(normalized_remote_df)),
                     "latest_trade_date": latest_trade_date,
                     "network_used": True,
                     "network_failed": False,
                     "partial_local_fallback": False,
-                }
+                    },
+                )
         except Exception as exc:
             logger.warning("Scanner history fetch failed for %s: %s", normalized_code, exc)
             if len(local_df) >= 40:
@@ -6790,7 +7029,11 @@ class MarketScannerService:
                     if not local_df.empty and "date" in local_df.columns
                     else None
                 )
-                return local_df, {
+                return self._with_historical_ohlcv_readiness(
+                    code=normalized_code,
+                    profile=profile,
+                    history_df=local_df,
+                    history_diag={
                     "source": "local_partial_fallback",
                     "rows": int(len(local_df)),
                     "latest_trade_date": latest_trade_date,
@@ -6798,24 +7041,97 @@ class MarketScannerService:
                     "network_failed": True,
                     "partial_local_fallback": True,
                     "warning": str(exc),
-                }
-            return pd.DataFrame(), {
+                    },
+                )
+            return self._with_historical_ohlcv_readiness(
+                code=normalized_code,
+                profile=profile,
+                history_df=pd.DataFrame(),
+                history_diag={
                 "source": "unavailable",
                 "rows": int(len(local_df)),
                 "network_used": True,
                 "network_failed": True,
                 "partial_local_fallback": False,
                 "warning": str(exc),
-            }
+                },
+            )
 
-        return pd.DataFrame(), {
+        return self._with_historical_ohlcv_readiness(
+            code=normalized_code,
+            profile=profile,
+            history_df=pd.DataFrame(),
+            history_diag={
             "source": "unavailable",
             "rows": int(len(local_df)),
             "network_used": True,
             "network_failed": True,
             "partial_local_fallback": False,
             "warning": "empty_remote_history",
+            },
+        )
+
+    def _load_history_from_ohlcv_provider(
+        self,
+        *,
+        code: str,
+        profile: ScannerMarketProfile,
+    ) -> Optional[Tuple[pd.DataFrame, Dict[str, Any]]]:
+        if self.historical_ohlcv_provider is None:
+            return None
+        result = build_scanner_historical_ohlcv_readiness(
+            symbol=code,
+            profile=profile,
+            history_df=pd.DataFrame(),
+            history_diag={},
+            readiness_service=self.ohlcv_readiness_service,
+            historical_ohlcv_provider=self.historical_ohlcv_provider,
+            require_adjusted=self.require_adjusted_ohlcv,
+        )
+        readiness = sanitize_historical_ohlcv_readiness(result.readiness)
+        history_df = self._normalize_history_frame(pd.DataFrame([bar.as_dict() for bar in result.bars]))
+        latest_trade_date = (
+            pd.to_datetime(history_df["date"]).max().date().isoformat()
+            if not history_df.empty and "date" in history_df.columns
+            else None
+        )
+        history_diag = {
+            "source": "historical_ohlcv_runtime" if readiness.get("providerState") == "available" else "unavailable",
+            "rows": int(len(history_df)),
+            "latest_trade_date": latest_trade_date,
+            "network_used": False,
+            "network_failed": False,
+            "partial_local_fallback": False,
+            "historicalOhlcvReadiness": readiness,
+            "unavailable_reason": result.unavailable_reason,
         }
+        if historical_ohlcv_readiness_blocks_scanner(readiness):
+            return pd.DataFrame(), history_diag
+        return history_df, history_diag
+
+    def _with_historical_ohlcv_readiness(
+        self,
+        *,
+        code: str,
+        profile: ScannerMarketProfile,
+        history_df: pd.DataFrame,
+        history_diag: Dict[str, Any],
+    ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+        result = build_scanner_historical_ohlcv_readiness(
+            symbol=code,
+            profile=profile,
+            history_df=history_df,
+            history_diag=history_diag,
+            readiness_service=self.ohlcv_readiness_service,
+            historical_ohlcv_provider=None,
+            require_adjusted=self.require_adjusted_ohlcv,
+        )
+        readiness = sanitize_historical_ohlcv_readiness(result.readiness)
+        normalized_diag = dict(history_diag or {})
+        normalized_diag["historicalOhlcvReadiness"] = readiness
+        if historical_ohlcv_readiness_blocks_scanner(readiness):
+            return pd.DataFrame(), normalized_diag
+        return history_df, normalized_diag
 
     def _load_local_history(self, code: str, history_days: int) -> pd.DataFrame:
         rows = self.stock_repo.get_recent_daily_rows(code=code, limit=history_days)
@@ -7895,6 +8211,12 @@ class MarketScannerService:
             "diagnostics": diagnostics if isinstance(diagnostics, dict) else {},
             "consumerDiagnostics": build_scanner_consumer_diagnostics(diagnostics if isinstance(diagnostics, dict) else {}),
         }
+        history_diag = diagnostics.get("history") if isinstance(diagnostics.get("history"), dict) else {}
+        ohlcv_readiness = sanitize_historical_ohlcv_readiness(
+            history_diag.get("historicalOhlcvReadiness") or diagnostics.get("historicalOhlcvReadiness")
+        )
+        if ohlcv_readiness:
+            payload["historicalOhlcvReadiness"] = ohlcv_readiness
         payload["candidateEvidenceFrame"] = build_scanner_candidate_evidence_frame(payload)
         payload["candidateResearchReadiness"] = build_scanner_candidate_research_readiness(
             payload,
@@ -7939,6 +8261,12 @@ class MarketScannerService:
             "diagnostics": diagnostics,
             "consumerDiagnostics": build_scanner_consumer_diagnostics(diagnostics),
         }
+        history_diag = diagnostics.get("history") if isinstance(diagnostics.get("history"), dict) else {}
+        ohlcv_readiness = sanitize_historical_ohlcv_readiness(
+            history_diag.get("historicalOhlcvReadiness") or diagnostics.get("historicalOhlcvReadiness")
+        )
+        if ohlcv_readiness:
+            payload["historicalOhlcvReadiness"] = ohlcv_readiness
         projection_source = {
             **dict(candidate),
             "diagnostics": diagnostics,

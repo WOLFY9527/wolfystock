@@ -11,6 +11,7 @@ from api.v1.schemas.scanner import (
     ScannerCandidateResponse,
     ScannerRunDetailResponse,
     ScannerScoreExplainabilityMetadata,
+    sanitize_scanner_consumer_payload,
 )
 from src.core.scanner_theme_registry import get_scanner_theme
 
@@ -131,6 +132,101 @@ def test_scanner_run_response_preserves_current_coarse_empty_reason_without_evid
     assert "candidate_diagnostics" not in serialized["diagnostics"]
     assert "universe_selection" not in serialized["diagnostics"]
     assert serialized["accepted_symbols_count"] == 0
+
+
+def test_scanner_consumer_payload_recursively_redacts_ohlcv_readiness_forbidden_diagnostics() -> None:
+    payload = {
+        "id": 99,
+        "market": "us",
+        "profile": "us_preopen_v1",
+        "status": "completed",
+        "universe_name": "us_liquid",
+        "shortlist_size": 1,
+        "universe_size": 1,
+        "preselected_size": 1,
+        "evaluated_size": 1,
+        "diagnostics": {
+            "providerName": "LeakyProvider",
+            "requestId": "rq-secret",
+            "rawPayload": {"token": "secret-token"},
+            "dataReadiness": {
+                "state": "blocked",
+                "availabilityState": "not_available",
+                "executionState": "blocked",
+                "missingRequirements": ["provider_missing"],
+                "ohlcvReadiness": {
+                    "providerClass": "LeakyClass",
+                    "traceId": "trace-secret",
+                    "raw_provider_payload": {"credential": "secret"},
+                },
+            },
+        },
+        "shortlist": [
+            {
+                "symbol": "NVDA",
+                "name": "NVIDIA",
+                "rank": 1,
+                "score": 0,
+                "historicalOhlcvReadiness": {
+                    "contractVersion": "historical_ohlcv_readiness_v1",
+                    "symbol": "NVDA",
+                    "market": "us",
+                    "timeframe": "1d",
+                    "requiredBars": 70,
+                    "usableBars": 0,
+                    "missingBars": 70,
+                    "providerState": "provider_missing",
+                    "overallState": "blocked",
+                    "missingRequirements": ["provider_missing", "insufficient_history"],
+                    "providerName": "LeakyProvider",
+                    "endpointHost": "provider.example.test",
+                    "apiKeyPresent": True,
+                    "exceptionClass": "RuntimeError",
+                    "exceptionChain": ["Traceback token secret"],
+                    "requestId": "rq-secret",
+                    "traceId": "trace-secret",
+                    "cacheKey": "cache-secret",
+                    "rawPayload": {"API_KEY": "secret"},
+                    "raw_provider_payload": {"PASSWORD": "secret"},
+                    "credential": "secret",
+                    "env": "SECRET",
+                    "PRIVATE_KEY": "secret",
+                },
+                "consumerDiagnostics": {
+                    "status": "limited",
+                    "missingEvidence": ["provider_missing"],
+                    "warningFlags": ["provider_missing"],
+                },
+            }
+        ],
+    }
+
+    sanitized = sanitize_scanner_consumer_payload(payload)
+    response = ScannerRunDetailResponse(**sanitized).model_dump()
+    serialized = json.dumps(response, ensure_ascii=False).lower()
+
+    for forbidden in (
+        "leakyprovider",
+        "leakyclass",
+        "provider.example.test",
+        "rq-secret",
+        "trace-secret",
+        "cache-secret",
+        "secret-token",
+        "api_key",
+        "password",
+        "private_key",
+        "traceback",
+        "exceptionclass",
+        "raw_provider_payload",
+        "rawpayload",
+        "credential",
+    ):
+        assert forbidden not in serialized
+    readiness = response["shortlist"][0]["historicalOhlcvReadiness"]
+    assert readiness["providerState"] == "provider_missing"
+    assert readiness["requiredBars"] == 70
+    assert readiness["missingBars"] == 70
 
 
 def test_scanner_run_response_accepts_additive_candidate_evidence_and_readiness_fields() -> None:

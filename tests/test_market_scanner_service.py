@@ -8,7 +8,7 @@ import tempfile
 import threading
 import time
 import unittest
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -23,6 +23,11 @@ from src.core.scanner_theme_registry import create_ai_scanner_theme, get_scanner
 from src.services.market_cache import market_cache
 from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
 from src.services.market_scanner_service import MarketScannerService, ScannerRuntimeError
+from src.services.historical_ohlcv_readiness import (
+    HistoricalOhlcvBar,
+    HistoricalOhlcvProviderResult,
+    HistoricalOhlcvReadinessRequest,
+)
 from src.services.scanner_evidence_packet import SCANNER_EVIDENCE_VERSION, build_scanner_evidence_packet
 from src.storage import DatabaseManager, MarketScannerRun
 
@@ -227,6 +232,61 @@ class StructuredScannerDataManager(FakeScannerDataManager):
         if isinstance(attempts, list):
             cloned["attempts"] = [dict(item) for item in attempts]
         return cloned
+
+
+class NoHistoryScannerDataManager(FakeScannerDataManager):
+    def get_daily_data(self, code: str, days: int = 140):
+        self.daily_history_calls.append(str(code))
+        raise RuntimeError("providerName=LeakyProvider token=secret Traceback")
+
+
+class FakeHistoricalOhlcvProvider:
+    def __init__(self, responses: dict[str, HistoricalOhlcvProviderResult]) -> None:
+        self.responses = responses
+        self.calls: list[HistoricalOhlcvReadinessRequest] = []
+
+    def fetch_ohlcv_history(
+        self,
+        request: HistoricalOhlcvReadinessRequest,
+    ) -> HistoricalOhlcvProviderResult:
+        self.calls.append(request)
+        return self.responses.get(
+            request.symbol,
+            HistoricalOhlcvProviderResult.unavailable("provider_missing"),
+        )
+
+
+class RaisingHistoricalOhlcvProvider:
+    def __init__(self) -> None:
+        self.calls: list[HistoricalOhlcvReadinessRequest] = []
+
+    def fetch_ohlcv_history(
+        self,
+        request: HistoricalOhlcvReadinessRequest,
+    ) -> HistoricalOhlcvProviderResult:
+        self.calls.append(request)
+        raise RuntimeError("providerName=LeakyProvider token=secret Traceback")
+
+
+def _ohlcv_bars(
+    count: int,
+    *,
+    start: date | None = None,
+    adjusted: bool = True,
+) -> list[HistoricalOhlcvBar]:
+    start_date = start or (date.today() - timedelta(days=max(count - 1, 0)))
+    return [
+        HistoricalOhlcvBar(
+            date=start_date + timedelta(days=index),
+            open=10.0 + index * 0.2,
+            high=10.4 + index * 0.2,
+            low=9.8 + index * 0.2,
+            close=10.2 + index * 0.2,
+            volume=5_000_000 + index * 1000,
+            adjusted_close=10.2 + index * 0.2 if adjusted else None,
+        )
+        for index in range(count)
+    ]
 
 
 class ObservationScannerDataManager(FakeScannerDataManager):
@@ -3677,6 +3737,191 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["blockerBucket"], "unknown")
         self.assertIn("Scanner 数据已满足本轮候选生成", readiness["consumerSummary"])
         self.assertEqual(readiness["nextDataAction"], "继续按当前数据节奏复核扫描结果。")
+
+    def test_run_scan_uses_injected_ohlcv_provider_for_executable_readiness_without_network_history(self) -> None:
+        provider = FakeHistoricalOhlcvProvider(
+            {
+                symbol: HistoricalOhlcvProviderResult.available(
+                    _ohlcv_bars(90),
+                    adjustments_available=True,
+                )
+                for symbol in ("600001", "600002", "300123", "600003")
+            }
+        )
+        data_manager = NoHistoryScannerDataManager()
+        service = MarketScannerService(
+            self.db,
+            data_manager=data_manager,
+            historical_ohlcv_provider=provider,
+        )
+
+        detail = service.run_scan(
+            market="cn",
+            profile="cn_preopen_v1",
+            shortlist_size=2,
+            universe_limit=50,
+            detail_limit=10,
+        )
+
+        readiness = detail["dataReadiness"]
+        self.assertEqual(readiness["availabilityState"], "available")
+        self.assertEqual(readiness["executionState"], "executable")
+        self.assertEqual(readiness["requiredBars"], 60)
+        self.assertEqual(readiness["missingBars"], 0)
+        self.assertGreater(len(detail["shortlist"]), 0)
+        self.assertEqual(data_manager.daily_history_calls, [])
+        candidate_readiness = detail["shortlist"][0]["historicalOhlcvReadiness"]
+        self.assertEqual(candidate_readiness["overallState"], "ready")
+        self.assertEqual(candidate_readiness["providerState"], "available")
+
+    def test_no_ohlcv_provider_or_history_records_provider_missing_without_fake_candidates(self) -> None:
+        data_manager = NoHistoryScannerDataManager()
+        DatabaseManager.reset_instance()
+        fresh_db = DatabaseManager(db_url="sqlite:///:memory:")
+        service = MarketScannerService(fresh_db, data_manager=data_manager)
+
+        with self.assertRaises(ScannerRuntimeError):
+            service.run_scan(
+                market="cn",
+                profile="cn_preopen_v1",
+                shortlist_size=2,
+                universe_limit=50,
+                detail_limit=10,
+            )
+
+        failure = service.record_failed_run(
+            market="cn",
+            profile="cn_preopen_v1",
+            profile_label="A股盘前扫描 v1",
+            universe_name="cn_a_liquid_watchlist_v1",
+            trigger_mode="manual",
+            request_source="test",
+            watchlist_date=date.today().isoformat(),
+            error_message="详细评估阶段未留下有效候选，请检查历史数据或放宽扫描条件",
+            diagnostics={
+                "candidate_diagnostics": {
+                    "600001": {
+                        "symbol": "600001",
+                        "status": "data_failed",
+                        "score": None,
+                        "reason": "missing price history",
+                        "failed_rules": ["not_enough_history"],
+                        "missing_fields": ["history"],
+                        "historicalOhlcvReadiness": {
+                            "contractVersion": "historical_ohlcv_readiness_v1",
+                            "symbol": "600001",
+                            "market": "cn",
+                            "timeframe": "1d",
+                            "requestedRange": {"start": None, "end": date.today().isoformat()},
+                            "lookbackBars": 140,
+                            "requiredBars": 60,
+                            "usableBars": 0,
+                            "missingBars": 60,
+                            "freshnessState": "unknown",
+                            "adjustmentState": "not_required",
+                            "benchmarkState": "not_requested",
+                            "providerState": "provider_missing",
+                            "overallState": "blocked",
+                            "missingRequirements": ["provider_missing", "insufficient_history"],
+                            "consumerSafe": True,
+                        },
+                    }
+                }
+            },
+            source_summary="scanner=blocked; history=unavailable",
+            scope="user",
+        )
+
+        readiness = failure["dataReadiness"]
+        self.assertEqual(failure["shortlist"], [])
+        self.assertEqual(readiness["availabilityState"], "not_available")
+        self.assertEqual(readiness["executionState"], "blocked")
+        self.assertIn("provider_missing", readiness["missingRequirements"])
+        self.assertEqual(readiness["requiredBars"], 60)
+        self.assertEqual(readiness["usableBars"], 0)
+        self.assertEqual(readiness["missingBars"], 60)
+
+    def test_scanner_ohlcv_readiness_maps_insufficient_stale_adjustments_entitlement_and_exception(self) -> None:
+        cases = [
+            (
+                HistoricalOhlcvProviderResult.available(_ohlcv_bars(12), adjustments_available=True),
+                "not_available",
+                "insufficient_history",
+                False,
+            ),
+            (
+                HistoricalOhlcvProviderResult.available(
+                    _ohlcv_bars(90, start=date.today() - timedelta(days=150)),
+                    freshness_state="stale",
+                    adjustments_available=True,
+                ),
+                "degraded",
+                "stale_data",
+                False,
+            ),
+            (
+                HistoricalOhlcvProviderResult.available(
+                    _ohlcv_bars(90, adjusted=False),
+                    adjustments_available=False,
+                ),
+                "degraded",
+                "missing_adjustments",
+                True,
+            ),
+            (
+                HistoricalOhlcvProviderResult.unavailable("entitlement_required"),
+                "not_available",
+                "entitlement_required",
+                False,
+            ),
+        ]
+
+        for result, availability, requirement, require_adjusted in cases:
+            with self.subTest(requirement=requirement):
+                provider = FakeHistoricalOhlcvProvider({"600001": result})
+                service = MarketScannerService(
+                    self.db,
+                    data_manager=self.data_manager,
+                    historical_ohlcv_provider=provider,
+                    require_adjusted_ohlcv=require_adjusted,
+                )
+                history_df, history_diag = service._load_history_local_first(
+                    code="600001",
+                    profile=get_scanner_profile(market="cn", profile="cn_preopen_v1"),
+                )
+                readiness = history_diag["historicalOhlcvReadiness"]
+
+                aggregate = service._build_data_readiness(
+                    market="cn",
+                    profile="cn_preopen_v1",
+                    status="completed",
+                    universe_size=1,
+                    preselected_size=1,
+                    evaluated_size=0 if availability == "not_available" else 1,
+                    shortlist_size=0 if availability == "not_available" else 1,
+                    diagnostics={"candidate_diagnostics": {"600001": {"historicalOhlcvReadiness": readiness}}},
+                    summary={},
+                    candidates=[{"symbol": "600001", "historicalOhlcvReadiness": readiness}],
+                )
+
+                self.assertEqual(aggregate["availabilityState"], availability)
+                self.assertIn(requirement, aggregate["missingRequirements"])
+                if availability == "not_available":
+                    self.assertTrue(history_df.empty)
+
+        service = MarketScannerService(
+            self.db,
+            data_manager=self.data_manager,
+            historical_ohlcv_provider=RaisingHistoricalOhlcvProvider(),
+        )
+        _history_df, history_diag = service._load_history_local_first(
+            code="600001",
+            profile=get_scanner_profile(market="cn", profile="cn_preopen_v1"),
+        )
+        serialized = json.dumps(history_diag, ensure_ascii=False).lower()
+        self.assertEqual(history_diag["historicalOhlcvReadiness"]["providerState"], "provider_unavailable")
+        for forbidden in ("leakyprovider", "secret", "traceback", "exceptionclass", "token"):
+            self.assertNotIn(forbidden, serialized)
 
     def test_terminal_empty_run_maps_profile_filter_blocker_from_existing_counts(self) -> None:
         detail = self.service.record_terminal_run(
