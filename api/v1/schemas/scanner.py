@@ -32,6 +32,24 @@ _SCANNER_FORBIDDEN_CONSUMER_KEYS = {
     "cnproviderobservation",
     "providername",
     "providerid",
+    "providerclass",
+    "providerattempted",
+    "requiredproviderclass",
+    "endpointhost",
+    "apikeypresent",
+    "exceptionclass",
+    "exceptionchain",
+    "requestid",
+    "traceid",
+    "cachekey",
+    "rawpayload",
+    "rawproviderpayload",
+    "credential",
+    "env",
+    "apikey",
+    "password",
+    "secret",
+    "privatekey",
     "rawprovidererror",
 }
 _SCANNER_FORBIDDEN_CONSUMER_TEXT_RE = re.compile(
@@ -309,6 +327,9 @@ def sanitize_scanner_consumer_payload(payload: Dict[str, Any]) -> Dict[str, Any]
             )
             item["diagnostics"] = {}
             item["candidateSourceProvenanceFrame"] = {}
+            if isinstance(item.get("historicalOhlcvReadiness"), dict):
+                item["historicalOhlcvReadiness"] = _scanner_sanitize_consumer_value(item["historicalOhlcvReadiness"])
+            item["suppressCandidateResearchPacket"] = True
             for frame_key in (
                 "candidateEvidenceFrame",
                 "candidateResearchReadiness",
@@ -327,6 +348,8 @@ def sanitize_scanner_consumer_payload(payload: Dict[str, Any]) -> Dict[str, Any]
             item["missing_fields"] = []
             item["metrics"] = {}
             item["cn_provider_observation"] = {}
+            if isinstance(item.get("historicalOhlcvReadiness"), dict):
+                item["historicalOhlcvReadiness"] = _scanner_sanitize_consumer_value(item["historicalOhlcvReadiness"])
             item["consumerDiagnostics"] = _scanner_consumer_diagnostics_payload(item.get("consumerDiagnostics"))
     return result
 
@@ -801,11 +824,13 @@ class ScannerCandidateResponse(BaseModel):
     realized_outcome: ScannerCandidateOutcomeResponse = Field(default_factory=ScannerCandidateOutcomeResponse)
     diagnostics: Dict[str, Any] = Field(default_factory=dict)
     consumerDiagnostics: Dict[str, Any] = Field(default_factory=dict)
+    historicalOhlcvReadiness: Dict[str, Any] = Field(default_factory=dict)
     candidateEvidenceFrame: Dict[str, Any] = Field(default_factory=dict)
     candidateResearchReadiness: Dict[str, Any] = Field(default_factory=dict)
     candidateResearchSummaryFrame: Dict[str, Any] = Field(default_factory=dict)
     candidateSourceProvenanceFrame: Dict[str, Any] = Field(default_factory=dict)
     candidateResearchPacket: Dict[str, Any] = Field(default_factory=dict)
+    suppressCandidateResearchPacket: bool = Field(False, exclude=True)
 
     @field_validator("diagnostics")
     @classmethod
@@ -819,6 +844,9 @@ class ScannerCandidateResponse(BaseModel):
 
     @model_validator(mode="after")
     def _populate_candidate_research_packet(self) -> "ScannerCandidateResponse":
+        if self.suppressCandidateResearchPacket:
+            self.candidateResearchPacket = {}
+            return self
         payload = self.model_dump(exclude={"candidateResearchPacket"})
         self.candidateResearchPacket = _build_scanner_candidate_research_packet(payload)
         return self
@@ -858,6 +886,7 @@ class ScannerCandidateDiagnosticsResponse(BaseModel):
     consumerReasonLabel: Optional[str] = None
     consumerNextEvidence: Optional[str] = None
     consumerDiagnostics: Dict[str, Any] = Field(default_factory=dict)
+    historicalOhlcvReadiness: Dict[str, Any] = Field(default_factory=dict)
     cn_provider_observation: Dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("consumerDiagnostics")
@@ -915,6 +944,7 @@ class ScannerRunDetailResponse(BaseModel):
     requested_symbols_count: int = 0
     accepted_symbols_count: int = 0
     rejected_symbols: List[str] = Field(default_factory=list)
+    dataReadiness: Dict[str, Any] = Field(default_factory=dict)
     diagnostics: Dict[str, Any] = Field(default_factory=dict)
     scannerContextFrame: Dict[str, Any] = Field(default_factory=dict)
     notification: ScannerNotificationResult = Field(default_factory=ScannerNotificationResult)
