@@ -109,6 +109,10 @@ _STRUCTURE_DECISION_TIMEOUT_REASON = "structure_decision_timeout"
 _STRUCTURE_DECISION_TIMEOUT_MESSAGE = (
     "Structure decision inputs did not return within the latency boundary."
 )
+_STRUCTURE_COMPUTATION_TIMEOUT_REASON = "structure_computation_timeout"
+_STRUCTURE_COMPUTATION_TIMEOUT_MESSAGE = (
+    "Daily OHLCV data is available, but structure computation timed out; this read remains observation-only."
+)
 
 
 class StockStructureDecisionService:
@@ -166,8 +170,18 @@ class StockStructureDecisionService:
         )
 
     def _build_structure_decision_with_latency_boundary(self, ticker: str) -> dict[str, Any]:
+        evidence = self._load_ohlcv_evidence_with_latency_boundary(ticker)
+        if evidence is None:
+            return _latency_boundary_payload(ticker)
+
         executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="stock_structure_decision")
-        future = executor.submit(self._build_structure_decision, ticker)
+        future = executor.submit(
+            self._build_structure_decision_from_evidence,
+            ticker,
+            evidence["bars"],
+            evidence["data_quality"],
+            evidence["historical_ohlcv_readiness"],
+        )
         timeout_triggered = False
         try:
             return future.result(timeout=self.timeout_seconds)
@@ -179,7 +193,30 @@ class StockStructureDecisionService:
                 ticker,
                 self.timeout_seconds,
             )
-            return _latency_boundary_payload(ticker)
+            return _latency_boundary_payload(
+                ticker,
+                data_quality=evidence["data_quality"],
+                historical_ohlcv_readiness=evidence["historical_ohlcv_readiness"],
+                structure_timeout=True,
+            )
+        finally:
+            executor.shutdown(wait=not timeout_triggered, cancel_futures=timeout_triggered)
+
+    def _load_ohlcv_evidence_with_latency_boundary(self, ticker: str) -> dict[str, Any] | None:
+        executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="stock_structure_ohlcv")
+        future = executor.submit(self._load_structure_ohlcv_evidence, ticker)
+        timeout_triggered = False
+        try:
+            return future.result(timeout=self.timeout_seconds)
+        except FuturesTimeoutError:
+            timeout_triggered = True
+            future.cancel()
+            logger.warning(
+                "Stock structure OHLCV evidence exceeded latency boundary for %s after %.3fs",
+                ticker,
+                self.timeout_seconds,
+            )
+            return None
         finally:
             executor.shutdown(wait=not timeout_triggered, cancel_futures=timeout_triggered)
 
@@ -262,23 +299,79 @@ class StockStructureDecisionService:
         include_comparative_context: bool = False,
     ) -> dict[str, Any]:
         if bars is None or data_quality is None:
-            runtime_result = self._load_runtime_ohlcv(ticker)
-            if runtime_result is not None:
-                bars = [bar.as_dict() for bar in runtime_result.bars]
-                data_quality = _build_data_quality_from_readiness(
-                    runtime_result.readiness,
-                    bars,
-                )
-                ohlcv_readiness = runtime_result.readiness
-            else:
-                history = self._load_daily_history(ticker)
-                bars = _history_bars(history)
-                data_quality = _build_data_quality(history, bars)
-                ohlcv_readiness = self._build_historical_ohlcv_readiness(ticker, bars, data_quality)
+            evidence = self._load_structure_ohlcv_evidence(ticker)
+            bars = evidence["bars"]
+            data_quality = evidence["data_quality"]
+            ohlcv_readiness = evidence["historical_ohlcv_readiness"]
         else:
             bars = list(bars)
-            data_quality = data_quality
-            ohlcv_readiness = self._build_historical_ohlcv_readiness(ticker, bars, data_quality)
+            data_quality = dict(data_quality)
+            ohlcv_readiness = self._build_historical_ohlcv_readiness(ticker, bars, data_quality=data_quality)
+
+        return self._build_structure_decision_from_evidence(
+            ticker,
+            bars,
+            data_quality,
+            ohlcv_readiness,
+            benchmark_bars=benchmark_bars,
+            benchmark_ticker=benchmark_ticker,
+            comparative_available=comparative_available,
+            include_comparative_context=include_comparative_context,
+        )
+
+    def _load_structure_ohlcv_evidence(self, ticker: str) -> dict[str, Any]:
+        runtime_result = self._load_runtime_ohlcv(ticker)
+        if runtime_result is not None:
+            bars = [bar.as_dict() for bar in runtime_result.bars]
+            data_quality = _build_data_quality_from_readiness(
+                runtime_result.readiness,
+                bars,
+                source_label="historical_ohlcv_runtime",
+            )
+            return {
+                "bars": bars,
+                "data_quality": data_quality,
+                "historical_ohlcv_readiness": runtime_result.readiness,
+            }
+
+        history = self._load_daily_history(ticker)
+        bars = _history_bars(history)
+        initial_data_quality = _build_data_quality(history, bars)
+        ohlcv_readiness = self._build_historical_ohlcv_readiness(
+            ticker,
+            bars,
+            data_quality=initial_data_quality,
+            history=history,
+        )
+        if initial_data_quality.get("status") == "unavailable":
+            data_quality = initial_data_quality
+        else:
+            data_quality = _build_data_quality_from_readiness(
+                ohlcv_readiness,
+                bars,
+                source_label=_safe_text(history.get("source")) or "unavailable",
+            )
+        return {
+            "bars": bars,
+            "data_quality": data_quality,
+            "historical_ohlcv_readiness": ohlcv_readiness,
+        }
+
+    def _build_structure_decision_from_evidence(
+        self,
+        ticker: str,
+        bars: Sequence[Mapping[str, Any]],
+        data_quality: Mapping[str, Any],
+        ohlcv_readiness: Mapping[str, Any],
+        *,
+        benchmark_bars: Sequence[Mapping[str, Any]] | None = None,
+        benchmark_ticker: str | None = None,
+        comparative_available: bool = False,
+        include_comparative_context: bool = False,
+    ) -> dict[str, Any]:
+        bars = list(bars)
+        data_quality = dict(data_quality)
+        ohlcv_readiness = dict(ohlcv_readiness)
         engine_result = build_stock_structure_decision(bars, benchmark_ohlcv=benchmark_bars)
         missing_evidence = _missing_evidence(
             data_quality,
@@ -295,6 +388,7 @@ class StockStructureDecisionService:
             "researchNotes": engine_result.get("researchNotes", {}),
             "dataQuality": data_quality,
             "historicalOhlcvReadiness": ohlcv_readiness,
+            "structureComputation": _completed_structure_computation_state(data_quality),
             "missingEvidence": missing_evidence,
             "peerCorrelationSnapshot": self._build_peer_correlation_snapshot(ticker),
             "noAdviceDisclosure": engine_result.get("noAdviceDisclosure") or NO_ADVICE_DISCLOSURE,
@@ -356,6 +450,7 @@ class StockStructureDecisionService:
         ticker: str,
         bars: Sequence[Mapping[str, Any]],
         data_quality: Mapping[str, Any],
+        history: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         request = HistoricalOhlcvReadinessRequest(
             symbol=ticker,
@@ -373,6 +468,8 @@ class StockStructureDecisionService:
             bars,
             source_available=status != "unavailable" and source != "unavailable",
             unavailable_reason=reason if reason in {"provider_missing", "entitlement_required"} else None,
+            adjustments_available=_history_adjustments_available(history),
+            freshness_state=_history_freshness_state(history),
         )
         return result.readiness
 
@@ -474,6 +571,12 @@ def _finalize_structure_contract(
     missing_evidence = missing_evidence if isinstance(missing_evidence, list) else []
     data_quality = payload.get("dataQuality")
     data_quality = data_quality if isinstance(data_quality, Mapping) else {}
+    structure_computation = payload.get("structureComputation")
+    structure_computation = (
+        structure_computation
+        if isinstance(structure_computation, Mapping)
+        else _completed_structure_computation_state(data_quality)
+    )
     historical_ohlcv_readiness = payload.get("historicalOhlcvReadiness")
     historical_ohlcv_readiness = (
         historical_ohlcv_readiness
@@ -500,6 +603,7 @@ def _finalize_structure_contract(
     )
     degraded_inputs = _build_degraded_inputs(
         data_quality=data_quality,
+        structure_computation=structure_computation,
         missing_evidence=missing_evidence,
         source_context_issue=source_context_issue,
         symbol_issue=symbol_issue,
@@ -543,6 +647,7 @@ def _finalize_structure_contract(
             "riskObservations": risk_observations,
             "evidenceGaps": evidence_gaps,
             "degradedInputs": degraded_inputs,
+            "structureComputation": dict(structure_computation),
             "historicalOhlcvReadiness": dict(historical_ohlcv_readiness),
             "peerCorrelationSnapshot": dict(peer_correlation_snapshot),
             "consumerIssues": consumer_issues,
@@ -585,17 +690,16 @@ def _precheck_fail_closed_payload(ticker: str, precheck: Any) -> dict[str, Any]:
     }
 
 
-def _latency_boundary_payload(ticker: str) -> dict[str, Any]:
+def _latency_boundary_payload(
+    ticker: str,
+    *,
+    data_quality: Mapping[str, Any] | None = None,
+    historical_ohlcv_readiness: Mapping[str, Any] | None = None,
+    structure_timeout: bool = False,
+) -> dict[str, Any]:
     engine_result = build_stock_structure_decision([])
-    return {
-        "schemaVersion": STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION,
-        "ticker": ticker,
-        "structureState": engine_result.get("structureState", "lowConfidence"),
-        "confidence": engine_result.get("confidence", "low"),
-        "componentScores": engine_result.get("componentScores", {}),
-        "explanation": engine_result.get("explanation", {}),
-        "researchNotes": engine_result.get("researchNotes", {}),
-        "dataQuality": {
+    if data_quality is None:
+        data_quality = {
             "status": "unavailable",
             "source": "unavailable",
             "period": "daily",
@@ -603,8 +707,34 @@ def _latency_boundary_payload(ticker: str) -> dict[str, Any]:
             "observedBars": 0,
             "usableBars": 0,
             "reason": _STRUCTURE_DECISION_TIMEOUT_REASON,
-        },
-        "missingEvidence": [
+        }
+    else:
+        data_quality = dict(data_quality)
+
+    if historical_ohlcv_readiness is None:
+        historical_ohlcv_readiness = _fallback_historical_ohlcv_readiness(
+            symbol=ticker,
+            data_quality=data_quality,
+        )
+    else:
+        historical_ohlcv_readiness = dict(historical_ohlcv_readiness)
+
+    if structure_timeout:
+        missing_evidence = [
+            {
+                "kind": "structure_computation",
+                "message": _STRUCTURE_COMPUTATION_TIMEOUT_MESSAGE,
+            },
+            *_missing_evidence(data_quality),
+        ]
+        structure_computation = {
+            "status": "degraded",
+            "stateReason": "timed_out",
+            "message": _STRUCTURE_COMPUTATION_TIMEOUT_MESSAGE,
+        }
+        peer_missing_inputs = ["Peer correlation was not evaluated because structure computation exceeded the latency boundary."]
+    else:
+        missing_evidence = [
             {
                 "kind": "daily_ohlcv",
                 "message": _STRUCTURE_DECISION_TIMEOUT_MESSAGE,
@@ -613,10 +743,29 @@ def _latency_boundary_payload(ticker: str) -> dict[str, Any]:
                 "kind": "benchmark_ohlcv",
                 "message": "Benchmark OHLCV is not included in this endpoint yet, so relative-strength evidence is neutral.",
             },
-        ],
+        ]
+        structure_computation = {
+            "status": "unavailable",
+            "stateReason": "timed_out",
+            "message": _STRUCTURE_DECISION_TIMEOUT_MESSAGE,
+        }
+        peer_missing_inputs = ["Peer correlation was not evaluated because structure evidence exceeded the latency boundary."]
+
+    return {
+        "schemaVersion": STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION,
+        "ticker": ticker,
+        "structureState": engine_result.get("structureState", "lowConfidence"),
+        "confidence": engine_result.get("confidence", "low"),
+        "componentScores": engine_result.get("componentScores", {}),
+        "explanation": engine_result.get("explanation", {}),
+        "researchNotes": engine_result.get("researchNotes", {}),
+        "dataQuality": data_quality,
+        "historicalOhlcvReadiness": historical_ohlcv_readiness,
+        "structureComputation": structure_computation,
+        "missingEvidence": missing_evidence,
         "peerCorrelationSnapshot": _insufficient_peer_correlation_snapshot(
             ticker,
-            missing_inputs=["Peer correlation was not evaluated because structure evidence exceeded the latency boundary."],
+            missing_inputs=peer_missing_inputs,
         ),
         "noAdviceDisclosure": engine_result.get("noAdviceDisclosure") or NO_ADVICE_DISCLOSURE,
     }
@@ -986,6 +1135,7 @@ def _safe_mapping_list(value: Any) -> list[dict[str, Any]]:
 def _build_degraded_inputs(
     *,
     data_quality: Mapping[str, Any],
+    structure_computation: Mapping[str, Any],
     missing_evidence: Sequence[Mapping[str, Any]],
     source_context_issue: str | None,
     symbol_issue: str | None,
@@ -1005,6 +1155,21 @@ def _build_degraded_inputs(
         degraded.append({"section": "structureEvidence", "status": "unavailable", "reason": reason or "history_unavailable"})
     elif status in {"partial", "insufficient"} and not symbol_issue:
         degraded.append({"section": "structureEvidence", "status": "degraded", "reason": reason or "history_partial"})
+
+    computation_status = str(structure_computation.get("status") or "")
+    computation_reason = str(structure_computation.get("stateReason") or "")
+    if computation_status in {"degraded", "unavailable"} and not symbol_issue:
+        degraded.append(
+            {
+                "section": "structureComputation",
+                "status": computation_status,
+                "reason": (
+                    _STRUCTURE_COMPUTATION_TIMEOUT_REASON
+                    if computation_reason == "timed_out"
+                    else computation_reason or "computation_degraded"
+                ),
+            }
+        )
 
     if any(str(item.get("kind") or "") == "benchmark_ohlcv" for item in missing_evidence):
         degraded.append(
@@ -1184,6 +1349,8 @@ def _build_data_quality(history: Mapping[str, Any], bars: Sequence[Mapping[str, 
 def _build_data_quality_from_readiness(
     readiness: Mapping[str, Any],
     bars: Sequence[Mapping[str, Any]],
+    *,
+    source_label: str,
 ) -> dict[str, Any]:
     provider_state = str(readiness.get("providerState") or "provider_missing")
     overall_state = str(readiness.get("overallState") or "blocked")
@@ -1199,12 +1366,38 @@ def _build_data_quality_from_readiness(
         status = "available"
     return {
         "status": status,
-        "source": "historical_ohlcv_runtime" if provider_state == "available" else "unavailable",
+        "source": source_label if provider_state == "available" else "unavailable",
         "period": "daily",
         "requestedDays": DEFAULT_STRUCTURE_DECISION_HISTORY_DAYS,
         "observedBars": observed_bars,
         "usableBars": usable_bars,
         "reason": _data_quality_reason_from_readiness(readiness),
+    }
+
+
+def _completed_structure_computation_state(data_quality: Mapping[str, Any]) -> dict[str, str]:
+    status = str(data_quality.get("status") or "")
+    reason = str(data_quality.get("reason") or "")
+    if status == "available":
+        return {
+            "status": "available",
+            "stateReason": "completed",
+            "message": "Structure computation completed with available daily OHLCV evidence.",
+        }
+    if status == "unavailable":
+        return {
+            "status": "unavailable",
+            "stateReason": "data_unavailable",
+            "message": "Structure computation is unavailable because daily OHLCV data is unavailable.",
+        }
+    if reason == "insufficient_history":
+        state_reason = "insufficient_data"
+    else:
+        state_reason = "data_degraded"
+    return {
+        "status": "degraded",
+        "stateReason": state_reason,
+        "message": "Structure computation is degraded by incomplete daily OHLCV evidence; this read remains observation-only.",
     }
 
 
@@ -1222,6 +1415,38 @@ def _data_quality_reason_from_readiness(readiness: Mapping[str, Any]) -> str:
         if candidate in missing:
             return candidate
     return "history_available"
+
+
+def _history_freshness_state(history: Mapping[str, Any] | None) -> str | None:
+    source_confidence = _history_source_confidence(history)
+    diagnostics = _history_diagnostics(history)
+    for source in (source_confidence, diagnostics):
+        freshness = _safe_text(source.get("freshness") or source.get("freshnessState")).lower()
+        if freshness == "stale" or source.get("isStale") is True:
+            return "stale"
+    return None
+
+
+def _history_adjustments_available(history: Mapping[str, Any] | None) -> bool | None:
+    source_confidence = _history_source_confidence(history)
+    for key in ("adjustmentsAvailable", "adjusted", "isAdjusted"):
+        if key in source_confidence:
+            return bool(source_confidence.get(key))
+    return None
+
+
+def _history_source_confidence(history: Mapping[str, Any] | None) -> Mapping[str, Any]:
+    if not isinstance(history, Mapping):
+        return {}
+    value = history.get("sourceConfidence") or history.get("source_confidence")
+    return value if isinstance(value, Mapping) else {}
+
+
+def _history_diagnostics(history: Mapping[str, Any] | None) -> Mapping[str, Any]:
+    if not isinstance(history, Mapping):
+        return {}
+    value = history.get("diagnostics")
+    return value if isinstance(value, Mapping) else {}
 
 
 def _data_quality_status(

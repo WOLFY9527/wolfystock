@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+from datetime import date, timedelta
 from typing import Any
 
 from src.services.stock_structure_decision_service import (
@@ -86,6 +87,19 @@ class _BlockingHistoryService:
         }
 
 
+class _BlockingPeerRepository:
+    def __init__(self) -> None:
+        self.started = threading.Event()
+        self.release = threading.Event()
+        self.peer_group_calls: list[str] = []
+
+    def get_local_peer_group(self, symbol: str) -> dict[str, Any] | None:
+        self.peer_group_calls.append(symbol)
+        self.started.set()
+        self.release.wait(timeout=2.0)
+        return {"label": "local verified peers", "symbols": ["MSFT", "NVDA"]}
+
+
 class _FakePeerRepository:
     def __init__(
         self,
@@ -108,8 +122,9 @@ class _FakePeerRepository:
 
 
 def _bar(index: int, close: float, *, volume: float = 1000.0, width: float = 1.0) -> dict[str, Any]:
+    bar_date = date(2026, 1, 1) + timedelta(days=index)
     return {
-        "date": f"2026-01-{index + 1:02d}",
+        "date": bar_date.isoformat(),
         "open": round(close - width * 0.2, 4),
         "high": round(close + width * 0.5, 4),
         "low": round(close - width * 0.5, 4),
@@ -197,6 +212,10 @@ def _assert_required_contract(payload: dict[str, Any]) -> None:
     assert payload["observationOnly"] is True
     assert payload["decisionGrade"] is False
     assert "drilldownLinks" in payload
+    assert "structureComputation" in payload
+    assert payload["structureComputation"]["status"] in {"available", "degraded", "unavailable"}
+    assert payload["structureComputation"]["stateReason"]
+    assert payload["structureComputation"]["message"]
 
 
 def test_service_builds_observation_only_structure_decision_from_daily_ohlcv() -> None:
@@ -501,6 +520,62 @@ def test_service_returns_unavailable_when_structure_decision_dependency_exceeds_
     assert "exception" not in serialized
     for forbidden in FORBIDDEN_ADVICE_TOKENS:
         assert forbidden not in serialized
+
+
+def test_service_preserves_ohlcv_readiness_when_structure_computation_times_out() -> None:
+    fake_history = _FakeHistoryService(
+        {
+            "stock_code": "AAPL",
+            "period": "daily",
+            "data": _trend_breakout_history(),
+            "source": "local_db",
+            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 55},
+        }
+    )
+    blocking_peer_repo = _BlockingPeerRepository()
+    service = StockStructureDecisionService(
+        history_service=fake_history,
+        stock_repo=blocking_peer_repo,
+        timeout_seconds=0.01,
+    )
+
+    started_at = time.monotonic()
+    try:
+        payload = service.get_structure_decision("AAPL")
+    finally:
+        blocking_peer_repo.release.set()
+    elapsed = time.monotonic() - started_at
+
+    assert fake_history.calls == [{"stock_code": "AAPL", "period": "daily", "days": 90}]
+    assert blocking_peer_repo.started.is_set()
+    assert elapsed < 0.5
+    _assert_required_contract(payload)
+    assert payload["structureState"] == "lowConfidence"
+    assert payload["confidence"] == "low"
+    assert payload["dataQuality"]["status"] == "available"
+    assert payload["dataQuality"]["observedBars"] == 55
+    assert payload["dataQuality"]["usableBars"] == 55
+    readiness = payload["historicalOhlcvReadiness"]
+    assert readiness["providerState"] == "available"
+    assert readiness["overallState"] == "ready"
+    assert readiness["requiredBars"] > 0
+    assert readiness["usableBars"] == 55
+    assert readiness["missingBars"] == 0
+    assert readiness["missingRequirements"] == []
+    assert payload["structureComputation"] == {
+        "status": "degraded",
+        "stateReason": "timed_out",
+        "message": "Daily OHLCV data is available, but structure computation timed out; this read remains observation-only.",
+    }
+    assert {
+        "section": "structureComputation",
+        "status": "degraded",
+        "reason": "structure_computation_timeout",
+    } in payload["degradedInputs"]
+    assert payload["missingEvidence"][0] == {
+        "kind": "structure_computation",
+        "message": "Daily OHLCV data is available, but structure computation timed out; this read remains observation-only.",
+    }
 
 
 def test_service_fails_closed_before_history_lookup_for_invalid_symbol_format() -> None:

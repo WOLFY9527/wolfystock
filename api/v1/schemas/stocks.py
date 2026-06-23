@@ -630,6 +630,16 @@ class StockStructureDecisionDegradedInput(BaseModel):
     reason: str = Field(..., description="降级原因码")
 
 
+class StockStructureComputationState(BaseModel):
+    """结构计算自身的完成/降级状态。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    status: Literal["available", "degraded", "unavailable"] = Field(..., description="结构计算状态")
+    state_reason: str = Field(..., alias="stateReason", description="消费端安全的计算状态原因")
+    message: str = Field(..., description="面向消费者的计算状态说明")
+
+
 class StockStructureDecisionSourceContext(BaseModel):
     """结构判断的安全来源/钻取上下文。"""
 
@@ -754,6 +764,11 @@ class StockStructureDecisionResponse(BaseModel):
         ...,
         alias="historicalOhlcvReadiness",
         description="历史 OHLCV readiness 与采集缺口状态",
+    )
+    structure_computation: Optional[StockStructureComputationState] = Field(
+        None,
+        alias="structureComputation",
+        description="结构计算自身的完成/降级状态；与 OHLCV readiness 分离",
     )
     missing_evidence: List[StockStructureDecisionMissingEvidence] = Field(
         ...,
