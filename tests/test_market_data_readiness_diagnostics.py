@@ -405,6 +405,30 @@ def test_diagnostics_stay_inert_without_network_or_provider_runtime_calls(tmp_pa
     assert seen_modules == ["pyarrow", "fastparquet", "tushare", "pytdx", "akshare", "efinance"]
 
 
+def test_cn_ohlcv_runtime_preflight_reports_disabled_and_dependency_missing_without_provider_calls() -> None:
+    disabled_payload = build_market_data_readiness_diagnostics(
+        env={},
+        spec_finder=_spec_finder_with(ALL_OPTIONAL_MODULES),
+    ).to_dict()
+    disabled_check = _find_check(disabled_payload, "akshare_cn_ohlcv_runtime")
+
+    missing_payload = build_market_data_readiness_diagnostics(
+        env={"WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "true"},
+        spec_finder=_spec_finder_with(ALL_OPTIONAL_MODULES - {"akshare"}),
+    ).to_dict()
+    missing_check = _find_check(missing_payload, "akshare_cn_ohlcv_runtime")
+    serialized = json.dumps(missing_check, ensure_ascii=False).lower()
+
+    assert disabled_check["status"] == "disabled"
+    assert disabled_check["details"]["runtimeStatus"] == "disabled"
+    assert disabled_check["details"]["externalProviderCalls"] is False
+    assert missing_check["status"] == "dependency_missing"
+    assert missing_check["details"]["runtimeStatus"] == "dependency_missing"
+    assert missing_check["details"]["networkCallsEnabled"] is False
+    for forbidden in ("token", "secret", "rawpayload", "traceback"):
+        assert forbidden not in serialized
+
+
 def test_official_risk_source_readiness_reports_ready_bundle_from_fresh_official_rows() -> None:
     payload = build_official_risk_source_readiness(
         vix_rows=[_official_row("VIXCLS", symbol="VIX", value=16.2, source_id="fred:VIXCLS")],

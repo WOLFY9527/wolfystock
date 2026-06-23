@@ -20,6 +20,7 @@ from src.services.official_macro_liquidity_cache_contracts import (
     build_official_fed_liquidity_cache_bundle,
     build_official_us_rates_cache_bundle,
 )
+from src.services.akshare_cn_ohlcv_cache import build_akshare_cn_ohlcv_runtime_status
 from src.services.provider_affected_surface_mapping import (
     canonical_product_affected_surfaces,
 )
@@ -166,6 +167,7 @@ def build_market_data_readiness_diagnostics(
     checks.append(_build_representative_parquet_file_check(parquet_dir=parquet_dir, symbols=normalized_symbols))
     checks.append(_build_tushare_token_check(env=resolved_env))
     checks.append(_build_optional_dependency_check(spec_finder=spec_finder))
+    checks.append(_build_akshare_cn_ohlcv_runtime_check(env=resolved_env, spec_finder=spec_finder))
 
     return MarketDataReadinessDiagnostics(
         readiness_status=_resolve_readiness_status(checks),
@@ -859,6 +861,53 @@ def _build_optional_dependency_check(*, spec_finder: SpecFinder) -> MarketDataRe
     )
 
 
+def _build_akshare_cn_ohlcv_runtime_check(*, env: Mapping[str, str], spec_finder: SpecFinder) -> MarketDataReadinessCheck:
+    status = build_akshare_cn_ohlcv_runtime_status(
+        env=env,
+        dependency_checker=lambda: _module_available("akshare", spec_finder),
+    )
+    runtime_status = _safe_text(status.get("runtimeStatus")) or "runtime_unavailable"
+    if runtime_status == "available":
+        return MarketDataReadinessCheck(
+            id="akshare_cn_ohlcv_runtime",
+            status="available",
+            severity="info",
+            user_facing_message="CN daily OHLCV runtime is explicitly enabled and locally importable.",
+            remediation_hint=None,
+            affects_surfaces=("stock_history", "scanner", "backtest"),
+            details=status,
+        )
+    if runtime_status == "disabled":
+        return MarketDataReadinessCheck(
+            id="akshare_cn_ohlcv_runtime",
+            status="disabled",
+            severity="info",
+            user_facing_message="CN daily OHLCV runtime is disabled by configuration.",
+            remediation_hint=f"Set the runtime enablement flag only in environments approved for local CN daily history refreshes.",
+            affects_surfaces=("stock_history", "scanner", "backtest"),
+            details=status,
+        )
+    if runtime_status == "dependency_missing":
+        return MarketDataReadinessCheck(
+            id="akshare_cn_ohlcv_runtime",
+            status="dependency_missing",
+            severity="warning",
+            user_facing_message="CN daily OHLCV runtime is enabled but its optional dependency is unavailable.",
+            remediation_hint="Install the declared optional dependency before enabling local CN daily history refreshes.",
+            affects_surfaces=("stock_history", "scanner", "backtest"),
+            details=status,
+        )
+    return MarketDataReadinessCheck(
+        id="akshare_cn_ohlcv_runtime",
+        status="runtime_unavailable",
+        severity="warning",
+        user_facing_message="CN daily OHLCV runtime status could not be evaluated safely.",
+        remediation_hint="Review local runtime configuration before enabling CN daily history refreshes.",
+        affects_surfaces=("stock_history", "scanner", "backtest"),
+        details=status,
+    )
+
+
 def _resolve_first_nonempty_env(keys: Sequence[str], env: Mapping[str, str]) -> tuple[Optional[str], str]:
     for key in keys:
         value = str(env.get(key, "") or "").strip()
@@ -891,9 +940,9 @@ def _resolve_readiness_status(checks: Sequence[MarketDataReadinessCheck]) -> str
         return "misconfigured"
     if not significant:
         return "ready"
-    if all(check.status == "missing" for check in significant):
+    if all(check.status in {"missing", "dependency_missing"} for check in significant):
         return "missing"
-    if any(check.status in {"missing", "partial"} for check in significant):
+    if any(check.status in {"missing", "partial", "dependency_missing", "runtime_unavailable"} for check in significant):
         return "partial"
     return "ready"
 

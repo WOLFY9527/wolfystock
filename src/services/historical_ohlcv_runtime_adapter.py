@@ -154,10 +154,15 @@ def _date_arg(value: date | None) -> str | None:
 
 def _safe_unavailable_reason(source: str, diagnostics: Mapping[str, Any]) -> str:
     reason = str(diagnostics.get("reason") or "").strip().lower()
-    if reason == "entitlement_required":
-        return "entitlement_required"
-    if reason == "provider_missing":
-        return "provider_missing"
+    if reason in {
+        "disabled_by_config",
+        "dependency_missing",
+        "entitlement_required",
+        "provider_missing",
+        "runtime_unavailable",
+        "unsupported_period",
+    }:
+        return reason
     if str(source or "").strip().lower() in {"", "unavailable", "none"}:
         return "provider_missing"
     return "provider_unavailable"

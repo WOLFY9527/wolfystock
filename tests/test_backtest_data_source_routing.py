@@ -39,6 +39,7 @@ def test_unknown_source_is_degraded_fill_only_unknown_authority() -> None:
 @pytest.mark.parametrize(
     "source",
     [
+        "akshare_cn_daily",
         "DatabaseCache",
         "database-cache",
         "database cache",
