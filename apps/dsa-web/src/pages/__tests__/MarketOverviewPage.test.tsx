@@ -167,7 +167,7 @@ const professionalDataCapabilitiesPayload = () => ({
   capabilities: [
     {
       capabilityId: 'options.chain',
-      label: 'Options chain',
+      label: 'Options structure and gamma inputs',
       category: 'options_structure',
       status: 'entitlement_required',
       sourceLabel: 'Options Lab readiness boundary',
@@ -184,8 +184,17 @@ const professionalDataCapabilitiesPayload = () => ({
       freshness: 'Partial and delayed.',
     },
     {
+      capabilityId: 'market.positioning_flows',
+      label: 'Flows and positioning',
+      category: 'market_breadth_flows',
+      status: 'configured_missing',
+      sourceLabel: 'Market readiness registry',
+      reason: 'Positioning inputs are not configured for product use.',
+      freshness: 'Missing provider configuration.',
+    },
+    {
       capabilityId: 'market.sector_rotation',
-      label: 'Sector rotation',
+      label: 'Sector and industry leadership',
       category: 'sector_rotation',
       status: 'degraded',
       sourceLabel: 'Market rotation readiness registry',
@@ -194,7 +203,7 @@ const professionalDataCapabilitiesPayload = () => ({
     },
     {
       capabilityId: 'macro.cross_asset_regime',
-      label: 'Macro and cross-asset regime',
+      label: 'Macro and cross-asset inputs',
       category: 'macro_cross_asset_regime',
       status: 'live',
       sourceLabel: 'Macro readiness registry',
@@ -218,6 +227,81 @@ const professionalDataCapabilitiesPayload = () => ({
       sourceLabel: 'Backtest readiness registry',
       reason: 'Point-in-time lineage remains incomplete.',
       freshness: 'Research-useful, but lineage is incomplete.',
+    },
+  ],
+});
+
+const allMissingMarketRegimeCapabilitiesPayload = () => ({
+  contractVersion: 'professional_data_capability_registry_v1',
+  consumerSafe: true,
+  summary: {
+    totalCapabilities: 6,
+    liveCount: 0,
+    degradedCount: 0,
+    entitlementRequiredCount: 0,
+    configuredMissingCount: 5,
+    notImplementedCount: 1,
+  },
+  categories: [
+    'options_structure',
+    'market_breadth_flows',
+    'sector_rotation',
+    'macro_cross_asset_regime',
+  ],
+  capabilities: [
+    {
+      capabilityId: 'market.breadth',
+      label: 'Breadth',
+      category: 'market_breadth_flows',
+      status: 'configured_missing',
+      sourceLabel: 'Readiness registry',
+      reason: 'Breadth provider is not configured.',
+      freshness: 'No timestamp.',
+    },
+    {
+      capabilityId: 'market.sector_leadership',
+      label: 'Sector leadership',
+      category: 'sector_rotation',
+      status: 'configured_missing',
+      sourceLabel: 'Readiness registry',
+      reason: 'Sector leadership provider is not configured.',
+      freshness: 'No timestamp.',
+    },
+    {
+      capabilityId: 'market.volatility_regime',
+      label: 'Volatility regime',
+      category: 'macro_cross_asset_regime',
+      status: 'configured_missing',
+      sourceLabel: 'Readiness registry',
+      reason: 'Volatility input provider is not configured.',
+      freshness: 'No timestamp.',
+    },
+    {
+      capabilityId: 'options.gamma_inputs',
+      label: 'Gamma inputs',
+      category: 'options_structure',
+      status: 'not_implemented',
+      sourceLabel: 'Options Lab readiness boundary',
+      reason: 'Gamma inputs are not available for market regime use.',
+      freshness: 'No timestamp.',
+    },
+    {
+      capabilityId: 'market.positioning_flows',
+      label: 'Positioning flows',
+      category: 'market_breadth_flows',
+      status: 'configured_missing',
+      sourceLabel: 'Readiness registry',
+      reason: 'Positioning provider is not configured.',
+      freshness: 'No timestamp.',
+    },
+    {
+      capabilityId: 'macro.cross_asset_inputs',
+      label: 'Macro cross-asset inputs',
+      category: 'macro_cross_asset_regime',
+      status: 'configured_missing',
+      sourceLabel: 'Readiness registry',
+      reason: 'Macro input provider is not configured.',
+      freshness: 'No timestamp.',
     },
   ],
 });
@@ -2102,60 +2186,142 @@ describe('MarketOverviewPage', () => {
     );
   });
 
-  it('renders professional data capability coverage grouped by consumer-safe categories', async () => {
+  it('renders the market regime readiness surface with consumer-safe category states', async () => {
     render(createElement(MarketOverviewPage));
 
-    const coverage = await screen.findByTestId('professional-data-capability-coverage');
-    await waitFor(() => expect(coverage).toHaveTextContent('按能力族查看当前专业数据覆盖'));
+    const surface = await screen.findByTestId('market-regime-readiness-surface');
+    await waitFor(() => expect(surface).toHaveTextContent('Market regime data readiness'));
 
-    expect(coverage).toHaveTextContent('期权结构');
-    expect(coverage).toHaveTextContent('广度 / 资金流');
-    expect(coverage).toHaveTextContent('板块 / 市场状态');
-    expect(coverage).toHaveTextContent('宏观 / 跨资产');
-    expect(coverage).toHaveTextContent('个股研究');
-    expect(coverage).toHaveTextContent('回测数据');
-    expect(coverage).toHaveTextContent('Options chain');
-    expect(coverage).toHaveTextContent('需授权');
-    expect(coverage).toHaveTextContent('Market breadth and flows');
-    expect(coverage).toHaveTextContent('降级');
-    expect(coverage).toHaveTextContent('Macro and cross-asset regime');
-    expect(coverage).toHaveTextContent('可用');
-    expect(coverage).toHaveTextContent('Stock news and catalysts');
-    expect(coverage).toHaveTextContent('配置待补');
-    expect(coverage).toHaveTextContent('Backtest data availability');
-    expect(coverage).toHaveTextContent('未实现');
-    expect(coverage).toHaveTextContent('Options Lab readiness boundary');
-    expect(coverage).toHaveTextContent('Display is blocked until entitlement evidence is verified.');
-    expect(coverage.textContent || '').not.toMatch(
-      /providerClass|providerName|providerAttempted|requiredProviderClass|sourceAuthorityRouter|endpointHost|apiKeyPresent|exceptionClass|exceptionChain|requestId|traceId|cacheKey|rawPayload|credential|token|env/i,
+    expect(surface).toHaveTextContent('breadth');
+    expect(surface).toHaveTextContent('degraded');
+    expect(surface).toHaveTextContent('sector/industry leadership');
+    expect(surface).toHaveTextContent('volatility/risk regime');
+    expect(surface).toHaveTextContent('available');
+    expect(surface).toHaveTextContent('options structure / gamma inputs');
+    expect(surface).toHaveTextContent('entitlement required');
+    expect(surface).toHaveTextContent('flows/positioning');
+    expect(surface).toHaveTextContent('missing provider');
+    expect(surface).toHaveTextContent('macro/cross-asset inputs');
+    expect(surface).toHaveTextContent('no fabricated regime score');
+    expect(surface).toHaveTextContent('no fake gamma or flow values');
+    expect(surface.textContent || '').not.toMatch(
+      /GEX|vanna|charm|providerClass|providerName|providerAttempted|requiredProviderClass|sourceAuthorityRouter|endpointHost|apiKeyPresent|exceptionClass|exceptionChain|requestId|traceId|cacheKey|rawPayload|credential|token|env/i,
     );
   });
 
-  it('shows a professional data capability loading skeleton while the registry is pending', () => {
+  it('keeps all-missing provider state explicit across market regime categories', async () => {
+    vi.mocked(marketApi.getDataReadiness).mockResolvedValueOnce({
+      ...officialRiskReadinessPayload(),
+      officialRiskSourceReadiness: {
+        bundleState: 'blocked',
+        vix: { state: 'blocked', freshness: 'unavailable' },
+        rates: { state: 'blocked', freshness: 'unavailable' },
+        fedLiquidity: { state: 'blocked', freshness: 'unavailable' },
+      },
+    });
+    vi.mocked(marketApi.getProfessionalDataCapabilities).mockResolvedValueOnce(allMissingMarketRegimeCapabilitiesPayload());
+
+    render(createElement(MarketOverviewPage));
+
+    const surface = await screen.findByTestId('market-regime-readiness-surface');
+    await waitFor(() => expect(surface).toHaveTextContent('missing provider'));
+    expect(surface).toHaveTextContent('breadth');
+    expect(surface).toHaveTextContent('sector/industry leadership');
+    expect(surface).toHaveTextContent('volatility/risk regime');
+    expect(surface).toHaveTextContent('flows/positioning');
+    expect(surface).toHaveTextContent('macro/cross-asset inputs');
+    expect(surface).toHaveTextContent('options structure / gamma inputs');
+    expect(surface).toHaveTextContent('not available');
+    expect(surface.textContent || '').not.toMatch(/buy|sell|target price|position sizing|买入|卖出|目标价|仓位/i);
+  });
+
+  it('renders stale freshness with a timestamp when market regime inputs include one', async () => {
+    vi.mocked(marketApi.getProfessionalDataCapabilities).mockResolvedValueOnce({
+      ...professionalDataCapabilitiesPayload(),
+      capabilities: [
+        ...professionalDataCapabilitiesPayload().capabilities,
+        {
+          capabilityId: 'market.volatility_regime',
+          label: 'Volatility and risk regime',
+          category: 'macro_cross_asset_regime',
+          status: 'degraded',
+          sourceLabel: 'Risk readiness registry',
+          reason: 'Volatility risk rows are delayed.',
+          freshness: 'stale',
+          asOf: '2026-06-22T13:45:00Z',
+        } as never,
+      ],
+    } as never);
+
+    render(createElement(MarketOverviewPage));
+
+    const surface = await screen.findByTestId('market-regime-readiness-surface');
+    await waitFor(() => expect(surface).toHaveTextContent('stale'));
+    expect(surface).toHaveTextContent('2026-06-22');
+    expect(surface).toHaveTextContent('volatility/risk regime');
+  });
+
+  it('shows a market regime readiness loading skeleton while the registry is pending', () => {
     vi.mocked(marketApi.getProfessionalDataCapabilities).mockReturnValueOnce(new Promise(() => {}));
 
     render(createElement(MarketOverviewPage));
 
-    const coverage = screen.getByTestId('professional-data-capability-coverage');
-    expect(coverage).toHaveTextContent('正在加载覆盖状态');
-    expect(screen.getByTestId('professional-data-capability-skeleton')).toBeInTheDocument();
+    const surface = screen.getByTestId('market-regime-readiness-surface');
+    expect(surface).toHaveTextContent('正在加载市场状态数据');
+    expect(screen.getByTestId('market-regime-readiness-skeleton')).toBeInTheDocument();
   });
 
-  it('shows a degraded professional data capability state when the registry request fails', async () => {
+  it('shows a degraded market regime readiness state when the registry request fails', async () => {
     vi.mocked(marketApi.getProfessionalDataCapabilities).mockRejectedValueOnce(
       new Error('providerClass requestId rawPayload should stay hidden'),
     );
 
     render(createElement(MarketOverviewPage));
 
-    const errorState = await screen.findByTestId('professional-data-capability-error');
-    expect(errorState).toHaveTextContent('专业数据覆盖暂不可用，请稍后重试。');
+    const errorState = await screen.findByTestId('market-regime-readiness-error');
+    expect(errorState).toHaveTextContent('市场状态数据可用性暂不可用，请稍后重试。');
     expect(errorState.textContent || '').not.toMatch(/providerClass|requestId|rawPayload|token|credential|env/i);
 
     fireEvent.click(within(errorState).getByRole('button', { name: '重试' }));
     await waitFor(() => {
       expect(marketApi.getProfessionalDataCapabilities).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('does not console-crash on a partial market regime readiness payload', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(marketApi.getProfessionalDataCapabilities).mockResolvedValueOnce({
+      contractVersion: 'professional_data_capability_registry_v1',
+      consumerSafe: true,
+      summary: {
+        totalCapabilities: 1,
+        liveCount: 0,
+        degradedCount: 1,
+        entitlementRequiredCount: 0,
+        configuredMissingCount: 0,
+        notImplementedCount: 0,
+      },
+      categories: ['macro_cross_asset_regime'],
+      capabilities: [
+        {
+          capabilityId: 'macro.cross_asset_inputs',
+          label: 'Macro input',
+          category: 'macro_cross_asset_regime',
+          status: 'degraded',
+          sourceLabel: 'Readiness registry',
+        },
+      ],
+    } as never);
+
+    render(createElement(MarketOverviewPage));
+
+    const surface = await screen.findByTestId('market-regime-readiness-surface');
+    await waitFor(() => expect(surface).toHaveTextContent('Market regime data readiness'));
+    expect(surface).toHaveTextContent('macro/cross-asset inputs');
+    expect(surface).toHaveTextContent('degraded');
+    expect(surface).toHaveTextContent('freshness pending');
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
   });
 
   it('renders the MarketMonitor boundary with stable controls and collapsed diagnostics', async () => {
@@ -3000,7 +3166,7 @@ describe('MarketOverviewPage', () => {
     const renderedCopy = document.body.textContent || '';
     expect(renderedCopy).toMatch(/ETF 资金流指标|机构压力指标|行业广度指标|部分可用|延迟可用|证据不足|仅供观察|数据新鲜度暂不可用/);
     expect(renderedCopy).not.toMatch(
-      /PROVIDER ALTERNATIVE_ME|ETF flow proxy|Institutional pressure proxy|Industry breadth proxy|Rotation Non Scoring Or Taxonomy Only|Sector ETF proxy|Alternative\.me|Yahoo Finance|Binance Futures|YFINANCE|CBOE|BINANCE|REAL|MIXED|FALLBACK|freshness=unavailable|provider|sourceTier|sourceLabel|reasonCode|diagnosticOnly|scoreContributionAllowed|sourceAuthorityAllowed|authorityGrant|raw|debug|backend|cache|schema|synthetic|mock|proxy|fallback/i,
+      /PROVIDER ALTERNATIVE_ME|ETF flow proxy|Institutional pressure proxy|Industry breadth proxy|Rotation Non Scoring Or Taxonomy Only|Sector ETF proxy|Alternative\.me|Yahoo Finance|Binance Futures|YFINANCE|CBOE|BINANCE|REAL|MIXED|FALLBACK|freshness=unavailable|providerClass|providerName|providerAttempted|requiredProviderClass|sourceAuthorityRouter|endpointHost|apiKeyPresent|exceptionClass|exceptionChain|requestId|traceId|cacheKey|rawPayload|credential|token|env|sourceTier|sourceLabel|reasonCode|diagnosticOnly|scoreContributionAllowed|sourceAuthorityAllowed|authorityGrant|raw|debug|backend|cache|schema|synthetic|mock|proxy|fallback/i,
     );
   });
 
