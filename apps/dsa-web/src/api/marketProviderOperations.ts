@@ -192,6 +192,61 @@ export interface ProviderOperationsMatrixResponse {
   };
 }
 
+export interface HistoricalOhlcvCachePreflightNextAction {
+  state: string;
+  summary?: string | null;
+  requiredConfig?: string | null;
+}
+
+export interface HistoricalOhlcvCachePreflightSymbol {
+  market: string;
+  symbol: string;
+  runtimeState: string;
+  cacheState: string;
+  dependencyState?: string | null;
+  dependencyAvailable?: boolean | null;
+  cachedBars: number;
+  latestBarDate?: string | null;
+  freshnessState: string;
+  adjustmentState: string;
+  dataState: string;
+  seedState: string;
+  nextAction: HistoricalOhlcvCachePreflightNextAction;
+}
+
+export interface HistoricalOhlcvCachePreflightMarket {
+  market: string;
+  runtimeEnabled: boolean;
+  dependencyAvailable: boolean;
+  symbols: HistoricalOhlcvCachePreflightSymbol[];
+}
+
+export interface HistoricalOhlcvCachePreflightResponse {
+  contractVersion: string;
+  mode: string;
+  dryRun: boolean;
+  seedEnabled: boolean;
+  networkCallsEnabled: boolean;
+  mutationEnabled: boolean;
+  consumerSafe: boolean;
+  representativeSymbols: {
+    cn: string[];
+    us: string[];
+  };
+  markets: {
+    cn?: HistoricalOhlcvCachePreflightMarket;
+    us?: HistoricalOhlcvCachePreflightMarket;
+    [key: string]: HistoricalOhlcvCachePreflightMarket | undefined;
+  };
+}
+
+export interface HistoricalOhlcvCachePreflightParams {
+  cnSymbols?: string[] | string;
+  usSymbols?: string[] | string;
+  requiredBars?: number;
+  requireAdjusted?: boolean;
+}
+
 const DEFAULT_SUMMARY: MarketProviderOperationsSummary = {
   totalItems: 0,
   liveCount: 0,
@@ -244,6 +299,50 @@ function normalizeOperationsMatrix(payload: Record<string, unknown>): ProviderOp
   };
 }
 
+function normalizeSymbolList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map((item) => String(item || '').trim()).filter(Boolean)
+    : [];
+}
+
+function normalizeHistoricalOhlcvCachePreflight(payload: Record<string, unknown>): HistoricalOhlcvCachePreflightResponse {
+  const normalized = toCamelCase<HistoricalOhlcvCachePreflightResponse>(payload);
+  const markets = normalized.markets || {};
+  return {
+    contractVersion: normalized.contractVersion || '',
+    mode: normalized.mode || 'preflight',
+    dryRun: normalized.dryRun !== false,
+    seedEnabled: normalized.seedEnabled === true,
+    networkCallsEnabled: normalized.networkCallsEnabled === true,
+    mutationEnabled: normalized.mutationEnabled === true,
+    consumerSafe: normalized.consumerSafe === true,
+    representativeSymbols: {
+      cn: normalizeSymbolList(normalized.representativeSymbols?.cn),
+      us: normalizeSymbolList(normalized.representativeSymbols?.us),
+    },
+    markets: {
+      ...markets,
+      cn: markets.cn ? {
+        ...markets.cn,
+        symbols: Array.isArray(markets.cn.symbols) ? markets.cn.symbols : [],
+      } : undefined,
+      us: markets.us ? {
+        ...markets.us,
+        symbols: Array.isArray(markets.us.symbols) ? markets.us.symbols : [],
+      } : undefined,
+    },
+  };
+}
+
+function encodeSymbols(value?: string[] | string): string | undefined {
+  if (Array.isArray(value)) {
+    const symbols = value.map((item) => String(item || '').trim()).filter(Boolean);
+    return symbols.length ? symbols.join(',') : undefined;
+  }
+  const text = String(value || '').trim();
+  return text || undefined;
+}
+
 export const marketProviderOperationsApi = {
   async getOperations(window = '24h'): Promise<MarketProviderOperationsResponse> {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/admin/market-providers/operations', {
@@ -255,5 +354,19 @@ export const marketProviderOperationsApi = {
   async getOperationsMatrix(): Promise<ProviderOperationsMatrixResponse> {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/admin/providers/operations-matrix');
     return normalizeOperationsMatrix(response.data);
+  },
+
+  async getHistoricalOhlcvCachePreflight(
+    params: HistoricalOhlcvCachePreflightParams = {},
+  ): Promise<HistoricalOhlcvCachePreflightResponse> {
+    const response = await apiClient.get<Record<string, unknown>>('/api/v1/admin/historical-ohlcv/cache-preflight', {
+      params: {
+        cn_symbols: encodeSymbols(params.cnSymbols),
+        us_symbols: encodeSymbols(params.usSymbols),
+        required_bars: params.requiredBars,
+        require_adjusted: params.requireAdjusted,
+      },
+    });
+    return normalizeHistoricalOhlcvCachePreflight(response.data);
   },
 };
