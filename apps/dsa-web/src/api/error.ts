@@ -598,7 +598,7 @@ export function parseApiError(error: unknown, fallbackMessage?: string): ParsedA
   if (code === 'ibkr_session_required' || code === 'ibkr_session_invalid' || code === 'ibkr_session_expired') {
     return buildError(
       'IBKR 会话不可用',
-      '请先在本地 IBKR Client Portal / Gateway 中确认只读会话仍有效，再重新粘贴 session token 后重试。',
+      '只读授权暂不可用，请由具备操作权限的人员确认连接状态后重试。',
       'validation_error',
       { isValidationError: true },
     );
@@ -607,7 +607,7 @@ export function parseApiError(error: unknown, fallbackMessage?: string): ParsedA
   if (code === 'ibkr_account_mapping_conflict') {
     return buildError(
       'IBKR 账户映射冲突',
-      '该 broker account ref 已绑定到另一持仓账户。请先确认账户映射，再重新同步。',
+      '该账户映射已绑定到另一持仓账户。请由具备操作权限的人员确认映射后重试。',
       'validation_error',
       { isValidationError: true },
     );
@@ -623,7 +623,7 @@ export function parseApiError(error: unknown, fallbackMessage?: string): ParsedA
   ) {
     return buildError(
       '无法确定要同步的 IBKR 账户',
-      '请确认当前 session 暴露了正确账户，并填写或复用正确的 broker account ref 后再试。',
+      '请由具备操作权限的人员确认当前授权范围与账户映射后重试。',
       'validation_error',
       { isValidationError: true },
     );

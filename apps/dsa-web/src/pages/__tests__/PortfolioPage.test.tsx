@@ -11,6 +11,9 @@ import {
 import PortfolioPage from '../PortfolioPage';
 
 const p = (key: string) => translate('zh', `portfolio.${key}`);
+const { useProductSurfaceMock } = vi.hoisted(() => ({
+  useProductSurfaceMock: vi.fn(),
+}));
 const SAFE_IBKR_CONNECTION_HANDLE = 'conn_111111111111';
 const SAFE_IBKR_ACCOUNT_HANDLE = 'acct_222222222222';
 const SAFE_IBKR_URL_HANDLE = 'url_333333333333';
@@ -105,6 +108,10 @@ vi.mock('../../api/portfolio', () => ({
   },
 }));
 
+vi.mock('../../hooks/useProductSurface', () => ({
+  useProductSurface: () => useProductSurfaceMock(),
+}));
+
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   PieChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -136,6 +143,24 @@ function makeAccounts(items: AccountItem[] = [{ id: 1, name: 'Main' }]) {
       updatedAt: '2026-03-19T00:00:00Z',
     })),
   };
+}
+
+function setAdminPortfolioSurface() {
+  useProductSurfaceMock.mockReturnValue({
+    isAdminMode: true,
+    canReadProviders: true,
+    isAdmin: true,
+    isAdminAccount: true,
+  });
+}
+
+function setConsumerPortfolioSurface() {
+  useProductSurfaceMock.mockReturnValue({
+    isAdminMode: false,
+    canReadProviders: false,
+    isAdmin: false,
+    isAdminAccount: false,
+  });
 }
 
 function makeSnapshot(options: {
@@ -667,6 +692,7 @@ describe('PortfolioPage FX refresh', () => {
     vi.clearAllMocks();
     window.localStorage.clear();
     Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1024 });
+    setAdminPortfolioSurface();
 
     getAccounts.mockResolvedValue(makeAccounts());
     getSnapshot.mockImplementation(async ({ accountId }: { accountId?: number } = {}) => makeSnapshot({ accountId, fxStale: true }));
@@ -2584,7 +2610,7 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.createAccount') }));
 
     expect(screen.getByLabelText('账户名称')).toBeInTheDocument();
-    expect(screen.getByLabelText('券商')).toHaveValue('Demo');
+    expect(screen.getByLabelText('券商')).toHaveValue('');
     expect(screen.getByLabelText('基准币种')).toHaveValue('CNY');
     expect(screen.getByLabelText('市场范围')).toHaveValue('cn');
     expect(screen.queryByText('ACCOUNT NAME')).not.toBeInTheDocument();
@@ -2600,9 +2626,9 @@ describe('PortfolioPage FX refresh', () => {
 
     expect(brokerSelect).toHaveValue('ibkr');
     expect(Array.from(brokerSelect.options).map((option) => option.textContent).join(' ')).toContain('Interactive Brokers');
-    expect(screen.getByLabelText('IBKR API 地址')).toHaveValue('https://localhost:5000/v1/api');
-    expect(screen.getByLabelText('IBKR 账户引用')).toBeInTheDocument();
-    expect(screen.getByLabelText('IBKR 会话令牌')).toBeInTheDocument();
+    expect(screen.getByLabelText('IBKR 连接端点')).toHaveValue('');
+    expect(screen.getByLabelText('IBKR 账户映射')).toBeInTheDocument();
+    expect(screen.getByLabelText('IBKR 临时授权')).toBeInTheDocument();
     expect(screen.queryByText('API BASE')).not.toBeInTheDocument();
     expect(screen.queryByText('ACCOUNT REF')).not.toBeInTheDocument();
     expect(screen.queryByText('SESSION TOKEN')).not.toBeInTheDocument();
@@ -2847,7 +2873,7 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.change(brokerSelect, { target: { value: 'ibkr' } });
     fireEvent.change(
       screen.getByPlaceholderText(translate('zh', 'portfolio.ibkrSessionTokenPlaceholder')),
-      { target: { value: 'session-token-123' } },
+      { target: { value: 'temporary-auth-123' } },
     );
 
     const brokerConnectionCallCount = listBrokerConnections.mock.calls.length;
@@ -3092,7 +3118,7 @@ describe('PortfolioPage FX refresh', () => {
       { target: { value: 'ibkr' } },
     );
     fireEvent.change(screen.getByPlaceholderText(translate('en', 'portfolio.ibkrSessionTokenPlaceholder')), {
-      target: { value: 'session-token-123' },
+      target: { value: 'temporary-auth-123' },
     });
     fireEvent.click(screen.getByRole('button', { name: translate('en', 'portfolio.syncIbkr') }));
 
@@ -3101,6 +3127,90 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByText(translate('en', 'portfolio.ibkrImportHint'))).toBeInTheDocument();
     expect(screen.getByText(translate('en', 'portfolio.syncResult'))).toBeInTheDocument();
     expect(screen.getByText((content) => content.includes(translate('en', 'portfolio.positionsCountLabel')))).toBeInTheDocument();
+  });
+
+  it('hides sync setup details and provider diagnostics for non-admin consumers', async () => {
+    setConsumerPortfolioSurface();
+    listImportBrokers.mockResolvedValueOnce({
+      brokers: [
+        { broker: 'huatai', aliases: [], displayName: 'Huatai', fileExtensions: ['csv'] },
+        { broker: 'ibkr', aliases: ['interactivebrokers'], displayName: 'Interactive Brokers', fileExtensions: ['xml'] },
+      ],
+    });
+    listBrokerConnections.mockResolvedValueOnce({
+      connections: [
+        {
+          id: 9,
+          portfolioAccountId: 1,
+          connectionName: SAFE_IBKR_CONNECTION_HANDLE,
+          brokerType: 'ibkr',
+          brokerAccountRef: SAFE_IBKR_ACCOUNT_HANDLE,
+          importMode: 'api',
+          status: 'active',
+          syncMetadata: {
+            ibkrApi: {
+              apiBaseUrl: SAFE_IBKR_URL_HANDLE,
+              verifySsl: false,
+              brokerAccountRef: SAFE_IBKR_ACCOUNT_HANDLE,
+            },
+          },
+        },
+      ],
+    });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    expect(listImportBrokers).not.toHaveBeenCalled();
+    expect(listBrokerConnections).not.toHaveBeenCalled();
+    expect(screen.queryByText(translate('zh', 'portfolio.dataSyncTitle'))).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '同步' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sync' })).not.toBeInTheDocument();
+    expect(screen.queryByText('IBKR 连接端点')).not.toBeInTheDocument();
+    expect(screen.queryByText('IBKR 账户映射')).not.toBeInTheDocument();
+    expect(screen.queryByText('IBKR 临时授权')).not.toBeInTheDocument();
+    expect(screen.queryByText(SAFE_IBKR_CONNECTION_HANDLE)).not.toBeInTheDocument();
+    expect(screen.queryByText(SAFE_IBKR_ACCOUNT_HANDLE)).not.toBeInTheDocument();
+    expect(screen.queryByText(SAFE_IBKR_URL_HANDLE)).not.toBeInTheDocument();
+    expect(screen.queryByText(translate('zh', 'portfolio.syncIbkr'))).not.toBeInTheDocument();
+    expect(screen.queryByText(translate('zh', 'portfolio.syncRequiresToken'))).not.toBeInTheDocument();
+    expect(screen.queryByText(translate('zh', 'portfolio.brokerFallbackEmpty'))).not.toBeInTheDocument();
+    expect(screen.queryByText(translate('zh', 'portfolio.brokerFallbackUnavailable'))).not.toBeInTheDocument();
+    expect(screen.queryByText('手工记账')).not.toBeInTheDocument();
+    expect(screen.queryByText('编辑')).not.toBeInTheDocument();
+    expect(screen.queryByText('作废')).not.toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-consumer-setup-boundary')).toHaveTextContent('当前视图仅展示已接入的组合、持仓与估值状态。');
+    expect(screen.getByTestId('portfolio-consumer-setup-boundary')).not.toHaveTextContent(/IBKR|token|API|账户引用|会话令牌|连接地址|同步控件|sync controls|request|trace|cache|payload/i);
+    expect(screen.getByTestId('portfolio-research-state-preview')).toHaveTextContent('账户已设置');
+  });
+
+  it('keeps new account broker blank instead of defaulting to Demo', async () => {
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    fireEvent.click(getLeftTabButton('账户'));
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.createAccount') }));
+
+    expect(screen.getByLabelText('券商')).toHaveValue('');
+    expect(screen.getByLabelText('账户名称')).toBeInTheDocument();
+    expect(screen.getByLabelText('基准币种')).toHaveValue('CNY');
+  });
+
+  it('shows explicit broker unavailability instead of falling back to built-in broker options', async () => {
+    listImportBrokers.mockResolvedValueOnce({ brokers: [] });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    fireEvent.click(getLeftTabButton('同步'));
+
+    expect(screen.getAllByText(translate('zh', 'portfolio.brokerFallbackUnavailable')).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('option', { name: /华泰|中信|招商|IBKR|Huatai|Citic|CMB/i })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('导入来源')).toHaveValue('');
+    expect(screen.queryByText('Demo')).not.toBeInTheDocument();
   });
 
   it('keeps zh IBKR sync detail labels localized on default routes', async () => {
@@ -3143,7 +3253,7 @@ describe('PortfolioPage FX refresh', () => {
       { target: { value: 'ibkr' } },
     );
     fireEvent.change(screen.getByPlaceholderText(translate('zh', 'portfolio.ibkrSessionTokenPlaceholder')), {
-      target: { value: 'session-token-123' },
+      target: { value: 'temporary-auth-123' },
     });
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.syncIbkr') }));
 
@@ -3778,7 +3888,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(Boolean(screen.getByTestId('portfolio-risk-card').compareDocumentPosition(tradeStation) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 
-  it('resets IBKR connection-derived fields on trade-account changes while preserving the typed session token', async () => {
+  it('resets IBKR connection-derived fields on trade-account changes while preserving the typed temporary authorization', async () => {
     getAccounts.mockResolvedValue(makeAccounts([
       { id: 1, name: 'Main', baseCurrency: 'USD', market: 'us' },
       { id: 2, name: 'Alt', baseCurrency: 'HKD', market: 'hk' },
@@ -3846,20 +3956,20 @@ describe('PortfolioPage FX refresh', () => {
 
     expect(await screen.findByText(SAFE_IBKR_CONNECTION_HANDLE)).toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText(translate('zh', 'portfolio.ibkrSessionTokenPlaceholder')), {
-      target: { value: 'session-token-123' },
+      target: { value: 'temporary-auth-123' },
     });
-    fireEvent.change(screen.getByLabelText('IBKR API 地址'), {
+    fireEvent.change(screen.getByLabelText('IBKR 连接端点'), {
       target: { value: 'https://override.local/v1/api' },
     });
-    fireEvent.change(screen.getByLabelText('IBKR 账户引用'), {
+    fireEvent.change(screen.getByLabelText('IBKR 账户映射'), {
       target: { value: 'U0000000' },
     });
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.syncIbkr') }));
 
     await waitFor(() => expect(syncIbkrReadOnly).toHaveBeenCalledTimes(1));
     expect(await screen.findByText(translate('zh', 'portfolio.syncResult'))).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('IBKR 会话令牌'), {
-      target: { value: 'session-token-123' },
+    fireEvent.change(screen.getByLabelText('IBKR 临时授权'), {
+      target: { value: 'temporary-auth-123' },
     });
 
     const tradeAccountSelect = screen.getByLabelText(/记账账户|ledger account/i) as HTMLSelectElement;
@@ -3868,9 +3978,9 @@ describe('PortfolioPage FX refresh', () => {
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(2));
     await waitFor(() => expect(screen.getByText(SAFE_IBKR_SECONDARY_CONNECTION_HANDLE)).toBeInTheDocument());
     await waitFor(() => expect(screen.queryByText(translate('zh', 'portfolio.syncResult'))).not.toBeInTheDocument());
-    expect(screen.getByLabelText('IBKR API 地址')).toHaveValue(SAFE_IBKR_SECONDARY_URL_HANDLE);
-    expect(screen.getByLabelText('IBKR 账户引用')).toHaveValue(SAFE_IBKR_SECONDARY_ACCOUNT_HANDLE);
-    expect(screen.getByLabelText('IBKR 会话令牌')).toHaveValue('session-token-123');
+    expect(screen.getByLabelText('IBKR 连接端点')).toHaveValue(SAFE_IBKR_SECONDARY_URL_HANDLE);
+    expect(screen.getByLabelText('IBKR 账户映射')).toHaveValue(SAFE_IBKR_SECONDARY_ACCOUNT_HANDLE);
+    expect(screen.getByLabelText('IBKR 临时授权')).toHaveValue('temporary-auth-123');
     expect(screen.getByLabelText(translate('zh', 'portfolio.verifyIbkrSsl'))).toBeChecked();
   });
 

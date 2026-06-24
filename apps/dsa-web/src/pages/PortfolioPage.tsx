@@ -40,6 +40,7 @@ import {
   shouldApplySafariA11yGuard,
   useSafariRenderReady,
 } from '../hooks/useSafariInteractionReady';
+import { useProductSurface } from '../hooks/useProductSurface';
 import { translate } from '../i18n/core';
 import { normalizePortfolioRiskEvidence } from '../utils/evidenceDisplay';
 import { toDateInputValue } from '../utils/format';
@@ -95,12 +96,6 @@ const PORTFOLIO_VALUATION_EVIDENCE_PACK_SCHEMA = 'portfolio_valuation_evidence_p
 const UNKNOWN_EVIDENCE_VALUE = 'unknown/待补证';
 
 const DEFAULT_PAGE_SIZE = 20;
-const FALLBACK_BROKERS: PortfolioImportBrokerItem[] = [
-  { broker: 'huatai', aliases: [], displayName: translate('zh', 'portfolio.brokerName.huatai'), fileExtensions: ['csv'] },
-  { broker: 'citic', aliases: ['zhongxin'], displayName: translate('zh', 'portfolio.brokerName.citic'), fileExtensions: ['csv'] },
-  { broker: 'cmb', aliases: ['cmbchina', 'zhaoshang'], displayName: translate('zh', 'portfolio.brokerName.cmb'), fileExtensions: ['csv'] },
-  { broker: 'ibkr', aliases: ['interactivebrokers'], displayName: translate('zh', 'portfolio.brokerName.ibkr'), fileExtensions: ['xml'] },
-];
 
 function subscribeNarrowViewport(onStoreChange: () => void): () => void {
   if (typeof window === 'undefined') {
@@ -1654,6 +1649,8 @@ const PortfolioPage: React.FC = () => {
   const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
   const shouldGuardA11y = shouldApplySafariA11yGuard();
   const { language, t } = useI18n();
+  const productSurface = useProductSurface();
+  const canManagePortfolioOperations = Boolean(productSurface.isAdminMode && productSurface.canReadProviders);
   const routeLocale = typeof window !== 'undefined' ? parseLocaleFromPathname(window.location.pathname) : null;
   const localize = useCallback((path: string) => (routeLocale ? buildLocalizedPath(path, routeLocale) : path), [routeLocale]);
   const copy = getPortfolioCopy(t, language);
@@ -1672,7 +1669,7 @@ const PortfolioPage: React.FC = () => {
   const [accountCreateSuccess, setAccountCreateSuccess] = useState<string | null>(null);
   const [accountForm, setAccountForm] = useState<AccountFormState>({
     name: '',
-    broker: 'Demo',
+    broker: '',
     market: 'cn' as 'cn' | 'hk' | 'us' | 'global',
     baseCurrency: 'CNY',
   });
@@ -1691,8 +1688,9 @@ const PortfolioPage: React.FC = () => {
   const [valuationEvidenceFeedback, setValuationEvidenceFeedback] = useState<string | null>(null);
 
   const [brokers, setBrokers] = useState<PortfolioImportBrokerItem[]>([]);
+  const [brokerListUnavailable, setBrokerListUnavailable] = useState(false);
   const [brokerConnections, setBrokerConnections] = useState<PortfolioBrokerConnectionItem[]>([]);
-  const [selectedBroker, setSelectedBroker] = useState('huatai');
+  const [selectedBroker, setSelectedBroker] = useState('');
   const [ibkrApiBaseUrlDraft, setIbkrApiBaseUrlDraft] = useState<string | null>(null);
   const [ibkrVerifySslDraft, setIbkrVerifySslDraft] = useState<boolean | null>(null);
   const [ibkrSessionToken, setIbkrSessionToken] = useState('');
@@ -1769,7 +1767,7 @@ const PortfolioPage: React.FC = () => {
   const editingAccount = editingTrade ? activeAccounts.find((item) => item.id === editingTrade.accountId) : undefined;
   const ibkrConnection = brokerConnections.find((item) => item.brokerType === 'ibkr') || null;
   const ibkrSyncConfig = extractIbkrSyncConfig(ibkrConnection);
-  const ibkrApiBaseUrl = ibkrApiBaseUrlDraft ?? ibkrSyncConfig.apiBaseUrl ?? 'https://localhost:5000/v1/api';
+  const ibkrApiBaseUrl = ibkrApiBaseUrlDraft ?? ibkrSyncConfig.apiBaseUrl ?? '';
   const ibkrVerifySsl = ibkrVerifySslDraft ?? ibkrSyncConfig.verifySsl ?? false;
   const ibkrBrokerAccountRef = ibkrBrokerAccountRefDraft ?? ibkrSyncConfig.brokerAccountRef ?? ibkrConnection?.brokerAccountRef ?? '';
   const currentEventCount = eventType === 'trade'
@@ -1907,36 +1905,37 @@ const PortfolioPage: React.FC = () => {
   }, []);
 
   const loadBrokers = useCallback(async () => {
+    if (!canManagePortfolioOperations) {
+      setBrokers([]);
+      setSelectedBroker('');
+      setBrokerListUnavailable(false);
+      return;
+    }
     try {
       const response = await portfolioApi.listImportBrokers();
       const brokerItems = response.brokers || [];
       if (brokerItems.length === 0) {
-        setBrokers(FALLBACK_BROKERS);
-        setSelectedBroker((prev) => (
-          FALLBACK_BROKERS.some((item) => item.broker === prev)
-            ? prev
-            : FALLBACK_BROKERS[0].broker
-        ));
+        setBrokers([]);
+        setSelectedBroker('');
+        setBrokerListUnavailable(true);
         return;
       }
       setBrokers(brokerItems);
+      setBrokerListUnavailable(false);
       setSelectedBroker((prev) => (
         brokerItems.some((item) => item.broker === prev)
           ? prev
           : brokerItems[0].broker
       ));
     } catch {
-      setBrokers(FALLBACK_BROKERS);
-      setSelectedBroker((prev) => (
-        FALLBACK_BROKERS.some((item) => item.broker === prev)
-          ? prev
-          : FALLBACK_BROKERS[0].broker
-      ));
+      setBrokers([]);
+      setSelectedBroker('');
+      setBrokerListUnavailable(true);
     }
-  }, []);
+  }, [canManagePortfolioOperations]);
 
   const loadBrokerConnections = useCallback(async (accountId?: number) => {
-    if (!accountId) {
+    if (!canManagePortfolioOperations || !accountId) {
       setBrokerConnections([]);
       return;
     }
@@ -1946,7 +1945,7 @@ const PortfolioPage: React.FC = () => {
     } catch {
       setBrokerConnections([]);
     }
-  }, []);
+  }, [canManagePortfolioOperations]);
 
   const loadSnapshotAndRisk = useCallback(async () => {
     setIsLoading(true);
@@ -2110,6 +2109,9 @@ const PortfolioPage: React.FC = () => {
 
   const handleTradeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManagePortfolioOperations) {
+      return;
+    }
     if (!writableAccountId) {
       setWriteWarning(copy.writeRequiresAccount);
       return;
@@ -2154,6 +2156,9 @@ const PortfolioPage: React.FC = () => {
 
   const handleCashSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManagePortfolioOperations) {
+      return;
+    }
     if (!writableAccountId) {
       setWriteWarning(copy.writeRequiresAccount);
       return;
@@ -2177,6 +2182,9 @@ const PortfolioPage: React.FC = () => {
 
   const handleCorporateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManagePortfolioOperations) {
+      return;
+    }
     if (!writableAccountId) {
       setWriteWarning(copy.writeRequiresAccount);
       return;
@@ -2200,6 +2208,9 @@ const PortfolioPage: React.FC = () => {
   };
 
   const handleSyncIbkr = async () => {
+    if (!canManagePortfolioOperations) {
+      return;
+    }
     if (!writableAccountId) {
       setWriteWarning(copy.syncRequiresAccount);
       return;
@@ -2231,6 +2242,9 @@ const PortfolioPage: React.FC = () => {
   };
 
   const handleConfirmDelete = async () => {
+    if (!canManagePortfolioOperations) {
+      return;
+    }
     if (!pendingDelete || deleteLoading) return;
     if (!writableAccountId) {
       setWriteWarning(copy.deleteRequiresAccount);
@@ -2295,6 +2309,9 @@ const PortfolioPage: React.FC = () => {
 
   const handleTradeEditSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!canManagePortfolioOperations) {
+      return;
+    }
     if (!editingTrade || tradeEditSubmitting) {
       return;
     }
@@ -2325,6 +2342,9 @@ const PortfolioPage: React.FC = () => {
   };
 
   const handleConfirmAccountDelete = async () => {
+    if (!canManagePortfolioOperations) {
+      return;
+    }
     if (!pendingAccountDelete || deleteLoading) return;
     try {
       setDeleteLoading(true);
@@ -2352,6 +2372,9 @@ const PortfolioPage: React.FC = () => {
 
   const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManagePortfolioOperations) {
+      return;
+    }
     const name = accountForm.name.trim();
     if (!name) {
       setAccountCreateError(copy.accountNameRequired);
@@ -2379,7 +2402,7 @@ const PortfolioPage: React.FC = () => {
       setWriteWarning(null);
       setAccountForm({
         name: '',
-        broker: 'Demo',
+        broker: '',
         market: accountForm.market,
         baseCurrency: accountForm.baseCurrency,
       });
@@ -2845,7 +2868,7 @@ const PortfolioPage: React.FC = () => {
   const holdingsPrimaryValue = hasHoldings
     ? (language === 'zh' ? `${positionRows.length} 项持仓` : `${positionRows.length} holdings`)
     : (language === 'zh' ? '等待首笔持仓' : 'Awaiting first holding');
-  const showHeaderPortfolioActions = hasHoldings;
+  const showHeaderPortfolioActions = hasHoldings && canManagePortfolioOperations;
   const accountStateSummary = !hasActiveAccounts
     ? (language === 'zh' ? '暂无可用账户' : 'No available account')
     : selectedAccount === 'all'
@@ -2989,6 +3012,9 @@ const PortfolioPage: React.FC = () => {
   );
   const syncDataActionLabel = language === 'zh' ? '同步数据' : 'Sync data';
   const openManualLedger = (nextLeftTab: 'trade' | 'account' | 'sync' | 'fx', nextTradeType?: TradeFormType) => {
+    if (!canManagePortfolioOperations) {
+      return;
+    }
     setLeftTab(nextLeftTab);
     if (nextTradeType) {
       setTradeType(nextTradeType);
@@ -3204,7 +3230,9 @@ const PortfolioPage: React.FC = () => {
     URL.revokeObjectURL(url);
     setValuationEvidenceFeedback(language === 'zh' ? '估值证据包已导出 JSON。' : 'Valuation evidence JSON exported.');
   }, [language, portfolioValuationEvidenceJson, snapshot?.asOf]);
-  const researchStateNextAction = !hasHoldings
+  const researchStateNextAction = !canManagePortfolioOperations
+    ? (language === 'zh' ? '查看接入指引' : 'Review setup guidance')
+    : !hasHoldings
     ? (language === 'zh' ? '补持仓或导入流水' : 'Add records or import ledger')
     : hasFxUnavailable || snapshot?.fxStale
       ? (language === 'zh' ? '确认FX与估值' : 'Confirm FX and valuation')
@@ -3360,6 +3388,7 @@ const PortfolioPage: React.FC = () => {
       </div>
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.04] bg-white/[0.025] px-3 py-2.5">
         <span className="text-xs font-medium text-white/62">{language === 'zh' ? '下一步' : 'Next action'}</span>
+        {canManagePortfolioOperations ? (
         <div className="flex min-w-0 flex-wrap gap-2">
           <TerminalButton
             type="button"
@@ -3383,11 +3412,19 @@ const PortfolioPage: React.FC = () => {
             {importTradesActionLabel}
           </TerminalButton>
         </div>
+        ) : (
+          <span className="text-xs text-white/45">
+            {language === 'zh' ? '连接步骤将在具备操作权限后显示。' : 'Connection steps appear when operator access is available.'}
+          </span>
+        )}
       </div>
     </TerminalPanel>
   );
 
   const handleToggleTradeActionMenu = (id: number) => {
+    if (!canManagePortfolioOperations) {
+      return;
+    }
     setOpenTradeActionMenuId((prev) => (prev === id ? null : id));
   };
 
@@ -3459,19 +3496,21 @@ const PortfolioPage: React.FC = () => {
                       </div>
                       <div className="mt-1 text-xs text-muted-text">{item.tradeDate} · {item.quantity} @ {item.price}</div>
                     </div>
-                    <PortfolioTradeActions
-                      item={item}
-                      context="history"
-                      isNarrowViewport={isNarrowViewport}
-                      openTradeActionMenuId={openTradeActionMenuId}
-                      voidedTradeLabel={voidedTradeLabel}
-                      moreTradeActionsLabel={moreTradeActionsLabel}
-                      editTradeActionLabel={editTradeActionLabel}
-                      deleteTradeActionLabel={deleteTradeActionLabel}
-                      onToggleMenu={handleToggleTradeActionMenu}
-                      onEdit={openTradeEditor}
-                      onVoid={openTradeVoidDialog}
-                    />
+                    {canManagePortfolioOperations ? (
+                      <PortfolioTradeActions
+                        item={item}
+                        context="history"
+                        isNarrowViewport={isNarrowViewport}
+                        openTradeActionMenuId={openTradeActionMenuId}
+                        voidedTradeLabel={voidedTradeLabel}
+                        moreTradeActionsLabel={moreTradeActionsLabel}
+                        editTradeActionLabel={editTradeActionLabel}
+                        deleteTradeActionLabel={deleteTradeActionLabel}
+                        onToggleMenu={handleToggleTradeActionMenu}
+                        onEdit={openTradeEditor}
+                        onVoid={openTradeVoidDialog}
+                      />
+                    ) : null}
                   </div>
                 </div>
               ))
@@ -3493,9 +3532,11 @@ const PortfolioPage: React.FC = () => {
                       <div className="text-foreground">{formatCashDirectionLabel(item.direction, language)} <span className="text-xs text-muted-text">{item.currency}</span></div>
                       <div className="mt-1 text-xs text-muted-text">{item.eventDate} · {formatMoney(item.amount, item.currency)}</div>
                     </div>
-                    <Button type="button" variant="ghost" className={PORTFOLIO_DANGER_GHOST_CLASS} onClick={() => setPendingDelete({ eventType: 'cash', id: item.id, message: copy.cashDeleteMessage(item) })} aria-label={copy.deleteConfirm} title={copy.deleteConfirm}>
-                      <Trash2 className="size-4" aria-hidden="true" />
-                    </Button>
+                    {canManagePortfolioOperations ? (
+                      <Button type="button" variant="ghost" className={PORTFOLIO_DANGER_GHOST_CLASS} onClick={() => setPendingDelete({ eventType: 'cash', id: item.id, message: copy.cashDeleteMessage(item) })} aria-label={copy.deleteConfirm} title={copy.deleteConfirm}>
+                        <Trash2 className="size-4" aria-hidden="true" />
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               ))
@@ -3521,9 +3562,11 @@ const PortfolioPage: React.FC = () => {
                         {item.splitRatio != null ? ` · ${copy.splitRatio} ${item.splitRatio}` : ''}
                       </div>
                     </div>
-                    <Button type="button" variant="ghost" className={PORTFOLIO_DANGER_GHOST_CLASS} onClick={() => setPendingDelete({ eventType: 'corporate', id: item.id, message: copy.corporateDeleteMessage(item) })} aria-label={copy.deleteConfirm} title={copy.deleteConfirm}>
-                      <Trash2 className="size-4" aria-hidden="true" />
-                    </Button>
+                    {canManagePortfolioOperations ? (
+                      <Button type="button" variant="ghost" className={PORTFOLIO_DANGER_GHOST_CLASS} onClick={() => setPendingDelete({ eventType: 'corporate', id: item.id, message: copy.corporateDeleteMessage(item) })} aria-label={copy.deleteConfirm} title={copy.deleteConfirm}>
+                        <Trash2 className="size-4" aria-hidden="true" />
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               ))
@@ -3570,19 +3613,21 @@ const PortfolioPage: React.FC = () => {
               </div>
               <div className="flex shrink-0 items-start gap-2">
                 <span className="font-mono text-xs text-white/45">{item.currency}</span>
-                <PortfolioTradeActions
-                  item={item}
-                  context="recent"
-                  isNarrowViewport={isNarrowViewport}
-                  openTradeActionMenuId={openTradeActionMenuId}
-                  voidedTradeLabel={voidedTradeLabel}
-                  moreTradeActionsLabel={moreTradeActionsLabel}
-                  editTradeActionLabel={editTradeActionLabel}
-                  deleteTradeActionLabel={deleteTradeActionLabel}
-                  onToggleMenu={handleToggleTradeActionMenu}
-                  onEdit={openTradeEditor}
-                  onVoid={openTradeVoidDialog}
-                />
+                {canManagePortfolioOperations ? (
+                  <PortfolioTradeActions
+                    item={item}
+                    context="recent"
+                    isNarrowViewport={isNarrowViewport}
+                    openTradeActionMenuId={openTradeActionMenuId}
+                    voidedTradeLabel={voidedTradeLabel}
+                    moreTradeActionsLabel={moreTradeActionsLabel}
+                    editTradeActionLabel={editTradeActionLabel}
+                    deleteTradeActionLabel={deleteTradeActionLabel}
+                    onToggleMenu={handleToggleTradeActionMenu}
+                    onEdit={openTradeEditor}
+                    onVoid={openTradeVoidDialog}
+                  />
+                ) : null}
               </div>
             </div>
           ))}
@@ -3869,6 +3914,7 @@ const PortfolioPage: React.FC = () => {
                         </div>
                       ))}
                     </div>
+                    {canManagePortfolioOperations ? (
                     <div data-testid="portfolio-empty-actions" className="flex min-w-0 flex-wrap gap-2">
                       <TerminalButton type="button" variant="primary" className="h-9 px-3" onClick={onboardingPrimaryAction}>
                         {onboardingPrimaryActionLabel}
@@ -3877,6 +3923,7 @@ const PortfolioPage: React.FC = () => {
                         {importTradesActionLabel}
                       </TerminalButton>
                     </div>
+                    ) : null}
                     <p data-testid="portfolio-empty-help" className="text-xs leading-5 text-white/45">
                       {portfolioEmptyHelpText}
                     </p>
@@ -3975,14 +4022,16 @@ const PortfolioPage: React.FC = () => {
                                       data-testid={`portfolio-holding-mobile-trust-${row.symbol}`}
                                     />
                                   ) : null}
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    className="mt-3 min-h-10 w-full rounded-md border border-[color:var(--wolfy-border-subtle)] bg-transparent px-3 py-2 text-sm text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] disabled:text-white/15 disabled:opacity-50"
-                                    onClick={() => openManualLedger('trade', 'stock')}
-                                  >
-                                    {manualLedgerActionLabel}
-                                  </Button>
+                                  {canManagePortfolioOperations ? (
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      className="mt-3 min-h-10 w-full rounded-md border border-[color:var(--wolfy-border-subtle)] bg-transparent px-3 py-2 text-sm text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] disabled:text-white/15 disabled:opacity-50"
+                                      onClick={() => openManualLedger('trade', 'stock')}
+                                    >
+                                      {manualLedgerActionLabel}
+                                    </Button>
+                                  ) : null}
                                 </article>
                               );
                             })}
@@ -3998,7 +4047,7 @@ const PortfolioPage: React.FC = () => {
                                 language === 'zh' ? '市值' : 'Market Value',
                                 language === 'zh' ? '盈亏' : 'P&L',
                                 holdingsTableStatusLabel,
-                                language === 'zh' ? '操作' : 'Action',
+                                ...(canManagePortfolioOperations ? [language === 'zh' ? '操作' : 'Action'] : []),
                               ].map((label) => (
                                 <th key={label} className="px-3 py-2 font-semibold">{label}</th>
                               ))}
@@ -4047,11 +4096,13 @@ const PortfolioPage: React.FC = () => {
                                       <span className="text-white/35">--</span>
                                     )}
                                   </td>
-                                  <td className="px-3 py-2">
-                                    <Button type="button" variant="ghost" className={PORTFOLIO_TEXT_BUTTON_CLASS} onClick={() => openManualLedger('trade', 'stock')}>
-                                      {manualLedgerActionLabel}
-                                    </Button>
-                                  </td>
+                                  {canManagePortfolioOperations ? (
+                                    <td className="px-3 py-2">
+                                      <Button type="button" variant="ghost" className={PORTFOLIO_TEXT_BUTTON_CLASS} onClick={() => openManualLedger('trade', 'stock')}>
+                                        {manualLedgerActionLabel}
+                                      </Button>
+                                    </td>
+                                  ) : null}
                                 </tr>
                               );
                             })}
@@ -4387,6 +4438,7 @@ const PortfolioPage: React.FC = () => {
                     <p className="mt-1 text-sm text-white">{nextActionHeadline}</p>
                     <p className="mt-2 text-xs leading-5 text-white/45">{nextActionBody}</p>
                   </div>
+                  {canManagePortfolioOperations ? (
                   <div className="flex flex-wrap gap-2">
                     {!hasAccounts ? (
                       <TerminalButton type="button" variant="primary" className="h-9 px-3" onClick={() => openManualLedger('account')}>
@@ -4404,6 +4456,7 @@ const PortfolioPage: React.FC = () => {
                       {syncDataActionLabel}
                     </TerminalButton>
                   </div>
+                  ) : null}
                   <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3 text-xs text-white/45">
                     {hasHistory
                       ? (language === 'zh' ? `近期已记录 ${totalHistoryRows} 条活动，可在下方时间线继续核对。` : `${totalHistoryRows} recent records are available in the timeline below.`)
@@ -4549,7 +4602,8 @@ const PortfolioPage: React.FC = () => {
               </div>
 
               <div data-testid="portfolio-manual-lane" className="min-w-0 flex flex-col gap-4">
-					          <TerminalPanel as="section" data-testid="portfolio-trade-station-card" data-execution-surface="manual-record-entry" className="min-w-0 flex flex-col gap-4 overflow-visible xl:min-h-0">
+                {canManagePortfolioOperations ? (
+						          <TerminalPanel as="section" data-testid="portfolio-trade-station-card" data-execution-surface="manual-record-entry" className="min-w-0 flex flex-col gap-4 overflow-visible xl:min-h-0">
             <div className="shrink-0">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -4737,7 +4791,7 @@ const PortfolioPage: React.FC = () => {
                   <div className="text-xs text-secondary-text space-y-1">
                     <p>{copy.currentImportAccount}</p>
                     <p>{writableAccount ? `${writableAccount.name} (#${writableAccount.id})` : copy.brokerFallbackEmpty}</p>
-                    <p>{selectedBroker === 'ibkr' ? copy.ibkrImportHint : copy.brokerImportHint}</p>
+                    <p>{brokerListUnavailable ? copy.brokerFallbackUnavailable : selectedBroker === 'ibkr' ? copy.ibkrImportHint : copy.brokerImportHint}</p>
                   </div>
                   <Select label={language === 'zh' ? '导入来源' : 'Broker'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={selectedBroker} onChange={(value) => {
                     setSelectedBroker(value);
@@ -4746,25 +4800,30 @@ const PortfolioPage: React.FC = () => {
                     if (value !== 'ibkr') {
                       setIbkrSessionToken('');
                     }
-                  }} options={brokers.map((broker) => ({ value: broker.broker, label: formatBrokerLabel(broker.broker, broker.displayName, language) }))} />
-                  {selectedBroker === 'ibkr' ? (
+                  }} options={brokers.map((broker) => ({ value: broker.broker, label: formatBrokerLabel(broker.broker, broker.displayName, language) }))} disabled={brokerListUnavailable || brokers.length === 0} />
+                  {brokerListUnavailable ? (
+                    <div className="rounded-2xl border border-amber-300/15 bg-amber-300/[0.05] p-4 text-xs leading-5 text-amber-100/80">
+                      {copy.brokerFallbackUnavailable}
+                    </div>
+                  ) : null}
+                  {!brokerListUnavailable && selectedBroker === 'ibkr' ? (
                     <SectionShell className="rounded-2xl border border-white/5 bg-white/[0.02] p-4" contentClassName="space-y-3">
                       <PortfolioIbkrImportHeader copy={copy} />
                       {ibkrConnection ? <p className="text-sm text-foreground">{ibkrConnection.connectionName}</p> : null}
-                      <Input label={language === 'zh' ? 'IBKR API 地址' : 'IBKR API base URL'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrApiBasePlaceholder} value={ibkrApiBaseUrl} onChange={(e) => setIbkrApiBaseUrlDraft(e.target.value)} />
-                      <Input label={language === 'zh' ? 'IBKR 账户引用' : 'IBKR account ref'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrAccountRefPlaceholder} value={ibkrBrokerAccountRef} onChange={(e) => setIbkrBrokerAccountRefDraft(e.target.value)} />
-                      <Input label={language === 'zh' ? 'IBKR 会话令牌' : 'IBKR session token'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrSessionTokenPlaceholder} value={ibkrSessionToken} onChange={(e) => setIbkrSessionToken(e.target.value)} />
+                      <Input label={language === 'zh' ? 'IBKR 连接端点' : 'IBKR connection endpoint'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrApiBasePlaceholder} value={ibkrApiBaseUrl} onChange={(e) => setIbkrApiBaseUrlDraft(e.target.value)} />
+                      <Input label={language === 'zh' ? 'IBKR 账户映射' : 'IBKR account mapping'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrAccountRefPlaceholder} value={ibkrBrokerAccountRef} onChange={(e) => setIbkrBrokerAccountRefDraft(e.target.value)} />
+                      <Input label={language === 'zh' ? 'IBKR 临时授权' : 'IBKR temporary authorization'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrSessionTokenPlaceholder} value={ibkrSessionToken} onChange={(e) => setIbkrSessionToken(e.target.value)} />
                       <Checkbox checked={ibkrVerifySsl} onChange={(e) => setIbkrVerifySslDraft(e.target.checked)} label={copy.verifyIbkrSsl} containerClassName="text-xs text-secondary-text" />
                       <Button type="button" variant="primary" className={`${PORTFOLIO_PRIMARY_BUTTON_CLASS} w-full`} onClick={() => void handleSyncIbkr()} disabled={!writableAccountId || ibkrSyncing}>
                         {ibkrSyncing ? copy.syncing : copy.syncIbkr}
                       </Button>
                       {ibkrSyncResult ? <PortfolioIbkrSyncResultCard copy={copy} result={ibkrSyncResult} /> : null}
                     </SectionShell>
-                  ) : (
+                  ) : !brokerListUnavailable ? (
                     <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 text-xs text-secondary-text">
                       {copy.brokerImportHint}
                     </div>
-                  )}
+                  ) : null}
                 </div>
               ) : null}
 
@@ -4838,9 +4897,26 @@ const PortfolioPage: React.FC = () => {
                 </div>
               ) : null}
             </div>
-	              </details>
-	            </div>
-	          </TerminalPanel>
+		              </details>
+		            </div>
+		          </TerminalPanel>
+                ) : (
+                  <TerminalPanel as="section" data-testid="portfolio-consumer-setup-boundary" className="min-w-0 flex flex-col gap-3">
+                    <h2 className="text-sm uppercase tracking-widest text-muted-text">
+                      {language === 'zh' ? '组合数据接入' : 'Portfolio data connection'}
+                    </h2>
+                    <p className="text-sm leading-6 text-white/62">
+                      {language === 'zh'
+                        ? '当前视图仅展示已接入的组合、持仓与估值状态。连接、导入和同步步骤由具备操作权限的人员配置后开放。'
+                        : 'This view only shows connected portfolio, holdings, and valuation status. Connection, import, and sync steps appear after an operator configures access.'}
+                    </p>
+                    <TerminalNestedBlock className="px-3 py-3 text-xs leading-5 text-white/52">
+                      {language === 'zh'
+                        ? '这里保留消费者可读状态，具体接入配置由具备操作权限的人员在受控入口完成。'
+                        : 'This area keeps consumer-readable status while operational setup stays in the controlled operator surface.'}
+                    </TerminalNestedBlock>
+                  </TerminalPanel>
+                )}
               </div>
             </div>
 	          </TerminalGrid>
