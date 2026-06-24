@@ -3048,6 +3048,48 @@ describe('UserScannerPage', () => {
     expect(screen.queryByText('AI 算力基建')).not.toBeInTheDocument();
   });
 
+  it('does not synthesize metrics or signals when backend omits candidate evidence fields', async () => {
+    const sparseCandidate = makeCandidate({
+      symbol: 'SPARSE',
+      name: 'Sparse Backend',
+      companyName: 'Sparse Backend',
+      rank: 1,
+      score: 42,
+      reasonSummary: null,
+      reasons: [],
+      keyMetrics: [],
+      featureSignals: [],
+      riskNotes: [],
+      watchContext: [],
+    });
+    const baseRun = makeRunDetail();
+    getRun.mockResolvedValue(makeRunDetail({
+      headline: 'Backend sparse scan',
+      shortlist: [sparseCandidate],
+      selected: [sparseCandidate],
+      candidates: [],
+      scoringNotes: [],
+      summary: {
+        ...baseRun.summary,
+        selectedCount: 1,
+        rejectedCount: 0,
+        dataFailedCount: 0,
+        errorCount: 0,
+      },
+    }));
+
+    renderUserScannerPage();
+
+    const row = await screen.findByTestId('scanner-result-row-SPARSE');
+    fireEvent.click(getActionButton(row, /详情|Detail/i));
+    const detail = await screen.findByTestId('scanner-result-detail-SPARSE');
+    fireEvent.click(within(detail).getByRole('button', { name: /候选说明|Candidate notes/i }));
+
+    expect(await within(detail).findByText(/未提供关键指标|No key metrics provided/i)).toBeInTheDocument();
+    expect(within(detail).queryByText(/特征信号|Feature signals/i)).not.toBeInTheDocument();
+    expect(detail).not.toHaveTextContent(/Entry range|Target price|Stop loss|Momentum expansion|Backend AI infrastructure|Backend GPU signal|Backend networking signal|AI 算力基建|Broadcom Inc\.|Tesla|Meta|Apple/i);
+  });
+
   it('keeps empty states clear when history and results are empty', async () => {
     getRuns.mockResolvedValue(makeHistoryResponse([]));
 
@@ -4058,10 +4100,16 @@ describe('UserScannerPage', () => {
 
     renderUserScannerPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: /启动扫描|运行扫描|run scanner/i }));
+    const runButton = await screen.findByRole('button', { name: /启动扫描|运行扫描|run scanner/i });
+    fireEvent.click(runButton);
 
     expect(await screen.findByTestId('scanner-run-feedback')).toHaveTextContent(/扫描请求提交中|Scanner request submitted/i);
-    expect(screen.getByTestId('scanner-run-button')).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByTestId('scanner-run-feedback')).toHaveTextContent(/正在按当前市场、范围和数据就绪度检查|Checking the current market, scope, and data readiness/i);
+    expect(runButton).toBeDisabled();
+    expect(runButton).toHaveAttribute('aria-busy', 'true');
+    expect(runButton).toHaveTextContent(/扫描中|Scanning/i);
+    fireEvent.click(runButton);
+    expect(runScan).toHaveBeenCalledTimes(1);
 
     resolveRun?.(blockedRun);
 
@@ -4153,5 +4201,35 @@ describe('UserScannerPage', () => {
     expect(screen.queryByText('Tesla')).not.toBeInTheDocument();
     expect(screen.queryByText('Meta')).not.toBeInTheDocument();
     expect(screen.queryByText('Apple')).not.toBeInTheDocument();
+  });
+
+  it('shows consumer-safe auth feedback after a scanner run click', async () => {
+    runScan.mockRejectedValueOnce(
+      createApiError(
+        createParsedApiError({
+          title: '登录已失效',
+          message: '请先登录后再运行扫描。',
+          rawMessage: 'Unauthorized token=secret provider_trace',
+          status: 401,
+          code: 'unauthorized',
+          category: 'auth_required',
+          isAuthError: true,
+        }),
+      ),
+    );
+
+    renderUserScannerPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /启动扫描|运行扫描|run scanner/i }));
+
+    const feedback = await screen.findByTestId('scanner-run-feedback');
+    expect(feedback).toHaveTextContent(/扫描未完成|Scan did not complete/i);
+    expect(feedback).toHaveTextContent(/登录|Sign in/i);
+    expect(feedback).not.toHaveTextContent(/Unauthorized|token|provider_trace|raw|provider|trace/i);
+
+    const pageError = await screen.findByTestId('scanner-page-error-summary');
+    expect(pageError).toHaveTextContent(/扫描未完成|Scan did not complete/i);
+    expect(pageError).toHaveTextContent(/登录|Sign in/i);
+    expect(pageError).not.toHaveTextContent(/Unauthorized|token|provider_trace|raw|provider|trace/i);
   });
 });
