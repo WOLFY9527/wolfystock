@@ -1427,7 +1427,7 @@ function buildWatchlistManualResearchPath(symbol: string, language: 'zh' | 'en',
 function getCopy(language: 'zh' | 'en') {
   if (language === 'en') {
     return {
-      title: 'Watchlist',
+      title: 'Watchlist Monitoring Board',
       subtitle: 'Clean monitoring list for research candidates.',
       totalTracked: 'Total tracked',
       marketsRepresented: 'Markets represented',
@@ -1549,7 +1549,7 @@ function getCopy(language: 'zh' | 'en') {
     };
   }
   return {
-      title: '观察列表',
+      title: '观察监控板',
       subtitle: '清晰跟踪每个标的的状态变化',
     totalTracked: '追踪总数',
     marketsRepresented: '覆盖市场',

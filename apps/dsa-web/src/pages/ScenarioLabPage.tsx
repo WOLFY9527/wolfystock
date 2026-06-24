@@ -711,10 +711,10 @@ export default function ScenarioLabPage() {
           <ConsoleBoard className="min-h-0" data-testid="scenario-lab-page">
             <RoughSurfaceIntro
               eyebrow={locale === 'en' ? 'Scenario Lab' : '情景实验室'}
-              title={locale === 'en' ? 'Research scenario workbench' : '研究情景工作台'}
+              title={locale === 'en' ? 'Scenario Lab what-if workbench' : '情景实验室：假设推演工作台'}
               description={locale === 'en'
-                ? 'Apply bounded scenario shocks to the current market context.'
-                : '对当前市场语境叠加有边界的情景冲击。'}
+                ? 'Apply bounded assumptions to compare how the current market frame could change.'
+                : '用有边界的假设对照当前市场框架可能如何变化。'}
             />
             {error ? (
               <div className="p-4 md:p-5">

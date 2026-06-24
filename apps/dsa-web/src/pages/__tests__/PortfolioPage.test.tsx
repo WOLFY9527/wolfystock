@@ -866,7 +866,8 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(commandStrip).queryByRole('button', { name: '添加持仓' })).not.toBeInTheDocument();
     expect(within(commandStrip).queryByRole('button', { name: '导入记录' })).not.toBeInTheDocument();
     expect(within(commandStrip).queryByRole('button', { name: '同步数据' })).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /总资产|Total Assets/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /持仓与组合暴露|Holdings and portfolio exposure/ })).toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-account-status-strip')).toHaveTextContent(/总资产|Total Assets/);
     expect(screen.getByTestId('portfolio-total-assets-value')).toHaveClass('text-white');
     expect(screen.getByTestId('portfolio-command-strip')).toContainElement(screen.getByTestId('portfolio-display-currency-select'));
     expect(screen.queryByTestId('portfolio-row-macro')).not.toBeInTheDocument();

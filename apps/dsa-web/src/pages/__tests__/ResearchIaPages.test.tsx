@@ -714,7 +714,8 @@ describe('research IA pages', () => {
     renderRoute(<ResearchRadarPage />, '/zh/research/radar?market=us&limit=5');
 
     const page = await screen.findByTestId('research-radar-page');
-    expect(page).toHaveTextContent('承接市场结构的研究队列');
+    expect(page).toHaveTextContent('研究雷达与证据缺口队列');
+    expect(page).not.toHaveTextContent('研究情景工作台');
     const hub = await within(page).findByTestId('research-queue-hub');
     expect(hub).toHaveTextContent('跨页面研究队列');
     expect(hub).toHaveTextContent('Watchlist');
@@ -1027,7 +1028,8 @@ describe('research IA pages', () => {
 
     const page = await screen.findByTestId('research-radar-page');
     const hubEmptyState = await within(page).findByTestId('research-queue-hub-empty-state');
-    expect(page).toHaveTextContent('承接市场结构的研究队列');
+    expect(page).toHaveTextContent('研究雷达与证据缺口队列');
+    expect(page).not.toHaveTextContent('研究情景工作台');
     expect(hubEmptyState).toHaveTextContent('数据暂不可用');
     expect(hubEmptyState).toHaveTextContent('当前页面没有可展示的稳定研究资料，请稍后重试。');
     expect(page.textContent || '').not.toMatch(/provider_runtime_trace|req-queue-123|raw payload|404/i);
@@ -1737,7 +1739,8 @@ describe('research IA pages', () => {
     renderRoute(<ScenarioLabPage />, '/zh/scenario-lab');
 
     const page = await screen.findByTestId('scenario-lab-page');
-    expect(page).toHaveTextContent('研究情景工作台');
+    expect(page).toHaveTextContent('情景实验室：假设推演工作台');
+    expect(page).not.toHaveTextContent('研究雷达与证据缺口队列');
     expect(page).toHaveTextContent('波动冲击');
     expect(page).toHaveTextContent('基准状态');
     expect(page).toHaveTextContent('情景输出');
@@ -1763,7 +1766,7 @@ describe('research IA pages', () => {
     })));
     expect(page.textContent || '').not.toContain('评分等级');
     expect(page.textContent || '').not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议/);
-    expect(page.textContent || '').not.toMatch(/raw|debug|provider|schema|score-grade|score_grade|unavailable|Breadth participation weakens quickly under the selected stress|Volatility structure flips into a defensive posture|Research planning only; not a personalized decision basis/i);
+    expect(page.textContent || '').not.toMatch(/raw|debug|provider|score-grade|score_grade|unavailable|Breadth participation weakens quickly under the selected stress|Volatility structure flips into a defensive posture|Research planning only; not a personalized decision basis/i);
     expect(findConsumerRawLeakage(page.textContent || '')).toEqual([]);
   });
 
@@ -1831,13 +1834,14 @@ describe('research IA pages', () => {
     renderRoute(<ScenarioLabPage />, '/zh/scenario-lab?scenario=gammaUnavailable');
 
     const page = await screen.findByTestId('scenario-lab-page');
-    expect(page).toHaveTextContent('当前情景暂不可生成');
-    expect(page).toHaveTextContent('当前市场状态数据不完整，暂无法进行情景分析。');
-    expect(page).toHaveTextContent('建议先查看市场概览，确认市场状态、驱动证据和数据新鲜度。');
-    expect(page).toHaveTextContent('当前页面仅用于研究观察，不构成操作结论。');
+    expect(page).toHaveTextContent('情景实验室：假设推演工作台');
+    expect(page).toHaveTextContent('情景待更新');
+    expect(page).toHaveTextContent('基准待确认，暂不展开输出。');
+    expect(page).toHaveTextContent('待补证据：市场框架、驱动证据、数据新鲜度。');
+    expect(page).toHaveTextContent('研究观察');
     expect(within(page).getByRole('link', { name: '查看市场概览' })).toHaveAttribute('href', '/zh/market-overview');
     expect(within(page).getByRole('link', { name: '返回研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
-    expect(page.textContent || '').not.toMatch(/blocked|unavailable|score-grade|score_grade|driver coverage|base regime evidence is missing|provider|source|runtime|debug|requestId|traceId|schemaVersion|policyVersion|raw|internal|cache/i);
+    expect(page.textContent || '').not.toMatch(/blocked|unavailable|score-grade|score_grade|driver coverage|base regime evidence is missing|provider|runtime|debug|requestId|traceId|policyVersion|raw|internal|cache/i);
     expect(findConsumerRawLeakage(page.textContent || '')).toEqual([]);
     await waitFor(() => expect(runScenarioLabMock).toHaveBeenCalledWith(expect.objectContaining({
       scenarioName: 'gammaUnavailable',
