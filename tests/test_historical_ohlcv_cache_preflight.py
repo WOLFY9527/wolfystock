@@ -110,6 +110,13 @@ def _spec_finder(available: set[str]):
     return lambda module_name: object() if module_name in available else None
 
 
+def _first_us_symbol(payload: dict[str, Any], symbol: str = "ORCL") -> dict[str, Any]:
+    for item in payload["markets"]["us"]["symbols"]:
+        if item["symbol"] == symbol:
+            return item
+    raise AssertionError(f"missing US symbol {symbol}")
+
+
 def test_disabled_default_preflight_is_dry_run_without_provider_or_mutation() -> None:
     cn_fetcher = _FakeDailyFetcher(error=AssertionError("CN provider called"))
     us_fetcher = _FakeDailyFetcher(error=AssertionError("US provider called"))
@@ -142,6 +149,133 @@ def test_disabled_default_preflight_is_dry_run_without_provider_or_mutation() ->
     assert us_item["cacheState"] == "cache_missing"
     assert "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED=true" in cn_item["nextAction"]["requiredConfig"]
     assert "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED=true" in us_item["nextAction"]["requiredConfig"]
+
+
+def test_disabled_default_seed_reports_disabled_by_config_without_provider_or_mutation() -> None:
+    fetcher = _FakeDailyFetcher(error=AssertionError("US provider called"))
+    us_cache = _FakeUsCache()
+    service = HistoricalOhlcvCachePreflightService(
+        env={},
+        spec_finder=_spec_finder({"yfinance"}),
+        us_cache=us_cache,
+        us_fetcher=fetcher,
+        today=date(2026, 6, 24),
+    )
+
+    payload = service.seed(symbols_by_market={"us": ["ORCL"]}, required_bars=5, dry_run=False)
+
+    item = _first_us_symbol(payload)
+    assert payload["networkCallsEnabled"] is False
+    assert payload["mutationEnabled"] is False
+    assert fetcher.calls == []
+    assert us_cache.save_calls == []
+    assert item["seedResult"] == "disabled_by_config"
+    assert item["barsWritten"] == 0
+    assert item["latestDate"] is None
+    assert item["freshness"] == "unknown"
+    assert item["adjustmentStatus"] == "unknown"
+
+
+def test_us_seed_requires_global_runtime_flag_before_fetching() -> None:
+    fetcher = _FakeDailyFetcher(error=AssertionError("US provider called"))
+    us_cache = _FakeUsCache()
+    service = HistoricalOhlcvCachePreflightService(
+        env={
+            "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
+            HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV: "true",
+        },
+        spec_finder=_spec_finder({"yfinance"}),
+        us_cache=us_cache,
+        us_fetcher=fetcher,
+        today=date(2026, 6, 24),
+    )
+
+    payload = service.seed(symbols_by_market={"us": ["AAPL"]}, required_bars=5, dry_run=False)
+
+    item = _first_us_symbol(payload, "AAPL")
+    assert payload["networkCallsEnabled"] is False
+    assert payload["mutationEnabled"] is False
+    assert fetcher.calls == []
+    assert us_cache.save_calls == []
+    assert item["runtimeState"] == "disabled_by_config"
+    assert item["seedResult"] == "disabled_by_config"
+    assert "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED=true" in item["nextAction"]["requiredConfig"]
+
+
+def test_us_seed_dry_run_reports_intended_action_and_writes_no_bars() -> None:
+    fetcher = _FakeDailyFetcher(error=AssertionError("US provider called"))
+    us_cache = _FakeUsCache()
+    service = HistoricalOhlcvCachePreflightService(
+        env={
+            "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "true",
+            "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
+            HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV: "true",
+        },
+        spec_finder=_spec_finder({"yfinance"}),
+        us_cache=us_cache,
+        us_fetcher=fetcher,
+        today=date(2026, 6, 24),
+    )
+
+    payload = service.seed(symbols_by_market={"us": ["NVDA"]}, required_bars=5, dry_run=True)
+
+    item = _first_us_symbol(payload, "NVDA")
+    assert payload["networkCallsEnabled"] is False
+    assert payload["mutationEnabled"] is False
+    assert fetcher.calls == []
+    assert us_cache.save_calls == []
+    assert item["seedResult"] == "dry_run"
+    assert item["intendedAction"] == "seed_us_ohlcv_cache"
+    assert item["barsWritten"] == 0
+
+
+def test_us_seed_reports_dependency_missing_without_provider_call() -> None:
+    fetcher = _FakeDailyFetcher(error=AssertionError("US provider called"))
+    service = HistoricalOhlcvCachePreflightService(
+        env={
+            "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "true",
+            "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
+            HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV: "true",
+        },
+        spec_finder=_spec_finder(set()),
+        us_cache=_FakeUsCache(),
+        us_fetcher=fetcher,
+        today=date(2026, 6, 24),
+    )
+
+    payload = service.seed(symbols_by_market={"us": ["ORCL"]}, required_bars=5, dry_run=False)
+
+    item = _first_us_symbol(payload, "ORCL")
+    assert fetcher.calls == []
+    assert item["runtimeState"] == "dependency_missing"
+    assert item["seedResult"] == "dependency_missing"
+    assert item["barsWritten"] == 0
+
+
+def test_us_provider_error_is_failed_safely_without_leaking_details() -> None:
+    fetcher = _FakeDailyFetcher(error=RuntimeError("YfinanceFetcher token=secret rawPayload Traceback"))
+    service = HistoricalOhlcvCachePreflightService(
+        env={
+            "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "true",
+            "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
+            HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV: "true",
+        },
+        spec_finder=_spec_finder({"yfinance"}),
+        us_cache=_FakeUsCache(),
+        us_fetcher=fetcher,
+        today=date(2026, 6, 24),
+    )
+
+    payload = service.seed(symbols_by_market={"us": ["AAPL"]}, required_bars=5, dry_run=False)
+    serialized = json.dumps(payload, ensure_ascii=False).lower()
+
+    item = _first_us_symbol(payload, "AAPL")
+    assert fetcher.calls == [{"stock_code": "AAPL", "start_date": None, "end_date": None, "days": 5}]
+    assert item["runtimeState"] == "runtime_unavailable"
+    assert item["seedResult"] == "failed_safely"
+    assert item["barsWritten"] == 0
+    for forbidden in ("yfinancefetcher", "token", "secret", "rawpayload", "traceback", "runtimeerror"):
+        assert forbidden not in serialized
 
 
 def test_cache_hit_reports_bar_count_freshness_and_adjustments_without_provider_call() -> None:
@@ -207,6 +341,7 @@ def test_explicit_seed_with_fake_us_provider_writes_cache_only_when_flags_allow(
     fetcher = _FakeDailyFetcher(_frame(7))
     service = HistoricalOhlcvCachePreflightService(
         env={
+            "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "true",
             "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
             HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV: "true",
         },
@@ -225,8 +360,39 @@ def test_explicit_seed_with_fake_us_provider_writes_cache_only_when_flags_allow(
     assert us_cache.save_calls == [{"symbol": "NVDA", "rows": 7}]
     item = live["markets"]["us"]["symbols"][0]
     assert item["seedState"] == "cache_updated"
+    assert item["seedResult"] == "seeded"
+    assert item["barsWritten"] == 7
+    assert item["latestDate"] == "2026-06-24"
+    assert item["freshness"] == "fresh"
+    assert item["adjustmentStatus"] == "available"
     assert item["runtimeState"] == "available"
     assert item["cachedBars"] == 5
+
+
+def test_fixture_us_seed_is_visible_to_followup_preflight_cache_hit() -> None:
+    us_cache = _FakeUsCache()
+    fetcher = _FakeDailyFetcher(_frame(7))
+    service = HistoricalOhlcvCachePreflightService(
+        env={
+            "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "true",
+            "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
+            HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV: "true",
+        },
+        spec_finder=_spec_finder({"yfinance"}),
+        us_cache=us_cache,
+        us_fetcher=fetcher,
+        today=date(2026, 6, 24),
+    )
+
+    seed_payload = service.seed(symbols_by_market={"us": ["ORCL"]}, required_bars=5, dry_run=False)
+    preflight_payload = service.preflight(symbols_by_market={"us": ["ORCL"]}, required_bars=5)
+
+    seed_item = _first_us_symbol(seed_payload, "ORCL")
+    preflight_item = _first_us_symbol(preflight_payload, "ORCL")
+    assert seed_item["seedResult"] == "seeded"
+    assert preflight_item["cacheState"] == "cache_hit"
+    assert preflight_item["cachedBars"] == 5
+    assert preflight_item["latestBarDate"] == "2026-06-24"
 
 
 def test_seed_requires_allowlisted_symbols_runtime_flag_and_seed_flag() -> None:
