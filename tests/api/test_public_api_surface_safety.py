@@ -530,31 +530,21 @@ def test_market_briefing_public_preview_ignores_prior_public_error_burst_when_au
         _reset_auth_globals()
 
 
-def test_unauthenticated_route_policy_matches_public_member_and_admin_surfaces(monkeypatch) -> None:
+def test_guest_stock_quote_baseline_is_public_while_adjacent_stock_routes_and_private_surfaces_stay_gated(
+    monkeypatch,
+) -> None:
     _reset_auth_globals()
     _reset_public_limiter_state_if_available()
     client = _auth_guarded_client()
-    market_service = MagicMock()
-    market_service.get_indices.return_value = {"items": [], "source": "fixture"}
-    market_service.get_volatility.return_value = {"items": [], "source": "fixture"}
-    market_service.get_sentiment.return_value = {"items": [], "source": "fixture"}
-    market_service.get_funds_flow.return_value = {"items": [], "source": "fixture"}
-    market_service.get_macro.return_value = {"items": [], "fallbackUsed": True, "source": "fixture"}
     stock_service = MagicMock()
-    stock_service.get_realtime_quote.return_value = _stock_quote_payload("AAPL")
+    stock_service.get_realtime_quote.side_effect = lambda symbol: _stock_quote_payload(symbol)
     evidence_service = MagicMock()
     evidence_service.get_stock_evidence.return_value = _stock_evidence_payload("AAPL")
     structure_service = MagicMock()
     structure_service.get_structure_decision.return_value = _stock_structure_decision_payload("AAPL")
 
     try:
-        with patch(
-            "api.v1.endpoints.market_overview.MarketOverviewService",
-            return_value=market_service,
-        ), patch(
-            "api.v1.endpoints.stocks.StockService",
-            return_value=stock_service,
-        ), patch(
+        with patch("api.v1.endpoints.stocks.StockService", return_value=stock_service), patch(
             "api.v1.endpoints.stocks.StockEvidenceService",
             return_value=evidence_service,
         ), patch(
@@ -566,37 +556,59 @@ def test_unauthenticated_route_policy_matches_public_member_and_admin_surfaces(m
             return_value=True,
         ):
             public_responses = {
-                "/api/v1/market-overview/indices": client.get("/api/v1/market-overview/indices"),
-                "/api/v1/market-overview/volatility": client.get("/api/v1/market-overview/volatility"),
-                "/api/v1/market-overview/sentiment": client.get("/api/v1/market-overview/sentiment"),
-                "/api/v1/market-overview/funds-flow": client.get("/api/v1/market-overview/funds-flow"),
-                "/api/v1/market-overview/macro": client.get("/api/v1/market-overview/macro"),
-                "/api/v1/stocks/AAPL/quote": client.get("/api/v1/stocks/AAPL/quote"),
-                "/api/v1/stocks/AAPL/evidence": client.get("/api/v1/stocks/AAPL/evidence"),
-                "/api/v1/stocks/AAPL/structure-decision": client.get("/api/v1/stocks/AAPL/structure-decision"),
+                "/api/v1/stocks/ORCL/quote": client.get("/api/v1/stocks/ORCL/quote"),
+                "/api/v1/stocks/600519/quote": client.get("/api/v1/stocks/600519/quote"),
             }
             protected_responses = {
+                "/api/v1/stocks/ORCL/evidence": client.get("/api/v1/stocks/ORCL/evidence"),
+                "/api/v1/stocks/ORCL/structure-decision": client.get("/api/v1/stocks/ORCL/structure-decision"),
                 "/api/v1/research/radar": client.get("/api/v1/research/radar"),
                 "/api/v1/scanner/themes": client.get("/api/v1/scanner/themes"),
+                "/api/v1/backtest/runs": client.get("/api/v1/backtest/runs"),
                 "/api/v1/admin/users": client.get("/api/v1/admin/users"),
+                "/api/v1/portfolio/accounts": client.get("/api/v1/portfolio/accounts"),
+                "/api/v1/watchlist/items": client.get("/api/v1/watchlist/items"),
+            }
+            protected_write_responses = {
+                "/api/v1/scanner/run": client.post("/api/v1/scanner/run", json={}),
+                "/api/v1/backtest/run": client.post("/api/v1/backtest/run", json={}),
+                "/api/v1/admin/users/bootstrap-admin/disable": client.post(
+                    "/api/v1/admin/users/bootstrap-admin/disable",
+                    json={"reason": "auth check", "confirm": "DISABLE"},
+                ),
+                "/api/v1/portfolio/accounts": client.post("/api/v1/portfolio/accounts", json={}),
+                "/api/v1/watchlist/items": client.post("/api/v1/watchlist/items", json={}),
             }
 
         assert {path: response.status_code for path, response in public_responses.items()} == {
-            "/api/v1/market-overview/indices": 200,
-            "/api/v1/market-overview/volatility": 200,
-            "/api/v1/market-overview/sentiment": 200,
-            "/api/v1/market-overview/funds-flow": 200,
-            "/api/v1/market-overview/macro": 200,
-            "/api/v1/stocks/AAPL/quote": 200,
-            "/api/v1/stocks/AAPL/evidence": 200,
-            "/api/v1/stocks/AAPL/structure-decision": 200,
+            "/api/v1/stocks/ORCL/quote": 200,
+            "/api/v1/stocks/600519/quote": 200,
         }
         assert {path: response.status_code for path, response in protected_responses.items()} == {
+            "/api/v1/stocks/ORCL/evidence": 401,
+            "/api/v1/stocks/ORCL/structure-decision": 401,
             "/api/v1/research/radar": 401,
             "/api/v1/scanner/themes": 401,
+            "/api/v1/backtest/runs": 401,
             "/api/v1/admin/users": 401,
+            "/api/v1/portfolio/accounts": 401,
+            "/api/v1/watchlist/items": 401,
         }
-        for response in (*public_responses.values(), *protected_responses.values()):
+        assert {path: response.status_code for path, response in protected_write_responses.items()} == {
+            "/api/v1/scanner/run": 401,
+            "/api/v1/backtest/run": 401,
+            "/api/v1/admin/users/bootstrap-admin/disable": 401,
+            "/api/v1/portfolio/accounts": 401,
+            "/api/v1/watchlist/items": 401,
+        }
+        assert stock_service.get_realtime_quote.call_count == 2
+        evidence_service.get_stock_evidence.assert_not_called()
+        structure_service.get_structure_decision.assert_not_called()
+        for response in (
+            *public_responses.values(),
+            *protected_responses.values(),
+            *protected_write_responses.values(),
+        ):
             _assert_public_surface_safe(response.json())
     finally:
         client.close()
@@ -798,13 +810,13 @@ def test_public_api_abuse_limiter_safe_market_read_allowlist_is_narrow() -> None
         "/api/v1/market-overview/funds-flow",
         "/api/v1/market-overview/macro",
         "/api/v1/stocks/AAPL/quote",
-        "/api/v1/stocks/AAPL/evidence",
-        "/api/v1/stocks/AAPL/structure-decision",
     ):
         assert limiter._is_safe_read_bypass("GET", path)
 
     assert not limiter._is_safe_read_bypass("POST", "/api/v1/market/rates")
     assert not limiter._is_safe_read_bypass("POST", "/api/v1/stocks/AAPL/quote")
+    assert not limiter._is_safe_read_bypass("GET", "/api/v1/stocks/AAPL/evidence")
+    assert not limiter._is_safe_read_bypass("GET", "/api/v1/stocks/AAPL/structure-decision")
     assert not limiter._is_safe_read_bypass("GET", "/api/v1/stocks/AAPL/history")
     assert not limiter._is_safe_read_bypass("GET", "/api/v1/market/sentiment")
     assert not limiter._is_safe_read_bypass("GET", "/api/v1/admin/users")
@@ -890,8 +902,8 @@ def test_hot_public_bucket_allows_public_route_policy_reads(monkeypatch) -> None
             "/api/v1/market-overview/sentiment": 200,
             "/api/v1/market-overview/funds-flow": 200,
             "/api/v1/stocks/AAPL/quote": 200,
-            "/api/v1/stocks/AAPL/evidence": 200,
-            "/api/v1/stocks/AAPL/structure-decision": 200,
+            "/api/v1/stocks/AAPL/evidence": 401,
+            "/api/v1/stocks/AAPL/structure-decision": 401,
         }
         assert _limiter_snapshot()["limitedBucketCount"] == 1
         for response in responses.values():

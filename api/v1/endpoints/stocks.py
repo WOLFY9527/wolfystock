@@ -68,6 +68,7 @@ _VALIDATION_UNAVAILABLE_MESSAGE = "Symbol validation is temporarily unavailable.
 _VALIDATION_VERIFIED_MESSAGE = "Symbol verified."
 _VALIDATION_UNKNOWN_MESSAGE = "Symbol format is supported, but verification is not confirmed yet."
 _STOCK_EVIDENCE_INTERNAL_ERROR_MESSAGE = "Stock evidence is temporarily unavailable. Please retry later."
+_STOCK_QUOTE_INTERNAL_ERROR_MESSAGE = "实时行情暂时不可用，请稍后重试。"
 
 
 def _consumer_safe_quote_source(result: dict) -> str | None:
@@ -537,7 +538,6 @@ def get_stock_structure_decision(
 )
 def get_stock_quote(
     stock_code: str,
-    current_user: CurrentUser = Depends(get_current_user),
 ) -> StockQuote:
     """
     获取股票实时行情
@@ -553,7 +553,6 @@ def get_stock_quote(
     Raises:
         HTTPException: 404 - 股票不存在
     """
-    _ = current_user
     try:
         service = StockService()
         
@@ -596,13 +595,13 @@ def get_stock_quote(
         raise
     except Exception as e:
         logger.error(f"获取实时行情失败: {e}", exc_info=True)
-        raise HTTPException(
+        raise safe_api_error(
             status_code=500,
-            detail={
-                "error": "internal_error",
-                "message": f"获取实时行情失败: {str(e)}"
-            }
-        )
+            error="internal_error",
+            message=_STOCK_QUOTE_INTERNAL_ERROR_MESSAGE,
+            retryable=True,
+            fallback_message=_STOCK_QUOTE_INTERNAL_ERROR_MESSAGE,
+        ) from e
 
 
 @router.get(
