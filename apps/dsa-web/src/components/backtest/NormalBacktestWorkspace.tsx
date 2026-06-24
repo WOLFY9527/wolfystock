@@ -6,6 +6,7 @@ import { GlassCard } from '../common/GlassCard';
 import type { ParsedApiError } from '../../api/error';
 import type { BacktestExecutionReadiness } from '../../types/backtest';
 import BacktestExecutionReadinessPanel from './BacktestExecutionReadinessPanel';
+import BacktestRunFeedbackBanner, { type BacktestRunFeedback } from './BacktestRunFeedbackBanner';
 import {
   RULE_BENCHMARK_OPTIONS,
   getBenchmarkModeLabel,
@@ -47,6 +48,7 @@ type NormalBacktestWorkspaceProps = {
   runReadiness?: BacktestExecutionReadiness | null;
   noAdviceDisclosure?: string | null;
   hasRunAttempt?: boolean;
+  runFeedback?: BacktestRunFeedback | null;
 };
 
 const FIELD_CLASS = 'w-full min-w-0 min-h-[44px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm leading-6 text-white outline-none transition-all focus:border-emerald-500/50 focus:bg-white/[0.05]';
@@ -80,6 +82,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
   runReadiness,
   noAdviceDisclosure,
   hasRunAttempt = false,
+  runFeedback = null,
 }) => {
   const templateName = getPointAndShootTemplateName(strategyTemplate, language);
 
@@ -290,6 +293,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
             isLoading={isLaunching}
             testId="normal-backtest-execution-readiness"
           />
+          <BacktestRunFeedbackBanner feedback={runFeedback} className="mt-4" />
 
           <div
             data-testid="normal-backtest-cta-row"

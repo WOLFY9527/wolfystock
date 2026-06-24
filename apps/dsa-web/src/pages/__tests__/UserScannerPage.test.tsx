@@ -4012,7 +4012,7 @@ describe('UserScannerPage', () => {
     await openAdvancedControls();
     fireEvent.click(screen.getByRole('button', { name: /启动扫描|运行扫描|Run scanner/i }));
 
-    expect(await screen.findByText(/运行前请输入一个或多个标的代码|Enter one or more symbols before running/i)).toBeInTheDocument();
+    expect(await screen.findAllByText(/运行前请输入一个或多个标的代码|Enter one or more symbols before running/i)).not.toHaveLength(0);
     expect(runScan).not.toHaveBeenCalled();
   });
 
@@ -4028,6 +4028,48 @@ describe('UserScannerPage', () => {
     expect(await screen.findByText(/主题名称至少需要 2 个字符|Theme name must be at least 2 characters/i)).toBeInTheDocument();
     expect(screen.getByText(/筛选条件至少需要 12 个字符|Criteria must be at least 12 characters/i)).toBeInTheDocument();
     expect(createTheme).not.toHaveBeenCalled();
+  });
+
+  it('shows pending scanner feedback before resolving into a blocked no-candidate state', async () => {
+    const blockedRun = makeRunDetail();
+    blockedRun.shortlist = [];
+    blockedRun.selected = [];
+    blockedRun.diagnostics = {
+      ...(blockedRun.diagnostics || {}),
+      dataReadiness: {
+        state: 'blocked',
+        blockerBucket: 'missing_history',
+        nextDataAction: '补齐历史数据后再重试。',
+      },
+    };
+    blockedRun.summary = {
+      ...blockedRun.summary,
+      selectedCount: 0,
+      rejectedCount: 18,
+      dataFailedCount: 22,
+      errorCount: 0,
+    };
+
+    let resolveRun: ((value: ScannerRunDetail) => void) | null = null;
+    runScan.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveRun = resolve;
+    }));
+    getRun.mockResolvedValue(blockedRun);
+
+    renderUserScannerPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /启动扫描|运行扫描|run scanner/i }));
+
+    expect(await screen.findByTestId('scanner-run-feedback')).toHaveTextContent(/扫描请求提交中|Scanner request submitted/i);
+    expect(screen.getByTestId('scanner-run-button')).toHaveAttribute('aria-busy', 'true');
+
+    resolveRun?.(blockedRun);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('scanner-run-feedback')).toHaveTextContent(/本次未形成入选候选|No selected candidate in this run|History pending|历史数据待补/i);
+    });
+    expect(screen.getByTestId('scanner-run-feedback')).toHaveTextContent('补齐历史数据后再重试。');
+    expect(screen.getByTestId('scanner-conclusion-band')).toHaveTextContent(/补齐历史数据后再重试|Check the rejection mix or history/i);
   });
 
   it('keeps Scanner primary controls accessible while exposing labeled AI theme and symbol inputs', async () => {
@@ -4079,7 +4121,18 @@ describe('UserScannerPage', () => {
   });
 
   it('does not render placeholder candidates after a failed manual run', async () => {
-    runScan.mockRejectedValueOnce({
+    let rejectRun: ((error: unknown) => void) | null = null;
+    runScan.mockImplementationOnce(() => new Promise((_resolve, reject) => {
+      rejectRun = reject;
+    }));
+
+    renderUserScannerPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /启动扫描|运行扫描|run scanner/i }));
+
+    expect(await screen.findByTestId('scanner-run-feedback')).toHaveTextContent(/扫描请求提交中|Scanner request submitted/i);
+
+    rejectRun?.({
       response: {
         status: 400,
         data: {
@@ -4091,11 +4144,9 @@ describe('UserScannerPage', () => {
       },
     });
 
-    renderUserScannerPage();
-
-    fireEvent.click(await screen.findByRole('button', { name: /启动扫描|运行扫描|run scanner/i }));
-
     expect(await screen.findByTestId('scanner-page-error-summary')).toHaveTextContent(/数据不足|Insufficient data/);
+    expect(await screen.findByTestId('scanner-run-feedback')).toHaveTextContent(/扫描未完成|Scan did not complete/i);
+    expect(screen.getByTestId('scanner-run-feedback')).toHaveTextContent(/数据不足|Insufficient data/);
     expect(screen.queryByText('A 股全市场快照不可用。')).not.toBeInTheDocument();
     expect(within(screen.getByTestId('scanner-page-error-summary')).queryByRole('button', { name: /开发者细节|Developer details/i })).not.toBeInTheDocument();
     expect(screen.getByTestId('scanner-page-error-summary')).toHaveTextContent(/数据不足|Insufficient data/);

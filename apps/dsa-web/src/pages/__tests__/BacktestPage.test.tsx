@@ -1763,7 +1763,8 @@ describe('BacktestPage', () => {
   });
 
   it('keeps blocked deterministic run attempts on the setup page with specific DATA-110 blockers', async () => {
-    runRuleBacktest.mockResolvedValueOnce(makeRuleRunResponse({
+    let resolveRun: ((value: RuleBacktestRunResponse) => void) | null = null;
+    const blockedRun = makeRuleRunResponse({
       status: 'completed',
       completedAt: '2026-04-07T08:02:00Z',
       statusMessage: '历史行情不足，无法执行该策略回测。',
@@ -1808,6 +1809,9 @@ describe('BacktestPage', () => {
         consumerSafe: true,
         noAdviceDisclosure: 'Research diagnostic only; not personalized financial advice and not an executable instruction.',
       },
+    });
+    runRuleBacktest.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveRun = resolve;
     }));
 
     renderBacktestRoutes();
@@ -1817,9 +1821,16 @@ describe('BacktestPage', () => {
     fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与执行假设/i));
     fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '执行回测任务' }));
 
+    const pendingFeedback = await screen.findAllByTestId('backtest-run-feedback');
+    expect(pendingFeedback[0]).toHaveTextContent('回测任务提交中');
     await waitFor(() => expect(runRuleBacktest).toHaveBeenCalledTimes(1));
 
+    resolveRun?.(blockedRun);
+
     expect(screen.queryByTestId('deterministic-backtest-result-page')).not.toBeInTheDocument();
+    const blockedFeedback = await screen.findAllByTestId('backtest-run-feedback');
+    expect(blockedFeedback[0]).toHaveTextContent('历史数据不足');
+    expect(blockedFeedback[0]).toHaveTextContent('缺少基准');
     const readiness = await screen.findByTestId('pro-execution-readiness-data110');
     expect(readiness).toHaveAttribute('data-readiness-state', 'data_insufficient');
     expect(readiness).toHaveAttribute('data-result-contract-available', 'false');
@@ -1870,14 +1881,10 @@ describe('BacktestPage', () => {
   });
 
   it('shows a unified message when deterministic backtest submission fails', async () => {
-    runRuleBacktest.mockRejectedValueOnce({
-      response: {
-        status: 503,
-        data: {
-          message: 'backend temporarily down',
-        },
-      },
-    });
+    let rejectRun: ((error: unknown) => void) | null = null;
+    runRuleBacktest.mockImplementationOnce(() => new Promise((_resolve, reject) => {
+      rejectRun = reject;
+    }));
 
     renderBacktestRoutes();
 
@@ -1886,11 +1893,26 @@ describe('BacktestPage', () => {
     fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与执行假设/i));
     fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '执行回测任务' }));
 
+    const pendingFeedback = await screen.findAllByTestId('backtest-run-feedback');
+    expect(pendingFeedback[0]).toHaveTextContent('回测任务提交中');
+
+    rejectRun?.({
+      response: {
+        status: 503,
+        data: {
+          message: 'backend temporarily down',
+        },
+      },
+    });
+
     const alerts = await screen.findAllByRole('alert');
     const alert = alerts.find((node) => node.textContent?.includes('服务器暂时不可用'));
     expect(alert).toBeDefined();
     expect(alert).toHaveTextContent('服务器暂时不可用');
     expect(alert).toHaveTextContent('服务器暂时不可用，请稍后重试。');
+    const failedFeedback = await screen.findAllByTestId('backtest-run-feedback');
+    expect(failedFeedback[0]).toHaveTextContent('回测未完成');
+    expect(failedFeedback[0]).toHaveTextContent('服务器暂时不可用');
   });
 
   it('opens deterministic history items in the dedicated result page route', async () => {
