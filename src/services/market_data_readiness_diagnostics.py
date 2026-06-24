@@ -20,6 +20,7 @@ from src.services.official_macro_liquidity_cache_contracts import (
     build_official_fed_liquidity_cache_bundle,
     build_official_us_rates_cache_bundle,
 )
+from src.services.historical_ohlcv_cache_preflight import build_historical_ohlcv_cache_preflight
 from src.services.akshare_cn_ohlcv_cache import build_akshare_cn_ohlcv_runtime_status
 from src.services.provider_affected_surface_mapping import (
     canonical_product_affected_surfaces,
@@ -117,6 +118,7 @@ class MarketDataReadinessDiagnostics:
     checks: tuple[MarketDataReadinessCheck, ...]
     consumer_evidence_readiness_matrix: tuple[ConsumerEvidenceReadinessSpec, ...]
     official_risk_source_readiness: Mapping[str, Any]
+    historical_ohlcv_cache_preflight: Mapping[str, Any]
     representative_symbols: tuple[str, ...] = ()
     diagnostic_only: bool = True
     provider_runtime_called: bool = False
@@ -129,6 +131,7 @@ class MarketDataReadinessDiagnostics:
             "providerRuntimeCalled": self.provider_runtime_called,
             "networkCallsEnabled": self.network_calls_enabled,
             "representativeSymbols": list(self.representative_symbols),
+            "historicalOhlcvCachePreflight": dict(self.historical_ohlcv_cache_preflight),
             "checks": [check.to_dict() for check in self.checks],
             "consumerEvidenceReadinessMatrix": {
                 "contractVersion": CONSUMER_EVIDENCE_READINESS_MATRIX_VERSION,
@@ -177,6 +180,12 @@ def build_market_data_readiness_diagnostics(
             vix_rows=official_vix_rows,
             rates_rows=official_rates_rows,
             fed_liquidity_rows=official_fed_liquidity_rows,
+        ),
+        historical_ohlcv_cache_preflight=build_historical_ohlcv_cache_preflight(
+            env=resolved_env,
+            spec_finder=spec_finder,
+            symbols_by_market={"us": normalized_symbols},
+            dry_run=True,
         ),
         representative_symbols=normalized_symbols,
     )

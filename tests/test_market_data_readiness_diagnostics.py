@@ -402,7 +402,16 @@ def test_diagnostics_stay_inert_without_network_or_provider_runtime_calls(tmp_pa
     assert payload["networkCallsEnabled"] is False
     assert payload["officialRiskSourceReadiness"]["externalProviderCalls"] is False
     assert payload["officialRiskSourceReadiness"]["mutationEnabled"] is False
-    assert seen_modules == ["pyarrow", "fastparquet", "tushare", "pytdx", "akshare", "efinance"]
+    assert seen_modules == [
+        "pyarrow",
+        "fastparquet",
+        "tushare",
+        "pytdx",
+        "akshare",
+        "efinance",
+        "akshare",
+        "yfinance",
+    ]
 
 
 def test_cn_ohlcv_runtime_preflight_reports_disabled_and_dependency_missing_without_provider_calls() -> None:
@@ -426,6 +435,30 @@ def test_cn_ohlcv_runtime_preflight_reports_disabled_and_dependency_missing_with
     assert missing_check["details"]["runtimeStatus"] == "dependency_missing"
     assert missing_check["details"]["networkCallsEnabled"] is False
     for forbidden in ("token", "secret", "rawpayload", "traceback"):
+        assert forbidden not in serialized
+
+
+def test_historical_ohlcv_cache_preflight_section_is_present_and_redacted() -> None:
+    payload = build_market_data_readiness_diagnostics(
+        env={
+            "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "true",
+            "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
+            "WOLFYSTOCK_HISTORICAL_OHLCV_CACHE_SEED_ENABLED": "true",
+        },
+        spec_finder=_spec_finder_with(ALL_OPTIONAL_MODULES),
+        representative_symbols=["ORCL", "AAPL", "NVDA"],
+    ).to_dict()
+
+    section = payload["historicalOhlcvCachePreflight"]
+    serialized = json.dumps(section, ensure_ascii=False).lower()
+
+    assert section["contractVersion"] == "historical_ohlcv_cache_preflight_v1"
+    assert section["dryRun"] is True
+    assert section["networkCallsEnabled"] is False
+    assert section["mutationEnabled"] is False
+    assert section["markets"]["cn"]["symbols"][0]["symbol"] == "600519"
+    assert [item["symbol"] for item in section["markets"]["us"]["symbols"]] == ["ORCL", "AAPL", "NVDA"]
+    for forbidden in ("aksharefetcher", "yfinancefetcher", "cachekey", "rawpayload", "token", "traceback"):
         assert forbidden not in serialized
 
 
@@ -581,7 +614,16 @@ def test_consumer_evidence_readiness_matrix_is_provider_free_and_covers_core_sur
         for row in rows
     }
     assert EXPECTED_READINESS_STATES <= {row["readinessState"] for row in rows}
-    assert seen_modules == ["pyarrow", "fastparquet", "tushare", "pytdx", "akshare", "efinance"]
+    assert seen_modules == [
+        "pyarrow",
+        "fastparquet",
+        "tushare",
+        "pytdx",
+        "akshare",
+        "efinance",
+        "akshare",
+        "yfinance",
+    ]
 
 
 def test_official_vix_readiness_rows_fail_closed_without_runtime_checks() -> None:
