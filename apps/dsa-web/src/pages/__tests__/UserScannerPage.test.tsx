@@ -2419,7 +2419,7 @@ describe('UserScannerPage', () => {
     const status = await screen.findByTestId('scanner-status-strip');
     const candidates = await screen.findByTestId('scanner-candidate-scroll-region');
     const table = await screen.findByTestId('scanner-result-table');
-    expect(status).toHaveTextContent(/Best candidate|最佳候选/);
+    expect(status).toHaveTextContent(/Top ranked row \(observation\)|排序首位（观察）/);
     expect(status).toHaveTextContent(/Candidate mix|候选分布/);
     expect(status).toHaveTextContent(/Signal state|信号状态/);
     expect(screen.queryByTestId('scanner-diagnostics-panel')).not.toBeInTheDocument();
@@ -3690,7 +3690,7 @@ describe('UserScannerPage', () => {
       expect(historySummary).toHaveTextContent(/最近扫描|Latest scan/);
       expect(historySummary).toHaveTextContent(/上次扫描|Previous scan/);
     });
-    expect(screen.getByTestId('scanner-run-comparison-compact')).toHaveTextContent(/候选减少|最佳候选变化|分数变化|候选变化|Candidates|Best changed|Score|Candidate/);
+    expect(screen.getByTestId('scanner-run-comparison-compact')).toHaveTextContent(/候选减少|排序首位（观察）变化|分数变化|候选变化|Candidates|Top-ranked row changed|Score|Candidate/);
 
     await waitFor(() => {
       expect(comparison).toHaveTextContent(/WULF.*连续入选|WULF.*Retained selected/i);

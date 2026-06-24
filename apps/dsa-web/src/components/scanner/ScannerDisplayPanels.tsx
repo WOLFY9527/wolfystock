@@ -260,7 +260,7 @@ export function ScannerResultHistorySummary({
                   </div>
                 ) : (
                   <div className="mt-2 grid grid-cols-2 gap-1.5 text-[11px] sm:grid-cols-3">
-                    <FieldChip label="最佳候选" value={summary.bestCandidate} />
+                    <FieldChip label={language === 'en' ? 'Top ranked row (observation)' : '排序首位（观察）'} value={summary.bestCandidate} />
                     <FieldChip label="候选数量" value={String(summary.candidateCount)} />
                     <FieldChip label="淘汰数量" value={String(summary.rejectedCount)} />
                     <FieldChip label="失败数量" value={String(summary.failedCount)} />
@@ -459,7 +459,7 @@ export function ScannerHistoryFallbackPanel({
                 </div>
               ) : (
                 <div className="mt-2 grid grid-cols-2 gap-1.5 text-[11px] sm:grid-cols-3">
-                  <FieldChip label="最佳候选" value={summary.bestCandidate} />
+                  <FieldChip label={language === 'en' ? 'Top ranked row (observation)' : '排序首位（观察）'} value={summary.bestCandidate} />
                   <FieldChip label="候选数量" value={String(summary.candidateCount)} />
                   <FieldChip label="淘汰数量" value={String(summary.rejectedCount)} />
                   <FieldChip label="失败数量" value={String(summary.failedCount)} />

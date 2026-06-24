@@ -337,8 +337,7 @@ describe('ParameterSweepPanel', () => {
     renderPanel();
 
     const initialRegistry = screen.getByTestId('pro-parameter-sweep-artifact-registry');
-    expect(initialRegistry).toHaveTextContent('研究证据包注册中心');
-    expect(initialRegistry).toHaveTextContent('backtest-sweep-evidence-pack');
+    expect(initialRegistry).toHaveTextContent('研究证据包');
     expect(initialRegistry).toHaveTextContent('backtest-sweep-evidence-pack.v1');
     expect(initialRegistry).toHaveTextContent('Backtest Sweep');
     expect(initialRegistry).toHaveTextContent('待补证');
@@ -361,9 +360,11 @@ describe('ParameterSweepPanel', () => {
 
     const registry = await screen.findByTestId('pro-parameter-sweep-artifact-registry');
     expect(registry).toHaveTextContent('可用');
-    expect(registry).toHaveTextContent('Artifact key');
-    expect(registry).toHaveTextContent('Schema version');
-    expect(registry).toHaveTextContent('Source surface');
+    expect(registry).toHaveTextContent('证据包版本');
+    expect(registry).toHaveTextContent('来源页面');
+    expect(registry).not.toHaveTextContent('Artifact key');
+    expect(registry).not.toHaveTextContent('Schema version');
+    expect(registry).not.toHaveTextContent('Source surface');
     expect(await screen.findByTestId('pro-parameter-sweep-evidence-copy')).toHaveTextContent('复制证据包');
     expect(screen.getByTestId('pro-parameter-sweep-evidence-download')).toHaveTextContent('导出研究证据包');
   });
