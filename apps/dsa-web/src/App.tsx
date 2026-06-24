@@ -250,7 +250,7 @@ function isStockStructureDecisionDetailPath(pathname: string): boolean {
 }
 
 function isStockStructureDecisionLegacyPath(pathname: string): boolean {
-  return /^\/stock\/[^/]+(?:\/)?$/i.test(pathname);
+  return /^\/stock\/[^/]+(?:\/structure-decision)?(?:\/)?$/i.test(pathname);
 }
 
 function isProtectedProductPath(pathname: string): boolean {
@@ -539,7 +539,9 @@ export const AppContent: React.FC = () => {
         <Route path="/:locale/guest/scanner" element={<Navigate to="../scanner" replace />} />
         <Route path="/:locale/user/scanner" element={<Navigate to="../scanner" replace />} />
         <Route path="/stock/:stockCode" element={<StockStructureDecisionLegacyRedirect />} />
+        <Route path="/stock/:stockCode/structure-decision" element={<StockStructureDecisionLegacyRedirect />} />
         <Route path="/:locale/stock/:stockCode" element={<StockStructureDecisionLegacyRedirect />} />
+        <Route path="/:locale/stock/:stockCode/structure-decision" element={<StockStructureDecisionLegacyRedirect />} />
         <Route element={<Shell />}>
           <Route path="/market" element={<Navigate to="/market-overview" replace />} />
           {/* /settings/system is the canonical admin system settings surface; /admin aliases remain intentional deep links. */}

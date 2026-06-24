@@ -143,9 +143,16 @@ vi.mock('../pages/LiquidityMonitorPage', () => ({
   default: () => <div>liquidity-monitor-page</div>,
 }));
 
-vi.mock('../pages/StockStructureDecisionPage', () => ({
-  default: () => <div>stock-structure-decision-page</div>,
-}));
+vi.mock('../pages/StockStructureDecisionPage', async () => {
+  const { useLocation, useParams } = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    default: () => {
+      const { stockCode } = useParams<{ stockCode: string }>();
+      const location = useLocation();
+      return <div>{`stock-structure-decision-page:${stockCode}:${location.pathname}`}</div>;
+    },
+  };
+});
 
 vi.mock('../pages/StockStructureDecisionEntryPage', () => ({
   default: () => <div>stock-structure-entry-page</div>,
@@ -674,6 +681,9 @@ describe('AppContent route flows', () => {
     ['/stock/AAPL', '/stocks/AAPL/structure-decision'],
     ['/zh/stock/AAPL', '/zh/stocks/AAPL/structure-decision'],
     ['/en/stock/AAPL', '/en/stocks/AAPL/structure-decision'],
+    ['/stock/AAPL/structure-decision', '/stocks/AAPL/structure-decision'],
+    ['/zh/stock/AAPL/structure-decision', '/zh/stocks/AAPL/structure-decision'],
+    ['/en/stock/AAPL/structure-decision', '/en/stocks/AAPL/structure-decision'],
   ])('redirects legacy stock route %s to the stock research surface', async (path, expectedPath) => {
     renderAtWithLocationProbe(path);
 
@@ -681,6 +691,25 @@ describe('AppContent route flows', () => {
     expect(await screen.findByText(path.startsWith('/zh/') ? 'auth-guard:个股结构面板' : 'auth-guard:Stock Structure Panel')).toBeInTheDocument();
     expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
     expect(screen.queryByText('stock-structure-decision-page')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['/stock/600519', '/stocks/600519/structure-decision', '600519'],
+    ['/stock/ORCL', '/stocks/ORCL/structure-decision', 'ORCL'],
+    ['/stock/600519/structure-decision', '/stocks/600519/structure-decision', '600519'],
+    ['/stocks/ORCL/structure-decision', '/stocks/ORCL/structure-decision', 'ORCL'],
+  ])('opens stock research route %s for signed-in consumers without admin shell leakage', async (path, expectedPath, expectedTicker) => {
+    mockSignedInConsumer();
+
+    renderAtWithLocationProbe(path);
+
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(expectedPath));
+    expect(await screen.findByText(`stock-structure-decision-page:${expectedTicker}:${expectedPath}`)).toBeInTheDocument();
+    expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
+    expect(screen.queryByText('system-settings-page')).not.toBeInTheDocument();
+    expect(screen.queryByText('market-provider-operations-page')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /requires an admin account|Admin Sign-in Required/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/auth-guard:/)).not.toBeInTheDocument();
   });
 
   it('redirects the browser legacy stock route before the catch-all can render NotFound', async () => {
