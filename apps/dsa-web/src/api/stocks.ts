@@ -79,6 +79,59 @@ export type StockHistoryResponse = {
   data: StockHistoryPoint[];
 };
 
+export type StockTechnicalIndicatorsStatus =
+  | 'available'
+  | 'missing_cache'
+  | 'insufficient_history'
+  | 'error'
+  | string;
+
+export type StockTechnicalIndicatorValue = {
+  value?: number | null;
+  status?: string | null;
+  asOf?: string | null;
+};
+
+export type StockTechnicalIndicatorsDataQuality = {
+  status?: string | null;
+  reason?: string | null;
+  requiredBars?: number | null;
+  observedBars?: number | null;
+  usableBars?: number | null;
+  missingBars?: number | null;
+  freshness?: string | null;
+  freshnessState?: string | null;
+};
+
+export type StockTechnicalIndicatorsResponse = {
+  contractVersion?: string | null;
+  schemaVersion?: string | null;
+  symbol: string;
+  status: StockTechnicalIndicatorsStatus;
+  timeframe?: string | null;
+  asOf?: string | null;
+  freshness?: string | null;
+  sourceLabel?: string | null;
+  dataQuality: StockTechnicalIndicatorsDataQuality;
+  indicators: {
+    sma20?: StockTechnicalIndicatorValue | null;
+    sma50?: StockTechnicalIndicatorValue | null;
+    sma200?: StockTechnicalIndicatorValue | null;
+    ema12?: StockTechnicalIndicatorValue | null;
+    ema26?: StockTechnicalIndicatorValue | null;
+    rsi14?: StockTechnicalIndicatorValue | null;
+    macd?: StockTechnicalIndicatorValue | null;
+    macdSignal?: StockTechnicalIndicatorValue | null;
+    macdHistogram?: StockTechnicalIndicatorValue | null;
+    bollingerUpper?: StockTechnicalIndicatorValue | null;
+    bollingerMiddle?: StockTechnicalIndicatorValue | null;
+    bollingerLower?: StockTechnicalIndicatorValue | null;
+  };
+  message?: string | null;
+  reason?: string | null;
+  noAdviceDisclosure?: string | null;
+};
+
 export type StockIntradayPoint = {
   time: string;
   open: number;
@@ -410,6 +463,76 @@ function normalizeStockHistoryResponse(payload: unknown): StockHistoryResponse {
     diagnostics: normalized.diagnostics ?? null,
     sourceConfidence: normalized.sourceConfidence ?? null,
     data: Array.isArray(normalized.data) ? normalized.data : [],
+  };
+}
+
+function normalizeTechnicalIndicatorValue(value: unknown): StockTechnicalIndicatorValue | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return { value };
+  }
+  if (!isRecord(value)) return null;
+  const hasValueShape = ['value', 'status', 'asOf', 'as_of'].some((key) => key in value);
+  if (!hasValueShape) return null;
+  return {
+    value: numberField(value, ['value']),
+    status: stringField(value, ['status']),
+    asOf: stringField(value, ['asOf', 'as_of']),
+  };
+}
+
+function readTechnicalIndicatorValue(
+  record: Record<string, unknown>,
+  keys: string[],
+): StockTechnicalIndicatorValue | null {
+  return normalizeTechnicalIndicatorValue(firstField(record, keys));
+}
+
+function normalizeStockTechnicalIndicatorsResponse(payload: unknown): StockTechnicalIndicatorsResponse {
+  const normalized = toCamelCase<Record<string, unknown>>(payload);
+  const indicators = isRecord(normalized.indicators) ? normalized.indicators : {};
+  const sma = isRecord(indicators.sma) ? indicators.sma : {};
+  const ema = isRecord(indicators.ema) ? indicators.ema : {};
+  const rsi = isRecord(indicators.rsi) ? indicators.rsi : {};
+  const macd = isRecord(indicators.macd) ? indicators.macd : {};
+  const bollinger = isRecord(indicators.bollinger) ? indicators.bollinger : {};
+  const dataQuality = isRecord(normalized.dataQuality) ? normalized.dataQuality : {};
+
+  return {
+    contractVersion: stringField(normalized, ['contractVersion']),
+    schemaVersion: stringField(normalized, ['schemaVersion']),
+    symbol: stringField(normalized, ['symbol', 'stockCode', 'ticker']) || '',
+    status: stringField(normalized, ['status', 'state']) || 'error',
+    timeframe: stringField(normalized, ['timeframe', 'period']),
+    asOf: stringField(normalized, ['asOf', 'updatedAt', 'marketTimestamp']),
+    freshness: stringField(normalized, ['freshness']),
+    sourceLabel: stringField(normalized, ['sourceLabel', 'sourceBoundaryLabel']),
+    dataQuality: {
+      status: stringField(dataQuality, ['status', 'state']),
+      reason: stringField(dataQuality, ['reason']),
+      requiredBars: numberField(dataQuality, ['requiredBars']),
+      observedBars: numberField(dataQuality, ['observedBars']),
+      usableBars: numberField(dataQuality, ['usableBars']),
+      missingBars: numberField(dataQuality, ['missingBars']),
+      freshness: stringField(dataQuality, ['freshness']),
+      freshnessState: stringField(dataQuality, ['freshnessState']),
+    },
+    indicators: {
+      sma20: readTechnicalIndicatorValue(indicators, ['sma20', 'sma_20']) ?? readTechnicalIndicatorValue(sma, ['20', 'period20', 'sma20']),
+      sma50: readTechnicalIndicatorValue(indicators, ['sma50', 'sma_50']) ?? readTechnicalIndicatorValue(sma, ['50', 'period50', 'sma50']),
+      sma200: readTechnicalIndicatorValue(indicators, ['sma200', 'sma_200']) ?? readTechnicalIndicatorValue(sma, ['200', 'period200', 'sma200']),
+      ema12: readTechnicalIndicatorValue(indicators, ['ema12', 'ema_12']) ?? readTechnicalIndicatorValue(ema, ['12', 'period12', 'ema12']),
+      ema26: readTechnicalIndicatorValue(indicators, ['ema26', 'ema_26']) ?? readTechnicalIndicatorValue(ema, ['26', 'period26', 'ema26']),
+      rsi14: readTechnicalIndicatorValue(indicators, ['rsi14', 'rsi_14']) ?? readTechnicalIndicatorValue(rsi, ['14', 'period14', 'rsi14']),
+      macd: readTechnicalIndicatorValue(indicators, ['macd']) ?? readTechnicalIndicatorValue(macd, ['macd', 'line', 'value']),
+      macdSignal: readTechnicalIndicatorValue(indicators, ['macdSignal', 'macd_signal']) ?? readTechnicalIndicatorValue(macd, ['signal', 'signalLine', 'macdSignal']),
+      macdHistogram: readTechnicalIndicatorValue(indicators, ['macdHistogram', 'macd_histogram', 'macdHist', 'macd_hist']) ?? readTechnicalIndicatorValue(macd, ['histogram', 'hist', 'macdHistogram']),
+      bollingerUpper: readTechnicalIndicatorValue(indicators, ['bollingerUpper', 'bollinger_upper']) ?? readTechnicalIndicatorValue(bollinger, ['upper', 'upperBand']),
+      bollingerMiddle: readTechnicalIndicatorValue(indicators, ['bollingerMiddle', 'bollinger_middle']) ?? readTechnicalIndicatorValue(bollinger, ['middle', 'mid', 'basis']),
+      bollingerLower: readTechnicalIndicatorValue(indicators, ['bollingerLower', 'bollinger_lower']) ?? readTechnicalIndicatorValue(bollinger, ['lower', 'lowerBand']),
+    },
+    message: stringField(normalized, ['message']),
+    reason: stringField(normalized, ['reason']),
+    noAdviceDisclosure: stringField(normalized, ['noAdviceDisclosure']),
   };
 }
 
@@ -824,6 +947,11 @@ export const stocksApi = {
       params,
     });
     return normalizeStockHistoryResponse(response.data);
+  },
+
+  async getTechnicalIndicators(stockCode: string): Promise<StockTechnicalIndicatorsResponse> {
+    const response = await apiClient.get(`/api/v1/stocks/${encodeURIComponent(stockCode)}/technical-indicators`);
+    return normalizeStockTechnicalIndicatorsResponse(response.data);
   },
 
   async getIntraday(

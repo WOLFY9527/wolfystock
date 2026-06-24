@@ -20,6 +20,7 @@ import {
   type StockHistoryPoint,
   type StockHistoryResponse,
   type StockQuote,
+  type StockTechnicalIndicatorsResponse,
   type SymbolResearchPacket,
   type StockPeerCorrelationSnapshot,
   type StockStructureDecisionResponse,
@@ -1491,6 +1492,238 @@ function formatCompactNumber(value: number | null | undefined, language: 'zh' | 
   }).format(value);
 }
 
+function formatTechnicalValue(value: number | null | undefined, language: 'zh' | 'en'): string | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return new Intl.NumberFormat(language === 'en' ? 'en-US' : 'zh-CN', {
+    maximumFractionDigits: 3,
+  }).format(value);
+}
+
+function technicalIndicatorValue(
+  indicators: StockTechnicalIndicatorsResponse | null,
+  key: keyof StockTechnicalIndicatorsResponse['indicators'],
+  language: 'zh' | 'en',
+): string | null {
+  return formatTechnicalValue(indicators?.indicators[key]?.value ?? null, language);
+}
+
+function technicalStatusLabel(status: string | null | undefined, language: 'zh' | 'en'): { label: string; status: 'success' | 'warning' | 'error' | 'info' } {
+  const token = normalizeStockConsumerToken(status);
+  if (token === 'available' || token === 'ready') {
+    return { label: language === 'en' ? 'Indicators available' : '指标可用', status: 'success' };
+  }
+  if (token === 'missing_cache' || token === 'missing') {
+    return { label: language === 'en' ? 'OHLCV cache missing' : '本地数据待补', status: 'warning' };
+  }
+  if (token === 'insufficient_history' || token === 'insufficient') {
+    return { label: language === 'en' ? 'History insufficient' : '历史样本不足', status: 'warning' };
+  }
+  if (token === 'error' || token === 'failed') {
+    return { label: language === 'en' ? 'Indicators unavailable' : '指标暂不可用', status: 'error' };
+  }
+  return { label: language === 'en' ? 'Indicators pending' : '指标待确认', status: 'info' };
+}
+
+function technicalFreshnessLabel(
+  indicators: StockTechnicalIndicatorsResponse,
+  language: 'zh' | 'en',
+): string {
+  const freshness = normalizeStockConsumerToken(indicators.freshness || indicators.dataQuality.freshness || indicators.dataQuality.freshnessState);
+  if (freshness === 'current' || freshness === 'fresh' || freshness === 'live') {
+    return language === 'en' ? 'Latest available' : '最新可用';
+  }
+  if (freshness === 'stale' || freshness === 'delayed') {
+    return language === 'en' ? 'May be delayed' : '可能延迟';
+  }
+  const timestamp = formatQuoteTimestamp(indicators.asOf, language);
+  if (timestamp) return `${language === 'en' ? 'Updated' : '更新'} ${timestamp}`;
+  return language === 'en' ? 'Freshness pending' : '新鲜度待确认';
+}
+
+function technicalAsOfLabel(
+  indicators: StockTechnicalIndicatorsResponse,
+  language: 'zh' | 'en',
+): string | null {
+  const timestamp = formatQuoteTimestamp(indicators.asOf, language);
+  if (!timestamp) return null;
+  return `${language === 'en' ? 'Updated' : '更新'} ${timestamp}`;
+}
+
+function technicalSourceBoundaryLabel(
+  indicators: StockTechnicalIndicatorsResponse,
+  language: 'zh' | 'en',
+): string {
+  const safeLabel = safeOptionalConsumerText(indicators.sourceLabel, language);
+  if (safeLabel) return safeLabel;
+  return language === 'en' ? 'Local OHLCV boundary' : '本地 OHLCV 边界';
+}
+
+function technicalHistoryRows(
+  indicators: StockTechnicalIndicatorsResponse | null,
+  language: 'zh' | 'en',
+) {
+  const quality = indicators?.dataQuality ?? {};
+  const required = quality.requiredBars;
+  const observed = quality.observedBars ?? quality.usableBars;
+  const missing = quality.missingBars ?? (
+    typeof required === 'number' && typeof observed === 'number'
+      ? Math.max(required - observed, 0)
+      : null
+  );
+  return [
+    {
+      key: 'required-bars',
+      label: language === 'en' ? 'Required history' : '所需历史',
+      value: typeof required === 'number' ? formatCompactNumber(required, language) : (language === 'en' ? 'not listed' : '未列明'),
+    },
+    {
+      key: 'observed-bars',
+      label: language === 'en' ? 'Observed history' : '已观察历史',
+      value: typeof observed === 'number' ? formatCompactNumber(observed, language) : (language === 'en' ? 'not received' : '未收到'),
+    },
+    {
+      key: 'missing-bars',
+      label: language === 'en' ? 'History gap' : '历史缺口',
+      value: typeof missing === 'number' ? formatCompactNumber(missing, language) : (language === 'en' ? 'unknown' : '待补证'),
+    },
+  ];
+}
+
+function technicalMetricRows(
+  indicators: StockTechnicalIndicatorsResponse,
+  language: 'zh' | 'en',
+) {
+  return [
+    ['sma20', 'SMA 20'],
+    ['sma50', 'SMA 50'],
+    ['sma200', 'SMA 200'],
+    ['ema12', 'EMA 12'],
+    ['ema26', 'EMA 26'],
+    ['rsi14', 'RSI 14'],
+    ['macd', 'MACD'],
+    ['macdSignal', language === 'en' ? 'MACD signal' : 'MACD 信号线'],
+    ['macdHistogram', language === 'en' ? 'MACD histogram' : 'MACD 柱'],
+    ['bollingerUpper', language === 'en' ? 'Bollinger upper' : '布林带上轨'],
+    ['bollingerMiddle', language === 'en' ? 'Bollinger middle' : '布林带中轨'],
+    ['bollingerLower', language === 'en' ? 'Bollinger lower' : '布林带下轨'],
+  ].map(([key, label]) => ({
+    key,
+    label,
+    value: technicalIndicatorValue(indicators, key as keyof StockTechnicalIndicatorsResponse['indicators'], language),
+  })).filter((row): row is { key: string; label: string; value: string } => Boolean(row.value));
+}
+
+function StockTechnicalIndicatorsPanel({
+  indicators,
+  failed,
+  loading,
+  language,
+}: {
+  indicators: StockTechnicalIndicatorsResponse | null;
+  failed: boolean;
+  loading: boolean;
+  language: 'zh' | 'en';
+}) {
+  const isEnglish = language === 'en';
+
+  if (loading && !indicators && !failed) {
+    return (
+      <div className="border-t border-[color:var(--wolfy-divider)] p-3" data-testid="stock-technical-indicators-panel">
+        <RoughSectionCard eyebrow={isEnglish ? 'Technical indicators' : '技术指标'} title={isEnglish ? 'Loading indicators' : '正在读取技术指标'}>
+          <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+            {isEnglish ? 'Loading cached OHLCV indicator context.' : '正在读取本地 OHLCV 指标上下文。'}
+          </p>
+        </RoughSectionCard>
+      </div>
+    );
+  }
+
+  if (failed) {
+    return (
+      <div className="border-t border-[color:var(--wolfy-divider)] p-3" data-testid="stock-technical-indicators-panel">
+        <RoughSectionCard eyebrow={isEnglish ? 'Technical indicators' : '技术指标'} title={isEnglish ? 'Indicators unavailable' : '技术指标暂不可用'}>
+          <div className="mb-3 flex flex-wrap gap-2">
+            <StatusBadge status="error" label={isEnglish ? 'Endpoint unavailable' : '接口暂不可用'} size="sm" />
+            <TerminalChip variant="neutral">{isEnglish ? 'Research observation only' : '仅研究观察'}</TerminalChip>
+          </div>
+          <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+            {isEnglish
+              ? 'The page received a safe error state and does not infer indicator values.'
+              : '页面收到安全错误状态，不展示原始诊断，也不推断指标。'}
+          </p>
+        </RoughSectionCard>
+      </div>
+    );
+  }
+
+  if (!indicators) return null;
+
+  const status = technicalStatusLabel(indicators.status, language);
+  const statusToken = normalizeStockConsumerToken(indicators.status);
+  const rows = technicalMetricRows(indicators, language);
+  const isAvailable = statusToken === 'available' || statusToken === 'ready';
+  const timeframe = periodLabel(indicators.timeframe, language) || indicators.timeframe || (isEnglish ? 'Daily' : '日线');
+  const boundaryChips = [
+    technicalSourceBoundaryLabel(indicators, language),
+    technicalFreshnessLabel(indicators, language),
+    technicalAsOfLabel(indicators, language),
+    timeframe,
+    isEnglish ? 'Research observation only' : '仅研究观察',
+  ].filter(Boolean) as string[];
+
+  if (isAvailable && rows.length) {
+    return (
+      <div className="border-t border-[color:var(--wolfy-divider)] p-3" data-testid="stock-technical-indicators-panel">
+        <RoughSectionCard eyebrow={isEnglish ? 'Technical indicators' : '技术指标'} title={isEnglish ? 'Cached OHLCV indicators' : '本地 OHLCV 技术指标'}>
+          <div className="mb-3 flex flex-wrap gap-2">
+            <StatusBadge status={status.status} label={status.label} size="sm" />
+            {boundaryChips.map((label) => (
+              <TerminalChip key={label} variant="neutral">{label}</TerminalChip>
+            ))}
+          </div>
+          <RoughKeyValueRows rows={rows} />
+          <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+            {isEnglish
+              ? 'Research-only context from cached OHLCV. No action instruction is generated.'
+              : '仅作研究观察上下文，来自本地 OHLCV，不生成操作指令。'}
+          </p>
+        </RoughSectionCard>
+      </div>
+    );
+  }
+
+  const title = statusToken === 'missing_cache'
+    ? (isEnglish ? 'Cached OHLCV data not available' : '本地 OHLCV 数据暂不可用')
+    : statusToken === 'insufficient_history'
+      ? (isEnglish ? 'History is insufficient for indicators' : '历史样本不足，暂不计算指标')
+      : (isEnglish ? 'Indicators not populated' : '技术指标待补证');
+  const detail = statusToken === 'missing_cache'
+    ? (isEnglish
+      ? 'The cached OHLCV input is not available, so SMA, EMA, RSI, MACD, and Bollinger values are not shown.'
+      : '本地 OHLCV 输入暂不可用，因此不展示 SMA、EMA、RSI、MACD 与布林带数值。')
+    : statusToken === 'insufficient_history'
+      ? (isEnglish
+        ? 'The observed history is shorter than the required window. The page does not calculate partial indicator values.'
+        : '已观察历史短于所需窗口，页面不会计算部分或替代指标值。')
+      : (isEnglish
+        ? 'Indicator values are not present in the current contract.'
+        : '当前合约未提供可展示的指标值。');
+
+  return (
+    <div className="border-t border-[color:var(--wolfy-divider)] p-3" data-testid="stock-technical-indicators-panel">
+      <RoughSectionCard eyebrow={isEnglish ? 'Technical indicators' : '技术指标'} title={title}>
+        <div className="mb-3 flex flex-wrap gap-2">
+          <StatusBadge status={status.status} label={status.label} size="sm" />
+          <TerminalChip variant="neutral">{isEnglish ? 'No inferred values' : '不推断指标'}</TerminalChip>
+          <TerminalChip variant="neutral">{isEnglish ? 'Research observation only' : '仅研究观察'}</TerminalChip>
+        </div>
+        <RoughKeyValueRows rows={technicalHistoryRows(indicators, language)} />
+        <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{detail}</p>
+      </RoughSectionCard>
+    </div>
+  );
+}
+
 function buildHistoryChartPath(points: StockHistoryPoint[], width: number, height: number, padding: number): string {
   const closes = points.map((point) => point.close).filter((value) => Number.isFinite(value));
   if (closes.length < 2) return '';
@@ -2219,6 +2452,8 @@ export default function StockStructureDecisionPage() {
   const [historyFailed, setHistoryFailed] = useState(false);
   const [quote, setQuote] = useState<StockQuote | null>(null);
   const [quoteFailed, setQuoteFailed] = useState(false);
+  const [technicalIndicators, setTechnicalIndicators] = useState<StockTechnicalIndicatorsResponse | null>(null);
+  const [technicalIndicatorsFailed, setTechnicalIndicatorsFailed] = useState(false);
   const [optionsStructure, setOptionsStructure] = useState<OptionsStructureSummary | null>(null);
   const [optionsStructureFailed, setOptionsStructureFailed] = useState(false);
   const [comparePacket, setComparePacket] = useState<StockSymbolCompareEvidencePacket | null>(null);
@@ -2236,6 +2471,8 @@ export default function StockStructureDecisionPage() {
     setHistoryFailed(false);
     setQuote(null);
     setQuoteFailed(false);
+    setTechnicalIndicators(null);
+    setTechnicalIndicatorsFailed(false);
     setOptionsStructure(null);
     setOptionsStructureFailed(false);
     try {
@@ -2274,18 +2511,21 @@ export default function StockStructureDecisionPage() {
           setResearchPacketFailed(false);
           setHistory(null);
           setHistoryFailed(false);
+          setTechnicalIndicators(null);
+          setTechnicalIndicatorsFailed(false);
           setComparePacket(null);
           setSymbolNotFound({
             symbol: validation.normalizedSymbol || validation.stockCode || primarySymbol,
           });
           return;
         }
-        const [quoteResult, packetResult, responseResult, optionsResult, historyResult] = await Promise.allSettled([
+        const [quoteResult, packetResult, responseResult, optionsResult, historyResult, technicalResult] = await Promise.allSettled([
           stocksApi.getQuote(primarySymbol),
           stocksApi.getResearchPacket(primarySymbol),
           stocksApi.getStructureDecision(primarySymbol),
           optionsLabApi.getOptionsStructure(primarySymbol),
           stocksApi.getHistory(primarySymbol, { period: 'daily', days: 180 }),
+          stocksApi.getTechnicalIndicators(primarySymbol),
         ]);
         if (quoteResult.status === 'fulfilled') {
           setQuote(quoteResult.value);
@@ -2309,6 +2549,12 @@ export default function StockStructureDecisionPage() {
           setHistoryFailed(false);
         } else {
           setHistoryFailed(true);
+        }
+        if (technicalResult.status === 'fulfilled') {
+          setTechnicalIndicators(technicalResult.value);
+          setTechnicalIndicatorsFailed(false);
+        } else {
+          setTechnicalIndicatorsFailed(true);
         }
         if (responseResult.status === 'rejected') {
           throw responseResult.reason;
@@ -2528,6 +2774,14 @@ export default function StockStructureDecisionPage() {
                 structure={optionsStructure}
                 failed={optionsStructureFailed}
                 loading={loading && !optionsStructure && !optionsStructureFailed}
+                language={locale}
+              />
+            ) : null}
+            {!isCompareRequest && !symbolNotFound ? (
+              <StockTechnicalIndicatorsPanel
+                indicators={technicalIndicators}
+                failed={technicalIndicatorsFailed}
+                loading={loading && !technicalIndicators && !technicalIndicatorsFailed}
                 language={locale}
               />
             ) : null}
