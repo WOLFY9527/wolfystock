@@ -1578,6 +1578,24 @@ function buildScannerValidationFeedback(
   };
 }
 
+function isScannerAuthOrAccessError(error: ParsedApiError): boolean {
+  return Boolean(
+    error.isAuthError
+    || error.status === 401
+    || error.status === 403
+    || error.category === 'auth_required'
+    || error.category === 'access_denied',
+  );
+}
+
+function getScannerSafeApiErrorMessage(error: ParsedApiError, language: 'zh' | 'en'): string {
+  return getConsumerSafeApiErrorCopy(error, {
+    language,
+    fallbackTitle: language === 'en' ? 'Scanner unavailable' : '扫描暂不可用',
+    fallbackMessage: language === 'en' ? 'Please sign in or check access.' : '请重新登录或确认权限。',
+  }).message;
+}
+
 function buildScannerErrorFeedback(
   error: ParsedApiError,
   language: 'zh' | 'en',
@@ -1592,7 +1610,9 @@ function buildScannerErrorFeedback(
   return {
     tone: 'danger',
     title: language === 'en' ? 'Scan did not complete' : '扫描未完成',
-    body: compactSummary
+    body: isScannerAuthOrAccessError(error)
+      ? getScannerSafeApiErrorMessage(error, language)
+      : compactSummary
       ? (language === 'en'
         ? `${compactSummary}. Retry later or adjust the current scope.`
         : `${compactSummary}。可稍后重试，或调整当前范围。`)
@@ -2486,6 +2506,7 @@ const UserScannerPage: React.FC = () => {
   const [strategySimulationError, setStrategySimulationError] = useState<string | null>(null);
   const [viewportWidth, setViewportWidth] = useState(() => (typeof window === 'undefined' ? 1440 : window.innerWidth));
   const selectedRunIdRef = useRef<number | null>(null);
+  const scannerRunInFlightRef = useRef(false);
 
   useEffect(() => {
     document.title = t('scanner.documentTitle');
@@ -2680,6 +2701,8 @@ const UserScannerPage: React.FC = () => {
   }, [fetchHistory]);
 
   const executeScannerRun = useCallback(async (request: ScannerRunRequest) => {
+    if (scannerRunInFlightRef.current) return;
+    scannerRunInFlightRef.current = true;
     setIsRunning(true);
     setScannerRunFeedback(buildScannerPendingFeedback(language));
     try {
@@ -2696,6 +2719,7 @@ const UserScannerPage: React.FC = () => {
       setPageError(parsedError);
       setScannerRunFeedback(buildScannerErrorFeedback(parsedError, language));
     } finally {
+      scannerRunInFlightRef.current = false;
       setIsRunning(false);
     }
   }, [fetchHistory, language, scannerFirstRunSetupLabel]);
@@ -3132,7 +3156,11 @@ const UserScannerPage: React.FC = () => {
   const emptyStateBody = language === 'en'
     ? `Scanner organizes observation candidates from the current scope. Starting setup: ${scannerFirstRunSetupLabel}.`
     : `扫描器会先按当前范围整理候选与观察线索。当前起始范围：${scannerFirstRunSetupLabel}。`;
-  const pageErrorSummary = pageError ? sanitizeScannerErrorSummary(pageError.message, language) || compactScannerStateLabel('failed', language) : null;
+  const pageErrorSummary = pageError
+    ? (isScannerAuthOrAccessError(pageError)
+      ? getScannerSafeApiErrorMessage(pageError, language)
+      : sanitizeScannerErrorSummary(pageError.message, language) || compactScannerStateLabel('failed', language))
+    : null;
   const historyResolution = useMemo<ScannerHistoryResolution>(
     () => ({
       hasLoaded: hasLoadedHistory,
