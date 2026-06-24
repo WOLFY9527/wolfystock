@@ -87,7 +87,7 @@ export default function ResearchArtifactRegistry({
   testId,
 }: ResearchArtifactRegistryProps) {
   const [statusByKey, setStatusByKey] = useState<Record<string, string>>({});
-  const resolvedTitle = title || (locale === 'en' ? 'Research artifact registry' : '研究证据包注册中心');
+  const resolvedTitle = title || (locale === 'en' ? 'Research evidence packs' : '研究证据包');
   const actionBaseClass = 'inline-flex min-h-[36px] items-center justify-center gap-1.5 rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-xs font-semibold text-white/78 transition-colors hover:border-white/20 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45';
 
   if (!entries.length) return null;
@@ -143,17 +143,13 @@ export default function ResearchArtifactRegistry({
                     <TerminalChip variant={stateVariant(state)}>{STATE_LABELS[state][locale]}</TerminalChip>
                   </div>
                   <p className="mt-1 text-xs leading-5 text-white/58">{entry.description}</p>
-                  <dl className="mt-2 grid gap-2 text-[11px] leading-5 text-white/58 sm:grid-cols-3">
+                  <dl className="mt-2 grid gap-2 text-[11px] leading-5 text-white/58 sm:grid-cols-2">
                     <div>
-                      <dt className="text-white/38">Artifact key</dt>
-                      <dd className="break-all font-mono text-white/72">{safeText(entry.packKey, locale)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-white/38">Schema version</dt>
+                      <dt className="text-white/38">{locale === 'en' ? 'Pack version' : '证据包版本'}</dt>
                       <dd className="break-all font-mono text-white/72">{safeText(entry.schemaVersion, locale)}</dd>
                     </div>
                     <div>
-                      <dt className="text-white/38">Source surface</dt>
+                      <dt className="text-white/38">{locale === 'en' ? 'Source page' : '来源页面'}</dt>
                       <dd className="text-white/72">{safeText(entry.sourceSurface, locale)}</dd>
                     </div>
                   </dl>

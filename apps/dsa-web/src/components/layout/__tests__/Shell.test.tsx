@@ -262,6 +262,8 @@ describe('Shell', () => {
       expect(story.copy.en.evidence).toContain('Evidence boundary');
       expect(story.copy.zh.boundary).not.toMatch(/买入|下单|必买|稳赚|保证收益/);
       expect(story.copy.en.boundary).not.toMatch(/guaranteed|best contract|AI recommends you buy/i);
+      expect(story.copy.zh.evidence).not.toMatch(/observationOnly=true|decisionGrade=false|provider|broker|raw debug payload/i);
+      expect(story.copy.en.evidence).not.toMatch(/observationOnly=true|decisionGrade=false|provider|broker|raw debug payload|frontend contract/i);
     }
   });
 

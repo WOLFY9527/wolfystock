@@ -661,15 +661,16 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                 const record = item as Record<string, unknown>;
                 const label = String(record.label || '改写成当前可执行版本');
                 const nextStrategyText = String(record.strategyText || record.strategy_text || '');
-                if (!nextStrategyText) return null;
+                const consumerSafeStrategyText = backtestStrategyDisplayCopy(nextStrategyText);
+                if (!consumerSafeStrategyText) return null;
                 return (
                   <button
-                    key={nextStrategyText}
+                    key={consumerSafeStrategyText}
                     type="button"
                     className={secondaryButtonClass}
-                    onClick={() => onApplyRewriteSuggestion(nextStrategyText)}
+                    onClick={() => onApplyRewriteSuggestion(consumerSafeStrategyText)}
                   >
-                    {label}: {nextStrategyText}
+                    {label}: {consumerSafeStrategyText}
                   </button>
                 );
               })}

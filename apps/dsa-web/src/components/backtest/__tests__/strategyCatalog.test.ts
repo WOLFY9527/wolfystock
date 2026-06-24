@@ -3,7 +3,6 @@ import {
   BUILT_IN_STRATEGY_CATALOG,
   POINT_AND_SHOOT_TEMPLATE_IDS,
   POINT_AND_SHOOT_TEMPLATES,
-  backtestStrategyDisplayCopy,
   buildPointAndShootStrategyDisplayText,
   buildPointAndShootStrategyText,
   getStrategyCatalogGroups,
@@ -107,18 +106,19 @@ describe('strategyCatalog', () => {
       initialCapital: '100000',
     });
 
-    expect(rawStrategyText).toContain('买入');
-    expect(rawStrategyText).toContain('卖出');
-    expect(displayStrategyText).toContain('正向信号触发');
-    expect(displayStrategyText).toContain('反向信号触发');
+    expect(rawStrategyText).toContain('入场规则样本');
+    expect(rawStrategyText).toContain('退出规则样本');
+    expect(rawStrategyText).not.toMatch(/买入|卖出|止损|止盈|buy|sell|stop.?loss|take.?profit/i);
+    expect(displayStrategyText).toContain('入场规则样本');
+    expect(displayStrategyText).toContain('退出规则样本');
     expect(displayStrategyText).not.toMatch(/买入|卖出|止损|止盈|buy|sell|stop.?loss|take.?profit/i);
 
-    const sanitizedCards = BUILT_IN_STRATEGY_CATALOG.map((template) => [
-      backtestStrategyDisplayCopy(template.description.zh),
-      backtestStrategyDisplayCopy(template.logicSummary.zh),
-      backtestStrategyDisplayCopy(template.description.en),
-      backtestStrategyDisplayCopy(template.logicSummary.en),
-      ...template.defaultParameters.map((parameter) => backtestStrategyDisplayCopy(`${parameter.label.zh} ${parameter.label.en}`)),
+    const sanitizedCards = getStrategyCatalogGroups().flatMap((group) => group.templates).map((template) => [
+      template.description.zh,
+      template.logicSummary.zh,
+      template.description.en,
+      template.logicSummary.en,
+      ...template.defaultParameters.map((parameter) => `${parameter.label.zh} ${parameter.label.en}`),
     ].join(' ')).join(' ');
 
     expect(sanitizedCards).not.toMatch(/买入|卖出|止损|止盈|buy|sell|stop.?loss|take.?profit/i);

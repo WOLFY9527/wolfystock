@@ -1237,7 +1237,7 @@ describe('BacktestPage', () => {
     });
 
     expect(await screen.findByTestId('pro-strategy-catalog-toast')).toHaveTextContent('当前模板暂不支持直接运行，请在编辑器中修改后再执行');
-    expect(screen.getByDisplayValue('近20日涨幅转正并创新高买入，跌破10日低点卖出')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('近20日涨幅转正并创新高入场规则样本，跌破10日低点退出规则样本')).toBeInTheDocument();
   });
 
   it('loads executable catalog templates without showing the unsupported warning', async () => {
@@ -1257,7 +1257,7 @@ describe('BacktestPage', () => {
     });
 
     expect(screen.queryByTestId('pro-strategy-catalog-toast')).not.toBeInTheDocument();
-    expect(screen.getByDisplayValue('MACD 金叉买入，死叉卖出')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('MACD 金叉入场规则样本，死叉退出规则样本')).toBeInTheDocument();
   });
 
   it('switches the professional workspace through one active step at a time', async () => {
@@ -1419,11 +1419,11 @@ describe('BacktestPage', () => {
     expect(within(assumptionsSection).getByText('未显式写出 MACD 参数，当前默认使用 (12, 26, 9)。')).toBeInTheDocument();
 
     fireEvent.click(within(guidanceSection).getByRole('button', {
-      name: /改写成当前可执行版本:\s*AAPL，MACD金叉买入，死叉卖出/i,
+      name: /改写成当前可执行版本:\s*AAPL，MACD金叉入场规则样本，死叉退出规则样本/i,
     }));
 
     expect(await screen.findByText('已应用建议改写')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('AAPL，MACD金叉买入，死叉卖出')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('AAPL，MACD金叉入场规则样本，死叉退出规则样本')).toBeInTheDocument();
   });
 
   it('keeps parse confirmation and history entry on the configuration page without embedding result analysis', async () => {

@@ -53,8 +53,8 @@ StrategyTemplateCategoryId,
       en: 'Basic / Default Strategies',
     },
     description: {
-      zh: '仅保留当前 deterministic 引擎可直接执行的默认模板，供普通用户一键发射。',
-      en: 'Keeps only the deterministic-ready presets that ordinary users can launch directly.',
+      zh: '仅保留当前 deterministic 引擎可直接载入的默认模板，供普通用户直接研究。',
+      en: 'Keeps only the deterministic-ready presets that ordinary users can load directly.',
     },
   },
   advanced: {
@@ -63,8 +63,8 @@ StrategyTemplateCategoryId,
       en: 'Advanced / Extended Strategies',
     },
     description: {
-      zh: '扩展更多经典量价、波动率与区间模板；已支持的条目可直接执行，其余保留参考。',
-      en: 'Expands the catalog with classic price, volume, and volatility setups; executable templates launch directly while the rest remain as references.',
+      zh: '扩展更多经典量价、波动率与区间模板；已支持的条目可直接研究，其余保留参考。',
+      en: 'Expands the catalog with classic price, volume, and volatility setups; loadable templates open directly while the rest remain as references.',
     },
   },
   professional: {
@@ -503,29 +503,32 @@ export const POINT_AND_SHOOT_TEMPLATES = BUILT_IN_STRATEGY_CATALOG.filter(
 );
 
 const BACKTEST_STRATEGY_COPY_REPLACEMENTS: Array<[RegExp, string]> = [
-  [/买入/g, '正向信号触发'],
-  [/卖出/g, '反向信号触发'],
-  [/减仓/g, '暴露收缩'],
-  [/离场/g, '观察解除'],
-  [/退出/g, '观察解除'],
-  [/入场/g, '观察触发'],
-  [/介入/g, '观察触发'],
-  [/追涨/g, '跟踪突破'],
+  [/买入条件/g, '入场规则样本'],
+  [/卖出条件/g, '退出规则样本'],
+  [/持续买入/g, '持续投入样本'],
+  [/买入并持有/g, '持有参照'],
+  [/买入持有/g, '持有参照'],
+  [/买入/g, '入场规则样本'],
+  [/卖出/g, '退出规则样本'],
+  [/减仓或离场/g, '暴露收缩或退出规则样本'],
+  [/减仓离场/g, '暴露收缩或退出规则样本'],
+  [/减仓/g, '暴露收缩规则样本'],
+  [/离场/g, '退出规则样本'],
+  [/介入/g, '开始观察'],
   [/参与/g, '观察'],
   [/开仓/g, '开启观察'],
   [/建仓/g, '建立观察状态'],
-  [/加仓/g, '暴露增加'],
-  [/止损/g, '风险退出参考'],
-  [/止盈/g, '上方参考'],
-  [/\bbuy(?:s|ing)?\b/gi, 'trigger a positive signal'],
-  [/\bsell(?:s|ing)?\b/gi, 'trigger a reverse signal'],
-  [/\bexit(?:s|ing)?\b/gi, 'release the observation'],
-  [/\bentries\b/gi, 'positive signal triggers'],
-  [/\bentry\b/gi, 'positive signal trigger'],
+  [/加仓/g, '暴露扩展规则样本'],
+  [/止损/g, '风险退出规则'],
+  [/止盈/g, '上方参考退出规则'],
+  [/\bbuy(?:s|ing)?\b/gi, 'entry rule sample'],
+  [/\bsell(?:s|ing)?\b/gi, 'exit rule sample'],
+  [/\breduce or exit\b/gi, 'exposure reduction or exit rule sample'],
+  [/\bexit(?:s|ing)?\b/gi, 'exit rule sample'],
   [/\benter(?:s|ing)?\b/gi, 'start observing'],
   [/\btrims?\b/gi, 'tracks exposure reduction'],
-  [/\bstop[-\s]?loss\b/gi, 'fixed exit reference'],
-  [/\btake[-\s]?profit\b/gi, 'target exit reference'],
+  [/\bstop[-\s]?loss\b/gi, 'risk exit rule'],
+  [/\btake[-\s]?profit\b/gi, 'upside reference exit rule'],
 ];
 
 export function backtestStrategyDisplayCopy(value: string): string {
@@ -535,8 +538,29 @@ export function backtestStrategyDisplayCopy(value: string): string {
   );
 }
 
+function sanitizeStrategyLocalizedText(text: LocalizedText): LocalizedText {
+  return {
+    zh: backtestStrategyDisplayCopy(text.zh),
+    en: backtestStrategyDisplayCopy(text.en),
+  };
+}
+
+function sanitizeStrategyCatalogEntry(entry: StrategyCatalogEntry): StrategyCatalogEntry {
+  return {
+    ...entry,
+    description: sanitizeStrategyLocalizedText(entry.description),
+    logicSummary: sanitizeStrategyLocalizedText(entry.logicSummary),
+    editorText: sanitizeStrategyLocalizedText(entry.editorText),
+    defaultParameters: entry.defaultParameters.map((parameter) => ({
+      ...parameter,
+      label: sanitizeStrategyLocalizedText(parameter.label),
+    })),
+  };
+}
+
 export function getStrategyCatalogEntry(templateId: string): StrategyCatalogEntry | undefined {
-  return BUILT_IN_STRATEGY_CATALOG.find((template) => template.id === templateId);
+  const template = BUILT_IN_STRATEGY_CATALOG.find((item) => item.id === templateId);
+  return template ? sanitizeStrategyCatalogEntry(template) : undefined;
 }
 
 export function getStrategyCatalogGroups(): Array<{
@@ -549,7 +573,7 @@ export function getStrategyCatalogGroups(): Array<{
     id: category,
     title: STRATEGY_CATEGORY_COPY[category].title,
     description: STRATEGY_CATEGORY_COPY[category].description,
-    templates: BUILT_IN_STRATEGY_CATALOG.filter((template) => template.category === category),
+    templates: BUILT_IN_STRATEGY_CATALOG.filter((template) => template.category === category).map(sanitizeStrategyCatalogEntry),
   }));
 }
 
@@ -570,8 +594,8 @@ export function buildPointAndShootStrategyText(
   const selectedTemplate = getStrategyCatalogEntry(template);
   const editorText = selectedTemplate?.editorText[language]
     || (language === 'en'
-      ? 'Buy when the 5-day moving average crosses above the 20-day average and sell on the reverse crossover'
-      : '5日均线上穿20日均线买入，下穿卖出');
+      ? 'Use the 5-day moving average crossing above the 20-day average as the entry rule sample, and the reverse crossover as the exit rule sample'
+      : '5日均线上穿20日均线作为入场规则样本，下穿作为退出规则样本');
 
   return language === 'en'
     ? `Use initial capital ${resolvedCapital}. Backtest ${resolvedCode} from ${resolvedStart} to ${resolvedEnd}. ${editorText}.`

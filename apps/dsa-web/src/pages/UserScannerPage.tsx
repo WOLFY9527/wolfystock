@@ -1641,8 +1641,8 @@ function buildScannerSuccessFeedback(
         ? `Scan completed with ${selectedCount} candidates`
         : `扫描已完成：形成 ${selectedCount} 个候选`,
       body: language === 'en'
-        ? 'Candidate evidence stays research-only. Ranking and labels do not imply an execution instruction.'
-        : '候选证据仅供研究参考，排序与标签不构成执行指令。',
+        ? 'Candidate evidence stays research-only. Ranked rows and labels are observation-only and do not imply an execution instruction.'
+        : '候选证据仅供研究参考，排序行与标签仅供观察，不构成执行指令。',
     };
   }
   return {
@@ -2182,7 +2182,7 @@ function buildRunComparisonHighlights(
     items.push({ label: language === 'en' ? 'Candidates' : '候选减少', value: String(countDelta) });
   }
   if (currentBest && previousBest && currentBest !== previousBest) {
-    items.push({ label: language === 'en' ? 'Best changed' : '最佳候选变化', value: `${previousBest} -> ${currentBest}` });
+    items.push({ label: language === 'en' ? 'Top-ranked row changed' : '排序首位（观察）变化', value: `${previousBest} -> ${currentBest}` });
   }
   if (scoreDelta != null && scoreDelta !== 0) {
     items.push({ label: language === 'en' ? 'Score' : '分数变化', value: formatScoreDelta(scoreDelta) || '0' });
@@ -3791,7 +3791,7 @@ const UserScannerPage: React.FC = () => {
   const isManualRecoveryAnalyzePending = Boolean(manualRecoveryParsedSymbol && pendingAnalyzeSymbol === manualRecoveryParsedSymbol);
   const scannerStatusItems = [
     {
-      label: language === 'en' ? 'Best candidate' : '最佳候选',
+      label: language === 'en' ? 'Top ranked row (observation)' : '排序首位（观察）',
       value: activeDetailCandidate
         ? `${activeDetailCandidate.symbol || '--'} · ${activeDetailCandidate.companyName || activeDetailCandidate.name || '--'}`
         : (scannerConclusion.state === 'waiting'

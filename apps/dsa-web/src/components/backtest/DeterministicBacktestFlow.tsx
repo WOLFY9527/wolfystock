@@ -44,16 +44,16 @@ type StrategyExample = {
 
 const STRATEGY_EXAMPLES: Record<BacktestLanguage, StrategyExample[]> = {
   zh: [
-    { label: 'MACD 金叉正向信号，死叉观察解除', strategyText: 'MACD 金叉买入，死叉卖出' },
-    { label: '5日均线上穿20日均线正向信号，下穿观察解除', strategyText: '5日均线上穿20日均线买入，下穿卖出' },
+    { label: 'MACD 金叉正向信号，死叉观察解除', strategyText: 'MACD 金叉作为入场规则样本，死叉作为退出规则样本' },
+    { label: '5日均线上穿20日均线正向信号，下穿观察解除', strategyText: '5日均线上穿20日均线作为入场规则样本，下穿作为退出规则样本' },
     { label: '2025 区间内每月定投 1000 美元 AAPL', strategyText: '从2025-01-01到2025-12-31，每月定投1000美元AAPL' },
-    { label: 'RSI 小于 30 正向信号，大于 70 观察解除', strategyText: 'RSI 小于 30 买入，大于 70 卖出' },
+    { label: 'RSI 小于 30 正向信号，大于 70 观察解除', strategyText: 'RSI 小于 30 作为入场规则样本，大于 70 作为退出规则样本' },
   ],
   en: [
-    { label: 'MACD bullish crossover positive signal; bearish crossover releases observation', strategyText: 'Buy on a MACD bullish crossover and sell on a bearish crossover' },
-    { label: '5-day average crossover positive signal; reverse crossover releases observation', strategyText: 'Buy when the 5-day moving average crosses above the 20-day average, and sell on the reverse crossover' },
+    { label: 'MACD bullish crossover positive signal; bearish crossover releases observation', strategyText: 'Use a MACD bullish crossover as the entry rule sample and a bearish crossover as the exit rule sample' },
+    { label: '5-day average crossover positive signal; reverse crossover releases observation', strategyText: 'Use the 5-day moving average crossing above the 20-day average as the entry rule sample, and the reverse crossover as the exit rule sample' },
     { label: 'Monthly 1000 USD AAPL accumulation from 2025-01-01 to 2025-12-31', strategyText: 'Invest 1000 USD into AAPL every month from 2025-01-01 to 2025-12-31' },
-    { label: 'RSI below 30 positive signal; above 70 releases observation', strategyText: 'Buy when RSI drops below 30 and sell when it rises above 70' },
+    { label: 'RSI below 30 positive signal; above 70 releases observation', strategyText: 'Use RSI below 30 as the entry rule sample and RSI above 70 as the exit rule sample' },
   ],
 };
 

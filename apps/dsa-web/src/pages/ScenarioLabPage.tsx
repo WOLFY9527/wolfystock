@@ -535,8 +535,8 @@ export default function ScenarioLabPage() {
       setError(getParsedApiError(err) || createParsedApiError({
         title: locale === 'en' ? 'Scenario lab pending' : '情景实验室待更新',
         message: locale === 'en'
-          ? 'Please retry after the market context and scenario contract respond again.'
-          : '请在市场上下文与情景契约恢复后重试。',
+          ? 'Please retry after the market context and scenario service respond again.'
+          : '请在市场上下文与情景服务恢复后重试。',
       }));
     } finally {
       setLoading(false);
@@ -697,7 +697,7 @@ export default function ScenarioLabPage() {
                   emptyText={locale === 'en' ? 'No explicit evidence limit is attached.' : '当前没有额外证据限制。'}
                 />
               </RoughSectionCard>
-              <RoughSectionCard eyebrow={locale === 'en' ? 'Disclosure' : '披露'} title={locale === 'en' ? 'Observation-only note' : '观察型说明'}>
+              <RoughSectionCard eyebrow={locale === 'en' ? 'Disclosure' : '披露'} title={locale === 'en' ? 'Observation boundary note' : '观察边界说明'}>
                 <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
                   {sanitizeScenarioNarrativeText(
                     scenarioResult?.noAdviceDisclosure || (locale === 'en' ? 'Research planning only.' : '仅供研究规划观察。'),
@@ -879,7 +879,7 @@ export default function ScenarioLabPage() {
                       ]}
                     />
                   </RoughSectionCard>
-                  <RoughSectionCard eyebrow={locale === 'en' ? 'Scenario output' : '情景输出'} title={scenarioUnavailable
+                  <RoughSectionCard eyebrow={locale === 'en' ? 'Scenario observation' : '情景观察'} title={scenarioUnavailable
                     ? (locale === 'en' ? 'Scenario pending' : '情景待更新')
                     : (locale === 'en' ? 'Projected research frame' : '情景后的研究框架')}>
                     {scenarioUnavailable ? (
@@ -929,7 +929,7 @@ export default function ScenarioLabPage() {
                         : '该情景当前没有可展示的驱动变化。'}
                     />
                   </RoughSectionCard>
-                  <RoughSectionCard eyebrow={locale === 'en' ? 'Generated scenario output' : '生成输出'} title={locale === 'en' ? 'What this scenario says' : '该情景下的观察'}>
+                  <RoughSectionCard eyebrow={locale === 'en' ? 'Scenario observations' : '情景观察'} title={locale === 'en' ? 'What to observe in this scenario' : '该情景下观察什么'}>
                     <RoughBulletList
                       items={scenarioUnavailable
                         ? [scenarioUnavailableCopy.summaryFallback]
@@ -963,7 +963,7 @@ export default function ScenarioLabPage() {
                       emptyText={locale === 'en' ? 'No base driver score is available.' : '当前没有基准驱动评分。'}
                     />
                   </RoughSectionCard>
-                  <RoughSectionCard eyebrow={locale === 'en' ? 'Surface boundaries' : '页面边界'} title={locale === 'en' ? 'Keep it consumer-safe' : '保持观察边界'}>
+                  <RoughSectionCard eyebrow={locale === 'en' ? 'Observation boundary' : '观察边界'} title={locale === 'en' ? 'Keep the observation boundary' : '保持观察边界'}>
                     <div className="flex flex-wrap gap-2">
                       <TerminalChip variant="info">{locale === 'en' ? 'Observation only' : '仅观察'}</TerminalChip>
                       <TerminalChip variant="info">{locale === 'en' ? 'No external action' : '不触发外部动作'}</TerminalChip>
