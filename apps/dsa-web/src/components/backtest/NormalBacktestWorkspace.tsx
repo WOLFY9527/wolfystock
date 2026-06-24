@@ -4,6 +4,8 @@ import { Play } from 'lucide-react';
 import { ApiErrorAlert } from '../common/ApiErrorAlert';
 import { GlassCard } from '../common/GlassCard';
 import type { ParsedApiError } from '../../api/error';
+import type { BacktestExecutionReadiness } from '../../types/backtest';
+import BacktestExecutionReadinessPanel from './BacktestExecutionReadinessPanel';
 import {
   RULE_BENCHMARK_OPTIONS,
   getBenchmarkModeLabel,
@@ -42,6 +44,9 @@ type NormalBacktestWorkspaceProps = {
   isLaunching: boolean;
   parseError: ParsedApiError | null;
   runError: ParsedApiError | null;
+  runReadiness?: BacktestExecutionReadiness | null;
+  noAdviceDisclosure?: string | null;
+  hasRunAttempt?: boolean;
 };
 
 const FIELD_CLASS = 'w-full min-w-0 min-h-[44px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm leading-6 text-white outline-none transition-all focus:border-emerald-500/50 focus:bg-white/[0.05]';
@@ -72,6 +77,9 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
   isLaunching,
   parseError,
   runError,
+  runReadiness,
+  noAdviceDisclosure,
+  hasRunAttempt = false,
 }) => {
   const templateName = getPointAndShootTemplateName(strategyTemplate, language);
 
@@ -87,7 +95,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
         <div className="flex min-w-0 flex-col gap-6">
           <div className="flex min-w-0 flex-col gap-2">
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">
-              {language === 'en' ? 'Quick-start research lane' : '普通模式'}
+              {language === 'en' ? 'Quick-start research lane' : '研究快速模式'}
             </p>
             <div className="flex min-w-0 flex-col gap-2 xl:flex-row xl:items-end xl:justify-between">
               <div className="min-w-0">
@@ -274,6 +282,15 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
             />
           </Suspense>
 
+          <BacktestExecutionReadinessPanel
+            language={language}
+            readiness={runReadiness}
+            noAdviceDisclosure={noAdviceDisclosure}
+            attempted={hasRunAttempt}
+            isLoading={isLaunching}
+            testId="normal-backtest-execution-readiness"
+          />
+
           <div
             data-testid="normal-backtest-cta-row"
             className="flex min-w-0 flex-col gap-4 border-t border-white/8 pt-5 xl:flex-row xl:items-center xl:justify-between"
@@ -281,7 +298,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
             <div className="min-w-0 text-sm text-white/46">
               {language === 'en'
                 ? 'Quick-start mode first turns the selected template into a fixed-rule backtest flow, then opens the dedicated result page.'
-                : '普通模式会先把模板整理为固定规则回测流程，再跳转到独立结果页。'}
+                : '研究快速模式会先把模板整理为固定规则回测流程，再跳转到独立结果页。'}
             </div>
             <button
               type="button"

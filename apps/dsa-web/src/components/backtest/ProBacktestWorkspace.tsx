@@ -13,8 +13,9 @@ import {
 } from 'lucide-react';
 import { ApiErrorAlert } from '../common/ApiErrorAlert';
 import { Drawer } from '../common/Drawer';
-import type { RuleBacktestHistoryItem, RuleBacktestParseResponse } from '../../types/backtest';
+import type { BacktestExecutionReadiness, RuleBacktestHistoryItem, RuleBacktestParseResponse } from '../../types/backtest';
 import type { FlowProps, RuleWizardStep } from './DeterministicBacktestFlow';
+import BacktestExecutionReadinessPanel from './BacktestExecutionReadinessPanel';
 import { RULE_BACKTEST_PRESET_STORAGE_KEY } from './ruleBacktestP6';
 import {
   RULE_BENCHMARK_OPTIONS,
@@ -68,6 +69,9 @@ type ProBacktestWorkspaceProps = Omit<FlowProps, 'panelMode'> & {
   onMonteCarloSimulationCountBlur: () => void;
   walkForwardPresetEnabled: boolean;
   onToggleWalkForwardPresetEnabled: (nextEnabled: boolean) => void;
+  runReadiness?: BacktestExecutionReadiness | null;
+  noAdviceDisclosure?: string | null;
+  hasRunAttempt?: boolean;
 };
 
 const ghostCardClass = 'bg-white/[0.02] border border-white/5 rounded-xl backdrop-blur-md transition-all hover:border-white/10';
@@ -265,6 +269,9 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   onMonteCarloSimulationCountBlur,
   walkForwardPresetEnabled,
   onToggleWalkForwardPresetEnabled,
+  runReadiness,
+  noAdviceDisclosure,
+  hasRunAttempt = false,
   parsedStrategy,
   confirmed,
   onToggleConfirmed,
@@ -1135,6 +1142,15 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         <p className={`mt-3 rounded-lg border px-3 py-2 text-xs ${canRun ? 'border-emerald-400/15 bg-emerald-400/10 text-emerald-100' : 'border-amber-400/15 bg-amber-400/10 text-amber-100'}`}>
           {readinessNote}
         </p>
+        <BacktestExecutionReadinessPanel
+          language={language}
+          readiness={runReadiness}
+          noAdviceDisclosure={noAdviceDisclosure}
+          attempted={hasRunAttempt}
+          isLoading={isSubmitting}
+          testId={`${readinessTestId}-data110`}
+          className="mt-3"
+        />
       </div>
       <div>
         <p className={labelClass}>{language === 'en' ? 'ACTIONS' : '操作'}</p>
@@ -1296,7 +1312,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
       >
         <div data-testid="pro-run-summary-strip" className={`${ghostCardClass} flex min-w-0 flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between`}>
           <div className="min-w-0">
-            <p className={labelClass}>{language === 'en' ? 'Professional deterministic workspace' : '专业确定性回测工作台'}</p>
+            <p className={labelClass}>{language === 'en' ? 'Research diagnostics deterministic workspace' : '研究诊断确定性回测工作台'}</p>
             <p className="mt-1 truncate text-sm text-white/62">
               {(code || '--')} · {startDate || '--'} {'->'} {endDate || '--'} · <span className="font-mono">{initialCapital || '--'}</span>
             </p>

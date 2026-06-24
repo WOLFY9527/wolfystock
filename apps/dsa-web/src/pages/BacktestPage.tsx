@@ -143,6 +143,18 @@ function parseScannerBacktestHandoff(search: string): ScannerBacktestHandoff | n
   };
 }
 
+function normalizeReadinessState(value?: string | null): string {
+  return String(value || '').trim().toLowerCase().replaceAll('-', '_').replace(/\s+/g, '_');
+}
+
+function shouldKeepRuleRunOnConfigPage(response: RuleBacktestRunResponse): boolean {
+  const readinessState = normalizeReadinessState(response.executionReadiness?.state);
+  if (['engine_disabled', 'data_disabled', 'no_samples', 'data_insufficient'].includes(readinessState)) {
+    return true;
+  }
+  return Boolean(response.executionReadiness?.resultContractAvailable === false && response.noResultReason);
+}
+
 const BacktestPage: React.FC = () => {
   const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
   const shouldGuardA11y = shouldApplySafariA11yGuard();
@@ -214,6 +226,7 @@ const BacktestPage: React.FC = () => {
   const [ruleParseError, setRuleParseError] = useState<ParsedApiError | null>(null);
   const [isSubmittingRuleBacktest, setIsSubmittingRuleBacktest] = useState(false);
   const [ruleRunError, setRuleRunError] = useState<ParsedApiError | null>(null);
+  const [lastRuleRunResult, setLastRuleRunResult] = useState<RuleBacktestRunResponse | null>(null);
   const [ruleHistoryItems, setRuleHistoryItems] = useState<RuleBacktestHistoryItem[]>([]);
   const [ruleHistoryTotal, setRuleHistoryTotal] = useState(0);
   const [ruleHistoryPage, setRuleHistoryPage] = useState(1);
@@ -551,6 +564,7 @@ const BacktestPage: React.FC = () => {
         setRuleConfirmed(true);
         setRuleCurrentStep('strategy');
         setAppliedRewriteText(null);
+        setLastRuleRunResult(draftRun);
         return;
       }
 
@@ -884,6 +898,7 @@ const BacktestPage: React.FC = () => {
     setIsParsingRuleStrategy(true);
     setRuleParseError(null);
     setRuleRunError(null);
+    setLastRuleRunResult(null);
     setAppliedRewriteText(null);
     return backtestApi.parseRuleStrategy({
       code: normalizedCode || undefined,
@@ -936,6 +951,7 @@ const BacktestPage: React.FC = () => {
     setRuleParsedStrategy(null);
     setRuleParseError(null);
     setRuleRunError(null);
+    setLastRuleRunResult(null);
     setRuleConfirmed(false);
     setRuleCurrentStep('setup');
     setRuleParseSignature(null);
@@ -1019,6 +1035,7 @@ const BacktestPage: React.FC = () => {
 
     setIsSubmittingRuleBacktest(true);
     setRuleRunError(null);
+    setLastRuleRunResult(null);
     const monteCarloConfig = proMonteCarloEnabled
       ? {
         simulationCount: clampInteger(
@@ -1062,7 +1079,11 @@ const BacktestPage: React.FC = () => {
     )
       .then((response) => {
         setSelectedRuleRunId(response.id);
+        setLastRuleRunResult(response);
         void fetchRuleHistory(1, resolvedCode);
+        if (shouldKeepRuleRunOnConfigPage(response)) {
+          return;
+        }
         navigate(`/backtest/results/${response.id}`, { state: { initialRun: response, resultMode: 'professional' } });
       })
       .catch((error) => {
@@ -1131,6 +1152,7 @@ const BacktestPage: React.FC = () => {
     setIsLaunchingNormalRuleBacktest(true);
     setRuleParseError(null);
     setRuleRunError(null);
+    setLastRuleRunResult(null);
     setAppliedRewriteText(null);
     setRuleStrategyText(strategyText);
 
@@ -1193,7 +1215,11 @@ const BacktestPage: React.FC = () => {
         })
           .then((response) => {
             setSelectedRuleRunId(response.id);
+            setLastRuleRunResult(response);
             void fetchRuleHistory(1, normalizedCode);
+            if (shouldKeepRuleRunOnConfigPage(response)) {
+              return;
+            }
             navigate(`/backtest/results/${response.id}`, { state: { initialRun: response, resultMode: 'simple' } });
           })
           .catch((error) => {
@@ -1275,6 +1301,7 @@ const BacktestPage: React.FC = () => {
     setRuleRunError(null);
     setRuleParseError(null);
     setRuleParseSignature(null);
+    setLastRuleRunResult(null);
     setRuleCurrentStep('symbol');
     setAppliedRewriteText(null);
     setRuleBenchmarkMode('auto');
@@ -1561,6 +1588,9 @@ const BacktestPage: React.FC = () => {
                       isLaunching={isLaunchingNormalRuleBacktest || isSubmittingRuleBacktest || isParsingRuleStrategy}
                       parseError={ruleParseError}
                       runError={ruleRunError}
+                      runReadiness={lastRuleRunResult?.executionReadiness || null}
+                      noAdviceDisclosure={lastRuleRunResult?.noAdviceDisclosure || null}
+                      hasRunAttempt={Boolean(lastRuleRunResult)}
                     />
                   ) : (
                     <ProBacktestWorkspace
@@ -1603,6 +1633,9 @@ const BacktestPage: React.FC = () => {
                       runError={ruleRunError}
                       onRun={handleRunRuleBacktest}
                       onReset={resetRuleFlow}
+                      runReadiness={lastRuleRunResult?.executionReadiness || null}
+                      noAdviceDisclosure={lastRuleRunResult?.noAdviceDisclosure || null}
+                      hasRunAttempt={Boolean(lastRuleRunResult)}
                       historyItems={ruleHistoryItems}
                       historyTotal={ruleHistoryTotal}
                       historyPage={ruleHistoryPage}

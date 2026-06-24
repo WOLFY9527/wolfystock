@@ -73,6 +73,32 @@ export interface StatusHistoryItem {
   at?: string;
 }
 
+export interface BacktestExecutionReadiness {
+  contractVersion?: string;
+  state?: string | null;
+  resultContractAvailable?: boolean | null;
+  engineState?: string | null;
+  dataStatus?: string | null;
+  calculationStatus?: string | null;
+  sampleStatus?: string | null;
+  benchmarkState?: string | null;
+  reasonCodes?: string[];
+  observationOnly?: boolean | null;
+  consumerSafe?: boolean | null;
+  noAdviceDisclosure?: string | null;
+}
+
+export interface BacktestResponseContractFields {
+  dataStatus?: string;
+  calculationStatus?: string;
+  sampleStatus?: string;
+  sourceWindow?: Record<string, unknown>;
+  asOf?: string | null;
+  limitations?: string[];
+  executionReadiness?: BacktestExecutionReadiness;
+  noAdviceDisclosure?: string;
+}
+
 // ============ Request / Response ============
 
 export interface BacktestRunRequest {
@@ -83,7 +109,7 @@ export interface BacktestRunRequest {
   limit?: number;
 }
 
-export interface BacktestRunResponse {
+export interface BacktestRunResponse extends BacktestResponseContractFields {
   runId?: number;
   runAt?: string | null;
   processed: number;
@@ -142,9 +168,10 @@ export interface PrepareBacktestSamplesResponse {
   pricingFallbackUsed?: boolean | null;
   evaluationWindowTradingBars?: number | null;
   maturityCalendarDays?: number | null;
+  executionReadiness?: BacktestExecutionReadiness;
 }
 
-export interface BacktestRunHistoryItem {
+export interface BacktestRunHistoryItem extends BacktestResponseContractFields {
   id: number;
   code?: string | null;
   evalWindowDays: number;
@@ -210,6 +237,10 @@ export interface BacktestSampleStatusResponse {
   pricingFallbackUsed?: boolean | null;
   evaluationWindowTradingBars?: number | null;
   maturityCalendarDays?: number | null;
+  sampleReadinessState?: string | null;
+  sampleBlockingReasons?: string[];
+  executionReadiness?: BacktestExecutionReadiness;
+  historicalOhlcvReadiness?: Record<string, unknown>;
 }
 
 export interface BacktestClearResponse {
@@ -1236,7 +1267,7 @@ export interface RuleBacktestRunSummary {
   [key: string]: unknown;
 }
 
-export interface RuleBacktestRunResponse {
+export interface RuleBacktestRunResponse extends BacktestResponseContractFields {
   id: number;
   code: string;
   strategyText: string;
@@ -1300,7 +1331,7 @@ export interface RuleBacktestRunResponse {
 
 export type RuleBacktestHistoryItem = RuleBacktestRunResponse;
 
-export interface RuleBacktestStatusResponse {
+export interface RuleBacktestStatusResponse extends BacktestResponseContractFields {
   id: number;
   code: string;
   status: string;
