@@ -15,6 +15,28 @@ from src.services.market_provider_operations_service import MarketProviderOperat
 router = APIRouter()
 
 
+def _project_market_provider_operations_compatibility_payload(value: Any, *, parent_key: str = "") -> Any:
+    if isinstance(value, dict):
+        projected: dict[str, Any] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            normalized_key = key_text.replace("_", "").lower()
+            if normalized_key in {"cachekey", "rawcachekey"}:
+                continue
+            if parent_key == "summaryCache" and key_text == "key":
+                continue
+            if key_text == "providerDiagnostics":
+                continue
+            projected[key_text] = _project_market_provider_operations_compatibility_payload(
+                item,
+                parent_key=key_text,
+            )
+        return projected
+    if isinstance(value, list):
+        return [_project_market_provider_operations_compatibility_payload(item, parent_key=parent_key) for item in value]
+    return value
+
+
 @router.get(
     "/market-providers/operations",
     response_model=MarketProviderOperationsResponse,
@@ -25,6 +47,19 @@ def get_market_provider_operations(
     _: CurrentUser = Depends(require_admin_capability("ops:providers:read")),
 ):
     return MarketProviderOperationsService().get_operations(window=window)
+
+
+@router.get(
+    "/market-provider-operations",
+    summary="Get read-only market provider operations status",
+)
+def get_market_provider_operations_compatibility(
+    window: str = Query(default="24h", description="Relative window: 15m, 1h, 24h, or 7d"),
+    _: CurrentUser = Depends(require_admin_capability("ops:providers:read")),
+):
+    return _project_market_provider_operations_compatibility_payload(
+        MarketProviderOperationsService().get_operations(window=window)
+    )
 
 
 def get_historical_ohlcv_cache_preflight_service() -> HistoricalOhlcvCachePreflightService:

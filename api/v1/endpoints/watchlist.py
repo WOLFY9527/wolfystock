@@ -114,6 +114,29 @@ def _internal_error(message: str, exc: Exception) -> HTTPException:
 
 
 @router.get(
+    "/",
+    response_model=WatchlistItemListResponse,
+    responses={500: {"model": ErrorResponse}},
+    summary="List user watchlist items",
+)
+def list_watchlist_items_compatibility(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> WatchlistItemListResponse:
+    service = _get_watchlist_service()
+    try:
+        items = service.list_items(owner_id=current_user.user_id)
+        return WatchlistItemListResponse(
+            items=[WatchlistItemResponse(**item) for item in items],
+        )
+    except ValueError as exc:
+        if "Unknown app user" in str(exc):
+            return WatchlistItemListResponse(items=[])
+        raise _bad_request(exc) from exc
+    except Exception as exc:
+        raise _internal_error("List watchlist items failed", exc) from exc
+
+
+@router.get(
     "/items",
     response_model=WatchlistItemListResponse,
     responses={500: {"model": ErrorResponse}},

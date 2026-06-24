@@ -105,8 +105,9 @@ EXPECTED_CONTROL_PLANE_GROUP_ROUTE_COUNTS = {
     "admin.mission_control": 1,
     "admin.notifications.read": 2,
     "admin.notifications.write": 5,
-    "admin.cost.read": 4,
-    "admin.providers.read": 8,
+    "admin.cost.read": 5,
+    "admin.providers.read": 12,
+    "market.professional_data_capabilities_admin": 1,
     "market.operator_diagnostics": 3,
     "system.config.read": 2,
     "system.config.validate": 1,
@@ -143,6 +144,7 @@ EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("GET", "/api/v1/market/data-source-gap-registry"): "operator_diagnostic",
     ("GET", "/api/v1/market/cn-provider-health"): "operator_diagnostic",
     ("GET", "/api/v1/market/provider-fit-advisor"): "admin_capability_required",
+    ("GET", "/api/v1/market/professional-data-capabilities/admin"): "admin_capability_required",
     ("GET", "/api/v1/agent/status"): "operator_diagnostic",
     ("GET", "/api/v1/agent/models"): "operator_diagnostic",
     ("GET", "/api/v1/agent/provider-health"): "operator_diagnostic",
@@ -157,6 +159,9 @@ EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("GET", "/api/v1/research/radar"): "authenticated_member",
     ("GET", "/api/v1/research/queue"): "authenticated_member",
     ("POST", "/api/v1/user-alerts/rules/{rule_id}/dry-run"): "authenticated_member",
+    ("GET", "/api/v1/stocks/{stock_code}/quote"): "unclassified",
+    ("GET", "/api/v1/stocks/{stock_code}/structure-decision"): "authenticated_member",
+    ("POST", "/api/v1/stocks/structure-decisions/batch"): "authenticated_member",
     ("POST", "/api/v1/scanner/run"): "authenticated_member",
     ("GET", "/api/v1/scanner/runs"): "authenticated_member",
     ("GET", "/api/v1/scanner/strategy-simulation"): "authenticated_member",
@@ -167,10 +172,20 @@ EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("GET", "/api/v1/scanner/status"): "admin_capability_required",
     ("GET", "/api/v1/scanner/themes"): "authenticated_member",
     ("POST", "/api/v1/scanner/themes"): "authenticated_member",
+    ("GET", "/api/v1/watchlist/"): "authenticated_member",
+    ("GET", "/api/v1/watchlist/items"): "authenticated_member",
+    ("POST", "/api/v1/watchlist/items"): "authenticated_member",
+    ("DELETE", "/api/v1/watchlist/items/{item_id}"): "authenticated_member",
+    ("GET", "/api/v1/watchlist/research-overlay"): "authenticated_member",
+    ("GET", "/api/v1/watchlist/refresh-status"): "authenticated_member",
+    ("POST", "/api/v1/watchlist/refresh-scores"): "authenticated_member",
     ("GET", "/api/v1/usage/summary"): "admin_capability_required",
+    ("GET", "/api/v1/options/lab"): "public_fixture_analysis",
+    ("GET", "/api/v1/options/gamma"): "public_fixture_analysis",
     ("GET", "/api/v1/options/underlyings/{symbol}/summary"): "public_fixture_analysis",
     ("GET", "/api/v1/options/underlyings/{symbol}/expirations"): "public_fixture_analysis",
     ("GET", "/api/v1/options/underlyings/{symbol}/chain"): "public_fixture_analysis",
+    ("GET", "/api/v1/options/underlyings/{symbol}/structure"): "public_fixture_analysis",
     ("POST", "/api/v1/options/analyze"): "public_fixture_analysis",
     ("POST", "/api/v1/options/decision/evaluate"): "public_fixture_analysis",
     ("POST", "/api/v1/options/scenario"): "public_fixture_analysis",
@@ -182,13 +197,18 @@ EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("GET", "/api/v1/admin/ops/surface-readiness"): "admin_capability_required",
     ("GET", "/api/v1/admin/mission-control"): "admin_capability_required",
     ("GET", "/api/v1/admin/cost/duplicate-summary"): "admin_capability_required",
+    ("GET", "/api/v1/admin/cost/summary"): "admin_capability_required",
     ("POST", "/api/v1/admin/cost/quota-dry-run"): "admin_capability_required",
     ("GET", "/api/v1/admin/cost/llm-ledger-summary"): "admin_capability_required",
+    ("GET", "/api/v1/admin/provider-circuits"): "admin_capability_required",
     ("GET", "/api/v1/admin/providers/quota-windows"): "admin_capability_required",
     ("GET", "/api/v1/admin/providers/sla-readiness"): "admin_capability_required",
     ("GET", "/api/v1/admin/providers/operations-matrix"): "admin_capability_required",
     ("GET", "/api/v1/admin/provider-usage-ledger"): "admin_capability_required",
     ("GET", "/api/v1/admin/market-providers/operations"): "admin_capability_required",
+    ("GET", "/api/v1/admin/market-provider-operations"): "admin_capability_required",
+    ("GET", "/api/v1/admin/historical-ohlcv/cache-preflight"): "admin_capability_required",
+    ("POST", "/api/v1/admin/historical-ohlcv/cache-preflight/seed"): "admin_capability_required",
     ("GET", "/api/v1/quant/duckdb/health"): "admin_capability_required",
     ("GET", "/api/v1/system/config"): "admin_capability_required",
 }
@@ -505,6 +525,7 @@ def _is_control_plane_route(route: dict[str, str | None]) -> bool:
         "/api/v1/market/data-readiness",
         "/api/v1/market/data-source-gap-registry",
         "/api/v1/market/cn-provider-health",
+        "/api/v1/market/professional-data-capabilities/admin",
     }
 
 
@@ -798,7 +819,7 @@ def test_options_public_api_inventory_matches_fixture_only_frontend_gate_contrac
     app_source = APP_TSX.read_text(encoding="utf-8")
     consumer_nav_source = CONSUMER_APP_NAVIGATION_TS.read_text(encoding="utf-8")
 
-    assert len(EXPECTED_OPTIONS_FIXTURE_ROUTE_CLASSIFICATIONS) == 8
+    assert len(EXPECTED_OPTIONS_FIXTURE_ROUTE_CLASSIFICATIONS) == 11
     for signature in EXPECTED_OPTIONS_FIXTURE_ROUTE_CLASSIFICATIONS:
         entry = classifications[signature]
         marker = str(entry["no_go_marker"])

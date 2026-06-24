@@ -569,6 +569,28 @@ def get_provider_circuit_states(
 
 
 @router.get(
+    "/provider-circuits",
+    response_model=ProviderCircuitStatesResponse,
+    summary="Get read-only provider circuit states",
+)
+def get_provider_circuit_states_compatibility(
+    provider: str | None = Query(default=None),
+    state: str | None = Query(default=None),
+    routeFamily: str | None = Query(default=None),
+    since: str | None = Query(default=None),
+    limit: int = Query(default=_DEFAULT_LIMIT),
+    _: CurrentUser = Depends(require_admin_capability("ops:providers:read")),
+) -> ProviderCircuitStatesResponse:
+    return get_provider_circuit_states(
+        provider=provider,
+        state=state,
+        routeFamily=routeFamily,
+        since=since,
+        limit=limit,
+    )
+
+
+@router.get(
     "/providers/circuits/events",
     response_model=ProviderCircuitEventsResponse,
     summary="Get read-only provider circuit events",
