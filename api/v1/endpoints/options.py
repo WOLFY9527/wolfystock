@@ -578,6 +578,48 @@ def _options_consumer_response(payload: object, *, surface: str):
 
 
 @router.get(
+    "/lab",
+    summary="Get read-only Options Lab compatibility state",
+)
+def get_options_lab_compatibility_state():
+    return _options_consumer_response(
+        {
+            "contractVersion": "options-lab-compatibility-v1",
+            "status": "unavailable",
+            "reasonCode": "provider_missing",
+            "dataState": "provider_missing",
+            "observationOnly": True,
+            "decisionGrade": False,
+            "readOnly": True,
+            "externalProviderCalls": False,
+            "providerConfigured": False,
+            "executionSupported": False,
+            "blockingReasons": ["provider_missing", "entitlement_required"],
+            "warnings": [],
+            "nextEvidenceNeeded": [
+                "configure_authorized_options_provider",
+                "obtain_options_provider_entitlement",
+            ],
+        },
+        surface="options-lab-compatibility",
+    )
+
+
+@router.get(
+    "/gamma",
+    response_model=OptionsStructureSummary,
+    summary="Get read-only options gamma compatibility state",
+)
+def get_options_gamma_compatibility_state(
+    symbol: str = Query(default="UNKNOWN"),
+) -> OptionsStructureSummary:
+    return _options_consumer_response(
+        _structure_service().get_structure(symbol),
+        surface="options-gamma-compatibility",
+    )
+
+
+@router.get(
     "/underlyings/{symbol}/summary",
     response_model=OptionUnderlyingSummaryResponse,
     summary="Get fixture-backed Options Lab underlying summary",

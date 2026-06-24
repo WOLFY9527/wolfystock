@@ -90,6 +90,26 @@ def get_duplicate_cost_summary(
         ) from exc
 
 
+@router.get(
+    "/cost/summary",
+    response_model=DuplicateCostSummaryResponse,
+    summary="Get read-only cost observability summary",
+)
+def get_cost_observability_summary(
+    window: str = Query(default="24h", description="Relative window: 15m, 1h, 24h, or 7d"),
+    bucket: str = Query(default="hour", description="Aggregation bucket contract: hour or day"),
+    area: str = Query(default="all", description="all, llm, provider, market-cache, or scanner-ai"),
+    limit: int = Query(default=50, ge=1, le=200),
+    _: CurrentUser = Depends(require_admin_capability("cost:observability:read")),
+) -> DuplicateCostSummaryResponse:
+    return get_duplicate_cost_summary(
+        window=window,
+        bucket=bucket,
+        area=area,
+        limit=limit,
+    )
+
+
 @router.post(
     "/cost/quota-dry-run",
     response_model=QuotaDryRunResponse,

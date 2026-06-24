@@ -92,12 +92,21 @@
     },
     {
       "route_id": "watchlist.member_surface",
-      "path_pattern": "^/api/v1/watchlist/(?:research-overlay|items(?:/\\{item_id\\})?|refresh-scores|refresh-status)$",
+      "path_pattern": "^/api/v1/watchlist/(?:$|research-overlay|items(?:/\\{item_id\\})?|refresh-scores|refresh-status)$",
       "methods": ["GET", "POST", "DELETE"],
       "surface": "watchlist",
       "auth_dependency_label": "authenticated_user",
       "capability_label": null,
       "transitional_note": null
+    },
+    {
+      "route_id": "stock.member_surface",
+      "path_pattern": "^/api/v1/stocks/(?:structure-decisions/batch|\\{stock_code\\}/structure-decision)$",
+      "methods": ["GET", "POST"],
+      "surface": "stock",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "transitional_note": "Consumer stock structure diagnostics are authenticated-user scoped and not public."
     },
     {
       "route_id": "usage.admin_summary",
@@ -236,7 +245,7 @@
     },
     {
       "route_id": "admin.cost.read",
-      "path_pattern": "^/api/v1/admin/cost/(?:duplicate-summary|quota-dry-run|llm-ledger-summary|model-pricing-policies)$",
+      "path_pattern": "^/api/v1/admin/cost/(?:duplicate-summary|summary|quota-dry-run|llm-ledger-summary|model-pricing-policies)$",
       "methods": ["GET", "POST"],
       "surface": "admin_cost_observability",
       "auth_dependency_label": "admin_capability",
@@ -245,12 +254,21 @@
     },
     {
       "route_id": "admin.providers.read",
-      "path_pattern": "^/api/v1/admin/(?:(?:providers/(?:circuits(?:/events)?|quota-windows|probe-events|sla-readiness|operations-matrix)|provider-usage-ledger)|market-providers/operations)$",
-      "methods": ["GET"],
+      "path_pattern": "^/api/v1/admin/(?:(?:providers/(?:circuits(?:/events)?|quota-windows|probe-events|sla-readiness|operations-matrix)|provider-circuits|provider-usage-ledger)|market-providers/operations|market-provider-operations|historical-ohlcv/cache-preflight(?:/seed)?)$",
+      "methods": ["GET", "POST"],
       "surface": "admin_provider_observability",
       "auth_dependency_label": "admin_capability",
       "capability_label": "ops:providers:read",
       "transitional_note": null
+    },
+    {
+      "route_id": "market.professional_data_capabilities_admin",
+      "path_pattern": "^/api/v1/market/professional-data-capabilities/admin$",
+      "methods": ["GET"],
+      "surface": "market_professional_data_capabilities_admin",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "transitional_note": "Professional data capability inventory is provider-read admin gated and not public."
     },
     {
       "route_id": "market.provider_fit_advisor",
@@ -418,6 +436,16 @@
       "transitional_note": "Hidden deprecated diagnostic route remains explicit because it lives outside the /admin route prefix."
     },
     {
+      "route_id": "market.professional_data_capabilities_admin",
+      "path": "/api/v1/market/professional-data-capabilities/admin",
+      "method": "GET",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "no_go_marker": null,
+      "transitional_note": "Professional data capability inventory is provider-read admin gated and not a public surface."
+    },
+    {
       "route_id": "agent.status",
       "path": "/api/v1/agent/status",
       "method": "GET",
@@ -558,6 +586,36 @@
       "transitional_note": "Owner-scoped dry-run evaluates caller-supplied local data and does not send alerts."
     },
     {
+      "route_id": "stock.quote",
+      "path": "/api/v1/stocks/{stock_code}/quote",
+      "method": "GET",
+      "surface_classification": "unclassified",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: stock quote route-level public policy is recorded explicitly here; do not treat it as a beta-safe authenticated member route without a separate quote auth decision.",
+      "transitional_note": "Inventory records the current route-level public stock quote policy without changing provider runtime or quote auth behavior."
+    },
+    {
+      "route_id": "stock.structure_decision",
+      "path": "/api/v1/stocks/{stock_code}/structure-decision",
+      "method": "GET",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": "Stock structure decision API is authenticated-user scoped and returns consumer-safe diagnostics."
+    },
+    {
+      "route_id": "stock.structure_decision_batch",
+      "path": "/api/v1/stocks/structure-decisions/batch",
+      "method": "POST",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": "Batch structure decision API is authenticated-user scoped and returns consumer-safe diagnostics."
+    },
+    {
       "route_id": "scanner.run",
       "path": "/api/v1/scanner/run",
       "method": "POST",
@@ -658,6 +716,76 @@
       "transitional_note": "Member-gated because custom scanner theme generation mutates the runtime theme registry and is not public ingress."
     },
     {
+      "route_id": "watchlist.root",
+      "path": "/api/v1/watchlist/",
+      "method": "GET",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": "Watchlist compatibility root is authenticated-user scoped and returns an empty item list when no watchlist exists."
+    },
+    {
+      "route_id": "watchlist.items_get",
+      "path": "/api/v1/watchlist/items",
+      "method": "GET",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": "Watchlist items are authenticated-user scoped and not public."
+    },
+    {
+      "route_id": "watchlist.items_post",
+      "path": "/api/v1/watchlist/items",
+      "method": "POST",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": "Watchlist writes are authenticated-user scoped and not public."
+    },
+    {
+      "route_id": "watchlist.items_delete",
+      "path": "/api/v1/watchlist/items/{item_id}",
+      "method": "DELETE",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": "Watchlist item deletion is authenticated-user scoped and not public."
+    },
+    {
+      "route_id": "watchlist.research_overlay",
+      "path": "/api/v1/watchlist/research-overlay",
+      "method": "GET",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": "Watchlist research overlay is authenticated-user scoped and returns consumer-safe research states."
+    },
+    {
+      "route_id": "watchlist.refresh_status",
+      "path": "/api/v1/watchlist/refresh-status",
+      "method": "GET",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": "Watchlist refresh status is authenticated-user scoped and not public."
+    },
+    {
+      "route_id": "watchlist.refresh_scores",
+      "path": "/api/v1/watchlist/refresh-scores",
+      "method": "POST",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": "Watchlist score refresh is authenticated-user scoped and not public."
+    },
+    {
       "route_id": "usage.admin_summary",
       "path": "/api/v1/usage/summary",
       "method": "GET",
@@ -666,6 +794,26 @@
       "capability_label": "cost:observability:read",
       "no_go_marker": null,
       "transitional_note": "LLM usage summary is admin-capability gated and not a public surface."
+    },
+    {
+      "route_id": "options.lab_compatibility",
+      "path": "/api/v1/options/lab",
+      "method": "GET",
+      "surface_classification": "public_fixture_analysis",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before public launch.",
+      "transitional_note": "Route-local public API contract is tested without app-level auth middleware; frontend /options-lab remains gated by RegisteredSurfaceRoute."
+    },
+    {
+      "route_id": "options.gamma_compatibility",
+      "path": "/api/v1/options/gamma",
+      "method": "GET",
+      "surface_classification": "public_fixture_analysis",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before public launch.",
+      "transitional_note": "Route-local public API contract is tested without app-level auth middleware; frontend /options-lab remains gated by RegisteredSurfaceRoute."
     },
     {
       "route_id": "options.underlying_summary",
@@ -690,6 +838,16 @@
     {
       "route_id": "options.chain",
       "path": "/api/v1/options/underlyings/{symbol}/chain",
+      "method": "GET",
+      "surface_classification": "public_fixture_analysis",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before public launch.",
+      "transitional_note": "Route-local public API contract is tested without app-level auth middleware; frontend /options-lab remains gated by RegisteredSurfaceRoute."
+    },
+    {
+      "route_id": "options.structure",
+      "path": "/api/v1/options/underlyings/{symbol}/structure",
       "method": "GET",
       "surface_classification": "public_fixture_analysis",
       "auth_dependency_label": "public",
@@ -808,6 +966,16 @@
       "transitional_note": "Cost diagnostics are admin-capability gated and not a public surface."
     },
     {
+      "route_id": "admin.cost.summary",
+      "path": "/api/v1/admin/cost/summary",
+      "method": "GET",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "cost:observability:read",
+      "no_go_marker": null,
+      "transitional_note": "Cost observability compatibility summary is admin-capability gated and not a public surface."
+    },
+    {
       "route_id": "admin.cost.quota_dry_run",
       "path": "/api/v1/admin/cost/quota-dry-run",
       "method": "POST",
@@ -826,6 +994,16 @@
       "capability_label": "cost:observability:read",
       "no_go_marker": null,
       "transitional_note": "Ledger diagnostics are admin-capability gated and not a public surface."
+    },
+    {
+      "route_id": "admin.provider_circuits_compatibility",
+      "path": "/api/v1/admin/provider-circuits",
+      "method": "GET",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "no_go_marker": null,
+      "transitional_note": "Provider circuit compatibility diagnostics are admin-capability gated and not a public surface."
     },
     {
       "route_id": "admin.providers.quota_windows",
@@ -876,6 +1054,36 @@
       "capability_label": "ops:providers:read",
       "no_go_marker": null,
       "transitional_note": "Market provider operations diagnostics are admin-capability gated and not a public surface."
+    },
+    {
+      "route_id": "admin.market_provider_operations_compatibility",
+      "path": "/api/v1/admin/market-provider-operations",
+      "method": "GET",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "no_go_marker": null,
+      "transitional_note": "Market provider operations compatibility diagnostics are admin-capability gated and not a public surface."
+    },
+    {
+      "route_id": "admin.historical_ohlcv_cache_preflight",
+      "path": "/api/v1/admin/historical-ohlcv/cache-preflight",
+      "method": "GET",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "no_go_marker": null,
+      "transitional_note": "Historical OHLCV cache preflight is provider-read admin gated and dry-run by default."
+    },
+    {
+      "route_id": "admin.historical_ohlcv_cache_preflight_seed",
+      "path": "/api/v1/admin/historical-ohlcv/cache-preflight/seed",
+      "method": "POST",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "no_go_marker": null,
+      "transitional_note": "Historical OHLCV seed preflight is inventoried as provider-read; runtime still requires provider-write for explicit non-dry-run seed."
     },
     {
       "route_id": "quant.duckdb.health",
