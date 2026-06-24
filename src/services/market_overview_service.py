@@ -2855,7 +2855,15 @@ class MarketOverviewService:
         )
         duration_ms = int((time.monotonic() - started_at) * 1000)
         error_message = _compact_error_summary(snapshot.get("lastError") or snapshot.get("error_message"))
-        if error_message:
+        if cache_key == self.OVERVIEW_SENTIMENT_CACHE_KEY:
+            status = self._resolve_overview_sentiment_status(snapshot, error_message=error_message)
+            if status == "failure":
+                raw_response = {"cache": "stale_or_fallback", "error": error_message}
+            elif snapshot.get("isRefreshing"):
+                raw_response = {"cache": "stale_refreshing"}
+            else:
+                raw_response = {"cache": "hit_or_refreshed"}
+        elif error_message:
             status = "failure"
             snapshot["error_message"] = error_message
             raw_response: Dict[str, Any] = {"cache": "stale_or_fallback", "error": error_message}
@@ -2863,6 +2871,9 @@ class MarketOverviewService:
             raw_response = {"cache": "stale_refreshing"}
         else:
             raw_response = {"cache": "hit_or_refreshed"}
+
+        if cache_key == self.OVERVIEW_SENTIMENT_CACHE_KEY and error_message:
+            snapshot["error_message"] = error_message
 
         snapshot["panel_name"] = panel_name
         snapshot["status"] = status
@@ -2889,6 +2900,44 @@ class MarketOverviewService:
         )
         snapshot["log_session_id"] = log_session_id
         return snapshot
+
+    def _resolve_overview_sentiment_status(
+        self,
+        snapshot: Dict[str, Any],
+        *,
+        error_message: Optional[str],
+    ) -> str:
+        has_usable_value = self._has_usable_market_values(snapshot)
+        source = str(snapshot.get("source") or "").strip().lower()
+        freshness = str(snapshot.get("freshness") or "").strip().lower()
+        has_degraded_state = bool(
+            error_message
+            or snapshot.get("refreshError")
+            or snapshot.get("isPartial")
+            or snapshot.get("isStale")
+            or snapshot.get("isFallback")
+            or snapshot.get("isFromSnapshot")
+            or freshness in {"partial", "stale", "fallback", "error"}
+            or source in {"fallback", "mock"}
+        )
+        if has_usable_value:
+            return "partial" if has_degraded_state else "success"
+        if snapshot.get("isUnavailable") or source in {"unavailable", "fallback", "mock"} or freshness in {"unavailable", "fallback", "error"}:
+            return "unavailable"
+        if error_message or snapshot.get("refreshError"):
+            return "failure"
+        return "success"
+
+    def _has_usable_market_values(self, snapshot: Mapping[str, Any]) -> bool:
+        items = snapshot.get("items")
+        if not isinstance(items, list):
+            return False
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            if self._clean_number(item.get("value")) is not None or self._clean_number(item.get("price")) is not None:
+                return True
+        return False
 
     def _market_snapshot(
         self,
@@ -4561,6 +4610,8 @@ class MarketOverviewService:
             return "stale"
         if has_error and not items:
             return "error"
+        if has_error and items:
+            return "partial"
         if real_items and fallback_items:
             return "partial"
         if payload.get("isFallback") or freshness in {"fallback", "mock"} or source in {"fallback", "mock"}:
@@ -5695,8 +5746,22 @@ class MarketOverviewService:
         return {
             "panel_name": "MarketSentimentCard",
             "last_refresh_at": snapshot.get("last_update"),
-            "status": "success",
+            "status": "partial" if snapshot.get("isPartial") else "success",
             "error_message": snapshot.get("error"),
+            "refreshError": snapshot.get("refreshError"),
+            "warning": snapshot.get("warning"),
+            "source": snapshot.get("source"),
+            "sourceLabel": snapshot.get("sourceLabel"),
+            "freshness": snapshot.get("freshness"),
+            "isFallback": bool(snapshot.get("isFallback") or snapshot.get("fallback_used") or snapshot.get("fallbackUsed")),
+            "isStale": snapshot.get("isStale"),
+            "isPartial": snapshot.get("isPartial"),
+            "isUnavailable": snapshot.get("isUnavailable"),
+            "isRefreshing": snapshot.get("isRefreshing"),
+            "isFromSnapshot": snapshot.get("isFromSnapshot"),
+            "lastSuccessfulAt": snapshot.get("lastSuccessfulAt"),
+            "degradationReason": snapshot.get("degradationReason"),
+            "fallbackReason": snapshot.get("fallbackReason"),
             "items": items,
         }
 
@@ -5923,9 +5988,14 @@ class MarketOverviewService:
         return {
             "items": items,
             "last_update": last_update,
-            "error": provider_error,
+            "error": None,
+            "refreshError": provider_error,
+            "warning": "情绪指标部分可用，请结合来源与时效观察。" if provider_error else None,
             "fallback_used": False,
             "source": payload["source"],
+            "sourceLabel": self._source_label(payload["source"]),
+            "isPartial": bool(provider_error),
+            "degradationReason": "provider_refresh_failed" if provider_error else None,
         }
 
     def _fetch_cnn_fear_greed_snapshot(self, *, timeout: Optional[float] = None) -> Dict[str, Any]:

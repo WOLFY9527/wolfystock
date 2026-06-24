@@ -2,7 +2,7 @@ import apiClient from './index';
 import { toCamelCase } from './utils';
 
 export type MarketRiskDirection = 'increasing' | 'decreasing' | 'neutral';
-export type MarketPanelStatus = 'success' | 'failure';
+export type MarketPanelStatus = 'success' | 'partial' | 'unavailable' | 'failure';
 export type MarketDataFreshness = 'live' | 'delayed' | 'cached' | 'stale' | 'fallback' | 'mock' | 'error' | 'unavailable';
 export type MarketProviderHealthStatus = 'live' | 'cache' | 'stale' | 'fallback' | 'partial' | 'unavailable' | 'error' | 'refreshing';
 

@@ -343,13 +343,68 @@ function normalizeItem(item: MarketSnapshotItem): MarketOverviewItem {
   };
 }
 
+function hasUsableSnapshotValue(payload: MarketSnapshotPayload): boolean {
+  return Boolean(
+    Array.isArray(payload.items)
+    && payload.items.some((item) => item && (typeof item.price === 'number' || typeof item.value === 'number'))
+  );
+}
+
+function deriveSnapshotPanelStatus(payload: MarketSnapshotPayload): MarketOverviewPanel['status'] {
+  const hasUsableValue = hasUsableSnapshotValue(payload);
+  const freshness = String(payload.freshness || '').trim().toLowerCase();
+  const source = String(payload.source || '').trim().toLowerCase();
+  const providerStatus = String(payload.providerHealth?.status || '').trim().toLowerCase();
+  const hasDegradedValue = Boolean(
+    payload.isPartial
+    || payload.isStale
+    || payload.isFallback
+    || payload.fallbackUsed
+    || payload.isFromSnapshot
+    || payload.refreshError
+    || providerStatus === 'partial'
+    || providerStatus === 'stale'
+    || providerStatus === 'fallback'
+    || freshness === 'partial'
+    || freshness === 'stale'
+    || freshness === 'fallback'
+  );
+  if (hasUsableValue) {
+    return hasDegradedValue ? 'partial' : 'success';
+  }
+  if (
+    payload.isUnavailable
+    || payload.isFallback
+    || payload.fallbackUsed
+    || providerStatus === 'unavailable'
+    || freshness === 'unavailable'
+    || freshness === 'fallback'
+    || source === 'unavailable'
+    || source === 'fallback'
+  ) {
+    return 'unavailable';
+  }
+  return payload.error ? 'failure' : 'success';
+}
+
+function deriveSnapshotPanelErrorMessage(
+  payload: MarketSnapshotPayload,
+  status: MarketOverviewPanel['status'],
+): string | null {
+  if (status === 'success' || status === 'partial') {
+    return null;
+  }
+  return payload.error || payload.refreshError || payload.lastError || null;
+}
+
 function normalizeMarketSnapshotPayload(rawPayload: Record<string, unknown>, panelName: string): MarketOverviewPanel {
   const payload = toCamelCase<MarketSnapshotPayload>(rawPayload);
+  const status = deriveSnapshotPanelStatus(payload);
   return {
     panelName,
     lastRefreshAt: payload.lastUpdate || payload.updatedAt || new Date().toISOString(),
-    status: payload.fallbackUsed ? 'failure' : 'success',
-    errorMessage: payload.fallbackUsed ? payload.error : null,
+    status,
+    errorMessage: deriveSnapshotPanelErrorMessage(payload, status),
     logSessionId: payload.logSessionId,
     source: payload.source || undefined,
     sourceLabel: payload.sourceLabel || undefined,
