@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, domAnimation, LazyMotion, m } from 'motion/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
@@ -210,14 +210,14 @@ function getBacktestReasonLabels(
 function buildPendingBacktestRunFeedback(language: BacktestLanguage, mode: 'normal' | 'professional'): BacktestRunFeedback {
   return {
     tone: 'default',
-    title: language === 'en' ? 'Backtest request submitted' : '回测任务提交中',
+    title: language === 'en' ? 'Backtest request accepted' : '回测任务已受理',
     body: mode === 'normal'
       ? (language === 'en'
-        ? 'Compiling the selected template, then waiting for execution readiness and a safe result contract.'
-        : '正在整理所选模板，并等待执行就绪度与安全结果契约回执。')
+        ? 'Submitting the selected template and checking DATA-110 execution readiness before any safe result contract is shown.'
+        : '正在提交回测请求，正在检查 DATA-110 执行就绪度；安全结果契约返回前不会展示指标。')
       : (language === 'en'
-        ? 'Waiting for execution readiness and a safe result contract from the backend.'
-        : '正在等待后端返回执行就绪度与安全结果契约。'),
+        ? 'Submitting the backtest request and checking DATA-110 execution readiness before opening any result view.'
+        : '正在提交回测请求，正在检查 DATA-110 执行就绪度；结果页打开前先等待安全回执。'),
   };
 }
 
@@ -279,6 +279,8 @@ const BacktestPage: React.FC = () => {
   const { search: routeSearch, state: routeState } = useLocation();
   const { language } = useI18n();
   const scannerHandoff = parseScannerBacktestHandoff(routeSearch);
+  const ruleBacktestSubmitInFlightRef = useRef(false);
+  const normalRuleLaunchInFlightRef = useRef(false);
 
   useEffect(() => {
     document.title = bt(language, 'page.documentTitle');
@@ -1084,6 +1086,9 @@ const BacktestPage: React.FC = () => {
   };
 
   const handleRunRuleBacktest = () => {
+    if (ruleBacktestSubmitInFlightRef.current) {
+      return Promise.resolve();
+    }
     const strategySpec = getStrategyPreviewSpec(ruleParsedStrategy);
     const parsedSymbol = getPeriodicString(strategySpec, 'symbol');
     const resolvedCode = normalizedCode || (parsedSymbol !== '--' ? parsedSymbol.toUpperCase() : '');
@@ -1165,6 +1170,7 @@ const BacktestPage: React.FC = () => {
       return Promise.resolve();
     }
 
+    ruleBacktestSubmitInFlightRef.current = true;
     setIsSubmittingRuleBacktest(true);
     setRuleRunError(null);
     setLastRuleRunResult(null);
@@ -1226,11 +1232,15 @@ const BacktestPage: React.FC = () => {
         setRuleRunFeedback(buildBacktestErrorFeedback(parsedError, language));
       })
       .finally(() => {
+        ruleBacktestSubmitInFlightRef.current = false;
         setIsSubmittingRuleBacktest(false);
       });
   };
 
   const handleLaunchNormalRuleBacktest = () => {
+    if (normalRuleLaunchInFlightRef.current || ruleBacktestSubmitInFlightRef.current) {
+      return Promise.resolve();
+    }
     if (!normalizedCode) {
       const error = {
         title: bt(language, 'page.errors.missingCodeTitle'),
@@ -1295,6 +1305,7 @@ const BacktestPage: React.FC = () => {
       return Promise.resolve();
     }
 
+    normalRuleLaunchInFlightRef.current = true;
     setIsLaunchingNormalRuleBacktest(true);
     setRuleParseError(null);
     setRuleRunError(null);
@@ -1344,6 +1355,7 @@ const BacktestPage: React.FC = () => {
 
         setRuleConfirmed(true);
         setRuleCurrentStep('run');
+        ruleBacktestSubmitInFlightRef.current = true;
         setIsSubmittingRuleBacktest(true);
         return backtestApi.runRuleBacktest({
           code: normalizedCode,
@@ -1378,6 +1390,7 @@ const BacktestPage: React.FC = () => {
             setRuleRunFeedback(buildBacktestErrorFeedback(parsedError, language));
           })
           .finally(() => {
+            ruleBacktestSubmitInFlightRef.current = false;
             setIsSubmittingRuleBacktest(false);
           });
       })
@@ -1387,6 +1400,7 @@ const BacktestPage: React.FC = () => {
         setRuleRunFeedback(buildBacktestErrorFeedback(parsedError, language));
       })
       .finally(() => {
+        normalRuleLaunchInFlightRef.current = false;
         setIsLaunchingNormalRuleBacktest(false);
       });
   };

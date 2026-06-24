@@ -313,7 +313,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
               <Play className="size-4" />
               <span>
                 {isLaunching
-                  ? (language === 'en' ? 'Submitting...' : '提交中...')
+                  ? (language === 'en' ? 'Checking DATA-110 readiness...' : '正在检查 DATA-110 执行就绪度')
                   : (language === 'en' ? 'Execute backtest task' : '执行回测任务')}
               </span>
             </button>
