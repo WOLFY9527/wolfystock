@@ -11,6 +11,10 @@ const { getOperationsMatrix } = vi.hoisted(() => ({
   getOperationsMatrix: vi.fn(),
 }));
 
+const { getHistoricalOhlcvCachePreflight } = vi.hoisted(() => ({
+  getHistoricalOhlcvCachePreflight: vi.fn(),
+}));
+
 const { getDataReadiness } = vi.hoisted(() => ({
   getDataReadiness: vi.fn(),
 }));
@@ -27,6 +31,7 @@ vi.mock('../../api/marketProviderOperations', () => ({
   marketProviderOperationsApi: {
     getOperations,
     getOperationsMatrix,
+    getHistoricalOhlcvCachePreflight,
   },
 }));
 
@@ -984,12 +989,98 @@ const professionalCapabilityAdminPayload = {
   ],
 };
 
+const historicalOhlcvCachePreflightPayload = {
+  contractVersion: 'historical_ohlcv_cache_preflight_v1',
+  mode: 'preflight',
+  dryRun: true,
+  seedEnabled: false,
+  networkCallsEnabled: false,
+  mutationEnabled: false,
+  consumerSafe: true,
+  representativeSymbols: {
+    cn: ['600519'],
+    us: ['ORCL', 'AAPL', 'NVDA'],
+  },
+  markets: {
+    cn: {
+      market: 'cn',
+      runtimeEnabled: false,
+      dependencyAvailable: true,
+      symbols: [
+        {
+          market: 'cn',
+          symbol: '600519',
+          runtimeState: 'disabled_by_config',
+          cacheState: 'cache_hit',
+          dependencyState: 'installed',
+          dependencyAvailable: true,
+          cachedBars: 72,
+          latestBarDate: '2026-06-23',
+          freshnessState: 'fresh',
+          adjustmentState: 'available',
+          dataState: 'fresh',
+          seedState: 'seed_skipped',
+          nextAction: {
+            state: 'disabled_by_config',
+            summary: 'Enable runtime before provider fetch is allowed.',
+            requiredConfig: 'WOLFYSTOCK_AKSHARE_CN_OHLCV_CACHE_ENABLED=true',
+          },
+        },
+      ],
+    },
+    us: {
+      market: 'us',
+      runtimeEnabled: true,
+      dependencyAvailable: false,
+      symbols: [
+        {
+          market: 'us',
+          symbol: 'ORCL',
+          runtimeState: 'dependency_missing',
+          cacheState: 'cache_missing',
+          dependencyState: 'missing',
+          dependencyAvailable: false,
+          cachedBars: 0,
+          latestBarDate: null,
+          freshnessState: 'unknown',
+          adjustmentState: 'unknown',
+          dataState: 'dependency_missing',
+          seedState: 'seed_skipped',
+          nextAction: {
+            state: 'dependency_missing',
+            summary: 'Install yfinance before provider fetch is allowed.',
+          },
+        },
+        {
+          market: 'us',
+          symbol: 'AAPL',
+          runtimeState: 'available',
+          cacheState: 'cache_hit',
+          dependencyState: 'installed',
+          dependencyAvailable: true,
+          cachedBars: 44,
+          latestBarDate: '2026-06-20',
+          freshnessState: 'stale',
+          adjustmentState: 'missing',
+          dataState: 'missing_adjustments',
+          seedState: 'seed_skipped',
+          nextAction: {
+            state: 'ready',
+            summary: 'Cache preflight is ready; enable seed only when operator approval allows mutation.',
+          },
+        },
+      ],
+    },
+  },
+};
+
 describe('MarketProviderOperationsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.history.replaceState({}, '', '/zh/admin/market-providers');
     getDataReadiness.mockResolvedValue(readinessPayload);
     getOperationsMatrix.mockResolvedValue(operationsMatrixPayload);
+    getHistoricalOhlcvCachePreflight.mockResolvedValue(historicalOhlcvCachePreflightPayload);
     getDataSourceGapRegistry.mockResolvedValue(dataSourceGapRegistryPayload);
     getProfessionalDataCapabilitiesAdmin.mockResolvedValue(professionalCapabilityAdminPayload);
   });
@@ -1117,7 +1208,7 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.getByText('运行时调用')).toBeInTheDocument();
     expect(screen.getByText('网络调用')).toBeInTheDocument();
     expect(screen.getByText('未配置')).toBeInTheDocument();
-    expect(screen.getByText('AAPL')).toBeInTheDocument();
+    expect(screen.getAllByText('AAPL').length).toBeGreaterThan(0);
     expect(screen.getByText('BTC-USD')).toBeInTheDocument();
     expect(screen.getByText('凭据配置')).toBeInTheDocument();
     expect(screen.getByText('本地缓存/历史文件')).toBeInTheDocument();
@@ -1257,6 +1348,45 @@ describe('MarketProviderOperationsPage', () => {
     expect(matrixDisclosure).toHaveTextContent('sourceAuthority=false');
     expect(matrixDisclosure).toHaveTextContent('score=false');
     expect(matrixDisclosure).toHaveTextContent('cache-required');
+  });
+
+  it('renders historicalOhlcvCachePreflight for representative CN and US symbols without enabling seed by default', async () => {
+    getOperations.mockResolvedValue(populatedPayload);
+
+    render(<MarketProviderOperationsPage />);
+
+    const panel = await screen.findByTestId('historical-ohlcv-cache-preflight-panel');
+    expect(getHistoricalOhlcvCachePreflight).toHaveBeenCalledWith();
+    expect(panel).toHaveTextContent('历史行情缓存预检');
+    expect(panel).toHaveTextContent('读取现有 DATA-113 admin dry-run endpoint');
+    expect(panel).toHaveTextContent('默认关闭是正常安全状态');
+    expect(panel).toHaveTextContent('dry-run');
+    expect(panel).toHaveTextContent('seed 默认关闭');
+    expect(panel).toHaveTextContent('不触发写入');
+    expect(within(panel).getByRole('button', { name: '历史缓存 seed 当前禁用' })).toBeDisabled();
+    expect(panel).toHaveTextContent('CN 1 · US 3');
+    expect(panel).toHaveTextContent('2 / 3');
+    expect(panel).toHaveTextContent('缺少复权');
+    expect(panel).toHaveTextContent('CN / AkShare');
+    expect(panel).toHaveTextContent('US / yfinance');
+    expect(panel).toHaveTextContent('运行时默认关闭');
+    expect(panel).toHaveTextContent('运行时开启');
+    expect(panel).toHaveTextContent('依赖可用');
+    expect(panel).toHaveTextContent('依赖缺失');
+    expect(panel).toHaveTextContent('600519');
+    expect(panel).toHaveTextContent('ORCL');
+    expect(panel).toHaveTextContent('AAPL');
+    expect(panel).toHaveTextContent('命中');
+    expect(panel).toHaveTextContent('未命中');
+    expect(panel).toHaveTextContent('72');
+    expect(panel).toHaveTextContent('44');
+    expect(panel).toHaveTextContent('新鲜 · 2026-06-23');
+    expect(panel).toHaveTextContent('过期 · 2026-06-20');
+    expect(panel).toHaveTextContent('复权缺失');
+    expect(panel).toHaveTextContent('缓存存在但缺少复权字段');
+    expect(panel.textContent || '').not.toMatch(
+      /WOLFYSTOCK_|requestId|traceId|cacheKey|rawProviderPayload|providerClass|api[_-]?key|token|secret|stack/i,
+    );
   });
 
   it('renders the backend data source gap registry as a fail-closed professional data map', async () => {

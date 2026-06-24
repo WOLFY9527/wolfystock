@@ -21,6 +21,9 @@ import {
   type MarketProviderCacheState,
   type MarketProviderEventRollup,
   type MarketProviderOperationItem,
+  type HistoricalOhlcvCachePreflightMarket,
+  type HistoricalOhlcvCachePreflightResponse,
+  type HistoricalOhlcvCachePreflightSymbol,
   type ProviderOperationsMatrixResponse,
   type ProviderOperationsMatrixRow,
   type MarketProviderOperationsResponse,
@@ -89,6 +92,8 @@ const EMPTY_PROVIDER_ITEMS: MarketProviderOperationItem[] = [];
 const EMPTY_PROVIDER_CACHE_STATES: MarketProviderCacheState[] = [];
 const EMPTY_PROVIDER_EVENT_ROLLUPS: MarketProviderEventRollup[] = [];
 const EMPTY_PROVIDER_MATRIX_ROWS: ProviderOperationsMatrixRow[] = [];
+const EMPTY_HISTORICAL_OHLCV_MARKETS: HistoricalOhlcvCachePreflightMarket[] = [];
+const EMPTY_HISTORICAL_OHLCV_SYMBOLS: HistoricalOhlcvCachePreflightSymbol[] = [];
 const EMPTY_READINESS_CHECKS: MarketDataReadinessCheck[] = [];
 const EMPTY_CONSUMER_EVIDENCE_ITEMS: ConsumerEvidenceReadinessItem[] = [];
 const PROVIDER_OPS_DIAGNOSTIC_SURFACE = '数据源运维 / 系统诊断';
@@ -1534,6 +1539,244 @@ const ReadOnlyBadges: React.FC<{ response?: MarketProviderOperationsResponse | n
       </TerminalChip>
       <TerminalChip variant="neutral">窗口 {response?.window?.key || '24h'}</TerminalChip>
     </div>
+  );
+};
+
+function historicalMarketLabel(market: string): string {
+  return {
+    cn: 'CN / AkShare',
+    us: 'US / yfinance',
+  }[market] || sanitizeCodeLabel(market).toUpperCase();
+}
+
+function historicalRuntimeLabel(enabled: boolean): string {
+  return enabled ? '运行时开启' : '运行时默认关闭';
+}
+
+function historicalDependencyLabel(available: boolean | null | undefined): string {
+  if (available === true) return '依赖可用';
+  if (available === false) return '依赖缺失';
+  return '依赖待确认';
+}
+
+function historicalCacheLabel(state: string): string {
+  const normalized = String(state || '').toLowerCase();
+  if (normalized === 'cache_hit') return '命中';
+  if (normalized === 'cache_error') return '读取异常';
+  return '未命中';
+}
+
+function historicalFreshnessLabel(state: string, latestBarDate?: string | null): string {
+  const normalized = String(state || '').toLowerCase();
+  if (normalized === 'fresh') return latestBarDate ? `新鲜 · ${sanitizeCodeLabel(latestBarDate)}` : '新鲜';
+  if (normalized === 'stale') return latestBarDate ? `过期 · ${sanitizeCodeLabel(latestBarDate)}` : '过期';
+  return latestBarDate ? `待确认 · ${sanitizeCodeLabel(latestBarDate)}` : '待确认';
+}
+
+function historicalAdjustmentLabel(state: string): string {
+  const normalized = String(state || '').toLowerCase();
+  if (normalized === 'available') return '复权可用';
+  if (normalized === 'missing') return '复权缺失';
+  return '复权待确认';
+}
+
+function historicalDataStateLabel(state: string): string {
+  return {
+    available: '运行时可用',
+    fresh: '可用',
+    stale: '过期',
+    insufficient: 'bars 不足',
+    missing_adjustments: '缺少复权',
+    cache_missing: '缓存未命中',
+    dependency_missing: '依赖缺失',
+    disabled_by_config: '默认关闭',
+    runtime_unavailable: '运行时不可用',
+    seed_disabled_by_config: '种子关闭',
+    symbol_not_allowlisted: '样本未授权',
+  }[String(state || '').toLowerCase()] || sanitizeCodeLabel(state, '待确认');
+}
+
+function historicalStateVariant(state: string): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
+  const normalized = String(state || '').toLowerCase();
+  if (normalized === 'fresh' || normalized === 'cache_hit' || normalized === 'available') return 'success';
+  if (normalized === 'stale' || normalized === 'insufficient' || normalized === 'missing_adjustments') return 'caution';
+  if (normalized === 'cache_error' || normalized === 'runtime_unavailable') return 'danger';
+  if (normalized === 'cache_missing' || normalized === 'disabled_by_config' || normalized === 'seed_disabled_by_config') return 'neutral';
+  return 'info';
+}
+
+function historicalNextActionText(symbol: HistoricalOhlcvCachePreflightSymbol): string {
+  const state = String(symbol.nextAction?.state || symbol.dataState || '').toLowerCase();
+  if (symbol.cacheState !== 'cache_hit') return '缓存未命中；先确认运行时、依赖与 seed 授权，不在本页发起网络写入。';
+  if (symbol.dataState === 'missing_adjustments') return '缓存存在但缺少复权字段；先补齐调整数据后再视为就绪。';
+  if (symbol.dataState === 'insufficient') return '缓存存在但 bars 不足；使用已批准的缓存补数流程补齐。';
+  if (symbol.dataState === 'stale') return '缓存存在但日期滞后；先确认最近交易日和刷新窗口。';
+  if (state === 'ready') return '缓存预检可读；如需写入，仍需走显式审批和 seed 开关。';
+  if (state === 'disabled_by_config') return '保持默认关闭；需要验证时先按现有运行时开关启用，再回本页确认。';
+  if (state === 'dependency_missing') return '先安装已批准的可选依赖，再重新读取本页预检。';
+  if (state === 'seed_disabled_by_config') return 'seed 默认关闭；仅在明确审批后启用既有 seed endpoint。';
+  if (state === 'cache_updated') return '缓存已通过既有存储抽象更新；继续核对 bar 数和新鲜度。';
+  if (state === 'symbol_not_allowlisted') return '使用后端允许的代表样本集合，不在前端扩展 seed 范围。';
+  return sanitizeOperatorText(symbol.nextAction?.summary, '保持只读观察，按现有运维流程处理。');
+}
+
+function historicalPreflightMarkets(preflight?: HistoricalOhlcvCachePreflightResponse | null): HistoricalOhlcvCachePreflightMarket[] {
+  if (!preflight?.markets) return EMPTY_HISTORICAL_OHLCV_MARKETS;
+  return ['cn', 'us']
+    .map((market) => preflight.markets[market])
+    .filter((market): market is HistoricalOhlcvCachePreflightMarket => Boolean(market));
+}
+
+const HistoricalOhlcvCachePreflightPanel: React.FC<{
+  preflight: HistoricalOhlcvCachePreflightResponse | null;
+  isLoading: boolean;
+  error: ParsedApiError | null;
+}> = ({ preflight, isLoading, error }) => {
+  const markets = historicalPreflightMarkets(preflight);
+  const symbols = markets.flatMap((market) => Array.isArray(market.symbols) ? market.symbols : EMPTY_HISTORICAL_OHLCV_SYMBOLS);
+  const hitCount = symbols.filter((symbol) => symbol.cacheState === 'cache_hit').length;
+  const missingAdjustmentCount = symbols.filter((symbol) => symbol.adjustmentState === 'missing').length;
+  const seedMutationAllowed = preflight?.seedEnabled === true
+    && preflight.networkCallsEnabled === true
+    && preflight.mutationEnabled === true
+    && preflight.dryRun === false;
+
+  return (
+    <TerminalPanel as="section" className="col-span-12" data-testid="historical-ohlcv-cache-preflight-panel">
+      <TerminalSectionHeader
+        eyebrow="DATA-113 / 历史 OHLCV"
+        title="历史行情缓存预检"
+        action={(
+          <div className="flex flex-wrap gap-1.5">
+            <TerminalChip variant={preflight?.dryRun !== false ? 'info' : 'caution'}>
+              {preflight?.dryRun !== false ? 'dry-run' : '可写模式'}
+            </TerminalChip>
+            <TerminalChip variant={preflight?.seedEnabled ? 'caution' : 'neutral'}>
+              {preflight?.seedEnabled ? 'seed 已开启' : 'seed 默认关闭'}
+            </TerminalChip>
+            <TerminalChip variant={seedMutationAllowed ? 'caution' : 'success'}>
+              {seedMutationAllowed ? '写入已允许' : '不触发写入'}
+            </TerminalChip>
+          </div>
+        )}
+      />
+      <p className="mt-2 text-[11px] leading-5 text-white/46">
+        读取现有 DATA-113 admin dry-run endpoint，展示 AkShare/yfinance 代表样本的运行时、依赖、缓存命中、bars、新鲜度和复权缺口。默认关闭是正常安全状态，不代表故障；本页不发起外部网络调用或缓存写入。
+      </p>
+
+      {error ? <ApiErrorAlert error={error} className="mt-4" /> : null}
+
+      {isLoading && !preflight ? (
+        <div className="mt-4">
+          <TerminalEmptyState title="正在读取历史缓存预检">仅请求 `/api/v1/admin/historical-ohlcv/cache-preflight` dry-run 状态。</TerminalEmptyState>
+        </div>
+      ) : null}
+
+      {!isLoading && !error && !markets.length ? (
+        <div className="mt-4">
+          <TerminalEmptyState title="暂无历史缓存预检">接口未返回市场行时，不在前端推断缓存就绪状态。</TerminalEmptyState>
+        </div>
+      ) : null}
+
+      {preflight ? (
+        <div className="mt-4 grid gap-2 md:grid-cols-4">
+          <div className="rounded-md border border-white/[0.06] bg-black/10 px-3 py-2.5">
+            <p className="text-[11px] text-white/42">代表样本</p>
+            <p className="mt-1 text-sm font-semibold text-white/82">
+              CN {formatNumber(preflight.representativeSymbols.cn.length, 0)} · US {formatNumber(preflight.representativeSymbols.us.length, 0)}
+            </p>
+          </div>
+          <div className="rounded-md border border-white/[0.06] bg-black/10 px-3 py-2.5">
+            <p className="text-[11px] text-white/42">缓存命中</p>
+            <p className="mt-1 text-sm font-semibold text-white/82">{formatNumber(hitCount, 0)} / {formatNumber(symbols.length, 0)}</p>
+          </div>
+          <div className="rounded-md border border-white/[0.06] bg-black/10 px-3 py-2.5">
+            <p className="text-[11px] text-white/42">缺少复权</p>
+            <p className="mt-1 text-sm font-semibold text-white/82">{formatNumber(missingAdjustmentCount, 0)} 个样本</p>
+          </div>
+          <div className="rounded-md border border-white/[0.06] bg-black/10 px-3 py-2.5">
+            <p className="text-[11px] text-white/42">seed 控制</p>
+            <button
+              type="button"
+              disabled={!seedMutationAllowed}
+              aria-label={seedMutationAllowed ? '历史缓存 seed 已由后端允许，但本页不自动执行' : '历史缓存 seed 当前禁用'}
+              className={cn(
+                'mt-1 min-h-8 rounded-md border px-2.5 py-1 text-[11px] font-semibold',
+                seedMutationAllowed
+                  ? 'border-amber-200/30 bg-amber-300/10 text-amber-100'
+                  : 'cursor-not-allowed border-white/[0.06] bg-white/[0.025] text-white/44',
+              )}
+            >
+              {seedMutationAllowed ? '显式 seed 已允许' : 'seed 按钮禁用'}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {markets.length ? (
+        <div className="mt-4 grid gap-3">
+          {markets.map((market) => (
+            <TerminalNestedBlock key={market.market} className="bg-black/10 px-3 py-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">{historicalMarketLabel(market.market)}</p>
+                  <p className="mt-1 text-sm font-semibold text-white/84">代表缓存状态</p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <TerminalChip variant={market.runtimeEnabled ? 'success' : 'neutral'}>{historicalRuntimeLabel(market.runtimeEnabled)}</TerminalChip>
+                  <TerminalChip variant={market.dependencyAvailable ? 'success' : 'caution'}>{historicalDependencyLabel(market.dependencyAvailable)}</TerminalChip>
+                </div>
+              </div>
+              <TerminalDenseTable className="mt-3 -mx-3 overflow-x-auto px-3 sm:mx-0 sm:px-0">
+                <table className="min-w-[48rem] table-fixed">
+                  <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
+                    <tr className="border-b border-white/5 text-left">
+                      <th className="px-3 py-3 font-medium">Symbol</th>
+                      <th className="px-3 py-3 font-medium">缓存</th>
+                      <th className="px-3 py-3 font-medium">Bars</th>
+                      <th className="px-3 py-3 font-medium">最新日期 / 新鲜度</th>
+                      <th className="px-3 py-3 font-medium">复权</th>
+                      <th className="px-3 py-3 font-medium">下一步</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(market.symbols || EMPTY_HISTORICAL_OHLCV_SYMBOLS).map((symbol) => (
+                      <tr key={`${market.market}-${symbol.symbol}`} className="border-b border-white/[0.04] align-top">
+                        <td className="px-3 py-3">
+                          <div className="min-w-0">
+                            <p className="font-mono text-sm font-semibold text-white/86">{sanitizeCodeLabel(symbol.symbol)}</p>
+                            <p className="mt-1 text-[11px] text-white/38">{historicalDataStateLabel(symbol.dataState)}</p>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex flex-wrap gap-1.5">
+                            <TerminalChip variant={historicalStateVariant(symbol.cacheState)}>{historicalCacheLabel(symbol.cacheState)}</TerminalChip>
+                            <TerminalChip variant={historicalStateVariant(symbol.runtimeState)}>{historicalDataStateLabel(symbol.runtimeState)}</TerminalChip>
+                            <TerminalChip variant={symbol.dependencyAvailable === false ? 'caution' : 'success'}>{historicalDependencyLabel(symbol.dependencyAvailable)}</TerminalChip>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 font-mono text-sm text-white/78">{formatNumber(symbol.cachedBars, 0)}</td>
+                        <td className="px-3 py-3 text-[11px] leading-5 text-white/58">
+                          {historicalFreshnessLabel(symbol.freshnessState, symbol.latestBarDate)}
+                        </td>
+                        <td className="px-3 py-3">
+                          <TerminalChip variant={symbol.adjustmentState === 'missing' ? 'caution' : historicalStateVariant(symbol.adjustmentState)}>
+                            {historicalAdjustmentLabel(symbol.adjustmentState)}
+                          </TerminalChip>
+                        </td>
+                        <td className="px-3 py-3 text-[11px] leading-5 text-white/62">
+                          {historicalNextActionText(symbol)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </TerminalDenseTable>
+            </TerminalNestedBlock>
+          ))}
+        </div>
+      ) : null}
+    </TerminalPanel>
   );
 };
 
@@ -3271,6 +3514,7 @@ const MarketProviderOperationsPage: React.FC = () => {
   const surfaceFocus = productSetupSurfaceFromCurrentQuery();
   const [response, setResponse] = useState<MarketProviderOperationsResponse | null>(null);
   const [matrixResponse, setMatrixResponse] = useState<ProviderOperationsMatrixResponse | null>(null);
+  const [historicalOhlcvPreflight, setHistoricalOhlcvPreflight] = useState<HistoricalOhlcvCachePreflightResponse | null>(null);
   const [readiness, setReadiness] = useState<MarketDataReadinessResponse | null>(null);
   const [gapRegistry, setGapRegistry] = useState<DataSourceGapRegistryResponse | null>(null);
   const [professionalCapabilityRegistry, setProfessionalCapabilityRegistry] = useState<ProfessionalDataCapabilityRegistryResponse | null>(null);
@@ -3279,11 +3523,13 @@ const MarketProviderOperationsPage: React.FC = () => {
   const [submittedReadinessSymbols, setSubmittedReadinessSymbols] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isMatrixLoading, setIsMatrixLoading] = useState(true);
+  const [isHistoricalOhlcvPreflightLoading, setIsHistoricalOhlcvPreflightLoading] = useState(true);
   const [isReadinessLoading, setIsReadinessLoading] = useState(true);
   const [isGapRegistryLoading, setIsGapRegistryLoading] = useState(true);
   const [isProfessionalCapabilityLoading, setIsProfessionalCapabilityLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [matrixError, setMatrixError] = useState<ParsedApiError | null>(null);
+  const [historicalOhlcvPreflightError, setHistoricalOhlcvPreflightError] = useState<ParsedApiError | null>(null);
   const [readinessError, setReadinessError] = useState<ParsedApiError | null>(null);
   const [gapRegistryError, setGapRegistryError] = useState<ParsedApiError | null>(null);
   const [professionalCapabilityError, setProfessionalCapabilityError] = useState<ParsedApiError | null>(null);
@@ -3326,6 +3572,26 @@ const MarketProviderOperationsPage: React.FC = () => {
       })
       .finally(() => {
         if (!cancelled) setIsMatrixLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    marketProviderOperationsApi.getHistoricalOhlcvCachePreflight()
+      .then((payload) => {
+        if (!cancelled) setHistoricalOhlcvPreflight(payload);
+      })
+      .catch((apiError) => {
+        if (!cancelled) {
+          const parsed = getParsedApiError(apiError);
+          setHistoricalOhlcvPreflightError({ ...parsed, title: '读取历史行情缓存预检失败' });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsHistoricalOhlcvPreflightLoading(false);
       });
     return () => {
       cancelled = true;
@@ -3580,6 +3846,11 @@ const MarketProviderOperationsPage: React.FC = () => {
               topSummary={topSummary}
               opsSummary={summary}
               operationItems={items}
+            />
+            <HistoricalOhlcvCachePreflightPanel
+              preflight={historicalOhlcvPreflight}
+              isLoading={isHistoricalOhlcvPreflightLoading}
+              error={historicalOhlcvPreflightError}
             />
             <AdminOpsSectionHeading
               dataTestId="market-provider-section-readiness"
