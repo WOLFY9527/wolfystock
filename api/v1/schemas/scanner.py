@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 SCANNER_CONSUMER_DATA_QUALITY_LABELS = {"ready", "delayed", "cached", "partial", "no_evidence", "unavailable"}
+SCANNER_NO_ADVICE_LABEL = "Observation-only research context; not investment advice."
 _SCANNER_FORBIDDEN_CONSUMER_KEYS = {
     "fallback",
     "trustlevel",
@@ -255,7 +256,95 @@ def _build_scanner_candidate_research_packet(value: Any) -> Dict[str, Any]:
         "dataQualityNotes": data_quality_notes,
         "rejectedOrLimitedReasonSafeLabel": reason_label,
         "researchNextStep": research_next_step,
+        "evidenceBoundaries": _build_scanner_candidate_evidence_boundaries(payload),
+        "noAdviceLabel": SCANNER_NO_ADVICE_LABEL,
         "observationOnly": True,
+    }
+
+
+def _scanner_safe_string_list(values: Any, *, limit: int = 6) -> List[str]:
+    raw_items = values if isinstance(values, (list, tuple, set)) else [values]
+    result: List[str] = []
+    seen = set()
+    for item in raw_items:
+        text = _scanner_packet_safe_text(item)
+        if not text:
+            continue
+        key = text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(text)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _build_scanner_candidate_evidence_boundaries(value: Any) -> Dict[str, Any]:
+    payload = value if isinstance(value, dict) else {}
+    readiness = payload.get("candidateResearchReadiness") if isinstance(payload.get("candidateResearchReadiness"), dict) else {}
+    summary_frame = payload.get("candidateResearchSummaryFrame") if isinstance(payload.get("candidateResearchSummaryFrame"), dict) else {}
+    consumer_diagnostics = payload.get("consumerDiagnostics") if isinstance(payload.get("consumerDiagnostics"), dict) else {}
+    ohlcv = payload.get("historicalOhlcvReadiness") if isinstance(payload.get("historicalOhlcvReadiness"), dict) else {}
+    source_frame = payload.get("candidateSourceProvenanceFrame") if isinstance(payload.get("candidateSourceProvenanceFrame"), dict) else {}
+
+    missing_evidence = _scanner_safe_string_list(
+        readiness.get("missingEvidence")
+        or summary_frame.get("missingEvidence")
+        or consumer_diagnostics.get("missingEvidence")
+        or ohlcv.get("missingRequirements")
+    )
+    next_evidence = _scanner_safe_string_list(
+        readiness.get("nextEvidenceNeeded")
+        or summary_frame.get("nextResearchStep")
+        or consumer_diagnostics.get("nextEvidence")
+    )
+    return {
+        "boundaryType": "observation_only",
+        "noAdvice": True,
+        "noAdviceLabel": SCANNER_NO_ADVICE_LABEL,
+        "decisionGrade": False,
+        "observationMode": True,
+        "readinessState": _scanner_packet_safe_text(
+            readiness.get("readinessState")
+            or summary_frame.get("frameState")
+            or "unknown"
+        ) or "unknown",
+        "sourceAuthority": _scanner_packet_safe_text(readiness.get("sourceAuthority")) or "unknown",
+        "freshness": _scanner_packet_safe_text(
+            readiness.get("freshnessFloor")
+            or summary_frame.get("freshness")
+            or consumer_diagnostics.get("freshnessCategory")
+            or "unknown"
+        ) or "unknown",
+        "missingEvidence": missing_evidence,
+        "nextEvidenceNeeded": next_evidence,
+        "ohlcvState": ohlcv.get("overallState"),
+        "sourceProvenance": {
+            "entryCount": int(source_frame.get("entryCount") or 0),
+            "scoringEvidenceCount": int(source_frame.get("scoreContributionAllowedCount") or 0),
+            "observationEvidenceCount": int(source_frame.get("observationOnlyCount") or 0),
+        },
+    }
+
+
+def _build_scanner_candidate_ranking_confidence(value: Any) -> Dict[str, Any]:
+    payload = value if isinstance(value, dict) else {}
+    consumer_diagnostics = payload.get("consumerDiagnostics") if isinstance(payload.get("consumerDiagnostics"), dict) else {}
+    diagnostics = payload.get("diagnostics") if isinstance(payload.get("diagnostics"), dict) else {}
+    explainability = diagnostics.get("score_explainability") if isinstance(diagnostics.get("score_explainability"), dict) else {}
+    score_confidence = consumer_diagnostics.get("scoreConfidence", explainability.get("score_confidence"))
+    return {
+        "rank": int(payload.get("rank") or 0),
+        "score": payload.get("score"),
+        "rawScore": payload.get("raw_score"),
+        "finalScore": payload.get("final_score"),
+        "scoreConfidence": score_confidence,
+        "confidenceCategory": str(consumer_diagnostics.get("confidenceCategory") or "unknown"),
+        "dataQualityState": str(consumer_diagnostics.get("dataQualityState") or "unknown"),
+        "sourceConfidenceBucket": str(consumer_diagnostics.get("sourceConfidenceBucket") or "unknown"),
+        "freshnessCategory": str(consumer_diagnostics.get("freshnessCategory") or "unknown"),
+        "rankingUse": "relative_observation_only",
     }
 
 
@@ -830,6 +919,9 @@ class ScannerCandidateResponse(BaseModel):
     candidateResearchSummaryFrame: Dict[str, Any] = Field(default_factory=dict)
     candidateSourceProvenanceFrame: Dict[str, Any] = Field(default_factory=dict)
     candidateResearchPacket: Dict[str, Any] = Field(default_factory=dict)
+    evidenceBoundaries: Dict[str, Any] = Field(default_factory=dict)
+    rankingConfidence: Dict[str, Any] = Field(default_factory=dict)
+    noAdviceLabel: str = SCANNER_NO_ADVICE_LABEL
     suppressCandidateResearchPacket: bool = Field(False, exclude=True)
 
     @field_validator("diagnostics")
@@ -844,10 +936,22 @@ class ScannerCandidateResponse(BaseModel):
 
     @model_validator(mode="after")
     def _populate_candidate_research_packet(self) -> "ScannerCandidateResponse":
+        payload = self.model_dump(
+            exclude={
+                "candidateResearchPacket",
+                "evidenceBoundaries",
+                "rankingConfidence",
+            }
+        )
+        if not self.evidenceBoundaries:
+            self.evidenceBoundaries = _build_scanner_candidate_evidence_boundaries(payload)
+        if not self.rankingConfidence:
+            self.rankingConfidence = _build_scanner_candidate_ranking_confidence(payload)
+        if not self.noAdviceLabel:
+            self.noAdviceLabel = SCANNER_NO_ADVICE_LABEL
         if self.suppressCandidateResearchPacket:
             self.candidateResearchPacket = {}
             return self
-        payload = self.model_dump(exclude={"candidateResearchPacket"})
         self.candidateResearchPacket = _build_scanner_candidate_research_packet(payload)
         return self
 

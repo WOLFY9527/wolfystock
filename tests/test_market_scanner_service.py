@@ -3781,6 +3781,14 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         candidate_readiness = detail["shortlist"][0]["historicalOhlcvReadiness"]
         self.assertEqual(candidate_readiness["overallState"], "ready")
         self.assertEqual(candidate_readiness["providerState"], "available")
+        candidate = detail["shortlist"][0]
+        self.assertEqual(candidate["noAdviceLabel"], "Observation-only research context; not investment advice.")
+        self.assertTrue(candidate["evidenceBoundaries"]["noAdvice"])
+        self.assertFalse(candidate["evidenceBoundaries"]["decisionGrade"])
+        self.assertEqual(candidate["evidenceBoundaries"]["boundaryType"], "observation_only")
+        self.assertEqual(candidate["rankingConfidence"]["rankingUse"], "relative_observation_only")
+        self.assertIn(candidate["rankingConfidence"]["dataQualityState"], {"ready", "limited", "partial", "unknown"})
+        self.assertEqual(candidate["rankingConfidence"]["rank"], candidate["rank"])
 
     def test_missing_benchmark_blocks_candidate_generation_before_ranking_claims(self) -> None:
         provider = FakeHistoricalOhlcvProvider(

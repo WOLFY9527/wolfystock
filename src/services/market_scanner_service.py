@@ -185,6 +185,7 @@ SCANNER_CONSUMER_CURRENT_FRESHNESS = frozenset({"fresh", "live", "realtime", "ca
 SCANNER_CONSUMER_DELAYED_FRESHNESS = frozenset({"delayed", "t_plus_1_or_delayed", "t+1", "recent"})
 SCANNER_CONSUMER_AGED_FRESHNESS = frozenset({"stale", "aged", "expired"})
 SCANNER_CONSUMER_PARTIAL_FRESHNESS = frozenset({"partial", "fallback", "fallback_static"})
+SCANNER_NO_ADVICE_LABEL = "Observation-only research context; not investment advice."
 SCANNER_CONTEXT_SUPPORTIVE_REGIMES = frozenset(
     {
         "risk_on",
@@ -630,6 +631,89 @@ def _context_blockers(value: Any) -> List[Dict[str, str]]:
         if key:
             result.append({"key": key, "label": key})
     return result
+
+
+def _safe_string_list(values: Any, *, limit: int = 6) -> List[str]:
+    raw_items = values if isinstance(values, (list, tuple, set)) else [values]
+    result: List[str] = []
+    seen = set()
+    for item in raw_items:
+        text = str(item or "").strip()
+        if not text:
+            continue
+        key = text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(text)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _candidate_evidence_boundaries(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    readiness = _context_mapping(payload.get("candidateResearchReadiness"))
+    summary = _context_mapping(payload.get("candidateResearchSummaryFrame"))
+    consumer = _context_mapping(payload.get("consumerDiagnostics"))
+    ohlcv = _context_mapping(payload.get("historicalOhlcvReadiness"))
+    source_frame = _context_mapping(payload.get("candidateSourceProvenanceFrame"))
+    missing_evidence = _safe_string_list(
+        readiness.get("missingEvidence")
+        or summary.get("missingEvidence")
+        or consumer.get("missingEvidence")
+        or ohlcv.get("missingRequirements")
+    )
+    next_evidence = _safe_string_list(
+        readiness.get("nextEvidenceNeeded")
+        or summary.get("nextResearchStep")
+        or consumer.get("nextEvidence")
+    )
+    return {
+        "boundaryType": "observation_only",
+        "noAdvice": True,
+        "noAdviceLabel": SCANNER_NO_ADVICE_LABEL,
+        "decisionGrade": False,
+        "observationMode": True,
+        "readinessState": str(readiness.get("readinessState") or summary.get("frameState") or "unknown"),
+        "sourceAuthority": str(readiness.get("sourceAuthority") or "unknown"),
+        "freshness": str(readiness.get("freshnessFloor") or summary.get("freshness") or consumer.get("freshnessCategory") or "unknown"),
+        "missingEvidence": missing_evidence,
+        "nextEvidenceNeeded": next_evidence,
+        "ohlcvState": ohlcv.get("overallState"),
+        "sourceProvenance": {
+            "entryCount": int(source_frame.get("entryCount") or 0),
+            "scoringEvidenceCount": int(source_frame.get("scoreContributionAllowedCount") or 0),
+            "observationEvidenceCount": int(source_frame.get("observationOnlyCount") or 0),
+        },
+    }
+
+
+def _candidate_ranking_confidence(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    consumer = _context_mapping(payload.get("consumerDiagnostics"))
+    diagnostics = _context_mapping(payload.get("diagnostics"))
+    explainability = _context_mapping(diagnostics.get("score_explainability"))
+    score_confidence = consumer.get("scoreConfidence")
+    if score_confidence is None:
+        score_confidence = explainability.get("score_confidence")
+    return {
+        "rank": int(payload.get("rank") or 0),
+        "score": _round_optional(payload.get("score"), digits=2),
+        "rawScore": _round_optional(payload.get("raw_score"), digits=2),
+        "finalScore": _round_optional(payload.get("final_score"), digits=2),
+        "scoreConfidence": _round_optional(score_confidence, digits=2),
+        "confidenceCategory": str(consumer.get("confidenceCategory") or "unknown"),
+        "dataQualityState": str(consumer.get("dataQualityState") or "unknown"),
+        "sourceConfidenceBucket": str(consumer.get("sourceConfidenceBucket") or "unknown"),
+        "freshnessCategory": str(consumer.get("freshnessCategory") or "unknown"),
+        "rankingUse": "relative_observation_only",
+    }
+
+
+def _attach_candidate_public_boundaries(payload: Dict[str, Any]) -> Dict[str, Any]:
+    payload["noAdviceLabel"] = SCANNER_NO_ADVICE_LABEL
+    payload["evidenceBoundaries"] = _candidate_evidence_boundaries(payload)
+    payload["rankingConfidence"] = _candidate_ranking_confidence(payload)
+    return payload
 
 
 def _scanner_runtime_resolution(diagnostics: Mapping[str, Any], key: str) -> Dict[str, Any]:
@@ -8535,6 +8619,7 @@ class MarketScannerService:
             candidate_research_readiness=payload["candidateResearchReadiness"],
         )
         self._attach_candidate_source_provenance_frames([payload], scanner_context_frame=None)
+        _attach_candidate_public_boundaries(payload)
         return payload
 
     def _public_candidate_dict(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
@@ -8593,6 +8678,7 @@ class MarketScannerService:
             [payload],
             scanner_context_frame=candidate.get("scannerContextFrame"),
         )
+        _attach_candidate_public_boundaries(payload)
         return payload
 
     @staticmethod
