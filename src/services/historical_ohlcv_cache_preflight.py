@@ -9,17 +9,16 @@ from typing import Any
 
 import pandas as pd
 
+from data_provider.base import DataFetcherManager
 from src.repositories.stock_repo import StockRepository
 from src.services.akshare_cn_ohlcv_cache import (
     AkshareCnOhlcvRuntime,
     RUNTIME_ENABLED_ENV as CN_RUNTIME_ENABLED_ENV,
     historical_ohlcv_runtime_enabled,
 )
-from src.services.historical_ohlcv_readiness import HistoricalOhlcvReadinessRequest
 from src.services.yfinance_us_ohlcv_cache_provider import (
     LocalUsOhlcvParquetCache,
     YFINANCE_US_OHLCV_ENABLE_ENV,
-    YfinanceUsOhlcvCacheProvider,
 )
 from src.utils.symbol_classification import is_us_stock_code
 
@@ -108,15 +107,18 @@ class HistoricalOhlcvCachePreflightService:
         dry_run: bool,
     ) -> dict[str, Any]:
         symbols = _normalize_symbols_by_market(symbols_by_market)
+        global_runtime_enabled = historical_ohlcv_runtime_enabled(self.env)
+        us_provider_enabled = _env_enabled(self.env.get(YFINANCE_US_OHLCV_ENABLE_ENV))
         runtime = {
-            "cn": historical_ohlcv_runtime_enabled(self.env),
-            "us": _env_enabled(self.env.get(YFINANCE_US_OHLCV_ENABLE_ENV)),
+            "cn": global_runtime_enabled,
+            "us": global_runtime_enabled and us_provider_enabled,
         }
         dependencies = {
             "cn": _module_available("akshare", self.spec_finder),
             "us": _module_available("yfinance", self.spec_finder),
         }
         seed_enabled = _env_enabled(self.env.get(HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV))
+        mutation_allowed = bool(mode == "seed" and seed_enabled and not dry_run and any(runtime.values()))
         markets = {
             market: {
                 "market": market,
@@ -145,12 +147,13 @@ class HistoricalOhlcvCachePreflightService:
                 "mode": mode,
                 "dryRun": bool(dry_run),
                 "seedEnabled": bool(seed_enabled),
-                "networkCallsEnabled": bool(mode == "seed" and seed_enabled and not dry_run),
-                "mutationEnabled": bool(mode == "seed" and seed_enabled and not dry_run),
+                "networkCallsEnabled": mutation_allowed,
+                "mutationEnabled": mutation_allowed,
                 "consumerSafe": True,
                 "requiredConfig": {
+                    "historicalRuntimeFlag": f"{CN_RUNTIME_ENABLED_ENV}=true",
                     "cnRuntimeFlag": f"{CN_RUNTIME_ENABLED_ENV}=true",
-                    "usRuntimeFlag": f"{YFINANCE_US_OHLCV_ENABLE_ENV}=true",
+                    "usRuntimeFlag": f"{CN_RUNTIME_ENABLED_ENV}=true; {YFINANCE_US_OHLCV_ENABLE_ENV}=true",
                     "seedFlag": f"{HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV}=true",
                 },
                 "representativeSymbols": {"cn": list(symbols["cn"]), "us": list(symbols["us"])},
@@ -173,8 +176,10 @@ class HistoricalOhlcvCachePreflightService:
     ) -> dict[str, Any]:
         runtime_state = _runtime_state(runtime_enabled, dependency_available)
         seed_state = "seed_skipped"
+        cache = self._read_cache(market, symbol, required_bars, dependency_available)
+        seed_report = _seed_report("not_requested", cache=cache)
         if mode == "seed":
-            runtime_state, seed_state = self._seed_state(
+            runtime_state, seed_state, seed_report, refresh_cache = self._seed_state(
                 market=market,
                 symbol=symbol,
                 runtime_enabled=runtime_enabled,
@@ -183,14 +188,17 @@ class HistoricalOhlcvCachePreflightService:
                 dry_run=dry_run,
                 required_bars=required_bars,
                 require_adjusted=require_adjusted,
+                cache=cache,
             )
-        cache = self._read_cache(market, symbol, required_bars, dependency_available)
+            if refresh_cache:
+                cache = self._read_cache(market, symbol, required_bars, dependency_available)
         return _build_symbol_payload(
             market=market,
             symbol=symbol,
             runtime_state=runtime_state,
             seed_state=seed_state,
             cache=cache,
+            seed_report=seed_report,
             required_bars=required_bars,
             require_adjusted=require_adjusted,
         )
@@ -206,17 +214,40 @@ class HistoricalOhlcvCachePreflightService:
         dry_run: bool,
         required_bars: int,
         require_adjusted: bool,
-    ) -> tuple[str, str]:
+        cache: Mapping[str, Any],
+    ) -> tuple[str, str, dict[str, Any], bool]:
         if not _seed_allowlisted(market, symbol):
-            return "symbol_not_allowlisted", "symbol_not_allowlisted"
+            return "symbol_not_allowlisted", "symbol_not_allowlisted", _seed_report(
+                "failed_safely",
+                cache=cache,
+                intended_action="use_representative_symbol",
+            ), False
         if not seed_enabled:
-            return "seed_disabled_by_config", "seed_disabled_by_config"
+            return "seed_disabled_by_config", "seed_disabled_by_config", _seed_report(
+                "disabled_by_config",
+                cache=cache,
+                intended_action="enable_seed_config",
+            ), False
         if not runtime_enabled:
-            return "disabled_by_config", "seed_skipped"
+            return "disabled_by_config", "seed_skipped", _seed_report(
+                "disabled_by_config",
+                cache=cache,
+                intended_action="enable_runtime_config",
+            ), False
         if not dependency_available:
-            return "dependency_missing", "seed_skipped"
+            return "dependency_missing", "seed_skipped", _seed_report(
+                "dependency_missing",
+                cache=cache,
+                intended_action=f"install_{market}_ohlcv_dependency",
+            ), False
+        if _cache_satisfies_seed(cache=cache, required_bars=required_bars, require_adjusted=require_adjusted):
+            return "available", "cache_hit", _seed_report("cache_hit", cache=cache), False
         if dry_run:
-            return "available", "seed_skipped"
+            return "available", "seed_skipped", _seed_report(
+                "dry_run",
+                cache=cache,
+                intended_action=f"seed_{market}_ohlcv_cache",
+            ), False
         return self._execute_seed(market, symbol, required_bars, require_adjusted)
 
     def _execute_seed(
@@ -225,7 +256,7 @@ class HistoricalOhlcvCachePreflightService:
         symbol: str,
         required_bars: int,
         require_adjusted: bool,
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, dict[str, Any], bool]:
         try:
             if market == "cn":
                 runtime = AkshareCnOhlcvRuntime(
@@ -236,24 +267,43 @@ class HistoricalOhlcvCachePreflightService:
                     persist_cache=True,
                 )
                 payload = runtime.get_history_data(symbol, days=required_bars)
-                return ("runtime_unavailable", "seed_skipped") if payload.get("source") == "unavailable" else ("available", "cache_updated")
-            provider = YfinanceUsOhlcvCacheProvider(
-                cache=self.us_cache,
-                fetcher=self.us_fetcher,
-                provider_fetch_enabled=True,
-            )
-            result = provider.fetch_ohlcv_history(
-                HistoricalOhlcvReadinessRequest(
-                    symbol=symbol,
-                    market="us",
-                    timeframe="1d",
-                    required_bars=required_bars,
-                    require_adjusted=require_adjusted,
+                if payload.get("source") == "unavailable":
+                    return "runtime_unavailable", "failed_safely", _seed_report("failed_safely"), False
+                rows = payload.get("data") if isinstance(payload.get("data"), list) else []
+                cache_summary = _summarize_frame(
+                    pd.DataFrame(rows) if rows else None,
+                    dependency_available=True,
+                    today=self.today,
                 )
+                return "available", "cache_updated", _seed_report(
+                    "seeded",
+                    cache=cache_summary,
+                    bars_written=len(rows),
+                ), True
+
+            fetcher = self.us_fetcher or DataFetcherManager()
+            payload = fetcher.get_daily_data(
+                stock_code=symbol,
+                start_date=None,
+                end_date=None,
+                days=max(1, int(required_bars)),
             )
-            return ("runtime_unavailable", "seed_skipped") if result.unavailable_reason else ("available", "cache_updated")
+            if isinstance(payload, tuple) and payload:
+                payload = payload[0]
+            frame = _coerce_frame(payload)
+            if frame is None or frame.empty:
+                return "runtime_unavailable", "failed_safely", _seed_report("failed_safely"), False
+            rows_written = int(self.us_cache.save(symbol, frame) or 0)
+            if rows_written <= 0:
+                return "runtime_unavailable", "failed_safely", _seed_report("failed_safely"), False
+            cache_summary = _summarize_frame(frame, dependency_available=True, today=self.today)
+            return "available", "cache_updated", _seed_report(
+                "seeded",
+                cache=cache_summary,
+                bars_written=rows_written,
+            ), True
         except Exception:
-            return "runtime_unavailable", "seed_skipped"
+            return "runtime_unavailable", "failed_safely", _seed_report("failed_safely"), False
 
     def _read_cache(self, market: str, symbol: str, required_bars: int, dependency_available: bool) -> dict[str, Any]:
         try:
@@ -323,6 +373,7 @@ def _build_symbol_payload(
     runtime_state: str,
     seed_state: str,
     cache: Mapping[str, Any],
+    seed_report: Mapping[str, Any],
     required_bars: int,
     require_adjusted: bool,
 ) -> dict[str, Any]:
@@ -330,6 +381,7 @@ def _build_symbol_payload(
     cached_bars = int(cache.get("cachedBars") or 0)
     freshness_state = str(cache.get("freshnessState") or "unknown")
     adjustment_state = str(cache.get("adjustmentState") or "unknown")
+    bars_written = int(seed_report.get("barsWritten") or 0)
     return {
         "market": market,
         "symbol": symbol,
@@ -351,8 +403,60 @@ def _build_symbol_payload(
             require_adjusted=require_adjusted,
         ),
         "seedState": seed_state,
+        "seedResult": seed_report.get("seedResult") or "not_requested",
+        "barsWritten": bars_written,
+        "latestDate": seed_report.get("latestDate"),
+        "freshness": seed_report.get("freshness") or "unknown",
+        "adjustmentStatus": seed_report.get("adjustmentStatus") or "unknown",
+        "intendedAction": seed_report.get("intendedAction"),
         "nextAction": _next_action(market, runtime_state, seed_state),
     }
+
+
+def _seed_report(
+    result: str,
+    *,
+    cache: Mapping[str, Any] | None = None,
+    bars_written: int = 0,
+    intended_action: str | None = None,
+) -> dict[str, Any]:
+    summary = dict(cache or {})
+    return {
+        "seedResult": _safe_seed_result(result),
+        "barsWritten": max(0, int(bars_written or 0)),
+        "latestDate": summary.get("latestBarDate"),
+        "freshness": summary.get("freshnessState") or "unknown",
+        "adjustmentStatus": summary.get("adjustmentState") or "unknown",
+        "intendedAction": intended_action,
+    }
+
+
+def _safe_seed_result(value: str) -> str:
+    normalized = str(value or "").strip().lower()
+    allowed = {
+        "cache_hit",
+        "dependency_missing",
+        "disabled_by_config",
+        "dry_run",
+        "failed_safely",
+        "not_requested",
+        "seeded",
+    }
+    return normalized if normalized in allowed else "failed_safely"
+
+
+def _cache_satisfies_seed(
+    *,
+    cache: Mapping[str, Any],
+    required_bars: int,
+    require_adjusted: bool,
+) -> bool:
+    if str(cache.get("cacheState") or "") != "cache_hit":
+        return False
+    cached_bars = int(cache.get("cachedBars") or 0)
+    if cached_bars < max(1, int(required_bars or 0)):
+        return False
+    return not (require_adjusted and str(cache.get("adjustmentState") or "") == "missing")
 
 
 def _summarize_frame(frame: pd.DataFrame | None, *, dependency_available: bool | None, today: date) -> dict[str, Any]:
@@ -459,7 +563,11 @@ def _next_action(market: str, runtime_state: str, seed_state: str) -> dict[str, 
 
 
 def _required_flag_text(market: str, *, include_seed: bool = False) -> str:
-    base = f"{CN_RUNTIME_ENABLED_ENV}=true" if market == "cn" else f"{YFINANCE_US_OHLCV_ENABLE_ENV}=true"
+    base = (
+        f"{CN_RUNTIME_ENABLED_ENV}=true"
+        if market == "cn"
+        else f"{CN_RUNTIME_ENABLED_ENV}=true; {YFINANCE_US_OHLCV_ENABLE_ENV}=true"
+    )
     return f"{base}; {HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV}=true" if include_seed else base
 
 
