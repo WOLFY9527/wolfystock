@@ -169,6 +169,21 @@ function makeRunResponse(overrides: Partial<BacktestRunResponse> = {}): Backtest
     fallbackUsed: false,
     evaluationWindowTradingBars: 10,
     maturityCalendarDays: 14,
+    executionReadiness: {
+      contractVersion: 'backtest_execution_readiness_v1',
+      state: 'executable',
+      resultContractAvailable: true,
+      engineState: 'enabled',
+      dataStatus: 'ready',
+      calculationStatus: 'ready',
+      sampleStatus: 'ready',
+      benchmarkState: 'not_requested',
+      reasonCodes: [],
+      observationOnly: true,
+      consumerSafe: true,
+      noAdviceDisclosure: 'Research diagnostic only; not personalized financial advice and not an executable instruction.',
+    },
+    noAdviceDisclosure: 'Research diagnostic only; not personalized financial advice and not an executable instruction.',
     executionAssumptions: {
       moduleType: 'historical_analysis_evaluation',
       priceBasis: 'close',
@@ -218,6 +233,21 @@ function makeHistoryItem(): BacktestRunHistoryItem {
     executionAssumptions: {
       moduleType: 'historical_analysis_evaluation',
     },
+    executionReadiness: {
+      contractVersion: 'backtest_execution_readiness_v1',
+      state: 'executable',
+      resultContractAvailable: true,
+      engineState: 'enabled',
+      dataStatus: 'ready',
+      calculationStatus: 'ready',
+      sampleStatus: 'ready',
+      benchmarkState: 'not_requested',
+      reasonCodes: [],
+      observationOnly: true,
+      consumerSafe: true,
+      noAdviceDisclosure: 'Research diagnostic only; not personalized financial advice and not an executable instruction.',
+    },
+    noAdviceDisclosure: 'Research diagnostic only; not personalized financial advice and not an executable instruction.',
   };
 }
 
@@ -588,13 +618,28 @@ function makeRuleRunResponse(overrides: Partial<RuleBacktestRunResponse> = {}): 
     aiSummary: null,
     equityCurve: [],
     trades: [],
+    executionReadiness: {
+      contractVersion: 'backtest_execution_readiness_v1',
+      state: 'executable',
+      resultContractAvailable: true,
+      engineState: 'enabled',
+      dataStatus: 'fixture_or_example_data',
+      calculationStatus: 'ready',
+      sampleStatus: 'ready',
+      benchmarkState: 'available',
+      reasonCodes: [],
+      observationOnly: true,
+      consumerSafe: true,
+      noAdviceDisclosure: 'Research diagnostic only; not personalized financial advice and not an executable instruction.',
+    },
+    noAdviceDisclosure: 'Research diagnostic only; not personalized financial advice and not an executable instruction.',
     ...overrides,
   };
 }
 
 describe('BacktestPage', () => {
   async function switchToProfessionalMode() {
-    fireEvent.click(screen.getByRole('tab', { name: /专业|Professional/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /研究诊断|Research diagnostics/i }));
     expect(await screen.findByTestId('pro-backtest-workspace')).toBeInTheDocument();
   }
 
@@ -647,6 +692,22 @@ describe('BacktestPage', () => {
       pricingFallbackUsed: false,
       evaluationWindowTradingBars: 10,
       maturityCalendarDays: 14,
+      sampleReadinessState: 'ready',
+      sampleBlockingReasons: [],
+      executionReadiness: {
+        contractVersion: 'backtest_execution_readiness_v1',
+        state: 'degraded',
+        resultContractAvailable: true,
+        engineState: 'enabled',
+        dataStatus: 'ready',
+        calculationStatus: 'ready',
+        sampleStatus: 'ready',
+        benchmarkState: 'missing',
+        reasonCodes: ['missing_benchmark'],
+        observationOnly: true,
+        consumerSafe: true,
+        noAdviceDisclosure: 'Research diagnostic only; not personalized financial advice and not an executable instruction.',
+      },
     });
     clearSamples.mockResolvedValue({
       code: 'ORCL',
@@ -685,6 +746,20 @@ describe('BacktestPage', () => {
       fallbackUsed: false,
       evaluationWindowTradingBars: 10,
       maturityCalendarDays: 14,
+      executionReadiness: {
+        contractVersion: 'backtest_execution_readiness_v1',
+        state: 'executable',
+        resultContractAvailable: true,
+        engineState: 'enabled',
+        dataStatus: 'ready',
+        calculationStatus: 'ready',
+        sampleStatus: 'ready',
+        benchmarkState: 'not_requested',
+        reasonCodes: [],
+        observationOnly: true,
+        consumerSafe: true,
+        noAdviceDisclosure: 'Research diagnostic only; not personalized financial advice and not an executable instruction.',
+      },
     } satisfies PrepareBacktestSamplesResponse);
     runBacktest.mockResolvedValue(makeRunResponse());
     parseRuleStrategy.mockResolvedValue(makeRuleParseResponse());
@@ -1016,7 +1091,7 @@ describe('BacktestPage', () => {
     expect(pageShell).not.toHaveTextContent(/立即交易|连接经纪商|真实下单|AI recommends you buy|must buy|must sell|buy now|sell now|place order|submit order|connect broker/i);
     expect(await screen.findByText('模板仅用于研究模拟，不构成交易建议。')).toBeInTheDocument();
     expect(await screen.findByText('回测规则预览')).toBeInTheDocument();
-    expect(screen.getByText('普通模式会先把模板整理为固定规则回测流程，再跳转到独立结果页。')).toBeInTheDocument();
+    expect(screen.getByText('研究快速模式会先把模板整理为固定规则回测流程，再跳转到独立结果页。')).toBeInTheDocument();
     expect(screen.queryByText('编译预览')).not.toBeInTheDocument();
     expect(screen.queryByText('确定性规则链路')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '执行回测任务' })).toHaveClass('bg-emerald-500/10', 'text-emerald-400', 'rounded-lg');
@@ -1665,6 +1740,95 @@ describe('BacktestPage', () => {
     }));
     expect(payload?.robustnessConfig?.monteCarlo).not.toHaveProperty('seed');
     expect(payload?.robustnessConfig?.monteCarlo).not.toHaveProperty('noiseScale');
+  });
+
+  it('shows DATA-110 execution readiness before a historical run', async () => {
+    renderBacktestRoutes();
+
+    await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('tab', { name: '历史评估' }));
+    fireEvent.change(screen.getByLabelText('股票代码'), { target: { value: 'ORCL' } });
+    fireEvent.click(screen.getByRole('button', { name: '应用筛选' }));
+
+    await waitFor(() => expect(getSampleStatus).toHaveBeenCalledWith('ORCL'));
+
+    const readiness = await screen.findByTestId('historical-backtest-execution-readiness');
+    expect(readiness).toHaveAttribute('data-readiness-state', 'degraded');
+    expect(readiness).toHaveTextContent('可执行，证据降级');
+    expect(readiness).toHaveTextContent('缺少基准，基准相对指标不可用。');
+    expect(readiness).toHaveTextContent('基准相对指标');
+    expect(readiness).toHaveTextContent('不可用');
+    expect(readiness).toHaveTextContent('仅供研究');
+  });
+
+  it('keeps blocked deterministic run attempts on the setup page with specific DATA-110 blockers', async () => {
+    runRuleBacktest.mockResolvedValueOnce(makeRuleRunResponse({
+      status: 'completed',
+      completedAt: '2026-04-07T08:02:00Z',
+      statusMessage: '历史行情不足，无法执行该策略回测。',
+      noResultReason: 'insufficient_history',
+      noResultMessage: '历史行情不足，无法执行该策略回测。',
+      tradeCount: 0,
+      winCount: 0,
+      lossCount: 0,
+      totalReturnPct: null,
+      annualizedReturnPct: null,
+      sharpeRatio: null,
+      benchmarkReturnPct: null,
+      excessReturnVsBenchmarkPct: null,
+      buyAndHoldReturnPct: null,
+      excessReturnVsBuyAndHoldPct: null,
+      winRatePct: null,
+      avgTradeReturnPct: null,
+      maxDrawdownPct: null,
+      finalEquity: null,
+      benchmarkSummary: {
+        label: 'Benchmark unavailable',
+        requestedMode: 'auto',
+        resolvedMode: 'none',
+        unavailableReason: 'missing benchmark',
+      },
+      auditRows: [],
+      dailyReturnSeries: [],
+      exposureCurve: [],
+      equityCurve: [],
+      trades: [],
+      executionReadiness: {
+        contractVersion: 'backtest_execution_readiness_v1',
+        state: 'data_insufficient',
+        resultContractAvailable: false,
+        engineState: 'enabled',
+        dataStatus: 'data_unavailable',
+        calculationStatus: 'insufficient_sample',
+        sampleStatus: 'insufficient_sample',
+        benchmarkState: 'missing',
+        reasonCodes: ['insufficient_history', 'missing_benchmark'],
+        observationOnly: true,
+        consumerSafe: true,
+        noAdviceDisclosure: 'Research diagnostic only; not personalized financial advice and not an executable instruction.',
+      },
+    }));
+
+    renderBacktestRoutes();
+
+    await parseDeterministicStrategy();
+
+    fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与执行假设/i));
+    fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '执行回测任务' }));
+
+    await waitFor(() => expect(runRuleBacktest).toHaveBeenCalledTimes(1));
+
+    expect(screen.queryByTestId('deterministic-backtest-result-page')).not.toBeInTheDocument();
+    const readiness = await screen.findByTestId('pro-execution-readiness-data110');
+    expect(readiness).toHaveAttribute('data-readiness-state', 'data_insufficient');
+    expect(readiness).toHaveAttribute('data-result-contract-available', 'false');
+    expect(readiness).toHaveTextContent('历史数据不足');
+    expect(readiness).toHaveTextContent('历史 OHLCV 窗口不足，无法计算安全结果。');
+    expect(readiness).toHaveTextContent('缺少基准，基准相对指标不可用。');
+    expect(readiness).toHaveTextContent('本次运行被阻塞或尚未具备结果条件');
+    expect(readiness).toHaveTextContent('仅供研究');
+    expect(readiness).not.toHaveTextContent(/Sharpe|CAGR|alpha|beta|跑赢|实盘|交易指令/i);
   });
 
   it('reveals the right-side KPI console after a historical run starts', async () => {

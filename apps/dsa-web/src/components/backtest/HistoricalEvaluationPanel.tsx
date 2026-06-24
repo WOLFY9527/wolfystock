@@ -14,6 +14,7 @@ import type {
   BacktestSampleStatusResponse,
   PrepareBacktestSamplesResponse,
 } from '../../types/backtest';
+import BacktestExecutionReadinessPanel from './BacktestExecutionReadinessPanel';
 import {
   AssumptionList,
   Banner,
@@ -181,6 +182,11 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
     },
   ];
   const isProfessionalMode = panelMode === 'professional';
+  const historicalExecutionReadiness = runResult?.executionReadiness
+    || sampleStatus?.executionReadiness
+    || prepareResult?.executionReadiness
+    || null;
+  const historicalNoAdviceDisclosure = runResult?.noAdviceDisclosure || null;
 
   const handleRunEvaluationClick = async () => {
     if (!isProfessionalMode) {
@@ -537,6 +543,15 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
           />
 
           <SummaryStrip items={modeSummaryItems} />
+          <BacktestExecutionReadinessPanel
+            language="zh"
+            readiness={historicalExecutionReadiness}
+            noAdviceDisclosure={historicalNoAdviceDisclosure}
+            attempted={Boolean(runResult)}
+            isLoading={isLoadingSampleStatus || isRunningHistoricalEval}
+            testId="historical-backtest-execution-readiness"
+            className="mt-4"
+          />
 
           <Disclosure summary="查看数据可用性说明">
             <div className="preview-grid">
