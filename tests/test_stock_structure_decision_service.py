@@ -83,7 +83,7 @@ class _BlockingHistoryService:
             "period": "daily",
             "data": _trend_breakout_history(),
             "source": "local_db",
-            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 55},
+            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 120},
         }
 
 
@@ -134,18 +134,18 @@ def _bar(index: int, close: float, *, volume: float = 1000.0, width: float = 1.0
 
 
 def _trend_breakout_history() -> list[dict[str, Any]]:
-    bars = [_bar(index, 100 + index * 0.55, volume=1200.0) for index in range(55)]
+    bars = [_bar(index, 100 + index * 0.55, volume=1200.0) for index in range(120)]
     prior_range_high = max(float(bar["high"]) for bar in bars[-21:-1])
-    bars[-1] = _bar(54, prior_range_high * 1.025, volume=2600.0)
+    bars[-1] = _bar(119, prior_range_high * 1.025, volume=2600.0)
     return bars
 
 
 def _flat_history() -> list[dict[str, Any]]:
-    return [_bar(index, 100 + (index % 3) * 0.05, volume=900.0, width=0.4) for index in range(55)]
+    return [_bar(index, 100 + (index % 3) * 0.05, volume=900.0, width=0.4) for index in range(120)]
 
 
 def _weak_history() -> list[dict[str, Any]]:
-    return [_bar(index, 80 - index * 0.35, volume=1000.0 + index * 12, width=0.8) for index in range(55)]
+    return [_bar(index, 80 - index * 0.35, volume=1000.0 + index * 12, width=0.8) for index in range(120)]
 
 
 def _peer_rows(closes: list[float]) -> list[dict[str, Any]]:
@@ -155,10 +155,10 @@ def _peer_rows(closes: list[float]) -> list[dict[str, Any]]:
     ]
 
 
-def _assert_required_contract(payload: dict[str, Any]) -> None:
+def _assert_required_contract(payload: dict[str, Any], *, ticker: str = "AAPL") -> None:
     assert payload["schemaVersion"] == STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION
-    assert payload["ticker"] == "AAPL"
-    assert payload["symbol"] == "AAPL"
+    assert payload["ticker"] == ticker
+    assert payload["symbol"] == ticker
     assert payload["structureState"] in {
         "uptrend",
         "breakout",
@@ -225,7 +225,7 @@ def test_service_builds_observation_only_structure_decision_from_daily_ohlcv() -
             "period": "daily",
             "data": _trend_breakout_history(),
             "source": "local_db",
-            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 55},
+            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 120},
         }
     )
 
@@ -240,8 +240,8 @@ def test_service_builds_observation_only_structure_decision_from_daily_ohlcv() -
         "source": "local_db",
         "period": "daily",
         "requestedDays": 90,
-        "observedBars": 55,
-        "usableBars": 55,
+        "observedBars": 120,
+        "usableBars": 120,
         "reason": "history_available",
     }
     assert payload["missingEvidence"] == [
@@ -276,14 +276,14 @@ def test_service_caps_high_structure_confidence_when_critical_evidence_is_missin
                 "period": "daily",
                 "data": _trend_breakout_history(),
                 "source": "local_db",
-                "diagnostics": {"status": "ok", "reason": "history_available", "rows": 55},
+                "diagnostics": {"status": "ok", "reason": "history_available", "rows": 120},
             },
             "SPY": {
                 "stock_code": "SPY",
                 "period": "daily",
                 "data": _flat_history(),
                 "source": "local_db",
-                "diagnostics": {"status": "ok", "reason": "history_available", "rows": 55},
+                "diagnostics": {"status": "ok", "reason": "history_available", "rows": 120},
             },
         }
     )
@@ -320,7 +320,7 @@ def test_peer_correlation_snapshot_marks_aligned_when_local_peer_group_and_price
             "period": "daily",
             "data": _trend_breakout_history(),
             "source": "local_db",
-            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 55},
+            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 120},
         }
     )
     target = [100, 101, 102, 104, 107, 111, 116, 122]
@@ -362,7 +362,7 @@ def test_peer_correlation_snapshot_marks_diverging_when_local_peers_move_away() 
             "period": "daily",
             "data": _trend_breakout_history(),
             "source": "local_db",
-            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 55},
+            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 120},
         }
     )
     fake_peer_repo = _FakePeerRepository(
@@ -394,7 +394,7 @@ def test_peer_correlation_snapshot_fails_gracefully_when_peer_prices_are_missing
             "period": "daily",
             "data": _trend_breakout_history(),
             "source": "local_db",
-            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 55},
+            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 120},
         }
     )
     fake_peer_repo = _FakePeerRepository(
@@ -527,9 +527,9 @@ def test_service_preserves_ohlcv_readiness_when_structure_computation_times_out(
         {
             "stock_code": "AAPL",
             "period": "daily",
-            "data": _trend_breakout_history(),
+            "data": [_bar(index, 100 + index * 0.55, volume=1200.0) for index in range(120)],
             "source": "local_db",
-            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 55},
+            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 120},
         }
     )
     blocking_peer_repo = _BlockingPeerRepository()
@@ -553,13 +553,13 @@ def test_service_preserves_ohlcv_readiness_when_structure_computation_times_out(
     assert payload["structureState"] == "lowConfidence"
     assert payload["confidence"] == "low"
     assert payload["dataQuality"]["status"] == "available"
-    assert payload["dataQuality"]["observedBars"] == 55
-    assert payload["dataQuality"]["usableBars"] == 55
+    assert payload["dataQuality"]["observedBars"] == 120
+    assert payload["dataQuality"]["usableBars"] == 120
     readiness = payload["historicalOhlcvReadiness"]
     assert readiness["providerState"] == "available"
     assert readiness["overallState"] == "ready"
-    assert readiness["requiredBars"] > 0
-    assert readiness["usableBars"] == 55
+    assert readiness["requiredBars"] == 90
+    assert readiness["usableBars"] == 120
     assert readiness["missingBars"] == 0
     assert readiness["missingRequirements"] == []
     assert payload["structureComputation"] == {
@@ -578,6 +578,51 @@ def test_service_preserves_ohlcv_readiness_when_structure_computation_times_out(
     }
 
 
+def test_service_marks_available_bars_as_structure_insufficient_without_erasing_evidence() -> None:
+    fake_history = _FakeHistoryService(
+        {
+            "stock_code": "ORCL",
+            "period": "daily",
+            "data": [_bar(index, 120 + index * 0.35, volume=1100.0) for index in range(40)],
+            "source": "local_db",
+            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 40},
+        }
+    )
+
+    payload = StockStructureDecisionService(history_service=fake_history).get_structure_decision("ORCL")
+
+    _assert_required_contract(payload, ticker="ORCL")
+    assert payload["ticker"] == "ORCL"
+    assert payload["structureState"] == "lowConfidence"
+    assert payload["confidence"] == "low"
+    assert payload["dataQuality"]["status"] == "partial"
+    assert payload["dataQuality"]["source"] == "local_db"
+    assert payload["dataQuality"]["observedBars"] == 40
+    assert payload["dataQuality"]["usableBars"] == 40
+    assert payload["dataQuality"]["reason"] == "insufficient_history_for_structure"
+    readiness = payload["historicalOhlcvReadiness"]
+    assert readiness["providerState"] == "available"
+    assert readiness["requiredBars"] == 90
+    assert readiness["usableBars"] == 40
+    assert readiness["missingBars"] == 50
+    assert readiness["overallState"] == "blocked"
+    assert readiness["missingRequirements"] == ["insufficient_history"]
+    assert payload["structureComputation"]["status"] == "degraded"
+    assert payload["structureComputation"]["stateReason"] == "insufficient_history_for_structure"
+    assert {
+        "section": "structureEvidence",
+        "status": "degraded",
+        "reason": "insufficient_history_for_structure",
+    } in payload["degradedInputs"]
+    assert {
+        "kind": "sufficient_daily_ohlcv_history",
+        "message": "More daily OHLCV history is needed before the structure-specific requirement is met.",
+    } in payload["missingEvidence"]
+    serialized = json.dumps(payload, ensure_ascii=False).lower()
+    for forbidden in FORBIDDEN_ADVICE_TOKENS:
+        assert forbidden not in serialized
+
+
 def test_service_fails_closed_before_history_lookup_for_invalid_symbol_format() -> None:
     fake_history = _FakeHistoryService(
         {
@@ -585,7 +630,7 @@ def test_service_fails_closed_before_history_lookup_for_invalid_symbol_format() 
             "period": "daily",
             "data": _trend_breakout_history(),
             "source": "local_db",
-            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 55},
+            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 120},
         }
     )
 
@@ -606,7 +651,7 @@ def test_service_adds_safe_drilldown_context_when_requested() -> None:
             "period": "daily",
             "data": _trend_breakout_history(),
             "source": "local_db",
-            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 55},
+            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 120},
         }
     )
 
@@ -635,7 +680,7 @@ def test_service_output_avoids_recommendation_or_trading_instruction_language() 
             "period": "daily",
             "data": _trend_breakout_history(),
             "source": "local_db",
-            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 55},
+            "diagnostics": {"status": "ok", "reason": "history_available", "rows": 120},
         }
     )
 
@@ -704,8 +749,8 @@ def test_batch_structure_decisions_are_bounded_and_stably_ordered() -> None:
             "status": "available",
             "period": "daily",
             "source": "local_db",
-            "usableBarsMin": 55,
-            "usableBarsMax": 55,
+            "usableBarsMin": 120,
+            "usableBarsMax": 120,
         },
         {
             "kind": "benchmark_ohlcv",
@@ -718,12 +763,12 @@ def test_batch_structure_decisions_are_bounded_and_stably_ordered() -> None:
     assert {
         "kind": "structure_state",
         "symbols": ["MSFT", "AAPL"],
-        "values": {"MSFT": "mixed", "AAPL": "breakout"},
+        "values": {"MSFT": "pullback", "AAPL": "breakout"},
     } in compare_packet["divergentEvidence"]
     assert compare_packet["missingEvidenceBySymbol"] == {"MSFT": [], "AAPL": []}
     assert compare_packet["freshnessBySymbol"] == {
-        "MSFT": {"status": "available", "source": "local_db", "period": "daily", "usableBars": 55},
-        "AAPL": {"status": "available", "source": "local_db", "period": "daily", "usableBars": 55},
+        "MSFT": {"status": "available", "source": "local_db", "period": "daily", "usableBars": 120},
+        "AAPL": {"status": "available", "source": "local_db", "period": "daily", "usableBars": 120},
     }
     assert compare_packet["confidenceCap"] == {
         "value": 100,
