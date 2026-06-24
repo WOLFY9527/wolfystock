@@ -8,9 +8,8 @@ import unittest
 from collections import defaultdict
 from pathlib import Path
 
-from fastapi.routing import APIRoute
-
 from api.app import create_app
+from tests.api.route_table_helpers import iter_effective_api_routes
 
 
 class ApiRouteUniquenessTestCase(unittest.TestCase):
@@ -19,9 +18,7 @@ class ApiRouteUniquenessTestCase(unittest.TestCase):
             app = create_app(static_dir=Path(temp_dir))
 
         routes_by_method_path: dict[tuple[str, str], list[str]] = defaultdict(list)
-        for route in app.routes:
-            if not isinstance(route, APIRoute):
-                continue
+        for route in iter_effective_api_routes(app.routes):
             for method in route.methods or set():
                 if method in {"HEAD", "OPTIONS"}:
                     continue
@@ -34,3 +31,25 @@ class ApiRouteUniquenessTestCase(unittest.TestCase):
         }
 
         self.assertEqual(duplicates, {})
+
+    def test_app_route_table_exposes_mac118_api_contract_routes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            app = create_app(static_dir=Path(temp_dir))
+
+        routes_by_signature = {
+            (method, route.path): route.endpoint
+            for route in iter_effective_api_routes(app.routes)
+            for method in route.methods or set()
+            if method not in {"HEAD", "OPTIONS"}
+        }
+
+        self.assertEqual(
+            {
+                ("GET", "/api/v1/admin/historical-ohlcv/cache-preflight"),
+                ("GET", "/api/v1/scanner/status"),
+                ("GET", "/api/v1/stocks/{stock_code}/structure-decision"),
+                ("GET", "/api/v1/backtest/performance"),
+            }
+            - set(routes_by_signature),
+            set(),
+        )
