@@ -234,8 +234,8 @@ def _payload(
     data_status: str = "available",
     missing_evidence: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
-    usable_bars = 55 if data_status == "available" else 0
-    required_bars = 12
+    usable_bars = 120 if data_status == "available" else 0
+    required_bars = 90
     return {
         "schemaVersion": STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION,
         "ticker": ticker,
@@ -599,8 +599,8 @@ def test_structure_decision_endpoint_includes_consumer_safe_ohlcv_readiness(monk
             "timeframe": "1d",
             "requestedRange": {"start": None, "end": None},
             "lookbackBars": 90,
-            "requiredBars": 12,
-            "usableBars": 55,
+            "requiredBars": 90,
+            "usableBars": 120,
             "missingBars": 0,
             "freshnessState": "unknown",
             "adjustmentState": "not_required",
@@ -748,7 +748,7 @@ def test_structure_decision_endpoint_returns_controlled_unavailable_payload_on_l
 def test_structure_decision_endpoint_preserves_ohlcv_readiness_when_computation_times_out(monkeypatch) -> None:
     fake_history = _FakeStockService(
         quote=None,
-        history=_history_payload_with_valid_rows(rows=55),
+        history=_history_payload_with_valid_rows(rows=40),
     )
     blocking_peer_repo = _BlockingPeerRepository()
     monkeypatch.setattr(
@@ -776,14 +776,16 @@ def test_structure_decision_endpoint_preserves_ohlcv_readiness_when_computation_
     payload = response.json()
     assert payload["structureState"] == "lowConfidence"
     assert payload["confidence"] == "low"
-    assert payload["dataQuality"]["status"] == "available"
-    assert payload["dataQuality"]["observedBars"] == 55
-    assert payload["dataQuality"]["usableBars"] == 55
+    assert payload["dataQuality"]["status"] == "partial"
+    assert payload["dataQuality"]["observedBars"] == 40
+    assert payload["dataQuality"]["usableBars"] == 40
+    assert payload["dataQuality"]["reason"] == "Evidence is limited for this observation."
     readiness = payload["historicalOhlcvReadiness"]
-    assert readiness["overallState"] == "ready"
-    assert readiness["usableBars"] == 55
-    assert readiness["missingBars"] == 0
-    assert readiness["missingRequirements"] == []
+    assert readiness["overallState"] == "blocked"
+    assert readiness["requiredBars"] == 90
+    assert readiness["usableBars"] == 40
+    assert readiness["missingBars"] == 50
+    assert readiness["missingRequirements"] == ["insufficient_history"]
     assert payload["structureComputation"]["status"] == "degraded"
     assert payload["structureComputation"]["stateReason"] == "timed_out"
     assert (

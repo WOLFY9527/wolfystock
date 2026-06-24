@@ -565,10 +565,10 @@ def test_yfinance_us_cache_provider_redacts_provider_exceptions() -> None:
 
 
 def test_stock_structure_can_route_orcl_and_aapl_through_yfinance_cache_provider() -> None:
-    cache = _FakeUsOhlcvCache({"ORCL": _frame(60), "AAPL": _frame(60)})
+    cache = _FakeUsOhlcvCache({"ORCL": _frame(120), "AAPL": _frame(120)})
     provider = YfinanceUsOhlcvCacheProvider(
         cache=cache,
-        fetcher=_FakeDailyFetcher(_frame(60)),
+        fetcher=_FakeDailyFetcher(_frame(120)),
         provider_fetch_enabled=False,
     )
 
@@ -589,7 +589,7 @@ def test_stock_structure_can_route_orcl_and_aapl_through_yfinance_cache_provider
 
 def test_stock_structure_yfinance_cache_env_wiring_uses_provider_without_history_call(monkeypatch) -> None:
     provider = _FakeOhlcvProvider(
-        {"AAPL": HistoricalOhlcvProviderResult.available(_bars(60), adjustments_available=True)}
+        {"AAPL": HistoricalOhlcvProviderResult.available(_bars(120), adjustments_available=True)}
     )
     history = _FakeHistoryService(_history_payload(0))
     monkeypatch.setenv("WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED", "true")
@@ -624,7 +624,7 @@ def test_stock_structure_payload_includes_historical_ohlcv_readiness() -> None:
 
 
 def test_stock_structure_runtime_adapter_can_make_readiness_actionable_with_sufficient_bars() -> None:
-    history = _FakeHistoryService(_history_payload(60))
+    history = _FakeHistoryService(_history_payload(120))
 
     payload = StockStructureDecisionService(
         historical_ohlcv_provider=HistoricalOhlcvRuntimeAdapter(history_runtime=history),
@@ -642,7 +642,7 @@ def test_stock_structure_runtime_adapter_can_make_readiness_actionable_with_suff
 
 def test_stock_structure_default_runtime_adapter_is_disabled_without_env(monkeypatch) -> None:
     monkeypatch.delenv("WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED", raising=False)
-    history = _FakeHistoryService(_history_payload(60))
+    history = _FakeHistoryService(_history_payload(120))
 
     payload = StockStructureDecisionService(history_service=history).get_structure_decision("AAPL")
 
@@ -654,7 +654,7 @@ def test_stock_structure_default_runtime_adapter_is_disabled_without_env(monkeyp
 
 def test_stock_structure_env_enabled_runtime_adapter_uses_existing_history_service(monkeypatch) -> None:
     monkeypatch.setenv("WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED", "true")
-    history = _FakeHistoryService(_history_payload(60))
+    history = _FakeHistoryService(_history_payload(120))
 
     payload = StockStructureDecisionService(history_service=history).get_structure_decision("AAPL")
 

@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION = "stock_structure_decision_api_v1"
 SYMBOL_COMPARE_EVIDENCE_PACKET_VERSION = "symbol_compare_evidence_packet_v1"
 DEFAULT_STRUCTURE_DECISION_HISTORY_DAYS = 90
+STRUCTURE_DECISION_REQUIRED_BARS = DEFAULT_STRUCTURE_DECISION_HISTORY_DAYS
 DEFAULT_STRUCTURE_DECISION_TIMEOUT_SECONDS = 2.5
 DEFAULT_STRUCTURE_DECISION_BATCH_MAX_ITEMS = 25
 MAX_STRUCTURE_DECISION_BATCH_ITEMS = 50
@@ -116,6 +117,19 @@ _STRUCTURE_DECISION_TIMEOUT_MESSAGE = (
 _STRUCTURE_COMPUTATION_TIMEOUT_REASON = "structure_computation_timeout"
 _STRUCTURE_COMPUTATION_TIMEOUT_MESSAGE = (
     "Daily OHLCV data is available, but structure computation timed out; this read remains observation-only."
+)
+_INSUFFICIENT_STRUCTURE_HISTORY_REASON = "insufficient_history_for_structure"
+_INSUFFICIENT_STRUCTURE_HISTORY_MESSAGE = (
+    "Daily OHLCV data is available, but the structure-specific history requirement is not met; "
+    "this read remains observation-only."
+)
+_STALE_STRUCTURE_HISTORY_MESSAGE = (
+    "Daily OHLCV data is available, but the structure read is degraded by stale history; "
+    "this read remains observation-only."
+)
+_MISSING_ADJUSTMENTS_MESSAGE = (
+    "Daily OHLCV data is available, but adjusted history evidence is incomplete; "
+    "this read remains observation-only."
 )
 
 
@@ -378,7 +392,8 @@ class StockStructureDecisionService:
         bars = list(bars)
         data_quality = dict(data_quality)
         ohlcv_readiness = dict(ohlcv_readiness)
-        engine_result = build_stock_structure_decision(bars, benchmark_ohlcv=benchmark_bars)
+        engine_bars = bars if _historical_ohlcv_readiness_allows_structure(ohlcv_readiness) else []
+        engine_result = build_stock_structure_decision(engine_bars, benchmark_ohlcv=benchmark_bars)
         missing_evidence = _missing_evidence(
             data_quality,
             include_benchmark_missing=not (include_comparative_context and comparative_available),
@@ -425,7 +440,7 @@ class StockStructureDecisionService:
             market="unknown",
             timeframe="1d",
             lookback_bars=DEFAULT_STRUCTURE_DECISION_HISTORY_DAYS,
-            required_bars=MIN_REQUIRED_BARS,
+            required_bars=STRUCTURE_DECISION_REQUIRED_BARS,
             require_adjusted=self.require_adjusted_ohlcv,
         )
         return self.ohlcv_readiness_service.fetch(request)
@@ -463,7 +478,7 @@ class StockStructureDecisionService:
             market="unknown",
             timeframe="1d",
             lookback_bars=DEFAULT_STRUCTURE_DECISION_HISTORY_DAYS,
-            required_bars=MIN_REQUIRED_BARS,
+            required_bars=STRUCTURE_DECISION_REQUIRED_BARS,
             require_adjusted=self.require_adjusted_ohlcv,
         )
         status = str(data_quality.get("status") or "")
@@ -787,7 +802,7 @@ def _fallback_historical_ohlcv_readiness(
         market="unknown",
         timeframe="1d",
         lookback_bars=DEFAULT_STRUCTURE_DECISION_HISTORY_DAYS,
-        required_bars=MIN_REQUIRED_BARS,
+        required_bars=STRUCTURE_DECISION_REQUIRED_BARS,
     )
     reason = str(data_quality.get("reason") or "")
     result = HistoricalOhlcvReadinessService().assess_supplied_history(
@@ -1369,13 +1384,16 @@ def _build_data_quality_from_readiness(
 ) -> dict[str, Any]:
     provider_state = str(readiness.get("providerState") or "provider_missing")
     overall_state = str(readiness.get("overallState") or "blocked")
+    missing_requirements = _safe_text_list(readiness.get("missingRequirements"))
     observed_bars = len(bars)
     usable_bars = int(readiness.get("usableBars") or 0)
     if provider_state != "available":
         status = "unavailable"
     elif usable_bars < MIN_REQUIRED_BARS:
         status = "insufficient"
-    elif overall_state == "degraded" or usable_bars < observed_bars:
+    elif "insufficient_history" in missing_requirements:
+        status = "partial"
+    elif overall_state in {"blocked", "degraded"} or usable_bars < observed_bars:
         status = "partial"
     else:
         status = "available"
@@ -1405,10 +1423,25 @@ def _completed_structure_computation_state(data_quality: Mapping[str, Any]) -> d
             "stateReason": "data_unavailable",
             "message": "Structure computation is unavailable because daily OHLCV data is unavailable.",
         }
-    if reason == "insufficient_history":
-        state_reason = "insufficient_data"
-    else:
-        state_reason = "data_degraded"
+    if reason in {"insufficient_history", _INSUFFICIENT_STRUCTURE_HISTORY_REASON}:
+        return {
+            "status": "degraded",
+            "stateReason": _INSUFFICIENT_STRUCTURE_HISTORY_REASON,
+            "message": _INSUFFICIENT_STRUCTURE_HISTORY_MESSAGE,
+        }
+    if reason == "stale_data":
+        return {
+            "status": "degraded",
+            "stateReason": "stale_data",
+            "message": _STALE_STRUCTURE_HISTORY_MESSAGE,
+        }
+    if reason == "missing_adjustments":
+        return {
+            "status": "degraded",
+            "stateReason": "missing_adjustments",
+            "message": _MISSING_ADJUSTMENTS_MESSAGE,
+        }
+    state_reason = "data_degraded"
     return {
         "status": "degraded",
         "stateReason": state_reason,
@@ -1416,14 +1449,24 @@ def _completed_structure_computation_state(data_quality: Mapping[str, Any]) -> d
     }
 
 
+def _historical_ohlcv_readiness_allows_structure(readiness: Mapping[str, Any]) -> bool:
+    if str(readiness.get("providerState") or "") != "available":
+        return False
+    if str(readiness.get("overallState") or "") != "ready":
+        return False
+    missing = _safe_text_list(readiness.get("missingRequirements"))
+    return not missing
+
+
 def _data_quality_reason_from_readiness(readiness: Mapping[str, Any]) -> str:
     missing = readiness.get("missingRequirements")
     missing = missing if isinstance(missing, list) else []
+    if "insufficient_history" in missing:
+        return _INSUFFICIENT_STRUCTURE_HISTORY_REASON
     for candidate in (
         "provider_missing",
         "entitlement_required",
         "provider_unavailable",
-        "insufficient_history",
         "stale_data",
         "missing_adjustments",
     ):
@@ -1496,6 +1539,7 @@ def _missing_evidence(
 ) -> list[dict[str, str]]:
     missing: list[dict[str, str]] = []
     status = str(data_quality.get("status") or "")
+    reason = str(data_quality.get("reason") or "")
     usable_bars = int(data_quality.get("usableBars") or 0)
     observed_bars = int(data_quality.get("observedBars") or 0)
 
@@ -1504,6 +1548,13 @@ def _missing_evidence(
             {
                 "kind": "daily_ohlcv",
                 "message": "Daily OHLCV history is unavailable, so the structure state is low confidence.",
+            }
+        )
+    elif reason == _INSUFFICIENT_STRUCTURE_HISTORY_REASON:
+        missing.append(
+            {
+                "kind": "sufficient_daily_ohlcv_history",
+                "message": "More daily OHLCV history is needed before the structure-specific requirement is met.",
             }
         )
     elif usable_bars < MIN_REQUIRED_BARS:
