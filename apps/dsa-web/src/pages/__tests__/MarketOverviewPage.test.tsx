@@ -2424,10 +2424,10 @@ describe('MarketOverviewPage', () => {
     });
   });
 
-  it('renders exactly one compact semantic market overview heading without internal terms', async () => {
+  it('renders exactly one compact semantic market state heading without internal terms', async () => {
     renderMarketOverviewWithLanguage('zh');
 
-    const heading = await screen.findByRole('heading', { level: 1, name: '市场总览' });
+    const heading = await screen.findByRole('heading', { level: 1, name: '市场状态概览' });
     expect(heading).toHaveClass('text-xl', 'md:text-2xl');
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.queryByText(/开发者详情|debug|raw|schema|trace|provider_timeout|not_enough_history|MarketCache|generatedCandidates|failedCandidates|LLM Ledger|QUOTA PILOT/i)).not.toBeInTheDocument();

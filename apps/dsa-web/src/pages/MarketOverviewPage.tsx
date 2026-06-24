@@ -1391,7 +1391,7 @@ const MarketOverviewPage = () => {
           heading={(
             <TerminalPageHeading
               data-testid="market-overview-page-heading"
-              title={language === 'en' ? 'Market Overview' : '市场总览'}
+              title={language === 'en' ? 'Market State Overview' : '市场状态概览'}
             />
           )}
           panels={panels}

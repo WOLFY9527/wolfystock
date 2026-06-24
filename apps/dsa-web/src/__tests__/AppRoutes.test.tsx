@@ -119,7 +119,12 @@ vi.mock('../components/auth/AuthGuardOverlay', () => ({
 }));
 
 vi.mock('../pages/PortfolioPage', () => ({
-  default: () => <div>portfolio-page</div>,
+  default: () => (
+    <main>
+      <h1>Holdings and portfolio exposure</h1>
+      <div>portfolio-page</div>
+    </main>
+  ),
 }));
 
 vi.mock('../pages/MarketOverviewPage', () => ({
@@ -127,12 +132,22 @@ vi.mock('../pages/MarketOverviewPage', () => ({
     if (routeCrashState.marketOverview) {
       throw new Error('provider runtime failure requestId=req-123 token=bearer-abc stack trace');
     }
-    return <div>market-overview-page</div>;
+    return (
+      <main>
+        <h1>Market State Overview</h1>
+        <div>market-overview-page</div>
+      </main>
+    );
   },
 }));
 
 vi.mock('../pages/MarketDecisionCockpitPage', () => ({
-  default: () => <div>market-decision-cockpit-page</div>,
+  default: () => (
+    <main>
+      <h1>Decision Cockpit</h1>
+      <div>market-decision-cockpit-page</div>
+    </main>
+  ),
 }));
 
 vi.mock('../pages/MarketRotationRadarPage', () => ({
@@ -159,11 +174,30 @@ vi.mock('../pages/StockStructureDecisionEntryPage', () => ({
 }));
 
 vi.mock('../pages/ResearchRadarPage', () => ({
-  default: () => <div>research-radar-page</div>,
+  default: () => (
+    <main>
+      <h1>Research Radar evidence queue</h1>
+      <div>research-radar-page</div>
+    </main>
+  ),
 }));
 
 vi.mock('../pages/ScenarioLabPage', () => ({
-  default: () => <div>scenario-lab-page</div>,
+  default: () => (
+    <main>
+      <h1>Scenario Lab what-if workbench</h1>
+      <div>scenario-lab-page</div>
+    </main>
+  ),
+}));
+
+vi.mock('../pages/WatchlistPage', () => ({
+  default: () => (
+    <main>
+      <h1>Watchlist monitoring board</h1>
+      <div>watchlist-page</div>
+    </main>
+  ),
 }));
 
 vi.mock('../pages/BacktestPage', () => ({
@@ -618,6 +652,33 @@ describe('AppContent route flows', () => {
     if (path.includes('/scanner') || path.includes('/portfolio')) {
       expect(screen.queryByText('scenario-lab-page')).not.toBeInTheDocument();
     }
+  });
+
+  it.each([
+    ['/en/market-overview', 'Market State Overview'],
+    ['/en/watchlist', 'Watchlist monitoring board'],
+    ['/en/portfolio', 'Holdings and portfolio exposure'],
+    ['/en/scenario-lab', 'Scenario Lab what-if workbench'],
+    ['/en/research/radar', 'Research Radar evidence queue'],
+    ['/en/market/decision-cockpit', 'Decision Cockpit'],
+  ])('renders distinct top-level route heading for %s', async (path, heading) => {
+    mockSignedInConsumer();
+
+    renderAtWithLocationProbe(path);
+
+    expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument();
+    expect(screen.getByTestId('location-path')).toHaveTextContent(path);
+    const allHeadings = screen.getAllByRole('heading', { level: 1 }).map((item) => item.textContent);
+    expect(new Set(allHeadings).size).toBe(allHeadings.length);
+  });
+
+  it('keeps Decision Cockpit identity distinct from Backtest', async () => {
+    mockSignedInConsumer();
+
+    renderAtWithLocationProbe('/en/market/decision-cockpit');
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Decision Cockpit' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1, name: /Backtest/i })).not.toBeInTheDocument();
   });
 
   it.each([

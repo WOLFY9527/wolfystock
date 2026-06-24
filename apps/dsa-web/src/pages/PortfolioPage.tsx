@@ -3653,7 +3653,7 @@ const PortfolioPage: React.FC = () => {
                 <div data-testid="portfolio-total-assets-card" className="min-w-0">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <h1 className="text-[1.45rem] font-semibold leading-tight tracking-normal text-white md:text-[1.75rem]">
-                      {language === 'zh' ? '组合总览' : 'Portfolio Overview'}
+                      {language === 'zh' ? '持仓与组合暴露' : 'Holdings and portfolio exposure'}
                     </h1>
                     <TerminalChip variant="neutral">
                       {selectedAccount === 'all' ? copy.allAccounts : scopedAccount?.name || copy.allAccounts}

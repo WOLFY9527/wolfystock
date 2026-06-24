@@ -674,10 +674,10 @@ export default function ResearchRadarPage() {
           <ConsoleBoard className="min-h-0" data-testid="research-radar-page">
             <RoughSurfaceIntro
               eyebrow={locale === 'en' ? 'Research radar' : '研究雷达'}
-              title={locale === 'en' ? 'Research queue for market-structure follow-through' : '承接市场结构的研究队列'}
+              title={locale === 'en' ? 'Research Radar evidence queue' : '研究雷达与证据缺口队列'}
               description={locale === 'en'
-                ? 'Reviewable ticker queue with rationale, verification, and risk flags.'
-                : '可复核的标的队列，集中呈现上榜原因、验证事项与风险标记。'}
+                ? 'Review surfaced watch items, verification steps, and missing evidence before deeper research.'
+                : '集中查看浮现的观察项、验证步骤与待补证据，再进入更深研究。'}
             />
             {error ? (
               <div className="p-4 md:p-5">

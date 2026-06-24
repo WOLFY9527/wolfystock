@@ -348,7 +348,8 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     expect(await screen.findByTestId('watchlist-row-NVDA')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '观察列表' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '观察监控板' })).toBeInTheDocument();
+    expect(screen.getByTestId('watchlist-header-strip')).toHaveTextContent('监控队列');
     expect(screen.queryByText('紧凑观察队列')).not.toBeInTheDocument();
     expect(screen.queryByText(/Track scanner candidates/i)).not.toBeInTheDocument();
     expect(screen.getByTestId('watchlist-row-TSM')).toBeInTheDocument();
