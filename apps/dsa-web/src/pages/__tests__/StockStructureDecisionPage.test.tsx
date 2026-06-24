@@ -10,6 +10,7 @@ const {
   verifyTickerExistsMock,
   getQuoteMock,
   getHistoryMock,
+  getTechnicalIndicatorsMock,
   getStructureDecisionMock,
   getResearchPacketMock,
   getOptionsStructureMock,
@@ -19,6 +20,7 @@ const {
   verifyTickerExistsMock: vi.fn(),
   getQuoteMock: vi.fn(),
   getHistoryMock: vi.fn(),
+  getTechnicalIndicatorsMock: vi.fn(),
   getStructureDecisionMock: vi.fn(),
   getResearchPacketMock: vi.fn(),
   getOptionsStructureMock: vi.fn(),
@@ -37,6 +39,7 @@ vi.mock('../../api/stocks', () => ({
     verifyTickerExists: (...args: unknown[]) => verifyTickerExistsMock(...args),
     getQuote: (...args: unknown[]) => getQuoteMock(...args),
     getHistory: (...args: unknown[]) => getHistoryMock(...args),
+    getTechnicalIndicators: (...args: unknown[]) => getTechnicalIndicatorsMock(...args),
     getStructureDecision: (...args: unknown[]) => getStructureDecisionMock(...args),
     getResearchPacket: (...args: unknown[]) => getResearchPacketMock(...args),
     getStructureDecisionsBatch: (...args: unknown[]) => getStructureDecisionsBatchMock(...args),
@@ -165,6 +168,76 @@ const baseHistory = (symbol = 'AAPL', bars = 60) => ({
     close: 100.5 + index,
     volume: 1000 + index * 10,
   })),
+});
+
+const technicalIndicatorsAvailable = () => ({
+  contractVersion: 'stock_technical_indicators_v1',
+  symbol: 'AAPL',
+  status: 'available',
+  timeframe: 'daily',
+  asOf: '2026-05-28T09:30:00Z',
+  freshness: 'fresh',
+  sourceLabel: 'Local OHLCV boundary',
+  dataQuality: {
+    status: 'available',
+    requiredBars: 200,
+    observedBars: 240,
+    usableBars: 240,
+    missingBars: 0,
+    freshness: 'fresh',
+  },
+  indicators: {
+    sma20: { value: 210.12 },
+    sma50: { value: 205.34 },
+    sma200: { value: 190.56 },
+    ema12: { value: 212.45 },
+    ema26: { value: 207.89 },
+    rsi14: { value: 58.42 },
+    macd: { value: 1.234 },
+    macdSignal: { value: 0.987 },
+    macdHistogram: { value: 0.247 },
+    bollingerUpper: { value: 221.45 },
+    bollingerMiddle: { value: 210.12 },
+    bollingerLower: { value: 198.79 },
+  },
+  noAdviceDisclosure: 'Research-only technical indicator context.',
+});
+
+const technicalIndicatorsMissingCache = () => ({
+  contractVersion: 'stock_technical_indicators_v1',
+  symbol: 'AAPL',
+  status: 'missing_cache',
+  timeframe: 'daily',
+  asOf: null,
+  freshness: 'unknown',
+  dataQuality: {
+    status: 'missing_cache',
+    requiredBars: 200,
+    observedBars: 0,
+    usableBars: 0,
+    missingBars: 200,
+    reason: 'missing_cache',
+  },
+  indicators: {},
+  message: 'missing_cache cacheKey provider rawPayload requestId traceId',
+});
+
+const technicalIndicatorsInsufficientHistory = () => ({
+  contractVersion: 'stock_technical_indicators_v1',
+  symbol: 'AAPL',
+  status: 'insufficient_history',
+  timeframe: 'daily',
+  asOf: '2026-05-28',
+  freshness: 'fresh',
+  dataQuality: {
+    status: 'insufficient_history',
+    requiredBars: 200,
+    observedBars: 60,
+    usableBars: 60,
+    missingBars: 140,
+    reason: 'insufficient_history',
+  },
+  indicators: {},
 });
 
 const partialResearchPacket = () => ({
@@ -404,6 +477,7 @@ describe('StockStructureDecisionPage', () => {
       ...baseQuote(),
     });
     getHistoryMock.mockImplementation((symbol: string) => Promise.resolve(baseHistory(symbol, 60)));
+    getTechnicalIndicatorsMock.mockResolvedValue(technicalIndicatorsAvailable());
     getOptionsStructureMock.mockResolvedValue(optionsStructureNotAvailable());
   });
 
@@ -683,6 +757,127 @@ describe('StockStructureDecisionPage', () => {
     expect(quotePanel).toHaveTextContent('最新可用');
     expect(quotePanel).toHaveTextContent('更新');
     expect(page.textContent || '').not.toMatch(/alpaca|provider_runtime|source_confidence|requestId|traceId|cache|debug/i);
+    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+  });
+
+  it('renders cached OHLCV technical indicator values as research-only context', async () => {
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+    getTechnicalIndicatorsMock.mockResolvedValue(technicalIndicatorsAvailable());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const panel = await within(page).findByTestId('stock-technical-indicators-panel');
+
+    expect(getTechnicalIndicatorsMock).toHaveBeenCalledWith('AAPL');
+    expect(panel).toHaveTextContent('本地 OHLCV 技术指标');
+    expect(panel).toHaveTextContent('指标可用');
+    expect(panel).toHaveTextContent('本地 OHLCV 边界');
+    expect(panel).toHaveTextContent('最新可用');
+    expect(panel).toHaveTextContent('SMA 20');
+    expect(panel).toHaveTextContent('210.12');
+    expect(panel).toHaveTextContent('SMA 50');
+    expect(panel).toHaveTextContent('205.34');
+    expect(panel).toHaveTextContent('SMA 200');
+    expect(panel).toHaveTextContent('190.56');
+    expect(panel).toHaveTextContent('EMA 12');
+    expect(panel).toHaveTextContent('212.45');
+    expect(panel).toHaveTextContent('EMA 26');
+    expect(panel).toHaveTextContent('207.89');
+    expect(panel).toHaveTextContent('RSI 14');
+    expect(panel).toHaveTextContent('58.42');
+    expect(panel).toHaveTextContent('MACD');
+    expect(panel).toHaveTextContent('1.234');
+    expect(panel).toHaveTextContent('MACD 信号线');
+    expect(panel).toHaveTextContent('0.987');
+    expect(panel).toHaveTextContent('MACD 柱');
+    expect(panel).toHaveTextContent('0.247');
+    expect(panel).toHaveTextContent('布林带上轨');
+    expect(panel).toHaveTextContent('221.45');
+    expect(panel).toHaveTextContent('布林带中轨');
+    expect(panel).toHaveTextContent('210.12');
+    expect(panel).toHaveTextContent('布林带下轨');
+    expect(panel).toHaveTextContent('198.79');
+    expect(panel).toHaveTextContent('仅作研究观察上下文');
+    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+  });
+
+  it('renders missing-cache technical indicators without fabricating values', async () => {
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+    getTechnicalIndicatorsMock.mockResolvedValue(technicalIndicatorsMissingCache());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const panel = await within(page).findByTestId('stock-technical-indicators-panel');
+
+    expect(panel).toHaveTextContent('本地 OHLCV 数据暂不可用');
+    expect(panel).toHaveTextContent('本地数据待补');
+    expect(panel).toHaveTextContent('所需历史');
+    expect(panel).toHaveTextContent('200');
+    expect(panel).toHaveTextContent('已观察历史');
+    expect(panel).toHaveTextContent('0');
+    expect(panel).toHaveTextContent('历史缺口');
+    expect(panel).toHaveTextContent('200');
+    expect(panel).toHaveTextContent('不推断指标');
+    expect(panel).not.toHaveTextContent('210.12');
+    expect(panel).not.toHaveTextContent('SMA 20');
+    expect(findConsumerRawLeakage(panel.textContent || '', {
+      extraForbiddenPatterns: [/cacheKey|provider|rawPayload|requestId|traceId|missing_cache/i],
+    })).toEqual([]);
+    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+  });
+
+  it('renders insufficient-history technical indicators with required versus observed history', async () => {
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+    getTechnicalIndicatorsMock.mockResolvedValue(technicalIndicatorsInsufficientHistory());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const panel = await screen.findByTestId('stock-technical-indicators-panel');
+
+    expect(panel).toHaveTextContent('历史样本不足，暂不计算指标');
+    expect(panel).toHaveTextContent('所需历史');
+    expect(panel).toHaveTextContent('200');
+    expect(panel).toHaveTextContent('已观察历史');
+    expect(panel).toHaveTextContent('60');
+    expect(panel).toHaveTextContent('历史缺口');
+    expect(panel).toHaveTextContent('140');
+    expect(panel).toHaveTextContent('页面不会计算部分或替代指标值。');
+    expect(panel).not.toHaveTextContent('SMA 200');
+    expect(panel).not.toHaveTextContent('MACD 信号线');
+    expect(panel).not.toHaveTextContent('布林带上轨');
+  });
+
+  it('renders a technical-indicators API error without raw diagnostics', async () => {
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+    getTechnicalIndicatorsMock.mockRejectedValue(new Error('provider cacheKey requestId traceId rawPayload token env stack'));
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const panel = await within(page).findByTestId('stock-technical-indicators-panel');
+
+    expect(panel).toHaveTextContent('技术指标暂不可用');
+    expect(panel).toHaveTextContent('接口暂不可用');
+    expect(panel).toHaveTextContent('不展示原始诊断，也不推断指标');
+    expect(panel.textContent || '').not.toMatch(/provider|cacheKey|requestId|traceId|rawPayload|token|env|stack/i);
     expect(page.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
   });
 

@@ -164,6 +164,86 @@ describe('stocksApi', () => {
     expect(history.data[1]?.amount).toBe(128400);
   });
 
+  it('calls the technical indicators endpoint and normalizes cached OHLCV fields', async () => {
+    const { stocksApi } = await import('../stocks');
+
+    get.mockResolvedValueOnce({
+      data: {
+        contract_version: 'stock_technical_indicators_v1',
+        symbol: 'AAPL',
+        status: 'available',
+        timeframe: 'daily',
+        as_of: '2026-05-28T09:30:00Z',
+        freshness: 'fresh',
+        source_boundary_label: 'Local OHLCV boundary',
+        data_quality: {
+          status: 'available',
+          required_bars: 200,
+          observed_bars: 240,
+          usable_bars: 240,
+          missing_bars: 0,
+          freshness_state: 'current',
+        },
+        indicators: {
+          sma: {
+            20: { value: 210.12 },
+            50: { value: 205.34 },
+            200: { value: 190.56 },
+          },
+          ema: {
+            12: { value: 212.45 },
+            26: { value: 207.89 },
+          },
+          rsi: {
+            14: { value: 58.42 },
+          },
+          macd: {
+            macd: { value: 1.234 },
+            signal: { value: 0.987 },
+            histogram: { value: 0.247 },
+          },
+          bollinger: {
+            upper: { value: 221.45 },
+            middle: { value: 210.12 },
+            lower: { value: 198.79 },
+          },
+        },
+        no_advice_disclosure: 'Observation-only technical indicator context.',
+      },
+    });
+
+    const payload = await stocksApi.getTechnicalIndicators('AAPL');
+
+    expect(get).toHaveBeenCalledWith('/api/v1/stocks/AAPL/technical-indicators');
+    expect(payload.contractVersion).toBe('stock_technical_indicators_v1');
+    expect(payload.symbol).toBe('AAPL');
+    expect(payload.status).toBe('available');
+    expect(payload.timeframe).toBe('daily');
+    expect(payload.asOf).toBe('2026-05-28T09:30:00Z');
+    expect(payload.sourceLabel).toBe('Local OHLCV boundary');
+    expect(payload.dataQuality).toMatchObject({
+      status: 'available',
+      requiredBars: 200,
+      observedBars: 240,
+      usableBars: 240,
+      missingBars: 0,
+      freshnessState: 'current',
+    });
+    expect(payload.indicators.sma20?.value).toBe(210.12);
+    expect(payload.indicators.sma50?.value).toBe(205.34);
+    expect(payload.indicators.sma200?.value).toBe(190.56);
+    expect(payload.indicators.ema12?.value).toBe(212.45);
+    expect(payload.indicators.ema26?.value).toBe(207.89);
+    expect(payload.indicators.rsi14?.value).toBe(58.42);
+    expect(payload.indicators.macd?.value).toBe(1.234);
+    expect(payload.indicators.macdSignal?.value).toBe(0.987);
+    expect(payload.indicators.macdHistogram?.value).toBe(0.247);
+    expect(payload.indicators.bollingerUpper?.value).toBe(221.45);
+    expect(payload.indicators.bollingerMiddle?.value).toBe(210.12);
+    expect(payload.indicators.bollingerLower?.value).toBe(198.79);
+    expect(payload.noAdviceDisclosure).toContain('Observation-only');
+  });
+
   it('keeps fallback and synthetic flags when quote data is non-fresh', async () => {
     const { stocksApi } = await import('../stocks');
 
