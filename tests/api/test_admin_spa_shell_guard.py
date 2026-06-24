@@ -132,6 +132,9 @@ def test_authenticated_admin_keeps_direct_admin_spa_shell_access(auth_enabled_sp
         "/market-overview",
         "/research-radar",
         "/stock/600519",
+        "/stock/ORCL",
+        "/stock/600519/structure-decision",
+        "/stocks/ORCL/structure-decision",
         "/decision-cockpit",
     ],
 )
@@ -173,6 +176,8 @@ def test_admin_spa_guard_preserves_api_and_static_asset_behavior(auth_enabled_sp
 
     bare_api = client.get("/api", follow_redirects=False)
     health = client.get("/api/health", follow_redirects=False)
+    unknown_api = client.get("/api/does-not-exist", follow_redirects=False)
+    unknown_api_v1 = client.get("/api/v1/does-not-exist", follow_redirects=False)
     scanner_status = client.get("/api/v1/scanner/status", follow_redirects=False)
     private_admin_api = client.get("/api/v1/admin/market-providers/operations", follow_redirects=False)
     asset = client.get("/assets/app.js", follow_redirects=False)
@@ -183,6 +188,12 @@ def test_admin_spa_guard_preserves_api_and_static_asset_behavior(auth_enabled_sp
     assert health.status_code in {200, 503}
     assert health.headers["content-type"].startswith("application/json")
     assert "status" in health.json()
+    assert unknown_api.status_code == 404
+    assert unknown_api.headers["content-type"].startswith("application/json")
+    assert "admin-spa-shell" not in unknown_api.text
+    assert unknown_api_v1.status_code in {401, 404}
+    assert unknown_api_v1.headers["content-type"].startswith("application/json")
+    assert "admin-spa-shell" not in unknown_api_v1.text
     assert scanner_status.status_code == 401
     assert scanner_status.json() == {"error": "unauthorized", "message": "Login required"}
     assert private_admin_api.status_code == 401

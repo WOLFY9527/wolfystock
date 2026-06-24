@@ -1033,6 +1033,10 @@ export default function MarketDecisionCockpitPage() {
   }, [loadCockpit, loadDailyIntelligence]);
 
   useEffect(() => {
+    document.title = locale === 'en' ? 'Decision Cockpit - WolfyStock' : '市场决策驾驶舱 - WolfyStock';
+  }, [locale]);
+
+  useEffect(() => {
     load();
   }, [load]);
 
