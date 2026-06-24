@@ -27,6 +27,7 @@ import {
 } from '../api/scanner';
 import { watchlistApi } from '../api/watchlist';
 import ConsumerResearchReadinessStrip from '../components/common/ConsumerResearchReadinessStrip';
+import { SupportBanner } from '../components/common/SupportSurface';
 import ResearchWorkspaceFlowPanel from '../components/research/ResearchWorkspaceFlowPanel';
 import { ScannerActionButton as ActionButton } from '../components/scanner/ScannerActionButton';
 import ScannerTopDownContextStrip from '../components/scanner/ScannerTopDownContextStrip';
@@ -106,6 +107,7 @@ import { buildLocalizedPath } from '../utils/localeRouting';
 import { normalizeScannerEvidence } from '../utils/evidenceDisplay';
 import type { TrustDisclosureBucket } from '../utils/trustDisclosure';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
+import { getConsumerSafeApiErrorCopy } from '../utils/consumerErrorCopy';
 import {
   getScannerDetailOptions,
   getScannerProfileOptions,
@@ -230,6 +232,12 @@ type ScannerCandidateWithEvidence = ScannerCandidate & {
   candidateResearchSummaryFrame?: ScannerCandidateResearchSummaryFrame | null;
   candidateResearchPacket?: ScannerCandidateResearchPacketModel | null;
   candidateSourceProvenanceFrame?: SourceProvenanceSummary | null;
+};
+
+type ScannerRunFeedback = {
+  tone: 'default' | 'warning' | 'success' | 'danger';
+  title: string;
+  body: string;
 };
 
 function normalizeCandidateSymbol(symbol?: string | null): string | null {
@@ -444,6 +452,16 @@ function buildScannerDataReadinessView(
     coverageChips,
     isMeaningful: ['ready', 'partial', 'blocked'].includes(state) || Boolean(blockerLabel),
   };
+}
+
+function firstScannerValidationMessage(errors: ScannerValidationErrors): string | null {
+  return errors.run
+    || errors.customSymbols
+    || errors.theme
+    || errors.customThemeLabel
+    || errors.customThemePrompt
+    || errors.customThemeManualSymbols
+    || null;
 }
 
 function getRunDetailDataReadiness(runDetail: ScannerRunDetail | null): ScannerDataReadiness | null {
@@ -1539,6 +1557,81 @@ function buildScannerWorkbenchEmptyState({
   };
 }
 
+function buildScannerPendingFeedback(language: 'zh' | 'en'): ScannerRunFeedback {
+  return {
+    tone: 'default',
+    title: language === 'en' ? 'Scanner request submitted' : '扫描请求提交中',
+    body: language === 'en'
+      ? 'Checking the current market, scope, and data readiness before rendering the next candidate state.'
+      : '正在按当前市场、范围和数据就绪度检查下一步候选状态。',
+  };
+}
+
+function buildScannerValidationFeedback(
+  message: string,
+  language: 'zh' | 'en',
+): ScannerRunFeedback {
+  return {
+    tone: 'warning',
+    title: language === 'en' ? 'Scanner request not submitted' : '扫描请求未提交',
+    body: message,
+  };
+}
+
+function buildScannerErrorFeedback(
+  error: ParsedApiError,
+  language: 'zh' | 'en',
+): ScannerRunFeedback {
+  const safeCopy = getConsumerSafeApiErrorCopy(error, {
+    language,
+    fallbackTitle: language === 'en' ? 'Scanner unavailable' : '扫描暂不可用',
+    fallbackMessage: language === 'en' ? 'Please try again shortly.' : '请稍后重试。',
+  });
+  const compactSummary = sanitizeScannerErrorSummary(error.message, language)
+    || sanitizeScannerErrorSummary(error.title, language);
+  return {
+    tone: 'danger',
+    title: language === 'en' ? 'Scan did not complete' : '扫描未完成',
+    body: compactSummary
+      ? (language === 'en'
+        ? `${compactSummary}. Retry later or adjust the current scope.`
+        : `${compactSummary}。可稍后重试，或调整当前范围。`)
+      : safeCopy.message,
+  };
+}
+
+function buildScannerSuccessFeedback(
+  runDetail: ScannerRunDetail,
+  language: 'zh' | 'en',
+  firstRunSetupLabel: string,
+): ScannerRunFeedback {
+  const dataReadinessView = buildScannerDataReadinessView(getRunDetailDataReadiness(runDetail), language);
+  const conclusion = buildScannerConclusion(
+    runDetail,
+    language,
+    firstRunSetupLabel,
+    { hasLoaded: true, latestRun: null },
+    dataReadinessView,
+  );
+  const selectedCount = getRunSummaryCount(runDetail, 'selectedCount', runDetail.shortlist?.length || 0);
+  if (conclusion.state === 'top-candidate' && selectedCount > 0) {
+    return {
+      tone: 'success',
+      title: language === 'en'
+        ? `Scan completed with ${selectedCount} candidates`
+        : `扫描已完成：形成 ${selectedCount} 个候选`,
+      body: language === 'en'
+        ? 'Candidate evidence stays research-only. Ranking and labels do not imply an execution instruction.'
+        : '候选证据仅供研究参考，排序与标签不构成执行指令。',
+    };
+  }
+  return {
+    tone: conclusion.state === 'insufficient' ? 'danger' : 'warning',
+    title: conclusion.title,
+    body: dataReadinessView?.nextDataLabel || conclusion.detail,
+  };
+}
+
 function buildVisualSummarySegments(
   items: Array<{ key: string; label: string; count: number; toneClassName: string }>,
 ): ScannerVisualSummaryBarSegment[] {
@@ -2367,6 +2460,7 @@ const UserScannerPage: React.FC = () => {
   const [pageError, setPageError] = useState<ParsedApiError | null>(null);
   const [historyError, setHistoryError] = useState<ParsedApiError | null>(null);
   const [actionNotice, setActionNotice] = useState<ActionNotice>(null);
+  const [scannerRunFeedback, setScannerRunFeedback] = useState<ScannerRunFeedback | null>(null);
   const [validationErrors, setValidationErrors] = useState<ScannerValidationErrors>({});
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
   const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>([]);
@@ -2587,6 +2681,7 @@ const UserScannerPage: React.FC = () => {
 
   const executeScannerRun = useCallback(async (request: ScannerRunRequest) => {
     setIsRunning(true);
+    setScannerRunFeedback(buildScannerPendingFeedback(language));
     try {
       const response = await scannerApi.run(request);
       setRunDetail(response);
@@ -2594,13 +2689,16 @@ const UserScannerPage: React.FC = () => {
       setSelectedRunId(response.id);
       setValidationErrors({});
       setPageError(null);
+      setScannerRunFeedback(buildScannerSuccessFeedback(response, language, scannerFirstRunSetupLabel));
       await fetchHistory(1, response.id, { market: request.market, profile: request.profile });
     } catch (error) {
-      setPageError(getParsedApiError(error));
+      const parsedError = getParsedApiError(error);
+      setPageError(parsedError);
+      setScannerRunFeedback(buildScannerErrorFeedback(parsedError, language));
     } finally {
       setIsRunning(false);
     }
-  }, [fetchHistory]);
+  }, [fetchHistory, language, scannerFirstRunSetupLabel]);
 
   const handleRun = useCallback(async () => {
     const retryState = buildScannerConclusion(
@@ -2645,6 +2743,10 @@ const UserScannerPage: React.FC = () => {
     }
     if (Object.keys(nextErrors).length) {
       setValidationErrors(nextErrors);
+      const message = firstScannerValidationMessage(nextErrors);
+      if (message) {
+        setScannerRunFeedback(buildScannerValidationFeedback(message, language));
+      }
       return;
     }
     await executeScannerRun({
@@ -3840,6 +3942,16 @@ const UserScannerPage: React.FC = () => {
                   }`}
                 >
                   {actionNotice.message}
+                </div>
+              ) : null}
+              {scannerRunFeedback ? (
+                <div data-testid="scanner-run-feedback" className="mx-3">
+                  <SupportBanner
+                    tone={scannerRunFeedback.tone}
+                    role={scannerRunFeedback.tone === 'danger' ? 'alert' : 'status'}
+                    title={scannerRunFeedback.title}
+                    body={scannerRunFeedback.body}
+                  />
                 </div>
               ) : null}
 

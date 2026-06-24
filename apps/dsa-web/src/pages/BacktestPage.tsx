@@ -16,6 +16,7 @@ import {
   getStrategyPreviewSpec,
   parsePositiveInt,
 } from '../components/backtest/shared';
+import type { BacktestRunFeedback } from '../components/backtest/BacktestRunFeedbackBanner';
 import type {
   AssumptionMap,
   BacktestResultItem,
@@ -38,6 +39,7 @@ import {
 import { translate } from '../i18n/core';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { TerminalPageHeading } from '../components/terminal/TerminalPrimitives';
+import { getConsumerSafeApiErrorCopy } from '../utils/consumerErrorCopy';
 
 const HISTORICAL_PAGE_SIZE = 20;
 const HISTORY_PAGE_SIZE = 10;
@@ -155,6 +157,121 @@ function shouldKeepRuleRunOnConfigPage(response: RuleBacktestRunResponse): boole
   return Boolean(response.executionReadiness?.resultContractAvailable === false && response.noResultReason);
 }
 
+const BACKTEST_RUN_STATE_LABELS: Record<string, { zh: string; en: string }> = {
+  engine_disabled: { zh: '回测引擎已关闭', en: 'Backtest engine disabled' },
+  data_disabled: { zh: '数据访问不可用', en: 'Data access unavailable' },
+  no_samples: { zh: '暂无可用样本', en: 'No usable samples' },
+  data_insufficient: { zh: '历史数据不足', en: 'Insufficient history' },
+  degraded: { zh: '结果已返回，证据降级', en: 'Result returned with degraded evidence' },
+  executable: { zh: '已返回安全结果契约', en: 'Safe result contract returned' },
+  calculation_unavailable: { zh: '等待执行回执', en: 'Waiting for execution receipt' },
+  unknown: { zh: '等待就绪度', en: 'Waiting for readiness' },
+};
+
+const BACKTEST_RUN_REASON_LABELS: Record<string, { zh: string; en: string }> = {
+  engine_disabled: { zh: '引擎开关关闭，未产生结果契约。', en: 'Engine switch is disabled, so no result contract was produced.' },
+  provider_missing: { zh: '数据源未就绪，无法读取所需行情。', en: 'Data source is not ready for the required market data.' },
+  entitlement_required: { zh: '数据授权不足，无法读取所需行情。', en: 'Data entitlement is missing for the required market data.' },
+  no_samples: { zh: '缺少已准备的分析样本。', en: 'Prepared analysis samples are missing.' },
+  insufficient_history: { zh: '历史 OHLCV 窗口不足，无法计算安全结果。', en: 'The OHLCV window is too short to calculate a safe result.' },
+  insufficient_data: { zh: '可用数据不足，未生成收益、回撤、胜率或基准相对指标。', en: 'Available data is insufficient, so return, drawdown, win-rate, and benchmark-relative metrics are unavailable.' },
+  missing_benchmark: { zh: '缺少基准，基准相对指标不可用。', en: 'Benchmark is missing, so benchmark-relative metrics are unavailable.' },
+  missing_adjustments: { zh: '复权或公司行动证据不足，结果只能观察。', en: 'Adjustment or corporate-action evidence is incomplete; result is observation-only.' },
+  stale_data: { zh: '数据可能过期，结果只能观察。', en: 'Data may be stale; result is observation-only.' },
+};
+
+function uniqueReadinessTokens(values?: string[] | null): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values || []) {
+    const token = normalizeReadinessState(value);
+    if (!token || seen.has(token)) continue;
+    seen.add(token);
+    result.push(token);
+  }
+  return result;
+}
+
+function getBacktestReasonLabels(
+  readiness: RuleBacktestRunResponse['executionReadiness'] | null | undefined,
+  language: BacktestLanguage,
+): string[] {
+  const reasons = uniqueReadinessTokens(readiness?.reasonCodes);
+  const labels = reasons
+    .map((reason) => BACKTEST_RUN_REASON_LABELS[reason]?.[language])
+    .filter((value): value is string => Boolean(value));
+  const benchmarkState = normalizeReadinessState(readiness?.benchmarkState);
+  if (benchmarkState === 'missing' && !labels.includes(BACKTEST_RUN_REASON_LABELS.missing_benchmark[language])) {
+    labels.push(BACKTEST_RUN_REASON_LABELS.missing_benchmark[language]);
+  }
+  return labels;
+}
+
+function buildPendingBacktestRunFeedback(language: BacktestLanguage, mode: 'normal' | 'professional'): BacktestRunFeedback {
+  return {
+    tone: 'default',
+    title: language === 'en' ? 'Backtest request submitted' : '回测任务提交中',
+    body: mode === 'normal'
+      ? (language === 'en'
+        ? 'Compiling the selected template, then waiting for execution readiness and a safe result contract.'
+        : '正在整理所选模板，并等待执行就绪度与安全结果契约回执。')
+      : (language === 'en'
+        ? 'Waiting for execution readiness and a safe result contract from the backend.'
+        : '正在等待后端返回执行就绪度与安全结果契约。'),
+  };
+}
+
+function buildBacktestValidationFeedback(message: string, language: BacktestLanguage): BacktestRunFeedback {
+  return {
+    tone: 'warning',
+    title: language === 'en' ? 'Backtest request not submitted' : '回测任务未提交',
+    body: message,
+  };
+}
+
+function buildBacktestErrorFeedback(error: ParsedApiError, language: BacktestLanguage): BacktestRunFeedback {
+  const safeCopy = getConsumerSafeApiErrorCopy(error, {
+    language,
+    fallbackTitle: language === 'en' ? 'Backtest unavailable' : '回测暂不可用',
+    fallbackMessage: language === 'en' ? 'Please try again shortly.' : '请稍后重试。',
+  });
+  return {
+    tone: 'danger',
+    title: language === 'en' ? 'Backtest did not complete' : '回测未完成',
+    body: safeCopy.message,
+  };
+}
+
+function buildBacktestResponseFeedback(
+  response: RuleBacktestRunResponse,
+  language: BacktestLanguage,
+): BacktestRunFeedback {
+  const readiness = response.executionReadiness || null;
+  const state = normalizeReadinessState(readiness?.state) || 'unknown';
+  const stateLabel = BACKTEST_RUN_STATE_LABELS[state]?.[language] || BACKTEST_RUN_STATE_LABELS.unknown[language];
+  const reasonLabels = getBacktestReasonLabels(readiness, language);
+  if (readiness?.resultContractAvailable) {
+    return {
+      tone: 'success',
+      title: stateLabel,
+      body: language === 'en'
+        ? 'A consumer-safe result contract is available. Metrics are shown only when returned by the backend.'
+        : '已返回消费者安全结果契约；仅展示后端明确返回的指标。',
+      details: reasonLabels,
+    };
+  }
+  return {
+    tone: 'warning',
+    title: stateLabel,
+    body: response.noResultMessage
+      || reasonLabels[0]
+      || (language === 'en'
+        ? 'The run is blocked or still waiting for a safe result contract.'
+        : '本次运行被阻塞，或仍在等待安全结果契约。'),
+    details: reasonLabels.slice(response.noResultMessage ? 0 : 1),
+  };
+}
+
 const BacktestPage: React.FC = () => {
   const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
   const shouldGuardA11y = shouldApplySafariA11yGuard();
@@ -227,6 +344,7 @@ const BacktestPage: React.FC = () => {
   const [isSubmittingRuleBacktest, setIsSubmittingRuleBacktest] = useState(false);
   const [ruleRunError, setRuleRunError] = useState<ParsedApiError | null>(null);
   const [lastRuleRunResult, setLastRuleRunResult] = useState<RuleBacktestRunResponse | null>(null);
+  const [ruleRunFeedback, setRuleRunFeedback] = useState<BacktestRunFeedback | null>(null);
   const [ruleHistoryItems, setRuleHistoryItems] = useState<RuleBacktestHistoryItem[]>([]);
   const [ruleHistoryTotal, setRuleHistoryTotal] = useState(0);
   const [ruleHistoryPage, setRuleHistoryPage] = useState(1);
@@ -970,72 +1088,87 @@ const BacktestPage: React.FC = () => {
     const parsedSymbol = getPeriodicString(strategySpec, 'symbol');
     const resolvedCode = normalizedCode || (parsedSymbol !== '--' ? parsedSymbol.toUpperCase() : '');
     if (!resolvedCode) {
-      setRuleRunError({
+      const error = {
         title: bt(language, 'page.errors.missingCodeTitle'),
         message: bt(language, 'page.errors.missingRunCode'),
         rawMessage: bt(language, 'page.errors.missingRunCode'),
         category: 'missing_params',
-      });
+      } satisfies ParsedApiError;
+      setRuleRunError(error);
+      setRuleRunFeedback(buildBacktestValidationFeedback(error.message, language));
       return Promise.resolve();
     }
     if (!ruleParsedStrategy) {
-      setRuleRunError({
+      const error = {
         title: bt(language, 'page.errors.needParsedStrategyTitle'),
         message: bt(language, 'page.errors.needParsedStrategy'),
         rawMessage: bt(language, 'page.errors.needParsedStrategy'),
         category: 'validation_error',
-      });
+      } satisfies ParsedApiError;
+      setRuleRunError(error);
+      setRuleRunFeedback(buildBacktestValidationFeedback(error.message, language));
       return Promise.resolve();
     }
     if (isRuleParseStale) {
-      setRuleRunError({
+      const error = {
         title: bt(language, 'page.errors.staleParseTitle'),
         message: bt(language, 'page.errors.staleParse'),
         rawMessage: bt(language, 'page.errors.staleParse'),
         category: 'validation_error',
-      });
+      } satisfies ParsedApiError;
+      setRuleRunError(error);
+      setRuleRunFeedback(buildBacktestValidationFeedback(error.message, language));
       return Promise.resolve();
     }
     if (!ruleConfirmed) {
-      setRuleRunError({
+      const error = {
         title: bt(language, 'page.errors.needConfirmTitle'),
         message: bt(language, 'page.errors.needConfirm'),
         rawMessage: bt(language, 'page.errors.needConfirm'),
         category: 'validation_error',
-      });
+      } satisfies ParsedApiError;
+      setRuleRunError(error);
+      setRuleRunFeedback(buildBacktestValidationFeedback(error.message, language));
       return Promise.resolve();
     }
     if (!ruleStartDate || !ruleEndDate) {
-      setRuleRunError({
+      const error = {
         title: bt(language, 'page.errors.missingRangeTitle'),
         message: bt(language, 'page.errors.missingRange'),
         rawMessage: bt(language, 'page.errors.missingRange'),
         category: 'validation_error',
-      });
+      } satisfies ParsedApiError;
+      setRuleRunError(error);
+      setRuleRunFeedback(buildBacktestValidationFeedback(error.message, language));
       return Promise.resolve();
     }
     if (ruleStartDate > ruleEndDate) {
-      setRuleRunError({
+      const error = {
         title: bt(language, 'page.errors.invalidRangeTitle'),
         message: bt(language, 'page.errors.invalidRange'),
         rawMessage: bt(language, 'page.errors.invalidRange'),
         category: 'validation_error',
-      });
+      } satisfies ParsedApiError;
+      setRuleRunError(error);
+      setRuleRunFeedback(buildBacktestValidationFeedback(error.message, language));
       return Promise.resolve();
     }
     if (ruleBenchmarkMode === 'custom_code' && !ruleBenchmarkCode.trim()) {
-      setRuleRunError({
+      const error = {
         title: bt(language, 'page.errors.missingBenchmarkTitle'),
         message: bt(language, 'page.errors.missingBenchmark'),
         rawMessage: bt(language, 'page.errors.missingBenchmark'),
         category: 'validation_error',
-      });
+      } satisfies ParsedApiError;
+      setRuleRunError(error);
+      setRuleRunFeedback(buildBacktestValidationFeedback(error.message, language));
       return Promise.resolve();
     }
 
     setIsSubmittingRuleBacktest(true);
     setRuleRunError(null);
     setLastRuleRunResult(null);
+    setRuleRunFeedback(buildPendingBacktestRunFeedback(language, 'professional'));
     const monteCarloConfig = proMonteCarloEnabled
       ? {
         simulationCount: clampInteger(
@@ -1080,6 +1213,7 @@ const BacktestPage: React.FC = () => {
       .then((response) => {
         setSelectedRuleRunId(response.id);
         setLastRuleRunResult(response);
+        setRuleRunFeedback(buildBacktestResponseFeedback(response, language));
         void fetchRuleHistory(1, resolvedCode);
         if (shouldKeepRuleRunOnConfigPage(response)) {
           return;
@@ -1087,7 +1221,9 @@ const BacktestPage: React.FC = () => {
         navigate(`/backtest/results/${response.id}`, { state: { initialRun: response, resultMode: 'professional' } });
       })
       .catch((error) => {
-        setRuleRunError(getParsedApiError(error));
+        const parsedError = getParsedApiError(error);
+        setRuleRunError(parsedError);
+        setRuleRunFeedback(buildBacktestErrorFeedback(parsedError, language));
       })
       .finally(() => {
         setIsSubmittingRuleBacktest(false);
@@ -1096,39 +1232,47 @@ const BacktestPage: React.FC = () => {
 
   const handleLaunchNormalRuleBacktest = () => {
     if (!normalizedCode) {
-      setRuleRunError({
+      const error = {
         title: bt(language, 'page.errors.missingCodeTitle'),
         message: bt(language, 'page.errors.missingRunCode'),
         rawMessage: bt(language, 'page.errors.missingRunCode'),
         category: 'missing_params',
-      });
+      } satisfies ParsedApiError;
+      setRuleRunError(error);
+      setRuleRunFeedback(buildBacktestValidationFeedback(error.message, language));
       return Promise.resolve();
     }
     if (!ruleStartDate || !ruleEndDate) {
-      setRuleRunError({
+      const error = {
         title: bt(language, 'page.errors.missingRangeTitle'),
         message: bt(language, 'page.errors.missingRange'),
         rawMessage: bt(language, 'page.errors.missingRange'),
         category: 'validation_error',
-      });
+      } satisfies ParsedApiError;
+      setRuleRunError(error);
+      setRuleRunFeedback(buildBacktestValidationFeedback(error.message, language));
       return Promise.resolve();
     }
     if (ruleStartDate > ruleEndDate) {
-      setRuleRunError({
+      const error = {
         title: bt(language, 'page.errors.invalidRangeTitle'),
         message: bt(language, 'page.errors.invalidRange'),
         rawMessage: bt(language, 'page.errors.invalidRange'),
         category: 'validation_error',
-      });
+      } satisfies ParsedApiError;
+      setRuleRunError(error);
+      setRuleRunFeedback(buildBacktestValidationFeedback(error.message, language));
       return Promise.resolve();
     }
     if (ruleBenchmarkMode === 'custom_code' && !ruleBenchmarkCode.trim()) {
-      setRuleRunError({
+      const error = {
         title: bt(language, 'page.errors.missingBenchmarkTitle'),
         message: bt(language, 'page.errors.missingBenchmark'),
         rawMessage: bt(language, 'page.errors.missingBenchmark'),
         category: 'validation_error',
-      });
+      } satisfies ParsedApiError;
+      setRuleRunError(error);
+      setRuleRunFeedback(buildBacktestValidationFeedback(error.message, language));
       return Promise.resolve();
     }
 
@@ -1140,12 +1284,14 @@ const BacktestPage: React.FC = () => {
     });
 
     if (!strategyText.trim()) {
-      setRuleParseError({
+      const error = {
         title: bt(language, 'page.errors.missingStrategyTitle'),
         message: bt(language, 'page.errors.missingStrategyText'),
         rawMessage: bt(language, 'page.errors.missingStrategyText'),
         category: 'missing_params',
-      });
+      } satisfies ParsedApiError;
+      setRuleParseError(error);
+      setRuleRunFeedback(buildBacktestValidationFeedback(error.message, language));
       return Promise.resolve();
     }
 
@@ -1153,6 +1299,7 @@ const BacktestPage: React.FC = () => {
     setRuleParseError(null);
     setRuleRunError(null);
     setLastRuleRunResult(null);
+    setRuleRunFeedback(buildPendingBacktestRunFeedback(language, 'normal'));
     setAppliedRewriteText(null);
     setRuleStrategyText(strategyText);
 
@@ -1180,7 +1327,7 @@ const BacktestPage: React.FC = () => {
         if (!parsed.executable && !parsed.parsedStrategy.executable) {
           setRuleConfirmed(false);
           setControlPanelMode('professional');
-          setRuleParseError({
+          const error = {
             title: language === 'en' ? 'Template needs professional review' : '模板需要专业模式复查',
             message: language === 'en'
               ? 'The selected template could not be organized into a runnable fixed-rule backtest flow. The page has switched to Professional mode so you can inspect and revise it.'
@@ -1189,7 +1336,9 @@ const BacktestPage: React.FC = () => {
               ? 'The selected template could not be organized into a runnable fixed-rule backtest flow.'
               : '当前模板暂时无法整理成可执行的固定规则回测流程。',
             category: 'validation_error',
-          });
+          } satisfies ParsedApiError;
+          setRuleParseError(error);
+          setRuleRunFeedback(buildBacktestValidationFeedback(error.message, language));
           return;
         }
 
@@ -1216,6 +1365,7 @@ const BacktestPage: React.FC = () => {
           .then((response) => {
             setSelectedRuleRunId(response.id);
             setLastRuleRunResult(response);
+            setRuleRunFeedback(buildBacktestResponseFeedback(response, language));
             void fetchRuleHistory(1, normalizedCode);
             if (shouldKeepRuleRunOnConfigPage(response)) {
               return;
@@ -1223,14 +1373,18 @@ const BacktestPage: React.FC = () => {
             navigate(`/backtest/results/${response.id}`, { state: { initialRun: response, resultMode: 'simple' } });
           })
           .catch((error) => {
-            setRuleRunError(getParsedApiError(error));
+            const parsedError = getParsedApiError(error);
+            setRuleRunError(parsedError);
+            setRuleRunFeedback(buildBacktestErrorFeedback(parsedError, language));
           })
           .finally(() => {
             setIsSubmittingRuleBacktest(false);
           });
       })
       .catch((error) => {
-        setRuleParseError(getParsedApiError(error));
+        const parsedError = getParsedApiError(error);
+        setRuleParseError(parsedError);
+        setRuleRunFeedback(buildBacktestErrorFeedback(parsedError, language));
       })
       .finally(() => {
         setIsLaunchingNormalRuleBacktest(false);
@@ -1299,6 +1453,7 @@ const BacktestPage: React.FC = () => {
     setRuleParsedStrategy(null);
     setRuleConfirmed(false);
     setRuleRunError(null);
+    setRuleRunFeedback(null);
     setRuleParseError(null);
     setRuleParseSignature(null);
     setLastRuleRunResult(null);
@@ -1591,6 +1746,7 @@ const BacktestPage: React.FC = () => {
                       runReadiness={lastRuleRunResult?.executionReadiness || null}
                       noAdviceDisclosure={lastRuleRunResult?.noAdviceDisclosure || null}
                       hasRunAttempt={Boolean(lastRuleRunResult)}
+                      runFeedback={ruleRunFeedback}
                     />
                   ) : (
                     <ProBacktestWorkspace
@@ -1636,6 +1792,7 @@ const BacktestPage: React.FC = () => {
                       runReadiness={lastRuleRunResult?.executionReadiness || null}
                       noAdviceDisclosure={lastRuleRunResult?.noAdviceDisclosure || null}
                       hasRunAttempt={Boolean(lastRuleRunResult)}
+                      runFeedback={ruleRunFeedback}
                       historyItems={ruleHistoryItems}
                       historyTotal={ruleHistoryTotal}
                       historyPage={ruleHistoryPage}

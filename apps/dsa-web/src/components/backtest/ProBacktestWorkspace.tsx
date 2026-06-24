@@ -16,6 +16,7 @@ import { Drawer } from '../common/Drawer';
 import type { BacktestExecutionReadiness, RuleBacktestHistoryItem, RuleBacktestParseResponse } from '../../types/backtest';
 import type { FlowProps, RuleWizardStep } from './DeterministicBacktestFlow';
 import BacktestExecutionReadinessPanel from './BacktestExecutionReadinessPanel';
+import BacktestRunFeedbackBanner, { type BacktestRunFeedback } from './BacktestRunFeedbackBanner';
 import { RULE_BACKTEST_PRESET_STORAGE_KEY } from './ruleBacktestP6';
 import {
   RULE_BENCHMARK_OPTIONS,
@@ -72,6 +73,7 @@ type ProBacktestWorkspaceProps = Omit<FlowProps, 'panelMode'> & {
   runReadiness?: BacktestExecutionReadiness | null;
   noAdviceDisclosure?: string | null;
   hasRunAttempt?: boolean;
+  runFeedback?: BacktestRunFeedback | null;
 };
 
 const ghostCardClass = 'bg-white/[0.02] border border-white/5 rounded-xl backdrop-blur-md transition-all hover:border-white/10';
@@ -272,6 +274,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   runReadiness,
   noAdviceDisclosure,
   hasRunAttempt = false,
+  runFeedback = null,
   parsedStrategy,
   confirmed,
   onToggleConfirmed,
@@ -1151,6 +1154,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           testId={`${readinessTestId}-data110`}
           className="mt-3"
         />
+        <BacktestRunFeedbackBanner feedback={runFeedback} className="mt-3" />
       </div>
       <div>
         <p className={labelClass}>{language === 'en' ? 'ACTIONS' : '操作'}</p>
