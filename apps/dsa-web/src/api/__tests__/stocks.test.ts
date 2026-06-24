@@ -82,6 +82,88 @@ describe('stocksApi', () => {
     expect(quote.update_time).not.toBe(quote.marketTimestamp);
   });
 
+  it('calls the history endpoint and normalizes readiness diagnostics', async () => {
+    const { stocksApi } = await import('../stocks');
+
+    get.mockResolvedValueOnce({
+      data: {
+        stock_code: 'ORCL',
+        stock_name: 'Oracle',
+        period: 'daily',
+        source: 'local_db',
+        diagnostics: {
+          status: 'available',
+          reason: 'history_available',
+          requested_days: 90,
+          rows: 2,
+          local_fallback: {
+            source: 'local_db',
+            rows: 2,
+            latest_trade_date: '2026-05-28',
+            data_sources: ['daily_history'],
+          },
+        },
+        source_confidence: {
+          source: 'local_db',
+          source_label: 'Local history',
+          as_of: '2026-05-28',
+          freshness: 'fresh',
+          is_fallback: false,
+          is_stale: false,
+          is_partial: true,
+          is_synthetic: false,
+          is_unavailable: false,
+          confidence_weight: 0.7,
+          coverage: 0.4,
+          degradation_reason: 'short_history',
+          cap_reason: 'insufficient_bars',
+        },
+        data: [
+          {
+            date: '2026-05-27',
+            open: 100,
+            high: 105,
+            low: 99,
+            close: 104,
+            volume: 1000,
+            change_percent: 1.2,
+          },
+          {
+            date: '2026-05-28',
+            open: 104,
+            high: 108,
+            low: 103,
+            close: 107,
+            volume: 1200,
+            amount: 128400,
+          },
+        ],
+      },
+    });
+
+    const history = await stocksApi.getHistory('ORCL', { period: 'daily', days: 180 });
+
+    expect(get).toHaveBeenCalledWith('/api/v1/stocks/ORCL/history', {
+      params: { period: 'daily', days: 180 },
+    });
+    expect(history.stockCode).toBe('ORCL');
+    expect(history.stockName).toBe('Oracle');
+    expect(history.period).toBe('daily');
+    expect(history.diagnostics?.requestedDays).toBe(90);
+    expect(history.diagnostics?.localFallback?.latestTradeDate).toBe('2026-05-28');
+    expect(history.sourceConfidence?.sourceLabel).toBe('Local history');
+    expect(history.sourceConfidence?.isPartial).toBe(true);
+    expect(history.sourceConfidence?.coverage).toBe(0.4);
+    expect(history.data).toHaveLength(2);
+    expect(history.data[0]).toMatchObject({
+      date: '2026-05-27',
+      open: 100,
+      close: 104,
+      changePercent: 1.2,
+    });
+    expect(history.data[1]?.amount).toBe(128400);
+  });
+
   it('keeps fallback and synthetic flags when quote data is non-fresh', async () => {
     const { stocksApi } = await import('../stocks');
 

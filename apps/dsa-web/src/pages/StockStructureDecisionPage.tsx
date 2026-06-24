@@ -17,6 +17,8 @@ import { TerminalButton, TerminalChip, TerminalEmptyState } from '../components/
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
 import {
   stocksApi,
+  type StockHistoryPoint,
+  type StockHistoryResponse,
   type StockQuote,
   type SymbolResearchPacket,
   type StockPeerCorrelationSnapshot,
@@ -845,6 +847,12 @@ type StockResearchFact = {
   detail?: string;
 };
 
+type StockHistoryComputationState = {
+  label: string;
+  detail: string;
+  tone: 'success' | 'caution' | 'danger' | 'neutral';
+};
+
 type EvidenceStackBucket = 'available' | 'missing' | 'partial' | 'stale';
 
 type EvidenceStackRow = {
@@ -1337,6 +1345,303 @@ function isSymbolNotFoundValidation(
 function numericValue(value: unknown): number | null {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
+}
+
+function positiveInteger(value: unknown): number | null {
+  const numeric = Number(value);
+  return Number.isInteger(numeric) && numeric >= 0 ? numeric : null;
+}
+
+function historyBarsCount(history: StockHistoryResponse | null, data: StockStructureDecisionResponse): number {
+  if (history?.data.length) return history.data.length;
+  return positiveInteger(data.dataQuality.usableBars) ?? positiveInteger(data.dataQuality.observedBars) ?? 0;
+}
+
+function requiredHistoryBars(history: StockHistoryResponse | null, data: StockStructureDecisionResponse): number {
+  return positiveInteger(data.dataQuality.requestedDays)
+    ?? positiveInteger(history?.diagnostics?.requestedDays)
+    ?? 90;
+}
+
+function historyMissingBars(history: StockHistoryResponse | null, data: StockStructureDecisionResponse): number {
+  return Math.max(requiredHistoryBars(history, data) - historyBarsCount(history, data), 0);
+}
+
+function latestHistoryDate(history: StockHistoryResponse | null): string | null {
+  const latest = history?.data.at(-1)?.date || history?.sourceConfidence?.asOf || history?.diagnostics?.localFallback?.latestTradeDate;
+  return safeOptionalConsumerText(latest, 'en');
+}
+
+function hasDisabledHistoryBoundary(history: StockHistoryResponse | null, failed: boolean): boolean {
+  if (failed) return true;
+  if (!history) return false;
+  if (history.sourceConfidence?.isUnavailable) return true;
+  const boundaryText = [
+    history.diagnostics?.status,
+    history.diagnostics?.reason,
+    history.diagnostics?.message,
+    history.diagnostics?.error,
+    history.sourceConfidence?.degradationReason,
+    history.sourceConfidence?.capReason,
+  ].filter(Boolean).join(' ').toLowerCase();
+  return /disabled|unavailable|not_configured|not configured|cache_miss|cache miss|missing|provider/.test(boundaryText)
+    && history.data.length === 0;
+}
+
+function stockHistoryReadinessState({
+  history,
+  failed,
+  data,
+  language,
+}: {
+  history: StockHistoryResponse | null;
+  failed: boolean;
+  data: StockStructureDecisionResponse;
+  language: 'zh' | 'en';
+}): StockHistoryComputationState {
+  const isEnglish = language === 'en';
+  const bars = historyBarsCount(history, data);
+  const missing = historyMissingBars(history, data);
+  if (bars > 0) {
+    return {
+      label: isEnglish ? 'History available' : '历史数据可用',
+      detail: missing > 0
+        ? (isEnglish
+          ? 'Historical bars are present, but the structure read still needs more bars.'
+          : '历史 K 线已返回，但结构计算仍缺少部分样本。')
+        : (isEnglish
+          ? 'Historical bars are present for this symbol.'
+          : '该标的已有历史 K 线可用于页面展示。'),
+      tone: missing > 0 ? 'caution' : 'success',
+    };
+  }
+  if (hasDisabledHistoryBoundary(history, failed)) {
+    return {
+      label: isEnglish ? 'History source disabled' : '历史来源未启用',
+      detail: isEnglish
+        ? 'No historical bars were returned from the configured source or local store.'
+        : '当前历史来源或本地存储未返回 K 线数据。',
+      tone: 'danger',
+    };
+  }
+  return {
+    label: isEnglish ? 'History missing' : '历史数据待补',
+    detail: isEnglish
+      ? 'The page did not receive historical bars for this symbol.'
+      : '页面暂未收到该标的历史 K 线。',
+    tone: 'caution',
+  };
+}
+
+function structureComputationState(
+  data: StockStructureDecisionResponse,
+  missingBars: number,
+  language: 'zh' | 'en',
+): StockHistoryComputationState {
+  const isEnglish = language === 'en';
+  const status = normalizeStockConsumerToken(data.dataQuality.status);
+  const reason = normalizeStockConsumerToken(data.dataQuality.reason);
+  if (/timeout|timed_out/.test(reason) || /timeout|timed_out/.test(status)) {
+    return {
+      label: isEnglish ? 'Computation timed out' : '结构计算超时',
+      detail: isEnglish
+        ? 'The structure service returned a timed-out or partial computation state.'
+        : '结构服务返回超时或部分计算状态。',
+      tone: 'danger',
+    };
+  }
+  if (missingBars > 0) {
+    return {
+      label: isEnglish ? 'History insufficient for structure' : '结构样本不足',
+      detail: isEnglish
+        ? 'The page shows available history but does not infer structure from the short sample.'
+        : '页面展示已有历史数据，但不会用短样本推断结构。',
+      tone: 'caution',
+    };
+  }
+  if (['degraded', 'partial', 'unavailable', 'blocked'].includes(status)) {
+    return {
+      label: isEnglish ? 'Computation degraded' : '结构计算降级',
+      detail: isEnglish
+        ? 'The structure response is present, but its data quality state is constrained.'
+        : '结构响应已返回，但数据质量状态仍受约束。',
+      tone: 'caution',
+    };
+  }
+  return {
+    label: isEnglish ? 'Structure computation populated' : '结构计算已返回',
+    detail: isEnglish
+      ? 'Structure fields came from the structure decision API.'
+      : '结构字段来自结构决策接口。',
+    tone: 'success',
+  };
+}
+
+function historyToneStatus(tone: StockHistoryComputationState['tone']) {
+  if (tone === 'success') return 'success';
+  if (tone === 'danger') return 'error';
+  if (tone === 'caution') return 'warning';
+  return 'info';
+}
+
+function formatCompactNumber(value: number | null | undefined, language: 'zh' | 'en'): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
+  return new Intl.NumberFormat(language === 'en' ? 'en-US' : 'zh-CN', {
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function buildHistoryChartPath(points: StockHistoryPoint[], width: number, height: number, padding: number): string {
+  const closes = points.map((point) => point.close).filter((value) => Number.isFinite(value));
+  if (closes.length < 2) return '';
+  const min = Math.min(...closes);
+  const max = Math.max(...closes);
+  const range = max - min || 1;
+  const innerWidth = width - padding * 2;
+  const innerHeight = height - padding * 2;
+  return points.map((point, index) => {
+    const x = padding + (innerWidth * index) / Math.max(points.length - 1, 1);
+    const y = padding + innerHeight - ((point.close - min) / range) * innerHeight;
+    return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+  }).join(' ');
+}
+
+function StockHistoryMiniChart({
+  points,
+  language,
+}: {
+  points: StockHistoryPoint[];
+  language: 'zh' | 'en';
+}) {
+  const visiblePoints = points.slice(-90);
+  if (visiblePoints.length < 2) return null;
+  const width = 640;
+  const height = 180;
+  const padding = 18;
+  const chartPath = buildHistoryChartPath(visiblePoints, width, 118, padding);
+  const maxVolume = Math.max(...visiblePoints.map((point) => point.volume || 0), 1);
+  const first = visiblePoints[0];
+  const last = visiblePoints.at(-1);
+  const summary = language === 'en'
+    ? `${visiblePoints.length} daily bars from ${first?.date || 'first bar'} to ${last?.date || 'latest bar'}`
+    : `${visiblePoints.length} 根日线，${first?.date || '首根'} 至 ${last?.date || '最新'}`;
+
+  return (
+    <div className="mt-4 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-muted)] p-3" data-testid="stock-history-mini-chart">
+      <svg
+        role="img"
+        aria-label={summary}
+        viewBox={`0 0 ${width} ${height}`}
+        className="h-44 w-full overflow-visible"
+        preserveAspectRatio="none"
+      >
+        <title>{summary}</title>
+        <line x1={padding} y1="118" x2={width - padding} y2="118" stroke="var(--wolfy-border-subtle)" strokeWidth="1" />
+        <path d={chartPath} fill="none" stroke="var(--wolfy-accent)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+        {visiblePoints.map((point, index) => {
+          const barWidth = Math.max((width - padding * 2) / visiblePoints.length - 2, 1);
+          const x = padding + ((width - padding * 2) * index) / visiblePoints.length;
+          const barHeight = Math.max(((point.volume || 0) / maxVolume) * 42, point.volume ? 2 : 0);
+          return (
+            <rect
+              key={`${point.date}-${index}`}
+              x={x}
+              y={height - padding - barHeight}
+              width={barWidth}
+              height={barHeight}
+              rx="1"
+              fill="var(--wolfy-text-muted)"
+              opacity="0.35"
+            />
+          );
+        })}
+      </svg>
+      <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{summary}</p>
+    </div>
+  );
+}
+
+function StockHistoryReadinessPanel({
+  history,
+  failed,
+  data,
+  language,
+}: {
+  history: StockHistoryResponse | null;
+  failed: boolean;
+  data: StockStructureDecisionResponse;
+  language: 'zh' | 'en';
+}) {
+  const isEnglish = language === 'en';
+  const availableBars = historyBarsCount(history, data);
+  const requiredBars = requiredHistoryBars(history, data);
+  const missingBars = historyMissingBars(history, data);
+  const historyState = stockHistoryReadinessState({ history, failed, data, language });
+  const computationState = structureComputationState(data, missingBars, language);
+  const latestDate = latestHistoryDate(history);
+  const chartPoints = history?.data ?? [];
+
+  return (
+    <div className="border-t border-[color:var(--wolfy-divider)] p-3" data-testid="stock-history-readiness-panel">
+      <RoughSectionCard
+        eyebrow={isEnglish ? 'Price / volume history' : '价格与成交量历史'}
+        title={isEnglish ? `${data.ticker} history readiness` : `${data.ticker} 历史数据就绪度`}
+      >
+        <div className="mb-3 flex flex-wrap gap-2">
+          <StatusBadge status={historyToneStatus(historyState.tone)} label={historyState.label} size="sm" />
+          <StatusBadge status={historyToneStatus(computationState.tone)} label={computationState.label} size="sm" />
+          <TerminalChip variant="neutral">{periodLabel(history?.period || data.dataQuality.period, language) || (isEnglish ? 'Daily' : '日线')}</TerminalChip>
+        </div>
+        <RoughKeyValueRows
+          rows={[
+            {
+              key: 'available-bars',
+              label: isEnglish ? 'Available bars' : '可用 K 线',
+              value: formatCompactNumber(availableBars, language),
+            },
+            {
+              key: 'required-bars',
+              label: isEnglish ? 'Required bars' : '所需 K 线',
+              value: formatCompactNumber(requiredBars, language),
+            },
+            {
+              key: 'missing-bars',
+              label: isEnglish ? 'Missing bars' : '缺口 K 线',
+              value: formatCompactNumber(missingBars, language),
+            },
+            {
+              key: 'latest-date',
+              label: isEnglish ? 'Latest history date' : '最新历史日期',
+              value: latestDate || (isEnglish ? 'not received' : '未收到'),
+            },
+            {
+              key: 'history-state',
+              label: isEnglish ? 'History state' : '历史状态',
+              value: historyState.detail,
+            },
+            {
+              key: 'computation-state',
+              label: isEnglish ? 'Structure computation' : '结构计算',
+              value: computationState.detail,
+            },
+          ]}
+        />
+        {chartPoints.length ? (
+          <StockHistoryMiniChart points={chartPoints} language={language} />
+        ) : (
+          <TerminalEmptyState
+            className="mt-4 items-start"
+            data-testid="stock-history-chart-unavailable"
+            title={isEnglish ? 'Chart unavailable' : '图表暂不可用'}
+          >
+            {isEnglish
+              ? 'No historical bars were returned, so the page shows readiness counts only.'
+              : '未返回历史 K 线，页面仅展示就绪度计数。'}
+          </TerminalEmptyState>
+        )}
+      </RoughSectionCard>
+    </div>
+  );
 }
 
 function isUnavailableStructureState(value: string | null | undefined): boolean {
@@ -1910,6 +2215,8 @@ export default function StockStructureDecisionPage() {
   const [data, setData] = useState<StockStructureDecisionResponse | null>(null);
   const [researchPacket, setResearchPacket] = useState<SymbolResearchPacket | null>(null);
   const [researchPacketFailed, setResearchPacketFailed] = useState(false);
+  const [history, setHistory] = useState<StockHistoryResponse | null>(null);
+  const [historyFailed, setHistoryFailed] = useState(false);
   const [quote, setQuote] = useState<StockQuote | null>(null);
   const [quoteFailed, setQuoteFailed] = useState(false);
   const [optionsStructure, setOptionsStructure] = useState<OptionsStructureSummary | null>(null);
@@ -1925,6 +2232,8 @@ export default function StockStructureDecisionPage() {
     setSymbolNotFound(null);
     setResearchPacket(null);
     setResearchPacketFailed(false);
+    setHistory(null);
+    setHistoryFailed(false);
     setQuote(null);
     setQuoteFailed(false);
     setOptionsStructure(null);
@@ -1963,17 +2272,20 @@ export default function StockStructureDecisionPage() {
           setData(null);
           setResearchPacket(null);
           setResearchPacketFailed(false);
+          setHistory(null);
+          setHistoryFailed(false);
           setComparePacket(null);
           setSymbolNotFound({
             symbol: validation.normalizedSymbol || validation.stockCode || primarySymbol,
           });
           return;
         }
-        const [quoteResult, packetResult, responseResult, optionsResult] = await Promise.allSettled([
+        const [quoteResult, packetResult, responseResult, optionsResult, historyResult] = await Promise.allSettled([
           stocksApi.getQuote(primarySymbol),
           stocksApi.getResearchPacket(primarySymbol),
           stocksApi.getStructureDecision(primarySymbol),
           optionsLabApi.getOptionsStructure(primarySymbol),
+          stocksApi.getHistory(primarySymbol, { period: 'daily', days: 180 }),
         ]);
         if (quoteResult.status === 'fulfilled') {
           setQuote(quoteResult.value);
@@ -1991,6 +2303,12 @@ export default function StockStructureDecisionPage() {
           setOptionsStructureFailed(false);
         } else {
           setOptionsStructureFailed(true);
+        }
+        if (historyResult.status === 'fulfilled') {
+          setHistory(historyResult.value);
+          setHistoryFailed(false);
+        } else {
+          setHistoryFailed(true);
         }
         if (responseResult.status === 'rejected') {
           throw responseResult.reason;
@@ -2226,6 +2544,12 @@ export default function StockStructureDecisionPage() {
                 <StockResearchPacketPanel
                   packet={researchPacket}
                   failed={researchPacketFailed}
+                  language={locale}
+                />
+                <StockHistoryReadinessPanel
+                  history={history}
+                  failed={historyFailed}
+                  data={data}
                   language={locale}
                 />
                 {hasResearchPacket ? (

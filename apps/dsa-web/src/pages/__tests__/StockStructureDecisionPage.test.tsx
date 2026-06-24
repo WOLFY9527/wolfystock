@@ -9,6 +9,7 @@ const {
   languageState,
   verifyTickerExistsMock,
   getQuoteMock,
+  getHistoryMock,
   getStructureDecisionMock,
   getResearchPacketMock,
   getOptionsStructureMock,
@@ -17,6 +18,7 @@ const {
   languageState: { value: 'zh' as 'zh' | 'en' },
   verifyTickerExistsMock: vi.fn(),
   getQuoteMock: vi.fn(),
+  getHistoryMock: vi.fn(),
   getStructureDecisionMock: vi.fn(),
   getResearchPacketMock: vi.fn(),
   getOptionsStructureMock: vi.fn(),
@@ -34,6 +36,7 @@ vi.mock('../../api/stocks', () => ({
   stocksApi: {
     verifyTickerExists: (...args: unknown[]) => verifyTickerExistsMock(...args),
     getQuote: (...args: unknown[]) => getQuoteMock(...args),
+    getHistory: (...args: unknown[]) => getHistoryMock(...args),
     getStructureDecision: (...args: unknown[]) => getStructureDecisionMock(...args),
     getResearchPacket: (...args: unknown[]) => getResearchPacketMock(...args),
     getStructureDecisionsBatch: (...args: unknown[]) => getStructureDecisionsBatchMock(...args),
@@ -126,6 +129,42 @@ const baseQuote = () => ({
     degradationReason: null,
     capReason: null,
   },
+});
+
+const baseHistory = (symbol = 'AAPL', bars = 60) => ({
+  stockCode: symbol,
+  stockName: symbol === 'ORCL' ? 'Oracle' : symbol,
+  period: 'daily',
+  source: 'local_db',
+  diagnostics: {
+    status: 'available',
+    reason: 'history_available',
+    requestedDays: 90,
+    rows: bars,
+  },
+  sourceConfidence: {
+    source: 'local_db',
+    sourceLabel: 'Local history',
+    asOf: '2026-05-28',
+    freshness: 'fresh',
+    isFallback: false,
+    isStale: false,
+    isPartial: bars < 90,
+    isSynthetic: false,
+    isUnavailable: false,
+    confidenceWeight: 1,
+    coverage: bars / 90,
+    degradationReason: null,
+    capReason: bars < 90 ? 'short_history' : null,
+  },
+  data: Array.from({ length: bars }, (_, index) => ({
+    date: `2026-03-${String((index % 28) + 1).padStart(2, '0')}`,
+    open: 100 + index,
+    high: 101 + index,
+    low: 99 + index,
+    close: 100.5 + index,
+    volume: 1000 + index * 10,
+  })),
 });
 
 const partialResearchPacket = () => ({
@@ -364,6 +403,7 @@ describe('StockStructureDecisionPage', () => {
     getQuoteMock.mockResolvedValue({
       ...baseQuote(),
     });
+    getHistoryMock.mockImplementation((symbol: string) => Promise.resolve(baseHistory(symbol, 60)));
     getOptionsStructureMock.mockResolvedValue(optionsStructureNotAvailable());
   });
 
@@ -379,8 +419,10 @@ describe('StockStructureDecisionPage', () => {
     const page = await screen.findByTestId('stock-structure-decision-page');
     const panel = await within(page).findByTestId('stock-research-packet-panel');
     const quotePanel = await within(page).findByTestId('stock-quote-boundary-panel');
+    const historyPanel = await within(page).findByTestId('stock-history-readiness-panel');
 
     expect(getQuoteMock).toHaveBeenCalledWith('AAPL');
+    expect(getHistoryMock).toHaveBeenCalledWith('AAPL', { period: 'daily', days: 180 });
     expect(getResearchPacketMock).toHaveBeenCalledWith('AAPL');
     expect(quotePanel).toHaveTextContent('报价来源与新鲜度');
     expect(quotePanel).toHaveTextContent('报价可用');
@@ -410,6 +452,16 @@ describe('StockStructureDecisionPage', () => {
     expect(panel).toHaveTextContent('基本面待补');
     expect(panel).toHaveTextContent('新闻线索待补');
     expect(panel).toHaveTextContent('市场线索待补');
+    expect(historyPanel).toHaveTextContent('AAPL 历史数据就绪度');
+    expect(historyPanel).toHaveTextContent('历史数据可用');
+    expect(historyPanel).toHaveTextContent('结构样本不足');
+    expect(historyPanel).toHaveTextContent('可用 K 线');
+    expect(historyPanel).toHaveTextContent('60');
+    expect(historyPanel).toHaveTextContent('所需 K 线');
+    expect(historyPanel).toHaveTextContent('90');
+    expect(historyPanel).toHaveTextContent('缺口 K 线');
+    expect(historyPanel).toHaveTextContent('30');
+    expect(within(historyPanel).getByTestId('stock-history-mini-chart')).toBeInTheDocument();
     expect(findConsumerRawLeakage(page.textContent || '', {
       extraForbiddenPatterns: [
         /\bavailable\b/i,
@@ -422,6 +474,195 @@ describe('StockStructureDecisionPage', () => {
     })).toEqual([]);
     expect(page.textContent || '').not.toMatch(/available|not_integrated|insufficient|blocked|observationOnly|not personalized financial advice/i);
     expect(page.textContent || '').not.toMatch(/buy|sell|hold|target price|stop-loss|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
+  });
+
+  it('renders ORCL-specific history readiness instead of a default symbol', async () => {
+    getResearchPacketMock.mockResolvedValue({
+      ...completeResearchPacket(),
+      symbol: 'ORCL',
+      identity: {
+        name: 'Oracle',
+        exchange: 'NYSE',
+        sector: 'Technology',
+        industry: 'Enterprise software',
+      },
+      history: {
+        state: 'available',
+        bars: 120,
+        period: 'daily',
+        asOf: '2026-05-28',
+      },
+    });
+    getStructureDecisionMock.mockResolvedValue({
+      ...baseStructureDecision(),
+      ticker: 'ORCL',
+      dataQuality: {
+        ...baseStructureDecision().dataQuality,
+        requestedDays: 90,
+        observedBars: 120,
+        usableBars: 120,
+      },
+    });
+    getHistoryMock.mockResolvedValue(baseHistory('ORCL', 120));
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/ORCL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const historyPanel = await within(page).findByTestId('stock-history-readiness-panel');
+
+    expect(getStructureDecisionMock).toHaveBeenCalledWith('ORCL');
+    expect(getResearchPacketMock).toHaveBeenCalledWith('ORCL');
+    expect(getHistoryMock).toHaveBeenCalledWith('ORCL', { period: 'daily', days: 180 });
+    expect(page).toHaveTextContent('ORCL 结构工作区');
+    expect(historyPanel).toHaveTextContent('ORCL 历史数据就绪度');
+    expect(historyPanel).toHaveTextContent('可用 K 线');
+    expect(historyPanel).toHaveTextContent('120');
+    expect(historyPanel).toHaveTextContent('缺口 K 线');
+    expect(historyPanel).toHaveTextContent('0');
+    expect(historyPanel).toHaveTextContent('结构计算已返回');
+    expect(page.textContent || '').not.toMatch(/\bAAPL\b/);
+    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+  });
+
+  it('renders a 600519 history-disabled or missing state without chart inference', async () => {
+    verifyTickerExistsMock.mockResolvedValueOnce({
+      stockCode: '600519',
+      normalizedSymbol: '600519',
+      market: 'cn',
+      status: 'valid',
+      valid: true,
+      exists: true,
+      stockName: '贵州茅台',
+      message: 'Symbol verified.',
+    });
+    getResearchPacketMock.mockResolvedValue({
+      ...partialResearchPacket(),
+      symbol: '600519',
+      market: 'cn',
+      identity: {
+        name: '贵州茅台',
+        exchange: 'SSE',
+        sector: null,
+        industry: null,
+      },
+      history: {
+        state: 'missing',
+        bars: 0,
+        period: 'daily',
+        asOf: null,
+      },
+      structure: {
+        state: 'insufficient',
+        label: null,
+        confidence: 'low',
+        asOf: null,
+      },
+    });
+    getStructureDecisionMock.mockResolvedValue({
+      ...baseStructureDecision(),
+      ticker: '600519',
+      structureState: 'low_confidence',
+      confidence: 'low',
+      componentScores: {},
+      explanation: {
+        whyThisStructure: null,
+        whatConfirmsIt: [],
+        whatInvalidatesIt: [],
+        keyLevels: [],
+      },
+      researchNotes: {
+        watchNext: [],
+        needsMoreEvidence: ['Need local historical bars.'],
+        riskFlags: [],
+      },
+      dataQuality: {
+        status: 'partial',
+        source: null,
+        period: 'daily',
+        requestedDays: 90,
+        observedBars: 0,
+        usableBars: 0,
+        reason: 'history_source_disabled',
+      },
+      missingEvidence: [
+        { kind: 'daily_ohlcv', message: 'Need local historical bars.' },
+      ],
+    });
+    getHistoryMock.mockResolvedValue({
+      ...baseHistory('600519', 0),
+      diagnostics: {
+        status: 'unavailable',
+        reason: 'provider_disabled cache_miss',
+        requestedDays: 90,
+        rows: 0,
+      },
+      sourceConfidence: {
+        ...baseHistory('600519', 0).sourceConfidence,
+        isUnavailable: true,
+        confidenceWeight: 0,
+        coverage: 0,
+        degradationReason: 'history_source_disabled',
+      },
+      data: [],
+    });
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/600519/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const historyPanel = await within(page).findByTestId('stock-history-readiness-panel');
+
+    expect(getHistoryMock).toHaveBeenCalledWith('600519', { period: 'daily', days: 180 });
+    expect(page).toHaveTextContent('600519 结构工作区');
+    expect(historyPanel).toHaveTextContent('600519 历史数据就绪度');
+    expect(historyPanel).toHaveTextContent('历史来源未启用');
+    expect(historyPanel).toHaveTextContent('结构样本不足');
+    expect(historyPanel).toHaveTextContent('可用 K 线');
+    expect(historyPanel).toHaveTextContent('0');
+    expect(historyPanel).toHaveTextContent('缺口 K 线');
+    expect(historyPanel).toHaveTextContent('90');
+    expect(within(historyPanel).getByTestId('stock-history-chart-unavailable')).toBeInTheDocument();
+    expect(within(page).queryByText('组件评分')).not.toBeInTheDocument();
+    expect(page.textContent || '').not.toMatch(/provider_disabled|cache_miss|provider|cache|raw|debug|trace/i);
+    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+  });
+
+  it('distinguishes a timed-out structure computation from available history', async () => {
+    getStructureDecisionMock.mockResolvedValue({
+      ...baseStructureDecision(),
+      ticker: 'ORCL',
+      structureState: 'low_confidence',
+      confidence: 'low',
+      dataQuality: {
+        ...baseStructureDecision().dataQuality,
+        status: 'degraded',
+        requestedDays: 90,
+        observedBars: 90,
+        usableBars: 90,
+        reason: 'computation_timed_out',
+      },
+    });
+    getHistoryMock.mockResolvedValue(baseHistory('ORCL', 90));
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/ORCL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const historyPanel = await within(page).findByTestId('stock-history-readiness-panel');
+
+    expect(historyPanel).toHaveTextContent('历史数据可用');
+    expect(historyPanel).toHaveTextContent('结构计算超时');
+    expect(historyPanel).toHaveTextContent('结构服务返回超时或部分计算状态。');
   });
 
   it('renders provider-backed quote lineage without leaking raw provider internals', async () => {
