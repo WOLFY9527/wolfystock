@@ -545,6 +545,68 @@ describe('market temperature evidence normalization', () => {
       expect.objectContaining({ claim: 'direct_trade_action', allowed: false }),
     ]);
   });
+
+  it('maps usable stale or partial sentiment snapshots to partial panel state instead of failure', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            symbol: 'FGI',
+            label: 'Fear & Greed',
+            price: 35,
+            change: -4.2,
+            unit: 'score',
+            source: 'alternative_me',
+            source_label: 'Alternative.me',
+            freshness: 'live',
+          },
+        ],
+        source: 'alternative_me',
+        source_label: 'Alternative.me',
+        freshness: 'live',
+        is_partial: true,
+        refresh_error: 'cnn unavailable',
+        warning: '情绪指标部分可用，请结合来源与时效观察。',
+        provider_health: {
+          provider: 'alternative_me',
+          status: 'partial',
+          isFallback: false,
+          isStale: false,
+          isRefreshing: false,
+          sourceLabel: 'Alternative.me',
+        },
+      },
+    });
+
+    const panel = await marketModule.marketApi.getSentiment();
+
+    expect(panel.status).toBe('partial');
+    expect(panel.errorMessage).toBeNull();
+    expect(panel.refreshError).toBe('cnn unavailable');
+    expect(panel.providerHealth?.status).toBe('partial');
+    expect(panel.warning).toBe('情绪指标部分可用，请结合来源与时效观察。');
+    expect(panel.items[0]?.value).toBe(35);
+  });
+
+  it('maps empty fallback sentiment snapshots to unavailable panel state', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({
+      data: {
+        items: [],
+        source: 'fallback',
+        source_label: '最近可用数据',
+        freshness: 'fallback',
+        fallback_used: true,
+        is_fallback: true,
+        error: '数据源刷新超时，当前显示备用快照',
+      },
+    });
+
+    const panel = await marketModule.marketApi.getSentiment();
+
+    expect(panel.status).toBe('unavailable');
+    expect(panel.errorMessage).toBe('数据源刷新超时，当前显示备用快照');
+    expect(panel.items).toEqual([]);
+  });
 });
 
 describe('market snapshot normalization', () => {

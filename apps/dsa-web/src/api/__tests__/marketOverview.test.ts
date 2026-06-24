@@ -101,4 +101,51 @@ describe('marketOverviewApi', () => {
     expect(secondItem.isSynthetic).toBe(false);
     expect(secondItem.isUnavailable).toBe(true);
   });
+
+  it('preserves partial overview sentiment panel status from snake_case responses', async () => {
+    const { marketOverviewApi } = await import('../marketOverview');
+
+    get.mockResolvedValueOnce({
+      data: {
+        panel_name: 'MarketSentimentCard',
+        last_refresh_at: '2026-06-25T09:00:00Z',
+        status: 'partial',
+        source: 'alternative_me',
+        source_label: 'Alternative.me',
+        updated_at: '2026-06-25T09:01:00Z',
+        as_of: '2026-06-25T09:00:00Z',
+        freshness: 'live',
+        is_partial: true,
+        refresh_error: 'cnn unavailable',
+        warning: '情绪指标部分可用，请结合来源与时效观察。',
+        provider_health: {
+          provider: 'alternative_me',
+          status: 'partial',
+          is_fallback: false,
+          is_stale: false,
+          is_refreshing: false,
+          source_label: 'Alternative.me',
+        },
+        items: [
+          {
+            symbol: 'FGI',
+            label: 'Fear & Greed',
+            value: 35,
+            unit: 'score',
+            source: 'alternative_me',
+            source_label: 'Alternative.me',
+            freshness: 'live',
+          },
+        ],
+      },
+    });
+
+    const panel = await marketOverviewApi.getSentiment();
+
+    expect(panel.status).toBe('partial');
+    expect(panel.isPartial).toBe(true);
+    expect(panel.refreshError).toBe('cnn unavailable');
+    expect(panel.providerHealth?.status).toBe('partial');
+    expect(panel.items[0]?.value).toBe(35);
+  });
 });

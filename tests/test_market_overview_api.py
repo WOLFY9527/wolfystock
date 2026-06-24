@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from api.v1.endpoints import market_overview
+from src.services.market_overview_service import MarketOverviewService
 
 FORBIDDEN_CONSUMER_REASON_TOKENS = (
     "_blocked",
@@ -179,6 +180,8 @@ class MarketOverviewApiTestCase(unittest.TestCase):
         serialized = json.dumps(funds_flow, ensure_ascii=False).lower()
         for raw_token in FORBIDDEN_CONSUMER_REASON_TOKENS:
             self.assertNotIn(raw_token, serialized)
+
+
         self.assertEqual(
             funds_flow["consumerEvidenceSnapshot"]["reasonFamilies"],
             [{"label": "证据来源级别不足", "category": "evidence", "sourceField": "evidence"}],
@@ -673,6 +676,92 @@ class MarketOverviewApiTestCase(unittest.TestCase):
         assert "internal" not in serialized_family
         assert "cacheBundleDiagnostics" not in serialized_family
         assert "cacheKey" not in serialized_family
+
+
+class _ExecutionLogStub:
+    def record_market_overview_fetch(self, **_: object) -> str:
+        return "log-overview-sentiment"
+
+
+def test_market_overview_sentiment_returns_partial_when_secondary_provider_has_usable_value() -> None:
+    service = MarketOverviewService()
+
+    with patch.object(
+        service,
+        "_fetch_cnn_fear_greed_snapshot",
+        side_effect=RuntimeError("cnn unavailable"),
+    ), patch.object(
+        service,
+        "_fetch_alternative_fear_greed_snapshot",
+        return_value={"history": [{"value": 22}, {"value": 24}, {"value": 35}], "source": "alternative_me"},
+    ), patch("src.services.market_overview_service.ExecutionLogService", _ExecutionLogStub):
+        payload = service.get_sentiment()
+
+    assert payload["status"] == "partial"
+    assert payload["items"][0]["symbol"] == "FGI"
+    assert payload["items"][0]["value"] == 35
+    assert payload["source"] == "alternative_me"
+    assert payload["sourceLabel"] == "Alternative.me"
+    assert payload["providerHealth"]["status"] == "partial"
+    assert payload["refreshError"] == "数据源暂不可用"
+    assert payload["warning"]
+    assert payload["error_message"] is None
+
+
+def test_market_overview_sentiment_returns_partial_for_stale_last_known_good_snapshot() -> None:
+    service = MarketOverviewService()
+    service._market_cache.clear()
+    service._market_data_cache.clear()
+    service._market_data_cache[service.OVERVIEW_SENTIMENT_CACHE_KEY] = {
+        "panel_name": "MarketSentimentCard",
+        "last_refresh_at": "2026-06-25T10:00:00+08:00",
+        "updatedAt": "2026-06-25T10:00:00+08:00",
+        "source": "cnn",
+        "items": [
+            {
+                "symbol": "FGI",
+                "label": "Fear & Greed",
+                "value": 33,
+                "unit": "score",
+                "change_pct": -2.0,
+                "trend": [38, 36, 33],
+                "source": "cnn",
+            }
+        ],
+    }
+
+    with patch.object(
+        service,
+        "_fetch_market_sentiment_snapshot",
+        side_effect=RuntimeError("cnn unavailable"),
+    ), patch("src.services.market_overview_service.ExecutionLogService", _ExecutionLogStub):
+        payload = service.get_sentiment()
+
+    assert payload["status"] == "partial"
+    assert payload["items"][0]["value"] == 33
+    assert payload["isStale"] is True
+    assert payload["providerHealth"]["status"] == "stale"
+    assert payload["refreshError"] == "数据源暂不可用"
+    assert payload["warning"]
+    assert payload["error_message"] == "数据源暂不可用"
+
+
+def test_market_overview_sentiment_returns_unavailable_when_no_usable_value_exists() -> None:
+    service = MarketOverviewService()
+    service._market_cache.clear()
+    service._market_data_cache.clear()
+
+    with patch.object(
+        service,
+        "_fetch_market_sentiment_snapshot",
+        side_effect=RuntimeError("cnn unavailable"),
+    ), patch("src.services.market_overview_service.ExecutionLogService", _ExecutionLogStub):
+        payload = service.get_sentiment()
+
+    assert payload["status"] == "unavailable"
+    assert payload["items"] == []
+    assert payload["providerHealth"]["status"] == "unavailable"
+    assert payload["error_message"] == "数据源暂不可用"
 
 
 if __name__ == "__main__":

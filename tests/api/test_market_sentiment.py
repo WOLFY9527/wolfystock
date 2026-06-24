@@ -125,7 +125,8 @@ class MarketSentimentApiTestCase(unittest.TestCase):
         ) as alternative_fetch:
             payload = service._fetch_market_sentiment_snapshot()
 
-        cnn_fetch.assert_called_once_with()
+        cnn_fetch.assert_called_once()
+        self.assertGreater(cnn_fetch.call_args.kwargs["timeout"], 0)
         alternative_fetch.assert_not_called()
         self.assertEqual(payload["source"], "cnn")
         self.assertIsNone(payload["error"])
@@ -145,10 +146,15 @@ class MarketSentimentApiTestCase(unittest.TestCase):
         ) as alternative_fetch:
             payload = service._fetch_market_sentiment_snapshot()
 
-        cnn_fetch.assert_called_once_with()
-        alternative_fetch.assert_called_once_with()
+        cnn_fetch.assert_called_once()
+        alternative_fetch.assert_called_once()
+        self.assertGreater(cnn_fetch.call_args.kwargs["timeout"], 0)
+        self.assertGreater(alternative_fetch.call_args.kwargs["timeout"], 0)
         self.assertEqual(payload["source"], "alternative_me")
-        self.assertEqual(payload["error"], "cnn unavailable")
+        self.assertIsNone(payload["error"])
+        self.assertEqual(payload["refreshError"], "cnn unavailable")
+        self.assertTrue(payload["isPartial"])
+        self.assertTrue(payload["warning"])
         self.assertTrue(all(item["source"] == "alternative_me" for item in payload["items"]))
 
     def test_get_sentiment_service_owns_provider_order_and_public_metadata_from_transport_payloads(self) -> None:
@@ -170,14 +176,18 @@ class MarketSentimentApiTestCase(unittest.TestCase):
         ) as alternative_fetch:
             payload = service.get_market_sentiment()
 
-        cnn_fetch.assert_called_once_with()
-        alternative_fetch.assert_called_once_with()
+        cnn_fetch.assert_called_once()
+        alternative_fetch.assert_called_once()
+        self.assertGreater(cnn_fetch.call_args.kwargs["timeout"], 0)
+        self.assertGreater(alternative_fetch.call_args.kwargs["timeout"], 0)
         self.assertEqual(payload["source"], "alternative_me")
         self.assertEqual(payload["sourceLabel"], "Alternative.me")
         self.assertFalse(payload["fallback_used"])
         self.assertFalse(payload["isFallback"])
         self.assertEqual(payload["providerHealth"]["provider"], "alternative_me")
-        self.assertIn(payload["providerHealth"]["status"], {"live", "cache"})
+        self.assertEqual(payload["providerHealth"]["status"], "partial")
+        self.assertEqual(payload["refreshError"], "数据源暂不可用")
+        self.assertTrue(payload["warning"])
         self.assertTrue(all(item["source"] == "alternative_me" for item in payload["items"]))
         self.assertTrue(all(item["sourceLabel"] == "Alternative.me" for item in payload["items"]))
 
