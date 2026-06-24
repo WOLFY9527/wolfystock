@@ -37,8 +37,6 @@ PUBLIC_ROUTE_SPECS: tuple[tuple[str, str], ...] = (
     ("GET", "/api/v1/auth/status"),
     ("GET", "/api/v1/market-overview/indices"),
     ("GET", "/api/v1/stocks/AAPL/quote"),
-    ("GET", "/api/v1/stocks/AAPL/evidence"),
-    ("GET", "/api/v1/stocks/AAPL/structure-decision"),
 )
 AUTHENTICATED_ROUTE_SPECS: tuple[tuple[str, str], ...] = (
     ("GET", "/api/v1/research/radar"),

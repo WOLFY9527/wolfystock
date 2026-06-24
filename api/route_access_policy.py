@@ -17,7 +17,7 @@ PUBLIC_BASELINE_PATHS = frozenset(
 )
 
 _PUBLIC_STOCK_READ_RE = re.compile(
-    r"^/api/v1/stocks/[^/]+/(?:quote|evidence|structure-decision)$"
+    r"^/api/v1/stocks/[^/]+/quote$"
 )
 
 

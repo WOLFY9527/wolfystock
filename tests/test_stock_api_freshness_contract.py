@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -32,18 +33,90 @@ def _client(*, authenticated: bool = True) -> TestClient:
     return TestClient(app)
 
 
-def test_quote_endpoint_requires_authenticated_user_before_fetching_quote() -> None:
+def test_quote_endpoint_allows_guest_access_without_auth_dependency() -> None:
+    service = SimpleNamespace(
+        get_realtime_quote=lambda stock_code: {
+            "stock_code": stock_code,
+            "stock_name": f"{stock_code} Corp.",
+            "current_price": 214.55,
+            "change": 2.35,
+            "change_percent": 1.11,
+            "open": 213.0,
+            "high": 215.0,
+            "low": 212.5,
+            "prev_close": 212.2,
+            "volume": 1000.0,
+            "amount": 214550.0,
+            "update_time": "2026-05-28T09:31:00Z",
+            "source": "alpaca",
+            "source_type": "provider_runtime",
+            "market_timestamp": "2026-05-28T09:30:00Z",
+            "observed_at": "2026-05-28T09:31:00Z",
+            "freshness": "live",
+            "is_fallback": False,
+            "is_stale": False,
+            "is_partial": False,
+            "is_synthetic": False,
+            "sourceConfidence": {
+                "source": "alpaca",
+                "sourceLabel": "Alpaca",
+                "asOf": "2026-05-28T09:30:00Z",
+                "freshness": "live",
+                "isFallback": False,
+                "isStale": False,
+                "isPartial": False,
+                "isSynthetic": False,
+                "isUnavailable": False,
+                "confidenceWeight": 1.0,
+                "coverage": None,
+                "degradationReason": None,
+                "capReason": None,
+            },
+        }
+    )
+
+    with patch("api.v1.endpoints.stocks.StockService", return_value=service):
+        client = _client(authenticated=False)
+        try:
+            responses = {
+                symbol: client.get(f"/api/v1/stocks/{symbol}/quote")
+                for symbol in ("ORCL", "600519")
+            }
+        finally:
+            client.close()
+
+    assert {symbol: response.status_code for symbol, response in responses.items()} == {
+        "ORCL": 200,
+        "600519": 200,
+    }
+    for symbol, response in responses.items():
+        payload = response.json()
+        assert payload["stock_code"] == symbol
+        assert payload["source"] == "Alpaca"
+        assert "sourceType" not in payload
+        assert "sourceConfidence" not in payload
+
+
+def test_quote_endpoint_internal_error_is_consumer_safe_for_guest() -> None:
     service = SimpleNamespace(
         get_realtime_quote=lambda stock_code: (_ for _ in ()).throw(
-            AssertionError("quote service must not be called without auth")
+            RuntimeError(
+                "provider_runtime requestId=req-raw traceId=trace-raw "
+                "cacheKey=cache-raw token=secret should not leak"
+            )
         )
     )
 
     with patch("api.v1.endpoints.stocks.StockService", return_value=service):
-        response = _client(authenticated=False).get("/api/v1/stocks/AAPL/quote")
+        response = _client(authenticated=False).get("/api/v1/stocks/ORCL/quote")
 
-    assert response.status_code == 401
-    assert response.json() == {"detail": {"error": "unauthorized", "message": "Login required"}}
+    assert response.status_code == 500
+    payload = response.json()["detail"]
+    assert payload["error"] == "internal_error"
+    assert "requestId" not in json.dumps(payload, ensure_ascii=False)
+    assert "traceId" not in json.dumps(payload, ensure_ascii=False)
+    assert "cacheKey" not in json.dumps(payload, ensure_ascii=False)
+    assert "token" not in json.dumps(payload, ensure_ascii=False)
 
 
 def test_quote_endpoint_exposes_safe_source_label_and_market_timestamp_without_runtime_taxonomy() -> None:

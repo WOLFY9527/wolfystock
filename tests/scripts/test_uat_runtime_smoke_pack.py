@@ -121,6 +121,12 @@ def _route_responses(base_url: str) -> dict[tuple[str, ...], _FakeResponse]:
     }
 
 
+def test_public_route_specs_only_include_quote_baseline_for_stocks() -> None:
+    assert ("GET", "/api/v1/stocks/AAPL/quote") in smoke.PUBLIC_ROUTE_SPECS
+    assert ("GET", "/api/v1/stocks/AAPL/evidence") not in smoke.PUBLIC_ROUTE_SPECS
+    assert ("GET", "/api/v1/stocks/AAPL/structure-decision") not in smoke.PUBLIC_ROUTE_SPECS
+
+
 def test_probe_runtime_bundle_accepts_matching_root_asset_and_public_routes() -> None:
     base_url = "http://127.0.0.1:8000"
     client = _FakeClient(
