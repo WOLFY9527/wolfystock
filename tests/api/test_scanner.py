@@ -495,7 +495,12 @@ def test_scanner_candidate_research_packet_summarizes_why_and_limits_without_ran
     assert packet["dataQualityNotes"]
     assert packet["rejectedOrLimitedReasonSafeLabel"] == "已进入本轮观察名单"
     assert packet["researchNextStep"] == "补充基本面证据"
+    assert packet["evidenceBoundaries"]["noAdvice"] is True
+    assert packet["evidenceBoundaries"]["decisionGrade"] is False
+    assert packet["noAdviceLabel"] == "Observation-only research context; not investment advice."
     assert packet["observationOnly"] is True
+    assert serialized["shortlist"][0]["evidenceBoundaries"]["noAdvice"] is True
+    assert serialized["shortlist"][0]["rankingConfidence"]["rankingUse"] == "relative_observation_only"
 
 
 def test_scanner_candidate_research_packet_is_bounded_and_no_advice() -> None:

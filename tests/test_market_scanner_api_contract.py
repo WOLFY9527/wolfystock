@@ -700,6 +700,17 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
         consumer_projection = serialized["shortlist"][0]["consumerDiagnostics"]
         self.assertEqual(consumer_projection["dataQualityState"], "partial")
         self.assertIn(consumer_projection["dataQualityState"], {"ready", "delayed", "cached", "partial", "no_evidence", "unavailable"})
+        self.assertEqual(
+            serialized["shortlist"][0]["noAdviceLabel"],
+            "Observation-only research context; not investment advice.",
+        )
+        self.assertTrue(serialized["shortlist"][0]["evidenceBoundaries"]["noAdvice"])
+        self.assertFalse(serialized["shortlist"][0]["evidenceBoundaries"]["decisionGrade"])
+        self.assertEqual(
+            serialized["shortlist"][0]["rankingConfidence"]["rankingUse"],
+            "relative_observation_only",
+        )
+        self.assertEqual(serialized["shortlist"][0]["candidateResearchPacket"], {})
         _assert_no_forbidden_consumer_response_fields(serialized)
 
     def test_admin_gated_scanner_watchlist_keeps_diagnostics_for_admin_surface(self) -> None:
