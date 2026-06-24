@@ -1606,6 +1606,7 @@ describe('BacktestPage', () => {
     renderBacktestRoutes();
 
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
+    expect(await screen.findByTestId('normal-backtest-workspace')).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('标的代码'), { target: { value: 'ORCL' } });
     fireEvent.click(screen.getByRole('button', { name: '执行回测任务' }));
@@ -1622,6 +1623,158 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('backtest-report-advanced-details')).toBeInTheDocument();
     expect(screen.queryByTestId('backtest-report-ledger-table')).not.toBeInTheDocument();
   }, 10000);
+
+  it('shows point-and-shoot pending readiness feedback and prevents duplicate launches', async () => {
+    parseRuleStrategy.mockImplementationOnce(() => new Promise(() => {}));
+
+    renderBacktestRoutes();
+
+    await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
+    expect(await screen.findByTestId('normal-backtest-workspace')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('标的代码'), { target: { value: 'ORCL' } });
+    fireEvent.click(screen.getByRole('button', { name: '执行回测任务' }));
+
+    const pendingButton = await screen.findByRole('button', { name: /正在检查 DATA-110 执行就绪度/ });
+    expect(pendingButton).toBeDisabled();
+
+    const feedback = await screen.findByTestId('backtest-run-feedback');
+    expect(feedback).toHaveTextContent('回测任务已受理');
+    expect(feedback).toHaveTextContent('正在提交回测请求');
+    expect(feedback).toHaveTextContent('正在检查 DATA-110 执行就绪度');
+
+    fireEvent.click(pendingButton);
+    expect(parseRuleStrategy).toHaveBeenCalledTimes(1);
+    expect(runRuleBacktest).not.toHaveBeenCalled();
+  });
+
+  it('keeps professional pending readiness feedback visible and blocks duplicate submissions', async () => {
+    runRuleBacktest.mockImplementationOnce(() => new Promise(() => {}));
+
+    renderBacktestRoutes();
+
+    await parseDeterministicStrategy();
+
+    fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与执行假设/i));
+    fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '执行回测任务' }));
+
+    const pendingButton = await within(screen.getByTestId('pro-execution-rail')).findByRole('button', {
+      name: /正在检查 DATA-110 执行就绪度/,
+    });
+    expect(pendingButton).toBeDisabled();
+
+    const pendingFeedback = await screen.findAllByTestId('backtest-run-feedback');
+    expect(pendingFeedback[0]).toHaveTextContent('回测任务已受理');
+    expect(pendingFeedback[0]).toHaveTextContent('正在提交回测请求');
+    expect(pendingFeedback[0]).toHaveTextContent('正在检查 DATA-110 执行就绪度');
+
+    fireEvent.click(pendingButton);
+    expect(runRuleBacktest).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows point-and-shoot DATA-110 blocked readiness without fake metrics', async () => {
+    runRuleBacktest.mockResolvedValueOnce(makeRuleRunResponse({
+      status: 'completed',
+      completedAt: '2026-04-07T08:02:00Z',
+      statusMessage: '历史行情不足，无法执行该策略回测。',
+      noResultReason: 'insufficient_history',
+      noResultMessage: '历史行情不足，无法执行该策略回测。',
+      tradeCount: 0,
+      winCount: 0,
+      lossCount: 0,
+      totalReturnPct: null,
+      annualizedReturnPct: null,
+      sharpeRatio: null,
+      benchmarkReturnPct: null,
+      excessReturnVsBenchmarkPct: null,
+      buyAndHoldReturnPct: null,
+      excessReturnVsBuyAndHoldPct: null,
+      winRatePct: null,
+      avgTradeReturnPct: null,
+      maxDrawdownPct: null,
+      finalEquity: null,
+      benchmarkSummary: {
+        label: 'Benchmark unavailable',
+        requestedMode: 'auto',
+        resolvedMode: 'none',
+        unavailableReason: 'missing benchmark',
+      },
+      auditRows: [],
+      dailyReturnSeries: [],
+      exposureCurve: [],
+      equityCurve: [],
+      trades: [],
+      executionReadiness: {
+        contractVersion: 'backtest_execution_readiness_v1',
+        state: 'data_insufficient',
+        resultContractAvailable: false,
+        engineState: 'enabled',
+        dataStatus: 'data_unavailable',
+        calculationStatus: 'insufficient_sample',
+        sampleStatus: 'insufficient_sample',
+        benchmarkState: 'missing',
+        reasonCodes: ['insufficient_history', 'missing_benchmark'],
+        observationOnly: true,
+        consumerSafe: true,
+        noAdviceDisclosure: 'Research diagnostic only; not personalized financial advice and not an executable instruction.',
+      },
+    }));
+
+    renderBacktestRoutes();
+
+    await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
+    expect(await screen.findByTestId('normal-backtest-workspace')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('标的代码'), { target: { value: 'ORCL' } });
+    fireEvent.click(screen.getByRole('button', { name: '执行回测任务' }));
+
+    await waitFor(() => expect(runRuleBacktest).toHaveBeenCalledTimes(1));
+
+    expect(screen.queryByTestId('deterministic-backtest-result-page')).not.toBeInTheDocument();
+    const blockedFeedback = await screen.findByTestId('backtest-run-feedback');
+    expect(blockedFeedback).toHaveTextContent('历史数据不足');
+    expect(blockedFeedback).toHaveTextContent('缺少基准');
+    const readiness = await screen.findByTestId('normal-backtest-execution-readiness');
+    expect(readiness).toHaveAttribute('data-readiness-state', 'data_insufficient');
+    expect(readiness).toHaveAttribute('data-result-contract-available', 'false');
+    expect(readiness).toHaveTextContent('历史数据不足');
+    expect(readiness).toHaveTextContent('历史 OHLCV 窗口不足，无法计算安全结果。');
+    expect(readiness).toHaveTextContent('缺少基准，基准相对指标不可用。');
+    expect(readiness).toHaveTextContent('仅供研究');
+    expect(readiness).not.toHaveTextContent(/Sharpe|CAGR|alpha|beta|跑赢|实盘|交易指令|\+?0\.00%/i);
+  });
+
+  it('shows point-and-shoot API errors with consumer-safe feedback', async () => {
+    runRuleBacktest.mockRejectedValueOnce({
+      response: {
+        status: 503,
+        data: {
+          message: 'Traceback provider payload requestId=abc token=secret',
+        },
+      },
+    });
+
+    renderBacktestRoutes();
+
+    await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
+    expect(await screen.findByTestId('normal-backtest-workspace')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('标的代码'), { target: { value: 'ORCL' } });
+    fireEvent.click(screen.getByRole('button', { name: '执行回测任务' }));
+
+    await waitFor(() => expect(runRuleBacktest).toHaveBeenCalledTimes(1));
+
+    expect(screen.queryByTestId('deterministic-backtest-result-page')).not.toBeInTheDocument();
+    const alerts = await screen.findAllByRole('alert');
+    const alert = alerts.find((node) => node.textContent?.includes('服务器暂时不可用'));
+    expect(alert).toBeDefined();
+    expect(alert).toHaveTextContent('服务器暂时不可用');
+    expect(alert).toHaveTextContent('服务器暂时不可用，请稍后重试。');
+    const failedFeedback = await screen.findByTestId('backtest-run-feedback');
+    expect(failedFeedback).toHaveTextContent('回测未完成');
+    expect(failedFeedback).toHaveTextContent('服务器暂时不可用');
+    expect(failedFeedback).not.toHaveTextContent(/Traceback|provider|payload|requestId|token|secret|abc/i);
+  });
 
   it('keeps walk-forward robustness preset disabled by default in professional mode', async () => {
     runRuleBacktest.mockResolvedValueOnce(makeRuleRunResponse({
@@ -1822,7 +1975,9 @@ describe('BacktestPage', () => {
     fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '执行回测任务' }));
 
     const pendingFeedback = await screen.findAllByTestId('backtest-run-feedback');
-    expect(pendingFeedback[0]).toHaveTextContent('回测任务提交中');
+    expect(pendingFeedback[0]).toHaveTextContent('回测任务已受理');
+    expect(pendingFeedback[0]).toHaveTextContent('正在提交回测请求');
+    expect(pendingFeedback[0]).toHaveTextContent('正在检查 DATA-110 执行就绪度');
     await waitFor(() => expect(runRuleBacktest).toHaveBeenCalledTimes(1));
 
     resolveRun?.(blockedRun);
@@ -1894,7 +2049,9 @@ describe('BacktestPage', () => {
     fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '执行回测任务' }));
 
     const pendingFeedback = await screen.findAllByTestId('backtest-run-feedback');
-    expect(pendingFeedback[0]).toHaveTextContent('回测任务提交中');
+    expect(pendingFeedback[0]).toHaveTextContent('回测任务已受理');
+    expect(pendingFeedback[0]).toHaveTextContent('正在提交回测请求');
+    expect(pendingFeedback[0]).toHaveTextContent('正在检查 DATA-110 执行就绪度');
 
     rejectRun?.({
       response: {
