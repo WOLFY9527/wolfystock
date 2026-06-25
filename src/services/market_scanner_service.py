@@ -2272,6 +2272,40 @@ class MarketScannerService:
         return "unknown"
 
     @staticmethod
+    def _cache_readiness_summary(
+        *,
+        state: str,
+        ohlcv_requirements: Sequence[str],
+        history_coverage: str,
+        freshness: str,
+    ) -> Dict[str, Any]:
+        requirements = {str(item or "").strip().lower() for item in ohlcv_requirements if str(item or "").strip()}
+        if "provider_missing" in requirements:
+            cache_state = "missing"
+            reason = "missing_cache"
+        elif "provider_unavailable" in requirements:
+            cache_state = "unavailable"
+            reason = "cache_unavailable"
+        elif "insufficient_history" in requirements:
+            cache_state = "insufficient"
+            reason = "insufficient_history"
+        elif "stale_data" in requirements:
+            cache_state = "stale"
+            reason = "stale_cache"
+        elif state in {"ready", "partial"} and history_coverage in {"available", "partial"}:
+            cache_state = "available" if state == "ready" else "degraded"
+            reason = "cached_ohlcv_available"
+        else:
+            cache_state = "unknown"
+            reason = "cache_state_unknown"
+        return {
+            "state": cache_state,
+            "reason": reason,
+            "freshness": freshness,
+            "consumerSafe": True,
+        }
+
+    @staticmethod
     def _data_readiness_freshness(
         *,
         status: str,
@@ -2485,13 +2519,24 @@ class MarketScannerService:
             diagnostics=diagnostics,
             candidates=candidates,
         )
+        existing_readiness = diagnostics.get("dataReadiness") if isinstance(diagnostics.get("dataReadiness"), Mapping) else {}
+        existing_requirements = (
+            existing_readiness.get("missingRequirements")
+            if isinstance(existing_readiness.get("missingRequirements"), Sequence)
+            and not isinstance(existing_readiness.get("missingRequirements"), (str, bytes, bytearray))
+            else []
+        )
         ohlcv_requirements = [
             str(item)
-            for item in ohlcv_readiness.get("missingRequirements", [])
+            for item in (ohlcv_readiness.get("missingRequirements", []) or existing_requirements)
             if str(item).strip()
         ]
         ohlcv_availability = str(ohlcv_readiness.get("availabilityState") or "unknown")
         ohlcv_execution = str(ohlcv_readiness.get("executionState") or "unknown")
+        if ohlcv_availability == "unknown" and existing_readiness.get("availabilityState"):
+            ohlcv_availability = str(existing_readiness.get("availabilityState") or "unknown")
+        if ohlcv_execution == "unknown" and existing_readiness.get("executionState"):
+            ohlcv_execution = str(existing_readiness.get("executionState") or "unknown")
         if ohlcv_execution == "blocked" and normalized_status != "not_run":
             state = "blocked"
             for requirement in (
@@ -2590,6 +2635,12 @@ class MarketScannerService:
         if blocker_hint not in {"unknown", *candidate_generation_blockers}:
             candidate_generation_blockers.append(blocker_hint)
         candidate_generation_blockers = list(dict.fromkeys(candidate_generation_blockers))
+        cache_readiness = self._cache_readiness_summary(
+            state=state,
+            ohlcv_requirements=ohlcv_requirements,
+            history_coverage=history_coverage,
+            freshness=freshness,
+        )
         if state == "ready" and not candidate_generation_blockers:
             candidate_generation_state = "ready"
         elif state == "partial" and not any(
@@ -2636,6 +2687,7 @@ class MarketScannerService:
                 "missingRequirements": ohlcv_requirements,
                 "consumerSafe": True,
             },
+            "cacheReadiness": cache_readiness,
             "benchmarkReadiness": {
                 "state": benchmark_state,
                 "reason": benchmark_reason,
@@ -3847,6 +3899,9 @@ class MarketScannerService:
                 "missing_fields": [],
                 "metrics": {},
             }
+            readiness = sanitize_historical_ohlcv_readiness(history_diag.get("historicalOhlcvReadiness"))
+            if readiness:
+                candidate_diagnostics[symbol]["historicalOhlcvReadiness"] = readiness
 
             if history_source == "local_db":
                 history_rollup["local_hits"] += 1

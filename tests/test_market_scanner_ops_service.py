@@ -265,14 +265,14 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["profile"], "cn_preopen_v1")
         self.assertEqual(readiness["universeSize"], 0)
         self.assertEqual(readiness["quoteCoverage"], "missing")
-        self.assertEqual(readiness["historyCoverage"], "unknown")
+        self.assertEqual(readiness["historyCoverage"], "missing")
         self.assertEqual(readiness["freshness"], "unknown")
         self.assertEqual(readiness["blockerBucket"], "missing_quote_snapshot")
         self.assertIn("行情快照", readiness["consumerSummary"])
         self.assertIn("补充行情快照", readiness["nextDataAction"])
         self.assertNotRegex(
             " ".join(str(value) for value in readiness.values()),
-            r"Akshare|Efinance|provider|cache|runtime|sourceAuthority|scoreContribution|raw|debug|buy|sell|hold|target|stop|position",
+            r"Akshare|Efinance|provider|cacheKey|cache_key|requestId|traceId|runtime|sourceAuthority|scoreContribution|raw|debug|buy|sell|hold|target|stop|position",
         )
 
     def test_scheduled_run_resolves_us_profile_from_config(self) -> None:
@@ -337,7 +337,7 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["profile"], "us_preopen_v1")
         self.assertEqual(readiness["universeSize"], 0)
         self.assertEqual(readiness["quoteCoverage"], "unknown")
-        self.assertEqual(readiness["historyCoverage"], "unknown")
+        self.assertEqual(readiness["historyCoverage"], "missing")
         self.assertEqual(readiness["freshness"], "unknown")
         self.assertEqual(readiness["blockerBucket"], "empty_universe")
         self.assertIn("候选池为空", readiness["consumerSummary"])
@@ -375,6 +375,9 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["universeSize"], 2)
         self.assertEqual(readiness["universeReadiness"]["state"], "available")
         self.assertEqual(readiness["historyReadiness"]["state"], "missing")
+        self.assertEqual(readiness["cacheReadiness"]["state"], "missing")
+        self.assertEqual(readiness["cacheReadiness"]["reason"], "missing_cache")
+        self.assertTrue(readiness["cacheReadiness"]["consumerSafe"])
         self.assertEqual(readiness["candidateGenerationState"], "blocked")
         self.assertIn("missing_history", readiness["candidateGenerationBlockers"])
         self.assertEqual(readiness["selectedCount"], 0)

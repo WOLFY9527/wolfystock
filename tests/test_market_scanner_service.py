@@ -3772,6 +3772,9 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["quoteReadiness"]["state"], "available")
         self.assertEqual(readiness["historyReadiness"]["state"], "available")
         self.assertEqual(readiness["benchmarkReadiness"]["state"], "available")
+        self.assertEqual(readiness["cacheReadiness"]["state"], "available")
+        self.assertEqual(readiness["cacheReadiness"]["reason"], "cached_ohlcv_available")
+        self.assertTrue(readiness["cacheReadiness"]["consumerSafe"])
         self.assertEqual(readiness["candidateGenerationState"], "ready")
         self.assertEqual(readiness["candidateGenerationBlockers"], [])
         self.assertEqual(readiness["requiredBars"], 70)
@@ -3786,9 +3789,15 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertTrue(candidate["evidenceBoundaries"]["noAdvice"])
         self.assertFalse(candidate["evidenceBoundaries"]["decisionGrade"])
         self.assertEqual(candidate["evidenceBoundaries"]["boundaryType"], "observation_only")
+        self.assertTrue(candidate["candidateEvidenceFrame"])
+        self.assertTrue(candidate["candidateResearchReadiness"])
+        self.assertIn(candidate["consumerDiagnostics"]["dataQualityState"], {"ready", "cached", "partial"})
         self.assertEqual(candidate["rankingConfidence"]["rankingUse"], "relative_observation_only")
         self.assertIn(candidate["rankingConfidence"]["dataQualityState"], {"ready", "limited", "partial", "unknown"})
         self.assertEqual(candidate["rankingConfidence"]["rank"], candidate["rank"])
+        serialized_candidate = json.dumps(candidate, ensure_ascii=False).lower()
+        for forbidden in ("buy now", "sell now", "hold", "recommendation", "best stock"):
+            self.assertNotIn(forbidden, serialized_candidate)
 
     def test_missing_benchmark_blocks_candidate_generation_before_ranking_claims(self) -> None:
         provider = FakeHistoricalOhlcvProvider(
@@ -3889,6 +3898,8 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["availabilityState"], "not_available")
         self.assertEqual(readiness["executionState"], "blocked")
         self.assertEqual(readiness["historyReadiness"]["state"], "missing")
+        self.assertEqual(readiness["cacheReadiness"]["state"], "missing")
+        self.assertEqual(readiness["cacheReadiness"]["reason"], "missing_cache")
         self.assertEqual(readiness["candidateGenerationState"], "blocked")
         self.assertIn("provider_missing", readiness["missingRequirements"])
         self.assertIn("provider_missing", readiness["candidateGenerationBlockers"])
@@ -3961,6 +3972,9 @@ class MarketScannerServiceTestCase(unittest.TestCase):
 
                 self.assertEqual(aggregate["availabilityState"], availability)
                 self.assertIn(requirement, aggregate["missingRequirements"])
+                if requirement == "insufficient_history":
+                    self.assertEqual(aggregate["cacheReadiness"]["state"], "insufficient")
+                    self.assertEqual(aggregate["cacheReadiness"]["reason"], "insufficient_history")
                 if availability == "not_available":
                     self.assertTrue(history_df.empty)
 
@@ -4013,7 +4027,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["state"], "blocked")
         self.assertEqual(readiness["universeSize"], 4)
         self.assertEqual(readiness["quoteCoverage"], "unknown")
-        self.assertEqual(readiness["historyCoverage"], "unknown")
+        self.assertEqual(readiness["historyCoverage"], "missing")
         self.assertEqual(readiness["candidateEvaluationCount"], 0)
         self.assertEqual(readiness["selectedCount"], 0)
         self.assertEqual(readiness["rejectedCount"], 0)
