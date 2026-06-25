@@ -388,6 +388,44 @@ class PortfolioAnalyticsSummary(BaseModel):
     risk: PortfolioRiskSummary
 
 
+PortfolioRiskExposureReadinessState = Literal[
+    "available",
+    "missing",
+    "stale",
+    "not_configured",
+    "broker_disabled",
+    "manual_only",
+]
+
+
+class PortfolioRiskExposureReadinessItem(BaseModel):
+    state: PortfolioRiskExposureReadinessState
+    reason: str
+    blockers: List[str] = Field(default_factory=list)
+    asOf: Optional[str] = None
+
+
+class PortfolioRiskExposureReadinessCategories(BaseModel):
+    sectorExposure: PortfolioRiskExposureReadinessItem
+    singleNameConcentration: PortfolioRiskExposureReadinessItem
+    currencyExposure: PortfolioRiskExposureReadinessItem
+    factorStyleExposure: PortfolioRiskExposureReadinessItem
+    liquidityVolatilityExposure: PortfolioRiskExposureReadinessItem
+    benchmarkComparison: PortfolioRiskExposureReadinessItem
+
+
+class PortfolioRiskExposureReadiness(BaseModel):
+    contractVersion: Literal["portfolio_risk_exposure_readiness_v1"] = "portfolio_risk_exposure_readiness_v1"
+    observationOnly: Literal[True] = True
+    decisionGrade: Literal[False] = False
+    noAdviceDisclosure: str
+    freshnessStatus: str
+    holdings: PortfolioRiskExposureReadinessItem
+    exposureCategories: PortfolioRiskExposureReadinessCategories
+    benchmarkAvailability: PortfolioRiskExposureReadinessItem
+    blockers: List[str] = Field(default_factory=list)
+
+
 class PortfolioSnapshotResponse(BaseModel):
     schemaVersion: Literal["portfolio_snapshot_consumer_v1"] = "portfolio_snapshot_consumer_v1"
     noAdviceDisclosure: str = "Observation-only portfolio research context; not personalized financial advice and not an instruction."
@@ -397,6 +435,7 @@ class PortfolioSnapshotResponse(BaseModel):
     evidenceGaps: List[str] = Field(default_factory=list)
     degradedInputs: List[Dict[str, str]] = Field(default_factory=list)
     exposureResearchContext: Optional[Dict[str, Any]] = None
+    riskExposureReadiness: Optional[PortfolioRiskExposureReadiness] = None
     dataQuality: Dict[str, Any] = Field(default_factory=dict)
     freshnessStatus: Optional[
         Literal[
@@ -693,6 +732,7 @@ class PortfolioRiskResponse(BaseModel):
     evidenceGaps: List[str] = Field(default_factory=list)
     degradedInputs: List[Dict[str, str]] = Field(default_factory=list)
     exposureResearchContext: Optional[Dict[str, Any]] = None
+    riskExposureReadiness: Optional[PortfolioRiskExposureReadiness] = None
     dataQuality: Dict[str, Any] = Field(default_factory=dict)
     freshnessStatus: Optional[
         Literal[

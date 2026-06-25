@@ -1,6 +1,10 @@
 import { TerminalChip, TerminalNestedBlock } from '../terminal/TerminalPrimitives';
 import type { PortfolioLineageSummary, PortfolioLineageStatusSummary } from '../../api/portfolio';
-import type { PortfolioExposureResearchContext } from '../../types/portfolio';
+import type {
+  PortfolioExposureResearchContext,
+  PortfolioRiskExposureReadiness,
+  PortfolioRiskExposureReadinessItem,
+} from '../../types/portfolio';
 
 type PortfolioExposureResearchContextPanelProps = {
   context?: PortfolioExposureResearchContext | null;
@@ -154,6 +158,105 @@ function nextStepLabel(topic: string, dominantSymbol: string | null | undefined,
 
 function statusDetail(item: PortfolioLineageStatusSummary): string {
   return item.total > 0 || item.count > 0 ? item.detail : '--';
+}
+
+function readinessStateLabel(item: PortfolioRiskExposureReadinessItem | undefined, language: 'zh' | 'en'): string {
+  const token = String(item?.state || '').trim().toLowerCase();
+  const labels: Record<string, { zh: string; en: string }> = {
+    available: { zh: '可用', en: 'Available' },
+    missing: { zh: '缺少证据', en: 'Missing evidence' },
+    stale: { zh: '可能过期', en: 'May be stale' },
+    not_configured: { zh: '未配置', en: 'Not configured' },
+    broker_disabled: { zh: '连接已停用', en: 'Connection disabled' },
+    manual_only: { zh: '仅手动记录', en: 'Manual records only' },
+  };
+  return labels[token]?.[language] ?? (language === 'zh' ? '待确认' : 'Pending');
+}
+
+function readinessVariant(item: PortfolioRiskExposureReadinessItem | undefined): ChipVariant {
+  const token = String(item?.state || '').trim().toLowerCase();
+  if (token === 'available') return 'success';
+  if (token === 'manual_only') return 'info';
+  if (token === 'stale' || token === 'not_configured') return 'caution';
+  if (token === 'missing' || token === 'broker_disabled') return 'danger';
+  return 'neutral';
+}
+
+function readinessCategoryLabel(key: string, language: 'zh' | 'en'): string {
+  const labels: Record<string, { zh: string; en: string }> = {
+    holdings: { zh: '持仓', en: 'Holdings' },
+    sectorExposure: { zh: '行业暴露', en: 'Sector exposure' },
+    singleNameConcentration: { zh: '单名集中度', en: 'Single-name concentration' },
+    currencyExposure: { zh: '币种暴露', en: 'Currency exposure' },
+    factorStyleExposure: { zh: '因子 / 风格', en: 'Factor / style' },
+    liquidityVolatilityExposure: { zh: '流动性 / 波动', en: 'Liquidity / volatility' },
+    benchmarkComparison: { zh: '基准比较', en: 'Benchmark comparison' },
+  };
+  return labels[key]?.[language] ?? key;
+}
+
+function readinessSummary(readiness: PortfolioRiskExposureReadiness, language: 'zh' | 'en'): string {
+  if (readiness.benchmarkAvailability.state === 'not_configured') {
+    return language === 'zh'
+      ? '比较基准待配置，横向观察保持受限。'
+      : 'Benchmark comparison is not configured, so cross-reference observation remains limited.';
+  }
+  if (readiness.holdings.state === 'missing') {
+    return language === 'zh'
+      ? '持仓证据缺失，暴露视图暂不生成。'
+      : 'Holding evidence is missing, so exposure views are not generated.';
+  }
+  return language === 'zh'
+    ? '只展示暴露就绪状态，不生成交易建议。'
+    : 'Shows exposure readiness only; no trading guidance is generated.';
+}
+
+export function PortfolioRiskExposureReadinessPanel({
+  readiness,
+  language,
+}: {
+  readiness?: PortfolioRiskExposureReadiness | null;
+  language: 'zh' | 'en';
+}) {
+  if (!readiness) {
+    return null;
+  }
+
+  const rows = [
+    { key: 'holdings', item: readiness.holdings },
+    { key: 'sectorExposure', item: readiness.exposureCategories.sectorExposure },
+    { key: 'singleNameConcentration', item: readiness.exposureCategories.singleNameConcentration },
+    { key: 'currencyExposure', item: readiness.exposureCategories.currencyExposure },
+    { key: 'factorStyleExposure', item: readiness.exposureCategories.factorStyleExposure },
+    { key: 'liquidityVolatilityExposure', item: readiness.exposureCategories.liquidityVolatilityExposure },
+    { key: 'benchmarkComparison', item: readiness.exposureCategories.benchmarkComparison },
+  ];
+
+  return (
+    <TerminalNestedBlock data-testid="portfolio-risk-exposure-readiness" className="p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+            {language === 'zh' ? '风险暴露就绪度' : 'Risk exposure readiness'}
+          </h3>
+          <p className="mt-1 text-xs leading-5 text-white/52">{readinessSummary(readiness, language)}</p>
+        </div>
+        <TerminalChip variant="info">{language === 'zh' ? '仅供观察' : 'Observation only'}</TerminalChip>
+      </div>
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {rows.map(({ key, item }) => (
+          <div key={key} className="min-w-0 rounded-lg border border-white/[0.03] bg-black/20 p-3">
+            <div className="truncate text-[10px] font-bold uppercase tracking-widest text-white/35">
+              {readinessCategoryLabel(key, language)}
+            </div>
+            <div className="mt-2">
+              <TerminalChip variant={readinessVariant(item)}>{readinessStateLabel(item, language)}</TerminalChip>
+            </div>
+          </div>
+        ))}
+      </div>
+    </TerminalNestedBlock>
+  );
 }
 
 export function PortfolioExposureResearchContextPanel({

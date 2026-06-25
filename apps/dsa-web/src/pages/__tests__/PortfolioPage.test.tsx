@@ -169,6 +169,7 @@ function makeSnapshot(options: {
   accountCount?: number;
   includePosition?: boolean;
   exposureResearchContext?: Record<string, unknown> | null;
+  riskExposureReadiness?: Record<string, unknown> | null;
   portfolioLineageSummary?: Record<string, unknown> | null;
   valuationLineageState?: string | null;
   positionOverrides?: Record<string, unknown>;
@@ -261,6 +262,7 @@ function makeSnapshot(options: {
     taxTotal: 0,
     fxStale: options.fxStale ?? true,
     ...(options.exposureResearchContext !== undefined ? { exposureResearchContext: options.exposureResearchContext } : {}),
+    ...(options.riskExposureReadiness !== undefined ? { riskExposureReadiness: options.riskExposureReadiness } : {}),
     ...(options.portfolioLineageSummary !== undefined ? { portfolioLineageSummary: options.portfolioLineageSummary } : {}),
     ...(options.valuationLineageState !== undefined ? { valuationLineageState: options.valuationLineageState } : {}),
     fxRates: options.fxRates ?? [
@@ -400,6 +402,28 @@ function makeExposureResearchContext(overrides: Record<string, unknown> = {}) {
       { topic: 'currency_context', check: 'Verify FX and valuation freshness before using aggregate currency context.' },
       { topic: 'comparative_context', check: 'Map benchmark and factor evidence before using comparative research context.' },
     ],
+    ...overrides,
+  };
+}
+
+function makeRiskExposureReadiness(overrides: Record<string, unknown> = {}) {
+  return {
+    contractVersion: 'portfolio_risk_exposure_readiness_v1',
+    observationOnly: true,
+    decisionGrade: false,
+    noAdviceDisclosure: 'Observation-only portfolio research context; not personalized financial advice and not an instruction.',
+    freshnessStatus: 'stale_or_cached',
+    holdings: { state: 'manual_only', reason: 'holdings_from_manual_records_only', blockers: [], asOf: '2026-03-19' },
+    exposureCategories: {
+      sectorExposure: { state: 'missing', reason: 'sector_missing', blockers: ['sector_exposure'] },
+      singleNameConcentration: { state: 'manual_only', reason: 'concentration_manual_only', blockers: [] },
+      currencyExposure: { state: 'stale', reason: 'currency_stale', blockers: ['fx_freshness'] },
+      factorStyleExposure: { state: 'not_configured', reason: 'factor_style_not_configured', blockers: ['factor_mapping'] },
+      liquidityVolatilityExposure: { state: 'missing', reason: 'liquidity_volatility_missing', blockers: ['liquidity_volatility_window'] },
+      benchmarkComparison: { state: 'not_configured', reason: 'benchmark_not_configured', blockers: ['benchmark_mapping'] },
+    },
+    benchmarkAvailability: { state: 'not_configured', reason: 'benchmark_not_configured', blockers: ['benchmark_mapping'] },
+    blockers: ['sector_exposure', 'benchmark_mapping', 'factor_mapping'],
     ...overrides,
   };
 }
@@ -1992,6 +2016,37 @@ describe('PortfolioPage FX refresh', () => {
     expect(Boolean(context.compareDocumentPosition(screen.getByTestId('portfolio-scenario-risk-disclosure')) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(context.textContent || '').not.toMatch(
       /sourceAuthority|warningCodes|providerRoutingChanged|externalProviderCallsAdded|provider|cache|debug|backend|raw|schema|trace|sourceRef|buy|sell|target|stop|position[- ]?sizing|买入|卖出|下单|仓位建议|持仓建议/i,
+    );
+  });
+
+  it('renders risk exposure readiness states without raw blockers or fake metrics', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({
+      includePosition: true,
+      fxStale: true,
+      exposureResearchContext: makeExposureResearchContext(),
+      riskExposureReadiness: makeRiskExposureReadiness(),
+    }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const readiness = screen.getByTestId('portfolio-risk-exposure-readiness');
+    expect(readiness).toHaveTextContent('风险暴露就绪度');
+    expect(readiness).toHaveTextContent('持仓');
+    expect(readiness).toHaveTextContent('仅手动记录');
+    expect(readiness).toHaveTextContent('行业暴露');
+    expect(readiness).toHaveTextContent('缺少证据');
+    expect(readiness).toHaveTextContent('单名集中度');
+    expect(readiness).toHaveTextContent('币种暴露');
+    expect(readiness).toHaveTextContent('可能过期');
+    expect(readiness).toHaveTextContent('因子 / 风格');
+    expect(readiness).toHaveTextContent('未配置');
+    expect(readiness).toHaveTextContent('流动性 / 波动');
+    expect(readiness).toHaveTextContent('基准比较');
+    expect(readiness).toHaveTextContent('比较基准待配置');
+    expect(readiness.textContent || '').not.toMatch(
+      /accountId|account_id|broker|ibkr|session|token|sync|provider|cache|debug|raw|reason|sector_exposure|benchmark_mapping|factor_mapping|valueAtRisk|VaR|beta|drawdown|buy|sell|rebalance|trim|target|stop|position[- ]?sizing|买入|卖出|下单|调仓|仓位建议/i,
     );
   });
 

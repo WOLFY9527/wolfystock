@@ -457,6 +457,42 @@ export interface PortfolioExposureResearchContext {
   researchNextSteps: PortfolioExposureResearchNextStep[];
 }
 
+export type PortfolioRiskExposureReadinessState =
+  | 'available'
+  | 'missing'
+  | 'stale'
+  | 'not_configured'
+  | 'broker_disabled'
+  | 'manual_only';
+
+export interface PortfolioRiskExposureReadinessItem {
+  state: PortfolioRiskExposureReadinessState;
+  reason: string;
+  blockers: string[];
+  asOf?: string | null;
+}
+
+export interface PortfolioRiskExposureReadinessCategories {
+  sectorExposure: PortfolioRiskExposureReadinessItem;
+  singleNameConcentration: PortfolioRiskExposureReadinessItem;
+  currencyExposure: PortfolioRiskExposureReadinessItem;
+  factorStyleExposure: PortfolioRiskExposureReadinessItem;
+  liquidityVolatilityExposure: PortfolioRiskExposureReadinessItem;
+  benchmarkComparison: PortfolioRiskExposureReadinessItem;
+}
+
+export interface PortfolioRiskExposureReadiness {
+  contractVersion: 'portfolio_risk_exposure_readiness_v1';
+  observationOnly: true;
+  decisionGrade: false;
+  noAdviceDisclosure: string;
+  freshnessStatus: string;
+  holdings: PortfolioRiskExposureReadinessItem;
+  exposureCategories: PortfolioRiskExposureReadinessCategories;
+  benchmarkAvailability: PortfolioRiskExposureReadinessItem;
+  blockers: string[];
+}
+
 export interface PortfolioSnapshotResponse extends PortfolioEvidenceMetadata, PortfolioRiskDiagnosticsResponseFields {
   asOf: string;
   costMethod: PortfolioCostMethod;
@@ -473,6 +509,7 @@ export interface PortfolioSnapshotResponse extends PortfolioEvidenceMetadata, Po
   fxRates?: PortfolioFxRateItem[];
   portfolioAttribution?: Record<string, unknown>;
   exposureResearchContext?: PortfolioExposureResearchContext | null;
+  riskExposureReadiness?: PortfolioRiskExposureReadiness | null;
   analytics?: PortfolioAnalyticsSummary | null;
   accounts: PortfolioAccountSnapshot[];
 }
@@ -534,6 +571,7 @@ export interface PortfolioRiskResponse extends PortfolioEvidenceMetadata, Portfo
   industryAttribution?: Record<string, unknown>;
   accountAttribution?: Record<string, unknown>;
   exposureResearchContext?: PortfolioExposureResearchContext | null;
+  riskExposureReadiness?: PortfolioRiskExposureReadiness | null;
   stopLoss: {
     nearAlert: boolean;
     triggeredCount: number;
