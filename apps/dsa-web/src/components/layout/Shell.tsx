@@ -687,7 +687,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                 <span className="shell-mobile-active-route" data-testid="shell-mobile-active-route">
                   {mobileRouteLabel}
                 </span>
-                <div className="ml-auto flex shrink-0 items-center gap-2">
+                <div className="shell-mobile-actions flex shrink-0 items-center gap-2" data-testid="shell-mobile-actions">
                   <button
                     type="button"
                     onClick={() => setColorMode(nextColorMode)}

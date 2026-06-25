@@ -616,6 +616,38 @@ describe('Shell', () => {
     });
   });
 
+  it('keeps the mobile shell actions grouped and visible at 375px', () => {
+    window.innerWidth = 375;
+
+    render(
+      <MemoryRouter initialEntries={['/watchlist']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const mobileStrip = screen.getByTestId('shell-mobile-strip');
+    const mobileActions = screen.getByTestId('shell-mobile-actions');
+
+    expect(screen.getByTestId('shell-mobile-active-route')).toHaveTextContent(translate('zh', 'nav.watchlist'));
+    expect(mobileStrip).toContainElement(mobileActions);
+    expect(within(mobileActions).getByRole('button', { name: '切换主题' })).toHaveStyle({
+      width: '44px',
+      minWidth: '44px',
+      height: '44px',
+      minHeight: '44px',
+    });
+    expect(within(mobileActions).getByRole('button', { name: '打开导航菜单' })).toHaveStyle({
+      width: '44px',
+      minWidth: '44px',
+      height: '44px',
+      minHeight: '44px',
+    });
+  });
+
   it('opens a mobile admin menu with all primary routes and account actions', async () => {
     window.innerWidth = 390;
     useAuthMock.mockReturnValue({
