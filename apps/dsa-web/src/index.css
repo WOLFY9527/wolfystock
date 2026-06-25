@@ -9491,13 +9491,28 @@ html[data-theme-style='spacex'][data-theme='dark'] .shell-masthead__inner {
   padding: 0 clamp(0.8rem, 1.8vw, 1.6rem);
 }
 
-html[data-theme-style='spacex'][data-theme='dark'] .shell-nav-strip,
-html[data-theme-style='spacex'][data-theme='dark'] .shell-mobile-strip {
+html[data-theme-style='spacex'][data-theme='dark'] .shell-nav-strip {
   display: flex;
   min-height: var(--shell-masthead-height);
   align-items: center;
-  justify-content: space-between;
   gap: 1rem;
+}
+
+html[data-theme-style='spacex'][data-theme='dark'] .shell-mobile-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 7.5rem) max-content;
+  min-height: var(--shell-masthead-height);
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  gap: 1rem;
+}
+
+html[data-theme-style='spacex'][data-theme='dark'] .shell-mobile-actions {
+  display: flex;
+  align-items: center;
+  justify-self: end;
+  min-width: 0;
 }
 
 html[data-theme-style='spacex'][data-theme='dark'] .shell-nav-brand,
@@ -16390,12 +16405,19 @@ html[data-theme-style='spacex'][data-theme='dark'] .shell-context-panel__content
 
   html[data-theme-style='spacex'][data-theme='dark'] .shell-mobile-strip {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(4rem, auto) 44px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 8.5rem) max-content;
     align-items: center;
     min-height: 3rem;
     width: 100%;
     min-width: 0;
     gap: 0.55rem;
+  }
+
+  html[data-theme-style='spacex'][data-theme='dark'] .shell-mobile-actions {
+    display: flex;
+    align-items: center;
+    justify-self: end;
+    min-width: 0;
   }
 
   html[data-theme-style='spacex'][data-theme='dark'] .shell-mobile-brand {
@@ -16421,7 +16443,7 @@ html[data-theme-style='spacex'][data-theme='dark'] .shell-context-panel__content
   html[data-theme-style='spacex'][data-theme='dark'] .shell-mobile-active-route {
     display: inline-flex;
     min-width: 0;
-    max-width: 8.5rem;
+    max-width: clamp(5.5rem, 24vw, 8.5rem);
     justify-self: center;
     overflow: hidden;
     text-overflow: ellipsis;
