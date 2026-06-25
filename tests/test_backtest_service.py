@@ -122,6 +122,18 @@ class BacktestServiceTestCase(unittest.TestCase):
             self._history_fetch_patch.stop()
             self._history_fetch_patch_active = False
 
+    def _insert_cached_ohlcv_rows(self, code: str = "CACHED") -> None:
+        with self.db.get_session() as session:
+            session.add_all(
+                [
+                    StockDaily(code=code, date=date(2024, 3, 1), open=10.0, high=10.2, low=9.8, close=10.0, volume=100),
+                    StockDaily(code=code, date=date(2024, 3, 4), open=10.1, high=10.5, low=10.0, close=10.4, volume=110),
+                    StockDaily(code=code, date=date(2024, 3, 5), open=10.4, high=10.8, low=10.2, close=10.7, volume=120),
+                    StockDaily(code=code, date=date(2024, 3, 6), open=10.7, high=10.9, low=10.4, close=10.5, volume=130),
+                ]
+            )
+            session.commit()
+
     def test_force_semantics(self) -> None:
         service = BacktestService(self.db)
 
@@ -163,7 +175,7 @@ class BacktestServiceTestCase(unittest.TestCase):
 
         status = service.get_sample_status(code="NODATA")
 
-        self.assertEqual(status["sample_readiness_state"], "blocked")
+        self.assertEqual(status["sample_readiness_state"], "missing_cache")
         self.assertEqual(status["execution_readiness"]["state"], "data_disabled")
         self.assertFalse(status["execution_readiness"]["result_contract_available"])
         self.assertIn("provider_missing", status["execution_readiness"]["reason_codes"])
@@ -180,6 +192,106 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertTrue(stats["execution_readiness"]["result_contract_available"])
         self.assertTrue(stats["execution_readiness"]["observation_only"])
         self.assertIn("Research diagnostic only", stats["no_advice_disclosure"])
+
+    def test_sample_status_auto_prepares_deterministic_cached_ohlcv_samples(self) -> None:
+        self._insert_cached_ohlcv_rows()
+        service = BacktestService(self.db)
+
+        status = service.get_sample_status(code="CACHED")
+
+        self.assertGreater(status["prepared_count"], 0)
+        self.assertEqual(status["sample_readiness_state"], "ready")
+        self.assertIn(status["execution_readiness"]["state"], {"executable", "degraded"})
+        self.assertTrue(status["execution_readiness"]["result_contract_available"])
+        self.assertTrue(status["execution_readiness"]["observation_only"])
+        self.assertEqual(status["resolved_source"], "DatabaseCache")
+        self.assertFalse(status["fallback_used"])
+        self.assertEqual(status["historicalOhlcvReadiness"]["overallState"], "ready")
+
+    def test_run_backtest_auto_executes_deterministic_cached_ohlcv_sample_path(self) -> None:
+        with self.db.get_session() as session:
+            session.query(AnalysisHistory).delete()
+            session.commit()
+        self._insert_cached_ohlcv_rows()
+        service = BacktestService(self.db)
+
+        stats = service.run_backtest(code="CACHED", force=False, eval_window_days=3, min_age_days=0, limit=10)
+
+        self.assertGreater(stats["processed"], 0)
+        self.assertGreater(stats["saved"], 0)
+        self.assertGreater(stats["completed"], 0)
+        self.assertEqual(stats["evaluation_mode"], "historical_analysis_evaluation")
+        self.assertEqual(stats["resolved_source"], "DatabaseCache")
+        self.assertFalse(stats["fallback_used"])
+        self.assertTrue(stats["execution_readiness"]["observation_only"])
+
+    def test_sample_status_missing_cache_uses_explicit_missing_cache_state(self) -> None:
+        service = BacktestService(self.db)
+
+        status = service.get_sample_status(code="NO_CACHE")
+
+        self.assertEqual(status["prepared_count"], 0)
+        self.assertEqual(status["sample_readiness_state"], "missing_cache")
+        self.assertIn("missing_cache", status["sample_blocking_reasons"])
+        self.assertIn("provider_missing", status["sample_blocking_reasons"])
+        self.assertEqual(status["execution_readiness"]["state"], "data_disabled")
+
+    def test_sample_status_insufficient_cached_history_uses_explicit_state(self) -> None:
+        with self.db.get_session() as session:
+            session.add_all(
+                [
+                    StockDaily(code="SHORT", date=date(2024, 2, 1), open=10.0, high=10.1, low=9.9, close=10.0),
+                    StockDaily(code="SHORT", date=date(2024, 2, 2), open=10.0, high=10.2, low=9.8, close=10.1),
+                ]
+            )
+            session.commit()
+        service = BacktestService(self.db)
+
+        status = service.get_sample_status(code="SHORT")
+
+        self.assertEqual(status["prepared_count"], 0)
+        self.assertEqual(status["sample_readiness_state"], "insufficient_history")
+        self.assertIn("insufficient_history", status["sample_blocking_reasons"])
+        self.assertNotIn("missing_cache", status["sample_blocking_reasons"])
+        self.assertEqual(status["execution_readiness"]["state"], "data_insufficient")
+
+    def test_blocked_cached_sample_flow_does_not_fabricate_metrics(self) -> None:
+        with self.db.get_session() as session:
+            session.query(AnalysisHistory).delete()
+            session.add(
+                AnalysisHistory(
+                    query_id="q-short-no-metrics",
+                    code="SHORT",
+                    name="SHORT",
+                    report_type="simple",
+                    sentiment_score=50,
+                    operation_advice="rule_simulation_flat",
+                    trend_prediction="rule_simulation_flat",
+                    analysis_summary="short cached history",
+                    created_at=datetime(2024, 1, 1, 0, 0, 0),
+                    context_snapshot='{"enhanced_context": {"date": "2024-02-01"}}',
+                )
+            )
+            session.add_all(
+                [
+                    StockDaily(code="SHORT", date=date(2024, 2, 1), open=10.0, high=10.1, low=9.9, close=10.0),
+                    StockDaily(code="SHORT", date=date(2024, 2, 2), open=10.0, high=10.2, low=9.8, close=10.1),
+                ]
+            )
+            session.commit()
+        service = BacktestService(self.db)
+
+        stats = service.run_backtest(code="SHORT", force=True, eval_window_days=3, min_age_days=0, limit=10)
+        summary = service.get_summary(scope="stock", code="SHORT", eval_window_days=3)
+
+        self.assertEqual(stats["completed"], 0)
+        self.assertEqual(stats["insufficient"], 1)
+        self.assertIsNotNone(summary)
+        self.assertEqual(summary["completed_count"], 0)
+        self.assertIsNone(summary["win_rate_pct"])
+        self.assertIsNone(summary["direction_accuracy_pct"])
+        self.assertIsNone(summary["avg_stock_return_pct"])
+        self.assertIsNone(summary["avg_simulated_return_pct"])
 
     def _run_and_get_result(self) -> BacktestResult:
         """Helper: run backtest and return the single BacktestResult row."""
@@ -345,7 +457,7 @@ class BacktestServiceTestCase(unittest.TestCase):
 
         self.assertEqual(status["code"], "__all__")
         self.assertEqual(status["scope"], "aggregate")
-        self.assertEqual(status["sample_readiness_state"], "blocked")
+        self.assertEqual(status["sample_readiness_state"], "missing_cache")
         self.assertIn("provider_missing", status["sample_blocking_reasons"])
         readiness = status["historicalOhlcvReadiness"]
         self.assertEqual(readiness["providerState"], "provider_missing")

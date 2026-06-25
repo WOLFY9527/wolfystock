@@ -105,6 +105,14 @@ class BacktestService:
         )
 
         total_history_count = self.repo.count_analysis_history(code=code, **self._owner_kwargs())
+        normalized_code = str(code or "").strip()
+        if normalized_code and total_history_count == 0:
+            self._ensure_cached_backtest_samples(
+                code=normalized_code,
+                settings=settings,
+                sample_count=max(1, min(int(limit or 1), 20)),
+            )
+            total_history_count = self.repo.count_analysis_history(code=code, **self._owner_kwargs())
         age_eligible_count = self.repo.count_analysis_history(
             code=code,
             created_before=cutoff_dt,
@@ -434,6 +442,9 @@ class BacktestService:
         if not str(code or "").strip():
             return self._get_aggregate_sample_status(settings=settings)
         rows = self.repo.get_sample_rows(code=code, **self._owner_kwargs())
+        if not rows and self.repo.count_analysis_history(code=code, **self._owner_kwargs()) == 0:
+            self._ensure_cached_backtest_samples(code=code, settings=settings, sample_count=20)
+            rows = self.repo.get_sample_rows(code=code, **self._owner_kwargs())
         parsed_dates: List[date] = []
         latest_created_at: Optional[datetime] = None
         for row in rows:
@@ -1147,16 +1158,22 @@ class BacktestService:
         ]
         if prepared_count <= 0:
             reasons.append("samples_missing")
-        if sample_observability.get("excluded_recent_reason") == "evaluation_window_not_satisfied":
-            reasons.append("stale_or_incomplete_sample_window")
         deduped: List[str] = []
         for reason in reasons:
             if reason not in deduped:
                 deduped.append(reason)
-        if any(reason in deduped for reason in ("provider_missing", "insufficient_history", "entitlement_required")):
+        if "provider_missing" in deduped:
+            if "missing_cache" not in deduped:
+                deduped.insert(0, "missing_cache")
+            return "missing_cache", deduped
+        if "insufficient_history" in deduped:
+            return "insufficient_history", deduped
+        if "entitlement_required" in deduped:
             return "blocked", deduped
         if "samples_missing" in deduped:
-            return "missing", deduped
+            if "no_samples" not in deduped:
+                deduped.insert(0, "no_samples")
+            return "no_samples", deduped
         if any(reason in deduped for reason in ("stale_data", "missing_benchmark", "missing_adjustments", "stale_or_incomplete_sample_window")):
             return "stale" if "stale_data" in deduped or "stale_or_incomplete_sample_window" in deduped else "blocked", deduped
         return "ready", deduped
@@ -1169,7 +1186,14 @@ class BacktestService:
         ohlcv_readiness: Dict[str, Any],
     ) -> Dict[str, Any]:
         reasons = [str(item) for item in sample_reasons if str(item or "").strip()]
-        no_result_reason = "insufficient_history" if "insufficient_history" in reasons else None
+        no_result_reason = None
+        if "insufficient_history" in reasons:
+            no_result_reason = "insufficient_history"
+        elif "no_samples" in reasons or (
+            "samples_missing" in reasons
+            and not any(item in reasons for item in ("provider_missing", "entitlement_required"))
+        ):
+            no_result_reason = "no_samples"
         data_sufficiency = assess_backtest_data_sufficiency(
             {
                 "no_result_reason": no_result_reason,
@@ -1350,6 +1374,64 @@ class BacktestService:
             logger.warning(f"准备历史分析评估样本时补全日线数据失败({code}): {exc}")
             return 0, None
 
+    def _ensure_cached_backtest_samples(
+        self,
+        *,
+        code: str,
+        settings: BacktestRuntimeSettings,
+        sample_count: int,
+    ) -> Dict[str, Any]:
+        """Create deterministic research-only samples from already cached bars."""
+        normalized_code = self._require_code(code)
+        existing_rows = self.repo.get_sample_rows(code=normalized_code, **self._owner_kwargs())
+        if existing_rows:
+            return {"prepared": 0, "skipped_existing": len(existing_rows), "candidate_rows": 0}
+
+        rows = self._load_stock_daily_rows(normalized_code)
+        candidate_rows = self._select_preparable_rows(rows, eval_window_days=settings.eval_window_days)
+        if not candidate_rows:
+            return {"prepared": 0, "skipped_existing": 0, "candidate_rows": 0}
+
+        selected_rows = candidate_rows[-max(1, int(sample_count or 1)):]
+        prepared = 0
+        skipped_existing = 0
+        now = datetime.now()
+        resolved_owner_id = self.db.require_user_id(self.owner_id)
+        with self.db.get_session() as session:
+            for index, row_index in enumerate(selected_rows):
+                row = rows[row_index]
+                query_id = self._prepare_sample_query_id(normalized_code, row.date, settings.eval_window_days)
+                existing = session.execute(
+                    select(AnalysisHistory).where(
+                        and_(
+                            AnalysisHistory.query_id == query_id,
+                            AnalysisHistory.owner_id == resolved_owner_id,
+                        )
+                    ).limit(1)
+                ).scalar_one_or_none()
+                if existing is not None:
+                    skipped_existing += 1
+                    continue
+                sample = self._build_prepared_analysis_sample(
+                    code=normalized_code,
+                    row=row,
+                    previous_close=rows[row_index - 1].close if row_index > 0 else None,
+                    average_close=self._moving_average(rows, row_index, window=3),
+                    min_age_days=settings.min_age_days,
+                    eval_window_days=settings.eval_window_days,
+                    created_at=now - timedelta(days=settings.min_age_days + 1 + index),
+                    query_id=query_id,
+                    owner_id=resolved_owner_id,
+                )
+                session.add(sample)
+                prepared += 1
+            session.commit()
+        return {
+            "prepared": prepared,
+            "skipped_existing": skipped_existing,
+            "candidate_rows": len(candidate_rows),
+        }
+
     def _load_stock_daily_rows(self, code: str) -> List[StockDaily]:
         with self.db.get_session() as session:
             rows = session.execute(
@@ -1364,7 +1446,7 @@ class BacktestService:
         if not rows:
             return []
         cutoff = max(0, len(rows) - int(eval_window_days))
-        return [idx for idx in range(3, cutoff) if rows[idx].close is not None]
+        return [idx for idx in range(0, cutoff) if rows[idx].close is not None]
 
     @staticmethod
     def _prepare_sample_query_id(code: str, sample_date: date, eval_window_days: int) -> str:
@@ -1384,8 +1466,8 @@ class BacktestService:
         owner_id: str,
     ) -> AnalysisHistory:
         if row.close is None:
-            operation_advice = "持有"
-            trend_prediction = "震荡"
+            operation_advice = "rule_simulation_flat"
+            trend_prediction = "rule_simulation_flat"
             sentiment_score = 50
         else:
             trend_gap = 0.0
@@ -1395,21 +1477,20 @@ class BacktestService:
             if average_close:
                 ma_gap = (float(row.close) - float(average_close)) / float(average_close) * 100.0
             if trend_gap >= 1.5 or ma_gap >= 1.0:
-                operation_advice = "买入"
-                trend_prediction = "看多"
+                operation_advice = "rule_simulation_up"
+                trend_prediction = "rule_momentum_up"
                 sentiment_score = 72
             elif trend_gap <= -1.5 or ma_gap <= -1.0:
-                operation_advice = "卖出"
-                trend_prediction = "看空"
+                operation_advice = "rule_simulation_down"
+                trend_prediction = "rule_momentum_down"
                 sentiment_score = 28
             else:
-                operation_advice = "持有"
-                trend_prediction = "震荡"
+                operation_advice = "rule_simulation_flat"
+                trend_prediction = "rule_momentum_flat"
                 sentiment_score = 50
 
-        current_close = float(row.close) if row.close is not None else None
-        stop_loss = round(current_close * 0.97, 2) if current_close is not None and operation_advice == "买入" else None
-        take_profit = round(current_close * 1.05, 2) if current_close is not None and operation_advice == "买入" else None
+        stop_loss = None
+        take_profit = None
 
         context_snapshot = {
             "enhanced_context": {
@@ -1428,6 +1509,7 @@ class BacktestService:
             "stop_loss": stop_loss,
             "take_profit": take_profit,
             "sample_source": "local_preparation",
+            "sample_purpose": "rule_simulation_historical_sample_review",
             "market_data_source": row.data_source,
             "eval_window_days": eval_window_days,
             "evaluation_window_unit": "trading_bars",
@@ -1445,12 +1527,12 @@ class BacktestService:
             operation_advice=operation_advice,
             trend_prediction=trend_prediction,
             analysis_summary=(
-                f"本地准备的历史分析评估样本，基于 {row.date.isoformat()} 的历史行情生成。"
+                f"本地准备的规则模拟历史样本，基于 {row.date.isoformat()} 的缓存行情生成，仅用于研究复核。"
             ),
             raw_result=json.dumps(raw_result, ensure_ascii=False),
             news_content=None,
             context_snapshot=json.dumps(context_snapshot, ensure_ascii=False),
-            ideal_buy=current_close,
+            ideal_buy=None,
             secondary_buy=None,
             stop_loss=stop_loss,
             take_profit=take_profit,
