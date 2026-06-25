@@ -33,6 +33,10 @@ FORBIDDEN_IMPORT_PREFIXES = (
     "src.auth",
 )
 INTERNAL_CODE_RE = re.compile(r"[a-z][a-z0-9]*_[a-z0-9_]+|[a-zA-Z]+:[a-zA-Z0-9_.-]+|=")
+FORBIDDEN_EVIDENCE_HUB_RE = re.compile(
+    r"provider|request[_\s-]?id|trace[_\s-]?id|cache|raw|debug|schemaVersion|token|stack|secret|env",
+    re.IGNORECASE,
+)
 
 
 def _serialized(payload: object) -> str:
@@ -88,6 +92,7 @@ def _assert_required_top_level_shape(payload: dict[str, Any]) -> None:
         "drilldownTargets",
         "noAdviceDisclosure",
         "dataQuality",
+        "evidenceHub",
         "consumerIssues",
         "onboardingGuidance",
         "emptyStateActions",
@@ -106,6 +111,9 @@ def _assert_required_top_level_shape(payload: dict[str, Any]) -> None:
     assert isinstance(payload["evidenceGaps"], list)
     assert isinstance(payload["evidenceGapsRaw"], list)
     assert isinstance(payload["drilldownTargets"], list)
+    assert {"scannerCandidates", "backtestSamples", "stockReadiness", "dataActivation", "missingEvidenceStates"}.issubset(
+        payload["evidenceHub"]
+    )
 
 
 def test_build_radar_projects_engine_output_to_required_api_contract() -> None:
@@ -208,6 +216,101 @@ def test_empty_or_missing_candidates_fail_closed_with_degraded_queue() -> None:
     assert payload["aggregateSummary"]["queueQuality"] == "degraded"
     assert payload["consumerIssues"]
     assert payload["dataQuality"]["consumerIssues"]
+
+
+def test_research_radar_evidence_hub_surfaces_real_evidence_readiness() -> None:
+    calls: list[str] = []
+
+    def _backtest_reader(symbol: str) -> dict[str, object]:
+        calls.append(symbol)
+        return {
+            "code": symbol,
+            "prepared_count": 12,
+            "sample_readiness_state": "ready",
+            "execution_readiness": {"state": "executable", "observation_only": True},
+        }
+
+    payload = ResearchRadarService(
+        now=_fixed_now,
+        backtest_sample_reader=_backtest_reader,
+    ).build_radar(
+        candidates=[
+            {
+                "ticker": "ALFA",
+                "relativeStrength": 88,
+                "volumeExpansion": 1.8,
+                "trendScore": 82,
+                "trendStructure": "confirmed_uptrend",
+                "themes": ["AI Infrastructure"],
+                "eventCatalyst": {"state": "confirmed"},
+                "avgDollarVolume": 120_000_000,
+                "evidenceQuality": {"state": "complete", "score": 88},
+            }
+        ],
+        market_regime_context={
+            "regime": "risk_on",
+            "favorableThemes": ["AI Infrastructure"],
+        },
+        theme_leadership_context={
+            "dominantThemes": [{"name": "AI Infrastructure", "leadershipScore": 86}]
+        },
+    )
+
+    hub = payload["evidenceHub"]
+    assert calls == ["ALFA"]
+    assert hub["scannerCandidates"]["status"] == "available"
+    assert hub["scannerCandidates"]["symbols"] == ["ALFA"]
+    assert hub["backtestSamples"]["status"] == "available"
+    assert hub["backtestSamples"]["evidenceCount"] == 1
+    assert hub["stockReadiness"]["status"] == "available"
+    assert hub["dataActivation"]["status"] == "available"
+    assert hub["missingEvidenceStates"] == []
+    assert FORBIDDEN_EVIDENCE_HUB_RE.search(_serialized(hub)) is None
+    assert FORBIDDEN_PUBLIC_RE.search(_serialized(hub)) is None
+
+
+def test_research_radar_evidence_hub_reports_blockers_without_internal_leakage() -> None:
+    def _backtest_reader(symbol: str) -> dict[str, object]:
+        return {
+            "code": symbol,
+            "prepared_count": 0,
+            "sample_readiness_state": "missing_cache",
+            "execution_readiness": {
+                "state": "data_disabled",
+                "reason_codes": ["provider_missing", "request_id=req-123"],
+            },
+            "raw_payload": {"trace_id": "trace-999", "token": "secret"},
+        }
+
+    payload = ResearchRadarService(
+        now=_fixed_now,
+        backtest_sample_reader=_backtest_reader,
+    ).build_radar(
+        candidates=[
+            {
+                "ticker": "THIN",
+                "relativeStrength": 60,
+                "volumeExpansion": 1.1,
+                "trendStructure": "mixed",
+                "avgDollarVolume": 50_000_000,
+                "evidenceQuality": {"state": "complete", "score": 70},
+            }
+        ]
+    )
+
+    hub = payload["evidenceHub"]
+    assert hub["scannerCandidates"]["status"] == "available"
+    assert hub["backtestSamples"]["status"] == "blocked"
+    assert hub["backtestSamples"]["blocker"] == "Backtest samples have not been prepared for the radar symbols."
+    assert hub["backtestSamples"]["nextDataAction"] == (
+        "Open Backtest and prepare or refresh samples for the radar symbols."
+    )
+    assert hub["stockReadiness"]["status"] in {"available", "partial"}
+    assert hub["dataActivation"]["status"] == "partial"
+    assert [item["key"] for item in hub["missingEvidenceStates"]] == ["backtest", "data"]
+    serialized = _serialized(hub)
+    assert FORBIDDEN_EVIDENCE_HUB_RE.search(serialized) is None
+    assert FORBIDDEN_PUBLIC_RE.search(serialized) is None
 
 
 def test_low_evidence_queue_keeps_raw_codes_separate_from_consumer_issues() -> None:

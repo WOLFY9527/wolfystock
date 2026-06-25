@@ -20,6 +20,7 @@ import { TerminalButton, TerminalChip } from '../components/terminal/TerminalPri
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
 import {
   researchRadarApi,
+  type ResearchRadarEvidenceHubItem,
   type ResearchRadarOnboardingGuidance,
   type ResearchRadarResponse,
   type UnifiedResearchQueueItem,
@@ -127,6 +128,29 @@ function priorityTierTone(priorityTier: UnifiedResearchQueueItem['priorityTier']
 function consumerStatusValue(value: string | null | undefined, locale: 'zh' | 'en'): string {
   const mapped = getConsumerStatusLabel(value, locale) || mapConsumerStatusText(value, locale);
   return mapped || '--';
+}
+
+function evidenceHubLabel(item: ResearchRadarEvidenceHubItem, locale: 'zh' | 'en'): string {
+  const key = String(item.key || '').toLowerCase();
+  if (locale === 'en') {
+    if (key === 'scanner') return 'Scanner candidates';
+    if (key === 'backtest') return 'Backtest samples';
+    if (key === 'stock') return 'Stock readiness';
+    if (key === 'data') return 'Data activation';
+    return safeResearchQueueText(item.label, locale, 'Evidence state') || 'Evidence state';
+  }
+  if (key === 'scanner') return 'Scanner 候选';
+  if (key === 'backtest') return 'Backtest 样本';
+  if (key === 'stock') return '个股就绪';
+  if (key === 'data') return '数据激活';
+  return safeResearchQueueText(item.label, locale, '证据状态') || '证据状态';
+}
+
+function evidenceHubStatusTone(value: string | null | undefined): string {
+  const normalized = String(value || '').toLowerCase();
+  if (normalized === 'available') return 'success';
+  if (normalized === 'partial') return 'warning';
+  return 'error';
 }
 
 function freshnessLabel(state: UnifiedResearchQueueItem['freshness']['state'], locale: 'zh' | 'en'): string {
@@ -355,6 +379,130 @@ function buildResearchRadarDerivedGuidance({
     summary: derivedSummary,
     conditionsDetected: dedupedConditions,
   };
+}
+
+function ResearchEvidenceHubPanel({
+  data,
+  locale,
+}: {
+  data: ResearchRadarResponse | null;
+  locale: 'zh' | 'en';
+}) {
+  const hub = data?.evidenceHub;
+  if (!hub) return null;
+
+  const slices = [
+    hub.scannerCandidates,
+    hub.backtestSamples,
+    hub.stockReadiness,
+    hub.dataActivation,
+  ];
+  const missingStates = hub.missingEvidenceStates ?? [];
+
+  return (
+    <RoughSectionCard
+      data-testid="research-radar-evidence-hub"
+      className="md:col-span-2"
+      eyebrow={locale === 'en' ? 'Evidence hub' : '证据中枢'}
+      title={locale === 'en' ? 'Real evidence readiness' : '真实证据就绪状态'}
+    >
+      <div className="space-y-4">
+        <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+          {locale === 'en'
+            ? 'Scanner, backtest sample, stock readiness, and activation states from available product evidence.'
+            : '汇总当前产品内已有的 Scanner、Backtest 样本、个股就绪和数据激活状态。'}
+        </p>
+
+        <div className="grid gap-3 lg:grid-cols-4">
+          {slices.map((item) => {
+            const safeSummary = safeResearchQueueText(item.summary, locale, locale === 'en' ? 'Evidence state unavailable.' : '证据状态暂不可用。');
+            const safeBlocker = safeResearchQueueText(item.blocker, locale);
+            const safeAction = safeResearchQueueText(item.nextDataAction, locale, locale === 'en' ? 'Refresh evidence.' : '刷新证据。');
+            const details = safeResearchQueueList(
+              item.details,
+              locale,
+              locale === 'en' ? 'No detail listed.' : '暂无明细。',
+            );
+            return (
+              <section
+                key={String(item.key || item.label)}
+                className="min-w-0 rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 p-3"
+              >
+                <div className="flex min-w-0 items-start justify-between gap-2">
+                  <h3 className="min-w-0 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
+                    {evidenceHubLabel(item, locale)}
+                  </h3>
+                  <StatusBadge
+                    status={evidenceHubStatusTone(item.status)}
+                    label={consumerStatusValue(item.status, locale)}
+                    size="sm"
+                  />
+                </div>
+                <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{safeSummary}</p>
+                {safeBlocker ? (
+                  <p className="mt-2 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2 py-1.5 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+                    <span className="font-medium text-[color:var(--wolfy-text-primary)]">
+                      {locale === 'en' ? 'Blocker: ' : '阻塞：'}
+                    </span>
+                    {safeBlocker}
+                  </p>
+                ) : null}
+                <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
+                  <span className="font-medium text-[color:var(--wolfy-text-secondary)]">
+                    {locale === 'en' ? 'Next data action: ' : '下一步数据动作：'}
+                  </span>
+                  {safeAction}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {(item.symbols ?? []).slice(0, 5).map((symbol) => (
+                    <TerminalChip key={symbol} variant="neutral" className="font-mono">{symbol}</TerminalChip>
+                  ))}
+                </div>
+                <RoughBulletList
+                  items={details}
+                  emptyText={locale === 'en' ? 'No detail listed.' : '暂无明细。'}
+                />
+              </section>
+            );
+          })}
+        </div>
+
+        {missingStates.length ? (
+          <section
+            data-testid="research-radar-missing-evidence-states"
+            className="rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-3"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
+                {locale === 'en' ? 'Missing evidence states' : '缺失证据状态'}
+              </h3>
+              <TerminalChip variant="caution">{missingStates.length}</TerminalChip>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {missingStates.map((item, index) => {
+                const safeBlocker = safeResearchQueueText(item.blocker, locale, locale === 'en' ? 'Evidence is incomplete.' : '证据尚未完整。');
+                const safeAction = safeResearchQueueText(item.nextDataAction, locale, locale === 'en' ? 'Refresh evidence.' : '刷新证据。');
+                return (
+                  <div
+                    key={`${item.key || item.label}-${index}`}
+                    className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-black/10 px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]"
+                  >
+                    <span className="font-semibold text-[color:var(--wolfy-text-primary)]">
+                      {evidenceHubLabel(item, locale)}
+                    </span>
+                    <span className="mx-2 text-[color:var(--wolfy-text-muted)]">/</span>
+                    <span>{safeBlocker}</span>
+                    <span className="mx-2 text-[color:var(--wolfy-text-muted)]">/</span>
+                    <span>{safeAction}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
+      </div>
+    </RoughSectionCard>
+  );
 }
 
 function ResearchQueueHubPanel({
@@ -752,6 +900,10 @@ export default function ResearchRadarPage() {
                       className="md:col-span-2"
                     />
                   ) : null}
+                  <ResearchEvidenceHubPanel
+                    data={data}
+                    locale={locale}
+                  />
                   <ResearchQueueHubPanel
                     data={unifiedQueue}
                     loading={unifiedQueueLoading}
