@@ -81,6 +81,26 @@ class _FakePreflightService:
             "dryRun": True,
             "networkCallsEnabled": False,
             "mutationEnabled": False,
+            "activationChecklist": {
+                "contractVersion": "historical_ohlcv_data_activation_checklist_v1",
+                "operatorOnly": True,
+                "readOnly": True,
+                "noExternalCalls": True,
+                "consumerVisible": False,
+                "supportedStates": [
+                    "disabled_by_config",
+                    "dependency_missing",
+                    "ready_to_seed",
+                    "seeded/cache_hit",
+                    "failed_safely",
+                ],
+                "starterSymbolSets": {
+                    "us": {"label": "US first cache activation set", "symbols": ["ORCL", "AAPL", "NVDA"], "supported": True},
+                    "cnIfSupported": {"label": "CN first cache activation set if the local CN runtime is supported", "symbols": ["600519", "000001", "601398"], "supported": True},
+                },
+                "workflowUnlocks": ["Stock", "Scanner", "Backtest", "Technical Indicators", "Market Regime"],
+                "items": [],
+            },
             "markets": {},
         }
 
@@ -98,6 +118,26 @@ class _FakePreflightService:
             "dryRun": dry_run,
             "networkCallsEnabled": not dry_run,
             "mutationEnabled": not dry_run,
+            "activationChecklist": {
+                "contractVersion": "historical_ohlcv_data_activation_checklist_v1",
+                "operatorOnly": True,
+                "readOnly": True,
+                "noExternalCalls": True,
+                "consumerVisible": False,
+                "supportedStates": [
+                    "disabled_by_config",
+                    "dependency_missing",
+                    "ready_to_seed",
+                    "seeded/cache_hit",
+                    "failed_safely",
+                ],
+                "starterSymbolSets": {
+                    "us": {"label": "US first cache activation set", "symbols": ["ORCL", "AAPL", "NVDA"], "supported": True},
+                    "cnIfSupported": {"label": "CN first cache activation set if the local CN runtime is supported", "symbols": ["600519", "000001", "601398"], "supported": True},
+                },
+                "workflowUnlocks": ["Stock", "Scanner", "Backtest", "Technical Indicators", "Market Regime"],
+                "items": [],
+            },
             "markets": {},
         }
 
@@ -130,6 +170,26 @@ def test_preflight_endpoint_returns_dry_run_payload_and_parses_symbols() -> None
 
     assert response.status_code == 200
     assert response.json()["dryRun"] is True
+    assert response.json()["activationChecklist"] == {
+        "contractVersion": "historical_ohlcv_data_activation_checklist_v1",
+        "operatorOnly": True,
+        "readOnly": True,
+        "noExternalCalls": True,
+        "consumerVisible": False,
+        "supportedStates": [
+            "disabled_by_config",
+            "dependency_missing",
+            "ready_to_seed",
+            "seeded/cache_hit",
+            "failed_safely",
+        ],
+        "starterSymbolSets": {
+            "us": {"label": "US first cache activation set", "symbols": ["ORCL", "AAPL", "NVDA"], "supported": True},
+            "cnIfSupported": {"label": "CN first cache activation set if the local CN runtime is supported", "symbols": ["600519", "000001", "601398"], "supported": True},
+        },
+        "workflowUnlocks": ["Stock", "Scanner", "Backtest", "Technical Indicators", "Market Regime"],
+        "items": [],
+    }
     assert service.preflight_calls == [
         {
             "symbols_by_market": {"cn": ["600519", "000001"], "us": ["ORCL", "AAPL", "NVDA", "MSFT"]},
@@ -169,3 +229,17 @@ def test_seed_endpoint_defaults_to_dry_run_and_requires_write_for_execute() -> N
         "require_adjusted": True,
         "dry_run": False,
     }
+
+
+def test_non_admin_route_failures_do_not_leak_activation_checklist_internals() -> None:
+    service = _FakePreflightService()
+    regular_text = _client_for(_regular_user, service).get("/api/v1/admin/historical-ohlcv/cache-preflight").text.lower()
+    missing_capability_text = _client_for(_admin_without_provider_read, service).get(
+        "/api/v1/admin/historical-ohlcv/cache-preflight"
+    ).text.lower()
+
+    for payload_text in (regular_text, missing_capability_text):
+        assert "orcl" not in payload_text
+        assert "nvda" not in payload_text
+        assert "market regime" not in payload_text
+        assert "wolfystock_" not in payload_text

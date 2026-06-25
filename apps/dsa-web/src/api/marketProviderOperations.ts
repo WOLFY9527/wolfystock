@@ -211,6 +211,12 @@ export interface HistoricalOhlcvCachePreflightSymbol {
   adjustmentState: string;
   dataState: string;
   seedState: string;
+  seedResult?: string | null;
+  barsWritten?: number | null;
+  latestDate?: string | null;
+  freshness?: string | null;
+  adjustmentStatus?: string | null;
+  intendedAction?: string | null;
   nextAction: HistoricalOhlcvCachePreflightNextAction;
 }
 
@@ -219,6 +225,55 @@ export interface HistoricalOhlcvCachePreflightMarket {
   runtimeEnabled: boolean;
   dependencyAvailable: boolean;
   symbols: HistoricalOhlcvCachePreflightSymbol[];
+}
+
+export interface HistoricalOhlcvActivationChecklistSymbolSet {
+  label: string;
+  symbols: string[];
+  supported: boolean;
+}
+
+export interface HistoricalOhlcvActivationChecklistCacheSummary {
+  totalSymbols: number;
+  cachedSymbolCount: number;
+  readySymbolCount: number;
+  staleSymbolCount: number;
+  missingAdjustmentCount: number;
+  failedSafelyCount: number;
+}
+
+export interface HistoricalOhlcvActivationChecklistItem {
+  market: string;
+  label: string;
+  state: string;
+  runtimeEnabled: boolean;
+  dependencyAvailable: boolean;
+  seedEnabled: boolean;
+  requiredRuntimeFlags: string[];
+  seedFlag: string;
+  currentRepresentativeSymbols: string[];
+  recommendedFirstSymbols: string[];
+  disabledReasonCodes: string[];
+  cacheSummary: HistoricalOhlcvActivationChecklistCacheSummary;
+  availableSeedActions: string[];
+  workflowUnlocks: string[];
+  currentStatusSummary: string;
+  nextStepSummary: string;
+}
+
+export interface HistoricalOhlcvActivationChecklist {
+  contractVersion: string;
+  operatorOnly: boolean;
+  readOnly: boolean;
+  noExternalCalls: boolean;
+  consumerVisible: boolean;
+  supportedStates: string[];
+  starterSymbolSets: {
+    us: HistoricalOhlcvActivationChecklistSymbolSet;
+    cnIfSupported: HistoricalOhlcvActivationChecklistSymbolSet;
+  };
+  workflowUnlocks: string[];
+  items: HistoricalOhlcvActivationChecklistItem[];
 }
 
 export interface HistoricalOhlcvCachePreflightResponse {
@@ -233,6 +288,7 @@ export interface HistoricalOhlcvCachePreflightResponse {
     cn: string[];
     us: string[];
   };
+  activationChecklist: HistoricalOhlcvActivationChecklist;
   markets: {
     cn?: HistoricalOhlcvCachePreflightMarket;
     us?: HistoricalOhlcvCachePreflightMarket;
@@ -305,6 +361,65 @@ function normalizeSymbolList(value: unknown): string[] {
     : [];
 }
 
+function normalizeChecklistSymbolSet(value: unknown, fallbackLabel: string): HistoricalOhlcvActivationChecklistSymbolSet {
+  const source = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  return {
+    label: String(source.label || fallbackLabel),
+    symbols: normalizeSymbolList(source.symbols),
+    supported: source.supported !== false,
+  };
+}
+
+function normalizeChecklistItem(value: unknown): HistoricalOhlcvActivationChecklistItem {
+  const item = value && typeof value === 'object' ? toCamelCase<HistoricalOhlcvActivationChecklistItem>(value as Record<string, unknown>) : {} as HistoricalOhlcvActivationChecklistItem;
+  return {
+    market: String(item.market || ''),
+    label: String(item.label || ''),
+    state: String(item.state || ''),
+    runtimeEnabled: item.runtimeEnabled === true,
+    dependencyAvailable: item.dependencyAvailable === true,
+    seedEnabled: item.seedEnabled === true,
+    requiredRuntimeFlags: normalizeSymbolList(item.requiredRuntimeFlags),
+    seedFlag: String(item.seedFlag || ''),
+    currentRepresentativeSymbols: normalizeSymbolList(item.currentRepresentativeSymbols),
+    recommendedFirstSymbols: normalizeSymbolList(item.recommendedFirstSymbols),
+    disabledReasonCodes: normalizeSymbolList(item.disabledReasonCodes),
+    cacheSummary: {
+      totalSymbols: Number(item.cacheSummary?.totalSymbols || 0),
+      cachedSymbolCount: Number(item.cacheSummary?.cachedSymbolCount || 0),
+      readySymbolCount: Number(item.cacheSummary?.readySymbolCount || 0),
+      staleSymbolCount: Number(item.cacheSummary?.staleSymbolCount || 0),
+      missingAdjustmentCount: Number(item.cacheSummary?.missingAdjustmentCount || 0),
+      failedSafelyCount: Number(item.cacheSummary?.failedSafelyCount || 0),
+    },
+    availableSeedActions: normalizeSymbolList(item.availableSeedActions),
+    workflowUnlocks: normalizeSymbolList(item.workflowUnlocks),
+    currentStatusSummary: String(item.currentStatusSummary || ''),
+    nextStepSummary: String(item.nextStepSummary || ''),
+  };
+}
+
+function normalizeActivationChecklist(value: unknown): HistoricalOhlcvActivationChecklist {
+  const checklist = value && typeof value === 'object' ? toCamelCase<HistoricalOhlcvActivationChecklist>(value as Record<string, unknown>) : {} as HistoricalOhlcvActivationChecklist;
+  return {
+    contractVersion: String(checklist.contractVersion || ''),
+    operatorOnly: checklist.operatorOnly !== false,
+    readOnly: checklist.readOnly !== false,
+    noExternalCalls: checklist.noExternalCalls !== false,
+    consumerVisible: checklist.consumerVisible === true,
+    supportedStates: normalizeSymbolList(checklist.supportedStates),
+    starterSymbolSets: {
+      us: normalizeChecklistSymbolSet(checklist.starterSymbolSets?.us, 'US first cache activation set'),
+      cnIfSupported: normalizeChecklistSymbolSet(
+        checklist.starterSymbolSets?.cnIfSupported,
+        'CN first cache activation set if the local CN runtime is supported',
+      ),
+    },
+    workflowUnlocks: normalizeSymbolList(checklist.workflowUnlocks),
+    items: Array.isArray(checklist.items) ? checklist.items.map((item) => normalizeChecklistItem(item)) : [],
+  };
+}
+
 function normalizeHistoricalOhlcvCachePreflight(payload: Record<string, unknown>): HistoricalOhlcvCachePreflightResponse {
   const normalized = toCamelCase<HistoricalOhlcvCachePreflightResponse>(payload);
   const markets = normalized.markets || {};
@@ -320,6 +435,7 @@ function normalizeHistoricalOhlcvCachePreflight(payload: Record<string, unknown>
       cn: normalizeSymbolList(normalized.representativeSymbols?.cn),
       us: normalizeSymbolList(normalized.representativeSymbols?.us),
     },
+    activationChecklist: normalizeActivationChecklist(normalized.activationChecklist),
     markets: {
       ...markets,
       cn: markets.cn ? {
