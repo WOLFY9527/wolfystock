@@ -12,6 +12,9 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
+from src.services.earnings_calendar_readiness_contract import (
+    build_earnings_calendar_readiness_v1,
+)
 from src.services.data_source_gap_registry_service import build_data_source_gap_registry
 
 
@@ -166,6 +169,16 @@ _CAPABILITY_SPECS: tuple[_CapabilitySpec, ...] = (
         "Fundamental context is supported, but coverage and lineage remain fragmented.",
     ),
     _spec(
+        "stock.earnings_calendar",
+        "Earnings calendar readiness",
+        "stock_research_data",
+        "fundamentals",
+        "Not configured; earnings calendar, EPS, guidance, and transcript fields must stay hidden until evidence exists.",
+        "Single-stock earnings calendar readiness",
+        "Earnings calendar readiness is exposed as a contract only; no provider is configured and no dates or estimates are inferred.",
+        status="configured_missing",
+    ),
+    _spec(
         "stock.technicals",
         "Stock technicals",
         "stock_research_data",
@@ -239,6 +252,10 @@ def _capability_to_dict(
         "sourceLabel": spec.source_label,
         "reason": spec.reason,
     }
+    if spec.capability_id == "stock.earnings_calendar":
+        item["earningsCalendarReadiness"] = build_earnings_calendar_readiness_v1(
+            {}
+        )
     if include_admin_diagnostics:
         item["adminDiagnostics"] = {
             "sourceFamilyKey": spec.source_family_key,

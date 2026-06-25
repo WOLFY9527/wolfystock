@@ -71,6 +71,14 @@ def test_professional_data_capability_consumer_route_is_safe() -> None:
     assert payload["consumerSafe"] is True
     assert "options_structure" in payload["categories"]
     assert all("adminDiagnostics" not in item for item in payload["capabilities"])
+    capabilities = {
+        item["capabilityId"]: item
+        for item in payload["capabilities"]
+    }
+    earnings_calendar = capabilities["stock.earnings_calendar"]
+    assert earnings_calendar["status"] == "configured_missing"
+    assert earnings_calendar["earningsCalendarReadiness"]["overallState"] == "not_configured"
+    assert earnings_calendar["earningsCalendarReadiness"]["components"]["nextEarningsDate"]["state"] == "not_configured"
 
     serialized = json.dumps(payload, ensure_ascii=False)
     lowered = serialized.lower()
