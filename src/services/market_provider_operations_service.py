@@ -17,6 +17,7 @@ from src.services.execution_log_service import ExecutionLogService
 from src.services.llm_instrumentation import snapshot_llm_event_counters
 from src.services.market_cache import MARKET_CACHE_TTLS, SAFE_MARKET_CACHE_PANEL_KEYS, MarketCache, market_cache
 from src.services.market_data_source_registry import resolve_source_label
+from src.services.macro_provider_readiness_service import build_macro_provider_readiness_contract
 from src.services.system_config_provider_projection import project_tickflow_entitlement_health
 from src.services.trust_evidence_projection import build_trust_evidence_snapshot_v1
 from src.storage import DatabaseManager
@@ -251,7 +252,11 @@ class MarketProviderOperationsService:
         items: List[Dict[str, Any]] = []
         limitations: List[str] = []
         tickflow_api_key = getattr(get_config(), "tickflow_api_key", None)
-        provider_diagnostics: Dict[str, Any] = {}
+        provider_diagnostics: Dict[str, Any] = {
+            "macroFredReadiness": build_macro_provider_readiness_contract(
+                include_admin_diagnostics=True
+            )
+        }
         for panel in PANELS:
             entry = self.cache.get(panel.cache_key)
             snapshot = self.db.get_market_overview_snapshot(f"market_overview:{panel.cache_key}")

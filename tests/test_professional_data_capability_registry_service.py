@@ -72,6 +72,14 @@ def test_professional_registry_returns_expected_categories_and_capabilities() ->
         "market.breadth_flows",
         "market.sector_rotation",
         "macro.cross_asset_regime",
+        "macro.fred.rates",
+        "macro.fred.inflation",
+        "macro.fred.labor",
+        "macro.fred.growth",
+        "macro.fred.liquidity",
+        "macro.fred.credit",
+        "macro.fred.usd_currency",
+        "macro.fred.recession",
         "macro.volatility_liquidity_credit",
         "stock.fundamentals",
         "stock.earnings_calendar",
@@ -103,6 +111,9 @@ def test_professional_registry_returns_expected_categories_and_capabilities() ->
         component["state"] == "not_configured"
         for component in earnings_calendar["earningsCalendarReadiness"]["components"].values()
     )
+    assert capabilities["macro.fred.rates"]["status"] == "configured_missing"
+    assert capabilities["macro.fred.rates"]["category"] == "macro_cross_asset_regime"
+    assert "no macro conclusion" in capabilities["macro.fred.rates"]["reason"]
     assert capabilities["stock.news"]["status"] == "configured_missing"
     assert capabilities["backtest.data_availability"]["status"] == "degraded"
 
@@ -187,6 +198,43 @@ def test_professional_registry_admin_projection_adds_bounded_diagnostics() -> No
         "rawpayload",
         "raw_payload",
         "credential",
+        "token",
+    ):
+        assert marker not in serialized
+
+
+def test_professional_registry_admin_projection_includes_macro_readiness_without_secret_values() -> None:
+    payload = build_professional_data_capability_registry(
+        include_admin_diagnostics=True,
+        macro_env={"FRED_MACRO_PROVIDER_ENABLED": "true"},
+    )
+
+    macro_readiness = payload["macroReadiness"]
+    assert macro_readiness["contractVersion"] == "macro_provider_readiness_v1"
+    assert macro_readiness["provider"]["providerKey"] == "fred"
+    assert macro_readiness["provider"]["state"] == "missing_env"
+    assert macro_readiness["admin"]["requiredEnvVars"] == ["FRED_API_KEY"]
+    assert macro_readiness["admin"]["requiredFlags"] == ["FRED_MACRO_PROVIDER_ENABLED"]
+
+    macro_capability = next(
+        item for item in payload["capabilities"]
+        if item["capabilityId"] == "macro.fred.inflation"
+    )
+    assert macro_capability["adminDiagnostics"]["macroReadinessState"] == "missing_env"
+    assert macro_capability["adminDiagnostics"]["nextAction"]
+
+    serialized = json.dumps(payload, ensure_ascii=False)
+    assert "FRED_API_KEY" in serialized
+    assert "FRED_MACRO_PROVIDER_ENABLED" in serialized
+    for marker in (
+        "fred-secret",
+        "apiKeyPresent",
+        "endpointHost",
+        "requestId",
+        "traceId",
+        "cacheKey",
+        "rawPayload",
+        "raw_payload",
         "token",
     ):
         assert marker not in serialized
