@@ -1001,6 +1001,95 @@ const historicalOhlcvCachePreflightPayload = {
     cn: ['600519'],
     us: ['ORCL', 'AAPL', 'NVDA'],
   },
+  activationChecklist: {
+    contractVersion: 'historical_ohlcv_data_activation_checklist_v1',
+    operatorOnly: true,
+    readOnly: true,
+    noExternalCalls: true,
+    consumerVisible: false,
+    supportedStates: [
+      'disabled_by_config',
+      'dependency_missing',
+      'ready_to_seed',
+      'seeded/cache_hit',
+      'failed_safely',
+    ],
+    starterSymbolSets: {
+      us: {
+        label: 'US first cache activation set',
+        symbols: ['ORCL', 'AAPL', 'NVDA'],
+        supported: true,
+      },
+      cnIfSupported: {
+        label: 'CN first cache activation set if the local CN runtime is supported',
+        symbols: ['600519', '000001', '601398'],
+        supported: true,
+      },
+    },
+    workflowUnlocks: ['Stock', 'Scanner', 'Backtest', 'Technical Indicators', 'Market Regime'],
+    items: [
+      {
+        market: 'cn',
+        label: 'CN activation checklist',
+        state: 'disabled_by_config',
+        runtimeEnabled: false,
+        dependencyAvailable: true,
+        seedEnabled: false,
+        requiredRuntimeFlags: ['WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED'],
+        seedFlag: 'WOLFYSTOCK_HISTORICAL_OHLCV_CACHE_SEED_ENABLED',
+        currentRepresentativeSymbols: ['600519'],
+        recommendedFirstSymbols: ['600519', '000001', '601398'],
+        disabledReasonCodes: ['runtime_flags_off', 'seed_flag_off_by_default'],
+        cacheSummary: {
+          totalSymbols: 1,
+          cachedSymbolCount: 1,
+          readySymbolCount: 1,
+          staleSymbolCount: 0,
+          missingAdjustmentCount: 0,
+          failedSafelyCount: 0,
+        },
+        availableSeedActions: [
+          'Enable the documented runtime flags first; keep providers default-off until operator approval.',
+          'The seed flag remains default-off until an operator explicitly enables it.',
+        ],
+        workflowUnlocks: ['Stock', 'Scanner', 'Backtest', 'Technical Indicators', 'Market Regime'],
+        currentStatusSummary: 'CN starter symbols remain intentionally disabled by runtime config.',
+        nextStepSummary: 'Turn on the CN runtime flags, reload the checklist, and confirm cache readiness before any seed.',
+      },
+      {
+        market: 'us',
+        label: 'US activation checklist',
+        state: 'ready_to_seed',
+        runtimeEnabled: true,
+        dependencyAvailable: true,
+        seedEnabled: false,
+        requiredRuntimeFlags: [
+          'WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED',
+          'WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED',
+        ],
+        seedFlag: 'WOLFYSTOCK_HISTORICAL_OHLCV_CACHE_SEED_ENABLED',
+        currentRepresentativeSymbols: ['ORCL', 'AAPL', 'NVDA'],
+        recommendedFirstSymbols: ['ORCL', 'AAPL', 'NVDA'],
+        disabledReasonCodes: ['seed_flag_off_by_default', 'representative_cache_missing', 'adjustments_missing_for_some_symbols'],
+        cacheSummary: {
+          totalSymbols: 3,
+          cachedSymbolCount: 1,
+          readySymbolCount: 0,
+          staleSymbolCount: 1,
+          missingAdjustmentCount: 1,
+          failedSafelyCount: 0,
+        },
+        availableSeedActions: [
+          'Review representative dry-run readiness before enabling any mutation.',
+          'Run the explicit seed flow in dry-run mode first, then enable the seed flag only after approval.',
+          'The seed flag remains default-off until an operator explicitly enables it.',
+        ],
+        workflowUnlocks: ['Stock', 'Scanner', 'Backtest', 'Technical Indicators', 'Market Regime'],
+        currentStatusSummary: 'US starter symbols are ready for an explicit admin seed review.',
+        nextStepSummary: 'Use the documented starter symbols first, keep the seed flag explicit, and verify the unlocked product surfaces stay bounded.',
+      },
+    ],
+  },
   markets: {
     cn: {
       market: 'cn',
@@ -1021,7 +1110,7 @@ const historicalOhlcvCachePreflightPayload = {
           dataState: 'fresh',
           seedState: 'seed_skipped',
           nextAction: {
-            state: 'disabled_by_config',
+            state: 'seeded/cache_hit',
             summary: 'Enable runtime before provider fetch is allowed.',
             requiredConfig: 'WOLFYSTOCK_AKSHARE_CN_OHLCV_CACHE_ENABLED=true',
           },
@@ -1065,8 +1154,8 @@ const historicalOhlcvCachePreflightPayload = {
           dataState: 'missing_adjustments',
           seedState: 'seed_skipped',
           nextAction: {
-            state: 'ready',
-            summary: 'Cache preflight is ready; enable seed only when operator approval allows mutation.',
+            state: 'seeded/cache_hit',
+            summary: 'Representative cache is already present; validate bars, freshness, and adjustments before widening coverage.',
           },
         },
       ],
@@ -1356,10 +1445,11 @@ describe('MarketProviderOperationsPage', () => {
     render(<MarketProviderOperationsPage />);
 
     const panel = await screen.findByTestId('historical-ohlcv-cache-preflight-panel');
+    const checklist = screen.getByTestId('historical-ohlcv-activation-checklist');
     expect(getHistoricalOhlcvCachePreflight).toHaveBeenCalledWith();
-    expect(panel).toHaveTextContent('历史行情缓存预检');
-    expect(panel).toHaveTextContent('读取现有 DATA-113 admin dry-run endpoint');
-    expect(panel).toHaveTextContent('默认关闭是正常安全状态');
+    expect(panel).toHaveTextContent('历史行情缓存激活清单');
+    expect(panel).toHaveTextContent('operator checklist');
+    expect(panel).toHaveTextContent('consumer 页面不会显示这些 provider/ops 内部说明');
     expect(panel).toHaveTextContent('dry-run');
     expect(panel).toHaveTextContent('seed 默认关闭');
     expect(panel).toHaveTextContent('不触发写入');
@@ -1376,6 +1466,18 @@ describe('MarketProviderOperationsPage', () => {
     expect(panel).toHaveTextContent('600519');
     expect(panel).toHaveTextContent('ORCL');
     expect(panel).toHaveTextContent('AAPL');
+    expect(checklist).toHaveTextContent('US: ORCL / AAPL / NVDA');
+    expect(checklist).toHaveTextContent('CN if supported: 600519 / 000001 / 601398');
+    expect(checklist).toHaveTextContent('disabled_by_config');
+    expect(checklist).toHaveTextContent('ready_to_seed');
+    expect(checklist).toHaveTextContent('Stock');
+    expect(checklist).toHaveTextContent('Scanner');
+    expect(checklist).toHaveTextContent('Backtest');
+    expect(checklist).toHaveTextContent('Technical Indicators');
+    expect(checklist).toHaveTextContent('Market Regime');
+    expect(checklist).toHaveTextContent('WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED');
+    expect(checklist).toHaveTextContent('WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED');
+    expect(checklist).toHaveTextContent('WOLFYSTOCK_HISTORICAL_OHLCV_CACHE_SEED_ENABLED');
     expect(panel).toHaveTextContent('命中');
     expect(panel).toHaveTextContent('未命中');
     expect(panel).toHaveTextContent('72');
@@ -1383,9 +1485,11 @@ describe('MarketProviderOperationsPage', () => {
     expect(panel).toHaveTextContent('新鲜 · 2026-06-23');
     expect(panel).toHaveTextContent('过期 · 2026-06-20');
     expect(panel).toHaveTextContent('复权缺失');
+    expect(panel).toHaveTextContent('seeded/cache_hit');
+    expect(panel).toHaveTextContent('dependency_missing');
     expect(panel).toHaveTextContent('缓存存在但缺少复权字段');
     expect(panel.textContent || '').not.toMatch(
-      /WOLFYSTOCK_|requestId|traceId|cacheKey|rawProviderPayload|providerClass|api[_-]?key|token|secret|stack/i,
+      /requestId|traceId|cacheKey|rawProviderPayload|providerClass|api[_-]?key|token|secret|stack/i,
     );
   });
 

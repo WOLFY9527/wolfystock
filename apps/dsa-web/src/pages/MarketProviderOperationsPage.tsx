@@ -24,6 +24,7 @@ import {
   type HistoricalOhlcvCachePreflightMarket,
   type HistoricalOhlcvCachePreflightResponse,
   type HistoricalOhlcvCachePreflightSymbol,
+  type HistoricalOhlcvActivationChecklistItem,
   type ProviderOperationsMatrixResponse,
   type ProviderOperationsMatrixRow,
   type MarketProviderOperationsResponse,
@@ -1583,6 +1584,9 @@ function historicalAdjustmentLabel(state: string): string {
 function historicalDataStateLabel(state: string): string {
   return {
     available: '运行时可用',
+    'ready_to_seed': '可开始 seed',
+    'seeded/cache_hit': '已 seed / 已命中缓存',
+    failed_safely: '失败已安全收口',
     fresh: '可用',
     stale: '过期',
     insufficient: 'bars 不足',
@@ -1598,25 +1602,27 @@ function historicalDataStateLabel(state: string): string {
 
 function historicalStateVariant(state: string): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
   const normalized = String(state || '').toLowerCase();
-  if (normalized === 'fresh' || normalized === 'cache_hit' || normalized === 'available') return 'success';
+  if (normalized === 'fresh' || normalized === 'cache_hit' || normalized === 'available' || normalized === 'seeded/cache_hit') return 'success';
+  if (normalized === 'ready_to_seed') return 'info';
   if (normalized === 'stale' || normalized === 'insufficient' || normalized === 'missing_adjustments') return 'caution';
-  if (normalized === 'cache_error' || normalized === 'runtime_unavailable') return 'danger';
+  if (normalized === 'cache_error' || normalized === 'runtime_unavailable' || normalized === 'failed_safely') return 'danger';
   if (normalized === 'cache_missing' || normalized === 'disabled_by_config' || normalized === 'seed_disabled_by_config') return 'neutral';
   return 'info';
 }
 
 function historicalNextActionText(symbol: HistoricalOhlcvCachePreflightSymbol): string {
   const state = String(symbol.nextAction?.state || symbol.dataState || '').toLowerCase();
-  if (symbol.cacheState !== 'cache_hit') return '缓存未命中；先确认运行时、依赖与 seed 授权，不在本页发起网络写入。';
+  if (state === 'failed_safely') return '本次状态已安全收口；先处理本地运行时问题，再重新读取 checklist。';
   if (symbol.dataState === 'missing_adjustments') return '缓存存在但缺少复权字段；先补齐调整数据后再视为就绪。';
   if (symbol.dataState === 'insufficient') return '缓存存在但 bars 不足；使用已批准的缓存补数流程补齐。';
   if (symbol.dataState === 'stale') return '缓存存在但日期滞后；先确认最近交易日和刷新窗口。';
-  if (state === 'ready') return '缓存预检可读；如需写入，仍需走显式审批和 seed 开关。';
+  if (state === 'seeded/cache_hit') return '代表样本已具备缓存证据；继续核对 bars、日期和复权，再决定是否扩大范围。';
+  if (state === 'ready_to_seed') return '当前环境已到可开始 seed 的前置状态；仍需显式审批和 seed 开关。';
   if (state === 'disabled_by_config') return '保持默认关闭；需要验证时先按现有运行时开关启用，再回本页确认。';
   if (state === 'dependency_missing') return '先安装已批准的可选依赖，再重新读取本页预检。';
   if (state === 'seed_disabled_by_config') return 'seed 默认关闭；仅在明确审批后启用既有 seed endpoint。';
-  if (state === 'cache_updated') return '缓存已通过既有存储抽象更新；继续核对 bar 数和新鲜度。';
   if (state === 'symbol_not_allowlisted') return '使用后端允许的代表样本集合，不在前端扩展 seed 范围。';
+  if (symbol.cacheState !== 'cache_hit') return '缓存未命中；先确认运行时、依赖与 seed 授权，不在本页发起网络写入。';
   return sanitizeOperatorText(symbol.nextAction?.summary, '保持只读观察，按现有运维流程处理。');
 }
 
@@ -1627,12 +1633,17 @@ function historicalPreflightMarkets(preflight?: HistoricalOhlcvCachePreflightRes
     .filter((market): market is HistoricalOhlcvCachePreflightMarket => Boolean(market));
 }
 
+function historicalActivationItems(preflight?: HistoricalOhlcvCachePreflightResponse | null): HistoricalOhlcvActivationChecklistItem[] {
+  return Array.isArray(preflight?.activationChecklist?.items) ? preflight.activationChecklist.items : [];
+}
+
 const HistoricalOhlcvCachePreflightPanel: React.FC<{
   preflight: HistoricalOhlcvCachePreflightResponse | null;
   isLoading: boolean;
   error: ParsedApiError | null;
 }> = ({ preflight, isLoading, error }) => {
   const markets = historicalPreflightMarkets(preflight);
+  const activationItems = historicalActivationItems(preflight);
   const symbols = markets.flatMap((market) => Array.isArray(market.symbols) ? market.symbols : EMPTY_HISTORICAL_OHLCV_SYMBOLS);
   const hitCount = symbols.filter((symbol) => symbol.cacheState === 'cache_hit').length;
   const missingAdjustmentCount = symbols.filter((symbol) => symbol.adjustmentState === 'missing').length;
@@ -1645,7 +1656,7 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
     <TerminalPanel as="section" className="col-span-12" data-testid="historical-ohlcv-cache-preflight-panel">
       <TerminalSectionHeader
         eyebrow="DATA-113 / 历史 OHLCV"
-        title="历史行情缓存预检"
+        title="历史行情缓存激活清单"
         action={(
           <div className="flex flex-wrap gap-1.5">
             <TerminalChip variant={preflight?.dryRun !== false ? 'info' : 'caution'}>
@@ -1661,7 +1672,7 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
         )}
       />
       <p className="mt-2 text-[11px] leading-5 text-white/46">
-        读取现有 DATA-113 admin dry-run endpoint，展示 AkShare/yfinance 代表样本的运行时、依赖、缓存命中、bars、新鲜度和复权缺口。默认关闭是正常安全状态，不代表故障；本页不发起外部网络调用或缓存写入。
+        只读展示现有 DATA-113 admin dry-run endpoint，把当前 OHLCV runtime/cache/seed readiness 汇总成 operator checklist。默认关闭是正常安全状态，不代表故障；consumer 页面不会显示这些 provider/ops 内部说明，本页也不发起外部网络调用或缓存写入。
       </p>
 
       {error ? <ApiErrorAlert error={error} className="mt-4" /> : null}
@@ -1709,6 +1720,100 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
             >
               {seedMutationAllowed ? '显式 seed 已允许' : 'seed 按钮禁用'}
             </button>
+          </div>
+        </div>
+      ) : null}
+
+      {preflight ? (
+        <div
+          data-testid="historical-ohlcv-activation-checklist"
+          className="mt-4 rounded-lg border border-white/[0.07] bg-white/[0.025] p-3"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">admin/operator only</p>
+              <p className="mt-1 text-sm font-semibold text-white/84">当前激活动作、starter symbols 与解锁工作流</p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <TerminalChip variant="neutral">consumer safe</TerminalChip>
+              <TerminalChip variant="info">no external calls</TerminalChip>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
+            <TerminalChip variant="success">US: {preflight.activationChecklist.starterSymbolSets.us.symbols.join(' / ')}</TerminalChip>
+            <TerminalChip variant="info">CN if supported: {preflight.activationChecklist.starterSymbolSets.cnIfSupported.symbols.join(' / ')}</TerminalChip>
+          </div>
+          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+            {activationItems.map((item) => (
+              <TerminalNestedBlock
+                key={item.market}
+                data-testid={`historical-ohlcv-activation-market-${item.market}`}
+                className="bg-black/10 px-3 py-3"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">{historicalMarketLabel(item.market)}</p>
+                    <p className="mt-1 text-sm font-semibold text-white/84">{sanitizeOperatorText(item.currentStatusSummary)}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <TerminalChip variant={historicalStateVariant(item.state)}>{sanitizeCodeLabel(item.state)}</TerminalChip>
+                    <TerminalChip variant={item.runtimeEnabled ? 'success' : 'neutral'}>
+                      {item.runtimeEnabled ? 'runtime_on' : 'runtime_off'}
+                    </TerminalChip>
+                    <TerminalChip variant={item.dependencyAvailable ? 'success' : 'caution'}>
+                      {item.dependencyAvailable ? 'dependency_ready' : 'dependency_missing'}
+                    </TerminalChip>
+                  </div>
+                </div>
+                <p className="mt-2 text-[11px] leading-5 text-white/56">{sanitizeOperatorText(item.nextStepSummary)}</p>
+                <div className="mt-3 grid gap-2 xl:grid-cols-2">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/32">Required runtime flags</p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {item.requiredRuntimeFlags.map((flag) => (
+                        <TerminalChip key={flag} variant="neutral">{sanitizeCodeLabel(flag)}</TerminalChip>
+                      ))}
+                      <TerminalChip variant={item.seedEnabled ? 'caution' : 'neutral'}>{sanitizeCodeLabel(item.seedFlag)}</TerminalChip>
+                    </div>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/32">Workflow unlocks</p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {item.workflowUnlocks.map((workflow) => (
+                        <TerminalChip key={workflow} variant="info">{sanitizeCodeLabel(workflow)}</TerminalChip>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-2 xl:grid-cols-2">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/32">Recommended first symbols</p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {item.recommendedFirstSymbols.map((symbol) => (
+                        <TerminalChip key={symbol} variant="success">{sanitizeCodeLabel(symbol)}</TerminalChip>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="min-w-0 text-[11px] leading-5 text-white/58">
+                    <p><span className="text-white/34">缓存命中：</span>{formatNumber(item.cacheSummary.cachedSymbolCount, 0)} / {formatNumber(item.cacheSummary.totalSymbols, 0)}</p>
+                    <p><span className="text-white/34">就绪样本：</span>{formatNumber(item.cacheSummary.readySymbolCount, 0)}</p>
+                    <p><span className="text-white/34">过期样本：</span>{formatNumber(item.cacheSummary.staleSymbolCount, 0)}</p>
+                    <p><span className="text-white/34">缺少复权：</span>{formatNumber(item.cacheSummary.missingAdjustmentCount, 0)}</p>
+                    <p><span className="text-white/34">safe failure：</span>{formatNumber(item.cacheSummary.failedSafelyCount, 0)}</p>
+                  </div>
+                </div>
+                {item.availableSeedActions.length ? (
+                  <div className="mt-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/32">Available seed actions</p>
+                    <div className="mt-2 space-y-1.5 text-[11px] leading-5 text-white/60">
+                      {item.availableSeedActions.map((action) => (
+                        <p key={action}>{sanitizeOperatorText(action)}</p>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </TerminalNestedBlock>
+            ))}
           </div>
         </div>
       ) : null}
@@ -1765,7 +1870,12 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
                           </TerminalChip>
                         </td>
                         <td className="px-3 py-3 text-[11px] leading-5 text-white/62">
-                          {historicalNextActionText(symbol)}
+                          <div className="flex flex-wrap gap-1.5">
+                            <TerminalChip variant={historicalStateVariant(symbol.nextAction?.state || symbol.dataState)}>
+                              {sanitizeCodeLabel(symbol.nextAction?.state || symbol.dataState)}
+                            </TerminalChip>
+                          </div>
+                          <p className="mt-2">{historicalNextActionText(symbol)}</p>
                         </td>
                       </tr>
                     ))}

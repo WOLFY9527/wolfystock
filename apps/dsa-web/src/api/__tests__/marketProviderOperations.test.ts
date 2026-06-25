@@ -28,7 +28,68 @@ describe('marketProviderOperationsApi.getHistoricalOhlcvCachePreflight', () => {
         consumer_safe: true,
         representative_symbols: {
           cn: ['600519'],
-          us: ['ORCL', 'AAPL'],
+          us: ['ORCL', 'AAPL', 'NVDA'],
+        },
+        activation_checklist: {
+          contract_version: 'historical_ohlcv_data_activation_checklist_v1',
+          operator_only: true,
+          read_only: true,
+          no_external_calls: true,
+          consumer_visible: false,
+          supported_states: [
+            'disabled_by_config',
+            'dependency_missing',
+            'ready_to_seed',
+            'seeded/cache_hit',
+            'failed_safely',
+          ],
+          starter_symbol_sets: {
+            us: {
+              label: 'US first cache activation set',
+              symbols: ['ORCL', 'AAPL', 'NVDA'],
+              supported: true,
+            },
+            cn_if_supported: {
+              label: 'CN first cache activation set if the local CN runtime is supported',
+              symbols: ['600519', '000001', '601398'],
+              supported: true,
+            },
+          },
+          workflow_unlocks: ['Stock', 'Scanner', 'Backtest', 'Technical Indicators', 'Market Regime'],
+          items: [
+            {
+              market: 'us',
+              label: 'US activation checklist',
+              state: 'ready_to_seed',
+              runtime_enabled: true,
+              dependency_available: true,
+              seed_enabled: false,
+              required_runtime_flags: [
+                'WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED',
+                'WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED',
+              ],
+              seed_flag: 'WOLFYSTOCK_HISTORICAL_OHLCV_CACHE_SEED_ENABLED',
+              current_representative_symbols: ['ORCL', 'AAPL'],
+              recommended_first_symbols: ['ORCL', 'AAPL', 'NVDA'],
+              disabled_reason_codes: ['seed_flag_off_by_default'],
+              cache_summary: {
+                total_symbols: 2,
+                cached_symbol_count: 1,
+                ready_symbol_count: 0,
+                stale_symbol_count: 1,
+                missing_adjustment_count: 1,
+                failed_safely_count: 0,
+              },
+              available_seed_actions: [
+                'Review representative dry-run readiness before enabling any mutation.',
+                'Run the explicit seed flow in dry-run mode first, then enable the seed flag only after approval.',
+                'The seed flag remains default-off until an operator explicitly enables it.',
+              ],
+              workflow_unlocks: ['Stock', 'Scanner', 'Backtest', 'Technical Indicators', 'Market Regime'],
+              current_status_summary: 'US starter symbols are ready for an explicit admin seed review.',
+              next_step_summary: 'Use the documented starter symbols first, keep the seed flag explicit, and verify the unlocked product surfaces stay bounded.',
+            },
+          ],
         },
         markets: {
           cn: {
@@ -75,8 +136,8 @@ describe('marketProviderOperationsApi.getHistoricalOhlcvCachePreflight', () => {
                 data_state: 'missing_adjustments',
                 seed_state: 'seed_skipped',
                 next_action: {
-                  state: 'ready',
-                  summary: 'Cache preflight is ready.',
+                  state: 'seeded/cache_hit',
+                  summary: 'Representative cache is already present; validate bars, freshness, and adjustments before widening coverage.',
                 },
               },
             ],
@@ -105,6 +166,29 @@ describe('marketProviderOperationsApi.getHistoricalOhlcvCachePreflight', () => {
     expect(payload.seedEnabled).toBe(false);
     expect(payload.networkCallsEnabled).toBe(false);
     expect(payload.mutationEnabled).toBe(false);
+    expect(payload.activationChecklist.contractVersion).toBe('historical_ohlcv_data_activation_checklist_v1');
+    expect(payload.activationChecklist.operatorOnly).toBe(true);
+    expect(payload.activationChecklist.consumerVisible).toBe(false);
+    expect(payload.activationChecklist.supportedStates).toEqual([
+      'disabled_by_config',
+      'dependency_missing',
+      'ready_to_seed',
+      'seeded/cache_hit',
+      'failed_safely',
+    ]);
+    expect(payload.activationChecklist.starterSymbolSets.us.symbols).toEqual(['ORCL', 'AAPL', 'NVDA']);
+    expect(payload.activationChecklist.starterSymbolSets.cnIfSupported.symbols).toEqual(['600519', '000001', '601398']);
+    expect(payload.activationChecklist.items[0]).toMatchObject({
+      market: 'us',
+      state: 'ready_to_seed',
+      requiredRuntimeFlags: [
+        'WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED',
+        'WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED',
+      ],
+      currentRepresentativeSymbols: ['ORCL', 'AAPL'],
+      recommendedFirstSymbols: ['ORCL', 'AAPL', 'NVDA'],
+      workflowUnlocks: ['Stock', 'Scanner', 'Backtest', 'Technical Indicators', 'Market Regime'],
+    });
     expect(payload.representativeSymbols.cn).toEqual(['600519']);
     expect(payload.markets.cn?.runtimeEnabled).toBe(false);
     expect(payload.markets.cn?.symbols[0]).toMatchObject({
@@ -118,5 +202,6 @@ describe('marketProviderOperationsApi.getHistoricalOhlcvCachePreflight', () => {
     });
     expect(payload.markets.us?.dependencyAvailable).toBe(false);
     expect(payload.markets.us?.symbols[0].dataState).toBe('missing_adjustments');
+    expect(payload.markets.us?.symbols[0].nextAction.state).toBe('seeded/cache_hit');
   });
 });

@@ -25,9 +25,22 @@ from src.utils.symbol_classification import is_us_stock_code
 
 HISTORICAL_OHLCV_CACHE_PREFLIGHT_CONTRACT_VERSION = "historical_ohlcv_cache_preflight_v1"
 HISTORICAL_OHLCV_CACHE_PRELIGHT_CONTRACT_VERSION = HISTORICAL_OHLCV_CACHE_PREFLIGHT_CONTRACT_VERSION
+HISTORICAL_OHLCV_ACTIVATION_CHECKLIST_CONTRACT_VERSION = "historical_ohlcv_data_activation_checklist_v1"
 HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV = "WOLFYSTOCK_HISTORICAL_OHLCV_CACHE_SEED_ENABLED"
-DEFAULT_CN_REPRESENTATIVE_SYMBOLS = ("600519",)
+DEFAULT_CN_REPRESENTATIVE_SYMBOLS = ("600519", "000001", "601398")
 DEFAULT_US_REPRESENTATIVE_SYMBOLS = ("ORCL", "AAPL", "NVDA")
+_ACTIVATION_STATE_DISABLED = "disabled_by_config"
+_ACTIVATION_STATE_DEPENDENCY_MISSING = "dependency_missing"
+_ACTIVATION_STATE_READY_TO_SEED = "ready_to_seed"
+_ACTIVATION_STATE_CACHED = "seeded/cache_hit"
+_ACTIVATION_STATE_FAILED_SAFELY = "failed_safely"
+_ACTIVATION_WORKFLOW_UNLOCKS = (
+    "Stock",
+    "Scanner",
+    "Backtest",
+    "Technical Indicators",
+    "Market Regime",
+)
 _TRUTHY = {"1", "true", "yes", "on"}
 _UNSAFE_KEY_RE = re.compile(
     r"(api[_-]?key|authorization|bearer|cachekey|cookie|debug|exceptionclass|password|"
@@ -157,6 +170,7 @@ class HistoricalOhlcvCachePreflightService:
                     "seedFlag": f"{HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV}=true",
                 },
                 "representativeSymbols": {"cn": list(symbols["cn"]), "us": list(symbols["us"])},
+                "activationChecklist": _build_activation_checklist(markets=markets, seed_enabled=seed_enabled),
                 "markets": markets,
             }
         )
@@ -382,6 +396,15 @@ def _build_symbol_payload(
     freshness_state = str(cache.get("freshnessState") or "unknown")
     adjustment_state = str(cache.get("adjustmentState") or "unknown")
     bars_written = int(seed_report.get("barsWritten") or 0)
+    data_state = _data_state(
+        runtime_state=runtime_state,
+        cache_state=cache_state,
+        cached_bars=cached_bars,
+        required_bars=required_bars,
+        freshness_state=freshness_state,
+        adjustment_state=adjustment_state,
+        require_adjusted=require_adjusted,
+    )
     return {
         "market": market,
         "symbol": symbol,
@@ -393,15 +416,7 @@ def _build_symbol_payload(
         "latestBarDate": cache.get("latestBarDate"),
         "freshnessState": freshness_state,
         "adjustmentState": adjustment_state,
-        "dataState": _data_state(
-            runtime_state=runtime_state,
-            cache_state=cache_state,
-            cached_bars=cached_bars,
-            required_bars=required_bars,
-            freshness_state=freshness_state,
-            adjustment_state=adjustment_state,
-            require_adjusted=require_adjusted,
-        ),
+        "dataState": data_state,
         "seedState": seed_state,
         "seedResult": seed_report.get("seedResult") or "not_requested",
         "barsWritten": bars_written,
@@ -409,7 +424,13 @@ def _build_symbol_payload(
         "freshness": seed_report.get("freshness") or "unknown",
         "adjustmentStatus": seed_report.get("adjustmentStatus") or "unknown",
         "intendedAction": seed_report.get("intendedAction"),
-        "nextAction": _next_action(market, runtime_state, seed_state),
+        "nextAction": _next_action(
+            market,
+            runtime_state,
+            seed_state,
+            cache_state=cache_state,
+            data_state=data_state,
+        ),
     }
 
 
@@ -537,28 +558,38 @@ def _cache_data_state(
     return "fresh"
 
 
-def _next_action(market: str, runtime_state: str, seed_state: str) -> dict[str, Any]:
+def _next_action(
+    market: str,
+    runtime_state: str,
+    seed_state: str,
+    *,
+    cache_state: str,
+    data_state: str,
+) -> dict[str, Any]:
     if seed_state == "cache_updated":
-        state = "cache_updated"
-        summary = "Cache seed completed successfully through the existing storage abstraction."
+        state = _ACTIVATION_STATE_CACHED
+        summary = "Representative cache data is now available through the existing storage abstraction."
+    elif cache_state == "cache_hit":
+        state = _ACTIVATION_STATE_CACHED
+        summary = "Representative cache is already present; validate bars, freshness, and adjustments before widening coverage."
     elif seed_state == "symbol_not_allowlisted":
         state = "symbol_not_allowlisted"
         summary = "Use the documented small representative symbol set for cache seed."
     elif seed_state == "seed_disabled_by_config":
-        state = "seed_disabled_by_config"
+        state = _ACTIVATION_STATE_DISABLED
         summary = "Enable the seed flag and the runtime flag before mutation is allowed."
     elif runtime_state == "disabled_by_config":
-        state = "disabled_by_config"
+        state = _ACTIVATION_STATE_DISABLED
         summary = "Enable the documented runtime flag before provider fetch is allowed."
     elif runtime_state == "dependency_missing":
-        state = "dependency_missing"
+        state = _ACTIVATION_STATE_DEPENDENCY_MISSING
         summary = "Install the documented optional dependency before provider fetch is allowed."
-    elif runtime_state == "runtime_unavailable":
-        state = "runtime_unavailable"
+    elif runtime_state == "runtime_unavailable" or cache_state == "cache_error" or data_state == "runtime_unavailable":
+        state = _ACTIVATION_STATE_FAILED_SAFELY
         summary = "Retry only after the provider runtime issue is resolved."
     else:
-        state = "ready"
-        summary = "Cache preflight is ready; enable seed only when operator approval allows mutation."
+        state = _ACTIVATION_STATE_READY_TO_SEED
+        summary = "Runtime and dependency checks are green; operator approval can move this market into explicit seed."
     return {"state": state, "summary": summary, "requiredConfig": _required_flag_text(market, include_seed=seed_state != "seed_skipped")}
 
 
@@ -638,9 +669,230 @@ def _default_cn_fetcher_factory() -> Any:
     return AkshareFetcher()
 
 
+def _build_activation_checklist(
+    *,
+    markets: Mapping[str, Mapping[str, Any]],
+    seed_enabled: bool,
+) -> dict[str, Any]:
+    return {
+        "contractVersion": HISTORICAL_OHLCV_ACTIVATION_CHECKLIST_CONTRACT_VERSION,
+        "operatorOnly": True,
+        "readOnly": True,
+        "noExternalCalls": True,
+        "consumerVisible": False,
+        "supportedStates": [
+            _ACTIVATION_STATE_DISABLED,
+            _ACTIVATION_STATE_DEPENDENCY_MISSING,
+            _ACTIVATION_STATE_READY_TO_SEED,
+            _ACTIVATION_STATE_CACHED,
+            _ACTIVATION_STATE_FAILED_SAFELY,
+        ],
+        "starterSymbolSets": {
+            "us": {
+                "label": "US first cache activation set",
+                "symbols": list(DEFAULT_US_REPRESENTATIVE_SYMBOLS),
+                "supported": True,
+            },
+            "cnIfSupported": {
+                "label": "CN first cache activation set if the local CN runtime is supported",
+                "symbols": list(DEFAULT_CN_REPRESENTATIVE_SYMBOLS),
+                "supported": True,
+            },
+        },
+        "workflowUnlocks": list(_ACTIVATION_WORKFLOW_UNLOCKS),
+        "items": [
+            _build_market_activation_item(
+                market=str(markets[market].get("market") or market),
+                market_payload=markets[market],
+                seed_enabled=seed_enabled,
+            )
+            for market in ("us", "cn")
+            if market in markets
+        ],
+    }
+
+
+def _build_market_activation_item(
+    *,
+    market: str,
+    market_payload: Mapping[str, Any],
+    seed_enabled: bool,
+) -> dict[str, Any]:
+    symbols = [
+        dict(item)
+        for item in market_payload.get("symbols") or ()
+        if isinstance(item, Mapping)
+    ]
+    runtime_enabled = bool(market_payload.get("runtimeEnabled"))
+    dependency_available = bool(market_payload.get("dependencyAvailable"))
+    state = _activation_state(
+        runtime_enabled=runtime_enabled,
+        dependency_available=dependency_available,
+        seed_enabled=seed_enabled,
+        symbols=symbols,
+    )
+    cached_symbol_count = sum(1 for item in symbols if str(item.get("cacheState") or "") == "cache_hit")
+    ready_symbol_count = sum(1 for item in symbols if str(item.get("dataState") or "") == "fresh")
+    stale_symbol_count = sum(1 for item in symbols if str(item.get("dataState") or "") == "stale")
+    missing_adjustment_count = sum(1 for item in symbols if str(item.get("adjustmentState") or "") == "missing")
+    failed_safely_count = sum(1 for item in symbols if _symbol_failed_safely(item))
+    return {
+        "market": market,
+        "label": "US activation checklist" if market == "us" else "CN activation checklist",
+        "state": state,
+        "runtimeEnabled": runtime_enabled,
+        "dependencyAvailable": dependency_available,
+        "seedEnabled": bool(seed_enabled),
+        "requiredRuntimeFlags": _required_runtime_flags(market),
+        "seedFlag": HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV,
+        "currentRepresentativeSymbols": [str(item.get("symbol") or "") for item in symbols if str(item.get("symbol") or "").strip()],
+        "recommendedFirstSymbols": list(
+            DEFAULT_US_REPRESENTATIVE_SYMBOLS if market == "us" else DEFAULT_CN_REPRESENTATIVE_SYMBOLS
+        ),
+        "disabledReasonCodes": _activation_disabled_reason_codes(
+            runtime_enabled=runtime_enabled,
+            dependency_available=dependency_available,
+            seed_enabled=seed_enabled,
+            symbols=symbols,
+        ),
+        "cacheSummary": {
+            "totalSymbols": len(symbols),
+            "cachedSymbolCount": cached_symbol_count,
+            "readySymbolCount": ready_symbol_count,
+            "staleSymbolCount": stale_symbol_count,
+            "missingAdjustmentCount": missing_adjustment_count,
+            "failedSafelyCount": failed_safely_count,
+        },
+        "availableSeedActions": _activation_seed_actions(state=state, seed_enabled=seed_enabled),
+        "workflowUnlocks": list(_ACTIVATION_WORKFLOW_UNLOCKS),
+        "currentStatusSummary": _activation_status_summary(
+            market=market,
+            state=state,
+            cached_symbol_count=cached_symbol_count,
+            total_symbols=len(symbols),
+        ),
+        "nextStepSummary": _activation_next_step_summary(market=market, state=state),
+    }
+
+
+def _required_runtime_flags(market: str) -> list[str]:
+    if market == "us":
+        return [CN_RUNTIME_ENABLED_ENV, YFINANCE_US_OHLCV_ENABLE_ENV]
+    return [CN_RUNTIME_ENABLED_ENV]
+
+
+def _activation_state(
+    *,
+    runtime_enabled: bool,
+    dependency_available: bool,
+    seed_enabled: bool,
+    symbols: Sequence[Mapping[str, Any]],
+) -> str:
+    if any(_symbol_failed_safely(item) for item in symbols):
+        return _ACTIVATION_STATE_FAILED_SAFELY
+    if symbols and all(_symbol_cached(item) for item in symbols):
+        return _ACTIVATION_STATE_CACHED
+    if not runtime_enabled:
+        return _ACTIVATION_STATE_DISABLED
+    if not dependency_available:
+        return _ACTIVATION_STATE_DEPENDENCY_MISSING
+    if seed_enabled or any(not _symbol_cached(item) for item in symbols):
+        return _ACTIVATION_STATE_READY_TO_SEED
+    return _ACTIVATION_STATE_READY_TO_SEED
+
+
+def _symbol_cached(item: Mapping[str, Any]) -> bool:
+    if str(item.get("cacheState") or "") == "cache_hit":
+        return True
+    return str(item.get("seedResult") or "") in {"cache_hit", "seeded"}
+
+
+def _symbol_failed_safely(item: Mapping[str, Any]) -> bool:
+    if str(item.get("runtimeState") or "") == "runtime_unavailable":
+        return True
+    if str(item.get("cacheState") or "") == "cache_error":
+        return True
+    return str(item.get("seedResult") or "") == "failed_safely"
+
+
+def _activation_disabled_reason_codes(
+    *,
+    runtime_enabled: bool,
+    dependency_available: bool,
+    seed_enabled: bool,
+    symbols: Sequence[Mapping[str, Any]],
+) -> list[str]:
+    reasons: list[str] = []
+    if not runtime_enabled:
+        reasons.append("runtime_flags_off")
+    if not dependency_available:
+        reasons.append("optional_dependency_missing")
+    if not seed_enabled:
+        reasons.append("seed_flag_off_by_default")
+    if any(not _symbol_cached(item) for item in symbols):
+        reasons.append("representative_cache_missing")
+    if any(str(item.get("adjustmentState") or "") == "missing" for item in symbols):
+        reasons.append("adjustments_missing_for_some_symbols")
+    if any(str(item.get("dataState") or "") == "stale" for item in symbols):
+        reasons.append("cached_history_stale_for_some_symbols")
+    if any(_symbol_failed_safely(item) for item in symbols):
+        reasons.append("runtime_or_cache_failed_safely")
+    return reasons
+
+
+def _activation_seed_actions(*, state: str, seed_enabled: bool) -> list[str]:
+    actions = ["Review representative dry-run readiness before enabling any mutation."]
+    if state == _ACTIVATION_STATE_DISABLED:
+        actions.append("Enable the documented runtime flags first; keep providers default-off until operator approval.")
+    elif state == _ACTIVATION_STATE_DEPENDENCY_MISSING:
+        actions.append("Install the approved optional dependency and rerun this read-only checklist.")
+    elif state == _ACTIVATION_STATE_READY_TO_SEED:
+        actions.append("Run the explicit seed flow in dry-run mode first, then enable the seed flag only after approval.")
+    elif state == _ACTIVATION_STATE_CACHED:
+        actions.append("Validate cached bars, freshness, and adjustments before expanding beyond the starter symbol set.")
+    elif state == _ACTIVATION_STATE_FAILED_SAFELY:
+        actions.append("Review the bounded runtime failure and retry only after the local issue is resolved.")
+    if not seed_enabled:
+        actions.append("The seed flag remains default-off until an operator explicitly enables it.")
+    return actions
+
+
+def _activation_status_summary(
+    *,
+    market: str,
+    state: str,
+    cached_symbol_count: int,
+    total_symbols: int,
+) -> str:
+    market_label = "US" if market == "us" else "CN"
+    if state == _ACTIVATION_STATE_DISABLED:
+        return f"{market_label} starter symbols remain intentionally disabled by runtime config."
+    if state == _ACTIVATION_STATE_DEPENDENCY_MISSING:
+        return f"{market_label} starter symbols are blocked until the optional dependency is installed."
+    if state == _ACTIVATION_STATE_CACHED:
+        return f"{market_label} starter cache is already seeded or present for {cached_symbol_count}/{total_symbols} representative symbols."
+    if state == _ACTIVATION_STATE_FAILED_SAFELY:
+        return f"{market_label} activation hit a bounded safe failure; no external behavior changed."
+    return f"{market_label} starter symbols are ready for an explicit admin seed review."
+
+
+def _activation_next_step_summary(*, market: str, state: str) -> str:
+    market_label = "US" if market == "us" else "CN"
+    if state == _ACTIVATION_STATE_DISABLED:
+        return f"Turn on the {market_label} runtime flags, reload the checklist, and confirm cache readiness before any seed."
+    if state == _ACTIVATION_STATE_DEPENDENCY_MISSING:
+        return f"Install the approved {market_label} dependency and reread this checklist before touching the seed flow."
+    if state == _ACTIVATION_STATE_CACHED:
+        return f"Use the starter cache hit as proof, then widen symbol coverage only through the existing explicit seed workflow."
+    if state == _ACTIVATION_STATE_FAILED_SAFELY:
+        return f"Keep the workflow bounded to admin review until the safe failure is resolved and the checklist returns to dry-run readiness."
+    return f"Use the documented starter symbols first, keep the seed flag explicit, and verify the unlocked product surfaces stay bounded."
+
+
 __all__ = [
     "DEFAULT_CN_REPRESENTATIVE_SYMBOLS",
     "DEFAULT_US_REPRESENTATIVE_SYMBOLS",
+    "HISTORICAL_OHLCV_ACTIVATION_CHECKLIST_CONTRACT_VERSION",
     "HISTORICAL_OHLCV_CACHE_PREFLIGHT_CONTRACT_VERSION",
     "HISTORICAL_OHLCV_CACHE_PRELIGHT_CONTRACT_VERSION",
     "HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV",

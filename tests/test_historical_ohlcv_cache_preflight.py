@@ -8,6 +8,7 @@ from typing import Any
 import pandas as pd
 
 from src.services.historical_ohlcv_cache_preflight import (
+    HISTORICAL_OHLCV_ACTIVATION_CHECKLIST_CONTRACT_VERSION,
     HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV,
     HistoricalOhlcvCachePreflightService,
     sanitize_historical_ohlcv_preflight_payload,
@@ -143,10 +144,24 @@ def test_disabled_default_preflight_is_dry_run_without_provider_or_mutation() ->
     assert us_cache.save_calls == []
     cn_item = payload["markets"]["cn"]["symbols"][0]
     us_item = payload["markets"]["us"]["symbols"][0]
+    checklist_by_market = {item["market"]: item for item in payload["activationChecklist"]["items"]}
     assert cn_item["runtimeState"] == "disabled_by_config"
     assert us_item["runtimeState"] == "disabled_by_config"
     assert cn_item["cacheState"] == "cache_missing"
     assert us_item["cacheState"] == "cache_missing"
+    assert payload["activationChecklist"]["contractVersion"] == HISTORICAL_OHLCV_ACTIVATION_CHECKLIST_CONTRACT_VERSION
+    assert payload["activationChecklist"]["operatorOnly"] is True
+    assert payload["activationChecklist"]["consumerVisible"] is False
+    assert checklist_by_market["cn"]["state"] == "disabled_by_config"
+    assert checklist_by_market["us"]["state"] == "disabled_by_config"
+    assert checklist_by_market["us"]["workflowUnlocks"] == [
+        "Stock",
+        "Scanner",
+        "Backtest",
+        "Technical Indicators",
+        "Market Regime",
+    ]
+    assert checklist_by_market["cn"]["recommendedFirstSymbols"] == ["600519", "000001", "601398"]
     assert "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED=true" in cn_item["nextAction"]["requiredConfig"]
     assert "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED=true" in us_item["nextAction"]["requiredConfig"]
 
@@ -227,6 +242,9 @@ def test_us_seed_dry_run_reports_intended_action_and_writes_no_bars() -> None:
     assert item["seedResult"] == "dry_run"
     assert item["intendedAction"] == "seed_us_ohlcv_cache"
     assert item["barsWritten"] == 0
+    assert item["nextAction"]["state"] == "ready_to_seed"
+    checklist_by_market = {entry["market"]: entry for entry in payload["activationChecklist"]["items"]}
+    assert checklist_by_market["us"]["state"] == "ready_to_seed"
 
 
 def test_us_seed_reports_dependency_missing_without_provider_call() -> None:
@@ -250,6 +268,10 @@ def test_us_seed_reports_dependency_missing_without_provider_call() -> None:
     assert item["runtimeState"] == "dependency_missing"
     assert item["seedResult"] == "dependency_missing"
     assert item["barsWritten"] == 0
+    assert item["nextAction"]["state"] == "dependency_missing"
+    checklist_by_market = {entry["market"]: entry for entry in payload["activationChecklist"]["items"]}
+    assert checklist_by_market["us"]["state"] == "dependency_missing"
+    assert "optional_dependency_missing" in checklist_by_market["us"]["disabledReasonCodes"]
 
 
 def test_us_provider_error_is_failed_safely_without_leaking_details() -> None:
@@ -274,6 +296,9 @@ def test_us_provider_error_is_failed_safely_without_leaking_details() -> None:
     assert item["runtimeState"] == "runtime_unavailable"
     assert item["seedResult"] == "failed_safely"
     assert item["barsWritten"] == 0
+    assert item["nextAction"]["state"] == "failed_safely"
+    checklist_by_market = {entry["market"]: entry for entry in payload["activationChecklist"]["items"]}
+    assert checklist_by_market["us"]["state"] == "failed_safely"
     for forbidden in ("yfinancefetcher", "token", "secret", "rawpayload", "traceback", "runtimeerror"):
         assert forbidden not in serialized
 
@@ -299,10 +324,14 @@ def test_cache_hit_reports_bar_count_freshness_and_adjustments_without_provider_
     assert cn_item["freshnessState"] == "stale"
     assert cn_item["adjustmentState"] == "available"
     assert cn_item["dataState"] == "stale"
+    assert cn_item["nextAction"]["state"] == "seeded/cache_hit"
     assert us_item["cacheState"] == "cache_hit"
     assert us_item["cachedBars"] == 5
     assert us_item["latestBarDate"] == "2026-06-23"
     assert us_item["adjustmentState"] == "available"
+    assert us_item["nextAction"]["state"] == "seeded/cache_hit"
+    checklist_by_market = {entry["market"]: entry for entry in payload["activationChecklist"]["items"]}
+    assert checklist_by_market["us"]["state"] == "seeded/cache_hit"
     assert us_fetcher.calls == []
 
 
@@ -426,4 +455,39 @@ def test_recursive_redaction_removes_unsafe_admin_and_consumer_payload_fragments
 
     assert payload["safe"]["nextAction"] == "Set WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED=true"
     for forbidden in ("providerclass", "aksharefetcher", "rawpayload", "token", "secret", "traceid", "traceback"):
+        assert forbidden not in serialized
+
+
+def test_activation_checklist_uses_explicit_admin_state_set_without_leaking_internal_details() -> None:
+    fetcher = _FakeDailyFetcher(error=RuntimeError("AkshareFetcher token=secret rawPayload Traceback"))
+    payload = HistoricalOhlcvCachePreflightService(
+        env={
+            "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "true",
+            "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
+            HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV: "true",
+        },
+        spec_finder=_spec_finder({"akshare", "yfinance"}),
+        cn_repository=_FakeCnRepository(),
+        cn_fetcher_factory=lambda: fetcher,
+        us_cache=_FakeUsCache(),
+        today=date(2026, 6, 24),
+    ).seed(symbols_by_market={"cn": ["600519"], "us": ["NVDA"]}, required_bars=5, dry_run=False)
+
+    serialized = json.dumps(payload, ensure_ascii=False).lower()
+    checklist = payload["activationChecklist"]
+    checklist_by_market = {entry["market"]: entry for entry in checklist["items"]}
+
+    assert checklist["supportedStates"] == [
+        "disabled_by_config",
+        "dependency_missing",
+        "ready_to_seed",
+        "seeded/cache_hit",
+        "failed_safely",
+    ]
+    assert checklist["starterSymbolSets"]["us"]["symbols"] == ["ORCL", "AAPL", "NVDA"]
+    assert checklist["starterSymbolSets"]["cnIfSupported"]["symbols"] == ["600519", "000001", "601398"]
+    assert checklist_by_market["cn"]["state"] == "failed_safely"
+    assert checklist_by_market["us"]["state"] == "seeded/cache_hit"
+    assert "runtime_or_cache_failed_safely" in checklist_by_market["cn"]["disabledReasonCodes"]
+    for forbidden in ("token", "secret", "rawpayload", "traceback", "requestid", "traceid", "runtimeerror"):
         assert forbidden not in serialized
