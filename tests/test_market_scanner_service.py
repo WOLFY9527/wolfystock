@@ -4027,7 +4027,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["state"], "blocked")
         self.assertEqual(readiness["universeSize"], 4)
         self.assertEqual(readiness["quoteCoverage"], "unknown")
-        self.assertEqual(readiness["historyCoverage"], "unknown")
+        self.assertEqual(readiness["historyCoverage"], "missing")
         self.assertEqual(readiness["candidateEvaluationCount"], 0)
         self.assertEqual(readiness["selectedCount"], 0)
         self.assertEqual(readiness["rejectedCount"], 0)
