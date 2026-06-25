@@ -63,6 +63,15 @@ def test_market_us_breadth_current_proxy_snapshot_stays_proxy_not_exchange_bread
     assert payload["sourceAuthorityReason"] == "representative_sample_not_full_market_breadth"
     assert "representative_sample_not_full_market_breadth" in payload["routeRejectedReasonCodes"]
     assert payload["authorityDiagnostics"]["reason"] == "authorized_us_market_breadth_feed_not_configured"
+    readiness = payload["breadthReadiness"]
+    readiness_measures = {item["measureId"]: item for item in readiness["measures"]}
+    assert readiness["contractVersion"] == "market_breadth_readiness_v1"
+    assert readiness["markets"][0]["market"] == "US"
+    assert readiness_measures["advance_decline"]["marketStates"]["US"] == "missing"
+    assert readiness_measures["new_highs_lows"]["marketStates"]["US"] == "missing"
+    assert readiness_measures["sector_participation"]["marketStates"]["US"] == "available"
+    assert readiness_measures["equal_weight_cap_weight_proxy"]["marketStates"]["US"] == "available"
+    assert readiness_measures["percent_above_ma"]["marketStates"]["US"] == "missing"
     assert "SECTORS_UP" in symbols
     assert "RSP_SPY" in symbols
     assert "ADVANCERS" not in symbols
@@ -141,6 +150,14 @@ def test_market_us_breadth_uses_polygon_computed_ad_when_authority_gate_passes()
     assert payload["isPartial"] is True
     assert payload["authorityDiagnostics"]["reasonCodes"] == ["polygon_high_low_history_unavailable"]
     assert payload["authorityDiagnostics"]["comparisonBasis"] == "previous_close"
+    readiness_measures = {
+        item["measureId"]: item
+        for item in payload["breadthReadiness"]["measures"]
+    }
+    assert readiness_measures["advance_decline"]["marketStates"]["US"] == "available"
+    assert readiness_measures["new_highs_lows"]["marketStates"]["US"] == "missing"
+    assert readiness_measures["percent_above_ma"]["marketStates"]["US"] == "missing"
+    assert readiness_measures["volume_breadth"]["marketStates"]["US"] == "missing"
     assert by_symbol["ADVANCERS"]["value"] == 7000
     assert by_symbol["ADVANCERS"]["broadMarketClaimAllowed"] is False
     assert by_symbol["ADVANCERS"]["comparisonBasis"] == "previous_close"
@@ -218,6 +235,12 @@ def test_market_us_breadth_projects_polygon_high_low_when_history_gates_pass() -
     assert payload["isPartial"] is False
     assert payload["fulfilledMetrics"] == activation["fulfilledMetrics"]
     assert payload["missingMetrics"] == []
+    readiness_measures = {
+        item["measureId"]: item
+        for item in payload["breadthReadiness"]["measures"]
+    }
+    assert readiness_measures["advance_decline"]["marketStates"]["US"] == "available"
+    assert readiness_measures["new_highs_lows"]["marketStates"]["US"] == "available"
     assert payload["highLowEligibleCount"] == 11250
     assert payload["highLowEligibleThreshold"] == 9600
     assert "unavailable" not in payload["warning"].lower()
@@ -299,6 +322,13 @@ def test_market_us_breadth_fallback_stays_non_live_and_sanitized() -> None:
     assert "US breadth missing/unavailable" in payload["warning"]
     assert payload["providerHealth"]["status"] == "unavailable"
     assert payload["providerHealth"]["status"] != "live"
+    readiness_measures = {
+        item["measureId"]: item
+        for item in payload["breadthReadiness"]["measures"]
+    }
+    assert readiness_measures["advance_decline"]["marketStates"]["US"] == "not_configured"
+    assert readiness_measures["new_highs_lows"]["marketStates"]["US"] == "not_configured"
+    assert readiness_measures["equal_weight_cap_weight_proxy"]["marketStates"]["US"] == "not_configured"
     assert provenance["sourceType"] == "fallback_static"
     assert provenance["freshnessLabel"] != "实时"
     assert "SECRET" not in serialized

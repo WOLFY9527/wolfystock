@@ -34,6 +34,9 @@ from src.services.futures_contracts import list_futures_contracts
 from src.services.investor_signal_model import build_consumer_safe_investor_signal
 from src.services.liquidity_monitor_service import LiquidityMonitorService
 from src.services.market_data_quality import build_consumer_data_quality_state
+from src.services.market_breadth_readiness_service import (
+    build_market_breadth_readiness_contract,
+)
 from src.services.consumer_issue_labels import build_consumer_issues, sanitize_consumer_reason_payload
 from src.services.market_data_source_registry import resolve_source_label
 from src.services.market_rotation_radar_service import MarketRotationRadarService
@@ -1193,13 +1196,16 @@ class MarketOverviewService:
         )
 
     def get_cn_breadth(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        return self._classified_snapshot(
-            cache_key="cn_breadth",
-            panel_name="ChinaBreadthCard",
-            endpoint_url="/api/v1/market/cn-breadth",
-            fetcher=self._fetch_cn_breadth_snapshot,
-            fallback_factory=self._fallback_cn_breadth_snapshot,
-            actor=actor,
+        return self._with_breadth_readiness(
+            self._classified_snapshot(
+                cache_key="cn_breadth",
+                panel_name="ChinaBreadthCard",
+                endpoint_url="/api/v1/market/cn-breadth",
+                fetcher=self._fetch_cn_breadth_snapshot,
+                fallback_factory=self._fallback_cn_breadth_snapshot,
+                actor=actor,
+            ),
+            "CN",
         )
 
     def get_cn_flows(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -1238,15 +1244,26 @@ class MarketOverviewService:
             )
 
         return self._with_request_quote_memo(
-            lambda: self._classified_snapshot(
-                cache_key="us_breadth",
-                panel_name="UsBreadthCard",
-                endpoint_url="/api/v1/market/us-breadth",
-                fetcher=fetcher,
-                fallback_factory=fallback_factory,
-                actor=actor,
+            lambda: self._with_breadth_readiness(
+                self._classified_snapshot(
+                    cache_key="us_breadth",
+                    panel_name="UsBreadthCard",
+                    endpoint_url="/api/v1/market/us-breadth",
+                    fetcher=fetcher,
+                    fallback_factory=fallback_factory,
+                    actor=actor,
+                ),
+                "US",
             )
         )
+
+    def _with_breadth_readiness(self, payload: Dict[str, Any], market: str) -> Dict[str, Any]:
+        return {
+            **payload,
+            "breadthReadiness": build_market_breadth_readiness_contract(
+                market_snapshots={market: payload}
+            ),
+        }
 
     def get_rates(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         return self._classified_snapshot(
@@ -4870,7 +4887,7 @@ class MarketOverviewService:
         if coverage is None:
             coverage = 0.0 if (is_fallback or is_unavailable or not _has_valid_market_value(normalized_item)) else 1.0
 
-        return {
+        payload = {
             "source": source,
             "sourceLabel": source_label,
             "sourceType": source_type,
@@ -4884,6 +4901,7 @@ class MarketOverviewService:
             "isSynthetic": is_synthetic,
             "isUnavailable": is_unavailable,
         }
+        return payload
 
     @staticmethod
     def _market_overview_provider_evidence_status(evidence: Mapping[str, Any]) -> str:
@@ -6381,6 +6399,7 @@ class MarketOverviewService:
                 self._breadth_metric_item("上涨比例", "ADV_RATIO", adv_ratio, "%", as_of, updated_at, source, source_label, source_type, detail=detail),
             ],
         }
+        return self._with_breadth_readiness(payload, "CN")
 
     def _fetch_us_breadth_snapshot(self) -> Dict[str, Any]:
         polygon_activation = run_polygon_us_breadth_activation()
@@ -6440,7 +6459,7 @@ class MarketOverviewService:
         items.extend(sorted_by_change)
 
         updated_at = _now_iso()
-        return {
+        payload = {
             "source": "yfinance_proxy",
             "sourceLabel": "Yahoo Finance",
             "sourceType": "unofficial_proxy",
@@ -6472,6 +6491,7 @@ class MarketOverviewService:
             ],
             "fallbackUsed": False,
         }
+        return self._with_breadth_readiness(payload, "US")
 
     def _polygon_us_breadth_authority_diagnostic(
         self,
@@ -6634,7 +6654,7 @@ class MarketOverviewService:
                     detail=detail,
                 )
             )
-        return {
+        payload = {
             **source_meta,
             "updatedAt": updated_at,
             "asOf": as_of,
@@ -6673,6 +6693,7 @@ class MarketOverviewService:
             },
             "items": items,
         }
+        return self._with_breadth_readiness(payload, "US")
 
     def _polygon_us_breadth_metric_item(
         self,
@@ -8505,18 +8526,38 @@ class MarketOverviewService:
         ])
 
     def _fallback_cn_breadth_snapshot(self) -> Dict[str, Any]:
+        updated_at = _now_iso()
         items = [
-            self._metric_item("赚钱效应", "EFFECT", 64, 4, 6.67, "score", [52, 58, 61, 64], explanation="上涨家数占优，市场赚钱效应较好。"),
-            self._metric_item("上涨家数", "ADVANCERS", 3190, 260, 8.87, "stocks", [2800, 2960, 3120, 3190]),
-            self._metric_item("下跌家数", "DECLINERS", 1780, -210, -10.55, "stocks", [2150, 1990, 1840, 1780]),
-            self._metric_item("平盘家数", "UNCHANGED", 240, -12, -4.76, "stocks", [260, 252, 248, 240]),
-            self._metric_item("涨停家数", "LIMIT_UP", 68, 11, 19.30, "stocks", [45, 51, 57, 68]),
-            self._metric_item("跌停家数", "LIMIT_DOWN", 18, -6, -25.00, "stocks", [31, 26, 24, 18]),
-            self._metric_item("创新高家数", "NEW_HIGH", 92, 18, 24.32, "stocks", [61, 72, 84, 92]),
-            self._metric_item("创新低家数", "NEW_LOW", 36, -9, -20.00, "stocks", [52, 45, 40, 36]),
-            self._metric_item("上涨比例", "ADV_RATIO", 63.2, 3.8, 6.40, "%", [55, 58, 61, 63.2]),
+            self._unavailable_item("CN breadth missing/unavailable", "CN_BREADTH_UNAVAILABLE", "未接入", updated_at, detail="A-share breadth provider is not configured or unavailable"),
+            self._unavailable_item("Advance / decline", "ADVANCE_DECLINE_UNAVAILABLE", "未接入", updated_at),
+            self._unavailable_item("New highs / lows", "HIGH_LOW_UNAVAILABLE", "未接入", updated_at),
+            self._unavailable_item("Volume breadth", "VOLUME_BREADTH_UNAVAILABLE", "未接入", updated_at),
         ]
-        return self._card_snapshot(items, explanation="上涨家数占优，市场赚钱效应较好。")
+        payload = {
+            "source": "unavailable",
+            "sourceLabel": "未接入",
+            "sourceType": "missing",
+            "updatedAt": updated_at,
+            "asOf": updated_at,
+            "freshness": "unavailable",
+            "fallbackUsed": True,
+            "isFallback": True,
+            "warning": "CN breadth missing/unavailable: breadth provider is not configured or unavailable.",
+            "explanation": "CN breadth is missing/unavailable; no fallback breadth score or market participation metric is fabricated.",
+            "items": [
+                {
+                    **item,
+                    "source": "unavailable",
+                    "sourceLabel": "未接入",
+                    "sourceType": "missing",
+                    "freshness": "unavailable",
+                    "isFallback": True,
+                    "isUnavailable": True,
+                }
+                for item in items
+            ],
+        }
+        return self._with_breadth_readiness(payload, "CN")
 
     def _fallback_us_breadth_snapshot(
         self,
@@ -8575,7 +8616,7 @@ class MarketOverviewService:
             self._unavailable_item("Advance / decline", "ADVANCE_DECLINE_UNAVAILABLE", "未接入", updated_at),
             self._unavailable_item("52W high / low", "HIGH_LOW_UNAVAILABLE", "未接入", updated_at),
         ]
-        return {
+        payload = {
             "source": "unavailable",
             "sourceLabel": "未接入",
             "sourceType": "missing",
@@ -8589,6 +8630,7 @@ class MarketOverviewService:
             **missing_meta,
             "items": [{**item, **missing_meta} for item in items],
         }
+        return self._with_breadth_readiness(payload, "US")
 
     def _fallback_cn_flows_snapshot(self) -> Dict[str, Any]:
         items = [

@@ -19,6 +19,9 @@ from src.services.data_source_gap_registry_service import build_data_source_gap_
 from src.services.macro_provider_readiness_service import (
     build_macro_provider_readiness_contract,
 )
+from src.services.market_breadth_readiness_service import (
+    build_market_breadth_readiness_contract,
+)
 
 
 PROFESSIONAL_DATA_CAPABILITY_CONTRACT_VERSION = (
@@ -44,6 +47,7 @@ class _CapabilitySpec:
     source_label: str
     reason: str
     status_override: str | None = None
+    readiness: dict[str, Any] | None = None
 
 
 def _spec(
@@ -56,6 +60,7 @@ def _spec(
     reason: str,
     *,
     status: str | None = None,
+    readiness: dict[str, Any] | None = None,
 ) -> _CapabilitySpec:
     return _CapabilitySpec(
         capability_id=capability_id,
@@ -66,6 +71,7 @@ def _spec(
         source_label=source_label,
         reason=reason,
         status_override=status,
+        readiness=readiness,
     )
 
 
@@ -125,6 +131,17 @@ _CAPABILITY_SPECS: tuple[_CapabilitySpec, ...] = (
         "Unavailable until intraday options completeness and display rights are proven.",
         "Options Lab readiness boundary",
         "0DTE structure can be represented by the contract, but live views remain blocked by rights, completeness, and freshness evidence gaps.",
+    ),
+    _spec(
+        "market.breadth_readiness",
+        "Market breadth readiness",
+        "market_breadth_flows",
+        "breadth_flows_positioning",
+        "Readiness-only contract; no breadth score is emitted until supported measures and market coverage are proven.",
+        "Market breadth readiness contract",
+        "Advance/decline, highs/lows, percent-above-MA, sector participation, volume breadth, and equal-weight/cap-weight proxy readiness are reported separately by market.",
+        status="configured_missing",
+        readiness=build_market_breadth_readiness_contract(),
     ),
     _spec(
         "market.breadth_flows",
@@ -391,6 +408,8 @@ def _capability_to_dict(
                     "nextAction": macro_category.get("nextAction"),
                 }
             )
+    if spec.readiness is not None:
+        item["readiness"] = spec.readiness
     return item
 
 
