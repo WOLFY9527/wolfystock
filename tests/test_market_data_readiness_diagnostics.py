@@ -411,6 +411,8 @@ def test_diagnostics_stay_inert_without_network_or_provider_runtime_calls(tmp_pa
         "efinance",
         "akshare",
         "yfinance",
+        "akshare",
+        "yfinance",
     ]
 
 
@@ -460,6 +462,139 @@ def test_historical_ohlcv_cache_preflight_section_is_present_and_redacted() -> N
     assert [item["symbol"] for item in section["markets"]["us"]["symbols"]] == ["ORCL", "AAPL", "NVDA"]
     for forbidden in ("aksharefetcher", "yfinancefetcher", "cachekey", "rawpayload", "token", "traceback"):
         assert forbidden not in serialized
+
+
+def test_cross_asset_driver_readiness_uses_configured_symbols_not_query_symbols(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict] = []
+
+    def fake_preflight(**kwargs):
+        symbols = tuple((kwargs.get("symbols_by_market") or {}).get("us") or ())
+        calls.append({"symbols": symbols, "dry_run": kwargs.get("dry_run")})
+        if "SPY" in symbols:
+            return {
+                "markets": {
+                    "us": {
+                        "symbols": [
+                            {
+                                "symbol": "SPY",
+                                "dataState": "fresh",
+                                "cacheState": "cache_hit",
+                                "cachedBars": 90,
+                                "latestBarDate": "2026-06-25",
+                                "freshnessState": "fresh",
+                            },
+                            {
+                                "symbol": "QQQ",
+                                "dataState": "fresh",
+                                "cacheState": "cache_hit",
+                                "cachedBars": 90,
+                                "latestBarDate": "2026-06-25",
+                                "freshnessState": "fresh",
+                            },
+                            {
+                                "symbol": "IWM",
+                                "dataState": "fresh",
+                                "cacheState": "cache_hit",
+                                "cachedBars": 90,
+                                "latestBarDate": "2026-06-25",
+                                "freshnessState": "fresh",
+                            },
+                        ],
+                    },
+                },
+                "representativeSymbols": {"us": list(symbols)},
+            }
+        return {
+            "markets": {"us": {"symbols": []}},
+            "representativeSymbols": {"us": list(symbols)},
+        }
+
+    monkeypatch.setattr(
+        "src.services.market_data_readiness_diagnostics.build_historical_ohlcv_cache_preflight",
+        fake_preflight,
+    )
+
+    payload = build_market_data_readiness_diagnostics(
+        representative_symbols=["AAPL"],
+        env={},
+        spec_finder=_spec_finder_with(set()),
+    ).to_dict()
+
+    drivers = {item["category"]: item for item in payload["crossAssetDriverReadiness"]["drivers"]}
+
+    assert calls[0] == {"symbols": ("AAPL",), "dry_run": True}
+    assert "SPY" in calls[1]["symbols"]
+    assert "AAPL" not in calls[1]["symbols"]
+    assert payload["historicalOhlcvCachePreflight"]["representativeSymbols"]["us"] == ["AAPL"]
+    assert drivers["equities_index"]["state"] == "available"
+    assert drivers["equities_index"]["cachedOhlcv"]["usableBars"] == 90
+
+
+def test_cross_asset_driver_readiness_section_uses_cached_ohlcv_without_conclusions() -> None:
+    payload = build_market_data_readiness_diagnostics(
+        env={
+            "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "true",
+            "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
+        },
+        spec_finder=_spec_finder_with(ALL_OPTIONAL_MODULES),
+    ).to_dict()
+
+    section = payload["crossAssetDriverReadiness"]
+    drivers = {item["category"]: item for item in section["drivers"]}
+    serialized = json.dumps(section, ensure_ascii=False).lower()
+
+    assert section["contractVersion"] == "cross_asset_driver_readiness_v1"
+    assert section["consumerSafe"] is True
+    assert section["diagnosticOnly"] is True
+    assert section["networkCallsEnabled"] is False
+    assert section["externalProviderCalls"] is False
+    assert section["mutationEnabled"] is False
+    assert {
+        "equities_index",
+        "rates",
+        "usd",
+        "oil_energy",
+        "gold",
+        "volatility",
+        "credit",
+        "crypto",
+        "sectors",
+    } == set(drivers)
+    assert drivers["equities_index"]["configuredIdentifiers"][0] == {
+        "kind": "symbol",
+        "value": "SPY",
+        "market": "us",
+    }
+    assert drivers["rates"]["configuredIdentifiers"][0] == {
+        "kind": "series",
+        "value": "DGS2",
+        "market": "us",
+    }
+    assert drivers["credit"]["state"] == "not_configured"
+    assert drivers["equities_index"]["cachedOhlcv"]["requiredBars"] == 60
+    assert drivers["equities_index"]["cachedOhlcv"]["usableBars"] >= 0
+    assert drivers["equities_index"]["state"] in section["supportedStates"]
+
+    for fragment in (
+        "risk-on",
+        "risk-off",
+        "risk off",
+        "liquidity",
+        "inflation",
+        "recession",
+        "providerclass",
+        "requestid",
+        "traceid",
+        "cachekey",
+        "rawpayload",
+        "token",
+        "secret",
+        "credential",
+        "env",
+    ):
+        assert fragment not in serialized
 
 
 def test_official_risk_source_readiness_reports_ready_bundle_from_fresh_official_rows() -> None:
@@ -621,6 +756,8 @@ def test_consumer_evidence_readiness_matrix_is_provider_free_and_covers_core_sur
         "pytdx",
         "akshare",
         "efinance",
+        "akshare",
+        "yfinance",
         "akshare",
         "yfinance",
     ]

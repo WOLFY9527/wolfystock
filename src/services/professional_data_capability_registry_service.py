@@ -15,13 +15,16 @@ from typing import Any
 from src.services.earnings_calendar_readiness_contract import (
     build_earnings_calendar_readiness_v1,
 )
-from src.services.data_source_gap_registry_service import build_data_source_gap_registry
 from src.services.macro_provider_readiness_service import (
     build_macro_provider_readiness_contract,
 )
 from src.services.market_breadth_readiness_service import (
     build_market_breadth_readiness_contract,
 )
+from src.services.cross_asset_driver_readiness import (
+    build_cross_asset_driver_readiness,
+)
+from src.services.data_source_gap_registry_service import build_data_source_gap_registry
 
 
 PROFESSIONAL_DATA_CAPABILITY_CONTRACT_VERSION = (
@@ -131,17 +134,6 @@ _CAPABILITY_SPECS: tuple[_CapabilitySpec, ...] = (
         "Unavailable until intraday options completeness and display rights are proven.",
         "Options Lab readiness boundary",
         "0DTE structure can be represented by the contract, but live views remain blocked by rights, completeness, and freshness evidence gaps.",
-    ),
-    _spec(
-        "market.breadth_readiness",
-        "Market breadth readiness",
-        "market_breadth_flows",
-        "breadth_flows_positioning",
-        "Readiness-only contract; no breadth score is emitted until supported measures and market coverage are proven.",
-        "Market breadth readiness contract",
-        "Advance/decline, highs/lows, percent-above-MA, sector participation, volume breadth, and equal-weight/cap-weight proxy readiness are reported separately by market.",
-        status="configured_missing",
-        readiness=build_market_breadth_readiness_contract(),
     ),
     _spec(
         "market.breadth_flows",
@@ -306,6 +298,17 @@ _CAPABILITY_SPECS: tuple[_CapabilitySpec, ...] = (
         "Backtest readiness registry",
         "Backtest execution is available for research, while professional dataset lineage remains degraded.",
     ),
+    _spec(
+        "market.breadth_readiness",
+        "Market breadth readiness",
+        "market_breadth_flows",
+        "breadth_flows_positioning",
+        "Readiness-only contract; no breadth score is emitted until supported measures and market coverage are proven.",
+        "Market breadth readiness contract",
+        "Advance/decline, highs/lows, percent-above-MA, sector participation, volume breadth, and equal-weight/cap-weight proxy readiness are reported separately by market.",
+        status="configured_missing",
+        readiness=build_market_breadth_readiness_contract(),
+    ),
 )
 
 _MACRO_FRED_CAPABILITY_TO_CATEGORY = {
@@ -462,6 +465,7 @@ def build_professional_data_capability_registry(
         "summary": _summary(capabilities),
         "categories": categories,
         "capabilities": capabilities,
+        "crossAssetDriverReadiness": build_cross_asset_driver_readiness().to_dict(),
     }
     if include_admin_diagnostics:
         payload["macroReadiness"] = macro_readiness

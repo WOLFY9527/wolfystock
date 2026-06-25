@@ -143,6 +143,77 @@ const officialRiskReadinessPayload = () => ({
     rates: { state: 'stale', freshness: 'stale' },
     fedLiquidity: { state: 'blocked', freshness: 'unavailable' },
   },
+  crossAssetDriverReadiness: {
+    contractVersion: 'cross_asset_driver_readiness_v1',
+    consumerSafe: true,
+    diagnosticOnly: true,
+    networkCallsEnabled: false,
+    externalProviderCalls: false,
+    mutationEnabled: false,
+    supportedStates: ['available', 'missing', 'stale', 'insufficient_history', 'not_configured'],
+    consumerSummary: 'Cross-asset drivers are reported as data-readiness inputs only; no market conclusion is inferred.',
+    summary: {
+      totalDrivers: 3,
+      availableCount: 1,
+      missingCount: 1,
+      staleCount: 1,
+      insufficientHistoryCount: 0,
+      notConfiguredCount: 0,
+    },
+    drivers: [
+      {
+        category: 'equities_index',
+        label: 'Equities/index trend',
+        supported: true,
+        state: 'available',
+        configuredIdentifiers: [{ kind: 'symbol', value: 'SPY', market: 'us' }],
+        cachedOhlcv: {
+          requiredBars: 60,
+          usableBars: 90,
+          missingBars: 0,
+          cacheState: 'cache_hit',
+          freshnessState: 'fresh',
+          latestBarDate: '2026-06-25',
+        },
+        missingReasons: [],
+        consumerSafeSummary: 'Configured data is present for readiness evaluation.',
+      },
+      {
+        category: 'oil_energy',
+        label: 'Oil/energy',
+        supported: true,
+        state: 'stale',
+        configuredIdentifiers: [{ kind: 'symbol', value: 'USO', market: 'us' }],
+        cachedOhlcv: {
+          requiredBars: 60,
+          usableBars: 82,
+          missingBars: 0,
+          cacheState: 'cache_hit',
+          freshnessState: 'stale',
+          latestBarDate: '2026-06-20',
+        },
+        missingReasons: ['stale'],
+        consumerSafeSummary: 'Configured data exists but is stale for readiness evaluation.',
+      },
+      {
+        category: 'credit',
+        label: 'Credit spreads',
+        supported: false,
+        state: 'not_configured',
+        configuredIdentifiers: [],
+        cachedOhlcv: {
+          requiredBars: 60,
+          usableBars: 0,
+          missingBars: 60,
+          cacheState: 'not_applicable',
+          freshnessState: 'unknown',
+          latestBarDate: null,
+        },
+        missingReasons: ['not_configured'],
+        consumerSafeSummary: 'Driver category is not configured for readiness evaluation.',
+      },
+    ],
+  },
 });
 
 const professionalDataCapabilitiesPayload = () => ({
@@ -2183,6 +2254,23 @@ describe('MarketOverviewPage', () => {
     expect(boundary).toHaveTextContent('下一步：补齐市场广度、宏观背景');
     expect(boundary.textContent || '').not.toMatch(
       /contractVersion|market_overview|market_regime|confidenceCapReason|sourceAuthority|freshnessReason|nextDiagnostic|consumerSafeSummary|provider|runtime|credential|cache|debug|raw|buy|sell|hold|target price|position sizing|买入|卖出|持有|目标价|止损|仓位/i,
+    );
+  });
+
+  it('renders cross-asset driver readiness without fabricating market conclusions', async () => {
+    vi.mocked(marketApi.getDataReadiness).mockResolvedValueOnce(officialRiskReadinessPayload());
+
+    render(createElement(MarketOverviewPage));
+
+    const strip = await screen.findByTestId('market-overview-cross-asset-readiness');
+    await waitFor(() => expect(strip).toHaveTextContent('跨资产驱动部分可用'));
+    expect(strip).toHaveTextContent('Equities/index trend: 可用 (SPY)');
+    expect(strip).toHaveTextContent('Oil/energy: 待更新 (USO)');
+    expect(strip).toHaveTextContent('Credit spreads: 未配置');
+    expect(strip).toHaveTextContent('可用 1 · 待更新 1 · 历史不足 0 · 待补/未配置 1');
+    expect(strip).toHaveTextContent('仅展示已配置输入与缓存状态；未返回的驱动不做方向推断。');
+    expect(strip.textContent || '').not.toMatch(
+      /risk-on|risk-off|inflation|recession|providerClass|providerName|providerAttempted|requiredProviderClass|sourceAuthorityRouter|endpointHost|apiKeyPresent|exceptionClass|exceptionChain|requestId|traceId|cacheKey|rawPayload|credential|token|env|buy|sell|hold|target price|stop-loss|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i,
     );
   });
 

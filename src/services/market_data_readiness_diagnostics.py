@@ -22,6 +22,10 @@ from src.services.official_macro_liquidity_cache_contracts import (
 )
 from src.services.historical_ohlcv_cache_preflight import build_historical_ohlcv_cache_preflight
 from src.services.akshare_cn_ohlcv_cache import build_akshare_cn_ohlcv_runtime_status
+from src.services.cross_asset_driver_readiness import (
+    build_cross_asset_driver_readiness,
+    cross_asset_driver_cache_symbols,
+)
 from src.services.provider_affected_surface_mapping import (
     canonical_product_affected_surfaces,
 )
@@ -119,6 +123,7 @@ class MarketDataReadinessDiagnostics:
     consumer_evidence_readiness_matrix: tuple[ConsumerEvidenceReadinessSpec, ...]
     official_risk_source_readiness: Mapping[str, Any]
     historical_ohlcv_cache_preflight: Mapping[str, Any]
+    cross_asset_driver_readiness: Mapping[str, Any]
     representative_symbols: tuple[str, ...] = ()
     diagnostic_only: bool = True
     provider_runtime_called: bool = False
@@ -132,6 +137,7 @@ class MarketDataReadinessDiagnostics:
             "networkCallsEnabled": self.network_calls_enabled,
             "representativeSymbols": list(self.representative_symbols),
             "historicalOhlcvCachePreflight": dict(self.historical_ohlcv_cache_preflight),
+            "crossAssetDriverReadiness": dict(self.cross_asset_driver_readiness),
             "checks": [check.to_dict() for check in self.checks],
             "consumerEvidenceReadinessMatrix": {
                 "contractVersion": CONSUMER_EVIDENCE_READINESS_MATRIX_VERSION,
@@ -172,6 +178,19 @@ def build_market_data_readiness_diagnostics(
     checks.append(_build_optional_dependency_check(spec_finder=spec_finder))
     checks.append(_build_akshare_cn_ohlcv_runtime_check(env=resolved_env, spec_finder=spec_finder))
 
+    historical_ohlcv_cache_preflight = build_historical_ohlcv_cache_preflight(
+        env=resolved_env,
+        spec_finder=spec_finder,
+        symbols_by_market={"us": normalized_symbols},
+        dry_run=True,
+    )
+    cross_asset_ohlcv_cache_preflight = build_historical_ohlcv_cache_preflight(
+        env=resolved_env,
+        spec_finder=spec_finder,
+        symbols_by_market={"us": cross_asset_driver_cache_symbols()},
+        dry_run=True,
+    )
+
     return MarketDataReadinessDiagnostics(
         readiness_status=_resolve_readiness_status(checks),
         checks=tuple(checks),
@@ -181,12 +200,10 @@ def build_market_data_readiness_diagnostics(
             rates_rows=official_rates_rows,
             fed_liquidity_rows=official_fed_liquidity_rows,
         ),
-        historical_ohlcv_cache_preflight=build_historical_ohlcv_cache_preflight(
-            env=resolved_env,
-            spec_finder=spec_finder,
-            symbols_by_market={"us": normalized_symbols},
-            dry_run=True,
-        ),
+        historical_ohlcv_cache_preflight=historical_ohlcv_cache_preflight,
+        cross_asset_driver_readiness=build_cross_asset_driver_readiness(
+            historical_ohlcv_cache_preflight=cross_asset_ohlcv_cache_preflight,
+        ).to_dict(),
         representative_symbols=normalized_symbols,
     )
 

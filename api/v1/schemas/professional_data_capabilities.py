@@ -51,6 +51,45 @@ class ProfessionalDataCapabilitySummary(BaseModel):
     notImplementedCount: int
 
 
+class CrossAssetDriverCachedOhlcv(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    requiredBars: int
+    usableBars: int
+    missingBars: int
+    cacheState: str
+    freshnessState: str
+    latestBarDate: str | None = None
+
+
+class CrossAssetDriverReadinessItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    category: str
+    label: str
+    supported: bool
+    state: str
+    configuredIdentifiers: List[Dict[str, str]]
+    cachedOhlcv: CrossAssetDriverCachedOhlcv
+    missingReasons: List[str]
+    consumerSafeSummary: str
+
+
+class CrossAssetDriverReadiness(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    contractVersion: str
+    consumerSafe: bool
+    diagnosticOnly: bool
+    networkCallsEnabled: bool
+    externalProviderCalls: bool
+    mutationEnabled: bool
+    supportedStates: List[str]
+    consumerSummary: str
+    summary: Dict[str, int]
+    drivers: List[CrossAssetDriverReadinessItem]
+
+
 class ProfessionalDataCapabilityRegistryResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -59,6 +98,7 @@ class ProfessionalDataCapabilityRegistryResponse(BaseModel):
     summary: ProfessionalDataCapabilitySummary
     categories: List[ProfessionalDataCapabilityCategory]
     capabilities: List[ProfessionalDataCapability]
+    crossAssetDriverReadiness: CrossAssetDriverReadiness
 
 
 class ProfessionalDataCapabilityAdminItem(ProfessionalDataCapability):
@@ -76,3 +116,4 @@ class ProfessionalDataCapabilityRegistryAdminResponse(BaseModel):
     categories: List[ProfessionalDataCapabilityCategory]
     capabilities: List[ProfessionalDataCapabilityAdminItem]
     macroReadiness: Dict[str, Any]
+    crossAssetDriverReadiness: CrossAssetDriverReadiness

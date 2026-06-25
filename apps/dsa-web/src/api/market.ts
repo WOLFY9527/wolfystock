@@ -523,6 +523,53 @@ export type OfficialRiskSourceReadiness = {
   nextDataAction?: string | null;
 };
 
+export type CrossAssetDriverReadinessState =
+  | 'available'
+  | 'missing'
+  | 'stale'
+  | 'insufficient_history'
+  | 'not_configured'
+  | string;
+
+export type CrossAssetDriverIdentifier = {
+  kind: string;
+  value: string;
+  market?: string;
+};
+
+export type CrossAssetDriverCachedOhlcv = {
+  requiredBars: number;
+  usableBars: number;
+  missingBars: number;
+  cacheState: string;
+  freshnessState: string;
+  latestBarDate?: string | null;
+};
+
+export type CrossAssetDriverReadinessItem = {
+  category: string;
+  label: string;
+  supported: boolean;
+  state: CrossAssetDriverReadinessState;
+  configuredIdentifiers: CrossAssetDriverIdentifier[];
+  cachedOhlcv: CrossAssetDriverCachedOhlcv;
+  missingReasons: string[];
+  consumerSafeSummary: string;
+};
+
+export type CrossAssetDriverReadiness = {
+  contractVersion: string;
+  consumerSafe: boolean;
+  diagnosticOnly: boolean;
+  networkCallsEnabled: boolean;
+  externalProviderCalls: boolean;
+  mutationEnabled: boolean;
+  supportedStates: string[];
+  consumerSummary: string;
+  summary: Record<string, number>;
+  drivers: CrossAssetDriverReadinessItem[];
+};
+
 export type OfficialRiskSourceReadinessChip = {
   key: string;
   label: string;
@@ -534,6 +581,19 @@ export type OfficialRiskSourceReadinessView = {
   bundleVariant: 'success' | 'info' | 'caution' | 'neutral';
   chips: OfficialRiskSourceReadinessChip[];
   note?: string;
+};
+
+export type CrossAssetDriverReadinessChip = {
+  key: string;
+  label: string;
+  variant: 'success' | 'info' | 'caution' | 'neutral';
+};
+
+export type CrossAssetDriverReadinessView = {
+  label: string;
+  variant: 'success' | 'info' | 'caution' | 'neutral';
+  chips: CrossAssetDriverReadinessChip[];
+  note: string;
 };
 
 export type ConsumerEvidenceBoundaryChip = {
@@ -559,6 +619,7 @@ export type MarketDataReadinessResponse = {
   checks: MarketDataReadinessCheck[];
   consumerEvidenceReadinessMatrix?: ConsumerEvidenceReadinessMatrix;
   officialRiskSourceReadiness?: OfficialRiskSourceReadiness;
+  crossAssetDriverReadiness?: CrossAssetDriverReadiness;
 };
 
 export type DataSourceGapRegistryStatus =
@@ -925,6 +986,7 @@ export type ProfessionalDataCapabilityRegistryResponse = {
   summary: ProfessionalDataCapabilitySummary;
   categories: ProfessionalDataCapabilityCategory[];
   capabilities: ProfessionalDataCapability[];
+  crossAssetDriverReadiness?: CrossAssetDriverReadiness;
 };
 
 export type ProfessionalDataCapabilityStatusView = {
@@ -958,6 +1020,7 @@ export type ProfessionalDataCapabilityRegistryView = {
   summary: ProfessionalDataCapabilitySummary;
   statusCounts: ProfessionalDataCapabilityStatusView[];
   categories: ProfessionalDataCapabilityCategoryView[];
+  crossAssetDriverReadiness?: CrossAssetDriverReadiness;
 };
 
 function normalizeReadinessSymbols(symbols?: string[] | string | null): string | undefined {
@@ -981,9 +1044,54 @@ function normalizeReadinessSymbols(symbols?: string[] | string | null): string |
   return sanitized || undefined;
 }
 
+function normalizeCrossAssetDriverReadiness(
+  readiness?: Partial<CrossAssetDriverReadiness> | null,
+): CrossAssetDriverReadiness | undefined {
+  if (!readiness) {
+    return undefined;
+  }
+  return {
+    contractVersion: readiness.contractVersion || 'cross_asset_driver_readiness_v1',
+    consumerSafe: readiness.consumerSafe !== false,
+    diagnosticOnly: readiness.diagnosticOnly !== false,
+    networkCallsEnabled: readiness.networkCallsEnabled === true,
+    externalProviderCalls: readiness.externalProviderCalls === true,
+    mutationEnabled: readiness.mutationEnabled === true,
+    supportedStates: Array.isArray(readiness.supportedStates) ? readiness.supportedStates : [],
+    consumerSummary: readiness.consumerSummary || '',
+    summary: readiness.summary || {},
+    drivers: Array.isArray(readiness.drivers)
+      ? readiness.drivers.map((driver) => ({
+        category: driver.category || 'unknown',
+        label: driver.label || driver.category || 'unknown',
+        supported: driver.supported === true,
+        state: driver.state || 'missing',
+        configuredIdentifiers: Array.isArray(driver.configuredIdentifiers)
+          ? driver.configuredIdentifiers.map((identifier) => ({
+            kind: identifier.kind || 'unknown',
+            value: identifier.value || '',
+            ...(identifier.market ? { market: identifier.market } : {}),
+          }))
+          : [],
+        cachedOhlcv: {
+          requiredBars: Number(driver.cachedOhlcv?.requiredBars || 0),
+          usableBars: Number(driver.cachedOhlcv?.usableBars || 0),
+          missingBars: Number(driver.cachedOhlcv?.missingBars || 0),
+          cacheState: driver.cachedOhlcv?.cacheState || 'missing',
+          freshnessState: driver.cachedOhlcv?.freshnessState || 'unknown',
+          latestBarDate: driver.cachedOhlcv?.latestBarDate || null,
+        },
+        missingReasons: Array.isArray(driver.missingReasons) ? driver.missingReasons.filter(Boolean) : [],
+        consumerSafeSummary: driver.consumerSafeSummary || '',
+      }))
+      : [],
+  };
+}
+
 function normalizeMarketDataReadinessPayload(rawPayload: Record<string, unknown>): MarketDataReadinessResponse {
   const payload = toCamelCase<MarketDataReadinessResponse>(rawPayload);
   const matrix = payload.consumerEvidenceReadinessMatrix;
+  const crossAsset = normalizeCrossAssetDriverReadiness(payload.crossAssetDriverReadiness);
   return {
     readinessStatus: payload.readinessStatus || 'missing',
     diagnosticOnly: payload.diagnosticOnly !== false,
@@ -1038,6 +1146,7 @@ function normalizeMarketDataReadinessPayload(rawPayload: Record<string, unknown>
         nextDataAction: payload.officialRiskSourceReadiness.nextDataAction || null,
       },
     } : {}),
+    ...(crossAsset ? { crossAssetDriverReadiness: crossAsset } : {}),
   };
 }
 
@@ -2064,6 +2173,7 @@ function normalizeProfessionalDataCapabilityRegistryPayload(
     },
     categories,
     capabilities,
+    crossAssetDriverReadiness: normalizeCrossAssetDriverReadiness(payload.crossAssetDriverReadiness),
   };
 }
 
@@ -2210,6 +2320,7 @@ export function buildProfessionalDataCapabilityRegistryView(
       { ...professionalDataCapabilityStatusView('not_implemented'), label: `未实现 ${summary.notImplementedCount}` },
     ],
     categories: categoryViews,
+    crossAssetDriverReadiness: registry?.crossAssetDriverReadiness,
   };
 }
 
@@ -2267,6 +2378,71 @@ export function buildOfficialRiskSourceReadinessView(
     bundleVariant: officialRiskSourceBundleVariant(readiness.bundleState),
     chips,
     ...(note ? { note } : {}),
+  };
+}
+
+function crossAssetDriverStateVariant(state?: CrossAssetDriverReadinessState): CrossAssetDriverReadinessChip['variant'] {
+  if (state === 'available') return 'success';
+  if (state === 'stale' || state === 'insufficient_history') return 'caution';
+  if (state === 'missing') return 'neutral';
+  if (state === 'not_configured') return 'neutral';
+  return 'neutral';
+}
+
+function crossAssetDriverStateLabel(state?: CrossAssetDriverReadinessState): string {
+  if (state === 'available') return '可用';
+  if (state === 'stale') return '待更新';
+  if (state === 'insufficient_history') return '历史不足';
+  if (state === 'not_configured') return '未配置';
+  return '待补';
+}
+
+function crossAssetDriverLabel(item: CrossAssetDriverReadinessItem): string {
+  const identifierText = item.configuredIdentifiers
+    .map((identifier) => identifier.value)
+    .filter(Boolean)
+    .slice(0, 3)
+    .join('/');
+  return `${item.label}: ${crossAssetDriverStateLabel(item.state)}${identifierText ? ` (${identifierText})` : ''}`;
+}
+
+export function buildCrossAssetDriverReadinessView(
+  readiness?: CrossAssetDriverReadiness | null,
+): CrossAssetDriverReadinessView {
+  const drivers = Array.isArray(readiness?.drivers) ? readiness.drivers : [];
+  if (!drivers.length) {
+    return {
+      label: '跨资产驱动待补',
+      variant: 'neutral',
+      chips: [],
+      note: '仅展示已配置的驱动输入；未返回的数据不做推断。',
+    };
+  }
+  const availableCount = drivers.filter((driver) => driver.state === 'available').length;
+  const staleCount = drivers.filter((driver) => driver.state === 'stale').length;
+  const insufficientCount = drivers.filter((driver) => driver.state === 'insufficient_history').length;
+  const missingCount = drivers.filter((driver) => driver.state === 'missing' || driver.state === 'not_configured').length;
+  const variant: CrossAssetDriverReadinessView['variant'] = availableCount === drivers.length
+    ? 'success'
+    : availableCount > 0
+      ? 'info'
+      : staleCount || insufficientCount
+        ? 'caution'
+        : 'neutral';
+  const label = availableCount === drivers.length
+    ? '跨资产驱动可用'
+    : availableCount > 0
+      ? '跨资产驱动部分可用'
+      : '跨资产驱动待补';
+  return {
+    label,
+    variant,
+    chips: drivers.slice(0, 9).map((driver) => ({
+      key: driver.category,
+      label: crossAssetDriverLabel(driver),
+      variant: crossAssetDriverStateVariant(driver.state),
+    })),
+    note: `可用 ${availableCount} · 待更新 ${staleCount} · 历史不足 ${insufficientCount} · 待补/未配置 ${missingCount}`,
   };
 }
 
