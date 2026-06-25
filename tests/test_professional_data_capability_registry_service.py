@@ -74,6 +74,7 @@ def test_professional_registry_returns_expected_categories_and_capabilities() ->
         "macro.cross_asset_regime",
         "macro.volatility_liquidity_credit",
         "stock.fundamentals",
+        "stock.earnings_calendar",
         "stock.technicals",
         "stock.news",
         "backtest.data_availability",
@@ -86,6 +87,22 @@ def test_professional_registry_returns_expected_categories_and_capabilities() ->
     assert capabilities["options.vanna_charm"]["status"] == "not_implemented"
     assert capabilities["market.breadth_flows"]["status"] == "degraded"
     assert capabilities["market.sector_rotation"]["category"] == "sector_rotation"
+    earnings_calendar = capabilities["stock.earnings_calendar"]
+    assert earnings_calendar["status"] == "configured_missing"
+    assert earnings_calendar["earningsCalendarReadiness"]["overallState"] == "not_configured"
+    assert set(earnings_calendar["earningsCalendarReadiness"]["components"]) == {
+        "nextEarningsDate",
+        "lastReport",
+        "epsEstimate",
+        "reportedEps",
+        "companyGuidance",
+        "callTranscript",
+        "eventFreshness",
+    }
+    assert all(
+        component["state"] == "not_configured"
+        for component in earnings_calendar["earningsCalendarReadiness"]["components"].values()
+    )
     assert capabilities["stock.news"]["status"] == "configured_missing"
     assert capabilities["backtest.data_availability"]["status"] == "degraded"
 
@@ -114,6 +131,30 @@ def test_professional_registry_consumer_projection_redacts_internal_diagnostics(
     for marker in FORBIDDEN_CONSUMER_MARKERS:
         assert marker not in serialized
         assert marker.lower() not in lowered
+
+    capabilities = {
+        item["capabilityId"]: item
+        for item in payload["capabilities"]
+    }
+    earnings_readiness = json.dumps(
+        capabilities["stock.earnings_calendar"]["earningsCalendarReadiness"],
+        ensure_ascii=False,
+    )
+    earnings_readiness_lowered = earnings_readiness.lower()
+    for marker in (
+        "2026-07-30",
+        "epsestimatevalue",
+        "reportedEpsValue",
+        "guidanceSummary",
+        "transcriptSummary",
+        "buy",
+        "sell",
+        "recommendation",
+        "target",
+        "position",
+    ):
+        assert marker not in earnings_readiness
+        assert marker.lower() not in earnings_readiness_lowered
 
 
 def test_professional_registry_admin_projection_adds_bounded_diagnostics() -> None:

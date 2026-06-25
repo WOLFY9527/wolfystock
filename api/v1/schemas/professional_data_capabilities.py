@@ -36,6 +36,7 @@ class ProfessionalDataCapability(BaseModel):
     freshness: str
     sourceLabel: str
     reason: str
+    earningsCalendarReadiness: Dict[str, Any] | None = None
 
 
 class ProfessionalDataCapabilitySummary(BaseModel):
