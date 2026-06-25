@@ -79,6 +79,27 @@ def test_professional_data_capability_consumer_route_is_safe() -> None:
     assert earnings_calendar["status"] == "configured_missing"
     assert earnings_calendar["earningsCalendarReadiness"]["overallState"] == "not_configured"
     assert earnings_calendar["earningsCalendarReadiness"]["components"]["nextEarningsDate"]["state"] == "not_configured"
+    breadth = capabilities["market.breadth_readiness"]
+    readiness = breadth["readiness"]
+    assert readiness["contractVersion"] == "market_breadth_readiness_v1"
+    assert readiness["readinessStates"] == [
+        "available",
+        "missing",
+        "stale",
+        "not_configured",
+        "disabled_by_flag",
+    ]
+    assert {item["measureId"] for item in readiness["measures"]} == {
+        "advance_decline",
+        "new_highs_lows",
+        "percent_above_ma",
+        "sector_participation",
+        "volume_breadth",
+        "equal_weight_cap_weight_proxy",
+    }
+    assert {item["market"] for item in readiness["markets"]} == {"US", "CN", "HK"}
+    assert all(item["state"] != "available" for item in readiness["measures"])
+    assert readiness["scoreEligible"] is False
 
     serialized = json.dumps(payload, ensure_ascii=False)
     lowered = serialized.lower()
@@ -102,6 +123,11 @@ def test_professional_data_capability_consumer_route_is_safe() -> None:
         "credential",
         "token",
         "env",
+        "stackTrace",
+        "breadthScore",
+        "breadthThrust",
+        "participationScore",
+        "adLine",
     ):
         assert marker not in serialized
         assert marker.lower() not in lowered
@@ -137,5 +163,9 @@ def test_professional_data_capability_admin_route_includes_bounded_diagnostics()
         "raw_payload",
         "credential",
         "token",
+        "requestid",
+        "traceid",
+        "cachekey",
+        "stacktrace",
     ):
         assert marker not in serialized

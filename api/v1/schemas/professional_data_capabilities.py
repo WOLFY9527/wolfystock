@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -37,6 +37,7 @@ class ProfessionalDataCapability(BaseModel):
     sourceLabel: str
     reason: str
     earningsCalendarReadiness: Dict[str, Any] | None = None
+    readiness: Optional[Dict[str, Any]] = None
 
 
 class ProfessionalDataCapabilitySummary(BaseModel):

@@ -885,6 +885,29 @@ export type ProfessionalDataCapability = {
   freshness?: string | null;
   asOf?: string | null;
   updatedAt?: string | null;
+  readiness?: ProfessionalDataCapabilityReadiness | null;
+};
+
+export type ProfessionalDataCapabilityReadinessMeasure = {
+  measureId: string;
+  label: string;
+  state: string;
+  supportedMarkets: string[];
+  missingMarkets: string[];
+};
+
+export type ProfessionalDataCapabilityReadinessMarket = {
+  market: string;
+  state: string;
+  supportedMeasures: string[];
+  missingMeasures: string[];
+};
+
+export type ProfessionalDataCapabilityReadiness = {
+  contractVersion?: string | null;
+  readinessStates?: string[];
+  measures?: ProfessionalDataCapabilityReadinessMeasure[];
+  markets?: ProfessionalDataCapabilityReadinessMarket[];
 };
 
 export type ProfessionalDataCapabilitySummary = {
@@ -1897,6 +1920,98 @@ function professionalDataCapabilityStatusView(status?: string | null): Professio
   return { key: 'degraded', label: '降级', variant: 'caution' };
 }
 
+function professionalCapabilityReadinessStateLabel(state?: string | null): string {
+  const normalized = normalizeGapToken(state);
+  if (normalized === 'available') return '可用';
+  if (normalized === 'stale') return '待更新';
+  if (normalized === 'disabled_by_flag') return '已停用';
+  return '待补';
+}
+
+function normalizeProfessionalCapabilityReadiness(
+  readiness?: Partial<ProfessionalDataCapabilityReadiness> | null,
+): ProfessionalDataCapabilityReadiness | null {
+  if (!readiness || typeof readiness !== 'object') {
+    return null;
+  }
+  const measures = Array.isArray(readiness.measures)
+    ? readiness.measures.flatMap((measure) => {
+      const measureId = professionalCapabilitySafeText(measure.measureId, '');
+      const label = professionalCapabilitySafeText(measure.label, '');
+      if (!measureId || !label) return [];
+      return [{
+        measureId,
+        label,
+        state: normalizeGapToken(measure.state),
+        supportedMarkets: Array.isArray(measure.supportedMarkets)
+          ? measure.supportedMarkets.flatMap((market) => {
+            const value = professionalCapabilitySafeText(market, '');
+            return value ? [value] : [];
+          })
+          : [],
+        missingMarkets: Array.isArray(measure.missingMarkets)
+          ? measure.missingMarkets.flatMap((market) => {
+            const value = professionalCapabilitySafeText(market, '');
+            return value ? [value] : [];
+          })
+          : [],
+      }];
+    })
+    : [];
+  const markets = Array.isArray(readiness.markets)
+    ? readiness.markets.flatMap((market) => {
+      const marketKey = professionalCapabilitySafeText(market.market, '');
+      if (!marketKey) return [];
+      return [{
+        market: marketKey,
+        state: normalizeGapToken(market.state),
+        supportedMeasures: Array.isArray(market.supportedMeasures)
+          ? market.supportedMeasures.flatMap((measure) => {
+            const value = professionalCapabilitySafeText(measure, '');
+            return value ? [value] : [];
+          })
+          : [],
+        missingMeasures: Array.isArray(market.missingMeasures)
+          ? market.missingMeasures.flatMap((measure) => {
+            const value = professionalCapabilitySafeText(measure, '');
+            return value ? [value] : [];
+          })
+          : [],
+      }];
+    })
+    : [];
+  return {
+    contractVersion: professionalCapabilitySafeText(readiness.contractVersion, ''),
+    readinessStates: Array.isArray(readiness.readinessStates)
+      ? readiness.readinessStates.flatMap((state) => {
+        const value = professionalCapabilitySafeText(state, '');
+        return value ? [value] : [];
+      })
+      : [],
+    measures,
+    markets,
+  };
+}
+
+function professionalCapabilityReadinessSummary(
+  readiness?: ProfessionalDataCapabilityReadiness | null,
+): string[] {
+  if (!readiness) {
+    return [];
+  }
+  const measureSummaries = (readiness.measures || []).slice(0, 2).map((measure) => {
+    const supported = measure.supportedMarkets.join('/') || '无';
+    const missing = measure.missingMarkets.join('/') || '无';
+    return `${measure.label}: ${supported} 可用；${missing} 待补`;
+  });
+  const marketSummaries = (readiness.markets || []).slice(0, 2).map((market) => {
+    const supported = market.supportedMeasures.join('/') || '无';
+    const missing = market.missingMeasures.join('/') || '无';
+    return `${market.market}: ${supported} ${professionalCapabilityReadinessStateLabel('available')}；${missing} 待补`;
+  });
+  return [...measureSummaries, ...marketSummaries].filter(Boolean);
+}
+
 function normalizeProfessionalDataCapabilityRegistryPayload(
   rawPayload: Record<string, unknown>,
 ): ProfessionalDataCapabilityRegistryResponse {
@@ -1920,6 +2035,7 @@ function normalizeProfessionalDataCapabilityRegistryPayload(
         freshness: professionalCapabilitySafeText(capability.freshness, ''),
         asOf: professionalCapabilitySafeText(capability.asOf, ''),
         updatedAt: professionalCapabilitySafeText(capability.updatedAt, ''),
+        readiness: normalizeProfessionalCapabilityReadiness(capability.readiness),
       }];
     })
     : [];
@@ -2073,6 +2189,7 @@ export function buildProfessionalDataCapabilityRegistryView(
           detail: [
             professionalCapabilitySafeText(capability.reason, ''),
             professionalCapabilitySafeText(capability.freshness, ''),
+            ...professionalCapabilityReadinessSummary(capability.readiness),
           ].filter(Boolean).join(' · ') || '覆盖原因待补证。',
           freshness: professionalCapabilitySafeText(capability.freshness, ''),
           asOf: professionalCapabilitySafeText(capability.asOf, ''),

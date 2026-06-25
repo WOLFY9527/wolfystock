@@ -67,6 +67,34 @@ describe('professional data capability registry normalization', () => {
             source_label: 'Market readiness registry',
             reason: 'Breadth context exists with incomplete source authority.',
             freshness: 'Partial and delayed.',
+            readiness: {
+              contract_version: 'market_breadth_readiness_v1',
+              readiness_states: ['available', 'missing', 'stale', 'not_configured', 'disabled_by_flag'],
+              measures: [
+                {
+                  measure_id: 'advance_decline',
+                  label: 'Advance / decline',
+                  state: 'missing',
+                  supported_markets: ['US'],
+                  missing_markets: ['CN', 'HK'],
+                },
+                {
+                  measure_id: 'new_highs_lows',
+                  label: 'New highs / lows',
+                  state: 'not_configured',
+                  supported_markets: [],
+                  missing_markets: ['US', 'CN', 'HK'],
+                },
+              ],
+              markets: [
+                {
+                  market: 'US',
+                  state: 'missing',
+                  supported_measures: ['advance_decline'],
+                  missing_measures: ['new_highs_lows'],
+                },
+              ],
+            },
           },
           {
             capability_id: 'market.sector_rotation',
@@ -126,6 +154,8 @@ describe('professional data capability registry normalization', () => {
       status: { key: 'entitlement_required', label: '需授权', variant: 'danger' },
       sourceLabel: 'Options Lab readiness boundary',
     });
+    expect(view.categories[1].items[0].detail).toContain('Advance / decline: US 可用；CN/HK 待补');
+    expect(view.categories[1].items[0].detail).toContain('US: advance_decline 可用；new_highs_lows 待补');
     expect(view.categories[5].items[0].detail).toBe('Research-useful, but lineage is incomplete.');
     expect(view.statusCounts.map((item) => item.label)).toEqual([
       '可用 1',

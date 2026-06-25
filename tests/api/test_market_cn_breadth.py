@@ -6,6 +6,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import unittest
 from unittest.mock import patch
+import json
 
 from api.v1.endpoints import market
 from src.services.market_overview_service import MarketOverviewService
@@ -19,19 +20,30 @@ class MarketCnBreadthApiTestCase(unittest.TestCase):
         self.assertTrue(payload["updatedAt"])
         self.assertTrue(payload["items"])
         metrics = {item["symbol"]: item for item in payload["items"]}
-        self.assertIn("EFFECT", metrics)
-        self.assertIsInstance(metrics["EFFECT"]["value"], (int, float))
+        if payload.get("source") == "unavailable":
+            self.assertNotIn("EFFECT", metrics)
+            self.assertTrue(all(item["value"] is None for item in payload["items"]))
         self.assertIn("explanation", payload)
+        self.assertIn("breadthReadiness", payload)
 
-    def test_cn_breadth_fallback_is_not_empty_when_provider_fails(self) -> None:
+    def test_cn_breadth_fallback_is_missing_not_fake_when_provider_fails(self) -> None:
         service = MarketOverviewService()
 
         with patch.object(service, "_fetch_cn_breadth_snapshot", side_effect=RuntimeError("provider down")):
             payload = service.get_cn_breadth()
 
-        self.assertEqual(payload["source"], "fallback")
+        self.assertEqual(payload["source"], "unavailable")
+        self.assertEqual(payload["sourceType"], "missing")
         self.assertTrue(payload["fallbackUsed"])
         self.assertTrue(payload["items"])
+        self.assertTrue(all(item["value"] is None for item in payload["items"]))
+        self.assertNotIn("EFFECT", {item["symbol"] for item in payload["items"]})
+        readiness = payload["breadthReadiness"]
+        measures = {item["measureId"]: item for item in readiness["measures"]}
+        self.assertEqual(measures["advance_decline"]["marketStates"]["CN"], "not_configured")
+        self.assertEqual(measures["new_highs_lows"]["marketStates"]["CN"], "not_configured")
+        self.assertEqual(measures["sector_participation"]["marketStates"]["CN"], "not_configured")
+        self.assertFalse(readiness["scoreEligible"])
 
     def test_cn_breadth_prefers_tickflow_market_stats_when_available(self) -> None:
         service = MarketOverviewService()
@@ -64,6 +76,11 @@ class MarketCnBreadthApiTestCase(unittest.TestCase):
         self.assertEqual(payload["sourceType"], "public_api")
         self.assertEqual(payload["asOf"], "2026-05-14T09:30:00+08:00")
         self.assertFalse(payload["fallbackUsed"])
+        readiness = payload["breadthReadiness"]
+        measures = {item["measureId"]: item for item in readiness["measures"]}
+        self.assertEqual(measures["advance_decline"]["marketStates"]["CN"], "stale")
+        self.assertEqual(measures["new_highs_lows"]["marketStates"]["CN"], "missing")
+        self.assertEqual(measures["volume_breadth"]["marketStates"]["CN"], "missing")
         self.assertEqual(
             set(metrics),
             {"EFFECT", "ADVANCERS", "DECLINERS", "LIMIT_UP", "LIMIT_DOWN", "ADV_RATIO"},
@@ -94,8 +111,11 @@ class MarketCnBreadthApiTestCase(unittest.TestCase):
         self.assertEqual(payload["freshness"], "fallback")
         self.assertEqual(payload["lastError"], "数据源暂不可用")
         self.assertEqual(payload["fallbackReason"], "tickflow_permission_unavailable")
-        self.assertNotIn("SECRET", str(payload))
-        self.assertNotIn("https://api.tickflow.test/raw", str(payload))
+        serialized = json.dumps(payload, ensure_ascii=False)
+        self.assertNotIn("SECRET", serialized)
+        self.assertNotIn("https://api.tickflow.test/raw", serialized)
+        for marker in ("rawPayload", "providerPayload", "requestId", "traceId", "cacheKey", "stackTrace"):
+            self.assertNotIn(marker, serialized)
 
     def test_cn_breadth_keeps_tickflow_provenance_bounded_and_non_official(self) -> None:
         service = MarketOverviewService()
@@ -188,10 +208,11 @@ class MarketCnBreadthApiTestCase(unittest.TestCase):
                 ):
                     payload = service.get_cn_breadth()
 
-                self.assertEqual(payload["source"], "fallback")
+                self.assertEqual(payload["source"], "unavailable")
                 self.assertTrue(payload["fallbackUsed"])
                 self.assertEqual(payload["fallbackReason"], reason)
                 self.assertTrue(payload["items"])
+                self.assertTrue(all(item["value"] is None for item in payload["items"]))
 
 
 if __name__ == "__main__":
