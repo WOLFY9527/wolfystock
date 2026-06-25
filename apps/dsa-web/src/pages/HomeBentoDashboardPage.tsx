@@ -126,6 +126,14 @@ type GuestMarketSnapshotView = {
   note: string;
 };
 
+type NeutralHomeStartCard = {
+  key: string;
+  title: string;
+  body: string;
+  note: string;
+  href: string;
+};
+
 const HOME_LOCAL_SURFACE_PANEL_CLASS = 'min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)]';
 const HOME_LOCAL_INSET_PANEL_CLASS = 'min-w-0 rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)]';
 const HOME_LOCAL_RAIL_CARD_CLASS =
@@ -6226,6 +6234,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [pendingAnalysisTicker, setPendingAnalysisTicker] = useState<string | null>(null);
   const [softTimedOutTaskId, setSoftTimedOutTaskId] = useState<string | null>(null);
   const [hasHydratedInitialTicker, setHasHydratedInitialTicker] = useState(false);
+  const [hasObservedInitialHistoryFetch, setHasObservedInitialHistoryFetch] = useState(false);
   const [isDashboardLoading, setDashboardLoading] = useState(false);
   const [statusToast, setStatusToast] = useState<{ message: string; tone: 'error' | 'warning' } | null>(null);
   const [guestPreview, setGuestPreview] = useState<PublicAnalysisPreviewResponse | null>(null);
@@ -6256,6 +6265,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   );
   const isAnalyzing = useStockPoolStore((state) => state.isAnalyzing);
   const historyItems = useStockPoolStore((state) => state.historyItems);
+  const isLoadingHistory = useStockPoolStore((state) => state.isLoadingHistory);
   const selectedReport = useStockPoolStore((state) => state.selectedReport);
   const [isHistoryDrawerOpen, setHistoryDrawerOpen] = useState(false);
   const refreshHistory = useStockPoolStore((state) => state.refreshHistory);
@@ -6415,6 +6425,20 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   })();
   const shouldRenderDashboardPanels = !isGuest || Boolean(guestPreview || pendingAnalysisTicker);
   const guestPaywall = isGuest ? <GuestPaywallOverlay locale={locale} registrationPath={registrationPath} /> : null;
+  const showNeutralHomeStart = Boolean(
+    !isGuest
+    && hasObservedInitialHistoryFetch
+    && !isLoadingHistory
+    && !traceFixtureReport
+    && !routeTaskId
+    && !routeSymbol
+    && !routeSource
+    && !pendingAnalysisTicker
+    && !selectedReport
+    && recentHistoryItems.length === 0
+    && activeTasks.length === 0
+    && !isHomeAnalyzing,
+  );
   const deleteCopy = {
     title: t('home.deleteTitle'),
     single: t('home.deleteSingle'),
@@ -6559,6 +6583,16 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     purgeZombieDashboardStorage();
   }, []);
 
+  useEffect(() => {
+    if (isGuest) {
+      setHasObservedInitialHistoryFetch(false);
+      return;
+    }
+    if (isLoadingHistory || historyItems.length > 0 || Boolean(selectedReport)) {
+      setHasObservedInitialHistoryFetch(true);
+    }
+  }, [historyItems.length, isGuest, isLoadingHistory, selectedReport]);
+
   useDashboardLifecycle({
     loadInitialHistory,
     refreshHistory,
@@ -6653,6 +6687,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     if (isGuest) {
       return;
     }
+    if (showNeutralHomeStart) {
+      return;
+    }
 
     const nextTicker = normalizeTickerQuery(selectedReport?.meta.stockCode) || normalizeTickerQuery(recentHistoryItems[0]?.stockCode) || DEFAULT_HOME_TICKER;
 
@@ -6662,7 +6699,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [hasHydratedInitialTicker, isGuest, pendingAnalysisTicker, recentHistoryItems, selectedReport?.meta.stockCode]);
+  }, [hasHydratedInitialTicker, isGuest, pendingAnalysisTicker, recentHistoryItems, selectedReport?.meta.stockCode, showNeutralHomeStart]);
 
   useEffect(() => {
     if (isGuest || pendingAnalysisTicker) {
@@ -6949,6 +6986,103 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         trustBody: '先查看单个代码的研究入口；只有在需要保存历史、查看更广市场上下文或继续后续工作流时，再创建账户继续。',
         workflow: ['搜索', '分析', '观察', '报告'],
       };
+  const neutralHomeStartCopy = locale === 'en'
+    ? {
+        eyebrow: 'Start here',
+        title: 'WolfyStock begins with research context, not a default stock pick.',
+        subtitle: 'Use the home route to understand the market, open a research path, and see where missing data will keep a workflow in observation-only or waiting state.',
+        cards: [
+          {
+            key: 'market-overview',
+            title: 'Market Overview',
+            body: 'Read the current market backdrop before deciding what deserves more research time.',
+            note: 'Safe even before you have a watchlist or a saved symbol.',
+            href: routeLocale ? buildLocalizedPath('/market-overview', routeLocale) : '/market-overview',
+          },
+          {
+            key: 'scanner',
+            title: 'Scanner',
+            body: 'Build a research queue when price and history coverage are ready.',
+            note: 'If data is still missing, the scanner should say so instead of inventing candidates.',
+            href: routeLocale ? buildLocalizedPath('/scanner', routeLocale) : '/scanner',
+          },
+          {
+            key: 'stock-research',
+            title: 'Stock Research',
+            body: 'Inspect one ticker at a time with evidence boundaries, structure, and observation notes.',
+            note: 'Missing quote, event, or history inputs should keep the result bounded.',
+            href: routeLocale ? buildLocalizedPath('/stocks/structure-decision', routeLocale) : '/stocks/structure-decision',
+          },
+          {
+            key: 'backtest',
+            title: 'Backtest',
+            body: 'Validate a rule only when enough historical samples exist to support the check.',
+            note: 'No historical sample means no result should be implied.',
+            href: routeLocale ? buildLocalizedPath('/backtest', routeLocale) : '/backtest',
+          },
+          {
+            key: 'watchlist',
+            title: 'Portfolio / Watchlist',
+            body: 'Organize symbols, notes, and later observations once you have something worth tracking.',
+            note: 'An empty account can still start with a watchlist instead of a personalized analysis.',
+            href: routeLocale ? buildLocalizedPath('/watchlist', routeLocale) : '/watchlist',
+          },
+        ] satisfies NeutralHomeStartCard[],
+        readinessTitle: 'Data readiness matters',
+        readinessBody: 'Some routes need quotes, history, or prior observations before they can move beyond observation-only states. WolfyStock should show those limits directly.',
+        exampleEyebrow: 'Example reference',
+        exampleTitle: 'ORCL is available only as a reference symbol.',
+        exampleBody: 'Use ORCL to preview what a single-stock workspace can look like when evidence is available. It is not a recommendation, a default conclusion, or personalized research.',
+        exampleAction: 'Open ORCL example',
+      }
+    : {
+        eyebrow: '从这里开始',
+        title: 'WolfyStock 的首页先给研究路径，不先给默认股票结论。',
+        subtitle: '先理解市场环境，再选择研究入口；如果行情、历史样本或观察记录缺失，对应工作流会明确停留在观察或等待状态。',
+        cards: [
+          {
+            key: 'market-overview',
+            title: '市场总览',
+            body: '先看当前市场环境与风险背景，再决定下一步应该研究什么。',
+            note: '即使还没有观察列表或已保存标的，也可以先从这里开始。',
+            href: routeLocale ? buildLocalizedPath('/market-overview', routeLocale) : '/market-overview',
+          },
+          {
+            key: 'scanner',
+            title: '扫描器',
+            body: '在行情和历史数据就绪后，建立一份待研究队列。',
+            note: '如果数据仍缺失，扫描器应直接说明原因，而不是生成伪候选。',
+            href: routeLocale ? buildLocalizedPath('/scanner', routeLocale) : '/scanner',
+          },
+          {
+            key: 'stock-research',
+            title: '个股研究',
+            body: '逐个查看股票代码的证据边界、结构状态和研究观察。',
+            note: '缺少行情、事件或历史样本时，结果会保持受限而不是补造结论。',
+            href: routeLocale ? buildLocalizedPath('/stocks/structure-decision', routeLocale) : '/stocks/structure-decision',
+          },
+          {
+            key: 'backtest',
+            title: '回测',
+            body: '只有在历史样本足够时，才用规则验证想法。',
+            note: '历史样本不足时，不应暗示已有回测结果。',
+            href: routeLocale ? buildLocalizedPath('/backtest', routeLocale) : '/backtest',
+          },
+          {
+            key: 'watchlist',
+            title: '组合 / 观察列表',
+            body: '把关注标的、后续观察点和个人上下文组织起来。',
+            note: '还没有持仓或列表时，可以先从观察列表起步，而不是默认个性化分析。',
+            href: routeLocale ? buildLocalizedPath('/watchlist', routeLocale) : '/watchlist',
+          },
+        ] satisfies NeutralHomeStartCard[],
+        readinessTitle: '数据就绪度会影响路径',
+        readinessBody: '部分工作流需要行情、历史样本或先前观察记录才能继续。WolfyStock 应直接展示这些限制，而不是制造活动、推荐或分析结果。',
+        exampleEyebrow: '示例参考',
+        exampleTitle: 'ORCL 仅作为参考标的保留。',
+        exampleBody: '它只用于展示“当证据可用时，单标的研究页可能是什么样子”。这不是推荐、默认结论，也不是个性化分析。',
+        exampleAction: '打开 ORCL 示例',
+      };
 
   const omnibarModule = (
     <div className="w-full shrink-0" data-testid="home-bento-omnibar-shell">
@@ -7045,7 +7179,92 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         </div>
       ) : null}
       <main className="w-full flex-1 flex flex-col min-h-0 min-w-0" data-testid="home-bento-main">
-        {!shouldRenderDashboardPanels ? (
+        {showNeutralHomeStart ? (
+          <section
+            className="mx-auto flex w-full max-w-[1880px] flex-1 min-w-0 flex-col px-3 py-3 sm:px-4 xl:px-6 2xl:px-8"
+            data-testid="member-home-neutral-start"
+          >
+            <div className="flex w-full min-w-0 flex-col gap-4" data-testid="member-home-neutral-start-stack">
+              <section
+                className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-4 sm:px-5 sm:py-5')}
+                data-testid="member-home-neutral-hero"
+              >
+                <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="min-w-0 max-w-3xl">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">
+                      {neutralHomeStartCopy.eyebrow}
+                    </p>
+                    <h1 className="mt-2 text-[28px] font-semibold tracking-[0] text-white sm:text-[32px]">
+                      {neutralHomeStartCopy.title}
+                    </h1>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-white/62 sm:text-[15px]">
+                      {neutralHomeStartCopy.subtitle}
+                    </p>
+                  </div>
+                  <aside
+                    className={cn(HOME_LOCAL_INSET_PANEL_CLASS, 'max-w-xl px-4 py-4')}
+                    data-testid="member-home-neutral-readiness"
+                  >
+                    <p className="text-[11px] font-medium text-white/40">{neutralHomeStartCopy.readinessTitle}</p>
+                    <p className="mt-2 text-sm leading-6 text-white/62">
+                      {neutralHomeStartCopy.readinessBody}
+                    </p>
+                  </aside>
+                </div>
+
+                <div className="mt-4 min-w-0">
+                  {omnibarModule}
+                </div>
+              </section>
+
+              <section
+                className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,0.6fr)]"
+                data-testid="member-home-neutral-guides"
+              >
+                <div
+                  className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-3"
+                  data-testid="member-home-neutral-cards"
+                >
+                  {neutralHomeStartCopy.cards.map((card) => (
+                    <Link
+                      key={card.key}
+                      to={card.href}
+                      className={cn(
+                        HOME_LOCAL_SURFACE_PANEL_CLASS,
+                        'flex min-h-[168px] min-w-0 flex-col justify-between px-4 py-4 transition-colors hover:border-[color:var(--wolfy-border-focus)] hover:bg-white/[0.03] sm:px-5',
+                      )}
+                      data-testid={`member-home-start-card-${card.key}`}
+                    >
+                      <div className="min-w-0">
+                        <h2 className="text-sm font-semibold text-white/88">{card.title}</h2>
+                        <p className="mt-2 text-sm leading-6 text-white/62">{card.body}</p>
+                      </div>
+                      <p className="mt-3 text-[11px] leading-5 text-white/42">{card.note}</p>
+                    </Link>
+                  ))}
+                </div>
+
+                <aside
+                  className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-4 sm:px-5')}
+                  data-testid="member-home-example-reference"
+                >
+                  <p className="text-[11px] font-medium text-white/40">{neutralHomeStartCopy.exampleEyebrow}</p>
+                  <h2 className="mt-2 text-sm font-semibold text-white/88">{neutralHomeStartCopy.exampleTitle}</h2>
+                  <p className="mt-2 text-sm leading-6 text-white/62">
+                    {neutralHomeStartCopy.exampleBody}
+                  </p>
+                  <Link
+                    to={routeLocale ? buildLocalizedPath('/stocks/ORCL/structure-decision', routeLocale) : '/stocks/ORCL/structure-decision'}
+                    className="mt-4 inline-flex min-h-10 items-center justify-center rounded-lg border border-[color:var(--wolfy-border-focus)] bg-[var(--wolfy-accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#8178e7]"
+                    data-testid="member-home-example-reference-link"
+                  >
+                    {neutralHomeStartCopy.exampleAction}
+                  </Link>
+                </aside>
+              </section>
+            </div>
+          </section>
+        ) : !shouldRenderDashboardPanels ? (
           <section
             className="mx-auto flex w-full max-w-[1880px] flex-1 min-w-0 flex-col px-3 py-3 sm:px-4 xl:px-6 2xl:px-8"
             data-testid="guest-home-clean-search"

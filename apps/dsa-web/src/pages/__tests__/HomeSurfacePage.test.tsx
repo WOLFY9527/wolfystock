@@ -286,6 +286,8 @@ const HOME_SOFT_TIMEOUT_FORBIDDEN_COPY_PATTERN =
   /\b(provider|debug|raw|schema|cache|fallback|broker|buy|sell|trade|order)\b|买入|卖出|下单|交易|经纪商|建仓|加仓|减仓|止损|止盈|目标价|立即交易|保证收益|稳赚/i;
 const HOME_RESEARCH_PACKET_FORBIDDEN_COPY_PATTERN =
   /\bmixed\b|INSUFFICIENT|REAL|MIXED|FALLBACK|provider|provider_timeout|providerTrace|sourceRefId|sourceId|sourceConfidence|sourceAuthority|sourceTier|scoreContributionAllowed|sourceAuthorityAllowed|authority|freshness|fallback_cache|cache|debug|diagnostic|diagnostics|trace|router|prompt|schema|raw payload|raw_result|raw_ai_response|context_snapshot|token|credential|stack|env|reasonCode|reasonCodes|reason_code|reason_codes|one_sentence|stop_loss|standard_report|Yahoo Finance|Yfinance|Finnhub|Alpaca|FMP|Gnews|Tavily|openai|deepseek|fixture-provider|fixture-model|buy|sell|trade now|order now|broker route|buy recommendation|sell recommendation|trading recommendation|probe size|start light|add only|position sizing|Ideal buy|Secondary entry|Stop loss|Take profit|Target zone|买入|卖出|下单|交易|立即交易|建仓|加仓|减仓|止损|止盈|目标价|目标位|目标区间|仓位建议|持仓建议|空仓建议|小仓试错|第二笔/i;
+const HOME_NEUTRAL_START_FORBIDDEN_COPY_PATTERN =
+  /provider|cache|trace|token|env|raw payload|schema|class|买入|卖出|持有|目标价|止损|止盈|buy|sell|hold|target price|stop loss/i;
 const GUEST_HOME_FORBIDDEN_COPY_PATTERN =
   /provider|cache|debug|schema|raw payload|token|session[_\s-]?id|secret|buy now|sell now|trade now|order now|connect broker|broker CTA|guaranteed|必买|稳赚|保证收益|立即交易|提交订单|连接经纪商/i;
 const GUEST_PREVIEW_PRICE_ZONE_FORBIDDEN_COPY_PATTERN =
@@ -950,7 +952,7 @@ describe('HomeSurfacePage', () => {
     expect(fundamentalsSummary).toHaveTextContent('PE(TTM)');
     expect(fundamentalsSummary).toHaveTextContent('ROE');
     expect(fundamentalsSummary).toHaveTextContent('营业利润率');
-    expect(fundamentalsSummary).toHaveTextContent('仅供观察，不构成投资建议');
+    expect(fundamentalsSummary).toHaveTextContent('仅供研究观察，不构成投资建议。');
     expect(fundamentalsSummary).toHaveTextContent('31.7x');
     expect(fundamentalsSummary).toHaveTextContent('41.2%');
     expect(symbolReadiness).toHaveTextContent('标的研究就绪度');
@@ -979,14 +981,14 @@ describe('HomeSurfacePage', () => {
     const peerBlock = await screen.findByTestId('home-peer-correlation-snapshot');
     expect(vi.mocked(stocksApi.getStructureDecision)).toHaveBeenCalledWith('ORCL');
     expect(peerBlock).toHaveTextContent('同业相关性');
-    expect(peerBlock).toHaveTextContent('diverging');
+    expect(peerBlock).toHaveTextContent('同业走势分化');
     expect(peerBlock).toHaveTextContent('Cloud software');
     expect(peerBlock).toHaveTextContent('MSFT moved away from ORCL across the comparison window.');
     expect(peerBlock).toHaveTextContent('MSFT diverged while ORCL weakened.');
     expect(peerBlock).toHaveTextContent('MSFT comparison window is stale.');
-    expect(peerBlock).toHaveTextContent('NVDA peer history is unavailable.');
-    expect(peerBlock).toHaveTextContent('medium');
-    expect(peerBlock).toHaveTextContent('Observation-only peer movement context; no personalized action instruction.');
+    expect(peerBlock).toHaveTextContent('NVDA 同业历史数据暂缺。');
+    expect(peerBlock).toHaveTextContent('置信上限 中');
+    expect(peerBlock).toHaveTextContent('仅供同业走势观察，不构成个性化行动指令。');
     expect(peerBlock).toHaveTextContent('Compare updated peer closes before extending the structure read.');
     expect(peerBlock.textContent || '').not.toMatch(/provider|debug|raw|trace|sourceRef|reasonCode|buy|sell|hold|recommend|target price|stop loss|position sizing|买入|卖出|持有|推荐|目标价|止损|仓位建议/i);
   });
@@ -1043,7 +1045,7 @@ describe('HomeSurfacePage', () => {
     expect(fundamentalsSummary).toHaveTextContent('待补充 4 项');
     expect(fundamentalsSummary).toHaveTextContent('TTM');
     expect(fundamentalsSummary).toHaveTextContent('部分更新');
-    expect(fundamentalsSummary).toHaveTextContent('仅作观察');
+    expect(fundamentalsSummary).toHaveTextContent('当前先展示较稳定字段，其余内容仍作为待补背景。');
     expect(within(fundamentalsSummary).getByTestId('home-stock-fundamentals-metric-market-cap')).toHaveTextContent('512.3B');
     expect(within(fundamentalsSummary).queryByTestId('home-symbol-evidence-readiness')).not.toBeInTheDocument();
     expect(fundamentalsSummary).not.toHaveTextContent(HOME_FUNDAMENTALS_FORBIDDEN_COPY_PATTERN);
@@ -2258,7 +2260,7 @@ describe('HomeSurfacePage', () => {
     expect(panel).toHaveTextContent('综合摘要');
     expect(panel).toHaveTextContent('当前研究包可用于观察性阅读。');
     expect(panel).toHaveTextContent('观察边界');
-    expect(panel).toHaveTextContent('仅作为研究观察，不构成投资建议。');
+    expect(panel).toHaveTextContent('证据结构可用于观察性阅读，结论仍需保持边界。');
     expect(panel).toHaveTextContent('截至');
     expect(panel.textContent).not.toMatch(HOME_RESEARCH_PACKET_FORBIDDEN_COPY_PATTERN);
   });
@@ -2325,7 +2327,7 @@ describe('HomeSurfacePage', () => {
 
     const panel = screen.getByTestId('home-research-packet-panel');
     expect(panel).toHaveTextContent('部分可用');
-    expect(panel).toHaveTextContent('部分证据仍需补齐，当前只保留观察性阅读。');
+    expect(panel).toHaveTextContent('当前真实证据不足，系统有意不生成强市场判断。');
     expect(panel).toHaveTextContent('下一步证据：补充基本面证据');
     expect(panel).toHaveTextContent('截至');
     expect(panel.textContent).not.toMatch(HOME_RESEARCH_PACKET_FORBIDDEN_COPY_PATTERN);
@@ -2511,7 +2513,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent('决策来源');
     expect(within(panel).queryByTestId('home-bento-decision-trace-developer')).not.toBeInTheDocument();
     expect(panel).not.toHaveTextContent('fixture-provider');
-    expect(within(panel).getByText('AI 洞察仅供参考，不构成投资建议。')).toBeInTheDocument();
+    expect(within(panel).getByText('仅供参考')).toBeInTheDocument();
   });
 
   it('can auto-open the dev/test full report fixture drawer for browser smoke', async () => {
@@ -2786,7 +2788,7 @@ describe('HomeSurfacePage', () => {
     expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
   });
 
-  it('keeps the Linear-style Home shell when there is no non-test history', async () => {
+  it('shows a neutral first-login start path when there is no saved history or active task', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     vi.mocked(historyApi.getList).mockResolvedValueOnce({
       total: 0,
@@ -2797,37 +2799,23 @@ describe('HomeSurfacePage', () => {
 
     renderSurface();
 
-    const researchConsole = await screen.findByTestId('home-research-console');
-    const board = screen.getByTestId('home-research-board');
-    const rail = screen.getByTestId('home-research-context-rail');
-    const commandBar = screen.getByTestId('home-research-command-bar');
+    const neutralStart = await screen.findByTestId('member-home-neutral-start');
     expect(screen.getByTestId('home-bento-omnibar')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-history-drawer-trigger')).toBeInTheDocument();
-    expect(researchConsole).toHaveAttribute('data-linear-primitive', 'research-console-shell');
-    expect(commandBar).toHaveAttribute('data-layout-zone', 'CommandBar');
-    expect(screen.getByTestId('home-research-header-strip').closest('[data-layout-zone="HeaderStrip"]')).toBeInTheDocument();
-    expect(screen.getByTestId('home-research-primary-workspace').closest('[data-layout-zone="PrimaryWorkRegion"]')).toBeInTheDocument();
-    expect(screen.getByTestId('home-research-secondary-deck')).toHaveAttribute('data-layout-zone', 'SecondaryDeck');
-    expect(rail).toHaveAttribute('data-layout-zone', 'ContextRail');
-    expect(rail).toHaveAttribute('data-linear-primitive', 'context-rail');
-    expect(board.contains(rail)).toBe(true);
-    expect(board.contains(screen.getByTestId('home-research-secondary-deck'))).toBe(true);
-    expect(researchConsole.contains(board)).toBe(true);
-    expect(researchConsole.contains(rail)).toBe(true);
-    expect(researchConsole).toHaveAttribute('data-visual-tier', 'dominant');
-    expect(researchConsole).toHaveAttribute('data-surface-system', 'reflect-linear-console');
-    expect(researchConsole).toHaveClass('rounded-none', 'border-transparent', 'bg-transparent', 'shadow-none');
-    expect(board).toHaveClass('relative', 'z-10', 'overflow-visible');
-    expect(rail).toHaveClass('home-research-context-rail', 'bg-transparent', 'divide-y-0');
-    expect(screen.queryByTestId('home-bento-zero-state')).not.toBeInTheDocument();
-    expect(screen.queryByText('Ghost dashboard 承接中')).not.toBeInTheDocument();
-    expect(screen.queryByText('待分析')).not.toBeInTheDocument();
-    expect(screen.queryByText('等待输入')).not.toBeInTheDocument();
-    expect(screen.queryByText('等待分析')).not.toBeInTheDocument();
-    expect(screen.queryByText('输入股票代码后将在此原位刷新 AI 判断。')).not.toBeInTheDocument();
-    expect(screen.queryByText('首页卡片会始终保留在这里，未分析字段先保持中性占位，等待你提交股票代码或打开完成历史。')).not.toBeInTheDocument();
-    expect(screen.getAllByText('价格触发').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', { name: 'WolfyStock 的首页先给研究路径，不先给默认股票结论。' })).toBeInTheDocument();
+    expect(screen.getByTestId('member-home-neutral-readiness')).toHaveTextContent('数据就绪度会影响路径');
+    expect(screen.getByTestId('member-home-start-card-market-overview')).toHaveTextContent('市场总览');
+    expect(screen.getByTestId('member-home-start-card-scanner')).toHaveTextContent('扫描器');
+    expect(screen.getByTestId('member-home-start-card-stock-research')).toHaveTextContent('个股研究');
+    expect(screen.getByTestId('member-home-start-card-backtest')).toHaveTextContent('回测');
+    expect(screen.getByTestId('member-home-start-card-watchlist')).toHaveTextContent('组合 / 观察列表');
+    expect(screen.getByTestId('member-home-example-reference')).toHaveTextContent('示例参考');
+    expect(screen.getByTestId('member-home-example-reference')).toHaveTextContent('ORCL 仅作为参考标的保留。');
+    expect(screen.getByTestId('member-home-example-reference-link')).toHaveAttribute('href', '/stocks/ORCL/structure-decision');
+    expect(screen.queryByTestId('home-research-console')).not.toBeInTheDocument();
+    expect(screen.queryByText('Oracle Corporation')).not.toBeInTheDocument();
+    expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
+    expect(neutralStart.textContent).not.toMatch(HOME_NEUTRAL_START_FORBIDDEN_COPY_PATTERN);
   });
 
   it('keeps analysis loading inside the compact Linear workspace', async () => {
@@ -3444,8 +3432,8 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
 
     await waitFor(() => expect(historyApi.deleteRecords).toHaveBeenCalledWith([3, 2, 1], { deleteAll: true }));
-    await waitFor(() => expect(screen.getByText('历史分析尚未同步。')).toBeInTheDocument());
-    expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('member-home-neutral-start')).toBeInTheDocument());
+    expect(screen.getByText('ORCL 仅作为参考标的保留。')).toBeInTheDocument();
     expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-zero-state')).not.toBeInTheDocument();
   });
