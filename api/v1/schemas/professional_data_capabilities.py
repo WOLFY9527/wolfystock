@@ -74,3 +74,4 @@ class ProfessionalDataCapabilityRegistryAdminResponse(BaseModel):
     summary: ProfessionalDataCapabilitySummary
     categories: List[ProfessionalDataCapabilityCategory]
     capabilities: List[ProfessionalDataCapabilityAdminItem]
+    macroReadiness: Dict[str, Any]

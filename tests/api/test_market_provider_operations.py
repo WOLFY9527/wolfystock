@@ -837,3 +837,42 @@ def test_tickflow_projection_stays_presence_only_without_secret_or_env_fields() 
     serialized = str(projection).lower()
     for forbidden in ("api_key", "token", "secret", "masked", "env", "value", "tf-secret"):
         assert forbidden not in serialized
+
+
+def test_operations_includes_macro_fred_readiness_without_network_or_secret_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("FRED_MACRO_PROVIDER_ENABLED", "true")
+    monkeypatch.setenv("FRED_API_KEY", "fred-secret-test-key")
+
+    payload = _service([]).get_operations(window="24h")
+    readiness = payload["metadata"]["providerDiagnostics"]["macroFredReadiness"]
+
+    assert readiness["contractVersion"] == "macro_provider_readiness_v1"
+    assert readiness["provider"] == {
+        "providerKey": "fred",
+        "providerLabel": "FRED macro provider category",
+        "state": "not_configured",
+        "configured": True,
+        "enabled": True,
+    }
+    assert readiness["networkCallsEnabled"] is False
+    assert readiness["runtimeProviderCalls"] is False
+    assert readiness["admin"]["requiredEnvVars"] == ["FRED_API_KEY"]
+    assert readiness["admin"]["requiredFlags"] == ["FRED_MACRO_PROVIDER_ENABLED"]
+    assert {item["categoryKey"] for item in readiness["categories"]} >= {"rates", "inflation", "labor", "liquidity", "recession"}
+
+    serialized = json.dumps(readiness, ensure_ascii=False)
+    assert "fred-secret-test-key" not in serialized
+    for forbidden in (
+        "apiKeyPresent",
+        "endpointHost",
+        "requestId",
+        "traceId",
+        "cacheKey",
+        "rawPayload",
+        "raw_payload",
+        "token",
+        "Authorization",
+    ):
+        assert forbidden not in serialized
