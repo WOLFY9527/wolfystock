@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import and_, desc, select
 
+from src.multi_user import OWNERSHIP_SCOPE_USER
 from src.repositories.scanner_repo import ScannerRepository
 from src.services.catalyst_event_exposure import build_catalyst_event_exposures
 from src.services.reason_code_vocabulary import classify_reason_code
@@ -53,18 +54,26 @@ _RESEARCH_STALE_STATUSES = {"cached", "cache_snapshot", "delayed", "expired", "p
 _RESEARCH_READY_STATUSES = {"available", "complete", "completed", "fresh", "live", "ready", "selected"}
 _SCORE_ERROR_FORBIDDEN_TEXT_RE = re.compile(
     r"traceback|https?://|api[_-]?key|secret|cookie|session|token|"
+    r"credential|env|request[_-]?id|trace[_-]?id|cache[_-]?key|exceptionclass|"
     r"sourcetype|trustlevel|reasoncode|provider|target price|predicted return|"
-    r"买入|卖出|加仓|减仓|目标价|预测收益",
+    r"buy|sell|hold|recommend|stop|position|"
+    r"买入|卖出|持有|加仓|减仓|止损|止盈|目标价|仓位|预测收益",
     re.IGNORECASE,
 )
 _LINEAGE_CONTRACT_VERSION = "scanner_watchlist_lineage_v1"
 _LINEAGE_FORBIDDEN_TEXT_RE = re.compile(
     r"sourceauthorityallowed|scorecontributionallowed|reasonfamilies|reasoncode|"
     r"source_confidence|score_blocked|raw diagnostics?|json|provider|debug|"
-    r"payload|trace|stack|buy|sell|recommend|stop|target|position|"
-    r"买入|卖出|加仓|减仓|下单|交易|止损|止盈|目标价|仓位|必买|稳赚|保证收益",
+    r"payload|trace|stack|api[_-]?key|token|credential|env|request[_-]?id|"
+    r"trace[_-]?id|cache[_-]?key|rawpayload|exceptionclass|buy|sell|hold|"
+    r"recommend|stop|target|position|"
+    r"买入|卖出|持有|加仓|减仓|下单|交易|止损|止盈|目标价|仓位|必买|稳赚|保证收益",
     re.IGNORECASE,
 )
+
+_SCANNER_CANDIDATE_DEFAULT_REASON = "Scanner candidate moved to research queue."
+
+
 class WatchlistService:
     """Business logic for user-owned candidate tracking."""
 
@@ -146,6 +155,16 @@ class WatchlistService:
             return parsed if isinstance(parsed, dict) else {}
         except Exception:
             return {}
+
+    @staticmethod
+    def _load_json_list(raw: Optional[str]) -> List[Any]:
+        if not raw:
+            return []
+        try:
+            parsed = json.loads(raw)
+            return list(parsed) if isinstance(parsed, list) else []
+        except Exception:
+            return []
 
     @staticmethod
     def _safe_float(value: Any) -> Optional[float]:
@@ -873,6 +892,30 @@ class WatchlistService:
         return "补充证据后继续观察。"
 
     @classmethod
+    def _lineage_observation_reasons(cls, candidate: MarketScannerCandidate, diagnostics: Dict[str, Any]) -> List[str]:
+        raw_values: List[Any] = []
+        raw_values.extend(cls._load_json_list(getattr(candidate, "reasons_json", None)))
+        for key in ("reasonCodes", "reason_codes"):
+            values = diagnostics.get(key)
+            if isinstance(values, list):
+                raw_values.extend(values)
+
+        result: List[str] = []
+        seen = set()
+        for value in raw_values:
+            safe = cls._optional_consumer_text(value)
+            if safe is None:
+                continue
+            key = safe.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(safe)
+            if len(result) >= 6:
+                break
+        return result
+
+    @classmethod
     def _project_scanner_lineage_v1(
         cls,
         *,
@@ -909,6 +952,7 @@ class WatchlistService:
             "universe_type": cls._optional_str(item.get("universe_type")),
             "research_reason": cls._lineage_research_reason(item=item, candidate=candidate, diagnostics=diagnostics),
             "research_next_step": cls._lineage_research_next_step(diagnostics),
+            "observationReasons": cls._lineage_observation_reasons(candidate, diagnostics),
             "data_state": data_state,
             "freshness_label": cls._lineage_freshness_label(data_state, disclosure),
             "no_advice_boundary": True,
@@ -1173,6 +1217,11 @@ class WatchlistService:
         scanner_run_id: Optional[int] = None,
         scanner_rank: Optional[int] = None,
         scanner_score: Optional[float] = None,
+        last_scored_at: Optional[datetime] = None,
+        score_source: Optional[str] = None,
+        score_profile: Optional[str] = None,
+        score_reason: Optional[str] = None,
+        score_status: Optional[str] = None,
         theme_id: Optional[str] = None,
         universe_type: Optional[str] = None,
         notes: Optional[str] = None,
@@ -1187,6 +1236,10 @@ class WatchlistService:
         normalized_theme_id = self._normalize_optional_text(theme_id)
         normalized_universe_type = self._normalize_optional_text(universe_type)
         normalized_notes = self._normalize_optional_text(notes)
+        normalized_score_source = self._normalize_optional_text(score_source)
+        normalized_score_profile = self._normalize_optional_text(score_profile)
+        normalized_score_reason = self._normalize_optional_text(score_reason)
+        normalized_score_status = self._normalize_optional_text(score_status)
 
         with self.db.get_session() as session:
             row = session.execute(
@@ -1218,6 +1271,16 @@ class WatchlistService:
                 row.scanner_rank = int(scanner_rank)
             if scanner_score is not None:
                 row.scanner_score = float(scanner_score)
+            if last_scored_at is not None:
+                row.last_scored_at = last_scored_at
+            if normalized_score_source is not None:
+                row.score_source = normalized_score_source
+            if normalized_score_profile is not None:
+                row.score_profile = normalized_score_profile
+            if normalized_score_reason is not None:
+                row.score_reason = normalized_score_reason
+            if normalized_score_status is not None:
+                row.score_status = normalized_score_status
             if normalized_theme_id is not None:
                 row.theme_id = normalized_theme_id
             if normalized_universe_type is not None:
@@ -1228,6 +1291,68 @@ class WatchlistService:
             session.commit()
             session.refresh(row)
             return self._row_to_dict(row)
+
+    @classmethod
+    def _scanner_candidate_score_status(cls, diagnostics: Dict[str, Any], candidate: MarketScannerCandidate) -> str:
+        readiness = cls._extract_lineage_frame(
+            diagnostics,
+            "candidateResearchReadiness",
+            "candidate_research_readiness",
+        )
+        status = cls._optional_str(readiness.get("readinessState") or readiness.get("readiness_state"))
+        if status is not None:
+            return cls._consumer_data_quality_label(status)
+        quality_hint = cls._optional_str(getattr(candidate, "quality_hint", None))
+        if quality_hint is not None:
+            return cls._consumer_data_quality_label(quality_hint)
+        return cls._consumer_data_quality_label(diagnostics)
+
+    def create_from_scanner_candidate(
+        self,
+        *,
+        owner_id: str,
+        scanner_run_id: int,
+        symbol: str,
+    ) -> Optional[Dict[str, Any]]:
+        resolved_owner_id = self.db.require_user_id(owner_id)
+        normalized_symbol = self._normalize_symbol(symbol)
+        with self.db.get_session() as session:
+            row = session.execute(
+                select(MarketScannerCandidate, MarketScannerRun)
+                .join(MarketScannerRun, MarketScannerRun.id == MarketScannerCandidate.run_id)
+                .where(
+                    and_(
+                        MarketScannerRun.id == int(scanner_run_id),
+                        MarketScannerRun.scope == OWNERSHIP_SCOPE_USER,
+                        MarketScannerRun.owner_id == resolved_owner_id,
+                        MarketScannerCandidate.symbol == normalized_symbol,
+                    )
+                )
+                .limit(1)
+            ).first()
+
+        if row is None:
+            return None
+
+        candidate, run = row
+        diagnostics = self._load_json_object(getattr(candidate, "diagnostics_json", None))
+        safe_reason = self._optional_consumer_text(getattr(candidate, "reason_summary", None))
+        item = self.add_item(
+            owner_id=resolved_owner_id,
+            symbol=str(candidate.symbol),
+            market=str(run.market),
+            source="scanner",
+            name=self._optional_consumer_text(getattr(candidate, "name", None)),
+            scanner_run_id=int(run.id),
+            scanner_rank=int(candidate.rank),
+            scanner_score=float(candidate.score),
+            last_scored_at=getattr(run, "completed_at", None) or getattr(run, "run_at", None) or datetime.now(),
+            score_source="scanner_candidate",
+            score_profile=str(run.profile or ""),
+            score_reason=safe_reason or _SCANNER_CANDIDATE_DEFAULT_REASON,
+            score_status=self._scanner_candidate_score_status(diagnostics, candidate),
+        )
+        return self._attach_intelligence(owner_id=resolved_owner_id, items=[item])[0]
 
     def refresh_scores(
         self,
