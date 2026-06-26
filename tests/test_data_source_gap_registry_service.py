@@ -12,6 +12,7 @@ from src.services.data_source_gap_registry_service import build_data_source_gap_
 EXPECTED_FAMILY_KEYS = {
     "stock_quote_spine",
     "fundamentals",
+    "news_catalyst_intelligence",
     "etf_index_coverage",
     "macro_rates",
     "fed_liquidity",
@@ -39,6 +40,16 @@ EXPECTED_QUEUE_FIELDS = {
     "nextConcreteStep",
     "requiredEvidence",
     "consumerSafeWarning",
+}
+EXPECTED_CAPABILITY_MAP_FIELDS = {
+    "capabilityKey",
+    "consumerLabel",
+    "state",
+    "freshnessState",
+    "scope",
+    "evidenceState",
+    "missingReason",
+    "operatorNextAction",
 }
 
 
@@ -73,6 +84,12 @@ def test_data_source_gap_registry_is_deterministic_and_fail_closed() -> None:
     assert "5 个产品面" in queue_by_key["stock_quote_spine"]["priorityReason"]
     assert "工程补数队列" in queue_by_key["stock_quote_spine"]["consumerSafeWarning"]
     assert queue_by_key["portfolio_valuation_lineage"]["priority"] == "high"
+    assert queue_by_key["news_catalyst_intelligence"]["readinessState"] == "missing"
+    assert queue_by_key["news_catalyst_intelligence"]["primaryBlockerType"] == (
+        "schema-contract"
+    )
+    assert queue_by_key["news_catalyst_intelligence"]["externalEntitlementRequired"] is False
+    assert queue_by_key["news_catalyst_intelligence"]["protectedDomainReviewRequired"] is True
     assert (
         queue.index(queue_by_key["stock_quote_spine"])
         < queue.index(queue_by_key["portfolio_valuation_lineage"])
@@ -104,6 +121,42 @@ def test_data_source_gap_registry_is_deterministic_and_fail_closed() -> None:
         family["integrationActionPlan"]
         for family in families.values()
     )
+    news_family = families["news_catalyst_intelligence"]
+    assert news_family["status"] == "missing"
+    assert news_family["authorityState"] == "not_configured"
+    assert news_family["freshnessState"] == "unavailable"
+    assert news_family["providerHydrationAllowed"] is False
+    assert news_family["scoreTradingAuthorityAllowed"] is False
+    assert all(set(item) == EXPECTED_CAPABILITY_MAP_FIELDS for item in news_family["capabilityMap"])
+    capability_states = {
+        item["capabilityKey"]: item["state"]
+        for item in news_family["capabilityMap"]
+    }
+    assert capability_states == {
+        "stock_news": "not_configured",
+        "market_news": "missing",
+        "earnings_calendar": "missing",
+        "macro_policy_catalyst": "stale",
+        "company_developments": "not_configured",
+    }
+    assert {
+        item["scope"]
+        for item in news_family["capabilityMap"]
+    } == {"stock", "market", "calendar", "macro_policy"}
+    assert all(
+        "headline" not in item["operatorNextAction"].lower()
+        and "provider" not in item["operatorNextAction"].lower()
+        for item in news_family["capabilityMap"]
+    )
+    assert {
+        impact["surfaceKey"]: impact["impactState"]
+        for impact in news_family["surfaceImpactMatrix"]
+    } == {
+        "stock_detail": "blocked",
+        "watchlist": "blocked",
+        "market_overview": "blocked",
+        "homepage": "observation-only",
+    }
     assert all(
         set(action) == {
             "actionKey",
@@ -264,6 +317,10 @@ def test_data_source_gap_registry_is_deterministic_and_fail_closed() -> None:
         "investment advice",
         "recommended",
         "winner",
+        "fake headline",
+        "breaking news",
+        "latest news",
+        "newswire",
     ):
         assert forbidden not in serialized
 
