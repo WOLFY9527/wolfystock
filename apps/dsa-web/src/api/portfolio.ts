@@ -21,6 +21,9 @@ import type {
   PortfolioImportParseResponse,
   PortfolioIbkrSyncRequest,
   PortfolioIbkrSyncResponse,
+  PortfolioRiskExposureReadiness,
+  PortfolioRiskExposureReadinessItem,
+  PortfolioRiskExposureReadinessState,
   PortfolioRiskResponse,
   PortfolioScenarioRiskAppliedShock,
   PortfolioScenarioRiskBucketContribution,
@@ -797,6 +800,87 @@ function normalizeExposureResearchContext(value: unknown): PortfolioExposureRese
   };
 }
 
+const READINESS_STATES: PortfolioRiskExposureReadinessState[] = [
+  'available',
+  'missing',
+  'stale',
+  'not_configured',
+  'broker_disabled',
+  'manual_only',
+];
+
+const READINESS_BLOCKERS = new Set([
+  'portfolio_account',
+  'portfolio_positions',
+  'portfolio_metrics',
+  'valuation_inputs',
+  'freshness',
+  'fx_freshness',
+  'position_lineage',
+  'cash_ledger',
+  'sector_exposure',
+  'benchmark_mapping',
+  'factor_mapping',
+  'liquidity_volatility_window',
+  'broker_disabled',
+]);
+
+function normalizeReadinessState(value: unknown): PortfolioRiskExposureReadinessState {
+  const token = String(value || '').trim().toLowerCase();
+  return READINESS_STATES.includes(token as PortfolioRiskExposureReadinessState)
+    ? token as PortfolioRiskExposureReadinessState
+    : 'missing';
+}
+
+function normalizeReadinessBlockers(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim().toLowerCase())
+    .filter((item, index, items) => READINESS_BLOCKERS.has(item) && items.indexOf(item) === index);
+}
+
+function normalizeReadinessItem(value: unknown): PortfolioRiskExposureReadinessItem {
+  const data = isRecord(value) ? value : {};
+  return {
+    state: normalizeReadinessState(data.state),
+    reason: pickString(data.reason) ?? '',
+    blockers: normalizeReadinessBlockers(data.blockers),
+    asOf: normalizeNullableString(data.asOf),
+  };
+}
+
+function normalizeRiskExposureReadiness(value: unknown): PortfolioRiskExposureReadiness | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  const data = toCamelCase<Record<string, unknown>>(value);
+  if (!isRecord(data)) {
+    return undefined;
+  }
+  const categories = normalizeStringRecord(data.exposureCategories);
+  return {
+    contractVersion: 'portfolio_risk_exposure_readiness_v1',
+    observationOnly: true,
+    decisionGrade: false,
+    noAdviceDisclosure: pickString(data.noAdviceDisclosure) ?? '',
+    freshnessStatus: pickString(data.freshnessStatus) ?? '',
+    holdings: normalizeReadinessItem(data.holdings),
+    exposureCategories: {
+      sectorExposure: normalizeReadinessItem(categories.sectorExposure),
+      singleNameConcentration: normalizeReadinessItem(categories.singleNameConcentration),
+      currencyExposure: normalizeReadinessItem(categories.currencyExposure),
+      factorStyleExposure: normalizeReadinessItem(categories.factorStyleExposure),
+      liquidityVolatilityExposure: normalizeReadinessItem(categories.liquidityVolatilityExposure),
+      benchmarkComparison: normalizeReadinessItem(categories.benchmarkComparison),
+    },
+    benchmarkAvailability: normalizeReadinessItem(data.benchmarkAvailability),
+    blockers: normalizeReadinessBlockers(data.blockers),
+  };
+}
+
 function normalizePortfolioSnapshotResponse(data: unknown): PortfolioSnapshotWithLineage {
   const normalized = toCamelCase<Record<string, unknown>>(data);
   const priceLineage = normalizePriceLineage(isRecord(normalized) ? normalized.priceLineage : undefined);
@@ -811,10 +895,14 @@ function normalizePortfolioSnapshotResponse(data: unknown): PortfolioSnapshotWit
   delete snapshotFields.valuationSnapshotLineage;
   delete snapshotFields.analyticsReadiness;
   delete snapshotFields.portfolioLineageSummary;
+  delete snapshotFields.riskExposureReadiness;
   return {
     ...snapshotFields,
     exposureResearchContext: normalizeExposureResearchContext(
       isRecord(normalized) ? normalized.exposureResearchContext : undefined,
+    ),
+    riskExposureReadiness: normalizeRiskExposureReadiness(
+      isRecord(normalized) ? normalized.riskExposureReadiness : undefined,
     ),
     ...(priceLineage ? { priceLineage } : {}),
     ...(fxLineage ? { fxLineage } : {}),
@@ -835,6 +923,9 @@ function normalizePortfolioRiskResponse(data: unknown): PortfolioRiskResponse {
     ...normalized,
     exposureResearchContext: normalizeExposureResearchContext(
       isRecord(normalized) ? normalized.exposureResearchContext : undefined,
+    ),
+    riskExposureReadiness: normalizeRiskExposureReadiness(
+      isRecord(normalized) ? normalized.riskExposureReadiness : undefined,
     ),
   };
 }

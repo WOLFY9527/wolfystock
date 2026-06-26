@@ -103,6 +103,7 @@ _IMPORT_ARTIFACT_SECRET_KEY_MARKERS = (
 _ADMIN_DIAGNOSTIC_CAMEL_BOUNDARY_RE = re.compile(r"(?<!^)(?=[A-Z])")
 PORTFOLIO_SNAPSHOT_CONSUMER_SCHEMA_VERSION = "portfolio_snapshot_consumer_v1"
 PORTFOLIO_RISK_CONSUMER_SCHEMA_VERSION = "portfolio_risk_consumer_v1"
+PORTFOLIO_RISK_EXPOSURE_READINESS_VERSION = "portfolio_risk_exposure_readiness_v1"
 PORTFOLIO_CONSUMER_NO_ADVICE_DISCLOSURE = (
     "Observation-only portfolio research context; not personalized financial advice and not an instruction."
 )
@@ -169,6 +170,13 @@ def _portfolio_consumer_safety_envelope(data: dict[str, Any], *, schema_version:
                 calculation_status=calculation_status,
                 freshness_status=freshness_status,
             ),
+            "riskExposureReadiness": _portfolio_risk_exposure_readiness(
+                payload,
+                evidence_gaps=evidence_gaps,
+                data_status=data_status,
+                calculation_status=calculation_status,
+                freshness_status=freshness_status,
+            ),
             "dataQuality": {
                 "status": data_status,
                 "freshnessStatus": freshness_status,
@@ -224,6 +232,315 @@ def _confidence_cap_value(payload: dict[str, Any]) -> Optional[int]:
 
 def _safe_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _portfolio_risk_exposure_readiness(
+    payload: dict[str, Any],
+    *,
+    evidence_gaps: list[str],
+    data_status: str,
+    calculation_status: str,
+    freshness_status: str,
+) -> dict[str, Any]:
+    availability = _safe_dict(payload.get("availability"))
+    position_count = _safe_int(availability.get("position_count"))
+    metrics_ready = bool(availability.get("metrics_ready")) and calculation_status == "ready"
+    as_of = str(payload.get("as_of") or payload.get("asOf") or "").strip() or None
+    diagnostics = _safe_dict(payload.get("riskDiagnostics"))
+    source_authority = _safe_dict(diagnostics.get("sourceAuthority"))
+    source_state = _safe_status(
+        payload.get("sourceAuthorityState") or source_authority.get("state"),
+        default="unknown",
+    )
+    broker_disabled = _portfolio_has_disabled_broker_link(source_authority)
+    holdings_state = _portfolio_holdings_readiness_state(
+        data_status=data_status,
+        position_count=position_count,
+        source_state=source_state,
+        broker_disabled=broker_disabled,
+    )
+    benchmark_state = _portfolio_mapping_readiness_state(payload.get("benchmarkMappingState"))
+    factor_state = _portfolio_mapping_readiness_state(payload.get("factorMappingState"))
+    currency_state = _portfolio_currency_readiness_state(payload, holdings_state=holdings_state)
+    concentration_state = _portfolio_concentration_readiness_state(
+        payload,
+        holdings_state=holdings_state,
+        metrics_ready=metrics_ready,
+    )
+    sector_state = _portfolio_sector_readiness_state(payload, holdings_state=holdings_state)
+    liquidity_volatility_state = _portfolio_liquidity_volatility_readiness_state(
+        payload,
+        holdings_state=holdings_state,
+    )
+
+    blockers = _portfolio_readiness_blockers(
+        evidence_gaps=evidence_gaps,
+        holdings_state=holdings_state,
+        sector_state=sector_state,
+        currency_state=currency_state,
+        benchmark_state=benchmark_state,
+        factor_state=factor_state,
+        liquidity_volatility_state=liquidity_volatility_state,
+    )
+    return {
+        "contractVersion": PORTFOLIO_RISK_EXPOSURE_READINESS_VERSION,
+        "observationOnly": True,
+        "decisionGrade": False,
+        "noAdviceDisclosure": PORTFOLIO_CONSUMER_NO_ADVICE_DISCLOSURE,
+        "freshnessStatus": freshness_status,
+        "holdings": _portfolio_readiness_item(
+            state=holdings_state,
+            reason=_portfolio_holdings_reason(holdings_state),
+            blockers=_portfolio_holdings_blockers(holdings_state),
+            as_of=as_of,
+        ),
+        "exposureCategories": {
+            "sectorExposure": _portfolio_readiness_item(
+                state=sector_state,
+                reason=_portfolio_category_reason("sector", sector_state),
+                blockers=["sector_exposure"] if sector_state == "missing" else [],
+                as_of=as_of,
+            ),
+            "singleNameConcentration": _portfolio_readiness_item(
+                state=concentration_state,
+                reason=_portfolio_category_reason("concentration", concentration_state),
+                blockers=["portfolio_positions"] if concentration_state == "missing" else [],
+                as_of=as_of,
+            ),
+            "currencyExposure": _portfolio_readiness_item(
+                state=currency_state,
+                reason=_portfolio_category_reason("currency", currency_state),
+                blockers=["fx_freshness"] if currency_state in {"missing", "stale"} else [],
+                as_of=as_of,
+            ),
+            "factorStyleExposure": _portfolio_readiness_item(
+                state=factor_state,
+                reason=_portfolio_category_reason("factor_style", factor_state),
+                blockers=["factor_mapping"] if factor_state == "not_configured" else [],
+                as_of=as_of,
+            ),
+            "liquidityVolatilityExposure": _portfolio_readiness_item(
+                state=liquidity_volatility_state,
+                reason=_portfolio_category_reason("liquidity_volatility", liquidity_volatility_state),
+                blockers=["liquidity_volatility_window"] if liquidity_volatility_state == "missing" else [],
+                as_of=as_of,
+            ),
+            "benchmarkComparison": _portfolio_readiness_item(
+                state=benchmark_state,
+                reason=_portfolio_category_reason("benchmark", benchmark_state),
+                blockers=["benchmark_mapping"] if benchmark_state == "not_configured" else [],
+                as_of=as_of,
+            ),
+        },
+        "benchmarkAvailability": _portfolio_readiness_item(
+            state=benchmark_state,
+            reason=_portfolio_category_reason("benchmark", benchmark_state),
+            blockers=["benchmark_mapping"] if benchmark_state == "not_configured" else [],
+            as_of=as_of,
+        ),
+        "blockers": blockers,
+    }
+
+
+def _portfolio_readiness_item(
+    *,
+    state: str,
+    reason: str,
+    blockers: list[str],
+    as_of: Optional[str],
+) -> dict[str, Any]:
+    return {
+        "state": state,
+        "reason": reason,
+        "blockers": _unique_strings(blockers),
+        "asOf": as_of,
+    }
+
+
+def _unique_strings(values: list[str]) -> list[str]:
+    seen: list[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if text and text not in seen:
+            seen.append(text)
+    return seen
+
+
+def _portfolio_has_disabled_broker_link(source_authority: dict[str, Any]) -> bool:
+    details = _safe_dict(source_authority.get("details"))
+    rows = details.get("sync_import_status")
+    if not isinstance(rows, list):
+        rows = details.get("syncImportStatus")
+    if not isinstance(rows, list):
+        return False
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if _safe_status(row.get("status"), default="") == "disabled":
+            return True
+    return False
+
+
+def _portfolio_holdings_readiness_state(
+    *,
+    data_status: str,
+    position_count: int,
+    source_state: str,
+    broker_disabled: bool,
+) -> str:
+    if broker_disabled and position_count == 0:
+        return "broker_disabled"
+    if position_count <= 0 or data_status in {"no_account", "no_positions"}:
+        return "missing"
+    if data_status == "stale_or_cached":
+        return "stale"
+    if source_state == "manual":
+        return "manual_only"
+    if source_state in {"broker", "import", "mixed"}:
+        return "available"
+    return "available"
+
+
+def _portfolio_mapping_readiness_state(value: Any) -> str:
+    token = _safe_status(value, default="unknown")
+    if token in {"mapped", "available", "ready"}:
+        return "available"
+    if token in {"stale"}:
+        return "stale"
+    if token in {"unmapped", "not_configured", "unknown", ""}:
+        return "not_configured"
+    return "missing"
+
+
+def _portfolio_category_base_state(holdings_state: str) -> str:
+    if holdings_state in {"missing", "broker_disabled"}:
+        return "missing"
+    if holdings_state == "stale":
+        return "stale"
+    if holdings_state == "manual_only":
+        return "manual_only"
+    return "available"
+
+
+def _portfolio_concentration_readiness_state(
+    payload: dict[str, Any],
+    *,
+    holdings_state: str,
+    metrics_ready: bool,
+) -> str:
+    if not metrics_ready:
+        return "missing"
+    analytics_risk = _portfolio_analytics_risk(payload)
+    concentration = _safe_dict(payload.get("concentration"))
+    has_concentration = bool(analytics_risk.get("largest_position")) or bool(concentration.get("top_positions"))
+    if not has_concentration:
+        return "missing"
+    return _portfolio_category_base_state(holdings_state)
+
+
+def _portfolio_currency_readiness_state(payload: dict[str, Any], *, holdings_state: str) -> str:
+    base_state = _portfolio_category_base_state(holdings_state)
+    if base_state == "missing":
+        return "missing"
+    analytics_exposure = _safe_dict(_safe_dict(payload.get("analytics")).get("exposure"))
+    has_currency = bool(analytics_exposure.get("by_currency"))
+    fx_state = _safe_status(payload.get("fxFreshnessState"), default="unknown")
+    if not has_currency:
+        return "missing"
+    if fx_state in {"unavailable", "missing"}:
+        return "missing"
+    if fx_state == "stale" or base_state == "stale":
+        return "stale"
+    return base_state
+
+
+def _portfolio_sector_readiness_state(payload: dict[str, Any], *, holdings_state: str) -> str:
+    base_state = _portfolio_category_base_state(holdings_state)
+    if base_state == "missing":
+        return "missing"
+    analytics_exposure = _safe_dict(_safe_dict(payload.get("analytics")).get("exposure"))
+    if _safe_status(analytics_exposure.get("sector_status"), default="unknown") == "available":
+        return base_state
+    sector_concentration = _safe_dict(payload.get("sector_concentration"))
+    coverage = _safe_dict(sector_concentration.get("coverage"))
+    if _safe_int(coverage.get("classified_count")) > 0:
+        return base_state
+    provenance = _safe_dict(payload.get("sectorSourceProvenance"))
+    summary = _safe_dict(provenance.get("summary"))
+    if _safe_int(summary.get("resolvedCount")) > 0:
+        return base_state
+    return "missing"
+
+
+def _portfolio_liquidity_volatility_readiness_state(payload: dict[str, Any], *, holdings_state: str) -> str:
+    base_state = _portfolio_category_base_state(holdings_state)
+    if base_state == "missing":
+        return "missing"
+    risk_window = _safe_dict(payload.get("drawdown"))
+    if _safe_int(risk_window.get("series_points")) > 1:
+        return base_state
+    return "missing"
+
+
+def _portfolio_readiness_blockers(
+    *,
+    evidence_gaps: list[str],
+    holdings_state: str,
+    sector_state: str,
+    currency_state: str,
+    benchmark_state: str,
+    factor_state: str,
+    liquidity_volatility_state: str,
+) -> list[str]:
+    blockers = list(evidence_gaps)
+    blockers.extend(_portfolio_holdings_blockers(holdings_state))
+    if sector_state == "missing":
+        blockers.append("sector_exposure")
+    if currency_state in {"missing", "stale"}:
+        blockers.append("fx_freshness")
+    if benchmark_state == "not_configured":
+        blockers.append("benchmark_mapping")
+    if factor_state == "not_configured":
+        blockers.append("factor_mapping")
+    if liquidity_volatility_state == "missing":
+        blockers.append("liquidity_volatility_window")
+    return _unique_strings(blockers)
+
+
+def _portfolio_holdings_blockers(state: str) -> list[str]:
+    if state == "missing":
+        return ["portfolio_positions"]
+    if state == "broker_disabled":
+        return ["broker_disabled"]
+    if state == "stale":
+        return ["freshness"]
+    return []
+
+
+def _portfolio_holdings_reason(state: str) -> str:
+    reasons = {
+        "available": "holdings_evidence_available",
+        "manual_only": "holdings_from_manual_records_only",
+        "missing": "holdings_evidence_missing",
+        "stale": "holdings_snapshot_stale",
+        "broker_disabled": "broker_connection_disabled",
+        "not_configured": "holdings_not_configured",
+    }
+    return reasons.get(state, "holdings_evidence_missing")
+
+
+def _portfolio_category_reason(category: str, state: str) -> str:
+    if state == "available":
+        return f"{category}_available"
+    if state == "manual_only":
+        return f"{category}_manual_only"
+    if state == "stale":
+        return f"{category}_stale"
+    if state == "not_configured":
+        return f"{category}_not_configured"
+    if state == "broker_disabled":
+        return f"{category}_broker_disabled"
+    return f"{category}_missing"
 
 
 def _portfolio_consumer_evidence_gaps(payload: dict[str, Any], *, data_status: str) -> list[str]:

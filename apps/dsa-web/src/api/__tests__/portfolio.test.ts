@@ -152,6 +152,31 @@ describe('portfolioApi scenario risk adapter', () => {
             { topic: 'dominant_exposure', check: 'Review latest research evidence for AAPL and its market context.', raw_payload: 'hidden' },
           ],
         },
+        risk_exposure_readiness: {
+          contract_version: 'portfolio_risk_exposure_readiness_v1',
+          observation_only: true,
+          decision_grade: false,
+          no_advice_disclosure: 'Observation-only portfolio research context; not personalized financial advice and not an instruction.',
+          freshness_status: 'stale_or_cached',
+          holdings: {
+            state: 'manual_only',
+            reason: 'holdings_from_manual_records_only',
+            blockers: [],
+            as_of: '2026-03-19',
+            account_id: 1,
+          },
+          exposure_categories: {
+            sector_exposure: { state: 'missing', reason: 'sector_missing', blockers: ['sector_exposure'], provider: 'hidden' },
+            single_name_concentration: { state: 'manual_only', reason: 'concentration_manual_only', blockers: [] },
+            currency_exposure: { state: 'stale', reason: 'currency_stale', blockers: ['fx_freshness'], beta: 1.4 },
+            factor_style_exposure: { state: 'not_configured', reason: 'factor_style_not_configured', blockers: ['factor_mapping'] },
+            liquidity_volatility_exposure: { state: 'missing', reason: 'liquidity_volatility_missing', blockers: ['liquidity_volatility_window'], value_at_risk: 12 },
+            benchmark_comparison: { state: 'not_configured', reason: 'benchmark_not_configured', blockers: ['benchmark_mapping'] },
+          },
+          benchmark_availability: { state: 'not_configured', reason: 'benchmark_not_configured', blockers: ['benchmark_mapping'] },
+          blockers: ['sector_exposure', 'benchmark_mapping', 'factor_mapping'],
+          raw_payload: { debug_trace: 'hidden' },
+        },
         accounts: [
           {
             account_id: 1,
@@ -280,6 +305,40 @@ describe('portfolioApi scenario risk adapter', () => {
       },
       researchNextSteps: [{ topic: 'dominant_exposure', check: 'Review latest research evidence for AAPL and its market context.' }],
     });
+    expect(payload.riskExposureReadiness).toEqual({
+      contractVersion: 'portfolio_risk_exposure_readiness_v1',
+      observationOnly: true,
+      decisionGrade: false,
+      noAdviceDisclosure: 'Observation-only portfolio research context; not personalized financial advice and not an instruction.',
+      freshnessStatus: 'stale_or_cached',
+      holdings: {
+        state: 'manual_only',
+        reason: 'holdings_from_manual_records_only',
+        blockers: [],
+        asOf: '2026-03-19',
+      },
+      exposureCategories: {
+        sectorExposure: { state: 'missing', reason: 'sector_missing', blockers: ['sector_exposure'] },
+        singleNameConcentration: { state: 'manual_only', reason: 'concentration_manual_only', blockers: [] },
+        currencyExposure: { state: 'stale', reason: 'currency_stale', blockers: ['fx_freshness'] },
+        factorStyleExposure: { state: 'not_configured', reason: 'factor_style_not_configured', blockers: ['factor_mapping'] },
+        liquidityVolatilityExposure: { state: 'missing', reason: 'liquidity_volatility_missing', blockers: ['liquidity_volatility_window'] },
+        benchmarkComparison: { state: 'not_configured', reason: 'benchmark_not_configured', blockers: ['benchmark_mapping'] },
+      },
+      benchmarkAvailability: { state: 'not_configured', reason: 'benchmark_not_configured', blockers: ['benchmark_mapping'] },
+      blockers: ['sector_exposure', 'benchmark_mapping', 'factor_mapping'],
+    });
+    const readinessKeys = new Set(walkKeys(payload.riskExposureReadiness));
+    for (const forbiddenKey of [
+      'accountId',
+      'provider',
+      'rawPayload',
+      'debugTrace',
+      'beta',
+      'valueAtRisk',
+    ]) {
+      expect(readinessKeys.has(forbiddenKey)).toBe(false);
+    }
     const contextKeys = new Set(walkKeys(payload.exposureResearchContext));
     for (const forbiddenKey of ['source', 'warningCodes', 'providerRoutingChanged', 'externalProviderCallsAdded', 'rawPayload', 'debugTrace']) {
       expect(contextKeys.has(forbiddenKey)).toBe(false);

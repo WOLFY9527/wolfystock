@@ -62,6 +62,17 @@ _EXPOSURE_RESEARCH_CONTEXT_FIELDS = {
     "observationBoundary",
     "researchNextSteps",
 }
+_RISK_EXPOSURE_READINESS_FIELDS = {
+    "contractVersion",
+    "observationOnly",
+    "decisionGrade",
+    "noAdviceDisclosure",
+    "freshnessStatus",
+    "holdings",
+    "exposureCategories",
+    "benchmarkAvailability",
+    "blockers",
+}
 
 
 def _reset_auth_globals() -> None:
@@ -237,6 +248,69 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, context_text.lower())
 
+    def _assert_risk_exposure_readiness(
+        self,
+        payload: dict,
+        *,
+        holdings_state: str,
+        benchmark_state: str = "not_configured",
+    ) -> dict:
+        self.assertIn("riskExposureReadiness", payload)
+        readiness = payload["riskExposureReadiness"]
+        self.assertTrue(_RISK_EXPOSURE_READINESS_FIELDS.issubset(readiness.keys()))
+        self.assertEqual(readiness["contractVersion"], "portfolio_risk_exposure_readiness_v1")
+        self.assertTrue(readiness["observationOnly"])
+        self.assertFalse(readiness["decisionGrade"])
+        self.assertEqual(readiness["noAdviceDisclosure"], _NO_ADVICE_DISCLOSURE)
+        self.assertEqual(readiness["freshnessStatus"], payload["freshnessStatus"])
+        self.assertEqual(readiness["holdings"]["state"], holdings_state)
+        self.assertEqual(readiness["benchmarkAvailability"]["state"], benchmark_state)
+
+        categories = readiness["exposureCategories"]
+        for key in (
+            "sectorExposure",
+            "singleNameConcentration",
+            "currencyExposure",
+            "factorStyleExposure",
+            "liquidityVolatilityExposure",
+            "benchmarkComparison",
+        ):
+            self.assertIn(key, categories)
+            self.assertIn(
+                categories[key]["state"],
+                {"available", "missing", "stale", "not_configured", "broker_disabled", "manual_only"},
+                key,
+            )
+
+        readiness_text = self._json_text(readiness).lower()
+        for forbidden in (
+            "account_id",
+            "accountid",
+            "broker_account",
+            "brokeraccount",
+            "session",
+            "token",
+            "sync_metadata",
+            "api_base_url",
+            "ibkr",
+            "var",
+            "beta",
+            "drawdown",
+            "sector_weight",
+            "currency_weight",
+            "buy now",
+            "sell now",
+            "rebalance",
+            "trim",
+            "add position",
+            "target price",
+            "stop loss",
+            "position sizing",
+        ):
+            self.assertNotIn(forbidden, readiness_text)
+        self._assert_no_admin_diagnostic_keys(readiness)
+        return readiness
+
     def test_snapshot_endpoint_exposes_optional_diagnostics_fields(self) -> None:
         create_resp = self.client.post(
             "/api/v1/portfolio/accounts",
@@ -289,6 +363,7 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
             freshness_status="ready",
         )
         self._assert_exposure_research_context(payload, expected_symbol="600519")
+        self._assert_risk_exposure_readiness(payload, holdings_state="manual_only")
 
         cached_response = self.client.get(
             "/api/v1/portfolio/snapshot",
@@ -303,6 +378,8 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
             freshness_status="stale_or_cached",
         )
         self._assert_exposure_research_context(cached_payload, expected_symbol="600519")
+        cached_readiness = self._assert_risk_exposure_readiness(cached_payload, holdings_state="stale")
+        self.assertEqual(cached_readiness["exposureCategories"]["singleNameConcentration"]["state"], "stale")
         self.assertTrue(
             any(item.get("section") == "freshness" for item in cached_payload["degradedInputs"]),
             cached_payload["degradedInputs"],
@@ -368,6 +445,73 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
             freshness_status="provider_unavailable",
         )
         self._assert_exposure_research_context(payload, expected_symbol="AAPL")
+        readiness = self._assert_risk_exposure_readiness(payload, holdings_state="manual_only")
+        self.assertEqual(readiness["exposureCategories"]["sectorExposure"]["state"], "missing")
+        self.assertEqual(readiness["exposureCategories"]["currencyExposure"]["state"], "missing")
+        self.assertIn("benchmark_mapping", readiness["blockers"])
+
+    def test_snapshot_readiness_exposes_missing_holdings_without_fake_metrics(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Empty", "broker": "Manual", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        account_id = create_resp.json()["id"]
+
+        response = self.client.get(
+            "/api/v1/portfolio/snapshot",
+            params={"account_id": account_id, "as_of": "2026-05-10", "cost_method": "fifo"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self._assert_safety_envelope(
+            payload,
+            schema_version=_SNAPSHOT_SCHEMA_VERSION,
+            freshness_status="no_positions",
+        )
+        readiness = self._assert_risk_exposure_readiness(payload, holdings_state="missing")
+        self.assertEqual(readiness["exposureCategories"]["singleNameConcentration"]["state"], "missing")
+        self.assertEqual(readiness["exposureCategories"]["currencyExposure"]["state"], "missing")
+        self.assertIn("portfolio_positions", readiness["blockers"])
+
+    def test_snapshot_readiness_marks_broker_disabled_without_leaking_broker_internals(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Disabled Link", "broker": "IBKR", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        account_id = create_resp.json()["id"]
+
+        broker_resp = self.client.post(
+            "/api/v1/portfolio/broker-connections",
+            json={
+                "portfolio_account_id": account_id,
+                "broker_type": "ibkr",
+                "broker_name": "Interactive Brokers",
+                "connection_name": "raw_connection_name_must_not_leak",
+                "broker_account_ref": "raw-account-ref-must-not-leak",
+                "import_mode": "api",
+                "status": "disabled",
+                "sync_metadata": {
+                    "session_token": "raw-session-token-must-not-leak",
+                    "api_base_url": "https://broker.example.invalid/raw-url-must-not-leak",
+                },
+            },
+        )
+        self.assertEqual(broker_resp.status_code, 200)
+
+        response = self.client.get(
+            "/api/v1/portfolio/snapshot",
+            params={"account_id": account_id, "as_of": "2026-05-10", "cost_method": "fifo"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        readiness = self._assert_risk_exposure_readiness(payload, holdings_state="broker_disabled")
+        self.assertEqual(readiness["exposureCategories"]["benchmarkComparison"]["state"], "not_configured")
+        self.assertNotIn("raw_connection_name_must_not_leak", self._json_text(readiness))
+        self.assertNotIn("raw-session-token-must-not-leak", self._json_text(readiness))
 
     def test_risk_endpoint_provider_lookup_failure_stays_bounded_and_contract_compatible(self) -> None:
         create_resp = self.client.post(
