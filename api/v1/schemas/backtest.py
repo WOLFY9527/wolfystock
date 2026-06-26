@@ -1181,6 +1181,8 @@ class RuleBacktestHistoryItem(BacktestResponseContractFields):
     historicalOhlcvReadiness: Dict[str, Any] = Field(default_factory=dict)
     robustness_analysis: Dict[str, Any] = Field(default_factory=dict)
     artifact_availability: Dict[str, Any] = Field(default_factory=dict)
+    research_artifact: Optional[Dict[str, Any]] = None
+    research_artifact_availability: Dict[str, Any] = Field(default_factory=dict)
     readback_integrity: Dict[str, Any] = Field(default_factory=dict)
     professionalReadiness: Dict[str, Any] = Field(default_factory=dict)
     adjustedDataState: Optional[str] = None
@@ -1265,6 +1267,8 @@ class RuleBacktestRunResponse(BacktestResponseContractFields):
     historicalOhlcvReadiness: Dict[str, Any] = Field(default_factory=dict)
     robustness_analysis: Dict[str, Any] = Field(default_factory=dict)
     artifact_availability: Dict[str, Any] = Field(default_factory=dict)
+    research_artifact: Optional[Dict[str, Any]] = None
+    research_artifact_availability: Dict[str, Any] = Field(default_factory=dict)
     readback_integrity: Dict[str, Any] = Field(default_factory=dict)
     professionalReadiness: Dict[str, Any] = Field(default_factory=dict)
     adjustedDataState: Optional[str] = None
