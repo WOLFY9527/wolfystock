@@ -3,6 +3,7 @@ import type { MarketDataMeta, MarketOverviewPanel } from '../api/marketOverview'
 import { marketOverviewApi } from '../api/marketOverview';
 import type {
   ConsumerEvidenceReadinessMatrix,
+  CrossAssetDriverReadiness,
   CnShortSentimentResponse,
   ProfessionalDataCapabilityRegistryView,
   ProfessionalDataCapabilityViewItem,
@@ -12,6 +13,7 @@ import type {
   OfficialRiskSourceReadiness,
 } from '../api/market';
 import {
+  buildCrossAssetDriverReadinessView,
   buildConsumerEvidenceBoundaryView,
   buildOfficialRiskSourceReadinessView,
   buildProfessionalDataCapabilityRegistryView,
@@ -726,6 +728,36 @@ const MarketOverviewEvidenceBoundaryStrip = ({
   );
 };
 
+const CrossAssetDriverReadinessStrip = ({
+  readiness,
+}: {
+  readiness?: CrossAssetDriverReadiness | null;
+}) => {
+  const view = buildCrossAssetDriverReadinessView(readiness);
+
+  return (
+    <section
+      data-testid="market-overview-cross-asset-readiness"
+      className="rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2.5"
+    >
+      <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-white/48">跨资产驱动输入</p>
+          <p className="mt-1 text-sm font-semibold text-white/84">{view.label}</p>
+        </div>
+        <div className="flex min-w-0 flex-wrap gap-1.5 md:justify-end">
+          <TerminalChip variant={view.variant}>{view.label}</TerminalChip>
+          {view.chips.map((chip) => (
+            <TerminalChip key={chip.key} variant={chip.variant}>{chip.label}</TerminalChip>
+          ))}
+        </div>
+      </div>
+      <p className="mt-2 text-[11px] leading-5 text-white/48">{view.note}</p>
+      <p className="mt-1 text-[11px] leading-5 text-white/40">仅展示已配置输入与缓存状态；未返回的驱动不做方向推断。</p>
+    </section>
+  );
+};
+
 type MarketRegimeReadinessStatus =
   | 'available'
   | 'missing provider'
@@ -1063,6 +1095,7 @@ const MarketOverviewPage = () => {
   const [panels, setPanels] = useState<PanelState>(initialLocalSnapshot.panels);
   const [officialRiskSourceReadiness, setOfficialRiskSourceReadiness] = useState<OfficialRiskSourceReadiness | null>(null);
   const [consumerEvidenceReadinessMatrix, setConsumerEvidenceReadinessMatrix] = useState<ConsumerEvidenceReadinessMatrix | null>(null);
+  const [crossAssetDriverReadiness, setCrossAssetDriverReadiness] = useState<CrossAssetDriverReadiness | null>(null);
   const [professionalDataCapabilities, setProfessionalDataCapabilities] = useState<ProfessionalDataCapabilityRegistryView | null>(null);
   const [professionalDataCapabilitiesLoading, setProfessionalDataCapabilitiesLoading] = useState(true);
   const [professionalDataCapabilitiesError, setProfessionalDataCapabilitiesError] = useState<string | null>(null);
@@ -1269,11 +1302,13 @@ const MarketOverviewPage = () => {
         if (!cancelled) {
           setOfficialRiskSourceReadiness(payload?.officialRiskSourceReadiness || null);
           setConsumerEvidenceReadinessMatrix(payload?.consumerEvidenceReadinessMatrix || null);
+          setCrossAssetDriverReadiness(payload?.crossAssetDriverReadiness || null);
         }
       } catch {
         if (!cancelled) {
           setOfficialRiskSourceReadiness(null);
           setConsumerEvidenceReadinessMatrix(null);
+          setCrossAssetDriverReadiness(null);
         }
       }
     }
@@ -1378,6 +1413,7 @@ const MarketOverviewPage = () => {
       >
         <OfficialRiskSourceReadinessStrip readiness={officialRiskSourceReadiness} />
         <MarketOverviewEvidenceBoundaryStrip matrix={consumerEvidenceReadinessMatrix} />
+        <CrossAssetDriverReadinessStrip readiness={crossAssetDriverReadiness} />
         <MarketRegimeReadinessSurface
           view={professionalDataCapabilities}
           riskReadiness={officialRiskSourceReadiness}

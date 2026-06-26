@@ -57,6 +57,18 @@ def test_professional_registry_returns_expected_categories_and_capabilities() ->
     assert payload["contractVersion"] == PROFESSIONAL_DATA_CAPABILITY_CONTRACT_VERSION
     assert payload["consumerSafe"] is True
     assert set(payload["categories"]) == EXPECTED_CATEGORIES
+    assert payload["crossAssetDriverReadiness"]["contractVersion"] == "cross_asset_driver_readiness_v1"
+    assert {
+        "equities_index",
+        "rates",
+        "usd",
+        "oil_energy",
+        "gold",
+        "volatility",
+        "credit",
+        "crypto",
+        "sectors",
+    } == {item["category"] for item in payload["crossAssetDriverReadiness"]["drivers"]}
 
     capabilities = {
         item["capabilityId"]: item
@@ -142,6 +154,17 @@ def test_professional_registry_consumer_projection_redacts_internal_diagnostics(
     for marker in FORBIDDEN_CONSUMER_MARKERS:
         assert marker not in serialized
         assert marker.lower() not in lowered
+    cross_asset_serialized = json.dumps(payload["crossAssetDriverReadiness"], ensure_ascii=False).lower()
+    for marker in (
+        "risk-on",
+        "risk-off",
+        "liquidity",
+        "inflation",
+        "recession",
+        "rawpayload",
+        "cachekey",
+    ):
+        assert marker not in cross_asset_serialized
 
     capabilities = {
         item["capabilityId"]: item
@@ -174,6 +197,8 @@ def test_professional_registry_admin_projection_adds_bounded_diagnostics() -> No
     )
 
     assert payload["consumerSafe"] is False
+    assert payload["crossAssetDriverReadiness"]["consumerSafe"] is True
+    assert payload["crossAssetDriverReadiness"]["networkCallsEnabled"] is False
     assert all("adminDiagnostics" in item for item in payload["capabilities"])
     sample = payload["capabilities"][0]["adminDiagnostics"]
     assert set(sample) == {

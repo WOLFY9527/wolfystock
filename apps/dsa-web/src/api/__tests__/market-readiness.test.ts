@@ -72,6 +72,63 @@ describe('marketApi.getDataReadiness', () => {
             },
           ],
         },
+        cross_asset_driver_readiness: {
+          contract_version: 'cross_asset_driver_readiness_v1',
+          consumer_safe: true,
+          diagnostic_only: true,
+          network_calls_enabled: false,
+          external_provider_calls: false,
+          mutation_enabled: false,
+          supported_states: ['available', 'missing', 'stale', 'insufficient_history', 'not_configured'],
+          consumer_summary: 'Cross-asset drivers are reported as data-readiness inputs only; no market conclusion is inferred.',
+          summary: {
+            total_drivers: 2,
+            available_count: 1,
+            missing_count: 1,
+            stale_count: 0,
+            insufficient_history_count: 0,
+            not_configured_count: 0,
+          },
+          drivers: [
+            {
+              category: 'equities_index',
+              label: 'Equities/index trend',
+              supported: true,
+              state: 'available',
+              configured_identifiers: [
+                { kind: 'symbol', value: 'SPY', market: 'us' },
+                { kind: 'symbol', value: 'QQQ', market: 'us' },
+              ],
+              cached_ohlcv: {
+                required_bars: 60,
+                usable_bars: 82,
+                missing_bars: 0,
+                cache_state: 'cache_hit',
+                freshness_state: 'fresh',
+                latest_bar_date: '2026-06-25',
+              },
+              missing_reasons: [],
+              consumer_safe_summary: 'Configured data is present for readiness evaluation.',
+            },
+            {
+              category: 'credit',
+              label: 'Credit spreads',
+              supported: false,
+              state: 'not_configured',
+              configured_identifiers: [],
+              cached_ohlcv: {
+                required_bars: 60,
+                usable_bars: 0,
+                missing_bars: 60,
+                cache_state: 'not_applicable',
+                freshness_state: 'unknown',
+                latest_bar_date: null,
+              },
+              missing_reasons: ['not_configured'],
+              consumer_safe_summary: 'Driver category is not configured for readiness evaluation.',
+            },
+          ],
+        },
       },
     });
 
@@ -99,6 +156,82 @@ describe('marketApi.getDataReadiness', () => {
       scoreGradeInputs: ['market overview read model'],
       nextDiagnostic: 'Compare overview evidence families against current safe surface snapshots.',
     });
+    expect(payload.crossAssetDriverReadiness?.contractVersion).toBe('cross_asset_driver_readiness_v1');
+    expect(payload.crossAssetDriverReadiness?.networkCallsEnabled).toBe(false);
+    expect(payload.crossAssetDriverReadiness?.drivers[0]).toMatchObject({
+      category: 'equities_index',
+      state: 'available',
+      configuredIdentifiers: [
+        { kind: 'symbol', value: 'SPY', market: 'us' },
+        { kind: 'symbol', value: 'QQQ', market: 'us' },
+      ],
+      cachedOhlcv: {
+        requiredBars: 60,
+        usableBars: 82,
+        missingBars: 0,
+      },
+    });
+  });
+
+  it('builds compact cross-asset driver readiness labels without implying a regime conclusion', async () => {
+    const { buildCrossAssetDriverReadinessView } = await import('../market');
+
+    const view = buildCrossAssetDriverReadinessView({
+      contractVersion: 'cross_asset_driver_readiness_v1',
+      consumerSafe: true,
+      diagnosticOnly: true,
+      networkCallsEnabled: false,
+      externalProviderCalls: false,
+      mutationEnabled: false,
+      supportedStates: ['available', 'missing', 'stale', 'insufficient_history', 'not_configured'],
+      consumerSummary: 'Cross-asset drivers are reported as data-readiness inputs only; no market conclusion is inferred.',
+      summary: {},
+      drivers: [
+        {
+          category: 'equities_index',
+          label: 'Equities/index trend',
+          supported: true,
+          state: 'available',
+          configuredIdentifiers: [{ kind: 'symbol', value: 'SPY', market: 'us' }],
+          cachedOhlcv: {
+            requiredBars: 60,
+            usableBars: 90,
+            missingBars: 0,
+            cacheState: 'cache_hit',
+            freshnessState: 'fresh',
+            latestBarDate: '2026-06-25',
+          },
+          missingReasons: [],
+          consumerSafeSummary: 'Configured data is present for readiness evaluation.',
+        },
+        {
+          category: 'oil_energy',
+          label: 'Oil/energy',
+          supported: true,
+          state: 'insufficient_history',
+          configuredIdentifiers: [{ kind: 'symbol', value: 'USO', market: 'us' }],
+          cachedOhlcv: {
+            requiredBars: 60,
+            usableBars: 12,
+            missingBars: 48,
+            cacheState: 'cache_hit',
+            freshnessState: 'fresh',
+            latestBarDate: '2026-06-25',
+          },
+          missingReasons: ['insufficient_history'],
+          consumerSafeSummary: 'Configured data exists but lacks required history.',
+        },
+      ],
+    });
+
+    expect(view.label).toBe('跨资产驱动部分可用');
+    expect(view.chips.map((chip) => chip.label)).toEqual([
+      'Equities/index trend: 可用 (SPY)',
+      'Oil/energy: 历史不足 (USO)',
+    ]);
+    expect(JSON.stringify(view)).not.toMatch(
+      /risk-on|risk-off|liquidity|inflation|recession|provider|runtime|raw|debug|cacheKey|requestId|traceId|buy|sell|target price|position sizing|买入|卖出|目标价|止损|仓位/i,
+    );
   });
 
   it('builds compact consumer evidence boundary labels without exposing matrix internals', async () => {

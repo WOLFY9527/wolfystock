@@ -175,6 +175,7 @@ def test_market_data_readiness_route_returns_read_only_diagnostic_payload(
     checks = payload["checks"]
     matrix = payload["consumerEvidenceReadinessMatrix"]
     official_risk = payload["officialRiskSourceReadiness"]
+    cross_asset = payload["crossAssetDriverReadiness"]
     rows = matrix["items"]
 
     assert matrix["contractVersion"] == "consumer_evidence_readiness_matrix_v1"
@@ -195,6 +196,26 @@ def test_market_data_readiness_route_returns_read_only_diagnostic_payload(
     assert official_risk["rates"]["coveredSeriesCount"] == 0
     assert isinstance(official_risk["consumerSummary"], str)
     assert isinstance(official_risk["nextDataAction"], str)
+    assert cross_asset["contractVersion"] == "cross_asset_driver_readiness_v1"
+    assert cross_asset["consumerSafe"] is True
+    assert cross_asset["diagnosticOnly"] is True
+    assert cross_asset["networkCallsEnabled"] is False
+    assert cross_asset["externalProviderCalls"] is False
+    assert cross_asset["mutationEnabled"] is False
+    assert {
+        "equities_index",
+        "rates",
+        "usd",
+        "oil_energy",
+        "gold",
+        "volatility",
+        "credit",
+        "crypto",
+        "sectors",
+    } == {item["category"] for item in cross_asset["drivers"]}
+    assert all(item["state"] in cross_asset["supportedStates"] for item in cross_asset["drivers"])
+    assert next(item for item in cross_asset["drivers"] if item["category"] == "credit")["state"] == "not_configured"
+    assert "no market conclusion is inferred" in cross_asset["consumerSummary"]
     assert {
         "market_overview",
         "liquidity_monitor",
@@ -240,7 +261,20 @@ def test_market_data_readiness_route_returns_read_only_diagnostic_payload(
         for check in checks
         if check["id"] != "tushare_token"
     )
-    assert all(check["status"] in {"ready", "missing", "partial", "misconfigured"} for check in checks)
+    assert all(
+        check["status"]
+        in {
+            "ready",
+            "available",
+            "disabled",
+            "missing",
+            "partial",
+            "misconfigured",
+            "dependency_missing",
+            "runtime_unavailable",
+        }
+        for check in checks
+    )
     assert all(check["affectsSurfaces"] for check in checks)
 
     serialized = json.dumps(payload, ensure_ascii=False)
@@ -261,6 +295,13 @@ def test_market_data_readiness_route_returns_read_only_diagnostic_payload(
     ).lower()
     for term in FORBIDDEN_CONSUMER_READINESS_TERMS | {"credential", "secret", "api_key"}:
         assert term not in serialized_official_risk_consumer
+    serialized_cross_asset = json.dumps(cross_asset, ensure_ascii=False).lower()
+    cross_asset_forbidden_terms = (
+        (FORBIDDEN_CONSUMER_READINESS_TERMS - {"cache", "cache_miss", "provider"})
+        | {"credential", "secret", "api_key", "liquidity", "inflation", "recession"}
+    )
+    for term in cross_asset_forbidden_terms:
+        assert term not in serialized_cross_asset
 
     parquet_check = next(check for check in checks if check["id"] == "local_us_parquet_dir")
     assert parquet_check["details"]["pathConfigured"] is True
