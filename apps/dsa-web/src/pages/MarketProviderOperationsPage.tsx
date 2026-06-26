@@ -13,6 +13,7 @@ import {
   type DataSourceGapRegistryResponse,
   type MarketDataReadinessCheck,
   type MarketDataReadinessResponse,
+  type ProfessionalDataCapability,
   type ProfessionalDataCapabilityRegistryResponse,
 } from '../api/market';
 import {
@@ -754,6 +755,61 @@ type ProviderOpsActionQueueItem = {
   action: string;
   severity: DisclosureSeverity;
 };
+type DataRoadmapSurfaceId =
+  | 'stock_research'
+  | 'market_overview_regime'
+  | 'scanner_backtest'
+  | 'research_radar'
+  | 'portfolio_risk'
+  | 'admin_operator_readiness';
+type DataRoadmapRow = {
+  key: string;
+  surfaceId: DataRoadmapSurfaceId;
+  capabilityLabel: string;
+  status: string;
+  statusVariant: SetupChecklistBadge['variant'];
+  providerClass: string;
+  freshnessState: string;
+  operatorAction: string;
+  surfaceUnlocked: string;
+};
+
+const DATA_ROADMAP_SURFACES: Array<{
+  id: DataRoadmapSurfaceId;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: 'stock_research',
+    label: 'Stock research',
+    description: 'Single-stock packet, fundamentals, catalysts, technicals, and quote/history evidence.',
+  },
+  {
+    id: 'market_overview_regime',
+    label: 'Market overview/regime',
+    description: 'Market regime, macro, breadth, liquidity, volatility, and rotation context.',
+  },
+  {
+    id: 'scanner_backtest',
+    label: 'Scanner/backtest',
+    description: 'Scanner universe, local history, OHLCV cache, and backtest data lineage.',
+  },
+  {
+    id: 'research_radar',
+    label: 'Research Radar',
+    description: 'Research queue prerequisites and consumer-safe evidence readiness.',
+  },
+  {
+    id: 'portfolio_risk',
+    label: 'Portfolio risk',
+    description: 'Portfolio valuation, price/FX lineage, factor and concentration evidence.',
+  },
+  {
+    id: 'admin_operator_readiness',
+    label: 'Admin/operator readiness',
+    description: 'Operator-only readiness, cache state, provider health, and next admin action.',
+  },
+];
 
 const SOURCE_GAP_CAPABILITIES: SourceGapCapability[] = [
   {
@@ -1375,6 +1431,323 @@ function buildProviderActionQueue(
   return queue.sort((left, right) => severityWeight(left.severity) - severityWeight(right.severity) || left.title.localeCompare(right.title)).slice(0, 4);
 }
 
+function readableCode(value?: string | null, fallback = '暂无数据'): string {
+  const safe = sanitizeCodeLabel(value, fallback);
+  return safe === fallback ? safe : safe.replace(/[_-]+/g, ' ');
+}
+
+function roadmapStatusFromMatrixRow(row: ProviderOperationsMatrixRow): Pick<DataRoadmapRow, 'status' | 'statusVariant'> {
+  const freshness = String(row.sourceFreshnessEvidence?.freshness || '').toLowerCase();
+  if (matrixRowHasMissingSetup(row) || freshness === 'unavailable') {
+    return { status: 'Missing / needs configuration', statusVariant: 'danger' };
+  }
+  if (freshness === 'stale') {
+    return { status: 'Stale', statusVariant: 'caution' };
+  }
+  if (row.observationOnly === true || row.inertMetadataOnly === true || row.diagnosticOnly === true) {
+    return { status: 'Observation only', statusVariant: 'info' };
+  }
+  if (sourceGapBlocksScoreGrade(row)) {
+    return { status: 'Partial readiness', statusVariant: 'caution' };
+  }
+  return { status: 'Configured', statusVariant: 'success' };
+}
+
+function roadmapFreshnessFromMatrixRow(row: ProviderOperationsMatrixRow): string {
+  const evidence = row.sourceFreshnessEvidence;
+  const states: string[] = [];
+  if (evidence?.isUnavailable) states.push('missing');
+  if (evidence?.isFallback) states.push('fallback');
+  if (evidence?.isPartial) states.push('partial');
+  if (evidence?.freshness) states.push(readableCode(evidence.freshness));
+  if (!states.length && row.freshnessExpectation) states.push(readableCode(row.freshnessExpectation));
+  if (matrixCacheRequired(row)) states.push('cache evidence required');
+  return formatReadableList(states, 'freshness unavailable');
+}
+
+function roadmapProviderClassFromMatrixRow(row: ProviderOperationsMatrixRow): string {
+  const values = [row.sourceType, row.sourceTier, row.providerCategory].flatMap((value) => (
+    value ? [readableCode(value)] : []
+  ));
+  return formatReadableList(values, 'provider/data class pending');
+}
+
+function roadmapCapabilityLabelFromMatrixRow(row: ProviderOperationsMatrixRow): string {
+  const capability = row.supportedCapabilities?.[0];
+  const provider = sourceGapName(row);
+  if (capability) {
+    return `${readableCode(capability)} · ${sanitizeOperatorText(provider)}`;
+  }
+  return sanitizeOperatorText(provider, 'Data source readiness');
+}
+
+function roadmapSurfaceIdsForMatrixRow(row: ProviderOperationsMatrixRow): DataRoadmapSurfaceId[] {
+  const values = [
+    ...(row.productAffectedSurfaces || []),
+    ...(row.affectedSurfaces || []),
+    ...(row.supportedCapabilities || []),
+    row.providerCategory,
+    row.providerId,
+  ].map((value) => String(value || '').toLowerCase());
+  const ids = new Set<DataRoadmapSurfaceId>();
+  const has = (needle: string) => values.some((value) => value.includes(needle));
+
+  if (has('stock') || has('watchlist') || has('fundamental') || has('earnings') || has('catalyst')) {
+    ids.add('stock_research');
+  }
+  if (has('market_overview') || has('liquidity') || has('rotation') || has('macro') || has('breadth') || has('rates') || has('volatility')) {
+    ids.add('market_overview_regime');
+  }
+  if (has('scanner') || has('backtest') || has('history') || has('ohlcv') || has('universe')) {
+    ids.add('scanner_backtest');
+  }
+  if (has('research_radar') || has('research_prerequisite') || has('research')) {
+    ids.add('research_radar');
+  }
+  if (has('portfolio') || has('fx') || has('risk')) {
+    ids.add('portfolio_risk');
+  }
+  if (has('provider_ops') || has('diagnostic') || has('system')) {
+    ids.add('admin_operator_readiness');
+  }
+
+  return ids.size ? [...ids] : ['admin_operator_readiness'];
+}
+
+function buildMatrixRoadmapRows(rows: ProviderOperationsMatrixRow[]): DataRoadmapRow[] {
+  const roadmapRows: DataRoadmapRow[] = [];
+  for (const row of rows) {
+    const status = roadmapStatusFromMatrixRow(row);
+    for (const surfaceId of roadmapSurfaceIdsForMatrixRow(row)) {
+      roadmapRows.push({
+        key: `matrix:${surfaceId}:${row.providerId}`,
+        surfaceId,
+        capabilityLabel: roadmapCapabilityLabelFromMatrixRow(row),
+        status: status.status,
+        statusVariant: status.statusVariant,
+        providerClass: roadmapProviderClassFromMatrixRow(row),
+        freshnessState: roadmapFreshnessFromMatrixRow(row),
+        operatorAction: sourceGapRequiredWork(row),
+        surfaceUnlocked: formatReadableList(resolveChecklistMatrixSurfaces(row), 'Admin/operator readiness'),
+      });
+    }
+  }
+  return roadmapRows;
+}
+
+function roadmapSurfaceIdsForReadinessCheck(check: MarketDataReadinessCheck): DataRoadmapSurfaceId[] {
+  const surfaces = resolveChecklistReadinessSurfaces(check);
+  const ids = new Set<DataRoadmapSurfaceId>();
+  for (const surface of surfaces) {
+    if (surface === 'Market Overview' || surface === 'Liquidity Monitor' || surface === 'Rotation Radar') ids.add('market_overview_regime');
+    if (surface === 'Scanner' || surface === 'Backtest' || surface === PROVIDER_OPS_DIAGNOSTIC_SURFACE) ids.add('scanner_backtest');
+    if (surface === 'Portfolio') ids.add('portfolio_risk');
+    if (surface === 'Watchlist') ids.add('stock_research');
+  }
+  if (!ids.size) ids.add('admin_operator_readiness');
+  return [...ids];
+}
+
+function buildReadinessRoadmapRows(checks: MarketDataReadinessCheck[]): DataRoadmapRow[] {
+  const rows: DataRoadmapRow[] = [];
+  for (const check of checks) {
+    for (const surfaceId of roadmapSurfaceIdsForReadinessCheck(check)) {
+      rows.push({
+        key: `readiness:${surfaceId}:${check.id}`,
+        surfaceId,
+        capabilityLabel: readinessCheckName(check),
+        status: readinessStatusLabel(check.status),
+        statusVariant: readinessStatusVariant(check.status),
+        providerClass: check.id.includes('cache') || check.id.includes('parquet') ? 'Local cache / history files' : 'Local configuration readiness',
+        freshnessState: readinessSeverityLabel(check.severity),
+        operatorAction: readinessCheckGuidance(check),
+        surfaceUnlocked: formatReadableList(resolveChecklistReadinessSurfaces(check), 'Local readiness diagnostics'),
+      });
+    }
+  }
+  return rows;
+}
+
+function roadmapSurfaceIdForProfessionalCapability(capability: ProfessionalDataCapability): DataRoadmapSurfaceId {
+  const category = String(capability.category || '').toLowerCase();
+  const id = String(capability.capabilityId || '').toLowerCase();
+  if (category.includes('stock') || id.startsWith('stock.') || category.includes('options')) return 'stock_research';
+  if (category.includes('market') || category.includes('macro') || category.includes('sector') || id.startsWith('market.') || id.startsWith('macro.')) return 'market_overview_regime';
+  if (category.includes('backtest')) return 'scanner_backtest';
+  return 'admin_operator_readiness';
+}
+
+function roadmapStatusFromProfessionalCapability(status: string): Pick<DataRoadmapRow, 'status' | 'statusVariant'> {
+  const normalized = String(status || '').toLowerCase();
+  if (normalized === 'live') return { status: 'Configured', statusVariant: 'success' };
+  if (normalized === 'degraded') return { status: 'Partial readiness', statusVariant: 'caution' };
+  if (normalized === 'entitlement_required') return { status: 'Missing entitlement', statusVariant: 'danger' };
+  if (normalized === 'configured_missing') return { status: 'Missing / needs configuration', statusVariant: 'danger' };
+  if (normalized === 'not_implemented') return { status: 'Not implemented', statusVariant: 'neutral' };
+  return { status: readableCode(normalized, 'Unknown'), statusVariant: 'neutral' };
+}
+
+function buildProfessionalCapabilityRoadmapRows(
+  registry: ProfessionalDataCapabilityRegistryResponse | null,
+): DataRoadmapRow[] {
+  const capabilities = registry?.capabilities ?? [];
+  return capabilities.map((capability) => {
+    const status = roadmapStatusFromProfessionalCapability(capability.status);
+    const surfaceId = roadmapSurfaceIdForProfessionalCapability(capability);
+    return {
+      key: `professional:${capability.capabilityId}`,
+      surfaceId,
+      capabilityLabel: sanitizeOperatorText(capability.label, 'Professional data capability'),
+      status: status.status,
+      statusVariant: status.statusVariant,
+      providerClass: sanitizeOperatorText(capability.sourceLabel, 'Professional data registry'),
+      freshnessState: sanitizeOperatorText(capability.freshness, 'freshness pending'),
+      operatorAction: sanitizeOperatorText(capability.reason, '补齐来源、授权、时效或覆盖证据后再复核。'),
+      surfaceUnlocked: DATA_ROADMAP_SURFACES.find((surface) => surface.id === surfaceId)?.label || 'Admin/operator readiness',
+    };
+  });
+}
+
+function historicalRoadmapStatus(item: HistoricalOhlcvActivationChecklistItem): Pick<DataRoadmapRow, 'status' | 'statusVariant'> {
+  const state = String(item.state || '').toLowerCase();
+  if (state === 'seeded/cache_hit') return { status: 'Cache ready', statusVariant: 'success' };
+  if (state === 'ready_to_seed') return { status: 'Missing cache seed', statusVariant: 'caution' };
+  if (state === 'disabled_by_config' || state === 'dependency_missing') return { status: 'Missing / needs configuration', statusVariant: 'danger' };
+  return { status: readableCode(state, 'Pending'), statusVariant: 'neutral' };
+}
+
+function buildHistoricalRoadmapRows(preflight: HistoricalOhlcvCachePreflightResponse | null): DataRoadmapRow[] {
+  return historicalActivationItems(preflight).map((item) => {
+    const status = historicalRoadmapStatus(item);
+    const stale = safeCount(item.cacheSummary?.staleSymbolCount);
+    const missingAdjustment = safeCount(item.cacheSummary?.missingAdjustmentCount);
+    const ready = safeCount(item.cacheSummary?.readySymbolCount);
+    const total = safeCount(item.cacheSummary?.totalSymbols);
+    return {
+      key: `historical:${item.market}`,
+      surfaceId: 'scanner_backtest',
+      capabilityLabel: `${historicalMarketLabel(item.market)} historical OHLCV`,
+      status: status.status,
+      statusVariant: status.statusVariant,
+      providerClass: 'Local historical OHLCV cache',
+      freshnessState: `ready ${formatNumber(ready, 0)}/${formatNumber(total, 0)} · stale ${formatNumber(stale, 0)} · adjustments missing ${formatNumber(missingAdjustment, 0)}`,
+      operatorAction: sanitizeOperatorText(item.nextStepSummary, '先复核 dry-run readiness，再显式开启受控缓存流程。'),
+      surfaceUnlocked: formatReadableList(item.workflowUnlocks, 'Scanner / Backtest'),
+    };
+  });
+}
+
+function buildConsumerEvidenceRoadmapRows(readiness: MarketDataReadinessResponse | null): DataRoadmapRow[] {
+  const items = readiness?.consumerEvidenceReadinessMatrix?.items ?? [];
+  return items
+    .filter((item) => String(item.surface || '').toLowerCase() === 'research_radar')
+    .map((item) => ({
+      key: `consumer-evidence:${item.surface}:${item.evidenceFamily}`,
+      surfaceId: 'research_radar' as const,
+      capabilityLabel: readableCode(item.evidenceFamily, 'Research prerequisites'),
+      status: consumerEvidenceReadinessLabel(item.readinessState),
+      statusVariant: consumerEvidenceReadinessVariant(item.readinessState),
+      providerClass: 'Consumer evidence readiness',
+      freshnessState: sanitizeOperatorText(item.freshnessReason, 'freshness pending'),
+      operatorAction: sanitizeOperatorText(item.nextDiagnostic, '核对 scanner、watchlist 与 candidate evidence 前置条件。'),
+      surfaceUnlocked: surfaceLabel(item.surface),
+    }));
+}
+
+function buildAdminRoadmapRows(
+  response: MarketProviderOperationsResponse | null,
+  actionQueueItems: ProviderOpsActionQueueItem[],
+): DataRoadmapRow[] {
+  if (!response) return [];
+  const metadata = response.metadata || {};
+  const degraded = safeCount(response.summary?.fallbackCount)
+    + safeCount(response.summary?.partialCount)
+    + safeCount(response.summary?.staleCount)
+    + safeCount(response.summary?.unavailableCount)
+    + safeCount(response.summary?.errorCount);
+  const statusVariant: SetupChecklistBadge['variant'] = degraded > 0 ? 'caution' : 'success';
+  return [
+    {
+      key: 'admin:provider-operations-snapshot',
+      surfaceId: 'admin_operator_readiness',
+      capabilityLabel: 'Provider operations snapshot',
+      status: degraded > 0 ? 'Degraded signals present' : 'Read-only snapshot ready',
+      statusVariant,
+      providerClass: 'Admin read model',
+      freshnessState: `generated ${formatDisplayDate(response.generatedAt, 'pending')} · window ${sanitizeCodeLabel(response.window?.key || '24h')}`,
+      operatorAction: actionQueueItems[0]?.action || '保持只读观察，按需进入 Admin Logs、provider circuits 或 evidence workflow。',
+      surfaceUnlocked: 'Admin/operator readiness',
+    },
+    {
+      key: 'admin:provider-readonly-boundary',
+      surfaceId: 'admin_operator_readiness',
+      capabilityLabel: 'Provider runtime boundary',
+      status: metadata.externalProviderCalls === false && metadata.cacheMutation === false ? 'No live calls or cache mutation' : 'Boundary needs review',
+      statusVariant: metadata.externalProviderCalls === false && metadata.cacheMutation === false ? 'success' : 'caution',
+      providerClass: 'Operator safety contract',
+      freshnessState: 'read-only admin projection',
+      operatorAction: '保持外部 provider 调用关闭，不在本页面改变缓存、provider 顺序或运行时配置。',
+      surfaceUnlocked: 'Admin/operator readiness',
+    },
+  ];
+}
+
+function roadmapRowPriority(row: DataRoadmapRow): number {
+  return {
+    danger: 0,
+    caution: 1,
+    info: 2,
+    neutral: 3,
+    success: 4,
+  }[row.statusVariant] ?? 5;
+}
+
+function dedupeAndLimitRoadmapRows(rows: DataRoadmapRow[]): DataRoadmapRow[] {
+  const seen = new Set<string>();
+  const result: DataRoadmapRow[] = [];
+  for (const row of rows.sort((left, right) => roadmapRowPriority(left) - roadmapRowPriority(right) || left.capabilityLabel.localeCompare(right.capabilityLabel))) {
+    const key = `${row.surfaceId}:${row.capabilityLabel}:${row.providerClass}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(row);
+    if (result.length >= 4) break;
+  }
+  return result;
+}
+
+function buildDataRoadmapRows(args: {
+  response: MarketProviderOperationsResponse | null;
+  matrixRows: ProviderOperationsMatrixRow[];
+  readiness: MarketDataReadinessResponse | null;
+  professionalCapabilityRegistry: ProfessionalDataCapabilityRegistryResponse | null;
+  historicalOhlcvPreflight: HistoricalOhlcvCachePreflightResponse | null;
+  actionQueueItems: ProviderOpsActionQueueItem[];
+}): Record<DataRoadmapSurfaceId, DataRoadmapRow[]> {
+  const buckets = DATA_ROADMAP_SURFACES.reduce((current, surface) => {
+    current[surface.id] = [];
+    return current;
+  }, {} as Record<DataRoadmapSurfaceId, DataRoadmapRow[]>);
+
+  const allRows = [
+    ...buildMatrixRoadmapRows(args.matrixRows),
+    ...buildReadinessRoadmapRows(args.readiness?.checks ?? EMPTY_READINESS_CHECKS),
+    ...buildProfessionalCapabilityRoadmapRows(args.professionalCapabilityRegistry),
+    ...buildHistoricalRoadmapRows(args.historicalOhlcvPreflight),
+    ...buildConsumerEvidenceRoadmapRows(args.readiness),
+    ...buildAdminRoadmapRows(args.response, args.actionQueueItems),
+  ];
+
+  for (const row of allRows) {
+    buckets[row.surfaceId].push(row);
+  }
+
+  for (const surface of DATA_ROADMAP_SURFACES) {
+    buckets[surface.id] = dedupeAndLimitRoadmapRows(buckets[surface.id]);
+  }
+
+  return buckets;
+}
+
 function statusChipVariant(status: StatusTone): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
   if (status === 'live') return 'success';
   if (status === 'cache' || status === 'refreshing' || status === 'partial') return 'info';
@@ -1981,6 +2354,94 @@ const ProviderOpsActionQueue: React.FC<{
     </div>
   </div>
 );
+
+const AdminDataRoadmapPanel: React.FC<{
+  rowsBySurface: Record<DataRoadmapSurfaceId, DataRoadmapRow[]>;
+  isLoading: boolean;
+}> = ({ rowsBySurface, isLoading }) => {
+  const totalRows = DATA_ROADMAP_SURFACES.reduce((count, surface) => count + rowsBySurface[surface.id].length, 0);
+
+  return (
+    <div data-testid="admin-data-roadmap-panel" className="mt-4 rounded-lg border border-white/[0.07] bg-black/10 px-3 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">L1 data roadmap</p>
+          <p className="mt-1 text-sm font-semibold text-white/84">专业数据能力路线图</p>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <TerminalChip variant="info">admin-only</TerminalChip>
+          <TerminalChip variant={totalRows ? 'neutral' : 'caution'}>
+            {isLoading && !totalRows ? '读取中' : `${formatNumber(totalRows, 0)} 行`}
+          </TerminalChip>
+        </div>
+      </div>
+      <p className="mt-2 text-[11px] leading-5 text-white/48">
+        汇总现有 registry、provider matrix、readiness checks、历史 OHLCV preflight 与 consumer evidence readiness；只展示 operator-safe 状态、数据类别、时效/缓存状态和下一步，不展示内部标识、缓存标识、原始载荷或 provider 异常细节。
+      </p>
+
+      {isLoading && !totalRows ? (
+        <p className="mt-3 text-[11px] leading-5 text-white/38">正在合成路线图；不会触发 live provider 调用。</p>
+      ) : null}
+
+      {!isLoading && !totalRows ? (
+        <p className="mt-3 text-[11px] leading-5 text-white/38">当前没有可展示的 roadmap 行；不在前端推断缺失数据。</p>
+      ) : null}
+
+      <div className="mt-3 grid gap-3">
+        {DATA_ROADMAP_SURFACES.map((surface) => {
+          const rows = rowsBySurface[surface.id];
+          return (
+            <TerminalNestedBlock
+              key={surface.id}
+              data-testid={`admin-data-roadmap-surface-${surface.id}`}
+              className="min-w-0 bg-white/[0.025] px-3 py-3"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-white/84">{surface.label}</p>
+                  <p className="mt-1 text-[11px] leading-5 text-white/44">{surface.description}</p>
+                </div>
+                <TerminalChip variant={rows.length ? 'neutral' : 'caution'}>{formatNumber(rows.length, 0)} rows</TerminalChip>
+              </div>
+              {rows.length ? (
+                <TerminalDenseTable className="mt-3 -mx-3 overflow-x-auto overscroll-x-contain px-3 [-webkit-overflow-scrolling:touch]">
+                  <table className="min-w-[58rem] table-fixed">
+                    <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
+                      <tr className="border-b border-white/5 text-left">
+                        <th className="w-[18%] px-3 py-3 font-medium">Capability</th>
+                        <th className="w-[14%] px-3 py-3 font-medium">Status</th>
+                        <th className="w-[18%] px-3 py-3 font-medium">Provider/data class</th>
+                        <th className="w-[16%] px-3 py-3 font-medium">Freshness/cache</th>
+                        <th className="w-[20%] px-3 py-3 font-medium">Next operator action</th>
+                        <th className="w-[14%] px-3 py-3 font-medium">Surface unlocked</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row) => (
+                        <tr key={row.key} className="border-b border-white/[0.04] align-top">
+                          <td className="px-3 py-3 text-xs font-semibold leading-5 text-white/82">{row.capabilityLabel}</td>
+                          <td className="px-3 py-3">
+                            <TerminalChip variant={row.statusVariant}>{row.status}</TerminalChip>
+                          </td>
+                          <td className="px-3 py-3 text-[11px] leading-5 text-white/54">{row.providerClass}</td>
+                          <td className="px-3 py-3 text-[11px] leading-5 text-white/54">{row.freshnessState}</td>
+                          <td className="px-3 py-3 text-[11px] leading-5 text-white/62">{row.operatorAction}</td>
+                          <td className="px-3 py-3 text-[11px] leading-5 text-white/54">{row.surfaceUnlocked}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </TerminalDenseTable>
+              ) : (
+                <p className="mt-3 text-[11px] leading-5 text-white/38">暂无显式 roadmap 行；保持缺失态，不用前端补假数据。</p>
+              )}
+            </TerminalNestedBlock>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 const SourceGapBoard: React.FC<{ rows: ProviderOperationsMatrixRow[] }> = ({ rows }) => (
   <div data-testid="market-provider-source-gap-board" className="mt-4 grid min-w-0 gap-3 xl:grid-cols-2">
@@ -3814,6 +4275,14 @@ const MarketProviderOperationsPage: React.FC = () => {
 
   const topSummary = buildProviderOpsTopSummary(items, matrixRows, readinessChecks);
   const actionQueueItems = buildProviderActionQueue(items, matrixRows, readinessChecks);
+  const dataRoadmapRowsBySurface = buildDataRoadmapRows({
+    response,
+    matrixRows,
+    readiness,
+    professionalCapabilityRegistry,
+    historicalOhlcvPreflight,
+    actionQueueItems,
+  });
   const l0TrustState: AdminOpsTrustState = error && !response
     ? 'blocked'
     : isLoading && !response
@@ -3891,6 +4360,10 @@ const MarketProviderOperationsPage: React.FC = () => {
           />
           <ProviderOpsTopSummary data={topSummary} isLoading={isLoading || isMatrixLoading || isReadinessLoading} />
           <ProviderOpsActionQueue items={actionQueueItems} isLoading={isLoading || isMatrixLoading || isReadinessLoading} />
+          <AdminDataRoadmapPanel
+            rowsBySurface={dataRoadmapRowsBySurface}
+            isLoading={isLoading || isMatrixLoading || isReadinessLoading || isHistoricalOhlcvPreflightLoading || isProfessionalCapabilityLoading}
+          />
           {error ? <ApiErrorAlert error={error} className="mt-5" /> : null}
         </TerminalPanel>
 
