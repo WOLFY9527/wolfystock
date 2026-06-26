@@ -164,6 +164,14 @@ export type StockValidationResponse = {
 export type SymbolResearchAvailabilityState = 'available' | 'missing' | 'stale' | 'unknown' | string;
 export type SymbolResearchStructureAvailabilityState = 'available' | 'insufficient' | 'missing' | 'unknown' | string;
 export type SymbolResearchIntegratedState = 'available' | 'missing' | 'not_integrated' | 'unknown' | string;
+export type SymbolResearchFundamentalsReadinessState =
+  | 'available'
+  | 'missing'
+  | 'not_configured'
+  | 'insufficient_permissions'
+  | 'stale'
+  | 'unknown'
+  | string;
 export type SymbolResearchPeerState = 'available' | 'insufficient' | 'missing' | 'unknown' | string;
 export type SymbolResearchStatus = 'ready' | 'partial' | 'blocked' | 'unknown' | string;
 
@@ -197,7 +205,23 @@ export type SymbolResearchStructureState = {
 
 export type SymbolResearchFundamentalsState = {
   state: SymbolResearchIntegratedState;
+  readinessState?: SymbolResearchFundamentalsReadinessState;
   fieldsAvailable: string[];
+  supportedFields?: Record<string, string[]>;
+  availableFields?: Record<string, string[]>;
+  missingFields?: Record<string, string[]>;
+  staleFields?: Record<string, string[]>;
+  blockedFields?: Record<string, string[]>;
+  categories?: Record<string, {
+    state?: SymbolResearchFundamentalsReadinessState;
+    supportedFields: string[];
+    availableFields: string[];
+    missingFields: string[];
+    staleFields: string[];
+    blockedFields: string[];
+  }>;
+  providerNeutralNextDataAction?: string;
+  consumerSafeCopy?: string;
 };
 
 export type SymbolResearchEventsState = {
@@ -548,6 +572,63 @@ function normalizeStockIntradayResponse(payload: unknown): StockIntradayResponse
   };
 }
 
+function normalizeStringArrayRecord(value: unknown): Record<string, string[]> {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [key, normalizeStringArray(item)]),
+  );
+}
+
+function normalizeSymbolResearchFundamentalsCategories(value: unknown): SymbolResearchFundamentalsState['categories'] {
+  if (!isRecord(value)) return undefined;
+  const categories = Object.fromEntries(
+    Object.entries(value)
+      .filter(([, item]) => isRecord(item))
+      .map(([key, item]) => {
+        const record = item as Record<string, unknown>;
+        return [key, {
+          state: typeof record.state === 'string' ? record.state : undefined,
+          supportedFields: normalizeStringArray(record.supportedFields),
+          availableFields: normalizeStringArray(record.availableFields),
+          missingFields: normalizeStringArray(record.missingFields),
+          staleFields: normalizeStringArray(record.staleFields),
+          blockedFields: normalizeStringArray(record.blockedFields),
+        }];
+      }),
+  );
+  return Object.keys(categories).length > 0 ? categories : undefined;
+}
+
+function normalizeSymbolResearchFundamentalsState(value: unknown): SymbolResearchFundamentalsState {
+  const payload = isRecord(value) ? value : {};
+  const fundamentals: SymbolResearchFundamentalsState = {
+    state: typeof payload.state === 'string' ? payload.state : 'unknown',
+    fieldsAvailable: normalizeStringArray(payload.fieldsAvailable),
+  };
+  if (typeof payload.readinessState === 'string') {
+    fundamentals.readinessState = payload.readinessState;
+  }
+  const supportedFields = normalizeStringArrayRecord(payload.supportedFields);
+  const availableFields = normalizeStringArrayRecord(payload.availableFields);
+  const missingFields = normalizeStringArrayRecord(payload.missingFields);
+  const staleFields = normalizeStringArrayRecord(payload.staleFields);
+  const blockedFields = normalizeStringArrayRecord(payload.blockedFields);
+  const categories = normalizeSymbolResearchFundamentalsCategories(payload.categories);
+  if (Object.keys(supportedFields).length) fundamentals.supportedFields = supportedFields;
+  if (Object.keys(availableFields).length) fundamentals.availableFields = availableFields;
+  if (Object.keys(missingFields).length) fundamentals.missingFields = missingFields;
+  if (Object.keys(staleFields).length) fundamentals.staleFields = staleFields;
+  if (Object.keys(blockedFields).length) fundamentals.blockedFields = blockedFields;
+  if (categories) fundamentals.categories = categories;
+  if (typeof payload.providerNeutralNextDataAction === 'string') {
+    fundamentals.providerNeutralNextDataAction = payload.providerNeutralNextDataAction;
+  }
+  if (typeof payload.consumerSafeCopy === 'string') {
+    fundamentals.consumerSafeCopy = payload.consumerSafeCopy;
+  }
+  return fundamentals;
+}
+
 function normalizeSymbolResearchPacket(payload: unknown): SymbolResearchPacket {
   const normalized = toCamelCase<SymbolResearchPacket>(payload);
   return {
@@ -577,12 +658,7 @@ function normalizeSymbolResearchPacket(payload: unknown): SymbolResearchPacket {
       confidence: normalized.structure?.confidence ?? null,
       asOf: normalized.structure?.asOf ?? null,
     },
-    fundamentals: {
-      state: normalized.fundamentals?.state ?? 'unknown',
-      fieldsAvailable: Array.isArray(normalized.fundamentals?.fieldsAvailable)
-        ? normalized.fundamentals.fieldsAvailable
-        : [],
-    },
+    fundamentals: normalizeSymbolResearchFundamentalsState(normalized.fundamentals),
     events: {
       state: normalized.events?.state ?? 'unknown',
       latest: Array.isArray(normalized.events?.latest) ? normalized.events.latest : [],

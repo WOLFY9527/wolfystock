@@ -280,8 +280,25 @@ class SymbolResearchFundamentalsState(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    state: Literal["available", "missing", "not_integrated", "unknown"] = Field(..., description="基本面覆盖状态")
+    state: Literal["available", "missing", "not_integrated", "not_configured", "insufficient_permissions", "stale", "unknown"] = Field(..., description="基本面覆盖状态")
+    readiness_state: Literal["available", "missing", "not_configured", "insufficient_permissions", "stale", "unknown"] = Field(
+        "unknown",
+        alias="readinessState",
+        description="基本面字段级就绪状态",
+    )
     fields_available: List[str] = Field(default_factory=list, alias="fieldsAvailable", description="已安全暴露的基本面字段")
+    supported_fields: Dict[str, List[str]] = Field(default_factory=dict, alias="supportedFields", description="按基本面类别分组的支持字段")
+    available_fields: Dict[str, List[str]] = Field(default_factory=dict, alias="availableFields", description="按类别分组的已可安全展示字段")
+    missing_fields: Dict[str, List[str]] = Field(default_factory=dict, alias="missingFields", description="按类别分组的缺失字段")
+    stale_fields: Dict[str, List[str]] = Field(default_factory=dict, alias="staleFields", description="按类别分组的过期字段")
+    blocked_fields: Dict[str, List[str]] = Field(default_factory=dict, alias="blockedFields", description="按类别分组的权限或配置阻塞字段")
+    categories: Dict[str, Dict[str, Any]] = Field(default_factory=dict, description="类别级基本面就绪状态")
+    provider_neutral_next_data_action: str = Field(
+        "",
+        alias="providerNeutralNextDataAction",
+        description="不绑定具体供应商的下一步数据动作",
+    )
+    consumer_safe_copy: str = Field("", alias="consumerSafeCopy", description="消费端安全说明文案")
 
 
 class SymbolResearchEventsState(BaseModel):

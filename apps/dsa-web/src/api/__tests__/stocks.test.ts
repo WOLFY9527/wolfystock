@@ -462,8 +462,47 @@ describe('stocksApi', () => {
           as_of: null,
         },
         fundamentals: {
-          state: 'not_integrated',
-          fields_available: [],
+          state: 'stale',
+          readiness_state: 'stale',
+          fields_available: ['marketCap', 'peTtm'],
+          supported_fields: {
+            companyProfile: ['companyName', 'sector'],
+            financialStatements: ['revenueTtm', 'netIncomeTtm'],
+            valuation: ['marketCap', 'peTtm'],
+            earnings: ['earningsDate'],
+          },
+          available_fields: {
+            valuation: ['marketCap', 'peTtm'],
+          },
+          missing_fields: {
+            companyProfile: ['companyName', 'sector'],
+            financialStatements: ['revenueTtm', 'netIncomeTtm'],
+            earnings: ['earningsDate'],
+          },
+          stale_fields: {
+            valuation: ['marketCap', 'peTtm'],
+          },
+          blocked_fields: {},
+          categories: {
+            valuation: {
+              state: 'stale',
+              supported_fields: ['marketCap', 'peTtm'],
+              available_fields: ['marketCap', 'peTtm'],
+              missing_fields: [],
+              stale_fields: ['marketCap', 'peTtm'],
+              blocked_fields: [],
+            },
+            financialStatements: {
+              state: 'missing',
+              supported_fields: ['revenueTtm', 'netIncomeTtm'],
+              available_fields: [],
+              missing_fields: ['revenueTtm', 'netIncomeTtm'],
+              stale_fields: [],
+              blocked_fields: [],
+            },
+          },
+          provider_neutral_next_data_action: 'Connect a fundamentals data path for company profile, financial statements, valuation, earnings, and ownership or flow fields.',
+          consumer_safe_copy: '基本面数据缺失或更新不完整，已标记为研究观察边界。',
         },
         events: {
           state: 'missing',
@@ -492,8 +531,17 @@ describe('stocksApi', () => {
     expect(payload.quote.asOf).toBe('2026-05-28T09:30:00Z');
     expect(payload.history.asOf).toBe('2026-05-28');
     expect(payload.structure.state).toBe('insufficient');
-    expect(payload.fundamentals.state).toBe('not_integrated');
-    expect(payload.fundamentals.fieldsAvailable).toEqual([]);
+    expect(payload.fundamentals.state).toBe('stale');
+    expect(payload.fundamentals.readinessState).toBe('stale');
+    expect(payload.fundamentals.fieldsAvailable).toEqual(['marketCap', 'peTtm']);
+    expect(payload.fundamentals.supportedFields?.valuation).toEqual(['marketCap', 'peTtm']);
+    expect(payload.fundamentals.availableFields?.valuation).toEqual(['marketCap', 'peTtm']);
+    expect(payload.fundamentals.missingFields?.financialStatements).toEqual(['revenueTtm', 'netIncomeTtm']);
+    expect(payload.fundamentals.staleFields?.valuation).toEqual(['marketCap', 'peTtm']);
+    expect(payload.fundamentals.categories?.valuation.state).toBe('stale');
+    expect(payload.fundamentals.categories?.financialStatements.missingFields).toEqual(['revenueTtm', 'netIncomeTtm']);
+    expect(payload.fundamentals.providerNeutralNextDataAction).toContain('fundamentals data path');
+    expect(payload.fundamentals.consumerSafeCopy).toContain('基本面数据缺失');
     expect(payload.events.latest).toEqual([]);
     expect(payload.peer.state).toBe('insufficient');
     expect(payload.missingData).toEqual(['fundamentals', 'filing_event_catalyst', 'peer_benchmark']);

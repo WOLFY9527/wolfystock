@@ -458,7 +458,10 @@ def test_research_packet_endpoint_assembles_existing_data_and_missing_families(m
     assert payload["structure"]["state"] == "available"
     assert payload["structure"]["label"] == "breakout"
     assert payload["structure"]["confidence"] == "high"
-    assert payload["fundamentals"] == {"state": "missing", "fieldsAvailable": []}
+    assert payload["fundamentals"]["state"] == "missing"
+    assert payload["fundamentals"]["readinessState"] == "missing"
+    assert payload["fundamentals"]["fieldsAvailable"] == []
+    assert payload["fundamentals"]["missingFields"]["valuation"] == ["marketCap", "peTtm", "pb", "beta"]
     assert payload["events"] == {"state": "missing", "latest": []}
     assert payload["peer"] == {"state": "missing", "benchmark": None}
     assert payload["missingData"] == ["fundamentals", "filing_event_catalyst", "peer_benchmark"]
@@ -469,8 +472,186 @@ def test_research_packet_endpoint_assembles_existing_data_and_missing_families(m
     serialized = json.dumps(payload, ensure_ascii=False).lower()
     for forbidden in FORBIDDEN_ADVICE_TOKENS:
         assert forbidden not in serialized
-    for raw_key in ("sourceType", "sourceConfidence", "provider", "cache", "traceId", "requestId"):
+    for raw_key in ("sourceType", "sourceConfidence", "providerName", "providerClass", "providerAttempted", "cacheKey", "traceId", "requestId"):
         assert raw_key not in json.dumps(payload, ensure_ascii=False)
+
+
+def test_research_packet_endpoint_exposes_fundamentals_readiness_contract(monkeypatch) -> None:
+    fake_stock = _FakeStockService(
+        quote={
+            "stock_code": "AAPL",
+            "stock_name": "Apple",
+            "current_price": 214.55,
+            "change_percent": 1.11,
+            "market_timestamp": "2026-05-28T09:30:00Z",
+            "freshness": "live",
+        },
+        history=_history_payload(),
+    )
+    fake_structure = _FakeStructureDecisionService(_payload())
+    evidence_payload = _evidence_payload()
+    evidence_payload["items"][0]["fundamental"] = {
+        "status": "partial",
+        "marketCap": 2800000000000,
+        "peTtm": 28.5,
+        "freshness": "stale",
+        "missingFields": ["revenueTtm", "grossMargin", "earningsDate"],
+        "providerName": "must-not-emit",
+        "requestId": "req-must-not-emit",
+        "rawPayload": {"token": "must-not-emit"},
+    }
+    evidence_payload["items"][0]["stockEvidencePacket"]["fundamentalsSummary"] = {
+        "status": "partial",
+        "marketCap": 2800000000000,
+        "peTtm": 28.5,
+        "freshness": "stale",
+        "missingFields": ["revenueTtm", "grossMargin", "earningsDate"],
+        "notInvestmentAdvice": True,
+        "observationOnly": True,
+        "scoreContributionAllowed": False,
+        "sourceAuthorityAllowed": False,
+    }
+    fake_evidence = _FakeStockEvidenceService(evidence_payload)
+    monkeypatch.setattr(symbol_research_packet_service, "StockService", lambda: fake_stock, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "StockStructureDecisionService", lambda: fake_structure, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "StockEvidenceService", lambda: fake_evidence, raising=False)
+
+    response = _client().get("/api/v1/stocks/AAPL/research-packet", params={"market": "us"})
+
+    assert response.status_code == 200
+    fundamentals = response.json()["fundamentals"]
+    assert fundamentals["state"] == "stale"
+    assert fundamentals["readinessState"] == "stale"
+    assert fundamentals["fieldsAvailable"] == ["marketCap", "peTtm"]
+    assert fundamentals["supportedFields"]["valuation"] == ["marketCap", "peTtm", "pb", "beta"]
+    assert fundamentals["availableFields"]["valuation"] == ["marketCap", "peTtm"]
+    assert fundamentals["missingFields"]["financialStatements"] == ["revenueTtm", "netIncomeTtm", "fcfTtm"]
+    assert fundamentals["missingFields"]["margins"] == ["grossMargin", "operatingMargin", "roe", "roa"]
+    assert fundamentals["missingFields"]["balanceSheet"] == ["totalDebt", "cashAndEquivalents", "totalAssets", "totalLiabilities"]
+    assert fundamentals["missingFields"]["earnings"] == ["earningsDate", "epsTtm", "revenueGrowth"]
+    assert fundamentals["categories"]["companyProfile"]["state"] == "missing"
+    assert fundamentals["categories"]["valuation"]["state"] == "stale"
+    assert fundamentals["categories"]["financialStatements"]["state"] == "missing"
+    assert fundamentals["categories"]["earnings"]["state"] == "missing"
+    assert fundamentals["providerNeutralNextDataAction"] == (
+        "Connect a fundamentals data path for company profile, financial statements, valuation, earnings, and ownership or flow fields."
+    )
+    assert "基本面数据缺失" in fundamentals["consumerSafeCopy"]
+    serialized = json.dumps(response.json(), ensure_ascii=False)
+    for forbidden in (
+        "providerName",
+        "providerClass",
+        "providerAttempted",
+        "apiKey",
+        "token",
+        "credential",
+        "env",
+        "requestId",
+        "traceId",
+        "cacheKey",
+        "rawPayload",
+        "exceptionClass",
+        "Traceback",
+        "stack",
+        "buy",
+        "sell",
+        "hold",
+        "recommendation",
+        "target",
+        "stop",
+        "position",
+    ):
+        assert forbidden not in serialized
+
+
+def test_research_packet_endpoint_marks_fundamentals_not_configured(monkeypatch) -> None:
+    fake_stock = _FakeStockService(quote=None, history=_history_payload(status="unavailable", source="unavailable", rows=0))
+    fake_structure = _FakeStructureDecisionService(_payload(data_status="unavailable"))
+    fake_evidence = _FakeStockEvidenceService({"symbols": [], "items": []})
+    monkeypatch.setattr(symbol_research_packet_service, "StockService", lambda: fake_stock, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "StockStructureDecisionService", lambda: fake_structure, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "StockEvidenceService", lambda: fake_evidence, raising=False)
+
+    response = _client().get("/api/v1/stocks/AAPL/research-packet", params={"market": "us"})
+
+    assert response.status_code == 200
+    fundamentals = response.json()["fundamentals"]
+    assert fundamentals["state"] == "not_configured"
+    assert fundamentals["readinessState"] == "not_configured"
+    assert fundamentals["availableFields"]["valuation"] == []
+    assert fundamentals["missingFields"]["companyProfile"] == ["companyName", "sector", "industry", "exchange", "country"]
+    assert fundamentals["consumerSafeCopy"] == "基本面数据路径尚未配置，暂不展示财务或估值指标。"
+
+
+def test_research_packet_endpoint_marks_fundamentals_permission_blocked(monkeypatch) -> None:
+    fake_stock = _FakeStockService(quote=None, history=_history_payload(status="unavailable", source="unavailable", rows=0))
+    fake_structure = _FakeStructureDecisionService(_payload(data_status="unavailable"))
+    evidence_payload = _evidence_payload()
+    evidence_payload["items"][0]["fundamental"] = {
+        "status": "insufficient_permissions",
+        "missingFields": ["marketCap", "revenueTtm", "earningsDate"],
+        "providerClass": "must-not-emit",
+        "credential": "must-not-emit",
+    }
+    fake_evidence = _FakeStockEvidenceService(evidence_payload)
+    monkeypatch.setattr(symbol_research_packet_service, "StockService", lambda: fake_stock, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "StockStructureDecisionService", lambda: fake_structure, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "StockEvidenceService", lambda: fake_evidence, raising=False)
+
+    response = _client().get("/api/v1/stocks/AAPL/research-packet", params={"market": "us"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    fundamentals = payload["fundamentals"]
+    assert fundamentals["state"] == "insufficient_permissions"
+    assert fundamentals["readinessState"] == "insufficient_permissions"
+    assert fundamentals["blockedFields"]["valuation"] == ["marketCap"]
+    assert fundamentals["blockedFields"]["financialStatements"] == ["revenueTtm"]
+    assert fundamentals["blockedFields"]["earnings"] == ["earningsDate"]
+    assert fundamentals["consumerSafeCopy"] == "基本面数据权限不足，暂不展示财务或估值指标。"
+    serialized = json.dumps(payload, ensure_ascii=False)
+    assert "providerClass" not in serialized
+    assert "credential" not in serialized
+
+
+def test_research_packet_endpoint_marks_fundamentals_available_without_fake_missing(monkeypatch) -> None:
+    fake_stock = _FakeStockService(quote=None, history=_history_payload())
+    fake_structure = _FakeStructureDecisionService(_payload())
+    evidence_payload = _evidence_payload()
+    evidence_payload["items"][0]["fundamental"] = {
+        "status": "available",
+        "marketCap": 2800000000000,
+        "peTtm": 28.5,
+        "pb": 36.2,
+        "beta": 1.1,
+    }
+    evidence_payload["items"][0]["stockEvidencePacket"]["fundamentalsSummary"] = {
+        "status": "available",
+        "marketCap": 2800000000000,
+        "peTtm": 28.5,
+        "pb": 36.2,
+        "beta": 1.1,
+        "missingFields": [],
+        "notInvestmentAdvice": True,
+        "observationOnly": True,
+        "scoreContributionAllowed": False,
+        "sourceAuthorityAllowed": False,
+    }
+    fake_evidence = _FakeStockEvidenceService(evidence_payload)
+    monkeypatch.setattr(symbol_research_packet_service, "StockService", lambda: fake_stock, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "StockStructureDecisionService", lambda: fake_structure, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "StockEvidenceService", lambda: fake_evidence, raising=False)
+
+    response = _client().get("/api/v1/stocks/AAPL/research-packet", params={"market": "us"})
+
+    assert response.status_code == 200
+    fundamentals = response.json()["fundamentals"]
+    assert fundamentals["state"] == "available"
+    assert fundamentals["readinessState"] == "available"
+    assert fundamentals["availableFields"]["valuation"] == ["marketCap", "peTtm", "pb", "beta"]
+    assert fundamentals["missingFields"]["valuation"] == []
+    assert fundamentals["categories"]["valuation"]["state"] == "available"
+    assert "revenueTtm" not in fundamentals["availableFields"]["financialStatements"]
 
 
 def test_research_packet_endpoint_fail_closes_absent_quote_history_and_evidence(monkeypatch) -> None:
@@ -503,7 +684,8 @@ def test_research_packet_endpoint_fail_closes_absent_quote_history_and_evidence(
     assert payload["quote"] == {"state": "missing", "price": None, "changePercent": None, "asOf": None}
     assert payload["history"] == {"state": "missing", "bars": 0, "period": "daily", "asOf": None}
     assert payload["structure"]["state"] == "missing"
-    assert payload["fundamentals"]["state"] == "not_integrated"
+    assert payload["fundamentals"]["state"] == "not_configured"
+    assert payload["fundamentals"]["readinessState"] == "not_configured"
     assert payload["events"]["state"] == "not_integrated"
     assert payload["peer"]["state"] == "missing"
     assert payload["missingData"] == [
