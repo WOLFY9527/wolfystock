@@ -17,6 +17,7 @@ from api.deps import CurrentUser, get_current_user
 import src.auth as auth
 from src.services import watchlist_service as watchlist_service_module
 from src.config import Config
+from src.multi_user import OWNERSHIP_SCOPE_USER
 from src.storage import DatabaseManager, MarketScannerCandidate, MarketScannerRun, RuleBacktestRun, UserWatchlistItem
 
 
@@ -37,6 +38,18 @@ FORBIDDEN_CONSUMER_RESPONSE_FIELDS = (
     "score_contribution_allowed",
     "observation_only",
     "raw provider error",
+    "providerName",
+    "providerClass",
+    "providerAttempted",
+    "apiKey",
+    "credential",
+    "env",
+    "requestId",
+    "traceId",
+    "cacheKey",
+    "rawPayload",
+    "exceptionClass",
+    "stack",
     "Traceback",
     "https://",
     "api_key",
@@ -254,6 +267,327 @@ class WatchlistApiTestCase(unittest.TestCase):
         list_resp = self.client.get("/api/v1/watchlist/items")
         self.assertEqual(list_resp.status_code, 200)
         self.assertEqual(list_resp.json()["items"], [])
+
+    def test_watchlist_create_from_scanner_candidate_preserves_research_queue_evidence(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+
+        now = datetime(2026, 6, 25, 9, 30, 0)
+        run = MarketScannerRun(
+            owner_id="user-1",
+            scope=OWNERSHIP_SCOPE_USER,
+            market="us",
+            profile="us_preopen_v1",
+            universe_name="us_cached_ohlcv",
+            status="completed",
+            run_at=now,
+            completed_at=now,
+            shortlist_size=1,
+        )
+        candidate = MarketScannerCandidate(
+            symbol="WULF",
+            name="TeraWulf",
+            rank=2,
+            score=71.5,
+            quality_hint="cached",
+            reason_summary="趋势结构和成交活跃度触发研究观察。",
+            reasons_json=json.dumps(["momentum_structure", "volume_expansion"], ensure_ascii=False),
+            diagnostics_json=json.dumps(
+                {
+                    "history": {"source": "local_us_parquet", "latest_trade_date": "2026-06-24"},
+                    "candidateResearchSummaryFrame": {
+                        "primaryResearchReason": "趋势结构和成交活跃度触发研究观察。",
+                        "researchNextStep": "补充报价与基本面证据后继续观察。",
+                    },
+                    "candidateResearchReadiness": {
+                        "readinessState": "partial",
+                        "missingEvidence": ["quote", "fundamentals"],
+                    },
+                    "score_explainability": {
+                        "score_confidence": 0.35,
+                        "score_grade_allowed": False,
+                        "cap_reason": "configured_cache_only_diagnostic",
+                        "source_confidence": {
+                            "freshness": "cached",
+                            "scoreContributionAllowed": False,
+                            "sourceAuthorityAllowed": False,
+                            "observationOnly": True,
+                        },
+                    },
+                    "reasonCodes": ["sourceAuthorityAllowed=false"],
+                    "providerName": "must-not-leak",
+                    "providerClass": "must-not-leak",
+                    "providerAttempted": True,
+                    "apiKey": "must-not-leak",
+                    "credential": "must-not-leak",
+                    "env": "must-not-leak",
+                    "requestId": "must-not-leak",
+                    "traceId": "must-not-leak",
+                    "cacheKey": "must-not-leak",
+                    "rawPayload": {"secret": "must-not-leak"},
+                    "exceptionClass": "ProviderError",
+                    "stack": "Traceback...",
+                },
+                ensure_ascii=False,
+            ),
+            created_at=now,
+        )
+        with self.db.get_session() as session:
+            session.add(run)
+            session.flush()
+            run_id = int(run.id)
+            candidate.run_id = run_id
+            session.add(candidate)
+            session.commit()
+
+        resp = self.client.post(
+            "/api/v1/watchlist/items/from-scanner-candidate",
+            json={"scanner_run_id": run_id, "symbol": "WULF"},
+        )
+
+        self.assertEqual(resp.status_code, 200, resp.text)
+        item = resp.json()
+        self.assertEqual(item["symbol"], "WULF")
+        self.assertEqual(item["market"], "us")
+        self.assertEqual(item["name"], "TeraWulf")
+        self.assertEqual(item["scanner_run_id"], run_id)
+        self.assertEqual(item["scanner_rank"], 2)
+        self.assertEqual(item["scanner_score"], 71.5)
+        self.assertEqual(item["score_profile"], "us_preopen_v1")
+        self.assertEqual(item["score_source"], "scanner_candidate")
+        self.assertEqual(item["score_status"], "partial")
+        self.assertEqual(item["score_reason"], "趋势结构和成交活跃度触发研究观察。")
+        self.assertEqual(item["rowResearchPacket"]["scannerLineage"]["runId"], run_id)
+
+        lineage = item["intelligence"]["scanner"]["scanner_lineage_v1"]
+        self.assertEqual(lineage["scanner_run_id"], run_id)
+        self.assertEqual(lineage["run_profile"], "us_preopen_v1")
+        self.assertEqual(lineage["research_reason"], "趋势结构和成交活跃度触发研究观察。")
+        self.assertEqual(lineage["research_next_step"], "补充报价与基本面证据后继续观察。")
+        self.assertEqual(lineage["observationReasons"], ["momentum_structure", "volume_expansion"])
+        self.assertTrue(lineage["no_advice_boundary"])
+        _assert_no_forbidden_consumer_response_fields(item)
+
+    def test_watchlist_create_from_scanner_candidate_returns_safe_not_found_for_missing_run_or_candidate(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+
+        missing_run_resp = self.client.post(
+            "/api/v1/watchlist/items/from-scanner-candidate",
+            json={"scanner_run_id": 9999, "symbol": "WULF"},
+        )
+        self.assertEqual(missing_run_resp.status_code, 404)
+        self.assertEqual(missing_run_resp.json()["error"], "not_found")
+        self.assertIn("unavailable", missing_run_resp.json()["message"].lower())
+
+        now = datetime(2026, 6, 25, 9, 30, 0)
+        run = MarketScannerRun(
+            owner_id="user-1",
+            scope=OWNERSHIP_SCOPE_USER,
+            market="us",
+            profile="us_preopen_v1",
+            universe_name="us_cached_ohlcv",
+            status="completed",
+            run_at=now,
+            completed_at=now,
+            shortlist_size=1,
+        )
+        with self.db.get_session() as session:
+            session.add(run)
+            session.flush()
+            run_id = int(run.id)
+            session.add(
+                MarketScannerCandidate(
+                    run_id=run_id,
+                    symbol="AAPL",
+                    name="Apple",
+                    rank=1,
+                    score=80.0,
+                    reason_summary="已有候选。",
+                    created_at=now,
+                )
+            )
+            session.commit()
+
+        missing_candidate_resp = self.client.post(
+            "/api/v1/watchlist/items/from-scanner-candidate",
+            json={"scanner_run_id": run_id, "symbol": "WULF"},
+        )
+        self.assertEqual(missing_candidate_resp.status_code, 404)
+        self.assertEqual(missing_candidate_resp.json()["error"], "not_found")
+
+        list_resp = self.client.get("/api/v1/watchlist/items")
+        self.assertEqual(list_resp.status_code, 200)
+        self.assertEqual(list_resp.json()["items"], [])
+
+        serialized = json.dumps(missing_candidate_resp.json(), ensure_ascii=False)
+        for forbidden in (
+            "providerName",
+            "providerClass",
+            "providerAttempted",
+            "apiKey",
+            "credential",
+            "env",
+            "requestId",
+            "traceId",
+            "cacheKey",
+            "rawPayload",
+            "exceptionClass",
+            "stack",
+            "Traceback",
+        ):
+            self.assertNotIn(forbidden, serialized)
+
+    def test_watchlist_create_from_scanner_candidate_deduplicates_existing_symbol_entry(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+
+        first_resp = self.client.post(
+            "/api/v1/watchlist/items",
+            json={"symbol": "WULF", "market": "us", "source": "scanner", "notes": "existing note"},
+        )
+        self.assertEqual(first_resp.status_code, 200)
+        first_id = first_resp.json()["id"]
+
+        now = datetime(2026, 6, 25, 9, 30, 0)
+        run = MarketScannerRun(
+            owner_id="user-1",
+            scope=OWNERSHIP_SCOPE_USER,
+            market="us",
+            profile="us_preopen_v1",
+            universe_name="us_cached_ohlcv",
+            status="completed",
+            run_at=now,
+            completed_at=now,
+            shortlist_size=1,
+        )
+        candidate = MarketScannerCandidate(
+            symbol="WULF",
+            name="TeraWulf",
+            rank=3,
+            score=68.0,
+            reason_summary="缓存历史证据进入研究队列。",
+            reasons_json=json.dumps(["cached_observation"], ensure_ascii=False),
+            diagnostics_json=json.dumps({"history": {"source": "local_us_parquet"}}, ensure_ascii=False),
+            created_at=now,
+        )
+        with self.db.get_session() as session:
+            session.add(run)
+            session.flush()
+            run_id = int(run.id)
+            candidate.run_id = run_id
+            session.add(candidate)
+            session.commit()
+
+        bridge_resp = self.client.post(
+            "/api/v1/watchlist/items/from-scanner-candidate",
+            json={"scanner_run_id": run_id, "symbol": "wulf"},
+        )
+
+        self.assertEqual(bridge_resp.status_code, 200, bridge_resp.text)
+        self.assertEqual(bridge_resp.json()["id"], first_id)
+        self.assertEqual(bridge_resp.json()["scanner_run_id"], run_id)
+        self.assertEqual(bridge_resp.json()["scanner_rank"], 3)
+        self.assertEqual(bridge_resp.json()["score_profile"], "us_preopen_v1")
+
+        list_resp = self.client.get("/api/v1/watchlist/items")
+        self.assertEqual(list_resp.status_code, 200)
+        self.assertEqual(len(list_resp.json()["items"]), 1)
+
+    def test_watchlist_create_from_scanner_candidate_redacts_unsafe_reason_and_advice_copy(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+
+        now = datetime(2026, 6, 25, 9, 30, 0)
+        run = MarketScannerRun(
+            owner_id="user-1",
+            scope=OWNERSHIP_SCOPE_USER,
+            market="us",
+            profile="us_preopen_v1",
+            universe_name="us_cached_ohlcv",
+            status="completed",
+            run_at=now,
+            completed_at=now,
+            shortlist_size=1,
+        )
+        candidate = MarketScannerCandidate(
+            symbol="MARA",
+            name="MARA",
+            rank=1,
+            score=90.0,
+            reason_summary="providerName=internal credential=abc requestId=abc buy now target price",
+            reasons_json=json.dumps(["buy_signal", "safe_observation"], ensure_ascii=False),
+            diagnostics_json=json.dumps(
+                {
+                    "candidateResearchSummaryFrame": {
+                        "primaryResearchReason": "providerAttempted apiKey rawPayload buy now",
+                        "researchNextStep": "env cacheKey traceId target price stop loss position sizing",
+                    },
+                    "consumerDiagnostics": {"userFacingLabels": ["safe observation label"]},
+                    "history": {"source": "local_us_parquet"},
+                    "providerClass": "InternalProvider",
+                    "rawPayload": {"token": "secret"},
+                    "exceptionClass": "ProviderError",
+                    "stack": "Traceback...",
+                },
+                ensure_ascii=False,
+            ),
+            created_at=now,
+        )
+        with self.db.get_session() as session:
+            session.add(run)
+            session.flush()
+            run_id = int(run.id)
+            candidate.run_id = run_id
+            session.add(candidate)
+            session.commit()
+
+        resp = self.client.post(
+            "/api/v1/watchlist/items/from-scanner-candidate",
+            json={"scanner_run_id": run_id, "symbol": "MARA"},
+        )
+
+        self.assertEqual(resp.status_code, 200, resp.text)
+        payload = resp.json()
+        self.assertEqual(payload["score_reason"], "Scanner candidate moved to research queue.")
+        self.assertEqual(
+            payload["intelligence"]["scanner"]["scanner_lineage_v1"]["research_reason"],
+            "safe observation label",
+        )
+        self.assertEqual(
+            payload["intelligence"]["scanner"]["scanner_lineage_v1"]["research_next_step"],
+            "补充证据后继续观察。",
+        )
+        self.assertEqual(
+            payload["intelligence"]["scanner"]["scanner_lineage_v1"]["observationReasons"],
+            ["safe_observation"],
+        )
+        serialized = json.dumps(payload, ensure_ascii=False)
+        for forbidden in (
+            "providerName",
+            "providerClass",
+            "providerAttempted",
+            "apiKey",
+            "credential",
+            "env",
+            "requestId",
+            "traceId",
+            "cacheKey",
+            "rawPayload",
+            "exceptionClass",
+            "stack",
+            "Traceback",
+            "buy",
+            "sell",
+            "hold",
+            "target price",
+            "stop loss",
+            "position sizing",
+            "买入",
+            "卖出",
+            "持有",
+            "目标价",
+            "止损",
+            "仓位",
+        ):
+            self.assertNotIn(forbidden, serialized)
+        _assert_no_forbidden_consumer_response_fields(payload)
 
     def test_watchlist_items_do_not_leak_between_users(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
@@ -837,6 +1171,7 @@ class WatchlistApiTestCase(unittest.TestCase):
                 "universe_type": "theme",
                 "research_reason": "动量延续，等待补充证据。",
                 "research_next_step": "补充证据后继续观察。",
+                "observationReasons": [],
                 "data_state": "cached",
                 "freshness_label": "最近可用",
                 "no_advice_boundary": True,

@@ -13,6 +13,7 @@ from api.v1.schemas.common import ErrorResponse
 from api.v1.schemas.watchlist import (
     WatchlistDeleteResponse,
     WatchlistItemCreateRequest,
+    WatchlistItemFromScannerCandidateRequest,
     WatchlistItemListResponse,
     WatchlistItemResponse,
     WatchlistResearchOverlayResponse,
@@ -259,6 +260,40 @@ def add_watchlist_item(
         raise _bad_request(exc) from exc
     except Exception as exc:
         raise _internal_error("Add watchlist item failed", exc) from exc
+
+
+@router.post(
+    "/items/from-scanner-candidate",
+    response_model=WatchlistItemResponse,
+    responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Create or update a watchlist research queue item from a scanner candidate",
+)
+def add_watchlist_item_from_scanner_candidate(
+    request: WatchlistItemFromScannerCandidateRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> WatchlistItemResponse:
+    service = _get_watchlist_service()
+    try:
+        item = service.create_from_scanner_candidate(
+            owner_id=current_user.user_id,
+            scanner_run_id=request.scanner_run_id,
+            symbol=request.symbol,
+        )
+        if item is None:
+            raise _not_found("Scanner candidate unavailable for this research queue request.")
+        _record_audit(
+            action="watchlist_add",
+            message=f"Scanner candidate staged for research queue: {item['symbol']}",
+            current_user=current_user,
+            item=item,
+        )
+        return WatchlistItemResponse(**item)
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+    except Exception as exc:
+        raise _internal_error("Create watchlist item from scanner candidate failed", exc) from exc
 
 
 @router.delete(

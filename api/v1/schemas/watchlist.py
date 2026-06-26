@@ -101,6 +101,23 @@ class WatchlistItemCreateRequest(BaseModel):
         return normalized
 
 
+class WatchlistItemFromScannerCandidateRequest(BaseModel):
+    scanner_run_id: int = Field(..., ge=1)
+    symbol: str = Field(..., min_length=1, max_length=16)
+
+    @field_validator("symbol")
+    @classmethod
+    def _normalize_symbol(cls, value: str) -> str:
+        normalized = canonical_stock_code(value).strip().upper()
+        if not normalized:
+            raise ValueError("symbol is required")
+        if len(normalized) > 16:
+            raise ValueError("symbol must be at most 16 characters")
+        if not re.fullmatch(r"[A-Z0-9][A-Z0-9.\-]*", normalized):
+            raise ValueError("symbol contains invalid characters")
+        return normalized
+
+
 class WatchlistItemResponse(BaseModel):
     id: int
     symbol: str
@@ -172,6 +189,7 @@ class WatchlistScannerLineageV1Response(BaseModel):
     universe_type: Optional[str] = None
     research_reason: str
     research_next_step: str
+    observationReasons: List[str] = Field(default_factory=list)
     data_state: Literal["ready", "delayed", "cached", "partial", "no_evidence", "unavailable"]
     freshness_label: str
     no_advice_boundary: bool = True

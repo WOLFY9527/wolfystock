@@ -1468,6 +1468,199 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertNotIn("place order", serialized.lower())
         self._assert_public_backtest_text_is_analytical(serialized)
 
+    def test_completed_backtest_exposes_safe_research_artifact_from_actual_result(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_ensure_market_history", return_value=0), patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.run_backtest(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                benchmark_mode="none",
+                confirmed=True,
+            )
+
+        artifact = response["research_artifact"]
+        self.assertIsNotNone(artifact)
+        self.assertEqual(response["research_artifact_availability"]["state"], "available")
+        self.assertEqual(response["summary"]["research_artifact_availability"]["state"], "available")
+        self.assertEqual(artifact["artifactKind"], "rule_backtest_research_artifact")
+        self.assertEqual(artifact["schemaVersion"], "backtest-research-artifact.v1")
+        self.assertTrue(artifact["researchOnly"])
+        self.assertFalse(artifact["decisionGrade"])
+        self.assertEqual(artifact["run"]["runId"], response["id"])
+        self.assertEqual(artifact["run"]["strategyId"], response["strategy_hash"])
+        self.assertEqual(artifact["run"]["symbol"], "600519")
+        self.assertEqual(artifact["sampleScope"]["lookbackBars"], 20)
+        self.assertEqual(artifact["sampleScope"]["barCount"], response["data_quality"]["bar_count"])
+        self.assertEqual(artifact["dataCoverage"]["barCount"], response["data_quality"]["bar_count"])
+        self.assertEqual(artifact["benchmarkAvailability"]["state"], "not_requested")
+        self.assertEqual(artifact["evidenceBoundary"]["derivedMetricsOnly"], True)
+        self.assertEqual(artifact["evidenceBoundary"]["fakePerformanceGenerated"], False)
+        self.assertEqual(artifact["evidenceBoundary"]["providerCallsEnabledByArtifact"], False)
+        expected_metric_values = {
+            "totalReturnPct": response["total_return_pct"],
+            "annualizedReturnPct": response["annualized_return_pct"],
+            "sharpeRatio": response["sharpe_ratio"],
+            "maxDrawdownPct": response["max_drawdown_pct"],
+            "winRatePct": response["win_rate_pct"],
+            "tradeCount": response["trade_count"],
+            "finalEquity": response["final_equity"],
+        }
+        for key, expected in expected_metric_values.items():
+            if expected is not None:
+                self.assertEqual(artifact["metrics"][key], expected)
+        serialized = json.dumps(artifact, ensure_ascii=False, sort_keys=True).lower()
+        for forbidden in (
+            "provider_payload",
+            "raw_provider",
+            "request_id",
+            "trace_id",
+            "cache_key",
+            "api_key",
+            "stack_trace",
+            "exception",
+            "alpha",
+            "beta",
+            "cagr",
+            "recommendation",
+            "target",
+            "stop",
+            "position",
+            "buy now",
+            "sell now",
+            "hold",
+        ):
+            self.assertNotIn(forbidden, serialized, forbidden)
+        self.assertIn("historical simulation", serialized)
+        self.assertIn("research artifact", serialized)
+        self.assertIn("rule review", serialized)
+        self.assertIn("evidence", serialized)
+
+    def test_research_artifact_readback_ignores_raw_internal_summary_fields(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_ensure_market_history", return_value=0), patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.run_backtest(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                benchmark_mode="none",
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        summary = service._load_summary_payload(run_row.summary_json)
+        summary["raw_provider_payload"] = {"token": "secret-token", "request_id": "req-unsafe"}
+        summary["cache_key"] = "provider-cache-key"
+        summary["trace_id"] = "trace-unsafe"
+        summary["exception_class"] = "ProviderStackTrace"
+        service.repo.update_run(
+            response["id"],
+            summary_json=service._serialize_json(summary),
+            **service._owner_kwargs(),
+        )
+
+        detail = service.get_run(response["id"])
+        artifact = detail["research_artifact"]
+        self.assertIsNotNone(artifact)
+        serialized = json.dumps(artifact, ensure_ascii=False, sort_keys=True).lower()
+        for forbidden in (
+            "raw_provider_payload",
+            "secret-token",
+            "request_id",
+            "req-unsafe",
+            "cache_key",
+            "provider-cache-key",
+            "trace_id",
+            "trace-unsafe",
+            "exception_class",
+            "providerstacktrace",
+            "token",
+            "stack",
+        ):
+            self.assertNotIn(forbidden, serialized, forbidden)
+
+    def test_blocked_backtest_does_not_generate_research_artifact(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_ensure_market_history", return_value=0), patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.run_backtest(
+                code="NODATA",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                start_date="2024-01-01",
+                end_date="2024-01-31",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        self.assertEqual(response["no_result_reason"], "insufficient_history")
+        self.assertIsNone(response["research_artifact"])
+        self.assertIsNone(response["summary"]["research_artifact"])
+        self.assertEqual(response["research_artifact_availability"]["state"], "blocked")
+        self.assertEqual(response["research_artifact_availability"]["reasonCode"], "insufficient_history")
+        self.assertEqual(response["summary"]["research_artifact_availability"]["reasonCode"], "insufficient_history")
+
+    def test_research_artifact_blocks_missing_cache_and_no_samples_states(self) -> None:
+        for reason_code in ("missing_cache", "no_samples"):
+            with self.subTest(reason_code=reason_code):
+                artifact, availability = RuleBacktestService._build_backtest_research_artifact_payload(
+                    run_id=1,
+                    code="600519",
+                    strategy_hash="strategy-hash",
+                    parsed_strategy={"strategy_kind": "moving_average_crossover", "timeframe": "daily"},
+                    status="completed",
+                    no_result_reason=reason_code,
+                    no_result_message="blocked",
+                    request_payload={"lookback_bars": 20},
+                    metrics={"total_return_pct": 1.5, "trade_count": 1},
+                    data_quality={"bar_count": 20},
+                    data_sufficiency={"status": reason_code, "blocked_reasons": [reason_code]},
+                    benchmark_summary={"resolved_mode": "none"},
+                    execution_model={"version": "v1", "timeframe": "daily"},
+                    execution_assumptions={"benchmark_method": "no_benchmark"},
+                    completed_at="2024-01-01T00:00:00",
+                )
+
+                self.assertIsNone(artifact)
+                self.assertEqual(availability["state"], "blocked")
+                self.assertEqual(availability["reasonCode"], reason_code)
+
+    def test_research_artifact_does_not_fabricate_missing_performance_metrics(self) -> None:
+        artifact, availability = RuleBacktestService._build_backtest_research_artifact_payload(
+            run_id=1,
+            code="600519",
+            strategy_hash="strategy-hash",
+            parsed_strategy={"strategy_kind": "moving_average_crossover", "timeframe": "daily"},
+            status="completed",
+            no_result_reason=None,
+            no_result_message=None,
+            request_payload={"lookback_bars": 20},
+            metrics={"total_return_pct": 1.5},
+            data_quality={"bar_count": 20},
+            data_sufficiency={"status": "sufficient"},
+            benchmark_summary={"resolved_mode": "none"},
+            execution_model={"version": "v1", "timeframe": "daily"},
+            execution_assumptions={"benchmark_method": "no_benchmark"},
+            completed_at="2024-01-01T00:00:00",
+        )
+
+        self.assertEqual(availability["state"], "available")
+        self.assertIsNotNone(artifact)
+        self.assertEqual(artifact["metrics"], {"totalReturnPct": 1.5})
+        for fabricated_key in (
+            "sharpeRatio",
+            "maxDrawdownPct",
+            "winRatePct",
+            "tradeCount",
+            "benchmarkReturnPct",
+            "excessReturnVsBenchmarkPct",
+            "alpha",
+            "beta",
+            "cagr",
+        ):
+            self.assertNotIn(fabricated_key, artifact["metrics"], fabricated_key)
+
     def test_service_normalizes_timezone_datetime_boundaries_to_dates(self) -> None:
         service = RuleBacktestService(self.db)
 
@@ -1792,6 +1985,13 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertIn("missing_benchmark", response["execution_readiness"]["reason_codes"])
         self.assertTrue(any(warning["code"] == "benchmark_data_missing" for warning in response["data_quality"]["warnings"]))
         self._assert_public_backtest_text_is_analytical(json.dumps(response, ensure_ascii=False, sort_keys=True))
+        artifact = response["research_artifact"]
+        self.assertIsNotNone(artifact)
+        self.assertEqual(artifact["benchmarkAvailability"]["state"], "benchmark_missing")
+        self.assertEqual(artifact["benchmarkAvailability"]["reasonCode"], "benchmark_missing")
+        self.assertIn("SPY", artifact["benchmarkAvailability"]["unavailableReason"])
+        self.assertNotIn("benchmarkReturnPct", artifact["metrics"])
+        self.assertNotIn("excessReturnVsBenchmarkPct", artifact["metrics"])
 
     def test_service_run_backtest_fetches_missing_us_history_via_shared_local_first_helper(self) -> None:
         self._allow_market_history_fetch()

@@ -390,6 +390,35 @@ ARTIFACT_AVAILABILITY_FIELDS: List[str] = [
     "has_run_timing",
 ]
 
+BACKTEST_RESEARCH_ARTIFACT_METRIC_KEY_MAP: Dict[str, str] = {
+    "total_return_pct": "totalReturnPct",
+    "annualized_return_pct": "annualizedReturnPct",
+    "sharpe_ratio": "sharpeRatio",
+    "max_drawdown_pct": "maxDrawdownPct",
+    "win_rate_pct": "winRatePct",
+    "avg_trade_return_pct": "avgTradeReturnPct",
+    "trade_count": "tradeCount",
+    "win_count": "winCount",
+    "loss_count": "lossCount",
+    "avg_holding_days": "avgDurationDays",
+    "avg_holding_bars": "avgDurationBars",
+    "avg_holding_calendar_days": "avgDurationCalendarDays",
+    "final_equity": "finalEquity",
+    "benchmark_return_pct": "benchmarkReturnPct",
+    "excess_return_vs_benchmark_pct": "excessReturnVsBenchmarkPct",
+}
+
+BACKTEST_RESEARCH_ARTIFACT_BLOCKED_REASONS = frozenset(
+    {
+        "missing_cache",
+        "insufficient_history",
+        "insufficient_data",
+        "no_samples",
+        "provider_missing",
+        "no_bars",
+    }
+)
+
 STATUS_INTEGRITY_SUMMARY_FIELDS: List[str] = [
     "status_message",
     "status_history",
@@ -4219,6 +4248,34 @@ class RuleBacktestService:
                 raise ValueError(f"Run {existing_run_id} not found.")
             self.repo.delete_trades_by_run_ids([run.id])
 
+        final_summary = summary_patch if existing_run_id is None else self._load_summary_payload(run.summary_json)
+        research_artifact, research_artifact_availability = self._build_backtest_research_artifact_payload(
+            run_id=run.id,
+            code=code,
+            strategy_hash=strategy_hash,
+            parsed_strategy=result.parsed_strategy.to_dict(),
+            status="completed",
+            no_result_reason=result.no_result_reason,
+            no_result_message=result.no_result_message,
+            request_payload=final_summary.get("request") if isinstance(final_summary, dict) else {},
+            metrics=dict(result.metrics or {}),
+            data_quality=data_quality_payload,
+            data_sufficiency=data_sufficiency_payload,
+            benchmark_summary=dict(comparison_payload.get("benchmark_summary") or {}),
+            execution_model=execution_model_payload,
+            execution_assumptions=execution_assumptions_payload,
+            completed_at=getattr(run, "completed_at", None),
+        )
+        final_summary["research_artifact"] = research_artifact
+        final_summary["research_artifact_availability"] = research_artifact_availability
+        updated_run = self.repo.update_run(
+            int(run.id),
+            **self._owner_kwargs(),
+            summary_json=self._serialize_json(final_summary),
+        )
+        if updated_run is not None:
+            run = updated_run
+
         trade_rows = [
             RuleBacktestTrade(
                 run_id=run.id,
@@ -4291,7 +4348,7 @@ class RuleBacktestService:
             equity_override=equity_payload,
             parsed_override=result.parsed_strategy.to_dict(),
             ai_summary_override=ai_summary,
-            summary_override=(summary_patch if existing_run_id is None else self._load_summary_payload(run.summary_json)),
+            summary_override=final_summary,
         )
 
     def _update_run_state(
@@ -6086,6 +6143,263 @@ class RuleBacktestService:
             source="derived_from_live_storage",
             completeness="legacy_derived",
             flags=derived_flags,
+        )
+
+    @staticmethod
+    def _safe_research_artifact_scalar(value: Any) -> Any:
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+        if isinstance(value, date):
+            return value.isoformat()
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return None
+
+    @classmethod
+    def _safe_research_artifact_dict(
+        cls,
+        payload: Optional[Dict[str, Any]],
+        allowed_keys: Sequence[str],
+    ) -> Dict[str, Any]:
+        source = dict(payload or {}) if isinstance(payload, dict) else {}
+        resolved: Dict[str, Any] = {}
+        for key in allowed_keys:
+            if key in source:
+                resolved[key] = cls._safe_research_artifact_scalar(source.get(key))
+        return resolved
+
+    @staticmethod
+    def _has_public_research_metric_value(metrics: Dict[str, Any]) -> bool:
+        for key in BACKTEST_RESEARCH_ARTIFACT_METRIC_KEY_MAP:
+            value = metrics.get(key)
+            if value is not None:
+                return True
+        return False
+
+    @classmethod
+    def _research_artifact_blocked_reason(
+        cls,
+        *,
+        status: Optional[str],
+        no_result_reason: Optional[str],
+        data_quality: Optional[Dict[str, Any]],
+        data_sufficiency: Optional[Dict[str, Any]],
+        metrics: Optional[Dict[str, Any]],
+    ) -> Optional[str]:
+        normalized_status = str(status or "").strip().lower()
+        if normalized_status and normalized_status not in {"completed"}:
+            return normalized_status
+        normalized_reason = str(no_result_reason or "").strip().lower()
+        if normalized_reason in BACKTEST_RESEARCH_ARTIFACT_BLOCKED_REASONS:
+            return normalized_reason
+        quality = dict(data_quality or {}) if isinstance(data_quality, dict) else {}
+        sufficiency = dict(data_sufficiency or {}) if isinstance(data_sufficiency, dict) else {}
+        for reason in list(sufficiency.get("blocked_reasons") or []) + list(sufficiency.get("reason_codes") or []):
+            normalized = str(reason or "").strip().lower()
+            if normalized in BACKTEST_RESEARCH_ARTIFACT_BLOCKED_REASONS:
+                return normalized
+        if int(quality.get("bar_count") or 0) <= 0 and not cls._has_public_research_metric_value(dict(metrics or {})):
+            return "no_samples"
+        return None
+
+    @staticmethod
+    def _build_research_artifact_availability_payload(
+        *,
+        state: str,
+        reason_code: Optional[str],
+        source: str,
+    ) -> Dict[str, Any]:
+        payload = {
+            "version": "v1",
+            "state": str(state or "blocked"),
+            "source": str(source or "derived_from_stored_run"),
+            "artifactKind": "rule_backtest_research_artifact",
+        }
+        if reason_code:
+            payload["reasonCode"] = str(reason_code)
+        return payload
+
+    @classmethod
+    def _build_rule_simulation_explanation(
+        cls,
+        *,
+        parsed_strategy: Optional[Dict[str, Any]],
+        execution_model: Optional[Dict[str, Any]],
+        execution_assumptions: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        strategy = dict(parsed_strategy or {}) if isinstance(parsed_strategy, dict) else {}
+        support = dict(strategy.get("support") or {})
+        spec = dict(strategy.get("strategy_spec") or {})
+        model = dict(execution_model or {}) if isinstance(execution_model, dict) else {}
+        assumptions = dict(execution_assumptions or {}) if isinstance(execution_assumptions, dict) else {}
+        return {
+            "label": "historical simulation rule review",
+            "strategyFamily": (
+                strategy.get("strategy_kind")
+                or strategy.get("detected_strategy_family")
+                or support.get("detected_strategy_family")
+                or spec.get("strategy_family")
+            ),
+            "timeframe": strategy.get("timeframe") or spec.get("timeframe"),
+            "executionModel": cls._safe_research_artifact_dict(
+                model,
+                [
+                    "version",
+                    "timeframe",
+                    "signal_evaluation_timing",
+                    "entry_timing",
+                    "exit_timing",
+                    "entry_fill_price_basis",
+                    "exit_fill_price_basis",
+                    "fee_model",
+                    "slippage_model",
+                ],
+            ),
+            "assumptions": cls._safe_research_artifact_dict(
+                assumptions,
+                [
+                    "benchmark_method",
+                    "benchmark_price_basis",
+                    "fee_bps",
+                    "slippage_bps",
+                ],
+            ),
+            "scopeNote": "historical simulation for research artifact review only",
+        }
+
+    @classmethod
+    def _build_backtest_research_artifact_payload(
+        cls,
+        *,
+        run_id: Any,
+        code: Optional[str],
+        strategy_hash: Optional[str],
+        parsed_strategy: Optional[Dict[str, Any]],
+        status: Optional[str],
+        no_result_reason: Optional[str],
+        no_result_message: Optional[str],
+        request_payload: Optional[Dict[str, Any]],
+        metrics: Optional[Dict[str, Any]],
+        data_quality: Optional[Dict[str, Any]],
+        data_sufficiency: Optional[Dict[str, Any]],
+        benchmark_summary: Optional[Dict[str, Any]],
+        execution_model: Optional[Dict[str, Any]],
+        execution_assumptions: Optional[Dict[str, Any]],
+        completed_at: Optional[Any] = None,
+    ) -> tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
+        metric_payload = {
+            public_key: metrics.get(source_key)
+            for source_key, public_key in BACKTEST_RESEARCH_ARTIFACT_METRIC_KEY_MAP.items()
+            if isinstance(metrics, dict) and metrics.get(source_key) is not None
+        }
+        blocked_reason = cls._research_artifact_blocked_reason(
+            status=status,
+            no_result_reason=no_result_reason,
+            data_quality=data_quality,
+            data_sufficiency=data_sufficiency,
+            metrics=metrics,
+        )
+        if blocked_reason:
+            return None, cls._build_research_artifact_availability_payload(
+                state="blocked",
+                reason_code=blocked_reason,
+                source="derived_from_stored_run",
+            )
+        if not metric_payload:
+            return None, cls._build_research_artifact_availability_payload(
+                state="blocked",
+                reason_code="metrics_missing",
+                source="derived_from_stored_run",
+            )
+
+        request = dict(request_payload or {}) if isinstance(request_payload, dict) else {}
+        quality = dict(data_quality or {}) if isinstance(data_quality, dict) else {}
+        sufficiency = dict(data_sufficiency or {}) if isinstance(data_sufficiency, dict) else {}
+        benchmark = dict(benchmark_summary or {}) if isinstance(benchmark_summary, dict) else {}
+        benchmark_mode = str(benchmark.get("resolved_mode") or "").strip().lower()
+        benchmark_missing = bool(
+            benchmark.get("unavailable_reason")
+            or (
+                benchmark_mode not in {"", "none"}
+                and benchmark.get("return_pct") is None
+                and benchmark.get("start_date") is None
+            )
+            or str(sufficiency.get("status") or "").strip().lower() == "missing_benchmark"
+        )
+        benchmark_state = "benchmark_missing" if benchmark_missing else "available"
+        if benchmark_mode in {"", "none"}:
+            benchmark_state = "not_requested"
+        if benchmark_missing:
+            metric_payload.pop("benchmarkReturnPct", None)
+            metric_payload.pop("excessReturnVsBenchmarkPct", None)
+        benchmark_missing_reason = benchmark.get("unavailable_reason")
+        if benchmark_missing and not benchmark_missing_reason:
+            benchmark_label = str(benchmark.get("label") or benchmark.get("code") or "").strip()
+            benchmark_missing_reason = f"benchmark_missing:{benchmark_label}" if benchmark_label else "benchmark_missing"
+
+        artifact = {
+            "artifactKind": "rule_backtest_research_artifact",
+            "schemaVersion": "backtest-research-artifact.v1",
+            "state": "available",
+            "researchOnly": True,
+            "decisionGrade": False,
+            "run": {
+                "runId": cls._safe_research_artifact_scalar(run_id),
+                "strategyId": str(strategy_hash or "").strip() or None,
+                "strategyHash": str(strategy_hash or "").strip() or None,
+                "symbol": str(code or "").strip().upper() or None,
+                "status": str(status or "").strip() or None,
+                "completedAt": cls._safe_research_artifact_scalar(completed_at),
+            },
+            "sampleScope": {
+                "startDate": cls._safe_research_artifact_scalar(request.get("start_date")),
+                "endDate": cls._safe_research_artifact_scalar(request.get("end_date")),
+                "lookbackBars": cls._safe_research_artifact_scalar(request.get("lookback_bars")),
+                "barCount": cls._safe_research_artifact_scalar(quality.get("bar_count")),
+                "frequency": cls._safe_research_artifact_scalar(quality.get("frequency")),
+            },
+            "metrics": metric_payload,
+            "dataCoverage": {
+                "state": sufficiency.get("status") or "available",
+                "barCount": cls._safe_research_artifact_scalar(quality.get("bar_count")),
+                "requestedStart": cls._safe_research_artifact_scalar(quality.get("requested_start")),
+                "requestedEnd": cls._safe_research_artifact_scalar(quality.get("requested_end")),
+                "actualStart": cls._safe_research_artifact_scalar(quality.get("actual_start")),
+                "actualEnd": cls._safe_research_artifact_scalar(quality.get("actual_end")),
+                "missingBarCount": cls._safe_research_artifact_scalar(quality.get("missing_bar_count")),
+                "warnings": [
+                    cls._safe_research_artifact_dict(item, ["code", "severity", "message"])
+                    for item in list(quality.get("warnings") or [])
+                    if isinstance(item, dict)
+                ],
+            },
+            "benchmarkAvailability": {
+                "state": benchmark_state,
+                "mode": cls._safe_research_artifact_scalar(benchmark.get("resolved_mode")),
+                "code": cls._safe_research_artifact_scalar(benchmark.get("code")),
+                "label": cls._safe_research_artifact_scalar(benchmark.get("label")),
+                "returnPct": cls._safe_research_artifact_scalar(benchmark.get("return_pct")),
+                "reasonCode": "benchmark_missing" if benchmark_missing else None,
+                "unavailableReason": cls._safe_research_artifact_scalar(benchmark_missing_reason),
+            },
+            "ruleSimulationExplanation": cls._build_rule_simulation_explanation(
+                parsed_strategy=parsed_strategy,
+                execution_model=execution_model,
+                execution_assumptions=execution_assumptions,
+            ),
+            "evidenceBoundary": {
+                "source": "stored_rule_backtest_run",
+                "derivedMetricsOnly": True,
+                "providerCallsEnabledByArtifact": False,
+                "fakePerformanceGenerated": False,
+                "rawProviderPayloadIncluded": False,
+                "adviceIncluded": False,
+            },
+        }
+        return artifact, cls._build_research_artifact_availability_payload(
+            state="available",
+            reason_code=None,
+            source="derived_from_stored_run",
         )
 
     @staticmethod
@@ -11042,6 +11356,25 @@ class RuleBacktestService:
             }
         )
         summary["data_sufficiency"] = dict(data_sufficiency)
+        research_artifact, research_artifact_availability = self._build_backtest_research_artifact_payload(
+            run_id=row.id,
+            code=row.code,
+            strategy_hash=row.strategy_hash,
+            parsed_strategy=parsed_strategy or {},
+            status=row.status,
+            no_result_reason=row.no_result_reason,
+            no_result_message=row.no_result_message,
+            request_payload=request if isinstance(request, dict) else {},
+            metrics=metrics,
+            data_quality=data_quality,
+            data_sufficiency=data_sufficiency,
+            benchmark_summary=benchmark_summary,
+            execution_model=execution_model,
+            execution_assumptions=execution_assumptions,
+            completed_at=row.completed_at,
+        )
+        summary["research_artifact"] = research_artifact
+        summary["research_artifact_availability"] = dict(research_artifact_availability)
         payload = {
             "id": row.id,
             "code": row.code,
@@ -11095,6 +11428,8 @@ class RuleBacktestService:
             "historicalOhlcvReadiness": dict(data_sufficiency.get("ohlcv_readiness") or {}),
             "robustness_analysis": dict(summary.get("robustness_analysis") or {}),
             "artifact_availability": artifact_availability,
+            "research_artifact": research_artifact,
+            "research_artifact_availability": research_artifact_availability,
             "readback_integrity": readback_integrity,
             "execution_model": execution_model,
             "execution_assumptions": execution_assumptions,

@@ -2019,6 +2019,41 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "replay_payload_missing_sections": [],
             }
         )
+        service.get_run.return_value["research_artifact"] = {
+            "artifactKind": "rule_backtest_research_artifact",
+            "schemaVersion": "backtest-research-artifact.v1",
+            "state": "available",
+            "researchOnly": True,
+            "decisionGrade": False,
+            "run": {
+                "runId": 123,
+                "strategyId": "abc123",
+                "symbol": "600519",
+                "status": "completed",
+            },
+            "sampleScope": {"lookbackBars": 20, "barCount": 20},
+            "metrics": {"totalReturnPct": 0.0, "tradeCount": 0},
+            "dataCoverage": {"state": "sufficient", "barCount": 20},
+            "benchmarkAvailability": {"state": "not_requested"},
+            "ruleSimulationExplanation": {
+                "label": "historical simulation rule review",
+                "scopeNote": "historical simulation for research artifact review only",
+            },
+            "evidenceBoundary": {
+                "derivedMetricsOnly": True,
+                "fakePerformanceGenerated": False,
+                "rawProviderPayloadIncluded": False,
+                "adviceIncluded": False,
+            },
+        }
+        service.get_run.return_value["research_artifact_availability"] = {
+            "version": "v1",
+            "state": "available",
+            "source": "derived_from_stored_run",
+            "artifactKind": "rule_backtest_research_artifact",
+        }
+        service.get_run.return_value["summary"]["research_artifact"] = service.get_run.return_value["research_artifact"]
+        service.get_run.return_value["summary"]["research_artifact_availability"] = service.get_run.return_value["research_artifact_availability"]
 
         with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
             response = get_rule_backtest_run(123, db_manager=MagicMock())
@@ -2059,6 +2094,12 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(payload["artifact_availability"]["source"], "summary.artifact_availability")
         self.assertTrue(payload["artifact_availability"]["has_trade_rows"])
         self.assertEqual(payload["summary"]["artifact_availability"], payload["artifact_availability"])
+        self.assertEqual(payload["research_artifact"]["artifactKind"], "rule_backtest_research_artifact")
+        self.assertEqual(payload["research_artifact"]["run"]["runId"], 123)
+        self.assertEqual(payload["research_artifact"]["metrics"], {"totalReturnPct": 0.0, "tradeCount": 0})
+        self.assertEqual(payload["research_artifact_availability"]["state"], "available")
+        self.assertEqual(payload["summary"]["research_artifact"], payload["research_artifact"])
+        self.assertEqual(payload["summary"]["research_artifact_availability"], payload["research_artifact_availability"])
         self.assertEqual(payload["readback_integrity"]["integrity_level"], "stored_complete")
         self.assertFalse(payload["readback_integrity"]["used_legacy_fallback"])
         self.assertEqual(payload["summary"]["readback_integrity"], payload["readback_integrity"])
