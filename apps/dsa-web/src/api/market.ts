@@ -672,6 +672,17 @@ export type DataSourceSurfaceImpact = {
   nextEvidenceStep: string;
 };
 
+export type NewsCatalystCapabilityMapItem = {
+  capabilityKey: string;
+  consumerLabel: string;
+  state: string;
+  freshnessState: string;
+  scope: string;
+  evidenceState: string;
+  missingReason: string;
+  operatorNextAction: string;
+};
+
 export type DataSourceGapActionType =
   | 'provider-entitlement'
   | 'provider-integration'
@@ -731,6 +742,7 @@ export type DataSourceGapRegistryFamily = {
   providerHydrationAllowed?: boolean;
   scoreTradingAuthorityAllowed?: boolean;
   consumerSafeDescription: string;
+  capabilityMap?: NewsCatalystCapabilityMapItem[];
   surfaceImpactMatrix?: DataSourceSurfaceImpact[];
   integrationActionPlan?: DataSourceGapRegistryActionPlanItem[];
 };
@@ -799,6 +811,7 @@ export type DataSourceGapRegistryFamilyView = {
   scoreTradingAuthorityAllowed: string;
   scoreTradingAuthorityVariant: DataSourceGapRegistryStatusView['variant'];
   consumerSafeDescription: string;
+  capabilityMap: NewsCatalystCapabilityMapItem[];
   surfaceImpactMatrix: DataSourceSurfaceImpactView[];
   integrationActionPlan: DataSourceGapRegistryActionPlanItemView[];
 };
@@ -883,6 +896,7 @@ export type DataSourceAcquisitionWorkbenchLane = {
 
 export type DataSourceGapRegistryGroupId =
   | 'quote_market'
+  | 'news_catalyst'
   | 'options'
   | 'macro_liquidity_credit'
   | 'backtest_research'
@@ -944,6 +958,7 @@ export type ProfessionalDataCapability = {
   sourceLabel: string;
   reason?: string | null;
   freshness?: string | null;
+  operatorNextAction?: string | null;
   asOf?: string | null;
   updatedAt?: string | null;
   readiness?: ProfessionalDataCapabilityReadiness | null;
@@ -1290,6 +1305,11 @@ const DATA_SOURCE_GAP_GROUPS: Array<{
     description: '报价、指数、ETF 和波动率输入的专业数据骨架。',
   },
   {
+    id: 'news_catalyst',
+    label: '新闻 / 催化',
+    description: '个股新闻、市场新闻、财报日历和政策事件 readiness。',
+  },
+  {
     id: 'options',
     label: '期权与衍生结构',
     description: '期权链、策略分析、Gamma 与 dealer positioning 权益边界。',
@@ -1326,6 +1346,7 @@ const DATA_SOURCE_GAP_FAMILY_GROUP: Record<string, DataSourceGapRegistryGroupId>
   etf_index_coverage: 'quote_market',
   vix_volatility: 'quote_market',
   fundamentals: 'quote_market',
+  news_catalyst_intelligence: 'news_catalyst',
   options_chains: 'options',
   options_strategy_analytics: 'options',
   gamma_dealer_positioning: 'options',
@@ -1907,6 +1928,18 @@ function normalizeDataSourceGapRegistryPayload(rawPayload: Record<string, unknow
       providerHydrationAllowed: typeof family.providerHydrationAllowed === 'boolean' ? family.providerHydrationAllowed : undefined,
       scoreTradingAuthorityAllowed: typeof family.scoreTradingAuthorityAllowed === 'boolean' ? family.scoreTradingAuthorityAllowed : undefined,
       consumerSafeDescription: family.consumerSafeDescription || '',
+      capabilityMap: Array.isArray(family.capabilityMap)
+        ? family.capabilityMap.map((item) => ({
+          capabilityKey: item.capabilityKey || '',
+          consumerLabel: item.consumerLabel || '',
+          state: item.state || 'missing',
+          freshnessState: item.freshnessState || 'unknown',
+          scope: item.scope || 'unknown',
+          evidenceState: item.evidenceState || 'unknown',
+          missingReason: item.missingReason || '',
+          operatorNextAction: item.operatorNextAction || '',
+        }))
+        : [],
       surfaceImpactMatrix: Array.isArray(family.surfaceImpactMatrix)
         ? family.surfaceImpactMatrix.map((impact) => ({
           surfaceKey: impact.surfaceKey || 'unknown_surface',
@@ -2142,6 +2175,7 @@ function normalizeProfessionalDataCapabilityRegistryPayload(
         sourceLabel: professionalCapabilitySafeText(capability.sourceLabel, '来源待补证'),
         reason: professionalCapabilitySafeText(capability.reason, ''),
         freshness: professionalCapabilitySafeText(capability.freshness, ''),
+        operatorNextAction: professionalCapabilitySafeText(capability.operatorNextAction, ''),
         asOf: professionalCapabilitySafeText(capability.asOf, ''),
         updatedAt: professionalCapabilitySafeText(capability.updatedAt, ''),
         readiness: normalizeProfessionalCapabilityReadiness(capability.readiness),
@@ -2228,6 +2262,16 @@ export function buildDataSourceGapRegistryView(
       scoreTradingAuthorityAllowed: scoreAuthority.scoreTradingAuthorityAllowed,
       scoreTradingAuthorityVariant: scoreAuthority.scoreTradingAuthorityVariant,
       consumerSafeDescription: DATA_SOURCE_GAP_DESCRIPTIONS[familyKey] || (family.consumerSafeDescription ? '已返回说明，需人工复核后展示。' : '数据说明待补证。'),
+      capabilityMap: (family.capabilityMap || []).map((item) => ({
+        capabilityKey: dataSourceGapSafeText(item.capabilityKey, 'unknown_capability'),
+        consumerLabel: dataSourceGapSafeText(item.consumerLabel, '能力待补证'),
+        state: normalizeGapToken(item.state) || 'missing',
+        freshnessState: normalizeGapToken(item.freshnessState) || 'unknown',
+        scope: dataSourceGapSafeText(item.scope, 'unknown'),
+        evidenceState: dataSourceGapSafeText(item.evidenceState, 'unknown'),
+        missingReason: dataSourceGapSafeText(item.missingReason, '缺失原因待补证。'),
+        operatorNextAction: dataSourceGapSafeText(item.operatorNextAction, '下一步待补证。'),
+      })),
       surfaceImpactMatrix,
       integrationActionPlan,
     };
@@ -2302,6 +2346,7 @@ export function buildProfessionalDataCapabilityRegistryView(
             ...professionalCapabilityReadinessSummary(capability.readiness),
           ].filter(Boolean).join(' · ') || '覆盖原因待补证。',
           freshness: professionalCapabilitySafeText(capability.freshness, ''),
+          operatorNextAction: professionalCapabilitySafeText(capability.operatorNextAction, ''),
           asOf: professionalCapabilitySafeText(capability.asOf, ''),
           updatedAt: professionalCapabilitySafeText(capability.updatedAt, ''),
         })),

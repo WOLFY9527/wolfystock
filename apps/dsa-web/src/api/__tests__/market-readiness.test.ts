@@ -306,10 +306,10 @@ describe('marketApi.getDataSourceGapRegistry', () => {
         network_calls_enabled: false,
         score_authority_allowed: false,
         summary: {
-          total_families: 4,
+          total_families: 5,
           ready_count: 0,
           partial_count: 1,
-          missing_count: 0,
+          missing_count: 1,
           blocked_count: 1,
           unauthorized_count: 1,
           stale_count: 0,
@@ -347,6 +347,21 @@ describe('marketApi.getDataSourceGapRegistry', () => {
             protected_domain_review_required: true,
             next_concrete_step: '定义报价/OHLCV 快照读模型并补齐来源权限字段。',
             required_evidence: ['授权报价快照', '日线 as-of 血缘'],
+            consumer_safe_warning: '工程补数队列；当前不是决策级证据，不生成交易指令。',
+          },
+          {
+            family_key: 'news_catalyst_intelligence',
+            family_label: 'News / Catalyst Intelligence',
+            priority: 'critical',
+            priority_reason: '关键队列：影响 2 个产品面，2 项能力阻断或降级；当前行动为 补齐数据契约。',
+            readiness_state: 'missing',
+            primary_blocker_type: 'schema-contract',
+            affected_surface_count: 2,
+            blocked_or_degraded_capability_count: 2,
+            external_entitlement_required: false,
+            protected_domain_review_required: true,
+            next_concrete_step: 'Define missing/stale/not_configured states.',
+            required_evidence: ['字段契约', '缺失状态定义'],
             consumer_safe_warning: '工程补数队列；当前不是决策级证据，不生成交易指令。',
           },
           {
@@ -438,6 +453,96 @@ describe('marketApi.getDataSourceGapRegistry', () => {
                 blocked_by: ['目标环境证据未齐'],
                 affected_surfaces_or_capabilities: ['Scanner 候选解释'],
                 next_concrete_step: '在目标环境采集脱敏覆盖和时效证据。',
+                requires_external_provider_license_work: false,
+                requires_protected_domain_review: true,
+              },
+            ],
+          },
+          {
+            family_key: 'news_catalyst_intelligence',
+            consumer_label: 'News / Catalyst Intelligence',
+            status: 'missing',
+            authority_state: 'not_configured',
+            freshness_state: 'unavailable',
+            entitlement_or_licensing_blocker: null,
+            integration_blocker: 'No approved news or catalyst layer is configured.',
+            source_evidence_state: 'not_configured',
+            next_integration_step: 'Define a provider-neutral capability map.',
+            provider_hydration_allowed: false,
+            score_trading_authority_allowed: false,
+            consumer_safe_description: 'News and catalyst inputs are missing.',
+            capability_map: [
+              {
+                capability_key: 'stock_news',
+                consumer_label: 'Stock news readiness',
+                state: 'not_configured',
+                freshness_state: 'unavailable',
+                scope: 'stock',
+                evidence_state: 'no_provider_or_cache',
+                missing_reason: 'No stock news data layer is configured.',
+                operator_next_action: 'Define the stock-news read contract before connecting data.',
+              },
+              {
+                capability_key: 'market_news',
+                consumer_label: 'Market news readiness',
+                state: 'missing',
+                freshness_state: 'unavailable',
+                scope: 'market',
+                evidence_state: 'no_curated_market_news_feed',
+                missing_reason: 'No market news feed is attached.',
+                operator_next_action: 'Add a market-news capability contract.',
+              },
+              {
+                capability_key: 'earnings_calendar',
+                consumer_label: 'Earnings/calendar readiness',
+                state: 'missing',
+                freshness_state: 'unavailable',
+                scope: 'calendar',
+                evidence_state: 'sample_or_scaffold_only',
+                missing_reason: 'Existing helpers are sample-bounded.',
+                operator_next_action: 'Promote only a verified calendar read model.',
+              },
+              {
+                capability_key: 'macro_policy_catalyst',
+                consumer_label: 'Macro/policy catalyst readiness',
+                state: 'stale',
+                freshness_state: 'stale',
+                scope: 'macro_policy',
+                evidence_state: 'static_or_observation_only',
+                missing_reason: 'Policy event feed is not fresh.',
+                operator_next_action: 'Attach a durable policy-event snapshot contract.',
+              },
+            ],
+            surface_impact_matrix: [
+              {
+                surface_key: 'stock_detail',
+                consumer_label: 'Stock Detail',
+                impact_state: 'blocked',
+                impact_reason: 'Stock pages must show missing news data.',
+                affected_capability: 'Stock news and catalysts readiness',
+                next_evidence_step: 'Add stock news readiness states.',
+              },
+              {
+                surface_key: 'market_overview',
+                consumer_label: 'Market Overview',
+                impact_state: 'blocked',
+                impact_reason: 'Market overview must not imply current market news.',
+                affected_capability: 'Market news and policy catalysts readiness',
+                next_evidence_step: 'Add event snapshot readiness.',
+              },
+            ],
+            integration_action_plan: [
+              {
+                action_key: 'news_catalyst_intelligence.schema_contract',
+                action_label: '补齐数据契约',
+                action_type: 'schema-contract',
+                priority: 'high',
+                status: 'planned',
+                reason: 'News/catalyst readiness contract is missing.',
+                required_evidence: ['字段契约', '缺失状态定义'],
+                blocked_by: ['contract missing'],
+                affected_surfaces_or_capabilities: ['Stock news and catalysts readiness'],
+                next_concrete_step: 'Define missing/stale/not_configured states.',
                 requires_external_provider_license_work: false,
                 requires_protected_domain_review: true,
               },
@@ -546,9 +651,10 @@ describe('marketApi.getDataSourceGapRegistry', () => {
     expect(payload.providerRuntimeCalled).toBe(false);
     expect(payload.networkCallsEnabled).toBe(false);
     expect(payload.scoreAuthorityAllowed).toBe(false);
-    expect(view.summary.totalFamilies).toBe(4);
+    expect(view.summary.totalFamilies).toBe(5);
     expect(view.groups.map((group) => [group.groupId, group.groupLabel, group.families.length])).toEqual([
       ['quote_market', '报价 / 市场骨架', 1],
+      ['news_catalyst', '新闻 / 催化', 1],
       ['options', '期权与衍生结构', 2],
       ['macro_liquidity_credit', '宏观 / 流动性 / 信用', 1],
       ['backtest_research', '回测 / 研究血缘', 0],
@@ -558,6 +664,7 @@ describe('marketApi.getDataSourceGapRegistry', () => {
     ]);
     expect(view.families.map((family) => [family.familyKey, family.familyLabel, family.status.label])).toEqual([
       ['stock_quote_spine', '股票报价骨架', '部分可用'],
+      ['news_catalyst_intelligence', 'News / Catalyst Intelligence', '待补证'],
       ['macro_rates', '宏观与利率', '仅观察'],
       ['options_chains', '期权链', '未授权'],
       ['gamma_dealer_positioning', 'Gamma / Dealer Positioning', '阻断'],
@@ -568,6 +675,26 @@ describe('marketApi.getDataSourceGapRegistry', () => {
       dataHydrationAllowed: '允许',
       scoreTradingAuthorityAllowed: '不允许',
     });
+    const newsCapabilityFamily = view.families.find((family) => family.familyKey === 'news_catalyst_intelligence');
+    expect(newsCapabilityFamily).toMatchObject({
+      groupId: 'news_catalyst',
+      groupLabel: '新闻 / 催化',
+      status: { label: '待补证', variant: 'caution' },
+      authorityState: { label: '待补证', variant: 'caution' },
+      freshnessState: { label: '不可用', variant: 'danger' },
+      dataHydrationAllowed: '不允许',
+      scoreTradingAuthorityAllowed: '不允许',
+    });
+    expect(newsCapabilityFamily?.capabilityMap.map((item) => [item.capabilityKey, item.state, item.freshnessState])).toEqual([
+      ['stock_news', 'not_configured', 'unavailable'],
+      ['market_news', 'missing', 'unavailable'],
+      ['earnings_calendar', 'missing', 'unavailable'],
+      ['macro_policy_catalyst', 'stale', 'stale'],
+    ]);
+    expect(newsCapabilityFamily?.surfaceImpactMatrix.map((item) => [item.surfaceKey, item.impactState.label])).toEqual([
+      ['stock_detail', '阻断'],
+      ['market_overview', '阻断'],
+    ]);
     expect(view.families.find((family) => family.familyKey === 'stock_quote_spine')?.surfaceImpactMatrix).toMatchObject([
       {
         surfaceKey: 'watchlist',
@@ -609,6 +736,7 @@ describe('marketApi.getDataSourceGapRegistry', () => {
     expect(view.acquisitionPriorityQueue.map((item) => item.priority.label)).toEqual([
       '关键',
       '高',
+      '关键',
       '中',
       '低',
     ]);
@@ -629,30 +757,38 @@ describe('marketApi.getDataSourceGapRegistry', () => {
       priorityReason: '高优先级队列：影响 2 个产品面，1 项能力阻断或降级；当前行动为 补齐报价骨架集成。',
       nextConcreteStep: '定义报价/OHLCV 快照读模型并补齐来源权限字段。',
     });
-    expect(view.workbench.blockedMissingPartialFamilyCount).toBe(2);
-    expect(view.workbench.urgentQueueCount).toBe(3);
+    expect(view.acquisitionPriorityQueue[2]).toMatchObject({
+      familyKey: 'news_catalyst_intelligence',
+      primaryBlockerType: { label: '契约补齐', variant: 'caution' },
+      readinessState: { label: '待补证', variant: 'caution' },
+      nextConcreteStep: 'Define missing/stale/not_configured states.',
+    });
+    expect(view.workbench.blockedMissingPartialFamilyCount).toBe(3);
+    expect(view.workbench.urgentQueueCount).toBe(4);
     expect(view.workbench.blockerTypeCounts).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'entitlement', label: '授权阻断', count: 1 }),
       expect.objectContaining({ key: 'provider-integration', label: '数据接入', count: 2 }),
+      expect.objectContaining({ key: 'schema-contract', label: '契约补齐', count: 1 }),
       expect.objectContaining({ key: 'unknown', label: '阻断待确认', count: 0 }),
     ]));
     expect(view.workbench.priorityCounts).toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'critical', label: '关键', count: 1 }),
+      expect.objectContaining({ key: 'critical', label: '关键', count: 2 }),
       expect.objectContaining({ key: 'high', label: '高', count: 1 }),
       expect.objectContaining({ key: 'medium', label: '中', count: 1 }),
     ]));
     expect(view.workbench.topNextActions.map((item) => item.familyKey)).toEqual([
+      'news_catalyst_intelligence',
       'options_chains',
       'stock_quote_spine',
-      'macro_rates',
     ]);
     expect(view.workbench.topNextActions[0]).toMatchObject({
-      familyKey: 'options_chains',
+      familyKey: 'news_catalyst_intelligence',
       priorityKey: 'critical',
-      affectedSurfaceCount: 1,
-      nextConcreteStep: '收集授权与字段覆盖证据，不接入数据源运行链路。',
+      affectedSurfaceCount: 2,
+      nextConcreteStep: 'Define missing/stale/not_configured states.',
     });
     expect(view.workbench.lanes.find((lane) => lane.key === 'protected-review')?.items.map((item) => item.familyKey)).toEqual([
+      'news_catalyst_intelligence',
       'options_chains',
       'stock_quote_spine',
       'macro_rates',
@@ -664,8 +800,8 @@ describe('marketApi.getDataSourceGapRegistry', () => {
       'stock_quote_spine',
     ]);
     expect(view.workbench.topNextActions.map((item) => item.familyKey)).not.toContain('ready_family');
-    expect(JSON.stringify(view.workbench)).not.toMatch(/ready_family|requestId|traceId|rawProviderPayload|cacheKey|credential|env|debug|buy|sell|hold|target price|stop loss|position sizing|买入|卖出|目标价|止损|仓位|推荐|最佳|最优|赢家/i);
-    expect(JSON.stringify(view)).not.toMatch(/requestId|traceId|rawProviderPayload|cacheKey|credential|env|debug|api[_-]?key|buy|sell|target price|stop loss|position sizing|买入|卖出|目标价|止损|仓位/i);
+    expect(JSON.stringify(view.workbench)).not.toMatch(/ready_family|requestId|traceId|rawProviderPayload|cacheKey|credential|env|debug|buy|sell|hold|target price|stop loss|position sizing|买入|卖出|目标价|止损|仓位|推荐|最佳|最优|赢家|fake headline|breaking news|latest news/i);
+    expect(JSON.stringify(view)).not.toMatch(/requestId|traceId|rawProviderPayload|cacheKey|credential|env|debug|api[_-]?key|buy|sell|target price|stop loss|position sizing|买入|卖出|目标价|止损|仓位|fake headline|breaking news|latest news/i);
   });
 
   it('keeps missing registry family fields fail-closed instead of overclaiming readiness', async () => {

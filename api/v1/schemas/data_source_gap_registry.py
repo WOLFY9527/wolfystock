@@ -22,8 +22,21 @@ DataSourceGapAuthorityState = Literal[
     "allowed",
     "blocked",
     "unauthorized",
+    "not_configured",
     "observation-only",
     "planned",
+]
+NewsCatalystCapabilityState = Literal[
+    "available",
+    "missing",
+    "stale",
+    "not_configured",
+]
+NewsCatalystCapabilityScope = Literal[
+    "stock",
+    "market",
+    "calendar",
+    "macro_policy",
 ]
 DataSourceGapFreshnessState = Literal[
     "fresh",
@@ -102,6 +115,19 @@ class DataSourceGapRegistryActionPlanItem(BaseModel):
     requiresProtectedDomainReview: bool
 
 
+class NewsCatalystCapabilityMapItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    capabilityKey: str
+    consumerLabel: str
+    state: NewsCatalystCapabilityState
+    freshnessState: DataSourceGapFreshnessState
+    scope: NewsCatalystCapabilityScope
+    evidenceState: str
+    missingReason: str
+    operatorNextAction: str
+
+
 class DataSourceGapRegistryFamily(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -117,6 +143,7 @@ class DataSourceGapRegistryFamily(BaseModel):
     providerHydrationAllowed: bool
     scoreTradingAuthorityAllowed: bool
     consumerSafeDescription: str
+    capabilityMap: List[NewsCatalystCapabilityMapItem]
     surfaceImpactMatrix: List[DataSourceSurfaceImpact]
     integrationActionPlan: List[DataSourceGapRegistryActionPlanItem]
 

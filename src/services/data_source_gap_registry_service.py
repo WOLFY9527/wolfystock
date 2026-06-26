@@ -37,6 +37,30 @@ class DataSourceSurfaceImpact:
 
 
 @dataclass(frozen=True, slots=True)
+class NewsCatalystCapabilityMapItem:
+    capability_key: str
+    consumer_label: str
+    state: str
+    freshness_state: str
+    scope: str
+    evidence_state: str
+    missing_reason: str
+    operator_next_action: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "capabilityKey": self.capability_key,
+            "consumerLabel": self.consumer_label,
+            "state": self.state,
+            "freshnessState": self.freshness_state,
+            "scope": self.scope,
+            "evidenceState": self.evidence_state,
+            "missingReason": self.missing_reason,
+            "operatorNextAction": self.operator_next_action,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class DataSourceGapRegistryActionPlanItem:
     action_key: str
     action_label: str
@@ -87,6 +111,7 @@ class DataSourceGapRegistryFamily:
     score_trading_authority_allowed: bool
     consumer_safe_description: str
     surface_impact_matrix: tuple[DataSourceSurfaceImpact, ...]
+    capability_map: tuple[NewsCatalystCapabilityMapItem, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -102,6 +127,9 @@ class DataSourceGapRegistryFamily:
             "providerHydrationAllowed": self.provider_hydration_allowed,
             "scoreTradingAuthorityAllowed": self.score_trading_authority_allowed,
             "consumerSafeDescription": self.consumer_safe_description,
+            "capabilityMap": [
+                item.to_dict() for item in self.capability_map
+            ],
             "surfaceImpactMatrix": [
                 impact.to_dict() for impact in self.surface_impact_matrix
             ],
@@ -163,6 +191,28 @@ def _impact(
         impact_reason=impact_reason,
         affected_capability=affected_capability,
         next_evidence_step=next_evidence_step,
+    )
+
+
+def _news_capability(
+    capability_key: str,
+    consumer_label: str,
+    state: str,
+    freshness_state: str,
+    scope: str,
+    evidence_state: str,
+    missing_reason: str,
+    operator_next_action: str,
+) -> NewsCatalystCapabilityMapItem:
+    return NewsCatalystCapabilityMapItem(
+        capability_key=capability_key,
+        consumer_label=consumer_label,
+        state=state,
+        freshness_state=freshness_state,
+        scope=scope,
+        evidence_state=evidence_state,
+        missing_reason=missing_reason,
+        operator_next_action=operator_next_action,
     )
 
 
@@ -385,6 +435,7 @@ def _integration_action_plan_for_family(
 
     if family_key in {
         "fundamentals",
+        "news_catalyst_intelligence",
         "backtest_dataset_lineage",
         "scenario_baselines",
     }:
@@ -769,6 +820,112 @@ _FAMILIES: tuple[DataSourceGapRegistryFamily, ...] = (
                 "点时基本面和 forward-return 血缘未证明。",
                 "因子暴露、分组研究输入",
                 "先补齐点时字段、观察时间和收益标签血缘。",
+            ),
+        ),
+    ),
+    DataSourceGapRegistryFamily(
+        family_key="news_catalyst_intelligence",
+        consumer_label="News / Catalyst Intelligence",
+        status="missing",
+        authority_state="not_configured",
+        freshness_state="unavailable",
+        entitlement_or_licensing_blocker=None,
+        integration_blocker=(
+            "No approved news, catalyst, earnings-calendar, or policy-event data capability map is configured."
+        ),
+        source_evidence_state="not_configured",
+        next_integration_step=(
+            "Define provider-neutral stock, market, earnings/calendar, and macro-policy catalyst contracts before any provider work."
+        ),
+        provider_hydration_allowed=False,
+        score_trading_authority_allowed=False,
+        consumer_safe_description=(
+            "News and catalyst inputs are not configured as a reliable data layer; product surfaces must show missing data instead of event conclusions."
+        ),
+        capability_map=(
+            _news_capability(
+                "stock_news",
+                "Stock news readiness",
+                "not_configured",
+                "unavailable",
+                "stock",
+                "no_provider_or_cache",
+                "No approved stock-level news provider/cache/read model is configured.",
+                "Define the stock-news read contract, freshness policy, and missing-state projection before connecting data.",
+            ),
+            _news_capability(
+                "market_news",
+                "Market news readiness",
+                "missing",
+                "unavailable",
+                "market",
+                "no_curated_market_news_feed",
+                "No curated market-news data family is attached to market overview.",
+                "Add a market-news capability contract with source authority and stale-state rules.",
+            ),
+            _news_capability(
+                "earnings_calendar",
+                "Earnings/calendar readiness",
+                "missing",
+                "unavailable",
+                "calendar",
+                "sample_or_scaffold_only",
+                "Existing earnings/event helpers are scaffold or sample-bounded, not a verified calendar data layer.",
+                "Promote only a verified calendar read model with as-of, timezone, source, and no-item states.",
+            ),
+            _news_capability(
+                "macro_policy_catalyst",
+                "Macro/policy catalyst readiness",
+                "stale",
+                "stale",
+                "macro_policy",
+                "static_or_observation_only",
+                "Policy and macro catalyst surfaces are not backed by a fresh event feed.",
+                "Attach a durable policy-event snapshot contract or keep policy catalyst state stale/missing.",
+            ),
+            _news_capability(
+                "company_developments",
+                "Company developments readiness",
+                "not_configured",
+                "unavailable",
+                "stock",
+                "no_company_development_source",
+                "No provider-neutral company-development evidence contract is configured.",
+                "Define allowed development types, source authority, and redacted evidence fields before display.",
+            ),
+        ),
+        surface_impact_matrix=(
+            _impact(
+                "stock_detail",
+                "Stock Detail",
+                "blocked",
+                "个股页不能展示近期新闻、公司进展或催化结论；当前只可显示新闻/催化数据缺失。",
+                "个股新闻、催化剂、公司进展 readiness",
+                "先补齐 stock news/catalyst capability contract 和 missing/stale/not_configured 状态。",
+            ),
+            _impact(
+                "watchlist",
+                "Watchlist",
+                "blocked",
+                "行级研究包不能从缺失新闻层推断催化因素。",
+                "保存标的新闻和催化 readiness",
+                "让 row research packet 引用明确的新闻/催化 readiness，而不是生成摘要。",
+            ),
+            _impact(
+                "market_overview",
+                "Market Overview",
+                "blocked",
+                "市场页不能声称最近新闻、政策事件或市场催化，除非有授权事件快照。",
+                "市场新闻、政策事件、宏观催化 readiness",
+                "补齐 market/policy event snapshot contract 后再展示事件状态。",
+            ),
+            _impact(
+                "homepage",
+                "Home",
+                "observation-only",
+                "首页现有 earnings/catalyst sample 只能保持观察边界，不能当作实时日历。",
+                "财报日历、主题催化观察边界",
+                "把 sample/scaffold 状态显式映射为 missing 或 stale readiness。",
             ),
         ),
     ),
@@ -1313,5 +1470,6 @@ __all__ = [
     "DataSourceAcquisitionPriorityQueueItem",
     "DataSourceSurfaceImpact",
     "DataSourceGapRegistryFamily",
+    "NewsCatalystCapabilityMapItem",
     "build_data_source_gap_registry",
 ]

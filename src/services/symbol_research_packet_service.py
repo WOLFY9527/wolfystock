@@ -16,6 +16,27 @@ logger = logging.getLogger(__name__)
 
 RESEARCH_PACKET_NO_ADVICE_DISCLOSURE = "Observation-only research packet; no personalized action instruction."
 RESEARCH_PACKET_HISTORY_DAYS = 90
+FUNDAMENTALS_NEXT_DATA_ACTION = (
+    "Connect a fundamentals data path for company profile, financial statements, valuation, earnings, and ownership or flow fields."
+)
+_FUNDAMENTALS_SUPPORTED_FIELDS: dict[str, list[str]] = {
+    "companyProfile": ["companyName", "sector", "industry", "exchange", "country"],
+    "financialStatements": ["revenueTtm", "netIncomeTtm", "fcfTtm"],
+    "margins": ["grossMargin", "operatingMargin", "roe", "roa"],
+    "valuation": ["marketCap", "peTtm", "pb", "beta"],
+    "balanceSheet": ["totalDebt", "cashAndEquivalents", "totalAssets", "totalLiabilities"],
+    "earnings": ["earningsDate", "epsTtm", "revenueGrowth"],
+    "ownershipFlows": ["institutionalOwnership", "insiderOwnership", "fundFlow"],
+}
+_FUNDAMENTALS_FIELD_CATEGORY = {
+    field: category
+    for category, fields in _FUNDAMENTALS_SUPPORTED_FIELDS.items()
+    for field in fields
+}
+_FUNDAMENTALS_STATUS_STALE = {"stale", "delayed"}
+_FUNDAMENTALS_STATUS_MISSING = {"", "missing", "unavailable", "no_evidence", "insufficient", "unknown"}
+_FUNDAMENTALS_STATUS_NOT_CONFIGURED = {"not_configured", "disabled", "unsupported", "not_integrated"}
+_FUNDAMENTALS_STATUS_PERMISSION = {"insufficient_permissions", "permission_denied", "unauthorized", "forbidden"}
 
 
 class _ReadOnlyEvidenceFetcherManager:
@@ -84,6 +105,134 @@ def _safe_text(value: Any) -> Optional[str]:
 
 def _is_true(payload: Mapping[str, Any], *keys: str) -> bool:
     return any(bool(_get_nested(payload, key)) for key in keys)
+
+
+def _empty_field_map() -> dict[str, list[str]]:
+    return {category: [] for category in _FUNDAMENTALS_SUPPORTED_FIELDS}
+
+
+def _categorized_fields(fields: list[str]) -> dict[str, list[str]]:
+    categorized = _empty_field_map()
+    for field in fields:
+        category = _FUNDAMENTALS_FIELD_CATEGORY.get(field)
+        if category and field not in categorized[category]:
+            categorized[category].append(field)
+    return categorized
+
+
+def _fundamentals_readiness_state(status: str, available_fields: list[str], explicit_missing: list[str]) -> str:
+    if status in _FUNDAMENTALS_STATUS_PERMISSION:
+        return "insufficient_permissions"
+    if status in _FUNDAMENTALS_STATUS_NOT_CONFIGURED:
+        return "not_configured"
+    if status in _FUNDAMENTALS_STATUS_STALE:
+        return "stale"
+    if available_fields:
+        return "stale" if explicit_missing or status == "partial" else "available"
+    if status in _FUNDAMENTALS_STATUS_MISSING or explicit_missing:
+        return "missing"
+    return "unknown"
+
+
+def _category_state(
+    *,
+    supported: list[str],
+    available: list[str],
+    missing: list[str],
+    blocked: list[str],
+    stale: list[str],
+    fallback_state: str,
+) -> str:
+    if blocked:
+        return "insufficient_permissions"
+    if stale or (available and fallback_state == "stale"):
+        return "stale"
+    if available and not missing:
+        return "available"
+    if available:
+        return "stale" if fallback_state == "stale" else "available"
+    if missing:
+        return "missing"
+    if fallback_state == "not_configured":
+        return "not_configured"
+    if fallback_state == "insufficient_permissions":
+        return "insufficient_permissions"
+    return "missing" if supported else "unknown"
+
+
+def _fundamentals_consumer_copy(state: str) -> str:
+    if state == "available":
+        return "基本面字段可用于研究观察，仍不构成投资建议。"
+    if state == "stale":
+        return "基本面数据缺失或更新不完整，已标记为研究观察边界。"
+    if state == "not_configured":
+        return "基本面数据路径尚未配置，暂不展示财务或估值指标。"
+    if state == "insufficient_permissions":
+        return "基本面数据权限不足，暂不展示财务或估值指标。"
+    return "基本面数据缺失，暂不展示财务或估值指标。"
+
+
+def _fundamentals_contract(
+    *,
+    state: str,
+    fields_available: list[str],
+    explicit_missing: list[str],
+) -> dict[str, Any]:
+    readiness_state = _fundamentals_readiness_state(state, fields_available, explicit_missing)
+    available_fields = _categorized_fields(fields_available)
+    blocked_fields = _empty_field_map()
+    stale_fields = _empty_field_map()
+    if readiness_state == "insufficient_permissions":
+        blocked_fields = _categorized_fields(explicit_missing or [field for fields in _FUNDAMENTALS_SUPPORTED_FIELDS.values() for field in fields])
+    if readiness_state == "stale":
+        stale_fields = _categorized_fields(fields_available)
+
+    missing_fields = _empty_field_map()
+    for category, supported in _FUNDAMENTALS_SUPPORTED_FIELDS.items():
+        explicit_for_category = [
+            field for field in explicit_missing
+            if _FUNDAMENTALS_FIELD_CATEGORY.get(field) == category
+        ]
+        inferred_for_category = [
+            field for field in supported
+            if field not in available_fields[category] and field not in blocked_fields[category]
+        ]
+        missing_fields[category] = [
+            field for field in supported
+            if field in explicit_for_category or field in inferred_for_category
+        ]
+
+    categories = {}
+    for category, supported in _FUNDAMENTALS_SUPPORTED_FIELDS.items():
+        categories[category] = {
+            "state": _category_state(
+                supported=supported,
+                available=available_fields[category],
+                missing=missing_fields[category],
+                blocked=blocked_fields[category],
+                stale=stale_fields[category],
+                fallback_state=readiness_state,
+            ),
+            "supportedFields": list(supported),
+            "availableFields": available_fields[category],
+            "missingFields": missing_fields[category],
+            "staleFields": stale_fields[category],
+            "blockedFields": blocked_fields[category],
+        }
+
+    return {
+        "state": readiness_state,
+        "readinessState": readiness_state,
+        "fieldsAvailable": fields_available,
+        "supportedFields": {category: list(fields) for category, fields in _FUNDAMENTALS_SUPPORTED_FIELDS.items()},
+        "availableFields": available_fields,
+        "missingFields": missing_fields,
+        "staleFields": stale_fields,
+        "blockedFields": blocked_fields,
+        "categories": categories,
+        "providerNeutralNextDataAction": FUNDAMENTALS_NEXT_DATA_ACTION,
+        "consumerSafeCopy": _fundamentals_consumer_copy(readiness_state),
+    }
 
 
 def _quote_packet(quote: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -179,7 +328,7 @@ def _first_evidence_item(evidence: Mapping[str, Any] | None, symbol: str) -> dic
 
 def _fundamentals_packet(item: Mapping[str, Any] | None) -> dict[str, Any]:
     if item is None:
-        return {"state": "not_integrated", "fieldsAvailable": []}
+        return _fundamentals_contract(state="not_configured", fields_available=[], explicit_missing=[])
 
     fundamental = _as_mapping(item.get("fundamental"))
     packet = _as_mapping(_get_nested(item, "stockEvidencePacket", "stock_evidence_packet"))
@@ -199,16 +348,20 @@ def _fundamentals_packet(item: Mapping[str, Any] | None) -> dict[str, Any]:
     )
     fields_available = [field for field in allowed_fields if summary.get(field) is not None]
     status = str(summary.get("status") or fundamental.get("status") or "").strip().lower()
+    missing_fields = summary.get("missingFields")
+    if not isinstance(missing_fields, list):
+        missing_fields = fundamental.get("missingFields")
+    explicit_missing = [str(field) for field in missing_fields] if isinstance(missing_fields, list) else []
 
     if fields_available:
         state = "available"
     elif not fundamental and not summary:
-        state = "not_integrated"
+        state = "not_configured"
     elif status in {"missing", "unavailable", "no_evidence", "insufficient"}:
         state = "missing"
     else:
         state = "unknown"
-    return {"state": state, "fieldsAvailable": fields_available}
+    return _fundamentals_contract(state=status or state, fields_available=fields_available, explicit_missing=explicit_missing)
 
 
 def _events_packet(item: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -350,7 +503,7 @@ def build_symbol_research_packet_from_parts(stock_code: str, *, market: Optional
     quote = {"state": "missing", "price": None, "changePercent": None, "asOf": None}
     history = {"state": "missing", "bars": 0, "period": "daily", "asOf": None}
     structure = {"state": "missing", "label": None, "confidence": None, "asOf": None}
-    fundamentals = {"state": "not_integrated", "fieldsAvailable": []}
+    fundamentals = _fundamentals_contract(state="not_configured", fields_available=[], explicit_missing=[])
     events = {"state": "not_integrated", "latest": []}
     peer = {"state": "missing", "benchmark": None}
     missing_data = _missing_data_families(

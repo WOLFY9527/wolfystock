@@ -1104,6 +1104,65 @@ function evidenceAuthorityLabels(packet: SymbolResearchPacket, language: 'zh' | 
   return [language === 'en' ? 'Authoritative' : '权威证据可用'];
 }
 
+function fundamentalsCategoryLabel(value: string, language: 'zh' | 'en'): string {
+  const labels: Record<string, { zh: string; en: string }> = {
+    companyProfile: { zh: '公司画像', en: 'Company profile' },
+    financialStatements: { zh: '财报主字段', en: 'Financial statements' },
+    margins: { zh: '利润率', en: 'Margins' },
+    valuation: { zh: '估值字段', en: 'Valuation' },
+    balanceSheet: { zh: '资产负债表', en: 'Balance sheet' },
+    earnings: { zh: '财报日期', en: 'Earnings' },
+    ownershipFlows: { zh: '持有人 / 资金流', en: 'Ownership / flows' },
+  };
+  return labels[value]?.[language] ?? value;
+}
+
+function fundamentalsCategoryStateLabel(value: string | null | undefined, language: 'zh' | 'en'): string {
+  const token = normalizeStockConsumerToken(value);
+  if (token === 'available') return language === 'en' ? 'ready' : '可用';
+  if (token === 'stale' || token === 'delayed') return language === 'en' ? 'delayed' : '延迟';
+  if (token === 'not_configured') return language === 'en' ? 'not configured' : '待配置';
+  if (token === 'insufficient_permissions') return language === 'en' ? 'permission needed' : '权限待补';
+  return language === 'en' ? 'needed' : '待补';
+}
+
+function safeFundamentalsAction(value: string | null | undefined, language: 'zh' | 'en'): string {
+  const fallback = language === 'en'
+    ? 'Connect a fundamentals data path before showing financial or valuation fields.'
+    : '补齐基本面数据路径后再展示财务或估值字段。';
+  if (!value || looksUnsafeForConsumer(value)) return fallback;
+  return safeConsumerText(value, language, fallback);
+}
+
+function formatFundamentalsFields(fields: string[], language: 'zh' | 'en'): string {
+  if (!fields.length) return language === 'en' ? 'No missing fields listed' : '未列出缺失字段';
+  return fields.slice(0, 5).join(', ');
+}
+
+function buildFundamentalsReadinessRows(packet: SymbolResearchPacket, language: 'zh' | 'en'): Array<{
+  key: string;
+  label: string;
+  value: string;
+  detail?: string;
+}> {
+  const categories = packet.fundamentals.categories ?? {};
+  return Object.entries(categories)
+    .map(([key, category]) => ({
+      key,
+      label: fundamentalsCategoryLabel(key, language),
+      value: `${fundamentalsCategoryLabel(key, language)}${fundamentalsCategoryStateLabel(category.state, language)}`,
+      detail: formatFundamentalsFields(
+        [
+          ...(category.missingFields ?? []),
+          ...(category.blockedFields ?? []),
+          ...(category.staleFields ?? []),
+        ],
+        language,
+      ),
+    }))
+    .slice(0, 6);
+}
+
 function evidenceCountLabels(counts: Record<EvidenceStackBucket, number>, language: 'zh' | 'en'): string[] {
   const labels = [
     [counts.available, language === 'en' ? 'ready' : '可用'],
@@ -2139,6 +2198,9 @@ function StockResearchPacketPanel({
   const countLabels = evidenceCountLabels(counts, language);
   const authorityLabels = evidenceAuthorityLabels(packet, language);
   const gapLabels = buildEvidenceGapLabels(packet, language);
+  const fundamentalsRows = buildFundamentalsReadinessRows(packet, language);
+  const fundamentalsCopy = safeOptionalConsumerText(packet.fundamentals.consumerSafeCopy, language);
+  const fundamentalsAction = safeFundamentalsAction(packet.fundamentals.providerNeutralNextDataAction, language);
   const identityLabel = [
     safeOptionalConsumerText(packet.identity.name, language),
     safeOptionalConsumerText(packet.market, language),
@@ -2168,6 +2230,20 @@ function StockResearchPacketPanel({
           }))}
         />
       </RoughSectionCard>
+      {(fundamentalsRows.length || fundamentalsCopy || fundamentalsAction) ? (
+        <RoughSectionCard
+          eyebrow={isEnglish ? 'Fundamentals boundary' : '基本面数据边界'}
+          title={isEnglish ? 'Missing fundamentals are explicit' : '基本面缺口明确标记'}
+        >
+          {fundamentalsCopy ? (
+            <p className="mb-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{fundamentalsCopy}</p>
+          ) : null}
+          {fundamentalsRows.length ? (
+            <RoughKeyValueRows rows={fundamentalsRows} />
+          ) : null}
+          <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-tertiary)]">{fundamentalsAction}</p>
+        </RoughSectionCard>
+      ) : null}
       {gapLabels.length ? (
         <RoughSectionCard eyebrow={isEnglish ? 'Next evidence gaps' : '下一证据缺口'} title={isEnglish ? 'What remains missing' : '仍需补齐'}>
           <div className="flex flex-wrap gap-2">

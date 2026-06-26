@@ -100,6 +100,24 @@ def test_professional_data_capability_consumer_route_is_safe() -> None:
     assert {item["market"] for item in readiness["markets"]} == {"US", "CN", "HK"}
     assert all(item["state"] != "available" for item in readiness["measures"])
     assert readiness["scoreEligible"] is False
+    for capability_id in (
+        "stock.news",
+        "market.news",
+        "events.earnings_calendar",
+        "macro.policy_catalyst",
+    ):
+        assert capability_id in capabilities
+        assert capabilities[capability_id]["sourceLabel"] == (
+            "News/catalyst readiness registry"
+        )
+    assert capabilities["stock.news"]["status"] == "configured_missing"
+    assert capabilities["market.news"]["status"] == "configured_missing"
+    assert capabilities["events.earnings_calendar"]["status"] == "configured_missing"
+    assert capabilities["macro.policy_catalyst"]["status"] == "degraded"
+    assert "headline" not in json.dumps(
+        [capabilities["stock.news"], capabilities["market.news"]],
+        ensure_ascii=False,
+    ).lower()
 
     serialized = json.dumps(payload, ensure_ascii=False)
     lowered = serialized.lower()

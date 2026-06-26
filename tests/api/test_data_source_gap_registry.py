@@ -8,6 +8,7 @@ import json
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import market
 
 
@@ -35,6 +36,7 @@ EXPECTED_FAMILY_FIELDS = {
     "providerHydrationAllowed",
     "scoreTradingAuthorityAllowed",
     "consumerSafeDescription",
+    "capabilityMap",
     "surfaceImpactMatrix",
     "integrationActionPlan",
 }
@@ -69,9 +71,24 @@ EXPECTED_QUEUE_FIELDS = {
 }
 
 
+def _admin_user() -> CurrentUser:
+    return CurrentUser(
+        user_id="admin-1",
+        username="admin",
+        display_name="Admin",
+        role="admin",
+        is_admin=True,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+        admin_capabilities=("ops:providers:read",),
+    )
+
+
 def _client() -> TestClient:
     app = FastAPI()
     app.include_router(market.router, prefix="/api/v1/market")
+    app.dependency_overrides[get_current_user] = _admin_user
     return TestClient(app)
 
 
@@ -108,6 +125,7 @@ def test_data_source_gap_registry_returns_static_fail_closed_family_inventory() 
     assert {
         "stock_quote_spine",
         "fundamentals",
+        "news_catalyst_intelligence",
         "etf_index_coverage",
         "macro_rates",
         "fed_liquidity",
@@ -136,6 +154,20 @@ def test_data_source_gap_registry_returns_static_fail_closed_family_inventory() 
     assert families["portfolio_valuation_lineage"]["status"] == "partial"
     assert families["portfolio_valuation_lineage"]["providerHydrationAllowed"] is True
     assert families["portfolio_valuation_lineage"]["scoreTradingAuthorityAllowed"] is False
+    assert families["news_catalyst_intelligence"]["status"] == "missing"
+    assert families["news_catalyst_intelligence"]["authorityState"] == "not_configured"
+    assert families["news_catalyst_intelligence"]["providerHydrationAllowed"] is False
+    assert families["news_catalyst_intelligence"]["scoreTradingAuthorityAllowed"] is False
+    assert {
+        item["capabilityKey"]: item["state"]
+        for item in families["news_catalyst_intelligence"]["capabilityMap"]
+    } == {
+        "stock_news": "not_configured",
+        "market_news": "missing",
+        "earnings_calendar": "missing",
+        "macro_policy_catalyst": "stale",
+        "company_developments": "not_configured",
+    }
     assert set(queue_by_key) == set(families)
     assert queue_by_key["stock_quote_spine"]["priority"] == "critical"
     assert queue_by_key["stock_quote_spine"]["primaryBlockerType"] == (
@@ -145,6 +177,8 @@ def test_data_source_gap_registry_returns_static_fail_closed_family_inventory() 
     assert queue_by_key["stock_quote_spine"]["blockedOrDegradedCapabilityCount"] == 4
     assert queue_by_key["stock_quote_spine"]["protectedDomainReviewRequired"] is True
     assert queue_by_key["portfolio_valuation_lineage"]["priority"] == "high"
+    assert queue_by_key["news_catalyst_intelligence"]["readinessState"] == "missing"
+    assert queue_by_key["news_catalyst_intelligence"]["primaryBlockerType"] == "schema-contract"
     assert (
         payload["acquisitionPriorityQueue"].index(
             queue_by_key["stock_quote_spine"]
@@ -225,6 +259,10 @@ def test_data_source_gap_registry_returns_static_fail_closed_family_inventory() 
         impact["surfaceKey"]: impact["impactState"]
         for impact in families["scenario_baselines"]["surfaceImpactMatrix"]
     }["scenario_lab"] == "planned"
+    assert {
+        impact["surfaceKey"]: impact["impactState"]
+        for impact in families["news_catalyst_intelligence"]["surfaceImpactMatrix"]
+    }["market_overview"] == "blocked"
     assert payload["summary"]["readyCount"] == 0
     assert payload["summary"]["scoreTradingAuthorityAllowedCount"] == 0
 
@@ -250,5 +288,9 @@ def test_data_source_gap_registry_returns_static_fail_closed_family_inventory() 
         "investment advice",
         "recommended",
         "winner",
+        "fake headline",
+        "breaking news",
+        "latest news",
+        "newswire",
     ):
         assert forbidden not in serialized

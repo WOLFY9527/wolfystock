@@ -285,8 +285,63 @@ const partialResearchPacket = () => ({
     asOf: null,
   },
   fundamentals: {
-    state: 'not_integrated',
+    state: 'stale',
+    readinessState: 'stale',
     fieldsAvailable: [],
+    supportedFields: {
+      companyProfile: ['companyName', 'sector'],
+      financialStatements: ['revenueTtm', 'netIncomeTtm', 'fcfTtm'],
+      valuation: ['marketCap', 'peTtm'],
+      earnings: ['earningsDate'],
+    },
+    availableFields: {
+      valuation: ['marketCap', 'peTtm'],
+    },
+    missingFields: {
+      companyProfile: ['companyName', 'sector'],
+      financialStatements: ['revenueTtm', 'netIncomeTtm', 'fcfTtm'],
+      earnings: ['earningsDate'],
+    },
+    staleFields: {
+      valuation: ['marketCap', 'peTtm'],
+    },
+    blockedFields: {},
+    categories: {
+      companyProfile: {
+        state: 'missing',
+        supportedFields: ['companyName', 'sector'],
+        availableFields: [],
+        missingFields: ['companyName', 'sector'],
+        staleFields: [],
+        blockedFields: [],
+      },
+      financialStatements: {
+        state: 'missing',
+        supportedFields: ['revenueTtm', 'netIncomeTtm', 'fcfTtm'],
+        availableFields: [],
+        missingFields: ['revenueTtm', 'netIncomeTtm', 'fcfTtm'],
+        staleFields: [],
+        blockedFields: [],
+      },
+      valuation: {
+        state: 'stale',
+        supportedFields: ['marketCap', 'peTtm'],
+        availableFields: ['marketCap', 'peTtm'],
+        missingFields: [],
+        staleFields: ['marketCap', 'peTtm'],
+        blockedFields: [],
+      },
+      earnings: {
+        state: 'missing',
+        supportedFields: ['earningsDate'],
+        availableFields: [],
+        missingFields: ['earningsDate'],
+        staleFields: [],
+        blockedFields: [],
+      },
+    },
+    providerNeutralNextDataAction: 'Connect a fundamentals data path for company profile, financial statements, valuation, earnings, and ownership or flow fields.',
+    consumerSafeCopy: '基本面数据缺失或更新不完整，已标记为研究观察边界。',
   },
   events: {
     state: 'missing',
@@ -542,13 +597,24 @@ describe('StockStructureDecisionPage', () => {
     expect(panel).toHaveTextContent('仅观察');
     expect(panel).toHaveTextContent('评分待确认');
     expect(panel).toHaveTextContent('可用 1');
-    expect(panel).toHaveTextContent('待补 3');
+    expect(panel).toHaveTextContent('待补 2');
     expect(panel).toHaveTextContent('部分 2');
     expect(panel).not.toHaveTextContent('报价可用');
     expect(panel).not.toHaveTextContent('历史可用');
     expect(panel).toHaveTextContent('标的上下文可用');
     expect(panel).toHaveTextContent('基本面待补');
     expect(panel).toHaveTextContent('财报 / 催化证据待补');
+    expect(panel).toHaveTextContent('延迟 1');
+    expect(panel).toHaveTextContent('基本面数据缺失');
+    expect(panel).toHaveTextContent('公司画像待补');
+    expect(panel).toHaveTextContent('财报主字段待补');
+    expect(panel).toHaveTextContent('估值字段延迟');
+    expect(panel).toHaveTextContent('财报日期待补');
+    expect(panel).toHaveTextContent('companyName');
+    expect(panel).toHaveTextContent('revenueTtm');
+    expect(panel).toHaveTextContent('earningsDate');
+    expect(panel).toHaveTextContent('Connect a fundamentals data path');
+    expect(panel).toHaveTextContent('新闻线索待补');
     expect(panel).toHaveTextContent('风险来源待补');
     expect(panel).toHaveTextContent('市场线索待补');
     expect(panel).toHaveTextContent('研究包可用');
@@ -1329,6 +1395,7 @@ describe('StockStructureDecisionPage', () => {
     expect(panel).toHaveTextContent('财报 / 催化证据待补');
     expect(panel).toHaveTextContent('风险来源待补');
     expect(panel).toHaveTextContent('市场线索待补');
+    expect(panel).toHaveTextContent('延迟 1');
     expect(panel).toHaveTextContent('下一证据缺口');
     expect(panel).toHaveTextContent('报价待补');
     expect(panel).toHaveTextContent('历史待补');
