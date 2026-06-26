@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { Copy, Download } from 'lucide-react';
 import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
@@ -878,6 +878,41 @@ type SingleStockEvidencePackEntry = {
   blockedCopyTestId: string;
 };
 
+function StockResearchCockpitStage({
+  order,
+  eyebrow,
+  title,
+  children,
+  testId,
+}: {
+  order: number;
+  eyebrow: string;
+  title: string;
+  children: ReactNode;
+  testId: string;
+}) {
+  return (
+    <section
+      className="min-w-0 border-t border-[color:var(--wolfy-divider)]"
+      data-cockpit-order={order}
+      data-testid={testId}
+    >
+      <div className="flex min-w-0 items-center gap-3 px-3 pt-3 md:px-4 md:pt-4">
+        <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] font-mono text-[11px] font-semibold text-[color:var(--wolfy-text-muted)]">
+          {String(order).padStart(2, '0')}
+        </span>
+        <div className="min-w-0">
+          <div className="text-[11px] font-semibold uppercase tracking-normal text-[color:var(--wolfy-text-muted)]">{eyebrow}</div>
+          <h3 className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{title}</h3>
+        </div>
+      </div>
+      <div className="min-w-0">
+        {children}
+      </div>
+    </section>
+  );
+}
+
 function evidenceStateBucket(value: string | null | undefined): EvidenceStackBucket {
   const token = normalizeStockConsumerToken(value);
   if (token === 'available' || token === 'ready') return 'available';
@@ -914,8 +949,8 @@ function fundamentalsEvidenceLabel(value: string | null | undefined, language: '
 
 function newsEvidenceLabel(value: string | null | undefined, hasLatest: boolean, language: 'zh' | 'en'): string {
   return evidenceStateBucket(value) === 'available' || hasLatest
-    ? (language === 'en' ? 'News leads ready' : '新闻线索可用')
-    : (language === 'en' ? 'News leads needed' : '新闻线索待补');
+    ? (language === 'en' ? 'Catalyst leads ready' : '催化线索可用')
+    : (language === 'en' ? 'Earnings / catalyst evidence needed' : '财报 / 催化证据待补');
 }
 
 function riskEvidenceLabel(bucket: EvidenceStackBucket, language: 'zh' | 'en'): string {
@@ -1015,7 +1050,7 @@ function buildEvidenceStackRows(packet: SymbolResearchPacket, language: 'zh' | '
     },
     {
       key: 'news',
-      label: language === 'en' ? 'News / events' : '新闻 / 事件',
+      label: language === 'en' ? 'Earnings / catalysts' : '财报 / 催化',
       value: newsEvidenceLabel(packet.events.state, packet.events.latest.length > 0, language),
       bucket: packet.events.latest.length > 0 ? 'available' : evidenceStateBucket(packet.events.state),
     },
@@ -2047,18 +2082,13 @@ function StockStructureCannotResearchState({
 }
 
 function StockMinimumResearchPacket({
-  data,
   facts,
   language,
-  missingSummary,
 }: {
-  data: StockStructureDecisionResponse;
   facts: StockResearchFact[];
   language: 'zh' | 'en';
-  missingSummary: string | null;
 }) {
   const isEnglish = language === 'en';
-  const watchNext = safeConsumerList(data.researchNotes.watchNext ?? [], language);
 
   return (
     <div className="grid gap-3 border-t border-[color:var(--wolfy-divider)] p-3" data-testid="stock-minimum-research-packet">
@@ -2075,25 +2105,6 @@ function StockMinimumResearchPacket({
           }))}
         />
       </RoughSectionCard>
-      {watchNext.length ? (
-        <RoughSectionCard
-          eyebrow={isEnglish ? 'Next check' : '下一步研究'}
-          title={isEnglish ? 'What to verify next' : '下一步核对'}
-        >
-          <RoughBulletList
-            items={watchNext.slice(0, 3)}
-            emptyText={isEnglish ? 'No next check listed.' : '暂无下一步核对项。'}
-          />
-        </RoughSectionCard>
-      ) : null}
-      {missingSummary ? (
-        <RoughSectionCard
-          eyebrow={isEnglish ? 'Data boundary' : '数据边界'}
-          title={isEnglish ? 'Missing data summarized once' : '缺失资料汇总'}
-        >
-          <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{missingSummary}</p>
-        </RoughSectionCard>
-      ) : null}
     </div>
   );
 }
@@ -2123,7 +2134,8 @@ function StockResearchPacketPanel({
   if (!packet) return null;
 
   const stackRows = buildEvidenceStackRows(packet, language);
-  const counts = evidenceStackCounts(stackRows);
+  const displayRows = stackRows.filter((row) => row.key !== 'quote' && row.key !== 'history');
+  const counts = evidenceStackCounts(displayRows);
   const countLabels = evidenceCountLabels(counts, language);
   const authorityLabels = evidenceAuthorityLabels(packet, language);
   const gapLabels = buildEvidenceGapLabels(packet, language);
@@ -2149,7 +2161,7 @@ function StockResearchPacketPanel({
           ))}
         </div>
         <RoughKeyValueRows
-          rows={stackRows.map((row) => ({
+          rows={displayRows.map((row) => ({
             key: row.key,
             label: row.label,
             value: row.value,
@@ -2165,6 +2177,164 @@ function StockResearchPacketPanel({
           </div>
         </RoughSectionCard>
       ) : null}
+    </div>
+  );
+}
+
+function catalystReadinessLabel(
+  packet: SymbolResearchPacket | null,
+  language: 'zh' | 'en',
+): { label: string; status: 'success' | 'warning' | 'error' | 'info' } {
+  if (!packet) return { label: language === 'en' ? 'Readiness pending' : '就绪度待确认', status: 'info' };
+  const bucket = packet.events.latest.length > 0 ? 'available' : evidenceStateBucket(packet.events.state);
+  if (bucket === 'available') return { label: language === 'en' ? 'Catalyst leads ready' : '催化线索可用', status: 'success' };
+  if (bucket === 'stale') return { label: language === 'en' ? 'Catalyst leads may be delayed' : '催化线索可能延迟', status: 'warning' };
+  if (bucket === 'partial') return { label: language === 'en' ? 'Catalyst evidence partial' : '催化证据部分可用', status: 'warning' };
+  return { label: language === 'en' ? 'Earnings / catalyst evidence needed' : '财报 / 催化证据待补', status: 'warning' };
+}
+
+function StockEarningsCatalystReadinessPanel({
+  packet,
+  failed,
+  language,
+}: {
+  packet: SymbolResearchPacket | null;
+  failed: boolean;
+  language: 'zh' | 'en';
+}) {
+  const isEnglish = language === 'en';
+  const readiness = catalystReadinessLabel(packet, language);
+  const latestCount = packet?.events.latest.length ?? 0;
+  const eventGap = packet ? hasMissingData(packet, ['events', 'filing_event_catalyst']) : false;
+  const nextAction = safeOptionalConsumerText(packet?.nextDataAction, language);
+  const rows = [
+    {
+      key: 'events-state',
+      label: isEnglish ? 'Readiness' : '就绪度',
+      value: readiness.label,
+    },
+    {
+      key: 'latest-items',
+      label: isEnglish ? 'Visible items' : '可见条目',
+      value: latestCount ? String(latestCount) : (isEnglish ? 'none listed' : '未列明'),
+    },
+    {
+      key: 'next-data',
+      label: isEnglish ? 'Next missing data' : '下一缺口',
+      value: eventGap
+        ? (isEnglish ? 'Filing, earnings, or catalyst evidence is still needed.' : '仍需补齐公告、财报或催化证据。')
+        : (nextAction || (isEnglish ? 'No catalyst-specific gap is listed.' : '暂未列出财报 / 催化专项缺口。')),
+    },
+  ];
+
+  return (
+    <div className="p-3 md:p-4" data-testid="stock-earnings-catalyst-readiness-panel">
+      <RoughSectionCard
+        eyebrow={isEnglish ? 'Earnings / catalysts' : '财报 / 催化'}
+        title={isEnglish ? 'Catalyst readiness' : '催化就绪度'}
+      >
+        <div className="mb-3 flex flex-wrap gap-2">
+          <StatusBadge status={failed ? 'warning' : readiness.status} label={failed ? (isEnglish ? 'Packet pending' : '研究包待更新') : readiness.label} size="sm" />
+          <TerminalChip variant="neutral">{isEnglish ? 'No inferred events' : '不推断事件'}</TerminalChip>
+        </div>
+        <RoughKeyValueRows rows={rows} />
+      </RoughSectionCard>
+    </div>
+  );
+}
+
+function buildMissingDataNextStepItems({
+  data,
+  packet,
+  missingSummary,
+  optionsStructure,
+  optionsFailed,
+  technicalIndicators,
+  technicalFailed,
+  history,
+  historyFailed,
+  language,
+}: {
+  data: StockStructureDecisionResponse;
+  packet: SymbolResearchPacket | null;
+  missingSummary: string | null;
+  optionsStructure: OptionsStructureSummary | null;
+  optionsFailed: boolean;
+  technicalIndicators: StockTechnicalIndicatorsResponse | null;
+  technicalFailed: boolean;
+  history: StockHistoryResponse | null;
+  historyFailed: boolean;
+  language: 'zh' | 'en';
+}): string[] {
+  const isEnglish = language === 'en';
+  const historyState = stockHistoryReadinessState({ history, failed: historyFailed, data, language });
+  const technicalStatus = technicalIndicators ? technicalStatusLabel(technicalIndicators.status, language).label : null;
+  const optionsReasons = optionsStructure ? optionsStructureReasonLabels(optionsStructure, language) : [];
+  const items = [
+    missingSummary,
+    ...(packet ? buildEvidenceGapLabels(packet, language) : []),
+    ...safeConsumerList(data.researchNotes.needsMoreEvidence ?? [], language),
+    historyState.tone === 'success' ? null : historyState.label,
+    technicalFailed ? (isEnglish ? 'Technical indicators are unavailable; no values are inferred.' : '技术指标暂不可用，不推断数值。') : null,
+    technicalIndicators && !['available', 'ready'].includes(normalizeStockConsumerToken(technicalIndicators.status)) ? technicalStatus : null,
+    optionsFailed ? (isEnglish ? 'Options structure is unavailable; no metrics are inferred.' : '期权结构暂不可用，不推断指标。') : null,
+    ...optionsReasons,
+  ];
+  return compactUnique(items
+    .map((item) => safeOptionalConsumerText(item, language))
+    .filter(Boolean) as string[]).slice(0, 6);
+}
+
+function StockMissingDataNextStepsPanel({
+  data,
+  packet,
+  missingSummary,
+  optionsStructure,
+  optionsFailed,
+  technicalIndicators,
+  technicalFailed,
+  history,
+  historyFailed,
+  language,
+}: {
+  data: StockStructureDecisionResponse;
+  packet: SymbolResearchPacket | null;
+  missingSummary: string | null;
+  optionsStructure: OptionsStructureSummary | null;
+  optionsFailed: boolean;
+  technicalIndicators: StockTechnicalIndicatorsResponse | null;
+  technicalFailed: boolean;
+  history: StockHistoryResponse | null;
+  historyFailed: boolean;
+  language: 'zh' | 'en';
+}) {
+  const isEnglish = language === 'en';
+  const items = buildMissingDataNextStepItems({
+    data,
+    packet,
+    missingSummary,
+    optionsStructure,
+    optionsFailed,
+    technicalIndicators,
+    technicalFailed,
+    history,
+    historyFailed,
+    language,
+  });
+
+  return (
+    <div className="p-3 md:p-4" data-testid="stock-missing-data-next-steps-panel">
+      <RoughSectionCard
+        eyebrow={isEnglish ? 'Missing data' : '缺失资料'}
+        title={isEnglish ? 'Next data to complete' : '下一步补齐资料'}
+      >
+        <RoughBulletList
+          items={items}
+          emptyText={isEnglish
+            ? 'No additional missing-data item is listed for the current packet.'
+            : '当前研究包暂未列出额外缺失资料。'}
+        />
+      </RoughSectionCard>
     </div>
   );
 }
@@ -2751,163 +2921,229 @@ export default function StockStructureDecisionPage() {
                 localize={localize}
               />
             ) : null}
-            {quoteBoundaryView ? (
-              <div className="p-3 md:p-4">
-                <RoughSectionCard
-                  data-testid="stock-quote-boundary-panel"
-                  eyebrow={locale === 'en' ? 'Quote boundary' : '报价边界'}
-                  title={quoteBoundaryView.title}
-                >
-                  <div className="flex flex-wrap gap-2">
-                    {quoteBoundaryView.chips.map((chip) => (
-                      <StatusBadge key={chip.label} status={chip.variant} label={chip.label} size="sm" />
-                    ))}
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-                    {quoteBoundaryView.detail}
-                  </p>
-                </RoughSectionCard>
-              </div>
-            ) : null}
-            {!isCompareRequest && !symbolNotFound ? (
-              <OptionsStructureSurface
-                structure={optionsStructure}
-                failed={optionsStructureFailed}
-                loading={loading && !optionsStructure && !optionsStructureFailed}
-                language={locale}
-              />
-            ) : null}
-            {!isCompareRequest && !symbolNotFound ? (
-              <StockTechnicalIndicatorsPanel
-                indicators={technicalIndicators}
-                failed={technicalIndicatorsFailed}
-                loading={loading && !technicalIndicators && !technicalIndicatorsFailed}
-                language={locale}
-              />
-            ) : null}
-            {singleStockEvidencePackEntry ? (
-              <div className="p-3 md:p-4">
-                <SingleStockEvidencePackControls
-                  entry={singleStockEvidencePackEntry}
-                  language={locale}
-                />
-              </div>
-            ) : null}
             {data ? (
               <>
-                <StockResearchPacketPanel
-                  packet={researchPacket}
-                  failed={researchPacketFailed}
-                  language={locale}
-                />
-                <StockHistoryReadinessPanel
-                  history={history}
-                  failed={historyFailed}
-                  data={data}
-                  language={locale}
-                />
-                {hasResearchPacket ? (
-                  <>
-                    <ConsoleStatusStrip
-                      items={[
-                        {
-                          label: locale === 'en' ? 'Ticker' : '标的',
-                          value: data.ticker,
-                        },
-                        {
-                          label: locale === 'en' ? 'Data status' : '数据状态',
-                          value: <StatusBadge status={toneFor(data.dataQuality.status)} label={statusLabel(data.dataQuality.status, locale)} size="sm" />,
-                        },
-                        {
-                          label: locale === 'en' ? 'Period' : '周期',
-                          value: periodLabel(data.dataQuality.period, locale) || (locale === 'en' ? 'not listed' : '未列明'),
-                        },
-                      ]}
-                    />
-                    <MetricStrip
-                      items={[
-                        {
-                          key: 'state',
-                          label: locale === 'en' ? 'Structure state' : '结构状态',
-                          value: stockStructureStateLabel(data.structureState, locale) || (locale === 'en' ? 'Under review' : '待确认'),
-                        },
-                        {
-                          key: 'confidence',
-                          label: locale === 'en' ? 'Confidence' : '置信度',
-                          value: confidenceLabel(data.confidence, locale),
-                        },
-                        {
-                          key: 'bars',
-                          label: locale === 'en' ? 'Usable bars' : '可用 K 线',
-                          value: data.dataQuality.usableBars ?? (locale === 'en' ? 'not listed' : '未列明'),
-                        },
-                      ]}
-                    />
-                    <StockMinimumResearchPacket
-                      data={data}
-                      facts={packetFacts}
-                      language={locale}
-                      missingSummary={missingDataSummary}
-                    />
-                    {isCompareRequest || comparePacket ? (
-                      <SymbolCompareEvidencePacketPanel
-                        packet={comparePacket}
-                        language={locale}
-                        requestedSymbols={requestedSymbols}
-                      />
-                    ) : null}
-                    <div className="grid gap-3 p-3 md:grid-cols-2">
-                      {scoreRows.length ? (
-                        <RoughSectionCard eyebrow={locale === 'en' ? 'Scores' : '评分'} title={locale === 'en' ? 'Component scores' : '组件评分'}>
-                          <RoughScoreRows
-                            items={scoreRows}
-                            emptyText={locale === 'en' ? 'No component score yet.' : '暂无组件评分。'}
-                          />
-                        </RoughSectionCard>
-                      ) : null}
-                      {explainRows.length ? (
-                        <RoughSectionCard eyebrow={locale === 'en' ? 'Structure logic' : '结构逻辑'} title={locale === 'en' ? 'Why this structure' : '结构解释'}>
-                          <RoughKeyValueRows rows={explainRows} />
-                        </RoughSectionCard>
-                      ) : null}
-                      {researchRows.length ? (
-                        <RoughSectionCard eyebrow={locale === 'en' ? 'Research notes' : '研究备注'} title={locale === 'en' ? 'What remains uncertain' : '仍需确认'}>
-                          <RoughKeyValueRows rows={researchRows} />
-                        </RoughSectionCard>
-                      ) : null}
-                      {hasPeerCorrelationContent(data.peerCorrelationSnapshot) ? (
-                        <>
-                          <PeerCorrelationSnapshotBlock
-                            snapshot={data.peerCorrelationSnapshot}
-                            locale={locale}
-                            testId="stock-structure-peer-correlation-snapshot"
-                            className="md:col-span-2"
-                          />
-                          {compareWithPeerPath && comparablePeerSymbol ? (
-                            <div className="md:col-span-2">
-                              <CompareWithPeerLink
-                                language={locale}
-                                to={compareWithPeerPath}
-                                peerSymbol={comparablePeerSymbol}
-                              />
-                            </div>
-                          ) : null}
-                        </>
-                      ) : null}
-                      {keyLevelRows.length ? (
-                        <RoughSectionCard eyebrow={locale === 'en' ? 'Reference levels' : '参考位置'} title={locale === 'en' ? 'Key levels' : '关键位置'}>
-                          <RoughKeyValueRows rows={keyLevelRows} />
-                        </RoughSectionCard>
-                      ) : null}
+                <StockResearchCockpitStage
+                  order={1}
+                  eyebrow={locale === 'en' ? 'Quote / identity' : '报价 / 标识'}
+                  title={locale === 'en' ? 'Safe baseline' : '安全基线'}
+                  testId="stock-cockpit-stage-quote"
+                >
+                  {quoteBoundaryView ? (
+                    <div className="p-3 md:p-4">
+                      <RoughSectionCard
+                        data-testid="stock-quote-boundary-panel"
+                        eyebrow={locale === 'en' ? 'Quote boundary' : '报价边界'}
+                        title={quoteBoundaryView.title}
+                      >
+                        <div className="flex flex-wrap gap-2">
+                          {quoteBoundaryView.chips.map((chip) => (
+                            <StatusBadge key={chip.label} status={chip.variant} label={chip.label} size="sm" />
+                          ))}
+                        </div>
+                        <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+                          {quoteBoundaryView.detail}
+                        </p>
+                      </RoughSectionCard>
                     </div>
-                  </>
-                ) : (
-                  <StockStructureCannotResearchState
-                    data={data}
+                  ) : null}
+                  {hasResearchPacket ? (
+                    <>
+                      <ConsoleStatusStrip
+                        items={[
+                          {
+                            label: locale === 'en' ? 'Ticker' : '标的',
+                            value: data.ticker,
+                          },
+                          {
+                            label: locale === 'en' ? 'Data status' : '数据状态',
+                            value: <StatusBadge status={toneFor(data.dataQuality.status)} label={statusLabel(data.dataQuality.status, locale)} size="sm" />,
+                          },
+                          {
+                            label: locale === 'en' ? 'Period' : '周期',
+                            value: periodLabel(data.dataQuality.period, locale) || (locale === 'en' ? 'not listed' : '未列明'),
+                          },
+                        ]}
+                      />
+                      <MetricStrip
+                        items={[
+                          {
+                            key: 'state',
+                            label: locale === 'en' ? 'Structure state' : '结构状态',
+                            value: stockStructureStateLabel(data.structureState, locale) || (locale === 'en' ? 'Under review' : '待确认'),
+                          },
+                          {
+                            key: 'confidence',
+                            label: locale === 'en' ? 'Confidence' : '置信度',
+                            value: confidenceLabel(data.confidence, locale),
+                          },
+                          {
+                            key: 'bars',
+                            label: locale === 'en' ? 'Usable bars' : '可用 K 线',
+                            value: data.dataQuality.usableBars ?? (locale === 'en' ? 'not listed' : '未列明'),
+                          },
+                        ]}
+                      />
+                    </>
+                  ) : null}
+                  <StockMinimumResearchPacket
+                    facts={packetFacts}
                     language={locale}
-                    localize={localize}
                   />
-                )}
+                  {singleStockEvidencePackEntry ? (
+                    <div className="p-3 md:p-4">
+                      <SingleStockEvidencePackControls
+                        entry={singleStockEvidencePackEntry}
+                        language={locale}
+                      />
+                    </div>
+                  ) : null}
+                </StockResearchCockpitStage>
+
+                {!isCompareRequest && !symbolNotFound ? (
+                  <StockResearchCockpitStage
+                    order={2}
+                    eyebrow={locale === 'en' ? 'OHLCV / technicals' : 'OHLCV / 技术'}
+                    title={locale === 'en' ? 'History and indicator readiness' : '历史与指标就绪度'}
+                    testId="stock-cockpit-stage-history-technical"
+                  >
+                    <StockHistoryReadinessPanel
+                      history={history}
+                      failed={historyFailed}
+                      data={data}
+                      language={locale}
+                    />
+                    <StockTechnicalIndicatorsPanel
+                      indicators={technicalIndicators}
+                      failed={technicalIndicatorsFailed}
+                      loading={loading && !technicalIndicators && !technicalIndicatorsFailed}
+                      language={locale}
+                    />
+                  </StockResearchCockpitStage>
+                ) : null}
+
+                <StockResearchCockpitStage
+                  order={3}
+                  eyebrow={locale === 'en' ? 'Earnings / catalysts' : '财报 / 催化'}
+                  title={locale === 'en' ? 'Readiness before conclusions' : '先看就绪度'}
+                  testId="stock-cockpit-stage-earnings"
+                >
+                  <StockEarningsCatalystReadinessPanel
+                    packet={researchPacket}
+                    failed={researchPacketFailed}
+                    language={locale}
+                  />
+                </StockResearchCockpitStage>
+
+                {!isCompareRequest && !symbolNotFound ? (
+                  <StockResearchCockpitStage
+                    order={4}
+                    eyebrow={locale === 'en' ? 'Options structure' : '期权结构'}
+                    title={locale === 'en' ? 'Options readiness' : '期权就绪度'}
+                    testId="stock-cockpit-stage-options"
+                  >
+                    <OptionsStructureSurface
+                      structure={optionsStructure}
+                      failed={optionsStructureFailed}
+                      loading={loading && !optionsStructure && !optionsStructureFailed}
+                      language={locale}
+                    />
+                  </StockResearchCockpitStage>
+                ) : null}
+
+                <StockResearchCockpitStage
+                  order={5}
+                  eyebrow={locale === 'en' ? 'Peers / fundamentals / evidence' : '同业 / 基本面 / 证据'}
+                  title={locale === 'en' ? 'Research evidence readiness' : '研究证据就绪度'}
+                  testId="stock-cockpit-stage-evidence"
+                >
+                  <StockResearchPacketPanel
+                    packet={researchPacket}
+                    failed={researchPacketFailed}
+                    language={locale}
+                  />
+                  {hasResearchPacket ? (
+                    <>
+                      {isCompareRequest || comparePacket ? (
+                        <SymbolCompareEvidencePacketPanel
+                          packet={comparePacket}
+                          language={locale}
+                          requestedSymbols={requestedSymbols}
+                        />
+                      ) : null}
+                      <div className="grid gap-3 p-3 md:grid-cols-2">
+                        {scoreRows.length ? (
+                          <RoughSectionCard eyebrow={locale === 'en' ? 'Scores' : '评分'} title={locale === 'en' ? 'Component scores' : '组件评分'}>
+                            <RoughScoreRows
+                              items={scoreRows}
+                              emptyText={locale === 'en' ? 'No component score yet.' : '暂无组件评分。'}
+                            />
+                          </RoughSectionCard>
+                        ) : null}
+                        {explainRows.length ? (
+                          <RoughSectionCard eyebrow={locale === 'en' ? 'Structure logic' : '结构逻辑'} title={locale === 'en' ? 'Why this structure' : '结构解释'}>
+                            <RoughKeyValueRows rows={explainRows} />
+                          </RoughSectionCard>
+                        ) : null}
+                        {researchRows.length ? (
+                          <RoughSectionCard eyebrow={locale === 'en' ? 'Research notes' : '研究备注'} title={locale === 'en' ? 'What remains uncertain' : '仍需确认'}>
+                            <RoughKeyValueRows rows={researchRows} />
+                          </RoughSectionCard>
+                        ) : null}
+                        {hasPeerCorrelationContent(data.peerCorrelationSnapshot) ? (
+                          <>
+                            <PeerCorrelationSnapshotBlock
+                              snapshot={data.peerCorrelationSnapshot}
+                              locale={locale}
+                              testId="stock-structure-peer-correlation-snapshot"
+                              className="md:col-span-2"
+                            />
+                            {compareWithPeerPath && comparablePeerSymbol ? (
+                              <div className="md:col-span-2">
+                                <CompareWithPeerLink
+                                  language={locale}
+                                  to={compareWithPeerPath}
+                                  peerSymbol={comparablePeerSymbol}
+                                />
+                              </div>
+                            ) : null}
+                          </>
+                        ) : null}
+                        {keyLevelRows.length ? (
+                          <RoughSectionCard eyebrow={locale === 'en' ? 'Reference levels' : '参考位置'} title={locale === 'en' ? 'Key levels' : '关键位置'}>
+                            <RoughKeyValueRows rows={keyLevelRows} />
+                          </RoughSectionCard>
+                        ) : null}
+                      </div>
+                    </>
+                  ) : (
+                    <StockStructureCannotResearchState
+                      data={data}
+                      language={locale}
+                      localize={localize}
+                    />
+                  )}
+                </StockResearchCockpitStage>
+
+                <StockResearchCockpitStage
+                  order={6}
+                  eyebrow={locale === 'en' ? 'Missing data' : '缺失资料'}
+                  title={locale === 'en' ? 'What is missing next' : '下一步缺什么'}
+                  testId="stock-cockpit-stage-next-steps"
+                >
+                  <StockMissingDataNextStepsPanel
+                    data={data}
+                    packet={researchPacket}
+                    missingSummary={missingDataSummary}
+                    optionsStructure={optionsStructure}
+                    optionsFailed={optionsStructureFailed}
+                    technicalIndicators={technicalIndicators}
+                    technicalFailed={technicalIndicatorsFailed}
+                    history={history}
+                    historyFailed={historyFailed}
+                    language={locale}
+                  />
+                </StockResearchCockpitStage>
               </>
             ) : null}
           </ConsoleBoard>

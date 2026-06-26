@@ -60,6 +60,23 @@ const renderRoutePattern = (ui: React.ReactElement, path: string, pattern: strin
   </MemoryRouter>,
 );
 
+const cockpitStageIds = [
+  'stock-cockpit-stage-quote',
+  'stock-cockpit-stage-history-technical',
+  'stock-cockpit-stage-earnings',
+  'stock-cockpit-stage-options',
+  'stock-cockpit-stage-evidence',
+  'stock-cockpit-stage-next-steps',
+] as const;
+
+function expectCockpitStageOrder(page: HTMLElement) {
+  const stages = cockpitStageIds.map((id) => within(page).getByTestId(id));
+  expect(stages.map((stage) => stage.getAttribute('data-cockpit-order'))).toEqual(['1', '2', '3', '4', '5', '6']);
+  for (let index = 0; index < stages.length - 1; index += 1) {
+    expect(stages[index].compareDocumentPosition(stages[index + 1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  }
+}
+
 const baseStructureDecision = () => ({
   schemaVersion: 'stock_structure_decision_api_v1',
   ticker: 'AAPL',
@@ -491,13 +508,26 @@ describe('StockStructureDecisionPage', () => {
     );
 
     const page = await screen.findByTestId('stock-structure-decision-page');
+    expectCockpitStageOrder(page);
+    for (const stageId of cockpitStageIds) {
+      expect(within(page).getByTestId(stageId).className).toContain('min-w-0');
+    }
     const panel = await within(page).findByTestId('stock-research-packet-panel');
     const quotePanel = await within(page).findByTestId('stock-quote-boundary-panel');
     const historyPanel = await within(page).findByTestId('stock-history-readiness-panel');
+    const catalystPanel = await within(page).findByTestId('stock-earnings-catalyst-readiness-panel');
+    const optionsStage = await within(page).findByTestId('stock-cockpit-stage-options');
+    const nextStepsPanel = await within(page).findByTestId('stock-missing-data-next-steps-panel');
 
     expect(getQuoteMock).toHaveBeenCalledWith('AAPL');
     expect(getHistoryMock).toHaveBeenCalledWith('AAPL', { period: 'daily', days: 180 });
     expect(getResearchPacketMock).toHaveBeenCalledWith('AAPL');
+    expect(within(page).getByTestId('stock-cockpit-stage-quote')).toHaveTextContent('安全基线');
+    expect(within(page).getByTestId('stock-cockpit-stage-history-technical')).toHaveTextContent('历史与指标就绪度');
+    expect(within(page).getByTestId('stock-cockpit-stage-earnings')).toHaveTextContent('先看就绪度');
+    expect(optionsStage).toHaveTextContent('期权就绪度');
+    expect(within(page).getByTestId('stock-cockpit-stage-evidence')).toHaveTextContent('研究证据就绪度');
+    expect(within(page).getByTestId('stock-cockpit-stage-next-steps')).toHaveTextContent('下一步缺什么');
     expect(quotePanel).toHaveTextContent('报价来源与新鲜度');
     expect(quotePanel).toHaveTextContent('报价可用');
     expect(quotePanel).toHaveTextContent('来源已确认');
@@ -511,14 +541,14 @@ describe('StockStructureDecisionPage', () => {
     expect(panel).toHaveTextContent('证据部分可用');
     expect(panel).toHaveTextContent('仅观察');
     expect(panel).toHaveTextContent('评分待确认');
-    expect(panel).toHaveTextContent('可用 3');
+    expect(panel).toHaveTextContent('可用 1');
     expect(panel).toHaveTextContent('待补 3');
     expect(panel).toHaveTextContent('部分 2');
-    expect(panel).toHaveTextContent('报价可用');
-    expect(panel).toHaveTextContent('历史可用');
+    expect(panel).not.toHaveTextContent('报价可用');
+    expect(panel).not.toHaveTextContent('历史可用');
     expect(panel).toHaveTextContent('标的上下文可用');
     expect(panel).toHaveTextContent('基本面待补');
-    expect(panel).toHaveTextContent('新闻线索待补');
+    expect(panel).toHaveTextContent('财报 / 催化证据待补');
     expect(panel).toHaveTextContent('风险来源待补');
     expect(panel).toHaveTextContent('市场线索待补');
     expect(panel).toHaveTextContent('研究包可用');
@@ -526,6 +556,12 @@ describe('StockStructureDecisionPage', () => {
     expect(panel).toHaveTextContent('基本面待补');
     expect(panel).toHaveTextContent('新闻线索待补');
     expect(panel).toHaveTextContent('市场线索待补');
+    expect(catalystPanel).toHaveTextContent('财报 / 催化证据待补');
+    expect(catalystPanel).toHaveTextContent('仍需补齐公告、财报或催化证据。');
+    expect(nextStepsPanel).toHaveTextContent('下一步补齐资料');
+    expect(nextStepsPanel).toHaveTextContent('基本面待补');
+    expect(nextStepsPanel).toHaveTextContent('新闻线索待补');
+    expect(nextStepsPanel).toHaveTextContent('结构来源待配置');
     expect(historyPanel).toHaveTextContent('AAPL 历史数据就绪度');
     expect(historyPanel).toHaveTextContent('历史数据可用');
     expect(historyPanel).toHaveTextContent('结构样本不足');
@@ -1236,12 +1272,13 @@ describe('StockStructureDecisionPage', () => {
     const panel = await within(page).findByTestId('stock-research-packet-panel');
 
     expect(panel).toHaveTextContent('证据完整');
-    expect(panel).toHaveTextContent('报价可用');
     expect(panel).toHaveTextContent('基本面可用');
-    expect(panel).toHaveTextContent('新闻线索可用');
+    expect(panel).toHaveTextContent('催化线索可用');
     expect(panel).toHaveTextContent('风险来源可用');
     expect(panel).toHaveTextContent('市场线索可用');
     expect(panel).toHaveTextContent('研究包可用');
+    expect(panel).not.toHaveTextContent('报价可用');
+    expect(panel).not.toHaveTextContent('历史可用');
     expect(panel).not.toHaveTextContent('下一证据缺口');
     expect(findConsumerRawLeakage(page.textContent || '', {
       extraForbiddenPatterns: [
@@ -1288,13 +1325,10 @@ describe('StockStructureDecisionPage', () => {
     const panel = await within(page).findByTestId('stock-research-packet-panel');
 
     expect(panel).toHaveTextContent('证据部分可用');
-    expect(panel).toHaveTextContent('报价可能延迟');
-    expect(panel).toHaveTextContent('历史待补');
     expect(panel).toHaveTextContent('基本面待补');
-    expect(panel).toHaveTextContent('新闻线索待补');
+    expect(panel).toHaveTextContent('财报 / 催化证据待补');
     expect(panel).toHaveTextContent('风险来源待补');
     expect(panel).toHaveTextContent('市场线索待补');
-    expect(panel).toHaveTextContent('延迟 1');
     expect(panel).toHaveTextContent('下一证据缺口');
     expect(panel).toHaveTextContent('报价待补');
     expect(panel).toHaveTextContent('历史待补');
