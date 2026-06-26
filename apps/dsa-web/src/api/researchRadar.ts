@@ -29,6 +29,29 @@ export type ResearchRadarEmptyStateAction = {
   description?: string | null;
 };
 
+export type ResearchRadarEvidenceHubItem = {
+  key?: string | null;
+  label?: string | null;
+  status?: string | null;
+  summary?: string | null;
+  blocker?: string | null;
+  nextDataAction?: string | null;
+  evidenceCount?: number;
+  totalCount?: number;
+  symbols?: string[];
+  details?: string[];
+  observationOnly?: boolean;
+  decisionGrade?: boolean;
+};
+
+export type ResearchRadarEvidenceHub = {
+  scannerCandidates: ResearchRadarEvidenceHubItem;
+  backtestSamples: ResearchRadarEvidenceHubItem;
+  stockReadiness: ResearchRadarEvidenceHubItem;
+  dataActivation: ResearchRadarEvidenceHubItem;
+  missingEvidenceStates: ResearchRadarEvidenceHubItem[];
+};
+
 export type ResearchRadarSuggestedResearchEntrypoint = {
   surface?: string | null;
   route?: string | null;
@@ -55,6 +78,7 @@ export type ResearchRadarResponse = {
     status?: string | null;
     missingEvidence?: string[];
   } | null;
+  evidenceHub: ResearchRadarEvidenceHub;
   onboardingGuidance?: ResearchRadarOnboardingGuidance | null;
   emptyStateActions: ResearchRadarEmptyStateAction[];
   starterResearchWorkflow: string[];
@@ -135,6 +159,53 @@ function normalizeNumberRecord(payload: unknown): Record<string, number> {
   );
 }
 
+function normalizeEvidenceHubItem(payload: Partial<ResearchRadarEvidenceHubItem> | null | undefined, fallback: {
+  key: string;
+  label: string;
+}): ResearchRadarEvidenceHubItem {
+  return {
+    key: payload?.key ?? fallback.key,
+    label: payload?.label ?? fallback.label,
+    status: payload?.status ?? 'blocked',
+    summary: payload?.summary ?? null,
+    blocker: payload?.blocker ?? null,
+    nextDataAction: payload?.nextDataAction ?? null,
+    evidenceCount: Number(payload?.evidenceCount ?? 0) || 0,
+    totalCount: Number(payload?.totalCount ?? 0) || 0,
+    symbols: normalizeStringList(payload?.symbols),
+    details: normalizeStringList(payload?.details),
+    observationOnly: payload?.observationOnly !== false,
+    decisionGrade: false,
+  };
+}
+
+function normalizeEvidenceHub(payload: Partial<ResearchRadarEvidenceHub> | null | undefined): ResearchRadarEvidenceHub {
+  return {
+    scannerCandidates: normalizeEvidenceHubItem(payload?.scannerCandidates, {
+      key: 'scanner',
+      label: 'Scanner candidates',
+    }),
+    backtestSamples: normalizeEvidenceHubItem(payload?.backtestSamples, {
+      key: 'backtest',
+      label: 'Backtest samples',
+    }),
+    stockReadiness: normalizeEvidenceHubItem(payload?.stockReadiness, {
+      key: 'stock',
+      label: 'Stock readiness',
+    }),
+    dataActivation: normalizeEvidenceHubItem(payload?.dataActivation, {
+      key: 'data',
+      label: 'Data activation',
+    }),
+    missingEvidenceStates: Array.isArray(payload?.missingEvidenceStates)
+      ? payload.missingEvidenceStates.map((item, index) => normalizeEvidenceHubItem(item, {
+        key: `missing-${index}`,
+        label: 'Missing evidence',
+      }))
+      : [],
+  };
+}
+
 function normalizeResearchRadarResponse(payload: unknown): ResearchRadarResponse {
   const normalized = toCamelCase<ResearchRadarResponse>(payload);
   return {
@@ -150,6 +221,7 @@ function normalizeResearchRadarResponse(payload: unknown): ResearchRadarResponse
     marketContextFit: normalized.marketContextFit ?? null,
     noAdviceDisclosure: normalized.noAdviceDisclosure ?? null,
     dataQuality: normalized.dataQuality ?? null,
+    evidenceHub: normalizeEvidenceHub(normalized.evidenceHub),
     onboardingGuidance: normalized.onboardingGuidance ? {
       title: normalized.onboardingGuidance.title ?? null,
       summary: normalized.onboardingGuidance.summary ?? null,

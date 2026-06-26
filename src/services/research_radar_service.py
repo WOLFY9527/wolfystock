@@ -260,9 +260,11 @@ class ResearchRadarService:
         self,
         *,
         scanner_repository: object | None = None,
+        backtest_sample_reader: Callable[[str], Mapping[str, Any] | None] | None = None,
         now: Callable[[], datetime] | None = None,
     ) -> None:
         self.scanner_repository = scanner_repository
+        self.backtest_sample_reader = backtest_sample_reader
         self._now = now or (lambda: datetime.now(timezone.utc))
 
     def build_from_latest_scanner_run(
@@ -374,6 +376,11 @@ class ResearchRadarService:
             candidate_count=len(candidate_payloads),
         )
         data_quality = self._data_quality(queue=queue, evidence_gaps_raw=evidence_gaps_raw)
+        evidence_hub = self._evidence_hub(
+            queue=queue,
+            candidate_payloads=candidate_payloads,
+            data_quality=data_quality,
+        )
         consumer_issues = _dedupe_descriptors(
             [
                 *list(data_quality.get("consumerIssues") or []),
@@ -412,6 +419,7 @@ class ResearchRadarService:
             "suggestedResearchEntrypoints": onboarding_contract["suggestedResearchEntrypoints"],
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
             "dataQuality": data_quality,
+            "evidenceHub": evidence_hub,
             "observationOnly": _OBSERVATION_ONLY,
             "decisionGrade": _DECISION_GRADE,
         }
@@ -534,6 +542,96 @@ class ResearchRadarService:
             "consumerIssues": _evidence_gap_descriptors(evidence_gaps_raw),
         }
 
+    def _evidence_hub(
+        self,
+        *,
+        queue: Sequence[Mapping[str, Any]],
+        candidate_payloads: Sequence[Mapping[str, Any]],
+        data_quality: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        scanner = _scanner_evidence_item(queue=queue, candidate_count=len(candidate_payloads))
+        backtest = self._backtest_sample_evidence_item(queue=queue)
+        stock = _stock_readiness_evidence_item(candidate_payloads=candidate_payloads, queue=queue)
+        data_activation = _data_activation_evidence_item(
+            scanner=scanner,
+            backtest=backtest,
+            stock=stock,
+            data_quality=data_quality,
+        )
+        missing_states = [
+            item
+            for item in (scanner, backtest, stock, data_activation)
+            if item["status"] != "available"
+        ]
+        return {
+            "scannerCandidates": scanner,
+            "backtestSamples": backtest,
+            "stockReadiness": stock,
+            "dataActivation": data_activation,
+            "missingEvidenceStates": missing_states,
+        }
+
+    def _backtest_sample_evidence_item(
+        self,
+        *,
+        queue: Sequence[Mapping[str, Any]],
+    ) -> dict[str, Any]:
+        symbols = _dedupe(_symbol_from(item) for item in queue)[:5]
+        if not symbols:
+            return _evidence_item(
+                key="backtest",
+                label="Backtest samples",
+                status="blocked",
+                summary="Backtest sample evidence cannot be checked until a radar symbol exists.",
+                blocker="No radar symbol is available for backtest sample lookup.",
+                next_data_action="Run scanner to create radar symbols, then prepare backtest samples.",
+            )
+        if self.backtest_sample_reader is None:
+            return _evidence_item(
+                key="backtest",
+                label="Backtest samples",
+                status="blocked",
+                summary="Backtest sample evidence is not connected for this radar view.",
+                blocker="Backtest sample status is unavailable for this radar view.",
+                next_data_action="Open Backtest and prepare samples for the radar symbols.",
+                total_count=len(symbols),
+                symbols=symbols,
+            )
+
+        rows: list[dict[str, Any]] = []
+        for symbol in symbols:
+            try:
+                payload = _mapping(self.backtest_sample_reader(symbol) or {})
+            except Exception:
+                payload = {"_readFailed": True}
+            rows.append(_backtest_symbol_sample_state(symbol, payload))
+
+        available_count = sum(1 for row in rows if row["status"] == "available")
+        partial_count = sum(1 for row in rows if row["status"] == "partial")
+        status = "available" if available_count == len(rows) else "partial" if available_count or partial_count else "blocked"
+        first_blocker = next((row["blocker"] for row in rows if row.get("blocker")), None)
+        if status == "available":
+            summary = "Prepared backtest samples are available for radar symbols."
+            blocker = None
+        elif status == "partial":
+            summary = "Backtest sample evidence is partial across radar symbols."
+            blocker = first_blocker or "Some radar symbols still need prepared backtest samples."
+        else:
+            summary = "Backtest samples are unavailable for radar symbols."
+            blocker = first_blocker or "Backtest samples have not been prepared for the radar symbols."
+        return _evidence_item(
+            key="backtest",
+            label="Backtest samples",
+            status=status,
+            summary=summary,
+            blocker=blocker,
+            next_data_action="Open Backtest and prepare or refresh samples for the radar symbols.",
+            evidence_count=available_count,
+            total_count=len(rows),
+            symbols=symbols,
+            details=[row["detail"] for row in rows],
+        )
+
 
 def _research_bias_descriptor(value: Any) -> dict[str, str]:
     return _descriptor_for(value, _RESEARCH_BIAS_DESCRIPTORS)
@@ -545,6 +643,296 @@ def _risk_flag_descriptors(values: Sequence[str]) -> list[dict[str, str]]:
 
 def _evidence_gap_descriptors(values: Sequence[str]) -> list[dict[str, str]]:
     return _dedupe_descriptors(_descriptor_for(value, _EVIDENCE_GAP_DESCRIPTORS) for value in values)
+
+
+def _evidence_item(
+    *,
+    key: str,
+    label: str,
+    status: str,
+    summary: str,
+    blocker: str | None = None,
+    next_data_action: str,
+    evidence_count: int = 0,
+    total_count: int = 0,
+    symbols: Sequence[str] | None = None,
+    details: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "key": key,
+        "label": label,
+        "status": _evidence_hub_status(status),
+        "summary": summary,
+        "blocker": blocker,
+        "nextDataAction": next_data_action,
+        "evidenceCount": max(0, int(evidence_count or 0)),
+        "totalCount": max(0, int(total_count or 0)),
+        "symbols": _dedupe(_text(symbol).upper() for symbol in symbols or []),
+        "details": _dedupe(_text(detail) for detail in details or []),
+        "observationOnly": _OBSERVATION_ONLY,
+        "decisionGrade": _DECISION_GRADE,
+    }
+
+
+def _evidence_hub_status(value: Any) -> str:
+    normalized = _text(value).lower()
+    if normalized in {"available", "ready", "complete", "current", "executable"}:
+        return "available"
+    if normalized in {"partial", "mixed", "observe_only", "observe-only", "degraded"}:
+        return "partial"
+    return "blocked"
+
+
+def _scanner_evidence_item(
+    *,
+    queue: Sequence[Mapping[str, Any]],
+    candidate_count: int,
+) -> dict[str, Any]:
+    symbols = _dedupe(_symbol_from(item) for item in queue)[:5]
+    if not queue:
+        return _evidence_item(
+            key="scanner",
+            label="Scanner candidates",
+            status="blocked",
+            summary="Scanner candidate evidence is unavailable for this radar view.",
+            blocker="No scanner candidates were found for this user scope.",
+            next_data_action="Run scanner to create user-scoped research candidates.",
+            total_count=max(0, int(candidate_count or 0)),
+        )
+    return _evidence_item(
+        key="scanner",
+        label="Scanner candidates",
+        status="available",
+        summary="Scanner candidate evidence is available for radar review.",
+        next_data_action="Refresh scanner when candidate evidence needs a newer observation window.",
+        evidence_count=len(queue),
+        total_count=max(len(queue), int(candidate_count or 0)),
+        symbols=symbols,
+        details=[f"{symbol} is available for radar review." for symbol in symbols],
+    )
+
+
+def _backtest_symbol_sample_state(symbol: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+    if payload.get("_readFailed"):
+        return {
+            "status": "blocked",
+            "blocker": "Backtest sample status could not be read safely.",
+            "detail": f"{symbol} sample status is unavailable.",
+        }
+
+    prepared_count = _safe_int(payload.get("prepared_count") or payload.get("preparedCount")) or 0
+    sample_state = _text(payload.get("sample_readiness_state") or payload.get("sampleReadinessState")).lower()
+    execution_state = _text(_mapping(payload.get("execution_readiness") or payload.get("executionReadiness")).get("state")).lower()
+    if prepared_count > 0 and (
+        sample_state in {"ready", "available"}
+        or execution_state in {"executable", "degraded", "available"}
+    ):
+        return {
+            "status": "available",
+            "blocker": None,
+            "detail": f"{symbol} has {prepared_count} prepared backtest samples.",
+        }
+    if prepared_count > 0:
+        return {
+            "status": "partial",
+            "blocker": _backtest_blocker(sample_state, execution_state),
+            "detail": f"{symbol} has {prepared_count} prepared samples with readiness limits.",
+        }
+    return {
+        "status": "blocked",
+        "blocker": _backtest_blocker(sample_state, execution_state),
+        "detail": f"{symbol} has no prepared backtest samples.",
+    }
+
+
+def _backtest_blocker(sample_state: str, execution_state: str) -> str:
+    states = {sample_state, execution_state}
+    if "engine_disabled" in states:
+        return "Backtest execution readiness is disabled for this radar view."
+    if {"insufficient_history", "data_insufficient"} & states:
+        return "Backtest sample history is too short for the evaluation window."
+    if {"missing_cache", "missing", "no_samples", "data_disabled"} & states:
+        return "Backtest samples have not been prepared for the radar symbols."
+    return "Backtest sample readiness is blocked."
+
+
+def _stock_readiness_evidence_item(
+    *,
+    candidate_payloads: Sequence[Mapping[str, Any]],
+    queue: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    queue_symbols = {_symbol_from(item) for item in queue}
+    rows = [
+        _stock_readiness_from_candidate(candidate)
+        for candidate in candidate_payloads
+        if not queue_symbols or _symbol_from(candidate) in queue_symbols
+    ]
+    rows = [row for row in rows if row["symbol"]]
+    if not rows:
+        return _evidence_item(
+            key="stock",
+            label="Stock readiness",
+            status="blocked",
+            summary="Stock technical readiness is unavailable for current radar symbols.",
+            blocker="Technical readiness is unavailable for current radar symbols.",
+            next_data_action="Refresh daily price history and technical evidence for radar symbols.",
+        )
+
+    available_count = sum(1 for row in rows if row["status"] == "available")
+    partial_count = sum(1 for row in rows if row["status"] == "partial")
+    status = "available" if available_count == len(rows) else "partial" if available_count or partial_count else "blocked"
+    first_blocker = next((row["blocker"] for row in rows if row.get("blocker")), None)
+    if status == "available":
+        summary = "Stock technical readiness is available for radar symbols."
+        blocker = None
+    elif status == "partial":
+        summary = "Stock technical readiness is partial for radar symbols."
+        blocker = first_blocker or "Some radar symbols still need technical evidence."
+    else:
+        summary = "Stock technical readiness is blocked for radar symbols."
+        blocker = first_blocker or "Technical readiness is unavailable for current radar symbols."
+    return _evidence_item(
+        key="stock",
+        label="Stock readiness",
+        status=status,
+        summary=summary,
+        blocker=blocker,
+        next_data_action="Refresh daily price history and technical evidence for radar symbols.",
+        evidence_count=available_count,
+        total_count=len(rows),
+        symbols=[row["symbol"] for row in rows],
+        details=[row["detail"] for row in rows],
+    )
+
+
+def _stock_readiness_from_candidate(candidate: Mapping[str, Any]) -> dict[str, Any]:
+    symbol = _symbol_from(candidate)
+    explicit = _mapping(candidate.get("stockReadiness") or candidate.get("stock_readiness"))
+    if explicit:
+        status = _evidence_hub_status(explicit.get("status") or explicit.get("readinessState"))
+        blocker = _text(explicit.get("blocker")) or None
+        detail = _text(explicit.get("detail")) or f"{symbol} technical readiness is {status}."
+        return {"symbol": symbol, "status": status, "blocker": blocker, "detail": detail}
+
+    present: list[str] = []
+    if _safe_float(candidate.get("trendScore")) is not None or _text(candidate.get("trendStructure")).lower() not in {
+        "",
+        "blocked",
+        "missing",
+        "weak",
+    }:
+        present.append("technical structure")
+    if _safe_float(candidate.get("relativeStrength")) is not None:
+        present.append("relative strength")
+    if _safe_float(candidate.get("volumeExpansion")) is not None:
+        present.append("volume participation")
+    if _safe_float(candidate.get("avgDollarVolume")) is not None:
+        present.append("liquidity")
+
+    status = "available" if len(present) >= 3 else "partial" if present else "blocked"
+    if status == "available":
+        blocker = None
+        detail = f"{symbol} has technical readiness evidence."
+    elif status == "partial":
+        blocker = "Stock technical evidence is incomplete for this radar symbol."
+        detail = f"{symbol} has partial technical readiness evidence."
+    else:
+        blocker = "Technical readiness is unavailable for current radar symbols."
+        detail = f"{symbol} has no technical readiness evidence."
+    return {"symbol": symbol, "status": status, "blocker": blocker, "detail": detail}
+
+
+def _stock_readiness_from_scanner_frame(
+    *,
+    symbol: str,
+    evidence_frame: Mapping[str, Any],
+) -> dict[str, Any]:
+    domains = _mapping(evidence_frame.get("domains"))
+    domain_labels = {
+        "technicals": "technical indicators",
+        "priceHistory": "price history",
+        "liquidity": "liquidity",
+        "volume": "volume participation",
+        "trend": "trend structure",
+    }
+    states = {
+        key: _text(_mapping(domains.get(key)).get("state")).lower()
+        for key in domain_labels
+    }
+    available_count = sum(1 for state in states.values() if state == "available")
+    partial_count = sum(1 for state in states.values() if state == "partial")
+    missing = [label for key, label in domain_labels.items() if states.get(key) not in {"available", "partial"}]
+    status = (
+        "available"
+        if states.get("technicals") == "available"
+        and states.get("priceHistory") == "available"
+        and states.get("trend") == "available"
+        and states.get("liquidity") in {"available", "partial"}
+        else "partial"
+        if available_count or partial_count
+        else "blocked"
+    )
+    if status == "available":
+        blocker = None
+        detail = f"{symbol} has technical indicators, price history, trend structure, and liquidity evidence."
+    elif status == "partial":
+        blocker = f"{missing[0].capitalize()} is missing for stock readiness." if missing else "Stock readiness is partial."
+        detail = f"{symbol} has partial stock readiness evidence."
+    else:
+        blocker = "Technical readiness is unavailable for current radar symbols."
+        detail = f"{symbol} has no stock readiness evidence."
+    return {
+        "status": status,
+        "blocker": blocker,
+        "detail": detail,
+        "evidenceCount": available_count,
+        "totalCount": len(domain_labels),
+    }
+
+
+def _data_activation_evidence_item(
+    *,
+    scanner: Mapping[str, Any],
+    backtest: Mapping[str, Any],
+    stock: Mapping[str, Any],
+    data_quality: Mapping[str, Any],
+) -> dict[str, Any]:
+    slices = [scanner, backtest, stock]
+    available_count = sum(1 for item in slices if item.get("status") == "available")
+    partial_count = sum(1 for item in slices if item.get("status") == "partial")
+    data_status = _text(data_quality.get("status")).lower()
+    status = (
+        "available"
+        if available_count == len(slices) and data_status in {"ready", "available", "complete"}
+        else "partial"
+        if available_count or partial_count or data_status in {"partial", "ready"}
+        else "blocked"
+    )
+    first_blocker = next((_text(item.get("blocker")) for item in slices if _text(item.get("blocker"))), None)
+    if status == "available":
+        summary = "Scanner, backtest sample, and stock readiness evidence are available."
+        blocker = None
+    elif status == "partial":
+        summary = "Research Radar evidence is partially activated."
+        blocker = first_blocker or "Some evidence slices still need data activation."
+    else:
+        summary = "Research Radar evidence is blocked until upstream data is activated."
+        blocker = first_blocker or "Research Radar has no usable upstream evidence."
+    return _evidence_item(
+        key="data",
+        label="Data activation",
+        status=status,
+        summary=summary,
+        blocker=blocker,
+        next_data_action="Resolve blocked evidence slices, then refresh Research Radar.",
+        evidence_count=available_count,
+        total_count=len(slices),
+        details=[
+            f"{_text(item.get('label'))} status {item.get('status')}."
+            for item in slices
+            if _text(item.get("label"))
+        ],
+    )
 
 
 def _descriptor_for(value: Any, mapping: Mapping[str, Mapping[str, str]]) -> dict[str, str]:
@@ -701,6 +1089,13 @@ def _scanner_candidate_to_engine_input(candidate: Any) -> dict[str, Any]:
             "state": _evidence_status_from_readiness(readiness, evidence_score),
             "score": evidence_score,
             "missing": missing_evidence,
+        },
+        "stockReadiness": {
+            "symbol": payload["symbol"],
+            **_stock_readiness_from_scanner_frame(
+                symbol=payload["symbol"],
+                evidence_frame=evidence_frame,
+            ),
         },
     }
 

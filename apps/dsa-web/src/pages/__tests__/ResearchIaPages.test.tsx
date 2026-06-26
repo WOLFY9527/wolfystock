@@ -626,6 +626,94 @@ describe('research IA pages', () => {
       ],
       noAdviceDisclosure: '仅供研究队列观察。',
       dataQuality: { status: 'partial' },
+      evidenceHub: {
+        scannerCandidates: {
+          key: 'scanner',
+          label: 'Scanner candidates',
+          status: 'available',
+          summary: 'Scanner candidate evidence is available for radar review.',
+          nextDataAction: 'Refresh scanner when candidate evidence needs a newer observation window.',
+          evidenceCount: 1,
+          totalCount: 1,
+          symbols: ['ALFA'],
+          details: ['ALFA is available for radar review.'],
+          observationOnly: true,
+          decisionGrade: false,
+        },
+        backtestSamples: {
+          key: 'backtest',
+          label: 'Backtest samples',
+          status: 'blocked',
+          summary: 'Backtest samples are unavailable for radar symbols.',
+          blocker: 'Backtest samples have not been prepared for the radar symbols.',
+          nextDataAction: 'Open Backtest and prepare or refresh samples for the radar symbols.',
+          evidenceCount: 0,
+          totalCount: 1,
+          symbols: ['ALFA'],
+          details: ['ALFA has no prepared backtest samples.'],
+          observationOnly: true,
+          decisionGrade: false,
+        },
+        stockReadiness: {
+          key: 'stock',
+          label: 'Stock readiness',
+          status: 'available',
+          summary: 'Stock technical readiness is available for radar symbols.',
+          nextDataAction: 'Refresh daily price history and technical evidence for radar symbols.',
+          evidenceCount: 1,
+          totalCount: 1,
+          symbols: ['ALFA'],
+          details: ['ALFA has technical readiness evidence.'],
+          observationOnly: true,
+          decisionGrade: false,
+        },
+        dataActivation: {
+          key: 'data',
+          label: 'Data activation',
+          status: 'partial',
+          summary: 'Research Radar evidence is partially activated.',
+          blocker: 'Backtest samples have not been prepared for the radar symbols.',
+          nextDataAction: 'Resolve blocked evidence slices, then refresh Research Radar.',
+          evidenceCount: 2,
+          totalCount: 3,
+          details: [
+            'Scanner candidates status available.',
+            'Backtest samples status blocked.',
+            'Stock readiness status available.',
+          ],
+          observationOnly: true,
+          decisionGrade: false,
+        },
+        missingEvidenceStates: [
+          {
+            key: 'backtest',
+            label: 'Backtest samples',
+            status: 'blocked',
+            summary: 'Backtest samples are unavailable for radar symbols.',
+            blocker: 'Backtest samples have not been prepared for the radar symbols.',
+            nextDataAction: 'Open Backtest and prepare or refresh samples for the radar symbols.',
+            evidenceCount: 0,
+            totalCount: 1,
+            symbols: ['ALFA'],
+            details: ['ALFA has no prepared backtest samples.'],
+            observationOnly: true,
+            decisionGrade: false,
+          },
+          {
+            key: 'data',
+            label: 'Data activation',
+            status: 'partial',
+            summary: 'Research Radar evidence is partially activated.',
+            blocker: 'Backtest samples have not been prepared for the radar symbols.',
+            nextDataAction: 'Resolve blocked evidence slices, then refresh Research Radar.',
+            evidenceCount: 2,
+            totalCount: 3,
+            details: ['Backtest samples status blocked.'],
+            observationOnly: true,
+            decisionGrade: false,
+          },
+        ],
+      },
     });
     getResearchQueueMock.mockResolvedValue({
       schemaVersion: 'research_queue_v1',
@@ -716,6 +804,17 @@ describe('research IA pages', () => {
     const page = await screen.findByTestId('research-radar-page');
     expect(page).toHaveTextContent('研究雷达与证据缺口队列');
     expect(page).not.toHaveTextContent('研究情景工作台');
+    const evidenceHub = await within(page).findByTestId('research-radar-evidence-hub');
+    expect(evidenceHub).toHaveTextContent('真实证据就绪状态');
+    expect(evidenceHub).toHaveTextContent('Scanner 候选');
+    expect(evidenceHub).toHaveTextContent('Backtest 样本');
+    expect(evidenceHub).toHaveTextContent('个股就绪');
+    expect(evidenceHub).toHaveTextContent('数据激活');
+    expect(evidenceHub).toHaveTextContent('Backtest samples have not been prepared for the radar symbols.');
+    expect(evidenceHub).toHaveTextContent('Open Backtest and prepare or refresh samples for the radar symbols.');
+    expect(evidenceHub).toHaveTextContent('缺失证据状态');
+    expect(evidenceHub.textContent || '').not.toMatch(/provider|request[_\s-]?id|trace[_\s-]?id|raw|debug|runtime|cache|schemaVersion|token|stack/i);
+    expect(evidenceHub.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing/i);
     const hub = await within(page).findByTestId('research-queue-hub');
     expect(hub).toHaveTextContent('跨页面研究队列');
     expect(hub).toHaveTextContent('Watchlist');

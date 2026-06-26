@@ -53,6 +53,29 @@ class ResearchRadarEvidenceQualityResponse(_ResearchRadarModel):
     missingEvidenceRaw: list[str] = Field(default_factory=list)
 
 
+class ResearchRadarEvidenceHubItemResponse(_ResearchRadarModel):
+    key: str
+    label: str
+    status: str
+    summary: str
+    blocker: str | None = None
+    nextDataAction: str
+    evidenceCount: int = 0
+    totalCount: int = 0
+    symbols: list[str] = Field(default_factory=list)
+    details: list[str] = Field(default_factory=list)
+    observationOnly: Literal[True] = True
+    decisionGrade: Literal[False] = False
+
+
+class ResearchRadarEvidenceHubResponse(_ResearchRadarModel):
+    scannerCandidates: ResearchRadarEvidenceHubItemResponse
+    backtestSamples: ResearchRadarEvidenceHubItemResponse
+    stockReadiness: ResearchRadarEvidenceHubItemResponse
+    dataActivation: ResearchRadarEvidenceHubItemResponse
+    missingEvidenceStates: list[ResearchRadarEvidenceHubItemResponse] = Field(default_factory=list)
+
+
 class ResearchRadarQueueItemResponse(_ResearchRadarModel):
     symbol: str
     ticker: str
@@ -120,6 +143,7 @@ class ResearchRadarResponse(_ResearchRadarModel):
     )
     noAdviceDisclosure: str
     dataQuality: ResearchRadarDataQualityResponse
+    evidenceHub: ResearchRadarEvidenceHubResponse
     observationOnly: Literal[True] = True
     decisionGrade: Literal[False] = False
 
@@ -130,6 +154,8 @@ __all__ = [
     "ResearchRadarConsumerIssueResponse",
     "ResearchRadarDataQualityResponse",
     "ResearchRadarDrilldownTargetResponse",
+    "ResearchRadarEvidenceHubItemResponse",
+    "ResearchRadarEvidenceHubResponse",
     "ResearchRadarEvidenceQualityResponse",
     "ResearchRadarEmptyStateActionResponse",
     "ResearchRadarOnboardingGuidanceResponse",

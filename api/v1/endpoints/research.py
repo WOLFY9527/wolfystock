@@ -15,6 +15,7 @@ from api.v1.schemas.scanner import ScannerRunDetailResponse, sanitize_scanner_co
 from src.multi_user import OWNERSHIP_SCOPE_USER
 from src.repositories.scanner_repo import ScannerRepository
 from src.services.market_scanner_service import MarketScannerService
+from src.services.backtest_service import BacktestService
 from src.services.research_queue_aggregator_service import ResearchQueueAggregatorService
 from src.services.research_radar_service import ResearchRadarService
 from src.services.watchlist_research_overlay_service import WatchlistResearchOverlayService
@@ -94,13 +95,26 @@ def get_research_radar(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> ResearchRadarResponse:
     bounded_limit = max(1, min(int(limit or 20), 20))
+    owner_id = get_current_user_id(current_user)
+    backtest_service = (
+        BacktestService(db_manager, owner_id=owner_id, include_all_owners=False)
+        if owner_id
+        else None
+    )
+
+    def _backtest_sample_status(symbol: str) -> dict[str, object] | None:
+        if backtest_service is None:
+            return None
+        return backtest_service.get_sample_status(code=symbol)
+
     service = ResearchRadarService(
         scanner_repository=ScannerRepository(db_manager),
+        backtest_sample_reader=_backtest_sample_status if backtest_service is not None else None,
     )
     payload = service.build_from_latest_scanner_run(
         market=market,
         profile=profile,
-        owner_id=get_current_user_id(current_user),
+        owner_id=owner_id,
         limit=bounded_limit,
     )
     return consumer_safe_json_response(

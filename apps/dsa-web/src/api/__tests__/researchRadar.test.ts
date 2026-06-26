@@ -45,6 +45,81 @@ describe('researchRadarApi', () => {
         market_context_fit: 'neutral',
         no_advice_disclosure: 'Research-only queue.',
         data_quality: { status: 'partial', missing_evidence: [] },
+        evidence_hub: {
+          scanner_candidates: {
+            key: 'scanner',
+            label: 'Scanner candidates',
+            status: 'available',
+            summary: 'Scanner candidate evidence is available for radar review.',
+            next_data_action: 'Refresh scanner when candidate evidence needs a newer observation window.',
+            evidence_count: 1,
+            total_count: 1,
+            symbols: ['ALFA'],
+            details: ['ALFA is available for radar review.'],
+            observation_only: true,
+            decision_grade: false,
+          },
+          backtest_samples: {
+            key: 'backtest',
+            label: 'Backtest samples',
+            status: 'blocked',
+            summary: 'Backtest samples are unavailable for radar symbols.',
+            blocker: 'Backtest samples have not been prepared for the radar symbols.',
+            next_data_action: 'Open Backtest and prepare or refresh samples for the radar symbols.',
+            evidence_count: 0,
+            total_count: 1,
+            symbols: ['ALFA'],
+            details: ['ALFA has no prepared backtest samples.'],
+            observation_only: true,
+            decision_grade: false,
+          },
+          stock_readiness: {
+            key: 'stock',
+            label: 'Stock readiness',
+            status: 'available',
+            summary: 'Stock technical readiness is available for radar symbols.',
+            next_data_action: 'Refresh daily price history and technical evidence for radar symbols.',
+            evidence_count: 1,
+            total_count: 1,
+            symbols: ['ALFA'],
+            details: ['ALFA has technical readiness evidence.'],
+            observation_only: true,
+            decision_grade: false,
+          },
+          data_activation: {
+            key: 'data',
+            label: 'Data activation',
+            status: 'partial',
+            summary: 'Research Radar evidence is partially activated.',
+            blocker: 'Backtest samples have not been prepared for the radar symbols.',
+            next_data_action: 'Resolve blocked evidence slices, then refresh Research Radar.',
+            evidence_count: 2,
+            total_count: 3,
+            details: [
+              'Scanner candidates status available.',
+              'Backtest samples status blocked.',
+              'Stock readiness status available.',
+            ],
+            observation_only: true,
+            decision_grade: false,
+          },
+          missing_evidence_states: [
+            {
+              key: 'backtest',
+              label: 'Backtest samples',
+              status: 'blocked',
+              summary: 'Backtest samples are unavailable for radar symbols.',
+              blocker: 'Backtest samples have not been prepared for the radar symbols.',
+              next_data_action: 'Open Backtest and prepare or refresh samples for the radar symbols.',
+              evidence_count: 0,
+              total_count: 1,
+              symbols: ['ALFA'],
+              details: ['ALFA has no prepared backtest samples.'],
+              observation_only: true,
+              decision_grade: false,
+            },
+          ],
+        },
       },
     });
 
@@ -58,6 +133,9 @@ describe('researchRadarApi', () => {
     expect(payload.aggregateSummary.priorityCounts?.medium).toBe(1);
     expect(payload.aggregateSummary.source?.scannerRunId).toBe(8);
     expect(payload.marketContextFit).toBe('neutral');
+    expect(payload.evidenceHub.scannerCandidates.status).toBe('available');
+    expect(payload.evidenceHub.backtestSamples.blocker).toBe('Backtest samples have not been prepared for the radar symbols.');
+    expect(payload.evidenceHub.missingEvidenceStates[0]?.key).toBe('backtest');
   });
 
   it('loads and normalizes the unified research queue hub', async () => {

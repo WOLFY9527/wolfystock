@@ -28,14 +28,21 @@ def _user() -> CurrentUser:
 class _FakeResearchRadarService:
     calls: list[dict[str, object]] = []
 
-    def __init__(self, *, scanner_repository: object | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        scanner_repository: object | None = None,
+        backtest_sample_reader: object | None = None,
+    ) -> None:
         self.scanner_repository = scanner_repository
+        self.backtest_sample_reader = backtest_sample_reader
 
     def build_from_latest_scanner_run(self, **kwargs: object) -> dict[str, object]:
         self.__class__.calls.append(
             {
                 **kwargs,
                 "hasScannerRepository": self.scanner_repository is not None,
+                "hasBacktestSampleReader": self.backtest_sample_reader is not None,
             }
         )
         return {
@@ -138,8 +145,100 @@ class _FakeResearchRadarService:
                     }
                 ],
             },
+            "evidenceHub": {
+                "scannerCandidates": {
+                    "key": "scanner",
+                    "label": "Scanner candidates",
+                    "status": "available",
+                    "summary": "Scanner candidate evidence is available for radar review.",
+                    "blocker": None,
+                    "nextDataAction": "Refresh scanner when candidate evidence needs a newer observation window.",
+                    "evidenceCount": 1,
+                    "totalCount": 1,
+                    "symbols": ["ALFA"],
+                    "details": ["ALFA is available for radar review."],
+                    "observationOnly": True,
+                    "decisionGrade": False,
+                },
+                "backtestSamples": {
+                    "key": "backtest",
+                    "label": "Backtest samples",
+                    "status": "blocked",
+                    "summary": "Backtest samples are unavailable for radar symbols.",
+                    "blocker": "Backtest samples have not been prepared for the radar symbols.",
+                    "nextDataAction": "Open Backtest and prepare or refresh samples for the radar symbols.",
+                    "evidenceCount": 0,
+                    "totalCount": 1,
+                    "symbols": ["ALFA"],
+                    "details": ["ALFA has no prepared backtest samples."],
+                    "observationOnly": True,
+                    "decisionGrade": False,
+                },
+                "stockReadiness": {
+                    "key": "stock",
+                    "label": "Stock readiness",
+                    "status": "available",
+                    "summary": "Stock technical readiness is available for radar symbols.",
+                    "blocker": None,
+                    "nextDataAction": "Refresh daily price history and technical evidence for radar symbols.",
+                    "evidenceCount": 1,
+                    "totalCount": 1,
+                    "symbols": ["ALFA"],
+                    "details": ["ALFA has technical readiness evidence."],
+                    "observationOnly": True,
+                    "decisionGrade": False,
+                },
+                "dataActivation": {
+                    "key": "data",
+                    "label": "Data activation",
+                    "status": "partial",
+                    "summary": "Research Radar evidence is partially activated.",
+                    "blocker": "Backtest samples have not been prepared for the radar symbols.",
+                    "nextDataAction": "Resolve blocked evidence slices, then refresh Research Radar.",
+                    "evidenceCount": 2,
+                    "totalCount": 3,
+                    "symbols": [],
+                    "details": [
+                        "Scanner candidates status available.",
+                        "Backtest samples status blocked.",
+                        "Stock readiness status available.",
+                    ],
+                    "observationOnly": True,
+                    "decisionGrade": False,
+                },
+                "missingEvidenceStates": [
+                    {
+                        "key": "backtest",
+                        "label": "Backtest samples",
+                        "status": "blocked",
+                        "summary": "Backtest samples are unavailable for radar symbols.",
+                        "blocker": "Backtest samples have not been prepared for the radar symbols.",
+                        "nextDataAction": "Open Backtest and prepare or refresh samples for the radar symbols.",
+                        "evidenceCount": 0,
+                        "totalCount": 1,
+                        "symbols": ["ALFA"],
+                        "details": ["ALFA has no prepared backtest samples."],
+                        "observationOnly": True,
+                        "decisionGrade": False,
+                    }
+                ],
+            },
             "observationOnly": True,
             "decisionGrade": False,
+        }
+
+
+class _FakeBacktestService:
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        self.args = args
+        self.kwargs = kwargs
+
+    def get_sample_status(self, *, code: str | None) -> dict[str, object]:
+        return {
+            "code": code,
+            "prepared_count": 0,
+            "sample_readiness_state": "missing_cache",
+            "execution_readiness": {"state": "data_disabled"},
         }
 
 
@@ -148,6 +247,7 @@ def _client(monkeypatch) -> TestClient:
 
     _FakeResearchRadarService.calls = []
     monkeypatch.setattr(research, "ResearchRadarService", _FakeResearchRadarService)
+    monkeypatch.setattr(research, "BacktestService", _FakeBacktestService)
 
     app = FastAPI()
     app.include_router(api_v1_router)
@@ -184,6 +284,7 @@ def test_get_research_radar_endpoint_is_registered_and_returns_contract(monkeypa
         "suggestedResearchEntrypoints",
         "noAdviceDisclosure",
         "dataQuality",
+        "evidenceHub",
         "observationOnly",
         "decisionGrade",
     }.issubset(payload)
@@ -210,6 +311,15 @@ def test_get_research_radar_endpoint_is_registered_and_returns_contract(monkeypa
     assert payload["suggestedResearchEntrypoints"] == []
     assert payload["researchQueue"][0]["duplicateEvidenceMerged"] == 1
     assert payload["aggregateSummary"]["duplicateEvidenceMerged"] == 1
+    assert payload["evidenceHub"]["scannerCandidates"]["status"] == "available"
+    assert payload["evidenceHub"]["backtestSamples"]["blocker"] == (
+        "Backtest samples have not been prepared for the radar symbols."
+    )
+    serialized_hub = str(payload["evidenceHub"])
+    assert "provider" not in serialized_hub.lower()
+    assert "request" not in serialized_hub.lower()
+    assert "trace" not in serialized_hub.lower()
+    assert "raw" not in serialized_hub.lower()
     assert payload["observationOnly"] is True
     assert payload["decisionGrade"] is False
     assert _FakeResearchRadarService.calls == [
@@ -219,6 +329,7 @@ def test_get_research_radar_endpoint_is_registered_and_returns_contract(monkeypa
             "owner_id": "user-1",
             "limit": 5,
             "hasScannerRepository": True,
+            "hasBacktestSampleReader": True,
         }
     ]
 
@@ -245,5 +356,6 @@ def test_get_research_radar_endpoint_clamps_limit_and_passes_optional_filters(mo
             "owner_id": "user-1",
             "limit": 20,
             "hasScannerRepository": True,
+            "hasBacktestSampleReader": True,
         }
     ]
