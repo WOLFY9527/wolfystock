@@ -1,12 +1,14 @@
 import type React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import StockStructureDecisionEntryPage from '../StockStructureDecisionEntryPage';
 import StockStructureDecisionPage from '../StockStructureDecisionPage';
 import { findConsumerRawLeakage } from '../../test-utils/consumerRawLeakageGuard';
 
 const {
   languageState,
+  productSurfaceState,
   verifyTickerExistsMock,
   getQuoteMock,
   getHistoryMock,
@@ -17,6 +19,7 @@ const {
   getStructureDecisionsBatchMock,
 } = vi.hoisted(() => ({
   languageState: { value: 'zh' as 'zh' | 'en' },
+  productSurfaceState: { isAdmin: false },
   verifyTickerExistsMock: vi.fn(),
   getQuoteMock: vi.fn(),
   getHistoryMock: vi.fn(),
@@ -31,6 +34,13 @@ vi.mock('../../contexts/UiLanguageContext', () => ({
   useI18n: () => ({
     language: languageState.value,
     t: (key: string) => key,
+  }),
+}));
+
+vi.mock('../../hooks/useProductSurface', () => ({
+  useProductSurface: () => ({
+    isAdmin: productSurfaceState.isAdmin,
+    isAdminAccount: productSurfaceState.isAdmin,
   }),
 }));
 
@@ -56,6 +66,21 @@ const renderRoutePattern = (ui: React.ReactElement, path: string, pattern: strin
   <MemoryRouter initialEntries={[path]}>
     <Routes>
       <Route path={pattern} element={ui} />
+    </Routes>
+  </MemoryRouter>,
+);
+
+function StockStructureDetailRouteProbe() {
+  const { stockCode = '' } = useParams();
+  return <div data-testid="stock-structure-detail-route">{stockCode}</div>;
+}
+
+const renderStockStructureEntryRoute = (path = '/zh/stock-structure') => render(
+  <MemoryRouter initialEntries={[path]}>
+    <Routes>
+      <Route path="/zh/stock-structure" element={<StockStructureDecisionEntryPage />} />
+      <Route path="/zh/research/radar" element={<div data-testid="research-radar-route">research radar</div>} />
+      <Route path="/zh/stocks/:stockCode/structure-decision" element={<StockStructureDetailRouteProbe />} />
     </Routes>
   </MemoryRouter>,
 );
@@ -531,6 +556,7 @@ describe('StockStructureDecisionPage', () => {
       },
     });
     languageState.value = 'zh';
+    productSurfaceState.isAdmin = false;
     verifyTickerExistsMock.mockResolvedValue({
       stockCode: 'ORCL',
       normalizedSymbol: 'ORCL',
@@ -551,6 +577,58 @@ describe('StockStructureDecisionPage', () => {
     getHistoryMock.mockImplementation((symbol: string) => Promise.resolve(baseHistory(symbol, 60)));
     getTechnicalIndicatorsMock.mockResolvedValue(technicalIndicatorsAvailable());
     getOptionsStructureMock.mockResolvedValue(optionsStructureNotAvailable());
+  });
+
+  it('renders direct symbol input on the stock-structure entry empty state while preserving queue links', () => {
+    renderStockStructureEntryRoute();
+
+    const page = screen.getByTestId('stock-structure-entry-page');
+    expect(page).toHaveTextContent('直接输入标的');
+    expect(screen.getByLabelText('股票代码')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '查看结构' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
+    expect(screen.getByRole('link', { name: '观察列表上下文' })).toHaveAttribute('href', '/zh/watchlist');
+    expect(page).toHaveTextContent('可以直接输入标的，也可以从 Scanner、观察列表或研究雷达选择标的后进入。');
+    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+  });
+
+  it('shows a validation error for empty direct symbol submit', () => {
+    renderStockStructureEntryRoute();
+
+    fireEvent.click(screen.getByRole('button', { name: '查看结构' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('请输入股票代码。');
+    expect(screen.queryByTestId('stock-structure-detail-route')).not.toBeInTheDocument();
+  });
+
+  it('shows a consumer-safe validation error for malformed direct symbols', () => {
+    renderStockStructureEntryRoute();
+
+    fireEvent.change(screen.getByLabelText('股票代码'), { target: { value: 'AAPL<script>' } });
+    fireEvent.click(screen.getByRole('button', { name: '查看结构' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('仅支持字母、数字、点号或短横线组成的股票代码。');
+    expect(screen.getByRole('alert').textContent || '').not.toMatch(/provider|requestId|traceId|cache|raw|debug|apiKey|token/i);
+    expect(screen.queryByTestId('stock-structure-detail-route')).not.toBeInTheDocument();
+  });
+
+  it('navigates a valid direct symbol into the existing structure detail route', () => {
+    renderStockStructureEntryRoute();
+
+    fireEvent.change(screen.getByLabelText('股票代码'), { target: { value: ' aapl ' } });
+    fireEvent.click(screen.getByRole('button', { name: '查看结构' }));
+
+    expect(screen.getByTestId('stock-structure-detail-route')).toHaveTextContent('AAPL');
+  });
+
+  it('keeps carried symbol state visible and deep-links common market formats', () => {
+    renderStockStructureEntryRoute('/zh/stock-structure?symbols=0700.HK');
+
+    expect(screen.getByLabelText('股票代码')).toHaveValue('0700.HK');
+
+    fireEvent.click(screen.getByRole('button', { name: '查看结构' }));
+
+    expect(screen.getByTestId('stock-structure-detail-route')).toHaveTextContent('0700.HK');
   });
 
   it('requests and renders the symbol research packet as a professional evidence stack', async () => {
@@ -1401,6 +1479,49 @@ describe('StockStructureDecisionPage', () => {
     expect(panel).toHaveTextContent('历史待补');
     expect(page.textContent || '').not.toMatch(/provider|runtime|fallback|sourceAuthority|debug|buy now|target price/i);
     expect(page.textContent || '').not.toMatch(/买入建议|卖出建议|持有建议|目标价|止损|仓位建议|交易建议|操作建议/);
+  });
+
+  it('shows a safe admin-only data readiness cue when stock evidence is missing', async () => {
+    productSurfaceState.isAdmin = true;
+    getResearchPacketMock.mockResolvedValue({
+      ...partialResearchPacket(),
+      missingData: ['fundamentals', 'filing_event_catalyst', 'peer_benchmark'],
+    });
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const nextStepsPanel = await within(page).findByTestId('stock-missing-data-next-steps-panel');
+    const adminLink = within(nextStepsPanel).getByRole('link', { name: '打开数据就绪诊断' });
+
+    expect(adminLink).toHaveAttribute('href', '/zh/admin/market-providers?surface=stock_structure&symbol=AAPL');
+    expect(nextStepsPanel).toHaveTextContent('仅管理员可见');
+    expect(nextStepsPanel.textContent || '').not.toMatch(/provider|requestId|traceId|cacheKey|raw|debug|apiKey|token/i);
+  });
+
+  it('does not show the data readiness admin cue to non-admin consumers', async () => {
+    getResearchPacketMock.mockResolvedValue({
+      ...partialResearchPacket(),
+      missingData: ['fundamentals', 'filing_event_catalyst', 'peer_benchmark'],
+    });
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const nextStepsPanel = await within(page).findByTestId('stock-missing-data-next-steps-panel');
+
+    expect(within(nextStepsPanel).queryByRole('link', { name: '打开数据就绪诊断' })).not.toBeInTheDocument();
+    expect(nextStepsPanel.textContent || '').not.toMatch(/provider|requestId|traceId|cacheKey|raw|debug|apiKey|token/i);
   });
 
   it('shows a compact packet fallback without hiding existing structure facts', async () => {
