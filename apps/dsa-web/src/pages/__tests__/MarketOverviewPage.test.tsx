@@ -1982,6 +1982,12 @@ const allMarketPanelRequests = [
   ...secondStagedMarketPanelRequests,
 ] as const;
 
+function rejectAllMarketOverviewPanels(message = 'market overview unavailable') {
+  allMarketPanelRequests.forEach((request) => {
+    vi.mocked(request).mockRejectedValue(new Error(message));
+  });
+}
+
 const FIRST_STAGE_PANEL_DELAY_MS = 250;
 const SECOND_STAGE_PANEL_DELAY_MS = 650;
 const SECOND_STAGE_PANEL_DELTA_MS = SECOND_STAGE_PANEL_DELAY_MS - FIRST_STAGE_PANEL_DELAY_MS;
@@ -2295,6 +2301,82 @@ describe('MarketOverviewPage', () => {
     expect(surface.textContent || '').not.toMatch(
       /GEX|vanna|charm|providerClass|providerName|providerAttempted|requiredProviderClass|sourceAuthorityRouter|endpointHost|apiKeyPresent|exceptionClass|exceptionChain|requestId|traceId|cacheKey|rawPayload|credential|token|env/i,
     );
+  });
+
+  it('fails closed when market overview panels are unavailable instead of rendering local sample markets', async () => {
+    rejectAllMarketOverviewPanels('providerClass requestId rawPayload unavailable');
+    vi.mocked(marketApi.getProfessionalDataCapabilities).mockResolvedValueOnce(allMissingMarketRegimeCapabilitiesPayload());
+    vi.mocked(marketApi.getDataReadiness).mockResolvedValueOnce({
+      readinessStatus: 'missing',
+      diagnosticOnly: true,
+      providerRuntimeCalled: false,
+      networkCallsEnabled: false,
+      representativeSymbols: [],
+      checks: [],
+      officialRiskSourceReadiness: {
+        bundleState: 'blocked',
+        vix: { state: 'missing', freshness: 'unavailable' },
+        rates: { state: 'missing', freshness: 'unavailable' },
+        fedLiquidity: { state: 'blocked', freshness: 'unavailable' },
+      },
+      consumerEvidenceReadinessMatrix: {
+        contractVersion: 'consumer_evidence_readiness_matrix_v1',
+        diagnosticOnly: true,
+        networkCallsEnabled: false,
+        mutationEnabled: false,
+        items: [
+          {
+            surface: 'market_overview',
+            evidenceFamily: 'market_index',
+            requiredInputs: ['index_quotes'],
+            fulfilledInputs: [],
+            missingInputs: ['index_quotes'],
+            staleInputs: [],
+            blockedInputs: [],
+            observationOnlyInputs: [],
+            scoreGradeInputs: [],
+            readinessState: 'missing',
+            confidenceCapReason: 'missing_required_evidence',
+            sourceAuthorityReason: '',
+            freshnessReason: '',
+            nextDiagnostic: '',
+            consumerSafeSummary: 'Market/index evidence is missing.',
+          },
+        ],
+      },
+      crossAssetDriverReadiness: {
+        contractVersion: 'cross_asset_driver_readiness_v1',
+        consumerSafe: true,
+        diagnosticOnly: true,
+        networkCallsEnabled: false,
+        externalProviderCalls: false,
+        mutationEnabled: false,
+        supportedStates: ['available', 'missing', 'stale', 'insufficient_history', 'not_configured'],
+        consumerSummary: 'Cross-asset inputs are readiness only.',
+        summary: { totalDrivers: 0, availableCount: 0, missingCount: 0 },
+        drivers: [],
+      },
+    });
+
+    render(createElement(MarketOverviewPage));
+
+    const failClosedPanel = await screen.findByTestId('market-overview-readiness-empty-panel');
+    expect(failClosedPanel).toHaveTextContent('Market Overview 数据待补');
+    expect(failClosedPanel).toHaveTextContent('market/index');
+    expect(failClosedPanel).toHaveTextContent('sector/industry rotation');
+    expect(failClosedPanel).toHaveTextContent('market breadth');
+    expect(failClosedPanel).toHaveTextContent('macro/regime');
+    expect(failClosedPanel).toHaveTextContent('cross-asset drivers');
+    expect(failClosedPanel).toHaveTextContent('news/catalyst/regime evidence');
+    expect(failClosedPanel).toHaveTextContent('historical OHLCV');
+    expect(failClosedPanel).toHaveTextContent(/missing|not_configured|unavailable/);
+    expect(failClosedPanel).toHaveTextContent('查看数据状态');
+    expect(failClosedPanel).toHaveTextContent('前往数据设置');
+
+    const pageText = document.body.textContent || '';
+    expect(pageText).not.toMatch(/18420\.5|5238\.25|38980|12580|17712|75800|3120|涨停家数占优|炸板率可控|短线情绪偏暖/);
+    expect(pageText).not.toMatch(/providerClass|requestId|rawPayload|apiKey|token|traceId|cacheKey/i);
+    expect(pageText).not.toMatch(/buy|sell|hold|target price|stop-loss|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
   });
 
   it('keeps all-missing provider state explicit across market regime categories', async () => {
@@ -3289,7 +3371,7 @@ describe('MarketOverviewPage', () => {
     expect(copiedText).toContain('## No-advice disclosure');
     expect(copiedText).toContain('## Generated timestamp');
     expect(copiedText).toContain('- 市场温度: 偏暖 (62)');
-    expect(copiedText).toContain('- 数据质量: 延迟可用');
+    expect(copiedText).toMatch(/- 数据质量: (延迟可用|部分数据暂不可用)/);
     expect(copiedText).not.toMatch(/provider_timeout|sourceAuthorityAllowed|scoreContributionAllowed|raw|debug|trace|schema|MarketCache|buy|sell|target price|position sizing|买入|卖出|目标价|止损|仓位/i);
     expect(await screen.findByText('证据快照已复制')).toBeInTheDocument();
   });
@@ -4668,10 +4750,11 @@ describe('MarketOverviewPage', () => {
     expandPendingDataSourceSection();
     expect(screen.getByTestId('market-overview-card-crypto')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /加密货币行情/i })).toBeInTheDocument();
-    expect(screen.getAllByText('BTC').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('ETH').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('BNB').length).toBeGreaterThan(0);
-    expect(screen.getAllByTestId('data-freshness-badge-fallback').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('market-overview-card-crypto')).toHaveTextContent(/部分数据暂不可用|数据更新超时|暂不可用/);
+    expect(screen.queryByText('BTC')).not.toBeInTheDocument();
+    expect(screen.queryByText('ETH')).not.toBeInTheDocument();
+    expect(screen.queryByText('BNB')).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('data-freshness-badge-error').length).toBeGreaterThan(0);
     expect(screen.queryByText(/正在获取最新快照/i)).not.toBeInTheDocument();
   });
 
@@ -4770,7 +4853,8 @@ describe('MarketOverviewPage', () => {
     expect(await screen.findByTestId('market-overview-card-crypto')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /加密货币行情/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /情绪与资金面/i })).toBeInTheDocument();
-    expect((await screen.findAllByText('BTC')).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('market-overview-card-crypto')).toHaveTextContent(/部分数据暂不可用|数据更新失败|暂不可用/);
+    expect(screen.queryByText('BTC')).not.toBeInTheDocument();
     expect(screen.queryByText(/正在获取最新快照/i)).not.toBeInTheDocument();
   });
 
