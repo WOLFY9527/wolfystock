@@ -47,6 +47,13 @@ const {
   loadScannerBacktestLabMock: vi.fn(),
 }));
 
+const productSurfaceMock = vi.hoisted(() => ({
+  state: {
+    isAdminAccount: false,
+    canReadProviders: false,
+  },
+}));
+
 const writeTextMock = vi.fn();
 const createObjectUrlMock = vi.fn(() => 'blob:scanner-export');
 const revokeObjectUrlMock = vi.fn();
@@ -83,6 +90,10 @@ vi.mock('../../api/backtest', () => ({
   backtestApi: {
     runRuleBacktest,
   },
+}));
+
+vi.mock('../../hooks/useProductSurface', () => ({
+  useProductSurface: () => productSurfaceMock.state,
 }));
 
 vi.mock('../../components/scanner/ScannerBacktestLab', async () => {
@@ -1047,6 +1058,10 @@ describe('UserScannerPage', () => {
     createObjectUrlMock.mockClear();
     revokeObjectUrlMock.mockClear();
     anchorClickMock.mockClear();
+    productSurfaceMock.state = {
+      isAdminAccount: false,
+      canReadProviders: false,
+    };
 
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -4231,5 +4246,177 @@ describe('UserScannerPage', () => {
     expect(pageError).toHaveTextContent(/扫描未完成|Scan did not complete/i);
     expect(pageError).toHaveTextContent(/登录|Sign in/i);
     expect(pageError).not.toHaveTextContent(/Unauthorized|token|provider_trace|raw|provider|trace/i);
+  });
+
+  it('shows stale scanner universe readiness without fake candidates or internal leakage', async () => {
+    getRuns.mockResolvedValue(makeHistoryResponse([]));
+    getRun.mockResolvedValue(null);
+    getStatus.mockResolvedValue({
+      market: 'cn',
+      profile: 'cn_preopen_v1',
+      watchlistDate: '2026-06-27',
+      todayTradingDay: true,
+      scheduleEnabled: false,
+      scheduleRunImmediately: false,
+      notificationEnabled: false,
+      qualitySummary: {
+        available: false,
+        reviewWindowDays: 5,
+        runCount: 0,
+        reviewedRunCount: 0,
+        reviewedCandidateCount: 0,
+        strongCount: 0,
+        mixedCount: 0,
+        weakCount: 0,
+      },
+      dataReadiness: {
+        state: 'blocked',
+        market: 'cn',
+        profile: 'cn_preopen_v1',
+        universeSize: 320,
+        blockerBucket: 'stale_universe',
+        quoteCoverage: 'unknown',
+        historyCoverage: 'unknown',
+        freshness: 'stale',
+        nextDataAction: '刷新扫描标的池后重新运行 Scanner。',
+        scannerUniverseReadiness: {
+          contractVersion: 'scanner_universe_readiness_v1',
+          status: 'stale',
+          market: 'CN',
+          universeSize: 320,
+          lastUpdatedAt: '2026-06-20T00:00:00+00:00',
+          freshnessState: 'universe_modified:2026-06-20',
+          requiredDataClasses: ['universe', 'historical_ohlcv', 'quote_snapshot'],
+          availableDataClasses: ['universe'],
+          missingDataClasses: ['historical_ohlcv', 'quote_snapshot'],
+          blockedProductSurfaces: ['Scanner', 'Market Overview', 'Backtest'],
+          consumerSafeMessage: '扫描标的池已过期，需要更新后再扫描。',
+          operatorNextAction: 'Refresh the scanner local universe and rerun scanner readiness checks.',
+          consumerSafe: true,
+        },
+      },
+    });
+
+    renderUserScannerPage();
+
+    const conclusion = await screen.findByTestId('scanner-conclusion-band');
+    expect(conclusion).toHaveTextContent(/标的池待更新|Universe stale/);
+    expect(conclusion).toHaveTextContent(/扫描标的池已过期|Universe/);
+    expect(conclusion).toHaveTextContent(/标的池状态|Universe readiness/);
+    expect(conclusion).toHaveTextContent(/缺口|Missing/);
+    expect(screen.queryByTestId(/^scanner-result-row-/)).not.toBeInTheDocument();
+    const emptyState = screen.getByTestId('scanner-workbench-empty-state');
+    expect(emptyState).toHaveTextContent(/刷新扫描标的池|标的池已过期/);
+    expect(conclusion).not.toHaveTextContent(/provider|raw|cacheKey|traceId|requestId|token|secret|buy|sell|hold|target|stop|position/i);
+    expect(emptyState).not.toHaveTextContent(/provider|raw|cacheKey|traceId|requestId|token|secret|buy|sell|hold|target|stop|position/i);
+  });
+
+  it('distinguishes missing scanner universe readiness from stale universe readiness', async () => {
+    getRuns.mockResolvedValue(makeHistoryResponse([]));
+    getRun.mockResolvedValue(null);
+    getStatus.mockResolvedValue({
+      market: 'cn',
+      profile: 'cn_preopen_v1',
+      watchlistDate: '2026-06-27',
+      todayTradingDay: true,
+      scheduleEnabled: false,
+      scheduleRunImmediately: false,
+      notificationEnabled: false,
+      qualitySummary: {
+        available: false,
+        reviewWindowDays: 5,
+        runCount: 0,
+        reviewedRunCount: 0,
+        reviewedCandidateCount: 0,
+        strongCount: 0,
+        mixedCount: 0,
+        weakCount: 0,
+      },
+      dataReadiness: {
+        state: 'blocked',
+        market: 'cn',
+        profile: 'cn_preopen_v1',
+        universeSize: 0,
+        blockerBucket: 'universe_missing',
+        quoteCoverage: 'unknown',
+        historyCoverage: 'unknown',
+        freshness: 'unknown',
+        nextDataAction: '补充可扫描标的池后重新运行 Scanner。',
+        scannerUniverseReadiness: {
+          contractVersion: 'scanner_universe_readiness_v1',
+          status: 'missing',
+          market: 'CN',
+          universeSize: 0,
+          freshnessState: 'missing_universe',
+          requiredDataClasses: ['universe', 'historical_ohlcv', 'quote_snapshot'],
+          availableDataClasses: [],
+          missingDataClasses: ['universe', 'historical_ohlcv', 'quote_snapshot'],
+          blockedProductSurfaces: ['Scanner', 'Market Overview', 'Backtest'],
+          consumerSafeMessage: '扫描标的池缺失，暂时无法生成候选。',
+          consumerSafe: true,
+        },
+      },
+    });
+
+    renderUserScannerPage();
+
+    const conclusion = await screen.findByTestId('scanner-conclusion-band');
+    expect(conclusion).toHaveTextContent(/标的池缺失|Universe missing/);
+    expect(conclusion).toHaveTextContent(/扫描标的池缺失|Universe/);
+    expect(conclusion).not.toHaveTextContent(/标的池待更新|Universe stale/);
+    expect(screen.queryByTestId(/^scanner-result-row-/)).not.toBeInTheDocument();
+  });
+
+  it('shows the operator data readiness link only for admin users with provider-read access', async () => {
+    productSurfaceMock.state = {
+      isAdminAccount: true,
+      canReadProviders: true,
+    };
+    getRuns.mockResolvedValue(makeHistoryResponse([]));
+    getRun.mockResolvedValue(null);
+    getStatus.mockResolvedValue({
+      market: 'cn',
+      profile: 'cn_preopen_v1',
+      watchlistDate: '2026-06-27',
+      todayTradingDay: true,
+      scheduleEnabled: false,
+      scheduleRunImmediately: false,
+      notificationEnabled: false,
+      qualitySummary: {
+        available: false,
+        reviewWindowDays: 5,
+        runCount: 0,
+        reviewedRunCount: 0,
+        reviewedCandidateCount: 0,
+        strongCount: 0,
+        mixedCount: 0,
+        weakCount: 0,
+      },
+      dataReadiness: {
+        state: 'blocked',
+        market: 'cn',
+        profile: 'cn_preopen_v1',
+        blockerBucket: 'stale_universe',
+        scannerUniverseReadiness: {
+          contractVersion: 'scanner_universe_readiness_v1',
+          status: 'stale',
+          market: 'CN',
+          universeSize: 10,
+          requiredDataClasses: ['universe', 'historical_ohlcv', 'quote_snapshot'],
+          availableDataClasses: ['universe'],
+          missingDataClasses: ['historical_ohlcv', 'quote_snapshot'],
+          blockedProductSurfaces: ['Scanner', 'Market Overview', 'Backtest'],
+          consumerSafeMessage: '扫描标的池已过期，需要更新后再扫描。',
+          consumerSafe: true,
+        },
+      },
+    });
+
+    renderUserScannerPage();
+
+    const link = await screen.findByTestId('scanner-operator-readiness-link');
+    await waitFor(() => {
+      expect(link).toHaveAttribute('href', '/en/admin/market-providers');
+    });
   });
 });

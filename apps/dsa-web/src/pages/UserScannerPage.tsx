@@ -83,6 +83,7 @@ import {
   useSafariRenderReady,
   useSafariWarmActivation,
 } from '../hooks/useSafariInteractionReady';
+import { useProductSurface } from '../hooks/useProductSurface';
 import type { SourceProvenanceSummary } from '../types/analysis';
 import type {
   ScannerCandidate,
@@ -388,7 +389,11 @@ const SCANNER_DATA_READINESS_STATE_LABELS: Record<string, { zh: string; en: stri
 
 const SCANNER_DATA_READINESS_BLOCKER_LABELS: Record<string, { zh: string; en: string }> = {
   missing_universe: { zh: '标的池待补', en: 'Universe pending' },
+  universe_missing: { zh: '标的池缺失', en: 'Universe missing' },
+  universe_not_configured: { zh: '标的池未配置', en: 'Universe not configured' },
+  stale_universe: { zh: '标的池待更新', en: 'Universe stale' },
   empty_universe: { zh: '标的池为空', en: 'Universe empty' },
+  insufficient_coverage: { zh: '覆盖不足', en: 'Coverage insufficient' },
   missing_quote_snapshot: { zh: '报价快照待补', en: 'Quote snapshot pending' },
   missing_history: { zh: '历史数据待补', en: 'History pending' },
   stale_history: { zh: '历史数据待更新', en: 'History refresh pending' },
@@ -404,6 +409,9 @@ const SCANNER_DATA_READINESS_COVERAGE_LABELS: Record<string, { zh: string; en: s
   unknown: { zh: '待确认', en: 'Unknown' },
   stale: { zh: '待更新', en: 'Stale' },
   missing: { zh: '待补', en: 'Missing' },
+  not_configured: { zh: '未配置', en: 'Not configured' },
+  insufficient_coverage: { zh: '覆盖不足', en: 'Insufficient coverage' },
+  unavailable: { zh: '不可用', en: 'Unavailable' },
 };
 
 function localizedDataReadinessLabel(
@@ -429,20 +437,39 @@ function buildScannerDataReadinessView(
 ): ScannerDataReadinessView | null {
   if (!readiness) return null;
   const state = normalizeScannerDataReadinessState(readiness.state);
+  const universeReadiness = readiness.scannerUniverseReadiness || null;
+  const universeStatus = normalizeScannerDataReadinessState(universeReadiness?.status);
   const blockerBucket = normalizeScannerDataReadinessState(readiness.blockerBucket);
   const stateLabel = localizedDataReadinessLabel(state, SCANNER_DATA_READINESS_STATE_LABELS, language)
     || (language === 'en' ? 'To confirm' : '待确认');
-  const blockerLabel = blockerBucket && blockerBucket !== 'unknown'
+  const universeBlockerLabel = universeStatus && universeStatus !== 'available'
+    ? localizedDataReadinessLabel(
+      universeStatus === 'stale' ? 'stale_universe' : universeStatus,
+      SCANNER_DATA_READINESS_BLOCKER_LABELS,
+      language,
+    ) || localizedDataReadinessLabel(universeStatus, SCANNER_DATA_READINESS_COVERAGE_LABELS, language)
+    : null;
+  const blockerLabel = universeBlockerLabel || (blockerBucket && blockerBucket !== 'unknown'
     ? localizedDataReadinessLabel(blockerBucket, SCANNER_DATA_READINESS_BLOCKER_LABELS, language)
       || (language === 'en' ? 'To confirm' : '待确认')
-    : null;
-  const nextDataLabel = sanitizeScannerDataReadinessText(readiness.nextDataAction, language)
+    : null);
+  const nextDataLabel = sanitizeScannerDataReadinessText(universeReadiness?.consumerSafeMessage, language)
+    || sanitizeScannerDataReadinessText(readiness.nextDataAction, language)
     || sanitizeScannerDataReadinessText(readiness.consumerSummary, language)
     || blockerLabel;
   const coverageChips = [
+    universeStatus ? {
+      label: language === 'en' ? 'Universe readiness' : '标的池状态',
+      value: localizedDataReadinessLabel(universeStatus, SCANNER_DATA_READINESS_COVERAGE_LABELS, language)
+        || (language === 'en' ? 'To confirm' : '待确认'),
+    } : null,
     readiness.quoteCoverage ? { label: language === 'en' ? 'Quote' : '报价', value: localizedDataReadinessLabel(readiness.quoteCoverage, SCANNER_DATA_READINESS_COVERAGE_LABELS, language) || (language === 'en' ? 'To confirm' : '待确认') } : null,
     readiness.historyCoverage ? { label: language === 'en' ? 'History' : '历史', value: localizedDataReadinessLabel(readiness.historyCoverage, SCANNER_DATA_READINESS_COVERAGE_LABELS, language) || (language === 'en' ? 'To confirm' : '待确认') } : null,
     readiness.universeSize != null ? { label: language === 'en' ? 'Universe' : '标的池', value: String(readiness.universeSize) } : null,
+    universeReadiness?.missingDataClasses?.length ? {
+      label: language === 'en' ? 'Missing' : '缺口',
+      value: universeReadiness.missingDataClasses.slice(0, 3).map((item) => String(item).replace(/_/g, ' ')).join(' / '),
+    } : null,
   ].filter((item): item is ScannerLabeledValue => Boolean(item));
 
   return {
@@ -450,7 +477,7 @@ function buildScannerDataReadinessView(
     blockerLabel,
     nextDataLabel,
     coverageChips,
-    isMeaningful: ['ready', 'partial', 'blocked'].includes(state) || Boolean(blockerLabel),
+    isMeaningful: ['ready', 'partial', 'blocked'].includes(state) || Boolean(blockerLabel) || Boolean(universeStatus),
   };
 }
 
@@ -2453,6 +2480,7 @@ const UserScannerPage: React.FC = () => {
   const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
   const shouldGuardA11y = shouldApplySafariA11yGuard();
   const { t, language } = useI18n();
+  const { isAdminAccount, canReadProviders } = useProductSurface();
   const navigate = useNavigate();
   const [market, setMarket] = useState<'cn' | 'us' | 'hk'>('cn');
   const [profile, setProfile] = useState('cn_preopen_v1');
@@ -2944,6 +2972,9 @@ const UserScannerPage: React.FC = () => {
     () => buildScannerDataReadinessView(scannerDataReadiness, language),
     [language, scannerDataReadiness],
   );
+  const scannerOperatorReadinessHref = isAdminAccount && canReadProviders
+    ? buildLocalizedPath('/admin/market-providers', language)
+    : null;
   const currentRunSummary = useMemo(
     () => buildScannerRunSummary(language === 'en' ? 'Current scan' : '本次扫描', runDetail, language),
     [language, runDetail],
@@ -3992,6 +4023,17 @@ const UserScannerPage: React.FC = () => {
                 nextDataLabel={scannerDataReadinessView?.nextDataLabel || null}
                 language={language}
               />
+              {scannerOperatorReadinessHref && scannerDataReadinessView?.isMeaningful ? (
+                <div className="mx-3 -mt-1 flex justify-end">
+                  <a
+                    data-testid="scanner-operator-readiness-link"
+                    href={scannerOperatorReadinessHref}
+                    className="inline-flex min-h-9 items-center rounded-md border border-white/10 bg-white/[0.03] px-3 text-xs font-semibold text-white/70 transition hover:border-white/20 hover:bg-white/[0.07] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300"
+                  >
+                    {language === 'en' ? 'Open data readiness' : '打开数据就绪'}
+                  </a>
+                </div>
+              ) : null}
               {showWorkflowNextSteps ? (
                 <section
                   data-testid="scanner-workflow-next-steps"

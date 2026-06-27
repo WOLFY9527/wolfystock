@@ -4,6 +4,9 @@
 from __future__ import annotations
 
 import unittest
+import os
+import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -73,9 +76,19 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
         DatabaseManager.reset_instance()
         self.db = DatabaseManager(db_url="sqlite:///:memory:")
         self.data_manager = FakeScannerDataManager()
+        self._cache_temp_dir = tempfile.TemporaryDirectory()
+        self._scanner_cache_path = Path(self._cache_temp_dir.name) / "scanner_cn_universe_cache.csv"
+        self.data_manager.stock_list[["code", "name"]].to_csv(self._scanner_cache_path, index=False)
+        self._config_patcher = patch(
+            "src.services.market_scanner_service.get_config",
+            return_value=SimpleNamespace(scanner_local_universe_path=str(self._scanner_cache_path)),
+        )
+        self._config_patcher.start()
         self.scanner_service = MarketScannerService(self.db, data_manager=self.data_manager)
 
     def tearDown(self) -> None:
+        self._config_patcher.stop()
+        self._cache_temp_dir.cleanup()
         DatabaseManager.reset_instance()
 
     def test_operational_status_exposes_not_run_data_readiness_before_any_run(self) -> None:
@@ -92,20 +105,67 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["state"], "not_run")
         self.assertEqual(readiness["market"], "cn")
         self.assertEqual(readiness["profile"], "cn_preopen_v1")
-        self.assertEqual(readiness["universeSize"], 0)
+        self.assertEqual(readiness["universeSize"], 6)
         self.assertEqual(readiness["quoteCoverage"], "unknown")
         self.assertEqual(readiness["historyCoverage"], "unknown")
         self.assertEqual(readiness["freshness"], "unknown")
-        self.assertEqual(readiness["blockerBucket"], "universe_missing")
-        self.assertEqual(readiness["universeReadiness"]["state"], "missing")
-        self.assertEqual(readiness["universeReadiness"]["reason"], "universe_missing")
+        self.assertEqual(readiness["blockerBucket"], "unknown")
+        self.assertEqual(readiness["universeReadiness"]["state"], "available")
+        self.assertEqual(readiness["universeReadiness"]["reason"], "universe_available")
+        self.assertEqual(readiness["scannerUniverseReadiness"]["status"], "insufficient_coverage")
+        self.assertEqual(readiness["scannerUniverseReadiness"]["availableDataClasses"], ["universe"])
+        self.assertIn("historical_ohlcv", readiness["scannerUniverseReadiness"]["missingDataClasses"])
         self.assertEqual(readiness["quoteReadiness"]["state"], "unknown")
         self.assertEqual(readiness["historyReadiness"]["state"], "unknown")
         self.assertEqual(readiness["benchmarkReadiness"]["state"], "unknown")
-        self.assertEqual(readiness["candidateGenerationState"], "blocked")
-        self.assertIn("universe_missing", readiness["candidateGenerationBlockers"])
+        self.assertEqual(readiness["candidateGenerationState"], "not_run")
+        self.assertEqual(readiness["candidateGenerationBlockers"], [])
         self.assertIn("尚未运行", readiness["consumerSummary"])
         self.assertIn("运行 Scanner", readiness["nextDataAction"])
+
+    def test_missing_universe_cache_blocks_default_manual_scan_without_candidates(self) -> None:
+        self._scanner_cache_path.unlink()
+        ops_service = MarketScannerOperationsService(
+            scanner_service=self.scanner_service,
+            config=_make_config(scanner_notification_enabled=False),
+            notifier_factory=lambda: FakeNotifier(available=False),
+        )
+
+        status = ops_service.get_operational_status(market="cn", profile="cn_preopen_v1")
+        readiness = status["dataReadiness"]
+        self.assertEqual(readiness["state"], "blocked")
+        self.assertEqual(readiness["scannerUniverseReadiness"]["status"], "missing")
+        self.assertEqual(readiness["candidateGenerationState"], "blocked")
+        self.assertIn("universe_missing", readiness["candidateGenerationBlockers"])
+
+        with self.assertRaises(ScannerRuntimeError) as ctx:
+            ops_service.run_manual_scan(market="cn", profile="cn_preopen_v1", notify=False)
+        self.assertEqual(ctx.exception.reason_code, "scanner_universe_missing")
+
+        failed = self.scanner_service.get_operational_status(market="cn", profile="cn_preopen_v1")["last_run"]
+        self.assertEqual(failed["status"], "failed")
+        detail = self.scanner_service.get_run_detail(failed["id"])
+        self.assertEqual(detail["shortlist"], [])
+        self.assertEqual(detail["diagnostics"]["dataReadiness"]["scannerUniverseReadiness"]["status"], "missing")
+
+    def test_stale_universe_cache_blocks_default_manual_scan_without_candidates(self) -> None:
+        os.utime(self._scanner_cache_path, (1, 1))
+        ops_service = MarketScannerOperationsService(
+            scanner_service=self.scanner_service,
+            config=_make_config(scanner_notification_enabled=False),
+            notifier_factory=lambda: FakeNotifier(available=False),
+        )
+
+        with self.assertRaises(ScannerRuntimeError) as ctx:
+            ops_service.run_manual_scan(market="cn", profile="cn_preopen_v1", notify=False)
+
+        self.assertEqual(ctx.exception.reason_code, "scanner_universe_stale")
+        detail = self.scanner_service.get_operational_status(market="cn", profile="cn_preopen_v1")
+        readiness = detail["dataReadiness"]
+        self.assertEqual(readiness["state"], "blocked")
+        self.assertEqual(readiness["scannerUniverseReadiness"]["status"], "stale")
+        self.assertEqual(readiness["freshness"], "stale")
+        self.assertIn("stale_universe", readiness["candidateGenerationBlockers"])
 
     def test_manual_and_scheduled_runs_record_trigger_mode_and_watchlist_views(self) -> None:
         ops_service = MarketScannerOperationsService(
@@ -263,11 +323,13 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["state"], "blocked")
         self.assertEqual(readiness["market"], "cn")
         self.assertEqual(readiness["profile"], "cn_preopen_v1")
-        self.assertEqual(readiness["universeSize"], 0)
+        self.assertEqual(readiness["universeSize"], 6)
         self.assertEqual(readiness["quoteCoverage"], "missing")
         self.assertEqual(readiness["historyCoverage"], "missing")
         self.assertEqual(readiness["freshness"], "unknown")
         self.assertEqual(readiness["blockerBucket"], "missing_quote_snapshot")
+        self.assertEqual(readiness["scannerUniverseReadiness"]["status"], "insufficient_coverage")
+        self.assertIn("quote_snapshot", readiness["scannerUniverseReadiness"]["missingDataClasses"])
         self.assertIn("行情快照", readiness["consumerSummary"])
         self.assertIn("补充行情快照", readiness["nextDataAction"])
         self.assertNotRegex(

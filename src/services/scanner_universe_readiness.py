@@ -1,0 +1,271 @@
+# -*- coding: utf-8 -*-
+"""Scanner universe readiness contract.
+
+This module is intentionally local and read-only: it inspects configured local
+universe/cache signals and combines them with scanner quote/history coverage
+without touching provider runtime behavior.
+"""
+
+from __future__ import annotations
+
+import csv
+from collections.abc import Callable
+from datetime import date, datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+SCANNER_UNIVERSE_READINESS_CONTRACT_VERSION = "scanner_universe_readiness_v1"
+SCANNER_UNIVERSE_SUPPORTED_STATUSES = (
+    "available",
+    "missing",
+    "stale",
+    "not_configured",
+    "insufficient_coverage",
+    "unavailable",
+)
+SCANNER_UNIVERSE_REQUIRED_DATA_CLASSES = (
+    "universe",
+    "historical_ohlcv",
+    "quote_snapshot",
+)
+SCANNER_UNIVERSE_BLOCKED_SURFACES = ("Scanner", "Market Overview", "Backtest")
+SCANNER_UNIVERSE_MAX_AGE_DAYS = 3
+
+FileMtimeReader = Callable[[Path], float | None]
+
+
+def _safe_market(value: Any) -> str:
+    normalized = str(value or "").strip().upper()
+    return normalized if normalized in {"CN", "US", "HK"} else "CN"
+
+
+def _date_from_mtime(value: float | None) -> date | None:
+    if value is None:
+        return None
+    try:
+        if 1 <= value <= 4_000_000:
+            return date.fromordinal(int(value))
+        return datetime.fromtimestamp(float(value), tz=timezone.utc).date()
+    except (OSError, OverflowError, ValueError):
+        return None
+
+
+def _iso_from_mtime(value: float | None) -> str | None:
+    if value is None:
+        return None
+    try:
+        if 1 <= value <= 4_000_000:
+            return datetime.combine(date.fromordinal(int(value)), datetime.min.time(), tzinfo=timezone.utc).isoformat()
+        return datetime.fromtimestamp(float(value), tz=timezone.utc).replace(microsecond=0).isoformat()
+    except (OSError, OverflowError, ValueError):
+        return None
+
+
+def _default_file_mtime(path: Path) -> float | None:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return None
+
+
+def _count_csv_rows(path: Path) -> int:
+    try:
+        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+            reader = csv.DictReader(handle)
+            if not reader.fieldnames:
+                return 0
+            return sum(1 for row in reader if any(str(value or "").strip() for value in row.values()))
+    except Exception:
+        return 0
+
+
+def build_scanner_universe_readiness_contract(
+    *,
+    market: str,
+    status: str,
+    universe_size: int = 0,
+    last_updated_at: str | None = None,
+    freshness_state: str = "unknown",
+    required_data_classes: list[str] | None = None,
+    available_data_classes: list[str] | None = None,
+    blocked_product_surfaces: list[str] | None = None,
+    operator_next_action: str | None = None,
+    consumer_safe_message: str | None = None,
+) -> dict[str, Any]:
+    normalized_status = str(status or "").strip().lower()
+    if normalized_status not in SCANNER_UNIVERSE_SUPPORTED_STATUSES:
+        normalized_status = "unavailable"
+    required = list(required_data_classes or SCANNER_UNIVERSE_REQUIRED_DATA_CLASSES)
+    available = [
+        str(item)
+        for item in (available_data_classes or [])
+        if str(item or "").strip() and str(item) in required
+    ]
+    missing = [item for item in required if item not in set(available)]
+    surfaces = list(blocked_product_surfaces or (SCANNER_UNIVERSE_BLOCKED_SURFACES if normalized_status != "available" else ()))
+    return {
+        "contractVersion": SCANNER_UNIVERSE_READINESS_CONTRACT_VERSION,
+        "status": normalized_status,
+        "market": _safe_market(market),
+        "universeSize": max(0, int(universe_size or 0)),
+        "lastUpdatedAt": last_updated_at,
+        "freshnessState": str(freshness_state or "unknown"),
+        "requiredDataClasses": required,
+        "availableDataClasses": available,
+        "missingDataClasses": missing,
+        "blockedProductSurfaces": surfaces,
+        "operatorNextAction": operator_next_action or _operator_next_action(normalized_status),
+        "consumerSafeMessage": consumer_safe_message or _consumer_safe_message(normalized_status),
+        "consumerSafe": True,
+    }
+
+
+def build_scanner_universe_readiness_from_cache(
+    *,
+    market: str,
+    cache_path: str | Path | None,
+    today: date | None = None,
+    file_mtime: FileMtimeReader | None = None,
+) -> dict[str, Any]:
+    if cache_path is None or not str(cache_path).strip():
+        return build_scanner_universe_readiness_contract(
+            market=market,
+            status="not_configured",
+            freshness_state="not_configured",
+            operator_next_action="Configure the scanner universe path, then refresh the local universe before running Scanner.",
+            consumer_safe_message="扫描标的池尚未配置，暂时无法生成候选。",
+        )
+
+    path = Path(str(cache_path)).expanduser()
+    mtime_reader = file_mtime or _default_file_mtime
+    mtime = mtime_reader(path)
+    if mtime is None:
+        return build_scanner_universe_readiness_contract(
+            market=market,
+            status="missing",
+            freshness_state="missing_universe",
+            operator_next_action="Create or refresh the scanner local universe before expecting Scanner candidates.",
+            consumer_safe_message="扫描标的池缺失，暂时无法生成候选。",
+        )
+
+    current_day = today or date.today()
+    modified_date = _date_from_mtime(mtime)
+    row_count = _count_csv_rows(path)
+    if modified_date is None:
+        return build_scanner_universe_readiness_contract(
+            market=market,
+            status="unavailable",
+            universe_size=row_count,
+            last_updated_at=_iso_from_mtime(mtime),
+            freshness_state="universe_modified:unknown",
+            operator_next_action="Refresh the scanner local universe and rerun scanner readiness checks.",
+            consumer_safe_message="扫描标的池状态无法确认，暂时无法生成候选。",
+        )
+    if row_count <= 0:
+        return build_scanner_universe_readiness_contract(
+            market=market,
+            status="missing",
+            universe_size=0,
+            last_updated_at=_iso_from_mtime(mtime),
+            freshness_state=f"universe_modified:{modified_date.isoformat()}",
+            operator_next_action="Refresh the scanner local universe with valid symbols before running Scanner.",
+            consumer_safe_message="扫描标的池为空，暂时无法生成候选。",
+        )
+    if (current_day - modified_date).days > SCANNER_UNIVERSE_MAX_AGE_DAYS:
+        return build_scanner_universe_readiness_contract(
+            market=market,
+            status="stale",
+            universe_size=row_count,
+            last_updated_at=_iso_from_mtime(mtime),
+            freshness_state=f"universe_modified:{modified_date.isoformat()}",
+            available_data_classes=["universe"],
+            operator_next_action="Refresh the scanner local universe and rerun scanner readiness checks before candidate generation.",
+            consumer_safe_message="扫描标的池已过期，需要更新后再扫描。",
+        )
+
+    return build_scanner_universe_readiness_contract(
+        market=market,
+        status="available",
+        universe_size=row_count,
+        last_updated_at=_iso_from_mtime(mtime),
+        freshness_state=f"universe_modified:{modified_date.isoformat()}",
+        available_data_classes=["universe", "historical_ohlcv", "quote_snapshot"],
+        operator_next_action="Run scanner status/readiness checks and keep candidate generation tied to the refreshed universe.",
+        consumer_safe_message="扫描标的池已更新，可继续检查行情与历史覆盖。",
+    )
+
+
+def build_scanner_universe_readiness_from_coverage(
+    *,
+    market: str,
+    universe_status: str,
+    universe_size: int,
+    last_updated_at: str | None,
+    freshness_state: str,
+    quote_coverage: str,
+    history_coverage: str,
+    blocked: bool,
+) -> dict[str, Any]:
+    normalized_universe_status = str(universe_status or "").strip().lower()
+    available_classes: list[str] = []
+    if normalized_universe_status == "available" and int(universe_size or 0) > 0:
+        available_classes.append("universe")
+    if str(history_coverage or "").strip().lower() == "available":
+        available_classes.append("historical_ohlcv")
+    if str(quote_coverage or "").strip().lower() == "available":
+        available_classes.append("quote_snapshot")
+
+    if normalized_universe_status in {"missing", "stale", "not_configured", "unavailable"}:
+        status = normalized_universe_status
+    elif blocked or set(available_classes) != set(SCANNER_UNIVERSE_REQUIRED_DATA_CLASSES):
+        status = "insufficient_coverage"
+    else:
+        status = "available"
+
+    return build_scanner_universe_readiness_contract(
+        market=market,
+        status=status,
+        universe_size=universe_size,
+        last_updated_at=last_updated_at,
+        freshness_state=freshness_state,
+        available_data_classes=available_classes,
+    )
+
+
+def _operator_next_action(status: str) -> str:
+    if status == "not_configured":
+        return "Configure the scanner universe path, then refresh the local universe."
+    if status == "missing":
+        return "Create or refresh the scanner local universe before running Scanner."
+    if status == "stale":
+        return "Refresh the scanner local universe and rerun scanner readiness checks."
+    if status == "insufficient_coverage":
+        return "Refresh or seed historical OHLCV and quote coverage for the current universe."
+    if status == "available":
+        return "Run Scanner with bounded candidate generation from the current universe."
+    return "Inspect scanner data readiness and refresh the current universe path."
+
+
+def _consumer_safe_message(status: str) -> str:
+    if status == "not_configured":
+        return "扫描标的池尚未配置，暂时无法生成候选。"
+    if status == "missing":
+        return "扫描标的池缺失，暂时无法生成候选。"
+    if status == "stale":
+        return "扫描标的池已过期，需要更新后再扫描。"
+    if status == "insufficient_coverage":
+        return "标的池可用，但行情或历史覆盖不足，暂不生成候选。"
+    if status == "available":
+        return "标的池与必要行情覆盖已满足本轮扫描。"
+    return "扫描标的池状态无法确认，暂时无法生成候选。"
+
+
+__all__ = [
+    "SCANNER_UNIVERSE_BLOCKED_SURFACES",
+    "SCANNER_UNIVERSE_READINESS_CONTRACT_VERSION",
+    "SCANNER_UNIVERSE_SUPPORTED_STATUSES",
+    "build_scanner_universe_readiness_contract",
+    "build_scanner_universe_readiness_from_cache",
+    "build_scanner_universe_readiness_from_coverage",
+]

@@ -177,6 +177,22 @@ def test_scanner_consumer_payload_recursively_redacts_ohlcv_readiness_forbidden_
                 "candidateGenerationState": "blocked",
                 "candidateGenerationBlockers": ["provider_missing", "missing_benchmark"],
                 "missingRequirements": ["provider_missing"],
+                "scannerUniverseReadiness": {
+                    "contractVersion": "scanner_universe_readiness_v1",
+                    "status": "insufficient_coverage",
+                    "market": "US",
+                    "universeSize": 2,
+                    "requiredDataClasses": ["universe", "historical_ohlcv", "quote_snapshot"],
+                    "availableDataClasses": ["universe"],
+                    "missingDataClasses": ["historical_ohlcv", "quote_snapshot"],
+                    "blockedProductSurfaces": ["Scanner", "Market Overview", "Backtest"],
+                    "consumerSafeMessage": "标的池可用，但行情或历史覆盖不足，暂不生成候选。",
+                    "operatorNextAction": "Refresh local universe; token=secret requestId=rq-secret",
+                    "requestId": "rq-secret",
+                    "traceId": "trace-secret",
+                    "cacheKey": "cache-secret",
+                    "rawPayload": {"token": "secret-token"},
+                },
                 "ohlcvReadiness": {
                     "providerClass": "LeakyClass",
                     "traceId": "trace-secret",
@@ -247,6 +263,8 @@ def test_scanner_consumer_payload_recursively_redacts_ohlcv_readiness_forbidden_
     ):
         assert forbidden not in serialized
     assert response["diagnostics"]["dataReadiness"]["universeReadiness"]["state"] == "available"
+    assert response["diagnostics"]["dataReadiness"]["scannerUniverseReadiness"]["status"] == "insufficient_coverage"
+    assert "operatorNextAction" not in response["diagnostics"]["dataReadiness"]["scannerUniverseReadiness"]
     assert response["diagnostics"]["dataReadiness"]["quoteReadiness"]["state"] == "missing"
     assert response["diagnostics"]["dataReadiness"]["benchmarkReadiness"]["state"] == "missing"
     assert response["diagnostics"]["dataReadiness"]["candidateGenerationState"] == "blocked"

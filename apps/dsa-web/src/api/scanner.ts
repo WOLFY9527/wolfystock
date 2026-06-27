@@ -19,6 +19,21 @@ export interface ScannerDataReadiness {
   market?: string | null;
   profile?: string | null;
   universeSize?: number | null;
+  scannerUniverseReadiness?: {
+    contractVersion?: string | null;
+    status?: 'available' | 'missing' | 'stale' | 'not_configured' | 'insufficient_coverage' | 'unavailable' | string | null;
+    market?: string | null;
+    universeSize?: number | null;
+    lastUpdatedAt?: string | null;
+    freshnessState?: string | null;
+    requiredDataClasses?: string[];
+    availableDataClasses?: string[];
+    missingDataClasses?: string[];
+    blockedProductSurfaces?: string[];
+    operatorNextAction?: string | null;
+    consumerSafeMessage?: string | null;
+    consumerSafe?: boolean | null;
+  } | null;
   quoteCoverage?: string | null;
   historyCoverage?: string | null;
   freshness?: string | null;
