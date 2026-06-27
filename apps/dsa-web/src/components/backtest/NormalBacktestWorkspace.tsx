@@ -4,7 +4,7 @@ import { Play } from 'lucide-react';
 import { ApiErrorAlert } from '../common/ApiErrorAlert';
 import { GlassCard } from '../common/GlassCard';
 import type { ParsedApiError } from '../../api/error';
-import type { BacktestExecutionReadiness } from '../../types/backtest';
+import type { BacktestExecutionReadiness, BacktestHistoricalOhlcvReadiness } from '../../types/backtest';
 import BacktestExecutionReadinessPanel from './BacktestExecutionReadinessPanel';
 import BacktestRunFeedbackBanner, { type BacktestRunFeedback } from './BacktestRunFeedbackBanner';
 import {
@@ -46,6 +46,7 @@ type NormalBacktestWorkspaceProps = {
   parseError: ParsedApiError | null;
   runError: ParsedApiError | null;
   runReadiness?: BacktestExecutionReadiness | null;
+  historicalOhlcvReadiness?: BacktestHistoricalOhlcvReadiness | null;
   noAdviceDisclosure?: string | null;
   hasRunAttempt?: boolean;
   runFeedback?: BacktestRunFeedback | null;
@@ -80,6 +81,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
   parseError,
   runError,
   runReadiness,
+  historicalOhlcvReadiness,
   noAdviceDisclosure,
   hasRunAttempt = false,
   runFeedback = null,
@@ -288,6 +290,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
           <BacktestExecutionReadinessPanel
             language={language}
             readiness={runReadiness}
+            historicalOhlcvReadiness={historicalOhlcvReadiness}
             noAdviceDisclosure={noAdviceDisclosure}
             attempted={hasRunAttempt}
             isLoading={isLaunching}

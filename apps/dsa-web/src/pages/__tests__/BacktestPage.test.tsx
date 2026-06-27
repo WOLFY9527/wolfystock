@@ -1718,6 +1718,25 @@ describe('BacktestPage', () => {
         consumerSafe: true,
         noAdviceDisclosure: 'Research diagnostic only; not personalized financial advice and not an executable instruction.',
       },
+      historicalOhlcvReadiness: {
+        contractVersion: 'backtest_historical_ohlcv_readiness_v1',
+        status: 'insufficient_coverage',
+        executable: false,
+        requestedSymbol: 'ORCL',
+        requestedMarket: 'us',
+        requestedDateRange: { start: '2026-01-01', end: '2026-04-01' },
+        requiredBarCount: 60,
+        availableBarCount: 12,
+        missingDateCoverage: { missingBarCount: 48, state: 'missing' },
+        adjustedDataRequirement: { required: true, state: 'missing' },
+        benchmarkReadiness: { required: true, symbol: 'SPY', status: 'missing' },
+        historicalOhlcvRuntimeStatus: 'available',
+        operatorNextAction: 'Seed or refresh the local historical OHLCV cache for the requested symbol and date range.',
+        consumerSafeMessage: 'Backtest cannot run because the requested date range does not have enough historical OHLCV bars.',
+        blockedExecutionReason: 'historical_ohlcv_insufficient_coverage',
+        missingDataClasses: ['date_coverage', 'adjusted_prices', 'benchmark_ohlcv'],
+        consumerSafe: true,
+      },
     }));
 
     renderBacktestRoutes();
@@ -1740,8 +1759,15 @@ describe('BacktestPage', () => {
     expect(readiness).toHaveTextContent('历史数据不足');
     expect(readiness).toHaveTextContent('历史 OHLCV 窗口不足，无法计算安全结果。');
     expect(readiness).toHaveTextContent('缺少基准，基准相对指标不可用。');
+    const historicalReadiness = await screen.findByTestId('normal-backtest-execution-readiness-historical-ohlcv');
+    expect(historicalReadiness).toHaveAttribute('data-historical-ohlcv-status', 'insufficient_coverage');
+    expect(historicalReadiness).toHaveTextContent('历史数据就绪度');
+    expect(historicalReadiness).toHaveTextContent('历史 OHLCV 覆盖不足');
+    expect(historicalReadiness).toHaveTextContent('12/60');
+    expect(historicalReadiness).toHaveTextContent('日期覆盖 / 复权价格 / 基准 OHLCV');
+    expect(historicalReadiness).toHaveTextContent('下一步：Seed or refresh the local historical OHLCV cache for the requested symbol and date range.');
     expect(readiness).toHaveTextContent('仅供研究');
-    expect(readiness).not.toHaveTextContent(/Sharpe|CAGR|alpha|beta|跑赢|实盘|交易指令|\+?0\.00%/i);
+    expect(readiness).not.toHaveTextContent(/Sharpe|CAGR|alpha|beta|跑赢|实盘|交易指令|\+?0\.00%|requestId|traceId|cacheKey|token|credential|Traceback/i);
   });
 
   it('shows point-and-shoot API errors with consumer-safe feedback', async () => {

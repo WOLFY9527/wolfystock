@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from src.services.historical_ohlcv_readiness import (
+    build_backtest_historical_ohlcv_readiness,
     HistoricalOhlcvBar,
     HistoricalOhlcvProviderResult,
     HistoricalOhlcvReadinessRequest,
@@ -168,6 +169,79 @@ def test_no_provider_configured_returns_provider_missing_readiness_without_bars(
     assert result.readiness["overallState"] == "blocked"
     assert result.readiness["providerState"] == "provider_missing"
     assert result.readiness["missingRequirements"] == ["provider_missing", "insufficient_history"]
+
+
+def test_backtest_projection_maps_provider_missing_to_not_configured_actionable_contract() -> None:
+    request = HistoricalOhlcvReadinessRequest(
+        symbol="AAPL",
+        market="us",
+        timeframe="1d",
+        start=date(2026, 1, 1),
+        end=date(2026, 3, 31),
+        lookback_bars=90,
+        required_bars=60,
+        require_adjusted=True,
+        benchmark_symbol="SPY",
+        benchmark_required=True,
+    )
+
+    result = HistoricalOhlcvReadinessService().fetch(request)
+    projection = build_backtest_historical_ohlcv_readiness(
+        result.readiness,
+        runtime_status="not_configured",
+    )
+
+    assert projection["contractVersion"] == "backtest_historical_ohlcv_readiness_v1"
+    assert projection["status"] == "not_configured"
+    assert projection["executable"] is False
+    assert projection["requestedSymbol"] == "AAPL"
+    assert projection["requestedMarket"] == "us"
+    assert projection["requestedDateRange"] == {"start": "2026-01-01", "end": "2026-03-31"}
+    assert projection["requiredBarCount"] == 60
+    assert projection["availableBarCount"] == 0
+    assert projection["adjustedDataRequirement"] == {"required": True, "state": "missing"}
+    assert projection["benchmarkReadiness"] == {"required": True, "symbol": "SPY", "status": "missing"}
+    assert projection["historicalOhlcvRuntimeStatus"] == "not_configured"
+    assert projection["blockedExecutionReason"] == "historical_ohlcv_not_configured"
+    assert "historical_ohlcv" in projection["missingDataClasses"]
+    assert "adjusted_prices" in projection["missingDataClasses"]
+    assert "benchmark_ohlcv" in projection["missingDataClasses"]
+    assert projection["consumerSafe"] is True
+    serialized = json.dumps(projection, ensure_ascii=False).lower()
+    for forbidden in ("apikey", "token", "credential", "traceid", "requestid", "cachekey", "traceback"):
+        assert forbidden not in serialized
+
+
+def test_backtest_projection_distinguishes_insufficient_coverage_stale_adjustment_and_available() -> None:
+    base_readiness = {
+        "contractVersion": "historical_ohlcv_readiness_v1",
+        "symbol": "AAPL",
+        "market": "us",
+        "timeframe": "1d",
+        "requestedRange": {"start": "2026-01-01", "end": "2026-02-15"},
+        "lookbackBars": 30,
+        "requiredBars": 30,
+        "usableBars": 30,
+        "missingBars": 0,
+        "freshnessState": "current",
+        "adjustmentState": "available",
+        "benchmarkState": "not_requested",
+        "providerState": "available",
+        "overallState": "ready",
+        "missingRequirements": [],
+        "consumerSafe": True,
+    }
+    insufficient = {**base_readiness, "usableBars": 12, "missingBars": 18, "overallState": "blocked", "missingRequirements": ["insufficient_history"]}
+    stale = {**base_readiness, "freshnessState": "stale", "overallState": "degraded", "missingRequirements": ["stale_data"]}
+    missing_adjusted = {**base_readiness, "adjustmentState": "missing", "overallState": "degraded", "missingRequirements": ["missing_adjustments"]}
+
+    assert build_backtest_historical_ohlcv_readiness(insufficient)["status"] == "insufficient_coverage"
+    assert build_backtest_historical_ohlcv_readiness(stale)["status"] == "stale"
+    assert build_backtest_historical_ohlcv_readiness(missing_adjusted)["status"] == "missing"
+    available_projection = build_backtest_historical_ohlcv_readiness(base_readiness)
+    assert available_projection["status"] == "available"
+    assert available_projection["executable"] is True
+    assert available_projection["blockedExecutionReason"] is None
 
 
 def test_fake_provider_with_sufficient_bars_returns_normalized_available_payload() -> None:

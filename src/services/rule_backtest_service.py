@@ -22,6 +22,7 @@ from src.services.backtest_response_contract import build_rule_run_contract
 from src.services.backtest_data_sufficiency import assess_backtest_data_sufficiency
 from src.services.backtest_data_source_guard import assess_backtest_data_source_eligibility
 from src.services.historical_ohlcv_readiness import (
+    build_backtest_historical_ohlcv_readiness,
     HistoricalOhlcvReadinessRequest,
     HistoricalOhlcvReadinessService,
 )
@@ -2666,50 +2667,36 @@ class RuleBacktestService:
         else:
             rows = self.stock_repo.get_latest(code, days=load_count)
             bars = list(reversed(rows))
-        if len(bars) < max(10, parsed.max_lookback + 2):
+        required_bars = max(10, parsed.max_lookback + 2, int(lookback_bars or 0))
+        if len(bars) < required_bars:
+            historical_readiness = build_backtest_historical_ohlcv_readiness(
+                self._build_historical_ohlcv_readiness_payload(
+                    code=code,
+                    bars=list(bars),
+                    requested_start=normalized_start_date or history_start_date,
+                    requested_end=normalized_end_date,
+                    required_bars=required_bars,
+                    benchmark_summary={},
+                )
+            )
             result = self._build_empty_result(
                 parsed=parsed,
                 initial_capital=initial_capital,
                 lookback_bars=lookback_bars,
                 fee_bps=fee_bps,
                 slippage_bps=slippage_bps,
-                no_result_reason="insufficient_history",
-                no_result_message="历史行情不足，无法执行该策略回测。",
+                no_result_reason=str(historical_readiness.get("blockedExecutionReason") or "historical_ohlcv_unavailable"),
+                no_result_message=str(historical_readiness.get("consumerSafeMessage") or "Historical OHLCV readiness blocks this Backtest request."),
                 start_date=normalized_start_date,
                 end_date=normalized_end_date,
             )
-            self._apply_benchmark_context(
-                result,
-                instrument_code=code,
-                benchmark_mode=benchmark_mode,
-                benchmark_code=benchmark_code,
-                start_date=normalized_start_date,
-                end_date=normalized_end_date,
-            )
-            result.audit_ledger = self.engine._build_audit_ledger(
-                equity_curve=result.equity_curve,
-                benchmark_curve=result.benchmark_curve,
-                buy_and_hold_curve=getattr(result, "buy_and_hold_curve", []) or [],
-                benchmark_summary=dict(result.benchmark_summary or {}),
-            )
-            setattr(
-                result,
-                "robustness_analysis",
-                self._build_robustness_analysis(
-                    code=code,
-                    parsed=parsed,
-                    bars=bars,
-                    initial_capital=initial_capital,
-                    fee_bps=fee_bps,
-                    slippage_bps=slippage_bps,
-                lookback_bars=lookback_bars,
-                benchmark_mode=benchmark_mode,
-                benchmark_code=benchmark_code,
-                robustness_config=robustness_config,
-                start_date=normalized_start_date,
-                end_date=normalized_end_date,
-            ),
-            )
+            result.audit_ledger = []
+            result.benchmark_curve = []
+            result.benchmark_summary = {
+                "state": "not_executed",
+                "unavailable_reason": "primary_historical_ohlcv_blocked",
+            }
+            setattr(result, "robustness_analysis", {})
             setattr(
                 result,
                 "data_quality",
@@ -2721,6 +2708,8 @@ class RuleBacktestService:
                     benchmark_summary=dict(getattr(result, "benchmark_summary", {}) or {}),
                 ),
             )
+            result.data_quality["historicalOhlcvReadiness"] = historical_readiness
+            setattr(result, "blocked_execution", True)
             return result
 
         result = self.engine.run(
@@ -4070,6 +4059,9 @@ class RuleBacktestService:
     ) -> Dict[str, Any]:
         run_at = datetime.now()
         normalized_start_date, normalized_end_date = self._normalize_date_range(start_date=start_date, end_date=end_date)
+        blocked_execution = bool(getattr(result, "blocked_execution", False))
+        stored_status = "failed" if blocked_execution else "completed"
+        status_message = result.no_result_message if blocked_execution else "规则回测已完成，可查看交易明细与执行假设。"
         strategy_hash = hashlib.sha256(strategy_text.encode("utf-8")).hexdigest()
         warnings = result.warnings or []
         equity_payload = [p.to_dict() for p in result.equity_curve]
@@ -4093,7 +4085,7 @@ class RuleBacktestService:
         data_quality_payload = dict(getattr(result, "data_quality", {}) or {})
         data_sufficiency_payload = assess_backtest_data_sufficiency(
             {
-                "status": "completed",
+                "status": stored_status,
                 "no_result_reason": result.no_result_reason,
                 "data_quality": data_quality_payload,
                 "benchmark_summary": comparison_payload.get("benchmark_summary") or {},
@@ -4153,8 +4145,8 @@ class RuleBacktestService:
             ai_summary=ai_summary,
             trade_rows_persisted=bool(trade_payload),
             equity_curve_persisted=bool(equity_payload),
-            status="completed",
-            status_message="规则回测已完成，可查看交易明细与执行假设。",
+            status=stored_status,
+            status_message=status_message,
             at=run_at,
         )
 
@@ -4174,7 +4166,7 @@ class RuleBacktestService:
                 warnings_json=self._serialize_json(warnings),
                 run_at=run_at,
                 completed_at=run_at,
-                status="completed",
+                status=stored_status,
                 no_result_reason=result.no_result_reason,
                 no_result_message=result.no_result_message,
                 trade_count=result.metrics.get("trade_count", 0),
@@ -4211,8 +4203,8 @@ class RuleBacktestService:
                 ai_summary=ai_summary,
                 trade_rows_persisted=bool(trade_payload),
                 equity_curve_persisted=bool(equity_payload),
-                status="completed",
-                status_message="规则回测已完成，可查看交易明细与执行假设。",
+                status=stored_status,
+                status_message=status_message,
                 at=run_at,
             )
             run = self.repo.update_run(
@@ -4228,7 +4220,7 @@ class RuleBacktestService:
                 needs_confirmation=bool(result.parsed_strategy.needs_confirmation),
                 warnings_json=self._serialize_json(warnings),
                 completed_at=run_at,
-                status="completed",
+                status=stored_status,
                 no_result_reason=result.no_result_reason,
                 no_result_message=result.no_result_message,
                 trade_count=result.metrics.get("trade_count", 0),
@@ -4254,7 +4246,7 @@ class RuleBacktestService:
             code=code,
             strategy_hash=strategy_hash,
             parsed_strategy=result.parsed_strategy.to_dict(),
-            status="completed",
+            status=stored_status,
             no_result_reason=result.no_result_reason,
             no_result_message=result.no_result_message,
             request_payload=final_summary.get("request") if isinstance(final_summary, dict) else {},
@@ -8355,7 +8347,8 @@ class RuleBacktestService:
         return float(value) if value is not None else None
 
     def _build_ai_summary(self, parsed: ParsedStrategy, result) -> str:
-        if str(getattr(result, "no_result_reason", "") or "").strip() in {"insufficient_history", "insufficient_data"}:
+        no_result_reason = str(getattr(result, "no_result_reason", "") or "").strip()
+        if no_result_reason in {"insufficient_history", "insufficient_data"} or no_result_reason.startswith("historical_ohlcv_"):
             return self._fallback_summary(parsed, result.metrics, result.trades, result)
         prompt = self._build_summary_prompt(
             parsed,
@@ -8415,7 +8408,7 @@ class RuleBacktestService:
 
     def _fallback_summary(self, parsed: ParsedStrategy, metrics: Dict[str, Any], trades: List[Any], result: Any) -> str:
         no_result_reason = str(getattr(result, "no_result_reason", "") or "").strip()
-        if no_result_reason in {"insufficient_history", "insufficient_data"}:
+        if no_result_reason in {"insufficient_history", "insufficient_data"} or no_result_reason.startswith("historical_ohlcv_"):
             return "数据不足，暂不形成结论。历史行情不足，未生成收益、回撤、胜率或基准相对指标。"
         total_return = metrics.get("total_return_pct", 0.0) or 0.0
         benchmark_return = metrics.get("benchmark_return_pct")

@@ -178,6 +178,11 @@ const BACKTEST_RUN_REASON_LABELS: Record<string, { zh: string; en: string }> = {
   missing_benchmark: { zh: '缺少基准，基准相对指标不可用。', en: 'Benchmark is missing, so benchmark-relative metrics are unavailable.' },
   missing_adjustments: { zh: '复权或公司行动证据不足，结果只能观察。', en: 'Adjustment or corporate-action evidence is incomplete; result is observation-only.' },
   stale_data: { zh: '数据可能过期，结果只能观察。', en: 'Data may be stale; result is observation-only.' },
+  historical_ohlcv_not_configured: { zh: '历史 OHLCV 运行时未配置。', en: 'Historical OHLCV runtime is not configured.' },
+  historical_ohlcv_stale: { zh: '历史 OHLCV 覆盖已过期。', en: 'Historical OHLCV coverage is stale.' },
+  historical_ohlcv_insufficient_coverage: { zh: '请求区间的历史 OHLCV 覆盖不足。', en: 'Historical OHLCV coverage is insufficient for the requested range.' },
+  historical_ohlcv_missing: { zh: '缺少必需的历史 OHLCV 输入。', en: 'Required historical OHLCV inputs are missing.' },
+  historical_ohlcv_unavailable: { zh: '历史 OHLCV 运行时不可用。', en: 'Historical OHLCV runtime is unavailable.' },
 };
 
 function uniqueReadinessTokens(values?: string[] | null): string[] {
@@ -1758,6 +1763,7 @@ const BacktestPage: React.FC = () => {
                       parseError={ruleParseError}
                       runError={ruleRunError}
                       runReadiness={lastRuleRunResult?.executionReadiness || null}
+                      historicalOhlcvReadiness={lastRuleRunResult?.historicalOhlcvReadiness || null}
                       noAdviceDisclosure={lastRuleRunResult?.noAdviceDisclosure || null}
                       hasRunAttempt={Boolean(lastRuleRunResult)}
                       runFeedback={ruleRunFeedback}
@@ -1804,6 +1810,7 @@ const BacktestPage: React.FC = () => {
                       onRun={handleRunRuleBacktest}
                       onReset={resetRuleFlow}
                       runReadiness={lastRuleRunResult?.executionReadiness || null}
+                      historicalOhlcvReadiness={lastRuleRunResult?.historicalOhlcvReadiness || null}
                       noAdviceDisclosure={lastRuleRunResult?.noAdviceDisclosure || null}
                       hasRunAttempt={Boolean(lastRuleRunResult)}
                       runFeedback={ruleRunFeedback}

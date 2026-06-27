@@ -1,12 +1,13 @@
 import type React from 'react';
 import { AlertTriangle, CheckCircle2, CircleDashed, ShieldCheck, XCircle } from 'lucide-react';
-import type { BacktestExecutionReadiness } from '../../types/backtest';
+import type { BacktestExecutionReadiness, BacktestHistoricalOhlcvReadiness } from '../../types/backtest';
 
 type BacktestLanguage = 'zh' | 'en';
 
 type BacktestExecutionReadinessPanelProps = {
   language: BacktestLanguage;
   readiness?: BacktestExecutionReadiness | null;
+  historicalOhlcvReadiness?: BacktestHistoricalOhlcvReadiness | null;
   noAdviceDisclosure?: string | null;
   attempted?: boolean;
   isLoading?: boolean;
@@ -46,6 +47,28 @@ const REASON_LABELS: Record<string, { zh: string; en: string }> = {
   missing_adjustments: { zh: '复权/公司行动证据不足，结果只能观察。', en: 'Adjustment or corporate-action evidence is incomplete; result is observation-only.' },
   stale_data: { zh: '数据可能过期，结果只能观察。', en: 'Data may be stale; result is observation-only.' },
   missing_factor_inputs: { zh: '因子输入缺失，相关诊断不可用。', en: 'Factor inputs are missing; related diagnostics are unavailable.' },
+  historical_ohlcv_not_configured: { zh: '历史 OHLCV 运行时未配置。', en: 'Historical OHLCV runtime is not configured.' },
+  historical_ohlcv_stale: { zh: '历史 OHLCV 覆盖已过期。', en: 'Historical OHLCV coverage is stale.' },
+  historical_ohlcv_insufficient_coverage: { zh: '请求区间的历史 OHLCV 覆盖不足。', en: 'Historical OHLCV coverage is insufficient for the requested range.' },
+  historical_ohlcv_missing: { zh: '缺少必需的历史 OHLCV 输入。', en: 'Required historical OHLCV inputs are missing.' },
+  historical_ohlcv_unavailable: { zh: '历史 OHLCV 运行时不可用。', en: 'Historical OHLCV runtime is unavailable.' },
+};
+
+const OHLCV_STATUS_LABELS: Record<string, { zh: string; en: string }> = {
+  available: { zh: '历史 OHLCV 可执行', en: 'Historical OHLCV executable' },
+  missing: { zh: '历史 OHLCV 输入缺失', en: 'Historical OHLCV inputs missing' },
+  stale: { zh: '历史 OHLCV 过期', en: 'Historical OHLCV stale' },
+  not_configured: { zh: '历史 OHLCV 未配置', en: 'Historical OHLCV not configured' },
+  insufficient_coverage: { zh: '历史 OHLCV 覆盖不足', en: 'Historical OHLCV insufficient coverage' },
+  unavailable: { zh: '历史 OHLCV 不可用', en: 'Historical OHLCV unavailable' },
+};
+
+const DATA_CLASS_LABELS: Record<string, { zh: string; en: string }> = {
+  historical_ohlcv: { zh: '历史 OHLCV', en: 'Historical OHLCV' },
+  date_coverage: { zh: '日期覆盖', en: 'Date coverage' },
+  freshness: { zh: '新鲜度', en: 'Freshness' },
+  adjusted_prices: { zh: '复权价格', en: 'Adjusted prices' },
+  benchmark_ohlcv: { zh: '基准 OHLCV', en: 'Benchmark OHLCV' },
 };
 
 function normalizeToken(value?: string | null): string {
@@ -101,9 +124,22 @@ function ToneIcon({ tone }: { tone: ReadinessTone }) {
   return <CircleDashed className="size-4 text-white/42" />;
 }
 
+function getHistoricalStatusLabel(readiness: BacktestHistoricalOhlcvReadiness | null | undefined, language: BacktestLanguage): string {
+  const status = normalizeToken(readiness?.status) || 'unavailable';
+  return OHLCV_STATUS_LABELS[status]?.[language] || OHLCV_STATUS_LABELS.unavailable[language];
+}
+
+function getHistoricalDataClassLabels(readiness: BacktestHistoricalOhlcvReadiness | null | undefined, language: BacktestLanguage): string {
+  const labels = uniqueStrings(readiness?.missingDataClasses)
+    .map((value) => DATA_CLASS_LABELS[value]?.[language])
+    .filter((value): value is string => Boolean(value));
+  return labels.length ? labels.join(' / ') : (language === 'en' ? 'None reported' : '未返回缺口');
+}
+
 const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelProps> = ({
   language,
   readiness,
+  historicalOhlcvReadiness,
   noAdviceDisclosure,
   attempted = false,
   isLoading = false,
@@ -117,6 +153,10 @@ const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelP
   const resultAvailable = readiness?.resultContractAvailable === true;
   const benchmarkMissing = normalizeToken(readiness?.benchmarkState) === 'missing'
     || uniqueStrings(readiness?.reasonCodes).includes('missing_benchmark');
+  const hasHistoricalReadiness = Boolean(historicalOhlcvReadiness?.contractVersion || historicalOhlcvReadiness?.status);
+  const historicalExecutable = historicalOhlcvReadiness?.executable === true;
+  const benchmarkReadiness = historicalOhlcvReadiness?.benchmarkReadiness;
+  const adjustedRequirement = historicalOhlcvReadiness?.adjustedDataRequirement;
   const title = language === 'en' ? 'Execution readiness' : '执行就绪度';
   const subtitle = !hasReadiness
     ? (language === 'en'
@@ -175,6 +215,51 @@ const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelP
               </p>
             </div>
           </div>
+
+          {hasHistoricalReadiness ? (
+            <div
+              data-testid={`${testId}-historical-ohlcv`}
+              data-historical-ohlcv-status={normalizeToken(historicalOhlcvReadiness?.status) || 'unknown'}
+              className="mt-3 rounded-lg border border-current/10 bg-black/10 px-3 py-3 text-xs"
+            >
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                <p className="font-semibold">{language === 'en' ? 'Historical data readiness' : '历史数据就绪度'}</p>
+                <span className="rounded-full border border-current/20 px-2 py-0.5 font-semibold">
+                  {getHistoricalStatusLabel(historicalOhlcvReadiness, language)}
+                </span>
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                <p>
+                  <span className="opacity-55">{language === 'en' ? 'Bars' : 'Bars'}: </span>
+                  <span className="font-semibold">
+                    {historicalOhlcvReadiness?.availableBarCount ?? 0}/{historicalOhlcvReadiness?.requiredBarCount ?? 0}
+                  </span>
+                </p>
+                <p>
+                  <span className="opacity-55">{language === 'en' ? 'Missing classes' : '缺失数据'}: </span>
+                  <span className="font-semibold">{getHistoricalDataClassLabels(historicalOhlcvReadiness, language)}</span>
+                </p>
+                <p>
+                  <span className="opacity-55">{language === 'en' ? 'Adjusted prices' : '复权价格'}: </span>
+                  <span className="font-semibold">{adjustedRequirement?.required ? (adjustedRequirement.state || 'unknown') : (language === 'en' ? 'Not required' : '未要求')}</span>
+                </p>
+                <p>
+                  <span className="opacity-55">{language === 'en' ? 'Benchmark' : '基准'}: </span>
+                  <span className="font-semibold">{benchmarkReadiness?.required ? (benchmarkReadiness.status || 'unknown') : (language === 'en' ? 'Not requested' : '未请求')}</span>
+                </p>
+              </div>
+              <p className="mt-3 leading-5 opacity-80">
+                {historicalOhlcvReadiness?.consumerSafeMessage || (historicalExecutable
+                  ? (language === 'en' ? 'Historical OHLCV coverage is available for this request.' : '当前请求具备历史 OHLCV 覆盖。')
+                  : (language === 'en' ? 'Historical OHLCV readiness blocks execution.' : '历史 OHLCV 就绪度阻止执行。'))}
+              </p>
+              {historicalOhlcvReadiness?.operatorNextAction ? (
+                <p className="mt-2 leading-5 opacity-70">
+                  {language === 'en' ? 'Next action: ' : '下一步：'}{historicalOhlcvReadiness.operatorNextAction}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           {reasonLabels.length ? (
             <ul className="mt-3 grid gap-2 text-xs leading-5">
