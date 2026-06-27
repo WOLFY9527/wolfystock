@@ -35,6 +35,7 @@ import { Drawer } from '../components/common/Drawer';
 import ConsumerDataHealthSummaryPanel from '../components/common/ConsumerDataHealthSummaryPanel';
 import ConsumerEvidenceCoverageStrip from '../components/common/ConsumerEvidenceCoverageStrip';
 import ConsumerEvidencePacketStrip from '../components/common/ConsumerEvidencePacketStrip';
+import ObservationOnlyBoundary from '../components/common/ObservationOnlyBoundary';
 import PeerCorrelationSnapshotBlock from '../components/common/PeerCorrelationSnapshotBlock';
 import ConsumerResearchReadinessStrip from '../components/common/ConsumerResearchReadinessStrip';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -7560,6 +7561,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                           data-testid="home-bento-card-decision"
                           data-research-card="decision"
                         >
+                          {activeTraceReport ? (
+                            <ObservationOnlyBoundary language={locale} surface="home-report" className="mb-3" />
+                          ) : null}
                           {isFocusedTaskSoftTimedOut ? (
                             <HomeAnalysisSoftTimeoutNotice
                               locale={locale}

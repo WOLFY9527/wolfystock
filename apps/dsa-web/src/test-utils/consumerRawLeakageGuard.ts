@@ -73,3 +73,10 @@ export function findConsumerRawLeakage(
 export function getConsumerRawLeakagePatterns() {
   return [...defaultForbiddenPatterns];
 }
+
+export function textContentWithoutObservationBoundary(root: HTMLElement): string {
+  const clone = root.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll('[data-testid="observation-only-boundary"], [data-testid="backtest-research-boundary"]')
+    .forEach((node) => node.remove());
+  return clone.textContent || '';
+}

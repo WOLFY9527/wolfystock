@@ -38,6 +38,7 @@ import {
 } from '../hooks/useSafariInteractionReady';
 import { translate } from '../i18n/core';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
+import ObservationOnlyBoundary from '../components/common/ObservationOnlyBoundary';
 import { TerminalPageHeading } from '../components/terminal/TerminalPrimitives';
 import { getConsumerSafeApiErrorCopy } from '../utils/consumerErrorCopy';
 
@@ -1537,23 +1538,7 @@ const BacktestPage: React.FC = () => {
       </button>
     </div>
   );
-  const researchBoundaryTitle = language === 'en' ? 'Research-only boundary' : '研究边界';
-  const researchBoundaryItems = language === 'en'
-    ? [
-        'This tool is for backtest analysis and learning research only.',
-        'It does not constitute investment advice.',
-        'Past performance does not represent future returns.',
-      ]
-    : [
-        '本工具仅用于回测分析与学习研究',
-        '不构成投资建议',
-        '过往表现不代表未来收益',
-      ];
-  const researchBoundaryEventNote = language === 'en'
-    ? 'Signal, fill, and execution labels on this page describe historical rule events only. They do not trigger external execution or change portfolio holdings.'
-    : '页面中的信号、成交与执行标签仅表示历史规则事件，不会触发外部执行，也不会改动组合持仓。';
   const configPanelRadiusClass = 'rounded-[14px]';
-  const configInsetRadiusClass = 'rounded-xl';
   const normalModeRadiusTaxonomyClass = [
     "[&_[data-testid='normal-backtest-consolidated-card']]:rounded-[14px]",
     "[&_[data-testid='normal-backtest-template-insights']>div]:rounded-xl",
@@ -1596,32 +1581,12 @@ const BacktestPage: React.FC = () => {
               </nav>
             </div>
           </div>
-          <section
-            data-testid="backtest-research-boundary"
-            aria-label={researchBoundaryTitle}
-            className={`w-full ${configPanelRadiusClass} border border-amber-300/15 bg-amber-300/[0.07] px-4 py-4 text-sm text-amber-50 backdrop-blur-sm`}
-          >
-            <div className="flex min-w-0 flex-col gap-3">
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-100/75">
-                  {researchBoundaryTitle}
-                </span>
-              </div>
-              <ul className="grid gap-2 md:grid-cols-3">
-                {researchBoundaryItems.map((item) => (
-                  <li
-                    key={item}
-                    className={`${configInsetRadiusClass} border border-amber-50/10 bg-black/10 px-3 py-2 leading-6 text-amber-50/95`}
-                  >
-                    {item}
-                  </li>
-                ))}
-              </ul>
-              <p className="leading-6 text-amber-50/78">
-                {researchBoundaryEventNote}
-              </p>
-            </div>
-          </section>
+          <ObservationOnlyBoundary
+            language={language}
+            surface="backtest"
+            testId="backtest-research-boundary"
+            className={`w-full ${configPanelRadiusClass}`}
+          />
 
           <main
             data-testid="backtest-v1-page"

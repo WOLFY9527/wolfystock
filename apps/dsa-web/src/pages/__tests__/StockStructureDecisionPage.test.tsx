@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import StockStructureDecisionEntryPage from '../StockStructureDecisionEntryPage';
 import StockStructureDecisionPage from '../StockStructureDecisionPage';
-import { findConsumerRawLeakage } from '../../test-utils/consumerRawLeakageGuard';
+import { findConsumerRawLeakage, textContentWithoutObservationBoundary } from '../../test-utils/consumerRawLeakageGuard';
 
 const {
   languageState,
@@ -589,7 +589,7 @@ describe('StockStructureDecisionPage', () => {
     expect(screen.getByRole('link', { name: '研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
     expect(screen.getByRole('link', { name: '观察列表上下文' })).toHaveAttribute('href', '/zh/watchlist');
     expect(page).toHaveTextContent('可以直接输入标的，也可以从 Scanner、观察列表或研究雷达选择标的后进入。');
-    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
   });
 
   it('shows a validation error for empty direct symbol submit', () => {
@@ -642,6 +642,12 @@ describe('StockStructureDecisionPage', () => {
 
     const page = await screen.findByTestId('stock-structure-decision-page');
     expectCockpitStageOrder(page);
+    const observationBoundary = within(page).getByTestId('observation-only-boundary');
+    expect(observationBoundary).toHaveAttribute('data-observation-boundary-surface', 'stock-structure');
+    expect(observationBoundary).toHaveTextContent('observation-only');
+    expect(observationBoundary).toHaveTextContent('证据摘要');
+    expect(observationBoundary).toHaveTextContent('不构成交易建议');
+    expect(observationBoundary).toHaveTextContent('不提供买入、卖出、持有指令');
     for (const stageId of cockpitStageIds) {
       expect(within(page).getByTestId(stageId).className).toContain('min-w-0');
     }
@@ -726,8 +732,8 @@ describe('StockStructureDecisionPage', () => {
         /not personalized financial advice/i,
       ],
     })).toEqual([]);
-    expect(page.textContent || '').not.toMatch(/available|not_integrated|insufficient|blocked|observationOnly|not personalized financial advice/i);
-    expect(page.textContent || '').not.toMatch(/buy|sell|hold|target price|stop-loss|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/available|not_integrated|insufficient|blocked|observationOnly|not personalized financial advice/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/buy|sell|hold|target price|stop-loss|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
   });
 
   it('renders ORCL-specific history readiness instead of a default symbol', async () => {
@@ -778,8 +784,8 @@ describe('StockStructureDecisionPage', () => {
     expect(historyPanel).toHaveTextContent('缺口 K 线');
     expect(historyPanel).toHaveTextContent('0');
     expect(historyPanel).toHaveTextContent('结构计算已返回');
-    expect(page.textContent || '').not.toMatch(/\bAAPL\b/);
-    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/\bAAPL\b/);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
   });
 
   it('renders a 600519 history-disabled or missing state without chart inference', async () => {
@@ -884,8 +890,8 @@ describe('StockStructureDecisionPage', () => {
     expect(historyPanel).toHaveTextContent('90');
     expect(within(historyPanel).getByTestId('stock-history-chart-unavailable')).toBeInTheDocument();
     expect(within(page).queryByText('组件评分')).not.toBeInTheDocument();
-    expect(page.textContent || '').not.toMatch(/provider_disabled|cache_miss|provider|cache|raw|debug|trace/i);
-    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/provider_disabled|cache_miss|provider|cache|raw|debug|trace/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
   });
 
   it('distinguishes a timed-out structure computation from available history', async () => {
@@ -936,8 +942,8 @@ describe('StockStructureDecisionPage', () => {
     expect(quotePanel).toHaveTextContent('来源已确认');
     expect(quotePanel).toHaveTextContent('最新可用');
     expect(quotePanel).toHaveTextContent('更新');
-    expect(page.textContent || '').not.toMatch(/alpaca|provider_runtime|source_confidence|requestId|traceId|cache|debug/i);
-    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/alpaca|provider_runtime|source_confidence|requestId|traceId|cache|debug/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
   });
 
   it('renders cached OHLCV technical indicator values as research-only context', async () => {
@@ -983,7 +989,7 @@ describe('StockStructureDecisionPage', () => {
     expect(panel).toHaveTextContent('布林带下轨');
     expect(panel).toHaveTextContent('198.79');
     expect(panel).toHaveTextContent('仅作研究观察上下文');
-    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
   });
 
   it('renders missing-cache technical indicators without fabricating values', async () => {
@@ -1013,7 +1019,7 @@ describe('StockStructureDecisionPage', () => {
     expect(findConsumerRawLeakage(panel.textContent || '', {
       extraForbiddenPatterns: [/cacheKey|provider|rawPayload|requestId|traceId|missing_cache/i],
     })).toEqual([]);
-    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
   });
 
   it('renders insufficient-history technical indicators with required versus observed history', async () => {
@@ -1058,7 +1064,7 @@ describe('StockStructureDecisionPage', () => {
     expect(panel).toHaveTextContent('接口暂不可用');
     expect(panel).toHaveTextContent('不展示原始诊断，也不推断指标');
     expect(panel.textContent || '').not.toMatch(/provider|cacheKey|requestId|traceId|rawPayload|token|env|stack/i);
-    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
   });
 
   it('copies a single stock evidence pack JSON with quote lineage, readiness, warnings, and visible research state', async () => {
@@ -1241,8 +1247,8 @@ describe('StockStructureDecisionPage', () => {
     expect(quotePanel).toHaveTextContent('报价已返回，但来源边界未提供。');
     expect(quotePanel).not.toHaveTextContent('来源已确认');
     expect(quotePanel).not.toHaveTextContent('最新可用');
-    expect(page.textContent || '').not.toMatch(/provider|cache|debug|trace|sourceAuthority|raw|fallback/i);
-    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/provider|cache|debug|trace|sourceAuthority|raw|fallback/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
   });
 
   it('renders sample quote lineage as observation only', async () => {
@@ -1285,8 +1291,8 @@ describe('StockStructureDecisionPage', () => {
     expect(quotePanel).toHaveTextContent('样本报价');
     expect(quotePanel).toHaveTextContent('样本 / 演示');
     expect(quotePanel).toHaveTextContent('当前为样本/演示数据，仅供观察。');
-    expect(page.textContent || '').not.toMatch(/provider|cache|debug|trace|sourceAuthority|raw|fallback/i);
-    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/provider|cache|debug|trace|sourceAuthority|raw|fallback/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
   });
 
   it('renders a compact fail-closed boundary when the quote call is unavailable', async () => {
@@ -1305,8 +1311,8 @@ describe('StockStructureDecisionPage', () => {
     expect(quotePanel).toHaveTextContent('报价边界暂不可用');
     expect(quotePanel).toHaveTextContent('仅观察');
     expect(quotePanel).toHaveTextContent('来源待确认');
-    expect(page.textContent || '').not.toMatch(/provider|cache|debug|trace|sourceAuthority|raw|fallback/i);
-    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/provider|cache|debug|trace|sourceAuthority|raw|fallback/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
   });
 
   it('shows the options structure provider-missing state without fake analytics', async () => {
@@ -1477,8 +1483,8 @@ describe('StockStructureDecisionPage', () => {
     expect(panel).toHaveTextContent('下一证据缺口');
     expect(panel).toHaveTextContent('报价待补');
     expect(panel).toHaveTextContent('历史待补');
-    expect(page.textContent || '').not.toMatch(/provider|runtime|fallback|sourceAuthority|debug|buy now|target price/i);
-    expect(page.textContent || '').not.toMatch(/买入建议|卖出建议|持有建议|目标价|止损|仓位建议|交易建议|操作建议/);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/provider|runtime|fallback|sourceAuthority|debug|buy now|target price/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入建议|卖出建议|持有建议|目标价|止损|仓位建议|交易建议|操作建议/);
   });
 
   it('shows a safe admin-only data readiness cue when stock evidence is missing', async () => {
@@ -1540,7 +1546,7 @@ describe('StockStructureDecisionPage', () => {
     expect(panel).toHaveTextContent('研究包待更新');
     expect(page).toHaveTextContent('突破观察');
     expect(page).toHaveTextContent('主要结构线索');
-    expect(page.textContent || '').not.toMatch(/sorry|apology|available|not_integrated|observationOnly/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/sorry|apology|available|not_integrated|observationOnly/i);
   });
 
   it('maps internal stock structure and peer evidence terms to consumer-safe labels', async () => {
@@ -1631,8 +1637,8 @@ describe('StockStructureDecisionPage', () => {
         /\blow\b/i,
       ],
     })).toEqual([]);
-    expect(page.textContent || '').not.toMatch(/insufficient_evidence|freshness=unavailable|\bbreakdown\b|\bavailable\b|\bdaily\b|\blow\b|observation-only/i);
-    expect(page.textContent || '').not.toMatch(/provider|cache|runtime|schema|requestId|traceId|fallback|proxy|sourceAuthority|score-grade|raw|debug/i);
-    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓|buy|sell|hold|target price|stop loss|position sizing/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/insufficient_evidence|freshness=unavailable|\bbreakdown\b|\bavailable\b|\bdaily\b|\blow\b|observation-only/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/provider|cache|runtime|schema|requestId|traceId|fallback|proxy|sourceAuthority|score-grade|raw|debug/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓|buy|sell|hold|target price|stop loss|position sizing/i);
   });
 });
