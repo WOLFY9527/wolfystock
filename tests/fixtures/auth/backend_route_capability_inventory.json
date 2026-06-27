@@ -92,7 +92,7 @@
     },
     {
       "route_id": "watchlist.member_surface",
-      "path_pattern": "^/api/v1/watchlist/(?:$|research-overlay|items(?:/\\{item_id\\})?|refresh-scores|refresh-status)$",
+      "path_pattern": "^/api/v1/watchlist/(?:$|research-overlay|items(?:/\\{item_id\\})?|items/from-scanner-candidate|refresh-scores|refresh-status)$",
       "methods": ["GET", "POST", "DELETE"],
       "surface": "watchlist",
       "auth_dependency_label": "authenticated_user",
@@ -254,7 +254,7 @@
     },
     {
       "route_id": "admin.providers.read",
-      "path_pattern": "^/api/v1/admin/(?:(?:providers/(?:circuits(?:/events)?|quota-windows|probe-events|sla-readiness|operations-matrix)|provider-circuits|provider-usage-ledger)|market-providers/operations|market-provider-operations|historical-ohlcv/cache-preflight(?:/seed)?)$",
+      "path_pattern": "^/api/v1/admin/(?:(?:providers/(?:circuits(?:/events)?|quota-windows|probe-events|sla-readiness|operations-matrix)|provider-circuits|provider-usage-ledger)|market-providers/operations|market-provider-operations|provider-activation-verifier|historical-ohlcv/cache-preflight(?:/seed)?)$",
       "methods": ["GET", "POST"],
       "surface": "admin_provider_observability",
       "auth_dependency_label": "admin_capability",
@@ -746,6 +746,16 @@
       "transitional_note": "Watchlist writes are authenticated-user scoped and not public."
     },
     {
+      "route_id": "watchlist.items_from_scanner_candidate",
+      "path": "/api/v1/watchlist/items/from-scanner-candidate",
+      "method": "POST",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": "Scanner candidate handoff into watchlist is authenticated-user scoped and not public."
+    },
+    {
       "route_id": "watchlist.items_delete",
       "path": "/api/v1/watchlist/items/{item_id}",
       "method": "DELETE",
@@ -1064,6 +1074,16 @@
       "capability_label": "ops:providers:read",
       "no_go_marker": null,
       "transitional_note": "Market provider operations compatibility diagnostics are admin-capability gated and not a public surface."
+    },
+    {
+      "route_id": "admin.provider_activation_verifier",
+      "path": "/api/v1/admin/provider-activation-verifier",
+      "method": "GET",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "no_go_marker": null,
+      "transitional_note": "Provider activation verifier is operator-only and admin-capability gated."
     },
     {
       "route_id": "admin.historical_ohlcv_cache_preflight",

@@ -15,6 +15,10 @@ const { getHistoricalOhlcvCachePreflight } = vi.hoisted(() => ({
   getHistoricalOhlcvCachePreflight: vi.fn(),
 }));
 
+const { getProviderActivationVerifier } = vi.hoisted(() => ({
+  getProviderActivationVerifier: vi.fn(),
+}));
+
 const { getDataReadiness } = vi.hoisted(() => ({
   getDataReadiness: vi.fn(),
 }));
@@ -32,6 +36,7 @@ vi.mock('../../api/marketProviderOperations', () => ({
     getOperations,
     getOperationsMatrix,
     getHistoricalOhlcvCachePreflight,
+    getProviderActivationVerifier,
   },
 }));
 
@@ -1163,6 +1168,91 @@ const historicalOhlcvCachePreflightPayload = {
   },
 };
 
+const providerActivationVerifierPayload = {
+  contractVersion: 'provider_activation_verifier_v1',
+  generatedAt: '2026-06-27T09:00:00Z',
+  operatorOnly: true,
+  readOnly: true,
+  externalProviderCalls: false,
+  networkCallsEnabled: false,
+  mutationEnabled: false,
+  supportedStatuses: ['available', 'missing', 'not_configured', 'insufficient_permissions', 'stale', 'sample_only', 'unavailable'],
+  summary: {
+    totalCapabilities: 7,
+    availableCount: 1,
+    missingCount: 2,
+    notConfiguredCount: 1,
+    insufficientPermissionsCount: 1,
+    staleCount: 1,
+    sampleOnlyCount: 1,
+    unavailableCount: 0,
+    blockedProductSurfaces: ['Market Overview', 'Scanner', 'Backtest', 'Stock Fundamentals', 'Earnings', 'Portfolio'],
+    uatDiagnosis: 'operator_actionable_provider_activation',
+  },
+  capabilities: [
+    {
+      capabilityId: 'akshare.cn_hk_market_data',
+      provider: 'AkShare',
+      dataClass: 'CN/HK quotes and OHLCV',
+      status: 'missing',
+      userFacingImpact: 'CN/HK Market Overview, Scanner, Stock research, and Portfolio price lineage lack AkShare activation evidence.',
+      adminNextAction: 'Install and pin the AkShare dependency, then run the existing bounded AkShare capability probe in operator mode.',
+      freshnessCacheStatus: { state: 'unavailable', known: true },
+      minimumValidationCheck: 'python -m pytest -q tests/test_akshare_capability_probe.py',
+      blockedProductSurfaces: ['Market Overview', 'Scanner', 'Stock Fundamentals', 'Portfolio'],
+    },
+    {
+      capabilityId: 'fmp.fundamentals_earnings',
+      provider: 'Financial Modeling Prep',
+      dataClass: 'US fundamentals, statements, earnings, and daily reference data',
+      status: 'insufficient_permissions',
+      userFacingImpact: 'Stock Fundamentals, Earnings, News/Catalyst enrichment, and deep single-stock research cannot prove real-data readiness.',
+      adminNextAction: 'Run a bounded FMP permission probe for one known symbol and store only sanitized entitlement evidence before promoting this capability.',
+      freshnessCacheStatus: { state: 'permission_unverified', known: true },
+      minimumValidationCheck: 'python scripts/provider_activation_verifier.py --format json',
+      blockedProductSurfaces: ['Stock Fundamentals', 'Earnings', 'News/Catalyst'],
+    },
+    {
+      capabilityId: 'historical_ohlcv.runtime',
+      provider: 'Local historical OHLCV runtime',
+      dataClass: 'Historical OHLCV cache and runtime activation',
+      status: 'stale',
+      userFacingImpact: 'Backtest, Scanner history gates, technical indicators, Market Regime, and single-stock history remain blocked or degraded.',
+      adminNextAction: 'Refresh or seed representative local OHLCV cache in the existing dry-run/explicit-seed workflow, then rerun the cache preflight.',
+      freshnessCacheStatus: { state: 'latest_bar:2026-06-12', known: true },
+      minimumValidationCheck: 'GET /api/v1/admin/historical-ohlcv/cache-preflight',
+      blockedProductSurfaces: ['Scanner', 'Backtest', 'Stock Fundamentals', 'Market Overview'],
+    },
+    {
+      capabilityId: 'earnings_fundamentals.readiness',
+      provider: 'Fundamentals and earnings evidence',
+      dataClass: 'Fundamentals, statements, earnings calendar, and catalyst facts',
+      status: 'sample_only',
+      userFacingImpact: 'Stock Fundamentals, Earnings, News/Catalyst, and single-stock research remain evidence-limited.',
+      adminNextAction: 'Replace sample-only earnings/fundamentals fixtures with provider-backed sanitized evidence before enabling the dependent surfaces.',
+      freshnessCacheStatus: { state: 'sample_only', known: true },
+      minimumValidationCheck: 'python -m pytest -q tests/services/test_earnings_calendar_readiness_contract.py tests/test_fundamental_adapter.py',
+      blockedProductSurfaces: ['Stock Fundamentals', 'Earnings', 'News/Catalyst'],
+    },
+  ],
+  metadata: {
+    source: 'local_dependency_configuration_and_cache_signals',
+    readOnly: true,
+    operatorOnly: true,
+    externalProviderCalls: false,
+    networkCallsEnabled: false,
+    mutationEnabled: false,
+    sensitiveValuesIncluded: false,
+    rawProviderPayloadsIncluded: false,
+    exceptionDetailsIncluded: false,
+    providerRuntimeChanged: false,
+    consumerVisible: false,
+    cacheKey: 'SECRET_CACHE_KEY',
+    traceId: 'TRACE-SECRET',
+    apiKey: 'SECRET',
+  },
+};
+
 describe('MarketProviderOperationsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1170,6 +1260,7 @@ describe('MarketProviderOperationsPage', () => {
     getDataReadiness.mockResolvedValue(readinessPayload);
     getOperationsMatrix.mockResolvedValue(operationsMatrixPayload);
     getHistoricalOhlcvCachePreflight.mockResolvedValue(historicalOhlcvCachePreflightPayload);
+    getProviderActivationVerifier.mockResolvedValue(providerActivationVerifierPayload);
     getDataSourceGapRegistry.mockResolvedValue(dataSourceGapRegistryPayload);
     getProfessionalDataCapabilitiesAdmin.mockResolvedValue(professionalCapabilityAdminPayload);
   });
@@ -1197,6 +1288,30 @@ describe('MarketProviderOperationsPage', () => {
     expect(await screen.findByRole('heading', { name: '数据源维护路线图' })).toBeInTheDocument();
     expect(pageRoot.className).not.toContain('bg-[#050505]');
     expect(pageRoot.className).not.toContain('bg-black');
+  });
+
+  it('renders provider activation verifier results with blocked surfaces and safe next actions only', async () => {
+    getOperations.mockResolvedValue(populatedPayload);
+
+    render(<MarketProviderOperationsPage />);
+
+    const panel = await screen.findByTestId('provider-activation-verifier-panel');
+    expect(panel).toHaveTextContent('Provider activation verifier');
+    expect(panel).toHaveTextContent('AkShare');
+    expect(panel).toHaveTextContent('Financial Modeling Prep');
+    expect(panel).toHaveTextContent('Local historical OHLCV runtime');
+    expect(panel).toHaveTextContent('Market Overview');
+    expect(panel).toHaveTextContent('Scanner');
+    expect(panel).toHaveTextContent('Backtest');
+    expect(panel).toHaveTextContent('Stock Fundamentals');
+    expect(panel).toHaveTextContent('Earnings');
+    expect(panel).toHaveTextContent('Portfolio');
+    expect(panel).toHaveTextContent('Run a bounded FMP permission probe');
+    expect(panel).toHaveTextContent('Refresh or seed representative local OHLCV cache');
+    expect(getProviderActivationVerifier).toHaveBeenCalledTimes(1);
+
+    const bodyText = document.body.textContent || '';
+    expect(bodyText).not.toMatch(/SECRET_CACHE_KEY|TRACE-SECRET|apiKey|cacheKey|traceId|requestId|rawPayload|stack trace|token=/i);
   });
 
   it('keeps page-level overflow hidden while exposing a contained mobile matrix scroll affordance', async () => {
