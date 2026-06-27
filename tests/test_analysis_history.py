@@ -1075,6 +1075,68 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         )
 
     @patch("src.auth.is_auth_enabled", return_value=False)
+    def test_history_list_api_excludes_test_reports_unless_explicitly_requested(self, mock_auth) -> None:
+        """Home consumers should not receive diagnostic/sample reports in the default history list."""
+        if TestClient is None or create_app is None:
+            self.skipTest("fastapi is not installed in this test environment")
+
+        self.assertEqual(
+            self.db.save_analysis_history(
+                result=AnalysisResult(
+                    code="ORCL",
+                    name="Oracle Corporation",
+                    sentiment_score=60,
+                    trend_prediction="Neutral",
+                    operation_advice="Observe",
+                    analysis_summary="Diagnostic fixture report.",
+                ),
+                query_id="query_history_test_orcl_001",
+                report_type="detailed",
+                news_content="fixture",
+                context_snapshot=None,
+                save_snapshot=False,
+                is_test=True,
+            ),
+            1,
+        )
+        self.assertEqual(
+            self.db.save_analysis_history(
+                result=AnalysisResult(
+                    code="AAPL",
+                    name="Apple",
+                    sentiment_score=55,
+                    trend_prediction="Observation",
+                    operation_advice="Observe",
+                    analysis_summary="Real persisted user report.",
+                ),
+                query_id="query_history_real_aapl_001",
+                report_type="detailed",
+                news_content="news",
+                context_snapshot=None,
+                save_snapshot=False,
+                is_test=False,
+            ),
+            1,
+        )
+
+        static_dir = Path(self._temp_dir.name) / "empty-static"
+        static_dir.mkdir(exist_ok=True)
+        client = TestClient(create_app(static_dir=static_dir))
+
+        default_response = client.get("/api/v1/history")
+        self.assertEqual(default_response.status_code, 200)
+        default_payload = default_response.json()
+        self.assertEqual(default_payload["total"], 1)
+        self.assertEqual([item["stock_code"] for item in default_payload["items"]], ["AAPL"])
+        self.assertNotIn("ORCL", json.dumps(default_payload, ensure_ascii=False))
+
+        diagnostic_response = client.get("/api/v1/history", params={"include_test": "true"})
+        self.assertEqual(diagnostic_response.status_code, 200)
+        diagnostic_payload = diagnostic_response.json()
+        self.assertEqual(diagnostic_payload["total"], 2)
+        self.assertIn("ORCL", [item["stock_code"] for item in diagnostic_payload["items"]])
+
+    @patch("src.auth.is_auth_enabled", return_value=False)
     def test_history_detail_api_omits_raw_debug_containers(self, mock_auth) -> None:
         """History detail API should project safe report fields without raw/debug containers."""
         if TestClient is None or create_app is None:

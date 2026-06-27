@@ -14,7 +14,7 @@ const HOME_TICKER_FORMAT_RE = /^[A-Z]{1,5}$|^\d{6}$/;
 
 function normalizeHomeTickerQuery(rawValue?: string | null): string {
   const trimmed = String(rawValue || '').trim();
-  if (!trimmed) {
+  if (!trimmed || trimmed === '-' || trimmed === '--') {
     return '';
   }
 
@@ -61,7 +61,6 @@ export function resolveHomeDashboardSelection(
   const activeTicker = normalizeHomeTickerQuery(input.activeTicker);
   const pendingAnalysisTicker = normalizeHomeTickerQuery(input.pendingAnalysisTicker);
   const selectedTicker = normalizeHomeTickerQuery(getSymbolDisplay(input.selectedReport));
-  const restoredTicker = normalizeHomeTickerQuery(input.recentHistoryItems[0]?.stockCode);
   const defaultTicker = normalizeHomeTickerQuery(input.defaultTicker);
 
   const completedTaskReport = input.routeTaskId
@@ -89,7 +88,7 @@ export function resolveHomeDashboardSelection(
     return input.activeTasks[0] || null;
   })();
 
-  const effectiveTicker = routeSymbol || activeTicker || selectedTicker || restoredTicker || defaultTicker;
+  const effectiveTicker = routeSymbol || activeTicker || selectedTicker || defaultTicker;
   const completedTaskTicker = normalizeHomeTickerQuery(completedTaskReport?.meta.stockCode);
 
   const dashboardReport = (() => {
@@ -129,7 +128,6 @@ export function resolveHomeDashboardSelection(
       || routeSymbol
       || activeTicker
       || selectedTicker
-      || restoredTicker,
   );
   const activeEvidenceTicker = HOME_TICKER_FORMAT_RE.test(activeEvidenceTickerCandidate) ? activeEvidenceTickerCandidate : '';
 

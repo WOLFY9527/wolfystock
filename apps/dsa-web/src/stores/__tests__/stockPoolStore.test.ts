@@ -65,7 +65,27 @@ describe('stockPoolStore', () => {
     useStockPoolStore.getState().resetDashboardState();
   });
 
-  it('loads initial history and auto-selects the first report', async () => {
+  it('loads initial history without auto-selecting an unchosen report', async () => {
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 20,
+      items: [historyItem],
+    });
+    vi.mocked(historyApi.getDetail).mockResolvedValue(historyReport);
+
+    await useStockPoolStore.getState().loadInitialHistory();
+
+    const state = useStockPoolStore.getState();
+    expect(state.historyItems).toHaveLength(1);
+    expect(state.selectedReport).toBeNull();
+    expect(historyApi.getDetail).not.toHaveBeenCalled();
+    expect(state.isLoadingHistory).toBe(false);
+    expect(state.isLoadingReport).toBe(false);
+  });
+
+  it('restores an explicitly persisted history selection on initial load', async () => {
+    window.localStorage.setItem('dsa-selected-history-id', '1');
     vi.mocked(historyApi.getList).mockResolvedValue({
       total: 1,
       page: 1,
@@ -79,8 +99,7 @@ describe('stockPoolStore', () => {
     const state = useStockPoolStore.getState();
     expect(state.historyItems).toHaveLength(1);
     expect(state.selectedReport?.meta.stockCode).toBe('600519');
-    expect(state.isLoadingHistory).toBe(false);
-    expect(state.isLoadingReport).toBe(false);
+    expect(historyApi.getDetail).toHaveBeenCalledWith(1);
   });
 
   it('deletes selected history and clears the selected report when nothing remains', async () => {
