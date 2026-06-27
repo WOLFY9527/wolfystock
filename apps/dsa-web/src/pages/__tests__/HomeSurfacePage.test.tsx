@@ -13,6 +13,7 @@ import { stocksApi } from '../../api/stocks';
 import { resolveHomeCandlestickTooltipPosition } from '../../components/home-bento/homeCandlestickChartUtils';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { useStockPoolStore } from '../../stores/stockPoolStore';
+import { textContentWithoutObservationBoundary } from '../../test-utils/consumerRawLeakageGuard';
 import { buildInstitutionalReportMarkdown, getCompanyWithTicker } from '../../utils/homeReportIdentity';
 import HomeSurfacePage from '../HomeSurfacePage';
 
@@ -1100,7 +1101,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-research-data-state-strip')).toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-decision-score-value')).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('home-bento-dashboard')).toHaveTextContent('不构成投资建议'));
-    expect(screen.getByTestId('home-bento-dashboard')).not.toHaveTextContent(/买入|卖出|下单|立即交易|必买|稳赚|保证收益|目标价|止损|建仓|加仓|减仓|小仓试错|第二笔|buy recommendation|sell recommendation|trading recommendation|probe size|start light|add only|guaranteed|AI recommends you buy/i);
+    expect(textContentWithoutObservationBoundary(screen.getByTestId('home-bento-dashboard'))).not.toMatch(/买入|卖出|下单|立即交易|必买|稳赚|保证收益|目标价|止损|建仓|加仓|减仓|小仓试错|第二笔|buy recommendation|sell recommendation|trading recommendation|probe size|start light|add only|guaranteed|AI recommends you buy/i);
   });
 
   it('keeps a single first-read summary zone ahead of the collapsed research boundary details', async () => {
@@ -1127,7 +1128,7 @@ describe('HomeSurfacePage', () => {
     expect(within(firstReadSummary).queryByText(/研究就绪度|Research readiness/i)).not.toBeInTheDocument();
     expect(within(firstReadSummary).queryByText(/数据健康|Data health/i)).not.toBeInTheDocument();
     expect(within(firstReadSummary).queryByText(/证据包摘要|Evidence packet/i)).not.toBeInTheDocument();
-    expect(dashboardText).not.toMatch(HOME_RESEARCH_PACKET_FORBIDDEN_COPY_PATTERN);
+    expect(textContentWithoutObservationBoundary(screen.getByTestId('home-bento-dashboard'))).not.toMatch(HOME_RESEARCH_PACKET_FORBIDDEN_COPY_PATTERN);
   });
 
   it('keeps US equity key levels non-CNY and makes the right rail conclusion-first', async () => {
@@ -1236,7 +1237,7 @@ describe('HomeSurfacePage', () => {
     expect(trustStrip).not.toHaveTextContent(/\bnews\b/i);
 
     expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('仅观察');
-    expect(screen.getByTestId('home-bento-dashboard')).not.toHaveTextContent(/买入|卖出|下单|立即交易|必买|稳赚|保证收益|建仓|加仓|减仓|小仓试错|第二笔|probe size|start light|add only|guaranteed|AI recommends you buy/i);
+    expect(textContentWithoutObservationBoundary(screen.getByTestId('home-bento-dashboard'))).not.toMatch(/买入|卖出|下单|立即交易|必买|稳赚|保证收益|建仓|加仓|减仓|小仓试错|第二笔|probe size|start light|add only|guaranteed|AI recommends you buy/i);
   });
 
   it('shows only verified catalyst-like events when report event data exists', async () => {
@@ -2388,7 +2389,7 @@ describe('HomeSurfacePage', () => {
     expect(panel).toHaveTextContent('下一步证据：等待完整研究证据后再阅读。');
     expect(panel).not.toHaveTextContent('INSUFFICIENT');
     expect(panel).not.toHaveTextContent('AVAILABLE');
-    expect(dashboard).not.toHaveTextContent(/可以形成研究判断|强市场判断已生成|买入|卖出|持有|推荐|目标价|止损|仓位|buy|sell|hold|recommend|target|stop|position sizing|requestId|traceId|provider|debug|schema|raw payload/i);
+    expect(textContentWithoutObservationBoundary(dashboard)).not.toMatch(/可以形成研究判断|强市场判断已生成|买入|卖出|持有|推荐|目标价|止损|仓位|buy|sell|hold|recommend|target|stop|position sizing|requestId|traceId|provider|debug|schema|raw payload/i);
     expect(panel.textContent).not.toMatch(HOME_RESEARCH_PACKET_FORBIDDEN_COPY_PATTERN);
   });
 
@@ -4665,7 +4666,14 @@ describe('HomeSurfacePage', () => {
       });
     });
 
-    expect(await screen.findByTestId('home-bento-analysis-result-card')).toHaveTextContent('Netflix completion replaced neutral cards.');
+    const resultCard = await screen.findByTestId('home-bento-analysis-result-card');
+    expect(resultCard).toHaveTextContent('Netflix completion replaced neutral cards.');
+    const boundary = screen.getByTestId('observation-only-boundary');
+    expect(boundary).toHaveAttribute('data-observation-boundary-surface', 'home-report');
+    expect(boundary).toHaveTextContent('observation-only');
+    expect(boundary).toHaveTextContent('证据摘要');
+    expect(boundary).toHaveTextContent('不构成交易建议');
+    expect(boundary).toHaveTextContent('不提供买入、卖出、持有指令');
     expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
@@ -4687,6 +4695,7 @@ describe('HomeSurfacePage', () => {
 
     await waitFor(() => expect(screen.getByTestId('home-bento-omnibar-input')).toHaveValue(''));
     expect(await screen.findByText('请求过于频繁，请稍后再试。')).toBeInTheDocument();
+    expect(screen.queryByTestId('observation-only-boundary')).not.toBeInTheDocument();
     expect(screen.queryByText('AI 引擎调用过载，已加载本地快照数据')).not.toBeInTheDocument();
     expect(screen.queryByText('Oracle Corporation')).not.toBeInTheDocument();
     expect(screen.queryByText('Oracle')).not.toBeInTheDocument();

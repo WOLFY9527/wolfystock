@@ -14,6 +14,8 @@ interface SupportBaseProps {
   contentClassName?: string;
   actionsClassName?: string;
   role?: React.AriaRole;
+  'data-testid'?: string;
+  'data-observation-boundary-surface'?: string;
 }
 
 interface SupportBannerProps extends SupportBaseProps {
@@ -44,8 +46,15 @@ export const SupportBanner: React.FC<SupportBannerProps> = ({
   contentClassName,
   actionsClassName,
   role,
+  'data-testid': dataTestId,
+  'data-observation-boundary-surface': dataObservationBoundarySurface,
 }) => (
-  <div className={cn('theme-inline-banner rounded-[var(--cohere-radius-medium)] px-4 py-4', bannerToneClasses[tone], className)} role={role}>
+  <div
+    className={cn('theme-inline-banner rounded-[var(--cohere-radius-medium)] px-4 py-4', bannerToneClasses[tone], className)}
+    role={role}
+    data-testid={dataTestId}
+    data-observation-boundary-surface={dataObservationBoundarySurface}
+  >
     {title ? <p className={cn('theme-inline-banner-title text-[0.98rem] font-normal tracking-[-0.01em]', titleClassName)}>{title}</p> : null}
     {body ? (
       <div className={cn(title ? 'mt-1.5' : '', 'text-sm leading-6 opacity-90', bodyClassName)}>

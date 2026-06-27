@@ -12,6 +12,7 @@ import {
 } from '../components/linear/LinearPrimitives';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import PeerCorrelationSnapshotBlock from '../components/common/PeerCorrelationSnapshotBlock';
+import ObservationOnlyBoundary from '../components/common/ObservationOnlyBoundary';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { TerminalButton, TerminalChip, TerminalEmptyState } from '../components/terminal/TerminalPrimitives';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
@@ -3020,6 +3021,9 @@ export default function StockStructureDecisionPage() {
             ) : null}
             {data ? (
               <>
+                <div className="p-3 pb-0 md:p-4 md:pb-0">
+                  <ObservationOnlyBoundary language={locale} surface="stock-structure" />
+                </div>
                 <StockResearchCockpitStage
                   order={1}
                   eyebrow={locale === 'en' ? 'Quote / identity' : '报价 / 标识'}

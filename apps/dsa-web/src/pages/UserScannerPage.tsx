@@ -27,6 +27,7 @@ import {
 } from '../api/scanner';
 import { watchlistApi } from '../api/watchlist';
 import ConsumerResearchReadinessStrip from '../components/common/ConsumerResearchReadinessStrip';
+import ObservationOnlyBoundary from '../components/common/ObservationOnlyBoundary';
 import { SupportBanner } from '../components/common/SupportSurface';
 import ResearchWorkspaceFlowPanel from '../components/research/ResearchWorkspaceFlowPanel';
 import { ScannerActionButton as ActionButton } from '../components/scanner/ScannerActionButton';
@@ -4033,6 +4034,9 @@ const UserScannerPage: React.FC = () => {
                     {language === 'en' ? 'Open data readiness' : '打开数据就绪'}
                   </a>
                 </div>
+              ) : null}
+              {runDetail ? (
+                <ObservationOnlyBoundary language={language} surface="scanner" className="mx-3" />
               ) : null}
               {showWorkflowNextSteps ? (
                 <section

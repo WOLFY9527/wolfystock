@@ -15,7 +15,7 @@ import type {
 } from '../../types/scanner';
 import type { WatchlistItem } from '../../types/watchlist';
 import type { RuleBacktestRunResponse } from '../../types/backtest';
-import { findConsumerRawLeakage } from '../../test-utils/consumerRawLeakageGuard';
+import { findConsumerRawLeakage, textContentWithoutObservationBoundary } from '../../test-utils/consumerRawLeakageGuard';
 
 const {
   getRuns,
@@ -1280,7 +1280,7 @@ describe('UserScannerPage', () => {
     expect(within(row).getAllByText('60/100').length).toBeGreaterThan(0);
     expect(within(row).queryByTestId('scanner-score-trust-WULF')).not.toBeInTheDocument();
     expect(row).not.toHaveTextContent(/fallback|proxy|stale|source-confidence|sourceConfidence|provider|reasonCode|reasonFamilies/i);
-    expect(container).not.toHaveTextContent(/买入|卖出|加仓|减仓|recommend(?:ation)?/i);
+    expect(textContentWithoutObservationBoundary(container)).not.toMatch(/买入|卖出|加仓|减仓|recommend(?:ation)?/i);
     expectNoRawI18nKeys(container);
   });
 
@@ -1424,7 +1424,7 @@ describe('UserScannerPage', () => {
     expect(within(row).getAllByText('94/100').length).toBeGreaterThan(0);
     expect(within(screen.getByTestId('scanner-result-row-AVGO')).getAllByText('88/100').length).toBeGreaterThan(0);
     expect(orderedSymbolsFromRows()).toEqual(['NVDA', 'AVGO', 'AMD']);
-    expect(container).not.toHaveTextContent(/买入|卖出|下单|trade|broker|order/i);
+    expect(textContentWithoutObservationBoundary(container)).not.toMatch(/买入|卖出|下单|trade|broker|order/i);
     expectNoRawI18nKeys(container);
   });
 
@@ -1470,7 +1470,7 @@ describe('UserScannerPage', () => {
     expect(within(row).getAllByText('94/100').length).toBeGreaterThan(0);
     expect(within(screen.getByTestId('scanner-result-row-AVGO')).getAllByText('88/100').length).toBeGreaterThan(0);
     expect(orderedSymbolsFromRows()).toEqual(['NVDA', 'AVGO', 'AMD']);
-    expect(container).not.toHaveTextContent(/买入|卖出|下单|trade|broker|order/i);
+    expect(textContentWithoutObservationBoundary(container)).not.toMatch(/买入|卖出|下单|trade|broker|order/i);
     expectNoRawI18nKeys(container);
   });
 
@@ -1528,7 +1528,7 @@ describe('UserScannerPage', () => {
     expect(within(row).getAllByText('94/100').length).toBeGreaterThan(0);
     expect(within(screen.getByTestId('scanner-result-row-AVGO')).getAllByText('88/100').length).toBeGreaterThan(0);
     expect(orderedSymbolsFromRows()).toEqual(['NVDA', 'AVGO', 'AMD']);
-    expect(container).not.toHaveTextContent(/买入|卖出|下单|交易建议|投资建议|position sizing/i);
+    expect(textContentWithoutObservationBoundary(container)).not.toMatch(/买入|卖出|下单|交易建议|投资建议|position sizing/i);
     expectNoRawI18nKeys(container);
   });
 
@@ -1563,7 +1563,7 @@ describe('UserScannerPage', () => {
     expect(within(row).getAllByText('94/100').length).toBeGreaterThan(0);
     expect(within(screen.getByTestId('scanner-result-row-AVGO')).getAllByText('88/100').length).toBeGreaterThan(0);
     expect(orderedSymbolsFromRows()).toEqual(['NVDA', 'AVGO', 'AMD']);
-    expect(container).not.toHaveTextContent(/买入|卖出|下单|trade|broker|order/i);
+    expect(textContentWithoutObservationBoundary(container)).not.toMatch(/买入|卖出|下单|trade|broker|order/i);
     expectNoRawI18nKeys(container);
   });
 
@@ -1670,7 +1670,7 @@ describe('UserScannerPage', () => {
     expect(strip).toHaveTextContent('主题：阻断');
     expect(strip).toHaveTextContent('标的池：默认池');
     expect(strip).toHaveTextContent('当前市场上下文暂不可用');
-    expect(container).not.toHaveTextContent(/cn_context_unavailable|provider|cache|router|sourceAuthority|buy|sell|order|trade|broker|买入|卖出|下单/i);
+    expect(textContentWithoutObservationBoundary(container)).not.toMatch(/cn_context_unavailable|provider|cache|router|sourceAuthority|buy|sell|order|trade|broker|买入|卖出|下单/i);
   });
 
   it('renders a scanner conclusion band when no candidate is usable', async () => {
@@ -1753,7 +1753,7 @@ describe('UserScannerPage', () => {
     expect(band).toHaveTextContent('报价快照待补');
     expect(band).toHaveTextContent('补充报价快照后重新运行。');
     expect(container).not.toHaveTextContent(/missing_quote_snapshot|0ms|0\s*\/\s*0\s*\/\s*0/);
-    expect(container).not.toHaveTextContent(/buy|sell|hold|target price|stop-loss|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
+    expect(textContentWithoutObservationBoundary(container)).not.toMatch(/buy|sell|hold|target price|stop-loss|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
   });
 
   it('uses scanner status data readiness when no run detail is available', async () => {
@@ -1860,8 +1860,8 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent('候选表暂不展示');
     expect(screen.queryByTestId('scanner-empty-history-fallback')).not.toBeInTheDocument();
     expect(screen.queryByTestId('scanner-empty-success-preview')).not.toBeInTheDocument();
-    expect(container).not.toHaveTextContent(/0ms|已验证|Verified|provider|fallback|cache|runtime|schema|requestId|traceId|observation-only|Low-evidence filter active|evidence families/i);
-    expect(container).not.toHaveTextContent(/买入|卖出|下单|交易建议|投资建议|止损|目标价|position sizing|target price|stop loss|buy now|sell now/i);
+    expect(textContentWithoutObservationBoundary(container)).not.toMatch(/0ms|已验证|Verified|provider|fallback|cache|runtime|schema|requestId|traceId|observation-only|Low-evidence filter active|evidence families/i);
+    expect(textContentWithoutObservationBoundary(container)).not.toMatch(/买入|卖出|下单|交易建议|投资建议|止损|目标价|position sizing|target price|stop loss|buy now|sell now/i);
   });
 
   it('labels zero-count latest and previous summaries as unavailable instead of completed 0ms cards', async () => {
@@ -2302,7 +2302,7 @@ describe('UserScannerPage', () => {
     expect(container).toHaveTextContent('参考区间');
     expect(container).toHaveTextContent('风险边界');
     expect(container).not.toHaveTextContent(/建仓|止损|before acting|执行操作|Entry|Target|Stop/i);
-    expect(container).not.toHaveTextContent(/买入|卖出|加仓|减仓|buy|sell|recommend(?:ation)?/i);
+    expect(textContentWithoutObservationBoundary(container)).not.toMatch(/买入|卖出|加仓|减仓|buy|sell|recommend(?:ation)?/i);
   });
 
   it('renders compact scanner workspace without the old decorative hero', async () => {
@@ -2310,6 +2310,12 @@ describe('UserScannerPage', () => {
 
     expect(await screen.findByTestId('user-scanner-workspace')).toBeInTheDocument();
     await screen.findByTestId('scanner-result-row-NVDA');
+    const observationBoundary = screen.getByTestId('observation-only-boundary');
+    expect(observationBoundary).toHaveAttribute('data-observation-boundary-surface', 'scanner');
+    expect(observationBoundary).toHaveTextContent('observation-only');
+    expect(observationBoundary).toHaveTextContent('证据摘要');
+    expect(observationBoundary).toHaveTextContent('不构成交易建议');
+    expect(observationBoundary).toHaveTextContent('不提供买入、卖出、持有指令');
     expect(screen.getByTestId('scanner-wide-workspace-scope')).toHaveAttribute('data-workspace-width', 'near-full');
     expect(screen.getByTestId('user-scanner-workspace')).toHaveAttribute('data-terminal-primitive', 'page-shell');
     expect(screen.getByTestId('scanner-page-heading')).toHaveAttribute('data-terminal-primitive', 'dense-page-header');
@@ -3125,7 +3131,7 @@ describe('UserScannerPage', () => {
     expect(screen.queryByTestId('scanner-detail-rail')).not.toBeInTheDocument();
     expect(screen.queryByTestId('scanner-inline-detail-panel')).not.toBeInTheDocument();
     expect(screen.getByTestId('scanner-workbench-detail-layout')).toHaveClass('grid-cols-1');
-    expect(container).not.toHaveTextContent(/买入|卖出|加仓|减仓|buy|sell|recommend(?:ation)?/i);
+    expect(textContentWithoutObservationBoundary(container)).not.toMatch(/买入|卖出|加仓|减仓|buy|sell|recommend(?:ation)?/i);
 
     fireEvent.click(screen.getByTestId('scanner-history-trigger'));
 

@@ -8,7 +8,7 @@ import ResearchRadarPage from '../ResearchRadarPage';
 import ScenarioLabPage from '../ScenarioLabPage';
 import StockStructureDecisionPage from '../StockStructureDecisionPage';
 import StockStructureDecisionEntryPage from '../StockStructureDecisionEntryPage';
-import { findConsumerRawLeakage } from '../../test-utils/consumerRawLeakageGuard';
+import { findConsumerRawLeakage, textContentWithoutObservationBoundary } from '../../test-utils/consumerRawLeakageGuard';
 
 const {
   languageState,
@@ -383,7 +383,7 @@ describe('research IA pages', () => {
     expect(within(onboardingPanel).getByRole('link', { name: '运行 Scanner' })).toHaveAttribute('href', '/zh/scanner');
     expect(within(onboardingPanel).getByRole('link', { name: '选择观察标的' })).toHaveAttribute('href', '/zh/watchlist');
     expect(within(onboardingPanel).getByRole('link', { name: '查看研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
-    expect(page.textContent || '').not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议/);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议/);
   });
 
   it('keeps the cockpit visible when the daily intelligence briefing is unavailable', async () => {
@@ -499,8 +499,8 @@ describe('research IA pages', () => {
     expect(page).toHaveTextContent('证据暂不可用');
     expect(narrative.textContent || '').not.toMatch(/provider_timeout|raw_backend_reason_code|score_grade|provider_runtime_debug|schema|debug|trace/i);
     expect(narrative.textContent || '').not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议/);
-    expect(page.textContent || '').not.toMatch(/provider_timeout|raw_backend_reason_code|score_grade|provider_runtime_debug|low_confidence_internal_reason|schema|debug|trace/i);
-    expect(page.textContent || '').not.toMatch(/buy now|sell stop|买入|卖出|下单|目标价|止损|仓位建议/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/provider_timeout|raw_backend_reason_code|score_grade|provider_runtime_debug|low_confidence_internal_reason|schema|debug|trace/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/buy now|sell stop|买入|卖出|下单|目标价|止损|仓位建议/i);
     expect(findConsumerRawLeakage(narrative.textContent || '')).toEqual([]);
   });
 
@@ -566,8 +566,8 @@ describe('research IA pages', () => {
     expect(page).toHaveTextContent('数据新鲜度暂不可用');
     expect(page).not.toHaveTextContent('暂未整理变化摘要');
     expect(page).not.toHaveTextContent('暂未整理明确的置信边界');
-    expect(page.textContent || '').not.toMatch(/proxy-only|pending-heavy|freshness=unavailable|score-grade|score_grade|provider|runtime|debug|traceId|requestId|schemaVersion/i);
-    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|加仓|减仓/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/proxy-only|pending-heavy|freshness=unavailable|score-grade|score_grade|provider|runtime|debug|traceId|requestId|schemaVersion/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|加仓|减仓/i);
   });
 
   it('renders Research Radar as the core queue and links queue rows to Stock Structure', async () => {
@@ -802,6 +802,12 @@ describe('research IA pages', () => {
     renderRoute(<ResearchRadarPage />, '/zh/research/radar?market=us&limit=5');
 
     const page = await screen.findByTestId('research-radar-page');
+    const observationBoundary = within(page).getByTestId('observation-only-boundary');
+    expect(observationBoundary).toHaveAttribute('data-observation-boundary-surface', 'research-radar');
+    expect(observationBoundary).toHaveTextContent('observation-only');
+    expect(observationBoundary).toHaveTextContent('证据摘要');
+    expect(observationBoundary).toHaveTextContent('不构成交易建议');
+    expect(observationBoundary).toHaveTextContent('不提供买入、卖出、持有指令');
     expect(page).toHaveTextContent('研究雷达与证据缺口队列');
     expect(page).not.toHaveTextContent('研究情景工作台');
     const evidenceHub = await within(page).findByTestId('research-radar-evidence-hub');
@@ -860,7 +866,7 @@ describe('research IA pages', () => {
     expect(findConsumerRawLeakage(healthSummary.textContent || '')).toEqual([]);
     expect(healthSummary.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing/i);
     expect(hub.textContent || '').not.toMatch(/sourceRefs|reasonCodes|provider_timeout|optional_news_timeout|benchmark_missing|price_history_stale|provider_runtime_trace|queueItemId|request[_\s-]?id|trace[_\s-]?id|raw|debug|runtime|cache|schemaVersion|Evidence missing|Evidence quality is acceptable|Low-evidence filter active|Relative strength is above the research threshold/i);
-    expect(page.textContent || '').not.toMatch(/Evidence missing|Evidence quality is acceptable|Low-evidence filter active|Relative strength is above the research threshold/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/Evidence missing|Evidence quality is acceptable|Low-evidence filter active|Relative strength is above the research threshold/i);
     expect(findConsumerRawLeakage(hub.textContent || '')).toEqual([]);
     expect(hub.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing/i);
   });
@@ -927,7 +933,8 @@ describe('research IA pages', () => {
     const page = await screen.findByTestId('research-radar-page');
     const hubEmptyState = await within(page).findByTestId('research-queue-hub-empty-state');
     expect(hubEmptyState).toHaveTextContent('数据暂不可用');
-    expect(page.textContent || '').not.toMatch(/NVDA|Unsafe decision grade queue|Unsafe queue should not render/i);
+    expect(within(page).queryByTestId('observation-only-boundary')).not.toBeInTheDocument();
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/NVDA|Unsafe decision grade queue|Unsafe queue should not render/i);
   });
 
   it('renders Research Radar onboarding CTAs when the queue is empty', async () => {
@@ -989,8 +996,8 @@ describe('research IA pages', () => {
     expect(queueEmptyState.textContent || '').not.toMatch(/request[_\s-]?id|trace[_\s-]?id|correlation[_\s-]?id|\breq-[a-z0-9-]{6,}\b/i);
     expect(findConsumerRawLeakage(queueEmptyState.textContent || '')).toEqual([]);
     expect(onboardingPanel.textContent || '').not.toMatch(/sourceRefs|reasonCodes|fundamentals\.eps|provider_timeout|\bnews\b/i);
-    expect(page.textContent || '').not.toMatch(/undefined|null|NaN/);
-    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommendation|target price|stop loss|position sizing/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/undefined|null|NaN/);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommendation|target price|stop loss|position sizing/i);
   });
 
   it('renders evidence remediation guidance and safe prerequisite copy for low-evidence research radar gaps', async () => {
@@ -1094,8 +1101,8 @@ describe('research IA pages', () => {
 
     expect(manualGapGroup).toHaveTextContent('证据补缺');
     expect(manualGapGroup.textContent || '').not.toMatch(/Manual gap|manual_gap/i);
-    expect(page.textContent || '').not.toMatch(/provider|raw|debug|trace|requestId|schemaVersion|manual_gap/i);
-    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/provider|raw|debug|trace|requestId|schemaVersion|manual_gap/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing/i);
     expect(getStructureDecisionMock).not.toHaveBeenCalled();
     expect(verifyTickerExistsMock).not.toHaveBeenCalled();
     await waitFor(() => expect(getResearchRadarMock).toHaveBeenCalledTimes(1));
@@ -1131,7 +1138,7 @@ describe('research IA pages', () => {
     expect(page).not.toHaveTextContent('研究情景工作台');
     expect(hubEmptyState).toHaveTextContent('数据暂不可用');
     expect(hubEmptyState).toHaveTextContent('当前页面没有可展示的稳定研究资料，请稍后重试。');
-    expect(page.textContent || '').not.toMatch(/provider_runtime_trace|req-queue-123|raw payload|404/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/provider_runtime_trace|req-queue-123|raw payload|404/i);
   });
 
   it('renders consumer-safe API error copy on Research Radar and keeps retry available', async () => {
@@ -1171,7 +1178,7 @@ describe('research IA pages', () => {
     expect(page).toHaveTextContent('对比仅展示结构差异和证据完整度，不给出买卖排序。');
     expect(screen.getByRole('link', { name: '研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
     expect(findConsumerRawLeakage(page.textContent || '')).toEqual([]);
-    expect(page.textContent || '').not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议|优先于其他标的|投资偏好/);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议|优先于其他标的|投资偏好/);
   });
 
   it('renders a consumer-safe symbol-not-found state for an invalid single-symbol structure route', async () => {
@@ -1203,8 +1210,8 @@ describe('research IA pages', () => {
     expect(within(emptyState).getByRole('link', { name: '返回研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
     expect(within(emptyState).getByRole('link', { name: '返回观察列表' })).toHaveAttribute('href', '/zh/watchlist');
     expect(within(emptyState).getByRole('link', { name: '返回首页' })).toHaveAttribute('href', '/zh');
-    expect(page.textContent || '').not.toMatch(/unavailable|lowConfidence|low_confidence|OHLCV|provider|runtime|debug|traceId|requestId|schemaVersion|policyVersion|raw|reasonCodes|internal|local_db|fallback_source|fixture|adapter/i);
-    expect(page.textContent || '').not.toMatch(/buy|sell|hold|recommend|target|stop|position size|买入|卖出|持有|推荐|目标价|止损|仓位建议|加仓|减仓/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/unavailable|lowConfidence|low_confidence|OHLCV|provider|runtime|debug|traceId|requestId|schemaVersion|policyVersion|raw|reasonCodes|internal|local_db|fallback_source|fixture|adapter/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/buy|sell|hold|recommend|target|stop|position size|买入|卖出|持有|推荐|目标价|止损|仓位建议|加仓|减仓/i);
   });
 
   it('renders the English symbol-not-found state without raw diagnostic labels', async () => {
@@ -1233,8 +1240,8 @@ describe('research IA pages', () => {
     expect(emptyState).toHaveTextContent('This means the symbol cannot currently be confirmed, which is different from data that is temporarily missing.');
     expect(emptyState).toHaveTextContent('This is a research observation state only; no investment conclusion is being made.');
     expect(within(emptyState).getByRole('link', { name: 'Back to Research Radar' })).toHaveAttribute('href', '/en/research/radar');
-    expect(page.textContent || '').not.toMatch(/unavailable|lowConfidence|low_confidence|OHLCV|provider|runtime|debug|traceId|requestId|schemaVersion|policyVersion|raw|reasonCodes|internal|local_db|fallback_source|fixture|adapter/i);
-    expect(page.textContent || '').not.toMatch(/buy|sell|hold|recommend|target|stop|position size|买入|卖出|持有|推荐|目标价|止损|仓位建议|加仓|减仓/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/unavailable|lowConfidence|low_confidence|OHLCV|provider|runtime|debug|traceId|requestId|schemaVersion|policyVersion|raw|reasonCodes|internal|local_db|fallback_source|fixture|adapter/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/buy|sell|hold|recommend|target|stop|position size|买入|卖出|持有|推荐|目标价|止损|仓位建议|加仓|减仓/i);
   });
 
   it('keeps supported but unverified symbols on the normal insufficient-evidence structure page', async () => {
@@ -1459,8 +1466,8 @@ describe('research IA pages', () => {
     expect(snapshot).toHaveTextContent('Observation-only peer movement context; no personalized action instruction.');
     expect(snapshot).toHaveTextContent('Review whether peer alignment persists after the next close.');
     expect(within(page).getByRole('link', { name: '与 MSFT 对比证据' })).toHaveAttribute('href', '/zh/stocks/ORCL,MSFT/structure-decision');
-    expect(page.textContent || '').not.toMatch(/raw|debug|provider|trace|sourceRef|reasonCode|requestId/i);
-    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommendation|target price|stop loss|position sizing/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/raw|debug|provider|trace|sourceRef|reasonCode|requestId/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommendation|target price|stop loss|position sizing/i);
   });
 
   it('renders a consumer-safe empty state when peer correlation evidence is missing', async () => {
@@ -1864,8 +1871,8 @@ describe('research IA pages', () => {
       }),
     })));
     expect(page.textContent || '').not.toContain('评分等级');
-    expect(page.textContent || '').not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议/);
-    expect(page.textContent || '').not.toMatch(/raw|debug|provider|score-grade|score_grade|unavailable|Breadth participation weakens quickly under the selected stress|Volatility structure flips into a defensive posture|Research planning only; not a personalized decision basis/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议/);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/raw|debug|provider|score-grade|score_grade|unavailable|Breadth participation weakens quickly under the selected stress|Volatility structure flips into a defensive posture|Research planning only; not a personalized decision basis/i);
     expect(findConsumerRawLeakage(page.textContent || '')).toEqual([]);
   });
 
@@ -1940,11 +1947,11 @@ describe('research IA pages', () => {
     expect(page).toHaveTextContent('研究观察');
     expect(within(page).getByRole('link', { name: '查看市场概览' })).toHaveAttribute('href', '/zh/market-overview');
     expect(within(page).getByRole('link', { name: '返回研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
-    expect(page.textContent || '').not.toMatch(/blocked|unavailable|score-grade|score_grade|driver coverage|base regime evidence is missing|provider|runtime|debug|requestId|traceId|policyVersion|raw|internal|cache/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/blocked|unavailable|score-grade|score_grade|driver coverage|base regime evidence is missing|provider|runtime|debug|requestId|traceId|policyVersion|raw|internal|cache/i);
     expect(findConsumerRawLeakage(page.textContent || '')).toEqual([]);
     await waitFor(() => expect(runScenarioLabMock).toHaveBeenCalledWith(expect.objectContaining({
       scenarioName: 'gammaUnavailable',
     })));
-    expect(page.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|加仓|减仓|buy|sell|hold|recommend|target|stop|position size/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|加仓|减仓|buy|sell|hold|recommend|target|stop|position size/i);
   });
 });

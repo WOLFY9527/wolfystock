@@ -4,6 +4,7 @@ import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import ConsumerDataHealthSummaryPanel from '../components/common/ConsumerDataHealthSummaryPanel';
 import { ConsumerOnboardingCtaPanel } from '../components/common/ConsumerOnboardingCtaPanel';
 import { ConsumerResearchEmptyState } from '../components/common/ConsumerResearchEmptyState';
+import ObservationOnlyBoundary from '../components/common/ObservationOnlyBoundary';
 import { buildConsumerResearchEmptyState } from '../components/common/researchEmptyStateModel';
 import { EvidenceGapExplanationList } from '../components/research/EvidenceGapExplanation';
 import {
@@ -744,6 +745,7 @@ export default function ResearchRadarPage() {
 
   const queueItems = useMemo(() => data?.researchQueue ?? [], [data?.researchQueue]);
   const unifiedQueueSize = unifiedQueue?.aggregateSummary.itemCount ?? unifiedQueue?.researchQueue.length ?? queueItems.length;
+  const shouldShowObservationBoundary = Boolean(data && (queueItems.length > 0 || isUnifiedResearchQueueDisplaySafe(unifiedQueue)));
   const showOnboardingCta = Boolean(data && (queueItems.length === 0 || data.emptyStateActions.length || data.starterResearchWorkflow.length));
   const dataHealthSummary = useMemo(
     () => buildResearchRadarDataHealthSummary({ data, unifiedQueue, locale }),
@@ -843,6 +845,11 @@ export default function ResearchRadarPage() {
             ) : null}
             {data ? (
               <>
+                {shouldShowObservationBoundary ? (
+                  <div className="p-3 pb-0">
+                    <ObservationOnlyBoundary language={locale} surface="research-radar" />
+                  </div>
+                ) : null}
                 <ConsoleStatusStrip
                   items={[
                     {
