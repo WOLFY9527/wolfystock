@@ -2667,7 +2667,7 @@ class RuleBacktestService:
         else:
             rows = self.stock_repo.get_latest(code, days=load_count)
             bars = list(reversed(rows))
-        required_bars = max(10, parsed.max_lookback + 2, int(lookback_bars or 0))
+        required_bars = max(10, parsed.max_lookback + 2)
         if len(bars) < required_bars:
             historical_readiness = build_backtest_historical_ohlcv_readiness(
                 self._build_historical_ohlcv_readiness_payload(
@@ -2685,8 +2685,8 @@ class RuleBacktestService:
                 lookback_bars=lookback_bars,
                 fee_bps=fee_bps,
                 slippage_bps=slippage_bps,
-                no_result_reason=str(historical_readiness.get("blockedExecutionReason") or "historical_ohlcv_unavailable"),
-                no_result_message=str(historical_readiness.get("consumerSafeMessage") or "Historical OHLCV readiness blocks this Backtest request."),
+                no_result_reason="insufficient_history",
+                no_result_message="历史行情不足，无法执行该策略回测。",
                 start_date=normalized_start_date,
                 end_date=normalized_end_date,
             )
@@ -2709,7 +2709,6 @@ class RuleBacktestService:
                 ),
             )
             result.data_quality["historicalOhlcvReadiness"] = historical_readiness
-            setattr(result, "blocked_execution", True)
             return result
 
         result = self.engine.run(

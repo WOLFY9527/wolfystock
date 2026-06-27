@@ -422,7 +422,7 @@ def _backtest_missing_data_classes(
         if value not in values:
             values.append(value)
 
-    if status in {"not_configured", "missing", "unavailable"} or provider_state != "available":
+    if status in {"not_configured", "unavailable"} or provider_state != "available":
         add("historical_ohlcv")
     if status == "insufficient_coverage" or _INSUFFICIENT_HISTORY in missing_requirements:
         add("date_coverage")
