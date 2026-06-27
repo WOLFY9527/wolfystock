@@ -272,4 +272,23 @@ describe('resolveHomeDashboardSelection', () => {
     expect(result.activeTraceReport).toBeNull();
     expect(result.activeEvidenceTicker).toBe('ORCL');
   });
+
+  it('does not fetch evidence from recent history when no report owns the surface', () => {
+    const result = resolveHomeDashboardSelection({
+      activeTasks: [],
+      routeTaskId: null,
+      routeSymbol: null,
+      activeTicker: null,
+      pendingAnalysisTicker: null,
+      selectedReport: null,
+      recentHistoryItems: [buildHistoryItem('ORCL')],
+      defaultTicker: '',
+    });
+
+    expect(result.effectiveTicker).toBe('');
+    expect(result.dashboardReport).toBeNull();
+    expect(result.activeTraceReport).toBeNull();
+    expect(result.activeEvidenceTicker).toBe('');
+    expect(result.reanalysisTicker).toBe('');
+  });
 });

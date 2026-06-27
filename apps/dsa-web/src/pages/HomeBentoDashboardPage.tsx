@@ -153,7 +153,7 @@ const LazyHomeCandlestickChart = lazy(() =>
     default: module.HomeCandlestickChart,
   })),
 );
-const DEFAULT_HOME_TICKER = 'ORCL';
+const DEFAULT_HOME_TICKER = '';
 const HOME_CHART_FALLBACK_TIMEFRAMES = ['1D', '1W', '1M'];
 const HOME_CHART_FALLBACK_INDICATORS = ['MA5', 'MA10', 'MA20', 'MA60', 'VWAP'];
 const HOME_CHART_FALLBACK_GRID_ROWS = ['price-top', 'price-upper', 'price-mid', 'volume'];
@@ -340,8 +340,8 @@ function buildDecisionTraceFixtureReport(): AnalysisReport {
       isTest: true,
     },
     summary: {
-      analysisSummary: 'Fixture result only; not investment advice. ORCL is waiting for a controlled pullback before any add.',
-      operationAdvice: '等待回踩',
+      analysisSummary: 'Diagnostic fixture only; not live research. Use it to verify Home rendering and trace drawer states.',
+      operationAdvice: '诊断样例',
       trendPrediction: '短线震荡，等待量能确认。',
       sentimentScore: 58,
       sentimentLabel: 'Neutral',
@@ -360,9 +360,9 @@ function buildDecisionTraceFixtureReport(): AnalysisReport {
           score: 3.6,
           currentPrice: '130.20',
           changePct: '-0.40%',
-          operationAdvice: '等待回踩',
+          operationAdvice: '诊断样例',
           trendPrediction: '短线震荡',
-          oneSentence: 'Fixture result only; not investment advice.',
+          oneSentence: 'Diagnostic fixture only; not live research.',
           tags: [
             { label: 'Fixture', value: 'Decision Trace' },
             { label: 'Mode', value: 'Hybrid' },
@@ -374,9 +374,9 @@ function buildDecisionTraceFixtureReport(): AnalysisReport {
           adjustmentReason: 'Fixture keeps deterministic browser smoke independent from live providers.',
         },
         decisionPanel: {
-          setupType: 'Wait for pullback',
+          setupType: 'Diagnostic observation',
           confidence: '0.64',
-          keyAction: 'wait_pullback',
+          keyAction: 'diagnostic_observation',
           analysisPrice: 130.2,
           idealEntry: '128.50',
           idealEntryCenter: 128.5,
@@ -387,20 +387,20 @@ function buildDecisionTraceFixtureReport(): AnalysisReport {
           target: '136.00-138.00',
           targetZone: '136.00-138.00',
           buildStrategy: 'Use fixture data only to verify Home rendering and trace drawer behavior.',
-          riskControlStrategy: 'Stop required if the fixture support band fails.',
+          riskControlStrategy: 'Fixture support band is diagnostic-only and not a trading boundary.',
           executionReminders: ['Do not treat fixture data as live analysis.'],
         },
         reasonLayer: {
           coreReasons: [
-            'Rule-stabilized action for fixture verification.',
+            'Rule-stabilized observation for fixture verification.',
             'Fundamental data intentionally incomplete.',
           ],
-          topRisk: 'Fixture warning: action and plan require position-context separation.',
+          topRisk: 'Fixture warning: diagnostic sample is not live research.',
           checklistSummary: 'Data source states include used, missing, and unknown.',
         },
         technicalFields: [
           { label: 'MA alignment', value: 'mixed', source: 'technical_rule' },
-          { label: 'Risk control', value: 'stop required', source: 'rule' },
+          { label: 'Risk control', value: 'diagnostic only', source: 'rule' },
         ],
         fundamentalFields: [
           { label: 'Revenue Growth', value: 'N/A', status: 'missing' },
@@ -409,7 +409,7 @@ function buildDecisionTraceFixtureReport(): AnalysisReport {
         coverageNotes: {
           dataSources: ['quote: used', 'fundamental: missing', 'scanner: unknown'],
           coverageGaps: ['Fundamental data intentionally incomplete.'],
-          conflictNotes: ['Fixture warning: action and plan require position-context separation.'],
+          conflictNotes: ['Fixture warning: diagnostic sample is not live research.'],
           methodNotes: ['No live LLM/provider call is required for this fixture.'],
         },
       },
@@ -424,10 +424,10 @@ function buildDecisionTraceFixtureReport(): AnalysisReport {
       generatedAt: '2026-05-04T09:00:00Z',
       decisionFields: {
         action: {
-          value: 'wait_pullback',
+          value: 'diagnostic_observation',
           source: 'rule',
           confidence: 0.64,
-          notes: 'Rule-stabilized action for fixture verification.',
+          notes: 'Rule-stabilized observation for fixture verification.',
         },
         score: {
           value: 5.8,
@@ -479,7 +479,7 @@ function buildDecisionTraceFixtureReport(): AnalysisReport {
         },
         {
           name: 'Risk control',
-          value: 'stop required',
+          value: 'diagnostic only',
           impact: 'warning',
           source: 'rule',
         },
@@ -497,11 +497,11 @@ function buildDecisionTraceFixtureReport(): AnalysisReport {
         {
           type: 'action_plan_mismatch',
           severity: 'warning',
-          message: 'Fixture warning: action and plan require position-context separation.',
+          message: 'Fixture warning: diagnostic sample is not live research.',
         },
       ],
       limitations: [
-        'Fixture result only; not investment advice.',
+        'Diagnostic fixture only; not live research.',
         'Fundamental data intentionally incomplete.',
       ],
     },
@@ -664,7 +664,7 @@ function localizeTraceLimitation(value: string, locale: DashboardLocale): string
   if (/fundamental.*incomplete/i.test(text)) {
     return '基本面数据缺失';
   }
-  if (/not investment advice/i.test(text)) {
+  if (/not investment advice|not live research|diagnostic fixture/i.test(text)) {
     return '仅供参考';
   }
   return '存在数据覆盖限制';
@@ -3972,7 +3972,7 @@ const CONTENT: Record<DashboardLocale, {
     eyebrow: 'SYSTEM VIEW',
     heading: 'WolfyStock 分析面板',
     description: '',
-    omnibarPlaceholder: '输入代码开始研究 (如 ORCL)...',
+    omnibarPlaceholder: '输入代码或名称开始研究...',
     analyzeButton: '分析',
     instrument: '英伟达',
     ticker: 'NVDA',
@@ -4040,7 +4040,7 @@ const CONTENT: Record<DashboardLocale, {
     eyebrow: 'SYSTEM VIEW',
     heading: 'WolfyStock Analysis Center',
     description: '',
-    omnibarPlaceholder: 'Enter a ticker to start research (for example ORCL)...',
+    omnibarPlaceholder: 'Enter a ticker or company name to start research...',
     analyzeButton: 'Analyze',
     instrument: 'NVIDIA',
     ticker: 'NVDA',
@@ -4854,16 +4854,21 @@ function buildInPlacePlaceholderDashboard(
   locale: DashboardLocale,
   ticker?: string | null,
 ): DashboardPayload {
-  const normalizedTicker = normalizeTickerQuery(ticker ?? undefined) || DEFAULT_HOME_TICKER;
+  const normalizedTicker = normalizeTickerQuery(ticker ?? undefined);
   const base = DASHBOARD_VARIANTS[locale].NVDA;
-  const companyProfile = resolveCompanyProfile(normalizedTicker);
+  const companyProfile = normalizedTicker
+    ? resolveCompanyProfile(normalizedTicker)
+    : {
+        company: locale === 'en' ? 'No research symbol selected' : '尚未选择研究标的',
+        sector: locale === 'en' ? 'Observation-only start' : '观察入口',
+      };
   const neutralStrategyMetrics = neutralizeDashboardFields(base.strategy.metrics);
   const neutralTechSignals = neutralizeDashboardSignals(base.tech.signals);
   const neutralFundamentals = neutralizeDashboardFields(base.fundamentals.metrics);
 
   return enrichDashboardPayload(locale, {
     ...base,
-    instrument: normalizedTicker,
+    instrument: normalizedTicker || companyProfile.company,
     ticker: normalizedTicker,
     decision: {
       ...base.decision,
@@ -5002,17 +5007,17 @@ function localizeNarrativeText(locale: DashboardLocale, raw: string | undefined,
   }
   if (locale === 'zh') {
     if (!containsCjk(value)) {
-      if (/fixture result only; not investment advice/i.test(value)) {
+      if (/fixture result only; not investment advice|diagnostic fixture only; not live research/i.test(value)) {
         return '固定样例仅用于界面验证，不代表实时研究结论。';
       }
       if (/orcl is waiting .*controlled pullback/i.test(value)) {
-        return '固定样例显示仍需等待回踩和量能证据。';
+        return '固定样例仅用于验证诊断展示，不代表实时研究。';
       }
       if (/momentum is mixed/i.test(value)) {
         return '动量信号分歧，仍需量能确认。';
       }
       if (/rule-stabilized/i.test(value)) {
-        return '规则层将该样例保持在等待复核状态。';
+        return '规则层将该样例保持在诊断观察状态。';
       }
       if (/fundamental data intentionally incomplete/i.test(value)) {
         return '基本面数据刻意保持不完整。';
@@ -6435,8 +6440,6 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     && !routeSource
     && !pendingAnalysisTicker
     && !selectedReport
-    && recentHistoryItems.length === 0
-    && activeTasks.length === 0
     && !isHomeAnalyzing,
   );
   const deleteCopy = {
@@ -6691,10 +6694,12 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       return;
     }
 
-    const nextTicker = normalizeTickerQuery(selectedReport?.meta.stockCode) || normalizeTickerQuery(recentHistoryItems[0]?.stockCode) || DEFAULT_HOME_TICKER;
+    const nextTicker = normalizeTickerQuery(selectedReport?.meta.stockCode) || DEFAULT_HOME_TICKER;
 
     const frame = window.requestAnimationFrame(() => {
-      setActiveTicker(nextTicker);
+      if (nextTicker) {
+        setActiveTicker(nextTicker);
+      }
       setHasHydratedInitialTicker(true);
     });
 
@@ -6989,8 +6994,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const neutralHomeStartCopy = locale === 'en'
     ? {
         eyebrow: 'Start here',
-        title: 'WolfyStock begins with research context, not a default stock pick.',
-        subtitle: 'Use the home route to understand the market, open a research path, and see where missing data will keep a workflow in observation-only or waiting state.',
+        title: 'No research symbol selected',
+        subtitle: 'Choose a real saved context or start a new ticker research flow. When data is missing, WolfyStock keeps the result in observation-only or waiting state.',
         cards: [
           {
             key: 'market-overview',
@@ -7008,8 +7013,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           },
           {
             key: 'stock-research',
-            title: 'Stock Research',
-            body: 'Inspect one ticker at a time with evidence boundaries, structure, and observation notes.',
+            title: 'Search Symbol',
+            body: 'Enter a ticker or company name above to start one real research flow at a time.',
             note: 'Missing quote, event, or history inputs should keep the result bounded.',
             href: routeLocale ? buildLocalizedPath('/stocks/structure-decision', routeLocale) : '/stocks/structure-decision',
           },
@@ -7030,15 +7035,13 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         ] satisfies NeutralHomeStartCard[],
         readinessTitle: 'Data readiness matters',
         readinessBody: 'Some routes need quotes, history, or prior observations before they can move beyond observation-only states. WolfyStock should show those limits directly.',
-        exampleEyebrow: 'Example reference',
-        exampleTitle: 'ORCL is available only as a reference symbol.',
-        exampleBody: 'Use ORCL to preview what a single-stock workspace can look like when evidence is available. It is not a recommendation, a default conclusion, or personalized research.',
-        exampleAction: 'Open ORCL example',
+        readinessAction: 'Open data readiness',
+        readinessHref: routeLocale ? buildLocalizedPath('/admin/provider-activation', routeLocale) : '/admin/provider-activation',
       }
     : {
         eyebrow: '从这里开始',
-        title: 'WolfyStock 的首页先给研究路径，不先给默认股票结论。',
-        subtitle: '先理解市场环境，再选择研究入口；如果行情、历史样本或观察记录缺失，对应工作流会明确停留在观察或等待状态。',
+        title: '尚未选择研究标的',
+        subtitle: '请从真实的已保存上下文继续，或输入代码/名称开始新的研究流。行情、历史样本或观察记录缺失时，结果会明确停留在观察或等待状态。',
         cards: [
           {
             key: 'market-overview',
@@ -7056,8 +7059,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           },
           {
             key: 'stock-research',
-            title: '个股研究',
-            body: '逐个查看股票代码的证据边界、结构状态和研究观察。',
+            title: '输入 / 搜索标的',
+            body: '在上方输入代码或名称，逐个开启真实研究流。',
             note: '缺少行情、事件或历史样本时，结果会保持受限而不是补造结论。',
             href: routeLocale ? buildLocalizedPath('/stocks/structure-decision', routeLocale) : '/stocks/structure-decision',
           },
@@ -7077,11 +7080,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           },
         ] satisfies NeutralHomeStartCard[],
         readinessTitle: '数据就绪度会影响路径',
-        readinessBody: '部分工作流需要行情、历史样本或先前观察记录才能继续。WolfyStock 应直接展示这些限制，而不是制造活动、推荐或分析结果。',
-        exampleEyebrow: '示例参考',
-        exampleTitle: 'ORCL 仅作为参考标的保留。',
-        exampleBody: '它只用于展示“当证据可用时，单标的研究页可能是什么样子”。这不是推荐、默认结论，也不是个性化分析。',
-        exampleAction: '打开 ORCL 示例',
+        readinessBody: '部分工作流需要行情、历史样本或先前观察记录才能继续。WolfyStock 会直接展示这些限制，而不是制造活动、推荐或分析结果。',
+        readinessAction: '查看数据就绪度',
+        readinessHref: routeLocale ? buildLocalizedPath('/admin/provider-activation', routeLocale) : '/admin/provider-activation',
       };
 
   const omnibarModule = (
@@ -7246,19 +7247,21 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
 
                 <aside
                   className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-4 sm:px-5')}
-                  data-testid="member-home-example-reference"
+                  data-testid="member-home-readiness-reference"
                 >
-                  <p className="text-[11px] font-medium text-white/40">{neutralHomeStartCopy.exampleEyebrow}</p>
-                  <h2 className="mt-2 text-sm font-semibold text-white/88">{neutralHomeStartCopy.exampleTitle}</h2>
+                  <p className="text-[11px] font-medium text-white/40">{neutralHomeStartCopy.readinessTitle}</p>
+                  <h2 className="mt-2 text-sm font-semibold text-white/88">
+                    {locale === 'en' ? 'No default analysis is loaded' : '不会加载默认分析'}
+                  </h2>
                   <p className="mt-2 text-sm leading-6 text-white/62">
-                    {neutralHomeStartCopy.exampleBody}
+                    {neutralHomeStartCopy.readinessBody}
                   </p>
                   <Link
-                    to={routeLocale ? buildLocalizedPath('/stocks/ORCL/structure-decision', routeLocale) : '/stocks/ORCL/structure-decision'}
+                    to={neutralHomeStartCopy.readinessHref}
                     className="mt-4 inline-flex min-h-10 items-center justify-center rounded-lg border border-[color:var(--wolfy-border-focus)] bg-[var(--wolfy-accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#8178e7]"
-                    data-testid="member-home-example-reference-link"
+                    data-testid="member-home-readiness-reference-link"
                   >
-                    {neutralHomeStartCopy.exampleAction}
+                    {neutralHomeStartCopy.readinessAction}
                   </Link>
                 </aside>
               </section>

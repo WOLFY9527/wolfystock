@@ -181,6 +181,7 @@ def get_history_list(
     end_date: Optional[str] = Query(None, description="结束日期 (YYYY-MM-DD)"),
     page: int = Query(1, ge=1, description="页码（从 1 开始）"),
     limit: int = Query(20, ge=1, le=100, description="每页数量"),
+    include_test: bool = Query(False, description="是否包含测试/诊断历史记录"),
     db_manager: DatabaseManager = Depends(get_database_manager),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> HistoryListResponse:
@@ -209,7 +210,8 @@ def get_history_list(
             start_date=start_date,
             end_date=end_date,
             page=page,
-            limit=limit
+            limit=limit,
+            include_test=include_test,
         )
         
         # 转换为响应模型

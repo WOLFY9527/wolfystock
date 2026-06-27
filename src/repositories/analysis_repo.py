@@ -136,6 +136,7 @@ class AnalysisRepository:
         end_date: Optional[date] = None,
         offset: int = 0,
         limit: int = 20,
+        include_test: bool = True,
     ) -> tuple[List[AnalysisHistory], int]:
         """Return paginated analysis history rows and total count."""
         try:
@@ -147,6 +148,7 @@ class AnalysisRepository:
                 limit=limit,
                 owner_id=self.owner_id,
                 include_all_owners=self.include_all_owners,
+                include_test=include_test,
             )
         except Exception as e:
             logger.error(f"分页获取分析历史失败: {e}")
