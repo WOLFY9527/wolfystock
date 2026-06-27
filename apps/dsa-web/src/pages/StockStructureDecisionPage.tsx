@@ -32,6 +32,7 @@ import {
 import { optionsLabApi, type OptionsStructureSummary, type OptionContractStructureRow } from '../api/optionsLab';
 import { EvidenceGapExplanationList } from '../components/research/EvidenceGapExplanation';
 import { useI18n } from '../contexts/UiLanguageContext';
+import { useProductSurface } from '../hooks/useProductSurface';
 import { getConsumerStatusLabel, mapConsumerStatusText } from '../utils/consumerStatusLabels';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
@@ -2372,6 +2373,9 @@ function StockMissingDataNextStepsPanel({
   history,
   historyFailed,
   language,
+  showAdminReadinessCue,
+  symbol,
+  localize,
 }: {
   data: StockStructureDecisionResponse;
   packet: SymbolResearchPacket | null;
@@ -2383,6 +2387,9 @@ function StockMissingDataNextStepsPanel({
   history: StockHistoryResponse | null;
   historyFailed: boolean;
   language: 'zh' | 'en';
+  showAdminReadinessCue: boolean;
+  symbol: string;
+  localize: (path: string) => string;
 }) {
   const isEnglish = language === 'en';
   const items = buildMissingDataNextStepItems({
@@ -2397,6 +2404,7 @@ function StockMissingDataNextStepsPanel({
     historyFailed,
     language,
   });
+  const adminReadinessPath = localize(`/admin/market-providers?surface=stock_structure&symbol=${encodeURIComponent(symbol)}`);
 
   return (
     <div className="p-3 md:p-4" data-testid="stock-missing-data-next-steps-panel">
@@ -2410,6 +2418,17 @@ function StockMissingDataNextStepsPanel({
             ? 'No additional missing-data item is listed for the current packet.'
             : '当前研究包暂未列出额外缺失资料。'}
         />
+        {showAdminReadinessCue && items.length ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[color:var(--wolfy-divider)] pt-3">
+            <TerminalChip variant="info">{isEnglish ? 'Admin only' : '仅管理员可见'}</TerminalChip>
+            <Link
+              to={adminReadinessPath}
+              className="inline-flex min-h-9 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+            >
+              {isEnglish ? 'Open data readiness diagnostics' : '打开数据就绪诊断'}
+            </Link>
+          </div>
+        ) : null}
       </RoughSectionCard>
     </div>
   );
@@ -2675,6 +2694,7 @@ function SymbolCompareEvidencePacketPanel({
 
 export default function StockStructureDecisionPage() {
   const { language } = useI18n();
+  const { isAdmin, isAdminAccount } = useProductSurface();
   const locale = language === 'en' ? 'en' : 'zh';
   const { stockCode = '' } = useParams();
   const location = useLocation();
@@ -2910,6 +2930,7 @@ export default function StockStructureDecisionPage() {
   const compareWithPeerPath = data && comparablePeerSymbol && !isCompareRequest
     ? localize(buildComparePath([data.ticker || primarySymbol, comparablePeerSymbol]))
     : null;
+  const showAdminReadinessCue = Boolean(isAdmin || isAdminAccount);
   const introTitle = symbolNotFound
     ? (locale === 'en' ? 'Symbol not found' : '标的未找到')
     : (locale === 'en' ? `${titleSymbol} structure workspace` : `${titleSymbol} 结构工作区`);
@@ -3218,6 +3239,9 @@ export default function StockStructureDecisionPage() {
                     history={history}
                     historyFailed={historyFailed}
                     language={locale}
+                    showAdminReadinessCue={showAdminReadinessCue}
+                    symbol={data.ticker || primarySymbol}
+                    localize={localize}
                   />
                 </StockResearchCockpitStage>
               </>
