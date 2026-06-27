@@ -11,6 +11,7 @@ from api.deps import CurrentUser, require_admin_capability
 from api.v1.schemas.market_provider_operations import MarketProviderOperationsResponse
 from src.services.historical_ohlcv_cache_preflight import HistoricalOhlcvCachePreflightService
 from src.services.market_provider_operations_service import MarketProviderOperationsService
+from src.services.provider_activation_verifier import ProviderActivationVerifierService
 
 router = APIRouter()
 
@@ -60,6 +61,16 @@ def get_market_provider_operations_compatibility(
     return _project_market_provider_operations_compatibility_payload(
         MarketProviderOperationsService().get_operations(window=window)
     )
+
+
+@router.get(
+    "/provider-activation-verifier",
+    summary="Get operator-only provider activation readiness verifier",
+)
+def get_provider_activation_verifier(
+    _: CurrentUser = Depends(require_admin_capability("ops:providers:read")),
+):
+    return ProviderActivationVerifierService().verify()
 
 
 def get_historical_ohlcv_cache_preflight_service() -> HistoricalOhlcvCachePreflightService:

@@ -296,6 +296,71 @@ export interface HistoricalOhlcvCachePreflightResponse {
   };
 }
 
+export type ProviderActivationStatus =
+  | 'available'
+  | 'missing'
+  | 'not_configured'
+  | 'insufficient_permissions'
+  | 'stale'
+  | 'sample_only'
+  | 'unavailable';
+
+export interface ProviderActivationVerifierCapability {
+  capabilityId: string;
+  provider: string;
+  dataClass: string;
+  status: ProviderActivationStatus | string;
+  userFacingImpact: string;
+  adminNextAction: string;
+  freshnessCacheStatus: {
+    state?: string | null;
+    known?: boolean | null;
+    [key: string]: unknown;
+  };
+  minimumValidationCheck: string;
+  blockedProductSurfaces: string[];
+}
+
+export interface ProviderActivationVerifierSummary {
+  totalCapabilities: number;
+  availableCount: number;
+  missingCount: number;
+  notConfiguredCount: number;
+  insufficientPermissionsCount: number;
+  staleCount: number;
+  sampleOnlyCount: number;
+  unavailableCount: number;
+  blockedProductSurfaces: string[];
+  uatDiagnosis?: string | null;
+}
+
+export interface ProviderActivationVerifierResponse {
+  contractVersion: string;
+  generatedAt: string;
+  operatorOnly: boolean;
+  readOnly: boolean;
+  externalProviderCalls: boolean;
+  networkCallsEnabled: boolean;
+  mutationEnabled: boolean;
+  supportedStatuses: string[];
+  summary: ProviderActivationVerifierSummary;
+  capabilities: ProviderActivationVerifierCapability[];
+  metadata: {
+    source?: string;
+    readOnly?: boolean;
+    operatorOnly?: boolean;
+    externalProviderCalls?: boolean;
+    networkCallsEnabled?: boolean;
+    mutationEnabled?: boolean;
+    sensitiveValuesIncluded?: boolean;
+    rawProviderPayloadsIncluded?: boolean;
+    exceptionDetailsIncluded?: boolean;
+    providerRuntimeChanged?: boolean;
+    consumerVisible?: boolean;
+    [key: string]: unknown;
+  };
+}
+
 export interface HistoricalOhlcvCachePreflightParams {
   cnSymbols?: string[] | string;
   usSymbols?: string[] | string;
@@ -327,6 +392,19 @@ const DEFAULT_MATRIX_SUMMARY: ProviderOperationsMatrixSummary = {
   missingProviderRows: 0,
   scoreEligibleRows: 0,
   paidDataLikelyRequiredRows: 0,
+};
+
+const DEFAULT_ACTIVATION_SUMMARY: ProviderActivationVerifierSummary = {
+  totalCapabilities: 0,
+  availableCount: 0,
+  missingCount: 0,
+  notConfiguredCount: 0,
+  insufficientPermissionsCount: 0,
+  staleCount: 0,
+  sampleOnlyCount: 0,
+  unavailableCount: 0,
+  blockedProductSurfaces: [],
+  uatDiagnosis: null,
 };
 
 function normalizeOperations(payload: Record<string, unknown>): MarketProviderOperationsResponse {
@@ -450,6 +528,48 @@ function normalizeHistoricalOhlcvCachePreflight(payload: Record<string, unknown>
   };
 }
 
+function normalizeActivationCapability(value: unknown): ProviderActivationVerifierCapability {
+  const item = value && typeof value === 'object'
+    ? toCamelCase<ProviderActivationVerifierCapability>(value as Record<string, unknown>)
+    : {} as ProviderActivationVerifierCapability;
+  return {
+    capabilityId: String(item.capabilityId || ''),
+    provider: String(item.provider || ''),
+    dataClass: String(item.dataClass || ''),
+    status: String(item.status || 'unavailable'),
+    userFacingImpact: String(item.userFacingImpact || ''),
+    adminNextAction: String(item.adminNextAction || ''),
+    freshnessCacheStatus: item.freshnessCacheStatus && typeof item.freshnessCacheStatus === 'object'
+      ? item.freshnessCacheStatus
+      : {},
+    minimumValidationCheck: String(item.minimumValidationCheck || ''),
+    blockedProductSurfaces: normalizeSymbolList(item.blockedProductSurfaces),
+  };
+}
+
+function normalizeProviderActivationVerifier(payload: Record<string, unknown>): ProviderActivationVerifierResponse {
+  const normalized = toCamelCase<ProviderActivationVerifierResponse>(payload);
+  return {
+    contractVersion: String(normalized.contractVersion || ''),
+    generatedAt: String(normalized.generatedAt || ''),
+    operatorOnly: normalized.operatorOnly !== false,
+    readOnly: normalized.readOnly !== false,
+    externalProviderCalls: normalized.externalProviderCalls === true,
+    networkCallsEnabled: normalized.networkCallsEnabled === true,
+    mutationEnabled: normalized.mutationEnabled === true,
+    supportedStatuses: normalizeSymbolList(normalized.supportedStatuses),
+    summary: {
+      ...DEFAULT_ACTIVATION_SUMMARY,
+      ...(normalized.summary || {}),
+      blockedProductSurfaces: normalizeSymbolList(normalized.summary?.blockedProductSurfaces),
+    },
+    capabilities: Array.isArray(normalized.capabilities)
+      ? normalized.capabilities.map((item) => normalizeActivationCapability(item))
+      : [],
+    metadata: normalized.metadata || {},
+  };
+}
+
 function encodeSymbols(value?: string[] | string): string | undefined {
   if (Array.isArray(value)) {
     const symbols = value.map((item) => String(item || '').trim()).filter(Boolean);
@@ -470,6 +590,11 @@ export const marketProviderOperationsApi = {
   async getOperationsMatrix(): Promise<ProviderOperationsMatrixResponse> {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/admin/providers/operations-matrix');
     return normalizeOperationsMatrix(response.data);
+  },
+
+  async getProviderActivationVerifier(): Promise<ProviderActivationVerifierResponse> {
+    const response = await apiClient.get<Record<string, unknown>>('/api/v1/admin/provider-activation-verifier');
+    return normalizeProviderActivationVerifier(response.data);
   },
 
   async getHistoricalOhlcvCachePreflight(

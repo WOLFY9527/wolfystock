@@ -26,6 +26,8 @@ import {
   type HistoricalOhlcvCachePreflightResponse,
   type HistoricalOhlcvCachePreflightSymbol,
   type HistoricalOhlcvActivationChecklistItem,
+  type ProviderActivationVerifierCapability,
+  type ProviderActivationVerifierResponse,
   type ProviderOperationsMatrixResponse,
   type ProviderOperationsMatrixRow,
   type MarketProviderOperationsResponse,
@@ -94,6 +96,7 @@ const EMPTY_PROVIDER_ITEMS: MarketProviderOperationItem[] = [];
 const EMPTY_PROVIDER_CACHE_STATES: MarketProviderCacheState[] = [];
 const EMPTY_PROVIDER_EVENT_ROLLUPS: MarketProviderEventRollup[] = [];
 const EMPTY_PROVIDER_MATRIX_ROWS: ProviderOperationsMatrixRow[] = [];
+const EMPTY_PROVIDER_ACTIVATION_CAPABILITIES: ProviderActivationVerifierCapability[] = [];
 const EMPTY_HISTORICAL_OHLCV_MARKETS: HistoricalOhlcvCachePreflightMarket[] = [];
 const EMPTY_HISTORICAL_OHLCV_SYMBOLS: HistoricalOhlcvCachePreflightSymbol[] = [];
 const EMPTY_READINESS_CHECKS: MarketDataReadinessCheck[] = [];
@@ -246,6 +249,27 @@ function readinessSeverityVariant(severity: string): 'neutral' | 'success' | 'ca
   if (severity === 'warning') return 'caution';
   if (severity === 'info') return 'info';
   return 'neutral';
+}
+
+function activationStatusLabel(status: string): string {
+  return {
+    available: 'available',
+    missing: 'missing',
+    not_configured: 'not configured',
+    insufficient_permissions: 'permission blocked',
+    stale: 'stale',
+    sample_only: 'sample only',
+    unavailable: 'unavailable',
+  }[String(status || '').toLowerCase()] || sanitizeCodeLabel(status, 'unavailable');
+}
+
+function activationStatusVariant(status: string): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
+  const normalized = String(status || '').toLowerCase();
+  if (normalized === 'available') return 'success';
+  if (normalized === 'stale' || normalized === 'sample_only') return 'caution';
+  if (normalized === 'missing' || normalized === 'not_configured' || normalized === 'insufficient_permissions') return 'danger';
+  if (normalized === 'unavailable') return 'neutral';
+  return 'info';
 }
 
 function surfaceLabel(surface: string): string {
@@ -2009,6 +2033,75 @@ function historicalPreflightMarkets(preflight?: HistoricalOhlcvCachePreflightRes
 function historicalActivationItems(preflight?: HistoricalOhlcvCachePreflightResponse | null): HistoricalOhlcvActivationChecklistItem[] {
   return Array.isArray(preflight?.activationChecklist?.items) ? preflight.activationChecklist.items : [];
 }
+
+const ProviderActivationVerifierPanel: React.FC<{
+  verifier: ProviderActivationVerifierResponse | null;
+  isLoading: boolean;
+  error: ParsedApiError | null;
+}> = ({ verifier, isLoading, error }) => {
+  const capabilities = verifier?.capabilities ?? EMPTY_PROVIDER_ACTIVATION_CAPABILITIES;
+  const blockedSurfaces = verifier?.summary?.blockedProductSurfaces ?? [];
+  const blockedCount = capabilities.filter((item) => String(item.status || '').toLowerCase() !== 'available').length;
+
+  return (
+    <TerminalPanel as="section" className="col-span-12" data-testid="provider-activation-verifier-panel">
+      <TerminalSectionHeader
+        eyebrow="Provider activation"
+        title="Provider activation verifier"
+        action={verifier ? (
+          <div className="flex flex-wrap gap-2">
+            <TerminalChip variant={blockedCount > 0 ? 'danger' : 'success'}>{formatNumber(blockedCount, 0)} blocked</TerminalChip>
+            <TerminalChip variant="neutral">{formatNumber(capabilities.length, 0)} capabilities</TerminalChip>
+          </div>
+        ) : <TerminalChip variant="neutral">待读取</TerminalChip>}
+      />
+      <p className="mt-2 text-[11px] leading-5 text-white/50">
+        Operator-only activation path for real-data beta readiness. This panel shows provider names, blocked surfaces, freshness/cache posture, and next checks without secret values or raw diagnostics.
+      </p>
+      {error ? <ApiErrorAlert error={error} className="mt-4" /> : null}
+      {isLoading ? (
+        <TerminalEmptyState title="正在读取 provider activation verifier">保持只读；不会触发 provider runtime、网络调用或缓存写入。</TerminalEmptyState>
+      ) : capabilities.length === 0 ? (
+        <TerminalEmptyState title="暂无 activation verifier 结果">接口未返回 capability 行时，不在前端推断 provider readiness。</TerminalEmptyState>
+      ) : (
+        <>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {blockedSurfaces.map((surface) => (
+              <TerminalChip key={surface} variant="caution">{sanitizeOperatorText(surface)}</TerminalChip>
+            ))}
+          </div>
+          <TerminalDenseList className="mt-4">
+            {capabilities.map((item) => (
+              <TerminalNestedBlock key={item.capabilityId} className="px-3 py-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/36">
+                      {sanitizeCodeLabel(item.capabilityId)}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-white">{sanitizeOperatorText(item.provider, 'Unknown provider')}</p>
+                    <p className="mt-1 text-[11px] leading-5 text-white/54">{sanitizeOperatorText(item.dataClass, 'Unknown data class')}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <TerminalChip variant={activationStatusVariant(item.status)}>{activationStatusLabel(item.status)}</TerminalChip>
+                    <TerminalChip variant="neutral">{sanitizeCodeLabel(item.freshnessCacheStatus?.state || 'unknown')}</TerminalChip>
+                  </div>
+                </div>
+                <p className="mt-2 text-[11px] leading-5 text-white/58">{sanitizeOperatorText(item.userFacingImpact)}</p>
+                <p className="mt-1 text-[11px] leading-5 text-white/70">Next action: {sanitizeOperatorText(item.adminNextAction)}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {item.blockedProductSurfaces.map((surface) => (
+                    <TerminalChip key={`${item.capabilityId}-${surface}`} variant="neutral">{sanitizeOperatorText(surface)}</TerminalChip>
+                  ))}
+                </div>
+                <p className="mt-2 text-[10px] leading-4 text-white/38">Check: {sanitizeOperatorText(item.minimumValidationCheck)}</p>
+              </TerminalNestedBlock>
+            ))}
+          </TerminalDenseList>
+        </>
+      )}
+    </TerminalPanel>
+  );
+};
 
 const HistoricalOhlcvCachePreflightPanel: React.FC<{
   preflight: HistoricalOhlcvCachePreflightResponse | null;
@@ -4085,6 +4178,7 @@ const MarketProviderOperationsPage: React.FC = () => {
   const surfaceFocus = productSetupSurfaceFromCurrentQuery();
   const [response, setResponse] = useState<MarketProviderOperationsResponse | null>(null);
   const [matrixResponse, setMatrixResponse] = useState<ProviderOperationsMatrixResponse | null>(null);
+  const [activationVerifier, setActivationVerifier] = useState<ProviderActivationVerifierResponse | null>(null);
   const [historicalOhlcvPreflight, setHistoricalOhlcvPreflight] = useState<HistoricalOhlcvCachePreflightResponse | null>(null);
   const [readiness, setReadiness] = useState<MarketDataReadinessResponse | null>(null);
   const [gapRegistry, setGapRegistry] = useState<DataSourceGapRegistryResponse | null>(null);
@@ -4094,12 +4188,14 @@ const MarketProviderOperationsPage: React.FC = () => {
   const [submittedReadinessSymbols, setSubmittedReadinessSymbols] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isMatrixLoading, setIsMatrixLoading] = useState(true);
+  const [isActivationVerifierLoading, setIsActivationVerifierLoading] = useState(true);
   const [isHistoricalOhlcvPreflightLoading, setIsHistoricalOhlcvPreflightLoading] = useState(true);
   const [isReadinessLoading, setIsReadinessLoading] = useState(true);
   const [isGapRegistryLoading, setIsGapRegistryLoading] = useState(true);
   const [isProfessionalCapabilityLoading, setIsProfessionalCapabilityLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [matrixError, setMatrixError] = useState<ParsedApiError | null>(null);
+  const [activationVerifierError, setActivationVerifierError] = useState<ParsedApiError | null>(null);
   const [historicalOhlcvPreflightError, setHistoricalOhlcvPreflightError] = useState<ParsedApiError | null>(null);
   const [readinessError, setReadinessError] = useState<ParsedApiError | null>(null);
   const [gapRegistryError, setGapRegistryError] = useState<ParsedApiError | null>(null);
@@ -4143,6 +4239,26 @@ const MarketProviderOperationsPage: React.FC = () => {
       })
       .finally(() => {
         if (!cancelled) setIsMatrixLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    marketProviderOperationsApi.getProviderActivationVerifier()
+      .then((payload) => {
+        if (!cancelled) setActivationVerifier(payload);
+      })
+      .catch((apiError) => {
+        if (!cancelled) {
+          const parsed = getParsedApiError(apiError);
+          setActivationVerifierError({ ...parsed, title: '读取 provider activation verifier 失败' });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsActivationVerifierLoading(false);
       });
     return () => {
       cancelled = true;
@@ -4429,6 +4545,11 @@ const MarketProviderOperationsPage: React.FC = () => {
               topSummary={topSummary}
               opsSummary={summary}
               operationItems={items}
+            />
+            <ProviderActivationVerifierPanel
+              verifier={activationVerifier}
+              isLoading={isActivationVerifierLoading}
+              error={activationVerifierError}
             />
             <HistoricalOhlcvCachePreflightPanel
               preflight={historicalOhlcvPreflight}

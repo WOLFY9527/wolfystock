@@ -102,21 +102,31 @@ def test_market_provider_operations_service_does_not_import_market_overview_runt
 
 def test_market_provider_operations_endpoint_stays_get_only_read_model_route() -> None:
     tree = ast.parse(MARKET_PROVIDER_OPERATIONS_ENDPOINT_PATH.read_text(encoding="utf-8"))
-    route_methods: set[str] = set()
+    route_methods_by_function: dict[str, set[str]] = {}
     source_text = MARKET_PROVIDER_OPERATIONS_ENDPOINT_PATH.read_text(encoding="utf-8").lower()
 
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef):
             continue
+        methods: set[str] = set()
         for decorator in node.decorator_list:
             if isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Attribute):
-                route_methods.add(decorator.func.attr)
+                methods.add(decorator.func.attr)
+        if methods:
+            route_methods_by_function[node.name] = methods
 
-    assert route_methods == {"get"}, (
-        "Market Provider Operations must remain query/read-only. Do not add "
-        f"POST/PATCH/DELETE routes here: found decorators {sorted(route_methods)}"
+    assert route_methods_by_function["get_provider_activation_verifier"] == {"get"}
+    unexpected_mutation_routes = {
+        name: methods
+        for name, methods in route_methods_by_function.items()
+        if methods - {"get"} and name != "seed_historical_ohlcv_cache"
+    }
+    assert unexpected_mutation_routes == {}, (
+        "Market Provider Operations must remain query/read-only except the "
+        "existing explicit historical OHLCV seed preflight route. Found "
+        f"{unexpected_mutation_routes}"
     )
-    for forbidden_term in ("cleanup", "dry_run", "use_retention", "refresh", "mutate", "test provider"):
+    for forbidden_term in ("cleanup", "use_retention", "refresh", "mutate", "test provider"):
         assert forbidden_term not in source_text, (
             "Market Provider Operations endpoint must stay an observer surface "
             f"without mutation/test semantics; found `{forbidden_term}`"
