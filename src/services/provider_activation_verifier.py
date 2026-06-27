@@ -17,6 +17,8 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from src.services.scanner_universe_readiness import build_scanner_universe_readiness_from_cache
+
 
 PROVIDER_ACTIVATION_VERIFIER_CONTRACT_VERSION = "provider_activation_verifier_v1"
 SUPPORTED_STATUSES = (
@@ -261,29 +263,21 @@ class ProviderActivationVerifierService:
 
     def _scanner_universe(self) -> dict[str, Any]:
         path = Path(self.env.get(_SCANNER_UNIVERSE_ENV) or _DEFAULT_SCANNER_UNIVERSE_PATH)
-        mtime = self.file_mtime(path)
-        if mtime is None:
-            status = "missing"
-            freshness_state = "missing_universe_cache"
-            action = "Create or refresh the scanner local universe cache through the existing scanner readiness workflow before expecting candidates."
-        else:
-            modified = self._date_from_mtime(mtime)
-            if modified is None or (self.today - modified).days > 3:
-                status = "stale"
-                freshness_state = f"universe_modified:{modified.isoformat() if modified else 'unknown'}"
-                action = "Refresh the scanner local universe cache and rerun scanner readiness checks before using candidate generation."
-            else:
-                status = "available"
-                freshness_state = f"universe_modified:{modified.isoformat()}"
-                action = "Run scanner status/readiness checks and confirm candidate generation remains tied to the refreshed universe."
+        readiness = build_scanner_universe_readiness_from_cache(
+            market="CN",
+            cache_path=path,
+            today=self.today,
+            file_mtime=self.file_mtime,
+        )
+        status = str(readiness.get("status") or "unavailable")
         return self._capability(
             capability_id="scanner.universe",
             provider="Scanner universe",
             data_class="Scanner local universe and candidate prerequisites",
             status=status,
             impact="Scanner pool can be empty because the universe prerequisite is missing or stale.",
-            action=action,
-            freshness_state=freshness_state,
+            action=str(readiness.get("operatorNextAction") or ""),
+            freshness_state=str(readiness.get("freshnessState") or "unknown"),
             validation="GET /api/v1/scanner/status",
             surfaces=("Scanner", "Market Overview", "Backtest"),
         )

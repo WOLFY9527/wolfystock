@@ -52,6 +52,10 @@ from src.services.scanner_ohlcv_readiness import (
     sanitize_historical_ohlcv_readiness,
     summarize_scanner_ohlcv_readiness,
 )
+from src.services.scanner_universe_readiness import (
+    build_scanner_universe_readiness_from_cache,
+    build_scanner_universe_readiness_from_coverage,
+)
 from src.services.provider_capability_matrix import get_provider_capability_support_contract
 from src.services.research_readiness_contract import build_research_readiness_v1
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback, get_us_stock_parquet_dir
@@ -2373,6 +2377,14 @@ class MarketScannerService:
                 "Scanner 缺少可用标的池，暂时无法生成候选。",
                 "补充可扫描标的池后重新运行 Scanner。",
             ),
+            "universe_not_configured": (
+                "Scanner 标的池尚未配置，暂时无法生成候选。",
+                "配置并刷新可扫描标的池后重新运行 Scanner。",
+            ),
+            "stale_universe": (
+                "Scanner 标的池已过期，暂时无法生成候选。",
+                "刷新扫描标的池后重新运行 Scanner。",
+            ),
             "empty_universe": (
                 "候选池为空，Scanner 暂时无法生成候选。",
                 "补充可扫描标的池后重新运行 Scanner。",
@@ -2416,6 +2428,10 @@ class MarketScannerService:
             "stale_history": (
                 "历史行情不够新，Scanner 只能给出受限结果。",
                 "刷新历史行情后再复核 Scanner。",
+            ),
+            "insufficient_coverage": (
+                "标的池可用，但行情或历史覆盖不足，暂不生成候选。",
+                "补齐行情与历史覆盖后重新运行 Scanner。",
             ),
             "profile_filters_rejected_all": (
                 "本轮 profile 过滤后没有留下候选。",
@@ -2573,6 +2589,50 @@ class MarketScannerService:
         elif normalized_status not in {"completed", "empty", "failed"}:
             universe_availability = "unknown"
 
+        universe_selection = (
+            diagnostics.get("universe_selection")
+            if isinstance(diagnostics.get("universe_selection"), Mapping)
+            else {}
+        )
+        universe_type = str(universe_selection.get("universe_type") or "default").strip().lower()
+        uses_cn_default_universe_cache = (
+            str(market or "").strip().lower() == "cn"
+            and universe_type == "default"
+        )
+        cache_universe_readiness = (
+            build_scanner_universe_readiness_from_cache(
+                market=market,
+                cache_path=self.local_universe_cache_path,
+            )
+            if uses_cn_default_universe_cache
+            else {
+                "status": "available" if resolved_universe_size > 0 else "missing",
+                "lastUpdatedAt": None,
+                "freshnessState": (
+                    "universe_runtime_input" if resolved_universe_size > 0 else "missing_universe"
+                ),
+            }
+        )
+        cache_universe_status = str(cache_universe_readiness.get("status") or "unavailable")
+        if cache_universe_status == "available":
+            cached_universe_size = self._readiness_int(cache_universe_readiness.get("universeSize"))
+            if resolved_universe_size <= 0 and cached_universe_size > 0:
+                resolved_universe_size = cached_universe_size
+                universe_availability = "available"
+            if blocker_hint in {"missing_universe", "universe_missing"} and normalized_status == "not_run":
+                blocker_hint = "unknown"
+        if uses_cn_default_universe_cache and cache_universe_status in {"missing", "stale", "not_configured", "unavailable"}:
+            universe_availability = "missing" if cache_universe_status != "stale" else "stale"
+            if cache_universe_status == "stale":
+                blocker_hint = "stale_universe"
+                freshness = "stale"
+            elif cache_universe_status == "not_configured":
+                blocker_hint = "universe_not_configured"
+            else:
+                blocker_hint = "universe_missing"
+            if normalized_status != "completed" or selected_count <= 0:
+                state = "blocked"
+
         benchmark_context = diagnostics.get("benchmark_context") if isinstance(diagnostics.get("benchmark_context"), Mapping) else {}
         benchmark_code = str(benchmark_context.get("benchmark_code") or "").strip()
         benchmark_missing = "missing_benchmark" in ohlcv_requirements or (
@@ -2588,6 +2648,8 @@ class MarketScannerService:
         universe_reason = (
             "universe_missing"
             if universe_availability == "missing"
+            else "stale_universe"
+            if universe_availability == "stale"
             else "empty_universe"
             if universe_availability == "empty"
             else "universe_available"
@@ -2621,7 +2683,7 @@ class MarketScannerService:
         )
 
         candidate_generation_blockers: List[str] = []
-        if universe_availability in {"missing", "empty"}:
+        if universe_availability in {"missing", "empty", "stale"}:
             candidate_generation_blockers.append(universe_reason)
         if quote_coverage == "missing":
             candidate_generation_blockers.append("missing_quote_snapshot")
@@ -2635,6 +2697,31 @@ class MarketScannerService:
         if blocker_hint not in {"unknown", *candidate_generation_blockers}:
             candidate_generation_blockers.append(blocker_hint)
         candidate_generation_blockers = list(dict.fromkeys(candidate_generation_blockers))
+        scanner_universe_readiness = build_scanner_universe_readiness_from_coverage(
+            market=market,
+            universe_status=(
+                "available"
+                if universe_availability == "available"
+                else "stale"
+                if universe_availability == "stale"
+                else cache_universe_status
+                if uses_cn_default_universe_cache
+                and cache_universe_status in {"missing", "stale", "not_configured", "unavailable"}
+                else "missing"
+            ),
+            universe_size=int(resolved_universe_size or cache_universe_readiness.get("universeSize") or 0),
+            last_updated_at=cache_universe_readiness.get("lastUpdatedAt"),
+            freshness_state=str(cache_universe_readiness.get("freshnessState") or freshness),
+            quote_coverage=quote_coverage,
+            history_coverage=history_coverage,
+            blocked=bool(candidate_generation_blockers),
+        )
+        if (
+            scanner_universe_readiness["status"] == "insufficient_coverage"
+            and blocker_hint == "unknown"
+            and normalized_status != "not_run"
+        ):
+            blocker_hint = "insufficient_coverage"
         cache_readiness = self._cache_readiness_summary(
             state=state,
             ohlcv_requirements=ohlcv_requirements,
@@ -2652,6 +2739,7 @@ class MarketScannerService:
             candidate_generation_state = "not_run"
         else:
             candidate_generation_state = "blocked"
+        consumer_summary, next_data_action = self._data_readiness_copy(blocker_hint, state)
 
         return {
             "state": state,
@@ -2673,6 +2761,7 @@ class MarketScannerService:
                 "universeSize": int(resolved_universe_size),
                 "consumerSafe": True,
             },
+            "scannerUniverseReadiness": scanner_universe_readiness,
             "quoteReadiness": {
                 "state": quote_coverage,
                 "reason": quote_reason,
@@ -6064,6 +6153,24 @@ class MarketScannerService:
             diagnostics={},
             summary={"selected_count": selected_count},
             candidates=[],
+        )
+
+    def get_default_universe_readiness(self, *, market: str) -> Dict[str, Any]:
+        normalized_market = str(market or "").strip().lower()
+        if normalized_market == "cn":
+            return build_scanner_universe_readiness_from_cache(
+                market="CN",
+                cache_path=self.local_universe_cache_path,
+            )
+        return build_scanner_universe_readiness_from_coverage(
+            market=normalized_market,
+            universe_status="missing",
+            universe_size=0,
+            last_updated_at=None,
+            freshness_state="missing_universe",
+            quote_coverage="unknown",
+            history_coverage="unknown",
+            blocked=True,
         )
 
     def get_operational_status(

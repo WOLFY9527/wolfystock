@@ -153,6 +153,24 @@ class MarketScannerOperationsService:
         watchlist_date = self._resolve_watchlist_date(resolved_profile.market)
 
         try:
+            if (
+                resolved_profile.market == "cn"
+                and str(universe_type or "default").strip().lower() == "default"
+            ):
+                universe_readiness = self.scanner_service.get_default_universe_readiness(
+                    market=resolved_profile.market,
+                )
+                universe_status = str(universe_readiness.get("status") or "").strip().lower()
+                if universe_status in {"missing", "stale", "not_configured", "unavailable"}:
+                    raise ScannerRuntimeError(
+                        f"scanner_universe_{universe_status}",
+                        str(universe_readiness.get("consumerSafeMessage") or "Scanner universe is not ready."),
+                        diagnostics={
+                            "reason_code": f"scanner_universe_{universe_status}",
+                            "scannerUniverseReadiness": universe_readiness,
+                        },
+                        source_summary=f"scanner=blocked; universe={universe_status}",
+                    )
             detail = self.scanner_service.run_scan(
                 market=resolved_profile.market,
                 profile=resolved_profile.key,
