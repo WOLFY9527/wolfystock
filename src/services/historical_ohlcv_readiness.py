@@ -8,6 +8,7 @@ from typing import Any, Protocol
 
 
 HISTORICAL_OHLCV_READINESS_CONTRACT_VERSION = "historical_ohlcv_readiness_v1"
+BACKTEST_HISTORICAL_OHLCV_READINESS_CONTRACT_VERSION = "backtest_historical_ohlcv_readiness_v1"
 HISTORICAL_OHLCV_DEFAULT_TIMEFRAME = "1d"
 _PROVIDER_MISSING = "provider_missing"
 _PROVIDER_UNAVAILABLE = "provider_unavailable"
@@ -16,6 +17,14 @@ _INSUFFICIENT_HISTORY = "insufficient_history"
 _STALE_DATA = "stale_data"
 _MISSING_ADJUSTMENTS = "missing_adjustments"
 _MISSING_BENCHMARK = "missing_benchmark"
+_SAFE_RUNTIME_STATUSES = {
+    "available",
+    "missing",
+    "stale",
+    "not_configured",
+    "insufficient_coverage",
+    "unavailable",
+}
 _BLOCKING_REQUIREMENTS = {
     _PROVIDER_MISSING,
     _PROVIDER_UNAVAILABLE,
@@ -223,6 +232,7 @@ class HistoricalOhlcvReadinessService:
             "freshnessState": freshness_state,
             "adjustmentState": adjustment_state,
             "benchmarkState": benchmark_state,
+            "benchmarkSymbol": _normalize_symbol(str(request.benchmark_symbol or "")) or None,
             "providerState": provider_state,
             "overallState": _overall_state(missing_requirements),
             "missingRequirements": missing_requirements,
@@ -235,6 +245,77 @@ class HistoricalOhlcvReadinessService:
         )
 
 
+def build_backtest_historical_ohlcv_readiness(
+    readiness: Mapping[str, Any] | None,
+    *,
+    runtime_status: str | None = None,
+    operator_next_action: str | None = None,
+) -> dict[str, Any]:
+    """Project generic OHLCV readiness into a consumer-safe Backtest contract."""
+
+    source = dict(readiness or {})
+    missing_requirements = _safe_text_list(source.get("missingRequirements"))
+    requested_range = _safe_mapping(source.get("requestedRange"))
+    required_bars = _safe_int(source.get("requiredBars"))
+    available_bars = _safe_int(source.get("usableBars"))
+    missing_bars = _safe_int(source.get("missingBars"))
+    provider_state = _safe_code(source.get("providerState"))
+    freshness_state = _safe_code(source.get("freshnessState"))
+    adjustment_state = _safe_code(source.get("adjustmentState"))
+    benchmark_state = _safe_code(source.get("benchmarkState")) or "not_requested"
+    normalized_runtime = _normalize_backtest_runtime_status(runtime_status, source, missing_requirements)
+    status = _backtest_readiness_status(
+        runtime_status=normalized_runtime,
+        provider_state=provider_state,
+        freshness_state=freshness_state,
+        adjustment_state=adjustment_state,
+        benchmark_state=benchmark_state,
+        missing_bars=missing_bars,
+        missing_requirements=missing_requirements,
+    )
+    missing_classes = _backtest_missing_data_classes(
+        status=status,
+        provider_state=provider_state,
+        adjustment_state=adjustment_state,
+        benchmark_state=benchmark_state,
+        missing_requirements=missing_requirements,
+    )
+    blocked_reason = None if status == "available" else f"historical_ohlcv_{status}"
+    return {
+        "contractVersion": BACKTEST_HISTORICAL_OHLCV_READINESS_CONTRACT_VERSION,
+        "status": status,
+        "executable": status == "available",
+        "requestedSymbol": _normalize_symbol(str(source.get("symbol") or "")),
+        "requestedMarket": _safe_code(source.get("market")) or "unknown",
+        "requestedDateRange": {
+            "start": _clean_public_text(requested_range.get("start")),
+            "end": _clean_public_text(requested_range.get("end")),
+        },
+        "requiredBarCount": required_bars,
+        "availableBarCount": available_bars,
+        "missingDateCoverage": {
+            "missingBarCount": missing_bars,
+            "state": "covered" if missing_bars <= 0 else "missing",
+        },
+        "adjustedDataRequirement": {
+            "required": adjustment_state != "not_required",
+            "state": adjustment_state or "unknown",
+        },
+        "benchmarkReadiness": {
+            "required": benchmark_state != "not_requested",
+            "symbol": _clean_public_text(source.get("benchmarkSymbol")),
+            "status": benchmark_state,
+        },
+        "historicalOhlcvRuntimeStatus": normalized_runtime,
+        "operatorNextAction": _clean_public_text(operator_next_action) or _default_backtest_operator_action(status),
+        "consumerSafeMessage": _backtest_consumer_message(status),
+        "blockedExecutionReason": blocked_reason,
+        "missingDataClasses": missing_classes,
+        "sourceReadiness": _sanitize_source_readiness(source),
+        "consumerSafe": True,
+    }
+
+
 def _normalize_bars(values: Sequence[HistoricalOhlcvBar | Mapping[str, Any]]) -> list[HistoricalOhlcvBar]:
     bars: list[HistoricalOhlcvBar] = []
     for value in values or []:
@@ -242,6 +323,168 @@ def _normalize_bars(values: Sequence[HistoricalOhlcvBar | Mapping[str, Any]]) ->
         if bar is not None:
             bars.append(bar)
     return sorted(bars, key=lambda item: item.date)
+
+
+def _safe_mapping(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _safe_text_list(value: Any) -> list[str]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        return []
+    result: list[str] = []
+    for item in value:
+        normalized = _safe_code(item)
+        if normalized and normalized not in result:
+            result.append(normalized)
+    return result
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _clean_public_text(value: Any) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    lower = text.lower()
+    forbidden = ("apikey", "api_key", "token", "credential", "traceid", "trace_id", "requestid", "request_id", "cachekey", "cache_key", "traceback")
+    if any(item in lower for item in forbidden):
+        return None
+    return text[:240]
+
+
+def _normalize_backtest_runtime_status(
+    runtime_status: str | None,
+    source: Mapping[str, Any],
+    missing_requirements: Sequence[str],
+) -> str:
+    normalized = _safe_code(runtime_status)
+    if normalized in _SAFE_RUNTIME_STATUSES:
+        return normalized
+    provider_state = _safe_code(source.get("providerState"))
+    freshness_state = _safe_code(source.get("freshnessState"))
+    if provider_state == _PROVIDER_MISSING:
+        return "not_configured"
+    if provider_state in {_PROVIDER_UNAVAILABLE, _ENTITLEMENT_REQUIRED}:
+        return "unavailable"
+    if freshness_state == "stale" or _STALE_DATA in missing_requirements:
+        return "stale"
+    if _INSUFFICIENT_HISTORY in missing_requirements:
+        return "insufficient_coverage"
+    if provider_state == "available":
+        return "available"
+    return "unavailable"
+
+
+def _backtest_readiness_status(
+    *,
+    runtime_status: str,
+    provider_state: str,
+    freshness_state: str,
+    adjustment_state: str,
+    benchmark_state: str,
+    missing_bars: int,
+    missing_requirements: Sequence[str],
+) -> str:
+    if runtime_status == "not_configured" or provider_state == _PROVIDER_MISSING:
+        return "not_configured"
+    if runtime_status == "missing":
+        return "missing"
+    if runtime_status == "unavailable" or provider_state in {_PROVIDER_UNAVAILABLE, _ENTITLEMENT_REQUIRED}:
+        return "unavailable"
+    if missing_bars > 0 or _INSUFFICIENT_HISTORY in missing_requirements or runtime_status == "insufficient_coverage":
+        return "insufficient_coverage"
+    if adjustment_state == "missing" or benchmark_state == "missing" or any(
+        item in missing_requirements for item in (_MISSING_ADJUSTMENTS, _MISSING_BENCHMARK)
+    ):
+        return "missing"
+    if freshness_state == "stale" or _STALE_DATA in missing_requirements or runtime_status == "stale":
+        return "stale"
+    return "available"
+
+
+def _backtest_missing_data_classes(
+    *,
+    status: str,
+    provider_state: str,
+    adjustment_state: str,
+    benchmark_state: str,
+    missing_requirements: Sequence[str],
+) -> list[str]:
+    values: list[str] = []
+
+    def add(value: str) -> None:
+        if value not in values:
+            values.append(value)
+
+    if status in {"not_configured", "unavailable"} or provider_state != "available":
+        add("historical_ohlcv")
+    if status == "insufficient_coverage" or _INSUFFICIENT_HISTORY in missing_requirements:
+        add("date_coverage")
+    if status == "stale" or _STALE_DATA in missing_requirements:
+        add("freshness")
+    if adjustment_state == "missing" or _MISSING_ADJUSTMENTS in missing_requirements:
+        add("adjusted_prices")
+    if benchmark_state == "missing" or _MISSING_BENCHMARK in missing_requirements:
+        add("benchmark_ohlcv")
+    return values
+
+
+def _default_backtest_operator_action(status: str) -> str:
+    if status == "available":
+        return "Historical OHLCV requirements are met for this Backtest request."
+    if status == "not_configured":
+        return "Enable the historical OHLCV runtime and run the existing cache preflight before retrying Backtest."
+    if status == "insufficient_coverage":
+        return "Seed or refresh the local historical OHLCV cache for the requested symbol and date range."
+    if status == "stale":
+        return "Refresh the local historical OHLCV cache until the requested end date is covered."
+    if status == "missing":
+        return "Provide the missing historical OHLCV, adjusted price, or benchmark coverage through the existing cache workflow."
+    return "Review historical OHLCV runtime availability and rerun the existing cache preflight."
+
+
+def _backtest_consumer_message(status: str) -> str:
+    if status == "available":
+        return "Historical OHLCV coverage is available for this Backtest request."
+    if status == "not_configured":
+        return "Backtest cannot run because historical OHLCV runtime readiness is not configured."
+    if status == "insufficient_coverage":
+        return "Backtest cannot run because the requested date range does not have enough historical OHLCV bars."
+    if status == "stale":
+        return "Backtest cannot run because the historical OHLCV cache is stale for the requested range."
+    if status == "missing":
+        return "Backtest cannot run because required historical OHLCV inputs are missing."
+    return "Backtest cannot run because historical OHLCV runtime is unavailable."
+
+
+def _sanitize_source_readiness(source: Mapping[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "contractVersion",
+        "symbol",
+        "market",
+        "timeframe",
+        "requestedRange",
+        "lookbackBars",
+        "requiredBars",
+        "usableBars",
+        "missingBars",
+        "freshnessState",
+        "adjustmentState",
+        "benchmarkState",
+        "providerState",
+        "overallState",
+        "missingRequirements",
+        "consumerSafe",
+    }
+    sanitized = {key: value for key, value in dict(source or {}).items() if key in allowed}
+    sanitized["consumerSafe"] = True
+    return sanitized
 
 
 def _normalize_bar(value: HistoricalOhlcvBar | Mapping[str, Any]) -> HistoricalOhlcvBar | None:

@@ -1701,6 +1701,8 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertGreater(len(response["buy_and_hold_curve"]), 0)
         self.assertEqual(response["buy_and_hold_summary"]["resolved_mode"], "same_symbol_buy_and_hold")
         self.assertGreater(len(response["audit_rows"]), 0)
+        self.assertEqual(response["historicalOhlcvReadiness"]["status"], "available")
+        self.assertTrue(response["historicalOhlcvReadiness"]["executable"])
         self.assertEqual(response["summary"]["visualization"]["audit_rows"], response["audit_rows"])
         self.assertEqual(response["execution_model"]["entry_timing"], "same_bar_open")
         self.assertEqual(response["execution_model"]["exit_timing"], "forced_close_at_window_end_close")
@@ -4249,6 +4251,40 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertTrue(repaired_run["readback_integrity"]["used_live_storage_repair"])
         self.assertEqual(repaired_run["readback_integrity"]["integrity_level"], "drift_repaired")
         self.assertEqual(repaired_run["readback_integrity"]["drift_domains"], ["execution_trace"])
+
+    def test_rule_backtest_preserves_insufficient_history_contract_with_actionable_ohlcv_readiness(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service.engine, "run", wraps=service.engine.run) as engine_run:
+            response = service.run_backtest(
+                code="EMPTY",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                benchmark_mode="none",
+                confirmed=True,
+            )
+
+        engine_run.assert_not_called()
+        self.assertEqual(response["status"], "completed")
+        self.assertEqual(response["no_result_reason"], "insufficient_history")
+        self.assertIsNone(response["total_return_pct"])
+        self.assertIsNone(response["max_drawdown_pct"])
+        self.assertEqual(response["trade_count"], 0)
+        self.assertEqual(response["trades"], [])
+        self.assertEqual(response["equity_curve"], [])
+        readiness = response["historicalOhlcvReadiness"]
+        self.assertEqual(readiness["contractVersion"], "backtest_historical_ohlcv_readiness_v1")
+        self.assertEqual(readiness["status"], "not_configured")
+        self.assertFalse(readiness["executable"])
+        self.assertEqual(readiness["requestedSymbol"], "EMPTY")
+        self.assertGreater(readiness["requiredBarCount"], 0)
+        self.assertEqual(readiness["availableBarCount"], 0)
+        self.assertEqual(response["research_artifact_availability"]["reasonCode"], "insufficient_history")
+        self.assertEqual(response["execution_readiness"]["state"], "data_disabled")
+        self.assertFalse(response["execution_readiness"]["result_contract_available"])
+        serialized = json.dumps(response, ensure_ascii=False).lower()
+        for forbidden in ("apikey", "token", "credential", "traceid", "requestid", "cachekey", "traceback"):
+            self.assertNotIn(forbidden, serialized)
 
     def test_run_response_exposes_stored_first_result_authority(self) -> None:
         service = RuleBacktestService(self.db)

@@ -6,6 +6,11 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from src.services.historical_ohlcv_readiness import (
+    BACKTEST_HISTORICAL_OHLCV_READINESS_CONTRACT_VERSION,
+    build_backtest_historical_ohlcv_readiness,
+)
+
 
 SUFFICIENCY_STATUSES = frozenset(
     {
@@ -21,9 +26,45 @@ SUFFICIENCY_STATUSES = frozenset(
 )
 _BLOCKING_STATUSES = frozenset({"insufficient_history", "provider_missing", "entitlement_required"})
 _ENTITLEMENT_TOKENS = ("entitlement", "unauthorized", "forbidden", "permission", "redisplay")
+_GENERIC_OHLCV_READINESS_KEYS = frozenset(
+    {
+        "contractVersion",
+        "symbol",
+        "market",
+        "timeframe",
+        "requestedRange",
+        "lookbackBars",
+        "requiredBars",
+        "usableBars",
+        "missingBars",
+        "freshnessState",
+        "adjustmentState",
+        "benchmarkState",
+        "providerState",
+        "overallState",
+        "missingRequirements",
+        "consumerSafe",
+    }
+)
 _SAFE_OHLCV_READINESS_KEYS = frozenset(
     {
         "contractVersion",
+        "status",
+        "executable",
+        "requestedSymbol",
+        "requestedMarket",
+        "requestedDateRange",
+        "requiredBarCount",
+        "availableBarCount",
+        "missingDateCoverage",
+        "adjustedDataRequirement",
+        "benchmarkReadiness",
+        "historicalOhlcvRuntimeStatus",
+        "operatorNextAction",
+        "consumerSafeMessage",
+        "blockedExecutionReason",
+        "missingDataClasses",
+        "sourceReadiness",
         "symbol",
         "market",
         "timeframe",
@@ -170,6 +211,35 @@ def _sanitize_ohlcv_readiness(readiness: Mapping[str, Any]) -> dict[str, Any]:
     if not sanitized:
         return {}
     sanitized["missingRequirements"] = _dedupe(_text_list(sanitized.get("missingRequirements")))
+    for key in ("requiredBars", "usableBars", "missingBars", "lookbackBars", "requiredBarCount", "availableBarCount"):
+        if key in sanitized:
+            sanitized[key] = _safe_int(sanitized.get(key))
+    if isinstance(sanitized.get("sourceReadiness"), Mapping):
+        sanitized["sourceReadiness"] = _sanitize_source_readiness(sanitized.get("sourceReadiness"))
+    sanitized["consumerSafe"] = True
+    if (
+        sanitized.get("contractVersion") == BACKTEST_HISTORICAL_OHLCV_READINESS_CONTRACT_VERSION
+        or "requestedDateRange" in sanitized
+        or "requiredBarCount" in sanitized
+    ):
+        return sanitized
+    projection = build_backtest_historical_ohlcv_readiness(sanitized)
+    for key in _GENERIC_OHLCV_READINESS_KEYS:
+        if key in sanitized and key not in projection:
+            projection[key] = sanitized[key]
+    projection["consumerSafe"] = True
+    return projection
+
+
+def _sanitize_source_readiness(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    sanitized = {
+        key: nested_value
+        for key, nested_value in value.items()
+        if key in _GENERIC_OHLCV_READINESS_KEYS
+    }
+    sanitized["missingRequirements"] = _dedupe(_text_list(sanitized.get("missingRequirements")))
     for key in ("requiredBars", "usableBars", "missingBars", "lookbackBars"):
         if key in sanitized:
             sanitized[key] = _safe_int(sanitized.get(key))
@@ -187,22 +257,38 @@ def _apply_ohlcv_readiness(
         return
     provider_state = _text(readiness.get("providerState")).lower()
     overall_state = _text(readiness.get("overallState")).lower()
+    backtest_status = _text(readiness.get("status")).lower()
+    runtime_status = _text(readiness.get("historicalOhlcvRuntimeStatus")).lower()
+    blocked_execution_reason = _text(readiness.get("blockedExecutionReason")).lower()
     freshness_state = _text(readiness.get("freshnessState")).lower()
     adjustment_state = _text(readiness.get("adjustmentState")).lower()
     benchmark_state = _text(readiness.get("benchmarkState")).lower()
     missing_bars = _safe_int(readiness.get("missingBars")) or 0
     missing_requirements = _text_list(readiness.get("missingRequirements"))
+    missing_data_classes = _text_list(readiness.get("missingDataClasses"))
+    if isinstance(readiness.get("missingDateCoverage"), Mapping):
+        missing_bars = max(missing_bars, _safe_int(readiness["missingDateCoverage"].get("missingBarCount")) or 0)
+    if isinstance(readiness.get("adjustedDataRequirement"), Mapping):
+        adjustment_state = adjustment_state or _text(readiness["adjustedDataRequirement"].get("state")).lower()
+    if isinstance(readiness.get("benchmarkReadiness"), Mapping):
+        benchmark_state = benchmark_state or _text(readiness["benchmarkReadiness"].get("status")).lower()
 
-    if provider_state == "provider_missing":
+    if (
+        provider_state == "provider_missing"
+        or backtest_status == "not_configured"
+        or runtime_status == "not_configured"
+        or (runtime_status == "missing" and "historical_ohlcv" in missing_data_classes)
+        or (backtest_status == "missing" and "historical_ohlcv" in missing_data_classes)
+    ):
         blocked.append("provider_missing")
     elif provider_state == "entitlement_required":
         blocked.append("entitlement_required")
-    elif provider_state in {"provider_unavailable", "not_available", "unavailable"}:
+    elif provider_state in {"provider_unavailable", "not_available", "unavailable"} or backtest_status == "unavailable" or runtime_status == "unavailable":
         degraded.append("provider_missing")
 
-    if missing_bars > 0 or "insufficient_history" in missing_requirements:
+    if missing_bars > 0 or "insufficient_history" in missing_requirements or backtest_status == "insufficient_coverage":
         blocked.append("insufficient_history")
-    if freshness_state == "stale" or "stale_data" in missing_requirements:
+    if freshness_state == "stale" or "stale_data" in missing_requirements or backtest_status == "stale" or runtime_status == "stale":
         degraded.append("stale_data")
     if adjustment_state == "missing" or "missing_adjustments" in missing_requirements:
         degraded.append("missing_adjustments")
@@ -210,6 +296,12 @@ def _apply_ohlcv_readiness(
         degraded.append("missing_benchmark")
     if "missing_factor_inputs" in missing_requirements:
         degraded.append("missing_factor_inputs")
+    if (
+        blocked_execution_reason.startswith("historical_ohlcv_")
+        and "historical_ohlcv" in missing_data_classes
+        and not blocked
+    ):
+        degraded.append("provider_missing")
     if overall_state == "blocked" and not any(
         item in blocked
         for item in ("provider_missing", "entitlement_required", "insufficient_history")

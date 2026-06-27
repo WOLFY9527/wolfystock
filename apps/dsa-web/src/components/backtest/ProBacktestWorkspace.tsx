@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { ApiErrorAlert } from '../common/ApiErrorAlert';
 import { Drawer } from '../common/Drawer';
-import type { BacktestExecutionReadiness, RuleBacktestHistoryItem, RuleBacktestParseResponse } from '../../types/backtest';
+import type { BacktestExecutionReadiness, BacktestHistoricalOhlcvReadiness, RuleBacktestHistoryItem, RuleBacktestParseResponse } from '../../types/backtest';
 import type { FlowProps, RuleWizardStep } from './DeterministicBacktestFlow';
 import BacktestExecutionReadinessPanel from './BacktestExecutionReadinessPanel';
 import BacktestRunFeedbackBanner, { type BacktestRunFeedback } from './BacktestRunFeedbackBanner';
@@ -71,6 +71,7 @@ type ProBacktestWorkspaceProps = Omit<FlowProps, 'panelMode'> & {
   walkForwardPresetEnabled: boolean;
   onToggleWalkForwardPresetEnabled: (nextEnabled: boolean) => void;
   runReadiness?: BacktestExecutionReadiness | null;
+  historicalOhlcvReadiness?: BacktestHistoricalOhlcvReadiness | null;
   noAdviceDisclosure?: string | null;
   hasRunAttempt?: boolean;
   runFeedback?: BacktestRunFeedback | null;
@@ -272,6 +273,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   walkForwardPresetEnabled,
   onToggleWalkForwardPresetEnabled,
   runReadiness,
+  historicalOhlcvReadiness,
   noAdviceDisclosure,
   hasRunAttempt = false,
   runFeedback = null,
@@ -1149,6 +1151,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         <BacktestExecutionReadinessPanel
           language={language}
           readiness={runReadiness}
+          historicalOhlcvReadiness={historicalOhlcvReadiness}
           noAdviceDisclosure={noAdviceDisclosure}
           attempted={hasRunAttempt}
           isLoading={isSubmitting}

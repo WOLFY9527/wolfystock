@@ -88,6 +88,39 @@ export interface BacktestExecutionReadiness {
   noAdviceDisclosure?: string | null;
 }
 
+export interface BacktestHistoricalOhlcvReadiness {
+  contractVersion?: string;
+  status?: string | null;
+  executable?: boolean | null;
+  requestedSymbol?: string | null;
+  requestedMarket?: string | null;
+  requestedDateRange?: {
+    start?: string | null;
+    end?: string | null;
+  } | null;
+  requiredBarCount?: number | null;
+  availableBarCount?: number | null;
+  missingDateCoverage?: {
+    missingBarCount?: number | null;
+    state?: string | null;
+  } | null;
+  adjustedDataRequirement?: {
+    required?: boolean | null;
+    state?: string | null;
+  } | null;
+  benchmarkReadiness?: {
+    required?: boolean | null;
+    symbol?: string | null;
+    status?: string | null;
+  } | null;
+  historicalOhlcvRuntimeStatus?: string | null;
+  operatorNextAction?: string | null;
+  consumerSafeMessage?: string | null;
+  blockedExecutionReason?: string | null;
+  missingDataClasses?: string[];
+  consumerSafe?: boolean | null;
+}
+
 export interface BacktestResponseContractFields {
   dataStatus?: string;
   calculationStatus?: string;
@@ -240,7 +273,7 @@ export interface BacktestSampleStatusResponse {
   sampleReadinessState?: string | null;
   sampleBlockingReasons?: string[];
   executionReadiness?: BacktestExecutionReadiness;
-  historicalOhlcvReadiness?: Record<string, unknown>;
+  historicalOhlcvReadiness?: BacktestHistoricalOhlcvReadiness;
 }
 
 export interface BacktestClearResponse {
@@ -1313,6 +1346,7 @@ export interface RuleBacktestRunResponse extends BacktestResponseContractFields 
   finalEquity?: number | null;
   summary: RuleBacktestRunSummary;
   dataQuality?: BacktestDataQuality;
+  historicalOhlcvReadiness?: BacktestHistoricalOhlcvReadiness;
   robustnessAnalysis?: Record<string, unknown>;
   executionModel?: RuleBacktestExecutionModel;
   executionAssumptions: AssumptionMap;
