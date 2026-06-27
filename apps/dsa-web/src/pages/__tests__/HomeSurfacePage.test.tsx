@@ -445,6 +445,7 @@ describe('HomeSurfacePage', () => {
     vi.clearAllMocks();
     window.localStorage.clear();
     useStockPoolStore.getState().resetDashboardState();
+    window.localStorage.setItem('dsa-selected-history-id', '3');
     vi.mocked(marketApi.getMarketBriefing).mockResolvedValue({
       source: 'computed',
       sourceLabel: '公开市场摘要',
@@ -772,7 +773,7 @@ describe('HomeSurfacePage', () => {
     expect(rail).toHaveAttribute('data-layout-zone', 'ContextRail');
     expect(rail).toHaveClass('home-research-context-rail', 'bg-transparent', 'divide-y-0', 'lg:border-l-0');
 
-    expect(homeSearch).toHaveAttribute('placeholder', '输入代码开始研究 (如 ORCL)...');
+    expect(homeSearch).toHaveAttribute('placeholder', '输入代码或名称开始研究...');
     expect(homeSearch).toHaveValue('');
     expect(screen.getByTestId('home-bento-omnibar-input-shell')).toHaveClass('overflow-hidden', 'rounded-lg', 'border', 'border-[color:var(--wolfy-border-subtle)]', 'bg-[var(--wolfy-surface-console)]');
     expect(homeSearch).toHaveClass('bg-transparent', 'text-sm', 'leading-none', 'pl-11', 'caret-[#93C5FD]');
@@ -1866,7 +1867,7 @@ describe('HomeSurfacePage', () => {
 
     const panel = await screen.findByTestId('home-bento-decision-trace-panel');
     expect(within(panel).getByText('决策字段')).toBeInTheDocument();
-    expect(within(panel).getByText('wait_pullback')).toBeInTheDocument();
+    expect(within(panel).getByText('diagnostic_observation')).toBeInTheDocument();
     expect(within(panel).getAllByText('系统依据').length).toBeGreaterThan(0);
     expect(within(panel).getByText('使用的数据')).toBeInTheDocument();
     expect(within(panel).getByText('可用')).toBeInTheDocument();
@@ -2802,19 +2803,20 @@ describe('HomeSurfacePage', () => {
     const neutralStart = await screen.findByTestId('member-home-neutral-start');
     expect(screen.getByTestId('home-bento-omnibar')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-history-drawer-trigger')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'WolfyStock 的首页先给研究路径，不先给默认股票结论。' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '尚未选择研究标的' })).toBeInTheDocument();
     expect(screen.getByTestId('member-home-neutral-readiness')).toHaveTextContent('数据就绪度会影响路径');
     expect(screen.getByTestId('member-home-start-card-market-overview')).toHaveTextContent('市场总览');
     expect(screen.getByTestId('member-home-start-card-scanner')).toHaveTextContent('扫描器');
-    expect(screen.getByTestId('member-home-start-card-stock-research')).toHaveTextContent('个股研究');
+    expect(screen.getByTestId('member-home-start-card-stock-research')).toHaveTextContent('输入 / 搜索标的');
     expect(screen.getByTestId('member-home-start-card-backtest')).toHaveTextContent('回测');
     expect(screen.getByTestId('member-home-start-card-watchlist')).toHaveTextContent('组合 / 观察列表');
-    expect(screen.getByTestId('member-home-example-reference')).toHaveTextContent('示例参考');
-    expect(screen.getByTestId('member-home-example-reference')).toHaveTextContent('ORCL 仅作为参考标的保留。');
-    expect(screen.getByTestId('member-home-example-reference-link')).toHaveAttribute('href', '/stocks/ORCL/structure-decision');
+    expect(screen.getByTestId('member-home-readiness-reference')).toHaveTextContent('不会加载默认分析');
+    expect(screen.getByTestId('member-home-readiness-reference-link')).toHaveAttribute('href', '/admin/provider-activation');
     expect(screen.queryByTestId('home-research-console')).not.toBeInTheDocument();
     expect(screen.queryByText('Oracle Corporation')).not.toBeInTheDocument();
     expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
+    expect(neutralStart).not.toHaveTextContent('ORCL');
+    expect(neutralStart).not.toHaveTextContent('TEM');
     expect(neutralStart.textContent).not.toMatch(HOME_NEUTRAL_START_FORBIDDEN_COPY_PATTERN);
   });
 
@@ -2869,7 +2871,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByRole('button', { name: 'History' })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Search ticker' })).toBeInTheDocument();
     expect((await screen.findAllByText('Current conclusion')).length).toBeGreaterThan(0);
-    expect(screen.getByTestId('home-bento-omnibar-input')).toHaveAttribute('placeholder', 'Enter a ticker to start research (for example ORCL)...');
+    expect(screen.getByTestId('home-bento-omnibar-input')).toHaveAttribute('placeholder', 'Enter a ticker or company name to start research...');
     expect(screen.getByText('Technical Structure')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /scanner/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /portfolio/i })).not.toBeInTheDocument();
@@ -3433,8 +3435,9 @@ describe('HomeSurfacePage', () => {
 
     await waitFor(() => expect(historyApi.deleteRecords).toHaveBeenCalledWith([3, 2, 1], { deleteAll: true }));
     await waitFor(() => expect(screen.getByTestId('member-home-neutral-start')).toBeInTheDocument());
-    expect(screen.getByText('ORCL 仅作为参考标的保留。')).toBeInTheDocument();
+    expect(screen.getByText('不会加载默认分析')).toBeInTheDocument();
     expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
+    expect(screen.queryByText('ORCL')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-zero-state')).not.toBeInTheDocument();
   });
 

@@ -9288,6 +9288,7 @@ class DatabaseManager:
         limit: int = 20,
         owner_id: Optional[str] = None,
         include_all_owners: bool = False,
+        include_test: bool = True,
     ) -> Tuple[List[AnalysisHistory], int]:
         """
         分页查询分析历史记录（带总数）
@@ -9317,6 +9318,8 @@ class DatabaseManager:
             if end_date:
                 # created_at < end_date+1 00:00:00 (即 <= end_date 23:59:59)
                 conditions.append(AnalysisHistory.created_at < datetime.combine(end_date + timedelta(days=1), datetime.min.time()))
+            if not include_test:
+                conditions.append(AnalysisHistory.is_test.is_(False))
             
             # 构建 where 子句
             where_clause = and_(*conditions) if conditions else True
