@@ -34,6 +34,7 @@ import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../component
 import { TerminalButton, TerminalChip, TerminalPageHeading } from '../components/terminal/TerminalPrimitives';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
+import { buildDataSourcesSetupHref, buildProviderOpsSetupHref } from '../utils/productSetupSurface';
 
 type LocalSnapshotEnvelope = {
   schemaVersion: 1;
@@ -51,6 +52,7 @@ const SECOND_STAGE_PANEL_DELAY_MS = 650;
 const AUTO_REVALIDATE_INITIAL_DELAY_MS = 1_500;
 const AUTO_REVALIDATE_RETRY_DELAY_MS = 2_500;
 const AUTO_REVALIDATE_MAX_ATTEMPTS = 3;
+const MARKET_OVERVIEW_SETUP_ACTION_CLASS = 'inline-flex min-h-8 items-center rounded-md border border-white/[0.08] bg-white/[0.035] px-2.5 py-1 text-[11px] font-semibold text-white/72 transition-colors hover:border-cyan-200/25 hover:bg-white/[0.06] hover:text-white';
 
 type PanelRequest = readonly [PanelKey, () => Promise<PanelState[PanelKey]>];
 type RefreshPanelRequestMode = 'background-refresh' | 'manual-refresh';
@@ -151,18 +153,22 @@ const AUTO_REVALIDATE_PANEL_KEYS: PanelKey[] = [
   'cnShortSentiment',
 ];
 
-const FALLBACK_TEMPERATURE: MarketTemperatureResponse = {
-  source: 'fallback',
-  sourceLabel: '最近可用数据',
+const createUnavailableTemperature = (warning = '市场温度数据待补'): MarketTemperatureResponse => ({
+  source: 'unavailable',
+  sourceLabel: '待补数据',
   updatedAt: new Date(0).toISOString(),
-  freshness: 'fallback',
-  isFallback: true,
-  warning: '数据待补',
+  freshness: 'unavailable',
+  isFallback: false,
+  warning,
   confidence: 0,
   reliableInputCount: 0,
   fallbackInputCount: 0,
   excludedInputCount: 0,
   isReliable: false,
+  temperatureAvailable: false,
+  conclusionAllowed: false,
+  disabledReason: 'missing_required_evidence',
+  unavailableReason: 'market_overview_inputs_unavailable',
   scores: {
     overall: { value: 50, label: '数据不足', trend: 'stable', description: '数据待补' },
     usRiskAppetite: { value: 50, label: '数据不足', trend: 'stable', description: '数据待补' },
@@ -170,85 +176,55 @@ const FALLBACK_TEMPERATURE: MarketTemperatureResponse = {
     macroPressure: { value: 50, label: '数据不足', trend: 'stable', description: '数据待补' },
     liquidity: { value: 50, label: '数据不足', trend: 'stable', description: '数据待补' },
   },
-};
+});
 
-const FALLBACK_BRIEFING: MarketBriefingResponse = {
-  source: 'fallback',
-  sourceLabel: '最近可用数据',
+const createUnavailableBriefing = (warning = '市场简报数据待补'): MarketBriefingResponse => ({
+  source: 'unavailable',
+  sourceLabel: '待补数据',
   updatedAt: new Date(0).toISOString(),
-  freshness: 'fallback',
-  isFallback: true,
-  warning: '数据待补',
+  freshness: 'unavailable',
+  isFallback: false,
+  warning,
   confidence: 0,
   reliableInputCount: 0,
   fallbackInputCount: 0,
   excludedInputCount: 0,
   isReliable: false,
-  items: [
-    { title: '数据待补', message: '数据待补', severity: 'warning', category: 'risk', confidence: 0 },
-    { title: '评分已暂停', message: '评分已暂停', severity: 'neutral', category: 'risk', confidence: 0 },
-    { title: '等待数据恢复', message: '等待数据恢复', severity: 'neutral', category: 'risk', confidence: 0 },
-  ],
-};
+  items: [],
+});
 
-const FALLBACK_FUTURES: MarketFuturesResponse = {
-  source: 'fallback',
-  sourceLabel: '最近可用数据',
+const createUnavailableFutures = (warning = '期货数据待补'): MarketFuturesResponse => ({
+  source: 'unavailable',
+  sourceLabel: '待补数据',
   updatedAt: new Date(0).toISOString(),
-  freshness: 'fallback',
-  isFallback: true,
-  warning: '最近可用数据',
-  items: [
-    { name: '纳指期货', symbol: 'NQ', value: 18420.5, change: 65.2, changePercent: 0.35, market: 'US', session: 'premarket', sparkline: [18320, 18380, 18420.5], source: 'fallback', sourceLabel: '最近可用数据', freshness: 'fallback', isFallback: true, warning: '最近可用数据' },
-    { name: '标普500期货', symbol: 'ES', value: 5238.25, change: 14.5, changePercent: 0.28, market: 'US', session: 'premarket', sparkline: [5208, 5218, 5238.25], source: 'fallback', sourceLabel: '最近可用数据', freshness: 'fallback', isFallback: true, warning: '最近可用数据' },
-    { name: '道指期货', symbol: 'YM', value: 38980, change: 72, changePercent: 0.19, market: 'US', session: 'premarket', sparkline: [38820, 38930, 38980], source: 'fallback', sourceLabel: '最近可用数据', freshness: 'fallback', isFallback: true, warning: '最近可用数据' },
-    { name: '罗素2000期货', symbol: 'RTY', value: 2094.6, change: -3.8, changePercent: -0.18, market: 'US', session: 'premarket', sparkline: [2108, 2098, 2094.6], source: 'fallback', sourceLabel: '最近可用数据', freshness: 'fallback', isFallback: true, warning: '最近可用数据' },
-    { name: '富时A50期货', symbol: 'CN00Y', value: 12580, change: 38, changePercent: 0.3, market: 'CN', session: 'day', sparkline: [12420, 12542, 12580], source: 'fallback', sourceLabel: '最近可用数据', freshness: 'fallback', isFallback: true, warning: '最近可用数据' },
-    { name: '恒指期货', symbol: 'HSI_F', value: 17712, change: 128, changePercent: 0.73, market: 'HK', session: 'day', sparkline: [17490, 17640, 17712], source: 'fallback', sourceLabel: '最近可用数据', freshness: 'fallback', isFallback: true, warning: '最近可用数据' },
-  ],
-};
+  freshness: 'unavailable',
+  isFallback: false,
+  warning,
+  items: [],
+});
 
-const FALLBACK_CRYPTO_PANEL: MarketOverviewPanel = {
-  panelName: 'CryptoCard',
-  lastRefreshAt: new Date(0).toISOString(),
-  status: 'failure',
-  source: 'fallback',
-  sourceLabel: '最近可用数据',
+const createUnavailableCnShortSentiment = (warning = '短线情绪数据待补'): CnShortSentimentResponse => ({
+  source: 'unavailable',
+  sourceLabel: '待补数据',
   updatedAt: new Date(0).toISOString(),
-  asOf: new Date(0).toISOString(),
-  freshness: 'fallback',
-  isFallback: true,
-  isRefreshing: true,
-  warning: '正在刷新，稍后自动更新',
-  items: [
-    { symbol: 'BTC', label: 'Bitcoin', value: 75800, unit: 'USD', changePct: -0.2, riskDirection: 'increasing', trend: [75220, 75640, 76110, 75800], source: 'fallback', sourceLabel: '最近可用数据', freshness: 'fallback', isFallback: true, warning: '正在刷新，稍后自动更新' },
-    { symbol: 'ETH', label: 'Ethereum', value: 3120, unit: 'USD', changePct: -0.4, riskDirection: 'increasing', trend: [3090, 3148, 3162, 3120], source: 'fallback', sourceLabel: '最近可用数据', freshness: 'fallback', isFallback: true, warning: '正在刷新，稍后自动更新' },
-    { symbol: 'BNB', label: 'BNB', value: 590, unit: 'USD', changePct: 0.3, riskDirection: 'decreasing', trend: [584, 588, 586, 590], source: 'fallback', sourceLabel: '最近可用数据', freshness: 'fallback', isFallback: true, warning: '正在刷新，稍后自动更新' },
-  ],
-};
-
-const FALLBACK_CN_SHORT_SENTIMENT: CnShortSentimentResponse = {
-  source: 'fallback',
-  sourceLabel: '最近可用数据',
-  updatedAt: new Date(0).toISOString(),
-  freshness: 'fallback',
-  isFallback: true,
-  warning: '最近可用数据',
-  sentimentScore: 50,
+  freshness: 'unavailable',
+  isFallback: false,
+  warning,
+  sentimentScore: 0,
   summary: '数据待补',
   metrics: {
-    limitUpCount: 68,
-    limitDownCount: 18,
-    failedLimitUpRate: 24.5,
-    maxConsecutiveLimitUps: 5,
-    yesterdayLimitUpPerformance: 2.8,
-    firstBoardCount: 42,
-    secondBoardCount: 12,
-    highBoardCount: 6,
-    twentyCmLimitUpCount: 9,
-    stRiskLevel: 'normal',
+    limitUpCount: 0,
+    limitDownCount: 0,
+    failedLimitUpRate: 0,
+    maxConsecutiveLimitUps: 0,
+    yesterdayLimitUpPerformance: 0,
+    firstBoardCount: 0,
+    secondBoardCount: 0,
+    highBoardCount: 0,
+    twentyCmLimitUpCount: 0,
+    stRiskLevel: 'unknown',
   },
-};
+});
 
 function readLocalMarketOverviewSnapshot(): LocalSnapshotEnvelope | null {
   if (typeof window === 'undefined') {
@@ -277,12 +253,16 @@ function hasUsablePanelValue(value: unknown): boolean {
     source?: string;
     freshness?: string;
     errorMessage?: string | null;
+    isUnavailable?: boolean;
     items?: unknown[];
     scores?: unknown;
     metrics?: unknown;
     summary?: unknown;
   };
-  if ((payload.source === 'error' || payload.freshness === 'error') && !payload.items?.length) {
+  if (
+    (payload.source === 'error' || payload.freshness === 'error' || payload.source === 'unavailable' || payload.freshness === 'unavailable' || payload.isUnavailable)
+    && !payload.items?.length
+  ) {
     return false;
   }
   return Boolean(
@@ -299,18 +279,18 @@ function buildInitialPanelsFromLocalSnapshot(): { panels: PanelState; source: 'l
     return {
       source: 'empty',
       panels: {
-        temperature: normalizeMarketTemperatureResponse(FALLBACK_TEMPERATURE),
-        briefing: FALLBACK_BRIEFING,
-        futures: FALLBACK_FUTURES,
-        cnShortSentiment: FALLBACK_CN_SHORT_SENTIMENT,
+        temperature: normalizeMarketTemperatureResponse(createUnavailableTemperature()),
+        briefing: createUnavailableBriefing(),
+        futures: createUnavailableFutures(),
+        cnShortSentiment: createUnavailableCnShortSentiment(),
       },
     };
   }
   const panels = {
-    temperature: FALLBACK_TEMPERATURE,
-    briefing: FALLBACK_BRIEFING,
-    futures: FALLBACK_FUTURES,
-    cnShortSentiment: FALLBACK_CN_SHORT_SENTIMENT,
+    temperature: createUnavailableTemperature(),
+    briefing: createUnavailableBriefing(),
+    futures: createUnavailableFutures(),
+    cnShortSentiment: createUnavailableCnShortSentiment(),
     ...localSnapshot.payload,
   } as PanelState;
   (Object.keys(panels) as PanelKey[]).forEach((panelKey) => {
@@ -419,42 +399,34 @@ function fallbackPanelValue(panelKey: PanelKey, error: unknown): PanelState[Pane
   switch (panelKey) {
     case 'temperature':
       return {
-        ...FALLBACK_TEMPERATURE,
+        ...createUnavailableTemperature(),
         updatedAt: new Date().toISOString(),
-        warning: `部分数据暂不可用，请稍后自动刷新。${describePanelError(error)}`,
+        warning: `市场温度数据待补。${describePanelError(error)}`,
       } as PanelState[PanelKey];
     case 'briefing':
       return {
-        ...FALLBACK_BRIEFING,
+        ...createUnavailableBriefing(),
         updatedAt: new Date().toISOString(),
-        warning: `部分数据暂不可用，请稍后自动刷新。${describePanelError(error)}`,
+        warning: `市场简报数据待补。${describePanelError(error)}`,
       } as PanelState[PanelKey];
     case 'futures':
       return {
-        ...FALLBACK_FUTURES,
+        ...createUnavailableFutures(),
         updatedAt: new Date().toISOString(),
-        isRefreshing: true,
-        warning: `部分数据暂不可用，请稍后自动刷新。${describePanelError(error)}`,
+        warning: `期货数据待补。${describePanelError(error)}`,
       } as PanelState[PanelKey];
     case 'cnShortSentiment':
       return {
-        ...FALLBACK_CN_SHORT_SENTIMENT,
+        ...createUnavailableCnShortSentiment(),
         updatedAt: new Date().toISOString(),
-        isRefreshing: true,
-        warning: `部分数据暂不可用，请稍后自动刷新。${describePanelError(error)}`,
+        warning: `短线情绪数据待补。${describePanelError(error)}`,
       } as PanelState[PanelKey];
     case 'indices':
       return fallbackPanel('IndexTrendsCard', error) as PanelState[PanelKey];
     case 'volatility':
       return fallbackPanel('VolatilityCard', error) as PanelState[PanelKey];
     case 'crypto':
-      return {
-        ...FALLBACK_CRYPTO_PANEL,
-        lastRefreshAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        asOf: new Date().toISOString(),
-        warning: `正在刷新，稍后自动更新。${describePanelError(error)}`,
-      } as PanelState[PanelKey];
+      return fallbackPanel('CryptoCard', error) as PanelState[PanelKey];
     case 'sentiment':
       return fallbackPanel('MarketSentimentCard', error) as PanelState[PanelKey];
     case 'fundsFlow':
@@ -1004,6 +976,225 @@ function buildMarketRegimeReadinessItems(
   });
 }
 
+type MarketOverviewFamilyReadinessState =
+  | 'available'
+  | 'missing'
+  | 'stale'
+  | 'not_configured'
+  | 'insufficient_coverage'
+  | 'unavailable';
+
+type MarketOverviewReadinessFamily = {
+  key: string;
+  label: string;
+  state: MarketOverviewFamilyReadinessState;
+  detail: string;
+};
+
+const MARKET_OVERVIEW_FAMILY_STATE_VARIANT: Record<MarketOverviewFamilyReadinessState, 'neutral' | 'success' | 'caution' | 'danger' | 'info'> = {
+  available: 'success',
+  missing: 'neutral',
+  stale: 'caution',
+  not_configured: 'neutral',
+  insufficient_coverage: 'caution',
+  unavailable: 'danger',
+};
+
+function panelHasCurrentItems(panel?: MarketOverviewPanel | null): boolean {
+  return Boolean(
+    panel
+      && panel.source !== 'error'
+      && panel.source !== 'unavailable'
+      && panel.freshness !== 'error'
+      && panel.freshness !== 'unavailable'
+      && panel.isUnavailable !== true
+      && Array.isArray(panel.items)
+      && panel.items.some((item) => item.isUnavailable !== true && item.value != null),
+  );
+}
+
+function futuresHasCurrentItems(futures?: MarketFuturesResponse | null): boolean {
+  return Boolean(
+    futures
+      && futures.source !== 'error'
+      && futures.source !== 'unavailable'
+      && futures.freshness !== 'error'
+      && futures.freshness !== 'unavailable'
+      && Array.isArray(futures.items)
+      && futures.items.some((item) => item.value != null),
+  );
+}
+
+function panelFamilyState(panels: Array<MarketOverviewPanel | undefined | null>): MarketOverviewFamilyReadinessState {
+  if (panels.some((panel) => panelHasCurrentItems(panel) && (panel?.isStale || panel?.freshness === 'stale'))) {
+    return 'stale';
+  }
+  if (panels.some(panelHasCurrentItems)) {
+    return 'available';
+  }
+  if (panels.some((panel) => panel?.source === 'error' || panel?.freshness === 'error')) {
+    return 'unavailable';
+  }
+  return 'missing';
+}
+
+function capabilityFamilyState(
+  view: ProfessionalDataCapabilityRegistryView | null,
+  categoryKey: string,
+  match: RegExp,
+): MarketOverviewFamilyReadinessState {
+  const items = (view?.categories || []).flatMap((category) => category.items);
+  const candidates = items.filter((item) => item.categoryKey === categoryKey || match.test(`${item.capabilityId} ${item.label} ${item.detail}`));
+  if (!candidates.length) {
+    return 'not_configured';
+  }
+  if (candidates.some((item) => item.status.key === 'live')) {
+    return 'available';
+  }
+  if (candidates.some((item) => item.status.key === 'degraded')) {
+    return 'insufficient_coverage';
+  }
+  if (candidates.some((item) => String(item.freshness || '').toLowerCase().includes('stale'))) {
+    return 'stale';
+  }
+  if (candidates.some((item) => item.status.key === 'configured_missing' || item.status.key === 'entitlement_required')) {
+    return 'not_configured';
+  }
+  return 'unavailable';
+}
+
+function evidenceFamilyState(
+  matrix: ConsumerEvidenceReadinessMatrix | null,
+  match: RegExp,
+): MarketOverviewFamilyReadinessState | null {
+  const items = (matrix?.items || []).filter((item) => match.test(`${item.surface} ${item.evidenceFamily} ${item.requiredInputs.join(' ')}`));
+  if (!items.length) {
+    return null;
+  }
+  if (items.some((item) => item.readinessState === 'score_grade')) {
+    return 'available';
+  }
+  if (items.some((item) => item.staleInputs.length > 0)) {
+    return 'stale';
+  }
+  if (items.some((item) => item.readinessState === 'observation_only')) {
+    return 'insufficient_coverage';
+  }
+  if (items.some((item) => item.blockedInputs.length > 0 || item.readinessState === 'blocked')) {
+    return 'unavailable';
+  }
+  return 'missing';
+}
+
+function crossAssetFamilyState(readiness: CrossAssetDriverReadiness | null): MarketOverviewFamilyReadinessState {
+  const drivers = readiness?.drivers || [];
+  if (!drivers.length) {
+    return 'not_configured';
+  }
+  if (drivers.some((driver) => driver.state === 'available')) {
+    return drivers.every((driver) => driver.state === 'available') ? 'available' : 'insufficient_coverage';
+  }
+  if (drivers.some((driver) => driver.state === 'stale')) {
+    return 'stale';
+  }
+  if (drivers.some((driver) => driver.state === 'insufficient_history')) {
+    return 'insufficient_coverage';
+  }
+  if (drivers.every((driver) => driver.state === 'not_configured')) {
+    return 'not_configured';
+  }
+  return 'missing';
+}
+
+function buildMarketOverviewReadinessFamilies(params: {
+  panels: PanelState;
+  consumerEvidenceReadinessMatrix: ConsumerEvidenceReadinessMatrix | null;
+  crossAssetDriverReadiness: CrossAssetDriverReadiness | null;
+  professionalDataCapabilities: ProfessionalDataCapabilityRegistryView | null;
+}): MarketOverviewReadinessFamily[] {
+  const { panels, consumerEvidenceReadinessMatrix, crossAssetDriverReadiness, professionalDataCapabilities } = params;
+  const marketIndexState = evidenceFamilyState(consumerEvidenceReadinessMatrix, /market[_-]?index|index|quote/i)
+    || (futuresHasCurrentItems(panels.futures) ? 'available' : panelFamilyState([panels.indices, panels.cnIndices]));
+  const sectorState = evidenceFamilyState(consumerEvidenceReadinessMatrix, /sector|industry|rotation/i)
+    || capabilityFamilyState(professionalDataCapabilities, 'sector_rotation', /sector|industry|rotation/i);
+  const breadthState = evidenceFamilyState(consumerEvidenceReadinessMatrix, /breadth|advance|decline/i)
+    || panelFamilyState([panels.cnBreadth, panels.usBreadth]);
+  const macroState = evidenceFamilyState(consumerEvidenceReadinessMatrix, /macro|regime|rates|volatility/i)
+    || capabilityFamilyState(professionalDataCapabilities, 'macro_cross_asset_regime', /macro|regime|rates|volatility/i);
+  const crossAssetState = crossAssetFamilyState(crossAssetDriverReadiness);
+  const newsState = evidenceFamilyState(consumerEvidenceReadinessMatrix, /news|catalyst|regime/i)
+    || capabilityFamilyState(professionalDataCapabilities, 'stock_research_data', /news|catalyst|regime/i);
+  const historicalState = crossAssetDriverReadiness?.drivers.some((driver) => driver.cachedOhlcv?.usableBars > 0)
+    ? 'available'
+    : crossAssetDriverReadiness?.drivers.some((driver) => driver.state === 'insufficient_history')
+      ? 'insufficient_coverage'
+      : 'missing';
+
+  return [
+    { key: 'market-index', label: 'market/index', state: marketIndexState, detail: '指数、区域市场和期货输入。' },
+    { key: 'sector-rotation', label: 'sector/industry rotation', state: sectorState, detail: '行业、主题和轮动输入。' },
+    { key: 'market-breadth', label: 'market breadth', state: breadthState, detail: '上涨/下跌、新高/新低和市场宽度输入。' },
+    { key: 'macro-regime', label: 'macro/regime', state: macroState, detail: '宏观、利率、波动率和 regime 输入。' },
+    { key: 'cross-asset', label: 'cross-asset drivers', state: crossAssetState, detail: '美元、利率、商品、信用或其他跨资产驱动。' },
+    { key: 'news-catalyst', label: 'news/catalyst/regime evidence', state: newsState, detail: '新闻、催化和 regime 证据边界。' },
+    { key: 'historical-ohlcv', label: 'historical OHLCV', state: historicalState, detail: '页面依赖的历史 OHLCV 和缓存覆盖。' },
+  ];
+}
+
+const MarketOverviewReadinessEmptyPanel = ({
+  families,
+  showOperatorCue,
+}: {
+  families: MarketOverviewReadinessFamily[];
+  showOperatorCue: boolean;
+}) => {
+  const allClosed = families.every((family) => family.state !== 'available');
+
+  return (
+    <section
+      data-testid="market-overview-readiness-empty-panel"
+      className="rounded-lg border border-amber-300/14 bg-amber-300/[0.035] px-3 py-3"
+    >
+      <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-amber-100/68">Market Overview readiness</p>
+          <p className="mt-1 text-sm font-semibold text-white/86">
+            {allClosed ? 'Market Overview 数据待补' : 'Market Overview 部分数据可用'}
+          </p>
+          <p className="mt-1 max-w-3xl text-[11px] leading-5 text-white/52">
+            缺失的数据族保持关闭，不生成市场概览、图表分数、结论或建议；已返回的数据区块仍按原始证据展示。
+          </p>
+        </div>
+        {showOperatorCue ? (
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <a className={MARKET_OVERVIEW_SETUP_ACTION_CLASS} href={buildProviderOpsSetupHref('market_overview')}>
+              查看数据状态
+            </a>
+            <a className={MARKET_OVERVIEW_SETUP_ACTION_CLASS} href={buildDataSourcesSetupHref('market_overview')}>
+              前往数据设置
+            </a>
+          </div>
+        ) : (
+          <TerminalChip variant="neutral" className="shrink-0">仅显示可用证据</TerminalChip>
+        )}
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+        {families.map((family) => (
+          <div key={family.key} className="min-w-0 rounded-md border border-white/[0.05] bg-black/10 px-3 py-2.5">
+            <div className="flex min-w-0 items-start justify-between gap-2">
+              <p className="min-w-0 text-[11px] font-semibold text-white/76">{family.label}</p>
+              <TerminalChip variant={MARKET_OVERVIEW_FAMILY_STATE_VARIANT[family.state]} className="shrink-0 text-[10px]">
+                {family.state}
+              </TerminalChip>
+            </div>
+            <p className="mt-1 text-[11px] leading-5 text-white/42">{family.detail}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+};
+
 const MarketRegimeReadinessSurface = ({
   view,
   riskReadiness,
@@ -1405,12 +1596,26 @@ const MarketOverviewPage = () => {
     resetAutoRevalidatePanel(panelKey);
     void refreshPanel(panelKey, loadPanel);
   }, [refreshPanel, resetAutoRevalidatePanel]);
+
+  const marketOverviewReadinessFamilies = buildMarketOverviewReadinessFamilies({
+    panels,
+    consumerEvidenceReadinessMatrix,
+    crossAssetDriverReadiness,
+    professionalDataCapabilities,
+  });
+  const hasUnavailableMarketOverviewFamily = marketOverviewReadinessFamilies.some((family) => family.state !== 'available');
   return (
     <ConsumerWorkspaceScope className="min-h-0 flex-1">
       <ConsumerWorkspacePageShell
         data-testid="market-overview-shell"
         className="flex min-h-0 flex-1 flex-col gap-4 md:gap-6"
       >
+        {hasUnavailableMarketOverviewFamily ? (
+          <MarketOverviewReadinessEmptyPanel
+            families={marketOverviewReadinessFamilies}
+            showOperatorCue={isAdminMode && canReadProviders}
+          />
+        ) : null}
         <OfficialRiskSourceReadinessStrip readiness={officialRiskSourceReadiness} />
         <MarketOverviewEvidenceBoundaryStrip matrix={consumerEvidenceReadinessMatrix} />
         <CrossAssetDriverReadinessStrip readiness={crossAssetDriverReadiness} />
@@ -1436,7 +1641,7 @@ const MarketOverviewPage = () => {
           refreshErrorCount={Object.keys(refreshErrors).length}
           refreshingPanel={refreshingPanel}
           cryptoRealtimeStatus={cryptoRealtimeStatus}
-          isCnShortSentimentBootstrapping={loading && panels.cnShortSentiment === FALLBACK_CN_SHORT_SENTIMENT}
+          isCnShortSentimentBootstrapping={loading && panels.cnShortSentiment.source === 'unavailable'}
           showAdminDiagnostics={isAdminMode && canReadProviders}
           onRefreshPanel={handleWorkbenchRefresh}
         />
