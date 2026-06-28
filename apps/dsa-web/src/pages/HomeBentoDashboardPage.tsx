@@ -6136,10 +6136,12 @@ function HomeAnalysisSoftTimeoutNotice({
   locale,
   ticker,
   onRetry,
+  onClear,
 }: {
   locale: DashboardLocale;
   ticker: string;
   onRetry: () => void;
+  onClear: () => void;
 }) {
   const isEnglish = locale === 'en';
   return (
@@ -6152,22 +6154,32 @@ function HomeAnalysisSoftTimeoutNotice({
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="text-sm font-semibold">
-            {isEnglish ? 'Part of this research is still pending' : '部分内容仍在整理'}
+            {isEnglish ? 'Analysis did not complete' : '分析未完成'}
           </p>
           <p className="mt-1 text-xs leading-5 text-amber-50/68">
             {isEnglish
-              ? `${ticker} is taking longer than usual. The current observation view is available now and will be replaced automatically when the report is ready.`
-              : `${ticker} 研究耗时较久。当前先显示可恢复观察视图，报告完成后会自动替换。`}
+              ? `${ticker} did not produce a research report in time. Current data or model dependencies did not return a usable result. You can retry later or check data readiness.`
+              : `${ticker} 未生成研究报告。当前数据或模型依赖未返回可用结果。可稍后重试或检查数据就绪度。`}
           </p>
         </div>
-        <button
-          type="button"
-          className="inline-flex min-h-9 shrink-0 items-center justify-center rounded-[7px] border border-amber-200/24 bg-amber-200/10 px-3 text-xs font-semibold text-amber-50 transition-colors hover:bg-amber-200/16"
-          data-testid="home-analysis-soft-timeout-retry"
-          onClick={onRetry}
-        >
-          {isEnglish ? 'Retry refresh' : '重试刷新'}
-        </button>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <button
+            type="button"
+            className="inline-flex min-h-9 items-center justify-center rounded-[7px] border border-amber-200/24 bg-amber-200/10 px-3 text-xs font-semibold text-amber-50 transition-colors hover:bg-amber-200/16"
+            data-testid="home-analysis-soft-timeout-retry"
+            onClick={onRetry}
+          >
+            {isEnglish ? 'Retry' : '重试'}
+          </button>
+          <button
+            type="button"
+            className="inline-flex min-h-9 items-center justify-center rounded-[7px] border border-white/12 bg-white/[0.035] px-3 text-xs font-semibold text-white/72 transition-colors hover:bg-white/[0.065] hover:text-white/88"
+            data-testid="home-analysis-soft-timeout-clear"
+            onClick={onClear}
+          >
+            {isEnglish ? 'Clear' : '清除'}
+          </button>
+        </div>
       </div>
     </section>
   );
@@ -6289,6 +6301,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const syncTaskUpdated = useStockPoolStore((state) => state.syncTaskUpdated);
   const syncTaskFailed = useStockPoolStore((state) => state.syncTaskFailed);
   const refreshTaskProgress = useStockPoolStore((state) => state.refreshTaskProgress);
+  const removeTask = useStockPoolStore((state) => state.removeTask);
   const {
     ref: openHistoryDrawerButtonRef,
     onClick: handleOpenHistoryDrawerClick,
@@ -6440,7 +6453,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     && !routeSymbol
     && !routeSource
     && !pendingAnalysisTicker
+    && recentHistoryItems.length === 0
     && !selectedReport
+    && !dashboardSelection.dashboardReport
     && !isHomeAnalyzing,
   );
   const deleteCopy = {
@@ -6864,6 +6879,17 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     if (pendingAnalysisTicker) {
       void handleAnalyze(pendingAnalysisTicker);
     }
+  };
+
+  const handleClearSoftTimedOutAnalysis = () => {
+    const taskId = focusedTaskId || softTimedOutTaskId;
+    if (taskId) {
+      removeTask(taskId);
+    }
+    setStatusToast(null);
+    setSoftTimedOutTaskId(null);
+    setPendingAnalysisTicker(null);
+    setDashboardLoading(false);
   };
 
   const handleHistoryClick = async (historyItem: HistoryItem) => {
@@ -7569,6 +7595,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                               locale={locale}
                               ticker={pendingAnalysisTicker || activeTicker || readyCopy.ticker}
                               onRetry={handleRetrySoftTimedOutAnalysis}
+                              onClear={handleClearSoftTimedOutAnalysis}
                             />
                           ) : null}
                           <div data-testid={completedTaskReport ? 'home-bento-analysis-result-card' : undefined}>
