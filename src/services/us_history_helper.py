@@ -284,6 +284,10 @@ def _normalize_local_us_history_frame(raw_df: Optional[pd.DataFrame]) -> Optiona
         return None
 
     df = df.rename(columns={date_column: "date"})
+    for candidate in ("adjusted_close", "adjustedClose", "adj_close", "Adj Close", "Adjusted Close"):
+        if candidate in df.columns:
+            df = df.rename(columns={candidate: "adjusted_close"})
+            break
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df = df.dropna(subset=["date", "open", "high", "low", "close"]).copy()
     if df.empty:

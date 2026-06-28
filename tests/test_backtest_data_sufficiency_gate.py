@@ -10,6 +10,8 @@ import unittest
 from datetime import date, timedelta
 from unittest.mock import patch
 
+import pandas as pd
+
 from tests.litellm_stub import ensure_litellm_stub
 
 ensure_litellm_stub()
@@ -17,6 +19,7 @@ ensure_litellm_stub()
 from src.config import Config
 from src.services.backtest_data_sufficiency import assess_backtest_data_sufficiency
 from src.services.rule_backtest_service import RuleBacktestService
+from src.services.us_history_helper import persist_local_us_daily_history
 from src.storage import DatabaseManager, StockDaily
 
 
@@ -38,6 +41,16 @@ FORBIDDEN_LEAK_KEYS = (
 
 class BacktestDataSufficiencyGateTestCase(unittest.TestCase):
     def setUp(self) -> None:
+        self._env_keys = [
+            "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED",
+            "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED",
+            "WOLFYSTOCK_HISTORICAL_OHLCV_CACHE_SEED_ENABLED",
+            "LOCAL_US_PARQUET_DIR",
+            "US_STOCK_PARQUET_DIR",
+        ]
+        self._env_snapshot = {key: os.environ.get(key) for key in self._env_keys}
+        for key in self._env_keys:
+            os.environ.pop(key, None)
         self._temp_dir = tempfile.TemporaryDirectory()
         os.environ["DATABASE_PATH"] = os.path.join(self._temp_dir.name, "data096.db")
         Config._instance = None
@@ -87,6 +100,11 @@ class BacktestDataSufficiencyGateTestCase(unittest.TestCase):
     def tearDown(self) -> None:
         DatabaseManager.reset_instance()
         self._temp_dir.cleanup()
+        for key in self._env_keys:
+            if self._env_snapshot[key] is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = self._env_snapshot[key] or ""
 
     @staticmethod
     def _assert_no_forbidden_leakage(payload: dict) -> None:
@@ -111,6 +129,23 @@ class BacktestDataSufficiencyGateTestCase(unittest.TestCase):
                     )
                 )
             session.commit()
+
+    @staticmethod
+    def _cache_frame(closes: list[float], *, start: date = date(2024, 1, 2), adjusted: bool = True) -> pd.DataFrame:
+        rows: list[dict] = []
+        for index, close in enumerate(closes):
+            row = {
+                "date": start + timedelta(days=index),
+                "open": close - 0.1,
+                "high": close + 0.2,
+                "low": max(0.01, close - 0.3),
+                "close": close,
+                "volume": 1000.0 + index,
+            }
+            if adjusted:
+                row["adjusted_close"] = close - 0.25
+            rows.append(row)
+        return pd.DataFrame(rows)
 
     @staticmethod
     def _sufficient_quality() -> dict:
@@ -286,7 +321,7 @@ class BacktestDataSufficiencyGateTestCase(unittest.TestCase):
                     missing_requirements=["missing_adjustments"],
                     adjustment_state="missing",
                 ),
-                "degraded",
+                "not_available",
             ),
             (
                 "missing_benchmark",
@@ -414,9 +449,12 @@ class BacktestDataSufficiencyGateTestCase(unittest.TestCase):
         self.assertNotIn("symbol_ohlcv", readiness["missingDataFamilies"])
         self.assertIsNone(response["total_return_pct"])
 
-    def test_seeded_symbol_and_benchmark_cache_unlocks_data110_execution(self) -> None:
-        self._seed_daily_rows("AAPL", [100.0 + (index * 0.5) for index in range(28)])
-        self._seed_daily_rows("SPY", [400.0 + (index * 0.4) for index in range(28)])
+    def test_seeded_symbol_and_benchmark_adjusted_cache_unlocks_data110_execution(self) -> None:
+        cache_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(cache_dir.cleanup)
+        os.environ["LOCAL_US_PARQUET_DIR"] = cache_dir.name
+        persist_local_us_daily_history("AAPL", self._cache_frame([100.0 + (index * 0.5) for index in range(28)]))
+        persist_local_us_daily_history("SPY", self._cache_frame([400.0 + (index * 0.4) for index in range(28)]))
         service = RuleBacktestService(self.db)
 
         with patch.object(service, "_get_llm_adapter", return_value=None), patch.object(
@@ -440,15 +478,48 @@ class BacktestDataSufficiencyGateTestCase(unittest.TestCase):
         readiness = response["historicalOhlcvReadiness"]
         self.assertEqual(response["status"], "completed")
         self.assertIsNone(response["no_result_reason"])
-        self.assertIn(gate["status"], {"sufficient", "missing_adjustments"})
-        self.assertNotEqual(gate["calculation_state"], "not_available")
+        self.assertEqual(gate["status"], "sufficient")
+        self.assertEqual(gate["calculation_state"], "executable")
         self.assertEqual(readiness["status"], "available")
         self.assertTrue(readiness["executable"])
+        self.assertEqual(readiness["adjustedDataRequirement"], {"required": True, "state": "available"})
         self.assertGreaterEqual(readiness["symbolBarsAvailable"], readiness["requiredBarCount"])
         self.assertGreaterEqual(readiness["benchmarkBarsAvailable"], readiness["requiredBarCount"])
         self.assertEqual(readiness["benchmarkReadiness"]["status"], "available")
+        self.assertEqual(readiness["benchmarkReadiness"]["adjustmentState"], "available")
         self.assertIsNotNone(response["total_return_pct"])
         self.assertIsNotNone(response["benchmark_return_pct"])
+
+    def test_seeded_symbol_and_benchmark_without_adjusted_blocks_data110_metrics(self) -> None:
+        self._seed_daily_rows("AAPL", [100.0 + (index * 0.5) for index in range(28)])
+        self._seed_daily_rows("SPY", [400.0 + (index * 0.4) for index in range(28)])
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None), patch.object(
+            service.engine,
+            "run",
+            wraps=service.engine.run,
+        ) as engine_run:
+            response = service.run_backtest(
+                code="AAPL",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                start_date="2024-01-02",
+                end_date="2024-01-19",
+                lookback_bars=20,
+                benchmark_mode="custom_code",
+                benchmark_code="SPY",
+                confirmed=True,
+            )
+
+        engine_run.assert_not_called()
+        readiness = response["historicalOhlcvReadiness"]
+        self.assertEqual(response["data_sufficiency"]["status"], "missing_adjustments")
+        self.assertEqual(response["data_sufficiency"]["calculation_state"], "not_available")
+        self.assertEqual(response["no_result_reason"], "missing_adjustments")
+        self.assertEqual(readiness["adjustedDataRequirement"], {"required": True, "state": "missing"})
+        self.assertIn("adjusted_prices", readiness["missingDataFamilies"])
+        self.assertIsNone(response["total_return_pct"])
+        self.assertIsNone(response["benchmark_return_pct"])
 
     def test_missing_corporate_action_adjustment_degrades_without_blocking(self) -> None:
         service = RuleBacktestService(self.db)

@@ -597,6 +597,7 @@ class RuleBacktestService:
         self._llm_adapter = llm_adapter
         self.owner_id = owner_id
         self.include_all_owners = bool(include_all_owners)
+        self._adjusted_close_by_symbol_date: Dict[tuple[str, date], float] = {}
 
     def _owner_kwargs(self) -> Dict[str, Any]:
         return {
@@ -2706,15 +2707,24 @@ class RuleBacktestService:
         )
         if len(bars) < required_bars or not historical_readiness.get("executable", False):
             blocked_reason = str(historical_readiness.get("blockedExecutionReason") or "")
+            missing_families = set(historical_readiness.get("missingDataFamilies") or [])
             no_result_reason = (
                 "missing_benchmark"
-                if "benchmark_ohlcv" in set(historical_readiness.get("missingDataFamilies") or [])
-                else "insufficient_history"
+                if "benchmark_ohlcv" in missing_families
+                else (
+                    "insufficient_history"
+                    if missing_families.intersection({"historical_ohlcv", "symbol_ohlcv", "date_coverage"})
+                    else ("missing_adjustments" if "adjusted_prices" in missing_families else "insufficient_history")
+                )
             )
             no_result_message = (
                 "基准历史行情缺失或覆盖不足，无法执行该策略回测。"
                 if no_result_reason == "missing_benchmark"
-                else "历史行情不足，无法执行该策略回测。"
+                else (
+                    "缺少真实复权价格或调整元数据，无法执行该策略回测。"
+                    if no_result_reason == "missing_adjustments"
+                    else "历史行情不足，无法执行该策略回测。"
+                )
             )
             historical_readiness = build_backtest_historical_ohlcv_readiness(
                 self._build_historical_ohlcv_readiness_payload(
@@ -3478,6 +3488,7 @@ class RuleBacktestService:
                 )
                 if df is None or df.empty:
                     return 0
+                self._remember_adjusted_close_values(code, df)
                 authority = assess_backtest_data_source_eligibility(code=code, source=source)
                 if authority.rejected:
                     logger.warning(
@@ -3511,6 +3522,7 @@ class RuleBacktestService:
             )
             if df is None or df.empty:
                 return 0
+            self._remember_adjusted_close_values(code, df)
             authority = assess_backtest_data_source_eligibility(code=code, source=source)
             if authority.rejected:
                 logger.warning(
@@ -3770,7 +3782,7 @@ class RuleBacktestService:
                 end=requested_end,
                 lookback_bars=required_bars,
                 required_bars=max(0, int(required_bars or 0)),
-                require_adjusted=False,
+                require_adjusted=str(self._market_metadata(code)["market"]).lower() == "us",
                 benchmark_symbol=benchmark_summary.get("code"),
                 benchmark_required=resolved_benchmark_required,
             ),
@@ -3841,7 +3853,7 @@ class RuleBacktestService:
         return self.stock_repo.get_range(benchmark_code, window_start, window_end)
 
     def _bar_to_ohlcv_mapping(self, bar: Any) -> Dict[str, Any]:
-        return {
+        payload = {
             "date": self._bar_date(bar),
             "open": getattr(bar, "open", None),
             "high": getattr(bar, "high", None),
@@ -3849,6 +3861,56 @@ class RuleBacktestService:
             "close": getattr(bar, "close", None),
             "volume": getattr(bar, "volume", 0.0) if getattr(bar, "volume", None) is not None else 0.0,
         }
+        adjusted_close = self._adjusted_close_for_bar(bar)
+        if adjusted_close is not None:
+            payload["adjustedClose"] = adjusted_close
+        return payload
+
+    def _adjusted_close_for_bar(self, bar: Any) -> Optional[float]:
+        for attr in ("adjusted_close", "adjustedClose", "adj_close"):
+            value = getattr(bar, attr, None)
+            if value is not None:
+                return _safe_float(value)
+        symbol = str(getattr(bar, "code", "") or "").strip().upper()
+        bar_date = self._bar_date(bar)
+        if symbol and bar_date is not None:
+            return self._adjusted_close_by_symbol_date.get((symbol, bar_date))
+        return None
+
+    def _remember_adjusted_close_values(self, code: str, frame: Any) -> None:
+        if frame is None or getattr(frame, "empty", True):
+            return
+        symbol = str(code or "").strip().upper()
+        if not symbol:
+            return
+        adjusted_column = None
+        for candidate in ("adjusted_close", "adjustedClose", "adj_close", "Adj Close", "Adjusted Close"):
+            if candidate in frame.columns:
+                adjusted_column = candidate
+                break
+        if adjusted_column is None:
+            return
+        date_column = "date" if "date" in frame.columns else ("trade_date" if "trade_date" in frame.columns else None)
+        if date_column is None:
+            return
+        for row in frame[[date_column, adjusted_column]].to_dict("records"):
+            bar_date = self._coerce_adjusted_cache_date(row.get(date_column))
+            adjusted_close = _safe_float(row.get(adjusted_column))
+            if bar_date is not None and adjusted_close is not None:
+                self._adjusted_close_by_symbol_date[(symbol, bar_date)] = adjusted_close
+
+    @staticmethod
+    def _coerce_adjusted_cache_date(value: Any) -> Optional[date]:
+        if isinstance(value, date) and not isinstance(value, datetime):
+            return value
+        if isinstance(value, datetime):
+            return value.date()
+        if value:
+            try:
+                return datetime.fromisoformat(str(value)[:10]).date()
+            except Exception:
+                return None
+        return None
 
     @staticmethod
     def _is_a_share_like_code(code: str) -> bool:

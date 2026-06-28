@@ -508,6 +508,7 @@ def _summarize_frame(frame: pd.DataFrame | None, *, dependency_available: bool |
     df = frame.copy()
     if "date" not in df.columns and "trade_date" in df.columns:
         df = df.rename(columns={"trade_date": "date"})
+    df = _normalize_adjusted_close_column(df)
     if "date" not in df.columns:
         return _empty_cache_summary("cache_missing", dependency_available=dependency_available)
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
@@ -542,10 +543,20 @@ def _empty_cache_summary(cache_state: str, *, dependency_available: bool | None)
 
 
 def _adjustment_state(frame: pd.DataFrame) -> str:
-    for column in ("adjustedClose", "adjusted_close", "adj_close"):
-        if column in frame.columns:
-            return "available" if bool(frame[column].notna().all()) else "missing"
+    normalized = _normalize_adjusted_close_column(frame)
+    if "adjusted_close" in normalized.columns:
+        return "available" if bool(normalized["adjusted_close"].notna().all()) else "missing"
     return "missing"
+
+
+def _normalize_adjusted_close_column(frame: pd.DataFrame) -> pd.DataFrame:
+    df = frame.copy()
+    for candidate in ("adjusted_close", "adjustedClose", "adj_close", "Adj Close", "Adjusted Close"):
+        if candidate in df.columns:
+            if candidate != "adjusted_close":
+                df = df.rename(columns={candidate: "adjusted_close"})
+            break
+    return df
 
 
 def _data_state(

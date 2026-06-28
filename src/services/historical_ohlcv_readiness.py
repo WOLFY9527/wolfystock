@@ -163,6 +163,7 @@ class HistoricalOhlcvReadinessService:
             benchmark_usable_bars=benchmark_result["usable_bars"],
             benchmark_missing_bars=benchmark_result["missing_bars"],
             benchmark_range=benchmark_result["usable_range"],
+            benchmark_adjustment_state=benchmark_result["adjustment_state"],
         )
 
     def assess_supplied_history(
@@ -199,17 +200,25 @@ class HistoricalOhlcvReadinessService:
             benchmark_usable_bars=benchmark_result["usable_bars"],
             benchmark_missing_bars=benchmark_result["missing_bars"],
             benchmark_range=benchmark_result["usable_range"],
+            benchmark_adjustment_state=benchmark_result["adjustment_state"],
         )
 
     def _benchmark_result(self, request: HistoricalOhlcvReadinessRequest) -> dict[str, Any]:
         if not request.benchmark_required:
-            return {"state": "not_requested", "usable_bars": 0, "missing_bars": 0, "usable_range": {}}
+            return {
+                "state": "not_requested",
+                "usable_bars": 0,
+                "missing_bars": 0,
+                "usable_range": {},
+                "adjustment_state": "not_required",
+            }
         if self.provider is None or not request.benchmark_symbol:
             return {
                 "state": "missing",
                 "usable_bars": 0,
                 "missing_bars": max(0, int(request.required_bars or 0)),
                 "usable_range": {},
+                "adjustment_state": "missing" if request.require_adjusted else "not_required",
             }
         try:
             benchmark_result = self.provider.fetch_ohlcv_history(request.benchmark_request())
@@ -219,6 +228,7 @@ class HistoricalOhlcvReadinessService:
                 "usable_bars": 0,
                 "missing_bars": max(0, int(request.required_bars or 0)),
                 "usable_range": {},
+                "adjustment_state": "missing" if request.require_adjusted else "not_required",
             }
         usable_bars = _count_usable_bars(benchmark_result.bars)
         required_bars = max(0, int(request.required_bars or 0))
@@ -228,6 +238,7 @@ class HistoricalOhlcvReadinessService:
                 "usable_bars": 0,
                 "missing_bars": required_bars,
                 "usable_range": {},
+                "adjustment_state": "missing" if request.require_adjusted else "not_required",
             }
         missing_bars = max(0, required_bars - usable_bars)
         return {
@@ -235,6 +246,11 @@ class HistoricalOhlcvReadinessService:
             "usable_bars": usable_bars,
             "missing_bars": missing_bars,
             "usable_range": _usable_range(benchmark_result.bars),
+            "adjustment_state": _adjustment_state(
+                request,
+                list(benchmark_result.bars),
+                benchmark_result.adjustments_available,
+            ),
         }
 
     def _result_from_provider_result(
@@ -246,6 +262,7 @@ class HistoricalOhlcvReadinessService:
         benchmark_usable_bars: int | None = None,
         benchmark_missing_bars: int | None = None,
         benchmark_range: Mapping[str, Any] | None = None,
+        benchmark_adjustment_state: str | None = None,
     ) -> HistoricalOhlcvAcquisitionResult:
         bars = list(provider_result.bars) if not provider_result.unavailable_reason else []
         usable_bars = _count_usable_bars(bars)
@@ -260,6 +277,7 @@ class HistoricalOhlcvReadinessService:
             freshness_state=freshness_state,
             adjustment_state=adjustment_state,
             benchmark_state=benchmark_state,
+            benchmark_adjustment_state=benchmark_adjustment_state,
         )
         readiness = {
             "contractVersion": HISTORICAL_OHLCV_READINESS_CONTRACT_VERSION,
@@ -282,6 +300,7 @@ class HistoricalOhlcvReadinessService:
             "benchmarkUsableBars": benchmark_usable_bars,
             "benchmarkMissingBars": benchmark_missing_bars,
             "benchmarkUsableRange": dict(benchmark_range or {}),
+            "benchmarkAdjustmentState": benchmark_adjustment_state or "not_required",
             "providerState": provider_state,
             "overallState": _overall_state(missing_requirements),
             "missingRequirements": missing_requirements,
@@ -312,15 +331,21 @@ def build_backtest_historical_ohlcv_readiness(
     freshness_state = _safe_code(source.get("freshnessState"))
     adjustment_state = _safe_code(source.get("adjustmentState"))
     benchmark_state = _safe_code(source.get("benchmarkState")) or "not_requested"
+    benchmark_adjustment_state = _safe_code(source.get("benchmarkAdjustmentState"))
     benchmark_usable_bars = _safe_int(source.get("benchmarkUsableBars"))
     benchmark_missing_bars = _safe_int(source.get("benchmarkMissingBars"))
     benchmark_range = _safe_mapping(source.get("benchmarkUsableRange"))
     normalized_runtime = _normalize_backtest_runtime_status(runtime_status, source, missing_requirements)
+    adjusted_requirement_state = _adjusted_requirement_state(
+        adjustment_state=adjustment_state,
+        benchmark_adjustment_state=benchmark_adjustment_state,
+        benchmark_state=benchmark_state,
+    )
     status = _backtest_readiness_status(
         runtime_status=normalized_runtime,
         provider_state=provider_state,
         freshness_state=freshness_state,
-        adjustment_state=adjustment_state,
+        adjustment_state=adjusted_requirement_state,
         benchmark_state=benchmark_state,
         missing_bars=missing_bars,
         missing_requirements=missing_requirements,
@@ -328,7 +353,7 @@ def build_backtest_historical_ohlcv_readiness(
     missing_classes = _backtest_missing_data_classes(
         status=status,
         provider_state=provider_state,
-        adjustment_state=adjustment_state,
+        adjustment_state=adjusted_requirement_state,
         benchmark_state=benchmark_state,
         missing_requirements=missing_requirements,
     )
@@ -364,8 +389,8 @@ def build_backtest_historical_ohlcv_readiness(
             "state": "covered" if missing_bars <= 0 else "missing",
         },
         "adjustedDataRequirement": {
-            "required": adjustment_state != "not_required",
-            "state": adjustment_state or "unknown",
+            "required": adjusted_requirement_state != "not_required",
+            "state": adjusted_requirement_state or "unknown",
         },
         "benchmarkReadiness": {
             "required": benchmark_state != "not_requested",
@@ -374,6 +399,7 @@ def build_backtest_historical_ohlcv_readiness(
             "requiredBarCount": required_bars if benchmark_state != "not_requested" else 0,
             "availableBarCount": benchmark_usable_bars,
             "missingBarCount": benchmark_missing_bars,
+            "adjustmentState": benchmark_adjustment_state or "not_required",
             "usableRange": _sanitize_range(benchmark_range),
         },
         "historicalOhlcvRuntimeStatus": normalized_runtime,
@@ -399,6 +425,23 @@ def _normalize_bars(values: Sequence[HistoricalOhlcvBar | Mapping[str, Any]]) ->
 
 def _safe_mapping(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _adjusted_requirement_state(
+    *,
+    adjustment_state: str,
+    benchmark_adjustment_state: str,
+    benchmark_state: str,
+) -> str:
+    if adjustment_state == "not_required":
+        return "not_required"
+    if adjustment_state == "missing":
+        return "missing"
+    if benchmark_state != "not_requested" and benchmark_adjustment_state == "missing":
+        return "missing"
+    if adjustment_state == "available":
+        return "available"
+    return adjustment_state or "unknown"
 
 
 def _safe_text_list(value: Any) -> list[str]:
@@ -579,6 +622,7 @@ def _sanitize_source_readiness(source: Mapping[str, Any]) -> dict[str, Any]:
         "freshnessState",
         "adjustmentState",
         "benchmarkState",
+        "benchmarkAdjustmentState",
         "providerState",
         "overallState",
         "missingRequirements",
@@ -596,13 +640,20 @@ def _assess_supplied_benchmark(
     benchmark_source_available: bool | None,
 ) -> dict[str, Any]:
     if not request.benchmark_required:
-        return {"state": "not_requested", "usable_bars": 0, "missing_bars": 0, "usable_range": {}}
+        return {
+            "state": "not_requested",
+            "usable_bars": 0,
+            "missing_bars": 0,
+            "usable_range": {},
+            "adjustment_state": "not_required",
+        }
     if benchmark_source_available is False:
         return {
             "state": "missing",
             "usable_bars": 0,
             "missing_bars": max(0, int(request.required_bars or 0)),
             "usable_range": {},
+            "adjustment_state": "missing" if request.require_adjusted else "not_required",
         }
     normalized_bars = _normalize_bars(list(bars or []))
     usable_bars = _count_usable_bars(normalized_bars)
@@ -619,6 +670,7 @@ def _assess_supplied_benchmark(
         "usable_bars": usable_bars,
         "missing_bars": missing_bars,
         "usable_range": _usable_range(normalized_bars),
+        "adjustment_state": _adjustment_state(request, normalized_bars, None),
     }
 
 
@@ -657,7 +709,13 @@ def _normalize_bar(value: HistoricalOhlcvBar | Mapping[str, Any]) -> HistoricalO
         or volume_value is None
     ):
         return None
-    adjusted_close = _finite_float(value.get("adjustedClose") or value.get("adjusted_close") or value.get("adj_close"))
+    adjusted_close = _finite_float(
+        value.get("adjustedClose")
+        or value.get("adjusted_close")
+        or value.get("adj_close")
+        or value.get("Adj Close")
+        or value.get("Adjusted Close")
+    )
     return HistoricalOhlcvBar(
         date=bar_date,
         open=open_value,
@@ -734,6 +792,7 @@ def _missing_requirements(
     freshness_state: str,
     adjustment_state: str,
     benchmark_state: str,
+    benchmark_adjustment_state: str | None = None,
 ) -> list[str]:
     values: list[str] = []
     for candidate in (_PROVIDER_MISSING, _PROVIDER_UNAVAILABLE, _ENTITLEMENT_REQUIRED):
@@ -743,7 +802,7 @@ def _missing_requirements(
         values.append(_INSUFFICIENT_HISTORY)
     if freshness_state == "stale":
         values.append(_STALE_DATA)
-    if adjustment_state == "missing":
+    if adjustment_state == "missing" or benchmark_adjustment_state == "missing":
         values.append(_MISSING_ADJUSTMENTS)
     if benchmark_state == "missing":
         values.append(_MISSING_BENCHMARK)

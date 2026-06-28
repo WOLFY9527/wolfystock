@@ -29,6 +29,8 @@ from src.services.yfinance_us_ohlcv_cache_provider import (
     YFINANCE_US_OHLCV_CACHE_SOURCE,
     YfinanceUsOhlcvCacheProvider,
 )
+from src.services.us_history_helper import load_local_us_daily_history, persist_local_us_daily_history
+from data_provider.yfinance_fetcher import YfinanceFetcher
 
 
 class _FakeOhlcvProvider:
@@ -373,6 +375,41 @@ def test_missing_benchmark_is_reported_when_benchmark_history_is_required() -> N
     assert "missing_benchmark" in result.readiness["missingRequirements"]
 
 
+def test_benchmark_missing_adjusted_data_blocks_adjusted_requirement_without_hiding_bars() -> None:
+    request = HistoricalOhlcvReadinessRequest(
+        symbol="AAPL",
+        market="us",
+        timeframe="1d",
+        required_bars=5,
+        require_adjusted=True,
+        benchmark_symbol="SPY",
+        benchmark_required=True,
+    )
+    provider = _FakeOhlcvProvider(
+        {
+            "AAPL": HistoricalOhlcvProviderResult.available(_bars(8, adjusted=True), adjustments_available=True),
+            "SPY": HistoricalOhlcvProviderResult.available(_bars(8, adjusted=False), adjustments_available=False),
+        }
+    )
+
+    result = HistoricalOhlcvReadinessService(provider=provider).fetch(request)
+    projection = build_backtest_historical_ohlcv_readiness(result.readiness)
+
+    assert result.readiness["providerState"] == "available"
+    assert result.readiness["usableBars"] == 8
+    assert result.readiness["benchmarkState"] == "available"
+    assert result.readiness["benchmarkUsableBars"] == 8
+    assert result.readiness["benchmarkAdjustmentState"] == "missing"
+    assert "missing_adjustments" in result.readiness["missingRequirements"]
+    assert projection["status"] == "missing"
+    assert projection["executable"] is False
+    assert projection["adjustedDataRequirement"] == {"required": True, "state": "missing"}
+    assert projection["benchmarkReadiness"]["status"] == "available"
+    assert projection["benchmarkReadiness"]["adjustmentState"] == "missing"
+    assert projection["blockedExecutionReason"] == "adjusted_prices_missing"
+    assert projection["missingDataFamilies"] == ["adjusted_prices"]
+
+
 def test_provider_unavailable_and_entitlement_required_are_consumer_safe_states() -> None:
     request = HistoricalOhlcvReadinessRequest(symbol="AAPL", market="us", timeframe="1d", required_bars=5)
     cases = {
@@ -565,6 +602,57 @@ def test_yfinance_us_cache_provider_cache_hit_bypasses_provider_call() -> None:
     assert readiness["missingBars"] == 0
     assert fetcher.calls == []
     assert cache.save_calls == []
+
+
+def test_local_us_parquet_cache_preserves_real_adjusted_close_alias(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("LOCAL_US_PARQUET_DIR", str(tmp_path))
+    monkeypatch.delenv("US_STOCK_PARQUET_DIR", raising=False)
+    import pandas as pd
+
+    frame = pd.DataFrame(
+        [
+            {
+                "date": "2026-01-02",
+                "open": 100.0,
+                "high": 101.0,
+                "low": 99.0,
+                "close": 100.5,
+                "volume": 1000.0,
+                "Adj Close": 98.25,
+            }
+        ]
+    )
+
+    saved = persist_local_us_daily_history("AAPL", frame)
+    loaded = load_local_us_daily_history("AAPL")
+
+    assert saved.status == "saved"
+    assert loaded.status == "hit"
+    assert loaded.dataframe is not None
+    assert "adjusted_close" in loaded.dataframe.columns
+    assert loaded.dataframe.loc[0, "adjusted_close"] == 98.25
+
+
+def test_yfinance_fetcher_normalizes_adj_close_without_replacing_raw_close() -> None:
+    import pandas as pd
+
+    raw = pd.DataFrame(
+        {
+            "Open": [100.0],
+            "High": [102.0],
+            "Low": [99.0],
+            "Close": [101.0],
+            "Adj Close": [97.5],
+            "Volume": [1000.0],
+        },
+        index=pd.to_datetime(["2026-01-02"]),
+    )
+    raw.index.name = "Date"
+
+    normalized = YfinanceFetcher()._normalize_data(raw, "AAPL")
+
+    assert normalized.loc[0, "close"] == 101.0
+    assert normalized.loc[0, "adjusted_close"] == 97.5
 
 
 def test_operator_seeded_us_cache_unlocks_scanner_and_backtest_readiness_chain() -> None:
