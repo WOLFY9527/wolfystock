@@ -111,7 +111,7 @@ def _spec_finder(available: set[str]):
     return lambda module_name: object() if module_name in available else None
 
 
-def _first_us_symbol(payload: dict[str, Any], symbol: str = "ORCL") -> dict[str, Any]:
+def _first_us_symbol(payload: dict[str, Any], symbol: str = "SPY") -> dict[str, Any]:
     for item in payload["markets"]["us"]["symbols"]:
         if item["symbol"] == symbol:
             return item
@@ -149,6 +149,12 @@ def test_disabled_default_preflight_is_dry_run_without_provider_or_mutation() ->
     assert us_item["runtimeState"] == "disabled_by_config"
     assert cn_item["cacheState"] == "cache_missing"
     assert us_item["cacheState"] == "cache_missing"
+    assert us_item["providerFamily"] == "us_daily_ohlcv_cache"
+    assert us_item["sourceClass"] == "explicit_operator_seed_provider"
+    assert us_item["barsRequested"] == 5
+    assert us_item["status"] == "not_configured"
+    assert us_item["dateRange"] == {"start": None, "end": None}
+    assert us_item["nextOperatorAction"] == "Enable the documented runtime flag before provider fetch is allowed."
     assert payload["activationChecklist"]["contractVersion"] == HISTORICAL_OHLCV_ACTIVATION_CHECKLIST_CONTRACT_VERSION
     assert payload["activationChecklist"]["operatorOnly"] is True
     assert payload["activationChecklist"]["consumerVisible"] is False
@@ -177,7 +183,7 @@ def test_disabled_default_seed_reports_disabled_by_config_without_provider_or_mu
         today=date(2026, 6, 24),
     )
 
-    payload = service.seed(symbols_by_market={"us": ["ORCL"]}, required_bars=5, dry_run=False)
+    payload = service.seed(symbols_by_market={"us": ["SPY"]}, required_bars=5, dry_run=False)
 
     item = _first_us_symbol(payload)
     assert payload["networkCallsEnabled"] is False
@@ -232,9 +238,9 @@ def test_us_seed_dry_run_reports_intended_action_and_writes_no_bars() -> None:
         today=date(2026, 6, 24),
     )
 
-    payload = service.seed(symbols_by_market={"us": ["NVDA"]}, required_bars=5, dry_run=True)
+    payload = service.seed(symbols_by_market={"us": ["QQQ"]}, required_bars=5, dry_run=True)
 
-    item = _first_us_symbol(payload, "NVDA")
+    item = _first_us_symbol(payload, "QQQ")
     assert payload["networkCallsEnabled"] is False
     assert payload["mutationEnabled"] is False
     assert fetcher.calls == []
@@ -261,9 +267,9 @@ def test_us_seed_reports_dependency_missing_without_provider_call() -> None:
         today=date(2026, 6, 24),
     )
 
-    payload = service.seed(symbols_by_market={"us": ["ORCL"]}, required_bars=5, dry_run=False)
+    payload = service.seed(symbols_by_market={"us": ["SPY"]}, required_bars=5, dry_run=False)
 
-    item = _first_us_symbol(payload, "ORCL")
+    item = _first_us_symbol(payload, "SPY")
     assert fetcher.calls == []
     assert item["runtimeState"] == "dependency_missing"
     assert item["seedResult"] == "dependency_missing"
@@ -309,12 +315,12 @@ def test_cache_hit_reports_bar_count_freshness_and_adjustments_without_provider_
         env={},
         spec_finder=_spec_finder({"akshare", "yfinance"}),
         cn_repository=_FakeCnRepository({"600519": _rows(6)}),
-        us_cache=_FakeUsCache({"ORCL": _frame(6)}),
+        us_cache=_FakeUsCache({"SPY": _frame(6)}),
         us_fetcher=us_fetcher,
         today=date(2026, 6, 24),
     )
 
-    payload = service.preflight(symbols_by_market={"cn": ["600519"], "us": ["ORCL"]}, required_bars=5)
+    payload = service.preflight(symbols_by_market={"cn": ["600519"], "us": ["SPY"]}, required_bars=5)
 
     cn_item = payload["markets"]["cn"]["symbols"][0]
     us_item = payload["markets"]["us"]["symbols"][0]
@@ -327,8 +333,11 @@ def test_cache_hit_reports_bar_count_freshness_and_adjustments_without_provider_
     assert cn_item["nextAction"]["state"] == "seeded/cache_hit"
     assert us_item["cacheState"] == "cache_hit"
     assert us_item["cachedBars"] == 5
+    assert us_item["dateRange"] == {"start": "2026-06-19", "end": "2026-06-23"}
     assert us_item["latestBarDate"] == "2026-06-23"
     assert us_item["adjustmentState"] == "available"
+    assert us_item["sourceClass"] == "local_cache"
+    assert us_item["status"] == "stale"
     assert us_item["nextAction"]["state"] == "seeded/cache_hit"
     checklist_by_market = {entry["market"]: entry for entry in payload["activationChecklist"]["items"]}
     assert checklist_by_market["us"]["state"] == "seeded/cache_hit"
@@ -380,13 +389,13 @@ def test_explicit_seed_with_fake_us_provider_writes_cache_only_when_flags_allow(
         today=date(2026, 6, 24),
     )
 
-    dry = service.seed(symbols_by_market={"us": ["NVDA"]}, required_bars=5, dry_run=True)
-    live = service.seed(symbols_by_market={"us": ["NVDA"]}, required_bars=5, dry_run=False)
+    dry = service.seed(symbols_by_market={"us": ["MSFT"]}, required_bars=5, dry_run=True)
+    live = service.seed(symbols_by_market={"us": ["MSFT"]}, required_bars=5, dry_run=False)
 
     assert dry["dryRun"] is True
     assert dry["networkCallsEnabled"] is False
-    assert fetcher.calls == [{"stock_code": "NVDA", "start_date": None, "end_date": None, "days": 5}]
-    assert us_cache.save_calls == [{"symbol": "NVDA", "rows": 7}]
+    assert fetcher.calls == [{"stock_code": "MSFT", "start_date": None, "end_date": None, "days": 5}]
+    assert us_cache.save_calls == [{"symbol": "MSFT", "rows": 7}]
     item = live["markets"]["us"]["symbols"][0]
     assert item["seedState"] == "cache_updated"
     assert item["seedResult"] == "seeded"
@@ -396,6 +405,7 @@ def test_explicit_seed_with_fake_us_provider_writes_cache_only_when_flags_allow(
     assert item["adjustmentStatus"] == "available"
     assert item["runtimeState"] == "available"
     assert item["cachedBars"] == 5
+    assert item["status"] == "available"
 
 
 def test_fixture_us_seed_is_visible_to_followup_preflight_cache_hit() -> None:
@@ -413,11 +423,11 @@ def test_fixture_us_seed_is_visible_to_followup_preflight_cache_hit() -> None:
         today=date(2026, 6, 24),
     )
 
-    seed_payload = service.seed(symbols_by_market={"us": ["ORCL"]}, required_bars=5, dry_run=False)
-    preflight_payload = service.preflight(symbols_by_market={"us": ["ORCL"]}, required_bars=5)
+    seed_payload = service.seed(symbols_by_market={"us": ["SPY"]}, required_bars=5, dry_run=False)
+    preflight_payload = service.preflight(symbols_by_market={"us": ["SPY"]}, required_bars=5)
 
-    seed_item = _first_us_symbol(seed_payload, "ORCL")
-    preflight_item = _first_us_symbol(preflight_payload, "ORCL")
+    seed_item = _first_us_symbol(seed_payload, "SPY")
+    preflight_item = _first_us_symbol(preflight_payload, "SPY")
     assert seed_item["seedResult"] == "seeded"
     assert preflight_item["cacheState"] == "cache_hit"
     assert preflight_item["cachedBars"] == 5
@@ -431,7 +441,7 @@ def test_seed_requires_allowlisted_symbols_runtime_flag_and_seed_flag() -> None:
         spec_finder=_spec_finder({"yfinance"}),
         us_cache=_FakeUsCache(),
         us_fetcher=fetcher,
-    ).seed(symbols_by_market={"us": ["MSFT", "AAPL"]}, required_bars=5, dry_run=False)
+    ).seed(symbols_by_market={"us": ["TSLA", "AAPL"]}, required_bars=5, dry_run=False)
 
     assert fetcher.calls == []
     assert [item["seedState"] for item in no_seed["markets"]["us"]["symbols"]] == [
@@ -471,7 +481,7 @@ def test_activation_checklist_uses_explicit_admin_state_set_without_leaking_inte
         cn_fetcher_factory=lambda: fetcher,
         us_cache=_FakeUsCache(),
         today=date(2026, 6, 24),
-    ).seed(symbols_by_market={"cn": ["600519"], "us": ["NVDA"]}, required_bars=5, dry_run=False)
+    ).seed(symbols_by_market={"cn": ["600519"], "us": ["MSFT"]}, required_bars=5, dry_run=False)
 
     serialized = json.dumps(payload, ensure_ascii=False).lower()
     checklist = payload["activationChecklist"]
@@ -484,7 +494,7 @@ def test_activation_checklist_uses_explicit_admin_state_set_without_leaking_inte
         "seeded/cache_hit",
         "failed_safely",
     ]
-    assert checklist["starterSymbolSets"]["us"]["symbols"] == ["ORCL", "AAPL", "NVDA"]
+    assert checklist["starterSymbolSets"]["us"]["symbols"] == ["SPY", "QQQ", "AAPL", "MSFT"]
     assert checklist["starterSymbolSets"]["cnIfSupported"]["symbols"] == ["600519", "000001", "601398"]
     assert checklist_by_market["cn"]["state"] == "failed_safely"
     assert checklist_by_market["us"]["state"] == "seeded/cache_hit"

@@ -28,7 +28,7 @@ HISTORICAL_OHLCV_CACHE_PRELIGHT_CONTRACT_VERSION = HISTORICAL_OHLCV_CACHE_PREFLI
 HISTORICAL_OHLCV_ACTIVATION_CHECKLIST_CONTRACT_VERSION = "historical_ohlcv_data_activation_checklist_v1"
 HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV = "WOLFYSTOCK_HISTORICAL_OHLCV_CACHE_SEED_ENABLED"
 DEFAULT_CN_REPRESENTATIVE_SYMBOLS = ("600519", "000001", "601398")
-DEFAULT_US_REPRESENTATIVE_SYMBOLS = ("ORCL", "AAPL", "NVDA")
+DEFAULT_US_REPRESENTATIVE_SYMBOLS = ("SPY", "QQQ", "AAPL", "MSFT")
 _ACTIVATION_STATE_DISABLED = "disabled_by_config"
 _ACTIVATION_STATE_DEPENDENCY_MISSING = "dependency_missing"
 _ACTIVATION_STATE_READY_TO_SEED = "ready_to_seed"
@@ -405,14 +405,33 @@ def _build_symbol_payload(
         adjustment_state=adjustment_state,
         require_adjusted=require_adjusted,
     )
+    status = _operator_status(
+        runtime_state=runtime_state,
+        cache_state=cache_state,
+        data_state=data_state,
+        cached_bars=cached_bars,
+    )
+    date_range = _date_range(cache=cache, seed_report=seed_report)
+    next_action = _next_action(
+        market,
+        runtime_state,
+        seed_state,
+        cache_state=cache_state,
+        data_state=data_state,
+    )
     return {
         "market": market,
         "symbol": symbol,
+        "providerFamily": _provider_family(market),
+        "sourceClass": _source_class(market, cache_state=cache_state),
+        "barsRequested": max(1, int(required_bars or 0)),
+        "status": status,
         "runtimeState": runtime_state,
         "cacheState": cache_state,
         "dependencyState": cache.get("dependencyState"),
         "dependencyAvailable": cache.get("dependencyAvailable"),
         "cachedBars": cached_bars,
+        "dateRange": date_range,
         "latestBarDate": cache.get("latestBarDate"),
         "freshnessState": freshness_state,
         "adjustmentState": adjustment_state,
@@ -424,13 +443,8 @@ def _build_symbol_payload(
         "freshness": seed_report.get("freshness") or "unknown",
         "adjustmentStatus": seed_report.get("adjustmentStatus") or "unknown",
         "intendedAction": seed_report.get("intendedAction"),
-        "nextAction": _next_action(
-            market,
-            runtime_state,
-            seed_state,
-            cache_state=cache_state,
-            data_state=data_state,
-        ),
+        "nextOperatorAction": next_action.get("summary"),
+        "nextAction": next_action,
     }
 
 
@@ -493,11 +507,13 @@ def _summarize_frame(frame: pd.DataFrame | None, *, dependency_available: bool |
     if df.empty:
         return _empty_cache_summary("cache_missing", dependency_available=dependency_available)
     latest = df["date"].max().date()
+    earliest = df["date"].min().date()
     return {
         "cacheState": "cache_hit",
         "dependencyState": "installed" if dependency_available else "missing",
         "dependencyAvailable": bool(dependency_available),
         "cachedBars": int(len(df)),
+        "earliestBarDate": earliest.isoformat(),
         "latestBarDate": latest.isoformat(),
         "freshnessState": "fresh" if latest >= today else "stale",
         "adjustmentState": _adjustment_state(df),
@@ -510,6 +526,7 @@ def _empty_cache_summary(cache_state: str, *, dependency_available: bool | None)
         "dependencyState": "unknown" if dependency_available is None else ("installed" if dependency_available else "missing"),
         "dependencyAvailable": None if dependency_available is None else bool(dependency_available),
         "cachedBars": 0,
+        "earliestBarDate": None,
         "latestBarDate": None,
         "freshnessState": "unknown",
         "adjustmentState": "unknown",
@@ -556,6 +573,48 @@ def _cache_data_state(
     if require_adjusted and adjustment_state == "missing":
         return "missing_adjustments"
     return "fresh"
+
+
+def _operator_status(
+    *,
+    runtime_state: str,
+    cache_state: str,
+    data_state: str,
+    cached_bars: int,
+) -> str:
+    if data_state == "fresh" or (
+        cache_state == "cache_hit"
+        and cached_bars > 0
+        and data_state not in {"stale", "insufficient", "missing_adjustments"}
+    ):
+        return "available"
+    if data_state == "stale":
+        return "stale"
+    if data_state == "insufficient":
+        return "insufficient_coverage"
+    if data_state == "missing_adjustments":
+        return "missing"
+    if data_state == "cache_missing" and runtime_state == "available":
+        return "missing"
+    if runtime_state in {"disabled_by_config", "seed_disabled_by_config", "dependency_missing"}:
+        return "not_configured"
+    return "unavailable"
+
+
+def _date_range(*, cache: Mapping[str, Any], seed_report: Mapping[str, Any]) -> dict[str, Any]:
+    start = cache.get("earliestBarDate") or seed_report.get("earliestDate")
+    end = cache.get("latestBarDate") or seed_report.get("latestDate")
+    return {"start": start, "end": end}
+
+
+def _provider_family(market: str) -> str:
+    return "us_daily_ohlcv_cache" if market == "us" else "cn_daily_ohlcv_cache"
+
+
+def _source_class(market: str, *, cache_state: str) -> str:
+    if cache_state == "cache_hit":
+        return "local_cache"
+    return "explicit_operator_seed_provider" if market in {"us", "cn"} else "unknown"
 
 
 def _next_action(
