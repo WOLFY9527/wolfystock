@@ -163,6 +163,8 @@ class HistoricalOhlcvReadinessService:
         request: HistoricalOhlcvReadinessRequest,
         bars: Sequence[HistoricalOhlcvBar | Mapping[str, Any]],
         *,
+        benchmark_bars: Sequence[HistoricalOhlcvBar | Mapping[str, Any]] | None = None,
+        benchmark_source_available: bool | None = None,
         source_available: bool,
         adjustments_available: bool | None = None,
         freshness_state: str | None = None,
@@ -178,8 +180,19 @@ class HistoricalOhlcvReadinessService:
             provider_result = HistoricalOhlcvProviderResult.unavailable(
                 unavailable_reason or _PROVIDER_MISSING
             )
-        benchmark_state = "missing" if request.benchmark_required else "not_requested"
-        return self._result_from_provider_result(request, provider_result, benchmark_state=benchmark_state)
+        benchmark_result = _assess_supplied_benchmark(
+            request,
+            benchmark_bars,
+            benchmark_source_available=benchmark_source_available,
+        )
+        return self._result_from_provider_result(
+            request,
+            provider_result,
+            benchmark_state=benchmark_result["state"],
+            benchmark_usable_bars=benchmark_result["usable_bars"],
+            benchmark_missing_bars=benchmark_result["missing_bars"],
+            benchmark_range=benchmark_result["usable_range"],
+        )
 
     def _benchmark_state(self, request: HistoricalOhlcvReadinessRequest) -> str:
         if not request.benchmark_required:
@@ -191,8 +204,10 @@ class HistoricalOhlcvReadinessService:
         except Exception:
             return "missing"
         usable_bars = _count_usable_bars(benchmark_result.bars)
-        if benchmark_result.unavailable_reason or usable_bars < max(0, int(request.required_bars or 0)):
+        if benchmark_result.unavailable_reason:
             return "missing"
+        if usable_bars < max(0, int(request.required_bars or 0)):
+            return "insufficient_coverage"
         return "available"
 
     def _result_from_provider_result(
@@ -201,6 +216,9 @@ class HistoricalOhlcvReadinessService:
         provider_result: HistoricalOhlcvProviderResult,
         *,
         benchmark_state: str,
+        benchmark_usable_bars: int | None = None,
+        benchmark_missing_bars: int | None = None,
+        benchmark_range: Mapping[str, Any] | None = None,
     ) -> HistoricalOhlcvAcquisitionResult:
         bars = list(provider_result.bars) if not provider_result.unavailable_reason else []
         usable_bars = _count_usable_bars(bars)
@@ -229,10 +247,14 @@ class HistoricalOhlcvReadinessService:
             "requiredBars": required_bars,
             "usableBars": usable_bars,
             "missingBars": missing_bars,
+            "usableRange": _usable_range(bars),
             "freshnessState": freshness_state,
             "adjustmentState": adjustment_state,
             "benchmarkState": benchmark_state,
             "benchmarkSymbol": _normalize_symbol(str(request.benchmark_symbol or "")) or None,
+            "benchmarkUsableBars": benchmark_usable_bars,
+            "benchmarkMissingBars": benchmark_missing_bars,
+            "benchmarkUsableRange": dict(benchmark_range or {}),
             "providerState": provider_state,
             "overallState": _overall_state(missing_requirements),
             "missingRequirements": missing_requirements,
@@ -263,6 +285,9 @@ def build_backtest_historical_ohlcv_readiness(
     freshness_state = _safe_code(source.get("freshnessState"))
     adjustment_state = _safe_code(source.get("adjustmentState"))
     benchmark_state = _safe_code(source.get("benchmarkState")) or "not_requested"
+    benchmark_usable_bars = _safe_int(source.get("benchmarkUsableBars"))
+    benchmark_missing_bars = _safe_int(source.get("benchmarkMissingBars"))
+    benchmark_range = _safe_mapping(source.get("benchmarkUsableRange"))
     normalized_runtime = _normalize_backtest_runtime_status(runtime_status, source, missing_requirements)
     status = _backtest_readiness_status(
         runtime_status=normalized_runtime,
@@ -291,8 +316,15 @@ def build_backtest_historical_ohlcv_readiness(
             "start": _clean_public_text(requested_range.get("start")),
             "end": _clean_public_text(requested_range.get("end")),
         },
+        "requestedRange": {
+            "start": _clean_public_text(requested_range.get("start")),
+            "end": _clean_public_text(requested_range.get("end")),
+        },
+        "usableRange": _sanitize_range(source.get("usableRange")),
         "requiredBarCount": required_bars,
         "availableBarCount": available_bars,
+        "symbolBarsAvailable": available_bars,
+        "benchmarkBarsAvailable": benchmark_usable_bars,
         "missingDateCoverage": {
             "missingBarCount": missing_bars,
             "state": "covered" if missing_bars <= 0 else "missing",
@@ -305,12 +337,18 @@ def build_backtest_historical_ohlcv_readiness(
             "required": benchmark_state != "not_requested",
             "symbol": _clean_public_text(source.get("benchmarkSymbol")),
             "status": benchmark_state,
+            "requiredBarCount": required_bars if benchmark_state != "not_requested" else 0,
+            "availableBarCount": benchmark_usable_bars,
+            "missingBarCount": benchmark_missing_bars,
+            "usableRange": _sanitize_range(benchmark_range),
         },
         "historicalOhlcvRuntimeStatus": normalized_runtime,
         "operatorNextAction": _clean_public_text(operator_next_action) or _default_backtest_operator_action(status),
+        "nextOperatorAction": _clean_public_text(operator_next_action) or _default_backtest_operator_action(status),
         "consumerSafeMessage": _backtest_consumer_message(status),
         "blockedExecutionReason": blocked_reason,
         "missingDataClasses": missing_classes,
+        "missingDataFamilies": list(missing_classes),
         "sourceReadiness": _sanitize_source_readiness(source),
         "consumerSafe": True,
     }
@@ -397,7 +435,12 @@ def _backtest_readiness_status(
         return "missing"
     if runtime_status == "unavailable" or provider_state in {_PROVIDER_UNAVAILABLE, _ENTITLEMENT_REQUIRED}:
         return "unavailable"
-    if missing_bars > 0 or _INSUFFICIENT_HISTORY in missing_requirements or runtime_status == "insufficient_coverage":
+    if (
+        missing_bars > 0
+        or _INSUFFICIENT_HISTORY in missing_requirements
+        or runtime_status == "insufficient_coverage"
+        or benchmark_state == "insufficient_coverage"
+    ):
         return "insufficient_coverage"
     if adjustment_state == "missing" or benchmark_state == "missing" or any(
         item in missing_requirements for item in (_MISSING_ADJUSTMENTS, _MISSING_BENCHMARK)
@@ -424,13 +467,16 @@ def _backtest_missing_data_classes(
 
     if status in {"not_configured", "unavailable"} or provider_state != "available":
         add("historical_ohlcv")
+        add("symbol_ohlcv")
     if status == "insufficient_coverage" or _INSUFFICIENT_HISTORY in missing_requirements:
         add("date_coverage")
+        if benchmark_state != "insufficient_coverage":
+            add("symbol_ohlcv")
     if status == "stale" or _STALE_DATA in missing_requirements:
         add("freshness")
     if adjustment_state == "missing" or _MISSING_ADJUSTMENTS in missing_requirements:
         add("adjusted_prices")
-    if benchmark_state == "missing" or _MISSING_BENCHMARK in missing_requirements:
+    if benchmark_state in {"missing", "insufficient_coverage"} or _MISSING_BENCHMARK in missing_requirements:
         add("benchmark_ohlcv")
     return values
 
@@ -474,6 +520,7 @@ def _sanitize_source_readiness(source: Mapping[str, Any]) -> dict[str, Any]:
         "requiredBars",
         "usableBars",
         "missingBars",
+        "usableRange",
         "freshnessState",
         "adjustmentState",
         "benchmarkState",
@@ -485,6 +532,54 @@ def _sanitize_source_readiness(source: Mapping[str, Any]) -> dict[str, Any]:
     sanitized = {key: value for key, value in dict(source or {}).items() if key in allowed}
     sanitized["consumerSafe"] = True
     return sanitized
+
+
+def _assess_supplied_benchmark(
+    request: HistoricalOhlcvReadinessRequest,
+    bars: Sequence[HistoricalOhlcvBar | Mapping[str, Any]] | None,
+    *,
+    benchmark_source_available: bool | None,
+) -> dict[str, Any]:
+    if not request.benchmark_required:
+        return {"state": "not_requested", "usable_bars": 0, "missing_bars": 0, "usable_range": {}}
+    if benchmark_source_available is False:
+        return {
+            "state": "missing",
+            "usable_bars": 0,
+            "missing_bars": max(0, int(request.required_bars or 0)),
+            "usable_range": {},
+        }
+    normalized_bars = _normalize_bars(list(bars or []))
+    usable_bars = _count_usable_bars(normalized_bars)
+    required_bars = max(0, int(request.required_bars or 0))
+    missing_bars = max(0, required_bars - usable_bars)
+    if benchmark_source_available is None and not normalized_bars:
+        state = "missing"
+    elif missing_bars > 0:
+        state = "insufficient_coverage"
+    else:
+        state = "available"
+    return {
+        "state": state,
+        "usable_bars": usable_bars,
+        "missing_bars": missing_bars,
+        "usable_range": _usable_range(normalized_bars),
+    }
+
+
+def _usable_range(bars: Sequence[HistoricalOhlcvBar]) -> dict[str, str | None]:
+    dates = [bar.date for bar in bars if isinstance(bar.date, date)]
+    if not dates:
+        return {"start": None, "end": None}
+    return {"start": min(dates).isoformat(), "end": max(dates).isoformat()}
+
+
+def _sanitize_range(value: Any) -> dict[str, str | None]:
+    source = _safe_mapping(value)
+    return {
+        "start": _clean_public_text(source.get("start")),
+        "end": _clean_public_text(source.get("end")),
+    }
 
 
 def _normalize_bar(value: HistoricalOhlcvBar | Mapping[str, Any]) -> HistoricalOhlcvBar | None:

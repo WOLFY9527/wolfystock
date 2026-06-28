@@ -2655,6 +2655,11 @@ class RuleBacktestService:
             if normalized_start_date is not None
             else None
         )
+        benchmark_selection = self._resolve_benchmark_selection(
+            instrument_code=code,
+            benchmark_mode=benchmark_mode,
+            benchmark_code=benchmark_code,
+        )
         self._ensure_market_history(
             code=code,
             load_count=load_count,
@@ -2668,15 +2673,59 @@ class RuleBacktestService:
             rows = self.stock_repo.get_latest(code, days=load_count)
             bars = list(reversed(rows))
         required_bars = max(10, parsed.max_lookback + 2)
-        if len(bars) < required_bars:
+        data_gate_start, data_gate_end = self._resolve_data_gate_window(
+            bars=bars,
+            requested_start=normalized_start_date,
+            requested_end=normalized_end_date,
+        )
+        data_gate_bars = self._bars_for_window(bars, start_date=data_gate_start, end_date=data_gate_end)
+        data_gate_required_bars = max(
+            required_bars,
+            len(self._business_dates(data_gate_start, data_gate_end)) if data_gate_start and data_gate_end else 0,
+        )
+        benchmark_required = self._benchmark_required_for_data_gate(benchmark_selection)
+        benchmark_rows: List[Any] = []
+        if benchmark_required and data_gate_start is not None and data_gate_end is not None:
+            benchmark_rows = self._load_benchmark_rows_for_data_gate(
+                selection=benchmark_selection,
+                window_start=data_gate_start,
+                window_end=data_gate_end,
+                required_bars=data_gate_required_bars,
+            )
+        historical_readiness = build_backtest_historical_ohlcv_readiness(
+            self._build_historical_ohlcv_readiness_payload(
+                code=code,
+                bars=data_gate_bars,
+                requested_start=data_gate_start,
+                requested_end=data_gate_end,
+                required_bars=data_gate_required_bars,
+                benchmark_summary=self._decorate_benchmark_summary({}, benchmark_selection) if benchmark_required else {},
+                benchmark_bars=benchmark_rows,
+                benchmark_required=benchmark_required,
+            )
+        )
+        if len(bars) < required_bars or not historical_readiness.get("executable", False):
+            blocked_reason = str(historical_readiness.get("blockedExecutionReason") or "")
+            no_result_reason = (
+                "missing_benchmark"
+                if "benchmark_ohlcv" in set(historical_readiness.get("missingDataFamilies") or [])
+                else "insufficient_history"
+            )
+            no_result_message = (
+                "基准历史行情缺失或覆盖不足，无法执行该策略回测。"
+                if no_result_reason == "missing_benchmark"
+                else "历史行情不足，无法执行该策略回测。"
+            )
             historical_readiness = build_backtest_historical_ohlcv_readiness(
                 self._build_historical_ohlcv_readiness_payload(
                     code=code,
-                    bars=list(bars),
-                    requested_start=normalized_start_date or history_start_date,
-                    requested_end=normalized_end_date,
-                    required_bars=required_bars,
-                    benchmark_summary={},
+                    bars=data_gate_bars,
+                    requested_start=data_gate_start,
+                    requested_end=data_gate_end,
+                    required_bars=data_gate_required_bars,
+                    benchmark_summary=self._decorate_benchmark_summary({}, benchmark_selection) if benchmark_required else {},
+                    benchmark_bars=benchmark_rows,
+                    benchmark_required=benchmark_required,
                 )
             )
             result = self._build_empty_result(
@@ -2685,8 +2734,8 @@ class RuleBacktestService:
                 lookback_bars=lookback_bars,
                 fee_bps=fee_bps,
                 slippage_bps=slippage_bps,
-                no_result_reason="insufficient_history",
-                no_result_message="历史行情不足，无法执行该策略回测。",
+                no_result_reason=no_result_reason,
+                no_result_message=no_result_message,
                 start_date=normalized_start_date,
                 end_date=normalized_end_date,
             )
@@ -2694,7 +2743,15 @@ class RuleBacktestService:
             result.benchmark_curve = []
             result.benchmark_summary = {
                 "state": "not_executed",
-                "unavailable_reason": "primary_historical_ohlcv_blocked",
+                "unavailable_reason": (
+                    f"{benchmark_selection.get('label') or benchmark_selection.get('code') or 'Benchmark'} "
+                    "历史行情缺失或覆盖不足，DATA-110 阻止执行。"
+                    if no_result_reason == "missing_benchmark"
+                    else blocked_reason or "primary_historical_ohlcv_blocked"
+                ),
+                "code": benchmark_selection.get("code") if benchmark_required else None,
+                "resolved_mode": benchmark_selection.get("resolved_mode") if benchmark_required else BENCHMARK_MODE_NONE,
+                "requested_mode": benchmark_selection.get("requested_mode") if benchmark_required else BENCHMARK_MODE_NONE,
             }
             setattr(result, "robustness_analysis", {})
             setattr(
@@ -2702,10 +2759,11 @@ class RuleBacktestService:
                 "data_quality",
                 self._build_data_quality_payload(
                     code=code,
-                    bars=bars,
-                    requested_start=normalized_start_date,
-                    requested_end=normalized_end_date,
+                    bars=data_gate_bars,
+                    requested_start=data_gate_start,
+                    requested_end=data_gate_end,
                     benchmark_summary=dict(getattr(result, "benchmark_summary", {}) or {}),
+                    historical_ohlcv_readiness=historical_readiness,
                 ),
             )
             result.data_quality["historicalOhlcvReadiness"] = historical_readiness
@@ -2767,6 +2825,7 @@ class RuleBacktestService:
                 requested_start=normalized_start_date,
                 requested_end=normalized_end_date,
                 benchmark_summary=dict(getattr(result, "benchmark_summary", {}) or {}),
+                historical_ohlcv_readiness=historical_readiness,
             ),
         )
         return result
@@ -3566,6 +3625,7 @@ class RuleBacktestService:
         requested_start: Optional[date],
         requested_end: Optional[date],
         benchmark_summary: Optional[Dict[str, Any]],
+        historical_ohlcv_readiness: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         ordered_bars = sorted(list(bars or []), key=lambda item: self._bar_date(item) or date.min)
         all_bar_dates = [self._bar_date(bar) for bar in ordered_bars]
@@ -3601,14 +3661,15 @@ class RuleBacktestService:
         missing_bar_count = max((expected_bar_count or 0) - len(window_bars), 0) if expected_bar_count is not None else 0
         anomalies = self._detect_data_quality_anomalies(window_bars)
         benchmark_payload = dict(benchmark_summary or {})
-        historical_ohlcv_readiness = self._build_historical_ohlcv_readiness_payload(
-            code=code,
-            bars=window_bars,
-            requested_start=requested_start,
-            requested_end=requested_end,
-            required_bars=expected_bar_count or len(window_bars),
-            benchmark_summary=benchmark_payload,
-        )
+        if historical_ohlcv_readiness is None:
+            historical_ohlcv_readiness = self._build_historical_ohlcv_readiness_payload(
+                code=code,
+                bars=window_bars,
+                requested_start=requested_start,
+                requested_end=requested_end,
+                required_bars=expected_bar_count or len(window_bars),
+                benchmark_summary=benchmark_payload,
+            )
         warnings: List[Dict[str, str]] = []
         if not window_bars:
             warnings.append(self._quality_warning("no_bars", "No market bars were available for the requested window.", "warning"))
@@ -3690,12 +3751,16 @@ class RuleBacktestService:
         requested_end: Optional[date],
         required_bars: int,
         benchmark_summary: Dict[str, Any],
+        benchmark_bars: Optional[List[Any]] = None,
+        benchmark_required: Optional[bool] = None,
     ) -> Dict[str, Any]:
-        benchmark_required = bool(
+        resolved_benchmark_required = bool(
             benchmark_summary
             and str(benchmark_summary.get("resolved_mode") or "").strip().lower()
             not in {"", "none", "same_symbol_buy_and_hold"}
         )
+        if benchmark_required is not None:
+            resolved_benchmark_required = bool(benchmark_required)
         result = HistoricalOhlcvReadinessService().assess_supplied_history(
             HistoricalOhlcvReadinessRequest(
                 symbol=code,
@@ -3707,15 +3772,73 @@ class RuleBacktestService:
                 required_bars=max(0, int(required_bars or 0)),
                 require_adjusted=False,
                 benchmark_symbol=benchmark_summary.get("code"),
-                benchmark_required=benchmark_required,
+                benchmark_required=resolved_benchmark_required,
             ),
             [self._bar_to_ohlcv_mapping(bar) for bar in bars],
+            benchmark_bars=[self._bar_to_ohlcv_mapping(bar) for bar in list(benchmark_bars or [])],
+            benchmark_source_available=bool(benchmark_bars) if resolved_benchmark_required else None,
             source_available=bool(bars),
             adjustments_available=None,
             freshness_state="stale" if requested_end and bars and (self._bar_date(bars[-1]) or date.min) < requested_end else None,
             unavailable_reason="provider_missing" if not bars else None,
         )
         return result.readiness
+
+    def _resolve_data_gate_window(
+        self,
+        *,
+        bars: List[Any],
+        requested_start: Optional[date],
+        requested_end: Optional[date],
+    ) -> tuple[Optional[date], Optional[date]]:
+        bar_dates = [self._bar_date(bar) for bar in list(bars or [])]
+        resolved_dates = [item for item in bar_dates if item is not None]
+        start = requested_start or (min(resolved_dates) if resolved_dates else None)
+        end = requested_end or (max(resolved_dates) if resolved_dates else None)
+        return start, end
+
+    def _bars_for_window(
+        self,
+        bars: List[Any],
+        *,
+        start_date: Optional[date],
+        end_date: Optional[date],
+    ) -> List[Any]:
+        return [
+            bar
+            for bar in list(bars or [])
+            if (bar_date := self._bar_date(bar)) is not None
+            and (start_date is None or bar_date >= start_date)
+            and (end_date is None or bar_date <= end_date)
+        ]
+
+    @staticmethod
+    def _benchmark_required_for_data_gate(selection: Mapping[str, Any]) -> bool:
+        requested_mode = str(selection.get("requested_mode") or "").strip().lower()
+        resolved_mode = str(selection.get("resolved_mode") or "").strip().lower()
+        if requested_mode == BENCHMARK_MODE_AUTO:
+            return False
+        return bool(resolved_mode and resolved_mode not in {BENCHMARK_MODE_NONE, BENCHMARK_MODE_SAME_SYMBOL})
+
+    def _load_benchmark_rows_for_data_gate(
+        self,
+        *,
+        selection: Mapping[str, Any],
+        window_start: date,
+        window_end: date,
+        required_bars: int,
+    ) -> List[Any]:
+        benchmark_code = str(selection.get("code") or "").strip()
+        if not benchmark_code:
+            return []
+        load_count = max(int(required_bars or 0), (window_end - window_start).days + 5, 10)
+        self._ensure_market_history(
+            code=benchmark_code,
+            load_count=load_count,
+            start_date=window_start,
+            end_date=window_end,
+        )
+        return self.stock_repo.get_range(benchmark_code, window_start, window_end)
 
     def _bar_to_ohlcv_mapping(self, bar: Any) -> Dict[str, Any]:
         return {

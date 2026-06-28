@@ -24,7 +24,7 @@ SUFFICIENCY_STATUSES = frozenset(
         "entitlement_required",
     }
 )
-_BLOCKING_STATUSES = frozenset({"insufficient_history", "provider_missing", "entitlement_required"})
+_BLOCKING_STATUSES = frozenset({"insufficient_history", "missing_benchmark", "provider_missing", "entitlement_required"})
 _ENTITLEMENT_TOKENS = ("entitlement", "unauthorized", "forbidden", "permission", "redisplay")
 _GENERIC_OHLCV_READINESS_KEYS = frozenset(
     {
@@ -37,9 +37,14 @@ _GENERIC_OHLCV_READINESS_KEYS = frozenset(
         "requiredBars",
         "usableBars",
         "missingBars",
+        "usableRange",
         "freshnessState",
         "adjustmentState",
         "benchmarkState",
+        "benchmarkSymbol",
+        "benchmarkUsableBars",
+        "benchmarkMissingBars",
+        "benchmarkUsableRange",
         "providerState",
         "overallState",
         "missingRequirements",
@@ -54,16 +59,22 @@ _SAFE_OHLCV_READINESS_KEYS = frozenset(
         "requestedSymbol",
         "requestedMarket",
         "requestedDateRange",
+        "requestedRange",
+        "usableRange",
         "requiredBarCount",
         "availableBarCount",
+        "symbolBarsAvailable",
+        "benchmarkBarsAvailable",
         "missingDateCoverage",
         "adjustedDataRequirement",
         "benchmarkReadiness",
         "historicalOhlcvRuntimeStatus",
         "operatorNextAction",
+        "nextOperatorAction",
         "consumerSafeMessage",
         "blockedExecutionReason",
         "missingDataClasses",
+        "missingDataFamilies",
         "sourceReadiness",
         "symbol",
         "market",
@@ -214,6 +225,9 @@ def _sanitize_ohlcv_readiness(readiness: Mapping[str, Any]) -> dict[str, Any]:
     for key in ("requiredBars", "usableBars", "missingBars", "lookbackBars", "requiredBarCount", "availableBarCount"):
         if key in sanitized:
             sanitized[key] = _safe_int(sanitized.get(key))
+    for key in ("symbolBarsAvailable", "benchmarkBarsAvailable", "benchmarkUsableBars", "benchmarkMissingBars"):
+        if key in sanitized:
+            sanitized[key] = _safe_int(sanitized.get(key))
     if isinstance(sanitized.get("sourceReadiness"), Mapping):
         sanitized["sourceReadiness"] = _sanitize_source_readiness(sanitized.get("sourceReadiness"))
     sanitized["consumerSafe"] = True
@@ -286,14 +300,21 @@ def _apply_ohlcv_readiness(
     elif provider_state in {"provider_unavailable", "not_available", "unavailable"} or backtest_status == "unavailable" or runtime_status == "unavailable":
         degraded.append("provider_missing")
 
-    if missing_bars > 0 or "insufficient_history" in missing_requirements or backtest_status == "insufficient_coverage":
+    benchmark_coverage_blocked = (
+        backtest_status == "insufficient_coverage"
+        and "benchmark_ohlcv" in missing_data_classes
+        and "symbol_ohlcv" not in missing_data_classes
+    )
+    if benchmark_coverage_blocked:
+        blocked.append("missing_benchmark")
+    elif missing_bars > 0 or "insufficient_history" in missing_requirements or backtest_status == "insufficient_coverage":
         blocked.append("insufficient_history")
     if freshness_state == "stale" or "stale_data" in missing_requirements or backtest_status == "stale" or runtime_status == "stale":
         degraded.append("stale_data")
     if adjustment_state == "missing" or "missing_adjustments" in missing_requirements:
         degraded.append("missing_adjustments")
-    if benchmark_state == "missing" or "missing_benchmark" in missing_requirements:
-        degraded.append("missing_benchmark")
+    if benchmark_state in {"missing", "insufficient_coverage"} or "missing_benchmark" in missing_requirements:
+        blocked.append("missing_benchmark")
     if "missing_factor_inputs" in missing_requirements:
         degraded.append("missing_factor_inputs")
     if (
