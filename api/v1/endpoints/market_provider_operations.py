@@ -90,10 +90,7 @@ def get_historical_ohlcv_cache_preflight(
     _: CurrentUser = Depends(require_admin_capability("ops:providers:read")),
 ):
     return service.preflight(
-        symbols_by_market={
-            "cn": _parse_symbol_list(cn_symbols),
-            "us": _parse_symbol_list(us_symbols),
-        },
+        symbols_by_market=_parse_query_symbols_by_market(cn_symbols=cn_symbols, us_symbols=us_symbols),
         required_bars=required_bars,
         require_adjusted=require_adjusted,
         dry_run=True,
@@ -130,6 +127,15 @@ def _parse_body_symbols(body: dict[str, Any], key: str) -> list[str]:
     if isinstance(value, list):
         return [str(item or "").strip().upper() for item in value if str(item or "").strip()]
     return []
+
+
+def _parse_query_symbols_by_market(*, cn_symbols: str | None, us_symbols: str | None) -> dict[str, list[str]] | None:
+    if cn_symbols is None and us_symbols is None:
+        return None
+    return {
+        "cn": _parse_symbol_list(cn_symbols) if cn_symbols is not None else [],
+        "us": _parse_symbol_list(us_symbols) if us_symbols is not None else [],
+    }
 
 
 def _parse_symbol_list(value: str | None) -> list[str]:

@@ -155,8 +155,15 @@ class HistoricalOhlcvReadinessService:
         except Exception:
             provider_result = HistoricalOhlcvProviderResult.unavailable(_PROVIDER_UNAVAILABLE)
 
-        benchmark_state = self._benchmark_state(request)
-        return self._result_from_provider_result(request, provider_result, benchmark_state=benchmark_state)
+        benchmark_result = self._benchmark_result(request)
+        return self._result_from_provider_result(
+            request,
+            provider_result,
+            benchmark_state=benchmark_result["state"],
+            benchmark_usable_bars=benchmark_result["usable_bars"],
+            benchmark_missing_bars=benchmark_result["missing_bars"],
+            benchmark_range=benchmark_result["usable_range"],
+        )
 
     def assess_supplied_history(
         self,
@@ -194,21 +201,41 @@ class HistoricalOhlcvReadinessService:
             benchmark_range=benchmark_result["usable_range"],
         )
 
-    def _benchmark_state(self, request: HistoricalOhlcvReadinessRequest) -> str:
+    def _benchmark_result(self, request: HistoricalOhlcvReadinessRequest) -> dict[str, Any]:
         if not request.benchmark_required:
-            return "not_requested"
+            return {"state": "not_requested", "usable_bars": 0, "missing_bars": 0, "usable_range": {}}
         if self.provider is None or not request.benchmark_symbol:
-            return "missing"
+            return {
+                "state": "missing",
+                "usable_bars": 0,
+                "missing_bars": max(0, int(request.required_bars or 0)),
+                "usable_range": {},
+            }
         try:
             benchmark_result = self.provider.fetch_ohlcv_history(request.benchmark_request())
         except Exception:
-            return "missing"
+            return {
+                "state": "missing",
+                "usable_bars": 0,
+                "missing_bars": max(0, int(request.required_bars or 0)),
+                "usable_range": {},
+            }
         usable_bars = _count_usable_bars(benchmark_result.bars)
+        required_bars = max(0, int(request.required_bars or 0))
         if benchmark_result.unavailable_reason:
-            return "missing"
-        if usable_bars < max(0, int(request.required_bars or 0)):
-            return "insufficient_coverage"
-        return "available"
+            return {
+                "state": "missing",
+                "usable_bars": 0,
+                "missing_bars": required_bars,
+                "usable_range": {},
+            }
+        missing_bars = max(0, required_bars - usable_bars)
+        return {
+            "state": "insufficient_coverage" if missing_bars > 0 else "available",
+            "usable_bars": usable_bars,
+            "missing_bars": missing_bars,
+            "usable_range": _usable_range(benchmark_result.bars),
+        }
 
     def _result_from_provider_result(
         self,

@@ -23,6 +23,7 @@ from src.services.scanner_ohlcv_readiness import (
     build_scanner_historical_ohlcv_readiness,
     summarize_scanner_ohlcv_readiness,
 )
+from src.services.scanner_universe_readiness import build_scanner_universe_readiness_from_coverage
 from src.services.stock_structure_decision_service import StockStructureDecisionService
 from src.services.yfinance_us_ohlcv_cache_provider import (
     YFINANCE_US_OHLCV_CACHE_SOURCE,
@@ -558,6 +559,89 @@ def test_yfinance_us_cache_provider_cache_hit_bypasses_provider_call() -> None:
     assert readiness["missingBars"] == 0
     assert fetcher.calls == []
     assert cache.save_calls == []
+
+
+def test_operator_seeded_us_cache_unlocks_scanner_and_backtest_readiness_chain() -> None:
+    cache = _FakeUsOhlcvCache()
+    seed_fetcher = _FakeDailyFetcher(_frame(65, adjusted=True))
+    preflight = HistoricalOhlcvCachePreflightService(
+        env={
+            "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "true",
+            "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
+            HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV: "true",
+        },
+        spec_finder=lambda module_name: object() if module_name == "yfinance" else None,
+        us_cache=cache,
+        us_fetcher=seed_fetcher,
+        today=date(2026, 3, 6),
+    )
+
+    seed_payload = preflight.seed(
+        symbols_by_market={"cn": [], "us": ["AAPL", "SPY"]},
+        required_bars=60,
+        dry_run=False,
+    )
+
+    assert seed_payload["summary"]["symbolsWritten"] == 2
+    assert [call["stock_code"] for call in seed_fetcher.calls] == ["AAPL", "SPY"]
+
+    provider = YfinanceUsOhlcvCacheProvider(cache=cache, provider_fetch_enabled=False)
+    result = HistoricalOhlcvReadinessService(provider=provider).fetch(
+        HistoricalOhlcvReadinessRequest(
+            symbol="AAPL",
+            market="us",
+            timeframe="1d",
+            required_bars=60,
+            require_adjusted=True,
+            benchmark_symbol="SPY",
+            benchmark_required=True,
+        )
+    )
+
+    assert result.readiness["providerState"] == "available"
+    assert result.readiness["overallState"] == "ready"
+    assert result.readiness["usableBars"] >= 60
+    assert result.readiness["benchmarkState"] == "available"
+    assert result.readiness["missingRequirements"] == []
+
+    scanner_readiness = build_scanner_universe_readiness_from_coverage(
+        market="us",
+        universe_status="available",
+        universe_size=2,
+        last_updated_at="2026-03-06T00:00:00+00:00",
+        freshness_state="universe_runtime_input",
+        quote_coverage="available",
+        history_coverage="available",
+        blocked=False,
+        historical_requirements=result.readiness["missingRequirements"],
+        seeded_symbols=["AAPL", "SPY"],
+        eligible_symbols=["AAPL", "SPY"],
+    )
+    assert scanner_readiness["status"] == "available"
+    assert scanner_readiness["availableDataClasses"] == ["universe", "historical_ohlcv", "quote_snapshot"]
+    assert scanner_readiness["seededSymbols"] == ["AAPL", "SPY"]
+    assert scanner_readiness["eligibleSymbols"] == ["AAPL", "SPY"]
+
+    backtest_readiness = build_backtest_historical_ohlcv_readiness(result.readiness)
+    assert backtest_readiness["status"] == "available"
+    assert backtest_readiness["executable"] is True
+    assert backtest_readiness["symbolBarsAvailable"] >= 60
+    assert backtest_readiness["benchmarkReadiness"]["status"] == "available"
+    assert backtest_readiness["benchmarkBarsAvailable"] >= 60
+    gate = assess_backtest_data_sufficiency(
+        {
+            "data_quality": {
+                "authority_status": "allowed",
+                "authority_source_type": "cache_snapshot",
+                "bar_count": 65,
+                "adjustment_mode": "split_dividend_adjusted",
+                "dividends_handled": "handled",
+                "splits_handled": "handled",
+            },
+            "historicalOhlcvReadiness": backtest_readiness,
+        }
+    )
+    assert gate["calculation_state"] == "executable"
 
 
 def test_yfinance_us_cache_provider_enabled_fetches_and_persists_sufficient_bars() -> None:

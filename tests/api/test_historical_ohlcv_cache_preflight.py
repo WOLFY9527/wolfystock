@@ -200,6 +200,40 @@ def test_preflight_endpoint_returns_dry_run_payload_and_parses_symbols() -> None
     ]
 
 
+def test_preflight_endpoint_uses_default_symbols_when_query_symbols_are_omitted() -> None:
+    service = _FakePreflightService()
+    client = _client_for(_provider_read_admin, service)
+
+    response = client.get("/api/v1/admin/historical-ohlcv/cache-preflight")
+
+    assert response.status_code == 200
+    assert service.preflight_calls == [
+        {
+            "symbols_by_market": None,
+            "required_bars": 60,
+            "require_adjusted": True,
+            "dry_run": True,
+        }
+    ]
+
+
+def test_preflight_endpoint_preserves_explicit_us_only_query_scope() -> None:
+    service = _FakePreflightService()
+    client = _client_for(_provider_read_admin, service)
+
+    response = client.get("/api/v1/admin/historical-ohlcv/cache-preflight", params={"us_symbols": "spy"})
+
+    assert response.status_code == 200
+    assert service.preflight_calls == [
+        {
+            "symbols_by_market": {"cn": [], "us": ["SPY"]},
+            "required_bars": 60,
+            "require_adjusted": True,
+            "dry_run": True,
+        }
+    ]
+
+
 def test_seed_endpoint_defaults_to_dry_run_and_requires_write_for_execute() -> None:
     service = _FakePreflightService()
     read_client = _client_for(_provider_read_admin, service)

@@ -29,8 +29,8 @@ def _parse_symbols(value: str | None) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--cn-symbols", default="", help="Comma-separated CN symbols; defaults to representative set.")
-    parser.add_argument("--us-symbols", default="", help="Comma-separated US symbols; defaults to representative set.")
+    parser.add_argument("--cn-symbols", default=None, help="Comma-separated CN symbols; defaults to representative set.")
+    parser.add_argument("--us-symbols", default=None, help="Comma-separated US symbols; defaults to representative set.")
     parser.add_argument("--required-bars", type=int, default=60)
     parser.add_argument("--no-require-adjusted", action="store_true")
     parser.add_argument("--seed", action="store_true", help="Run the seed control path; defaults to dry-run.")
@@ -38,11 +38,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     service = HistoricalOhlcvCachePreflightService()
-    kwargs = {
-        "symbols_by_market": {
+    symbols_by_market = None
+    if args.cn_symbols is not None or args.us_symbols is not None:
+        symbols_by_market = {
             "cn": _parse_symbols(args.cn_symbols),
             "us": _parse_symbols(args.us_symbols),
-        },
+        }
+    kwargs = {
+        "symbols_by_market": symbols_by_market,
         "required_bars": max(1, int(args.required_bars or 60)),
         "require_adjusted": not bool(args.no_require_adjusted),
     }
