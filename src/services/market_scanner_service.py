@@ -39,6 +39,11 @@ from src.services.historical_ohlcv_readiness import (
     HistoricalOhlcvReadinessService,
 )
 from src.services.historical_ohlcv_runtime_adapter import HistoricalOhlcvRuntimeAdapter
+from src.services.quote_snapshot_readiness import (
+    QuoteSnapshotProvider,
+    QuoteSnapshotReadinessRequest,
+    QuoteSnapshotReadinessService,
+)
 from src.services.scanner_ai_service import ScannerAiInterpretationService
 from src.services.scanner_evidence_packet import (
     SCANNER_EVIDENCE_VERSION,
@@ -749,6 +754,7 @@ class MarketScannerService:
         include_all_owners: bool = False,
         ohlcv_readiness_service: Optional[HistoricalOhlcvReadinessService] = None,
         historical_ohlcv_provider: Optional[HistoricalOhlcvProvider] = None,
+        quote_snapshot_provider: Optional[QuoteSnapshotProvider] = None,
         require_adjusted_ohlcv: bool = False,
     ) -> None:
         self.db = db_manager or DatabaseManager.get_instance()
@@ -765,6 +771,8 @@ class MarketScannerService:
         self.ohlcv_readiness_service = ohlcv_readiness_service or HistoricalOhlcvReadinessService(
             provider=historical_ohlcv_provider
         )
+        self.quote_snapshot_provider = quote_snapshot_provider
+        self.quote_snapshot_readiness_service = QuoteSnapshotReadinessService(provider=quote_snapshot_provider)
         self.require_adjusted_ohlcv = bool(require_adjusted_ohlcv)
         configured_path = local_universe_cache_path or getattr(
             get_config(),
@@ -2246,6 +2254,53 @@ class MarketScannerService:
             return "available"
         return "unknown"
 
+    @staticmethod
+    def _quote_snapshot_readiness_symbols(
+        *,
+        market: str,
+        seeded_symbols: Sequence[str],
+        universe_selection: Mapping[str, Any],
+    ) -> List[str]:
+        if str(market or "").strip().lower() != "us":
+            return []
+        accepted = universe_selection.get("accepted_symbols")
+        accepted_symbols = {
+            str(symbol or "").strip().upper()
+            for symbol in accepted
+            if str(symbol or "").strip()
+        } if isinstance(accepted, Sequence) and not isinstance(accepted, (str, bytes, bytearray)) else set()
+        symbols: List[str] = []
+        for symbol in seeded_symbols:
+            normalized = str(symbol or "").strip().upper()
+            if not normalized:
+                continue
+            if accepted_symbols and normalized not in accepted_symbols:
+                continue
+            if normalized not in symbols:
+                symbols.append(normalized)
+        return symbols[:50]
+
+    def _quote_snapshot_readiness_for_symbols(
+        self,
+        *,
+        market: str,
+        symbols: Sequence[str],
+    ) -> Dict[str, Any]:
+        normalized = []
+        for symbol in symbols:
+            text = str(symbol or "").strip().upper()
+            if text and text not in normalized:
+                normalized.append(text)
+        if not normalized:
+            return {}
+        result = self.quote_snapshot_readiness_service.fetch(
+            QuoteSnapshotReadinessRequest(
+                symbols=tuple(normalized),
+                market=market,
+            )
+        )
+        return dict(result.readiness)
+
     def _history_readiness_coverage(
         self,
         diagnostics: Mapping[str, Any],
@@ -2337,6 +2392,9 @@ class MarketScannerService:
             add("universe")
         if quote_coverage == "missing" or "missing_quote_snapshot" in candidate_generation_blockers:
             add("quote_snapshot")
+        if quote_coverage == "stale" or "stale_quote_snapshot" in candidate_generation_blockers:
+            add("quote_snapshot")
+            add("freshness")
         if history_coverage == "missing" or "missing_history" in candidate_generation_blockers:
             add("historical_ohlcv")
         if benchmark_missing or "missing_benchmark" in candidate_generation_blockers:
@@ -2776,6 +2834,59 @@ class MarketScannerService:
         else:
             benchmark_state = "unknown"
         ohlcv_symbol_readiness = self._scanner_ohlcv_symbol_readiness(ohlcv_readiness)
+        quote_snapshot_symbols = self._quote_snapshot_readiness_symbols(
+            market=market,
+            seeded_symbols=ohlcv_symbol_readiness["eligibleSymbols"],
+            universe_selection=universe_selection,
+        )
+        quote_snapshot_readiness = self._quote_snapshot_readiness_for_symbols(
+            market=market,
+            symbols=quote_snapshot_symbols,
+        )
+        quote_snapshot_available_symbols = (
+            [
+                str(symbol or "").strip().upper()
+                for symbol in quote_snapshot_readiness.get("availableSymbols", [])
+                if str(symbol or "").strip()
+            ]
+            if isinstance(quote_snapshot_readiness, Mapping)
+            else []
+        )
+        quote_snapshot_missing_symbols = (
+            [
+                str(symbol or "").strip().upper()
+                for symbol in quote_snapshot_readiness.get("missingSymbols", [])
+                if str(symbol or "").strip()
+            ]
+            if isinstance(quote_snapshot_readiness, Mapping)
+            else []
+        )
+        quote_snapshot_stale_symbols = (
+            [
+                str(symbol or "").strip().upper()
+                for symbol in quote_snapshot_readiness.get("staleSymbols", [])
+                if str(symbol or "").strip()
+            ]
+            if isinstance(quote_snapshot_readiness, Mapping)
+            else []
+        )
+        quote_snapshot_state = str(
+            quote_snapshot_readiness.get("availabilityState")
+            if isinstance(quote_snapshot_readiness, Mapping)
+            else ""
+        ).strip().lower()
+        if quote_snapshot_symbols:
+            if quote_snapshot_state == "available":
+                quote_coverage = "available"
+                if blocker_hint == "missing_quote_snapshot":
+                    blocker_hint = "unknown"
+            elif quote_snapshot_state == "stale":
+                quote_coverage = "stale"
+                freshness = "stale"
+                if blocker_hint == "missing_quote_snapshot":
+                    blocker_hint = "stale_quote_snapshot"
+            elif quote_snapshot_state == "partial":
+                quote_coverage = "partial"
 
         universe_reason = (
             "universe_missing"
@@ -2791,6 +2902,8 @@ class MarketScannerService:
         quote_reason = (
             "missing_quote_snapshot"
             if quote_coverage == "missing"
+            else "stale_quote_snapshot"
+            if quote_coverage == "stale"
             else "quote_partial"
             if quote_coverage == "partial"
             else "quote_available"
@@ -2818,6 +2931,14 @@ class MarketScannerService:
         if universe_availability in {"missing", "empty", "stale"}:
             candidate_generation_blockers.append(universe_reason)
         if quote_coverage == "missing":
+            candidate_generation_blockers.append("missing_quote_snapshot")
+        if quote_coverage == "stale":
+            candidate_generation_blockers.append("stale_quote_snapshot")
+        if (
+            quote_snapshot_state == "available"
+            and normalized_status in {"empty", "failed"}
+            and self._readiness_int(reason_counts.get("missing_quote_or_snapshot")) > 0
+        ):
             candidate_generation_blockers.append("missing_quote_snapshot")
         if history_coverage == "missing":
             candidate_generation_blockers.append("missing_history")
@@ -2926,6 +3047,14 @@ class MarketScannerService:
             "quoteReadiness": {
                 "state": quote_coverage,
                 "reason": quote_reason,
+                "availableSymbols": quote_snapshot_available_symbols[:50],
+                "missingSymbols": quote_snapshot_missing_symbols[:50],
+                "staleSymbols": quote_snapshot_stale_symbols[:50],
+                "sourceFamilies": (
+                    list(quote_snapshot_readiness.get("sourceFamilies", []))[:10]
+                    if isinstance(quote_snapshot_readiness, Mapping)
+                    else []
+                ),
                 "consumerSafe": True,
             },
             "historyReadiness": {
@@ -4380,25 +4509,40 @@ class MarketScannerService:
         symbol: str,
         reference_close: Optional[float],
     ) -> Dict[str, Any]:
+        trace: List[Dict[str, Any]] = []
         try:
             quote = self.data_manager.get_realtime_quote(symbol)
         except Exception as exc:
             trace = self.data_manager.get_last_realtime_quote_trace() if hasattr(self.data_manager, "get_last_realtime_quote_trace") else []
+            snapshot_context = self._load_us_quote_snapshot_context(
+                symbol=symbol,
+                reference_close=reference_close,
+                prior_trace=trace,
+            )
+            if snapshot_context.get("available"):
+                return snapshot_context
             return {
                 "available": False,
                 "status": "failed",
                 "source": None,
-                "trace": trace,
+                "trace": snapshot_context.get("trace") or trace,
                 "message": str(exc),
             }
 
         trace = self.data_manager.get_last_realtime_quote_trace() if hasattr(self.data_manager, "get_last_realtime_quote_trace") else []
         if quote is None or getattr(quote, "price", None) is None:
+            snapshot_context = self._load_us_quote_snapshot_context(
+                symbol=symbol,
+                reference_close=reference_close,
+                prior_trace=trace,
+            )
+            if snapshot_context.get("available"):
+                return snapshot_context
             return {
                 "available": False,
                 "status": "unavailable",
                 "source": None,
-                "trace": trace,
+                "trace": snapshot_context.get("trace") or trace,
                 "message": "live quote unavailable",
             }
 
@@ -4417,6 +4561,68 @@ class MarketScannerService:
             "pre_close": pre_close,
             "gap_pct": _round_optional(gap_pct),
             "name": getattr(quote, "name", None),
+            "trace": trace,
+            "message": None,
+        }
+
+    def _load_us_quote_snapshot_context(
+        self,
+        *,
+        symbol: str,
+        reference_close: Optional[float],
+        prior_trace: Sequence[Mapping[str, Any]] | None = None,
+    ) -> Dict[str, Any]:
+        trace = [dict(item) for item in prior_trace or [] if isinstance(item, Mapping)]
+        if self.quote_snapshot_provider is None:
+            return {
+                "available": False,
+                "status": "unavailable",
+                "source": None,
+                "trace": trace,
+                "message": "quote snapshot provider not configured",
+            }
+        result = self.quote_snapshot_readiness_service.fetch(
+            QuoteSnapshotReadinessRequest(symbols=(str(symbol or "").strip().upper(),), market="us")
+        )
+        readiness = result.readiness
+        if readiness.get("availabilityState") != "available" or not result.snapshots:
+            trace.append(
+                {
+                    "provider": "quote_snapshot",
+                    "action": "failed",
+                    "reason_code": readiness.get("freshnessState") or readiness.get("providerState") or "quote_snapshot_unavailable",
+                }
+            )
+            return {
+                "available": False,
+                "status": "unavailable",
+                "source": None,
+                "trace": trace,
+                "message": "quote snapshot unavailable",
+            }
+        snapshot = result.snapshots[0]
+        price = _safe_float(snapshot.last)
+        pre_close = _safe_float(snapshot.previous_close, default=_safe_float(reference_close))
+        change_pct = _pct_change(pre_close, price)
+        source = str(snapshot.source or "quote_snapshot_cache")
+        trace.append(
+            {
+                "provider": "quote_snapshot",
+                "action": "succeeded",
+                "reason_code": None,
+            }
+        )
+        return {
+            "available": True,
+            "status": "available",
+            "source": source,
+            "price": price,
+            "change_pct": _round_optional(change_pct),
+            "volume": snapshot.volume,
+            "amount": None,
+            "pre_close": pre_close,
+            "gap_pct": _round_optional(change_pct),
+            "name": None,
             "trace": trace,
             "message": None,
         }
