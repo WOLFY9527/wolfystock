@@ -2378,8 +2378,13 @@ class MarketScannerService:
             return "Seed or refresh enough historical OHLCV bars for the blocked scanner symbols."
         if "stale_data" in requirements:
             return "Refresh stale historical OHLCV bars for the bounded scanner universe."
+        if "missing_adjustments" in requirements and quote_coverage == "missing" and seeded_symbol_count > 0:
+            return (
+                f"Cache-backed historical OHLCV rows exist for {seeded_symbol_count} symbol(s), "
+                "but quote snapshot coverage and adjusted prices or adjustment metadata still block Scanner candidates."
+            )
         if "missing_adjustments" in requirements:
-            return "Provide adjusted historical OHLCV rows where this scanner profile requires them."
+            return "Provide adjusted historical OHLCV rows or adjustment metadata before generating Scanner candidates."
         if eligible_symbol_count > 0 and quote_coverage == "missing":
             return f"Seeded historical OHLCV is usable for {eligible_symbol_count} symbol(s); refresh quote snapshot coverage before candidate generation."
         if seeded_symbol_count > 0 and quote_coverage == "missing":
@@ -2409,6 +2414,9 @@ class MarketScannerService:
         elif "stale_data" in requirements:
             cache_state = "stale"
             reason = "stale_cache"
+        elif "missing_adjustments" in requirements and history_coverage in {"available", "partial"}:
+            cache_state = "degraded"
+            reason = "cached_ohlcv_missing_adjustments"
         elif state in {"ready", "partial"} and history_coverage in {"available", "partial"}:
             cache_state = "available" if state == "ready" else "degraded"
             reason = "cached_ohlcv_available"
@@ -2666,7 +2674,15 @@ class MarketScannerService:
             ohlcv_availability = str(existing_readiness.get("availabilityState") or "unknown")
         if ohlcv_execution == "unknown" and existing_readiness.get("executionState"):
             ohlcv_execution = str(existing_readiness.get("executionState") or "unknown")
-        if ohlcv_availability == "available" and history_coverage == "unknown":
+        ohlcv_usable_bars = self._readiness_int(ohlcv_readiness.get("usableBars"))
+        ohlcv_missing_bars = self._readiness_int(ohlcv_readiness.get("missingBars"))
+        ohlcv_required_bars = self._readiness_int(ohlcv_readiness.get("requiredBars"))
+        if (
+            ohlcv_availability in {"available", "degraded"}
+            and history_coverage == "unknown"
+            and ohlcv_usable_bars >= ohlcv_required_bars
+            and ohlcv_missing_bars <= 0
+        ):
             history_coverage = "available"
         if ohlcv_execution == "blocked" and normalized_status != "not_run":
             state = "blocked"
@@ -2870,7 +2886,14 @@ class MarketScannerService:
             candidate_generation_state = "ready"
         elif state == "partial" and not any(
             item in candidate_generation_blockers
-            for item in ("universe_missing", "empty_universe", "missing_quote_snapshot", "missing_history", "missing_benchmark")
+            for item in (
+                "universe_missing",
+                "empty_universe",
+                "missing_quote_snapshot",
+                "missing_history",
+                "missing_adjustments",
+                "missing_benchmark",
+            )
         ):
             candidate_generation_state = "degraded"
         elif normalized_status == "not_run" and not candidate_generation_blockers:

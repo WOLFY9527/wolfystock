@@ -189,6 +189,31 @@ def test_verify_cache_reports_zero_bars_safely_when_cache_is_empty() -> None:
     assert payload["mutationEnabled"] is False
 
 
+def test_verify_cache_reports_cache_hit_for_seeded_unadjusted_rows() -> None:
+    cache = _FakeUsCache(
+        {
+            "SPY": _frame(60, adjusted=False),
+            "QQQ": _frame(60, adjusted=False),
+            "AAPL": _frame(60, adjusted=False),
+            "MSFT": _frame(60, adjusted=False),
+        }
+    )
+
+    payload = build_operator_verifier_payload(
+        mode="verify-cache",
+        env={},
+        symbols=["SPY", "QQQ", "AAPL", "MSFT"],
+        required_bars=60,
+        service=_service(cache=cache),
+    )
+
+    assert payload["summary"]["cacheHitCount"] == 4
+    assert [row["cacheState"] for row in payload["cacheRows"]] == ["cache_hit", "cache_hit", "cache_hit", "cache_hit"]
+    assert [row["cachedBars"] for row in payload["cacheRows"]] == [60, 60, 60, 60]
+    assert payload["networkCallsEnabled"] is False
+    assert payload["mutationEnabled"] is False
+
+
 def test_verify_chain_reads_cache_backed_rows_for_scanner_and_backtest_readiness() -> None:
     cache = _FakeUsCache(
         {
@@ -223,6 +248,64 @@ def test_verify_chain_reads_cache_backed_rows_for_scanner_and_backtest_readiness
     assert backtest["symbolBarsAvailable"] == 5
     assert backtest["benchmarkReadiness"]["availableBarCount"] == 5
     assert cache.save_calls == []
+
+
+def test_verify_chain_reports_seeded_but_degraded_when_adjustments_are_missing() -> None:
+    cache = _FakeUsCache(
+        {
+            "SPY": _frame(60, adjusted=False),
+            "QQQ": _frame(60, adjusted=False),
+            "AAPL": _frame(60, adjusted=False),
+            "MSFT": _frame(60, adjusted=False),
+        }
+    )
+    readiness_service = HistoricalOhlcvReadinessService(
+        provider=YfinanceUsOhlcvCacheProvider(cache=cache, provider_fetch_enabled=False)
+    )
+
+    payload = build_operator_verifier_payload(
+        mode="verify-chain",
+        env={},
+        symbols=["SPY", "QQQ", "AAPL", "MSFT"],
+        required_bars=60,
+        service=_service(cache=cache),
+        readiness_service=readiness_service,
+    )
+
+    scanner_summary = payload["scannerReadiness"]["historicalOhlcvSummary"]
+    scanner = payload["scannerReadiness"]["scannerUniverseReadiness"]
+    backtest = payload["backtestReadiness"]["data110"]
+    serialized = json.dumps(payload, ensure_ascii=False).lower()
+
+    assert payload["status"] == "partial"
+    assert payload["scannerReadiness"]["cacheBackedSymbolCount"] == 4
+    assert scanner_summary["usableBars"] == 60
+    assert scanner_summary["missingBars"] == 0
+    assert scanner_summary["overallState"] == "degraded"
+    assert "missing_adjustments" in scanner_summary["missingRequirements"]
+    assert scanner["seededSymbols"] == ["SPY", "QQQ", "AAPL", "MSFT"]
+    assert scanner["eligibleSymbols"] == []
+    assert scanner["blockedSymbols"] == ["SPY", "QQQ", "AAPL", "MSFT"]
+    assert scanner["availableDataClasses"] == ["universe", "historical_ohlcv"]
+    assert "historical_ohlcv" not in scanner["missingDataFamilies"]
+    assert "quote_snapshot" in scanner["missingDataFamilies"]
+    assert "adjusted_prices" in scanner["missingDataFamilies"]
+    assert "cache-backed historical ohlcv rows exist" in scanner["nextOperatorAction"].lower()
+    assert "quote snapshot" in scanner["nextOperatorAction"].lower()
+    assert "adjusted" in scanner["nextOperatorAction"].lower()
+
+    assert backtest["symbolBarsAvailable"] == 60
+    assert backtest["benchmarkBarsAvailable"] == 60
+    assert backtest["executable"] is False
+    assert backtest["adjustedDataRequirement"] == {"required": True, "state": "missing"}
+    assert backtest["blockedExecutionReason"] == "adjusted_prices_missing"
+    assert "adjusted_prices" in backtest["missingDataFamilies"]
+    assert "historical_ohlcv" not in backtest["missingDataFamilies"]
+    assert "adjusted" in backtest["nextOperatorAction"].lower()
+    assert "seed or refresh local cache rows" not in serialized
+    assert "requestid" not in serialized
+    assert "traceid" not in serialized
+    assert "cachekey" not in serialized
 
 
 def test_redaction_removes_raw_provider_secret_debug_and_trace_fragments() -> None:
