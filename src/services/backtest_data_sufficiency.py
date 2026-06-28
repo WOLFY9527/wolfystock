@@ -41,6 +41,7 @@ _GENERIC_OHLCV_READINESS_KEYS = frozenset(
         "freshnessState",
         "adjustmentState",
         "benchmarkState",
+        "benchmarkAdjustmentState",
         "benchmarkSymbol",
         "benchmarkUsableBars",
         "benchmarkMissingBars",
@@ -87,6 +88,7 @@ _SAFE_OHLCV_READINESS_KEYS = frozenset(
         "freshnessState",
         "adjustmentState",
         "benchmarkState",
+        "benchmarkAdjustmentState",
         "providerState",
         "overallState",
         "missingRequirements",
@@ -143,10 +145,10 @@ def assess_backtest_data_sufficiency(payload: Mapping[str, Any] | None) -> dict[
     if _is_stale(data_quality):
         degraded.append("stale_data")
 
-    if _benchmark_missing(benchmark_summary):
+    if _benchmark_missing(benchmark_summary, ohlcv_readiness=ohlcv_readiness):
         degraded.append("missing_benchmark")
 
-    if _adjustments_missing(data_quality, professional):
+    if not _adjusted_requirement_available(ohlcv_readiness) and _adjustments_missing(data_quality, professional):
         degraded.append("missing_adjustments")
 
     if _factor_inputs_missing(factor_inputs):
@@ -274,6 +276,7 @@ def _apply_ohlcv_readiness(
     backtest_status = _text(readiness.get("status")).lower()
     runtime_status = _text(readiness.get("historicalOhlcvRuntimeStatus")).lower()
     blocked_execution_reason = _text(readiness.get("blockedExecutionReason")).lower()
+    executable = readiness.get("executable")
     freshness_state = _text(readiness.get("freshnessState")).lower()
     adjustment_state = _text(readiness.get("adjustmentState")).lower()
     benchmark_state = _text(readiness.get("benchmarkState")).lower()
@@ -312,7 +315,10 @@ def _apply_ohlcv_readiness(
     if freshness_state == "stale" or "stale_data" in missing_requirements or backtest_status == "stale" or runtime_status == "stale":
         degraded.append("stale_data")
     if adjustment_state == "missing" or "missing_adjustments" in missing_requirements:
-        degraded.append("missing_adjustments")
+        if blocked_execution_reason == "adjusted_prices_missing" or executable is False:
+            blocked.append("missing_adjustments")
+        else:
+            degraded.append("missing_adjustments")
     if benchmark_state in {"missing", "insufficient_coverage"} or "missing_benchmark" in missing_requirements:
         blocked.append("missing_benchmark")
     if "missing_factor_inputs" in missing_requirements:
@@ -350,7 +356,13 @@ def _is_stale(data_quality: Mapping[str, Any]) -> bool:
     return False
 
 
-def _benchmark_missing(benchmark_summary: Mapping[str, Any]) -> bool:
+def _benchmark_missing(benchmark_summary: Mapping[str, Any], *, ohlcv_readiness: Mapping[str, Any] | None = None) -> bool:
+    readiness = _mapping(ohlcv_readiness)
+    missing_classes = set(_text_list(readiness.get("missingDataClasses") or readiness.get("missingDataFamilies")))
+    benchmark_readiness = _mapping(readiness.get("benchmarkReadiness"))
+    benchmark_status = _text(benchmark_readiness.get("status") or readiness.get("benchmarkState")).lower()
+    if readiness and "benchmark_ohlcv" not in missing_classes and benchmark_status in {"available", "not_requested"}:
+        return False
     if not benchmark_summary:
         return False
     resolved_mode = _text(benchmark_summary.get("resolved_mode")).lower()
@@ -363,6 +375,12 @@ def _benchmark_missing(benchmark_summary: Mapping[str, Any]) -> bool:
         and benchmark_summary.get("start_date") is None
         and benchmark_summary.get("end_date") is None
     )
+
+
+def _adjusted_requirement_available(readiness: Mapping[str, Any]) -> bool:
+    adjusted_requirement = _mapping(readiness.get("adjustedDataRequirement"))
+    state = _text(adjusted_requirement.get("state") or readiness.get("adjustmentState")).lower()
+    return state == "available"
 
 
 def _adjustments_missing(data_quality: Mapping[str, Any], professional: Mapping[str, Any]) -> bool:

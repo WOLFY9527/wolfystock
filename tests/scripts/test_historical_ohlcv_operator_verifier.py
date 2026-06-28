@@ -245,8 +245,10 @@ def test_verify_chain_reads_cache_backed_rows_for_scanner_and_backtest_readiness
     assert "quote_snapshot" in scanner["missingDataFamilies"]
     assert backtest["status"] == "available"
     assert backtest["executable"] is True
+    assert backtest["adjustedDataRequirement"] == {"required": True, "state": "available"}
     assert backtest["symbolBarsAvailable"] == 5
     assert backtest["benchmarkReadiness"]["availableBarCount"] == 5
+    assert backtest["benchmarkReadiness"]["adjustmentState"] == "available"
     assert cache.save_calls == []
 
 

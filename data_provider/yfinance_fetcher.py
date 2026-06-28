@@ -146,7 +146,7 @@ class YfinanceFetcher(BaseFetcher):
                 start=start_date,
                 end=end_date,
                 progress=False,  # 禁止进度条
-                auto_adjust=True,  # 自动调整价格（复权）
+                auto_adjust=False,  # 保留原始 OHLC，并单独读取真实 Adj Close
                 multi_level_index=True
             )
 
@@ -199,6 +199,7 @@ class YfinanceFetcher(BaseFetcher):
             'High': 'high',
             'Low': 'low',
             'Close': 'close',
+            'Adj Close': 'adjusted_close',
             'Volume': 'volume',
         }
 
@@ -220,7 +221,7 @@ class YfinanceFetcher(BaseFetcher):
         df['code'] = stock_code
 
         # 只保留需要的列
-        keep_cols = ['code'] + STANDARD_COLUMNS
+        keep_cols = ['code'] + STANDARD_COLUMNS + ['adjusted_close']
         existing_cols = [col for col in keep_cols if col in df.columns]
         df = df[existing_cols]
 

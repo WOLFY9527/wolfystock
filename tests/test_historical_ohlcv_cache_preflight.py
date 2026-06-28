@@ -500,6 +500,23 @@ def test_preflight_summary_counts_safe_operator_statuses() -> None:
     }
 
 
+def test_preflight_reports_adjusted_available_for_common_real_adjusted_alias() -> None:
+    frame = _frame(6, start=date(2026, 6, 19), adjusted=False)
+    frame["Adj Close"] = [100.5 + index for index in range(6)]
+
+    payload = HistoricalOhlcvCachePreflightService(
+        env={},
+        spec_finder=_spec_finder({"yfinance"}),
+        us_cache=_FakeUsCache({"SPY": frame}),
+        today=date(2026, 6, 24),
+    ).preflight(symbols_by_market={"cn": [], "us": ["SPY"]}, required_bars=5)
+
+    item = _first_us_symbol(payload, "SPY")
+    assert item["cacheState"] == "cache_hit"
+    assert item["cachedBars"] == 5
+    assert item["adjustmentState"] == "available"
+
+
 def test_seed_requires_allowlisted_symbols_runtime_flag_and_seed_flag() -> None:
     fetcher = _FakeDailyFetcher(_frame(7))
     no_seed = HistoricalOhlcvCachePreflightService(

@@ -207,6 +207,7 @@ def _frame_records(frame: pd.DataFrame) -> list[dict[str, Any]]:
     df = frame.copy()
     if "trade_date" in df.columns and "date" not in df.columns:
         df = df.rename(columns={"trade_date": "date"})
+    df = _normalize_adjusted_close_column(df)
     records: list[dict[str, Any]] = []
     for row in df.to_dict("records"):
         record: dict[str, Any] = {}
@@ -218,8 +219,6 @@ def _frame_records(frame: pd.DataFrame) -> list[dict[str, Any]]:
             "close",
             "volume",
             "adjusted_close",
-            "adjustedClose",
-            "adj_close",
         ):
             if key in row:
                 value = row[key]
@@ -231,10 +230,20 @@ def _frame_records(frame: pd.DataFrame) -> list[dict[str, Any]]:
 
 
 def _adjustments_available(frame: pd.DataFrame) -> bool | None:
-    for column in ("adjusted_close", "adjustedClose", "adj_close"):
-        if column in frame.columns:
-            return bool(frame[column].notna().all())
+    normalized = _normalize_adjusted_close_column(frame)
+    if "adjusted_close" in normalized.columns:
+        return bool(normalized["adjusted_close"].notna().all())
     return None
+
+
+def _normalize_adjusted_close_column(frame: pd.DataFrame) -> pd.DataFrame:
+    df = frame.copy()
+    for candidate in ("adjusted_close", "adjustedClose", "adj_close", "Adj Close", "Adjusted Close"):
+        if candidate in df.columns:
+            if candidate != "adjusted_close":
+                df = df.rename(columns={candidate: "adjusted_close"})
+            break
+    return df
 
 
 def _requested_days(request: HistoricalOhlcvReadinessRequest) -> int:
