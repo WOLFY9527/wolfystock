@@ -28,6 +28,11 @@ from src.services.historical_ohlcv_readiness import (
     HistoricalOhlcvReadinessService,
     build_backtest_historical_ohlcv_readiness,
 )
+from src.services.quote_snapshot_readiness import (
+    QuoteSnapshotProvider,
+    QuoteSnapshotReadinessRequest,
+    QuoteSnapshotReadinessService,
+)
 from src.services.scanner_ohlcv_readiness import summarize_scanner_ohlcv_readiness
 from src.services.scanner_universe_readiness import build_scanner_universe_readiness_from_coverage
 from src.services.us_history_helper import get_us_stock_parquet_dir
@@ -56,6 +61,7 @@ def build_operator_verifier_payload(
     execute: bool = False,
     service: HistoricalOhlcvCachePreflightService | None = None,
     readiness_service: HistoricalOhlcvReadinessService | None = None,
+    quote_provider: QuoteSnapshotProvider | None = None,
 ) -> dict[str, Any]:
     env_map = dict(env or os.environ)
     verifier = _Verifier(
@@ -65,6 +71,7 @@ def build_operator_verifier_payload(
         require_adjusted=bool(require_adjusted),
         service=service,
         readiness_service=readiness_service,
+        quote_provider=quote_provider,
     )
     normalized_mode = str(mode or "").strip().lower()
     if normalized_mode == "inspect":
@@ -96,6 +103,7 @@ class _Verifier:
         require_adjusted: bool,
         service: HistoricalOhlcvCachePreflightService | None,
         readiness_service: HistoricalOhlcvReadinessService | None,
+        quote_provider: QuoteSnapshotProvider | None,
     ) -> None:
         self.env = dict(env)
         self.symbols = list(symbols)
@@ -108,6 +116,7 @@ class _Verifier:
                 provider_fetch_enabled=False,
             )
         )
+        self.quote_service = QuoteSnapshotReadinessService(provider=quote_provider)
 
     def base(self, *, mode: str, status: str, next_action: str) -> dict[str, Any]:
         return {
@@ -276,23 +285,43 @@ class _Verifier:
             seeded_symbols=seeded_symbols,
             requirements=scanner_summary.get("missingRequirements"),
         )
+        quote_readiness = self.quote_service.fetch(
+            QuoteSnapshotReadinessRequest(symbols=tuple(eligible_symbols), market="us")
+        ).readiness if eligible_symbols else {}
+        quote_available_symbols = list(quote_readiness.get("availableSymbols") or [])
+        quote_stale_symbols = list(quote_readiness.get("staleSymbols") or [])
+        quote_missing_symbols = list(quote_readiness.get("missingSymbols") or [])
+        quote_coverage = (
+            "available"
+            if eligible_symbols and len(quote_available_symbols) == len(eligible_symbols)
+            else "partial"
+            if quote_available_symbols
+            else "missing"
+        )
+        if quote_coverage == "available":
+            scanner_missing_families = [
+                family for family in scanner_missing_families if family != "quote_snapshot"
+            ]
+        elif "quote_snapshot" not in scanner_missing_families:
+            scanner_missing_families.append("quote_snapshot")
         scanner_universe = build_scanner_universe_readiness_from_coverage(
             market="us",
             universe_status="available",
             universe_size=len(self.symbols),
             last_updated_at=None,
             freshness_state="operator_verifier",
-            quote_coverage="missing",
+            quote_coverage=quote_coverage,
             history_coverage="available" if seeded_symbols else "missing",
-            blocked=bool(blocked_symbols) or not eligible_symbols,
+            blocked=bool(blocked_symbols) or not eligible_symbols or quote_coverage != "available",
             historical_requirements=scanner_summary.get("missingRequirements"),
             seeded_symbols=seeded_symbols,
-            eligible_symbols=eligible_symbols,
-            blocked_symbols=blocked_symbols,
+            eligible_symbols=quote_available_symbols if quote_coverage == "available" else eligible_symbols,
+            blocked_symbols=list(dict.fromkeys([*blocked_symbols, *quote_stale_symbols, *quote_missing_symbols])),
             missing_data_families=scanner_missing_families,
             operator_next_action=_scanner_chain_operator_action(
                 seeded_count=len(seeded_symbols),
                 requirements=scanner_summary.get("missingRequirements"),
+                quote_coverage=quote_coverage,
             ),
         )
         backtest_fetch = self.readiness_service.fetch(
@@ -325,6 +354,7 @@ class _Verifier:
         payload["mutationEnabled"] = False
         payload["scannerReadiness"] = {
             "historicalOhlcvSummary": scanner_summary,
+            "quoteSnapshotReadiness": quote_readiness,
             "scannerUniverseReadiness": scanner_universe,
             "cacheBackedSymbolCount": len(seeded_symbols),
         }
@@ -495,8 +525,10 @@ def _scanner_missing_families_for_seeded_state(
     return list(dict.fromkeys(families))
 
 
-def _scanner_chain_operator_action(*, seeded_count: int, requirements: Any) -> str:
+def _scanner_chain_operator_action(*, seeded_count: int, requirements: Any, quote_coverage: str = "missing") -> str:
     normalized = {str(item or "").strip().lower() for item in requirements or []}
+    if seeded_count > 0 and quote_coverage == "available" and "missing_adjustments" not in normalized:
+        return "Cache-backed historical OHLCV rows and quote snapshots are available for the bounded Scanner verifier."
     if seeded_count > 0 and "missing_adjustments" in normalized:
         return (
             f"Cache-backed historical OHLCV rows exist for {seeded_count} symbol(s); "

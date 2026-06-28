@@ -28,6 +28,11 @@ from src.services.historical_ohlcv_readiness import (
     HistoricalOhlcvProviderResult,
     HistoricalOhlcvReadinessRequest,
 )
+from src.services.quote_snapshot_readiness import (
+    QuoteSnapshot,
+    QuoteSnapshotProviderResult,
+    QuoteSnapshotReadinessRequest,
+)
 from src.services.scanner_evidence_packet import SCANNER_EVIDENCE_VERSION, build_scanner_evidence_packet
 from src.storage import DatabaseManager, MarketScannerRun
 
@@ -268,6 +273,26 @@ class RaisingHistoricalOhlcvProvider:
         raise RuntimeError("providerName=LeakyProvider token=secret Traceback")
 
 
+class FakeQuoteSnapshotProvider:
+    def __init__(self, responses: dict[str, QuoteSnapshot]) -> None:
+        self.responses = responses
+        self.calls: list[QuoteSnapshotReadinessRequest] = []
+
+    def fetch_quote_snapshots(
+        self,
+        request: QuoteSnapshotReadinessRequest,
+    ) -> QuoteSnapshotProviderResult:
+        self.calls.append(request)
+        snapshots = [
+            self.responses[symbol]
+            for symbol in request.symbols
+            if symbol in self.responses
+        ]
+        if snapshots:
+            return QuoteSnapshotProviderResult.available(snapshots)
+        return QuoteSnapshotProviderResult.unavailable("provider_missing")
+
+
 def _ohlcv_bars(
     count: int,
     *,
@@ -287,6 +312,22 @@ def _ohlcv_bars(
         )
         for index in range(count)
     ]
+
+
+def _quote_snapshots(symbols: tuple[str, ...]) -> dict[str, QuoteSnapshot]:
+    return {
+        symbol: QuoteSnapshot(
+            symbol=symbol,
+            market="us",
+            last=100.0 + index,
+            previous_close=99.0 + index,
+            volume=1_000_000 + index,
+            as_of=datetime.now().astimezone(),
+            currency="USD",
+            source="local_test_cache",
+        )
+        for index, symbol in enumerate(symbols)
+    }
 
 
 class ObservationScannerDataManager(FakeScannerDataManager):
@@ -3753,6 +3794,9 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             self.db,
             data_manager=data_manager,
             historical_ohlcv_provider=provider,
+            quote_snapshot_provider=FakeQuoteSnapshotProvider(
+                _quote_snapshots(("SPY", "NVDA", "AAPL", "PLTR"))
+            ),
         )
 
         detail = service.run_scan(
@@ -3770,6 +3814,8 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["executionState"], "executable")
         self.assertEqual(readiness["universeReadiness"]["state"], "available")
         self.assertEqual(readiness["quoteReadiness"]["state"], "available")
+        self.assertEqual(readiness["quoteReadiness"]["availableSymbols"], ["NVDA", "AAPL", "PLTR"])
+        self.assertEqual(readiness["quoteReadiness"]["missingSymbols"], [])
         self.assertEqual(readiness["historyReadiness"]["state"], "available")
         self.assertEqual(readiness["benchmarkReadiness"]["state"], "available")
         self.assertEqual(readiness["cacheReadiness"]["state"], "available")
@@ -3805,6 +3851,86 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         serialized_candidate = json.dumps(candidate, ensure_ascii=False).lower()
         for forbidden in ("buy now", "sell now", "hold", "recommendation", "best stock"):
             self.assertNotIn(forbidden, serialized_candidate)
+
+    def test_quote_snapshot_cache_readiness_can_supply_quote_context_without_live_quotes(self) -> None:
+        provider = FakeHistoricalOhlcvProvider(
+            {
+                symbol: HistoricalOhlcvProviderResult.available(
+                    _ohlcv_bars(90),
+                    adjustments_available=True,
+                )
+                for symbol in ("SPY", "NVDA", "AAPL")
+            }
+        )
+        data_manager = FakeUsScannerDataManager()
+        data_manager.us_quotes.clear()
+        service = MarketScannerService(
+            self.db,
+            data_manager=data_manager,
+            historical_ohlcv_provider=provider,
+            quote_snapshot_provider=FakeQuoteSnapshotProvider(_quote_snapshots(("NVDA", "AAPL"))),
+        )
+
+        detail = service.run_scan(
+            market="us",
+            profile="us_preopen_v1",
+            shortlist_size=2,
+            universe_limit=50,
+            detail_limit=10,
+            universe_type="symbols",
+            symbols=["NVDA", "AAPL"],
+        )
+
+        self.assertEqual(detail["status"], "completed")
+        self.assertGreater(len(detail["shortlist"]), 0)
+        readiness = detail["dataReadiness"]
+        self.assertEqual(readiness["quoteReadiness"]["state"], "available")
+        self.assertEqual(readiness["quoteReadiness"]["availableSymbols"], ["NVDA", "AAPL"])
+        self.assertEqual(readiness["scannerUniverseReadiness"]["availableDataClasses"], ["universe", "historical_ohlcv", "quote_snapshot"])
+        self.assertEqual(readiness["scannerUniverseReadiness"]["missingDataFamilies"], [])
+        self.assertEqual(readiness["candidateGenerationState"], "ready")
+        self.assertEqual(readiness["candidateGenerationBlockers"], [])
+        self.assertEqual(data_manager.realtime_quote_calls, ["NVDA", "AAPL"])
+
+    def test_stale_quote_snapshot_blocks_scanner_readiness_with_freshness_family(self) -> None:
+        provider = FakeHistoricalOhlcvProvider(
+            {
+                symbol: HistoricalOhlcvProviderResult.available(
+                    _ohlcv_bars(90),
+                    adjustments_available=True,
+                )
+                for symbol in ("SPY", "NVDA", "AAPL")
+            }
+        )
+        stale_quotes = _quote_snapshots(("NVDA", "AAPL"))
+        for snapshot in stale_quotes.values():
+            object.__setattr__(snapshot, "as_of", datetime.now().astimezone() - timedelta(days=2))
+        data_manager = FakeUsScannerDataManager()
+        data_manager.us_quotes.clear()
+        service = MarketScannerService(
+            self.db,
+            data_manager=data_manager,
+            historical_ohlcv_provider=provider,
+            quote_snapshot_provider=FakeQuoteSnapshotProvider(stale_quotes),
+        )
+
+        with self.assertRaises(ScannerRuntimeError) as ctx:
+            service.run_scan(
+                market="us",
+                profile="us_preopen_v1",
+                shortlist_size=2,
+                universe_limit=50,
+                detail_limit=10,
+                universe_type="symbols",
+                symbols=["NVDA", "AAPL"],
+            )
+
+        readiness = ctx.exception.diagnostics["dataReadiness"]
+        self.assertEqual(readiness["quoteReadiness"]["state"], "stale")
+        self.assertEqual(readiness["quoteReadiness"]["staleSymbols"], ["NVDA", "AAPL"])
+        self.assertIn("stale_quote_snapshot", readiness["candidateGenerationBlockers"])
+        self.assertIn("quote_snapshot", readiness["scannerUniverseReadiness"]["missingDataFamilies"])
+        self.assertIn("freshness", readiness["scannerUniverseReadiness"]["missingDataFamilies"])
 
     def test_seeded_ohlcv_symbols_are_visible_but_missing_quotes_do_not_emit_candidates(self) -> None:
         provider = FakeHistoricalOhlcvProvider(

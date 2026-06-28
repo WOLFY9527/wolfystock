@@ -12,6 +12,11 @@ from src.services.historical_ohlcv_cache_preflight import (
     HistoricalOhlcvCachePreflightService,
 )
 from src.services.historical_ohlcv_readiness import HistoricalOhlcvReadinessService
+from src.services.quote_snapshot_readiness import (
+    QuoteSnapshot,
+    QuoteSnapshotProviderResult,
+    QuoteSnapshotReadinessRequest,
+)
 from src.services.yfinance_us_ohlcv_cache_provider import (
     YFINANCE_US_OHLCV_ENABLE_ENV,
     YfinanceUsOhlcvCacheProvider,
@@ -62,6 +67,22 @@ class _UnsafeService:
         return self.seed(**kwargs)
 
 
+class _FakeQuoteProvider:
+    def __init__(self, snapshots: dict[str, QuoteSnapshot]) -> None:
+        self.snapshots = dict(snapshots)
+        self.calls: list[QuoteSnapshotReadinessRequest] = []
+
+    def fetch_quote_snapshots(
+        self,
+        request: QuoteSnapshotReadinessRequest,
+    ) -> QuoteSnapshotProviderResult:
+        self.calls.append(request)
+        rows = [self.snapshots[symbol] for symbol in request.symbols if symbol in self.snapshots]
+        if rows:
+            return QuoteSnapshotProviderResult.available(rows)
+        return QuoteSnapshotProviderResult.unavailable("provider_missing")
+
+
 def _spec_finder(available: set[str]):
     return lambda module_name: object() if module_name in available else None
 
@@ -81,6 +102,24 @@ def _frame(count: int, *, start: date = date(2026, 5, 1), adjusted: bool = True)
             row["adjusted_close"] = 100.5 + index
         rows.append(row)
     return pd.DataFrame(rows)
+
+
+def _quote_rows(*symbols: str) -> dict[str, QuoteSnapshot]:
+    from datetime import datetime, timezone
+
+    return {
+        symbol: QuoteSnapshot(
+            symbol=symbol,
+            market="us",
+            last=100.0 + index,
+            previous_close=99.0 + index,
+            volume=1_000_000 + index,
+            as_of=datetime.now(timezone.utc),
+            currency="USD",
+            source="local_quote_snapshot_cache",
+        )
+        for index, symbol in enumerate(symbols)
+    }
 
 
 def _service(*, env: dict[str, str] | None = None, cache: _FakeUsCache | None = None, fetcher=None):
@@ -250,6 +289,44 @@ def test_verify_chain_reads_cache_backed_rows_for_scanner_and_backtest_readiness
     assert backtest["benchmarkReadiness"]["availableBarCount"] == 5
     assert backtest["benchmarkReadiness"]["adjustmentState"] == "available"
     assert cache.save_calls == []
+
+
+def test_verify_chain_marks_scanner_quote_snapshot_available_when_real_rows_exist() -> None:
+    cache = _FakeUsCache(
+        {
+            "SPY": _frame(60),
+            "QQQ": _frame(60),
+            "AAPL": _frame(60),
+            "MSFT": _frame(60),
+        }
+    )
+    quote_provider = _FakeQuoteProvider(_quote_rows("SPY", "QQQ", "AAPL", "MSFT"))
+    readiness_service = HistoricalOhlcvReadinessService(
+        provider=YfinanceUsOhlcvCacheProvider(cache=cache, provider_fetch_enabled=False)
+    )
+
+    payload = build_operator_verifier_payload(
+        mode="verify-chain",
+        env={},
+        symbols=["SPY", "QQQ", "AAPL", "MSFT"],
+        required_bars=60,
+        service=_service(cache=cache),
+        readiness_service=readiness_service,
+        quote_provider=quote_provider,
+    )
+
+    scanner = payload["scannerReadiness"]["scannerUniverseReadiness"]
+    assert payload["status"] == "ok"
+    assert scanner["availableDataClasses"] == ["universe", "historical_ohlcv", "quote_snapshot"]
+    assert scanner["missingDataFamilies"] == []
+    assert scanner["eligibleSymbols"] == ["SPY", "QQQ", "AAPL", "MSFT"]
+    assert payload["scannerReadiness"]["quoteSnapshotReadiness"]["availableSymbols"] == [
+        "SPY",
+        "QQQ",
+        "AAPL",
+        "MSFT",
+    ]
+    assert quote_provider.calls
 
 
 def test_verify_chain_reports_seeded_but_degraded_when_adjustments_are_missing() -> None:
