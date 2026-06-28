@@ -31,6 +31,15 @@ SCANNER_UNIVERSE_REQUIRED_DATA_CLASSES = (
 )
 SCANNER_UNIVERSE_BLOCKED_SURFACES = ("Scanner", "Market Overview", "Backtest")
 SCANNER_UNIVERSE_MAX_AGE_DAYS = 3
+SCANNER_UNIVERSE_SAFE_DATA_FAMILIES = (
+    "universe",
+    "historical_ohlcv",
+    "quote_snapshot",
+    "benchmark_ohlcv",
+    "date_coverage",
+    "freshness",
+    "adjusted_prices",
+)
 
 FileMtimeReader = Callable[[Path], float | None]
 
@@ -80,6 +89,31 @@ def _count_csv_rows(path: Path) -> int:
         return 0
 
 
+def _safe_symbol_list(values: list[str] | None, *, limit: int = 50) -> list[str]:
+    result: list[str] = []
+    for value in values or []:
+        symbol = str(value or "").strip().upper()
+        if not symbol:
+            continue
+        if not all(ch.isalnum() or ch in {".", "-", "_"} for ch in symbol):
+            continue
+        if symbol not in result:
+            result.append(symbol)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _safe_data_family_list(values: list[str] | None) -> list[str]:
+    result: list[str] = []
+    allowed = set(SCANNER_UNIVERSE_SAFE_DATA_FAMILIES)
+    for value in values or []:
+        family = str(value or "").strip().lower()
+        if family in allowed and family not in result:
+            result.append(family)
+    return result
+
+
 def build_scanner_universe_readiness_contract(
     *,
     market: str,
@@ -92,6 +126,10 @@ def build_scanner_universe_readiness_contract(
     blocked_product_surfaces: list[str] | None = None,
     operator_next_action: str | None = None,
     consumer_safe_message: str | None = None,
+    seeded_symbols: list[str] | None = None,
+    eligible_symbols: list[str] | None = None,
+    blocked_symbols: list[str] | None = None,
+    missing_data_families: list[str] | None = None,
 ) -> dict[str, Any]:
     normalized_status = str(status or "").strip().lower()
     if normalized_status not in SCANNER_UNIVERSE_SUPPORTED_STATUSES:
@@ -103,7 +141,9 @@ def build_scanner_universe_readiness_contract(
         if str(item or "").strip() and str(item) in required
     ]
     missing = [item for item in required if item not in set(available)]
+    missing_families = _safe_data_family_list(missing_data_families or missing)
     surfaces = list(blocked_product_surfaces or (SCANNER_UNIVERSE_BLOCKED_SURFACES if normalized_status != "available" else ()))
+    next_action = operator_next_action or _operator_next_action(normalized_status)
     return {
         "contractVersion": SCANNER_UNIVERSE_READINESS_CONTRACT_VERSION,
         "status": normalized_status,
@@ -114,8 +154,13 @@ def build_scanner_universe_readiness_contract(
         "requiredDataClasses": required,
         "availableDataClasses": available,
         "missingDataClasses": missing,
+        "missingDataFamilies": missing_families,
+        "seededSymbols": _safe_symbol_list(seeded_symbols),
+        "eligibleSymbols": _safe_symbol_list(eligible_symbols),
+        "blockedSymbols": _safe_symbol_list(blocked_symbols),
         "blockedProductSurfaces": surfaces,
-        "operatorNextAction": operator_next_action or _operator_next_action(normalized_status),
+        "operatorNextAction": next_action,
+        "nextOperatorAction": next_action,
         "consumerSafeMessage": consumer_safe_message or _consumer_safe_message(normalized_status),
         "consumerSafe": True,
     }
@@ -186,13 +231,13 @@ def build_scanner_universe_readiness_from_cache(
 
     return build_scanner_universe_readiness_contract(
         market=market,
-        status="available",
+        status="insufficient_coverage",
         universe_size=row_count,
         last_updated_at=_iso_from_mtime(mtime),
         freshness_state=f"universe_modified:{modified_date.isoformat()}",
-        available_data_classes=["universe", "historical_ohlcv", "quote_snapshot"],
-        operator_next_action="Run scanner status/readiness checks and keep candidate generation tied to the refreshed universe.",
-        consumer_safe_message="扫描标的池已更新，可继续检查行情与历史覆盖。",
+        available_data_classes=["universe"],
+        operator_next_action="Use the refreshed local universe only after seeded historical OHLCV and quote coverage are confirmed.",
+        consumer_safe_message="扫描标的池已更新，但仍需确认历史行情与报价覆盖。",
     )
 
 
@@ -206,6 +251,12 @@ def build_scanner_universe_readiness_from_coverage(
     quote_coverage: str,
     history_coverage: str,
     blocked: bool,
+    historical_requirements: list[str] | None = None,
+    seeded_symbols: list[str] | None = None,
+    eligible_symbols: list[str] | None = None,
+    blocked_symbols: list[str] | None = None,
+    missing_data_families: list[str] | None = None,
+    operator_next_action: str | None = None,
 ) -> dict[str, Any]:
     normalized_universe_status = str(universe_status or "").strip().lower()
     available_classes: list[str] = []
@@ -216,8 +267,15 @@ def build_scanner_universe_readiness_from_coverage(
     if str(quote_coverage or "").strip().lower() == "available":
         available_classes.append("quote_snapshot")
 
+    requirements = {str(item or "").strip().lower() for item in historical_requirements or []}
     if normalized_universe_status in {"missing", "stale", "not_configured", "unavailable"}:
         status = normalized_universe_status
+    elif "provider_missing" in requirements:
+        status = "not_configured"
+    elif requirements.intersection({"provider_unavailable", "entitlement_required"}):
+        status = "unavailable"
+    elif "stale_data" in requirements:
+        status = "stale"
     elif blocked or set(available_classes) != set(SCANNER_UNIVERSE_REQUIRED_DATA_CLASSES):
         status = "insufficient_coverage"
     else:
@@ -230,6 +288,11 @@ def build_scanner_universe_readiness_from_coverage(
         last_updated_at=last_updated_at,
         freshness_state=freshness_state,
         available_data_classes=available_classes,
+        seeded_symbols=seeded_symbols,
+        eligible_symbols=eligible_symbols,
+        blocked_symbols=blocked_symbols,
+        missing_data_families=missing_data_families,
+        operator_next_action=operator_next_action,
     )
 
 

@@ -2276,6 +2276,119 @@ class MarketScannerService:
         return "unknown"
 
     @staticmethod
+    def _scanner_ohlcv_symbol_readiness(ohlcv_readiness: Mapping[str, Any]) -> Dict[str, List[str]]:
+        seeded_symbols: List[str] = []
+        eligible_symbols: List[str] = []
+        blocked_symbols: List[str] = []
+
+        def add(target: List[str], value: Any) -> None:
+            symbol = str(value or "").strip().upper()
+            if symbol and symbol not in target:
+                target.append(symbol)
+
+        symbol_states = ohlcv_readiness.get("symbolStates")
+        if isinstance(symbol_states, Sequence) and not isinstance(symbol_states, (str, bytes, bytearray)):
+            for item in symbol_states:
+                if not isinstance(item, Mapping):
+                    continue
+                symbol = str(item.get("symbol") or "").strip().upper()
+                if not symbol:
+                    continue
+                provider_state = str(item.get("providerState") or "").strip().lower()
+                overall_state = str(item.get("overallState") or "").strip().lower()
+                usable_bars = MarketScannerService._readiness_int(item.get("usableBars"))
+                missing_bars = MarketScannerService._readiness_int(item.get("missingBars"))
+                if provider_state == "available" and usable_bars > 0:
+                    add(seeded_symbols, symbol)
+                if provider_state == "available" and overall_state == "ready" and missing_bars <= 0:
+                    add(eligible_symbols, symbol)
+                else:
+                    add(blocked_symbols, symbol)
+
+        for key in ("blockedSymbols", "degradedSymbols"):
+            values = ohlcv_readiness.get(key)
+            if isinstance(values, Sequence) and not isinstance(values, (str, bytes, bytearray)):
+                for symbol in values:
+                    add(blocked_symbols, symbol)
+
+        return {
+            "seededSymbols": seeded_symbols[:50],
+            "eligibleSymbols": eligible_symbols[:50],
+            "blockedSymbols": blocked_symbols[:50],
+        }
+
+    @staticmethod
+    def _scanner_missing_data_families(
+        *,
+        universe_availability: str,
+        quote_coverage: str,
+        history_coverage: str,
+        benchmark_missing: bool,
+        ohlcv_requirements: Sequence[str],
+        candidate_generation_blockers: Sequence[str],
+    ) -> List[str]:
+        families: List[str] = []
+
+        def add(value: str) -> None:
+            if value and value not in families:
+                families.append(value)
+
+        if universe_availability in {"missing", "empty", "stale"}:
+            add("universe")
+        if quote_coverage == "missing" or "missing_quote_snapshot" in candidate_generation_blockers:
+            add("quote_snapshot")
+        if history_coverage == "missing" or "missing_history" in candidate_generation_blockers:
+            add("historical_ohlcv")
+        if benchmark_missing or "missing_benchmark" in candidate_generation_blockers:
+            add("benchmark_ohlcv")
+
+        for requirement in ohlcv_requirements:
+            normalized = str(requirement or "").strip().lower()
+            if normalized in {"provider_missing", "provider_unavailable", "entitlement_required"}:
+                add("historical_ohlcv")
+            elif normalized == "insufficient_history":
+                add("historical_ohlcv")
+                add("date_coverage")
+            elif normalized == "stale_data":
+                add("freshness")
+            elif normalized == "missing_adjustments":
+                add("adjusted_prices")
+            elif normalized == "missing_benchmark":
+                add("benchmark_ohlcv")
+        return families
+
+    @staticmethod
+    def _scanner_universe_operator_action(
+        *,
+        cache_universe_status: str,
+        quote_coverage: str,
+        benchmark_missing: bool,
+        ohlcv_requirements: Sequence[str],
+        eligible_symbol_count: int,
+        seeded_symbol_count: int,
+    ) -> Optional[str]:
+        requirements = {str(item or "").strip().lower() for item in ohlcv_requirements if str(item or "").strip()}
+        if cache_universe_status in {"missing", "stale", "not_configured", "unavailable"}:
+            return None
+        if "provider_missing" in requirements:
+            return "Enable the existing historical OHLCV cache/readiness path, or seed local bars for the bounded scanner universe."
+        if requirements.intersection({"provider_unavailable", "entitlement_required"}):
+            return "Restore historical OHLCV availability for the bounded scanner universe, then rerun Scanner readiness."
+        if "insufficient_history" in requirements:
+            return "Seed or refresh enough historical OHLCV bars for the blocked scanner symbols."
+        if "stale_data" in requirements:
+            return "Refresh stale historical OHLCV bars for the bounded scanner universe."
+        if "missing_adjustments" in requirements:
+            return "Provide adjusted historical OHLCV rows where this scanner profile requires them."
+        if eligible_symbol_count > 0 and quote_coverage == "missing":
+            return f"Seeded historical OHLCV is usable for {eligible_symbol_count} symbol(s); refresh quote snapshot coverage before candidate generation."
+        if seeded_symbol_count > 0 and quote_coverage == "missing":
+            return f"Seeded historical OHLCV exists for {seeded_symbol_count} symbol(s), but quote snapshot coverage is still missing."
+        if benchmark_missing:
+            return "Seed or refresh the scanner benchmark OHLCV before candidate generation."
+        return None
+
+    @staticmethod
     def _cache_readiness_summary(
         *,
         state: str,
@@ -2553,6 +2666,8 @@ class MarketScannerService:
             ohlcv_availability = str(existing_readiness.get("availabilityState") or "unknown")
         if ohlcv_execution == "unknown" and existing_readiness.get("executionState"):
             ohlcv_execution = str(existing_readiness.get("executionState") or "unknown")
+        if ohlcv_availability == "available" and history_coverage == "unknown":
+            history_coverage = "available"
         if ohlcv_execution == "blocked" and normalized_status != "not_run":
             state = "blocked"
             for requirement in (
@@ -2614,7 +2729,7 @@ class MarketScannerService:
             }
         )
         cache_universe_status = str(cache_universe_readiness.get("status") or "unavailable")
-        if cache_universe_status == "available":
+        if cache_universe_status in {"available", "insufficient_coverage"}:
             cached_universe_size = self._readiness_int(cache_universe_readiness.get("universeSize"))
             if resolved_universe_size <= 0 and cached_universe_size > 0:
                 resolved_universe_size = cached_universe_size
@@ -2644,6 +2759,7 @@ class MarketScannerService:
             benchmark_state = "available"
         else:
             benchmark_state = "unknown"
+        ohlcv_symbol_readiness = self._scanner_ohlcv_symbol_readiness(ohlcv_readiness)
 
         universe_reason = (
             "universe_missing"
@@ -2697,6 +2813,22 @@ class MarketScannerService:
         if blocker_hint not in {"unknown", *candidate_generation_blockers}:
             candidate_generation_blockers.append(blocker_hint)
         candidate_generation_blockers = list(dict.fromkeys(candidate_generation_blockers))
+        missing_data_families = self._scanner_missing_data_families(
+            universe_availability=universe_availability,
+            quote_coverage=quote_coverage,
+            history_coverage=history_coverage,
+            benchmark_missing=benchmark_missing,
+            ohlcv_requirements=ohlcv_requirements,
+            candidate_generation_blockers=candidate_generation_blockers,
+        )
+        scanner_operator_action = self._scanner_universe_operator_action(
+            cache_universe_status=cache_universe_status,
+            quote_coverage=quote_coverage,
+            benchmark_missing=benchmark_missing,
+            ohlcv_requirements=ohlcv_requirements,
+            eligible_symbol_count=len(ohlcv_symbol_readiness["eligibleSymbols"]),
+            seeded_symbol_count=len(ohlcv_symbol_readiness["seededSymbols"]),
+        )
         scanner_universe_readiness = build_scanner_universe_readiness_from_coverage(
             market=market,
             universe_status=(
@@ -2715,6 +2847,12 @@ class MarketScannerService:
             quote_coverage=quote_coverage,
             history_coverage=history_coverage,
             blocked=bool(candidate_generation_blockers),
+            historical_requirements=ohlcv_requirements,
+            seeded_symbols=ohlcv_symbol_readiness["seededSymbols"],
+            eligible_symbols=ohlcv_symbol_readiness["eligibleSymbols"],
+            blocked_symbols=ohlcv_symbol_readiness["blockedSymbols"],
+            missing_data_families=missing_data_families,
+            operator_next_action=scanner_operator_action,
         )
         if (
             scanner_universe_readiness["status"] == "insufficient_coverage"
