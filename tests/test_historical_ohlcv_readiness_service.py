@@ -12,7 +12,17 @@ from src.services.historical_ohlcv_readiness import (
     HistoricalOhlcvReadinessRequest,
     HistoricalOhlcvReadinessService,
 )
+from src.core.scanner_profile import get_scanner_profile
+from src.services.backtest_data_sufficiency import assess_backtest_data_sufficiency
+from src.services.historical_ohlcv_cache_preflight import (
+    HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV,
+    HistoricalOhlcvCachePreflightService,
+)
 from src.services.historical_ohlcv_runtime_adapter import HistoricalOhlcvRuntimeAdapter
+from src.services.scanner_ohlcv_readiness import (
+    build_scanner_historical_ohlcv_readiness,
+    summarize_scanner_ohlcv_readiness,
+)
 from src.services.stock_structure_decision_service import StockStructureDecisionService
 from src.services.yfinance_us_ohlcv_cache_provider import (
     YFINANCE_US_OHLCV_CACHE_SOURCE,
@@ -576,6 +586,98 @@ def test_yfinance_us_cache_provider_enabled_fetches_and_persists_sufficient_bars
     assert result.readiness["providerState"] == "available"
     assert result.readiness["overallState"] == "ready"
     assert result.readiness["missingRequirements"] == []
+
+
+def test_explicit_seeded_us_cache_transitions_readiness_backtest_and_scanner_contracts() -> None:
+    cache = _FakeUsOhlcvCache()
+    fetcher = _FakeDailyFetcher(
+        _frame(
+            90,
+            start=date.today() - timedelta(days=89),
+        )
+    )
+    provider = YfinanceUsOhlcvCacheProvider(
+        cache=cache,
+        fetcher=_FakeDailyFetcher(_frame(90)),
+        provider_fetch_enabled=False,
+    )
+    request = HistoricalOhlcvReadinessRequest(
+        symbol="SPY",
+        market="us",
+        timeframe="1d",
+        lookback_bars=90,
+        required_bars=60,
+        require_adjusted=True,
+    )
+
+    before = HistoricalOhlcvReadinessService(provider=provider).fetch(request).readiness
+    seed_payload = HistoricalOhlcvCachePreflightService(
+        env={
+            "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "true",
+            "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
+            HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV: "true",
+        },
+        spec_finder=lambda module_name: object() if module_name == "yfinance" else None,
+        us_cache=cache,
+        us_fetcher=fetcher,
+        today=date.today(),
+    ).seed(symbols_by_market={"us": ["SPY"]}, required_bars=60, dry_run=False)
+    after = HistoricalOhlcvReadinessService(provider=provider).fetch(request).readiness
+    backtest_readiness = build_backtest_historical_ohlcv_readiness(after)
+    backtest_gate = assess_backtest_data_sufficiency(
+        {
+            "status": "completed",
+            "data_quality": {
+                "source": "local_us_parquet",
+                "authority_status": "allowed",
+                "authority_source_type": "cache_snapshot",
+                "authority_reason_codes": [],
+                "bar_count": 90,
+                "adjustment_mode": "split_dividend_adjusted",
+                "dividends_handled": "handled",
+                "splits_handled": "handled",
+            },
+            "historicalOhlcvReadiness": backtest_readiness,
+        }
+    )
+    scanner_result = build_scanner_historical_ohlcv_readiness(
+        symbol="SPY",
+        profile=get_scanner_profile(market="us", profile="us_preopen_v1"),
+        history_df=_frame(0),
+        history_diag={},
+        readiness_service=HistoricalOhlcvReadinessService(provider=provider),
+        historical_ohlcv_provider=provider,
+        require_adjusted=True,
+    )
+    scanner_summary = summarize_scanner_ohlcv_readiness(
+        market="us",
+        profile="us_preopen_v1",
+        diagnostics={"candidate_diagnostics": {"SPY": {"historicalOhlcvReadiness": scanner_result.readiness}}},
+        candidates=[{"symbol": "SPY", "historicalOhlcvReadiness": scanner_result.readiness}],
+    )
+
+    assert before["providerState"] == "provider_missing"
+    assert before["overallState"] == "blocked"
+    assert "insufficient_history" in before["missingRequirements"]
+    seed_item = seed_payload["markets"]["us"]["symbols"][0]
+    assert seed_item["symbol"] == "SPY"
+    assert seed_item["barsRequested"] == 60
+    assert seed_item["barsWritten"] == 90
+    assert seed_item["status"] == "available"
+    assert seed_payload["summary"]["symbolsWritten"] == 1
+    assert seed_payload["summary"]["totalBarsWritten"] == 90
+    assert after["providerState"] == "available"
+    assert after["overallState"] == "ready"
+    assert after["usableBars"] >= 60
+    assert after["missingBars"] == 0
+    assert backtest_readiness["status"] == "available"
+    assert backtest_readiness["executable"] is True
+    assert backtest_gate["status"] == "sufficient"
+    assert backtest_gate["calculation_state"] == "executable"
+    assert scanner_summary["availabilityState"] == "available"
+    assert scanner_summary["executionState"] == "executable"
+    assert scanner_summary["overallState"] == "ready"
+    assert fetcher.calls == [{"stock_code": "SPY", "start_date": None, "end_date": None, "days": 60}]
 
 
 def test_yfinance_us_cache_provider_reports_insufficient_stale_and_missing_adjustments() -> None:
