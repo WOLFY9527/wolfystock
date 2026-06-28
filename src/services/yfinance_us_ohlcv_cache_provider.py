@@ -10,7 +10,7 @@ from typing import Any, Protocol
 
 import pandas as pd
 
-from data_provider.base import DataFetcherManager
+from data_provider.yfinance_fetcher import YfinanceFetcher
 from src.services.historical_ohlcv_readiness import (
     HistoricalOhlcvProviderResult,
     HistoricalOhlcvReadinessRequest,
@@ -171,7 +171,7 @@ class YfinanceUsOhlcvCacheProvider:
         end_date: str | None,
         days: int,
     ) -> pd.DataFrame | None:
-        fetcher = self.fetcher or DataFetcherManager()
+        fetcher = self.fetcher or YfinanceFetcher()
         payload = fetcher.get_daily_data(
             stock_code=symbol,
             start_date=start_date,

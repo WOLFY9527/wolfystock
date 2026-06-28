@@ -9,7 +9,7 @@ from typing import Any
 
 import pandas as pd
 
-from data_provider.base import DataFetcherManager
+from data_provider.yfinance_fetcher import YfinanceFetcher
 from src.repositories.stock_repo import StockRepository
 from src.services.akshare_cn_ohlcv_cache import (
     AkshareCnOhlcvRuntime,
@@ -303,7 +303,7 @@ class HistoricalOhlcvCachePreflightService:
                     bars_written=len(rows),
                 ), True
 
-            fetcher = self.us_fetcher or DataFetcherManager()
+            fetcher = self.us_fetcher or YfinanceFetcher()
             payload = fetcher.get_daily_data(
                 stock_code=symbol,
                 start_date=None,
