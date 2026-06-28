@@ -3922,7 +3922,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByText('深度分析请求已发出')).not.toBeInTheDocument();
   });
 
-  it('exits visible loading and shows recoverable partial-pending UI after TSLA analysis soft timeout', async () => {
+  it('exits visible loading and shows terminal no-report feedback after TSLA analysis soft timeout', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     vi.mocked(historyApi.getList).mockResolvedValue({
       total: 0,
@@ -3969,16 +3969,28 @@ describe('HomeSurfacePage', () => {
       expect(screen.queryByTestId('home-bento-inplace-loading-decision')).not.toBeInTheDocument();
       expect(screen.queryByTestId('home-research-rail-loading-stack')).not.toBeInTheDocument();
       expect(screen.getByTestId('home-bento-decision-ticker')).toHaveTextContent('TSLA');
-      expect(notice).toHaveTextContent('部分内容仍在整理');
-      expect(notice).toHaveTextContent('报告完成后会自动替换');
-      expect(within(notice).getByRole('button', { name: '重试刷新' })).toBeInTheDocument();
+      expect(notice).toHaveTextContent('分析未完成');
+      expect(notice).toHaveTextContent('未生成研究报告');
+      expect(notice).toHaveTextContent('当前数据或模型依赖未返回可用结果');
+      expect(within(notice).getByRole('button', { name: '重试' })).toBeInTheDocument();
+      expect(within(notice).getByRole('button', { name: '清除' })).toBeInTheDocument();
       expect(decisionCard.textContent).not.toMatch(HOME_SOFT_TIMEOUT_FORBIDDEN_COPY_PATTERN);
+      expect(screen.queryByTestId('home-bento-analysis-result-card')).not.toBeInTheDocument();
 
       const progressCallsBeforeRetry = vi.mocked(analysisApi.getTaskProgress).mock.calls.length;
       fireEvent.click(screen.getByTestId('home-analysis-soft-timeout-retry'));
       await flushPendingUiWork();
       expect(vi.mocked(analysisApi.getTaskProgress).mock.calls.length).toBeGreaterThan(progressCallsBeforeRetry);
       expect(screen.getByTestId('home-bento-inplace-loading-decision')).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      fireEvent.click(screen.getByTestId('home-analysis-soft-timeout-clear'));
+      await flushPendingUiWork();
+      expect(useStockPoolStore.getState().activeTasks.some((task) => task.taskId === 'task-tsla-soft-timeout')).toBe(false);
+      expect(screen.queryByTestId('home-analysis-soft-timeout-notice')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '分析' })).toBeEnabled();
     } finally {
       vi.useRealTimers();
     }
