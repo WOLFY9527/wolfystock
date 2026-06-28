@@ -29,6 +29,7 @@ from src.services.yfinance_us_ohlcv_cache_provider import (
     YFINANCE_US_OHLCV_CACHE_SOURCE,
     YfinanceUsOhlcvCacheProvider,
 )
+import src.services.yfinance_us_ohlcv_cache_provider as yfinance_cache_provider_module
 from src.services.us_history_helper import load_local_us_daily_history, persist_local_us_daily_history
 from data_provider.yfinance_fetcher import YfinanceFetcher
 
@@ -103,6 +104,23 @@ class _FakeDailyFetcher:
         if self.error is not None:
             raise self.error
         return self.frame, YFINANCE_US_OHLCV_CACHE_SOURCE
+
+
+class _FakeManagerWithoutAdjustments:
+    def __init__(self, frame: Any) -> None:
+        self.frame = frame
+        self.calls: list[dict[str, Any]] = []
+
+    def get_daily_data(self, stock_code: str, start_date=None, end_date=None, days: int = 30):
+        self.calls.append(
+            {
+                "stock_code": stock_code,
+                "start_date": start_date,
+                "end_date": end_date,
+                "days": days,
+            }
+        )
+        return self.frame, "AlpacaFetcher"
 
 
 def _bars(count: int, *, start: date = date(2026, 1, 1), adjusted: bool = True) -> list[HistoricalOhlcvBar]:
@@ -767,6 +785,36 @@ def test_yfinance_us_cache_provider_enabled_fetches_and_persists_sufficient_bars
     assert len(result.bars) == 60
     assert result.readiness["providerState"] == "available"
     assert result.readiness["overallState"] == "ready"
+    assert result.readiness["missingRequirements"] == []
+
+
+def test_yfinance_us_cache_provider_default_fetcher_preserves_yfinance_adjusted_close(monkeypatch) -> None:
+    cache = _FakeUsOhlcvCache()
+    manager = _FakeManagerWithoutAdjustments(_frame(60, adjusted=False))
+    yfinance_fetcher = _FakeDailyFetcher(_frame(60, adjusted=True))
+    monkeypatch.setattr(yfinance_cache_provider_module, "DataFetcherManager", lambda: manager, raising=False)
+    monkeypatch.setattr(yfinance_cache_provider_module, "YfinanceFetcher", lambda: yfinance_fetcher, raising=False)
+    provider = YfinanceUsOhlcvCacheProvider(
+        cache=cache,
+        provider_fetch_enabled=True,
+    )
+
+    result = HistoricalOhlcvReadinessService(provider=provider).fetch(
+        HistoricalOhlcvReadinessRequest(
+            symbol="NVDA",
+            market="us",
+            timeframe="1d",
+            lookback_bars=90,
+            required_bars=50,
+            require_adjusted=True,
+        )
+    )
+
+    saved = cache.frames["NVDA"]
+    assert manager.calls == []
+    assert yfinance_fetcher.calls == [{"stock_code": "NVDA", "start_date": None, "end_date": None, "days": 90}]
+    assert "adjusted_close" in saved.columns
+    assert result.readiness["adjustmentState"] == "available"
     assert result.readiness["missingRequirements"] == []
 
 

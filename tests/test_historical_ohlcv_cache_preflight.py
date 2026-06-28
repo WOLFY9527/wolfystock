@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pandas as pd
+import src.services.historical_ohlcv_cache_preflight as preflight_module
 
 from src.services.historical_ohlcv_cache_preflight import (
     HISTORICAL_OHLCV_ACTIVATION_CHECKLIST_CONTRACT_VERSION,
@@ -72,6 +73,16 @@ class _FakeDailyFetcher:
         if self.error is not None:
             raise self.error
         return self.frame.copy()
+
+
+class _FakeManagerWithoutAdjustments:
+    def __init__(self, frame: pd.DataFrame) -> None:
+        self.frame = frame
+        self.calls: list[dict[str, Any]] = []
+
+    def get_daily_data(self, stock_code: str, start_date=None, end_date=None, days: int = 30):
+        self.calls.append({"stock_code": stock_code, "start_date": start_date, "end_date": end_date, "days": days})
+        return self.frame.copy(), "AlpacaFetcher"
 
 
 def _rows(count: int, *, start: date = date(2026, 6, 18)) -> list[Any]:
@@ -442,6 +453,40 @@ def test_us_seed_normalizes_yfinance_adj_close_before_cache_save() -> None:
     assert "Adj Close" not in saved.columns
     assert saved.loc[0, "adjusted_close"] == 99.25
     assert saved.loc[0, "close"] == 100.5
+    assert item["adjustmentStatus"] == "available"
+
+
+def test_default_us_seed_uses_yfinance_adjusted_close_instead_of_generic_manager(monkeypatch) -> None:
+    us_cache = _FakeUsCache()
+    manager_frame = _frame(7, adjusted=False)
+    yfinance_frame = _frame(7, adjusted=False)
+    yfinance_frame["Adj Close"] = [98.75 + index for index in range(7)]
+    manager = _FakeManagerWithoutAdjustments(manager_frame)
+    yfinance_fetcher = _FakeDailyFetcher(yfinance_frame)
+    monkeypatch.setattr(preflight_module, "DataFetcherManager", lambda: manager, raising=False)
+    monkeypatch.setattr(preflight_module, "YfinanceFetcher", lambda: yfinance_fetcher, raising=False)
+    service = HistoricalOhlcvCachePreflightService(
+        env={
+            "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "true",
+            "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
+            HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV: "true",
+        },
+        spec_finder=_spec_finder({"yfinance"}),
+        us_cache=us_cache,
+        today=date(2026, 6, 24),
+    )
+
+    payload = service.seed(symbols_by_market={"cn": [], "us": ["SPY"]}, required_bars=5, dry_run=False)
+
+    saved = us_cache.frames["SPY"]
+    item = _first_us_symbol(payload, "SPY")
+    assert manager.calls == []
+    assert yfinance_fetcher.calls == [{"stock_code": "SPY", "start_date": None, "end_date": None, "days": 5}]
+    assert "adjusted_close" in saved.columns
+    assert "Adj Close" not in saved.columns
+    assert saved.loc[0, "adjusted_close"] == 98.75
+    assert saved.loc[0, "close"] == 100.5
+    assert item["seedResult"] == "seeded"
     assert item["adjustmentStatus"] == "available"
 
 
