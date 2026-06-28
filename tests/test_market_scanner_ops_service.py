@@ -440,6 +440,12 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["cacheReadiness"]["state"], "missing")
         self.assertEqual(readiness["cacheReadiness"]["reason"], "missing_cache")
         self.assertTrue(readiness["cacheReadiness"]["consumerSafe"])
+        universe_readiness = readiness["scannerUniverseReadiness"]
+        self.assertEqual(universe_readiness["status"], "not_configured")
+        self.assertEqual(universe_readiness["seededSymbols"], [])
+        self.assertEqual(universe_readiness["eligibleSymbols"], [])
+        self.assertEqual(universe_readiness["blockedSymbols"], ["NVDA", "AAPL"])
+        self.assertIn("historical_ohlcv", universe_readiness["missingDataFamilies"])
         self.assertEqual(readiness["candidateGenerationState"], "blocked")
         self.assertIn("missing_history", readiness["candidateGenerationBlockers"])
         self.assertEqual(readiness["selectedCount"], 0)

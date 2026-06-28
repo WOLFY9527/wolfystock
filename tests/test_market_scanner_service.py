@@ -3775,6 +3775,13 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["cacheReadiness"]["state"], "available")
         self.assertEqual(readiness["cacheReadiness"]["reason"], "cached_ohlcv_available")
         self.assertTrue(readiness["cacheReadiness"]["consumerSafe"])
+        universe_readiness = readiness["scannerUniverseReadiness"]
+        self.assertEqual(universe_readiness["status"], "available")
+        self.assertEqual(universe_readiness["availableDataClasses"], ["universe", "historical_ohlcv", "quote_snapshot"])
+        self.assertEqual(universe_readiness["missingDataFamilies"], [])
+        self.assertEqual(universe_readiness["seededSymbols"], ["NVDA", "AAPL", "PLTR"])
+        self.assertEqual(universe_readiness["eligibleSymbols"], ["NVDA", "AAPL", "PLTR"])
+        self.assertEqual(universe_readiness["blockedSymbols"], [])
         self.assertEqual(readiness["candidateGenerationState"], "ready")
         self.assertEqual(readiness["candidateGenerationBlockers"], [])
         self.assertEqual(readiness["requiredBars"], 70)
@@ -3798,6 +3805,54 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         serialized_candidate = json.dumps(candidate, ensure_ascii=False).lower()
         for forbidden in ("buy now", "sell now", "hold", "recommendation", "best stock"):
             self.assertNotIn(forbidden, serialized_candidate)
+
+    def test_seeded_ohlcv_symbols_are_visible_but_missing_quotes_do_not_emit_candidates(self) -> None:
+        provider = FakeHistoricalOhlcvProvider(
+            {
+                symbol: HistoricalOhlcvProviderResult.available(
+                    _ohlcv_bars(90),
+                    adjustments_available=True,
+                )
+                for symbol in ("SPY", "NVDA", "AAPL")
+            }
+        )
+        data_manager = FakeUsScannerDataManager()
+        data_manager.us_quotes.clear()
+        service = MarketScannerService(
+            self.db,
+            data_manager=data_manager,
+            historical_ohlcv_provider=provider,
+        )
+
+        with patch.object(service, "_prepare_shortlist", wraps=service._prepare_shortlist) as prepare_shortlist:
+            with self.assertRaises(ScannerRuntimeError) as ctx:
+                service.run_scan(
+                    market="us",
+                    profile="us_preopen_v1",
+                    shortlist_size=2,
+                    universe_limit=50,
+                    detail_limit=10,
+                    universe_type="symbols",
+                    symbols=["NVDA", "AAPL"],
+                )
+
+        self.assertEqual(ctx.exception.reason_code, "missing_quote_or_snapshot")
+        prepare_shortlist.assert_not_called()
+        readiness = ctx.exception.diagnostics["dataReadiness"]
+        self.assertEqual(readiness["universeSize"], 2)
+        self.assertEqual(readiness["historyReadiness"]["state"], "available")
+        self.assertEqual(readiness["quoteReadiness"]["state"], "missing")
+        self.assertEqual(readiness["candidateGenerationState"], "blocked")
+        self.assertIn("missing_quote_snapshot", readiness["candidateGenerationBlockers"])
+        universe_readiness = readiness["scannerUniverseReadiness"]
+        self.assertEqual(universe_readiness["status"], "insufficient_coverage")
+        self.assertEqual(universe_readiness["availableDataClasses"], ["universe", "historical_ohlcv"])
+        self.assertEqual(universe_readiness["missingDataFamilies"], ["quote_snapshot"])
+        self.assertEqual(universe_readiness["seededSymbols"], ["NVDA", "AAPL"])
+        self.assertEqual(universe_readiness["eligibleSymbols"], ["NVDA", "AAPL"])
+        self.assertEqual(universe_readiness["blockedSymbols"], [])
+        self.assertIn("Seeded historical OHLCV is usable", universe_readiness["nextOperatorAction"])
+        self.assertEqual(ctx.exception.diagnostics.get("shortlist"), None)
 
     def test_missing_benchmark_blocks_candidate_generation_before_ranking_claims(self) -> None:
         provider = FakeHistoricalOhlcvProvider(
