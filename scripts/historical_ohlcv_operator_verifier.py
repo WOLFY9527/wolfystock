@@ -255,21 +255,27 @@ class _Verifier:
                     for symbol, readiness in readiness_by_symbol.items()
                 }
             },
-            candidates=[
-                {"symbol": symbol, "historicalOhlcvReadiness": readiness}
-                for symbol, readiness in readiness_by_symbol.items()
-            ],
+            candidates=[],
         )
-        ready_symbols = [
+        seeded_symbols = [
             symbol
             for symbol, readiness in readiness_by_symbol.items()
-            if readiness.get("overallState") == "ready"
+            if _readiness_has_seeded_bars(readiness, required_bars=self.required_bars)
+        ]
+        eligible_symbols = [
+            symbol
+            for symbol, readiness in readiness_by_symbol.items()
+            if symbol in seeded_symbols and readiness.get("overallState") == "ready"
         ]
         blocked_symbols = [
             symbol
             for symbol, readiness in readiness_by_symbol.items()
-            if readiness.get("overallState") == "blocked"
+            if symbol not in eligible_symbols
         ]
+        scanner_missing_families = _scanner_missing_families_for_seeded_state(
+            seeded_symbols=seeded_symbols,
+            requirements=scanner_summary.get("missingRequirements"),
+        )
         scanner_universe = build_scanner_universe_readiness_from_coverage(
             market="us",
             universe_status="available",
@@ -277,17 +283,16 @@ class _Verifier:
             last_updated_at=None,
             freshness_state="operator_verifier",
             quote_coverage="missing",
-            history_coverage="available" if ready_symbols else "missing",
-            blocked=bool(blocked_symbols) or not ready_symbols,
+            history_coverage="available" if seeded_symbols else "missing",
+            blocked=bool(blocked_symbols) or not eligible_symbols,
             historical_requirements=scanner_summary.get("missingRequirements"),
-            seeded_symbols=ready_symbols,
-            eligible_symbols=ready_symbols,
+            seeded_symbols=seeded_symbols,
+            eligible_symbols=eligible_symbols,
             blocked_symbols=blocked_symbols,
-            missing_data_families=["quote_snapshot"] if ready_symbols else ["historical_ohlcv", "quote_snapshot"],
-            operator_next_action=(
-                "Seeded historical OHLCV is usable for the listed symbol(s); refresh quote snapshot coverage before Scanner candidate generation."
-                if ready_symbols
-                else "Seed or refresh historical OHLCV cache rows before Scanner can observe seeded symbols."
+            missing_data_families=scanner_missing_families,
+            operator_next_action=_scanner_chain_operator_action(
+                seeded_count=len(seeded_symbols),
+                requirements=scanner_summary.get("missingRequirements"),
             ),
         )
         backtest_fetch = self.readiness_service.fetch(
@@ -304,13 +309,12 @@ class _Verifier:
         )
         backtest = build_backtest_historical_ohlcv_readiness(
             backtest_fetch.readiness,
-            operator_next_action="Seed or refresh local cache rows for AAPL and SPY, then rerun verify-chain.",
         )
         if backtest["status"] == "available":
             backtest["operatorNextAction"] = "Backtest DATA-110 symbol and benchmark OHLCV requirements are met for this verifier request."
             backtest["nextOperatorAction"] = backtest["operatorNextAction"]
 
-        status = "ok" if ready_symbols and backtest["status"] == "available" else "partial"
+        status = "ok" if eligible_symbols and backtest["status"] == "available" else "partial"
         payload = self.base(
             mode="verify-chain",
             status=status,
@@ -322,6 +326,7 @@ class _Verifier:
         payload["scannerReadiness"] = {
             "historicalOhlcvSummary": scanner_summary,
             "scannerUniverseReadiness": scanner_universe,
+            "cacheBackedSymbolCount": len(seeded_symbols),
         }
         payload["backtestReadiness"] = {
             "symbol": BACKTEST_SYMBOL,
@@ -461,7 +466,56 @@ def _cache_next_action(rows: Sequence[Mapping[str, Any]]) -> str:
     return "Cache rows are present for the starter symbols; run verify-chain next."
 
 
+def _readiness_has_seeded_bars(readiness: Mapping[str, Any], *, required_bars: int) -> bool:
+    if str(readiness.get("providerState") or "").strip().lower() != "available":
+        return False
+    usable_bars = _safe_int(readiness.get("usableBars"))
+    missing_bars = _safe_int(readiness.get("missingBars"))
+    return usable_bars >= max(1, int(required_bars or 0)) and missing_bars <= 0
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _scanner_missing_families_for_seeded_state(
+    *,
+    seeded_symbols: Sequence[str],
+    requirements: Any,
+) -> list[str]:
+    families: list[str] = ["quote_snapshot"]
+    normalized = {str(item or "").strip().lower() for item in requirements or []}
+    if "missing_adjustments" in normalized:
+        families.append("adjusted_prices")
+    if not seeded_symbols:
+        families.insert(0, "historical_ohlcv")
+    return list(dict.fromkeys(families))
+
+
+def _scanner_chain_operator_action(*, seeded_count: int, requirements: Any) -> str:
+    normalized = {str(item or "").strip().lower() for item in requirements or []}
+    if seeded_count > 0 and "missing_adjustments" in normalized:
+        return (
+            f"Cache-backed historical OHLCV rows exist for {seeded_count} symbol(s); "
+            "quote snapshot coverage and adjusted prices or adjustment metadata still block Scanner candidates."
+        )
+    if seeded_count > 0:
+        return (
+            f"Cache-backed historical OHLCV rows exist for {seeded_count} symbol(s); "
+            "quote snapshot coverage still blocks Scanner candidates."
+        )
+    return "Seed or refresh historical OHLCV cache rows before Scanner can observe seeded symbols."
+
+
 def _chain_next_action(scanner_universe: Mapping[str, Any], backtest: Mapping[str, Any]) -> str:
+    scanner_missing = set(scanner_universe.get("missingDataFamilies") or [])
+    backtest_missing = set(backtest.get("missingDataFamilies") or [])
+    rows_present = "historical_ohlcv" not in scanner_missing and int(backtest.get("symbolBarsAvailable") or 0) > 0
+    if rows_present and "quote_snapshot" in scanner_missing and "adjusted_prices" in backtest_missing:
+        return "Cache rows are present; adjusted prices or adjustment metadata and Scanner quote snapshot coverage still block verify-chain."
     if backtest.get("status") != "available":
         return str(backtest.get("nextOperatorAction") or "Refresh local OHLCV cache rows, then rerun verify-chain.")
     if scanner_universe.get("status") != "available":

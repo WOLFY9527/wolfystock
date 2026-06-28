@@ -252,7 +252,13 @@ def test_backtest_projection_distinguishes_insufficient_coverage_stale_adjustmen
 
     assert build_backtest_historical_ohlcv_readiness(insufficient)["status"] == "insufficient_coverage"
     assert build_backtest_historical_ohlcv_readiness(stale)["status"] == "stale"
-    assert build_backtest_historical_ohlcv_readiness(missing_adjusted)["status"] == "missing"
+    missing_adjusted_projection = build_backtest_historical_ohlcv_readiness(missing_adjusted)
+    assert missing_adjusted_projection["status"] == "missing"
+    assert missing_adjusted_projection["executable"] is False
+    assert missing_adjusted_projection["blockedExecutionReason"] == "adjusted_prices_missing"
+    assert missing_adjusted_projection["missingDataFamilies"] == ["adjusted_prices"]
+    assert "adjusted" in missing_adjusted_projection["nextOperatorAction"].lower()
+    assert "seed or refresh" not in missing_adjusted_projection["nextOperatorAction"].lower()
     available_projection = build_backtest_historical_ohlcv_readiness(base_readiness)
     assert available_projection["status"] == "available"
     assert available_projection["executable"] is True

@@ -332,7 +332,14 @@ def build_backtest_historical_ohlcv_readiness(
         benchmark_state=benchmark_state,
         missing_requirements=missing_requirements,
     )
-    blocked_reason = None if status == "available" else f"historical_ohlcv_{status}"
+    blocked_reason = _backtest_blocked_execution_reason(
+        status=status,
+        missing_classes=missing_classes,
+    )
+    next_action = _clean_public_text(operator_next_action) or _default_backtest_operator_action(
+        status,
+        missing_classes=missing_classes,
+    )
     return {
         "contractVersion": BACKTEST_HISTORICAL_OHLCV_READINESS_CONTRACT_VERSION,
         "status": status,
@@ -370,9 +377,9 @@ def build_backtest_historical_ohlcv_readiness(
             "usableRange": _sanitize_range(benchmark_range),
         },
         "historicalOhlcvRuntimeStatus": normalized_runtime,
-        "operatorNextAction": _clean_public_text(operator_next_action) or _default_backtest_operator_action(status),
-        "nextOperatorAction": _clean_public_text(operator_next_action) or _default_backtest_operator_action(status),
-        "consumerSafeMessage": _backtest_consumer_message(status),
+        "operatorNextAction": next_action,
+        "nextOperatorAction": next_action,
+        "consumerSafeMessage": _backtest_consumer_message(status, missing_classes=missing_classes),
         "blockedExecutionReason": blocked_reason,
         "missingDataClasses": missing_classes,
         "missingDataFamilies": list(missing_classes),
@@ -508,7 +515,19 @@ def _backtest_missing_data_classes(
     return values
 
 
-def _default_backtest_operator_action(status: str) -> str:
+def _backtest_blocked_execution_reason(*, status: str, missing_classes: Sequence[str]) -> str | None:
+    if status == "available":
+        return None
+    missing = set(missing_classes or [])
+    if "adjusted_prices" in missing and "historical_ohlcv" not in missing and "symbol_ohlcv" not in missing:
+        return "adjusted_prices_missing"
+    if "benchmark_ohlcv" in missing and "historical_ohlcv" not in missing and "symbol_ohlcv" not in missing:
+        return "benchmark_ohlcv_missing"
+    return f"historical_ohlcv_{status}"
+
+
+def _default_backtest_operator_action(status: str, *, missing_classes: Sequence[str] | None = None) -> str:
+    missing = set(missing_classes or [])
     if status == "available":
         return "Historical OHLCV requirements are met for this Backtest request."
     if status == "not_configured":
@@ -518,11 +537,18 @@ def _default_backtest_operator_action(status: str) -> str:
     if status == "stale":
         return "Refresh the local historical OHLCV cache until the requested end date is covered."
     if status == "missing":
+        if "adjusted_prices" in missing and "benchmark_ohlcv" in missing:
+            return "Provide adjusted historical prices or adjustment metadata and benchmark OHLCV coverage before retrying Backtest."
+        if "adjusted_prices" in missing:
+            return "Provide adjusted historical prices or real adjustment metadata before retrying Backtest."
+        if "benchmark_ohlcv" in missing:
+            return "Provide benchmark OHLCV coverage before retrying Backtest."
         return "Provide the missing historical OHLCV, adjusted price, or benchmark coverage through the existing cache workflow."
     return "Review historical OHLCV runtime availability and rerun the existing cache preflight."
 
 
-def _backtest_consumer_message(status: str) -> str:
+def _backtest_consumer_message(status: str, *, missing_classes: Sequence[str] | None = None) -> str:
+    missing = set(missing_classes or [])
     if status == "available":
         return "Historical OHLCV coverage is available for this Backtest request."
     if status == "not_configured":
@@ -532,6 +558,8 @@ def _backtest_consumer_message(status: str) -> str:
     if status == "stale":
         return "Backtest cannot run because the historical OHLCV cache is stale for the requested range."
     if status == "missing":
+        if "adjusted_prices" in missing and "historical_ohlcv" not in missing and "symbol_ohlcv" not in missing:
+            return "Backtest cannot run because adjusted historical prices or adjustment metadata are missing."
         return "Backtest cannot run because required historical OHLCV inputs are missing."
     return "Backtest cannot run because historical OHLCV runtime is unavailable."
 
