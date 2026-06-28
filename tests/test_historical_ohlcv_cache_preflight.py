@@ -407,12 +407,46 @@ def test_explicit_seed_with_fake_us_provider_writes_cache_only_when_flags_allow(
     assert item["cachedBars"] == 5
     assert item["status"] == "available"
     assert live["summary"] == {
-        "symbolsRequested": 4,
+        "symbolsRequested": 1,
         "symbolsWritten": 1,
         "totalBarsWritten": 7,
         "availableCount": 1,
         "insufficientCoverageCount": 0,
-        "notConfiguredCount": 3,
+        "notConfiguredCount": 0,
+        "unavailableCount": 0,
+    }
+
+
+def test_explicit_us_only_seed_does_not_expand_empty_cn_to_default_symbols() -> None:
+    us_cache = _FakeUsCache()
+    fetcher = _FakeDailyFetcher(_frame(7))
+    service = HistoricalOhlcvCachePreflightService(
+        env={
+            "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "true",
+            "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
+            HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV: "true",
+        },
+        spec_finder=_spec_finder({"akshare", "yfinance"}),
+        cn_repository=_FakeCnRepository(),
+        cn_fetcher_factory=lambda: _FakeDailyFetcher(_frame(7)),
+        us_cache=us_cache,
+        us_fetcher=fetcher,
+        today=date(2026, 6, 24),
+    )
+
+    payload = service.seed(symbols_by_market={"cn": [], "us": ["SPY"]}, required_bars=5, dry_run=False)
+
+    assert payload["markets"]["cn"]["symbols"] == []
+    assert [item["symbol"] for item in payload["markets"]["us"]["symbols"]] == ["SPY"]
+    assert fetcher.calls == [{"stock_code": "SPY", "start_date": None, "end_date": None, "days": 5}]
+    assert us_cache.save_calls == [{"symbol": "SPY", "rows": 7}]
+    assert payload["summary"] == {
+        "symbolsRequested": 1,
+        "symbolsWritten": 1,
+        "totalBarsWritten": 7,
+        "availableCount": 1,
+        "insufficientCoverageCount": 0,
+        "notConfiguredCount": 0,
         "unavailableCount": 0,
     }
 

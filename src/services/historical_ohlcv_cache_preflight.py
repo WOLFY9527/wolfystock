@@ -92,6 +92,7 @@ class HistoricalOhlcvCachePreflightService:
             required_bars=required_bars,
             require_adjusted=require_adjusted,
             dry_run=dry_run,
+            default_missing_markets=True,
         )
 
     def seed(
@@ -108,6 +109,7 @@ class HistoricalOhlcvCachePreflightService:
             required_bars=required_bars,
             require_adjusted=require_adjusted,
             dry_run=dry_run,
+            default_missing_markets=False,
         )
 
     def _build_payload(
@@ -118,8 +120,12 @@ class HistoricalOhlcvCachePreflightService:
         required_bars: int,
         require_adjusted: bool,
         dry_run: bool,
+        default_missing_markets: bool,
     ) -> dict[str, Any]:
-        symbols = _normalize_symbols_by_market(symbols_by_market)
+        symbols = _normalize_symbols_by_market(
+            symbols_by_market,
+            default_missing_markets=default_missing_markets,
+        )
         global_runtime_enabled = historical_ohlcv_runtime_enabled(self.env)
         us_provider_enabled = _env_enabled(self.env.get(YFINANCE_US_OHLCV_ENABLE_ENV))
         runtime = {
@@ -671,14 +677,21 @@ def _runtime_state(runtime_enabled: bool, dependency_available: bool) -> str:
     return "available"
 
 
-def _normalize_symbols_by_market(symbols_by_market: Mapping[str, Sequence[str]] | None) -> dict[str, tuple[str, ...]]:
+def _normalize_symbols_by_market(
+    symbols_by_market: Mapping[str, Sequence[str]] | None,
+    *,
+    default_missing_markets: bool = True,
+) -> dict[str, tuple[str, ...]]:
     symbols = {"cn": DEFAULT_CN_REPRESENTATIVE_SYMBOLS, "us": DEFAULT_US_REPRESENTATIVE_SYMBOLS}
     if not symbols_by_market:
         return symbols
     for market, defaults in list(symbols.items()):
-        raw_values = symbols_by_market.get(market) or defaults
+        if market not in symbols_by_market:
+            symbols[market] = tuple(defaults) if default_missing_markets else ()
+            continue
+        raw_values = symbols_by_market.get(market) or ()
         normalized = tuple(dict.fromkeys(str(item or "").strip().upper() for item in raw_values if str(item or "").strip()))
-        symbols[market] = tuple(item for item in normalized if market == "cn" or is_us_stock_code(item)) or defaults
+        symbols[market] = tuple(item for item in normalized if market == "cn" or is_us_stock_code(item))
     return symbols
 
 
