@@ -95,6 +95,23 @@ class BacktestDataSufficiencyGateTestCase(unittest.TestCase):
             assert key not in serialized, key
         assert "secret-token-value" not in serialized
 
+    def _seed_daily_rows(self, code: str, closes: list[float], *, start: date = date(2024, 1, 2)) -> None:
+        with self.db.get_session() as session:
+            for index, close in enumerate(closes):
+                session.add(
+                    StockDaily(
+                        code=code,
+                        date=start + timedelta(days=index),
+                        open=close - 0.1,
+                        high=close + 0.2,
+                        low=max(0.01, close - 0.3),
+                        close=close,
+                        volume=1000.0 + index,
+                        data_source="local_us_parquet",
+                    )
+                )
+            session.commit()
+
     @staticmethod
     def _sufficient_quality() -> dict:
         return {
@@ -278,7 +295,7 @@ class BacktestDataSufficiencyGateTestCase(unittest.TestCase):
                     missing_requirements=["missing_benchmark"],
                     benchmark_state="missing",
                 ),
-                "degraded",
+                "not_available",
             ),
             (
                 "entitlement_required",
@@ -332,21 +349,13 @@ class BacktestDataSufficiencyGateTestCase(unittest.TestCase):
 
         self._assert_no_forbidden_leakage(gate)
 
-    def test_missing_benchmark_prevents_benchmark_relative_claims(self) -> None:
+    def test_missing_benchmark_blocks_execution_without_fabricating_metrics(self) -> None:
         service = RuleBacktestService(self.db)
         with patch.object(service, "_ensure_market_history", return_value=0), patch.object(
             service,
             "_get_llm_adapter",
             return_value=None,
-        ), patch.object(
-            service,
-            "_load_external_benchmark_context",
-            return_value=(
-                [],
-                {"label": "SPY", "resolved_mode": "custom_code", "code": "SPY", "return_pct": None},
-                "SPY 在当前窗口没有可用行情。",
-            ),
-        ):
+        ), patch.object(service.engine, "run", wraps=service.engine.run) as engine_run:
             response = service.run_backtest(
                 code="600519",
                 strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
@@ -356,13 +365,90 @@ class BacktestDataSufficiencyGateTestCase(unittest.TestCase):
                 confirmed=True,
             )
 
+        engine_run.assert_not_called()
         gate = response["data_sufficiency"]
         self.assertEqual(gate["status"], "missing_benchmark")
-        self.assertEqual(gate["calculation_state"], "degraded")
-        self.assertIn("missing_benchmark", gate["degraded_reasons"])
+        self.assertEqual(gate["calculation_state"], "not_available")
+        self.assertIn("missing_benchmark", gate["blocked_reasons"])
+        self.assertEqual(response["no_result_reason"], "missing_benchmark")
+        self.assertIsNone(response["total_return_pct"])
+        self.assertIsNone(response["max_drawdown_pct"])
         self.assertIsNone(response["benchmark_return_pct"])
         self.assertIsNone(response["excess_return_vs_benchmark_pct"])
+        readiness = response["historicalOhlcvReadiness"]
+        self.assertEqual(readiness["benchmarkReadiness"]["status"], "missing")
+        self.assertGreater(readiness["symbolBarsAvailable"], 0)
+        self.assertEqual(readiness["benchmarkBarsAvailable"], 0)
+        self.assertIn("benchmark_ohlcv", readiness["missingDataFamilies"])
         self.assertNotIn("相对基准超额", response["ai_summary"])
+
+    def test_insufficient_benchmark_coverage_blocks_execution_distinctly(self) -> None:
+        self._seed_daily_rows("AAPL", [100.0 + index for index in range(24)])
+        self._seed_daily_rows("SPY", [400.0, 401.0, 402.0])
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None), patch.object(
+            service.engine,
+            "run",
+            wraps=service.engine.run,
+        ) as engine_run:
+            response = service.run_backtest(
+                code="AAPL",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                start_date="2024-01-02",
+                end_date="2024-01-19",
+                lookback_bars=20,
+                benchmark_mode="custom_code",
+                benchmark_code="SPY",
+                confirmed=True,
+            )
+
+        engine_run.assert_not_called()
+        readiness = response["historicalOhlcvReadiness"]
+        self.assertEqual(response["data_sufficiency"]["status"], "missing_benchmark")
+        self.assertEqual(response["data_sufficiency"]["calculation_state"], "not_available")
+        self.assertEqual(readiness["status"], "insufficient_coverage")
+        self.assertEqual(readiness["benchmarkReadiness"]["status"], "insufficient_coverage")
+        self.assertEqual(readiness["benchmarkBarsAvailable"], 3)
+        self.assertIn("benchmark_ohlcv", readiness["missingDataFamilies"])
+        self.assertNotIn("symbol_ohlcv", readiness["missingDataFamilies"])
+        self.assertIsNone(response["total_return_pct"])
+
+    def test_seeded_symbol_and_benchmark_cache_unlocks_data110_execution(self) -> None:
+        self._seed_daily_rows("AAPL", [100.0 + (index * 0.5) for index in range(28)])
+        self._seed_daily_rows("SPY", [400.0 + (index * 0.4) for index in range(28)])
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None), patch.object(
+            service.engine,
+            "run",
+            wraps=service.engine.run,
+        ) as engine_run:
+            response = service.run_backtest(
+                code="AAPL",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                start_date="2024-01-02",
+                end_date="2024-01-19",
+                lookback_bars=20,
+                benchmark_mode="custom_code",
+                benchmark_code="SPY",
+                confirmed=True,
+            )
+
+        self.assertGreater(engine_run.call_count, 0)
+        gate = response["data_sufficiency"]
+        readiness = response["historicalOhlcvReadiness"]
+        self.assertEqual(response["status"], "completed")
+        self.assertIsNone(response["no_result_reason"])
+        self.assertIn(gate["status"], {"sufficient", "missing_adjustments"})
+        self.assertNotEqual(gate["calculation_state"], "not_available")
+        self.assertEqual(readiness["status"], "available")
+        self.assertTrue(readiness["executable"])
+        self.assertGreaterEqual(readiness["symbolBarsAvailable"], readiness["requiredBarCount"])
+        self.assertGreaterEqual(readiness["benchmarkBarsAvailable"], readiness["requiredBarCount"])
+        self.assertEqual(readiness["benchmarkReadiness"]["status"], "available")
+        self.assertIsNotNone(response["total_return_pct"])
+        self.assertIsNotNone(response["benchmark_return_pct"])
 
     def test_missing_corporate_action_adjustment_degrades_without_blocking(self) -> None:
         service = RuleBacktestService(self.db)

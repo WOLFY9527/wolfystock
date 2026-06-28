@@ -210,7 +210,11 @@ def test_backtest_projection_maps_provider_missing_to_not_configured_actionable_
     assert projection["requiredBarCount"] == 60
     assert projection["availableBarCount"] == 0
     assert projection["adjustedDataRequirement"] == {"required": True, "state": "missing"}
-    assert projection["benchmarkReadiness"] == {"required": True, "symbol": "SPY", "status": "missing"}
+    assert projection["benchmarkReadiness"]["required"] is True
+    assert projection["benchmarkReadiness"]["symbol"] == "SPY"
+    assert projection["benchmarkReadiness"]["status"] == "missing"
+    assert projection["benchmarkReadiness"]["requiredBarCount"] == 60
+    assert projection["benchmarkReadiness"]["availableBarCount"] == 0
     assert projection["historicalOhlcvRuntimeStatus"] == "not_configured"
     assert projection["blockedExecutionReason"] == "historical_ohlcv_not_configured"
     assert "historical_ohlcv" in projection["missingDataClasses"]

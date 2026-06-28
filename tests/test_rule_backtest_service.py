@@ -1949,15 +1949,6 @@ class RuleBacktestTestCase(unittest.TestCase):
     def test_rule_backtest_data_quality_reports_missing_benchmark_without_changing_returns(self) -> None:
         service = RuleBacktestService(self.db)
 
-        with patch.object(service, "_ensure_market_history", return_value=0), patch.object(service, "_get_llm_adapter", return_value=None):
-            baseline = service.run_backtest(
-                code="600519",
-                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
-                lookback_bars=20,
-                benchmark_mode="none",
-                confirmed=True,
-            )
-
         with (
             patch.object(service, "_ensure_market_history", return_value=0),
             patch.object(service, "_get_llm_adapter", return_value=None),
@@ -1976,22 +1967,22 @@ class RuleBacktestTestCase(unittest.TestCase):
                 confirmed=True,
             )
 
-        self.assertEqual(response["total_return_pct"], baseline["total_return_pct"])
+        self.assertIsNone(response["total_return_pct"])
         self.assertIsNone(response["benchmark_return_pct"])
         self.assertIsNone(response["excess_return_vs_benchmark_pct"])
         self.assertEqual(response["data_sufficiency"]["status"], "missing_benchmark")
+        self.assertEqual(response["data_sufficiency"]["calculation_state"], "not_available")
         self.assertEqual(response["data_sufficiency"]["input_states"]["benchmark"], "missing")
-        self.assertEqual(response["execution_readiness"]["state"], "degraded")
+        self.assertEqual(response["execution_readiness"]["state"], "calculation_unavailable")
         self.assertEqual(response["execution_readiness"]["benchmark_state"], "missing")
-        self.assertTrue(response["execution_readiness"]["result_contract_available"])
+        self.assertFalse(response["execution_readiness"]["result_contract_available"])
         self.assertIn("missing_benchmark", response["execution_readiness"]["reason_codes"])
         self.assertTrue(any(warning["code"] == "benchmark_data_missing" for warning in response["data_quality"]["warnings"]))
         self._assert_public_backtest_text_is_analytical(json.dumps(response, ensure_ascii=False, sort_keys=True))
         artifact = response["research_artifact"]
         self.assertIsNotNone(artifact)
         self.assertEqual(artifact["benchmarkAvailability"]["state"], "benchmark_missing")
-        self.assertEqual(artifact["benchmarkAvailability"]["reasonCode"], "benchmark_missing")
-        self.assertIn("SPY", artifact["benchmarkAvailability"]["unavailableReason"])
+        self.assertNotIn("totalReturnPct", artifact["metrics"])
         self.assertNotIn("benchmarkReturnPct", artifact["metrics"])
         self.assertNotIn("excessReturnVsBenchmarkPct", artifact["metrics"])
 
@@ -2110,6 +2101,7 @@ class RuleBacktestTestCase(unittest.TestCase):
 
     def test_service_applies_custom_benchmark_context_for_custom_code_mode(self) -> None:
         service = RuleBacktestService(self.db)
+        self._seed_history("SPY", [100.0 + index for index in range(30)])
 
         with patch.object(service, "_get_llm_adapter", return_value=None), patch.object(
             service,
@@ -6463,13 +6455,13 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertIn("沪深300", response["benchmark_summary"]["unavailable_reason"])
         self.assertEqual(response["benchmark_curve"], [])
         self.assertIsNone(response["benchmark_return_pct"])
-        self.assertIsNotNone(response["buy_and_hold_return_pct"])
+        self.assertIsNone(response["buy_and_hold_return_pct"])
+        self.assertEqual(response["no_result_reason"], "missing_benchmark")
+        self.assertEqual(response["data_sufficiency"]["status"], "missing_benchmark")
+        self.assertEqual(response["data_sufficiency"]["calculation_state"], "not_available")
         self.assertEqual(comparison.get("benchmark_summary"), response["benchmark_summary"])
         self.assertIsNone(comparison.get("metrics", {}).get("benchmark_return_pct"))
-        self.assertEqual(
-            comparison.get("metrics", {}).get("buy_and_hold_return_pct"),
-            response["buy_and_hold_return_pct"],
-        )
+        self.assertIsNone(comparison.get("metrics", {}).get("buy_and_hold_return_pct"))
 
     def test_engine_executes_moving_average_crossover_from_normalized_spec(self) -> None:
         service = RuleBacktestService(self.db)
