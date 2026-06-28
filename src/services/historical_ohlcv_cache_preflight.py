@@ -315,6 +315,7 @@ class HistoricalOhlcvCachePreflightService:
             frame = _coerce_frame(payload)
             if frame is None or frame.empty:
                 return "runtime_unavailable", "failed_safely", _seed_report("failed_safely"), False
+            frame = _normalize_adjusted_close_column(frame)
             rows_written = int(self.us_cache.save(symbol, frame) or 0)
             if rows_written <= 0:
                 return "runtime_unavailable", "failed_safely", _seed_report("failed_safely"), False

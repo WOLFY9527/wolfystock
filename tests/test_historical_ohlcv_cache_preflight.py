@@ -417,6 +417,34 @@ def test_explicit_seed_with_fake_us_provider_writes_cache_only_when_flags_allow(
     }
 
 
+def test_us_seed_normalizes_yfinance_adj_close_before_cache_save() -> None:
+    us_cache = _FakeUsCache()
+    frame = _frame(7, adjusted=False)
+    frame["Adj Close"] = [99.25 + index for index in range(7)]
+    fetcher = _FakeDailyFetcher(frame)
+    service = HistoricalOhlcvCachePreflightService(
+        env={
+            "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "true",
+            "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "true",
+            HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV: "true",
+        },
+        spec_finder=_spec_finder({"yfinance"}),
+        us_cache=us_cache,
+        us_fetcher=fetcher,
+        today=date(2026, 6, 24),
+    )
+
+    payload = service.seed(symbols_by_market={"cn": [], "us": ["SPY"]}, required_bars=5, dry_run=False)
+
+    saved = us_cache.frames["SPY"]
+    item = _first_us_symbol(payload, "SPY")
+    assert "adjusted_close" in saved.columns
+    assert "Adj Close" not in saved.columns
+    assert saved.loc[0, "adjusted_close"] == 99.25
+    assert saved.loc[0, "close"] == 100.5
+    assert item["adjustmentStatus"] == "available"
+
+
 def test_explicit_us_only_seed_does_not_expand_empty_cn_to_default_symbols() -> None:
     us_cache = _FakeUsCache()
     fetcher = _FakeDailyFetcher(_frame(7))
