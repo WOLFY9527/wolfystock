@@ -406,6 +406,15 @@ def test_explicit_seed_with_fake_us_provider_writes_cache_only_when_flags_allow(
     assert item["runtimeState"] == "available"
     assert item["cachedBars"] == 5
     assert item["status"] == "available"
+    assert live["summary"] == {
+        "symbolsRequested": 4,
+        "symbolsWritten": 1,
+        "totalBarsWritten": 7,
+        "availableCount": 1,
+        "insufficientCoverageCount": 0,
+        "notConfiguredCount": 3,
+        "unavailableCount": 0,
+    }
 
 
 def test_fixture_us_seed_is_visible_to_followup_preflight_cache_hit() -> None:
@@ -432,6 +441,29 @@ def test_fixture_us_seed_is_visible_to_followup_preflight_cache_hit() -> None:
     assert preflight_item["cacheState"] == "cache_hit"
     assert preflight_item["cachedBars"] == 5
     assert preflight_item["latestBarDate"] == "2026-06-24"
+
+
+def test_preflight_summary_counts_safe_operator_statuses() -> None:
+    payload = HistoricalOhlcvCachePreflightService(
+        env={},
+        spec_finder=_spec_finder({"akshare", "yfinance"}),
+        cn_repository=_FakeCnRepository({"600519": _rows(2)}),
+        us_cache=_FakeUsCache({"SPY": _frame(6, start=date(2026, 6, 19)), "QQQ": _frame(2, adjusted=False)}),
+        today=date(2026, 6, 24),
+    ).preflight(
+        symbols_by_market={"cn": ["600519"], "us": ["SPY", "QQQ"]},
+        required_bars=5,
+    )
+
+    assert payload["summary"] == {
+        "symbolsRequested": 3,
+        "symbolsWritten": 0,
+        "totalBarsWritten": 0,
+        "availableCount": 1,
+        "insufficientCoverageCount": 2,
+        "notConfiguredCount": 0,
+        "unavailableCount": 0,
+    }
 
 
 def test_seed_requires_allowlisted_symbols_runtime_flag_and_seed_flag() -> None:
@@ -480,6 +512,7 @@ def test_activation_checklist_uses_explicit_admin_state_set_without_leaking_inte
         cn_repository=_FakeCnRepository(),
         cn_fetcher_factory=lambda: fetcher,
         us_cache=_FakeUsCache(),
+        us_fetcher=_FakeDailyFetcher(_frame(7)),
         today=date(2026, 6, 24),
     ).seed(symbols_by_market={"cn": ["600519"], "us": ["MSFT"]}, required_bars=5, dry_run=False)
 

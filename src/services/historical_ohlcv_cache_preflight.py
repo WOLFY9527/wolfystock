@@ -154,6 +154,7 @@ class HistoricalOhlcvCachePreflightService:
             }
             for market in ("cn", "us")
         }
+        summary = _build_seed_summary(markets)
         return sanitize_historical_ohlcv_preflight_payload(
             {
                 "contractVersion": HISTORICAL_OHLCV_CACHE_PREFLIGHT_CONTRACT_VERSION,
@@ -170,6 +171,7 @@ class HistoricalOhlcvCachePreflightService:
                     "seedFlag": f"{HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV}=true",
                 },
                 "representativeSymbols": {"cn": list(symbols["cn"]), "us": list(symbols["us"])},
+                "summary": summary,
                 "activationChecklist": _build_activation_checklist(markets=markets, seed_enabled=seed_enabled),
                 "markets": markets,
             }
@@ -946,6 +948,25 @@ def _activation_next_step_summary(*, market: str, state: str) -> str:
     if state == _ACTIVATION_STATE_FAILED_SAFELY:
         return f"Keep the workflow bounded to admin review until the safe failure is resolved and the checklist returns to dry-run readiness."
     return f"Use the documented starter symbols first, keep the seed flag explicit, and verify the unlocked product surfaces stay bounded."
+
+
+def _build_seed_summary(markets: Mapping[str, Mapping[str, Any]]) -> dict[str, int]:
+    symbols = [
+        item
+        for market in markets.values()
+        for item in (market.get("symbols") or ())
+        if isinstance(item, Mapping)
+    ]
+    statuses = [str(item.get("status") or "") for item in symbols]
+    return {
+        "symbolsRequested": len(symbols),
+        "symbolsWritten": sum(1 for item in symbols if int(item.get("barsWritten") or 0) > 0),
+        "totalBarsWritten": sum(int(item.get("barsWritten") or 0) for item in symbols),
+        "availableCount": statuses.count("available"),
+        "insufficientCoverageCount": statuses.count("insufficient_coverage"),
+        "notConfiguredCount": statuses.count("not_configured"),
+        "unavailableCount": statuses.count("unavailable"),
+    }
 
 
 __all__ = [
