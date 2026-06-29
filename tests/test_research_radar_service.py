@@ -93,6 +93,7 @@ def _assert_required_top_level_shape(payload: dict[str, Any]) -> None:
         "noAdviceDisclosure",
         "dataQuality",
         "evidenceHub",
+        "marketLevelFallback",
         "consumerIssues",
         "onboardingGuidance",
         "emptyStateActions",
@@ -114,6 +115,114 @@ def _assert_required_top_level_shape(payload: dict[str, Any]) -> None:
     assert {"scannerCandidates", "backtestSamples", "stockReadiness", "dataActivation", "missingEvidenceStates"}.issubset(
         payload["evidenceHub"]
     )
+
+
+def _market_regime_read_model(
+    *,
+    readiness_label: str = "product_ready",
+    status: str = "ok",
+) -> dict[str, Any]:
+    return {
+        "contractVersion": "market_regime_read_model_v1",
+        "status": status,
+        "market": "US",
+        "regime": {
+            "label": "risk_on_confirming" if readiness_label == "product_ready" else "insufficient_data",
+            "status": status,
+            "source": "deterministic_evidence_fields",
+        },
+        "regimeLabel": "risk_on_confirming" if readiness_label == "product_ready" else "insufficient_data",
+        "regimeStatus": status,
+        "productSummary": (
+            "Risk-on confirming evidence is currently present because local evidence fields align."
+            if readiness_label == "product_ready"
+            else "Market regime evidence is blocked by missing local source families or product surface blockers."
+        ),
+        "evidenceCards": [
+            {
+                "id": "benchmark_trend",
+                "cardId": "benchmark_trend",
+                "title": "Benchmark Trend",
+                "status": "positive" if readiness_label == "product_ready" else "unavailable",
+                "severity": "info" if readiness_label == "product_ready" else "blocker",
+                "headline": (
+                    "Benchmark trend evidence is positive."
+                    if readiness_label == "product_ready"
+                    else "Benchmark trend evidence is unavailable."
+                ),
+                "metrics": [{"label": "return20d", "value": 0.1}],
+                "reasons": ["Benchmark local trend fields are aligned."],
+                "sourceFields": ["evidence.benchmarkTrend.return20d"],
+                "consumerSafe": True,
+            },
+            {
+                "id": "breadth",
+                "cardId": "breadth",
+                "title": "Breadth",
+                "status": "positive" if readiness_label == "product_ready" else "unavailable",
+                "severity": "info" if readiness_label == "product_ready" else "blocker",
+                "headline": (
+                    "Breadth evidence is broad."
+                    if readiness_label == "product_ready"
+                    else "Breadth evidence is unavailable."
+                ),
+                "metrics": [{"label": "percentAboveMa20", "value": 1.0}],
+                "reasons": ["Breadth evidence is available."],
+                "sourceFields": ["evidence.breadthProxy.percentAboveMa20"],
+                "consumerSafe": True,
+            },
+            {
+                "id": "data_quality",
+                "cardId": "data_quality",
+                "title": "Data Quality",
+                "status": "positive" if readiness_label == "product_ready" else "degraded",
+                "severity": "info" if readiness_label == "product_ready" else "blocker",
+                "headline": (
+                    "Data quality is product-ready."
+                    if readiness_label == "product_ready"
+                    else "Data quality blocks at least one product surface."
+                ),
+                "metrics": [{"label": "missingDataFamilies", "value": [] if readiness_label == "product_ready" else ["historical_ohlcv"]}],
+                "reasons": ["No missing evidence families are present."],
+                "sourceFields": ["missingDataFamilies"],
+                "consumerSafe": True,
+            },
+        ],
+        "dataQuality": {
+            "adjustedCoverageState": "available" if readiness_label == "product_ready" else "missing",
+            "ohlcvCoverage": {"state": "available" if readiness_label == "product_ready" else "missing"},
+            "quoteSnapshotCoverage": {"state": "available" if readiness_label == "product_ready" else "missing"},
+            "missingDataFamilies": [] if readiness_label == "product_ready" else ["historical_ohlcv"],
+            "blockedProductSurfaces": [] if readiness_label == "product_ready" else ["Research Radar"],
+            "nextOperatorAction": (
+                "Market regime read model is available from local evidence inputs."
+                if readiness_label == "product_ready"
+                else "Resolve missing local evidence families or blocked product surfaces, then rerun."
+            ),
+        },
+        "readiness": {
+            "label": readiness_label,
+            "status": status,
+            "missingDataFamilies": [] if readiness_label == "product_ready" else ["historical_ohlcv"],
+            "blockedProductSurfaces": [] if readiness_label == "product_ready" else ["Research Radar"],
+            "nextOperatorAction": (
+                "Market regime read model is available from local evidence inputs."
+                if readiness_label == "product_ready"
+                else "Resolve missing local evidence families or blocked product surfaces, then rerun."
+            ),
+        },
+        "missingDataFamilies": [] if readiness_label == "product_ready" else ["historical_ohlcv"],
+        "blockedProductSurfaces": [] if readiness_label == "product_ready" else ["Research Radar"],
+        "nextOperatorAction": (
+            "Market regime read model is available from local evidence inputs."
+            if readiness_label == "product_ready"
+            else "Resolve missing local evidence families or blocked product surfaces, then rerun."
+        ),
+        "noAdvice": True,
+        "networkCallsEnabled": False,
+        "mutationEnabled": False,
+        "providerCallsEnabled": False,
+    }
 
 
 def test_build_radar_projects_engine_output_to_required_api_contract() -> None:
@@ -216,6 +325,81 @@ def test_empty_or_missing_candidates_fail_closed_with_degraded_queue() -> None:
     assert payload["aggregateSummary"]["queueQuality"] == "degraded"
     assert payload["consumerIssues"]
     assert payload["dataQuality"]["consumerIssues"]
+
+
+def test_empty_candidates_include_product_ready_market_level_fallback_without_fake_candidates() -> None:
+    payload = ResearchRadarService(now=_fixed_now).build_radar(
+        candidates=[],
+        market_regime_read_model=_market_regime_read_model(),
+    )
+
+    _assert_required_top_level_shape(payload)
+    assert payload["researchQueue"] == []
+    assert payload["aggregateSummary"]["candidateCount"] == 0
+    assert payload["aggregateSummary"]["queueCount"] == 0
+    fallback = payload["marketLevelFallback"]
+    assert fallback["available"] is True
+    assert fallback["label"] == "Market-level context"
+    assert fallback["candidateGenerationExecuted"] is False
+    assert fallback["candidateUnavailableReason"] == "scanner_candidates_unavailable"
+    assert fallback["readiness"]["label"] == "product_ready"
+    assert fallback["regime"]["label"] == "risk_on_confirming"
+    assert fallback["productSummary"].startswith("Risk-on confirming evidence")
+    assert [card["cardId"] for card in fallback["evidenceCards"]] == [
+        "benchmark_trend",
+        "breadth",
+        "data_quality",
+    ]
+    assert fallback["dataQuality"]["missingDataFamilies"] == []
+    assert fallback["nextOperatorAction"] == "Market regime read model is available from local evidence inputs."
+    assert fallback["observationOnly"] is True
+    assert fallback["decisionGrade"] is False
+    serialized = _serialized(fallback)
+    assert "alfa" not in serialized
+    assert "rank" not in serialized
+    assert "score" not in serialized
+    assert FORBIDDEN_PUBLIC_RE.search(serialized) is None
+
+
+def test_populated_candidates_do_not_include_market_level_fallback_or_change_queue() -> None:
+    payload = ResearchRadarService(now=_fixed_now).build_radar(
+        candidates=[
+            {
+                "ticker": "ALFA",
+                "relativeStrength": 88,
+                "volumeExpansion": 1.8,
+                "trendStructure": "confirmed_uptrend",
+                "themes": ["AI Infrastructure"],
+                "eventCatalyst": {"state": "confirmed"},
+                "avgDollarVolume": 120_000_000,
+                "evidenceQuality": {"state": "complete", "score": 0.88},
+            }
+        ],
+        market_regime_read_model=_market_regime_read_model(),
+    )
+
+    assert [item["symbol"] for item in payload["researchQueue"]] == ["ALFA"]
+    assert payload["marketLevelFallback"] is None
+
+
+def test_degraded_market_read_model_fallback_fails_closed_honestly() -> None:
+    payload = ResearchRadarService(now=_fixed_now).build_radar(
+        candidates=[],
+        market_regime_read_model=_market_regime_read_model(readiness_label="failed_closed", status="failed_closed"),
+    )
+
+    fallback = payload["marketLevelFallback"]
+    assert fallback["available"] is True
+    assert fallback["readiness"]["label"] == "failed_closed"
+    assert fallback["regime"]["label"] == "insufficient_data"
+    assert fallback["missingDataFamilies"] == ["historical_ohlcv"]
+    assert fallback["blockedProductSurfaces"] == ["Research Radar"]
+    assert fallback["dataQuality"]["missingDataFamilies"] == ["historical_ohlcv"]
+    assert fallback["nextOperatorAction"] == "Resolve missing local evidence families or blocked product surfaces, then rerun."
+    assert [card["status"] for card in fallback["evidenceCards"][:2]] == ["unavailable", "unavailable"]
+    serialized = _serialized(fallback)
+    assert FORBIDDEN_PUBLIC_RE.search(serialized) is None
+    assert FORBIDDEN_EVIDENCE_HUB_RE.search(serialized) is None
 
 
 def test_research_radar_evidence_hub_surfaces_real_evidence_readiness() -> None:

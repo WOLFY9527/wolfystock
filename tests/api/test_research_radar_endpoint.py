@@ -242,12 +242,13 @@ class _FakeBacktestService:
         }
 
 
-def _client(monkeypatch) -> TestClient:
+def _client(monkeypatch, *, regime_read_model: dict[str, object] | None = None) -> TestClient:
     from api.v1.endpoints import research
 
     _FakeResearchRadarService.calls = []
     monkeypatch.setattr(research, "ResearchRadarService", _FakeResearchRadarService)
     monkeypatch.setattr(research, "BacktestService", _FakeBacktestService)
+    monkeypatch.setattr(research, "build_market_regime_read_model", lambda **_: regime_read_model)
 
     app = FastAPI()
     app.include_router(api_v1_router)
@@ -328,6 +329,7 @@ def test_get_research_radar_endpoint_is_registered_and_returns_contract(monkeypa
             "profile": "us_preopen_v1",
             "owner_id": "user-1",
             "limit": 5,
+            "market_regime_read_model": None,
             "hasScannerRepository": True,
             "hasBacktestSampleReader": True,
         }
@@ -335,10 +337,12 @@ def test_get_research_radar_endpoint_is_registered_and_returns_contract(monkeypa
 
 
 def test_get_research_radar_endpoint_uses_typed_response_model() -> None:
+    from api.v1.endpoints import research
+
     route = next(
         route
-        for route in api_v1_router.routes
-        if isinstance(route, APIRoute) and route.path == "/api/v1/research/radar" and "GET" in route.methods
+        for route in research.router.routes
+        if isinstance(route, APIRoute) and route.path == "/radar" and "GET" in route.methods
     )
 
     assert route.response_model is not None
@@ -355,6 +359,34 @@ def test_get_research_radar_endpoint_clamps_limit_and_passes_optional_filters(mo
             "profile": None,
             "owner_id": "user-1",
             "limit": 20,
+            "market_regime_read_model": None,
+            "hasScannerRepository": True,
+            "hasBacktestSampleReader": True,
+        }
+    ]
+
+
+def test_get_research_radar_endpoint_passes_market_regime_read_model(monkeypatch) -> None:
+    read_model = {
+        "status": "ok",
+        "readiness": {"label": "product_ready"},
+        "regime": {"label": "risk_on_confirming"},
+        "productSummary": "Market regime evidence is available from local inputs.",
+        "evidenceCards": [],
+        "dataQuality": {},
+        "nextOperatorAction": "Market regime read model is available from local evidence inputs.",
+    }
+
+    response = _client(monkeypatch, regime_read_model=read_model).get("/api/v1/research/radar")
+
+    assert response.status_code == 200, response.text
+    assert _FakeResearchRadarService.calls == [
+        {
+            "market": None,
+            "profile": None,
+            "owner_id": "user-1",
+            "limit": 20,
+            "market_regime_read_model": read_model,
             "hasScannerRepository": True,
             "hasBacktestSampleReader": True,
         }

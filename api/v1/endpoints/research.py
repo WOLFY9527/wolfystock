@@ -16,8 +16,17 @@ from src.multi_user import OWNERSHIP_SCOPE_USER
 from src.repositories.scanner_repo import ScannerRepository
 from src.services.market_scanner_service import MarketScannerService
 from src.services.backtest_service import BacktestService
+from src.services.market_regime_evidence_service import (
+    DEFAULT_BENCHMARK_SYMBOL,
+    DEFAULT_GROWTH_PROXY_SYMBOL,
+    DEFAULT_MARKET_REGIME_SYMBOLS,
+    DEFAULT_REQUIRED_BARS,
+)
+from src.services.market_regime_read_model_service import build_market_regime_read_model
 from src.services.research_queue_aggregator_service import ResearchQueueAggregatorService
 from src.services.research_radar_service import ResearchRadarService
+from src.services.quote_snapshot_config import get_configured_us_quote_snapshot_cache_path
+from src.services.us_history_helper import get_configured_us_stock_parquet_dir
 from src.services.watchlist_research_overlay_service import WatchlistResearchOverlayService
 from src.storage import DatabaseManager
 
@@ -78,6 +87,22 @@ def _optional_query_token(value: object) -> str | None:
     return token or None
 
 
+def _market_regime_read_model_payload() -> dict[str, object] | None:
+    try:
+        return build_market_regime_read_model(
+            market="US",
+            symbols=list(DEFAULT_MARKET_REGIME_SYMBOLS),
+            benchmark_symbol=DEFAULT_BENCHMARK_SYMBOL,
+            growth_proxy_symbol=DEFAULT_GROWTH_PROXY_SYMBOL,
+            required_bars=DEFAULT_REQUIRED_BARS,
+            ohlcv_cache_dir=get_configured_us_stock_parquet_dir(),
+            quote_snapshot_cache_path=get_configured_us_quote_snapshot_cache_path(),
+            require_adjusted=True,
+        )
+    except Exception:
+        return None
+
+
 @router.get(
     "/radar",
     response_model=ResearchRadarResponse,
@@ -116,6 +141,7 @@ def get_research_radar(
         profile=profile,
         owner_id=owner_id,
         limit=bounded_limit,
+        market_regime_read_model=_market_regime_read_model_payload(),
     )
     return consumer_safe_json_response(
         ResearchRadarResponse.model_validate(payload),

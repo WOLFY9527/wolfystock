@@ -1,4 +1,4 @@
-import type React from 'react';
+import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -1078,6 +1078,88 @@ describe('research IA pages', () => {
     expect(onboardingPanel.textContent || '').not.toMatch(/sourceRefs|reasonCodes|fundamentals\.eps|provider_timeout|\bnews\b/i);
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/undefined|null|NaN/);
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommendation|target price|stop loss|position sizing/i);
+  });
+
+  it('renders market-level read model fallback when Research Radar has no candidates', async () => {
+    languageState.value = 'en';
+    getResearchRadarMock.mockResolvedValue({
+      schemaVersion: 'research_radar_api_v1',
+      generatedAt: '2026-06-15T09:30:00Z',
+      researchQueue: [],
+      aggregateSummary: {
+        queueQuality: 'degraded',
+        priorityCounts: {},
+      },
+      evidenceGaps: ['Research candidates unavailable'],
+      marketContextFit: 'unavailable',
+      onboardingGuidance: null,
+      emptyStateActions: [],
+      starterResearchWorkflow: [],
+      firstRunChecklist: [],
+      suggestedResearchEntrypoints: [],
+      noAdviceDisclosure: 'Research-only queue.',
+      dataQuality: { status: 'degraded' },
+      marketLevelFallback: {
+        available: true,
+        label: 'Market-level context',
+        summary: 'Market-level evidence is available while candidate research is unavailable.',
+        candidateGenerationExecuted: false,
+        candidateUnavailableReason: 'scanner_candidates_unavailable',
+        regime: { label: 'risk_on_confirming', status: 'ok' },
+        productSummary: 'Risk-on confirming evidence is currently present because local evidence fields align.',
+        evidenceCards: [
+          {
+            cardId: 'benchmark_trend',
+            title: 'Benchmark Trend',
+            status: 'positive',
+            severity: 'info',
+            headline: 'Benchmark trend evidence is positive.',
+            reasons: ['Benchmark local trend fields are aligned.'],
+          },
+          {
+            cardId: 'data_quality',
+            title: 'Data Quality',
+            status: 'positive',
+            severity: 'info',
+            headline: 'Data quality is product-ready.',
+            reasons: ['No missing evidence families are present.'],
+          },
+        ],
+        dataQuality: {
+          adjustedCoverageState: 'available',
+          missingDataFamilies: [],
+          blockedProductSurfaces: [],
+        },
+        readiness: {
+          label: 'product_ready',
+          status: 'ok',
+          missingDataFamilies: [],
+          blockedProductSurfaces: [],
+          nextOperatorAction: 'Market regime read model is available from local evidence inputs.',
+        },
+        missingDataFamilies: [],
+        blockedProductSurfaces: [],
+        nextOperatorAction: 'Market regime read model is available from local evidence inputs.',
+        observationOnly: true,
+        decisionGrade: false,
+      },
+    });
+    getResearchQueueMock.mockResolvedValue(makeEmptyUnifiedResearchQueue());
+
+    renderRoute(<ResearchRadarPage />, '/en/research/radar');
+
+    const page = await screen.findByTestId('research-radar-page');
+    const fallback = await within(page).findByTestId('research-radar-market-level-fallback');
+    expect(fallback).toHaveTextContent('Market-level context');
+    expect(fallback).toHaveTextContent('Candidate research is unavailable or has not executed.');
+    expect(fallback).toHaveTextContent('risk on confirming');
+    expect(fallback).toHaveTextContent('product ready');
+    expect(fallback).toHaveTextContent('Risk-on confirming evidence is currently present');
+    expect(fallback).toHaveTextContent('Benchmark Trend');
+    expect(fallback).toHaveTextContent('Data Quality');
+    expect(fallback).toHaveTextContent('Market regime read model is available from local evidence inputs.');
+    expect(within(page).getByTestId('research-radar-queue-empty-state')).toHaveTextContent('No research queue');
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/ranking executed|rank\s*1|ALFA|buy|sell|hold|recommendation|target price|stop loss|position sizing/i);
   });
 
   it('renders evidence remediation guidance and safe prerequisite copy for low-evidence research radar gaps', async () => {

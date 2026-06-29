@@ -76,6 +76,35 @@ class ResearchRadarEvidenceHubResponse(_ResearchRadarModel):
     missingEvidenceStates: list[ResearchRadarEvidenceHubItemResponse] = Field(default_factory=list)
 
 
+class ResearchRadarMarketLevelFallbackCardResponse(_ResearchRadarModel):
+    cardId: str
+    title: str
+    status: str
+    severity: str
+    headline: str
+    reasons: list[str] = Field(default_factory=list)
+    observationOnly: Literal[True] = True
+    decisionGrade: Literal[False] = False
+
+
+class ResearchRadarMarketLevelFallbackResponse(_ResearchRadarModel):
+    available: Literal[True] = True
+    label: str
+    summary: str
+    candidateGenerationExecuted: bool = False
+    candidateUnavailableReason: str
+    regime: dict[str, Any] = Field(default_factory=dict)
+    productSummary: str
+    evidenceCards: list[ResearchRadarMarketLevelFallbackCardResponse] = Field(default_factory=list)
+    dataQuality: dict[str, Any] = Field(default_factory=dict)
+    readiness: dict[str, Any] = Field(default_factory=dict)
+    missingDataFamilies: list[str] = Field(default_factory=list)
+    blockedProductSurfaces: list[str] = Field(default_factory=list)
+    nextOperatorAction: str
+    observationOnly: Literal[True] = True
+    decisionGrade: Literal[False] = False
+
+
 class ResearchRadarQueueItemResponse(_ResearchRadarModel):
     symbol: str
     ticker: str
@@ -144,6 +173,7 @@ class ResearchRadarResponse(_ResearchRadarModel):
     noAdviceDisclosure: str
     dataQuality: ResearchRadarDataQualityResponse
     evidenceHub: ResearchRadarEvidenceHubResponse
+    marketLevelFallback: ResearchRadarMarketLevelFallbackResponse | None = None
     observationOnly: Literal[True] = True
     decisionGrade: Literal[False] = False
 
@@ -158,6 +188,8 @@ __all__ = [
     "ResearchRadarEvidenceHubResponse",
     "ResearchRadarEvidenceQualityResponse",
     "ResearchRadarEmptyStateActionResponse",
+    "ResearchRadarMarketLevelFallbackCardResponse",
+    "ResearchRadarMarketLevelFallbackResponse",
     "ResearchRadarOnboardingGuidanceResponse",
     "ResearchRadarQueueItemResponse",
     "ResearchRadarResponse",
