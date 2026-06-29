@@ -134,6 +134,43 @@ export interface AdminOpsStatusResponse {
   metadata?: Record<string, unknown>;
 }
 
+export interface AdminScannerUniverseReadinessResponse {
+  contractVersion: string;
+  status: string;
+  scannerUniverseStatus?: string | null;
+  market: string;
+  profile: string;
+  freshnessState: string;
+  lastUpdatedAt?: string | null;
+  universeSize: number;
+  affectedProductSurfaces: string[];
+  nextOperatorAction: string;
+  scannerUniverseReadiness: Record<string, unknown>;
+  candidateGenerationState?: string | null;
+  candidateGenerationBlockers: string[];
+  readOnly: boolean;
+  noExternalCalls: boolean;
+  mutationEnabled: boolean;
+  providerCallsEnabled: boolean;
+  consumerVisible: boolean;
+}
+
+export interface AdminScannerUniverseRefreshResponse {
+  contractVersion: string;
+  status: string;
+  actionStatus: string;
+  market: string;
+  profile: string;
+  refreshExecuted: boolean;
+  mutationEnabled: boolean;
+  noExternalCalls: boolean;
+  providerCallsEnabled: boolean;
+  runtimeBehaviorChanged: boolean;
+  nextOperatorAction: string;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+}
+
 function arrayOfStrings(value: unknown): string[] {
   return Array.isArray(value)
     ? value.flatMap((item) => {
@@ -257,6 +294,59 @@ function normalizeLaunchCockpit(payload: Record<string, unknown> | undefined): A
   };
 }
 
+function normalizeScannerUniverseReadiness(
+  payload: Record<string, unknown>,
+): AdminScannerUniverseReadinessResponse {
+  const normalized = toCamelCase<AdminScannerUniverseReadinessResponse>(payload || {});
+  return {
+    contractVersion: String(normalized.contractVersion || 'scanner_universe_operator_readiness_v1'),
+    status: String(normalized.status || 'unavailable'),
+    scannerUniverseStatus: normalized.scannerUniverseStatus ? String(normalized.scannerUniverseStatus) : null,
+    market: String(normalized.market || ''),
+    profile: String(normalized.profile || ''),
+    freshnessState: String(normalized.freshnessState || 'unknown'),
+    lastUpdatedAt: normalized.lastUpdatedAt ? String(normalized.lastUpdatedAt) : null,
+    universeSize: Number(normalized.universeSize || 0),
+    affectedProductSurfaces: arrayOfStrings(normalized.affectedProductSurfaces),
+    nextOperatorAction: String(normalized.nextOperatorAction || ''),
+    scannerUniverseReadiness: normalized.scannerUniverseReadiness && typeof normalized.scannerUniverseReadiness === 'object'
+      ? normalized.scannerUniverseReadiness as Record<string, unknown>
+      : {},
+    candidateGenerationState: normalized.candidateGenerationState ? String(normalized.candidateGenerationState) : null,
+    candidateGenerationBlockers: arrayOfStrings(normalized.candidateGenerationBlockers),
+    readOnly: normalized.readOnly !== false,
+    noExternalCalls: normalized.noExternalCalls !== false,
+    mutationEnabled: Boolean(normalized.mutationEnabled),
+    providerCallsEnabled: Boolean(normalized.providerCallsEnabled),
+    consumerVisible: Boolean(normalized.consumerVisible),
+  };
+}
+
+function normalizeScannerUniverseRefresh(
+  payload: Record<string, unknown>,
+): AdminScannerUniverseRefreshResponse {
+  const normalized = toCamelCase<AdminScannerUniverseRefreshResponse>(payload || {});
+  return {
+    contractVersion: String(normalized.contractVersion || 'scanner_universe_operator_action_v1'),
+    status: String(normalized.status || 'manual_action_required'),
+    actionStatus: String(normalized.actionStatus || 'deferred'),
+    market: String(normalized.market || ''),
+    profile: String(normalized.profile || ''),
+    refreshExecuted: Boolean(normalized.refreshExecuted),
+    mutationEnabled: Boolean(normalized.mutationEnabled),
+    noExternalCalls: normalized.noExternalCalls !== false,
+    providerCallsEnabled: Boolean(normalized.providerCallsEnabled),
+    runtimeBehaviorChanged: Boolean(normalized.runtimeBehaviorChanged),
+    nextOperatorAction: String(normalized.nextOperatorAction || ''),
+    before: normalized.before && typeof normalized.before === 'object'
+      ? normalized.before as Record<string, unknown>
+      : {},
+    after: normalized.after && typeof normalized.after === 'object'
+      ? normalized.after as Record<string, unknown>
+      : {},
+  };
+}
+
 export const adminOpsStatusApi = {
   async getStatus(): Promise<AdminOpsStatusResponse> {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/admin/ops/status');
@@ -270,5 +360,17 @@ export const adminOpsStatusApi = {
       consumerVisible: Boolean(normalized.consumerVisible),
       launchCockpit: normalizeLaunchCockpit(normalized.launchCockpit as unknown as Record<string, unknown>),
     };
+  },
+  async getScannerUniverseReadiness(market: 'us' | 'cn'): Promise<AdminScannerUniverseReadinessResponse> {
+    const response = await apiClient.get<Record<string, unknown>>(
+      `/api/v1/admin/ops/scanner-universe-readiness?market=${encodeURIComponent(market)}`,
+    );
+    return normalizeScannerUniverseReadiness(response.data || {});
+  },
+  async requestScannerUniverseRefresh(market: 'us' | 'cn'): Promise<AdminScannerUniverseRefreshResponse> {
+    const response = await apiClient.post<Record<string, unknown>>(
+      `/api/v1/admin/ops/scanner-universe-refresh?market=${encodeURIComponent(market)}`,
+    );
+    return normalizeScannerUniverseRefresh(response.data || {});
   },
 };

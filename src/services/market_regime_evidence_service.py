@@ -69,7 +69,7 @@ def build_market_regime_evidence_pack(
                 "status": "failed_closed",
                 "availableDataClasses": [],
                 "missingDataFamilies": _fail_closed_missing_families(reasons),
-                "blockedProductSurfaces": ["Scanner", "Market Overview", "Watchlist", "Research"],
+                "blockedProductSurfaces": ["Scanner", "Market Overview", "Watchlist", "Research Radar"],
                 "nextOperatorAction": _fail_closed_operator_action(reasons),
                 "evidence": _empty_evidence(required_bars=required),
                 "regimeSummary": _regime_summary("insufficient_data", status="failed_closed"),
@@ -618,9 +618,9 @@ def _blocked_surfaces(missing_families: Sequence[str]) -> list[str]:
     blocked: list[str] = []
     missing = set(missing_families)
     if missing & {"historical_ohlcv", "adjusted_prices", "quote_snapshot"}:
-        blocked.extend(["Scanner", "Market Overview", "Watchlist", "Research"])
+        blocked.extend(["Scanner", "Market Overview", "Watchlist", "Research Radar"])
     elif missing:
-        blocked.extend(["Market Overview", "Research"])
+        blocked.extend(["Market Overview", "Research Radar"])
     return blocked
 
 
