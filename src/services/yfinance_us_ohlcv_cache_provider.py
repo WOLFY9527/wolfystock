@@ -6,6 +6,7 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 from typing import Any, Protocol
 
 import pandas as pd
@@ -16,6 +17,8 @@ from src.services.historical_ohlcv_readiness import (
     HistoricalOhlcvReadinessRequest,
 )
 from src.services.us_history_helper import (
+    LocalUsHistoryLoadResult,
+    get_configured_us_stock_parquet_dir,
     load_local_us_daily_history,
     persist_local_us_daily_history,
 )
@@ -56,6 +59,30 @@ class DailyHistoryFetcher(Protocol):
 class LocalUsOhlcvParquetCache:
     """Adapter around the repository's existing LOCAL_US_PARQUET_DIR cache."""
 
+    root_dir: Path | None = None
+    require_configured_dir: bool = True
+
+    @classmethod
+    def from_env(cls, env: Mapping[str, str] | None = None) -> "LocalUsOhlcvParquetCache":
+        return cls(root_dir=get_configured_us_stock_parquet_dir(env), require_configured_dir=True)
+
+    def load_result(
+        self,
+        symbol: str,
+        *,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        days: int | None = None,
+    ) -> LocalUsHistoryLoadResult:
+        return load_local_us_daily_history(
+            symbol,
+            start_date=start_date,
+            end_date=end_date,
+            days=days,
+            parquet_dir=self.root_dir,
+            require_configured_dir=self.require_configured_dir,
+        )
+
     def load(
         self,
         symbol: str,
@@ -69,6 +96,8 @@ class LocalUsOhlcvParquetCache:
             start_date=start_date,
             end_date=end_date,
             days=days,
+            parquet_dir=self.root_dir,
+            require_configured_dir=self.require_configured_dir,
         )
         if result.status == "hit" and result.dataframe is not None:
             return result.dataframe
@@ -118,16 +147,20 @@ class YfinanceUsOhlcvCacheProvider:
         start_date = _date_arg(request.start)
         end_date = _date_arg(request.end)
         days = _requested_days(request)
-        cached = self._load_cache(symbol, start_date=start_date, end_date=end_date, days=days)
+        cached, cache_status = self._load_cache(symbol, start_date=start_date, end_date=end_date, days=days)
         if cached is not None and not cached.empty:
             return HistoricalOhlcvProviderResult.available(
                 _frame_records(cached),
                 adjustments_available=_adjustments_available(cached),
                 freshness_state=None,
+                metadata={"runtimeStatus": "available"},
             )
 
         if not self.provider_fetch_enabled:
-            return HistoricalOhlcvProviderResult.unavailable("provider_missing")
+            return HistoricalOhlcvProviderResult.unavailable(
+                "provider_missing",
+                metadata={"runtimeStatus": _runtime_status_from_cache_status(cache_status)},
+            )
 
         try:
             fetched = self._fetch_from_provider(
@@ -147,6 +180,7 @@ class YfinanceUsOhlcvCacheProvider:
             _frame_records(fetched),
             adjustments_available=_adjustments_available(fetched),
             freshness_state=None,
+            metadata={"runtimeStatus": "available"},
         )
 
     def _load_cache(
@@ -156,12 +190,22 @@ class YfinanceUsOhlcvCacheProvider:
         start_date: str | None,
         end_date: str | None,
         days: int,
-    ) -> pd.DataFrame | None:
+    ) -> tuple[pd.DataFrame | None, str]:
+        load_result = getattr(self.cache, "load_result", None)
+        if callable(load_result):
+            try:
+                result = load_result(symbol, start_date=start_date, end_date=end_date, days=days)
+            except Exception:
+                return None, "failed"
+            status = str(getattr(result, "status", "") or "")
+            frame = _coerce_frame(getattr(result, "dataframe", None))
+            return frame, status
         try:
             loaded = self.cache.load(symbol, start_date=start_date, end_date=end_date, days=days)
         except Exception:
-            return None
-        return _coerce_frame(loaded)
+            return None, "failed"
+        frame = _coerce_frame(loaded)
+        return frame, "hit" if frame is not None and not frame.empty else "missing"
 
     def _fetch_from_provider(
         self,
@@ -259,6 +303,17 @@ def _requested_days(request: HistoricalOhlcvReadinessRequest) -> int:
 
 def _date_arg(value: date | None) -> str | None:
     return value.isoformat() if value else None
+
+
+def _runtime_status_from_cache_status(status: str) -> str:
+    normalized = str(status or "").strip().lower()
+    if normalized == "not_configured":
+        return "not_configured"
+    if normalized == "missing":
+        return "missing"
+    if normalized in {"failed", "invalid"}:
+        return "unavailable"
+    return "missing"
 
 
 def _env_enabled(key: str) -> bool:

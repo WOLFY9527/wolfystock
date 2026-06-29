@@ -192,6 +192,25 @@ def test_market_regime_read_model_endpoint_returns_product_ready_payload(monkeyp
     assert calls[0]["require_adjusted"] is True
 
 
+def test_market_regime_read_model_endpoint_does_not_default_to_legacy_unconfigured_cache(
+    monkeypatch,
+) -> None:
+    calls: list[dict] = []
+
+    def fake_build_read_model(**kwargs) -> dict:
+        calls.append(kwargs)
+        return _base_payload(status="failed_closed", readiness_label="failed_closed")
+
+    monkeypatch.delenv("LOCAL_US_PARQUET_DIR", raising=False)
+    monkeypatch.delenv("US_STOCK_PARQUET_DIR", raising=False)
+    monkeypatch.setattr(market, "build_market_regime_read_model", fake_build_read_model)
+
+    response = _client().get("/api/v1/market/regime-read-model")
+
+    assert response.status_code == 200
+    assert calls[0]["ohlcv_cache_dir"] is None
+
+
 def test_market_regime_read_model_endpoint_preserves_blocked_families(monkeypatch) -> None:
     blocked = _base_payload(status="partial", readiness_label="blocked")
     blocked["regime"] = {"label": "insufficient_data", "status": "partial", "source": "deterministic_evidence_fields"}

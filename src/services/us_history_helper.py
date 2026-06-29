@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Mapping, Optional, Tuple, Union
 
 import pandas as pd
 
@@ -16,6 +16,7 @@ from src.utils.symbol_classification import is_us_stock_code
 
 
 DEFAULT_US_STOCK_PARQUET_DIR = "/root/us_test/data/normalized/us"
+US_STOCK_PARQUET_ENV_KEYS = ("LOCAL_US_PARQUET_DIR", "US_STOCK_PARQUET_DIR")
 LOCAL_US_PARQUET_SOURCE = "local_us_parquet"
 DateLike = Union[str, date, datetime]
 
@@ -55,11 +56,22 @@ def get_us_stock_parquet_dir() -> Path:
     `US_STOCK_PARQUET_DIR` remains as a compatibility fallback.
     """
 
-    for env_key in ("LOCAL_US_PARQUET_DIR", "US_STOCK_PARQUET_DIR"):
+    for env_key in US_STOCK_PARQUET_ENV_KEYS:
         configured = os.getenv(env_key, "").strip()
         if configured:
             return Path(configured)
     return Path(DEFAULT_US_STOCK_PARQUET_DIR)
+
+
+def get_configured_us_stock_parquet_dir(env: Optional[Mapping[str, str]] = None) -> Optional[Path]:
+    """Return the explicitly configured US parquet root, if any."""
+
+    source = os.environ if env is None else env
+    for env_key in US_STOCK_PARQUET_ENV_KEYS:
+        configured = str(source.get(env_key, "") or "").strip()
+        if configured:
+            return Path(configured)
+    return None
 
 
 def get_local_us_history_path(stock_code: str) -> Path:
@@ -74,11 +86,21 @@ def load_local_us_daily_history(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     days: Optional[int] = None,
+    parquet_dir: Optional[Path] = None,
+    require_configured_dir: bool = False,
 ) -> LocalUsHistoryLoadResult:
     """Load normalized local US daily history for a ticker when available."""
 
     normalized_code = str(stock_code or "").strip().upper()
-    path = get_local_us_history_path(normalized_code)
+    configured_dir = parquet_dir or get_configured_us_stock_parquet_dir()
+    if require_configured_dir and configured_dir is None:
+        return LocalUsHistoryLoadResult(
+            stock_code=normalized_code,
+            path=get_local_us_history_path(normalized_code),
+            status="not_configured",
+        )
+    root_dir = configured_dir or get_us_stock_parquet_dir()
+    path = root_dir / f"{normalized_code}.parquet"
     if not normalized_code or not is_us_stock_code(normalized_code):
         return LocalUsHistoryLoadResult(
             stock_code=normalized_code,

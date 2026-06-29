@@ -109,9 +109,14 @@ class HistoricalOhlcvProviderResult:
         )
 
     @classmethod
-    def unavailable(cls, reason: str) -> "HistoricalOhlcvProviderResult":
+    def unavailable(
+        cls,
+        reason: str,
+        *,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> "HistoricalOhlcvProviderResult":
         normalized = _safe_code(reason) or _PROVIDER_UNAVAILABLE
-        return cls(unavailable_reason=normalized)
+        return cls(unavailable_reason=normalized, metadata=dict(metadata or {}))
 
 
 class HistoricalOhlcvProvider(Protocol):
@@ -302,6 +307,7 @@ class HistoricalOhlcvReadinessService:
             "benchmarkUsableRange": dict(benchmark_range or {}),
             "benchmarkAdjustmentState": benchmark_adjustment_state or "not_required",
             "providerState": provider_state,
+            "runtimeStatus": _runtime_status(provider_result.metadata),
             "overallState": _overall_state(missing_requirements),
             "missingRequirements": missing_requirements,
             "consumerSafe": True,
@@ -481,6 +487,9 @@ def _normalize_backtest_runtime_status(
     normalized = _safe_code(runtime_status)
     if normalized in _SAFE_RUNTIME_STATUSES:
         return normalized
+    source_runtime = _safe_code(source.get("runtimeStatus"))
+    if source_runtime in _SAFE_RUNTIME_STATUSES:
+        return source_runtime
     provider_state = _safe_code(source.get("providerState"))
     freshness_state = _safe_code(source.get("freshnessState"))
     if provider_state == _PROVIDER_MISSING:
@@ -506,12 +515,14 @@ def _backtest_readiness_status(
     missing_bars: int,
     missing_requirements: Sequence[str],
 ) -> str:
-    if runtime_status == "not_configured" or provider_state == _PROVIDER_MISSING:
+    if runtime_status == "not_configured":
         return "not_configured"
     if runtime_status == "missing":
         return "missing"
     if runtime_status == "unavailable" or provider_state in {_PROVIDER_UNAVAILABLE, _ENTITLEMENT_REQUIRED}:
         return "unavailable"
+    if provider_state == _PROVIDER_MISSING:
+        return "not_configured"
     if (
         missing_bars > 0
         or _INSUFFICIENT_HISTORY in missing_requirements
@@ -624,6 +635,7 @@ def _sanitize_source_readiness(source: Mapping[str, Any]) -> dict[str, Any]:
         "benchmarkState",
         "benchmarkAdjustmentState",
         "providerState",
+        "runtimeStatus",
         "overallState",
         "missingRequirements",
         "consumerSafe",
@@ -751,6 +763,11 @@ def _provider_state(unavailable_reason: str | None) -> str:
     if reason == _ENTITLEMENT_REQUIRED:
         return _ENTITLEMENT_REQUIRED
     return _PROVIDER_UNAVAILABLE
+
+
+def _runtime_status(metadata: Mapping[str, Any]) -> str | None:
+    status = _safe_code(metadata.get("runtimeStatus") or metadata.get("runtime_status"))
+    return status if status in _SAFE_RUNTIME_STATUSES else None
 
 
 def _freshness_state(

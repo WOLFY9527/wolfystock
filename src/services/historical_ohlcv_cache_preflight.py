@@ -5,6 +5,7 @@ import os
 import re
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -20,6 +21,7 @@ from src.services.yfinance_us_ohlcv_cache_provider import (
     LocalUsOhlcvParquetCache,
     YFINANCE_US_OHLCV_ENABLE_ENV,
 )
+from src.services.us_history_helper import get_configured_us_stock_parquet_dir
 from src.utils.symbol_classification import is_us_stock_code
 
 
@@ -73,7 +75,7 @@ class HistoricalOhlcvCachePreflightService:
         self.env = dict(env or os.environ)
         self.spec_finder = spec_finder
         self.cn_repository = cn_repository or StockRepository()
-        self.us_cache = us_cache or LocalUsOhlcvParquetCache()
+        self.us_cache = us_cache or LocalUsOhlcvParquetCache.from_env(self.env)
         self.cn_fetcher_factory = cn_fetcher_factory or _default_cn_fetcher_factory
         self.us_fetcher = us_fetcher
         self.today = today or date.today()
@@ -336,13 +338,53 @@ class HistoricalOhlcvCachePreflightService:
                 if summary["cacheState"] == "cache_hit" and summary["adjustmentState"] == "missing":
                     summary["adjustmentState"] = "available"
                 return summary
+            cache_config = _us_cache_config(self.env, self.us_cache)
+            load_result = getattr(self.us_cache, "load_result", None)
+            if callable(load_result):
+                result = load_result(symbol, days=max(1, int(required_bars)))
+                status = str(getattr(result, "status", "") or "")
+                if status == "hit":
+                    return _summarize_frame(
+                        _coerce_frame(getattr(result, "dataframe", None)),
+                        dependency_available=dependency_available,
+                        today=self.today,
+                        cache_config=cache_config,
+                        read_state="hit",
+                    )
+                if status == "not_configured":
+                    return _empty_cache_summary(
+                        "cache_not_configured",
+                        dependency_available=dependency_available,
+                        cache_config=cache_config,
+                        read_state="not_configured",
+                    )
+                if status == "missing":
+                    return _empty_cache_summary(
+                        "cache_missing",
+                        dependency_available=dependency_available,
+                        cache_config=cache_config,
+                        read_state="missing",
+                    )
+                return _empty_cache_summary(
+                    "cache_error",
+                    dependency_available=dependency_available,
+                    cache_config=cache_config,
+                    read_state="unreadable",
+                )
             return _summarize_frame(
                 _coerce_frame(self.us_cache.load(symbol, days=max(1, int(required_bars)))),
                 dependency_available=dependency_available,
                 today=self.today,
+                cache_config=cache_config,
+                read_state="hit",
             )
         except Exception:
-            return _empty_cache_summary("cache_error", dependency_available=None)
+            return _empty_cache_summary(
+                "cache_error",
+                dependency_available=None,
+                cache_config=_us_cache_config(self.env, self.us_cache),
+                read_state="unreadable",
+            )
 
 
 def build_historical_ohlcv_cache_preflight(
@@ -419,6 +461,7 @@ def _build_symbol_payload(
         cache_state=cache_state,
         data_state=data_state,
         cached_bars=cached_bars,
+        cache_configured=bool((cache.get("cacheConfig") or {}).get("pathConfigured")),
     )
     date_range = _date_range(cache=cache, seed_report=seed_report)
     next_action = _next_action(
@@ -437,6 +480,8 @@ def _build_symbol_payload(
         "status": status,
         "runtimeState": runtime_state,
         "cacheState": cache_state,
+        "cacheReadState": cache.get("cacheReadState") or "unknown",
+        "cacheConfig": dict(cache.get("cacheConfig") or {}),
         "dependencyState": cache.get("dependencyState"),
         "dependencyAvailable": cache.get("dependencyAvailable"),
         "cachedBars": cached_bars,
@@ -503,23 +548,47 @@ def _cache_satisfies_seed(
     return not (require_adjusted and str(cache.get("adjustmentState") or "") == "missing")
 
 
-def _summarize_frame(frame: pd.DataFrame | None, *, dependency_available: bool | None, today: date) -> dict[str, Any]:
+def _summarize_frame(
+    frame: pd.DataFrame | None,
+    *,
+    dependency_available: bool | None,
+    today: date,
+    cache_config: Mapping[str, Any] | None = None,
+    read_state: str = "unknown",
+) -> dict[str, Any]:
     if frame is None or frame.empty:
-        return _empty_cache_summary("cache_missing", dependency_available=dependency_available)
+        return _empty_cache_summary(
+            "cache_missing",
+            dependency_available=dependency_available,
+            cache_config=cache_config,
+            read_state="missing" if read_state == "unknown" else read_state,
+        )
     df = frame.copy()
     if "date" not in df.columns and "trade_date" in df.columns:
         df = df.rename(columns={"trade_date": "date"})
     df = _normalize_adjusted_close_column(df)
     if "date" not in df.columns:
-        return _empty_cache_summary("cache_missing", dependency_available=dependency_available)
+        return _empty_cache_summary(
+            "cache_error",
+            dependency_available=dependency_available,
+            cache_config=cache_config,
+            read_state="invalid",
+        )
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df = df.dropna(subset=["date"]).sort_values("date")
     if df.empty:
-        return _empty_cache_summary("cache_missing", dependency_available=dependency_available)
+        return _empty_cache_summary(
+            "cache_error",
+            dependency_available=dependency_available,
+            cache_config=cache_config,
+            read_state="invalid",
+        )
     latest = df["date"].max().date()
     earliest = df["date"].min().date()
     return {
         "cacheState": "cache_hit",
+        "cacheReadState": read_state,
+        "cacheConfig": dict(cache_config or {}),
         "dependencyState": "installed" if dependency_available else "missing",
         "dependencyAvailable": bool(dependency_available),
         "cachedBars": int(len(df)),
@@ -530,9 +599,17 @@ def _summarize_frame(frame: pd.DataFrame | None, *, dependency_available: bool |
     }
 
 
-def _empty_cache_summary(cache_state: str, *, dependency_available: bool | None) -> dict[str, Any]:
+def _empty_cache_summary(
+    cache_state: str,
+    *,
+    dependency_available: bool | None,
+    cache_config: Mapping[str, Any] | None = None,
+    read_state: str = "unknown",
+) -> dict[str, Any]:
     return {
         "cacheState": cache_state,
+        "cacheReadState": read_state,
+        "cacheConfig": dict(cache_config or {}),
         "dependencyState": "unknown" if dependency_available is None else ("installed" if dependency_available else "missing"),
         "dependencyAvailable": None if dependency_available is None else bool(dependency_available),
         "cachedBars": 0,
@@ -570,6 +647,8 @@ def _data_state(
     adjustment_state: str,
     require_adjusted: bool,
 ) -> str:
+    if cache_state == "cache_not_configured":
+        return "cache_not_configured"
     if cache_state == "cache_error":
         return "runtime_unavailable"
     if runtime_state in {"dependency_missing", "runtime_unavailable", "symbol_not_allowlisted", "seed_disabled_by_config"}:
@@ -601,6 +680,7 @@ def _operator_status(
     cache_state: str,
     data_state: str,
     cached_bars: int,
+    cache_configured: bool,
 ) -> str:
     if data_state == "fresh" or (
         cache_state == "cache_hit"
@@ -613,6 +693,12 @@ def _operator_status(
     if data_state == "insufficient":
         return "insufficient_coverage"
     if data_state == "missing_adjustments":
+        return "missing"
+    if data_state == "cache_not_configured":
+        return "not_configured"
+    if data_state == "runtime_unavailable":
+        return "unavailable"
+    if data_state == "cache_missing" and cache_configured:
         return "missing"
     if data_state == "cache_missing" and runtime_state == "available":
         return "missing"
@@ -651,6 +737,12 @@ def _next_action(
     elif cache_state == "cache_hit":
         state = _ACTIVATION_STATE_CACHED
         summary = "Representative cache is already present; validate bars, freshness, and adjustments before widening coverage."
+    elif cache_state == "cache_not_configured":
+        state = _ACTIVATION_STATE_DISABLED
+        summary = "Configure LOCAL_US_PARQUET_DIR or US_STOCK_PARQUET_DIR before product readiness can inspect local OHLCV cache rows."
+    elif cache_state == "cache_missing":
+        state = _ACTIVATION_STATE_READY_TO_SEED
+        summary = "Configured cache directory is readable, but representative symbol parquet files are missing."
     elif seed_state == "symbol_not_allowlisted":
         state = "symbol_not_allowlisted"
         summary = "Use the documented small representative symbol set for cache seed."
@@ -670,6 +762,41 @@ def _next_action(
         state = _ACTIVATION_STATE_READY_TO_SEED
         summary = "Runtime and dependency checks are green; operator approval can move this market into explicit seed."
     return {"state": state, "summary": summary, "requiredConfig": _required_flag_text(market, include_seed=seed_state != "seed_skipped")}
+
+
+def _us_cache_config(env: Mapping[str, str], us_cache: Any) -> dict[str, Any]:
+    configured_dir = get_configured_us_stock_parquet_dir(env)
+    env_key = _configured_us_parquet_env_key(env)
+    if configured_dir is None:
+        cache_root = getattr(us_cache, "root_dir", None)
+        if cache_root:
+            configured_dir = Path(cache_root)
+    custom_cache = not isinstance(us_cache, LocalUsOhlcvParquetCache)
+    path_configured = configured_dir is not None or custom_cache
+    exists: bool | None = None
+    is_dir: bool | None = None
+    if configured_dir is not None:
+        try:
+            exists = configured_dir.exists()
+            is_dir = configured_dir.is_dir()
+        except OSError:
+            exists = False
+            is_dir = False
+    return {
+        "pathConfigured": bool(path_configured),
+        "envKey": env_key,
+        "pathBasename": configured_dir.name if configured_dir is not None else None,
+        "pathExists": exists,
+        "pathReadable": is_dir,
+        "storageKind": "local_filesystem",
+    }
+
+
+def _configured_us_parquet_env_key(env: Mapping[str, str]) -> str | None:
+    for key in ("LOCAL_US_PARQUET_DIR", "US_STOCK_PARQUET_DIR"):
+        if str(env.get(key, "") or "").strip():
+            return key
+    return None
 
 
 def _required_flag_text(market: str, *, include_seed: bool = False) -> str:
