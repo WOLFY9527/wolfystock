@@ -32,7 +32,7 @@ import {
   type PanelState,
 } from '../components/market-overview/MarketOverviewWorkbench';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
-import { TerminalButton, TerminalChip, TerminalPageHeading } from '../components/terminal/TerminalPrimitives';
+import { TerminalButton, TerminalChip, TerminalDisclosure, TerminalPageHeading } from '../components/terminal/TerminalPrimitives';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 import { buildDataSourcesSetupHref, buildProviderOpsSetupHref } from '../utils/productSetupSurface';
@@ -1833,32 +1833,6 @@ const MarketOverviewPage = () => {
         data-testid="market-overview-shell"
         className="flex min-h-0 flex-1 flex-col gap-4 md:gap-6"
       >
-        {hasUnavailableMarketOverviewFamily ? (
-          <MarketOverviewReadinessEmptyPanel
-            families={marketOverviewReadinessFamilies}
-            showOperatorCue={isAdminMode && canReadProviders}
-          />
-        ) : null}
-        <OfficialRiskSourceReadinessStrip readiness={officialRiskSourceReadiness} />
-        <MarketOverviewEvidenceBoundaryStrip matrix={consumerEvidenceReadinessMatrix} />
-        <CrossAssetDriverReadinessStrip readiness={crossAssetDriverReadiness} />
-        <MarketRegimeReadinessSurface
-          view={professionalDataCapabilities}
-          riskReadiness={officialRiskSourceReadiness}
-          loading={professionalDataCapabilitiesLoading}
-          error={professionalDataCapabilitiesError}
-          onRetry={() => {
-            void loadProfessionalDataCapabilities();
-          }}
-        />
-        <MarketRegimeReadModelSurface
-          payload={regimeReadModel}
-          loading={regimeReadModelLoading}
-          error={regimeReadModelError}
-          onRetry={() => {
-            void loadRegimeReadModel();
-          }}
-        />
         <MarketOverviewWorkbench
           heading={(
             <TerminalPageHeading
@@ -1876,6 +1850,41 @@ const MarketOverviewPage = () => {
           showAdminDiagnostics={isAdminMode && canReadProviders}
           onRefreshPanel={handleWorkbenchRefresh}
         />
+        <TerminalDisclosure
+          data-testid="market-overview-data-diagnostics-disclosure"
+          title="查看数据诊断"
+          summary="市场状态、证据覆盖和内部就绪度默认折叠"
+          className="bg-black/10"
+        >
+          {hasUnavailableMarketOverviewFamily ? (
+            <MarketOverviewReadinessEmptyPanel
+              families={marketOverviewReadinessFamilies}
+              showOperatorCue={isAdminMode && canReadProviders}
+            />
+          ) : null}
+          <div className="mt-3 grid gap-3">
+            <OfficialRiskSourceReadinessStrip readiness={officialRiskSourceReadiness} />
+            <MarketOverviewEvidenceBoundaryStrip matrix={consumerEvidenceReadinessMatrix} />
+            <CrossAssetDriverReadinessStrip readiness={crossAssetDriverReadiness} />
+            <MarketRegimeReadinessSurface
+              view={professionalDataCapabilities}
+              riskReadiness={officialRiskSourceReadiness}
+              loading={professionalDataCapabilitiesLoading}
+              error={professionalDataCapabilitiesError}
+              onRetry={() => {
+                void loadProfessionalDataCapabilities();
+              }}
+            />
+            <MarketRegimeReadModelSurface
+              payload={regimeReadModel}
+              loading={regimeReadModelLoading}
+              error={regimeReadModelError}
+              onRetry={() => {
+                void loadRegimeReadModel();
+              }}
+            />
+          </div>
+        </TerminalDisclosure>
       </ConsumerWorkspacePageShell>
     </ConsumerWorkspaceScope>
   );
