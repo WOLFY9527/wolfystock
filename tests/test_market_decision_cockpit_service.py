@@ -183,6 +183,86 @@ def _complete_option_contracts() -> list[dict[str, Any]]:
     ]
 
 
+def _read_model(
+    *,
+    readiness_label: str = "product_ready",
+    status: str = "ok",
+    regime_label: str = "risk_off",
+) -> dict[str, Any]:
+    return {
+        "consumerSafe": True,
+        "noAdvice": True,
+        "contractVersion": "market_regime_read_model_v1",
+        "sourceEvidenceContractVersion": "market_regime_evidence_pack_v1",
+        "status": status,
+        "market": "US",
+        "symbols": ["SPY", "QQQ", "AAPL", "MSFT"],
+        "benchmarkSymbol": "SPY",
+        "growthProxySymbol": "QQQ",
+        "regime": {"label": regime_label, "status": status, "source": "deterministic_evidence_fields"},
+        "regimeLabel": regime_label,
+        "regimeStatus": status,
+        "productSummary": "Risk-off evidence is currently dominant across the bounded read model.",
+        "evidenceCards": [
+            {
+                "id": "benchmark_trend",
+                "title": "Benchmark Trend",
+                "status": "negative",
+                "severity": "warning",
+                "headline": "Benchmark trend evidence is negative.",
+                "metrics": [],
+                "reasons": ["Benchmark local trend fields are negative."],
+                "sourceFields": ["evidence.benchmarkTrend.return20d"],
+                "consumerSafe": True,
+            },
+            {
+                "id": "breadth",
+                "title": "Breadth",
+                "status": "negative",
+                "severity": "warning",
+                "headline": "Breadth evidence is weak.",
+                "metrics": [],
+                "reasons": ["Breadth evidence is weak."],
+                "sourceFields": ["evidence.breadthProxy.percentAboveMa20"],
+                "consumerSafe": True,
+            },
+            {
+                "id": "data_quality",
+                "title": "Data Quality",
+                "status": "positive" if readiness_label == "product_ready" else "degraded",
+                "severity": "info" if readiness_label == "product_ready" else "blocker",
+                "headline": "Data quality is product-ready."
+                if readiness_label == "product_ready"
+                else "Data quality blocks the read model.",
+                "metrics": [],
+                "reasons": [],
+                "sourceFields": ["missingDataFamilies"],
+                "consumerSafe": True,
+            },
+        ],
+        "dataQuality": {
+            "adjustedCoverageState": "available" if readiness_label == "product_ready" else "missing",
+            "missingDataFamilies": [] if readiness_label == "product_ready" else ["historical_ohlcv"],
+            "blockedProductSurfaces": [] if readiness_label == "product_ready" else ["Market Overview"],
+        },
+        "readiness": {
+            "label": readiness_label,
+            "status": status,
+            "missingDataFamilies": [] if readiness_label == "product_ready" else ["historical_ohlcv"],
+            "blockedProductSurfaces": [] if readiness_label == "product_ready" else ["Market Overview"],
+            "nextOperatorAction": "Market regime read model is available from local evidence inputs."
+            if readiness_label == "product_ready"
+            else "Provide readable local evidence inputs, then rerun the read model.",
+        },
+        "missingDataFamilies": [] if readiness_label == "product_ready" else ["historical_ohlcv"],
+        "blockedProductSurfaces": [] if readiness_label == "product_ready" else ["Market Overview"],
+        "nextOperatorAction": "Market regime read model is available from local evidence inputs.",
+        "networkCallsEnabled": False,
+        "mutationEnabled": False,
+        "providerCallsEnabled": False,
+    }
+
+
 def _serialized_values(payload: object) -> str:
     values: list[str] = []
 
@@ -387,6 +467,109 @@ def test_cockpit_uses_regime_engine_as_primary_judgment_and_shapes_safe_aggregat
 
     _assert_no_forbidden_public_terms(payload)
     _assert_consumer_safe_cockpit_narrative(payload)
+
+
+def test_product_ready_read_model_becomes_primary_regime_context_without_low_confidence_contradiction() -> None:
+    payload = build_market_decision_cockpit(
+        market_regime_decision={
+            "regime": "lowConfidence",
+            "confidence": "low",
+            "confidenceScore": 0.18,
+            "driverScores": {},
+            "explanation": {
+                "whyThisRegime": ["lowConfidence selected from deterministic driver agreement."],
+                "whatConfirmsIt": [],
+                "whatInvalidatesIt": [],
+            },
+            "researchPriorities": {"watchToday": [], "needsMoreEvidence": [], "investigateNext": []},
+            "dataQuality": {
+                "evidenceGrade": "limited",
+                "availableDriverCount": 0,
+                "scoringDriverCount": 0,
+                "blockedDriverCount": 0,
+                "missingDriverCount": 0,
+                "proxyEvidenceCount": 0,
+                "confidenceCapReasons": [],
+            },
+            "missingEvidence": ["market_regime_low_confidence"],
+        },
+        market_regime_read_model=_read_model(),
+        research_candidates=[],
+        generated_at="2026-06-15T00:00:00+00:00",
+    )
+
+    assert payload["marketRegimeReadModel"]["primaryContext"] is True
+    assert payload["marketRegimeReadModel"]["readinessLabel"] == "product_ready"
+    assert payload["marketRegimeReadModel"]["regimeLabel"] == "risk_off"
+    assert payload["marketRegimeDecision"]["regime"] == "risk_off"
+    assert payload["marketRegimeDecision"]["readModelPrimaryContext"] is True
+    assert payload["marketRegimeDecision"]["missingEvidence"] == []
+    assert payload["marketRegimeSummary"]["regime"] == "Risk-off observation"
+    assert payload["marketRegimeSummary"]["readinessLabel"] == "product_ready"
+    assert payload["whatChanged"][0] == "Market Regime Read Model is product-ready: Risk-off observation."
+    assert "Low-confidence observation" not in json.dumps(payload["whatChanged"], ensure_ascii=False)
+    assert payload["dataQuality"]["status"] == "ready"
+    assert payload["cockpitReadiness"]["status"] == "ready"
+    assert payload["advancedDecisionDiagnostics"] == {
+        "status": "secondary",
+        "primaryOverriddenByReadModel": True,
+        "advancedRegime": "lowConfidence",
+        "advancedConfidence": "low",
+        "readModelReadinessLabel": "product_ready",
+        "reason": "Market Regime Read Model is product-ready, so advanced cockpit evidence is secondary.",
+    }
+    _assert_no_forbidden_public_terms(payload)
+
+
+def test_product_ready_read_model_keeps_advanced_gaps_visible_as_secondary() -> None:
+    payload = build_market_decision_cockpit(
+        market_regime_decision={"regime": "lowConfidence", "confidence": "low", "driverScores": {}},
+        market_regime_read_model=_read_model(),
+        research_candidates=[],
+        generated_at="2026-06-15T00:00:00+00:00",
+    )
+
+    degraded_reasons = {item["reason"] for item in payload["degradedInputs"]}
+    degraded_surfaces = {(item["surface"], item["reason"]) for item in payload["degradedSurfaceSummary"]}
+
+    assert "Market regime evidence is low confidence." not in degraded_reasons
+    assert "Secondary Research Radar evidence is unavailable." in degraded_reasons
+    assert "Secondary options structure evidence is unavailable." in degraded_reasons
+    assert ("Research Radar", "Secondary Research Radar evidence is unavailable.") in degraded_surfaces
+    assert (
+        "Options / Gamma Observation",
+        "Secondary options structure evidence is unavailable.",
+    ) in degraded_surfaces
+    assert "Secondary Research Radar evidence unavailable" in payload["dataQuality"]["reasonCodes"]
+    assert "Secondary options structure evidence unavailable" in payload["dataQuality"]["reasonCodes"]
+    assert "Advanced evidence observation-only" in payload["dataQuality"]["reasonCodes"]
+
+
+def test_unready_read_model_fails_closed_as_primary_market_context() -> None:
+    payload = build_market_decision_cockpit(
+        market_regime_decision={
+            "regime": "riskOn",
+            "confidence": "high",
+            "confidenceScore": 0.91,
+            "driverScores": {},
+            "dataQuality": {"availableDriverCount": 4, "scoringDriverCount": 4},
+            "missingEvidence": [],
+        },
+        market_regime_read_model=_read_model(readiness_label="failed_closed", status="failed_closed", regime_label="insufficient_data"),
+        research_candidates=[_candidate()],
+        generated_at="2026-06-15T00:00:00+00:00",
+    )
+
+    assert payload["marketRegimeReadModel"]["primaryContext"] is False
+    assert payload["marketRegimeReadModel"]["readinessLabel"] == "failed_closed"
+    assert payload["marketRegimeDecision"]["regime"] == "insufficient_data"
+    assert payload["marketRegimeDecision"]["confidence"] == "low"
+    assert payload["marketRegimeSummary"]["regime"] == "Insufficient market evidence"
+    assert payload["dataQuality"]["status"] == "blocked"
+    assert payload["cockpitReadiness"]["status"] in {"degraded", "insufficient"}
+    assert "Market Regime Read Model failed closed" in payload["dataQuality"]["reasonCodes"]
+    assert payload["advancedDecisionDiagnostics"]["status"] == "primary"
+    _assert_no_forbidden_public_terms(payload)
 
 
 def test_missing_inputs_fail_closed_with_empty_research_preview_and_blocked_options() -> None:

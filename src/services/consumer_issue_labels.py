@@ -286,6 +286,36 @@ _ISSUES: dict[str, ConsumerIssue] = {
         "severity": "warning",
         "category": "research",
     },
+    "market_regime_read_model_failed_closed": {
+        "label": "Market Regime Read Model failed closed",
+        "message": "Market regime evidence inputs are unavailable for the primary read.",
+        "severity": "warning",
+        "category": "evidence",
+    },
+    "market_regime_read_model_degraded": {
+        "label": "Market Regime Read Model degraded",
+        "message": "Market regime evidence inputs are degraded for the primary read.",
+        "severity": "warning",
+        "category": "evidence",
+    },
+    "secondary_research_evidence_unavailable": {
+        "label": "Secondary Research Radar evidence unavailable",
+        "message": "Research Radar evidence is unavailable as secondary context.",
+        "severity": "info",
+        "category": "research",
+    },
+    "secondary_options_evidence_unavailable": {
+        "label": "Secondary options structure evidence unavailable",
+        "message": "Options structure evidence is unavailable as secondary context.",
+        "severity": "info",
+        "category": "options",
+    },
+    "advanced_evidence_observation_only": {
+        "label": "Advanced evidence observation-only",
+        "message": "Advanced evidence remains secondary observation context.",
+        "severity": "info",
+        "category": "evidence",
+    },
     "avoidlowevidence": {
         "label": "Low-evidence filter active",
         "message": "The queue is avoiding low-evidence candidates.",

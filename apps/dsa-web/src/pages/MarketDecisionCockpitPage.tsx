@@ -234,6 +234,21 @@ function humanizeEnum(value: string | null | undefined, language: 'zh' | 'en'): 
   }
 }
 
+function readModelReadinessLabel(value: string | null | undefined, language: 'zh' | 'en'): string {
+  switch (String(value || '').toLowerCase()) {
+    case 'product_ready':
+      return language === 'en' ? 'Product-ready' : '产品可用';
+    case 'failed_closed':
+      return language === 'en' ? 'Failed closed' : '已失败关闭';
+    case 'blocked':
+      return language === 'en' ? 'Blocked' : '已阻断';
+    case 'degraded':
+      return language === 'en' ? 'Partial context' : '部分缺口';
+    default:
+      return sanitizeCockpitStatusOrIssue(value, language) || '--';
+  }
+}
+
 function dailySectionLabel(section: string | null | undefined, language: 'zh' | 'en'): string {
   if (!section) {
     return language === 'en' ? 'Availability note' : '可用性提醒';
@@ -278,6 +293,16 @@ function sanitizeCockpitDisplayItems(
     labels.push(label);
   });
   return labels;
+}
+
+function safeReadModelDisplayText(value: string | null | undefined, language: 'zh' | 'en'): string {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return '';
+  }
+  return FORBIDDEN_CONSUMER_WORDING.test(raw)
+    ? (language === 'en' ? 'Review after evidence is refreshed.' : '等待证据刷新后再复核。')
+    : raw;
 }
 
 function pushUniqueLabel(target: string[], label: string | null | undefined, limit = Number.POSITIVE_INFINITY) {
@@ -440,7 +465,22 @@ function CockpitFirstViewportSummary({
     const whatMatters: string[] = [];
     const nextChecks: string[] = [];
     const missingData: string[] = [];
+    const readModel = data?.marketRegimeReadModel;
+    const readModelPrimary = Boolean(readModel?.primaryContext && readModel.readinessLabel === 'product_ready');
 
+    if (readModelPrimary) {
+      pushUniqueLabel(whatHappened, safeReadModelDisplayText(readModel?.summary, locale), 3);
+      pushUniqueLabel(
+        whatMatters,
+        locale === 'en'
+          ? `Primary regime context: ${regimeLabel(readModel?.regimeLabel, locale)} · ${readModelReadinessLabel(readModel?.readinessLabel, locale)}`
+          : `主市场状态语境：${regimeLabel(readModel?.regimeLabel, locale)} · ${readModelReadinessLabel(readModel?.readinessLabel, locale)}`,
+        3,
+      );
+      (readModel?.evidenceCards ?? []).forEach((card) => {
+        pushUniqueLabel(nextChecks, safeReadModelDisplayText(card.headline || card.title || '', locale), 3);
+      });
+    }
     pushSanitizedLabels(whatHappened, briefing?.whatChanged, locale, 3);
     pushSanitizedLabels(whatHappened, data?.cockpitSummary?.whatChanged, locale, 3);
     pushSanitizedLabels(whatHappened, narrativeSentences.slice(0, 1), locale, 3);
@@ -470,6 +510,11 @@ function CockpitFirstViewportSummary({
     (briefing?.scannerHighlights ?? []).forEach((item) => pushDailyReasonLabels(missingData, item.evidenceGaps, locale, 3));
     (briefing?.watchlistHighlights ?? []).forEach((item) => pushDailyReasonLabels(missingData, item.evidenceGaps, locale, 3));
     (briefing?.portfolioStructureHighlights ?? []).forEach((item) => pushDailyReasonLabels(missingData, item.missingEvidence, locale, 3));
+    if (readModelPrimary) {
+      (data?.degradedInputs ?? []).forEach((item) => {
+        pushUniqueLabel(missingData, safeReadModelDisplayText(item.reason, locale), 3);
+      });
+    }
     pushSanitizedLabels(missingData, data?.dataQuality?.reasonCodes, locale, 3);
     pushSanitizedLabels(missingData, data?.researchQueuePreview?.degradedState?.reasonCodes, locale, 3);
     pushSanitizedLabels(missingData, data?.researchQueuePreview?.evidenceGaps, locale, 3);
@@ -477,7 +522,8 @@ function CockpitFirstViewportSummary({
       .forEach((item) => pushUniqueLabel(missingData, item, 3));
     pushSanitizedLabels(missingData, data?.optionsStructureStatus?.blockedReasonCodes, locale, 3);
 
-    const headline = briefing?.marketRegimeSummary?.summary
+    const headline = (readModelPrimary ? safeReadModelDisplayText(readModel?.summary, locale) : null)
+      || briefing?.marketRegimeSummary?.summary
       || data?.cockpitSummary?.whatChanged?.[0]
       || narrativeSentences[0]
       || (locale === 'en'
@@ -490,6 +536,7 @@ function CockpitFirstViewportSummary({
       whatMatters,
       nextChecks,
       missingData,
+      readModelPrimary,
     };
   }, [briefing, data, locale, narrativeSentences]);
 
@@ -552,7 +599,9 @@ function CockpitFirstViewportSummary({
           {summary.missingData.length ? (
             <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-black/10 p-3" data-testid="decision-cockpit-missing-summary">
               <div className="text-xs font-medium text-[color:var(--wolfy-text-primary)]">
-                {locale === 'en' ? 'What is still missing' : '仍需补齐的部分'}
+                {summary.readModelPrimary
+                  ? (locale === 'en' ? 'Secondary advanced evidence gaps' : '次级高级证据缺口')
+                  : (locale === 'en' ? 'What is still missing' : '仍需补齐的部分')}
               </div>
               <p className="mt-1 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
                 {summary.missingData.join(locale === 'en' ? ' · ' : '；')}
