@@ -148,7 +148,7 @@ def assess_backtest_data_sufficiency(payload: Mapping[str, Any] | None) -> dict[
     if _benchmark_missing(benchmark_summary, ohlcv_readiness=ohlcv_readiness):
         degraded.append("missing_benchmark")
 
-    if not _adjusted_requirement_available(ohlcv_readiness) and _adjustments_missing(data_quality, professional):
+    if _adjustments_missing_for_gate(data_quality, professional, ohlcv_readiness):
         degraded.append("missing_adjustments")
 
     if _factor_inputs_missing(factor_inputs):
@@ -380,7 +380,33 @@ def _benchmark_missing(benchmark_summary: Mapping[str, Any], *, ohlcv_readiness:
 def _adjusted_requirement_available(readiness: Mapping[str, Any]) -> bool:
     adjusted_requirement = _mapping(readiness.get("adjustedDataRequirement"))
     state = _text(adjusted_requirement.get("state") or readiness.get("adjustmentState")).lower()
+    if adjusted_requirement.get("required") is False or state == "not_required":
+        return True
     return state == "available"
+
+
+def _adjustments_missing_for_gate(
+    data_quality: Mapping[str, Any],
+    professional: Mapping[str, Any],
+    readiness: Mapping[str, Any],
+) -> bool:
+    if not _adjustments_missing(data_quality, professional):
+        return False
+    adjusted_requirement = _mapping(readiness.get("adjustedDataRequirement"))
+    adjustment_state = _text(adjusted_requirement.get("state") or readiness.get("adjustmentState")).lower()
+    if adjustment_state == "available":
+        return False
+    if adjusted_requirement.get("required") is False or adjustment_state == "not_required":
+        return _has_explicit_adjustment_quality(data_quality, professional)
+    return True
+
+
+def _has_explicit_adjustment_quality(data_quality: Mapping[str, Any], professional: Mapping[str, Any]) -> bool:
+    for key in ("adjustment_mode", "dividends_handled", "splits_handled"):
+        if key in data_quality:
+            return True
+    categories = _mapping(professional.get("categories"))
+    return bool(categories.get("corporate_actions") or categories.get("adjusted_data"))
 
 
 def _adjustments_missing(data_quality: Mapping[str, Any], professional: Mapping[str, Any]) -> bool:

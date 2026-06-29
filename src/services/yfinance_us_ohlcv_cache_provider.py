@@ -318,3 +318,16 @@ def _runtime_status_from_cache_status(status: str) -> str:
 
 def _env_enabled(key: str) -> bool:
     return str(os.getenv(key) or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def build_readonly_local_us_ohlcv_cache_provider_from_env(
+    env: Mapping[str, str] | None = None,
+) -> YfinanceUsOhlcvCacheProvider | None:
+    """Return a cache-only provider when a local US parquet root is configured."""
+
+    if get_configured_us_stock_parquet_dir(env) is None:
+        return None
+    return YfinanceUsOhlcvCacheProvider(
+        cache=LocalUsOhlcvParquetCache.from_env(env),
+        provider_fetch_enabled=False,
+    )

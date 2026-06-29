@@ -28,6 +28,7 @@ from src.services.historical_ohlcv_readiness import (
     HistoricalOhlcvReadinessService,
 )
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback
+from src.services.yfinance_us_ohlcv_cache_provider import build_readonly_local_us_ohlcv_cache_provider_from_env
 from src.storage import AnalysisHistory, BacktestResult, BacktestRun, BacktestSummary, DatabaseManager, StockDaily
 
 logger = logging.getLogger(__name__)
@@ -443,6 +444,13 @@ class BacktestService:
             return self._get_aggregate_sample_status(settings=settings)
         rows = self.repo.get_sample_rows(code=code, **self._owner_kwargs())
         if not rows and self.repo.count_analysis_history(code=code, **self._owner_kwargs()) == 0:
+            self._ensure_market_history(
+                code=code,
+                min_age_days=settings.min_age_days,
+                eval_window_days=settings.eval_window_days,
+                sample_count=20,
+                force_refresh=False,
+            )
             self._ensure_cached_backtest_samples(code=code, settings=settings, sample_count=20)
             rows = self.repo.get_sample_rows(code=code, **self._owner_kwargs())
         parsed_dates: List[date] = []
@@ -1113,6 +1121,24 @@ class BacktestService:
             start = None
             end = None
             source_available = False
+        provider = build_readonly_local_us_ohlcv_cache_provider_from_env()
+        if provider is not None and (not source_available or benchmark_required):
+            result = HistoricalOhlcvReadinessService(provider=provider).fetch(
+                HistoricalOhlcvReadinessRequest(
+                    symbol=code,
+                    market="US",
+                    timeframe="1d",
+                    start=start,
+                    end=end,
+                    lookback_bars=required_bars,
+                    required_bars=max(0, int(required_bars or 0)),
+                    require_adjusted=False,
+                    benchmark_symbol=benchmark_symbol,
+                    benchmark_required=benchmark_required,
+                )
+            )
+            if result.readiness.get("providerState") == "available" or not source_available:
+                return result.readiness
         result = HistoricalOhlcvReadinessService().assess_supplied_history(
             HistoricalOhlcvReadinessRequest(
                 symbol=code,
