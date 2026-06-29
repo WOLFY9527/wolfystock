@@ -32,6 +32,7 @@ from src.services.yfinance_us_ohlcv_cache_provider import build_readonly_local_u
 from src.storage import AnalysisHistory, BacktestResult, BacktestRun, BacktestSummary, DatabaseManager, StockDaily
 
 logger = logging.getLogger(__name__)
+LOCAL_BACKTEST_STARTER_SYMBOLS = ("SPY", "QQQ", "AAPL", "MSFT")
 
 
 @dataclass(frozen=True)
@@ -1291,6 +1292,7 @@ class BacktestService:
             ohlcv_readiness=readiness,
             sample_observability={},
         )
+        symbol_specific_readiness = self._aggregate_local_symbol_readiness(settings=settings)
         return {
             "code": "__all__",
             "scope": "aggregate",
@@ -1319,7 +1321,29 @@ class BacktestService:
                 ohlcv_readiness=readiness,
             ),
             "historicalOhlcvReadiness": readiness,
+            "symbolSpecificReadiness": symbol_specific_readiness,
         }
+
+    def _aggregate_local_symbol_readiness(self, *, settings: BacktestRuntimeSettings) -> List[Dict[str, Any]]:
+        rows: List[Dict[str, Any]] = []
+        for symbol in LOCAL_BACKTEST_STARTER_SYMBOLS:
+            readiness = self._build_historical_ohlcv_readiness(
+                code=symbol,
+                rows=[],
+                required_bars=settings.eval_window_days,
+            )
+            rows.append(
+                {
+                    "symbol": symbol,
+                    "historicalOhlcvState": str(readiness.get("overallState") or "unknown"),
+                    "providerState": str(readiness.get("providerState") or "unknown"),
+                    "usableBars": int(readiness.get("usableBars") or 0),
+                    "missingBars": int(readiness.get("missingBars") or 0),
+                    "missingRequirements": list(readiness.get("missingRequirements") or []),
+                    "consumerSafe": True,
+                }
+            )
+        return rows
 
     def _try_fill_daily_data(self, *, code: str, analysis_date: date, eval_window_days: int) -> Optional[BacktestSourceMetadata]:
         try:

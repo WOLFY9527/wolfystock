@@ -132,9 +132,16 @@ class _ScannerUniverseOperatorFixture:
                 "status": "stale",
                 "freshnessState": "universe_modified:2026-06-20",
                 "lastUpdatedAt": "2026-06-20T00:00:00+00:00",
+                "sourceClass": "local_bounded_us_parquet_universe",
+                "sourcePath": "LOCAL_US_PARQUET_DIR",
+                "symbols": ["SPY", "QQQ", "AAPL", "MSFT"],
+                "generatedFrom": "LOCAL_US_PARQUET_DIR",
+                "noExternalCalls": True,
+                "providerCallsEnabled": False,
             },
             "readOnly": True,
             "noExternalCalls": True,
+            "providerCallsEnabled": False,
             "mutationEnabled": False,
             "consumerVisible": False,
         }
@@ -309,6 +316,29 @@ def test_admin_scanner_universe_refresh_action_defers_when_no_safe_refresh_seam(
     assert payload["before"]["status"] == "stale"
     assert payload["after"]["status"] == "stale"
     assert "approved scanner universe refresh workflow" in payload["nextOperatorAction"]
+    _assert_no_sensitive_markers(payload)
+
+
+def test_admin_scanner_universe_readiness_preserves_local_source_metadata(app: FastAPI) -> None:
+    app.state.scanner_universe_operator_service = _ScannerUniverseOperatorFixture()
+
+    with _client(app, _ops_admin) as client:
+        response = client.get("/api/v1/admin/ops/scanner-universe-readiness?market=us&profile=us_preopen_v1")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["market"] == "us"
+    assert payload["profile"] == "us_preopen_v1"
+    assert payload["readOnly"] is True
+    assert payload["noExternalCalls"] is True
+    assert payload["providerCallsEnabled"] is False
+    readiness = payload["scannerUniverseReadiness"]
+    assert readiness["sourceClass"] == "local_bounded_us_parquet_universe"
+    assert readiness["sourcePath"] == "LOCAL_US_PARQUET_DIR"
+    assert readiness["symbols"] == ["SPY", "QQQ", "AAPL", "MSFT"]
+    assert readiness["generatedFrom"] == "LOCAL_US_PARQUET_DIR"
+    assert readiness["noExternalCalls"] is True
+    assert readiness["providerCallsEnabled"] is False
     _assert_no_sensitive_markers(payload)
 
 

@@ -428,7 +428,15 @@ def _quote_snapshot_evidence(
         "availabilityState": str(readiness.get("availabilityState") or "missing"),
         "sourceFamilies": list(readiness.get("sourceFamilies") or []),
         "providerCallsEnabled": False,
-        "state": "available" if readiness.get("availabilityState") == "available" else "missing",
+        "state": (
+            "available"
+            if readiness.get("availabilityState") == "available"
+            else "stale"
+            if readiness.get("availabilityState") == "stale"
+            else "partial"
+            if readiness.get("availabilityState") == "partial"
+            else "missing"
+        ),
     }
 
 
@@ -525,7 +533,7 @@ def _missing_data_families(
         add("breadth_proxy")
     if volatility.get("state") != "available":
         add("volatility_proxy")
-    if quote.get("availabilityState") not in {"available", "not_requested"}:
+    if quote.get("availabilityState") not in {"available", "not_requested", "stale"}:
         add("quote_snapshot")
     return families
 

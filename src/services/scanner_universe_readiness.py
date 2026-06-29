@@ -26,6 +26,10 @@ SCANNER_UNIVERSE_SUPPORTED_STATUSES = (
     "unavailable",
     "deferred",
     "manual_action_required",
+    "local_universe_available",
+    "local_universe_seeded",
+    "quote_snapshot_stale",
+    "provider_not_configured",
 )
 SCANNER_UNIVERSE_REQUIRED_DATA_CLASSES = (
     "universe",
@@ -133,6 +137,14 @@ def build_scanner_universe_readiness_contract(
     eligible_symbols: list[str] | None = None,
     blocked_symbols: list[str] | None = None,
     missing_data_families: list[str] | None = None,
+    source_class: str | None = None,
+    source_path: str | None = None,
+    symbols: list[str] | None = None,
+    generated_from: str | None = None,
+    no_external_calls: bool = True,
+    provider_calls_enabled: bool = False,
+    read_only: bool = True,
+    activation_state: str | None = None,
 ) -> dict[str, Any]:
     normalized_status = str(status or "").strip().lower()
     if normalized_status == "ready":
@@ -147,7 +159,12 @@ def build_scanner_universe_readiness_contract(
     ]
     missing = [item for item in required if item not in set(available)]
     missing_families = _safe_data_family_list(missing_data_families or missing)
-    surfaces = list(blocked_product_surfaces or (SCANNER_UNIVERSE_BLOCKED_SURFACES if normalized_status != "available" else ()))
+    effectively_available = normalized_status in {
+        "available",
+        "local_universe_available",
+        "local_universe_seeded",
+    }
+    surfaces = list(blocked_product_surfaces or (() if effectively_available else SCANNER_UNIVERSE_BLOCKED_SURFACES))
     next_action = operator_next_action or _operator_next_action(normalized_status)
     return {
         "contractVersion": SCANNER_UNIVERSE_READINESS_CONTRACT_VERSION,
@@ -163,6 +180,14 @@ def build_scanner_universe_readiness_contract(
         "seededSymbols": _safe_symbol_list(seeded_symbols),
         "eligibleSymbols": _safe_symbol_list(eligible_symbols),
         "blockedSymbols": _safe_symbol_list(blocked_symbols),
+        "sourceClass": str(source_class or "").strip() or None,
+        "sourcePath": str(source_path or "").strip() or None,
+        "symbols": _safe_symbol_list(symbols),
+        "generatedFrom": str(generated_from or "").strip() or None,
+        "noExternalCalls": bool(no_external_calls),
+        "providerCallsEnabled": bool(provider_calls_enabled),
+        "readOnly": bool(read_only),
+        "activationState": str(activation_state or normalized_status).strip() or normalized_status,
         "blockedProductSurfaces": surfaces,
         "affectedProductSurfaces": surfaces,
         "operatorNextAction": next_action,
@@ -263,10 +288,11 @@ def build_scanner_universe_readiness_from_coverage(
     blocked_symbols: list[str] | None = None,
     missing_data_families: list[str] | None = None,
     operator_next_action: str | None = None,
+    source_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     normalized_universe_status = str(universe_status or "").strip().lower()
     available_classes: list[str] = []
-    if normalized_universe_status == "available" and int(universe_size or 0) > 0:
+    if normalized_universe_status in {"available", "local_universe_available", "local_universe_seeded"} and int(universe_size or 0) > 0:
         available_classes.append("universe")
     if str(history_coverage or "").strip().lower() == "available":
         available_classes.append("historical_ohlcv")
@@ -274,7 +300,10 @@ def build_scanner_universe_readiness_from_coverage(
         available_classes.append("quote_snapshot")
 
     requirements = {str(item or "").strip().lower() for item in historical_requirements or []}
-    if normalized_universe_status in {"missing", "stale", "not_configured", "unavailable"}:
+    local_universe_statuses = {"local_universe_available", "local_universe_seeded"}
+    if normalized_universe_status in local_universe_statuses:
+        status = normalized_universe_status
+    elif normalized_universe_status in {"missing", "stale", "not_configured", "unavailable"}:
         status = normalized_universe_status
     elif "provider_missing" in requirements:
         status = "not_configured"
@@ -287,6 +316,7 @@ def build_scanner_universe_readiness_from_coverage(
     else:
         status = "available"
 
+    metadata = dict(source_metadata or {})
     return build_scanner_universe_readiness_contract(
         market=market,
         status=status,
@@ -299,19 +329,31 @@ def build_scanner_universe_readiness_from_coverage(
         blocked_symbols=blocked_symbols,
         missing_data_families=missing_data_families,
         operator_next_action=operator_next_action,
+        source_class=metadata.get("sourceClass"),
+        source_path=metadata.get("sourcePath"),
+        symbols=metadata.get("symbols") if isinstance(metadata.get("symbols"), list) else None,
+        generated_from=metadata.get("generatedFrom"),
+        no_external_calls=bool(metadata.get("noExternalCalls", True)),
+        provider_calls_enabled=bool(metadata.get("providerCallsEnabled", False)),
+        read_only=bool(metadata.get("readOnly", True)),
+        activation_state=str(metadata.get("activationState") or status),
     )
 
 
 def _operator_next_action(status: str) -> str:
     if status == "not_configured":
         return "Configure the scanner universe path, then refresh the local universe."
+    if status == "provider_not_configured":
+        return "Configure the local scanner universe source before running Scanner."
     if status == "missing":
         return "Create or refresh the scanner local universe before running Scanner."
     if status == "stale":
         return "Refresh the scanner local universe and rerun scanner readiness checks."
+    if status == "quote_snapshot_stale":
+        return "Refresh quote snapshot coverage before candidate generation."
     if status == "insufficient_coverage":
         return "Refresh or seed historical OHLCV and quote coverage for the current universe."
-    if status == "available":
+    if status in {"available", "local_universe_available", "local_universe_seeded"}:
         return "Run Scanner with bounded candidate generation from the current universe."
     return "Inspect scanner data readiness and refresh the current universe path."
 
@@ -319,13 +361,17 @@ def _operator_next_action(status: str) -> str:
 def _consumer_safe_message(status: str) -> str:
     if status == "not_configured":
         return "扫描标的池尚未配置，暂时无法生成候选。"
+    if status == "provider_not_configured":
+        return "本地扫描标的池来源尚未配置，暂时无法生成候选。"
     if status == "missing":
         return "扫描标的池缺失，暂时无法生成候选。"
     if status == "stale":
         return "扫描标的池已过期，需要更新后再扫描。"
+    if status == "quote_snapshot_stale":
+        return "行情快照已过期，需要刷新后再生成候选。"
     if status == "insufficient_coverage":
         return "标的池可用，但行情或历史覆盖不足，暂不生成候选。"
-    if status == "available":
+    if status in {"available", "local_universe_available", "local_universe_seeded"}:
         return "标的池与必要行情覆盖已满足本轮扫描。"
     return "扫描标的池状态无法确认，暂时无法生成候选。"
 

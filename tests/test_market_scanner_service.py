@@ -3927,6 +3927,66 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["ohlcvReadiness"]["blockedSymbols"], [])
         self.assertEqual(data_manager.daily_history_calls, [])
 
+    def test_not_run_status_activates_bounded_us_local_parquet_universe(self) -> None:
+        cache_dir = Path(self._cache_temp_dir.name) / "us-parquet-cache"
+        for symbol in ("SPY", "QQQ", "AAPL", "MSFT", "TSLA"):
+            _write_local_us_parquet(cache_dir, symbol, rows=90)
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": str(cache_dir),
+                "US_STOCK_PARQUET_DIR": "",
+                "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "",
+                "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "",
+            },
+            clear=False,
+        ):
+            service = MarketScannerService(self.db, data_manager=FakeUsScannerDataManager())
+            status = service.get_operational_status(market="us", profile="us_preopen_v1")
+
+        readiness = status["dataReadiness"]
+        self.assertEqual(readiness["universeAvailability"], "available")
+        self.assertNotIn("universe_missing", readiness["candidateGenerationBlockers"])
+        scanner_readiness = readiness["scannerUniverseReadiness"]
+        self.assertEqual(scanner_readiness["status"], "local_universe_available")
+        self.assertEqual(scanner_readiness["sourceClass"], "local_bounded_us_parquet_universe")
+        self.assertEqual(scanner_readiness["sourcePath"], "LOCAL_US_PARQUET_DIR")
+        self.assertEqual(scanner_readiness["generatedFrom"], "LOCAL_US_PARQUET_DIR")
+        self.assertEqual(scanner_readiness["symbols"], ["SPY", "QQQ", "AAPL", "MSFT"])
+        self.assertEqual(scanner_readiness["universeSize"], 4)
+        self.assertTrue(scanner_readiness["noExternalCalls"])
+        self.assertFalse(scanner_readiness["providerCallsEnabled"])
+        self.assertTrue(scanner_readiness["readOnly"])
+        self.assertEqual(scanner_readiness["activationState"], "local_universe_available")
+        self.assertNotIn("TSLA", scanner_readiness["symbols"])
+        self.assertEqual(readiness["selectedCount"], 0)
+        self.assertEqual(readiness["candidateEvaluationCount"], 0)
+
+    def test_not_run_status_keeps_us_local_universe_missing_when_parquet_cache_missing(self) -> None:
+        missing_dir = Path(self._cache_temp_dir.name) / "missing-us-parquet-cache"
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": str(missing_dir),
+                "US_STOCK_PARQUET_DIR": "",
+                "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "",
+                "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "",
+            },
+            clear=False,
+        ):
+            service = MarketScannerService(self.db, data_manager=FakeUsScannerDataManager())
+            status = service.get_operational_status(market="us", profile="us_preopen_v1")
+
+        readiness = status["dataReadiness"]
+        self.assertEqual(readiness["universeAvailability"], "missing")
+        self.assertEqual(readiness["scannerUniverseReadiness"]["status"], "missing")
+        self.assertEqual(readiness["candidateGenerationState"], "blocked")
+        self.assertIn("universe_missing", readiness["candidateGenerationBlockers"])
+        self.assertEqual(readiness["selectedCount"], 0)
+        self.assertEqual(readiness["candidateEvaluationCount"], 0)
+
     def test_quote_snapshot_cache_readiness_can_supply_quote_context_without_live_quotes(self) -> None:
         provider = FakeHistoricalOhlcvProvider(
             {
@@ -4006,6 +4066,10 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertIn("stale_quote_snapshot", readiness["candidateGenerationBlockers"])
         self.assertIn("quote_snapshot", readiness["scannerUniverseReadiness"]["missingDataFamilies"])
         self.assertIn("freshness", readiness["scannerUniverseReadiness"]["missingDataFamilies"])
+        self.assertIn("Refresh quote snapshot", readiness["scannerUniverseReadiness"]["nextOperatorAction"])
+        self.assertNotIn("Configure", readiness["scannerUniverseReadiness"]["nextOperatorAction"])
+        self.assertEqual(readiness["candidateEvaluationCount"], 0)
+        self.assertEqual(readiness["selectedCount"], 0)
 
     def test_seeded_ohlcv_symbols_are_visible_but_missing_quotes_do_not_emit_candidates(self) -> None:
         provider = FakeHistoricalOhlcvProvider(
