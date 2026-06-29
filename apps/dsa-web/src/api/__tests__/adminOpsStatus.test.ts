@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { get } = vi.hoisted(() => ({
+const { get, post } = vi.hoisted(() => ({
   get: vi.fn(),
+  post: vi.fn(),
 }));
 
 vi.mock('../index', () => ({
   default: {
     get,
+    post,
   },
 }));
 
@@ -139,5 +141,62 @@ describe('adminOpsStatusApi', () => {
     }));
     expect(result.launchCockpit.domains[0].followUpProposals[0].approvalNeeded).toBe(true);
     expect(result.launchCockpit.blockers[0].blockerKey).toBe('public_launch_no_go');
+  });
+
+  it('maps scanner universe readiness and deferred refresh responses honestly', async () => {
+    const { adminOpsStatusApi } = await import('../adminOpsStatus');
+    get.mockResolvedValueOnce({
+      data: {
+        contract_version: 'scanner_universe_operator_readiness_v1',
+        status: 'stale',
+        scanner_universe_status: 'stale',
+        market: 'us',
+        profile: 'us_premarket_v1',
+        freshness_state: 'stale',
+        universe_size: 4,
+        affected_product_surfaces: ['Scanner', 'Research Radar', 'Backtest'],
+        next_operator_action: 'Refresh the configured scanner universe through the approved operator workflow.',
+        scanner_universe_readiness: {
+          status: 'stale',
+          available_data_classes: ['universe'],
+          missing_data_families: ['historical_ohlcv', 'quote_snapshot'],
+          missing_data_classes: ['quote_snapshot'],
+        },
+        candidate_generation_blockers: ['scanner_universe_stale'],
+        read_only: true,
+        no_external_calls: true,
+        mutation_enabled: false,
+        provider_calls_enabled: false,
+      },
+    });
+    post.mockResolvedValueOnce({
+      data: {
+        contract_version: 'scanner_universe_operator_action_v1',
+        status: 'manual_action_required',
+        action_status: 'deferred',
+        market: 'us',
+        profile: 'us_premarket_v1',
+        refresh_executed: false,
+        mutation_enabled: false,
+        no_external_calls: true,
+        provider_calls_enabled: false,
+        runtime_behavior_changed: false,
+        next_operator_action: 'Use the approved scanner universe refresh workflow, then rerun this readiness check.',
+      },
+    });
+
+    const readiness = await adminOpsStatusApi.getScannerUniverseReadiness('us');
+    const refresh = await adminOpsStatusApi.requestScannerUniverseRefresh('us');
+
+    expect(get).toHaveBeenCalledWith('/api/v1/admin/ops/scanner-universe-readiness?market=us');
+    expect(post).toHaveBeenCalledWith('/api/v1/admin/ops/scanner-universe-refresh?market=us');
+    expect(readiness.market).toBe('us');
+    expect(readiness.affectedProductSurfaces).toEqual(['Scanner', 'Research Radar', 'Backtest']);
+    expect(readiness.scannerUniverseReadiness.missingDataFamilies).toEqual(['historical_ohlcv', 'quote_snapshot']);
+    expect(readiness.providerCallsEnabled).toBe(false);
+    expect(refresh.status).toBe('manual_action_required');
+    expect(refresh.actionStatus).toBe('deferred');
+    expect(refresh.refreshExecuted).toBe(false);
+    expect(refresh.providerCallsEnabled).toBe(false);
   });
 });

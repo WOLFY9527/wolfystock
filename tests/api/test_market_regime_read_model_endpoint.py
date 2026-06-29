@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import json
+from datetime import date, datetime, timedelta, timezone
 
+import pandas as pd
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -29,6 +31,48 @@ FORBIDDEN_ADVICE_TERMS = (
     "目标价",
     "推荐",
 )
+START_DATE = date(2026, 1, 2)
+SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT"]
+
+
+def _series(start: float, step: float, bars: int = 60) -> list[float]:
+    return [round(start + (index * step), 4) for index in range(bars)]
+
+
+def _write_ohlcv(cache_dir, values_by_symbol: dict[str, list[float]]) -> None:
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    for symbol, closes in values_by_symbol.items():
+        rows = [
+            {
+                "date": (START_DATE + timedelta(days=index)).isoformat(),
+                "open": close - 0.5,
+                "high": close + 1.0,
+                "low": close - 1.0,
+                "close": close,
+                "volume": 1_000_000 + index,
+                "adjusted_close": close,
+            }
+            for index, close in enumerate(closes)
+        ]
+        pd.DataFrame(rows).to_parquet(cache_dir / f"{symbol}.parquet", index=False)
+
+
+def _write_quote_cache(cache_path) -> None:
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {
+            "symbol": symbol,
+            "market": "us",
+            "last": 100.0 + index,
+            "previousClose": 99.5 + index,
+            "volume": 1_000_000 + index,
+            "asOf": datetime.now(timezone.utc).isoformat(),
+            "currency": "USD",
+            "source": "local_quote_snapshot_cache",
+        }
+        for index, symbol in enumerate(SYMBOLS)
+    ]
+    cache_path.write_text(json.dumps({"quotes": rows}), encoding="utf-8")
 
 
 def _base_payload(*, status: str = "ok", readiness_label: str = "product_ready") -> dict:
@@ -197,12 +241,49 @@ def test_market_regime_read_model_endpoint_does_not_default_to_legacy_unconfigur
 
     monkeypatch.delenv("LOCAL_US_PARQUET_DIR", raising=False)
     monkeypatch.delenv("US_STOCK_PARQUET_DIR", raising=False)
+    monkeypatch.delenv("LOCAL_US_QUOTE_SNAPSHOT_CACHE_PATH", raising=False)
+    monkeypatch.delenv("US_QUOTE_SNAPSHOT_CACHE_PATH", raising=False)
+    monkeypatch.delenv("WOLFYSTOCK_US_QUOTE_SNAPSHOT_CACHE_PATH", raising=False)
+    monkeypatch.delenv("QUOTE_SNAPSHOT_CACHE_PATH", raising=False)
     monkeypatch.setattr(market, "build_market_regime_read_model", fake_build_read_model)
 
     response = _client().get("/api/v1/market/regime-read-model")
 
     assert response.status_code == 200
     assert calls[0]["ohlcv_cache_dir"] is None
+    assert calls[0]["quote_snapshot_cache_path"] is None
+
+
+def test_market_regime_read_model_endpoint_resolves_configured_quote_snapshot_cache(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    ohlcv_dir = tmp_path / "us-parquet-cache"
+    quote_path = tmp_path / "quote-snapshot-cache" / "us-starter-quotes.json"
+    _write_ohlcv(
+        ohlcv_dir,
+        {
+            "SPY": _series(100, 1.0),
+            "QQQ": _series(100, 1.25),
+            "AAPL": _series(90, 0.9),
+            "MSFT": _series(95, 1.1),
+        },
+    )
+    _write_quote_cache(quote_path)
+    monkeypatch.setenv("LOCAL_US_PARQUET_DIR", str(ohlcv_dir))
+    monkeypatch.setenv("LOCAL_US_QUOTE_SNAPSHOT_CACHE_PATH", str(quote_path))
+
+    response = _client().get("/api/v1/market/regime-read-model")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["dataQuality"]["quoteSnapshotCoverage"]["state"] == "available"
+    assert payload["dataQuality"]["quoteSnapshotCoverage"]["availabilityState"] == "available"
+    assert payload["evidenceCards"][4]["id"] == "quote_snapshot"
+    assert payload["evidenceCards"][4]["cardId"] == "quote_snapshot"
+    assert payload["evidenceCards"][4]["status"] == "positive"
+    assert payload["surfaceHints"][0]["statusHint"] == "evidence_available"
 
 
 def test_market_regime_read_model_endpoint_preserves_blocked_families(monkeypatch) -> None:

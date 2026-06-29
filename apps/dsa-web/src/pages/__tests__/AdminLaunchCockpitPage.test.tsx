@@ -1,16 +1,20 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminLaunchCockpitPage from '../AdminLaunchCockpitPage';
 import type { AdminOpsStatusResponse } from '../../api/adminOpsStatus';
 
-const { getStatus } = vi.hoisted(() => ({
+const { getStatus, getScannerUniverseReadiness, requestScannerUniverseRefresh } = vi.hoisted(() => ({
   getStatus: vi.fn(),
+  getScannerUniverseReadiness: vi.fn(),
+  requestScannerUniverseRefresh: vi.fn(),
 }));
 
 vi.mock('../../api/adminOpsStatus', () => ({
   adminOpsStatusApi: {
     getStatus,
+    getScannerUniverseReadiness,
+    requestScannerUniverseRefresh,
   },
 }));
 
@@ -180,9 +184,58 @@ function statusFixture(): AdminOpsStatusResponse {
   };
 }
 
+function scannerReadinessFixture(market: 'us' | 'cn', status = 'stale') {
+  return {
+    contractVersion: 'scanner_universe_operator_readiness_v1',
+    status,
+    scannerUniverseStatus: status,
+    market,
+    profile: market === 'us' ? 'us_premarket_v1' : 'cn_preopen_v1',
+    freshnessState: market === 'us' ? 'stale' : 'universe_modified:2026-06-20',
+    lastUpdatedAt: '2026-06-20T00:00:00+00:00',
+    universeSize: market === 'us' ? 4 : 300,
+    affectedProductSurfaces: ['Scanner', 'Research Radar', 'Backtest'],
+    nextOperatorAction: 'Refresh the configured scanner universe through the approved operator workflow.',
+    scannerUniverseReadiness: {
+      status,
+      availableDataClasses: ['universe'],
+      missingDataFamilies: ['historical_ohlcv', 'quote_snapshot'],
+      missingDataClasses: ['quote_snapshot'],
+      blockedProductSurfaces: ['Scanner', 'Research Radar'],
+    },
+    candidateGenerationState: 'blocked',
+    candidateGenerationBlockers: ['scanner_universe_stale'],
+    readOnly: true,
+    noExternalCalls: true,
+    mutationEnabled: false,
+    providerCallsEnabled: false,
+    consumerVisible: false,
+  };
+}
+
+function scannerRefreshFixture(market: 'us' | 'cn') {
+  return {
+    contractVersion: 'scanner_universe_operator_action_v1',
+    status: 'manual_action_required',
+    actionStatus: 'deferred',
+    market,
+    profile: market === 'us' ? 'us_premarket_v1' : 'cn_preopen_v1',
+    refreshExecuted: false,
+    mutationEnabled: false,
+    noExternalCalls: true,
+    providerCallsEnabled: false,
+    runtimeBehaviorChanged: false,
+    nextOperatorAction: 'Use the approved scanner universe refresh workflow, then rerun this readiness check.',
+    before: {},
+    after: {},
+  };
+}
+
 describe('AdminLaunchCockpitPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getScannerUniverseReadiness.mockImplementation((market: 'us' | 'cn') => Promise.resolve(scannerReadinessFixture(market)));
+    requestScannerUniverseRefresh.mockImplementation((market: 'us' | 'cn') => Promise.resolve(scannerRefreshFixture(market)));
   });
 
   it('renders a read-only private beta cockpit with NO-GO and evidence states first', async () => {
@@ -224,7 +277,34 @@ describe('AdminLaunchCockpitPage', () => {
     expect(page).toHaveTextContent('Manual approval required');
     expect(page).toHaveTextContent('scripts/security_mfa_operator_evidence_check.py');
     expect(page).toHaveTextContent('api/v1/endpoints/analysis.py');
+    const scannerPanel = await screen.findByTestId('admin-scanner-universe-panel');
+    expect(scannerPanel).toHaveTextContent('Scanner universe readiness');
+    expect(within(scannerPanel).getByTestId('admin-scanner-universe-us')).toHaveTextContent('US scanner universe');
+    expect(within(scannerPanel).getByTestId('admin-scanner-universe-us')).toHaveTextContent('Research Radar');
+    expect(within(scannerPanel).getByTestId('admin-scanner-universe-us')).toHaveTextContent('historical_ohlcv, quote_snapshot');
+    expect(within(scannerPanel).getByTestId('admin-scanner-universe-cn')).toHaveTextContent('CN scanner universe');
+    expect(within(scannerPanel).getByTestId('admin-scanner-universe-cn')).toHaveTextContent('quote_snapshot');
     expect(page).not.toHaveTextContent(forbiddenVisibleCopy);
+  });
+
+  it('shows the scanner universe refresh result as deferred manual action', async () => {
+    getStatus.mockResolvedValueOnce(statusFixture());
+
+    render(
+      <MemoryRouter initialEntries={['/admin/launch-cockpit']}>
+        <AdminLaunchCockpitPage />
+      </MemoryRouter>,
+    );
+
+    const usPanel = await screen.findByTestId('admin-scanner-universe-us');
+    fireEvent.click(within(usPanel).getByRole('button', { name: 'Request US scanner universe refresh' }));
+
+    const refreshResult = await screen.findByTestId('admin-scanner-universe-refresh-us');
+    expect(requestScannerUniverseRefresh).toHaveBeenCalledWith('us');
+    expect(refreshResult).toHaveTextContent('manual_action_required');
+    expect(refreshResult).toHaveTextContent('deferred');
+    expect(refreshResult).toHaveTextContent('Refresh deferred');
+    expect(refreshResult).toHaveTextContent('approved scanner universe refresh workflow');
   });
 
   it('keeps the cockpit advisory when the API source is unavailable', async () => {

@@ -1,11 +1,13 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Ban, CheckCircle2, FileText, ShieldAlert } from 'lucide-react';
+import { ArrowRight, Ban, CheckCircle2, FileText, RefreshCw, ShieldAlert } from 'lucide-react';
 import {
   adminOpsStatusApi,
   type AdminOpsCockpitDomain,
   type AdminOpsCockpitMaintenanceQueueItem,
+  type AdminScannerUniverseReadinessResponse,
+  type AdminScannerUniverseRefreshResponse,
   type AdminOpsStatusResponse,
 } from '../api/adminOpsStatus';
 import AdminOpsL0OverviewStrip from '../components/admin/AdminOpsL0OverviewStrip';
@@ -42,6 +44,185 @@ function priorityVariant(priorityTier: string): React.ComponentProps<typeof Term
   if (priorityTier === 'high') return 'caution';
   if (priorityTier === 'medium') return 'info';
   return 'neutral';
+}
+
+type ScannerMarket = 'us' | 'cn';
+
+const SCANNER_MARKETS: ScannerMarket[] = ['us', 'cn'];
+
+function scannerStatusVariant(status: string): React.ComponentProps<typeof TerminalChip>['variant'] {
+  if (status === 'ready') return 'success';
+  if (status === 'stale' || status === 'manual_action_required') return 'caution';
+  if (status === 'missing' || status === 'not_configured' || status === 'unavailable') return 'danger';
+  return 'neutral';
+}
+
+function readinessList(
+  readiness: AdminScannerUniverseReadinessResponse | null | undefined,
+  key: string,
+): string[] {
+  const value = readiness?.scannerUniverseReadiness?.[key];
+  return Array.isArray(value)
+    ? value.flatMap((item) => {
+      const text = String(item || '').trim();
+      return text ? [text] : [];
+    })
+    : [];
+}
+
+function ScannerUniverseReadinessPanel({
+  readinessByMarket,
+  refreshResults,
+  refreshingMarket,
+  onRefresh,
+  loadFailed,
+}: {
+  readinessByMarket: Partial<Record<ScannerMarket, AdminScannerUniverseReadinessResponse>>;
+  refreshResults: Partial<Record<ScannerMarket, AdminScannerUniverseRefreshResponse>>;
+  refreshingMarket: ScannerMarket | null;
+  onRefresh: (market: ScannerMarket) => void;
+  loadFailed: boolean;
+}) {
+  return (
+    <section data-testid="admin-scanner-universe-panel" className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="size-4 text-amber-200" />
+            <h2 className="text-sm font-semibold text-white">Scanner universe readiness</h2>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-white/54">
+            Admin-only view of bounded US/CN scanner universe readiness and the existing safe refresh request.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <TerminalChip variant="info">RBAC protected</TerminalChip>
+          <TerminalChip variant="neutral">No provider calls</TerminalChip>
+          <TerminalChip variant="neutral">No cache mutation</TerminalChip>
+        </div>
+      </div>
+
+      {loadFailed ? (
+        <TerminalNotice data-testid="admin-scanner-universe-error" variant="caution">
+          Scanner universe readiness did not load. Keep Scanner and Research Radar readiness under manual review.
+        </TerminalNotice>
+      ) : null}
+
+      <div className="grid gap-3 xl:grid-cols-2">
+        {SCANNER_MARKETS.map((market) => {
+          const readiness = readinessByMarket[market];
+          const refresh = refreshResults[market];
+          const missingFamilies = readinessList(readiness, 'missingDataFamilies');
+          const missingClasses = readinessList(readiness, 'missingDataClasses');
+          const availableClasses = readinessList(readiness, 'availableDataClasses');
+          const blockingSurfaces = readinessList(readiness, 'blockedProductSurfaces');
+          const affectedSurfaces = readiness?.affectedProductSurfaces ?? [];
+          const isRefreshing = refreshingMarket === market;
+
+          return (
+            <TerminalPanel
+              key={market}
+              as="article"
+              data-testid={`admin-scanner-universe-${market}`}
+              className="space-y-4"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/34">
+                    {market.toUpperCase()} scanner universe
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <TerminalChip variant={scannerStatusVariant(readiness?.status || 'unavailable')}>
+                      {readiness?.status || 'unavailable'}
+                    </TerminalChip>
+                    <TerminalChip variant="neutral">{readiness?.scannerUniverseStatus || 'unknown'}</TerminalChip>
+                    <TerminalChip variant="neutral">{readiness?.profile || 'profile unknown'}</TerminalChip>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  aria-label={`Request ${market.toUpperCase()} scanner universe refresh`}
+                  disabled={isRefreshing}
+                  onClick={() => onRefresh(market)}
+                  className="inline-flex min-h-[40px] items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.03] px-3 text-xs font-medium text-white/74 transition-colors hover:border-white/18 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <RefreshCw className={cn('size-4', isRefreshing ? 'animate-spin' : '')} />
+                  <span>{isRefreshing ? 'Requesting' : 'Request refresh'}</span>
+                </button>
+              </div>
+
+              <div className="grid gap-2 md:grid-cols-3">
+                <TerminalMetric label="Universe" value={String(readiness?.universeSize ?? 0)} subvalue="symbols" />
+                <TerminalMetric
+                  label="Freshness"
+                  value={readiness?.freshnessState || 'unknown'}
+                  subvalue={readiness?.lastUpdatedAt || 'no timestamp'}
+                  valueClassName="break-words text-xs leading-5"
+                />
+                <TerminalMetric
+                  label="Candidate state"
+                  value={readiness?.candidateGenerationState || 'unknown'}
+                  subvalue="scanner generation"
+                  valueClassName="break-words text-xs leading-5"
+                />
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <TerminalNestedBlock className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">Affected surfaces</p>
+                  <p className="mt-2 text-xs leading-5 text-white/68">
+                    {(affectedSurfaces.length ? affectedSurfaces : ['Scanner', 'Research Radar']).join(' / ')}
+                  </p>
+                </TerminalNestedBlock>
+                <TerminalNestedBlock className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">Blocking surfaces</p>
+                  <p className="mt-2 text-xs leading-5 text-white/68">
+                    {(blockingSurfaces.length ? blockingSurfaces : ['none reported']).join(' / ')}
+                  </p>
+                </TerminalNestedBlock>
+                <TerminalNestedBlock className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">Missing families</p>
+                  <p className="mt-2 break-words font-mono text-[11px] leading-5 text-white/68">
+                    {(missingFamilies.length ? missingFamilies : ['none reported']).join(', ')}
+                  </p>
+                </TerminalNestedBlock>
+                <TerminalNestedBlock className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">Data classes</p>
+                  <p className="mt-2 break-words font-mono text-[11px] leading-5 text-white/68">
+                    available: {(availableClasses.length ? availableClasses : ['none reported']).join(', ')}
+                  </p>
+                  <p className="mt-1 break-words font-mono text-[11px] leading-5 text-white/52">
+                    missing: {(missingClasses.length ? missingClasses : ['none reported']).join(', ')}
+                  </p>
+                </TerminalNestedBlock>
+              </div>
+
+              <TerminalNestedBlock className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">Next operator step</p>
+                <p className="mt-2 text-xs leading-5 text-white/72">{readiness?.nextOperatorAction || 'No operator step reported.'}</p>
+                {readiness?.candidateGenerationBlockers?.length ? (
+                  <p className="mt-1 break-words font-mono text-[11px] leading-5 text-white/50">
+                    blockers: {readiness.candidateGenerationBlockers.join(', ')}
+                  </p>
+                ) : null}
+              </TerminalNestedBlock>
+
+              {refresh ? (
+                <TerminalNestedBlock data-testid={`admin-scanner-universe-refresh-${market}`} className="min-w-0 border-amber-300/18">
+                  <div className="flex flex-wrap gap-1.5">
+                    <TerminalChip variant={scannerStatusVariant(refresh.status)}>{refresh.status}</TerminalChip>
+                    <TerminalChip variant="caution">{refresh.actionStatus}</TerminalChip>
+                    {boolChip(refresh.refreshExecuted, 'Refresh executed', 'Refresh deferred', true)}
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-white/68">{refresh.nextOperatorAction}</p>
+                </TerminalNestedBlock>
+              ) : null}
+            </TerminalPanel>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 function StatusBadgeRow({ domain }: { domain: AdminOpsCockpitDomain }) {
@@ -187,6 +368,10 @@ const AdminLaunchCockpitPage: React.FC = () => {
   const [snapshot, setSnapshot] = useState<AdminOpsStatusResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [scannerReadinessByMarket, setScannerReadinessByMarket] = useState<Partial<Record<ScannerMarket, AdminScannerUniverseReadinessResponse>>>({});
+  const [scannerReadinessFailed, setScannerReadinessFailed] = useState(false);
+  const [refreshResults, setRefreshResults] = useState<Partial<Record<ScannerMarket, AdminScannerUniverseRefreshResponse>>>({});
+  const [refreshingMarket, setRefreshingMarket] = useState<ScannerMarket | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -212,6 +397,49 @@ const AdminLaunchCockpitPage: React.FC = () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(SCANNER_MARKETS.map(async (market) => {
+      const payload = await adminOpsStatusApi.getScannerUniverseReadiness(market);
+      return [market, payload] as const;
+    }))
+      .then((entries) => {
+        if (!cancelled) {
+          setScannerReadinessByMarket(Object.fromEntries(entries) as Record<ScannerMarket, AdminScannerUniverseReadinessResponse>);
+          setScannerReadinessFailed(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setScannerReadinessByMarket({});
+          setScannerReadinessFailed(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const requestScannerRefresh = (market: ScannerMarket) => {
+    setRefreshingMarket(market);
+    adminOpsStatusApi.requestScannerUniverseRefresh(market)
+      .then((payload) => {
+        setRefreshResults((current) => ({ ...current, [market]: payload }));
+        return adminOpsStatusApi.getScannerUniverseReadiness(market);
+      })
+      .then((payload) => {
+        setScannerReadinessByMarket((current) => ({ ...current, [market]: payload }));
+        setScannerReadinessFailed(false);
+      })
+      .catch(() => {
+        setScannerReadinessFailed(true);
+      })
+      .finally(() => {
+        setRefreshingMarket(null);
+      });
+  };
 
   const cockpit = snapshot?.launchCockpit;
   const counts = cockpit?.summaryCounts ?? {};
@@ -304,6 +532,14 @@ const AdminLaunchCockpitPage: React.FC = () => {
       </TerminalPanel>
 
       <MaintenanceQueue items={maintenanceQueue} />
+
+      <ScannerUniverseReadinessPanel
+        readinessByMarket={scannerReadinessByMarket}
+        refreshResults={refreshResults}
+        refreshingMarket={refreshingMarket}
+        onRefresh={requestScannerRefresh}
+        loadFailed={scannerReadinessFailed}
+      />
 
       <section data-testid="admin-launch-cockpit-blockers" className="space-y-3">
         <div className="flex items-center gap-2">

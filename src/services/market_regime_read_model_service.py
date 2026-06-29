@@ -96,7 +96,7 @@ def build_market_regime_read_model_from_evidence(source: Mapping[str, Any]) -> d
         "symbolContext": _symbol_context(source),
         "dataQuality": data_quality,
         "readiness": readiness,
-        "surfaceHints": _surface_hints(),
+        "surfaceHints": _surface_hints(readiness=readiness, data_quality=data_quality),
         "sourceEvidenceContractVersion": str(
             source.get("contractVersion") or MARKET_REGIME_EVIDENCE_CONTRACT_VERSION
         ),
@@ -131,7 +131,7 @@ def _failed_closed_source(
         "requiredBars": int(required_bars or DEFAULT_REQUIRED_BARS),
         "requireAdjusted": bool(require_adjusted),
         "missingDataFamilies": ["historical_ohlcv"],
-        "blockedProductSurfaces": ["Scanner", "Market Overview", "Watchlist", "Research"],
+        "blockedProductSurfaces": ["Scanner", "Market Overview", "Watchlist", "Research Radar"],
         "nextOperatorAction": "Provide readable local market regime evidence inputs, then rerun.",
         "evidence": {},
         "regimeSummary": {"label": "insufficient_data", "status": "failed_closed"},
@@ -470,6 +470,7 @@ def _card(
 ) -> dict[str, Any]:
     return {
         "id": card_id,
+        "cardId": card_id,
         "title": title,
         "status": status,
         "severity": severity,
@@ -546,33 +547,64 @@ def _symbol_context(source: Mapping[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
-def _surface_hints() -> list[dict[str, Any]]:
+def _surface_hints(
+    *,
+    readiness: Mapping[str, Any],
+    data_quality: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    status_hint = _surface_status_hint(readiness=readiness, data_quality=data_quality)
     return [
         {
             "surface": "market_overview",
+            "surfaceName": "Market Overview",
             "usage": "regime_summary_and_top_evidence_cards",
+            "statusHint": status_hint,
             "readOnly": True,
             "routeChangeImplied": False,
         },
         {
-            "surface": "research",
+            "surface": "research_radar",
+            "surfaceName": "Research Radar",
             "usage": "full_evidence_cards_and_data_quality",
+            "statusHint": status_hint,
             "readOnly": True,
             "routeChangeImplied": False,
         },
         {
             "surface": "scanner",
+            "surfaceName": "Scanner",
             "usage": "readiness_only",
+            "statusHint": status_hint,
             "readOnly": True,
             "candidateGenerationEnabled": False,
         },
         {
             "surface": "watchlist",
+            "surfaceName": "Watchlist",
             "usage": "regime_context_only",
+            "statusHint": status_hint,
             "readOnly": True,
             "rankingEnabled": False,
         },
     ]
+
+
+def _surface_status_hint(*, readiness: Mapping[str, Any], data_quality: Mapping[str, Any]) -> str:
+    label = str(readiness.get("label") or "").strip()
+    if label == "product_ready":
+        return "evidence_available"
+    if label == "degraded":
+        return "evidence_degraded"
+    if label == "blocked":
+        missing = set(data_quality.get("missingDataFamilies") or [])
+        if "quote_snapshot" in missing:
+            return "quote_snapshot_missing"
+        if "historical_ohlcv" in missing or "adjusted_prices" in missing:
+            return "local_history_missing"
+        return "evidence_blocked"
+    if label == "failed_closed":
+        return "evidence_failed_closed"
+    return "evidence_unknown"
 
 
 def _number(value: Any) -> float | None:

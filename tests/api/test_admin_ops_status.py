@@ -278,6 +278,21 @@ def test_admin_scanner_universe_readiness_exposes_operator_fields_without_mutati
     _assert_no_sensitive_markers(payload)
 
 
+def test_admin_scanner_universe_endpoints_require_admin_ops_capability(app: FastAPI) -> None:
+    app.state.scanner_universe_operator_service = _ScannerUniverseOperatorFixture()
+
+    with _client(app, _regular_user) as client:
+        readiness = client.get("/api/v1/admin/ops/scanner-universe-readiness")
+        refresh = client.post("/api/v1/admin/ops/scanner-universe-refresh")
+
+    assert readiness.status_code == 403
+    assert readiness.json()["detail"]["error"] == "admin_required"
+    assert refresh.status_code == 403
+    assert refresh.json()["detail"]["error"] == "admin_required"
+    _assert_no_sensitive_markers(readiness.json())
+    _assert_no_sensitive_markers(refresh.json())
+
+
 def test_admin_scanner_universe_refresh_action_defers_when_no_safe_refresh_seam(app: FastAPI) -> None:
     app.state.scanner_universe_operator_service = _ScannerUniverseOperatorFixture()
 

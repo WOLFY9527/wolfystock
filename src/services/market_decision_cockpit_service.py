@@ -18,6 +18,7 @@ from src.services.market_overview_service import MarketOverviewService
 from src.services.market_regime_read_model_service import build_market_regime_read_model
 from src.services.market_regime_decision_engine import build_market_regime_decision
 from src.services.options_market_structure_observation import build_options_market_structure_observation
+from src.services.quote_snapshot_config import get_configured_us_quote_snapshot_cache_path
 from src.services.research_radar_candidate_engine import build_research_radar_candidate_queue
 from src.services.consumer_issue_labels import build_consumer_issues, sanitize_consumer_reason_payload
 from src.services.us_history_helper import get_configured_us_stock_parquet_dir
@@ -217,7 +218,7 @@ class MarketDecisionCockpitService:
         return build_market_regime_read_model(
             market="US",
             ohlcv_cache_dir=get_configured_us_stock_parquet_dir(),
-            quote_snapshot_cache_path=None,
+            quote_snapshot_cache_path=get_configured_us_quote_snapshot_cache_path(),
         )
 
     def _resolve_market_regime_read_model(

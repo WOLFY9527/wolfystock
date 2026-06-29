@@ -157,6 +157,20 @@ def test_ok_source_evidence_returns_product_ready_read_model(tmp_path: Path) -> 
         "quote_snapshot",
         "data_quality",
     }
+    assert {card["cardId"] for card in model["evidenceCards"]} == {
+        "benchmark_trend",
+        "growth_risk_proxy",
+        "breadth",
+        "volatility",
+        "quote_snapshot",
+        "data_quality",
+    }
+    assert model["surfaceHints"][0]["statusHint"] == "evidence_available"
+    assert {hint["surfaceName"] for hint in model["surfaceHints"]} >= {
+        "Market Overview",
+        "Research Radar",
+        "Scanner",
+    }
 
 
 def test_risk_off_cards_are_negative_or_warning_without_advice_text(tmp_path: Path) -> None:
@@ -195,6 +209,7 @@ def test_missing_quote_snapshot_preserves_source_state_and_marks_quote_card_bloc
     assert quote_card["severity"] == "blocker"
     assert model["dataQuality"]["quoteSnapshotCoverage"]["state"] == "partial"
     assert model["dataQuality"]["quoteSnapshotCoverage"]["missingSymbols"] == ["AAPL"]
+    assert model["surfaceHints"][0]["statusHint"] == "quote_snapshot_missing"
 
 
 def test_invalid_source_input_fails_closed_without_raw_exception_leakage(tmp_path: Path) -> None:
