@@ -136,6 +136,79 @@ describe('researchRadarApi', () => {
     expect(payload.evidenceHub.scannerCandidates.status).toBe('available');
     expect(payload.evidenceHub.backtestSamples.blocker).toBe('Backtest samples have not been prepared for the radar symbols.');
     expect(payload.evidenceHub.missingEvidenceStates[0]?.key).toBe('backtest');
+    expect(payload.marketLevelFallback).toBeNull();
+  });
+
+  it('loads and normalizes the market-level fallback without creating candidates', async () => {
+    const { researchRadarApi } = await import('../researchRadar');
+
+    get.mockResolvedValueOnce({
+      data: {
+        schema_version: 'research_radar_api_v1',
+        generated_at: '2026-06-15T09:30:00Z',
+        research_queue: [],
+        aggregate_summary: {
+          queue_quality: 'degraded',
+          priority_counts: {},
+        },
+        evidence_gaps: ['Research candidates unavailable'],
+        market_context_fit: 'unavailable',
+        no_advice_disclosure: 'Research-only queue.',
+        data_quality: { status: 'degraded' },
+        evidence_hub: {},
+        market_level_fallback: {
+          available: true,
+          label: 'Market-level context',
+          summary: 'Market-level evidence is available while candidate research is unavailable.',
+          candidate_generation_executed: false,
+          candidate_unavailable_reason: 'scanner_candidates_unavailable',
+          regime: { label: 'risk_on_confirming', status: 'ok' },
+          product_summary: 'Risk-on confirming evidence is currently present because local evidence fields align.',
+          evidence_cards: [
+            {
+              card_id: 'benchmark_trend',
+              title: 'Benchmark Trend',
+              status: 'positive',
+              severity: 'info',
+              headline: 'Benchmark trend evidence is positive.',
+              reasons: ['Benchmark local trend fields are aligned.'],
+              observation_only: true,
+              decision_grade: false,
+            },
+          ],
+          data_quality: {
+            adjusted_coverage_state: 'available',
+            ohlcv_coverage: { state: 'available' },
+            quote_snapshot_coverage: { state: 'available' },
+            missing_data_families: [],
+            blocked_product_surfaces: [],
+          },
+          readiness: {
+            label: 'product_ready',
+            status: 'ok',
+            missing_data_families: [],
+            blocked_product_surfaces: [],
+            next_operator_action: 'Market regime read model is available from local evidence inputs.',
+          },
+          missing_data_families: [],
+          blocked_product_surfaces: [],
+          next_operator_action: 'Market regime read model is available from local evidence inputs.',
+          observation_only: true,
+          decision_grade: false,
+        },
+      },
+    });
+
+    const payload = await researchRadarApi.getResearchRadar();
+
+    expect(payload.researchQueue).toEqual([]);
+    expect(payload.marketLevelFallback?.available).toBe(true);
+    expect(payload.marketLevelFallback?.candidateGenerationExecuted).toBe(false);
+    expect(payload.marketLevelFallback?.regime?.label).toBe('risk_on_confirming');
+    expect(payload.marketLevelFallback?.readiness?.label).toBe('product_ready');
+    expect(payload.marketLevelFallback?.evidenceCards?.[0]?.cardId).toBe('benchmark_trend');
+    expect(payload.marketLevelFallback?.dataQuality?.ohlcvCoverage?.state).toBe('available');
+    expect(payload.marketLevelFallback?.nextOperatorAction).toBe('Market regime read model is available from local evidence inputs.');
   });
 
   it('loads and normalizes the unified research queue hub', async () => {

@@ -274,6 +274,7 @@ class ResearchRadarService:
         profile: str | None = None,
         owner_id: str | None = None,
         limit: int = 20,
+        market_regime_read_model: Mapping[str, Any] | Any | None = None,
     ) -> dict[str, Any]:
         """Read recent scanner candidates and build a fail-closed radar payload."""
 
@@ -284,7 +285,11 @@ class ResearchRadarService:
             "profile": _optional_token(profile),
         }
         if self.scanner_repository is None or not owner_id:
-            return self.build_radar(candidates=[], source=source)
+            return self.build_radar(
+                candidates=[],
+                source=source,
+                market_regime_read_model=market_regime_read_model,
+            )
 
         try:
             runs = self.scanner_repository.get_recent_runs(
@@ -311,12 +316,21 @@ class ResearchRadarService:
                 return self.build_radar(
                     candidates=[_scanner_candidate_to_engine_input(candidate) for candidate in candidates],
                     source=source,
+                    market_regime_read_model=market_regime_read_model,
                 )
         except Exception:
             source["readState"] = "degraded"
-            return self.build_radar(candidates=[], source=source)
+            return self.build_radar(
+                candidates=[],
+                source=source,
+                market_regime_read_model=market_regime_read_model,
+            )
 
-        return self.build_radar(candidates=[], source=source)
+        return self.build_radar(
+            candidates=[],
+            source=source,
+            market_regime_read_model=market_regime_read_model,
+        )
 
     def build_radar(
         self,
@@ -326,6 +340,7 @@ class ResearchRadarService:
         stock_structure_context: Mapping[str, Any] | Any | None = None,
         theme_leadership_context: Mapping[str, Any] | Any | None = None,
         evidence_quality_metadata: Mapping[str, Any] | Any | None = None,
+        market_regime_read_model: Mapping[str, Any] | Any | None = None,
         source: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Project candidate-engine output into the backend API contract."""
@@ -420,6 +435,10 @@ class ResearchRadarService:
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
             "dataQuality": data_quality,
             "evidenceHub": evidence_hub,
+            "marketLevelFallback": _market_level_fallback(
+                queue=queue,
+                market_regime_read_model=market_regime_read_model,
+            ),
             "observationOnly": _OBSERVATION_ONLY,
             "decisionGrade": _DECISION_GRADE,
         }
@@ -672,6 +691,133 @@ def _evidence_item(
         "observationOnly": _OBSERVATION_ONLY,
         "decisionGrade": _DECISION_GRADE,
     }
+
+
+def _market_level_fallback(
+    *,
+    queue: Sequence[Mapping[str, Any]],
+    market_regime_read_model: Mapping[str, Any] | Any | None,
+) -> dict[str, Any] | None:
+    if queue:
+        return None
+    read_model = _mapping(market_regime_read_model)
+    if not read_model:
+        return None
+
+    readiness = _safe_readiness(read_model)
+    regime = _safe_regime(read_model)
+    cards = _market_level_fallback_cards(read_model)
+    product_summary = _safe_public_sentence(
+        read_model.get("productSummary"),
+        fallback="Market-level evidence is available for context while candidate research is unavailable.",
+    )
+    next_operator_action = _safe_public_sentence(
+        read_model.get("nextOperatorAction") or readiness.get("nextOperatorAction"),
+        fallback="Resolve missing market evidence inputs, then rerun the read model.",
+    )
+    missing_families = _safe_text_list(
+        read_model.get("missingDataFamilies") or readiness.get("missingDataFamilies")
+    )
+    blocked_surfaces = _safe_text_list(
+        read_model.get("blockedProductSurfaces") or readiness.get("blockedProductSurfaces")
+    )
+    return {
+        "available": True,
+        "label": "Market-level context",
+        "summary": (
+            "Market-level evidence is available while candidate research is unavailable or has not executed."
+            if readiness.get("label") == "product_ready"
+            else "Market-level evidence is degraded or blocked; candidate research is unavailable or has not executed."
+        ),
+        "candidateGenerationExecuted": False,
+        "candidateUnavailableReason": "scanner_candidates_unavailable",
+        "regime": regime,
+        "productSummary": product_summary,
+        "evidenceCards": cards,
+        "dataQuality": _safe_market_data_quality(read_model.get("dataQuality")),
+        "readiness": readiness,
+        "missingDataFamilies": missing_families,
+        "blockedProductSurfaces": blocked_surfaces,
+        "nextOperatorAction": next_operator_action,
+        "observationOnly": _OBSERVATION_ONLY,
+        "decisionGrade": _DECISION_GRADE,
+    }
+
+
+def _safe_regime(read_model: Mapping[str, Any]) -> dict[str, str]:
+    regime = _mapping(read_model.get("regime"))
+    return {
+        "label": _safe_token(read_model.get("regimeLabel") or regime.get("label"), fallback="insufficient_data"),
+        "status": _safe_token(read_model.get("regimeStatus") or regime.get("status") or read_model.get("status"), fallback="failed_closed"),
+    }
+
+
+def _safe_readiness(read_model: Mapping[str, Any]) -> dict[str, Any]:
+    readiness = _mapping(read_model.get("readiness"))
+    missing = _safe_text_list(readiness.get("missingDataFamilies") or read_model.get("missingDataFamilies"))
+    blocked = _safe_text_list(readiness.get("blockedProductSurfaces") or read_model.get("blockedProductSurfaces"))
+    return {
+        "label": _safe_token(readiness.get("label"), fallback="failed_closed"),
+        "status": _safe_token(readiness.get("status") or read_model.get("status"), fallback="failed_closed"),
+        "missingDataFamilies": missing,
+        "blockedProductSurfaces": blocked,
+        "nextOperatorAction": _safe_public_sentence(
+            readiness.get("nextOperatorAction") or read_model.get("nextOperatorAction"),
+            fallback="Resolve missing market evidence inputs, then rerun the read model.",
+        ),
+    }
+
+
+def _safe_market_data_quality(value: Any) -> dict[str, Any]:
+    data_quality = _mapping(value)
+    return {
+        "adjustedCoverageState": _safe_token(data_quality.get("adjustedCoverageState"), fallback="missing"),
+        "ohlcvCoverage": _safe_coverage_state(data_quality.get("ohlcvCoverage")),
+        "quoteSnapshotCoverage": _safe_coverage_state(data_quality.get("quoteSnapshotCoverage")),
+        "missingDataFamilies": _safe_text_list(data_quality.get("missingDataFamilies")),
+        "blockedProductSurfaces": _safe_text_list(data_quality.get("blockedProductSurfaces")),
+        "failClosedReasons": _safe_text_list(data_quality.get("failClosedReasons")),
+    }
+
+
+def _safe_coverage_state(value: Any) -> dict[str, Any]:
+    coverage = _mapping(value)
+    result = {
+        "state": _safe_token(coverage.get("state"), fallback="missing"),
+    }
+    for key in ("requiredBars",):
+        if _safe_int(coverage.get(key)) is not None:
+            result[key] = _safe_int(coverage.get(key))
+    return result
+
+
+def _market_level_fallback_cards(read_model: Mapping[str, Any]) -> list[dict[str, Any]]:
+    cards: list[dict[str, Any]] = []
+    for raw_card in list(read_model.get("evidenceCards") or []):
+        card = _mapping(raw_card)
+        card_id = _safe_token(card.get("cardId") or card.get("id"), fallback="")
+        title = _safe_public_sentence(card.get("title"), fallback="")
+        headline = _safe_public_sentence(card.get("headline"), fallback="")
+        if not card_id or not title or not headline:
+            continue
+        cards.append(
+            {
+                "cardId": card_id,
+                "title": title,
+                "status": _safe_token(card.get("status"), fallback="unavailable"),
+                "severity": _safe_token(card.get("severity"), fallback="blocker"),
+                "headline": headline,
+                "reasons": [
+                    _safe_public_sentence(reason, fallback="Evidence needs review.")
+                    for reason in _safe_text_list(card.get("reasons"))
+                ][:3],
+                "observationOnly": _OBSERVATION_ONLY,
+                "decisionGrade": _DECISION_GRADE,
+            }
+        )
+        if len(cards) >= 3:
+            break
+    return cards
 
 
 def _evidence_hub_status(value: Any) -> str:
@@ -948,6 +1094,41 @@ def _compact_descriptor_key(value: Any) -> str:
 
 def _descriptor_labels(descriptors: Sequence[Mapping[str, str]]) -> list[str]:
     return _dedupe(str(descriptor.get("label") or "") for descriptor in descriptors)
+
+
+def _safe_token(value: Any, *, fallback: str) -> str:
+    token = _text(value).strip()
+    if not token:
+        return fallback
+    return "".join(character for character in token if character.isalnum() or character in {"_", "-", "."})[:80] or fallback
+
+
+def _safe_public_sentence(value: Any, *, fallback: str) -> str:
+    text = _text(value).strip()
+    if not text:
+        return fallback
+    lowered = text.lower()
+    unsafe_markers = (
+        "request_id",
+        "requestid",
+        "trace_id",
+        "traceid",
+        "provider",
+        "raw",
+        "debug",
+        "token",
+        "secret",
+        "cache key",
+        "schema",
+        "source authority",
+    )
+    if any(marker in lowered for marker in unsafe_markers):
+        return fallback
+    if any(term in lowered for term in ("buy", "sell", "hold", "recommendation", "target price", "stop loss", "position sizing")):
+        return fallback
+    if any(term in text for term in ("买入", "卖出", "持有", "推荐", "目标价", "止损", "仓位")):
+        return fallback
+    return text[:320]
 
 
 def _dedupe_descriptors(descriptors: Iterable[Mapping[str, str]]) -> list[dict[str, str]]:

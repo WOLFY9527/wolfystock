@@ -22,6 +22,7 @@ import { createParsedApiError, getParsedApiError, type ParsedApiError } from '..
 import {
   researchRadarApi,
   type ResearchRadarEvidenceHubItem,
+  type ResearchRadarMarketLevelFallback,
   type ResearchRadarOnboardingGuidance,
   type ResearchRadarResponse,
   type UnifiedResearchQueueItem,
@@ -152,6 +153,13 @@ function evidenceHubStatusTone(value: string | null | undefined): string {
   if (normalized === 'available') return 'success';
   if (normalized === 'partial') return 'warning';
   return 'error';
+}
+
+function readModelLabel(value: string | null | undefined, locale: 'zh' | 'en'): string {
+  const raw = String(value || '').trim();
+  const mapped = consumerStatusValue(value, locale);
+  if (mapped !== '--' && mapped !== raw) return mapped;
+  return (raw || '--').replace(/_/g, ' ');
 }
 
 function freshnessLabel(state: UnifiedResearchQueueItem['freshness']['state'], locale: 'zh' | 'en'): string {
@@ -685,6 +693,107 @@ function ResearchQueueHubPanel({
   );
 }
 
+function MarketLevelFallbackPanel({
+  fallback,
+  locale,
+}: {
+  fallback: ResearchRadarMarketLevelFallback | null | undefined;
+  locale: 'zh' | 'en';
+}) {
+  if (!fallback?.available || fallback.observationOnly === false || fallback.decisionGrade === true) {
+    return null;
+  }
+  const cards = (fallback.evidenceCards ?? []).filter((card) => card.observationOnly !== false && card.decisionGrade !== true);
+  const missingFamilies = safeResearchQueueList(
+    fallback.missingDataFamilies ?? fallback.readiness?.missingDataFamilies ?? fallback.dataQuality?.missingDataFamilies,
+    locale,
+    locale === 'en' ? 'No missing market evidence family reported.' : '未报告缺失的市场证据族。',
+  );
+  const blockedSurfaces = safeResearchQueueList(
+    fallback.blockedProductSurfaces ?? fallback.readiness?.blockedProductSurfaces ?? fallback.dataQuality?.blockedProductSurfaces,
+    locale,
+    locale === 'en' ? 'No blocked product surface reported.' : '未报告阻塞的产品界面。',
+  );
+  const action = safeResearchQueueText(
+    fallback.nextOperatorAction ?? fallback.readiness?.nextOperatorAction,
+    locale,
+    locale === 'en' ? 'Review market evidence inputs before using candidate research.' : '先复核市场证据输入，再使用候选研究。',
+  );
+  return (
+    <RoughSectionCard
+      eyebrow={locale === 'en' ? 'Market-level context' : '市场级上下文'}
+      title={locale === 'en' ? 'Market evidence while candidate research is unavailable' : '候选研究不可用时的市场证据'}
+      className="md:col-span-2"
+    >
+      <div data-testid="research-radar-market-level-fallback" className="space-y-4">
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-lg border border-[color:var(--wolfy-divider)] bg-black/10 p-3">
+            <div className="text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Scope' : '范围'}</div>
+            <div className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">
+              {safeResearchQueueText(fallback.label, locale, locale === 'en' ? 'Market-level context' : '市场级上下文')}
+            </div>
+            <div className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+              {locale === 'en'
+                ? 'Candidate research is unavailable or has not executed. This is not stock candidate ranking.'
+                : '候选研究不可用或尚未执行；这里不是个股候选排序。'}
+            </div>
+          </div>
+          <div className="rounded-lg border border-[color:var(--wolfy-divider)] bg-black/10 p-3">
+            <div className="text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Regime' : '市场状态'}</div>
+            <div className="mt-1 flex flex-wrap gap-2">
+              <StatusBadge status={toneFor(fallback.regime?.status)} label={readModelLabel(fallback.regime?.label, locale)} size="sm" />
+              <StatusBadge status={toneFor(fallback.readiness?.label)} label={readModelLabel(fallback.readiness?.label, locale)} size="sm" />
+            </div>
+          </div>
+          <div className="rounded-lg border border-[color:var(--wolfy-divider)] bg-black/10 p-3">
+            <div className="text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Candidate state' : '候选状态'}</div>
+            <div className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">
+              {fallback.candidateGenerationExecuted
+                ? (locale === 'en' ? 'Candidate generation executed' : '候选生成已执行')
+                : (locale === 'en' ? 'Candidate generation not executed' : '候选生成未执行')}
+            </div>
+            <div className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+              {locale === 'en' ? 'No candidates, ranks, scores, or tickers are created by this fallback.' : '该 fallback 不创建候选、排名、评分或 ticker。'}
+            </div>
+          </div>
+        </div>
+        <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+          {safeResearchQueueText(fallback.productSummary, locale, locale === 'en' ? 'Market-level evidence summary is unavailable.' : '市场级证据摘要暂不可用。')}
+        </p>
+        <div className="grid gap-3 md:grid-cols-3">
+          {cards.map((card, index) => (
+            <div key={`${card.cardId || card.title || 'card'}-${index}`} className="rounded-lg border border-[color:var(--wolfy-divider)] bg-black/10 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">
+                  {safeResearchQueueText(card.title, locale, locale === 'en' ? 'Evidence card' : '证据卡')}
+                </div>
+                <StatusBadge status={toneFor(card.status)} label={readModelLabel(card.status, locale)} size="sm" />
+              </div>
+              <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+                {safeResearchQueueText(card.headline, locale, locale === 'en' ? 'Evidence needs review.' : '证据需要复核。')}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          <RoughBulletList
+            items={missingFamilies}
+            emptyText={locale === 'en' ? 'No missing market evidence family reported.' : '未报告缺失的市场证据族。'}
+          />
+          <RoughBulletList
+            items={blockedSurfaces}
+            emptyText={locale === 'en' ? 'No blocked product surface reported.' : '未报告阻塞的产品界面。'}
+          />
+          <div className="rounded-lg border border-[color:var(--wolfy-divider)] bg-black/10 p-3">
+            <div className="text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Next operator action' : '下一步操作'}</div>
+            <div className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{action}</div>
+          </div>
+        </div>
+      </div>
+    </RoughSectionCard>
+  );
+}
+
 export default function ResearchRadarPage() {
   const { language } = useI18n();
   const locale = language === 'en' ? 'en' : 'zh';
@@ -745,6 +854,7 @@ export default function ResearchRadarPage() {
 
   const queueItems = useMemo(() => data?.researchQueue ?? [], [data?.researchQueue]);
   const unifiedQueueSize = unifiedQueue?.aggregateSummary.itemCount ?? unifiedQueue?.researchQueue.length ?? queueItems.length;
+  const hasMarketLevelFallback = Boolean(data?.marketLevelFallback?.available && queueItems.length === 0 && (unifiedQueue?.researchQueue.length ?? 0) === 0);
   const shouldShowObservationBoundary = Boolean(data && (queueItems.length > 0 || isUnifiedResearchQueueDisplaySafe(unifiedQueue)));
   const showOnboardingCta = Boolean(data && (queueItems.length === 0 || data.emptyStateActions.length || data.starterResearchWorkflow.length));
   const dataHealthSummary = useMemo(
@@ -918,6 +1028,12 @@ export default function ResearchRadarPage() {
                     locale={locale}
                     localize={localize}
                   />
+                  {hasMarketLevelFallback ? (
+                    <MarketLevelFallbackPanel
+                      fallback={data.marketLevelFallback}
+                      locale={locale}
+                    />
+                  ) : null}
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Queue' : '队列'} title={locale === 'en' ? 'Research queue' : '研究队列'}>
                     {queueItems.length ? (
                       <div className="space-y-3">

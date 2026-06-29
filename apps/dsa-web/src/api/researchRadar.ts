@@ -52,6 +52,51 @@ export type ResearchRadarEvidenceHub = {
   missingEvidenceStates: ResearchRadarEvidenceHubItem[];
 };
 
+export type ResearchRadarMarketLevelFallbackCard = {
+  cardId?: string | null;
+  title?: string | null;
+  status?: string | null;
+  severity?: string | null;
+  headline?: string | null;
+  reasons?: string[];
+  observationOnly?: boolean;
+  decisionGrade?: boolean;
+};
+
+export type ResearchRadarMarketLevelFallback = {
+  available?: boolean;
+  label?: string | null;
+  summary?: string | null;
+  candidateGenerationExecuted?: boolean;
+  candidateUnavailableReason?: string | null;
+  regime?: {
+    label?: string | null;
+    status?: string | null;
+  } | null;
+  productSummary?: string | null;
+  evidenceCards?: ResearchRadarMarketLevelFallbackCard[];
+  dataQuality?: {
+    adjustedCoverageState?: string | null;
+    ohlcvCoverage?: { state?: string | null } | null;
+    quoteSnapshotCoverage?: { state?: string | null } | null;
+    missingDataFamilies?: string[];
+    blockedProductSurfaces?: string[];
+    failClosedReasons?: string[];
+  } | null;
+  readiness?: {
+    label?: string | null;
+    status?: string | null;
+    missingDataFamilies?: string[];
+    blockedProductSurfaces?: string[];
+    nextOperatorAction?: string | null;
+  } | null;
+  missingDataFamilies?: string[];
+  blockedProductSurfaces?: string[];
+  nextOperatorAction?: string | null;
+  observationOnly?: boolean;
+  decisionGrade?: boolean;
+};
+
 export type ResearchRadarSuggestedResearchEntrypoint = {
   surface?: string | null;
   route?: string | null;
@@ -79,6 +124,7 @@ export type ResearchRadarResponse = {
     missingEvidence?: string[];
   } | null;
   evidenceHub: ResearchRadarEvidenceHub;
+  marketLevelFallback?: ResearchRadarMarketLevelFallback | null;
   onboardingGuidance?: ResearchRadarOnboardingGuidance | null;
   emptyStateActions: ResearchRadarEmptyStateAction[];
   starterResearchWorkflow: string[];
@@ -206,6 +252,56 @@ function normalizeEvidenceHub(payload: Partial<ResearchRadarEvidenceHub> | null 
   };
 }
 
+function normalizeMarketLevelFallback(payload: Partial<ResearchRadarMarketLevelFallback> | null | undefined): ResearchRadarMarketLevelFallback | null {
+  if (!payload || payload.available !== true || payload.observationOnly === false || payload.decisionGrade === true) {
+    return null;
+  }
+  return {
+    available: true,
+    label: payload.label ?? null,
+    summary: payload.summary ?? null,
+    candidateGenerationExecuted: payload.candidateGenerationExecuted === true,
+    candidateUnavailableReason: payload.candidateUnavailableReason ?? null,
+    regime: payload.regime ? {
+      label: payload.regime.label ?? null,
+      status: payload.regime.status ?? null,
+    } : null,
+    productSummary: payload.productSummary ?? null,
+    evidenceCards: Array.isArray(payload.evidenceCards)
+      ? payload.evidenceCards.map((card) => ({
+        cardId: card?.cardId ?? null,
+        title: card?.title ?? null,
+        status: card?.status ?? null,
+        severity: card?.severity ?? null,
+        headline: card?.headline ?? null,
+        reasons: normalizeStringList(card?.reasons),
+        observationOnly: card?.observationOnly !== false,
+        decisionGrade: false,
+      }))
+      : [],
+    dataQuality: payload.dataQuality ? {
+      adjustedCoverageState: payload.dataQuality.adjustedCoverageState ?? null,
+      ohlcvCoverage: payload.dataQuality.ohlcvCoverage ?? null,
+      quoteSnapshotCoverage: payload.dataQuality.quoteSnapshotCoverage ?? null,
+      missingDataFamilies: normalizeStringList(payload.dataQuality.missingDataFamilies),
+      blockedProductSurfaces: normalizeStringList(payload.dataQuality.blockedProductSurfaces),
+      failClosedReasons: normalizeStringList(payload.dataQuality.failClosedReasons),
+    } : null,
+    readiness: payload.readiness ? {
+      label: payload.readiness.label ?? null,
+      status: payload.readiness.status ?? null,
+      missingDataFamilies: normalizeStringList(payload.readiness.missingDataFamilies),
+      blockedProductSurfaces: normalizeStringList(payload.readiness.blockedProductSurfaces),
+      nextOperatorAction: payload.readiness.nextOperatorAction ?? null,
+    } : null,
+    missingDataFamilies: normalizeStringList(payload.missingDataFamilies),
+    blockedProductSurfaces: normalizeStringList(payload.blockedProductSurfaces),
+    nextOperatorAction: payload.nextOperatorAction ?? null,
+    observationOnly: true,
+    decisionGrade: false,
+  };
+}
+
 function normalizeResearchRadarResponse(payload: unknown): ResearchRadarResponse {
   const normalized = toCamelCase<ResearchRadarResponse>(payload);
   return {
@@ -222,6 +318,7 @@ function normalizeResearchRadarResponse(payload: unknown): ResearchRadarResponse
     noAdviceDisclosure: normalized.noAdviceDisclosure ?? null,
     dataQuality: normalized.dataQuality ?? null,
     evidenceHub: normalizeEvidenceHub(normalized.evidenceHub),
+    marketLevelFallback: normalizeMarketLevelFallback(normalized.marketLevelFallback),
     onboardingGuidance: normalized.onboardingGuidance ? {
       title: normalized.onboardingGuidance.title ?? null,
       summary: normalized.onboardingGuidance.summary ?? null,
