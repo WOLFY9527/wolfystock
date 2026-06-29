@@ -141,6 +141,43 @@ class AdminOpsLaunchCockpit(_AdminOpsStatusModel):
     priority_summary: Dict[str, int] = Field(default_factory=dict, alias="prioritySummary")
 
 
+class AdminScannerUniverseReadinessResponse(_AdminOpsStatusModel):
+    contract_version: str = Field(default="scanner_universe_operator_readiness_v1", alias="contractVersion")
+    status: str
+    scanner_universe_status: Optional[str] = Field(default=None, alias="scannerUniverseStatus")
+    market: str = "cn"
+    profile: str = "cn_preopen_v1"
+    freshness_state: str = Field(default="unknown", alias="freshnessState")
+    last_updated_at: Optional[str] = Field(default=None, alias="lastUpdatedAt")
+    universe_size: int = Field(default=0, alias="universeSize")
+    affected_product_surfaces: List[str] = Field(default_factory=list, alias="affectedProductSurfaces")
+    next_operator_action: str = Field(default="", alias="nextOperatorAction")
+    scanner_universe_readiness: Dict[str, Any] = Field(default_factory=dict, alias="scannerUniverseReadiness")
+    candidate_generation_state: Optional[str] = Field(default=None, alias="candidateGenerationState")
+    candidate_generation_blockers: List[str] = Field(default_factory=list, alias="candidateGenerationBlockers")
+    read_only: bool = Field(default=True, alias="readOnly")
+    no_external_calls: bool = Field(default=True, alias="noExternalCalls")
+    mutation_enabled: bool = Field(default=False, alias="mutationEnabled")
+    provider_calls_enabled: bool = Field(default=False, alias="providerCallsEnabled")
+    consumer_visible: bool = Field(default=False, alias="consumerVisible")
+
+
+class AdminScannerUniverseRefreshResponse(_AdminOpsStatusModel):
+    contract_version: str = Field(default="scanner_universe_operator_action_v1", alias="contractVersion")
+    status: str
+    action_status: str = Field(alias="actionStatus")
+    market: str = "cn"
+    profile: str = "cn_preopen_v1"
+    refresh_executed: bool = Field(default=False, alias="refreshExecuted")
+    mutation_enabled: bool = Field(default=False, alias="mutationEnabled")
+    no_external_calls: bool = Field(default=True, alias="noExternalCalls")
+    provider_calls_enabled: bool = Field(default=False, alias="providerCallsEnabled")
+    runtime_behavior_changed: bool = Field(default=False, alias="runtimeBehaviorChanged")
+    next_operator_action: str = Field(default="", alias="nextOperatorAction")
+    before: Dict[str, Any] = Field(default_factory=dict)
+    after: Dict[str, Any] = Field(default_factory=dict)
+
+
 class AdminBuildProvenance(_AdminOpsStatusModel):
     contract: str = "admin_build_provenance_v1"
     read_only: bool = Field(default=True, alias="readOnly")

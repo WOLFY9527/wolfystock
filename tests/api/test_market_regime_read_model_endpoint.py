@@ -145,15 +145,9 @@ def _client() -> TestClient:
 def test_market_regime_read_model_route_is_exposed() -> None:
     app = FastAPI()
     app.include_router(market.router, prefix="/api/v1/market")
-    routes = {
-        (method, route.path)
-        for route in app.routes
-        if hasattr(route, "methods")
-        for method in (route.methods or set())
-        if method not in {"HEAD", "OPTIONS"}
-    }
+    paths = TestClient(app).get("/openapi.json").json()["paths"]
 
-    assert ("GET", "/api/v1/market/regime-read-model") in routes
+    assert "get" in paths["/api/v1/market/regime-read-model"]
 
 
 def test_market_regime_read_model_endpoint_returns_product_ready_payload(monkeypatch) -> None:

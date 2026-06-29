@@ -3,17 +3,34 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 
-from api.deps import CurrentUser, require_admin_capability
-from api.v1.schemas.admin_ops_status import AdminOpsStatusResponse
+from api.deps import CurrentUser, get_database_manager, require_admin_capability
+from api.v1.schemas.admin_ops_status import (
+    AdminOpsStatusResponse,
+    AdminScannerUniverseReadinessResponse,
+    AdminScannerUniverseRefreshResponse,
+)
 from api.v1.schemas.admin_surface_readiness import BackendSurfaceReadinessResponse
 from src.services.admin_ops_status_service import AdminOpsStatusService
 from src.services.admin_surface_contract_readiness_service import (
     AdminSurfaceContractReadinessService,
 )
+from src.services.market_scanner_ops_service import MarketScannerOperationsService
+from src.storage import DatabaseManager
 
 router = APIRouter()
+
+
+def _scanner_universe_operator_service(
+    *,
+    request: Request,
+    db_manager: DatabaseManager,
+) -> MarketScannerOperationsService:
+    service = getattr(request.app.state, "scanner_universe_operator_service", None)
+    if service is not None:
+        return service
+    return MarketScannerOperationsService(db_manager=db_manager)
 
 
 @router.get(
@@ -47,4 +64,40 @@ def get_admin_surface_readiness(
         service = AdminSurfaceContractReadinessService()
     return BackendSurfaceReadinessResponse.model_validate(
         service.build_snapshot(routes=request.app.routes)
+    )
+
+
+@router.get(
+    "/ops/scanner-universe-readiness",
+    response_model=AdminScannerUniverseReadinessResponse,
+    summary="Get admin scanner universe readiness and next operator action",
+)
+def get_admin_scanner_universe_readiness(
+    request: Request,
+    market: str = Query("cn"),
+    profile: str | None = Query(None),
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    _: CurrentUser = Depends(require_admin_capability("ops:logs:read")),
+) -> AdminScannerUniverseReadinessResponse:
+    service = _scanner_universe_operator_service(request=request, db_manager=db_manager)
+    return AdminScannerUniverseReadinessResponse.model_validate(
+        service.get_universe_operator_readiness(market=market, profile=profile)
+    )
+
+
+@router.post(
+    "/ops/scanner-universe-refresh",
+    response_model=AdminScannerUniverseRefreshResponse,
+    summary="Request bounded admin scanner universe refresh action",
+)
+def request_admin_scanner_universe_refresh(
+    request: Request,
+    market: str = Query("cn"),
+    profile: str | None = Query(None),
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    _: CurrentUser = Depends(require_admin_capability("ops:logs:read")),
+) -> AdminScannerUniverseRefreshResponse:
+    service = _scanner_universe_operator_service(request=request, db_manager=db_manager)
+    return AdminScannerUniverseRefreshResponse.model_validate(
+        service.request_universe_refresh_action(market=market, profile=profile)
     )

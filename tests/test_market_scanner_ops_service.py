@@ -167,6 +167,88 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["freshness"], "stale")
         self.assertIn("stale_universe", readiness["candidateGenerationBlockers"])
 
+    def test_operator_universe_readiness_projects_stale_surface_blockers(self) -> None:
+        os.utime(self._scanner_cache_path, (1, 1))
+        ops_service = MarketScannerOperationsService(
+            scanner_service=self.scanner_service,
+            config=_make_config(scanner_notification_enabled=False),
+            notifier_factory=lambda: FakeNotifier(available=False),
+        )
+
+        readiness = ops_service.get_universe_operator_readiness(market="cn", profile="cn_preopen_v1")
+
+        self.assertEqual(readiness["status"], "stale")
+        self.assertEqual(readiness["scannerUniverseReadiness"]["status"], "stale")
+        self.assertEqual(readiness["freshnessState"], readiness["scannerUniverseReadiness"]["freshnessState"])
+        self.assertIsNotNone(readiness["lastUpdatedAt"])
+        self.assertIn("Scanner", readiness["affectedProductSurfaces"])
+        self.assertIn("Research Radar", readiness["affectedProductSurfaces"])
+        self.assertIn("Backtest", readiness["affectedProductSurfaces"])
+        self.assertIn("Refresh", readiness["nextOperatorAction"])
+        self.assertTrue(readiness["readOnly"])
+        self.assertTrue(readiness["noExternalCalls"])
+        self.assertFalse(readiness["mutationEnabled"])
+
+    def test_operator_universe_readiness_distinguishes_admin_statuses(self) -> None:
+        ops_service = MarketScannerOperationsService(
+            scanner_service=self.scanner_service,
+            config=_make_config(scanner_notification_enabled=False),
+            notifier_factory=lambda: FakeNotifier(available=False),
+        )
+        cases = [
+            ("available", "ready"),
+            ("missing", "missing"),
+            ("stale", "stale"),
+            ("not_configured", "not_configured"),
+            ("unavailable", "unavailable"),
+            ("insufficient_coverage", "manual_action_required"),
+        ]
+
+        for raw_status, expected_status in cases:
+            with self.subTest(raw_status=raw_status), patch.object(
+                ops_service,
+                "get_operational_status",
+                return_value={
+                    "dataReadiness": {
+                        "scannerUniverseReadiness": {
+                            "status": raw_status,
+                            "freshnessState": raw_status,
+                            "lastUpdatedAt": None,
+                            "affectedProductSurfaces": ["Scanner", "Research Radar", "Backtest"],
+                        },
+                        "candidateGenerationBlockers": [],
+                    }
+                },
+            ):
+                readiness = ops_service.get_universe_operator_readiness(market="cn", profile="cn_preopen_v1")
+
+            self.assertEqual(readiness["status"], expected_status)
+
+    def test_operator_universe_refresh_deferred_without_safe_refresh_seam_or_cache_mutation(self) -> None:
+        os.utime(self._scanner_cache_path, (1, 1))
+        ops_service = MarketScannerOperationsService(
+            scanner_service=self.scanner_service,
+            config=_make_config(scanner_notification_enabled=False),
+            notifier_factory=lambda: FakeNotifier(available=False),
+        )
+
+        with patch.object(
+            self.scanner_service,
+            "_persist_local_universe_cache",
+            side_effect=AssertionError("operator action must not mutate local universe cache"),
+        ):
+            action = ops_service.request_universe_refresh_action(market="cn", profile="cn_preopen_v1")
+
+        self.assertEqual(action["status"], "manual_action_required")
+        self.assertEqual(action["actionStatus"], "deferred")
+        self.assertFalse(action["refreshExecuted"])
+        self.assertFalse(action["mutationEnabled"])
+        self.assertTrue(action["noExternalCalls"])
+        self.assertEqual(action["before"]["status"], "stale")
+        self.assertEqual(action["after"]["status"], "stale")
+        self.assertIn("approved", action["nextOperatorAction"].lower())
+        self.assertNotIn(str(self._scanner_cache_path), str(action))
+
     def test_manual_and_scheduled_runs_record_trigger_mode_and_watchlist_views(self) -> None:
         ops_service = MarketScannerOperationsService(
             scanner_service=self.scanner_service,
