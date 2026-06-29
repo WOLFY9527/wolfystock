@@ -507,10 +507,21 @@ describe('research IA pages', () => {
     const page = await screen.findByTestId('market-decision-cockpit-page');
     const firstViewport = await within(page).findByTestId('decision-cockpit-first-viewport-summary');
 
+    expect(firstViewport).toHaveTextContent('当前状态');
+    expect(firstViewport).toHaveTextContent('风险规避观察');
+    expect(firstViewport).toHaveTextContent('信心等级 · 中');
     expect(firstViewport).toHaveTextContent('Risk-off evidence is currently dominant across the bounded read model.');
     expect(firstViewport).toHaveTextContent('主市场状态语境：风险规避观察 · 产品可用');
+    const evidenceStrip = within(firstViewport).getByTestId('decision-cockpit-key-evidence-strip');
+    expect(evidenceStrip).toHaveTextContent('趋势');
+    expect(evidenceStrip).toHaveTextContent('广度');
+    expect(evidenceStrip).toHaveTextContent('波动 / 风险');
     expect(firstViewport).toHaveTextContent('次级高级证据缺口');
     expect(firstViewport).toHaveTextContent('Secondary options structure evidence is unavailable.');
+    expect(firstViewport).toHaveTextContent('研究观察，不构成投资建议。');
+    expect((page.textContent || '').match(/不构成投资建议/g)?.length).toBe(1);
+    const diagnostics = within(page).getByTestId('decision-cockpit-diagnostics-disclosure');
+    expect(diagnostics).not.toHaveAttribute('open');
     expect(firstViewport).not.toHaveTextContent('低置信观察');
   });
 
@@ -794,6 +805,20 @@ describe('research IA pages', () => {
           },
         ],
       },
+      marketLevelFallback: {
+        available: true,
+        label: 'Market-level context',
+        summary: 'Market-level evidence stays available while candidate rows are present.',
+        candidateGenerationExecuted: false,
+        regime: { label: 'neutral', status: 'partial' },
+        productSummary: 'Market-level evidence is secondary when the candidate queue has rows.',
+        evidenceCards: [],
+        missingDataFamilies: [],
+        blockedProductSurfaces: [],
+        nextOperatorAction: 'Use candidate rows first, then review market context if needed.',
+        observationOnly: true,
+        decisionGrade: false,
+      },
     });
     getResearchQueueMock.mockResolvedValue({
       schemaVersion: 'research_queue_v1',
@@ -882,18 +907,31 @@ describe('research IA pages', () => {
     renderRoute(<ResearchRadarPage />, '/zh/research/radar?market=us&limit=5');
 
     const page = await screen.findByTestId('research-radar-page');
-    const observationBoundary = within(page).getByTestId('observation-only-boundary');
-    expect(observationBoundary).toHaveAttribute('data-observation-boundary-surface', 'research-radar');
-    expect(observationBoundary).toHaveTextContent('observation-only');
-    expect(observationBoundary).toHaveTextContent('证据摘要');
-    expect(observationBoundary).toHaveTextContent('不构成交易建议');
-    expect(observationBoundary).toHaveTextContent('不提供买入、卖出、持有指令');
-    expect(page).toHaveTextContent('研究雷达与证据缺口队列');
+    expect(within(page).queryByTestId('observation-only-boundary')).not.toBeInTheDocument();
+    expect(page).toHaveTextContent('今日观察队列');
     expect(page).not.toHaveTextContent('研究情景工作台');
+    const overview = await within(page).findByTestId('research-radar-consumer-overview');
+    expect(overview).toHaveTextContent('观察候选');
+    expect(overview).toHaveTextContent('证据质量分布');
+    expect(overview).toHaveTextContent('队列健康');
+    expect(overview).toHaveTextContent('研究观察，不构成投资建议。');
+    expect((overview.textContent || '').match(/不构成投资建议/g)?.length).toBe(1);
+    const candidate = within(overview).getByTestId('research-radar-candidate-ALFA');
+    expect(candidate).toHaveTextContent('ALFA');
+    expect(candidate).toHaveTextContent('相对强弱已达到研究阈值');
+    expect(candidate).toHaveTextContent('主要限制');
+    expect(candidate).toHaveTextContent('观察延续性');
+    expect(candidate).toHaveTextContent('下一步检查');
+    expect(within(candidate).getByRole('link', { name: '查看详情' })).toHaveAttribute('href', '/zh/stocks/ALFA/structure-decision');
+    const diagnostics = within(page).getByTestId('research-radar-diagnostics-disclosure');
+    expect(diagnostics).not.toHaveAttribute('open');
+    expect(diagnostics).toHaveTextContent('查看详细证据与数据诊断');
+    const secondaryFallback = within(diagnostics).getByTestId('research-radar-market-level-fallback');
+    expect(secondaryFallback).toHaveTextContent('Market-level evidence is secondary when the candidate queue has rows.');
     const evidenceHub = await within(page).findByTestId('research-radar-evidence-hub');
     expect(evidenceHub).toHaveTextContent('真实证据就绪状态');
-    expect(evidenceHub).toHaveTextContent('Scanner 候选');
-    expect(evidenceHub).toHaveTextContent('Backtest 样本');
+    expect(evidenceHub).toHaveTextContent('扫描候选');
+    expect(evidenceHub).toHaveTextContent('回测样本');
     expect(evidenceHub).toHaveTextContent('个股就绪');
     expect(evidenceHub).toHaveTextContent('数据激活');
     expect(evidenceHub).toHaveTextContent('Backtest samples have not been prepared for the radar symbols.');
@@ -903,9 +941,9 @@ describe('research IA pages', () => {
     expect(evidenceHub.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing/i);
     const hub = await within(page).findByTestId('research-queue-hub');
     expect(hub).toHaveTextContent('跨页面研究队列');
-    expect(hub).toHaveTextContent('Watchlist');
-    expect(hub).toHaveTextContent('Scanner');
-    expect(hub).toHaveTextContent('Market');
+    expect(hub).toHaveTextContent('观察列表');
+    expect(hub).toHaveTextContent('扫描器');
+    expect(hub).toHaveTextContent('市场背景');
     const watchlistGroup = within(hub).getByTestId('research-queue-source-watchlist');
     expect(watchlistGroup).toHaveTextContent('MSFT');
     expect(watchlistGroup).toHaveTextContent('Watchlist evidence follow-up');
@@ -930,8 +968,6 @@ describe('research IA pages', () => {
     expect(marketGroup).toHaveTextContent('价格历史时效有限');
     expect(marketGroup).toHaveTextContent('部分证据暂不可用，因此当前结论只适合作为观察线索。');
     expect((await within(page).findAllByText('ALFA')).length).toBeGreaterThan(0);
-    expect(await within(page).findByText('相对强弱已达到研究阈值；证据质量可供继续观察；证据不足')).toBeInTheDocument();
-    expect(within(page).getByRole('link', { name: '打开结构面板' })).toHaveAttribute('href', '/zh/stocks/ALFA/structure-decision');
     await waitFor(() => expect(getResearchRadarMock).toHaveBeenCalledWith({ market: 'us', profile: undefined, limit: 5 }));
     await waitFor(() => expect(getResearchQueueMock).toHaveBeenCalledWith({ market: 'us', profile: undefined, queueLimit: 5 }));
     const healthSummary = within(page).getByTestId('research-radar-data-health-summary');
@@ -1245,7 +1281,7 @@ describe('research IA pages', () => {
     const manualGapGroup = within(hub).getByTestId('research-queue-source-manual-gap');
 
     expect(onboardingPanel).toHaveTextContent('当前队列仍缺少公司资料、媒体语境、事件语境、时效复核，因此先保持观察边界。');
-    expect(onboardingPanel).toHaveTextContent('Scanner 候选尚未建立。');
+    expect(onboardingPanel).toHaveTextContent('扫描器候选尚未建立。');
     expect(onboardingPanel).toHaveTextContent('观察列表上下文尚未建立。');
     expect(onboardingPanel).toHaveTextContent('当前按低证据条件整理。');
     expect(within(onboardingPanel).getByRole('link', { name: '运行 Scanner' })).toHaveAttribute('href', '/zh/scanner');
@@ -1296,7 +1332,7 @@ describe('research IA pages', () => {
 
     const page = await screen.findByTestId('research-radar-page');
     const hubEmptyState = await within(page).findByTestId('research-queue-hub-empty-state');
-    expect(page).toHaveTextContent('研究雷达与证据缺口队列');
+    expect(page).toHaveTextContent('今日观察队列');
     expect(page).not.toHaveTextContent('研究情景工作台');
     expect(hubEmptyState).toHaveTextContent('数据暂不可用');
     expect(hubEmptyState).toHaveTextContent('当前页面没有可展示的稳定研究资料，请稍后重试。');
@@ -2008,7 +2044,7 @@ describe('research IA pages', () => {
 
     const page = await screen.findByTestId('scenario-lab-page');
     expect(page).toHaveTextContent('情景实验室：假设推演工作台');
-    expect(page).not.toHaveTextContent('研究雷达与证据缺口队列');
+    expect(page).not.toHaveTextContent('今日观察队列');
     expect(page).toHaveTextContent('波动冲击');
     expect(page).toHaveTextContent('基准状态');
     expect(page).toHaveTextContent('情景输出');

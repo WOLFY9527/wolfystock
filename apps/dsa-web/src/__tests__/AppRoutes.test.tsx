@@ -176,7 +176,7 @@ vi.mock('../pages/StockStructureDecisionEntryPage', () => ({
 vi.mock('../pages/ResearchRadarPage', () => ({
   default: () => (
     <main>
-      <h1>Research Radar evidence queue</h1>
+      <h1>Today’s observation queue</h1>
       <div>research-radar-page</div>
     </main>
   ),
@@ -659,7 +659,7 @@ describe('AppContent route flows', () => {
     ['/en/watchlist', 'Watchlist monitoring board'],
     ['/en/portfolio', 'Holdings and portfolio exposure'],
     ['/en/scenario-lab', 'Scenario Lab what-if workbench'],
-    ['/en/research/radar', 'Research Radar evidence queue'],
+    ['/en/research/radar', 'Today’s observation queue'],
     ['/en/market/decision-cockpit', 'Decision Cockpit'],
   ])('renders distinct top-level route heading for %s', async (path, heading) => {
     mockSignedInConsumer();

@@ -444,6 +444,61 @@ function EvidenceLinkStrip({
   );
 }
 
+function driverEvidenceValue(
+  data: MarketDecisionCockpitResponse | null,
+  keys: string[],
+  language: 'zh' | 'en',
+): {
+  value: string;
+  tone: string;
+} {
+  for (const key of keys) {
+    const driver = data?.marketRegimeDecision.driverScores?.[key];
+    if (!driver) {
+      continue;
+    }
+    return {
+      value: driver.evidenceState
+        ? getDriverEvidenceStateLabel(driver.evidenceState, language)
+        : (driver.score == null ? '--' : `${driver.score}`),
+      tone: statusTone(driver.evidenceState),
+    };
+  }
+  return {
+    value: language === 'en' ? 'Needs evidence' : '待补证据',
+    tone: 'warning',
+  };
+}
+
+function buildCockpitEvidenceStrip(data: MarketDecisionCockpitResponse | null, language: 'zh' | 'en') {
+  const readModelCards = data?.marketRegimeReadModel?.evidenceCards ?? [];
+  const trendCard = readModelCards.find((card) => /trend|benchmark|趋势|基准/i.test(`${card.title || ''} ${card.id || ''}`));
+  const breadth = driverEvidenceValue(data, ['breadthParticipation', 'sectorThemeRotation'], language);
+  const volatility = driverEvidenceValue(data, ['volatilityStructure', 'crossAssetRisk', 'liquidityCredit'], language);
+  return [
+    {
+      key: 'trend',
+      label: language === 'en' ? 'Trend' : '趋势',
+      value: trendCard
+        ? sanitizeCockpitStatusOrIssue(trendCard.status || trendCard.headline || trendCard.title, language)
+        : regimeLabel(data?.marketRegimeDecision.regime, language),
+      tone: statusTone(trendCard?.status || data?.marketRegimeDecision.confidence),
+    },
+    {
+      key: 'breadth',
+      label: language === 'en' ? 'Breadth' : '广度',
+      value: breadth.value,
+      tone: breadth.tone,
+    },
+    {
+      key: 'volatility-risk',
+      label: language === 'en' ? 'Vol / risk' : '波动 / 风险',
+      value: volatility.value,
+      tone: volatility.tone,
+    },
+  ];
+}
+
 function CockpitFirstViewportSummary({
   data,
   briefing,
@@ -537,6 +592,9 @@ function CockpitFirstViewportSummary({
       nextChecks,
       missingData,
       readModelPrimary,
+      regime: regimeLabel(readModel?.regimeLabel || data?.marketRegimeDecision.regime || briefing?.marketRegimeSummary.regime, locale),
+      confidence: confidenceLabel(data?.marketRegimeDecision.confidence || briefing?.marketRegimeSummary.confidence, locale),
+      evidenceStrip: buildCockpitEvidenceStrip(data, locale),
     };
   }, [briefing, data, locale, narrativeSentences]);
 
@@ -561,12 +619,29 @@ function CockpitFirstViewportSummary({
   return (
     <div className="border-b border-[color:var(--wolfy-divider)] p-3">
       <RoughSectionCard
-        eyebrow={locale === 'en' ? 'Research state' : '研究状态'}
-        title={locale === 'en' ? 'What happened, what matters, what to check next' : '发生了什么、为什么重要、下一步查什么'}
+        eyebrow={locale === 'en' ? 'Regime conclusion' : '市场判断'}
+        title={locale === 'en' ? 'Current state, why it matters, and what to watch next' : '当前状态、原因与下一步观察'}
         data-testid="decision-cockpit-first-viewport-summary"
       >
         <div className="space-y-4">
-          <p className="text-base leading-7 text-[color:var(--wolfy-text-primary)]">{summary.headline}</p>
+          <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 p-3">
+            <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[11px] text-[color:var(--wolfy-text-muted)]">
+                  {locale === 'en' ? 'Current state' : '当前状态'}
+                </div>
+                <div className="mt-1 text-xl font-semibold leading-7 text-[color:var(--wolfy-text-primary)]">
+                  {summary.regime}
+                </div>
+              </div>
+              <StatusBadge
+                status={statusTone(data?.marketRegimeDecision.confidence || briefing?.marketRegimeSummary.confidence)}
+                label={`${locale === 'en' ? 'Confidence' : '信心等级'} · ${summary.confidence}`}
+                size="sm"
+              />
+            </div>
+            <p className="mt-3 text-base leading-7 text-[color:var(--wolfy-text-primary)]">{summary.headline}</p>
+          </div>
           <div className="grid gap-3 xl:grid-cols-3">
             <BriefingBlock
               eyebrow={locale === 'en' ? 'What happened' : '发生了什么'}
@@ -596,6 +671,16 @@ function CockpitFirstViewportSummary({
               />
             </BriefingBlock>
           </div>
+          <div className="grid gap-3 md:grid-cols-3" data-testid="decision-cockpit-key-evidence-strip">
+            {summary.evidenceStrip.map((item) => (
+              <div key={item.key} className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                <div className="text-[11px] text-[color:var(--wolfy-text-muted)]">{item.label}</div>
+                <div className="mt-2">
+                  <StatusBadge status={item.tone} label={item.value} size="sm" />
+                </div>
+              </div>
+            ))}
+          </div>
           {summary.missingData.length ? (
             <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-black/10 p-3" data-testid="decision-cockpit-missing-summary">
               <div className="text-xs font-medium text-[color:var(--wolfy-text-primary)]">
@@ -610,8 +695,8 @@ function CockpitFirstViewportSummary({
           ) : null}
           <p className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
             {locale === 'en'
-              ? 'Research context'
-              : '研究语境'}
+              ? 'Research observation, not investment advice.'
+              : '研究观察，不构成投资建议。'}
           </p>
         </div>
       </RoughSectionCard>
@@ -1220,7 +1305,10 @@ export default function MarketDecisionCockpitPage() {
               </div>
             ) : null}
             {data ? (
-              <details className="m-3 rounded-[16px] border border-[color:var(--wolfy-border-subtle)] bg-black/5 p-3">
+              <details
+                data-testid="decision-cockpit-diagnostics-disclosure"
+                className="m-3 rounded-[16px] border border-[color:var(--wolfy-border-subtle)] bg-black/5 p-3"
+              >
                 <summary className="cursor-pointer text-sm font-medium text-[color:var(--wolfy-text-secondary)]">
                   {locale === 'en' ? 'Market structure details and data-quality notes' : '市场结构明细与数据质量说明'}
                 </summary>
