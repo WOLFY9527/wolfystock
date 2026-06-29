@@ -134,6 +134,26 @@ class BacktestServiceTestCase(unittest.TestCase):
             )
             session.commit()
 
+    @staticmethod
+    def _write_local_us_parquet(cache_dir: str, symbol: str, *, rows: int = 90) -> None:
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=max(rows - 1, 0))
+        frame = pd.DataFrame(
+            [
+                {
+                    "date": (start_date + timedelta(days=index)).isoformat(),
+                    "open": 100.0 + index,
+                    "high": 101.0 + index,
+                    "low": 99.0 + index,
+                    "close": 100.5 + index,
+                    "volume": 1_000_000 + index,
+                    "adjusted_close": 100.5 + index,
+                }
+                for index in range(rows)
+            ]
+        )
+        frame.to_parquet(os.path.join(cache_dir, f"{symbol.upper()}.parquet"), index=False)
+
     def test_force_semantics(self) -> None:
         service = BacktestService(self.db)
 
@@ -207,6 +227,61 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(status["resolved_source"], "DatabaseCache")
         self.assertFalse(status["fallback_used"])
         self.assertEqual(status["historicalOhlcvReadiness"]["overallState"], "ready")
+
+    def test_sample_status_uses_configured_local_us_parquet_cache_for_readiness(self) -> None:
+        self._allow_history_fetch()
+        self._write_local_us_parquet(self._temp_dir.name, "AAPL", rows=90)
+        self._write_local_us_parquet(self._temp_dir.name, "SPY", rows=90)
+        service = BacktestService(self.db)
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": self._temp_dir.name,
+                "US_STOCK_PARQUET_DIR": "",
+            },
+            clear=False,
+        ), patch("src.services.us_history_helper.DataFetcherManager") as manager_cls:
+            status = service.get_sample_status(code="AAPL")
+
+        manager_cls.assert_not_called()
+        self.assertGreater(status["prepared_count"], 0)
+        self.assertEqual(status["sample_readiness_state"], "ready")
+        self.assertNotIn("missing_cache", status["sample_blocking_reasons"])
+        self.assertNotIn("provider_missing", status["sample_blocking_reasons"])
+        self.assertEqual(status["execution_readiness"]["state"], "executable")
+        readiness = status["historicalOhlcvReadiness"]
+        self.assertEqual(readiness["providerState"], "available")
+        self.assertGreater(readiness["usableBars"], 0)
+        self.assertEqual(readiness["missingRequirements"], [])
+
+    def test_backtest_readiness_uses_configured_local_us_parquet_cache_with_benchmark(self) -> None:
+        self._write_local_us_parquet(self._temp_dir.name, "AAPL", rows=90)
+        self._write_local_us_parquet(self._temp_dir.name, "SPY", rows=90)
+        service = BacktestService(self.db)
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": self._temp_dir.name,
+                "US_STOCK_PARQUET_DIR": "",
+            },
+            clear=False,
+        ), patch("src.services.us_history_helper.DataFetcherManager") as manager_cls:
+            readiness = service._build_historical_ohlcv_readiness(
+                code="AAPL",
+                rows=[],
+                required_bars=60,
+                benchmark_required=True,
+                benchmark_symbol="SPY",
+            )
+
+        manager_cls.assert_not_called()
+        self.assertEqual(readiness["providerState"], "available")
+        self.assertEqual(readiness["benchmarkState"], "available")
+        self.assertGreater(readiness["usableBars"], 0)
+        self.assertGreater(readiness["benchmarkUsableBars"], 0)
+        self.assertEqual(readiness["missingRequirements"], [])
 
     def test_run_backtest_auto_executes_deterministic_cached_ohlcv_sample_path(self) -> None:
         with self.db.get_session() as session:

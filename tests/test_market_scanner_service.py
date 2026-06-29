@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import threading
 import time
@@ -328,6 +329,29 @@ def _quote_snapshots(symbols: tuple[str, ...]) -> dict[str, QuoteSnapshot]:
         )
         for index, symbol in enumerate(symbols)
     }
+
+
+def _write_local_us_parquet(cache_dir: Path, symbol: str, *, rows: int = 90) -> None:
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    end_date = datetime.now().date()
+    start_date = end_date - timedelta(days=max(rows - 1, 0))
+    frame = pd.DataFrame(
+        [
+            {
+                "date": (start_date + timedelta(days=index)).isoformat(),
+                "open": 100.0 + index,
+                "high": 101.0 + index,
+                "low": 99.0 + index,
+                "close": 100.5 + index,
+                "volume": 30_000_000 + index,
+                "amount": 3.0e10 + index,
+                "pct_chg": 0.1,
+                "adjusted_close": 100.5 + index,
+            }
+            for index in range(rows)
+        ]
+    )
+    frame.to_parquet(cache_dir / f"{symbol.upper()}.parquet", index=False)
 
 
 class ObservationScannerDataManager(FakeScannerDataManager):
@@ -3851,6 +3875,57 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         serialized_candidate = json.dumps(candidate, ensure_ascii=False).lower()
         for forbidden in ("buy now", "sell now", "hold", "recommendation", "best stock"):
             self.assertNotIn(forbidden, serialized_candidate)
+
+    def test_run_scan_uses_configured_local_us_parquet_cache_for_default_readiness(self) -> None:
+        cache_dir = Path(self._cache_temp_dir.name) / "us-parquet-cache"
+        for symbol in ("SPY", "QQQ", "AAPL", "MSFT"):
+            _write_local_us_parquet(cache_dir, symbol, rows=90)
+        data_manager = FakeUsScannerDataManager()
+        for index, symbol in enumerate(("SPY", "QQQ", "MSFT"), start=1):
+            data_manager.us_quotes[symbol] = SimpleNamespace(
+                price=100.0 + index,
+                pre_close=99.0 + index,
+                change_pct=1.0 + index,
+                volume=30_000_000 + index,
+                amount=3.0e9 + index,
+                name=symbol,
+                source=SimpleNamespace(value="local_quote_snapshot_cache"),
+            )
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": str(cache_dir),
+                "US_STOCK_PARQUET_DIR": "",
+                "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "",
+                "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "",
+            },
+            clear=False,
+        ):
+            service = MarketScannerService(
+                self.db,
+                data_manager=data_manager,
+                quote_snapshot_provider=FakeQuoteSnapshotProvider(
+                    _quote_snapshots(("SPY", "QQQ", "AAPL", "MSFT"))
+                ),
+            )
+            detail = service.run_scan(
+                market="us",
+                profile="us_preopen_v1",
+                shortlist_size=2,
+                universe_limit=50,
+                detail_limit=10,
+                universe_type="symbols",
+                symbols=["SPY", "QQQ", "AAPL", "MSFT"],
+            )
+
+        readiness = detail["dataReadiness"]
+        self.assertEqual(readiness["historyReadiness"]["state"], "available")
+        self.assertEqual(readiness["cacheReadiness"]["state"], "available")
+        self.assertNotIn("historical_ohlcv", readiness["scannerUniverseReadiness"]["missingDataFamilies"])
+        self.assertNotIn("missing_history", readiness["candidateGenerationBlockers"])
+        self.assertEqual(readiness["ohlcvReadiness"]["blockedSymbols"], [])
+        self.assertEqual(data_manager.daily_history_calls, [])
 
     def test_quote_snapshot_cache_readiness_can_supply_quote_context_without_live_quotes(self) -> None:
         provider = FakeHistoricalOhlcvProvider(

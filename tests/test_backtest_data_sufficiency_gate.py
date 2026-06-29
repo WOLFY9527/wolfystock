@@ -292,6 +292,26 @@ class BacktestDataSufficiencyGateTestCase(unittest.TestCase):
         self.assertEqual(gate["ohlcv_readiness"]["usableBars"], 0)
         self.assertEqual(gate["ohlcv_readiness"]["missingBars"], 30)
 
+    def test_gate_does_not_degrade_when_adjusted_ohlcv_is_not_required(self) -> None:
+        gate = assess_backtest_data_sufficiency(
+            {
+                "status": "completed",
+                "data_quality": {"bar_count": 20},
+                "historicalOhlcvReadiness": self._historical_readiness(
+                    adjustment_state="not_required",
+                ),
+            }
+        )
+
+        self.assertEqual(gate["status"], "sufficient")
+        self.assertEqual(gate["calculation_state"], "executable")
+        self.assertEqual(gate["degraded_reasons"], [])
+        self.assertEqual(gate["input_states"]["adjustments"], "available")
+        self.assertEqual(
+            gate["ohlcv_readiness"]["adjustedDataRequirement"],
+            {"required": False, "state": "not_required"},
+        )
+
     def test_gate_consumes_historical_ohlcv_readiness_bar_counts_and_degraded_states(self) -> None:
         cases = [
             (

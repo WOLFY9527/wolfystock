@@ -64,6 +64,7 @@ from src.services.scanner_universe_readiness import (
 from src.services.provider_capability_matrix import get_provider_capability_support_contract
 from src.services.research_readiness_contract import build_research_readiness_v1
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback, get_us_stock_parquet_dir
+from src.services.yfinance_us_ohlcv_cache_provider import build_readonly_local_us_ohlcv_cache_provider_from_env
 from src.storage import (
     DatabaseManager,
     MarketScannerCandidate,
@@ -765,6 +766,8 @@ class MarketScannerService:
         self.ai_service = ai_interpretation_service or ScannerAiInterpretationService(owner_user_id=owner_id)
         self.include_all_owners = bool(include_all_owners)
         self.baostock_cn_history_observation_resolver = baostock_cn_history_observation_resolver
+        if historical_ohlcv_provider is None:
+            historical_ohlcv_provider = build_readonly_local_us_ohlcv_cache_provider_from_env()
         if historical_ohlcv_provider is None and _scanner_historical_ohlcv_runtime_enabled():
             historical_ohlcv_provider = HistoricalOhlcvRuntimeAdapter(history_runtime=self.data_manager)
         self.historical_ohlcv_provider = historical_ohlcv_provider
