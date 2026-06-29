@@ -2790,7 +2790,7 @@ describe('HomeSurfacePage', () => {
     expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
   });
 
-  it('shows a neutral first-login start path when there is no saved history or active task', async () => {
+  it('shows a consumer market brief when there is no saved history or active task', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     vi.mocked(historyApi.getList).mockResolvedValueOnce({
       total: 0,
@@ -2801,24 +2801,32 @@ describe('HomeSurfacePage', () => {
 
     renderSurface();
 
-    const neutralStart = await screen.findByTestId('member-home-neutral-start');
+    const marketBrief = await screen.findByTestId('member-home-market-brief');
     expect(screen.getByTestId('home-bento-omnibar')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-history-drawer-trigger')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '尚未选择研究标的' })).toBeInTheDocument();
-    expect(screen.getByTestId('member-home-neutral-readiness')).toHaveTextContent('数据就绪度会影响路径');
-    expect(screen.getByTestId('member-home-start-card-market-overview')).toHaveTextContent('市场总览');
-    expect(screen.getByTestId('member-home-start-card-scanner')).toHaveTextContent('扫描器');
-    expect(screen.getByTestId('member-home-start-card-stock-research')).toHaveTextContent('输入 / 搜索标的');
-    expect(screen.getByTestId('member-home-start-card-backtest')).toHaveTextContent('回测');
-    expect(screen.getByTestId('member-home-start-card-watchlist')).toHaveTextContent('组合 / 观察列表');
-    expect(screen.getByTestId('member-home-readiness-reference')).toHaveTextContent('不会加载默认分析');
-    expect(screen.getByTestId('member-home-readiness-reference-link')).toHaveAttribute('href', '/admin/provider-activation');
+    expect(screen.getByRole('heading', { name: '今日市场简报' })).toBeInTheDocument();
+    expect(screen.getByTestId('member-home-market-regime')).toHaveTextContent(/当前状态：Risk-on|当前状态：中性|当前状态：Risk-off/);
+    expect(screen.getByTestId('member-home-market-reliability')).toHaveTextContent('数据可靠性');
+    expect(screen.getByTestId('member-home-market-reliability')).toHaveTextContent('研究可读');
+    expect(screen.getByTestId('member-home-market-evidence-trend')).toHaveTextContent('趋势');
+    expect(screen.getByTestId('member-home-market-evidence-breadth')).toHaveTextContent('广度');
+    expect(screen.getByTestId('member-home-market-evidence-risk')).toHaveTextContent('风险 / 波动');
+    expect(screen.getByTestId('member-home-market-action-market-overview')).toHaveTextContent('查看市场研究');
+    expect(screen.getByTestId('member-home-market-action-research-radar')).toHaveTextContent('打开研究雷达');
+    expect(screen.getByTestId('member-home-market-action-scanner')).toHaveTextContent('查看扫描器');
+    expect(screen.getByTestId('member-home-market-action-stock-search')).toHaveTextContent('搜索个股');
+    expect(screen.getByTestId('member-home-market-safety')).toHaveTextContent('研究观察，不构成投资建议。');
+    expect((marketBrief.textContent || '').match(/研究观察，不构成投资建议/g)).toHaveLength(1);
     expect(screen.queryByTestId('home-research-console')).not.toBeInTheDocument();
     expect(screen.queryByText('Oracle Corporation')).not.toBeInTheDocument();
     expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
-    expect(neutralStart).not.toHaveTextContent('ORCL');
-    expect(neutralStart).not.toHaveTextContent('TEM');
-    expect(neutralStart.textContent).not.toMatch(HOME_NEUTRAL_START_FORBIDDEN_COPY_PATTERN);
+    expect(marketBrief).not.toHaveTextContent('尚未选择研究标的');
+    expect(marketBrief).not.toHaveTextContent('ORCL');
+    expect(marketBrief).not.toHaveTextContent('TEM');
+    expect(marketBrief.textContent).not.toMatch(HOME_NEUTRAL_START_FORBIDDEN_COPY_PATTERN);
+    expect(marketBrief.textContent || '').not.toMatch(
+      /available|missing|not configured|provider_missing|blockedProductSurfaces|missingDataFamilies|sourceClass|sourcePath|contractVersion|inputSource|local_bounded_us_parquet_universe|noExternalCalls|providerCallsEnabled|not_requested/i,
+    );
   });
 
   it('keeps analysis loading inside the compact Linear workspace', async () => {
@@ -3435,8 +3443,9 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
 
     await waitFor(() => expect(historyApi.deleteRecords).toHaveBeenCalledWith([3, 2, 1], { deleteAll: true }));
-    await waitFor(() => expect(screen.getByTestId('member-home-neutral-start')).toBeInTheDocument());
-    expect(screen.getByText('不会加载默认分析')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('member-home-market-brief')).toBeInTheDocument());
+    expect(screen.getByRole('heading', { name: '今日市场简报' })).toBeInTheDocument();
+    expect(screen.getByTestId('member-home-market-actions')).toHaveTextContent('查看市场研究');
     expect(screen.queryByText('甲骨文')).not.toBeInTheDocument();
     expect(screen.queryByText('ORCL')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-zero-state')).not.toBeInTheDocument();

@@ -996,6 +996,7 @@ const MarketOverviewConclusionLayer: React.FC<{
       detail: '只作为研究核对顺序，不升级为更强结论。',
     },
   ];
+  const isEnglishRoute = routeLocale === 'en';
   const quickActions: Array<{
     key: string;
     label: string;
@@ -1004,34 +1005,27 @@ const MarketOverviewConclusionLayer: React.FC<{
     current?: boolean;
   }> = [
     {
-      key: 'research-radar',
-      label: 'Research Radar',
-      href: routeLocale ? buildLocalizedPath('/research/radar', routeLocale) : '/research/radar',
+      key: 'decision-cockpit',
+      label: isEnglishRoute ? 'Decision Cockpit' : '决策驾驶舱',
+      href: routeLocale ? buildLocalizedPath('/market/decision-cockpit', routeLocale) : '/market/decision-cockpit',
       primary: true,
     },
     {
-      key: 'stock-structure',
-      label: 'Stock Structure',
+      key: 'research-radar',
+      label: isEnglishRoute ? 'Research Radar' : '研究雷达',
+      href: routeLocale ? buildLocalizedPath('/research/radar', routeLocale) : '/research/radar',
+      primary: false,
+    },
+    {
+      key: 'scanner',
+      label: isEnglishRoute ? 'Scanner' : '扫描器',
+      href: routeLocale ? buildLocalizedPath('/scanner', routeLocale) : '/scanner',
+      primary: false,
+    },
+    {
+      key: 'stock-search',
+      label: isEnglishRoute ? 'Stock Search' : '搜索个股',
       href: routeLocale ? buildLocalizedPath('/stocks/structure-decision', routeLocale) : '/stocks/structure-decision',
-      primary: false,
-    },
-    {
-      key: 'market-overview',
-      label: 'Market Overview',
-      href: routeLocale ? buildLocalizedPath('/market-overview', routeLocale) : '/market-overview',
-      primary: false,
-      current: true,
-    },
-    {
-      key: 'options-lab',
-      label: 'Options Lab',
-      href: routeLocale ? buildLocalizedPath('/options-lab', routeLocale) : '/options-lab',
-      primary: false,
-    },
-    {
-      key: 'portfolio',
-      label: 'Portfolio',
-      href: routeLocale ? buildLocalizedPath('/portfolio', routeLocale) : '/portfolio',
       primary: false,
     },
   ] as const;
@@ -1106,7 +1100,7 @@ const MarketOverviewConclusionLayer: React.FC<{
         ))}
       </div>
       <p className="mt-3 text-[11px] leading-5 text-white/38">
-        研究用途，不形成个人化决策依据。
+        {isEnglishRoute ? 'Research observation, not investment advice.' : '研究观察，不构成投资建议。'}
       </p>
     </section>
   );

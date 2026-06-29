@@ -127,12 +127,17 @@ type GuestMarketSnapshotView = {
   note: string;
 };
 
-type NeutralHomeStartCard = {
-  key: string;
+type MemberMarketBriefView = {
+  eyebrow: string;
   title: string;
-  body: string;
-  note: string;
-  href: string;
+  regimeLabel: string;
+  regimeDetail: string;
+  summary: string;
+  reliabilityLabel: string;
+  reliabilityDetail: string;
+  evidence: Array<{ key: string; label: string; value: string; detail: string }>;
+  actions: Array<{ key: string; label: string; href: string; primary?: boolean }>;
+  safety: string;
 };
 
 const HOME_LOCAL_SURFACE_PANEL_CLASS = 'min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)]';
@@ -4843,6 +4848,106 @@ function buildGuestMarketSnapshotView(
   };
 }
 
+function buildMemberMarketBriefView(
+  locale: DashboardLocale,
+  briefing: MarketBriefingResponse | null,
+  isLoading: boolean,
+  isUnavailable: boolean,
+  routeLocale: 'zh' | 'en' | null,
+): MemberMarketBriefView {
+  const isEnglish = locale === 'en';
+  const buildHref = (path: string) => (routeLocale ? buildLocalizedPath(path, routeLocale) : path);
+  const safeItems = (briefing?.items || [])
+    .map((item) => ({
+      title: String(item.title || '').trim(),
+      message: String(item.message || '').trim(),
+      severity: String(item.severity || '').trim().toLowerCase(),
+      category: String(item.category || '').trim().toLowerCase(),
+    }))
+    .filter((item) => item.title || item.message)
+    .slice(0, 3);
+  const severityText = safeItems.map((item) => `${item.severity} ${item.title} ${item.message}`).join(' ');
+  const riskOff = /negative|bear|volatility|pressure|stress|回落|压力|风险|波动|走弱|防守/i.test(severityText);
+  const riskOn = /positive|bull|breadth|flow|improve|走强|改善|资金|广度|修复/i.test(severityText);
+  const limited = Boolean(briefing?.isFallback || briefing?.isStale || briefing?.isReliable === false || isUnavailable);
+  const regimeLabel = isLoading && !briefing
+    ? (isEnglish ? 'Updating' : '更新中')
+    : riskOff
+      ? 'Risk-off'
+      : riskOn
+        ? 'Risk-on'
+        : (isEnglish ? 'Neutral' : '中性');
+  const regimeDetail = isLoading && !briefing
+    ? (isEnglish ? 'Market evidence is being refreshed.' : '正在刷新市场证据。')
+    : riskOff
+      ? (isEnglish ? 'Risk pressure is more visible than participation.' : '风险压力比参与扩散更清晰。')
+      : riskOn
+        ? (isEnglish ? 'Trend or participation clues are improving.' : '趋势或参与扩散线索正在改善。')
+        : (isEnglish ? 'Signals are mixed; keep the first read balanced.' : '多空线索分化，先保持中性观察。');
+  const summary = String(briefing?.warning || safeItems[0]?.message || '').trim()
+    || (isUnavailable
+      ? (isEnglish ? 'The market brief did not return yet; existing navigation and symbol search remain usable.' : '市场简报暂未返回；市场入口、研究雷达、扫描器和个股搜索仍可继续使用。')
+      : isLoading
+        ? (isEnglish ? 'Preparing the current market brief from returned research-safe fields.' : '正在用已返回的研究安全字段整理当前市场简报。')
+        : (isEnglish ? 'No dominant market conclusion has been returned yet; start from the visible evidence and refresh later.' : '暂未返回强主线结论；先从已可见证据开始，并在稍后刷新复核。'));
+  const reliabilityLabel = isLoading && !briefing
+    ? (isEnglish ? 'Checking data reliability' : '正在检查数据可靠性')
+    : limited
+      ? (isEnglish ? 'Partially usable' : '部分可用')
+      : (isEnglish ? 'Research-ready' : '研究可读');
+  const reliabilityDetail = limited
+    ? (isEnglish
+      ? 'OHLCV and returned market facts can still be read; some quote snapshots may be delayed or incomplete.'
+      : 'OHLCV 与已返回市场事实仍可阅读；部分报价快照可能延迟或不完整。')
+    : isLoading && !briefing
+      ? (isEnglish ? 'Waiting for the latest returned market snapshot.' : '等待最新市场快照返回。')
+      : (isEnglish ? 'Returned market facts are fresh enough for research observation.' : '已返回市场事实足以支持研究观察。');
+  const fallbackEvidence = isEnglish
+    ? [
+        { key: 'trend', label: 'Trend', value: 'Waiting for index direction', detail: 'Use Market Overview for the wider map.' },
+        { key: 'breadth', label: 'Breadth', value: 'Participation not confirmed', detail: 'Research Radar can still queue follow-up work.' },
+        { key: 'risk', label: 'Risk / volatility', value: 'Risk checks stay visible', detail: 'Keep stale or partial data bounded.' },
+      ]
+    : [
+        { key: 'trend', label: '趋势', value: '等待指数方向确认', detail: '可先打开市场总览查看更完整地图。' },
+        { key: 'breadth', label: '广度', value: '参与扩散暂未确认', detail: '研究雷达仍可承接后续研究队列。' },
+        { key: 'risk', label: '风险 / 波动', value: '风险检查保持可见', detail: '过期或部分数据只作边界说明。' },
+      ];
+  const evidenceLabels = isEnglish
+    ? ['Trend', 'Breadth', 'Risk / volatility']
+    : ['趋势', '广度', '风险 / 波动'];
+  const evidence = fallbackEvidence.map((fallback, index) => {
+    const item = safeItems[index];
+    if (!item) {
+      return fallback;
+    }
+    return {
+      key: fallback.key,
+      label: evidenceLabels[index],
+      value: item.title || fallback.value,
+      detail: item.message || fallback.detail,
+    };
+  });
+
+  return {
+    eyebrow: isEnglish ? 'Consumer market brief' : '消费者市场简报',
+    title: isEnglish ? "Today's Market Brief" : '今日市场简报',
+    regimeLabel,
+    regimeDetail,
+    summary,
+    reliabilityLabel,
+    reliabilityDetail,
+    evidence,
+    actions: [
+      { key: 'market-overview', label: isEnglish ? 'Open Market Research' : '查看市场研究', href: buildHref('/market-overview'), primary: true },
+      { key: 'research-radar', label: isEnglish ? 'Open Research Radar' : '打开研究雷达', href: buildHref('/research/radar') },
+      { key: 'scanner', label: isEnglish ? 'Open Scanner' : '查看扫描器', href: buildHref('/scanner') },
+      { key: 'stock-search', label: isEnglish ? 'Search Symbol' : '搜索个股', href: buildHref('/stocks/structure-decision') },
+    ],
+    safety: isEnglish ? 'Research observation, not investment advice.' : '研究观察，不构成投资建议。',
+  };
+}
+
 function resolveHistoryGeneratedAt(historyItem: HistoryItem, locale: DashboardLocale): string {
   return formatHistoryTimestamp(historyItem.generatedAt || historyItem.createdAt, locale);
 }
@@ -6260,6 +6365,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [guestMarketBriefing, setGuestMarketBriefing] = useState<MarketBriefingResponse | null>(null);
   const [isGuestMarketBriefingLoading, setGuestMarketBriefingLoading] = useState(false);
   const [isGuestMarketBriefingUnavailable, setGuestMarketBriefingUnavailable] = useState(false);
+  const [memberMarketBriefing, setMemberMarketBriefing] = useState<MarketBriefingResponse | null>(null);
+  const [isMemberMarketBriefingLoading, setMemberMarketBriefingLoading] = useState(false);
+  const [isMemberMarketBriefingUnavailable, setMemberMarketBriefingUnavailable] = useState(false);
   const [guestError, setGuestError] = useState<ParsedApiError | null>(null);
   const [guestFallbackNotice, setGuestFallbackNotice] = useState<string | null>(null);
   const [pendingHistoryDelete, setPendingHistoryDelete] = useState<PendingHistoryDelete | null>(null);
@@ -6512,6 +6620,45 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   }, [isGuest]);
 
   useEffect(() => {
+    if (isGuest || !showNeutralHomeStart) {
+      if (isGuest) {
+        setMemberMarketBriefing(null);
+        setMemberMarketBriefingLoading(false);
+        setMemberMarketBriefingUnavailable(false);
+      }
+      return;
+    }
+
+    let isCancelled = false;
+    setMemberMarketBriefingLoading(true);
+    setMemberMarketBriefingUnavailable(false);
+
+    void marketApi.getMarketBriefing()
+      .then((response) => {
+        if (isCancelled) {
+          return;
+        }
+        setMemberMarketBriefing(normalizeMarketBriefingConsumerCopy(response));
+      })
+      .catch(() => {
+        if (isCancelled) {
+          return;
+        }
+        setMemberMarketBriefing(null);
+        setMemberMarketBriefingUnavailable(true);
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setMemberMarketBriefingLoading(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isGuest, showNeutralHomeStart]);
+
+  useEffect(() => {
     if (isGuest || !activeEvidenceTicker) {
       setStockEvidenceFundamentals(null);
       setStockSymbolEvidenceReadiness(null);
@@ -6706,11 +6853,16 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     if (isGuest) {
       return;
     }
+    if (!hasObservedInitialHistoryFetch || isLoadingHistory) {
+      return;
+    }
     if (showNeutralHomeStart) {
       return;
     }
 
-    const nextTicker = normalizeTickerQuery(selectedReport?.meta.stockCode) || DEFAULT_HOME_TICKER;
+    const nextTicker = normalizeTickerQuery(selectedReport?.meta.stockCode)
+      || normalizeTickerQuery(recentHistoryItems[0]?.stockCode)
+      || DEFAULT_HOME_TICKER;
 
     const frame = window.requestAnimationFrame(() => {
       if (nextTicker) {
@@ -6720,7 +6872,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [hasHydratedInitialTicker, isGuest, pendingAnalysisTicker, recentHistoryItems, selectedReport?.meta.stockCode, showNeutralHomeStart]);
+  }, [hasHydratedInitialTicker, hasObservedInitialHistoryFetch, isGuest, isLoadingHistory, pendingAnalysisTicker, recentHistoryItems, selectedReport?.meta.stockCode, showNeutralHomeStart]);
 
   useEffect(() => {
     if (isGuest || pendingAnalysisTicker) {
@@ -6989,6 +7141,15 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const guestMarketSnapshot = isGuest
     ? buildGuestMarketSnapshotView(locale, guestMarketBriefing, isGuestMarketBriefingLoading, isGuestMarketBriefingUnavailable)
     : null;
+  const memberMarketBrief = showNeutralHomeStart
+    ? buildMemberMarketBriefView(
+        locale,
+        memberMarketBriefing,
+        isMemberMarketBriefingLoading,
+        isMemberMarketBriefingUnavailable,
+        routeLocale,
+      )
+    : null;
   const guestCommandConsoleCopy = locale === 'en'
     ? {
         eyebrow: 'Guest Research Console',
@@ -7017,99 +7178,6 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         trustTitle: '安全下一步',
         trustBody: '先查看单个代码的研究入口；只有在需要保存历史、查看更广市场上下文或继续后续工作流时，再创建账户继续。',
         workflow: ['搜索', '分析', '观察', '报告'],
-      };
-  const neutralHomeStartCopy = locale === 'en'
-    ? {
-        eyebrow: 'Start here',
-        title: 'No research symbol selected',
-        subtitle: 'Choose a real saved context or start a new ticker research flow. When data is missing, WolfyStock keeps the result in observation-only or waiting state.',
-        cards: [
-          {
-            key: 'market-overview',
-            title: 'Market Overview',
-            body: 'Read the current market backdrop before deciding what deserves more research time.',
-            note: 'Safe even before you have a watchlist or a saved symbol.',
-            href: routeLocale ? buildLocalizedPath('/market-overview', routeLocale) : '/market-overview',
-          },
-          {
-            key: 'scanner',
-            title: 'Scanner',
-            body: 'Build a research queue when price and history coverage are ready.',
-            note: 'If data is still missing, the scanner should say so instead of inventing candidates.',
-            href: routeLocale ? buildLocalizedPath('/scanner', routeLocale) : '/scanner',
-          },
-          {
-            key: 'stock-research',
-            title: 'Search Symbol',
-            body: 'Enter a ticker or company name above to start one real research flow at a time.',
-            note: 'Missing quote, event, or history inputs should keep the result bounded.',
-            href: routeLocale ? buildLocalizedPath('/stocks/structure-decision', routeLocale) : '/stocks/structure-decision',
-          },
-          {
-            key: 'backtest',
-            title: 'Backtest',
-            body: 'Validate a rule only when enough historical samples exist to support the check.',
-            note: 'No historical sample means no result should be implied.',
-            href: routeLocale ? buildLocalizedPath('/backtest', routeLocale) : '/backtest',
-          },
-          {
-            key: 'watchlist',
-            title: 'Portfolio / Watchlist',
-            body: 'Organize symbols, notes, and later observations once you have something worth tracking.',
-            note: 'An empty account can still start with a watchlist instead of a personalized analysis.',
-            href: routeLocale ? buildLocalizedPath('/watchlist', routeLocale) : '/watchlist',
-          },
-        ] satisfies NeutralHomeStartCard[],
-        readinessTitle: 'Data readiness matters',
-        readinessBody: 'Some routes need quotes, history, or prior observations before they can move beyond observation-only states. WolfyStock should show those limits directly.',
-        readinessAction: 'Open data readiness',
-        readinessHref: routeLocale ? buildLocalizedPath('/admin/provider-activation', routeLocale) : '/admin/provider-activation',
-      }
-    : {
-        eyebrow: '从这里开始',
-        title: '尚未选择研究标的',
-        subtitle: '请从真实的已保存上下文继续，或输入代码/名称开始新的研究流。行情、历史样本或观察记录缺失时，结果会明确停留在观察或等待状态。',
-        cards: [
-          {
-            key: 'market-overview',
-            title: '市场总览',
-            body: '先看当前市场环境与风险背景，再决定下一步应该研究什么。',
-            note: '即使还没有观察列表或已保存标的，也可以先从这里开始。',
-            href: routeLocale ? buildLocalizedPath('/market-overview', routeLocale) : '/market-overview',
-          },
-          {
-            key: 'scanner',
-            title: '扫描器',
-            body: '在行情和历史数据就绪后，建立一份待研究队列。',
-            note: '如果数据仍缺失，扫描器应直接说明原因，而不是生成伪候选。',
-            href: routeLocale ? buildLocalizedPath('/scanner', routeLocale) : '/scanner',
-          },
-          {
-            key: 'stock-research',
-            title: '输入 / 搜索标的',
-            body: '在上方输入代码或名称，逐个开启真实研究流。',
-            note: '缺少行情、事件或历史样本时，结果会保持受限而不是补造结论。',
-            href: routeLocale ? buildLocalizedPath('/stocks/structure-decision', routeLocale) : '/stocks/structure-decision',
-          },
-          {
-            key: 'backtest',
-            title: '回测',
-            body: '只有在历史样本足够时，才用规则验证想法。',
-            note: '历史样本不足时，不应暗示已有回测结果。',
-            href: routeLocale ? buildLocalizedPath('/backtest', routeLocale) : '/backtest',
-          },
-          {
-            key: 'watchlist',
-            title: '组合 / 观察列表',
-            body: '把关注标的、后续观察点和个人上下文组织起来。',
-            note: '还没有持仓或列表时，可以先从观察列表起步，而不是默认个性化分析。',
-            href: routeLocale ? buildLocalizedPath('/watchlist', routeLocale) : '/watchlist',
-          },
-        ] satisfies NeutralHomeStartCard[],
-        readinessTitle: '数据就绪度会影响路径',
-        readinessBody: '部分工作流需要行情、历史样本或先前观察记录才能继续。WolfyStock 会直接展示这些限制，而不是制造活动、推荐或分析结果。',
-        readinessAction: '查看数据就绪度',
-        readinessHref: routeLocale ? buildLocalizedPath('/admin/provider-activation', routeLocale) : '/admin/provider-activation',
       };
 
   const omnibarModule = (
@@ -7207,89 +7275,106 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         </div>
       ) : null}
       <main className="w-full flex-1 flex flex-col min-h-0 min-w-0" data-testid="home-bento-main">
-        {showNeutralHomeStart ? (
+        {showNeutralHomeStart && memberMarketBrief ? (
           <section
             className="mx-auto flex w-full max-w-[1880px] flex-1 min-w-0 flex-col px-3 py-3 sm:px-4 xl:px-6 2xl:px-8"
-            data-testid="member-home-neutral-start"
+            data-testid="member-home-market-brief"
           >
-            <div className="flex w-full min-w-0 flex-col gap-4" data-testid="member-home-neutral-start-stack">
+            <div className="flex w-full min-w-0 flex-col gap-4" data-testid="member-home-market-brief-stack">
+              {omnibarModule}
               <section
                 className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-4 sm:px-5 sm:py-5')}
-                data-testid="member-home-neutral-hero"
+                data-testid="member-home-market-brief-hero"
               >
-                <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
                   <div className="min-w-0 max-w-3xl">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">
-                      {neutralHomeStartCopy.eyebrow}
+                      {memberMarketBrief.eyebrow}
                     </p>
                     <h1 className="mt-2 text-[28px] font-semibold tracking-[0] text-white sm:text-[32px]">
-                      {neutralHomeStartCopy.title}
+                      {memberMarketBrief.title}
                     </h1>
-                    <p className="mt-2 max-w-2xl text-sm leading-6 text-white/62 sm:text-[15px]">
-                      {neutralHomeStartCopy.subtitle}
+                    <div
+                      className="mt-3 inline-flex min-h-9 max-w-full items-center rounded-full border border-cyan-200/18 bg-cyan-300/[0.07] px-3.5 py-1.5 text-sm font-semibold text-cyan-50"
+                      data-testid="member-home-market-regime"
+                    >
+                      <span className="truncate">
+                        {locale === 'en' ? 'Current state' : '当前状态'}：{memberMarketBrief.regimeLabel}
+                      </span>
+                    </div>
+                    <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-white/78 sm:text-[15px]">
+                      {memberMarketBrief.regimeDetail}
+                    </p>
+                    <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60 sm:text-[15px]">
+                      {memberMarketBrief.summary}
                     </p>
                   </div>
                   <aside
                     className={cn(HOME_LOCAL_INSET_PANEL_CLASS, 'max-w-xl px-4 py-4')}
-                    data-testid="member-home-neutral-readiness"
+                    data-testid="member-home-market-reliability"
                   >
-                    <p className="text-[11px] font-medium text-white/40">{neutralHomeStartCopy.readinessTitle}</p>
+                    <p className="text-[11px] font-medium text-white/40">
+                      {locale === 'en' ? 'Data reliability' : '数据可靠性'}
+                    </p>
+                    <h2 className="mt-2 text-sm font-semibold text-white/88">{memberMarketBrief.reliabilityLabel}</h2>
                     <p className="mt-2 text-sm leading-6 text-white/62">
-                      {neutralHomeStartCopy.readinessBody}
+                      {memberMarketBrief.reliabilityDetail}
                     </p>
                   </aside>
-                </div>
-
-                <div className="mt-4 min-w-0">
-                  {omnibarModule}
                 </div>
               </section>
 
               <section
-                className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,0.6fr)]"
-                data-testid="member-home-neutral-guides"
+                className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]"
+                data-testid="member-home-market-brief-guides"
               >
                 <div
-                  className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-3"
-                  data-testid="member-home-neutral-cards"
+                  className="grid min-w-0 gap-4 md:grid-cols-3"
+                  data-testid="member-home-market-evidence"
                 >
-                  {neutralHomeStartCopy.cards.map((card) => (
-                    <Link
+                  {memberMarketBrief.evidence.map((card) => (
+                    <article
                       key={card.key}
-                      to={card.href}
                       className={cn(
                         HOME_LOCAL_SURFACE_PANEL_CLASS,
-                        'flex min-h-[168px] min-w-0 flex-col justify-between px-4 py-4 transition-colors hover:border-[color:var(--wolfy-border-focus)] hover:bg-white/[0.03] sm:px-5',
+                        'flex min-h-[148px] min-w-0 flex-col justify-between px-4 py-4 sm:px-5',
                       )}
-                      data-testid={`member-home-start-card-${card.key}`}
+                      data-testid={`member-home-market-evidence-${card.key}`}
                     >
                       <div className="min-w-0">
-                        <h2 className="text-sm font-semibold text-white/88">{card.title}</h2>
-                        <p className="mt-2 text-sm leading-6 text-white/62">{card.body}</p>
+                        <p className="text-[11px] font-medium text-white/42">{card.label}</p>
+                        <h2 className="mt-2 text-sm font-semibold leading-5 text-white/88">{card.value}</h2>
                       </div>
-                      <p className="mt-3 text-[11px] leading-5 text-white/42">{card.note}</p>
-                    </Link>
+                      <p className="mt-3 text-[11px] leading-5 text-white/46">{card.detail}</p>
+                    </article>
                   ))}
                 </div>
 
                 <aside
                   className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-4 sm:px-5')}
-                  data-testid="member-home-readiness-reference"
+                  data-testid="member-home-market-actions"
                 >
-                  <p className="text-[11px] font-medium text-white/40">{neutralHomeStartCopy.readinessTitle}</p>
-                  <h2 className="mt-2 text-sm font-semibold text-white/88">
-                    {locale === 'en' ? 'No default analysis is loaded' : '不会加载默认分析'}
-                  </h2>
-                  <p className="mt-2 text-sm leading-6 text-white/62">
-                    {neutralHomeStartCopy.readinessBody}
+                  <p className="text-[11px] font-medium text-white/40">{locale === 'en' ? 'Next action' : '下一步'}</p>
+                  <div className="mt-3 grid min-w-0 gap-2">
+                    {memberMarketBrief.actions.map((action) => (
+                      <Link
+                        key={action.key}
+                        to={action.href}
+                        className={cn(
+                          'inline-flex min-h-10 min-w-0 items-center justify-center rounded-lg border px-4 text-sm font-semibold transition-colors',
+                          action.primary
+                            ? 'border-[color:var(--wolfy-border-focus)] bg-[var(--wolfy-accent)] text-white hover:bg-[#8178e7]'
+                            : 'border-white/[0.08] bg-white/[0.035] text-white/72 hover:border-white/[0.12] hover:bg-white/[0.06] hover:text-white/88',
+                        )}
+                        data-testid={`member-home-market-action-${action.key}`}
+                      >
+                        <span className="truncate">{action.label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                  <p data-testid="member-home-market-safety" className="mt-4 text-[11px] leading-5 text-white/38">
+                    {memberMarketBrief.safety}
                   </p>
-                  <Link
-                    to={neutralHomeStartCopy.readinessHref}
-                    className="mt-4 inline-flex min-h-10 items-center justify-center rounded-lg border border-[color:var(--wolfy-border-focus)] bg-[var(--wolfy-accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#8178e7]"
-                    data-testid="member-home-readiness-reference-link"
-                  >
-                    {neutralHomeStartCopy.readinessAction}
-                  </Link>
                 </aside>
               </section>
             </div>
