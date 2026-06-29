@@ -117,6 +117,46 @@ class _TaskQueueFixture:
         }
 
 
+class _ScannerUniverseOperatorFixture:
+    def get_universe_operator_readiness(self, *, market: str = "cn", profile: str | None = None):
+        return {
+            "contractVersion": "scanner_universe_operator_readiness_v1",
+            "status": "stale",
+            "market": market,
+            "profile": profile or "cn_preopen_v1",
+            "freshnessState": "universe_modified:2026-06-20",
+            "lastUpdatedAt": "2026-06-20T00:00:00+00:00",
+            "affectedProductSurfaces": ["Scanner", "Research Radar", "Backtest"],
+            "nextOperatorAction": "Refresh the configured scanner universe through the approved operator workflow.",
+            "scannerUniverseReadiness": {
+                "status": "stale",
+                "freshnessState": "universe_modified:2026-06-20",
+                "lastUpdatedAt": "2026-06-20T00:00:00+00:00",
+            },
+            "readOnly": True,
+            "noExternalCalls": True,
+            "mutationEnabled": False,
+            "consumerVisible": False,
+        }
+
+    def request_universe_refresh_action(self, *, market: str = "cn", profile: str | None = None):
+        before = self.get_universe_operator_readiness(market=market, profile=profile)
+        return {
+            "contractVersion": "scanner_universe_operator_action_v1",
+            "status": "manual_action_required",
+            "actionStatus": "deferred",
+            "market": market,
+            "profile": profile or "cn_preopen_v1",
+            "refreshExecuted": False,
+            "mutationEnabled": False,
+            "noExternalCalls": True,
+            "providerCallsEnabled": False,
+            "nextOperatorAction": "Use the approved scanner universe refresh workflow, then rerun this readiness check.",
+            "before": before,
+            "after": before,
+        }
+
+
 @pytest.fixture()
 def app(tmp_path: Path):
     DatabaseManager.reset_instance()
@@ -216,6 +256,45 @@ def test_admin_ops_status_requires_admin_with_ops_logs_read(
     with _client(app, _ops_admin) as client:
         allowed = client.get("/api/v1/admin/ops/status")
     assert allowed.status_code == 200
+
+
+def test_admin_scanner_universe_readiness_exposes_operator_fields_without_mutation(app: FastAPI) -> None:
+    app.state.scanner_universe_operator_service = _ScannerUniverseOperatorFixture()
+
+    with _client(app, _ops_admin) as client:
+        response = client.get("/api/v1/admin/ops/scanner-universe-readiness")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "stale"
+    assert payload["freshnessState"] == "universe_modified:2026-06-20"
+    assert payload["lastUpdatedAt"] == "2026-06-20T00:00:00+00:00"
+    assert payload["affectedProductSurfaces"] == ["Scanner", "Research Radar", "Backtest"]
+    assert payload["nextOperatorAction"].startswith("Refresh the configured scanner universe")
+    assert payload["scannerUniverseReadiness"]["status"] == "stale"
+    assert payload["readOnly"] is True
+    assert payload["noExternalCalls"] is True
+    assert payload["mutationEnabled"] is False
+    _assert_no_sensitive_markers(payload)
+
+
+def test_admin_scanner_universe_refresh_action_defers_when_no_safe_refresh_seam(app: FastAPI) -> None:
+    app.state.scanner_universe_operator_service = _ScannerUniverseOperatorFixture()
+
+    with _client(app, _ops_admin) as client:
+        response = client.post("/api/v1/admin/ops/scanner-universe-refresh")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "manual_action_required"
+    assert payload["actionStatus"] == "deferred"
+    assert payload["refreshExecuted"] is False
+    assert payload["mutationEnabled"] is False
+    assert payload["providerCallsEnabled"] is False
+    assert payload["before"]["status"] == "stale"
+    assert payload["after"]["status"] == "stale"
+    assert "approved scanner universe refresh workflow" in payload["nextOperatorAction"]
+    _assert_no_sensitive_markers(payload)
 
 
 def test_admin_ops_status_returns_read_only_advisory_markers(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> None:

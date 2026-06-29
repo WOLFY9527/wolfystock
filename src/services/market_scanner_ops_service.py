@@ -27,6 +27,10 @@ def _trigger_scope(trigger_mode: str) -> str:
 class MarketScannerOperationsService:
     """Thin orchestration layer for scanner schedule + notification workflows."""
 
+    _MANUAL_REFRESH_ACTION = (
+        "Use the approved scanner universe refresh workflow, then rerun this readiness check."
+    )
+
     def __init__(
         self,
         db_manager: Optional[DatabaseManager] = None,
@@ -132,6 +136,113 @@ class MarketScannerOperationsService:
             schedule_run_immediately=getattr(self.config, "scanner_schedule_run_immediately", False),
             notification_enabled=getattr(self.config, "scanner_notification_enabled", True),
         )
+
+    def get_universe_operator_readiness(
+        self,
+        *,
+        market: str = "cn",
+        profile: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Project scanner universe readiness into an admin/operator action shape.
+
+        This is deliberately read-only. It does not invoke scanner candidate
+        generation, provider fetches, or local cache mutation.
+        """
+        resolved_profile = get_scanner_profile(market=market, profile=profile)
+        status = self.get_operational_status(
+            market=resolved_profile.market,
+            profile=resolved_profile.key,
+        )
+        data_readiness = status.get("dataReadiness") if isinstance(status.get("dataReadiness"), dict) else {}
+        scanner_readiness = (
+            data_readiness.get("scannerUniverseReadiness")
+            if isinstance(data_readiness.get("scannerUniverseReadiness"), dict)
+            else {}
+        )
+        raw_status = str(scanner_readiness.get("status") or "unavailable").strip().lower()
+        operator_status = self._operator_universe_status(raw_status)
+        affected_surfaces = self._operator_affected_surfaces(scanner_readiness)
+        next_action = self._operator_next_action(scanner_readiness, operator_status=operator_status)
+        return {
+            "contractVersion": "scanner_universe_operator_readiness_v1",
+            "status": operator_status,
+            "scannerUniverseStatus": raw_status,
+            "market": resolved_profile.market,
+            "profile": resolved_profile.key,
+            "freshnessState": str(scanner_readiness.get("freshnessState") or data_readiness.get("freshness") or "unknown"),
+            "lastUpdatedAt": scanner_readiness.get("lastUpdatedAt"),
+            "universeSize": int(scanner_readiness.get("universeSize") or data_readiness.get("universeSize") or 0),
+            "affectedProductSurfaces": affected_surfaces,
+            "nextOperatorAction": next_action,
+            "scannerUniverseReadiness": scanner_readiness,
+            "candidateGenerationState": data_readiness.get("candidateGenerationState"),
+            "candidateGenerationBlockers": list(data_readiness.get("candidateGenerationBlockers") or []),
+            "readOnly": True,
+            "noExternalCalls": True,
+            "mutationEnabled": False,
+            "providerCallsEnabled": False,
+            "consumerVisible": False,
+        }
+
+    def request_universe_refresh_action(
+        self,
+        *,
+        market: str = "cn",
+        profile: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Return the bounded operator refresh decision without mutating cache.
+
+        Existing scanner universe refresh behavior is coupled to provider/source
+        authority and local cache writes. This admin action therefore fails
+        closed as a manual/deferred action until an approved refresh seam exists.
+        """
+        before = self.get_universe_operator_readiness(market=market, profile=profile)
+        return {
+            "contractVersion": "scanner_universe_operator_action_v1",
+            "status": "manual_action_required",
+            "actionStatus": "deferred",
+            "market": before["market"],
+            "profile": before["profile"],
+            "refreshExecuted": False,
+            "mutationEnabled": False,
+            "noExternalCalls": True,
+            "providerCallsEnabled": False,
+            "runtimeBehaviorChanged": False,
+            "nextOperatorAction": self._MANUAL_REFRESH_ACTION,
+            "before": before,
+            "after": before,
+        }
+
+    @staticmethod
+    def _operator_universe_status(raw_status: str) -> str:
+        if raw_status == "available":
+            return "ready"
+        if raw_status in {"missing", "stale", "not_configured", "unavailable"}:
+            return raw_status
+        if raw_status in {"deferred", "manual_action_required"}:
+            return raw_status
+        return "manual_action_required"
+
+    @staticmethod
+    def _operator_affected_surfaces(scanner_readiness: Dict[str, Any]) -> list[str]:
+        values = scanner_readiness.get("affectedProductSurfaces") or scanner_readiness.get("blockedProductSurfaces") or []
+        surfaces: list[str] = []
+        for value in [*list(values), "Scanner", "Research Radar", "Backtest"]:
+            label = str(value or "").strip()
+            if label and label not in surfaces:
+                surfaces.append(label)
+        return surfaces
+
+    def _operator_next_action(self, scanner_readiness: Dict[str, Any], *, operator_status: str) -> str:
+        if operator_status in {"ready", "missing", "stale", "not_configured", "unavailable"}:
+            action = str(
+                scanner_readiness.get("nextOperatorAction")
+                or scanner_readiness.get("operatorNextAction")
+                or ""
+            ).strip()
+            if action:
+                return action
+        return self._MANUAL_REFRESH_ACTION
 
     def _run_scan_workflow(
         self,

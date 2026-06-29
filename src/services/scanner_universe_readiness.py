@@ -18,18 +18,21 @@ from typing import Any
 SCANNER_UNIVERSE_READINESS_CONTRACT_VERSION = "scanner_universe_readiness_v1"
 SCANNER_UNIVERSE_SUPPORTED_STATUSES = (
     "available",
+    "ready",
     "missing",
     "stale",
     "not_configured",
     "insufficient_coverage",
     "unavailable",
+    "deferred",
+    "manual_action_required",
 )
 SCANNER_UNIVERSE_REQUIRED_DATA_CLASSES = (
     "universe",
     "historical_ohlcv",
     "quote_snapshot",
 )
-SCANNER_UNIVERSE_BLOCKED_SURFACES = ("Scanner", "Market Overview", "Backtest")
+SCANNER_UNIVERSE_BLOCKED_SURFACES = ("Scanner", "Research Radar", "Backtest", "Market Overview")
 SCANNER_UNIVERSE_MAX_AGE_DAYS = 3
 SCANNER_UNIVERSE_SAFE_DATA_FAMILIES = (
     "universe",
@@ -132,6 +135,8 @@ def build_scanner_universe_readiness_contract(
     missing_data_families: list[str] | None = None,
 ) -> dict[str, Any]:
     normalized_status = str(status or "").strip().lower()
+    if normalized_status == "ready":
+        normalized_status = "available"
     if normalized_status not in SCANNER_UNIVERSE_SUPPORTED_STATUSES:
         normalized_status = "unavailable"
     required = list(required_data_classes or SCANNER_UNIVERSE_REQUIRED_DATA_CLASSES)
@@ -159,6 +164,7 @@ def build_scanner_universe_readiness_contract(
         "eligibleSymbols": _safe_symbol_list(eligible_symbols),
         "blockedSymbols": _safe_symbol_list(blocked_symbols),
         "blockedProductSurfaces": surfaces,
+        "affectedProductSurfaces": surfaces,
         "operatorNextAction": next_action,
         "nextOperatorAction": next_action,
         "consumerSafeMessage": consumer_safe_message or _consumer_safe_message(normalized_status),
