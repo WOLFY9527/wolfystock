@@ -93,6 +93,24 @@ def _write_quote_cache(cache_path: Path, symbols: Iterable[str]) -> None:
     cache_path.write_text(json.dumps({"quotes": rows}), encoding="utf-8")
 
 
+def _write_stale_quote_cache(cache_path: Path, symbols: Iterable[str]) -> None:
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {
+            "symbol": symbol,
+            "market": "us",
+            "last": 100.0 + index,
+            "previousClose": 99.5 + index,
+            "volume": 1_000_000 + index,
+            "asOf": (datetime.now(timezone.utc) - timedelta(days=2)).isoformat(),
+            "currency": "USD",
+            "source": "local_quote_snapshot_cache",
+        }
+        for index, symbol in enumerate(symbols)
+    ]
+    cache_path.write_text(json.dumps({"quotes": rows}), encoding="utf-8")
+
+
 def _build_model(
     tmp_path: Path,
     *,
@@ -210,6 +228,36 @@ def test_missing_quote_snapshot_preserves_source_state_and_marks_quote_card_bloc
     assert model["dataQuality"]["quoteSnapshotCoverage"]["state"] == "partial"
     assert model["dataQuality"]["quoteSnapshotCoverage"]["missingSymbols"] == ["AAPL"]
     assert model["surfaceHints"][0]["statusHint"] == "quote_snapshot_missing"
+
+
+def test_stale_quote_snapshot_is_consumed_and_degraded_not_not_requested(tmp_path: Path) -> None:
+    ohlcv_dir = tmp_path / "us-parquet-cache"
+    quote_path = tmp_path / "quote-snapshot-cache" / "us-starter-quotes.json"
+    _write_ohlcv(ohlcv_dir, _full_values())
+    _write_stale_quote_cache(quote_path, SYMBOLS)
+
+    model = build_market_regime_read_model(
+        market="US",
+        symbols=SYMBOLS,
+        benchmark_symbol="SPY",
+        growth_proxy_symbol="QQQ",
+        required_bars=60,
+        ohlcv_cache_dir=ohlcv_dir,
+        quote_snapshot_cache_path=quote_path,
+        require_adjusted=True,
+    )
+
+    assert model["dataQuality"]["ohlcvCoverage"]["state"] == "available"
+    quote_coverage = model["dataQuality"]["quoteSnapshotCoverage"]
+    assert quote_coverage["state"] == "stale"
+    assert quote_coverage["availabilityState"] == "stale"
+    assert quote_coverage["staleSymbols"] == SYMBOLS
+    assert quote_coverage["state"] != "not_requested"
+    quote_card = _card_by_id(model, "quote_snapshot")
+    assert quote_card["cardId"] == "quote_snapshot"
+    assert quote_card["status"] == "degraded"
+    assert model["surfaceHints"]
+    assert all(hint.get("statusHint") for hint in model["surfaceHints"])
 
 
 def test_invalid_source_input_fails_closed_without_raw_exception_leakage(tmp_path: Path) -> None:

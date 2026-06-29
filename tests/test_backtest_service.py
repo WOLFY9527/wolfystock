@@ -540,6 +540,38 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["usableBars"], 0)
         self.assertEqual(readiness["missingBars"], status["eval_window_days"])
 
+    def test_aggregate_sample_status_exposes_local_symbol_readiness_without_masking(self) -> None:
+        for symbol in ("SPY", "QQQ", "AAPL", "MSFT"):
+            self._write_local_us_parquet(self._temp_dir.name, symbol, rows=90)
+        service = BacktestService(self.db)
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": self._temp_dir.name,
+                "US_STOCK_PARQUET_DIR": "",
+            },
+            clear=False,
+        ), patch("src.services.us_history_helper.DataFetcherManager") as manager_cls:
+            aggregate = service.get_sample_status(code=None)
+            spy = service.get_sample_status(code="SPY")
+            aapl = service.get_sample_status(code="AAPL")
+
+        manager_cls.assert_not_called()
+        self.assertEqual(aggregate["code"], "__all__")
+        self.assertEqual(aggregate["scope"], "aggregate")
+        self.assertEqual(aggregate["sample_readiness_state"], "missing_cache")
+        symbol_readiness = aggregate["symbolSpecificReadiness"]
+        self.assertEqual([item["symbol"] for item in symbol_readiness], ["SPY", "QQQ", "AAPL", "MSFT"])
+        self.assertTrue(all(item["historicalOhlcvState"] == "ready" for item in symbol_readiness))
+        self.assertTrue(all(item["providerState"] == "available" for item in symbol_readiness))
+        self.assertEqual(spy["historicalOhlcvReadiness"]["providerState"], "available")
+        self.assertEqual(aapl["historicalOhlcvReadiness"]["providerState"], "available")
+        self.assertNotEqual(
+            aggregate["historicalOhlcvReadiness"]["providerState"],
+            spy["historicalOhlcvReadiness"]["providerState"],
+        )
+
     def test_run_history_is_recorded_and_results_can_be_reopened(self) -> None:
         service = BacktestService(self.db)
         stats = service.run_backtest(code="600519", force=False, eval_window_days=3, min_age_days=0, limit=10)

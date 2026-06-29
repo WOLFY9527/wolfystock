@@ -224,6 +224,64 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
 
             self.assertEqual(readiness["status"], expected_status)
 
+        for raw_status in ("local_universe_available", "local_universe_seeded", "quote_snapshot_stale", "provider_not_configured"):
+            with self.subTest(raw_status=raw_status), patch.object(
+                ops_service,
+                "get_operational_status",
+                return_value={
+                    "dataReadiness": {
+                        "scannerUniverseReadiness": {
+                            "status": raw_status,
+                            "freshnessState": raw_status,
+                            "lastUpdatedAt": None,
+                            "affectedProductSurfaces": ["Scanner", "Research Radar", "Backtest"],
+                        },
+                        "candidateGenerationBlockers": [],
+                    }
+                },
+            ):
+                readiness = ops_service.get_universe_operator_readiness(market="cn", profile="cn_preopen_v1")
+
+            self.assertEqual(readiness["status"], raw_status)
+
+    def test_operator_universe_readiness_activates_bounded_us_parquet_universe(self) -> None:
+        cache_dir = Path(self._cache_temp_dir.name) / "us-parquet-cache"
+        seed_us_local_history(StockRepository(self.db))
+        for symbol in ("SPY", "QQQ", "AAPL", "MSFT"):
+            (cache_dir / f"{symbol}.parquet").parent.mkdir(parents=True, exist_ok=True)
+            (cache_dir / f"{symbol}.parquet").touch()
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": str(cache_dir),
+                "US_STOCK_PARQUET_DIR": "",
+                "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "",
+            },
+            clear=False,
+        ):
+            ops_service = MarketScannerOperationsService(
+                scanner_service=MarketScannerService(self.db, data_manager=FakeUsScannerDataManager()),
+                config=_make_config(scanner_notification_enabled=False),
+                notifier_factory=lambda: FakeNotifier(available=False),
+            )
+            readiness = ops_service.get_universe_operator_readiness(market="us", profile="us_preopen_v1")
+
+        self.assertEqual(readiness["status"], "local_universe_available")
+        self.assertEqual(readiness["market"], "us")
+        self.assertTrue(readiness["readOnly"])
+        self.assertTrue(readiness["noExternalCalls"])
+        self.assertFalse(readiness["providerCallsEnabled"])
+        scanner_readiness = readiness["scannerUniverseReadiness"]
+        self.assertEqual(scanner_readiness["status"], "local_universe_available")
+        self.assertEqual(scanner_readiness["sourceClass"], "local_bounded_us_parquet_universe")
+        self.assertEqual(scanner_readiness["symbols"], ["SPY", "QQQ", "AAPL", "MSFT"])
+        self.assertEqual(scanner_readiness["generatedFrom"], "LOCAL_US_PARQUET_DIR")
+        self.assertTrue(scanner_readiness["noExternalCalls"])
+        self.assertFalse(scanner_readiness["providerCallsEnabled"])
+        self.assertIn("universe", scanner_readiness["availableDataClasses"])
+        self.assertNotIn("universe_missing", readiness["candidateGenerationBlockers"])
+
     def test_operator_universe_refresh_deferred_without_safe_refresh_seam_or_cache_mutation(self) -> None:
         os.utime(self._scanner_cache_path, (1, 1))
         ops_service = MarketScannerOperationsService(

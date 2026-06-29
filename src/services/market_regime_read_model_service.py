@@ -494,6 +494,8 @@ def _build_data_quality(source: Mapping[str, Any]) -> dict[str, Any]:
     quote_state = str(quote.get("availabilityState") or "missing")
     if quote_state == "available":
         quote_coverage_state = "available"
+    elif quote_state == "stale":
+        quote_coverage_state = "stale"
     elif quote_state == "not_requested":
         quote_coverage_state = "not_requested"
     elif quote.get("availableSymbols"):

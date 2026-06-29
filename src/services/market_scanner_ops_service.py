@@ -217,6 +217,13 @@ class MarketScannerOperationsService:
     def _operator_universe_status(raw_status: str) -> str:
         if raw_status == "available":
             return "ready"
+        if raw_status in {
+            "local_universe_available",
+            "local_universe_seeded",
+            "quote_snapshot_stale",
+            "provider_not_configured",
+        }:
+            return raw_status
         if raw_status in {"missing", "stale", "not_configured", "unavailable"}:
             return raw_status
         if raw_status in {"deferred", "manual_action_required"}:

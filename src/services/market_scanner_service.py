@@ -86,6 +86,7 @@ DEFAULT_SCANNER_REVIEW_WINDOW_DAYS = 3
 DEFAULT_SCANNER_BENCHMARK_CODE = "000300"
 DEFAULT_US_SCANNER_BENCHMARK_CODE = "SPY"
 DEFAULT_HK_SCANNER_BENCHMARK_CODE = "HK02800"
+BOUNDED_US_LOCAL_SCANNER_UNIVERSE_SYMBOLS = ("SPY", "QQQ", "AAPL", "MSFT")
 MIN_US_SCANNER_SEED_TARGET = 24
 MAX_US_SCANNER_SUPPLEMENT_TARGET = 80
 MAX_HK_SCANNER_SUPPLEMENT_TARGET = 60
@@ -2431,6 +2432,8 @@ class MarketScannerService:
         requirements = {str(item or "").strip().lower() for item in ohlcv_requirements if str(item or "").strip()}
         if cache_universe_status in {"missing", "stale", "not_configured", "unavailable"}:
             return None
+        if quote_coverage == "stale":
+            return "Refresh quote snapshot coverage before candidate generation."
         if "provider_missing" in requirements:
             return "Enable the existing historical OHLCV cache/readiness path, or seed local bars for the bounded scanner universe."
         if requirements.intersection({"provider_unavailable", "entitlement_required"}):
@@ -2545,6 +2548,35 @@ class MarketScannerService:
         if status == "failed":
             return "scanner_runtime_unavailable"
         return "unknown"
+
+    @staticmethod
+    def _bounded_local_us_universe_from_parquet(parquet_dir: Path) -> Dict[str, Any]:
+        configured_key = "LOCAL_US_PARQUET_DIR" if os.getenv("LOCAL_US_PARQUET_DIR", "").strip() else "US_STOCK_PARQUET_DIR"
+        symbols: List[str] = []
+        try:
+            if parquet_dir.exists() and parquet_dir.is_dir():
+                for symbol in BOUNDED_US_LOCAL_SCANNER_UNIVERSE_SYMBOLS:
+                    if (parquet_dir / f"{symbol}.parquet").exists():
+                        symbols.append(symbol)
+        except OSError as exc:
+            logger.warning("Unable to inspect bounded local US scanner universe at %s: %s", parquet_dir, exc)
+            symbols = []
+        return {
+            "status": "local_universe_available" if symbols else "missing",
+            "universeSize": len(symbols),
+            "lastUpdatedAt": None,
+            "freshnessState": "local_universe_available" if symbols else "missing_universe",
+            "sourceMetadata": {
+                "sourceClass": "local_bounded_us_parquet_universe",
+                "sourcePath": configured_key,
+                "symbols": symbols,
+                "generatedFrom": configured_key,
+                "noExternalCalls": True,
+                "providerCallsEnabled": False,
+                "readOnly": True,
+                "activationState": "local_universe_available" if symbols else "universe_missing",
+            },
+        }
 
     @staticmethod
     def _data_readiness_copy(blocker: str, state: str) -> Tuple[str, str]:
@@ -2791,12 +2823,18 @@ class MarketScannerService:
             str(market or "").strip().lower() == "cn"
             and universe_type == "default"
         )
+        uses_us_default_local_parquet_universe = (
+            str(market or "").strip().lower() == "us"
+            and universe_type == "default"
+        )
         cache_universe_readiness = (
             build_scanner_universe_readiness_from_cache(
                 market=market,
                 cache_path=self.local_universe_cache_path,
             )
             if uses_cn_default_universe_cache
+            else self._bounded_local_us_universe_from_parquet(get_us_stock_parquet_dir())
+            if uses_us_default_local_parquet_universe
             else {
                 "status": "available" if resolved_universe_size > 0 else "missing",
                 "lastUpdatedAt": None,
@@ -2806,7 +2844,7 @@ class MarketScannerService:
             }
         )
         cache_universe_status = str(cache_universe_readiness.get("status") or "unavailable")
-        if cache_universe_status in {"available", "insufficient_coverage"}:
+        if cache_universe_status in {"available", "insufficient_coverage", "local_universe_available", "local_universe_seeded"}:
             cached_universe_size = self._readiness_int(cache_universe_readiness.get("universeSize"))
             if resolved_universe_size <= 0 and cached_universe_size > 0:
                 resolved_universe_size = cached_universe_size
@@ -2972,13 +3010,22 @@ class MarketScannerService:
         scanner_universe_readiness = build_scanner_universe_readiness_from_coverage(
             market=market,
             universe_status=(
+                cache_universe_status
+                if cache_universe_status in {"local_universe_available", "local_universe_seeded"}
+                else "quote_snapshot_stale"
+                if quote_coverage == "stale" and universe_availability == "available"
+                else "provider_not_configured"
+                if "provider_missing" in ohlcv_requirements and universe_availability == "available"
+                else
                 "available"
                 if universe_availability == "available"
                 else "stale"
                 if universe_availability == "stale"
                 else cache_universe_status
-                if uses_cn_default_universe_cache
-                and cache_universe_status in {"missing", "stale", "not_configured", "unavailable"}
+                if (
+                    (uses_cn_default_universe_cache or uses_us_default_local_parquet_universe)
+                    and cache_universe_status in {"missing", "stale", "not_configured", "unavailable"}
+                )
                 else "missing"
             ),
             universe_size=int(resolved_universe_size or cache_universe_readiness.get("universeSize") or 0),
@@ -2993,6 +3040,11 @@ class MarketScannerService:
             blocked_symbols=ohlcv_symbol_readiness["blockedSymbols"],
             missing_data_families=missing_data_families,
             operator_next_action=scanner_operator_action,
+            source_metadata=(
+                cache_universe_readiness.get("sourceMetadata")
+                if isinstance(cache_universe_readiness.get("sourceMetadata"), dict)
+                else None
+            ),
         )
         if (
             scanner_universe_readiness["status"] == "insufficient_coverage"
