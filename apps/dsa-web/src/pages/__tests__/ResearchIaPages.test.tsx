@@ -434,6 +434,86 @@ describe('research IA pages', () => {
     expect(page).toHaveTextContent('驱动评分');
   });
 
+  it('uses product-ready read model as the first-viewport primary market context', async () => {
+    getDecisionCockpitMock.mockResolvedValue({
+      schemaVersion: 'market_decision_cockpit.v1',
+      generatedAt: '2026-06-15T09:30:00Z',
+      marketRegimeReadModel: {
+        available: true,
+        primaryContext: true,
+        readinessLabel: 'product_ready',
+        status: 'ok',
+        regimeLabel: 'risk_off',
+        summary: 'Risk-off evidence is currently dominant across the bounded read model.',
+        evidenceCards: [
+          { id: 'benchmark_trend', title: 'Benchmark Trend', status: 'negative', headline: 'Benchmark trend evidence is negative.' },
+          { id: 'breadth', title: 'Breadth', status: 'negative', headline: 'Breadth evidence is weak.' },
+        ],
+      },
+      marketRegimeDecision: {
+        regime: 'risk_off',
+        confidence: 'medium',
+        driverScores: {},
+        explanation: {
+          whyThisRegime: ['Risk-off evidence is currently dominant across the bounded read model.'],
+          whatConfirmsIt: ['Benchmark trend evidence is negative.'],
+          whatInvalidatesIt: [],
+        },
+        invalidationConditions: [],
+        researchPriorities: {
+          watchToday: ['Monitor Market Regime Read Model evidence freshness.'],
+          needsMoreEvidence: [],
+          investigateNext: [],
+        },
+      },
+      researchQueuePreview: {
+        topCandidates: [],
+        queueQuality: 'thin',
+        evidenceGaps: [],
+        previewOnly: true,
+      },
+      optionsStructureStatus: {
+        gammaEvidenceStatus: 'unavailable',
+        observationOnly: true,
+        decisionGrade: false,
+        missingEvidence: [],
+        blockedReasonCodes: ['Secondary options structure evidence unavailable'],
+      },
+      cockpitSummary: {
+        whatChanged: ['Market Regime Read Model is product-ready: Risk-off observation.'],
+        whyItMatters: ['This cockpit keeps regime, research triage, and options observation in one read-only view.'],
+        whatToWatch: ['Monitor Market Regime Read Model evidence freshness.'],
+        confidenceLimits: ['Advanced evidence observation-only'],
+      },
+      degradedInputs: [
+        {
+          section: 'scenarioRisks',
+          status: 'unavailable',
+          reason: 'Secondary options structure evidence is unavailable.',
+        },
+      ],
+      noAdviceDisclosure: '仅供研究语境参考。',
+      dataQuality: {
+        status: 'ready',
+        reasonCodes: ['Secondary options structure evidence unavailable'],
+        primaryReadModelReady: true,
+        advancedEvidenceStatus: 'secondary_unavailable',
+      },
+    });
+    getDailyIntelligenceMock.mockRejectedValue(new Error('briefing unavailable'));
+
+    renderRoute(<MarketDecisionCockpitPage />, '/zh/market/decision-cockpit');
+
+    const page = await screen.findByTestId('market-decision-cockpit-page');
+    const firstViewport = await within(page).findByTestId('decision-cockpit-first-viewport-summary');
+
+    expect(firstViewport).toHaveTextContent('Risk-off evidence is currently dominant across the bounded read model.');
+    expect(firstViewport).toHaveTextContent('主市场状态语境：风险规避观察 · 产品可用');
+    expect(firstViewport).toHaveTextContent('次级高级证据缺口');
+    expect(firstViewport).toHaveTextContent('Secondary options structure evidence is unavailable.');
+    expect(firstViewport).not.toHaveTextContent('低置信观察');
+  });
+
   it('renders a compact consumer-safe cockpit narrative for blocked and low-confidence drivers', async () => {
     getDecisionCockpitMock.mockResolvedValue({
       schemaVersion: 'market_decision_cockpit.v1',

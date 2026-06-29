@@ -27,6 +27,25 @@ export type MarketDecisionCockpitResearchCandidate = {
 export type MarketDecisionCockpitResponse = {
   schemaVersion: string;
   generatedAt?: string | null;
+  marketRegimeReadModel?: {
+    available?: boolean;
+    primaryContext?: boolean;
+    readinessLabel?: string | null;
+    status?: string | null;
+    regimeLabel?: string | null;
+    regimeStatus?: string | null;
+    summary?: string | null;
+    evidenceCards?: Array<{
+      id?: string | null;
+      title?: string | null;
+      status?: string | null;
+      severity?: string | null;
+      headline?: string | null;
+    }>;
+    missingDataFamilies?: string[];
+    blockedProductSurfaces?: string[];
+    noAdvice?: boolean;
+  } | null;
   marketRegimeDecision: {
     regime?: string | null;
     confidence?: string | null;
@@ -73,10 +92,18 @@ export type MarketDecisionCockpitResponse = {
     whatToWatch?: string[];
     confidenceLimits?: string[];
   };
+  degradedInputs?: Array<{
+    section?: string | null;
+    status?: string | null;
+    reason?: string | null;
+  }>;
   noAdviceDisclosure?: string | null;
   dataQuality?: {
     status?: string | null;
     reasonCodes?: string[];
+    primaryReadModelReady?: boolean;
+    primaryReadModelStatus?: string | null;
+    advancedEvidenceStatus?: string | null;
   } | null;
 };
 
@@ -85,6 +112,7 @@ function normalizeCockpitResponse(payload: unknown): MarketDecisionCockpitRespon
   return {
     schemaVersion: normalized.schemaVersion,
     generatedAt: normalized.generatedAt ?? null,
+    marketRegimeReadModel: normalized.marketRegimeReadModel ?? null,
     marketRegimeDecision: {
       regime: normalized.marketRegimeDecision?.regime ?? null,
       confidence: normalized.marketRegimeDecision?.confidence ?? null,
@@ -116,6 +144,7 @@ function normalizeCockpitResponse(payload: unknown): MarketDecisionCockpitRespon
       whatToWatch: normalized.cockpitSummary?.whatToWatch ?? [],
       confidenceLimits: normalized.cockpitSummary?.confidenceLimits ?? [],
     },
+    degradedInputs: normalized.degradedInputs ?? [],
     noAdviceDisclosure: normalized.noAdviceDisclosure ?? null,
     dataQuality: normalized.dataQuality ?? null,
   };

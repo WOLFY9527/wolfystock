@@ -15,10 +15,12 @@ from urllib.parse import quote
 
 from src.services.confidence_evidence_consistency import project_confidence_evidence_state
 from src.services.market_overview_service import MarketOverviewService
+from src.services.market_regime_read_model_service import build_market_regime_read_model
 from src.services.market_regime_decision_engine import build_market_regime_decision
 from src.services.options_market_structure_observation import build_options_market_structure_observation
 from src.services.research_radar_candidate_engine import build_research_radar_candidate_queue
 from src.services.consumer_issue_labels import build_consumer_issues, sanitize_consumer_reason_payload
+from src.services.us_history_helper import get_configured_us_stock_parquet_dir
 
 
 SCHEMA_VERSION = "market_decision_cockpit.v1"
@@ -26,10 +28,20 @@ NO_ADVICE_DISCLOSURE = "Observation-only market research; not personalized finan
 _RESEARCH_EMPTY_REASON = "research_candidates_unavailable"
 _OPTION_CHAIN_EMPTY_REASON = "option_chain_unavailable"
 _MARKET_REGIME_LOW_CONFIDENCE_REASON = "market_regime_low_confidence"
+_READ_MODEL_FAILED_CLOSED_REASON = "market_regime_read_model_failed_closed"
+_READ_MODEL_DEGRADED_REASON = "market_regime_read_model_degraded"
+_SECONDARY_RESEARCH_EMPTY_REASON = "secondary_research_evidence_unavailable"
+_SECONDARY_OPTIONS_EMPTY_REASON = "secondary_options_evidence_unavailable"
+_ADVANCED_EVIDENCE_OBSERVATION_ONLY_REASON = "advanced_evidence_observation_only"
 _REGIME_LABELS = {
     "riskOn": "Risk-on observation",
+    "risk_on": "Risk-on observation",
+    "risk_on_confirming": "Risk-on confirming observation",
+    "risk_on_fragile": "Risk-on fragile observation",
     "riskOff": "Risk-off observation",
+    "risk_off": "Risk-off observation",
     "lowConfidence": "Low-confidence observation",
+    "insufficient_data": "Insufficient market evidence",
     "mixed": "Mixed-regime observation",
     "rangeBound": "Range-bound observation",
 }
@@ -54,6 +66,11 @@ _SAFE_REASON_LABELS = {
     "thin": "Thin evidence coverage.",
     "mixed": "Mixed evidence coverage.",
     "strong": "Strong evidence coverage.",
+    _READ_MODEL_FAILED_CLOSED_REASON: "Market Regime Read Model failed closed.",
+    _READ_MODEL_DEGRADED_REASON: "Market Regime Read Model is degraded.",
+    _SECONDARY_RESEARCH_EMPTY_REASON: "Secondary Research Radar evidence is unavailable.",
+    _SECONDARY_OPTIONS_EMPTY_REASON: "Secondary options structure evidence is unavailable.",
+    _ADVANCED_EVIDENCE_OBSERVATION_ONLY_REASON: "Advanced evidence remains observation-only.",
 }
 
 
@@ -64,9 +81,13 @@ class MarketDecisionCockpitService:
         self,
         *,
         market_overview_service: MarketOverviewService | None = None,
+        market_regime_read_model_provider: Callable[[], Mapping[str, Any] | None] | None = None,
         now_provider: Callable[[], str] | None = None,
     ) -> None:
         self._market_overview_service = market_overview_service or MarketOverviewService()
+        self._market_regime_read_model_provider = (
+            market_regime_read_model_provider or self._default_market_regime_read_model_provider
+        )
         self._now_provider = now_provider or self._default_now_provider
 
     def get_decision_cockpit(
@@ -75,15 +96,24 @@ class MarketDecisionCockpitService:
         actor: Mapping[str, Any] | None = None,
         market_inputs: Mapping[str, Any] | None = None,
         market_regime_decision: Mapping[str, Any] | None = None,
+        market_regime_read_model: Mapping[str, Any] | None = None,
         research_candidates: Sequence[Mapping[str, Any]] | None = None,
         option_contracts: Sequence[Any] | None = None,
         option_spot: float | int | str | None = None,
     ) -> dict[str, Any]:
         generated_at = self._now_provider()
-        decision = self._build_market_regime_decision(
+        read_model = self._resolve_market_regime_read_model(
+            explicit_read_model=market_regime_read_model,
+            should_use_default=market_inputs is None and market_regime_decision is None,
+        )
+        advanced_decision = self._build_market_regime_decision(
             actor=actor,
             market_inputs=market_inputs,
             market_regime_decision=market_regime_decision,
+        )
+        decision = self._compose_primary_market_regime_decision(
+            advanced_decision=advanced_decision,
+            read_model=read_model,
         )
         research_preview = self._build_research_queue_preview(
             decision,
@@ -130,6 +160,12 @@ class MarketDecisionCockpitService:
             "schemaVersion": SCHEMA_VERSION,
             "generatedAt": generated_at,
             "marketRegimeDecision": decision,
+            "marketRegimeReadModel": self._build_market_regime_read_model_context(read_model),
+            "advancedDecisionDiagnostics": self._build_advanced_decision_diagnostics(
+                advanced_decision=advanced_decision,
+                primary_decision=decision,
+                read_model=read_model,
+            ),
             "marketRegimeSummary": self._build_market_regime_summary(decision),
             "whatChanged": what_changed,
             "topResearchPriorities": top_research_priorities,
@@ -175,6 +211,45 @@ class MarketDecisionCockpitService:
     @staticmethod
     def _default_now_provider() -> str:
         return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    @staticmethod
+    def _default_market_regime_read_model_provider() -> Mapping[str, Any] | None:
+        return build_market_regime_read_model(
+            market="US",
+            ohlcv_cache_dir=get_configured_us_stock_parquet_dir(),
+            quote_snapshot_cache_path=None,
+        )
+
+    def _resolve_market_regime_read_model(
+        self,
+        *,
+        explicit_read_model: Mapping[str, Any] | None,
+        should_use_default: bool,
+    ) -> dict[str, Any] | None:
+        if isinstance(explicit_read_model, Mapping):
+            return dict(explicit_read_model)
+        if not should_use_default:
+            return None
+        try:
+            payload = self._market_regime_read_model_provider()
+        except Exception:
+            return None
+        return dict(payload) if isinstance(payload, Mapping) else None
+
+    def _compose_primary_market_regime_decision(
+        self,
+        *,
+        advanced_decision: Mapping[str, Any],
+        read_model: Mapping[str, Any] | None,
+    ) -> dict[str, Any]:
+        if not isinstance(read_model, Mapping):
+            return dict(advanced_decision)
+        readiness_label = _read_model_readiness_label(read_model)
+        if readiness_label == "product_ready":
+            return _decision_from_product_ready_read_model(advanced_decision, read_model)
+        if readiness_label in {"failed_closed", "blocked", "degraded"}:
+            return _decision_from_unready_read_model(advanced_decision, read_model)
+        return dict(advanced_decision)
 
     def _build_market_regime_decision(
         self,
@@ -300,12 +375,19 @@ class MarketDecisionCockpitService:
 
         what_to_watch = _safe_public_list(priorities.get("watchToday") or [])
         what_to_watch.extend(_safe_public_list(priorities.get("investigateNext") or []))
+        if _is_read_model_primary(market_regime_decision):
+            what_to_watch.insert(0, "Monitor Market Regime Read Model evidence freshness.")
         if not what_to_watch:
             what_to_watch.append("Await stronger market evidence before tightening the read.")
 
         confidence_limits = list(regime_quality.get("confidenceCapReasons") or [])
         confidence_limits.extend(evidence_gaps)
         confidence_limits.extend(blocked_reasons)
+        if _is_read_model_primary(market_regime_decision):
+            confidence_limits = [
+                _ADVANCED_EVIDENCE_OBSERVATION_ONLY_REASON,
+                *confidence_limits,
+            ]
 
         return {
             "whatChanged": self._build_what_changed(market_regime_decision, research_preview, options_status),
@@ -321,7 +403,7 @@ class MarketDecisionCockpitService:
         regime_label = _regime_label(market_regime_decision.get("regime") or "lowConfidence")
         summary = _first_text(explanation.get("whyThisRegime")) or f"Current regime observation is {regime_label}."
         confidence_projection = _market_regime_confidence_projection(market_regime_decision)
-        return {
+        payload = {
             "regime": regime_label,
             "confidence": _confidence_label(confidence_projection["consumerConfidence"]),
             "rawConfidence": str(market_regime_decision.get("confidence") or "low"),
@@ -331,6 +413,16 @@ class MarketDecisionCockpitService:
             "supportingObservations": _safe_public_list(explanation.get("whatConfirmsIt") or []),
             "invalidationObservations": _safe_public_list(explanation.get("whatInvalidatesIt") or []),
         }
+        if _is_read_model_primary(market_regime_decision):
+            payload.update(
+                {
+                    "primarySource": "Market Regime Read Model",
+                    "readinessLabel": str(market_regime_decision.get("readModelReadinessLabel") or "product_ready"),
+                    "readModelStatus": str(market_regime_decision.get("readModelStatus") or "ok"),
+                    "readModelRegimeLabel": str(market_regime_decision.get("readModelRegimeLabel") or ""),
+                }
+            )
+        return payload
 
     def _build_top_research_priorities(self, research_preview: Mapping[str, Any]) -> list[dict[str, Any]]:
         priorities: list[dict[str, Any]] = []
@@ -405,7 +497,8 @@ class MarketDecisionCockpitService:
         data_quality: Mapping[str, Any],
     ) -> list[str]:
         raw: list[Any] = []
-        raw.extend(market_regime_decision.get("missingEvidence") or [])
+        if not _is_read_model_primary(market_regime_decision):
+            raw.extend(market_regime_decision.get("missingEvidence") or [])
         raw.extend(research_preview.get("evidenceGaps") or [])
         raw.extend(options_status.get("blockedReasonCodes") or [])
         raw.extend(data_quality.get("reasonCodes") or [])
@@ -418,12 +511,20 @@ class MarketDecisionCockpitService:
         data_quality: Mapping[str, Any],
     ) -> list[dict[str, str]]:
         items: list[dict[str, str]] = []
+        primary_ready = bool(data_quality.get("primaryReadModelReady"))
         if data_quality.get("status") in {"blocked", "degraded"}:
+            reason = (
+                _READ_MODEL_FAILED_CLOSED_REASON
+                if data_quality.get("primaryReadModelStatus") == "failed_closed"
+                else _READ_MODEL_DEGRADED_REASON
+                if data_quality.get("primaryReadModelStatus") in {"blocked", "degraded", "partial"}
+                else _MARKET_REGIME_LOW_CONFIDENCE_REASON
+            )
             items.append(
                 {
                     "section": "marketRegimeSummary",
                     "status": str(data_quality.get("status")),
-                    "reason": _safe_reason_phrase(_MARKET_REGIME_LOW_CONFIDENCE_REASON),
+                    "reason": _safe_reason_phrase(reason),
                 }
             )
         if not research_preview.get("topCandidates"):
@@ -431,14 +532,18 @@ class MarketDecisionCockpitService:
                 {
                     "section": "topResearchPriorities",
                     "status": "unavailable",
-                    "reason": _safe_reason_phrase(_RESEARCH_EMPTY_REASON),
+                    "reason": _safe_reason_phrase(
+                        _SECONDARY_RESEARCH_EMPTY_REASON if primary_ready else _RESEARCH_EMPTY_REASON
+                    ),
                 }
             )
             items.append(
                 {
                     "section": "scannerHighlights",
                     "status": "unavailable",
-                    "reason": _safe_reason_phrase(_RESEARCH_EMPTY_REASON),
+                    "reason": _safe_reason_phrase(
+                        _SECONDARY_RESEARCH_EMPTY_REASON if primary_ready else _RESEARCH_EMPTY_REASON
+                    ),
                 }
             )
         if options_status.get("gammaEvidenceStatus") == "unavailable":
@@ -446,7 +551,9 @@ class MarketDecisionCockpitService:
                 {
                     "section": "scenarioRisks",
                     "status": "unavailable",
-                    "reason": _safe_reason_phrase(_OPTION_CHAIN_EMPTY_REASON),
+                    "reason": _safe_reason_phrase(
+                        _SECONDARY_OPTIONS_EMPTY_REASON if primary_ready else _OPTION_CHAIN_EMPTY_REASON
+                    ),
                 }
             )
         items.append(
@@ -796,6 +903,14 @@ class MarketDecisionCockpitService:
             "scenarioRisks": ("Scenario Lab", "/scenario-lab"),
         }
         items: list[dict[str, Any]] = []
+        secondary_research = any(
+            str(item.get("reason") or "") == _safe_reason_phrase(_SECONDARY_RESEARCH_EMPTY_REASON)
+            for item in degraded_inputs
+        )
+        secondary_options = any(
+            str(item.get("reason") or "") == _safe_reason_phrase(_SECONDARY_OPTIONS_EMPTY_REASON)
+            for item in degraded_inputs
+        )
         for item in degraded_inputs:
             section = str(item.get("section") or "").strip()
             surface, route = section_surface.get(section, (_humanize_code(section), "/market/decision-cockpit"))
@@ -812,7 +927,9 @@ class MarketDecisionCockpitService:
                 {
                     "surface": "Research Radar",
                     "status": "unavailable",
-                    "reason": _safe_reason_phrase(_RESEARCH_EMPTY_REASON),
+                    "reason": _safe_reason_phrase(
+                        _SECONDARY_RESEARCH_EMPTY_REASON if secondary_research else _RESEARCH_EMPTY_REASON
+                    ),
                     "drilldownTargets": [_surface_link("Research Radar", "/research/radar", "topResearchPriorities")],
                 }
             )
@@ -839,7 +956,9 @@ class MarketDecisionCockpitService:
                 {
                     "surface": "Options / Gamma Observation",
                     "status": "unavailable",
-                    "reason": _safe_reason_phrase(_OPTION_CHAIN_EMPTY_REASON),
+                    "reason": _safe_reason_phrase(
+                        _SECONDARY_OPTIONS_EMPTY_REASON if secondary_options else _OPTION_CHAIN_EMPTY_REASON
+                    ),
                     "drilldownTargets": [_surface_link("Options / Gamma", "/options-lab", "scenarioRisks")],
                 }
             )
@@ -888,21 +1007,28 @@ class MarketDecisionCockpitService:
         options_status: Mapping[str, Any],
     ) -> dict[str, Any]:
         regime_quality = _mapping(market_regime_decision.get("dataQuality"))
-        reason_codes = list(market_regime_decision.get("missingEvidence") or [])
-        if str(market_regime_decision.get("confidence") or "").lower() == "low":
+        primary_ready = _is_read_model_primary(market_regime_decision)
+        read_model_status = str(market_regime_decision.get("readModelReadinessLabel") or "")
+        reason_codes = [] if primary_ready else list(market_regime_decision.get("missingEvidence") or [])
+        if not primary_ready and str(market_regime_decision.get("confidence") or "").lower() == "low":
             reason_codes.append(_MARKET_REGIME_LOW_CONFIDENCE_REASON)
         if not research_preview.get("topCandidates"):
-            reason_codes.append(_RESEARCH_EMPTY_REASON)
+            reason_codes.append(_SECONDARY_RESEARCH_EMPTY_REASON if primary_ready else _RESEARCH_EMPTY_REASON)
         if options_status.get("gammaEvidenceStatus") == "unavailable":
-            reason_codes.append(_OPTION_CHAIN_EMPTY_REASON)
-        reason_codes.append("options_observation_only")
+            reason_codes.append(_SECONDARY_OPTIONS_EMPTY_REASON if primary_ready else _OPTION_CHAIN_EMPTY_REASON)
+        reason_codes.append(_ADVANCED_EVIDENCE_OBSERVATION_ONLY_REASON if primary_ready else "options_observation_only")
 
         available_driver_count = int(regime_quality.get("availableDriverCount") or 0)
-        status = "blocked" if (
-            available_driver_count == 0
-            and not research_preview.get("topCandidates")
-            and options_status.get("gammaEvidenceStatus") == "unavailable"
-        ) else "degraded"
+        if primary_ready:
+            status = "ready"
+        elif read_model_status == "failed_closed":
+            status = "blocked"
+        else:
+            status = "blocked" if (
+                available_driver_count == 0
+                and not research_preview.get("topCandidates")
+                and options_status.get("gammaEvidenceStatus") == "unavailable"
+            ) else "degraded"
 
         return {
             "status": status,
@@ -910,6 +1036,9 @@ class MarketDecisionCockpitService:
             "regimeEvidenceGrade": regime_quality.get("evidenceGrade"),
             "availableDriverCount": available_driver_count,
             "proxyEvidenceCount": int(regime_quality.get("proxyEvidenceCount") or 0),
+            "primaryReadModelReady": primary_ready,
+            "primaryReadModelStatus": read_model_status or None,
+            "advancedEvidenceStatus": "secondary_unavailable" if primary_ready else "primary_limited",
             "consumerIssues": build_consumer_issues(reason_codes, regime_quality.get("confidenceCapReasons")),
         }
 
@@ -960,7 +1089,9 @@ class MarketDecisionCockpitService:
         data_quality: Mapping[str, Any],
     ) -> dict[str, Any]:
         regime_quality = _mapping(market_regime_decision.get("dataQuality"))
-        missing_evidence = list(market_regime_decision.get("missingEvidence") or [])
+        missing_evidence = [] if _is_read_model_primary(market_regime_decision) else list(
+            market_regime_decision.get("missingEvidence") or []
+        )
         reason_codes = list(data_quality.get("reasonCodes") or [])
         confidence_projection = _market_regime_confidence_projection(market_regime_decision)
         evidence_strength = {
@@ -1065,6 +1196,19 @@ class MarketDecisionCockpitService:
         options_status: Mapping[str, Any],
     ) -> list[str]:
         regime_label = _regime_label(market_regime_decision.get("regime") or "lowConfidence")
+        if _is_read_model_primary(market_regime_decision):
+            queue_quality = _queue_quality_label(research_preview.get("queueQuality") or "thin")
+            option_status = str(options_status.get("gammaEvidenceStatus") or "unavailable")
+            option_sentence = (
+                "Secondary options structure evidence is unavailable for this cockpit snapshot."
+                if option_status == "unavailable"
+                else "Secondary options structure remains observation-only for this cockpit snapshot."
+            )
+            return [
+                f"Market Regime Read Model is product-ready: {regime_label}.",
+                f"Secondary Research Radar quality is {queue_quality}.",
+                option_sentence,
+            ]
         confidence_projection = _market_regime_confidence_projection(market_regime_decision)
         confidence_label = _confidence_label(confidence_projection["consumerConfidence"])
         queue_quality = _queue_quality_label(research_preview.get("queueQuality") or "thin")
@@ -1090,6 +1234,12 @@ class MarketDecisionCockpitService:
         reasons: list[str] = []
         confidence = str(market_regime_decision.get("confidence") or "low").lower()
         regime_quality = _mapping(market_regime_decision.get("dataQuality"))
+        if _is_read_model_primary(market_regime_decision):
+            return {
+                "status": "ready",
+                "reasons": ["Market Regime Read Model is product-ready for the primary market context."],
+                "advancedEvidenceStatus": "secondary_unavailable",
+            }
         scoring_driver_count = int(
             regime_quality.get("scoringDriverCount")
             or data_quality.get("availableDriverCount")
@@ -1132,16 +1282,65 @@ class MarketDecisionCockpitService:
             break
         return _dedupe(hints)[:5]
 
+    def _build_market_regime_read_model_context(self, read_model: Mapping[str, Any] | None) -> dict[str, Any]:
+        if not isinstance(read_model, Mapping):
+            return {
+                "available": False,
+                "primaryContext": False,
+                "readinessLabel": "failed_closed",
+                "status": "failed_closed",
+                "regimeLabel": "insufficient_data",
+                "evidenceCards": [],
+                "summary": "Market Regime Read Model is unavailable for this cockpit snapshot.",
+            }
+        readiness_label = _read_model_readiness_label(read_model)
+        regime_label = _read_model_regime_label(read_model)
+        return {
+            "available": True,
+            "primaryContext": readiness_label == "product_ready",
+            "readinessLabel": readiness_label,
+            "status": str(read_model.get("status") or "failed_closed"),
+            "regimeLabel": regime_label,
+            "regimeStatus": str(read_model.get("regimeStatus") or _mapping(read_model.get("regime")).get("status") or ""),
+            "summary": _safe_public_text(read_model.get("productSummary") or ""),
+            "evidenceCards": _read_model_evidence_summary(read_model),
+            "missingDataFamilies": list(read_model.get("missingDataFamilies") or []),
+            "blockedProductSurfaces": list(read_model.get("blockedProductSurfaces") or []),
+            "noAdvice": bool(read_model.get("noAdvice", True)),
+        }
+
+    def _build_advanced_decision_diagnostics(
+        self,
+        *,
+        advanced_decision: Mapping[str, Any],
+        primary_decision: Mapping[str, Any],
+        read_model: Mapping[str, Any] | None,
+    ) -> dict[str, Any]:
+        return {
+            "status": "secondary" if _is_read_model_primary(primary_decision) else "primary",
+            "primaryOverriddenByReadModel": _is_read_model_primary(primary_decision),
+            "advancedRegime": str(advanced_decision.get("regime") or "lowConfidence"),
+            "advancedConfidence": str(advanced_decision.get("confidence") or "low"),
+            "readModelReadinessLabel": _read_model_readiness_label(read_model) if isinstance(read_model, Mapping) else None,
+            "reason": (
+                "Market Regime Read Model is product-ready, so advanced cockpit evidence is secondary."
+                if _is_read_model_primary(primary_decision)
+                else "Advanced cockpit engine remains the primary market context for this snapshot."
+            ),
+        }
+
 
 def build_market_decision_cockpit(
     *,
     actor: Mapping[str, Any] | None = None,
     market_inputs: Mapping[str, Any] | None = None,
     market_regime_decision: Mapping[str, Any] | None = None,
+    market_regime_read_model: Mapping[str, Any] | None = None,
     research_candidates: Sequence[Mapping[str, Any]] | None = None,
     option_contracts: Sequence[Any] | None = None,
     option_spot: float | int | str | None = None,
     market_overview_service: MarketOverviewService | None = None,
+    market_regime_read_model_provider: Callable[[], Mapping[str, Any] | None] | None = None,
     now_provider: Callable[[], str] | None = None,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
@@ -1150,15 +1349,169 @@ def build_market_decision_cockpit(
     now = (lambda: generated_at) if generated_at is not None else now_provider
     return MarketDecisionCockpitService(
         market_overview_service=market_overview_service,
+        market_regime_read_model_provider=market_regime_read_model_provider,
         now_provider=now,
     ).get_decision_cockpit(
         actor=actor,
         market_inputs=market_inputs,
         market_regime_decision=market_regime_decision,
+        market_regime_read_model=market_regime_read_model,
         research_candidates=research_candidates,
         option_contracts=option_contracts,
         option_spot=option_spot,
     )
+
+
+def _decision_from_product_ready_read_model(
+    advanced_decision: Mapping[str, Any],
+    read_model: Mapping[str, Any],
+) -> dict[str, Any]:
+    payload = dict(advanced_decision)
+    regime_label = _read_model_regime_label(read_model)
+    evidence_cards = _read_model_evidence_summary(read_model)
+    payload.update(
+        {
+            "regime": regime_label,
+            "confidence": "medium",
+            "confidenceScore": max(_float_value(payload.get("confidenceScore")) or 0.0, 0.68),
+            "inputSource": "market_regime_read_model",
+            "primaryRegimeSource": "market_regime_read_model",
+            "readModelPrimaryContext": True,
+            "readModelReadinessLabel": "product_ready",
+            "readModelStatus": str(read_model.get("status") or "ok"),
+            "readModelRegimeLabel": regime_label,
+            "readModelEvidenceCardCount": len(evidence_cards),
+            "missingEvidence": [],
+        }
+    )
+    payload["explanation"] = {
+        "whyThisRegime": [
+            _safe_public_text(read_model.get("productSummary"))
+            or f"Market Regime Read Model primary context is {_regime_label(regime_label)}."
+        ],
+        "whatConfirmsIt": [
+            _safe_public_text(card.get("headline"))
+            for card in evidence_cards
+            if _safe_public_text(card.get("headline"))
+        ][:4],
+        "whatInvalidatesIt": ["Market Regime Read Model readiness moves away from product-ready."],
+        "keyTriggerLevels": [],
+    }
+    payload["researchPriorities"] = {
+        "watchToday": ["Monitor Market Regime Read Model evidence freshness."],
+        "needsMoreEvidence": [],
+        "investigateNext": ["Review secondary advanced evidence only after the primary regime context is read."],
+    }
+    payload["dataQuality"] = {
+        **_mapping(payload.get("dataQuality")),
+        "evidenceGrade": "product_ready",
+        "availableDriverCount": max(int(_mapping(payload.get("dataQuality")).get("availableDriverCount") or 0), 3),
+        "scoringDriverCount": max(int(_mapping(payload.get("dataQuality")).get("scoringDriverCount") or 0), 3),
+        "blockedDriverCount": int(_mapping(payload.get("dataQuality")).get("blockedDriverCount") or 0),
+        "missingDriverCount": int(_mapping(payload.get("dataQuality")).get("missingDriverCount") or 0),
+        "proxyEvidenceCount": int(_mapping(payload.get("dataQuality")).get("proxyEvidenceCount") or 0),
+        "confidenceCapReasons": [_ADVANCED_EVIDENCE_OBSERVATION_ONLY_REASON],
+        "readModelReadinessLabel": "product_ready",
+    }
+    return payload
+
+
+def _decision_from_unready_read_model(
+    advanced_decision: Mapping[str, Any],
+    read_model: Mapping[str, Any],
+) -> dict[str, Any]:
+    readiness_label = _read_model_readiness_label(read_model)
+    reason = _READ_MODEL_FAILED_CLOSED_REASON if readiness_label == "failed_closed" else _READ_MODEL_DEGRADED_REASON
+    payload = dict(advanced_decision)
+    payload.update(
+        {
+            "regime": "insufficient_data",
+            "confidence": "low",
+            "confidenceScore": min(_float_value(payload.get("confidenceScore")) or 0.0, 0.2),
+            "inputSource": "market_regime_read_model",
+            "primaryRegimeSource": "market_regime_read_model",
+            "readModelPrimaryContext": False,
+            "readModelReadinessLabel": readiness_label,
+            "readModelStatus": str(read_model.get("status") or "failed_closed"),
+            "readModelRegimeLabel": _read_model_regime_label(read_model),
+            "missingEvidence": [reason],
+        }
+    )
+    payload["explanation"] = {
+        "whyThisRegime": [
+            "Market Regime Read Model is not product-ready, so the cockpit fails closed for primary market context."
+        ],
+        "whatConfirmsIt": [],
+        "whatInvalidatesIt": ["Read Model local evidence inputs become product-ready."],
+        "keyTriggerLevels": [],
+    }
+    payload["researchPriorities"] = {
+        "watchToday": [],
+        "needsMoreEvidence": [reason],
+        "investigateNext": ["Restore Read Model evidence inputs before interpreting advanced cockpit evidence."],
+    }
+    payload["dataQuality"] = {
+        **_mapping(payload.get("dataQuality")),
+        "evidenceGrade": readiness_label,
+        "availableDriverCount": 0,
+        "scoringDriverCount": 0,
+        "blockedDriverCount": 1,
+        "missingDriverCount": 1,
+        "proxyEvidenceCount": 0,
+        "confidenceCapReasons": [reason],
+        "readModelReadinessLabel": readiness_label,
+    }
+    return payload
+
+
+def _read_model_readiness_label(read_model: Mapping[str, Any] | None) -> str:
+    if not isinstance(read_model, Mapping):
+        return "failed_closed"
+    readiness = _mapping(read_model.get("readiness"))
+    return str(readiness.get("label") or read_model.get("readinessLabel") or "failed_closed")
+
+
+def _read_model_regime_label(read_model: Mapping[str, Any]) -> str:
+    regime = _mapping(read_model.get("regime"))
+    return str(read_model.get("regimeLabel") or regime.get("label") or "insufficient_data")
+
+
+def _read_model_evidence_summary(read_model: Mapping[str, Any]) -> list[dict[str, Any]]:
+    cards: list[dict[str, Any]] = []
+    for item in list(read_model.get("evidenceCards") or [])[:6]:
+        card = _mapping(item)
+        card_id = str(card.get("id") or "").strip()
+        title = str(card.get("title") or "").strip()
+        if not card_id or not title:
+            continue
+        cards.append(
+            {
+                "id": card_id,
+                "title": title,
+                "status": str(card.get("status") or "unavailable"),
+                "severity": str(card.get("severity") or "watch"),
+                "headline": _safe_public_text(card.get("headline") or ""),
+            }
+        )
+    return cards
+
+
+def _is_read_model_primary(market_regime_decision: Mapping[str, Any]) -> bool:
+    return bool(market_regime_decision.get("readModelPrimaryContext")) and (
+        str(market_regime_decision.get("readModelReadinessLabel") or "") == "product_ready"
+    )
+
+
+def _float_value(value: Any) -> float | None:
+    try:
+        if value is None or isinstance(value, bool):
+            return None
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number != number or number in {float("inf"), float("-inf")}:
+        return None
+    return number
 
 
 def _regime_label(value: Any) -> str:

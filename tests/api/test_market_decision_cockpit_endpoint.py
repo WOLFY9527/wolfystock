@@ -232,6 +232,48 @@ class _RawReasonCockpitService:
         return payload
 
 
+class _ReadModelCockpitService:
+    def get_decision_cockpit(self, *, actor=None) -> dict:
+        payload = _payload()
+        payload["marketRegimeReadModel"] = {
+            "available": True,
+            "primaryContext": True,
+            "readinessLabel": "product_ready",
+            "status": "ok",
+            "regimeLabel": "risk_off",
+            "summary": "Risk-off evidence is currently dominant across the bounded read model.",
+            "evidenceCards": [
+                {
+                    "id": "benchmark_trend",
+                    "title": "Benchmark Trend",
+                    "status": "negative",
+                    "severity": "warning",
+                    "headline": "Benchmark trend evidence is negative.",
+                }
+            ],
+            "missingDataFamilies": [],
+            "blockedProductSurfaces": [],
+            "noAdvice": True,
+        }
+        payload["marketRegimeDecision"]["regime"] = "risk_off"
+        payload["marketRegimeDecision"]["confidence"] = "medium"
+        payload["marketRegimeDecision"]["readModelPrimaryContext"] = True
+        payload["marketRegimeDecision"]["readModelReadinessLabel"] = "product_ready"
+        payload["marketRegimeSummary"] = {
+            **payload["marketRegimeSummary"],
+            "regime": "Risk-off observation",
+            "readinessLabel": "product_ready",
+            "readModelRegimeLabel": "risk_off",
+        }
+        payload["dataQuality"] = {
+            **payload["dataQuality"],
+            "status": "ready",
+            "primaryReadModelReady": True,
+            "advancedEvidenceStatus": "secondary_unavailable",
+        }
+        return payload
+
+
 def test_market_decision_cockpit_route_is_exposed() -> None:
     app = FastAPI()
     app.include_router(market.router, prefix="/api/v1/market")
@@ -287,6 +329,26 @@ def test_market_decision_cockpit_endpoint_returns_service_payload(monkeypatch) -
     assert fake_service.calls == [
         {"actor": {"actor_type": "anonymous", "role": "anonymous", "display_name": "Anonymous"}}
     ]
+
+
+def test_market_decision_cockpit_endpoint_preserves_primary_read_model_context(monkeypatch) -> None:
+    monkeypatch.setattr(market, "MarketDecisionCockpitService", lambda: _ReadModelCockpitService())
+    app = FastAPI()
+    app.include_router(market.router, prefix="/api/v1/market")
+    app.dependency_overrides[get_optional_current_user] = lambda: None
+
+    response = TestClient(app).get("/api/v1/market/decision-cockpit")
+
+    assert response.status_code == 200
+    payload = response.json()
+    read_model = payload["marketRegimeReadModel"]
+    assert read_model["primaryContext"] is True
+    assert read_model["readinessLabel"] == "product_ready"
+    assert read_model["regimeLabel"] == "risk_off"
+    assert payload["marketRegimeDecision"]["regime"] == "risk_off"
+    assert payload["marketRegimeSummary"]["regime"] == "Risk-off observation"
+    assert payload["dataQuality"]["status"] == "ready"
+    assert payload["dataQuality"]["primaryReadModelReady"] is True
 
 
 def test_market_decision_cockpit_endpoint_redacts_raw_reason_codes(monkeypatch) -> None:
