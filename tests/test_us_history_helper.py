@@ -14,9 +14,15 @@ from src.services.us_history_helper import (
     LOCAL_US_PARQUET_SOURCE,
     LocalUsHistoryLoadResult,
     fetch_daily_history_with_local_us_fallback,
+    get_configured_us_stock_parquet_dir,
     get_us_stock_parquet_dir,
+    load_local_us_daily_history,
     persist_local_us_daily_history,
 )
+
+
+def _posix(value: object) -> str:
+    return str(value).replace("\\", "/")
 
 
 class UsHistoryHelperTestCase(unittest.TestCase):
@@ -84,7 +90,33 @@ class UsHistoryHelperTestCase(unittest.TestCase):
             },
             clear=False,
         ):
-            self.assertEqual(str(get_us_stock_parquet_dir()), "/tmp/local-priority")
+            self.assertEqual(_posix(get_us_stock_parquet_dir()), "/tmp/local-priority")
+
+    def test_get_configured_us_stock_parquet_dir_distinguishes_missing_env_from_default(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "LOCAL_US_PARQUET_DIR": "",
+                "US_STOCK_PARQUET_DIR": "",
+            },
+            clear=False,
+        ):
+            self.assertIsNone(get_configured_us_stock_parquet_dir())
+            self.assertEqual(_posix(get_us_stock_parquet_dir()), "/root/us_test/data/normalized/us")
+
+    def test_load_local_us_daily_history_can_fail_closed_when_cache_path_is_not_configured(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "LOCAL_US_PARQUET_DIR": "",
+                "US_STOCK_PARQUET_DIR": "",
+            },
+            clear=False,
+        ):
+            result = load_local_us_daily_history("AAPL", require_configured_dir=True)
+
+        self.assertEqual(result.status, "not_configured")
+        self.assertIsNone(result.dataframe)
 
     def test_persist_local_us_daily_history_writes_normalized_parquet_cache(self) -> None:
         raw = pd.DataFrame(
@@ -113,7 +145,7 @@ class UsHistoryHelperTestCase(unittest.TestCase):
 
         self.assertEqual(result.status, "saved")
         self.assertEqual(result.rows, 1)
-        self.assertEqual(str(written["path"]), "/tmp/us-cache/AAPL.parquet")
+        self.assertEqual(_posix(written["path"]), "/tmp/us-cache/AAPL.parquet")
         self.assertEqual(written["index"], False)
         saved_frame = written["frame"]
         self.assertEqual(list(saved_frame["date"].dt.strftime("%Y-%m-%d")), ["2026-01-02"])

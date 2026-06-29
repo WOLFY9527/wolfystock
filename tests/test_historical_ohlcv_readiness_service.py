@@ -953,6 +953,193 @@ def test_yfinance_us_cache_provider_reports_insufficient_stale_and_missing_adjus
         assert expected in readiness["missingRequirements"]
 
 
+def test_preflight_env_configured_local_cache_with_adjusted_close_is_available_without_runtime_fetch(
+    tmp_path,
+) -> None:
+    cache_dir = tmp_path / "us-parquet-cache"
+    cache_dir.mkdir()
+    _frame(65, adjusted=True).to_parquet(cache_dir / "SPY.parquet", index=False)
+
+    preflight = HistoricalOhlcvCachePreflightService(
+        env={"LOCAL_US_PARQUET_DIR": str(cache_dir)},
+        spec_finder=lambda module_name: object() if module_name in {"pyarrow", "yfinance"} else None,
+        today=date(2026, 3, 6),
+    ).preflight(symbols_by_market={"cn": [], "us": ["SPY"]}, required_bars=60, require_adjusted=True)
+
+    symbol = preflight["markets"]["us"]["symbols"][0]
+    assert symbol["symbol"] == "SPY"
+    assert symbol["status"] == "available"
+    assert symbol["cacheState"] == "cache_hit"
+    assert symbol["dataState"] == "fresh"
+    assert symbol["adjustmentState"] == "available"
+    assert symbol["cachedBars"] == 60
+    assert symbol["cacheConfig"]["pathConfigured"] is True
+    assert symbol["cacheConfig"]["envKey"] == "LOCAL_US_PARQUET_DIR"
+    assert preflight["summary"]["availableCount"] == 1
+    assert preflight["summary"]["notConfiguredCount"] == 0
+    assert preflight["networkCallsEnabled"] is False
+    assert preflight["mutationEnabled"] is False
+
+
+def test_preflight_without_configured_local_cache_path_reports_not_configured(monkeypatch) -> None:
+    monkeypatch.delenv("LOCAL_US_PARQUET_DIR", raising=False)
+    monkeypatch.delenv("US_STOCK_PARQUET_DIR", raising=False)
+
+    preflight = HistoricalOhlcvCachePreflightService(
+        env={},
+        spec_finder=lambda module_name: object() if module_name == "yfinance" else None,
+        today=date(2026, 3, 6),
+    ).preflight(symbols_by_market={"cn": [], "us": ["SPY"]}, required_bars=60, require_adjusted=True)
+
+    symbol = preflight["markets"]["us"]["symbols"][0]
+    assert symbol["status"] == "not_configured"
+    assert symbol["dataState"] == "cache_not_configured"
+    assert symbol["cacheConfig"]["pathConfigured"] is False
+    assert "LOCAL_US_PARQUET_DIR" in symbol["nextOperatorAction"]
+
+
+def test_preflight_configured_cache_with_missing_symbol_reports_missing_not_not_configured(tmp_path) -> None:
+    cache_dir = tmp_path / "us-parquet-cache"
+    cache_dir.mkdir()
+
+    preflight = HistoricalOhlcvCachePreflightService(
+        env={"LOCAL_US_PARQUET_DIR": str(cache_dir)},
+        spec_finder=lambda module_name: object() if module_name == "yfinance" else None,
+        today=date(2026, 3, 6),
+    ).preflight(symbols_by_market={"cn": [], "us": ["AAPL"]}, required_bars=60, require_adjusted=True)
+
+    symbol = preflight["markets"]["us"]["symbols"][0]
+    assert symbol["status"] == "missing"
+    assert symbol["dataState"] == "cache_missing"
+    assert symbol["cacheState"] == "cache_missing"
+    assert symbol["cacheConfig"]["pathConfigured"] is True
+    assert preflight["summary"]["notConfiguredCount"] == 0
+
+
+def test_preflight_missing_adjusted_close_and_insufficient_bars_are_distinct(tmp_path) -> None:
+    cache_dir = tmp_path / "us-parquet-cache"
+    cache_dir.mkdir()
+    _frame(65, adjusted=False).to_parquet(cache_dir / "AAPL.parquet", index=False)
+    _frame(12, adjusted=True).to_parquet(cache_dir / "MSFT.parquet", index=False)
+
+    preflight = HistoricalOhlcvCachePreflightService(
+        env={"LOCAL_US_PARQUET_DIR": str(cache_dir)},
+        spec_finder=lambda module_name: object() if module_name == "yfinance" else None,
+        today=date(2026, 3, 6),
+    ).preflight(symbols_by_market={"cn": [], "us": ["AAPL", "MSFT"]}, required_bars=60, require_adjusted=True)
+
+    symbols = {item["symbol"]: item for item in preflight["markets"]["us"]["symbols"]}
+    assert symbols["AAPL"]["status"] == "missing"
+    assert symbols["AAPL"]["dataState"] == "missing_adjustments"
+    assert symbols["AAPL"]["adjustmentState"] == "missing"
+    assert symbols["MSFT"]["status"] == "insufficient_coverage"
+    assert symbols["MSFT"]["dataState"] == "insufficient"
+    assert symbols["MSFT"]["cachedBars"] == 12
+
+
+def test_preflight_malformed_configured_cache_fails_closed_as_unavailable(tmp_path) -> None:
+    cache_dir = tmp_path / "us-parquet-cache"
+    cache_dir.mkdir()
+    (cache_dir / "QQQ.parquet").write_text("not parquet", encoding="utf-8")
+
+    preflight = HistoricalOhlcvCachePreflightService(
+        env={"LOCAL_US_PARQUET_DIR": str(cache_dir)},
+        spec_finder=lambda module_name: object() if module_name == "yfinance" else None,
+        today=date(2026, 3, 6),
+    ).preflight(symbols_by_market={"cn": [], "us": ["QQQ"]}, required_bars=60, require_adjusted=True)
+
+    symbol = preflight["markets"]["us"]["symbols"][0]
+    assert symbol["status"] == "unavailable"
+    assert symbol["cacheState"] == "cache_error"
+    assert symbol["dataState"] == "runtime_unavailable"
+    assert symbol["cacheConfig"]["pathConfigured"] is True
+    assert "Traceback" not in json.dumps(preflight, ensure_ascii=False)
+
+
+def test_yfinance_us_cache_provider_reads_configured_local_parquet_without_fetch(monkeypatch, tmp_path) -> None:
+    cache_dir = tmp_path / "us-parquet-cache"
+    cache_dir.mkdir()
+    _frame(65, adjusted=True).to_parquet(cache_dir / "AAPL.parquet", index=False)
+    monkeypatch.setenv("LOCAL_US_PARQUET_DIR", str(cache_dir))
+    monkeypatch.delenv("US_STOCK_PARQUET_DIR", raising=False)
+    fetcher = _FakeDailyFetcher(_frame(90))
+    provider = YfinanceUsOhlcvCacheProvider(fetcher=fetcher, provider_fetch_enabled=False)
+
+    readiness = HistoricalOhlcvReadinessService(provider=provider).fetch(
+        HistoricalOhlcvReadinessRequest(
+            symbol="AAPL",
+            market="us",
+            timeframe="1d",
+            required_bars=60,
+            lookback_bars=60,
+            require_adjusted=True,
+        )
+    ).readiness
+
+    assert fetcher.calls == []
+    assert readiness["providerState"] == "available"
+    assert readiness["overallState"] == "ready"
+    assert readiness["usableBars"] == 60
+    assert readiness["adjustmentState"] == "available"
+
+
+def test_yfinance_us_cache_provider_distinguishes_configured_missing_cache_for_backtest(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    cache_dir = tmp_path / "us-parquet-cache"
+    cache_dir.mkdir()
+    monkeypatch.setenv("LOCAL_US_PARQUET_DIR", str(cache_dir))
+    monkeypatch.delenv("US_STOCK_PARQUET_DIR", raising=False)
+    provider = YfinanceUsOhlcvCacheProvider(provider_fetch_enabled=False)
+
+    readiness = HistoricalOhlcvReadinessService(provider=provider).fetch(
+        HistoricalOhlcvReadinessRequest(
+            symbol="AAPL",
+            market="us",
+            timeframe="1d",
+            required_bars=60,
+            lookback_bars=60,
+            require_adjusted=True,
+        )
+    ).readiness
+    backtest_readiness = build_backtest_historical_ohlcv_readiness(readiness)
+
+    assert readiness["providerState"] == "provider_missing"
+    assert readiness["runtimeStatus"] == "missing"
+    assert backtest_readiness["status"] == "missing"
+    assert backtest_readiness["historicalOhlcvRuntimeStatus"] == "missing"
+    assert backtest_readiness["blockedExecutionReason"] == "historical_ohlcv_missing"
+
+
+def test_yfinance_us_cache_provider_reports_unavailable_for_malformed_configured_cache(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    cache_dir = tmp_path / "us-parquet-cache"
+    cache_dir.mkdir()
+    (cache_dir / "QQQ.parquet").write_text("not parquet", encoding="utf-8")
+    monkeypatch.setenv("LOCAL_US_PARQUET_DIR", str(cache_dir))
+    monkeypatch.delenv("US_STOCK_PARQUET_DIR", raising=False)
+    provider = YfinanceUsOhlcvCacheProvider(provider_fetch_enabled=False)
+
+    readiness = HistoricalOhlcvReadinessService(provider=provider).fetch(
+        HistoricalOhlcvReadinessRequest(
+            symbol="QQQ",
+            market="us",
+            timeframe="1d",
+            required_bars=60,
+            lookback_bars=60,
+            require_adjusted=True,
+        )
+    ).readiness
+    backtest_readiness = build_backtest_historical_ohlcv_readiness(readiness)
+
+    assert readiness["runtimeStatus"] == "unavailable"
+    assert backtest_readiness["status"] == "unavailable"
+    assert backtest_readiness["historicalOhlcvRuntimeStatus"] == "unavailable"
+
+
 def test_yfinance_us_cache_provider_redacts_provider_exceptions() -> None:
     provider = YfinanceUsOhlcvCacheProvider(
         cache=_FakeUsOhlcvCache(),

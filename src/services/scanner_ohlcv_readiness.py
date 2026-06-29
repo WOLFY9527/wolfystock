@@ -48,6 +48,7 @@ SAFE_HISTORICAL_OHLCV_READINESS_KEYS = frozenset(
         "adjustmentState",
         "benchmarkState",
         "providerState",
+        "runtimeStatus",
         "overallState",
         "missingRequirements",
         "consumerSafe",

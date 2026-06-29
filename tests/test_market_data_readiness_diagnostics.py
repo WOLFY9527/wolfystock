@@ -7,6 +7,7 @@ import json
 import socket
 from pathlib import Path
 
+import pandas as pd
 import pytest
 import requests
 
@@ -135,6 +136,25 @@ def _spec_finder_with(available_modules: set[str], seen: list[str] | None = None
 
 def _find_check(payload: dict, check_id: str) -> dict:
     return next(check for check in payload["checks"] if check["id"] == check_id)
+
+
+def _write_ohlcv_parquet(cache_dir: Path, symbol: str, rows: int = 65, *, adjusted: bool = True) -> None:
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    dates = pd.date_range(end="2026-06-29", periods=rows, freq="D")
+    data = []
+    for index in range(rows):
+        row = {
+            "date": dates[index].date().isoformat(),
+            "open": 100.0 + index,
+            "high": 101.0 + index,
+            "low": 99.0 + index,
+            "close": 100.5 + index,
+            "volume": 1_000_000 + index,
+        }
+        if adjusted:
+            row["adjusted_close"] = 100.25 + index
+        data.append(row)
+    pd.DataFrame(data).to_parquet(cache_dir / f"{symbol}.parquet", index=False)
 
 
 def _matrix_rows(payload: dict) -> list[dict]:
@@ -462,6 +482,33 @@ def test_historical_ohlcv_cache_preflight_section_is_present_and_redacted() -> N
     assert [item["symbol"] for item in section["markets"]["us"]["symbols"]] == ["ORCL", "AAPL", "NVDA"]
     for forbidden in ("aksharefetcher", "yfinancefetcher", "cachekey", "rawpayload", "token", "traceback"):
         assert forbidden not in serialized
+
+
+def test_historical_ohlcv_cache_preflight_section_recognizes_configured_adjusted_local_cache(
+    tmp_path: Path,
+) -> None:
+    cache_dir = tmp_path / "us-parquet"
+    for symbol in ("SPY", "QQQ", "AAPL", "MSFT"):
+        _write_ohlcv_parquet(cache_dir, symbol)
+
+    payload = build_market_data_readiness_diagnostics(
+        env={"LOCAL_US_PARQUET_DIR": str(cache_dir)},
+        spec_finder=_spec_finder_with({"pyarrow", "yfinance"}),
+        representative_symbols=["SPY", "QQQ", "AAPL", "MSFT"],
+    ).to_dict()
+
+    section = payload["historicalOhlcvCachePreflight"]
+    us_symbols = section["markets"]["us"]["symbols"]
+    serialized = json.dumps(section, ensure_ascii=False)
+
+    assert section["summary"]["availableCount"] >= 4
+    assert [item["status"] for item in us_symbols] == ["available"] * 4
+    assert [item["adjustmentState"] for item in us_symbols] == ["available"] * 4
+    assert all(item["cacheConfig"]["pathConfigured"] is True for item in us_symbols)
+    assert all(item["cacheConfig"]["envKey"] == "LOCAL_US_PARQUET_DIR" for item in us_symbols)
+    assert {item["status"] for item in section["markets"]["cn"]["symbols"]} == {"not_configured"}
+    assert str(cache_dir) not in serialized
+    assert str(tmp_path) not in serialized
 
 
 def test_cross_asset_driver_readiness_uses_configured_symbols_not_query_symbols(

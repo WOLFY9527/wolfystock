@@ -55,7 +55,7 @@ from src.services.professional_data_capability_registry_service import (
 from src.services.provider_fit_advisor_service import build_provider_fit_advisor_snapshot
 from src.services.rotation_radar_quote_provider import get_rotation_radar_quote_provider
 from src.services.daily_intelligence_service import DailyIntelligenceService
-from src.services.us_history_helper import get_us_stock_parquet_dir
+from src.services.us_history_helper import get_configured_us_stock_parquet_dir
 
 router = APIRouter()
 _MAX_DATA_READINESS_SYMBOLS = 8
@@ -441,7 +441,7 @@ def get_regime_read_model(
             benchmark_symbol=benchmark,
             growth_proxy_symbol=growth_proxy,
             required_bars=bounded_required_bars,
-            ohlcv_cache_dir=_safe_local_path(ohlcv_cache_dir, default=get_us_stock_parquet_dir()),
+            ohlcv_cache_dir=_safe_local_path(ohlcv_cache_dir, default=get_configured_us_stock_parquet_dir()),
             quote_snapshot_cache_path=_safe_local_path(quote_snapshot_cache_path),
             require_adjusted=require_adjusted,
             quote_max_age_seconds=quote_max_age_seconds,
