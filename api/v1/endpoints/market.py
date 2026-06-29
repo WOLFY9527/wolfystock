@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -36,6 +37,17 @@ from src.services.market_scenario_lab_engine import build_market_scenario_lab
 from src.services.market_decision_cockpit_service import MarketDecisionCockpitService
 from src.services.market_data_readiness_diagnostics import build_market_data_readiness_diagnostics
 from src.services.market_overview_service import MarketOverviewService
+from src.services.market_regime_evidence_service import (
+    DEFAULT_BENCHMARK_SYMBOL,
+    DEFAULT_GROWTH_PROXY_SYMBOL,
+    DEFAULT_MARKET_REGIME_SYMBOLS,
+    DEFAULT_REQUIRED_BARS,
+    MARKET_REGIME_EVIDENCE_CONTRACT_VERSION,
+)
+from src.services.market_regime_read_model_service import (
+    build_market_regime_read_model,
+    build_market_regime_read_model_from_evidence,
+)
 from src.services.market_rotation_radar_service import MarketRotationRadarService
 from src.services.professional_data_capability_registry_service import (
     build_professional_data_capability_registry,
@@ -43,10 +55,13 @@ from src.services.professional_data_capability_registry_service import (
 from src.services.provider_fit_advisor_service import build_provider_fit_advisor_snapshot
 from src.services.rotation_radar_quote_provider import get_rotation_radar_quote_provider
 from src.services.daily_intelligence_service import DailyIntelligenceService
+from src.services.us_history_helper import get_us_stock_parquet_dir
 
 router = APIRouter()
 _MAX_DATA_READINESS_SYMBOLS = 8
 _MAX_DATA_READINESS_SYMBOL_LENGTH = 24
+_MAX_REGIME_READ_MODEL_SYMBOLS = 8
+_MAX_REGIME_READ_MODEL_SYMBOL_LENGTH = 16
 _MARKET_CONSUMER_DIAGNOSTIC_KEYS = frozenset(
     {
         "activationhint",
@@ -124,6 +139,84 @@ def _parse_data_readiness_symbols(raw_symbols: Optional[str]) -> tuple[str, ...]
             break
 
     return tuple(dict.fromkeys(normalized))
+
+
+def _parse_regime_read_model_symbols(raw_symbols: Optional[str]) -> list[str]:
+    if not raw_symbols:
+        return list(DEFAULT_MARKET_REGIME_SYMBOLS)
+
+    allowed_punctuation = {".", "-", "_"}
+    normalized: list[str] = []
+    for raw_symbol in raw_symbols.split(","):
+        cleaned = "".join(
+            character
+            for character in raw_symbol.strip().upper()
+            if character.isalnum() or character in allowed_punctuation
+        )
+        if not cleaned:
+            continue
+        normalized.append(cleaned[:_MAX_REGIME_READ_MODEL_SYMBOL_LENGTH])
+        if len(normalized) >= _MAX_REGIME_READ_MODEL_SYMBOLS:
+            break
+
+    return list(dict.fromkeys(normalized)) or list(DEFAULT_MARKET_REGIME_SYMBOLS)
+
+
+def _safe_local_path(value: Optional[str], *, default: Path | None = None) -> Path | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return default
+    if "\x00" in raw or re.match(r"^[a-z][a-z0-9+.-]*://", raw, flags=re.IGNORECASE):
+        return default
+    return Path(raw).expanduser()
+
+
+def _bounded_required_bars(value: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_REQUIRED_BARS
+    return min(max(parsed, 20), 260)
+
+
+def _failed_closed_regime_read_model(
+    *,
+    market: str,
+    symbols: list[str],
+    benchmark_symbol: str,
+    growth_proxy_symbol: str,
+    required_bars: int,
+    require_adjusted: bool,
+) -> dict[str, Any]:
+    source = {
+        "consumerSafe": True,
+        "contractVersion": MARKET_REGIME_EVIDENCE_CONTRACT_VERSION,
+        "status": "failed_closed",
+        "market": "US" if str(market or "").strip().upper() == "US" else "UNKNOWN",
+        "symbols": list(symbols),
+        "benchmarkSymbol": benchmark_symbol,
+        "growthProxySymbol": growth_proxy_symbol,
+        "requiredBars": required_bars,
+        "requireAdjusted": require_adjusted,
+        "missingDataFamilies": ["historical_ohlcv"],
+        "blockedProductSurfaces": ["Market Overview", "Research"],
+        "nextOperatorAction": "Provide readable local evidence inputs, then rerun the read model.",
+        "evidence": {},
+        "regimeSummary": {"label": "insufficient_data", "status": "failed_closed"},
+        "symbolEvidence": {},
+        "quoteSnapshotEvidence": {},
+        "dataQuality": {
+            "missingBars": {},
+            "missingAdjustedData": [],
+            "missingQuoteSnapshot": list(symbols),
+            "staleOrUnknownFreshness": list(symbols),
+            "failClosedReasons": ["source_unavailable"],
+        },
+        "networkCallsEnabled": False,
+        "mutationEnabled": False,
+        "providerCallsEnabled": False,
+    }
+    return build_market_regime_read_model_from_evidence(source)
 
 
 def _consumer_safe_market_payload(payload: Any, *, surface: str) -> Any:
@@ -311,6 +404,59 @@ def get_regime_decision(current_user: Optional[CurrentUser] = Depends(get_option
     return _consumer_safe_market_payload(
         MarketOverviewService().get_market_regime_decision(actor=_actor(current_user)),
         surface="market-regime-decision",
+    )
+
+
+@router.get("/regime-read-model", summary="Get read-only market regime evidence read model")
+def get_regime_read_model(
+    market: str = Query("US", description="Market code for the bounded read model universe."),
+    symbols: Optional[str] = Query(
+        default=None,
+        description="Optional comma-separated symbols for local read-model evidence.",
+    ),
+    benchmark_symbol: str = Query(DEFAULT_BENCHMARK_SYMBOL, alias="benchmarkSymbol"),
+    growth_proxy_symbol: str = Query(DEFAULT_GROWTH_PROXY_SYMBOL, alias="growthProxySymbol"),
+    required_bars: int = Query(DEFAULT_REQUIRED_BARS, alias="requiredBars", ge=20, le=260),
+    require_adjusted: bool = Query(True, alias="requireAdjusted"),
+    ohlcv_cache_dir: Optional[str] = Query(
+        default=None,
+        alias="ohlcvCacheDir",
+        description="Optional local OHLCV parquet cache directory. The resolved path is not returned.",
+    ),
+    quote_snapshot_cache_path: Optional[str] = Query(
+        default=None,
+        alias="quoteSnapshotCachePath",
+        description="Optional local quote snapshot JSON path. The resolved path is not returned.",
+    ),
+    quote_max_age_seconds: int = Query(60 * 60 * 24, alias="quoteMaxAgeSeconds", ge=1, le=60 * 60 * 24 * 30),
+) -> JSONResponse:
+    requested_symbols = _parse_regime_read_model_symbols(symbols)
+    benchmark = _parse_regime_read_model_symbols(benchmark_symbol)[0]
+    growth_proxy = _parse_regime_read_model_symbols(growth_proxy_symbol)[0]
+    bounded_required_bars = _bounded_required_bars(required_bars)
+    try:
+        payload = build_market_regime_read_model(
+            market=market,
+            symbols=requested_symbols,
+            benchmark_symbol=benchmark,
+            growth_proxy_symbol=growth_proxy,
+            required_bars=bounded_required_bars,
+            ohlcv_cache_dir=_safe_local_path(ohlcv_cache_dir, default=get_us_stock_parquet_dir()),
+            quote_snapshot_cache_path=_safe_local_path(quote_snapshot_cache_path),
+            require_adjusted=require_adjusted,
+            quote_max_age_seconds=quote_max_age_seconds,
+        )
+    except Exception:
+        payload = _failed_closed_regime_read_model(
+            market=market,
+            symbols=requested_symbols,
+            benchmark_symbol=benchmark,
+            growth_proxy_symbol=growth_proxy,
+            required_bars=bounded_required_bars,
+            require_adjusted=require_adjusted,
+        )
+    return JSONResponse(
+        content=jsonable_encoder(_consumer_safe_market_payload(payload, surface="market-regime-read-model"))
     )
 
 

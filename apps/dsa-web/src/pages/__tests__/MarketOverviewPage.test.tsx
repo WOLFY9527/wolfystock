@@ -56,6 +56,7 @@ vi.mock('../../api/market', async (importOriginal) => {
       getMarketBriefing: vi.fn(),
       getFutures: vi.fn(),
       getCnShortSentiment: vi.fn(),
+      getRegimeReadModel: vi.fn(),
       getDataReadiness: vi.fn(),
       getProfessionalDataCapabilities: vi.fn(),
       cryptoStreamUrl: vi.fn(() => '/api/v1/market/crypto/stream'),
@@ -300,6 +301,116 @@ const professionalDataCapabilitiesPayload = () => ({
       freshness: 'Research-useful, but lineage is incomplete.',
     },
   ],
+});
+
+const regimeReadModelPayload = () => ({
+  consumerSafe: true,
+  noAdvice: true,
+  contractVersion: 'market_regime_read_model_v1',
+  sourceEvidenceContractVersion: 'market_regime_evidence_pack_v1',
+  status: 'ok',
+  market: 'US',
+  symbols: ['SPY', 'QQQ', 'AAPL', 'MSFT'],
+  benchmarkSymbol: 'SPY',
+  growthProxySymbol: 'QQQ',
+  regime: {
+    label: 'risk_on_confirming',
+    status: 'ok',
+    source: 'deterministic_evidence_fields',
+  },
+  productSummary: 'Risk-on confirming evidence is currently present because local evidence fields align.',
+  evidenceCards: [
+    {
+      id: 'benchmark_trend',
+      title: 'Benchmark Trend',
+      status: 'positive',
+      severity: 'info',
+      headline: 'Benchmark trend evidence is positive.',
+      metrics: [{ label: 'return20d', value: 0.12 }],
+      reasons: ['Benchmark local trend fields are aligned.'],
+      sourceFields: ['evidence.benchmarkTrend.return20d'],
+      consumerSafe: true,
+    },
+    {
+      id: 'growth_risk_proxy',
+      title: 'Growth Risk Proxy',
+      status: 'positive',
+      severity: 'info',
+      headline: 'Growth proxy evidence is positive.',
+      metrics: [{ label: 'relativeReturn20d', value: 0.03 }],
+      reasons: ['Growth proxy relative return is available.'],
+      sourceFields: ['evidence.growthRiskProxy.relativeReturn20d'],
+      consumerSafe: true,
+    },
+    {
+      id: 'breadth',
+      title: 'Breadth',
+      status: 'positive',
+      severity: 'info',
+      headline: 'Breadth evidence is broad.',
+      metrics: [{ label: 'percentAboveMa20', value: 1 }],
+      reasons: ['Breadth evidence is available.'],
+      sourceFields: ['evidence.breadthProxy.percentAboveMa20'],
+      consumerSafe: true,
+    },
+    {
+      id: 'volatility',
+      title: 'Volatility',
+      status: 'neutral',
+      severity: 'info',
+      headline: 'Volatility evidence is normal.',
+      metrics: [{ label: 'volatilityState', value: 'normal' }],
+      reasons: ['Volatility evidence is available.'],
+      sourceFields: ['evidence.volatilityProxy.volatilityState'],
+      consumerSafe: true,
+    },
+    {
+      id: 'quote_snapshot',
+      title: 'Quote Snapshot',
+      status: 'positive',
+      severity: 'info',
+      headline: 'Quote snapshot evidence is available.',
+      metrics: [{ label: 'availabilityState', value: 'available' }],
+      reasons: ['Quote snapshot rows are available.'],
+      sourceFields: ['quoteSnapshotEvidence.availabilityState'],
+      consumerSafe: true,
+    },
+    {
+      id: 'data_quality',
+      title: 'Data Quality',
+      status: 'positive',
+      severity: 'info',
+      headline: 'Data quality is product-ready.',
+      metrics: [{ label: 'missingDataFamilies', value: [] }],
+      reasons: ['No missing evidence families are present.'],
+      sourceFields: ['missingDataFamilies'],
+      consumerSafe: true,
+    },
+  ],
+  symbolContext: [],
+  dataQuality: {
+    adjustedCoverageState: 'available',
+    ohlcvCoverage: { state: 'available', requiredBars: 60, availableSymbols: ['SPY', 'QQQ', 'AAPL', 'MSFT'], missingSymbols: [] },
+    quoteSnapshotCoverage: { state: 'available', availabilityState: 'available', freshnessState: 'fresh', availableSymbols: ['SPY', 'QQQ', 'AAPL', 'MSFT'], missingSymbols: [], staleSymbols: [] },
+    missingDataFamilies: [],
+    blockedProductSurfaces: [],
+    nextOperatorAction: 'Market regime read model is available from local evidence inputs.',
+    failClosedReasons: [],
+  },
+  readiness: {
+    label: 'product_ready',
+    status: 'ok',
+    missingDataFamilies: [],
+    blockedProductSurfaces: [],
+    nextOperatorAction: 'Market regime read model is available from local evidence inputs.',
+  },
+  surfaceHints: [{ surface: 'market_overview', readOnly: true }],
+  missingDataFamilies: [],
+  blockedProductSurfaces: [],
+  nextOperatorAction: 'Market regime read model is available from local evidence inputs.',
+  networkCallsEnabled: false,
+  mutationEnabled: false,
+  providerCallsEnabled: false,
 });
 
 const allMissingMarketRegimeCapabilitiesPayload = () => ({
@@ -2194,6 +2305,7 @@ describe('MarketOverviewPage', () => {
     vi.mocked(marketApi.getMarketBriefing).mockResolvedValue(briefingPayload());
     vi.mocked(marketApi.getFutures).mockResolvedValue(futuresPayload());
     vi.mocked(marketApi.getCnShortSentiment).mockResolvedValue(cnShortSentimentPayload());
+    vi.mocked(marketApi.getRegimeReadModel).mockResolvedValue(regimeReadModelPayload());
     vi.mocked(marketApi.getDataReadiness).mockResolvedValue(officialRiskReadinessPayload());
     vi.mocked(marketApi.getProfessionalDataCapabilities).mockResolvedValue(professionalDataCapabilitiesPayload());
   });
@@ -2217,6 +2329,68 @@ describe('MarketOverviewPage', () => {
     );
     expect(strip.textContent || '').not.toMatch(/buy|sell|hold|target price|stop-loss|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
     expect(boundary.textContent || '').not.toMatch(/provider|cache|debug|raw|sourceAuthority|buy|sell|买入|卖出|目标价|止损|仓位/i);
+  });
+
+  it('renders market regime read model evidence cards and data quality without advice copy', async () => {
+    vi.mocked(marketApi.getRegimeReadModel).mockResolvedValueOnce(regimeReadModelPayload());
+
+    render(createElement(MarketOverviewPage));
+
+    const surface = await screen.findByTestId('market-regime-read-model-surface');
+    expect(surface).toHaveTextContent('risk_on_confirming');
+    expect(surface).toHaveTextContent('product_ready');
+    expect(surface).toHaveTextContent('Risk-on confirming evidence is currently present');
+    expect(within(surface).getByTestId('market-regime-evidence-card-benchmark_trend')).toHaveTextContent('Benchmark Trend');
+    expect(within(surface).getByTestId('market-regime-evidence-card-growth_risk_proxy')).toHaveTextContent('Growth Risk Context');
+    expect(within(surface).getByTestId('market-regime-evidence-card-breadth')).toHaveTextContent('Breadth');
+    expect(within(surface).getByTestId('market-regime-evidence-card-volatility')).toHaveTextContent('Volatility');
+    expect(within(surface).getByTestId('market-regime-evidence-card-quote_snapshot')).toHaveTextContent('Quote Snapshot');
+    expect(within(surface).getByTestId('market-regime-evidence-card-data_quality')).toHaveTextContent('Data Quality');
+    expect(surface).toHaveTextContent('adjusted: available');
+    expect(surface).toHaveTextContent('OHLCV: available');
+    expect(surface).toHaveTextContent('quote snapshot: available');
+    expect(surface.textContent || '').not.toMatch(/buy|sell|hold|recommendation|target price|enter|exit|long|short|加仓|减仓|买入|卖出|持有|目标价|推荐/i);
+  });
+
+  it('keeps blocked market regime read model states visible', async () => {
+    vi.mocked(marketApi.getRegimeReadModel).mockResolvedValueOnce({
+      ...regimeReadModelPayload(),
+      status: 'partial',
+      regime: {
+        label: 'insufficient_data',
+        status: 'partial',
+        source: 'deterministic_evidence_fields',
+      },
+      productSummary: 'Market regime evidence is blocked by missing local source families or product surface blockers.',
+      missingDataFamilies: ['adjusted_prices', 'quote_snapshot'],
+      blockedProductSurfaces: ['Market Overview'],
+      readiness: {
+        label: 'blocked',
+        status: 'blocked',
+        missingDataFamilies: ['adjusted_prices', 'quote_snapshot'],
+        blockedProductSurfaces: ['Market Overview'],
+        nextOperatorAction: 'Resolve missing local evidence families or blocked product surfaces, then rerun.',
+      },
+      dataQuality: {
+        ...regimeReadModelPayload().dataQuality,
+        adjustedCoverageState: 'missing',
+        ohlcvCoverage: { state: 'partial', requiredBars: 60, availableSymbols: ['SPY'], missingSymbols: ['QQQ'] },
+        quoteSnapshotCoverage: { state: 'partial', availabilityState: 'partial', freshnessState: 'unknown', availableSymbols: ['SPY'], missingSymbols: ['AAPL'], staleSymbols: [] },
+        missingDataFamilies: ['adjusted_prices', 'quote_snapshot'],
+        blockedProductSurfaces: ['Market Overview'],
+      },
+    });
+
+    render(createElement(MarketOverviewPage));
+
+    const surface = await screen.findByTestId('market-regime-read-model-surface');
+    expect(surface).toHaveTextContent('insufficient_data');
+    expect(surface).toHaveTextContent('blocked');
+    expect(surface).toHaveTextContent('adjusted_prices, quote_snapshot');
+    expect(surface).toHaveTextContent('Market Overview');
+    expect(surface).toHaveTextContent('adjusted: missing');
+    expect(surface).toHaveTextContent('OHLCV: partial');
+    expect(surface).toHaveTextContent('quote snapshot: partial');
   });
 
   it('renders market overview evidence boundary states from readiness matrix without raw internals', async () => {
