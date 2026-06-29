@@ -190,6 +190,8 @@ describe('adminOpsStatusApi', () => {
 
     expect(get).toHaveBeenCalledWith('/api/v1/admin/ops/scanner-universe-readiness?market=us');
     expect(post).toHaveBeenCalledWith('/api/v1/admin/ops/scanner-universe-refresh?market=us');
+    expect(get).not.toHaveBeenCalledWith(expect.stringContaining('/api/v1/admin/scanner/universe-readiness'));
+    expect(post).not.toHaveBeenCalledWith(expect.stringContaining('/api/v1/admin/scanner/universe-refresh'));
     expect(readiness.market).toBe('us');
     expect(readiness.affectedProductSurfaces).toEqual(['Scanner', 'Research Radar', 'Backtest']);
     expect(readiness.scannerUniverseReadiness.missingDataFamilies).toEqual(['historical_ohlcv', 'quote_snapshot']);

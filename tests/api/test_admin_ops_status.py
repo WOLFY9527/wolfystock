@@ -293,6 +293,35 @@ def test_admin_scanner_universe_endpoints_require_admin_ops_capability(app: Fast
     _assert_no_sensitive_markers(refresh.json())
 
 
+def test_known_stale_admin_ops_paths_alias_to_canonical_admin_protected_endpoints(app: FastAPI) -> None:
+    app.state.task_queue = _TaskQueueFixture()
+    app.state.scanner_universe_operator_service = _ScannerUniverseOperatorFixture()
+
+    with _client(app, _regular_user) as client:
+        assert client.get("/api/v1/admin/launch-cockpit").status_code == 403
+        assert client.get("/api/v1/admin/ops-status").status_code == 403
+        assert client.get("/api/v1/admin/scanner/universe-readiness").status_code == 403
+
+    with _client(app, _ops_admin) as client:
+        launch_cockpit = client.get("/api/v1/admin/launch-cockpit")
+        ops_status = client.get("/api/v1/admin/ops-status")
+        scanner_readiness = client.get("/api/v1/admin/scanner/universe-readiness?market=us")
+
+    assert launch_cockpit.status_code == 200
+    assert launch_cockpit.json()["readOnly"] is True
+    assert launch_cockpit.json()["launchCockpit"]["contract"] == "admin_ops_launch_cockpit_v1"
+    assert ops_status.status_code == 200
+    assert ops_status.json()["readOnly"] is True
+    assert scanner_readiness.status_code == 200
+    readiness_payload = scanner_readiness.json()
+    assert readiness_payload["market"] == "us"
+    assert readiness_payload["readOnly"] is True
+    assert readiness_payload["noExternalCalls"] is True
+    _assert_no_sensitive_markers(launch_cockpit.json())
+    _assert_no_sensitive_markers(ops_status.json())
+    _assert_no_sensitive_markers(readiness_payload)
+
+
 def test_admin_scanner_universe_refresh_action_defers_when_no_safe_refresh_seam(app: FastAPI) -> None:
     app.state.scanner_universe_operator_service = _ScannerUniverseOperatorFixture()
 

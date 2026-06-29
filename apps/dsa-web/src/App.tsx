@@ -77,7 +77,7 @@ type AuthBootstrapSurfaceCopy = {
 function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: boolean): GateCopy {
   const isEnglish = language === 'en';
 
-  if (pathname.startsWith('/admin/launch-cockpit') || pathname.startsWith('/admin/mission-control') || pathname.startsWith('/admin/logs') || pathname.startsWith('/admin/evidence-workflow') || pathname.startsWith('/admin/notifications') || pathname.startsWith('/admin/market-providers') || pathname.startsWith('/admin/provider-circuits') || pathname.startsWith('/admin/users') || pathname.startsWith('/admin/cost-observability')) {
+  if (pathname.startsWith('/admin/launch-cockpit') || pathname.startsWith('/admin/mission-control') || pathname.startsWith('/admin/logs') || pathname.startsWith('/admin/evidence-workflow') || pathname.startsWith('/admin/notifications') || pathname.startsWith('/admin/market-providers') || pathname.startsWith('/admin/provider-operations') || pathname.startsWith('/admin/provider-circuits') || pathname.startsWith('/admin/users') || pathname.startsWith('/admin/cost-observability')) {
     const surfaceName = pathname.startsWith('/admin/cost-observability')
       ? (isEnglish ? 'cost observability' : '成本观测')
       : pathname.startsWith('/admin/launch-cockpit')
@@ -88,7 +88,7 @@ function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: bo
       ? (isEnglish ? 'evidence workflow' : '证据工作流')
       : pathname.startsWith('/admin/provider-circuits')
       ? (isEnglish ? 'provider circuit diagnostics' : 'Provider 熔断诊断')
-      : pathname.startsWith('/admin/market-providers')
+      : pathname.startsWith('/admin/market-providers') || pathname.startsWith('/admin/provider-operations')
       ? (isEnglish ? 'market provider operations' : '市场数据源运维')
       : pathname.startsWith('/admin/notifications')
       ? (isEnglish ? 'notification channels' : '通知通道')
@@ -549,6 +549,7 @@ export const AppContent: React.FC = () => {
           <Route path="/admin/system" element={<Navigate to="/settings/system" replace />} />
           <Route path="/admin/provider" element={<Navigate to="/admin/market-providers" replace />} />
           <Route path="/admin/providers" element={<Navigate to="/admin/market-providers" replace />} />
+          <Route path="/admin/provider-operations" element={<Navigate to="/admin/market-providers" replace />} />
         <Route path="/admin/evidence" element={<Navigate to="/admin/evidence-workflow" replace />} />
         <Route path="/admin/costs" element={<Navigate to="/admin/cost-observability" replace />} />
         <Route path="/admin/ai" element={<Navigate to="/settings/system" replace />} />
@@ -601,6 +602,7 @@ export const AppContent: React.FC = () => {
           <Route path="admin/system" element={<Navigate to="../settings/system" replace />} />
           <Route path="admin/provider" element={<Navigate to="../admin/market-providers" replace />} />
           <Route path="admin/providers" element={<Navigate to="../admin/market-providers" replace />} />
+          <Route path="admin/provider-operations" element={<Navigate to="../admin/market-providers" replace />} />
           <Route path="admin/evidence" element={<Navigate to="../admin/evidence-workflow" replace />} />
           <Route path="admin/costs" element={<Navigate to="../admin/cost-observability" replace />} />
           <Route path="admin/ai" element={<Navigate to="../settings/system" replace />} />

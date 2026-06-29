@@ -122,6 +122,35 @@ def test_endpoint_requires_admin_provider_read_capability_consistent_with_admin_
     assert admin_response.json()["metadata"]["readOnly"] is True
 
 
+def test_known_stale_provider_operations_paths_alias_to_canonical_admin_protected_snapshot() -> None:
+    app = FastAPI()
+    app.include_router(market_provider_operations.router, prefix="/api/v1/admin")
+
+    app.dependency_overrides[get_current_user] = _regular_user
+    user_client = TestClient(app)
+    for path in ("/api/v1/admin/provider-operations", "/api/v1/admin/market-providers"):
+        denied = user_client.get(path)
+        assert denied.status_code == 403
+        assert denied.json()["detail"]["error"] == "admin_required"
+
+    app.dependency_overrides[get_current_user] = _admin_user
+    admin_client = TestClient(app)
+    payload = _service([]).get_operations(window="24h")
+    with patch(
+        "api.v1.endpoints.market_provider_operations.MarketProviderOperationsService",
+        return_value=SimpleNamespace(get_operations=lambda *, window="24h": payload),
+    ):
+        provider_operations = admin_client.get("/api/v1/admin/provider-operations")
+        market_providers = admin_client.get("/api/v1/admin/market-providers")
+
+    for response in (provider_operations, market_providers):
+        assert response.status_code == 200
+        body = response.json()
+        assert body["metadata"]["readOnly"] is True
+        assert body["metadata"]["externalProviderCalls"] is False
+        assert "providerDiagnostics" not in json.dumps(body)
+
+
 def test_endpoint_preserves_market_cache_event_summary_as_diagnostic_read_only_metadata() -> None:
     app = FastAPI()
     app.include_router(market_provider_operations.router, prefix="/api/v1/admin")

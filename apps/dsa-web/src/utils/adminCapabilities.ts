@@ -85,7 +85,12 @@ export function canAccessAdminPath(pathname: string, flags: AdminCapabilityFlags
   if (pathname === '/admin/notifications' || pathname.startsWith('/admin/notifications/')) {
     return capabilityFlags.canReadNotifications;
   }
-  if (pathname === '/admin/market-providers' || pathname.startsWith('/admin/market-providers/')) {
+  if (
+    pathname === '/admin/market-providers'
+    || pathname.startsWith('/admin/market-providers/')
+    || pathname === '/admin/provider-operations'
+    || pathname.startsWith('/admin/provider-operations/')
+  ) {
     return capabilityFlags.canReadProviders;
   }
   if (pathname === '/admin/provider-circuits' || pathname.startsWith('/admin/provider-circuits/')) {
