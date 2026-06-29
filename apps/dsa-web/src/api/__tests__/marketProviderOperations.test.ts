@@ -15,6 +15,32 @@ describe('marketProviderOperationsApi.getHistoricalOhlcvCachePreflight', () => {
     vi.clearAllMocks();
   });
 
+  it('uses the canonical provider operations admin endpoint', async () => {
+    const { marketProviderOperationsApi } = await import('../marketProviderOperations');
+    get.mockResolvedValueOnce({
+      data: {
+        generated_at: '2026-06-29T00:00:00Z',
+        window: { key: '24h' },
+        summary: { total_items: 0 },
+        items: [],
+        event_rollups: [],
+        cache_states: [],
+        limitations: [],
+        admin_log_drill_through: { label: 'Admin Logs', route: '/zh/admin/logs', query: {} },
+        metadata: { read_only: true, external_provider_calls: false },
+      },
+    });
+
+    const payload = await marketProviderOperationsApi.getOperations();
+
+    expect(get).toHaveBeenCalledWith('/api/v1/admin/market-providers/operations', {
+      params: { window: '24h' },
+    });
+    expect(get).not.toHaveBeenCalledWith(expect.stringContaining('/api/v1/admin/provider-operations'));
+    expect(payload.metadata.readOnly).toBe(true);
+    expect(payload.metadata.externalProviderCalls).toBe(false);
+  });
+
   it('loads and normalizes the DATA-113 historical cache preflight response', async () => {
     const { marketProviderOperationsApi } = await import('../marketProviderOperations');
     get.mockResolvedValueOnce({

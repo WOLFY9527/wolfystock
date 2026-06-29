@@ -38,6 +38,18 @@ def _scanner_universe_operator_service(
     response_model=AdminOpsStatusResponse,
     summary="Get read-only admin ops status snapshot",
 )
+@router.get(
+    "/ops-status",
+    response_model=AdminOpsStatusResponse,
+    summary="Compatibility alias for admin ops status snapshot",
+    include_in_schema=False,
+)
+@router.get(
+    "/launch-cockpit",
+    response_model=AdminOpsStatusResponse,
+    summary="Compatibility alias for admin launch cockpit ops snapshot",
+    include_in_schema=False,
+)
 def get_admin_ops_status(
     request: Request,
     _: CurrentUser = Depends(require_admin_capability("ops:logs:read")),
@@ -71,6 +83,12 @@ def get_admin_surface_readiness(
     "/ops/scanner-universe-readiness",
     response_model=AdminScannerUniverseReadinessResponse,
     summary="Get admin scanner universe readiness and next operator action",
+)
+@router.get(
+    "/scanner/universe-readiness",
+    response_model=AdminScannerUniverseReadinessResponse,
+    summary="Compatibility alias for admin scanner universe readiness",
+    include_in_schema=False,
 )
 def get_admin_scanner_universe_readiness(
     request: Request,

@@ -54,6 +54,16 @@ def get_market_provider_operations(
     "/market-provider-operations",
     summary="Get read-only market provider operations status",
 )
+@router.get(
+    "/provider-operations",
+    summary="Compatibility alias for read-only market provider operations status",
+    include_in_schema=False,
+)
+@router.get(
+    "/market-providers",
+    summary="Compatibility alias for read-only market provider operations status",
+    include_in_schema=False,
+)
 def get_market_provider_operations_compatibility(
     window: str = Query(default="24h", description="Relative window: 15m, 1h, 24h, or 7d"),
     _: CurrentUser = Depends(require_admin_capability("ops:providers:read")),
