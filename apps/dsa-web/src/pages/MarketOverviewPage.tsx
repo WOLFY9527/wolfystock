@@ -9,6 +9,7 @@ import type {
   ProfessionalDataCapabilityViewItem,
   MarketBriefingResponse,
   MarketFuturesResponse,
+  MarketRegimeReadModelResponse,
   MarketTemperatureResponse,
   OfficialRiskSourceReadiness,
 } from '../api/market';
@@ -1279,6 +1280,197 @@ const MarketRegimeReadinessSurface = ({
   );
 };
 
+const MARKET_REGIME_READ_MODEL_CHIP_VARIANT: Record<string, 'neutral' | 'success' | 'caution' | 'danger' | 'info'> = {
+  product_ready: 'success',
+  ok: 'success',
+  degraded: 'caution',
+  partial: 'caution',
+  blocked: 'danger',
+  failed_closed: 'danger',
+  unavailable: 'neutral',
+};
+
+const MARKET_REGIME_CARD_VARIANT: Record<string, 'neutral' | 'success' | 'caution' | 'danger' | 'info'> = {
+  positive: 'success',
+  neutral: 'info',
+  negative: 'caution',
+  degraded: 'caution',
+  unavailable: 'danger',
+};
+
+const MARKET_REGIME_NO_ADVICE_PATTERN =
+  /\b(buy|sell|hold|recommendation|target price|enter|exit|long|short)\b|加仓|减仓|买入|卖出|持有|目标价|推荐/gi;
+
+function sanitizeRegimeReadModelText(value?: unknown, fallback = 'Evidence unavailable'): string {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) {
+    return fallback;
+  }
+  return text
+    .replace(MARKET_REGIME_NO_ADVICE_PATTERN, 'observation-only')
+    .replace(/Proxy/g, 'Context')
+    .replace(/proxy/g, 'context');
+}
+
+function formatRegimeReadModelMetricValue(value: unknown): string {
+  if (value == null || value === '') {
+    return 'n/a';
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? String(Math.round(value * 10000) / 10000) : 'n/a';
+  }
+  if (Array.isArray(value)) {
+    return value.length ? value.map((item) => sanitizeRegimeReadModelText(item)).join(', ') : 'none';
+  }
+  if (typeof value === 'object') {
+    return 'available';
+  }
+  return sanitizeRegimeReadModelText(value);
+}
+
+const MarketRegimeReadModelSurface = ({
+  payload,
+  loading,
+  error,
+  onRetry,
+}: {
+  payload: MarketRegimeReadModelResponse | null;
+  loading: boolean;
+  error: string | null;
+  onRetry: () => void;
+}) => {
+  const readinessLabel = payload?.readiness?.label || 'unavailable';
+  const status = payload?.status || 'unavailable';
+  const missingFamilies = payload?.missingDataFamilies || payload?.readiness?.missingDataFamilies || [];
+  const blockedSurfaces = payload?.blockedProductSurfaces || payload?.readiness?.blockedProductSurfaces || [];
+  const evidenceCards = payload?.evidenceCards || [];
+  const dataQuality = payload?.dataQuality;
+
+  return (
+    <section
+      data-testid="market-regime-read-model-surface"
+      className="rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3"
+    >
+      <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-white/48">Market regime read model</p>
+          <p className="mt-1 text-sm font-semibold text-white/86">
+            {loading
+              ? 'Loading local regime evidence'
+              : error
+                ? 'Local regime evidence unavailable'
+                : `${sanitizeRegimeReadModelText(payload?.regime?.label, 'insufficient_data')} · ${status}`}
+          </p>
+          <p className="mt-1 max-w-4xl text-[11px] leading-5 text-white/50">
+            {loading
+              ? 'Waiting for read-only local evidence fields.'
+              : error
+                ? error
+                : sanitizeRegimeReadModelText(payload?.productSummary, 'Market regime evidence is not available.')}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-1.5">
+          <TerminalChip variant={MARKET_REGIME_READ_MODEL_CHIP_VARIANT[readinessLabel] || 'neutral'}>
+            {readinessLabel}
+          </TerminalChip>
+          <TerminalChip variant={MARKET_REGIME_READ_MODEL_CHIP_VARIANT[status] || 'neutral'}>
+            {status}
+          </TerminalChip>
+          {payload?.noAdvice ? <TerminalChip variant="info">observation only</TerminalChip> : null}
+        </div>
+      </div>
+
+      {loading ? (
+        <div data-testid="market-regime-read-model-skeleton" className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={index} className="h-28 animate-pulse rounded-md border border-white/[0.05] bg-white/[0.03]" />
+          ))}
+        </div>
+      ) : error ? (
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-amber-300/20 bg-amber-400/8 px-3 py-2">
+          <p className="min-w-0 text-xs leading-5 text-amber-100/80">{error}</p>
+          <TerminalButton variant="compact" onClick={onRetry}>重试</TerminalButton>
+        </div>
+      ) : (
+        <>
+          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {evidenceCards.map((card) => (
+              <section
+                key={card.id}
+                data-testid={`market-regime-evidence-card-${card.id}`}
+                className="rounded-md border border-white/[0.05] bg-white/[0.02] px-3 py-2.5"
+              >
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-medium text-white/48">{sanitizeRegimeReadModelText(card.title)}</p>
+                    <p className="mt-1 text-sm font-semibold text-white/86">{sanitizeRegimeReadModelText(card.headline)}</p>
+                  </div>
+                  <TerminalChip variant={MARKET_REGIME_CARD_VARIANT[card.status] || MARKET_REGIME_CARD_VARIANT[card.severity] || 'neutral'}>
+                    {sanitizeRegimeReadModelText(card.status)}
+                  </TerminalChip>
+                </div>
+                {card.metrics.length ? (
+                  <div className="mt-2 grid gap-1.5">
+                    {card.metrics.slice(0, 4).map((metric) => (
+                      <div key={`${card.id}-${metric.label}`} className="flex min-w-0 items-center justify-between gap-2 text-[11px]">
+                        <span className="min-w-0 text-white/42">{sanitizeRegimeReadModelText(metric.label)}</span>
+                        <span className="max-w-[55%] truncate text-right font-medium text-white/72">
+                          {formatRegimeReadModelMetricValue(metric.value)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {card.reasons.length ? (
+                  <ul className="mt-2 space-y-1">
+                    {card.reasons.slice(0, 2).map((reason) => (
+                      <li key={reason} className="text-[11px] leading-5 text-white/44">
+                        {sanitizeRegimeReadModelText(reason)}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {card.sourceFields?.length ? (
+                  <p className="mt-2 truncate text-[10px] text-white/30">
+                    {card.sourceFields.map((field) => sanitizeRegimeReadModelText(field)).join(' · ')}
+                  </p>
+                ) : null}
+              </section>
+            ))}
+          </div>
+
+          <div className="mt-3 grid gap-3 lg:grid-cols-3">
+            <section className="rounded-md border border-white/[0.05] bg-black/10 px-3 py-2.5">
+              <p className="text-[11px] font-medium text-white/48">Data quality</p>
+              <div className="mt-2 grid gap-1.5 text-[11px] text-white/62">
+                <p>adjusted: {sanitizeRegimeReadModelText(dataQuality?.adjustedCoverageState, 'unknown')}</p>
+                <p>OHLCV: {sanitizeRegimeReadModelText(dataQuality?.ohlcvCoverage?.state, 'unknown')}</p>
+                <p>quote snapshot: {sanitizeRegimeReadModelText(dataQuality?.quoteSnapshotCoverage?.state, 'unknown')}</p>
+              </div>
+            </section>
+            <section className="rounded-md border border-white/[0.05] bg-black/10 px-3 py-2.5">
+              <p className="text-[11px] font-medium text-white/48">Missing data families</p>
+              <p className="mt-2 text-[11px] leading-5 text-white/62">
+                {missingFamilies.length ? missingFamilies.map((item) => sanitizeRegimeReadModelText(item)).join(', ') : 'none'}
+              </p>
+            </section>
+            <section className="rounded-md border border-white/[0.05] bg-black/10 px-3 py-2.5">
+              <p className="text-[11px] font-medium text-white/48">Blocked surfaces</p>
+              <p className="mt-2 text-[11px] leading-5 text-white/62">
+                {blockedSurfaces.length ? blockedSurfaces.map((item) => sanitizeRegimeReadModelText(item)).join(', ') : 'none'}
+              </p>
+            </section>
+          </div>
+
+          <p className="mt-3 text-[11px] leading-5 text-white/42">
+            {sanitizeRegimeReadModelText(payload?.nextOperatorAction || payload?.readiness?.nextOperatorAction, 'No next operator action returned.')}
+          </p>
+        </>
+      )}
+    </section>
+  );
+};
+
 const MarketOverviewPage = () => {
   const { language } = useI18n();
   const { isAdminMode, canReadProviders } = useProductSurface();
@@ -1290,6 +1482,9 @@ const MarketOverviewPage = () => {
   const [professionalDataCapabilities, setProfessionalDataCapabilities] = useState<ProfessionalDataCapabilityRegistryView | null>(null);
   const [professionalDataCapabilitiesLoading, setProfessionalDataCapabilitiesLoading] = useState(true);
   const [professionalDataCapabilitiesError, setProfessionalDataCapabilitiesError] = useState<string | null>(null);
+  const [regimeReadModel, setRegimeReadModel] = useState<MarketRegimeReadModelResponse | null>(null);
+  const [regimeReadModelLoading, setRegimeReadModelLoading] = useState(true);
+  const [regimeReadModelError, setRegimeReadModelError] = useState<string | null>(null);
   const [loading, setLoading] = useState(initialLocalSnapshot.source !== 'local');
   const [localSnapshotSavedAt, setLocalSnapshotSavedAt] = useState<string | undefined>(initialLocalSnapshot.savedAt);
   const [refreshErrors, setRefreshErrors] = useState<Record<string, string>>({});
@@ -1539,6 +1734,34 @@ const MarketOverviewPage = () => {
     };
   }, [loadProfessionalDataCapabilities]);
 
+  const loadRegimeReadModel = useCallback(async (cancelledRef?: { current: boolean }) => {
+    setRegimeReadModelLoading(true);
+    setRegimeReadModelError(null);
+    try {
+      const payload = await marketApi.getRegimeReadModel();
+      if (!cancelledRef?.current) {
+        setRegimeReadModel(payload);
+      }
+    } catch {
+      if (!cancelledRef?.current) {
+        setRegimeReadModel(null);
+        setRegimeReadModelError('Local regime evidence is unavailable; readiness stays visible as blocked.');
+      }
+    } finally {
+      if (!cancelledRef?.current) {
+        setRegimeReadModelLoading(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const cancelledRef = { current: false };
+    void loadRegimeReadModel(cancelledRef);
+    return () => {
+      cancelledRef.current = true;
+    };
+  }, [loadRegimeReadModel]);
+
   useEffect(() => {
     writeLocalMarketOverviewSnapshot(panels);
     setLocalSnapshotSavedAt(new Date().toISOString());
@@ -1626,6 +1849,14 @@ const MarketOverviewPage = () => {
           error={professionalDataCapabilitiesError}
           onRetry={() => {
             void loadProfessionalDataCapabilities();
+          }}
+        />
+        <MarketRegimeReadModelSurface
+          payload={regimeReadModel}
+          loading={regimeReadModelLoading}
+          error={regimeReadModelError}
+          onRetry={() => {
+            void loadRegimeReadModel();
           }}
         />
         <MarketOverviewWorkbench

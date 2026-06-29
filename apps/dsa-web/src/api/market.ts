@@ -2647,6 +2647,106 @@ export function buildMarketApiUrl(baseUrl: string, path: string): string {
   return buildAbsoluteApiUrl(baseUrl, path);
 }
 
+export type MarketRegimeReadinessLabel = 'product_ready' | 'degraded' | 'blocked' | 'failed_closed' | string;
+
+export type MarketRegimeReadModelMetric = {
+  label: string;
+  value: unknown;
+};
+
+export type MarketRegimeReadModelEvidenceCard = {
+  id: string;
+  title: string;
+  status: string;
+  severity: string;
+  headline: string;
+  metrics: MarketRegimeReadModelMetric[];
+  reasons: string[];
+  sourceFields?: string[];
+  consumerSafe?: boolean;
+};
+
+export type MarketRegimeReadModelResponse = {
+  consumerSafe: boolean;
+  noAdvice: boolean;
+  contractVersion: string;
+  sourceEvidenceContractVersion: string;
+  status: string;
+  market: string;
+  symbols: string[];
+  benchmarkSymbol: string;
+  growthProxySymbol: string;
+  regime: {
+    label: string;
+    status: string;
+    source?: string;
+  };
+  productSummary: string;
+  evidenceCards: MarketRegimeReadModelEvidenceCard[];
+  symbolContext: Array<Record<string, unknown>>;
+  dataQuality: {
+    adjustedCoverageState?: string;
+    ohlcvCoverage?: {
+      state?: string;
+      requiredBars?: number | null;
+      availableSymbols?: string[];
+      missingSymbols?: string[];
+      missingBars?: Record<string, unknown>;
+    };
+    quoteSnapshotCoverage?: {
+      state?: string;
+      availabilityState?: string;
+      freshnessState?: string;
+      availableSymbols?: string[];
+      missingSymbols?: string[];
+      staleSymbols?: string[];
+    };
+    missingDataFamilies?: string[];
+    blockedProductSurfaces?: string[];
+    nextOperatorAction?: string;
+    failClosedReasons?: string[];
+  };
+  readiness: {
+    label: MarketRegimeReadinessLabel;
+    status: string;
+    missingDataFamilies: string[];
+    blockedProductSurfaces: string[];
+    nextOperatorAction: string;
+  };
+  surfaceHints: Array<Record<string, unknown>>;
+  missingDataFamilies: string[];
+  blockedProductSurfaces: string[];
+  nextOperatorAction: string;
+  networkCallsEnabled: boolean;
+  mutationEnabled: boolean;
+  providerCallsEnabled: boolean;
+};
+
+function normalizeMarketRegimeReadModelPayload(payload: Record<string, unknown>): MarketRegimeReadModelResponse {
+  const normalized = toCamelCase<MarketRegimeReadModelResponse>(payload);
+  return {
+    ...normalized,
+    symbols: Array.isArray(normalized.symbols) ? normalized.symbols : [],
+    evidenceCards: Array.isArray(normalized.evidenceCards) ? normalized.evidenceCards : [],
+    symbolContext: Array.isArray(normalized.symbolContext) ? normalized.symbolContext : [],
+    surfaceHints: Array.isArray(normalized.surfaceHints) ? normalized.surfaceHints : [],
+    missingDataFamilies: Array.isArray(normalized.missingDataFamilies) ? normalized.missingDataFamilies : [],
+    blockedProductSurfaces: Array.isArray(normalized.blockedProductSurfaces) ? normalized.blockedProductSurfaces : [],
+    readiness: {
+      label: normalized.readiness?.label || 'failed_closed',
+      status: normalized.readiness?.status || 'failed_closed',
+      missingDataFamilies: Array.isArray(normalized.readiness?.missingDataFamilies) ? normalized.readiness.missingDataFamilies : [],
+      blockedProductSurfaces: Array.isArray(normalized.readiness?.blockedProductSurfaces) ? normalized.readiness.blockedProductSurfaces : [],
+      nextOperatorAction: normalized.readiness?.nextOperatorAction || normalized.nextOperatorAction || '',
+    },
+    dataQuality: {
+      ...normalized.dataQuality,
+      missingDataFamilies: Array.isArray(normalized.dataQuality?.missingDataFamilies) ? normalized.dataQuality.missingDataFamilies : [],
+      blockedProductSurfaces: Array.isArray(normalized.dataQuality?.blockedProductSurfaces) ? normalized.dataQuality.blockedProductSurfaces : [],
+    },
+  };
+}
+
 export const marketApi = {
   getCrypto: () => getPanel(buildMarketApiPath('crypto'), 'CryptoCard'),
   cryptoStreamUrl: () => buildMarketApiUrl(API_BASE_URL, buildMarketApiPath('crypto/stream')),
@@ -2674,6 +2774,10 @@ export const marketApi = {
   getCnShortSentiment: async (): Promise<CnShortSentimentResponse> => {
     const response = await apiClient.get<Record<string, unknown>>(buildMarketApiPath('cn-short-sentiment'));
     return toCamelCase<CnShortSentimentResponse>(response.data);
+  },
+  getRegimeReadModel: async (): Promise<MarketRegimeReadModelResponse> => {
+    const response = await apiClient.get<Record<string, unknown>>(buildMarketApiPath('regime-read-model'));
+    return normalizeMarketRegimeReadModelPayload(response.data);
   },
   getDataReadiness: async (options?: { symbols?: string[] | string | null }): Promise<MarketDataReadinessResponse> => {
     const params = normalizeReadinessSymbols(options?.symbols);
