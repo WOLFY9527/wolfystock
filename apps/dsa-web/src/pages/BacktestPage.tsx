@@ -219,11 +219,11 @@ function buildPendingBacktestRunFeedback(language: BacktestLanguage, mode: 'norm
     title: language === 'en' ? 'Backtest request accepted' : '回测任务已受理',
     body: mode === 'normal'
       ? (language === 'en'
-        ? 'Submitting the selected template and checking DATA-110 execution readiness before any safe result contract is shown.'
-        : '正在提交回测请求，正在检查 DATA-110 执行就绪度；安全结果契约返回前不会展示指标。')
+        ? 'Submitting the selected template and checking data readiness before any result view is shown.'
+        : '正在提交回测请求，正在检查数据就绪度；结果结构返回前不会展示指标。')
       : (language === 'en'
-        ? 'Submitting the backtest request and checking DATA-110 execution readiness before opening any result view.'
-        : '正在提交回测请求，正在检查 DATA-110 执行就绪度；结果页打开前先等待安全回执。'),
+        ? 'Submitting the backtest request and checking data readiness before opening any result view.'
+        : '正在提交回测请求，正在检查数据就绪度；结果页打开前先等待回执。'),
   };
 }
 
@@ -261,8 +261,8 @@ function buildBacktestResponseFeedback(
       tone: 'success',
       title: stateLabel,
       body: language === 'en'
-        ? 'A consumer-safe result contract is available. Metrics are shown only when returned by the backend.'
-        : '已返回消费者安全结果契约；仅展示后端明确返回的指标。',
+        ? 'A consumer-safe result view is ready. Metrics are shown only when returned by the backend.'
+        : '消费者安全结果结构已返回；仅展示后端明确返回的指标。',
       details: reasonLabels,
     };
   }
@@ -272,8 +272,8 @@ function buildBacktestResponseFeedback(
     body: response.noResultMessage
       || reasonLabels[0]
       || (language === 'en'
-        ? 'The run is blocked or still waiting for a safe result contract.'
-        : '本次运行被阻塞，或仍在等待安全结果契约。'),
+        ? 'The run is blocked or still waiting for a safe result view.'
+        : '本次运行被阻塞，或仍在等待安全结果结构。'),
     details: reasonLabels.slice(response.noResultMessage ? 0 : 1),
   };
 }
@@ -1560,8 +1560,13 @@ const BacktestPage: React.FC = () => {
         >
           <TerminalPageHeading
             data-testid="backtest-page-heading"
-            title={language === 'en' ? 'Backtest' : '回测'}
+            title={language === 'en' ? 'Backtest Lab' : '回测实验室'}
           />
+          <p data-testid="backtest-consumer-status-sentence" className="max-w-4xl text-sm leading-6 text-white/58">
+            {language === 'en'
+              ? 'Configure a strategy, check data readiness, then inspect the result preview or latest saved run before opening a full report.'
+              : '先配置策略与区间，再核对数据就绪度；运行前可预览将展示的结果结构或最近保存记录。'}
+          </p>
           <div
             data-testid="backtest-subnav"
             className={`w-full ${configPanelRadiusClass} border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-sm`}

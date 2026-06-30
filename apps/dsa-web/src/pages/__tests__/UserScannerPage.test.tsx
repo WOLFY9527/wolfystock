@@ -2345,7 +2345,7 @@ describe('UserScannerPage', () => {
   it('renders exactly one compact semantic scanner page heading without internal terms', async () => {
     renderUserScannerPage({ initialEntry: '/zh/scanner' });
 
-    const heading = await screen.findByRole('heading', { level: 1, name: '扫描器' });
+    const heading = await screen.findByRole('heading', { level: 1, name: '发现 / 扫描器' });
     expect(heading).toHaveClass('text-xl', 'md:text-2xl');
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.queryByText(/provider_timeout|MarketCache|generatedCandidates|failedCandidates/i)).not.toBeInTheDocument();
@@ -2451,10 +2451,10 @@ describe('UserScannerPage', () => {
     expectElementBefore(candidates, screen.getByTestId('scanner-secondary-sections'));
 
     const diagnostics = screen.getByTestId('scanner-diagnostics-disclosure');
-    expect(within(diagnostics).getByRole('button', { name: /展开.*(?:数据说明|Data notes)|Expand.*(?:数据说明|Data notes)/i })).toHaveAttribute('aria-expanded', 'false');
+    expect(within(diagnostics).getByRole('button', { name: /展开.*(?:查看扫描诊断|View scanner diagnostics)|Expand.*(?:查看扫描诊断|View scanner diagnostics)/i })).toHaveAttribute('aria-expanded', 'false');
     expect(within(screen.getByTestId('scanner-run-comparison-strip')).getByRole('button', { name: /^(?:展开|Expand).*?(?:比较记录|Comparison records|Compare records)$/i })).toHaveAttribute('aria-expanded', 'false');
     expect(within(screen.getByTestId('scanner-strategy-experiment')).getByRole('button', { name: /展开.*(?:回测准备|Backtest setup)|Expand.*(?:回测准备|Backtest setup)/i })).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(within(diagnostics).getByRole('button', { name: /展开.*(?:数据说明|Data notes)|Expand.*(?:数据说明|Data notes)/i }));
+    fireEvent.click(within(diagnostics).getByRole('button', { name: /展开.*(?:查看扫描诊断|View scanner diagnostics)|Expand.*(?:查看扫描诊断|View scanner diagnostics)/i }));
     expect(await screen.findByTestId('scanner-diagnostics-panel')).toBeInTheDocument();
   });
 
@@ -2499,7 +2499,7 @@ describe('UserScannerPage', () => {
 
     const secondaryDeck = await screen.findByTestId('scanner-secondary-deck');
 
-    expect(within(secondaryDeck).getByText(/数据说明|Data notes/i)).toBeInTheDocument();
+    expect(within(secondaryDeck).getByText(/查看扫描诊断|View scanner diagnostics/i)).toBeInTheDocument();
     expect(within(secondaryDeck).getByText(/运行状态|Run status/i)).toBeInTheDocument();
     expect(within(secondaryDeck).getByText(/比较记录|Compare records/i)).toBeInTheDocument();
     expect(within(secondaryDeck).getByText(/回测准备|Backtest setup/i)).toBeInTheDocument();
@@ -2546,8 +2546,11 @@ describe('UserScannerPage', () => {
     defaultSurfaces.forEach((surface) => {
       expect(surface).not.toHaveTextContent(forbiddenDiagnosticText);
     });
+    expect(screen.getByTestId('scanner-consumer-first-viewport')).not.toHaveTextContent(forbiddenDiagnosticText);
     expect(screen.getByTestId('scanner-conclusion-band')).toHaveTextContent('部分结果使用最近一次可用数据。');
     expect(screen.queryByTestId('scanner-diagnostics-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('scanner-diagnostics-disclosure')).toHaveTextContent('查看扫描诊断');
+    expect(within(screen.getByTestId('scanner-diagnostics-disclosure')).getByRole('button', { name: /查看扫描诊断/ })).toHaveAttribute('aria-expanded', 'false');
     expect(document.body).not.toHaveTextContent(/providerDiagnostics|fallback_source|reasonCodes|sourceConfidence|fallback_snapshot|raw detail/i);
   });
 
@@ -2661,7 +2664,7 @@ describe('UserScannerPage', () => {
     expect(screen.queryByTestId('scanner-rejection-aggregate')).not.toBeInTheDocument();
 
     const diagnostics = await screen.findByTestId('scanner-diagnostics-disclosure');
-    fireEvent.click(within(diagnostics).getByRole('button', { name: /展开.*(?:数据说明|Data notes)|Expand.*(?:数据说明|Data notes)/i }));
+    fireEvent.click(within(diagnostics).getByRole('button', { name: /展开.*(?:查看扫描诊断|View scanner diagnostics)|Expand.*(?:查看扫描诊断|View scanner diagnostics)/i }));
     const summary = await screen.findByTestId('scanner-diagnostics-summary');
     fireEvent.click(within(summary).getByRole('button', { name: /淘汰分布|Rejection mix/i }));
     expect(await screen.findByTestId('scanner-rejection-aggregate')).toBeInTheDocument();
@@ -2718,7 +2721,7 @@ describe('UserScannerPage', () => {
     expect(document.body).not.toHaveTextContent(forbiddenSyntheticMarkers);
 
     const diagnostics = screen.getByTestId('scanner-diagnostics-disclosure');
-    fireEvent.click(within(diagnostics).getByRole('button', { name: /展开.*(?:数据说明|Data notes)|Expand.*(?:数据说明|Data notes)/i }));
+    fireEvent.click(within(diagnostics).getByRole('button', { name: /展开.*(?:查看扫描诊断|View scanner diagnostics)|Expand.*(?:查看扫描诊断|View scanner diagnostics)/i }));
     const panel = await screen.findByTestId('scanner-diagnostics-panel');
     const panelText = panel.textContent || '';
 
@@ -2776,7 +2779,7 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const diagnostics = await screen.findByTestId('scanner-diagnostics-disclosure');
-    fireEvent.click(within(diagnostics).getByRole('button', { name: /展开.*(?:数据说明|Data notes)|Expand.*(?:数据说明|Data notes)/i }));
+    fireEvent.click(within(diagnostics).getByRole('button', { name: /展开.*(?:查看扫描诊断|View scanner diagnostics)|Expand.*(?:查看扫描诊断|View scanner diagnostics)/i }));
     const panel = await screen.findByTestId('scanner-diagnostics-panel');
     const summary = await screen.findByTestId('scanner-diagnostics-summary');
     fireEvent.click(within(summary).getByRole('button', { name: /淘汰分布|Rejection mix/i }));
@@ -3187,6 +3190,17 @@ describe('UserScannerPage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent('本次未形成入选候选');
     });
+    expect(screen.getByRole('heading', { level: 1, name: '发现 / 扫描器' })).toBeInTheDocument();
+    expect(screen.getByTestId('scanner-consumer-first-viewport')).toBeInTheDocument();
+    expect(screen.getByTestId('scanner-consumer-status-sentence')).toHaveTextContent('本次未形成入选候选');
+    expect(screen.getByTestId('scanner-consumer-control-summary')).toHaveTextContent('市场');
+    expect(screen.getByTestId('scanner-consumer-control-summary')).toHaveTextContent('策略');
+    expect(screen.getByTestId('scanner-consumer-control-summary')).toHaveTextContent('标的池');
+    expect(screen.getByTestId('scanner-data-trust-row')).toHaveTextContent('标的池');
+    expect(screen.getByTestId('scanner-data-trust-row')).toHaveTextContent('历史数据');
+    expect(screen.getByTestId('scanner-data-trust-row')).toHaveTextContent('报价新鲜度');
+    expect(screen.getByTestId('scanner-data-trust-row')).toHaveTextContent('候选输出');
+    expect(screen.getByTestId('scanner-consumer-next-action')).toHaveTextContent(/未形成官方入选候选|手动研究单个代码/);
     const emptyState = screen.getByTestId('scanner-workbench-empty-state');
     expect(screen.getByTestId('scanner-empty-history-fallback')).toBeInTheDocument();
     expect(emptyState).toHaveTextContent('未形成入选候选，可重试、查看数据受限行或切换市场/策略');

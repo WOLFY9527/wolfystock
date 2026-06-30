@@ -3841,6 +3841,46 @@ const UserScannerPage: React.FC = () => {
       value: generatedAt ? `${scannerDataStateLabel} · ${formatTimestamp(generatedAt, language)}` : scannerDataStateLabel,
     },
   ];
+  const scannerConsumerStatusSentence = scannerConclusion.state === 'top-candidate'
+    ? (language === 'en'
+      ? `Current setup can inspect ${currentSelectedCount} scanner candidate${currentSelectedCount === 1 ? '' : 's'}; review data limits before downstream validation.`
+      : `当前配置可查看 ${currentSelectedCount} 个扫描候选；进入下游验证前先核对数据限制。`)
+    : scannerConclusion.state === 'waiting'
+      ? (language === 'en'
+        ? 'Choose market, strategy, and universe, then run the scanner when the setup is ready.'
+        : '先选择市场、策略与标的池；配置确认后即可运行扫描。')
+      : scannerConclusion.state === 'no-candidate'
+        ? (language === 'en'
+          ? 'This run did not produce selected candidates; adjust scope, retry, or research one symbol manually.'
+          : '本次未形成入选候选；可调整范围、重新扫描，或手动研究单个代码。')
+        : (language === 'en'
+          ? 'Scanner output is limited by data coverage; use the next action before treating results as research evidence.'
+          : '扫描输出受数据覆盖限制；先完成下一步动作，再把结果作为研究证据。');
+  const scannerConsumerTrustItems = [
+    {
+      label: language === 'en' ? 'Universe' : '标的池',
+      value: scannerDataReadinessView?.coverageChips.find((item) => item.label === (language === 'en' ? 'Universe readiness' : '标的池状态'))?.value
+        || scannerScopeLabel,
+    },
+    {
+      label: language === 'en' ? 'History' : '历史数据',
+      value: scannerDataReadinessView?.coverageChips.find((item) => item.label === (language === 'en' ? 'History' : '历史'))?.value
+        || (language === 'en' ? 'Check after scan' : '运行后确认'),
+    },
+    {
+      label: language === 'en' ? 'Quote freshness' : '报价新鲜度',
+      value: scannerDataReadinessView?.coverageChips.find((item) => item.label === (language === 'en' ? 'Quote' : '报价'))?.value
+        || scannerDataStateLabel,
+    },
+    {
+      label: language === 'en' ? 'Candidate output' : '候选输出',
+      value: scannerShouldHideEmptyRunCounts
+        ? (language === 'en' ? 'Not produced' : '未产出')
+        : (runDetail
+          ? `${currentSelectedCount}/${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize ?? 0}`
+          : (language === 'en' ? 'Waiting for run' : '等待运行')),
+    },
+  ];
   const scannerRailProfileLabel = runDetail
     ? sanitizeScannerProfileLabel(runDetail.profileLabel || runDetail.profile)
     : sanitizeScannerProfileLabel(SCANNER_PROFILE_DEFAULTS[market]?.profile || profile);
@@ -3963,7 +4003,7 @@ const UserScannerPage: React.FC = () => {
                     {runDetail ? sanitizeScannerProfileLabel(runDetail.profileLabel || runDetail.profile) : (language === 'en' ? 'Candidate workbench' : '候选工作台')}
                   </span>
                 )}
-                title={language === 'en' ? 'Scanner' : '扫描器'}
+                title={language === 'en' ? 'Discovery / Scanner' : '发现 / 扫描器'}
                 action={(
                   <TerminalButton
                     ref={openHistoryDrawerButtonRef}
@@ -4014,6 +4054,50 @@ const UserScannerPage: React.FC = () => {
                   />
                 </div>
               ) : null}
+
+              <section
+                data-testid="scanner-consumer-first-viewport"
+                className="mx-3 rounded-xl border border-white/10 bg-white/[0.025] p-3"
+                aria-label={language === 'en' ? 'Scanner consumer summary' : '扫描器消费级摘要'}
+              >
+                <div className="flex min-w-0 flex-col gap-3">
+                  <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <p data-testid="scanner-consumer-status-sentence" className="text-sm font-semibold leading-6 text-white">
+                        {scannerConsumerStatusSentence}
+                      </p>
+                      <p data-testid="scanner-consumer-readiness-summary" className="mt-1 text-xs leading-5 text-white/58">
+                        {scannerDataStateLabel}
+                        {scannerDataReadinessView?.nextDataLabel ? ` · ${scannerDataReadinessView.nextDataLabel}` : ''}
+                      </p>
+                    </div>
+                    <div data-testid="scanner-consumer-control-summary" className="grid min-w-0 grid-cols-2 gap-1.5 text-xs sm:grid-cols-4 lg:min-w-[34rem]">
+                      {[
+                        [language === 'en' ? 'Market' : '市场', market.toUpperCase()],
+                        [language === 'en' ? 'Strategy' : '策略', scannerRailProfileLabel || '--'],
+                        [language === 'en' ? 'Universe' : '标的池', scannerScopeLabel],
+                        [language === 'en' ? 'Output' : '输出', scannerShouldHideEmptyRunCounts ? (language === 'en' ? 'Pending' : '待产出') : String(currentSelectedCount)],
+                      ].map(([label, value]) => (
+                        <div key={label} className="min-w-0 rounded-lg border border-white/8 bg-black/20 px-2 py-2">
+                          <p className="text-[10px] text-white/38">{label}</p>
+                          <p className="mt-1 truncate font-mono text-white/76">{value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div data-testid="scanner-data-trust-row" className="grid min-w-0 gap-1.5 text-xs sm:grid-cols-2 xl:grid-cols-4">
+                    {scannerConsumerTrustItems.map((item) => (
+                      <div key={item.label} className="min-w-0 rounded-lg border border-white/8 bg-black/15 px-2.5 py-2">
+                        <p className="text-[10px] text-white/38">{item.label}</p>
+                        <p className="mt-1 truncate text-white/72">{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p data-testid="scanner-consumer-next-action" className="rounded-lg border border-indigo-300/15 bg-indigo-300/[0.06] px-2.5 py-2 text-xs leading-5 text-indigo-50/78">
+                    {scannerDataReadinessView?.nextDataLabel || scannerWorkflowDetail}
+                  </p>
+                </div>
+              </section>
 
               <ScannerConclusionBand
                 model={scannerConclusion}
@@ -4817,7 +4901,7 @@ const UserScannerPage: React.FC = () => {
                           {rejectionBuckets.length || hasRunDiagnosticsContent(runDetail) ? (
                             <AdvancedDisclosure
                               testId="scanner-diagnostics-disclosure"
-                              title={language === 'en' ? 'Data notes' : '数据说明'}
+                              title={language === 'en' ? 'View scanner diagnostics' : '查看扫描诊断'}
                               summary={language === 'en'
                                 ? `Evaluated ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize} · main rejection ${rejectionBuckets[0]?.label || 'n/a'}`
                                 : `评估 ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize} · 主要淘汰 ${rejectionBuckets[0]?.label || '暂无'}`}
