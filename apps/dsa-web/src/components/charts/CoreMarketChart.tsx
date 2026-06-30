@@ -1,4 +1,30 @@
 import type React from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { BarChart, CandlestickChart, LineChart } from 'echarts/charts';
+import type { BarSeriesOption, CandlestickSeriesOption, LineSeriesOption } from 'echarts/charts';
+import {
+  DataZoomComponent,
+  GridComponent,
+  TooltipComponent,
+} from 'echarts/components';
+import type {
+  DataZoomComponentOption,
+  GridComponentOption,
+  TooltipComponentOption,
+} from 'echarts/components';
+import * as echarts from 'echarts/core';
+import type { ComposeOption, ECharts, SetOptionOpts } from 'echarts/core';
+import { CanvasRenderer } from 'echarts/renderers';
+
+echarts.use([
+  CandlestickChart,
+  LineChart,
+  BarChart,
+  GridComponent,
+  TooltipComponent,
+  DataZoomComponent,
+  CanvasRenderer,
+]);
 
 export type CoreMarketChartPoint = {
   date: string;
@@ -11,6 +37,8 @@ export type CoreMarketChartPoint = {
 };
 
 type CoreMarketChartTone = 'success' | 'warning' | 'error' | 'neutral';
+type CoreMarketChartRange = '1D' | '1W' | '1M' | '3M' | 'ALL';
+type CoreMarketRenderMode = 'candlestick' | 'line';
 
 type CoreMarketChartProps = {
   testId: string;
@@ -34,16 +62,42 @@ type CoreMarketChartProps = {
   compact?: boolean;
 };
 
-const WIDTH = 720;
-const HEIGHT = 300;
-const COMPACT_HEIGHT = 210;
-const PRICE_TOP = 36;
-const PRICE_BOTTOM = 188;
-const COMPACT_PRICE_BOTTOM = 148;
-const VOLUME_TOP = 214;
-const VOLUME_BOTTOM = 276;
-const LEFT = 54;
-const RIGHT = 20;
+type ChartPoint = {
+  date: string;
+  label?: string | null;
+  open?: number;
+  high?: number;
+  low?: number;
+  close: number;
+  volume?: number;
+  ma5?: number;
+  ma20?: number;
+};
+
+type CoreMarketChartOption = ComposeOption<
+  | CandlestickSeriesOption
+  | LineSeriesOption
+  | BarSeriesOption
+  | GridComponentOption
+  | TooltipComponentOption
+  | DataZoomComponentOption
+>;
+
+const RANGE_OPTIONS: Array<{ key: CoreMarketChartRange; labelZh: string; labelEn: string; bars?: number }> = [
+  { key: '1D', labelZh: '1D', labelEn: '1D', bars: 1 },
+  { key: '1W', labelZh: '1W', labelEn: '1W', bars: 5 },
+  { key: '1M', labelZh: '1M', labelEn: '1M', bars: 22 },
+  { key: '3M', labelZh: '3M', labelEn: '3M', bars: 66 },
+  { key: 'ALL', labelZh: '全部', labelEn: 'All' },
+];
+
+const PRICE_COLORS = {
+  up: '#2FC48D',
+  down: '#E76576',
+  ma5: '#38BDF8',
+  ma20: '#F59E0B',
+  line: '#8BA4FF',
+};
 
 function finiteNumber(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -72,10 +126,20 @@ function formatCompactNumber(value: number | null | undefined, language: 'zh' | 
   return `${sign}${abs.toFixed(abs >= 100 ? 0 : 1)}`;
 }
 
-function formatDateTick(value: string): string {
+function formatDateLabel(value: string | null | undefined): string {
+  if (!value) return '--';
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
-  if (!match) return value || '--';
-  return `${match[2]}/${match[3]}`;
+  if (!match) return value;
+  return `${match[1]}-${match[2]}-${match[3]}`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function toneClass(tone: CoreMarketChartTone): string {
@@ -85,23 +149,300 @@ function toneClass(tone: CoreMarketChartTone): string {
   return 'border-white/[0.10] bg-white/[0.04] text-white/72';
 }
 
-function buildLinePath(points: CoreMarketChartPoint[], min: number, max: number, priceBottom: number): string {
-  const range = max - min || 1;
-  const innerWidth = WIDTH - LEFT - RIGHT;
-  return points.map((point, index) => {
-    const x = LEFT + (innerWidth * index) / Math.max(points.length - 1, 1);
-    const y = PRICE_TOP + (priceBottom - PRICE_TOP) - ((point.close - min) / range) * (priceBottom - PRICE_TOP);
-    return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
-  }).join(' ');
+function movingAverage(values: number[], index: number, length: number): number | undefined {
+  if (index < length - 1) return undefined;
+  const slice = values.slice(index - length + 1, index + 1);
+  return Number((slice.reduce((sum, value) => sum + value, 0) / length).toFixed(2));
 }
 
-function pointX(index: number, total: number): number {
-  return LEFT + ((WIDTH - LEFT - RIGHT) * index) / Math.max(total - 1, 1);
+function normalizePoints(points: CoreMarketChartPoint[], compact: boolean): ChartPoint[] {
+  const normalized = points
+    .filter((point) => finiteNumber(point.close) != null && point.date)
+    .map((point) => {
+      const open = finiteNumber(point.open);
+      const high = finiteNumber(point.high);
+      const low = finiteNumber(point.low);
+      const volume = finiteNumber(point.volume);
+      return {
+        date: String(point.date),
+        label: point.label,
+        close: Number(point.close),
+        open: open ?? undefined,
+        high: high ?? undefined,
+        low: low ?? undefined,
+        volume: volume ?? undefined,
+      };
+    })
+    .slice(compact ? -64 : -240);
+  const closes = normalized.map((point) => point.close);
+  return normalized.map((point, index) => ({
+    ...point,
+    ma5: movingAverage(closes, index, 5),
+    ma20: movingAverage(closes, index, 20),
+  }));
 }
 
-function pointY(value: number, min: number, max: number, priceBottom: number): number {
-  const range = max - min || 1;
-  return PRICE_TOP + (priceBottom - PRICE_TOP) - ((value - min) / range) * (priceBottom - PRICE_TOP);
+function hasCompleteOhlc(points: ChartPoint[]): boolean {
+  return points.length > 0 && points.every((point) => (
+    finiteNumber(point.open) != null
+    && finiteNumber(point.high) != null
+    && finiteNumber(point.low) != null
+    && finiteNumber(point.close) != null
+  ));
+}
+
+function visibleRangePoints(points: ChartPoint[], range: CoreMarketChartRange): ChartPoint[] {
+  const option = RANGE_OPTIONS.find((item) => item.key === range);
+  if (!option?.bars) return points;
+  return points.slice(-option.bars);
+}
+
+function buildTooltip(point: ChartPoint, language: 'zh' | 'en', enabledOverlays: string[], renderMode: CoreMarketRenderMode): string {
+  const labels = language === 'en'
+    ? { date: 'Date', open: 'Open', high: 'High', low: 'Low', close: 'Close', volume: 'Volume' }
+    : { date: '日期', open: '开盘', high: '最高', low: '最低', close: '收盘', volume: '成交量' };
+  const ohlcRows = renderMode === 'candlestick'
+    ? `
+      <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.52);">${labels.open}</span><strong>${formatNumber(point.open, language)}</strong></div>
+      <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.52);">${labels.high}</span><strong>${formatNumber(point.high, language)}</strong></div>
+      <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.52);">${labels.low}</span><strong>${formatNumber(point.low, language)}</strong></div>
+    `
+    : '';
+  const overlayRows = enabledOverlays
+    .map((label) => {
+      const value = label === 'MA5' ? point.ma5 : point.ma20;
+      return finiteNumber(value) == null
+        ? ''
+        : `<div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.52);">${label}</span><strong>${formatNumber(value, language)}</strong></div>`;
+    })
+    .join('');
+  return `
+    <div style="min-width:190px;padding:8px 10px;font-size:11px;line-height:1.65;color:rgba(248,250,252,.86);">
+      <div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:5px;"><span style="color:rgba(248,250,252,.52);">${labels.date}</span><strong>${escapeHtml(formatDateLabel(point.label || point.date))}</strong></div>
+      ${ohlcRows}
+      <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.52);">${labels.close}</span><strong>${formatNumber(point.close, language)}</strong></div>
+      <div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.52);">${labels.volume}</span><strong>${formatCompactNumber(point.volume, language)}</strong></div>
+      ${overlayRows}
+    </div>
+  `;
+}
+
+function buildChartOption({
+  points,
+  language,
+  hasVolume,
+  enabledOverlays,
+  renderMode,
+  compact,
+}: {
+  points: ChartPoint[];
+  language: 'zh' | 'en';
+  hasVolume: boolean;
+  enabledOverlays: string[];
+  renderMode: CoreMarketRenderMode;
+  compact: boolean;
+}): CoreMarketChartOption {
+  const dates = points.map((point) => point.label || point.date);
+  const xLabelInterval = Math.max(0, Math.ceil(points.length / (compact ? 4 : 8)) - 1);
+  const grids: GridComponentOption[] = hasVolume
+    ? [
+        { left: '2%', right: '5%', top: compact ? '12%' : '10%', height: compact ? '60%' : '58%', containLabel: true },
+        { left: '2%', right: '5%', top: compact ? '78%' : '76%', height: compact ? '11%' : '12%', containLabel: true },
+      ]
+    : [
+        { left: '2%', right: '5%', top: compact ? '12%' : '10%', bottom: compact ? '18%' : '16%', containLabel: true },
+      ];
+  const xAxis = hasVolume
+    ? [
+        {
+          type: 'category' as const,
+          data: dates,
+          boundaryGap: true,
+          axisLine: { lineStyle: { color: 'rgba(166,176,230,0.13)' } },
+          axisTick: { show: false },
+          axisLabel: { show: false },
+          splitLine: { show: false },
+        },
+        {
+          type: 'category' as const,
+          gridIndex: 1,
+          data: dates,
+          boundaryGap: true,
+          axisLine: { lineStyle: { color: 'rgba(166,176,230,0.10)' } },
+          axisTick: { show: false },
+          axisLabel: {
+            show: true,
+            interval: xLabelInterval,
+            hideOverlap: true,
+            color: 'rgba(213,219,235,0.48)',
+            fontSize: compact ? 9 : 10,
+            formatter: (value: string) => formatDateLabel(value).slice(5),
+          },
+          splitLine: { show: false },
+        },
+      ]
+    : [
+        {
+          type: 'category' as const,
+          data: dates,
+          boundaryGap: true,
+          axisLine: { lineStyle: { color: 'rgba(166,176,230,0.13)' } },
+          axisTick: { show: false },
+          axisLabel: {
+            show: true,
+            interval: xLabelInterval,
+            hideOverlap: true,
+            color: 'rgba(213,219,235,0.48)',
+            fontSize: compact ? 9 : 10,
+            formatter: (value: string) => formatDateLabel(value).slice(5),
+          },
+          splitLine: { show: false },
+        },
+      ];
+  const yAxis = hasVolume
+    ? [
+        {
+          scale: true,
+          position: 'right' as const,
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: {
+            hideOverlap: true,
+            color: 'rgba(213,219,235,0.58)',
+            fontSize: 10,
+            formatter: (value: number) => formatNumber(value, language),
+          },
+          splitLine: { lineStyle: { color: 'rgba(166,176,230,0.08)' } },
+        },
+        {
+          scale: true,
+          gridIndex: 1,
+          position: 'right' as const,
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: {
+            show: !compact,
+            hideOverlap: true,
+            color: 'rgba(213,219,235,0.34)',
+            fontSize: 9,
+            formatter: (value: number) => formatCompactNumber(value, language),
+          },
+          splitLine: { lineStyle: { color: 'rgba(166,176,230,0.05)' } },
+        },
+      ]
+    : [
+        {
+          scale: true,
+          position: 'right' as const,
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: {
+            hideOverlap: true,
+            color: 'rgba(213,219,235,0.58)',
+            fontSize: 10,
+            formatter: (value: number) => formatNumber(value, language),
+          },
+          splitLine: { lineStyle: { color: 'rgba(166,176,230,0.08)' } },
+        },
+      ];
+  const mainSeries: CandlestickSeriesOption | LineSeriesOption = renderMode === 'candlestick'
+    ? {
+        name: 'OHLC',
+        type: 'candlestick',
+        data: points.map((point) => [point.open, point.close, point.low, point.high]),
+        itemStyle: {
+          color: PRICE_COLORS.up,
+          color0: PRICE_COLORS.down,
+          borderColor: PRICE_COLORS.up,
+          borderColor0: PRICE_COLORS.down,
+        },
+      }
+    : {
+        name: 'Close',
+        type: 'line',
+        data: points.map((point) => point.close),
+        showSymbol: points.length <= 10,
+        smooth: false,
+        lineStyle: { color: PRICE_COLORS.line, width: compact ? 2 : 2.4 },
+        areaStyle: { color: 'rgba(139,164,255,0.08)' },
+      };
+  const overlaySeries: LineSeriesOption[] = enabledOverlays.map((label) => ({
+    name: label,
+    type: 'line',
+    data: points.map((point) => (label === 'MA5' ? point.ma5 : point.ma20) ?? null),
+    showSymbol: false,
+    connectNulls: false,
+    lineStyle: {
+      color: label === 'MA5' ? PRICE_COLORS.ma5 : PRICE_COLORS.ma20,
+      width: label === 'MA5' ? 1.35 : 1.25,
+      opacity: label === 'MA5' ? 0.88 : 0.76,
+    },
+    emphasis: { disabled: true },
+  }));
+  const volumeSeries: BarSeriesOption[] = hasVolume
+    ? [{
+        name: 'Volume',
+        type: 'bar',
+        xAxisIndex: 1,
+        yAxisIndex: 1,
+        data: points.map((point) => ({
+          value: point.volume ?? 0,
+          itemStyle: {
+            color: (point.close >= (point.open ?? point.close)) ? 'rgba(47,196,141,0.28)' : 'rgba(231,101,118,0.28)',
+          },
+        })),
+        barWidth: '58%',
+      }]
+    : [];
+
+  return {
+    animation: false,
+    backgroundColor: 'transparent',
+    grid: grids,
+    tooltip: {
+      trigger: 'axis',
+      renderMode: 'html',
+      appendToBody: true,
+      appendTo: 'body',
+      confine: false,
+      showDelay: 0,
+      hideDelay: 50,
+      transitionDuration: 0.08,
+      borderWidth: 1,
+      borderColor: 'rgba(166,176,230,0.16)',
+      backgroundColor: 'rgba(7,11,19,0.96)',
+      padding: 0,
+      extraCssText: 'pointer-events:none;white-space:normal;max-width:min(260px,calc(100vw - 20px));backdrop-filter:blur(10px);',
+      axisPointer: {
+        type: 'cross',
+        crossStyle: { color: 'rgba(186,194,238,0.46)' },
+        label: {
+          backgroundColor: 'rgba(9,14,24,0.96)',
+          color: 'rgba(248,250,252,0.82)',
+          fontSize: 10,
+        },
+      },
+      formatter: (params: unknown) => {
+        const first = Array.isArray(params) ? params[0] as { dataIndex?: number } | undefined : undefined;
+        const point = first?.dataIndex != null ? points[first.dataIndex] : undefined;
+        return point ? buildTooltip(point, language, enabledOverlays, renderMode) : '';
+      },
+    },
+    axisPointer: hasVolume ? { link: [{ xAxisIndex: [0, 1] }] } : undefined,
+    xAxis,
+    yAxis,
+    dataZoom: [
+      {
+        type: 'inside',
+        xAxisIndex: hasVolume ? [0, 1] : [0],
+        start: 0,
+        end: 100,
+        minValueSpan: points.length > 24 ? 8 : undefined,
+        filterMode: 'none',
+      },
+    ],
+    series: [mainSeries, ...overlaySeries, ...volumeSeries],
+  };
 }
 
 export const CoreMarketChart: React.FC<CoreMarketChartProps> = ({
@@ -125,31 +466,67 @@ export const CoreMarketChart: React.FC<CoreMarketChartProps> = ({
   showVolume = true,
   compact = false,
 }) => {
-  const usablePoints = points
-    .filter((point) => finiteNumber(point.close) != null)
-    .slice(compact ? -32 : -110);
-  const hasChart = usablePoints.length >= 2;
-  const hasVolume = showVolume && usablePoints.some((point) => (point.volume ?? 0) > 0);
-  const priceBottom = compact || !hasVolume ? COMPACT_PRICE_BOTTOM : PRICE_BOTTOM;
-  const svgHeight = compact || !hasVolume ? COMPACT_HEIGHT : HEIGHT;
-  const lowsAndHighs = usablePoints.flatMap((point) => [
-    finiteNumber(point.low) ?? point.close,
-    finiteNumber(point.high) ?? point.close,
-    point.close,
-  ]);
-  const minPrice = Math.min(...lowsAndHighs);
-  const maxPrice = Math.max(...lowsAndHighs);
-  const linePath = hasChart ? buildLinePath(usablePoints, minPrice, maxPrice, priceBottom) : '';
-  const maxVolume = Math.max(...usablePoints.map((point) => point.volume ?? 0), 1);
-  const first = usablePoints[0];
-  const last = usablePoints.at(-1);
-  const ariaSummary = hasChart
-    ? `${title}: ${usablePoints.length} ${language === 'en' ? 'bars' : '根'} ${first?.date || ''} ${last?.date || ''}`
-    : `${title}: ${emptyTitle}`;
-  const yTicks = [maxPrice, (maxPrice + minPrice) / 2, minPrice];
-  const xTicks = hasChart
-    ? [0, Math.floor((usablePoints.length - 1) / 2), usablePoints.length - 1]
+  const chartNodeRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<ECharts | null>(null);
+  const [activeRange, setActiveRange] = useState<CoreMarketChartRange>('ALL');
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
+  const usablePoints = useMemo(() => normalizePoints(points, compact), [compact, points]);
+  const visiblePoints = useMemo(() => visibleRangePoints(usablePoints, activeRange), [activeRange, usablePoints]);
+  const renderMode: CoreMarketRenderMode = hasCompleteOhlc(visiblePoints) ? 'candlestick' : 'line';
+  const hasChart = visiblePoints.length >= 1;
+  const hasVolume = showVolume && visiblePoints.some((point) => (point.volume ?? 0) > 0);
+  const enabledOverlays = renderMode === 'candlestick'
+    ? [
+        usablePoints.some((point) => finiteNumber(point.ma5) != null) ? 'MA5' : null,
+        usablePoints.some((point) => finiteNumber(point.ma20) != null) ? 'MA20' : null,
+      ].filter((item): item is string => Boolean(item))
     : [];
+  const latestPoint = visiblePoints.at(-1);
+  const hoveredPoint = hoveredIndex == null ? null : visiblePoints[hoveredIndex] ?? null;
+  const ariaSummary = hasChart
+    ? `${title}: ${visiblePoints.length} ${language === 'en' ? 'returned bars' : '根返回 K 线'}, ${formatDateLabel(visiblePoints[0]?.date)} ${language === 'en' ? 'to' : '至'} ${formatDateLabel(latestPoint?.date)}`
+    : `${title}: ${emptyTitle}`;
+  const option = useMemo(() => (
+    hasChart
+      ? buildChartOption({
+          points: visiblePoints,
+          language,
+          hasVolume,
+          enabledOverlays,
+          renderMode,
+          compact,
+        })
+      : null
+  ), [compact, enabledOverlays, hasChart, hasVolume, language, renderMode, visiblePoints]);
+
+  useEffect(() => {
+    const host = chartNodeRef.current;
+    if (!host || !option) return undefined;
+    const instance = chartRef.current ?? echarts.init(host, undefined, { renderer: 'canvas' });
+    chartRef.current = instance;
+    const setOpts: SetOptionOpts = { notMerge: true, lazyUpdate: true };
+    instance.setOption(option, setOpts);
+    instance.resize();
+    const handleResize = () => instance.resize();
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [option]);
+
+  useEffect(() => () => {
+    chartRef.current?.dispose();
+    chartRef.current = null;
+  }, []);
+
+  const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!visiblePoints.length) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const width = rect.width || 1;
+    const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / width));
+    setHoveredIndex(Math.round(ratio * (visiblePoints.length - 1)));
+  };
 
   return (
     <section
@@ -159,8 +536,15 @@ export const CoreMarketChart: React.FC<CoreMarketChartProps> = ({
       ].join(' ')}
       data-testid={testId}
       data-chart-kind={chartKind}
+      data-chart-engine="echarts"
+      data-render-mode={renderMode}
       data-point-count={usablePoints.length}
+      data-visible-points={visiblePoints.length}
+      data-active-range={activeRange}
       data-has-volume={hasVolume ? 'true' : 'false'}
+      data-volume-panel={hasVolume ? 'true' : 'false'}
+      data-datazoom-mode="inside"
+      data-enabled-overlays={enabledOverlays.length ? enabledOverlays.join(',') : 'none'}
     >
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
@@ -182,95 +566,85 @@ export const CoreMarketChart: React.FC<CoreMarketChartProps> = ({
 
       {hasChart ? (
         <div className="mt-3">
-          <svg
-            role="img"
-            aria-label={ariaSummary}
-            viewBox={`0 0 ${WIDTH} ${svgHeight}`}
-            className={compact ? 'h-[210px] w-full overflow-visible' : 'h-[300px] w-full overflow-visible'}
-            preserveAspectRatio="none"
-            data-testid="core-market-chart-svg"
+          <div className="mb-2.5 flex min-w-0 flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5" data-testid="core-market-chart-range-controls">
+              {RANGE_OPTIONS.map((optionItem) => {
+                const label = language === 'en' ? optionItem.labelEn : optionItem.labelZh;
+                const disabled = Boolean(optionItem.bars && usablePoints.length < optionItem.bars && optionItem.key !== '1D');
+                return (
+                  <button
+                    key={optionItem.key}
+                    type="button"
+                    className={[
+                      'min-h-9 rounded-md border px-2.5 text-xs font-semibold transition-colors',
+                      activeRange === optionItem.key
+                        ? 'border-[color:var(--wolfy-accent)] bg-[color:var(--wolfy-accent)]/16 text-[color:var(--wolfy-text-primary)]'
+                        : 'border-white/[0.10] bg-white/[0.03] text-[color:var(--wolfy-text-secondary)] hover:border-white/[0.20] hover:text-[color:var(--wolfy-text-primary)]',
+                      disabled ? 'cursor-not-allowed opacity-45' : 'cursor-pointer',
+                    ].join(' ')}
+                    aria-pressed={activeRange === optionItem.key}
+                    disabled={disabled}
+                    onClick={() => {
+                      setActiveRange(optionItem.key);
+                      setHoveredIndex(null);
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-[color:var(--wolfy-text-muted)]" data-testid="core-market-chart-overlay-legend">
+              {enabledOverlays.length ? enabledOverlays.map((label) => (
+                <span key={label} className="inline-flex items-center gap-1.5">
+                  <span
+                    className="h-0.5 w-4 rounded-full"
+                    style={{ backgroundColor: label === 'MA5' ? PRICE_COLORS.ma5 : PRICE_COLORS.ma20 }}
+                    aria-hidden="true"
+                  />
+                  {label}
+                </span>
+              )) : (
+                <span>{language === 'en' ? 'MA sample insufficient' : '均线样本不足'}</span>
+              )}
+            </div>
+          </div>
+
+          <div
+            className={compact ? 'relative h-[210px] min-w-0 max-w-full overflow-visible' : 'relative h-[320px] min-w-0 max-w-full overflow-visible sm:h-[360px]'}
+            data-testid="core-market-chart-frame"
+            onMouseMove={handleMouseMove}
+            onMouseLeave={() => setHoveredIndex(null)}
           >
-            <title>{ariaSummary}</title>
-            <defs>
-              <linearGradient id={`${testId}-price-fill`} x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="var(--wolfy-accent)" stopOpacity="0.22" />
-                <stop offset="100%" stopColor="var(--wolfy-accent)" stopOpacity="0.01" />
-              </linearGradient>
-            </defs>
-            {yTicks.map((value) => {
-              const y = pointY(value, minPrice, maxPrice, priceBottom);
-              return (
-                <g key={`tick-${value}`}>
-                  <line x1={LEFT} y1={y} x2={WIDTH - RIGHT} y2={y} stroke="var(--wolfy-border-subtle)" strokeOpacity="0.65" strokeWidth="1" />
-                  <text x={LEFT - 10} y={y + 4} textAnchor="end" fill="var(--wolfy-text-muted)" fontSize="11">
-                    {formatNumber(value, language)}
-                  </text>
-                </g>
-              );
-            })}
-            <path
-              d={`${linePath} L ${WIDTH - RIGHT} ${priceBottom} L ${LEFT} ${priceBottom} Z`}
-              fill={`url(#${testId}-price-fill)`}
-              opacity="0.95"
+            <figure
+              ref={chartNodeRef}
+              className="size-full min-h-full min-w-0"
+              aria-label={ariaSummary}
+              data-testid="core-market-echarts-node"
             />
-            {usablePoints.map((point, index) => {
-              const high = finiteNumber(point.high) ?? point.close;
-              const low = finiteNumber(point.low) ?? point.close;
-              const open = finiteNumber(point.open);
-              const x = pointX(index, usablePoints.length);
-              const highY = pointY(high, minPrice, maxPrice, priceBottom);
-              const lowY = pointY(low, minPrice, maxPrice, priceBottom);
-              const closeY = pointY(point.close, minPrice, maxPrice, priceBottom);
-              const openY = open == null ? closeY : pointY(open, minPrice, maxPrice, priceBottom);
-              const up = open == null ? index === 0 || point.close >= usablePoints[index - 1]?.close : point.close >= open;
-              const color = up ? '#34d399' : '#fb7185';
-              return (
-                <g key={`${point.date}-${index}`} opacity={compact ? 0.28 : 0.46}>
-                  <line x1={x} y1={highY} x2={x} y2={lowY} stroke={color} strokeWidth={compact ? 1 : 1.4} vectorEffect="non-scaling-stroke" />
-                  {!compact ? <line x1={x - 4} y1={openY} x2={x + 4} y2={closeY} stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" /> : null}
-                </g>
-              );
-            })}
-            <path d={linePath} fill="none" stroke="var(--wolfy-accent)" strokeWidth={compact ? 2.4 : 3} vectorEffect="non-scaling-stroke" />
-            {xTicks.map((index) => {
-              const point = usablePoints[index];
-              if (!point) return null;
-              const x = pointX(index, usablePoints.length);
-              return (
-                <text key={`x-${index}`} x={x} y={priceBottom + 24} textAnchor={index === 0 ? 'start' : index === usablePoints.length - 1 ? 'end' : 'middle'} fill="var(--wolfy-text-muted)" fontSize="11">
-                  {formatDateTick(point.label || point.date)}
-                </text>
-              );
-            })}
-            {hasVolume ? (
-              <g data-testid="core-market-volume-bars">
-                <line x1={LEFT} y1={VOLUME_TOP} x2={WIDTH - RIGHT} y2={VOLUME_TOP} stroke="var(--wolfy-border-subtle)" strokeOpacity="0.55" strokeWidth="1" />
-                <text x={LEFT - 10} y={VOLUME_TOP + 4} textAnchor="end" fill="var(--wolfy-text-muted)" fontSize="11">
-                  {language === 'en' ? 'Volume' : '成交量'}
-                </text>
-                {usablePoints.map((point, index) => {
-                  const volume = Math.max(point.volume ?? 0, 0);
-                  const x = LEFT + ((WIDTH - LEFT - RIGHT) * index) / usablePoints.length;
-                  const barWidth = Math.max((WIDTH - LEFT - RIGHT) / usablePoints.length - 2, 1);
-                  const barHeight = volume > 0 ? Math.max((volume / maxVolume) * (VOLUME_BOTTOM - VOLUME_TOP), 2) : 0;
-                  const previousClose = usablePoints[index - 1]?.close ?? point.open ?? point.close;
-                  const up = point.close >= previousClose;
-                  return (
-                    <rect
-                      key={`vol-${point.date}-${index}`}
-                      x={x}
-                      y={VOLUME_BOTTOM - barHeight}
-                      width={barWidth}
-                      height={barHeight}
-                      rx="1.5"
-                      fill={up ? '#34d399' : '#fb7185'}
-                      opacity="0.42"
-                    />
-                  );
-                })}
-              </g>
+            {hoveredPoint ? (
+              <output
+                className="sr-only"
+                aria-live="polite"
+                data-testid="core-market-hover-tooltip"
+              >
+                <p>{language === 'en' ? 'Date' : '日期'} {formatDateLabel(hoveredPoint.label || hoveredPoint.date)}</p>
+                {renderMode === 'candlestick' ? (
+                  <p>
+                    {language === 'en'
+                      ? `Open ${formatNumber(hoveredPoint.open, language)} · High ${formatNumber(hoveredPoint.high, language)} · Low ${formatNumber(hoveredPoint.low, language)}`
+                      : `开盘 ${formatNumber(hoveredPoint.open, language)} · 最高 ${formatNumber(hoveredPoint.high, language)} · 最低 ${formatNumber(hoveredPoint.low, language)}`}
+                  </p>
+                ) : null}
+                <p>{language === 'en' ? 'Close' : '收盘'} {formatNumber(hoveredPoint.close, language)}</p>
+                <p>{language === 'en' ? 'Volume' : '成交量'} {formatCompactNumber(hoveredPoint.volume, language)}</p>
+                {enabledOverlays.length ? (
+                  <p>{enabledOverlays.map((label) => `${label} ${formatNumber(label === 'MA5' ? hoveredPoint.ma5 : hoveredPoint.ma20, language)}`).join(' · ')}</p>
+                ) : null}
+              </output>
             ) : null}
-          </svg>
+          </div>
+
           <div className="mt-3 grid gap-2 text-xs text-[color:var(--wolfy-text-secondary)] sm:grid-cols-3">
             <div>
               <span className="block text-[10px] uppercase tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Range' : '区间'}</span>
@@ -278,7 +652,7 @@ export const CoreMarketChart: React.FC<CoreMarketChartProps> = ({
             </div>
             <div>
               <span className="block text-[10px] uppercase tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Latest' : '最新'}</span>
-              <span className="font-medium text-[color:var(--wolfy-text-primary)]">{latestLabel || formatNumber(last?.close, language)}</span>
+              <span className="font-medium text-[color:var(--wolfy-text-primary)]">{latestLabel || formatNumber(latestPoint?.close, language)}</span>
             </div>
             <div>
               <span className="block text-[10px] uppercase tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Source' : '来源'}</span>
@@ -286,10 +660,10 @@ export const CoreMarketChart: React.FC<CoreMarketChartProps> = ({
             </div>
           </div>
           {hasVolume ? (
-            <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+            <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]" data-testid="core-market-chart-volume-context">
               {language === 'en'
-                ? `Volume bars use only returned price and volume rows. Latest volume ${formatCompactNumber(last?.volume, language)}.`
-                : `成交量柱仅使用接口返回的价格与成交量记录。最新成交量 ${formatCompactNumber(last?.volume, language)}。`}
+                ? `Volume uses returned rows only. Latest volume ${formatCompactNumber(latestPoint?.volume, language)}.`
+                : `成交量仅使用接口返回记录。最新成交量 ${formatCompactNumber(latestPoint?.volume, language)}。`}
             </p>
           ) : null}
           {changeLabel ? <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{changeLabel}</p> : null}

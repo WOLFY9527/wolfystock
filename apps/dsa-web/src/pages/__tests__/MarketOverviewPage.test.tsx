@@ -3991,7 +3991,12 @@ describe('MarketOverviewPage', () => {
     expect(chart).toHaveTextContent('报价延迟');
     expect(chart).toHaveTextContent('Yahoo Finance');
     expect(chart).toHaveTextContent('+0.64%');
-    expect(within(chart).getByTestId('core-market-chart-svg')).toBeInTheDocument();
+    const chartFrame = within(chart).getByTestId('market-overview-core-trend-chart-frame');
+    expect(chartFrame).toHaveAttribute('data-chart-engine', 'echarts');
+    expect(chartFrame).toHaveAttribute('data-render-mode', 'line');
+    expect(chartFrame).toHaveAttribute('data-volume-panel', 'false');
+    expect(chartFrame).toHaveAttribute('data-enabled-overlays', 'none');
+    expect(within(chartFrame).getByTestId('core-market-chart-frame')).toBeInTheDocument();
     expect(within(chart).queryByText(/provider_missing|data_disabled|sourceClass|local_bounded_us_parquet_universe|noExternalCalls|providerCallsEnabled|contractVersion/i)).not.toBeInTheDocument();
     expect(chart).not.toHaveTextContent(/buy|sell|hold|entry|exit|target|stop-loss|accumulate|reduce|overweight|underweight|买入|卖出|持有|目标价|止损|仓位/i);
   });
