@@ -697,9 +697,17 @@ describe('StockStructureDecisionPage', () => {
     expect(trustRow).toHaveTextContent('指标可用');
     expect(trustRow).toHaveTextContent('证据包');
     expect(trustRow).toHaveTextContent('可用');
-    expect(within(page).getByTestId('stock-price-history-visual-block')).toContainElement(
-      within(page).getByTestId('stock-history-mini-chart'),
-    );
+    const stockCoreChart = within(page).getByTestId('stock-history-core-chart');
+    expect(within(page).getByTestId('stock-price-history-visual-block')).toContainElement(stockCoreChart);
+    expect(stockCoreChart).toHaveAttribute('data-chart-kind', 'stock-history');
+    expect(stockCoreChart).toHaveTextContent('价格趋势');
+    expect(stockCoreChart).toHaveTextContent('成交量');
+    expect(stockCoreChart).toHaveTextContent('历史数据可用');
+    expect(stockCoreChart).toHaveTextContent('历史样本不足');
+    expect(stockCoreChart).toHaveTextContent('60 / 90');
+    expect(stockCoreChart).toHaveTextContent('本地历史数据');
+    expect(within(stockCoreChart).getByTestId('core-market-chart-svg')).toBeInTheDocument();
+    expect(within(stockCoreChart).getByTestId('core-market-volume-bars')).toBeInTheDocument();
     expect(panel).toHaveTextContent('证据栈');
     expect(panel).toHaveTextContent('AAPL');
     expect(panel).toHaveTextContent('Apple');
@@ -747,7 +755,7 @@ describe('StockStructureDecisionPage', () => {
     expect(historyPanel).toHaveTextContent('90');
     expect(historyPanel).toHaveTextContent('缺口 K 线');
     expect(historyPanel).toHaveTextContent('30');
-    expect(within(historyPanel).getByTestId('stock-history-mini-chart')).toBeInTheDocument();
+    expect(within(historyPanel).getByTestId('stock-history-core-chart')).toBeInTheDocument();
     expect(findConsumerRawLeakage(page.textContent || '', {
       extraForbiddenPatterns: [
         /\bavailable\b/i,
@@ -918,9 +926,10 @@ describe('StockStructureDecisionPage', () => {
     expect(summary).toHaveTextContent('历史数据暂缺，价格走势图暂不可用。');
     expect(summary).toHaveTextContent('置信度为低：关键价格、历史或结构证据不足，页面只保留可核验事实。');
     expect(within(page).getByTestId('stock-price-history-visual-block')).toContainElement(
-      within(historyPanel).getByTestId('stock-history-chart-unavailable'),
+      within(historyPanel).getByTestId('stock-history-empty-chart-state'),
     );
-    expect(within(historyPanel).getByTestId('stock-history-chart-unavailable')).toBeInTheDocument();
+    expect(within(historyPanel).getByTestId('stock-history-empty-chart-state')).toHaveTextContent('图表暂不可用');
+    expect(within(historyPanel).getByTestId('stock-history-empty-chart-state')).toHaveTextContent('历史数据待补');
     expect(within(page).queryByText('组件评分')).not.toBeInTheDocument();
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/provider_disabled|cache_miss|provider|cache|raw|debug|trace/i);
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
