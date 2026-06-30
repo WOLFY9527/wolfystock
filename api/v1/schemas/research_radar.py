@@ -132,6 +132,7 @@ class ResearchRadarQueueItemResponse(_ResearchRadarModel):
     evidenceQuality: ResearchRadarEvidenceQualityResponse
     consumerIssues: list[ResearchRadarConsumerIssueResponse] = Field(default_factory=list)
     drilldownTargets: list[ResearchRadarDrilldownTargetResponse] = Field(default_factory=list)
+    scannerLineage: dict[str, Any] = Field(default_factory=dict)
     noAdviceDisclosure: str
     observationOnly: Literal[True] = True
     decisionGrade: Literal[False] = False

@@ -758,6 +758,92 @@ def test_latest_scanner_reader_is_read_only_and_uses_user_scope() -> None:
     assert item["dataFreshness"]["quoteState"] == "unavailable_or_stale"
 
 
+class _BoundedScannerRepository:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, object]]] = []
+        self.runs = [
+            SimpleNamespace(
+                id=23,
+                status="completed",
+                market="us",
+                profile="us_preopen_v1",
+                diagnostics_json=json.dumps(
+                    {
+                        "dataReadiness": {
+                            "scannerLineage": {
+                                "source": "bounded_starter_market_data_spine",
+                                "universeMode": "bounded_starter_local",
+                                "universeSymbols": ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"],
+                                "symbolsEvaluated": ["AAPL", "MSFT", "NVDA", "TSLA"],
+                                "symbolsSkipped": [
+                                    {"symbol": "SPY", "reason": "insufficient_history"},
+                                    {"symbol": "QQQ", "reason": "insufficient_history"},
+                                ],
+                            }
+                        }
+                    }
+                ),
+            )
+        ]
+        self.candidates = [
+            SimpleNamespace(
+                symbol=symbol,
+                name=f"{symbol} Inc",
+                rank=index,
+                score=80.0 - index,
+                quality_hint="partial",
+                reason_summary=f"{symbol} has scanner evidence for research review.",
+                reasons_json="[]",
+                key_metrics_json="[]",
+                feature_signals_json="[]",
+                risk_notes_json='["Evidence is partial."]',
+                watch_context_json='["Verify volume persistence."]',
+                boards_json='["Starter"]',
+                diagnostics_json=json.dumps(
+                    {
+                        "component_scores": {"trend": 70},
+                        "history": {"latest_trade_date": "2026-06-14", "source": "local_us_parquet"},
+                    }
+                ),
+            )
+            for index, symbol in enumerate(("AAPL", "SMCI", "INTC", "BAC", "XLF", "MSFT", "NVDA"), start=1)
+        ]
+
+    def get_recent_runs(self, **kwargs: object) -> list[object]:
+        self.calls.append(("get_recent_runs", dict(kwargs)))
+        return list(self.runs)
+
+    def get_candidates_for_run(self, run_id: int) -> list[object]:
+        self.calls.append(("get_candidates_for_run", {"run_id": run_id}))
+        return list(self.candidates if run_id == 23 else [])
+
+
+def test_latest_scanner_reader_filters_primary_queue_to_bounded_starter_lineage() -> None:
+    repo = _BoundedScannerRepository()
+
+    payload = ResearchRadarService(scanner_repository=repo, now=_fixed_now).build_from_latest_scanner_run(
+        market="us",
+        profile="us_preopen_v1",
+        owner_id="user-1",
+        limit=5,
+    )
+
+    queue_symbols = [item["symbol"] for item in payload["researchQueue"]]
+    assert queue_symbols
+    assert set(queue_symbols).issubset({"SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"})
+    for non_starter in ("SMCI", "INTC", "BAC", "XLF"):
+        assert non_starter not in queue_symbols
+    assert payload["aggregateSummary"]["candidateCount"] == 3
+    source = payload["aggregateSummary"]["source"]
+    assert source["scannerRunId"] == 23
+    assert source["scannerLineage"]["source"] == "bounded_starter_market_data_spine"
+    assert source["scannerLineage"]["universeMode"] == "bounded_starter_local"
+    assert source["scannerLineage"]["universeSymbols"] == ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"]
+    for item in payload["researchQueue"]:
+        assert item["scannerLineage"]["source"] == "bounded_starter_market_data_spine"
+        assert item["scannerLineage"]["universeSymbols"] == ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"]
+
+
 def test_empty_consumer_radar_adds_onboarding_without_admin_leak_or_mutation() -> None:
     repo = _AdminOnlyScannerRepository()
 

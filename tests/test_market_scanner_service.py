@@ -3977,6 +3977,47 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(candidate["dataFreshness"]["quoteState"], "unavailable_or_stale")
         self.assertEqual(candidate["noAdviceDisclosure"], "Observation-only research context; not investment advice.")
 
+    def test_default_us_scan_payload_exposes_bounded_lineage_and_skipped_symbols(self) -> None:
+        cache_dir = Path(self._cache_temp_dir.name) / "us-lineage-cache"
+        for symbol in ("SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA", "SMCI", "INTC", "BAC", "XLF"):
+            rows = 20 if symbol == "QQQ" else 90
+            _write_local_us_parquet(cache_dir, symbol, rows=rows)
+        data_manager = FakeUsScannerDataManager()
+        data_manager.us_quotes.clear()
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": str(cache_dir),
+                "US_STOCK_PARQUET_DIR": "",
+                "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "",
+                "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "",
+            },
+            clear=False,
+        ):
+            service = MarketScannerService(self.db, data_manager=data_manager)
+            detail = service.run_scan(
+                market="us",
+                profile="us_preopen_v1",
+                shortlist_size=3,
+                universe_limit=50,
+                detail_limit=10,
+            )
+
+        lineage = detail["scannerLineage"]
+        self.assertEqual(lineage["source"], "bounded_starter_market_data_spine")
+        self.assertEqual(lineage["universeMode"], "bounded_starter_local")
+        self.assertEqual(lineage["universeSymbols"], ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"])
+        self.assertEqual(lineage["runId"], detail["id"])
+        self.assertTrue(lineage["generatedAt"])
+        self.assertTrue(set(lineage["symbolsEvaluated"]).issubset({"SPY", "AAPL", "MSFT", "NVDA", "TSLA"}))
+        skipped_by_symbol = {item["symbol"]: item for item in lineage["symbolsSkipped"]}
+        self.assertEqual(skipped_by_symbol["QQQ"]["reason"], "insufficient_history")
+        for non_starter in ("SMCI", "INTC", "BAC", "XLF"):
+            self.assertNotIn(non_starter, lineage["symbolsEvaluated"])
+            self.assertNotIn(non_starter, skipped_by_symbol)
+        self.assertEqual(detail["dataReadiness"]["scannerLineage"], lineage)
+
     def test_not_run_status_activates_bounded_us_local_parquet_universe(self) -> None:
         cache_dir = Path(self._cache_temp_dir.name) / "us-parquet-cache"
         for symbol in ("SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"):

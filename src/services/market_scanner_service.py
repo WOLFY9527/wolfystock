@@ -2720,12 +2720,23 @@ class MarketScannerService:
         )
         symbols_evaluated: List[str] = []
         symbols_with_sufficient_data: List[str] = []
-        symbols_skipped: List[str] = []
+        symbols_skipped: List[Dict[str, str]] = []
 
         def add(target: List[str], value: Any) -> None:
             symbol = str(value or "").strip().upper()
             if symbol and symbol not in target:
                 target.append(symbol)
+
+        def add_skipped(value: Any, reason: Any) -> None:
+            symbol = str(value or "").strip().upper()
+            reason_text = str(reason or "limited").strip().lower() or "limited"
+            if reason_text in {"history", "missing_history", "not_enough_history"}:
+                reason_text = "insufficient_history"
+            if not symbol:
+                return
+            if any(item.get("symbol") == symbol for item in symbols_skipped):
+                return
+            symbols_skipped.append({"symbol": symbol, "reason": reason_text})
 
         for key, payload in candidate_diagnostics.items():
             item = payload if isinstance(payload, Mapping) else {}
@@ -2735,7 +2746,9 @@ class MarketScannerService:
                 add(symbols_evaluated, symbol)
                 add(symbols_with_sufficient_data, symbol)
             elif status_value:
-                add(symbols_skipped, symbol)
+                reasons = item.get("missing_fields") or item.get("failed_rules") or []
+                reason = reasons[0] if isinstance(reasons, Sequence) and not isinstance(reasons, (str, bytes, bytearray)) and reasons else status_value
+                add_skipped(symbol, reason)
 
         for item in candidates:
             symbol = str(item.get("symbol") or "").strip().upper()
@@ -2764,8 +2777,40 @@ class MarketScannerService:
             or diagnostics.get("stock_list_source")
             or "unknown"
         )
+        universe_symbols = [
+            str(symbol or "").strip().upper()
+            for symbol in (
+                diagnostics.get("boundedStarterUniverse")
+                or universe_resolution.get("boundedStarterUniverse")
+                or universe_resolution.get("data")
+                or []
+            )
+            if str(symbol or "").strip()
+        ]
+        resolved_symbols = [
+            str(symbol or "").strip().upper()
+            for symbol in (universe_resolution.get("resolvedStarterSymbols") or universe_resolution.get("data") or [])
+            if str(symbol or "").strip()
+        ]
+        universe_mode = (
+            "bounded_starter_local"
+            if universe_source == "bounded_starter_market_data_spine"
+            or str(universe_resolution.get("coverage_strategy") or "").strip() == "bounded_starter_local_only"
+            or universe_symbols == list(BOUNDED_US_LOCAL_SCANNER_UNIVERSE_SYMBOLS)
+            else str(universe_resolution.get("coverage_strategy") or "default").strip() or "default"
+        )
+        if universe_mode == "bounded_starter_local":
+            active_symbols = set(resolved_symbols or symbols_evaluated or symbols_with_sufficient_data)
+            for symbol in universe_symbols:
+                if symbol not in active_symbols:
+                    add_skipped(symbol, "missing_cache")
         return {
+            "source": universe_source,
             "universeSource": universe_source,
+            "universeMode": universe_mode,
+            "universeSymbols": universe_symbols,
+            "generatedAt": diagnostics.get("generatedAt") or diagnostics.get("completedAt"),
+            "runId": diagnostics.get("runId"),
             "symbolsEvaluated": symbols_evaluated[:50],
             "symbolsWithSufficientData": symbols_with_sufficient_data[:50],
             "symbolsSkipped": symbols_skipped[:50],
@@ -3268,6 +3313,7 @@ class MarketScannerService:
             "quoteFreshness": diagnostics.get("quoteFreshness") or quote_coverage,
             "quoteReadinessLimitation": diagnostics.get("quoteReadinessLimitation"),
             "universeSource": diagnostics.get("universeSource") or lineage["universeSource"],
+            "scannerLineage": lineage,
             "symbolsEvaluated": lineage["symbolsEvaluated"],
             "symbolsWithSufficientData": lineage["symbolsWithSufficientData"],
             "symbolsSkipped": lineage["symbolsSkipped"],
@@ -3414,6 +3460,27 @@ class MarketScannerService:
             for candidate in shortlist_list
         ]
         saved_run = self.repo.save_run_with_candidates(run=run_model, candidates=candidate_models)
+        scanner_lineage = (
+            finalized_diagnostics.get("dataReadiness", {}).get("scannerLineage")
+            if isinstance(finalized_diagnostics.get("dataReadiness"), Mapping)
+            else None
+        )
+        if isinstance(scanner_lineage, Mapping):
+            updated_lineage = {
+                **dict(scanner_lineage),
+                "runId": int(saved_run.id),
+                "generatedAt": run_completed_at.isoformat(),
+            }
+            finalized_diagnostics["scannerLineage"] = updated_lineage
+            finalized_diagnostics["dataReadiness"]["scannerLineage"] = updated_lineage
+            finalized_diagnostics["dataReadiness"]["symbolsEvaluated"] = list(updated_lineage.get("symbolsEvaluated") or [])
+            finalized_diagnostics["dataReadiness"]["symbolsSkipped"] = list(updated_lineage.get("symbolsSkipped") or [])
+            self.repo.update_run(
+                int(saved_run.id),
+                diagnostics_json=json.dumps(finalized_diagnostics, ensure_ascii=False),
+                scope=scope,
+                owner_id=owner_id,
+            )
         self._attach_shortlist_evidence_packets(
             shortlist=shortlist_list,
             market=profile_config.market,
@@ -3474,6 +3541,7 @@ class MarketScannerService:
             "accepted_symbols_count": public_universe_selection["accepted_symbols_count"],
             "rejected_symbols": public_universe_selection["rejected_symbols"],
             "dataReadiness": finalized_diagnostics.get("dataReadiness"),
+            "scannerLineage": finalized_diagnostics.get("scannerLineage"),
             "diagnostics": finalized_diagnostics,
             "scannerContextFrame": scanner_context_frame,
             "theme": theme_payload,
@@ -4362,6 +4430,7 @@ class MarketScannerService:
                 "coverage_strategy": "bounded_starter_local_only",
                 "universeSource": "bounded_starter_market_data_spine",
                 "boundedStarterUniverse": list(BOUNDED_US_LOCAL_SCANNER_UNIVERSE_SYMBOLS),
+                "resolvedStarterSymbols": ordered_symbols,
                 "noExternalCalls": True,
                 "providerCallsEnabled": False,
             }
@@ -6611,6 +6680,14 @@ class MarketScannerService:
             "accepted_symbols_count": universe_selection["accepted_symbols_count"],
             "rejected_symbols": universe_selection["rejected_symbols"],
             "dataReadiness": diagnostics_payload.get("dataReadiness"),
+            "scannerLineage": (
+                diagnostics_payload.get("scannerLineage")
+                or (
+                    diagnostics_payload.get("dataReadiness", {}).get("scannerLineage")
+                    if isinstance(diagnostics_payload.get("dataReadiness"), Mapping)
+                    else None
+                )
+            ),
             "diagnostics": diagnostics_payload,
             "scannerContextFrame": scanner_context_frame,
             "notification": self._normalize_notification_result(diagnostics.get("notification")),
@@ -6761,6 +6838,23 @@ class MarketScannerService:
             return build_scanner_universe_readiness_from_cache(
                 market="CN",
                 cache_path=self.local_universe_cache_path,
+            )
+        if normalized_market == "us":
+            readiness = self._bounded_local_us_universe_from_parquet(get_us_stock_parquet_dir())
+            return build_scanner_universe_readiness_from_coverage(
+                market="US",
+                universe_status=str(readiness.get("status") or "missing"),
+                universe_size=int(readiness.get("universeSize") or 0),
+                last_updated_at=readiness.get("lastUpdatedAt"),
+                freshness_state=str(readiness.get("freshnessState") or "missing_universe"),
+                quote_coverage="unknown",
+                history_coverage="unknown",
+                blocked=str(readiness.get("status") or "") != "local_universe_available",
+                source_metadata=(
+                    readiness.get("sourceMetadata")
+                    if isinstance(readiness.get("sourceMetadata"), dict)
+                    else None
+                ),
             )
         return build_scanner_universe_readiness_from_coverage(
             market=normalized_market,
