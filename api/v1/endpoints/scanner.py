@@ -147,6 +147,40 @@ def _get_run_detail_payload(
     return None
 
 
+@router.get(
+    "",
+    responses={
+        200: {"description": "Scanner route discovery"},
+    },
+    summary="获取 Scanner canonical routes",
+)
+def get_scanner_route_summary(
+    market: Optional[str] = Query("cn", description="市场过滤"),
+    profile: Optional[str] = Query(None, description="扫描配置过滤"),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    _ = current_user
+    normalized_market = (market or "cn").strip().lower()
+    normalized_profile = (profile or "").strip() or None
+    readiness_route = f"GET /api/v1/scanner/status?market={normalized_market}"
+    if normalized_profile:
+        readiness_route = f"{readiness_route}&profile={normalized_profile}"
+    return {
+        "contractVersion": "scanner_discoverability_v1",
+        "market": normalized_market,
+        "profile": normalized_profile,
+        "canonicalRoutes": {
+            "run": "POST /api/v1/scanner/run",
+            "runs": "GET /api/v1/scanner/runs",
+            "latest": "GET /api/v1/scanner/runs/{run_id}",
+            "readiness": readiness_route,
+            "themes": "GET /api/v1/scanner/themes",
+        },
+        "observationOnly": True,
+        "decisionGrade": False,
+    }
+
+
 @router.post(
     "/run",
     response_model=ScannerRunDetailResponse,

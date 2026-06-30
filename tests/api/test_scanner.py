@@ -5,6 +5,11 @@ from __future__ import annotations
 
 import json
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from api.deps import CurrentUser, get_current_user, get_database_manager, require_admin_capability
+from api.v1.router import router as api_v1_router
 from api.v1.schemas.scanner import (
     ScannerConsumerDiagnosticsMetadata,
     ScannerEvidencePacketMetadata,
@@ -14,6 +19,41 @@ from api.v1.schemas.scanner import (
     sanitize_scanner_consumer_payload,
 )
 from src.core.scanner_theme_registry import get_scanner_theme
+
+
+def _scanner_api_user() -> CurrentUser:
+    return CurrentUser(
+        user_id="user-1",
+        username="alice",
+        display_name="Alice",
+        role="admin",
+        is_admin=True,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+        session_id="session-1",
+    )
+
+
+def test_scanner_root_route_is_discoverable_and_points_to_canonical_routes() -> None:
+    app = FastAPI()
+    app.include_router(api_v1_router)
+    app.dependency_overrides[get_current_user] = _scanner_api_user
+    app.dependency_overrides[get_database_manager] = lambda: object()
+    app.dependency_overrides[require_admin_capability("scanner:admin:read")] = _scanner_api_user
+
+    response = TestClient(app).get("/api/v1/scanner?market=us&profile=us_preopen_v1")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["contractVersion"] == "scanner_discoverability_v1"
+    assert payload["canonicalRoutes"]["run"] == "POST /api/v1/scanner/run"
+    assert payload["canonicalRoutes"]["latest"] == "GET /api/v1/scanner/runs/{run_id}"
+    assert payload["canonicalRoutes"]["readiness"] == "GET /api/v1/scanner/status?market=us&profile=us_preopen_v1"
+    assert payload["market"] == "us"
+    assert payload["profile"] == "us_preopen_v1"
+    assert payload["observationOnly"] is True
+    assert payload["decisionGrade"] is False
 
 
 def test_crypto_mining_theme_registry_has_11_symbols() -> None:

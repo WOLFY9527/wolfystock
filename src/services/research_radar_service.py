@@ -313,8 +313,13 @@ class ResearchRadarService:
                         "profile": _optional_token(getattr(run, "profile", None)),
                     }
                 )
+                scanner_lineage = _scanner_lineage_from_run(run)
+                if scanner_lineage:
+                    source["scannerLineage"] = scanner_lineage
+                engine_candidates = [_scanner_candidate_to_engine_input(candidate) for candidate in candidates]
+                engine_candidates = _filter_candidates_by_scanner_lineage(engine_candidates, scanner_lineage)
                 return self.build_radar(
-                    candidates=[_scanner_candidate_to_engine_input(candidate) for candidate in candidates],
+                    candidates=engine_candidates,
                     source=source,
                     market_regime_read_model=market_regime_read_model,
                 )
@@ -507,6 +512,7 @@ class ResearchRadarService:
             "evidenceQuality": evidence_quality,
             "consumerIssues": consumer_issues,
             "drilldownTargets": drilldown_targets,
+            "scannerLineage": dict(_mapping(source_candidate.get("scannerLineage"))),
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
             "observationOnly": _OBSERVATION_ONLY,
             "decisionGrade": _DECISION_GRADE,
@@ -1237,6 +1243,7 @@ def _empty_consumer_onboarding_contract(
 def _scanner_candidate_to_engine_input(candidate: Any) -> dict[str, Any]:
     diagnostics = _json_load(getattr(candidate, "diagnostics_json", None), {})
     component_scores = _mapping(diagnostics.get("component_scores"))
+    scanner_lineage = _mapping(diagnostics.get("scannerLineage"))
     payload = {
         "symbol": _text(getattr(candidate, "symbol", "")).upper(),
         "name": _text(getattr(candidate, "name", "")),
@@ -1307,7 +1314,53 @@ def _scanner_candidate_to_engine_input(candidate: Any) -> dict[str, Any]:
                 evidence_frame=evidence_frame,
             ),
         },
+        "scannerLineage": scanner_lineage,
     }
+
+
+def _scanner_lineage_from_run(run: Any) -> dict[str, Any]:
+    diagnostics = _json_load(getattr(run, "diagnostics_json", None), {})
+    readiness = _mapping(diagnostics.get("dataReadiness"))
+    lineage = _mapping(diagnostics.get("scannerLineage") or readiness.get("scannerLineage"))
+    if not lineage:
+        return {}
+    return {
+        "source": _text(lineage.get("source") or lineage.get("universeSource")),
+        "universeMode": _text(lineage.get("universeMode")),
+        "universeSymbols": _safe_text_list(lineage.get("universeSymbols")),
+        "generatedAt": _text(lineage.get("generatedAt")) or None,
+        "runId": lineage.get("runId") or getattr(run, "id", None),
+        "symbolsEvaluated": _safe_text_list(lineage.get("symbolsEvaluated")),
+        "symbolsSkipped": [
+            {
+                "symbol": _text(_mapping(item).get("symbol")).upper(),
+                "reason": _text(_mapping(item).get("reason")) or "limited",
+            }
+            for item in list(lineage.get("symbolsSkipped") or [])
+            if isinstance(item, Mapping) and _text(item.get("symbol"))
+        ],
+    }
+
+
+def _filter_candidates_by_scanner_lineage(
+    candidates: Sequence[Mapping[str, Any]],
+    scanner_lineage: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    lineage = _mapping(scanner_lineage)
+    if _text(lineage.get("universeMode")) != "bounded_starter_local":
+        return [dict(candidate) for candidate in candidates]
+    allowed_symbols = {_text(symbol).upper() for symbol in lineage.get("universeSymbols") or [] if _text(symbol)}
+    if not allowed_symbols:
+        return [dict(candidate) for candidate in candidates]
+    filtered: list[dict[str, Any]] = []
+    for candidate in candidates:
+        symbol = _symbol_from(candidate)
+        if symbol not in allowed_symbols:
+            continue
+        payload = dict(candidate)
+        payload["scannerLineage"] = dict(lineage)
+        filtered.append(payload)
+    return filtered
 
 
 def _candidate_evidence_quality(
