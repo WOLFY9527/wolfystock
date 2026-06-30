@@ -674,6 +674,32 @@ describe('StockStructureDecisionPage', () => {
     expect(quotePanel).toHaveTextContent('更新');
     expect(quotePanel).toHaveTextContent('05/28');
     expect(quotePanel).toHaveTextContent('17:30');
+    const summary = within(page).getByTestId('stock-consumer-research-summary');
+    expect(summary).toHaveTextContent('AAPL');
+    expect(summary).toHaveTextContent('Apple');
+    expect(summary).toHaveTextContent('US');
+    expect(summary).toHaveTextContent('$214.6');
+    expect(summary).toHaveTextContent('+1.11%');
+    expect(summary).toHaveTextContent('更新 05/28 17:30');
+    expect(summary).toHaveTextContent('突破观察');
+    expect(summary).toHaveTextContent('置信度：中');
+    expect(summary).toHaveTextContent('置信度为中：报价、历史与结构证据可用，但基本面、事件或同业证据仍限制结论强度。');
+    expect(summary).toHaveTextContent('AAPL 当前呈现突破观察，报价最新可用，历史 K 线可用于查看走势。');
+    expect(summary).toHaveTextContent('查看研究雷达');
+    expect(summary).toHaveTextContent('打开回测');
+    expect(summary).toHaveTextContent('复制证据');
+    const trustRow = within(page).getByTestId('stock-data-trust-row');
+    expect(trustRow).toHaveTextContent('报价');
+    expect(trustRow).toHaveTextContent('最新可用');
+    expect(trustRow).toHaveTextContent('历史');
+    expect(trustRow).toHaveTextContent('60 根');
+    expect(trustRow).toHaveTextContent('技术指标');
+    expect(trustRow).toHaveTextContent('指标可用');
+    expect(trustRow).toHaveTextContent('证据包');
+    expect(trustRow).toHaveTextContent('可用');
+    expect(within(page).getByTestId('stock-price-history-visual-block')).toContainElement(
+      within(page).getByTestId('stock-history-mini-chart'),
+    );
     expect(panel).toHaveTextContent('证据栈');
     expect(panel).toHaveTextContent('AAPL');
     expect(panel).toHaveTextContent('Apple');
@@ -888,6 +914,12 @@ describe('StockStructureDecisionPage', () => {
     expect(historyPanel).toHaveTextContent('0');
     expect(historyPanel).toHaveTextContent('缺口 K 线');
     expect(historyPanel).toHaveTextContent('90');
+    const summary = within(page).getByTestId('stock-consumer-research-summary');
+    expect(summary).toHaveTextContent('历史数据暂缺，价格走势图暂不可用。');
+    expect(summary).toHaveTextContent('置信度为低：关键价格、历史或结构证据不足，页面只保留可核验事实。');
+    expect(within(page).getByTestId('stock-price-history-visual-block')).toContainElement(
+      within(historyPanel).getByTestId('stock-history-chart-unavailable'),
+    );
     expect(within(historyPanel).getByTestId('stock-history-chart-unavailable')).toBeInTheDocument();
     expect(within(page).queryByText('组件评分')).not.toBeInTheDocument();
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/provider_disabled|cache_miss|provider|cache|raw|debug|trace/i);

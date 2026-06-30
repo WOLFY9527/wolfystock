@@ -483,6 +483,108 @@ describe('WatchlistPage', () => {
     expect(band).not.toHaveTextContent(/买入|卖出|加仓|减仓|buy|sell|recommend(?:ation)?/i);
   });
 
+  it('renders a compact consumer observation board with actionable partial states', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [
+        makeItem({
+          id: 41,
+          symbol: 'AAPL',
+          market: 'us',
+          name: 'Apple',
+          source: 'manual',
+          scannerRunId: null,
+          scannerRank: null,
+          scannerScore: null,
+          lastScoredAt: null,
+          scoreSource: null,
+          scoreStatus: null,
+          intelligence: undefined,
+          rowResearchPacket: {
+            symbol: 'AAPL',
+            market: 'us',
+            identity: {
+              name: 'Apple',
+              exchange: 'NASDAQ',
+              sector: 'Technology',
+              industry: 'Consumer Electronics',
+            },
+            savedItemSource: 'manual',
+            quote: {
+              state: 'available',
+              price: 190.25,
+              changePercent: -0.42,
+              asOf: '2026-05-01T11:00:00Z',
+            },
+            scannerLineage: {
+              runId: null,
+              rank: null,
+              score: null,
+              status: null,
+              lastScoredAt: null,
+            },
+            researchStatus: 'partial',
+            missingData: [
+              'fundamentals',
+              'filing_event_catalyst',
+              'peer_benchmark',
+              'provider_runtime_trace',
+              'sourceAuthority',
+              'buy setup',
+            ],
+            nextDataAction: 'Add fundamentals, filing/event/catalyst, and peer evidence before marking the packet ready.',
+            observationOnly: true,
+            noAdviceDisclosure: 'Observation-only research packet; not personalized financial advice and not an instruction.',
+          },
+          createdAt: '2026-04-10T08:00:00Z',
+          updatedAt: '2026-05-01T10:05:00Z',
+        }),
+        makeItem({
+          id: 42,
+          symbol: 'SHOP',
+          source: 'manual',
+          scannerRunId: null,
+          scannerRank: null,
+          scannerScore: null,
+          lastScoredAt: null,
+          scoreSource: null,
+          scoreStatus: 'unknown',
+          themeId: null,
+          universeType: null,
+          intelligence: undefined,
+        }),
+      ],
+    });
+
+    renderWatchlist();
+
+    const board = await screen.findByTestId('watchlist-consumer-observation-board');
+    expect(board).toHaveTextContent('观察列表');
+    expect(board).toHaveTextContent('正在观察 2 个标的');
+    expect(board).toHaveTextContent('可用报价 1');
+    expect(board).toHaveTextContent('需补资料 2');
+    expect(board).toHaveTextContent('AAPL');
+    expect(board).toHaveTextContent('$190.3');
+    expect(board).toHaveTextContent('-0.42%');
+    expect(board).toHaveTextContent('研究包部分可用');
+    expect(board).toHaveTextContent('补基本面、事件、同业');
+    expect(board).toHaveTextContent('查看个股结构');
+    expect(board).toHaveTextContent('SHOP');
+    expect(board).toHaveTextContent('报价暂缺');
+    expect(board).toHaveTextContent('先打开个股结构页，仍可查看已保存信息。');
+    expect(board).toHaveTextContent('打开研究雷达');
+    expect(board).not.toHaveTextContent(/待补.*待补.*待补.*待补/s);
+    expect(board).not.toHaveTextContent(/available|missing|not configured|provider_missing|blockedProductSurfaces|missingDataFamilies|sourceClass|sourcePath|contractVersion|inputSource|noExternalCalls|providerCallsEnabled|not_requested|provider|runtime|schema|requestId|traceId|raw|observationOnly|buy setup|buy|sell|hold|target price|position sizing|买入|卖出|持有|目标价|仓位/i);
+
+    fireEvent.click(within(board).getByRole('button', { name: '查看 AAPL 详情' }));
+    const detail = screen.getByTestId('watchlist-consumer-detail-panel');
+    expect(detail).toHaveTextContent('AAPL');
+    expect(detail).toHaveTextContent('Apple · US');
+    expect(detail).toHaveTextContent('最新报价 $190.3');
+    expect(detail).toHaveTextContent('资料缺口：基本面、事件、同业');
+    expect(detail).toHaveTextContent('下一步：查看个股结构');
+    expect(detail).not.toHaveTextContent(/provider|runtime|schema|observationOnly|buy setup|not personalized financial advice|instruction/i);
+  });
+
   it('renders a compact research queue from the watchlist overlay without changing saved rows', async () => {
     getResearchOverlay.mockResolvedValue({
       schemaVersion: 'watchlist_research_overlay_v1',
