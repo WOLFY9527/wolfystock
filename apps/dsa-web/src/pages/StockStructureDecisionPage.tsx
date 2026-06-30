@@ -124,6 +124,34 @@ function confidenceCapLabel(value: unknown, language: 'zh' | 'en'): string {
   return confidenceLabel(String(value), language);
 }
 
+function formatStockMarketLabel(value: string | null | undefined, language: 'zh' | 'en'): string {
+  const market = String(value || '').trim().toUpperCase();
+  if (market === 'US') return 'US';
+  if (market === 'CN') return language === 'en' ? 'CN' : 'A股';
+  if (market === 'HK') return language === 'en' ? 'HK' : '港股';
+  return market || '--';
+}
+
+function formatStockPrice(value: number | null | undefined, market: string | null | undefined): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
+  const abs = Math.abs(value);
+  const decimals = abs >= 1000 ? 0 : abs >= 100 ? 1 : 2;
+  const formatted = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(value);
+  const normalizedMarket = String(market || '').trim().toUpperCase();
+  if (normalizedMarket === 'US') return `$${formatted}`;
+  if (normalizedMarket === 'HK') return `HK$${formatted}`;
+  if (normalizedMarket === 'CN') return `¥${formatted}`;
+  return formatted;
+}
+
+function formatSignedPercent(value: number | null | undefined): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+}
+
 function toneFor(value: string | null | undefined): string {
   const normalized = String(value || '').toLowerCase();
   if (['available', 'high', 'ready', 'complete', 'breakout'].includes(normalized)) return 'success';
@@ -1469,6 +1497,215 @@ function latestHistoryDate(history: StockHistoryResponse | null): string | null 
   return safeOptionalConsumerText(latest, 'en');
 }
 
+function stockConfidenceExplanation(
+  confidence: string | null | undefined,
+  language: 'zh' | 'en',
+): string {
+  const normalized = String(confidence || '').trim().toLowerCase();
+  if (normalized === 'high') {
+    return language === 'en'
+      ? 'Confidence is high: quote, history, structure, and supporting evidence are mostly available, while freshness still needs routine review.'
+      : '置信度为高：报价、历史、结构与辅助证据较完整，但仍需例行核验新鲜度。';
+  }
+  if (normalized === 'medium') {
+    return language === 'en'
+      ? 'Confidence is medium: quote, history, and structure evidence are available, but fundamentals, events, or peer evidence still limit conclusion strength.'
+      : '置信度为中：报价、历史与结构证据可用，但基本面、事件或同业证据仍限制结论强度。';
+  }
+  return language === 'en'
+    ? 'Confidence is low: key price, history, or structure evidence is limited, so the page keeps only verifiable facts.'
+    : '置信度为低：关键价格、历史或结构证据不足，页面只保留可核验事实。';
+}
+
+function stockConsumerSummarySentence({
+  data,
+  quote,
+  history,
+  historyFailed,
+  language,
+}: {
+  data: StockStructureDecisionResponse;
+  quote: StockQuote | null;
+  history: StockHistoryResponse | null;
+  historyFailed: boolean;
+  language: 'zh' | 'en';
+}): string {
+  const hasHistory = historyBarsCount(history, data) > 0;
+  if (!hasHistory || historyFailed) {
+    return language === 'en'
+      ? 'Historical data is not available yet, so the price history visual is unavailable.'
+      : '历史数据暂缺，价格走势图暂不可用。';
+  }
+  const state = stockStructureStateLabel(data.structureState, language) || (language === 'en' ? 'under review' : '待确认');
+  const freshness = quote ? quoteBoundaryFreshnessLabel(quote, language).label : (language === 'en' ? 'pending' : '待确认');
+  return language === 'en'
+    ? `${data.ticker} is currently ${state}; quote freshness is ${freshness}, and historical bars can be reviewed for price context.`
+    : `${data.ticker} 当前呈现${state}，报价${freshness}，历史 K 线可用于查看走势。`;
+}
+
+function stockTechnicalTrustLabel(
+  indicators: StockTechnicalIndicatorsResponse | null,
+  failed: boolean,
+  language: 'zh' | 'en',
+): string {
+  if (indicators) return technicalStatusLabel(indicators.status, language).label;
+  if (failed) return language === 'en' ? 'Indicators unavailable' : '指标暂不可用';
+  return language === 'en' ? 'Indicators pending' : '指标待确认';
+}
+
+function evidencePackTrustLabel(entry: SingleStockEvidencePackEntry | null, language: 'zh' | 'en'): string {
+  if (!entry) return language === 'en' ? 'Pending' : '待生成';
+  if (entry.state === 'available') return language === 'en' ? 'Available' : '可用';
+  return language === 'en' ? 'Not ready yet' : '暂不可用';
+}
+
+function StockDataTrustRow({
+  quote,
+  history,
+  data,
+  technicalIndicators,
+  technicalFailed,
+  evidenceEntry,
+  language,
+}: {
+  quote: StockQuote | null;
+  history: StockHistoryResponse | null;
+  data: StockStructureDecisionResponse;
+  technicalIndicators: StockTechnicalIndicatorsResponse | null;
+  technicalFailed: boolean;
+  evidenceEntry: SingleStockEvidencePackEntry | null;
+  language: 'zh' | 'en';
+}) {
+  const quoteLabel = quote ? quoteBoundaryFreshnessLabel(quote, language).label : (language === 'en' ? 'Pending' : '待确认');
+  const historyBars = historyBarsCount(history, data);
+  const historyLabel = historyBars > 0
+    ? barsCountLabel(historyBars, language)
+    : (language === 'en' ? 'History pending' : '历史待补');
+  const items = [
+    {
+      key: 'quote',
+      label: language === 'en' ? 'Quote' : '报价',
+      value: quoteLabel,
+    },
+    {
+      key: 'history',
+      label: language === 'en' ? 'History' : '历史',
+      value: historyLabel || '--',
+    },
+    {
+      key: 'technical',
+      label: language === 'en' ? 'Technicals' : '技术指标',
+      value: stockTechnicalTrustLabel(technicalIndicators, technicalFailed, language),
+    },
+    {
+      key: 'evidence',
+      label: language === 'en' ? 'Evidence pack' : '证据包',
+      value: evidencePackTrustLabel(evidenceEntry, language),
+    },
+  ];
+
+  return (
+    <div className="grid gap-2 border-t border-[color:var(--wolfy-divider)] p-3 md:grid-cols-4" data-testid="stock-data-trust-row">
+      {items.map((item) => (
+        <div key={item.key} className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-muted)] px-3 py-2">
+          <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{item.label}</p>
+          <p className="mt-1 truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{item.value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StockConsumerResearchSummary({
+  data,
+  quote,
+  history,
+  historyFailed,
+  researchPacket,
+  evidenceEntry,
+  language,
+  localize,
+}: {
+  data: StockStructureDecisionResponse;
+  quote: StockQuote | null;
+  history: StockHistoryResponse | null;
+  historyFailed: boolean;
+  researchPacket: SymbolResearchPacket | null;
+  evidenceEntry: SingleStockEvidencePackEntry | null;
+  language: 'zh' | 'en';
+  localize: (path: string) => string;
+}) {
+  const market = formatStockMarketLabel(researchPacket?.market || '', language);
+  const name = safeOptionalConsumerText(researchPacket?.identity?.name || quote?.stockName, language);
+  const price = formatStockPrice(quote?.currentPrice ?? researchPacket?.quote.price ?? null, researchPacket?.market || market);
+  const change = formatSignedPercent(quote?.changePercent ?? researchPacket?.quote.changePercent ?? null);
+  const timestamp = formatQuoteTimestamp(
+    quote?.sourceConfidence?.asOf || quote?.marketTimestamp || quote?.observedAt || quote?.updateTime || researchPacket?.quote.asOf || null,
+    language,
+  );
+  const structureState = stockStructureStateLabel(data.structureState, language) || (language === 'en' ? 'Under review' : '待确认');
+  const summary = stockConsumerSummarySentence({ data, quote, history, historyFailed, language });
+  const confidence = confidenceLabel(data.confidence, language);
+  const confidenceText = stockConfidenceExplanation(data.confidence, language);
+  const canCopyEvidence = Boolean(evidenceEntry?.exportContent);
+
+  const handleCopyEvidence = () => {
+    if (!evidenceEntry?.exportContent || typeof navigator === 'undefined' || !navigator.clipboard) return;
+    void navigator.clipboard.writeText(evidenceEntry.exportContent);
+  };
+
+  return (
+    <section className="border-t border-[color:var(--wolfy-divider)] p-3 md:p-4" data-testid="stock-consumer-research-summary">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+        <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-muted)] p-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h2 className="text-xl font-semibold text-[color:var(--wolfy-text-primary)]">{data.ticker}</h2>
+            {name ? <span className="text-sm text-[color:var(--wolfy-text-secondary)]">{name}</span> : null}
+            <TerminalChip variant="neutral">{market}</TerminalChip>
+          </div>
+          <div className="mt-3 flex min-w-0 flex-wrap items-end gap-3">
+            <span className="text-2xl font-semibold text-[color:var(--wolfy-text-primary)]">{price}</span>
+            <span className={change.startsWith('-') ? 'text-sm font-medium text-rose-300' : 'text-sm font-medium text-emerald-300'}>{change}</span>
+            <span className="text-xs text-[color:var(--wolfy-text-muted)]">
+              {timestamp ? `${language === 'en' ? 'Updated' : '更新'} ${timestamp}` : (language === 'en' ? 'Update time pending' : '更新时间待确认')}
+            </span>
+          </div>
+        </div>
+        <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] p-4">
+          <div className="flex flex-wrap gap-2">
+            <StatusBadge status={toneFor(data.structureState)} label={structureState} size="sm" />
+            <StatusBadge status={toneFor(data.confidence)} label={`${language === 'en' ? 'Confidence' : '置信度'}：${confidence}`} size="sm" />
+          </div>
+          <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-primary)]">{summary}</p>
+          <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{confidenceText}</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link
+              to={localize('/research/radar')}
+              className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-primary)] hover:border-[color:var(--wolfy-accent)]"
+            >
+              {language === 'en' ? 'Open Research Radar' : '查看研究雷达'}
+            </Link>
+            <Link
+              to={localize(`/backtest?symbol=${encodeURIComponent(data.ticker)}`)}
+              className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-primary)] hover:border-[color:var(--wolfy-accent)]"
+            >
+              {language === 'en' ? 'Open Backtest' : '打开回测'}
+            </Link>
+            <button
+              type="button"
+              className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-primary)] hover:border-[color:var(--wolfy-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!canCopyEvidence}
+              onClick={handleCopyEvidence}
+            >
+              {language === 'en' ? 'Copy evidence' : '复制证据'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function hasDisabledHistoryBoundary(history: StockHistoryResponse | null, failed: boolean): boolean {
   if (failed) return true;
   if (!history) return false;
@@ -2154,7 +2391,7 @@ function StockMinimumResearchPacket({
   return (
     <div className="grid gap-3 border-t border-[color:var(--wolfy-divider)] p-3" data-testid="stock-minimum-research-packet">
       <RoughSectionCard
-        eyebrow={isEnglish ? 'Minimum research packet' : '最低研究包'}
+        eyebrow={isEnglish ? 'Baseline research packet' : '基础研究包'}
         title={isEnglish ? 'Known stock facts' : '已知个股事实'}
       >
         <RoughKeyValueRows
@@ -3024,6 +3261,25 @@ export default function StockStructureDecisionPage() {
                 <div className="p-3 pb-0 md:p-4 md:pb-0">
                   <ObservationOnlyBoundary language={locale} surface="stock-structure" />
                 </div>
+                <StockConsumerResearchSummary
+                  data={data}
+                  quote={quote}
+                  history={history}
+                  historyFailed={historyFailed}
+                  researchPacket={researchPacket}
+                  evidenceEntry={singleStockEvidencePackEntry}
+                  language={locale}
+                  localize={localize}
+                />
+                <StockDataTrustRow
+                  quote={quote}
+                  history={history}
+                  data={data}
+                  technicalIndicators={technicalIndicators}
+                  technicalFailed={technicalIndicatorsFailed}
+                  evidenceEntry={singleStockEvidencePackEntry}
+                  language={locale}
+                />
                 <StockResearchCockpitStage
                   order={1}
                   eyebrow={locale === 'en' ? 'Quote / identity' : '报价 / 标识'}
@@ -3108,12 +3364,14 @@ export default function StockStructureDecisionPage() {
                     title={locale === 'en' ? 'History and indicator readiness' : '历史与指标就绪度'}
                     testId="stock-cockpit-stage-history-technical"
                   >
+                    <div data-testid="stock-price-history-visual-block">
                     <StockHistoryReadinessPanel
                       history={history}
                       failed={historyFailed}
                       data={data}
                       language={locale}
                     />
+                    </div>
                     <StockTechnicalIndicatorsPanel
                       indicators={technicalIndicators}
                       failed={technicalIndicatorsFailed}

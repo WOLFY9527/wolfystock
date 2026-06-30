@@ -1278,6 +1278,197 @@ function getDecisionRiskContextLabel(
   };
 }
 
+function getWatchlistConsumerGapLabels(item: WatchlistItem, language: 'zh' | 'en'): string[] {
+  return getPacketGapLabels(item.rowResearchPacket?.missingData, language);
+}
+
+function getWatchlistConsumerResearchLabel(item: WatchlistItem, language: 'zh' | 'en'): string {
+  const packet = item.rowResearchPacket;
+  if (!packet) return language === 'en' ? 'Research can start from saved item' : '可从已保存信息继续研究';
+  const status = normalizeRowPacketState(packet.researchStatus);
+  if (status === 'ready') return language === 'en' ? 'Research packet ready' : '研究包可用';
+  if (status === 'partial') return language === 'en' ? 'Research packet partial' : '研究包部分可用';
+  return language === 'en' ? 'Research packet needs data' : '研究包待补资料';
+}
+
+function getWatchlistConsumerPrice(item: WatchlistItem, language: 'zh' | 'en'): string {
+  const packetPrice = item.rowResearchPacket?.quote?.price;
+  if (typeof packetPrice === 'number' && Number.isFinite(packetPrice)) {
+    return formatPriceValue(packetPrice, item.market);
+  }
+  const fallbackPrice = readNumericField(item, ['currentPrice', 'price', 'lastPrice']);
+  if (fallbackPrice !== null) {
+    return formatPriceValue(fallbackPrice, item.market);
+  }
+  return language === 'en' ? 'Quote pending' : '报价暂缺';
+}
+
+function getWatchlistConsumerChange(item: WatchlistItem): string | null {
+  const change = item.rowResearchPacket?.quote?.changePercent ?? readNumericField(item, ['changePercent', 'priceChangePercent']);
+  return typeof change === 'number' && Number.isFinite(change) ? `${change >= 0 ? '+' : ''}${change.toFixed(2)}%` : null;
+}
+
+function hasWatchlistConsumerQuote(item: WatchlistItem): boolean {
+  return getWatchlistConsumerPrice(item, 'zh') !== '报价暂缺';
+}
+
+function getWatchlistConsumerNextAction(item: WatchlistItem, language: 'zh' | 'en'): string {
+  if (!item.rowResearchPacket) {
+    return language === 'en'
+      ? 'Open the stock structure page; saved context is still available.'
+      : '先打开个股结构页，仍可查看已保存信息。';
+  }
+  const gaps = getWatchlistConsumerGapLabels(item, language);
+  if (gaps.length) {
+    return language === 'en'
+      ? `Add ${gaps.join(', ')}`
+      : `补${gaps.join('、')}`;
+  }
+  return language === 'en' ? 'Review stock structure' : '查看个股结构';
+}
+
+function watchlistConsumerItemsNeedingData(items: WatchlistItem[]): number {
+  return items.filter((item) => {
+    const gaps = getWatchlistConsumerGapLabels(item, 'zh');
+    return gaps.length > 0 || !hasWatchlistConsumerQuote(item) || !item.rowResearchPacket;
+  }).length;
+}
+
+function WatchlistConsumerObservationBoard({
+  items,
+  activeItem,
+  onSelect,
+  language,
+}: {
+  items: WatchlistItem[];
+  activeItem: WatchlistItem | null;
+  onSelect: (item: WatchlistItem) => void;
+  language: 'zh' | 'en';
+}) {
+  const navigate = useNavigate();
+  if (!items.length) return null;
+
+  const quoteCount = items.filter(hasWatchlistConsumerQuote).length;
+  const needingDataCount = watchlistConsumerItemsNeedingData(items);
+  const selected = activeItem || items[0];
+  const selectedPrice = selected ? getWatchlistConsumerPrice(selected, language) : '--';
+  const selectedGaps = selected ? getWatchlistConsumerGapLabels(selected, language) : [];
+  const selectedName = selected ? buildWatchlistIdentityLabel(selected, language) : '';
+  const selectedMarket = selected ? formatMarket(selected.market) : '--';
+  const selectedNext = selected?.rowResearchPacket
+    ? (language === 'en' ? 'Review stock structure' : '查看个股结构')
+    : selected
+      ? getWatchlistConsumerNextAction(selected, language)
+      : '--';
+
+  return (
+    <section
+      data-testid="watchlist-consumer-observation-board"
+      className="grid min-w-0 gap-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-panel)] p-3 lg:grid-cols-[minmax(0,1fr)_320px]"
+    >
+      <div className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
+              {language === 'en' ? 'Watchlist' : '观察列表'}
+            </p>
+            <p className="mt-1 text-sm text-white/72">
+              {language === 'en'
+                ? `Tracking ${items.length} symbols`
+                : `正在观察 ${items.length} 个标的`}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <TerminalChip variant="info">{language === 'en' ? `Quotes ${quoteCount}` : `可用报价 ${quoteCount}`}</TerminalChip>
+            <TerminalChip variant={needingDataCount > 0 ? 'caution' : 'success'}>
+              {language === 'en' ? `Need data ${needingDataCount}` : `需补资料 ${needingDataCount}`}
+            </TerminalChip>
+          </div>
+        </div>
+        <div className="mt-3 divide-y divide-[color:var(--wolfy-divider)]">
+          {items.slice(0, 8).map((item) => {
+            const price = getWatchlistConsumerPrice(item, language);
+            const change = getWatchlistConsumerChange(item);
+            const gaps = getWatchlistConsumerGapLabels(item, language);
+            const researchLabel = getWatchlistConsumerResearchLabel(item, language);
+            const nextAction = getWatchlistConsumerNextAction(item, language);
+            const isActive = selected?.id === item.id;
+            return (
+              <div key={item.id} className="grid min-w-0 gap-2 py-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-center">
+                <div className="min-w-0">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="font-semibold text-white">{item.symbol}</span>
+                    <TerminalChip variant="neutral">{formatMarket(item.market)}</TerminalChip>
+                  </div>
+                  <p className="mt-1 truncate text-xs text-white/55">{buildWatchlistIdentityLabel(item, language)}</p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-white/82">
+                    {price}
+                    {change ? <span className={change.startsWith('-') ? 'ml-2 text-rose-300' : 'ml-2 text-emerald-300'}>{change}</span> : null}
+                  </p>
+                  <p className="mt-1 text-xs text-white/58">{researchLabel}</p>
+                  <p className="mt-1 truncate text-xs text-white/45">
+                    {gaps.length ? (language === 'en' ? `Add ${gaps.join(', ')}` : `补${gaps.join('、')}`) : nextAction}
+                  </p>
+                  {!item.rowResearchPacket ? (
+                    <p className="mt-1 text-xs leading-5 text-white/50">{nextAction}</p>
+                  ) : null}
+                </div>
+                <div className="flex min-w-0 flex-wrap justify-start gap-1.5 md:justify-end">
+                  <button
+                    type="button"
+                    aria-pressed={isActive}
+                    className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-2.5 py-1.5 text-xs text-white/78 hover:border-[color:var(--wolfy-accent)] hover:text-white"
+                    onClick={() => onSelect(item)}
+                  >
+                    {language === 'en' ? `View ${item.symbol} details` : `查看 ${item.symbol} 详情`}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-2.5 py-1.5 text-xs text-white/78 hover:border-[color:var(--wolfy-accent)] hover:text-white"
+                    onClick={() => navigate(buildStockStructurePath(item, language))}
+                  >
+                    {language === 'en' ? 'View stock structure' : '查看个股结构'}
+                  </button>
+                  {!item.rowResearchPacket ? (
+                    <button
+                      type="button"
+                      className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-2.5 py-1.5 text-xs text-white/78 hover:border-[color:var(--wolfy-accent)] hover:text-white"
+                      onClick={() => navigate(buildLocalizedPath('/research/radar', language))}
+                    >
+                      {language === 'en' ? 'Open Research Radar' : '打开研究雷达'}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {selected ? (
+        <aside
+          data-testid="watchlist-consumer-detail-panel"
+          className="min-w-0 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3"
+        >
+          <p className="text-[11px] text-white/40">{language === 'en' ? 'Selected symbol' : '当前标的'}</p>
+          <h2 className="mt-1 text-lg font-semibold text-white">{selected.symbol}</h2>
+          <p className="mt-1 truncate text-sm text-white/62">{selectedName} · {selectedMarket}</p>
+          <div className="mt-3 space-y-2 text-sm leading-6 text-white/75">
+            <p>{language === 'en' ? 'Latest quote' : '最新报价'} {selectedPrice}</p>
+            <p>
+              {selectedGaps.length
+                ? `${language === 'en' ? 'Evidence gaps: ' : '资料缺口：'}${selectedGaps.join(language === 'en' ? ', ' : '、')}`
+                : (language === 'en' ? 'Core evidence is usable for review.' : '核心证据可用于查看。')}
+            </p>
+            <p>{language === 'en' ? 'Next: ' : '下一步：'}{selectedNext}</p>
+          </div>
+        </aside>
+      ) : null}
+    </section>
+  );
+}
+
 function buildWatchlistRowDecisionContext(
   item: WatchlistItem,
   language: 'zh' | 'en',
@@ -2415,6 +2606,13 @@ const WatchlistPage: React.FC = () => {
           data-testid="watchlist-status-strip"
           ariaLabel="watchlist summary"
           items={statusItems}
+        />
+
+        <WatchlistConsumerObservationBoard
+          items={filteredItems}
+          activeItem={activeItem}
+          onSelect={(item) => setActiveItemId(item.id)}
+          language={language}
         />
 
         {watchlistWorkflowSymbol ? (
