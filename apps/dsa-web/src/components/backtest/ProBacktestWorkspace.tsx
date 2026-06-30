@@ -1171,7 +1171,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             aria-busy={isSubmitting || undefined}
           >
             <Play className="size-4" />
-            {isSubmitting ? (language === 'en' ? 'Checking DATA-110 readiness...' : '正在检查 DATA-110 执行就绪度') : (language === 'en' ? 'Execute backtest task' : '执行回测任务')}
+            {isSubmitting ? (language === 'en' ? 'Checking data readiness...' : '正在检查数据就绪度') : (language === 'en' ? 'Execute backtest task' : '执行回测任务')}
           </button>
           <button type="button" className={secondaryButtonClass} onClick={() => goToStep(stepDefinitions[2])}>
             <ShieldCheck className="size-4" />
@@ -1384,7 +1384,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             aria-busy={isSubmitting || undefined}
           >
             <Play className="size-4" />
-            {isSubmitting ? (language === 'en' ? 'Checking DATA-110 readiness...' : '正在检查 DATA-110 执行就绪度') : (language === 'en' ? 'Execute backtest task' : '执行回测任务')}
+            {isSubmitting ? (language === 'en' ? 'Checking data readiness...' : '正在检查数据就绪度') : (language === 'en' ? 'Execute backtest task' : '执行回测任务')}
           </button>
         </div>
       </section>

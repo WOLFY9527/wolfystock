@@ -17,11 +17,6 @@ type BacktestExecutionReadinessPanelProps = {
 
 type ReadinessTone = 'ready' | 'warning' | 'blocked' | 'neutral';
 
-const DEFAULT_DISCLOSURE = {
-  zh: '仅供研究诊断，不构成投资建议，也不是可执行交易指令。',
-  en: 'Research diagnostic only; not personalized financial advice and not an executable instruction.',
-} as const;
-
 const STATE_LABELS: Record<string, { zh: string; en: string; tone: ReadinessTone }> = {
   engine_disabled: { zh: '回测引擎已关闭', en: 'Backtest engine disabled', tone: 'blocked' },
   data_disabled: { zh: '数据访问不可用', en: 'Data access unavailable', tone: 'blocked' },
@@ -42,7 +37,7 @@ const REASON_LABELS: Record<string, { zh: string; en: string }> = {
   no_analysis_history: { zh: '没有可用于评估的历史分析记录。', en: 'No historical analysis records are available for evaluation.' },
   no_samples_prepared: { zh: '尚未准备历史评估样本。', en: 'Historical evaluation samples have not been prepared.' },
   insufficient_history: { zh: '历史 OHLCV 窗口不足，无法计算安全结果。', en: 'The OHLCV window is too short to calculate a safe result.' },
-  insufficient_data: { zh: '可用数据不足，未生成收益、回撤、胜率或基准相对指标。', en: 'Available data is insufficient, so return, drawdown, win-rate, and benchmark-relative metrics are unavailable.' },
+  insufficient_data: { zh: '可用数据不足，未生成收益、回撤、胜率或基准相对指标。', en: 'Usable data is insufficient, so return, drawdown, win-rate, and benchmark-relative metrics are not ready.' },
   missing_benchmark: { zh: '缺少基准，基准相对指标不可用。', en: 'Benchmark is missing, so benchmark-relative metrics are unavailable.' },
   missing_adjustments: { zh: '复权/公司行动证据不足，结果只能观察。', en: 'Adjustment or corporate-action evidence is incomplete; result is observation-only.' },
   stale_data: { zh: '数据可能过期，结果只能观察。', en: 'Data may be stale; result is observation-only.' },
@@ -55,7 +50,7 @@ const REASON_LABELS: Record<string, { zh: string; en: string }> = {
 };
 
 const OHLCV_STATUS_LABELS: Record<string, { zh: string; en: string }> = {
-  available: { zh: '历史 OHLCV 可执行', en: 'Historical OHLCV executable' },
+  available: { zh: '历史 OHLCV 可执行', en: 'Historical data ready' },
   missing: { zh: '历史 OHLCV 输入缺失', en: 'Historical OHLCV inputs missing' },
   stale: { zh: '历史 OHLCV 过期', en: 'Historical OHLCV stale' },
   not_configured: { zh: '历史 OHLCV 未配置', en: 'Historical OHLCV not configured' },
@@ -140,7 +135,6 @@ const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelP
   language,
   readiness,
   historicalOhlcvReadiness,
-  noAdviceDisclosure,
   attempted = false,
   isLoading = false,
   className = '',
@@ -149,7 +143,6 @@ const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelP
   const stateInfo = getStateInfo(readiness);
   const reasonLabels = getReasonLabels(readiness, language);
   const hasReadiness = Boolean(readiness?.state);
-  const disclosure = noAdviceDisclosure || readiness?.noAdviceDisclosure || DEFAULT_DISCLOSURE[language];
   const resultAvailable = readiness?.resultContractAvailable === true;
   const benchmarkMissing = normalizeToken(readiness?.benchmarkState) === 'missing'
     || uniqueStrings(readiness?.reasonCodes).includes('missing_benchmark');
@@ -157,21 +150,21 @@ const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelP
   const historicalExecutable = historicalOhlcvReadiness?.executable === true;
   const benchmarkReadiness = historicalOhlcvReadiness?.benchmarkReadiness;
   const adjustedRequirement = historicalOhlcvReadiness?.adjustedDataRequirement;
-  const title = language === 'en' ? 'Execution readiness' : '执行就绪度';
+  const title = language === 'en' ? 'Data readiness' : '数据就绪度';
   const subtitle = !hasReadiness
     ? (language === 'en'
-      ? 'Waiting for DATA-110 readiness from sample status or a run attempt.'
-      : '等待样本状态或运行回执返回 DATA-110 就绪度。')
+      ? 'Waiting for sample status or a run receipt.'
+      : '等待样本状态或运行回执。')
     : stateInfo[language];
   const body = isLoading
-    ? (language === 'en' ? 'Checking latest readiness...' : '正在检查最新就绪度…')
+    ? (language === 'en' ? 'Checking data and result conditions...' : '正在检查数据与结果条件…')
     : resultAvailable
       ? (language === 'en'
-        ? 'A consumer-safe result contract is available. Metrics are shown only when returned by the backend.'
+        ? 'A consumer-safe result view is ready. Metrics are shown only when returned by the backend.'
         : '已返回消费者安全结果契约；只展示后端明确返回的指标。')
       : attempted
         ? (language === 'en'
-          ? 'The run attempt is blocked or not yet result-ready. Metrics stay unavailable until the contract says otherwise.'
+          ? 'The run attempt is blocked or not yet result-ready. Metrics stay hidden until the result view is ready.'
           : '本次运行被阻塞或尚未具备结果条件；指标在契约确认前保持不可用。')
         : (language === 'en'
           ? 'Review this state before running. It does not trigger any trade or portfolio change.'
@@ -200,12 +193,12 @@ const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelP
 
           <div className="mt-3 grid gap-2 text-xs md:grid-cols-3">
             <div className="rounded-lg border border-current/10 bg-black/10 px-3 py-2">
-              <p className="opacity-55">{language === 'en' ? 'Result contract' : '结果契约'}</p>
-              <p className="mt-1 font-semibold">{resultAvailable ? (language === 'en' ? 'Available' : '可用') : (language === 'en' ? 'Unavailable' : '不可用')}</p>
+              <p className="opacity-55">{language === 'en' ? 'Result view' : '结果结构'}</p>
+              <p className="mt-1 font-semibold">{resultAvailable ? (language === 'en' ? 'Ready' : '可用') : (language === 'en' ? 'Not ready' : '不可用')}</p>
             </div>
             <div className="rounded-lg border border-current/10 bg-black/10 px-3 py-2">
               <p className="opacity-55">{language === 'en' ? 'Benchmark-relative metrics' : '基准相对指标'}</p>
-              <p className="mt-1 font-semibold">{benchmarkMissing ? (language === 'en' ? 'Unavailable' : '不可用') : (language === 'en' ? 'As returned' : '按回执展示')}</p>
+              <p className="mt-1 font-semibold">{benchmarkMissing ? (language === 'en' ? 'Not ready' : '不可用') : (language === 'en' ? 'As returned' : '按回执展示')}</p>
             </div>
             <div className="rounded-lg border border-current/10 bg-black/10 px-3 py-2">
               <p className="opacity-55">{language === 'en' ? 'Boundary' : '边界'}</p>
@@ -271,7 +264,6 @@ const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelP
             </ul>
           ) : null}
 
-          <p className="mt-3 text-xs leading-5 opacity-70">{disclosure}</p>
         </div>
       </div>
     </section>
