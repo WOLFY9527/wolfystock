@@ -706,8 +706,29 @@ describe('StockStructureDecisionPage', () => {
     expect(stockCoreChart).toHaveTextContent('历史样本不足');
     expect(stockCoreChart).toHaveTextContent('60 / 90');
     expect(stockCoreChart).toHaveTextContent('本地历史数据');
-    expect(within(stockCoreChart).getByTestId('core-market-chart-svg')).toBeInTheDocument();
-    expect(within(stockCoreChart).getByTestId('core-market-volume-bars')).toBeInTheDocument();
+    expect(stockCoreChart).toHaveAttribute('data-chart-engine', 'echarts');
+    expect(stockCoreChart).toHaveAttribute('data-render-mode', 'candlestick');
+    expect(stockCoreChart).toHaveAttribute('data-volume-panel', 'true');
+    expect(stockCoreChart).toHaveAttribute('data-enabled-overlays', 'MA5,MA20');
+    expect(within(stockCoreChart).getByTestId('core-market-chart-frame')).toBeInTheDocument();
+    expect(within(stockCoreChart).getByTestId('core-market-echarts-node')).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('AAPL 价格与成交量历史'),
+    );
+    expect(within(stockCoreChart).getByTestId('core-market-chart-volume-context')).toHaveTextContent('成交量');
+    expect(within(stockCoreChart).getByTestId('core-market-chart-range-controls')).toHaveTextContent('1D');
+    expect(within(stockCoreChart).getByTestId('core-market-chart-range-controls')).toHaveTextContent('全部');
+    expect(within(stockCoreChart).getByTestId('core-market-chart-overlay-legend')).toHaveTextContent('MA5');
+    expect(within(stockCoreChart).getByTestId('core-market-chart-overlay-legend')).toHaveTextContent('MA20');
+    fireEvent.click(within(stockCoreChart).getByRole('button', { name: /1M/ }));
+    expect(stockCoreChart).toHaveAttribute('data-active-range', '1M');
+    fireEvent.mouseMove(within(stockCoreChart).getByTestId('core-market-chart-frame'), { clientX: 640 });
+    const chartTooltip = within(stockCoreChart).getByTestId('core-market-hover-tooltip');
+    expect(chartTooltip).toHaveTextContent('开盘');
+    expect(chartTooltip).toHaveTextContent('最高');
+    expect(chartTooltip).toHaveTextContent('最低');
+    expect(chartTooltip).toHaveTextContent('收盘');
+    expect(chartTooltip).toHaveTextContent('成交量');
     expect(panel).toHaveTextContent('证据栈');
     expect(panel).toHaveTextContent('AAPL');
     expect(panel).toHaveTextContent('Apple');
