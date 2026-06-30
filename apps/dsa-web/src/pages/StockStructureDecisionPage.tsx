@@ -13,6 +13,7 @@ import {
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import PeerCorrelationSnapshotBlock from '../components/common/PeerCorrelationSnapshotBlock';
 import ObservationOnlyBoundary from '../components/common/ObservationOnlyBoundary';
+import { CoreMarketChart, type CoreMarketChartPoint } from '../components/charts/CoreMarketChart';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { TerminalButton, TerminalChip, TerminalEmptyState } from '../components/terminal/TerminalPrimitives';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
@@ -1497,6 +1498,64 @@ function latestHistoryDate(history: StockHistoryResponse | null): string | null 
   return safeOptionalConsumerText(latest, 'en');
 }
 
+function stockHistorySourceLabel(history: StockHistoryResponse | null, language: 'zh' | 'en'): string {
+  const source = normalizeStockConsumerToken(history?.source || history?.diagnostics?.source);
+  const explicit = safeOptionalConsumerText(history?.sourceConfidence?.sourceLabel, language);
+  const explicitToken = normalizeStockConsumerToken(explicit);
+  if (source.includes('local') || source.includes('cache') || explicitToken.includes('local')) {
+    return language === 'en' ? 'Local history data' : '本地历史数据';
+  }
+  if (explicit) return explicit;
+  if (source.includes('yahoo')) {
+    return 'Yahoo Finance';
+  }
+  if (source.includes('alpaca')) {
+    return 'Alpaca';
+  }
+  return language === 'en' ? 'History source pending' : '历史来源待确认';
+}
+
+function stockHistoryFreshnessLabel(history: StockHistoryResponse | null, failed: boolean, language: 'zh' | 'en'): string {
+  if (failed) return language === 'en' ? 'Quote delayed/unavailable' : '报价延迟/不可用';
+  const token = normalizeStockConsumerToken(history?.sourceConfidence?.freshness || history?.diagnostics?.status);
+  if (['fresh', 'current', 'live', 'available', 'success'].includes(token)) {
+    return language === 'en' ? 'History available' : '历史数据可用';
+  }
+  if (['stale', 'delayed', 'cached', 'partial'].includes(token) || history?.sourceConfidence?.isStale || history?.sourceConfidence?.isPartial) {
+    return language === 'en' ? 'Quote delayed/unavailable' : '报价延迟/不可用';
+  }
+  if (history?.data.length) {
+    return language === 'en' ? 'History available' : '历史数据可用';
+  }
+  return language === 'en' ? 'Quote delayed/unavailable' : '报价延迟/不可用';
+}
+
+function chartCoverageLabel(availableBars: number, requiredBars: number, language: 'zh' | 'en'): string {
+  return language === 'en'
+    ? `${availableBars} / ${requiredBars} bars`
+    : `${availableBars} / ${requiredBars} 根`;
+}
+
+function historyRangeLabel(points: StockHistoryPoint[], language: 'zh' | 'en'): string {
+  const first = points[0]?.date;
+  const last = points.at(-1)?.date;
+  if (!first || !last) return language === 'en' ? 'Range pending' : '区间待确认';
+  return `${first} → ${last}`;
+}
+
+function normalizeChartPoints(points: StockHistoryPoint[]): CoreMarketChartPoint[] {
+  return points
+    .filter((point) => Number.isFinite(point.close))
+    .map((point) => ({
+      date: point.date,
+      open: point.open,
+      high: point.high,
+      low: point.low,
+      close: point.close,
+      volume: point.volume,
+    }));
+}
+
 function stockConfidenceExplanation(
   confidence: string | null | undefined,
   language: 'zh' | 'en',
@@ -2057,76 +2116,6 @@ function StockTechnicalIndicatorsPanel({
   );
 }
 
-function buildHistoryChartPath(points: StockHistoryPoint[], width: number, height: number, padding: number): string {
-  const closes = points.map((point) => point.close).filter((value) => Number.isFinite(value));
-  if (closes.length < 2) return '';
-  const min = Math.min(...closes);
-  const max = Math.max(...closes);
-  const range = max - min || 1;
-  const innerWidth = width - padding * 2;
-  const innerHeight = height - padding * 2;
-  return points.map((point, index) => {
-    const x = padding + (innerWidth * index) / Math.max(points.length - 1, 1);
-    const y = padding + innerHeight - ((point.close - min) / range) * innerHeight;
-    return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
-  }).join(' ');
-}
-
-function StockHistoryMiniChart({
-  points,
-  language,
-}: {
-  points: StockHistoryPoint[];
-  language: 'zh' | 'en';
-}) {
-  const visiblePoints = points.slice(-90);
-  if (visiblePoints.length < 2) return null;
-  const width = 640;
-  const height = 180;
-  const padding = 18;
-  const chartPath = buildHistoryChartPath(visiblePoints, width, 118, padding);
-  const maxVolume = Math.max(...visiblePoints.map((point) => point.volume || 0), 1);
-  const first = visiblePoints[0];
-  const last = visiblePoints.at(-1);
-  const summary = language === 'en'
-    ? `${visiblePoints.length} daily bars from ${first?.date || 'first bar'} to ${last?.date || 'latest bar'}`
-    : `${visiblePoints.length} 根日线，${first?.date || '首根'} 至 ${last?.date || '最新'}`;
-
-  return (
-    <div className="mt-4 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-muted)] p-3" data-testid="stock-history-mini-chart">
-      <svg
-        role="img"
-        aria-label={summary}
-        viewBox={`0 0 ${width} ${height}`}
-        className="h-44 w-full overflow-visible"
-        preserveAspectRatio="none"
-      >
-        <title>{summary}</title>
-        <line x1={padding} y1="118" x2={width - padding} y2="118" stroke="var(--wolfy-border-subtle)" strokeWidth="1" />
-        <path d={chartPath} fill="none" stroke="var(--wolfy-accent)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
-        {visiblePoints.map((point, index) => {
-          const barWidth = Math.max((width - padding * 2) / visiblePoints.length - 2, 1);
-          const x = padding + ((width - padding * 2) * index) / visiblePoints.length;
-          const barHeight = Math.max(((point.volume || 0) / maxVolume) * 42, point.volume ? 2 : 0);
-          return (
-            <rect
-              key={`${point.date}-${index}`}
-              x={x}
-              y={height - padding - barHeight}
-              width={barWidth}
-              height={barHeight}
-              rx="1"
-              fill="var(--wolfy-text-muted)"
-              opacity="0.35"
-            />
-          );
-        })}
-      </svg>
-      <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{summary}</p>
-    </div>
-  );
-}
-
 function StockHistoryReadinessPanel({
   history,
   failed,
@@ -2146,6 +2135,12 @@ function StockHistoryReadinessPanel({
   const computationState = structureComputationState(data, missingBars, language);
   const latestDate = latestHistoryDate(history);
   const chartPoints = history?.data ?? [];
+  const chartStatusLabel = availableBars > 0
+    ? (isEnglish ? 'History available' : '历史数据可用')
+    : (isEnglish ? 'History missing' : '历史数据待补');
+  const insufficientLabel = missingBars > 0 && availableBars > 0
+    ? (isEnglish ? 'History sample insufficient' : '历史样本不足')
+    : null;
 
   return (
     <div className="border-t border-[color:var(--wolfy-divider)] p-3" data-testid="stock-history-readiness-panel">
@@ -2193,16 +2188,34 @@ function StockHistoryReadinessPanel({
           ]}
         />
         {chartPoints.length ? (
-          <StockHistoryMiniChart points={chartPoints} language={language} />
+          <CoreMarketChart
+            testId="stock-history-core-chart"
+            chartKind="stock-history"
+            title={isEnglish ? `${data.ticker} price and volume history` : `${data.ticker} 价格与成交量历史`}
+            subtitle={isEnglish ? 'Returned price and volume bars only. Missing days are not filled.' : '仅使用接口返回的价格与成交量 K 线，缺失日期不补齐。'}
+            points={normalizeChartPoints(chartPoints)}
+            language={language}
+            statusLabel={chartStatusLabel}
+            statusTone={missingBars > 0 ? 'warning' : 'success'}
+            sourceLabel={stockHistorySourceLabel(history, language)}
+            freshnessLabel={stockHistoryFreshnessLabel(history, failed, language)}
+            rangeLabel={historyRangeLabel(chartPoints, language)}
+            latestLabel={latestDate || undefined}
+            coverageLabel={chartCoverageLabel(availableBars, requiredBars, language)}
+            warningLabel={insufficientLabel}
+            emptyTitle={isEnglish ? 'Chart unavailable' : '图表暂不可用'}
+            emptyDetail={isEnglish ? 'Historical bars are unavailable, so no price line is drawn.' : '历史 K 线暂不可用，因此不绘制价格线。'}
+            showVolume
+          />
         ) : (
           <TerminalEmptyState
             className="mt-4 items-start"
-            data-testid="stock-history-chart-unavailable"
+            data-testid="stock-history-empty-chart-state"
             title={isEnglish ? 'Chart unavailable' : '图表暂不可用'}
           >
             {isEnglish
-              ? 'No historical bars were returned, so the page shows readiness counts only.'
-              : '未返回历史 K 线，页面仅展示就绪度计数。'}
+              ? 'History missing. No historical bars were returned, so the page shows readiness counts only.'
+              : '历史数据待补。未返回历史 K 线，页面仅展示就绪度计数。'}
           </TerminalEmptyState>
         )}
       </RoughSectionCard>

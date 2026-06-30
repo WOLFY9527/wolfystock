@@ -3960,6 +3960,42 @@ describe('MarketOverviewPage', () => {
     expect(regimeSummaryText).not.toMatch(/买入|卖出|交易指令|评分级别|score[-\s]?grade|investment advice/i);
   });
 
+  it('renders a compact broad-market trend chart from SPY proxy data with consumer-safe labeling', async () => {
+    const basePanels = localSnapshotPayload().payload;
+    renderMarketOverviewWorkbenchWithProps({
+      panels: {
+        ...basePanels,
+        indices: denseQuotePanel('IndexTrendsCard', [
+          {
+            ...quoteItem('SPY', 'SPY', 548.22, 0.64),
+            trend: [540.1, 542.4, 541.8, 545.3, 548.22],
+            sourceLabel: 'Yahoo Finance',
+            asOf: '2026-06-25T20:00:00Z',
+            freshness: 'delayed',
+          },
+          {
+            ...quoteItem('QQQ', 'QQQ', 486.1, 0.72),
+            trend: [477.5, 480.3, 479.8, 484.9, 486.1],
+            sourceLabel: 'Yahoo Finance',
+            asOf: '2026-06-25T20:00:00Z',
+            freshness: 'delayed',
+          },
+        ]),
+      },
+    });
+
+    const chart = await screen.findByTestId('market-overview-core-trend-chart');
+    expect(chart).toHaveAttribute('data-chart-kind', 'market-overview-trend');
+    expect(chart).toHaveTextContent('广义美股市场趋势');
+    expect(chart).toHaveTextContent('SPY proxy for broad US market');
+    expect(chart).toHaveTextContent('报价延迟');
+    expect(chart).toHaveTextContent('Yahoo Finance');
+    expect(chart).toHaveTextContent('+0.64%');
+    expect(within(chart).getByTestId('core-market-chart-svg')).toBeInTheDocument();
+    expect(within(chart).queryByText(/provider_missing|data_disabled|sourceClass|local_bounded_us_parquet_universe|noExternalCalls|providerCallsEnabled|contractVersion/i)).not.toBeInTheDocument();
+    expect(chart).not.toHaveTextContent(/buy|sell|hold|entry|exit|target|stop-loss|accumulate|reduce|overweight|underweight|买入|卖出|持有|目标价|止损|仓位/i);
+  });
+
   it('keeps default consumer market overview surfaces free of raw evidence metadata vocabulary', async () => {
     useProductSurfaceMock.mockReturnValue({
       isAdminMode: false,

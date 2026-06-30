@@ -25,6 +25,7 @@ import { FundsFlowCard } from './FundsFlowCard';
 import { MarketSentimentCard } from './MarketSentimentCard';
 import { MarketOverviewCard } from './MarketOverviewCard';
 import { VolatilityCard } from './VolatilityCard';
+import { CoreMarketChart, type CoreMarketChartPoint } from '../charts/CoreMarketChart';
 import type {
   MarketOverviewContextHighlightView,
   MarketOverviewExecutiveGroupView,
@@ -162,6 +163,19 @@ type TopLevelDataStatus = {
   detail?: string;
   hasUsableData: boolean;
   hasMissingPanels: boolean;
+};
+type MarketTrendChartView = {
+  item: MarketOverviewItem;
+  title: string;
+  subtitle: string;
+  sourceLabel: string;
+  freshnessLabel: string;
+  rangeLabel: string;
+  latestLabel: string;
+  changeLabel: string;
+  statusLabel: string;
+  isProxy: boolean;
+  points: CoreMarketChartPoint[];
 };
 
 const MODULE_COVERAGE_CARDS: Record<MarketOverviewModuleId, CardKey[]> = {
@@ -465,6 +479,140 @@ function findMetricItem(panels: PanelState, metricId: MarketOverviewPulseMetricI
     }
   }
   return undefined;
+}
+
+function marketTrendFreshnessLabel(item: MarketOverviewItem, language: 'zh' | 'en'): string {
+  const freshness = String(item.freshness || '').toLowerCase();
+  if (freshness === 'live' || freshness === 'fresh') {
+    return language === 'en' ? 'History available' : '历史数据可用';
+  }
+  if (['delayed', 'cached', 'stale', 'fallback'].includes(freshness) || item.isStale || item.isFallback) {
+    return language === 'en' ? 'Quote delayed' : '报价延迟';
+  }
+  if (item.isUnavailable) {
+    return language === 'en' ? 'Quote unavailable' : '报价不可用';
+  }
+  return language === 'en' ? 'Quote delayed/unavailable' : '报价延迟/不可用';
+}
+
+function marketTrendSourceLabel(item: MarketOverviewItem, language: 'zh' | 'en'): string {
+  const label = String(item.sourceLabel || '').trim();
+  if (label && !/\b(provider_missing|data_disabled|sourceClass|local_bounded_us_parquet_universe|noExternalCalls|providerCallsEnabled|contractVersion)\b/i.test(label)) {
+    return label;
+  }
+  return language === 'en' ? 'Market data source pending' : '市场数据来源待确认';
+}
+
+function marketTrendRangeLabel(item: MarketOverviewItem, language: 'zh' | 'en'): string {
+  const count = Array.isArray(item.trend) ? item.trend.filter((value) => Number.isFinite(value)).length : 0;
+  if (!count) return language === 'en' ? 'Range pending' : '区间待确认';
+  return language === 'en' ? `${count} returned points` : `${count} 个返回点`;
+}
+
+function buildMarketTrendPoints(item: MarketOverviewItem): CoreMarketChartPoint[] {
+  const trend = Array.isArray(item.trend) ? item.trend.filter((value) => Number.isFinite(value)) : [];
+  return trend.map((value, index) => ({
+    date: `T-${String(index + 1).padStart(2, '0')}`,
+    label: index === trend.length - 1 ? (item.asOf || item.updatedAt || item.lastSuccessfulAt || item.symbol) : `T-${index + 1}`,
+    close: value,
+  }));
+}
+
+function buildMarketTrendChartView(panels: PanelState, language: 'zh' | 'en'): MarketTrendChartView | null {
+  const item = findPanelItem(panels.indices, ['SPY'])
+    || findPanelItem(panels.indices, ['QQQ'])
+    || findMetricItem(panels, 'SPX')
+    || findMetricItem(panels, 'NDX');
+  if (!item || !Array.isArray(item.trend) || item.trend.filter((value) => Number.isFinite(value)).length < 2) {
+    return null;
+  }
+  const symbol = String(item.symbol || '').toUpperCase();
+  const isProxy = symbol === 'SPY' || symbol === 'QQQ';
+  const display = resolveMarketOverviewDisplayLabel(item, language);
+  const proxyLabel = symbol === 'QQQ'
+    ? 'QQQ proxy for Nasdaq-100 trend'
+    : 'SPY proxy for broad US market';
+  const title = isProxy
+    ? (language === 'en' ? 'Broad US market trend' : '广义美股市场趋势')
+    : (language === 'en' ? `${display.primary} market trend` : `${display.primary} 市场趋势`);
+  const subtitle = isProxy
+    ? proxyLabel
+    : (language === 'en' ? 'Official index item from the loaded market panel.' : '来自已加载市场面板的指数项目。');
+  const latestLabel = typeof item.value === 'number' && Number.isFinite(item.value)
+    ? formatHeroValue(item.value)
+    : (language === 'en' ? 'Latest value pending' : '最新值待确认');
+  const changeText = formatHeroChange(item.changePct);
+  const changeLabel = language === 'en' ? `Latest change ${changeText}` : `最新涨跌 ${changeText}`;
+  return {
+    item,
+    title,
+    subtitle,
+    sourceLabel: marketTrendSourceLabel(item, language),
+    freshnessLabel: marketTrendFreshnessLabel(item, language),
+    rangeLabel: marketTrendRangeLabel(item, language),
+    latestLabel,
+    changeLabel,
+    statusLabel: item.isUnavailable ? (language === 'en' ? 'Quote unavailable' : '报价不可用') : (language === 'en' ? 'History available' : '历史数据可用'),
+    isProxy,
+    points: buildMarketTrendPoints(item),
+  };
+}
+
+function MarketOverviewCoreTrendChart({
+  view,
+  language,
+}: {
+  view: MarketTrendChartView | null;
+  language: 'zh' | 'en';
+}) {
+  if (!view) {
+    return (
+      <section className="px-3 md:px-4" data-testid="market-overview-core-trend-chart" data-chart-kind="market-overview-trend">
+        <CoreMarketChart
+          testId="market-overview-core-trend-chart-frame"
+          chartKind="market-overview-trend"
+          title={language === 'en' ? 'Market trend unavailable' : '市场趋势暂不可用'}
+          subtitle={language === 'en' ? 'No SPY, QQQ, SPX, or NDX trend points were returned.' : '当前未返回 SPY、QQQ、SPX 或 NDX 趋势点。'}
+          points={[]}
+          language={language}
+          statusLabel={language === 'en' ? 'Quote delayed/unavailable' : '报价延迟/不可用'}
+          statusTone="warning"
+          sourceLabel={language === 'en' ? 'Market data source pending' : '市场数据来源待确认'}
+          freshnessLabel={language === 'en' ? 'Quote delayed/unavailable' : '报价延迟/不可用'}
+          rangeLabel={language === 'en' ? 'Range pending' : '区间待确认'}
+          emptyTitle={language === 'en' ? 'Compact trend unavailable' : '紧凑趋势图暂不可用'}
+          emptyDetail={language === 'en' ? 'The page does not draw a market trend without returned points.' : '未收到返回点时，页面不会绘制市场趋势。'}
+          showVolume={false}
+          compact
+        />
+      </section>
+    );
+  }
+
+  return (
+    <section className="px-3 md:px-4" data-testid="market-overview-core-trend-chart" data-chart-kind="market-overview-trend">
+      <CoreMarketChart
+        testId="market-overview-core-trend-chart-frame"
+        chartKind="market-overview-trend"
+        title={view.title}
+        subtitle={view.subtitle}
+        points={view.points}
+        language={language}
+        statusLabel={view.statusLabel}
+        statusTone={view.item.isUnavailable ? 'warning' : 'success'}
+        sourceLabel={view.sourceLabel}
+        freshnessLabel={view.freshnessLabel}
+        rangeLabel={view.rangeLabel}
+        latestLabel={view.latestLabel}
+        changeLabel={view.changeLabel}
+        coverageLabel={view.isProxy ? view.subtitle : undefined}
+        emptyTitle={language === 'en' ? 'Compact trend unavailable' : '紧凑趋势图暂不可用'}
+        emptyDetail={language === 'en' ? 'The page does not draw a market trend without returned points.' : '未收到返回点时，页面不会绘制市场趋势。'}
+        showVolume={false}
+        compact
+      />
+    </section>
+  );
 }
 
 function missingMetricItem(metricId: MarketOverviewPulseMetricId): MarketOverviewItem {
@@ -3104,6 +3252,7 @@ function useMarketOverviewWorkbenchModel({
     panels,
     language,
   });
+  const marketTrendChartView = buildMarketTrendChartView(panels, language);
 
   return {
     language,
@@ -3124,6 +3273,7 @@ function useMarketOverviewWorkbenchModel({
     briefingSummary,
     officialMacroRecords,
     heroAnchorViews,
+    marketTrendChartView,
     visualEvidenceCards,
     showContextRail: activeTabConfig.rail.length > 0,
     contextHighlights,
@@ -3160,6 +3310,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     briefingSummary,
     officialMacroRecords,
     heroAnchorViews,
+    marketTrendChartView,
     visualEvidenceCards,
     showContextRail,
     contextHighlights,
@@ -3199,6 +3350,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
         heroAnchors={heroAnchorViews}
         showAdminDiagnostics={showAdminDiagnostics}
       />
+      <MarketOverviewCoreTrendChart view={marketTrendChartView} language={language} />
       <Suspense fallback={<MarketOverviewWorkbenchGridFallback language={language} />}>
         <LazyMarketOverviewWorkbenchGrid
           heroRows={heroRows}
