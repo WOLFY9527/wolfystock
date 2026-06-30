@@ -10,7 +10,7 @@ from scripts.market_regime_read_model_verifier import main
 
 
 START_DATE = date(2026, 1, 2)
-SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT"]
+SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"]
 
 
 def _write_ohlcv_cache(cache_dir: Path) -> None:

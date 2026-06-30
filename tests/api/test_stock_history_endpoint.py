@@ -85,3 +85,81 @@ def test_stock_history_endpoint_reads_cached_us_bars_without_provider_network() 
         manager=manager,
         log_context="[stock history]",
     )
+
+
+def test_stock_history_endpoint_exposes_90_bar_ohlcv_readiness_when_cache_sufficient() -> None:
+    app = FastAPI()
+    app.include_router(stocks.router, prefix="/api/v1/stocks")
+    client = TestClient(app)
+    cached_frame = pd.DataFrame(
+        [
+            {
+                "date": pd.Timestamp("2026-01-01") + pd.Timedelta(days=index),
+                "open": 100.0 + index,
+                "high": 101.0 + index,
+                "low": 99.0 + index,
+                "close": 100.5 + index,
+                "volume": 1000 + index,
+            }
+            for index in range(90)
+        ]
+    )
+    manager = SimpleNamespace(get_stock_name=lambda stock_code: f"{stock_code} Inc.")
+
+    with (
+        patch("data_provider.base.DataFetcherManager", return_value=manager),
+        patch(
+            "src.services.stock_service.fetch_daily_history_with_local_us_fallback",
+            return_value=(cached_frame, LOCAL_US_PARQUET_SOURCE),
+        ),
+    ):
+        response = client.get("/api/v1/stocks/AAPL/history", params={"period": "daily", "days": 90})
+
+    assert response.status_code == 200
+    payload = response.json()
+    readiness = payload["historicalOhlcvReadiness"]
+    assert len(payload["data"]) == 90
+    assert readiness["providerState"] == "available"
+    assert readiness["overallState"] == "ready"
+    assert readiness["requiredBars"] == 90
+    assert readiness["usableBars"] == 90
+    assert readiness["missingBars"] == 0
+    assert readiness["missingRequirements"] == []
+
+
+def test_stock_history_endpoint_reports_insufficient_coverage_without_provider_missing() -> None:
+    app = FastAPI()
+    app.include_router(stocks.router, prefix="/api/v1/stocks")
+    client = TestClient(app)
+    cached_frame = pd.DataFrame(
+        [
+            {
+                "date": pd.Timestamp("2026-04-01") + pd.Timedelta(days=index),
+                "open": 100.0,
+                "high": 101.0,
+                "low": 99.0,
+                "close": 100.5,
+                "volume": 1000,
+            }
+            for index in range(40)
+        ]
+    )
+    manager = SimpleNamespace(get_stock_name=lambda stock_code: f"{stock_code} Inc.")
+
+    with (
+        patch("data_provider.base.DataFetcherManager", return_value=manager),
+        patch(
+            "src.services.stock_service.fetch_daily_history_with_local_us_fallback",
+            return_value=(cached_frame, LOCAL_US_PARQUET_SOURCE),
+        ),
+    ):
+        response = client.get("/api/v1/stocks/TSLA/history", params={"period": "daily", "days": 90})
+
+    assert response.status_code == 200
+    readiness = response.json()["historicalOhlcvReadiness"]
+    assert readiness["providerState"] == "available"
+    assert readiness["overallState"] == "blocked"
+    assert readiness["requiredBars"] == 90
+    assert readiness["usableBars"] == 40
+    assert readiness["missingBars"] == 50
+    assert readiness["missingRequirements"] == ["insufficient_history"]

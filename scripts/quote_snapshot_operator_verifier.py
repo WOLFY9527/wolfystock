@@ -25,10 +25,11 @@ from src.services.quote_snapshot_readiness import (
     QuoteSnapshotReadinessService,
 )
 from src.services.scanner_universe_readiness import build_scanner_universe_readiness_from_coverage
+from src.services.starter_market_data import STARTER_MARKET_DATA_SYMBOLS
 
 
 CONTRACT_VERSION = "quote_snapshot_operator_verifier_v1"
-DEFAULT_VERIFY_SYMBOLS = ("SPY", "QQQ", "AAPL", "MSFT")
+DEFAULT_VERIFY_SYMBOLS = STARTER_MARKET_DATA_SYMBOLS
 QUOTE_SNAPSHOT_LIVE_ENABLED_ENV = "WOLFYSTOCK_US_QUOTE_SNAPSHOT_LIVE_ENABLED"
 QUOTE_SNAPSHOT_CACHE_WRITE_ENABLED_ENV = "WOLFYSTOCK_US_QUOTE_SNAPSHOT_CACHE_WRITE_ENABLED"
 _TRUTHY = {"1", "true", "yes", "on"}
@@ -107,11 +108,11 @@ class _Verifier:
         }
         payload["dryRunCommand"] = (
             "python scripts/quote_snapshot_operator_verifier.py --mode dry-run "
-            "--us-symbols SPY,QQQ,AAPL,MSFT"
+            "--us-symbols SPY,QQQ,AAPL,MSFT,NVDA,TSLA"
         )
         payload["verifyScannerCommand"] = (
             "python scripts/quote_snapshot_operator_verifier.py --mode verify-scanner "
-            "--us-symbols SPY,QQQ,AAPL,MSFT"
+            "--us-symbols SPY,QQQ,AAPL,MSFT,NVDA,TSLA"
         )
         return payload
 
@@ -290,7 +291,7 @@ def _snapshot_next_action(readiness: Mapping[str, Any]) -> str:
         return "Quote snapshot rows are available for the starter symbols; run verify-scanner next."
     if readiness.get("staleSymbols"):
         return "Refresh stale quote snapshot rows for the starter symbols, then rerun verify-snapshot."
-    return "Provide explicit local/provider-backed quote snapshot rows for SPY, QQQ, AAPL, and MSFT."
+    return "Provide explicit local/provider-backed quote snapshot rows for the bounded starter symbols."
 
 
 def _scanner_next_action(readiness: Mapping[str, Any]) -> str:

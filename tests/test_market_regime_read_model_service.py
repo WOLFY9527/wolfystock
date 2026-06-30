@@ -11,7 +11,7 @@ from src.services.market_regime_read_model_service import build_market_regime_re
 
 
 START_DATE = date(2026, 1, 2)
-SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT"]
+SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"]
 FORBIDDEN_TEXT = (
     "buy",
     "sell",
@@ -38,6 +38,8 @@ def _full_values() -> dict[str, list[float]]:
         "QQQ": _series(100, 1.25),
         "AAPL": _series(90, 0.9),
         "MSFT": _series(95, 1.1),
+        "NVDA": _series(110, 1.4),
+        "TSLA": _series(80, 0.7),
     }
 
 
@@ -47,6 +49,8 @@ def _risk_off_values() -> dict[str, list[float]]:
         "QQQ": _series(160, -1.2),
         "AAPL": _series(150, -0.8),
         "MSFT": _series(155, -0.9),
+        "NVDA": _series(170, -1.4),
+        "TSLA": _series(140, -1.1),
     }
 
 
@@ -217,7 +221,7 @@ def test_missing_adjusted_prices_preserves_missing_family_and_blocks_readiness(t
 
 
 def test_missing_quote_snapshot_preserves_source_state_and_marks_quote_card_blocker(tmp_path: Path) -> None:
-    model = _build_model(tmp_path, quote_symbols=["SPY", "QQQ", "MSFT"])
+    model = _build_model(tmp_path, quote_symbols=["SPY", "QQQ", "MSFT", "NVDA", "TSLA"])
 
     assert model["status"] == "partial"
     assert model["readiness"]["label"] == "blocked"

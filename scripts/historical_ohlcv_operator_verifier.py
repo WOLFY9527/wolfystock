@@ -144,11 +144,11 @@ class _Verifier:
         }
         payload["dryRunCommand"] = (
             "python scripts/historical_ohlcv_operator_verifier.py --mode dry-run "
-            "--us-symbols SPY,QQQ,AAPL,MSFT"
+            "--us-symbols SPY,QQQ,AAPL,MSFT,NVDA,TSLA"
         )
         payload["executeCommandTemplate"] = (
             "python scripts/historical_ohlcv_operator_verifier.py --mode execute --execute "
-            "--us-symbols SPY,QQQ,AAPL,MSFT"
+            "--us-symbols SPY,QQQ,AAPL,MSFT,NVDA,TSLA"
         )
         return payload
 

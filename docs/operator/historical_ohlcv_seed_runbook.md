@@ -1,7 +1,7 @@
 # Historical OHLCV Seed Operator Runbook
 
 This runbook covers the safe local path for attempting and verifying the
-starter US historical OHLCV cache seed for `SPY`, `QQQ`, `AAPL`, and `MSFT`.
+starter US historical OHLCV cache seed for `SPY`, `QQQ`, `AAPL`, `MSFT`, `NVDA`, and `TSLA`.
 It does not enable providers on app startup and does not make Scanner or
 Backtest results appear successful when data is missing.
 
@@ -23,7 +23,7 @@ Cache location:
 ## Inspect Gates
 
 ```bash
-python scripts/historical_ohlcv_operator_verifier.py --mode inspect --us-symbols SPY,QQQ,AAPL,MSFT
+python scripts/historical_ohlcv_operator_verifier.py --mode inspect --us-symbols SPY,QQQ,AAPL,MSFT,NVDA,TSLA
 ```
 
 The output redacts env values and reports whether each gate is enabled.
@@ -31,7 +31,7 @@ The output redacts env values and reports whether each gate is enabled.
 ## Dry Run
 
 ```bash
-python scripts/historical_ohlcv_operator_verifier.py --mode dry-run --us-symbols SPY,QQQ,AAPL,MSFT --required-bars 60
+python scripts/historical_ohlcv_operator_verifier.py --mode dry-run --us-symbols SPY,QQQ,AAPL,MSFT,NVDA,TSLA --required-bars 60
 ```
 
 Dry-run is no-network and no-mutation. Review `nextOperatorAction`, cache
@@ -47,7 +47,7 @@ export WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED=true
 export WOLFYSTOCK_HISTORICAL_OHLCV_CACHE_SEED_ENABLED=true
 export LOCAL_US_PARQUET_DIR=/example/local/us-parquet-cache
 
-python scripts/historical_ohlcv_operator_verifier.py --mode execute --execute --us-symbols SPY,QQQ,AAPL,MSFT --required-bars 60
+python scripts/historical_ohlcv_operator_verifier.py --mode execute --execute --us-symbols SPY,QQQ,AAPL,MSFT,NVDA,TSLA --required-bars 60
 ```
 
 PowerShell equivalent for the gates:
@@ -65,7 +65,7 @@ reports a read-only preflight.
 ## Verify Bars Written
 
 ```bash
-python scripts/historical_ohlcv_operator_verifier.py --mode verify-cache --us-symbols SPY,QQQ,AAPL,MSFT --required-bars 60
+python scripts/historical_ohlcv_operator_verifier.py --mode verify-cache --us-symbols SPY,QQQ,AAPL,MSFT,NVDA,TSLA --required-bars 60
 ```
 
 Check `cacheRows[*].cachedBars`, `dateRange`, `freshnessState`, and
@@ -75,7 +75,7 @@ not produce usable rows for that symbol.
 ## Verify Scanner Readiness
 
 ```bash
-python scripts/historical_ohlcv_operator_verifier.py --mode verify-chain --us-symbols SPY,QQQ,AAPL,MSFT --required-bars 60
+python scripts/historical_ohlcv_operator_verifier.py --mode verify-chain --us-symbols SPY,QQQ,AAPL,MSFT,NVDA,TSLA --required-bars 60
 ```
 
 Scanner verification reads the existing historical OHLCV readiness seam. It can

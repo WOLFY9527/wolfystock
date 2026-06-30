@@ -32,7 +32,7 @@ FORBIDDEN_ADVICE_TERMS = (
     "推荐",
 )
 START_DATE = date(2026, 1, 2)
-SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT"]
+SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"]
 
 
 def _series(start: float, step: float, bars: int = 60) -> list[float]:
@@ -83,7 +83,7 @@ def _base_payload(*, status: str = "ok", readiness_label: str = "product_ready")
         "sourceEvidenceContractVersion": "market_regime_evidence_pack_v1",
         "status": status,
         "market": "US",
-        "symbols": ["SPY", "QQQ", "AAPL", "MSFT"],
+        "symbols": ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"],
         "benchmarkSymbol": "SPY",
         "growthProxySymbol": "QQQ",
         "regime": {"label": "risk_on_confirming", "status": status, "source": "deterministic_evidence_fields"},
@@ -226,7 +226,7 @@ def test_market_regime_read_model_endpoint_returns_product_ready_payload(monkeyp
     }
     assert calls
     assert calls[0]["market"] == "US"
-    assert calls[0]["symbols"] == ["SPY", "QQQ", "AAPL", "MSFT"]
+    assert calls[0]["symbols"] == ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"]
     assert calls[0]["require_adjusted"] is True
 
 
@@ -267,6 +267,8 @@ def test_market_regime_read_model_endpoint_resolves_configured_quote_snapshot_ca
             "QQQ": _series(100, 1.25),
             "AAPL": _series(90, 0.9),
             "MSFT": _series(95, 1.1),
+            "NVDA": _series(110, 1.4),
+            "TSLA": _series(80, 0.7),
         },
     )
     _write_quote_cache(quote_path)

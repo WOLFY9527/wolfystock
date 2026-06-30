@@ -3929,7 +3929,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
 
     def test_not_run_status_activates_bounded_us_local_parquet_universe(self) -> None:
         cache_dir = Path(self._cache_temp_dir.name) / "us-parquet-cache"
-        for symbol in ("SPY", "QQQ", "AAPL", "MSFT", "TSLA"):
+        for symbol in ("SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"):
             _write_local_us_parquet(cache_dir, symbol, rows=90)
 
         with patch.dict(
@@ -3953,13 +3953,13 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(scanner_readiness["sourceClass"], "local_bounded_us_parquet_universe")
         self.assertEqual(scanner_readiness["sourcePath"], "LOCAL_US_PARQUET_DIR")
         self.assertEqual(scanner_readiness["generatedFrom"], "LOCAL_US_PARQUET_DIR")
-        self.assertEqual(scanner_readiness["symbols"], ["SPY", "QQQ", "AAPL", "MSFT"])
-        self.assertEqual(scanner_readiness["universeSize"], 4)
+        self.assertEqual(scanner_readiness["symbols"], ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"])
+        self.assertEqual(scanner_readiness["universeSize"], 6)
         self.assertTrue(scanner_readiness["noExternalCalls"])
         self.assertFalse(scanner_readiness["providerCallsEnabled"])
         self.assertTrue(scanner_readiness["readOnly"])
         self.assertEqual(scanner_readiness["activationState"], "local_universe_available")
-        self.assertNotIn("TSLA", scanner_readiness["symbols"])
+        self.assertIn("TSLA", scanner_readiness["symbols"])
         self.assertEqual(readiness["selectedCount"], 0)
         self.assertEqual(readiness["candidateEvaluationCount"], 0)
 

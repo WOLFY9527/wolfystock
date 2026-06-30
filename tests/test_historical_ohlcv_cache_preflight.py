@@ -651,7 +651,7 @@ def test_activation_checklist_uses_explicit_admin_state_set_without_leaking_inte
         "seeded/cache_hit",
         "failed_safely",
     ]
-    assert checklist["starterSymbolSets"]["us"]["symbols"] == ["SPY", "QQQ", "AAPL", "MSFT"]
+    assert checklist["starterSymbolSets"]["us"]["symbols"] == ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"]
     assert checklist["starterSymbolSets"]["cnIfSupported"]["symbols"] == ["600519", "000001", "601398"]
     assert checklist_by_market["cn"]["state"] == "failed_safely"
     assert checklist_by_market["us"]["state"] == "seeded/cache_hit"

@@ -16,11 +16,23 @@ from typing import Optional, Dict, Any, List
 import pandas as pd
 
 from src.repositories.stock_repo import StockRepository
+from src.services.historical_ohlcv_readiness import (
+    HistoricalOhlcvReadinessRequest,
+    HistoricalOhlcvReadinessService,
+)
+from src.services.local_quote_snapshot_provider import LocalQuoteSnapshotJsonProvider
+from src.services.quote_snapshot_config import get_configured_us_quote_snapshot_cache_path
+from src.services.quote_snapshot_readiness import (
+    DEFAULT_QUOTE_SNAPSHOT_MAX_AGE_SECONDS,
+    QuoteSnapshotReadinessRequest,
+    QuoteSnapshotReadinessService,
+)
 from src.services.source_confidence_contract import (
     SourceConfidenceContract,
     SourceFreshness,
     coerce_source_confidence_contract,
 )
+from src.services.starter_market_data import is_starter_market_data_symbol
 from src.services.stock_service_provider_adapter import StockServiceProviderAdapter
 from src.services.akshare_cn_ohlcv_cache import AkshareCnOhlcvRuntime, is_cn_a_share_symbol
 from src.services.us_history_helper import LOCAL_US_PARQUET_SOURCE, fetch_daily_history_with_local_us_fallback
@@ -129,7 +141,7 @@ class StockService:
             
             if quote is None:
                 logger.warning(f"获取 {stock_code} 实时行情失败")
-                return None
+                return self._get_consumer_safe_quote_recovery(stock_code, observed_at=observed_at)
 
             quote_metadata = self._build_quote_metadata(
                 source=quote.source,
@@ -163,17 +175,163 @@ class StockService:
             }
             
         except ImportError:
-            logger.warning("DataFetcherManager 未找到，使用占位数据")
-            return self._get_placeholder_quote(stock_code, observed_at=observed_at)
+            logger.warning("DataFetcherManager 未找到，返回结构化行情不可用状态")
+            return self._get_consumer_safe_quote_recovery(stock_code, observed_at=observed_at)
         except Exception as e:
             logger.error(f"获取实时行情失败: {e}", exc_info=True)
+            return self._get_consumer_safe_quote_recovery(stock_code, observed_at=observed_at)
+
+    def _get_consumer_safe_quote_recovery(
+        self,
+        stock_code: str,
+        *,
+        observed_at: str,
+    ) -> Optional[Dict[str, Any]]:
+        normalized_code = str(stock_code or "").strip().upper()
+        if not is_us_stock_code(normalized_code) or not is_starter_market_data_symbol(normalized_code):
             return None
+
+        cache_result = self._get_local_quote_snapshot_quote(normalized_code, observed_at=observed_at)
+        if cache_result is not None:
+            return cache_result
+        return self._get_unavailable_quote_state(
+            normalized_code,
+            observed_at=observed_at,
+            reason="quote_snapshot_missing",
+        )
+
+    def _get_local_quote_snapshot_quote(
+        self,
+        stock_code: str,
+        *,
+        observed_at: str,
+    ) -> Optional[Dict[str, Any]]:
+        cache_path = get_configured_us_quote_snapshot_cache_path()
+        if cache_path is None:
+            return None
+        result = QuoteSnapshotReadinessService(
+            provider=LocalQuoteSnapshotJsonProvider(cache_path=cache_path)
+        ).fetch(
+            QuoteSnapshotReadinessRequest(
+                symbols=(stock_code,),
+                market="us",
+                max_age_seconds=DEFAULT_QUOTE_SNAPSHOT_MAX_AGE_SECONDS,
+            )
+        )
+        if not result.snapshots:
+            return None
+
+        snapshot = result.snapshots[0]
+        previous_close = snapshot.previous_close
+        change = float(snapshot.last) - float(previous_close) if previous_close else None
+        change_percent = (change / float(previous_close) * 100.0) if change is not None and previous_close else None
+        source_confidence = SourceConfidenceContract(
+            source=snapshot.source,
+            source_label=str(snapshot.source or "Local quote snapshot cache").replace("_", " ").title(),
+            as_of=snapshot.as_dict().get("asOf"),
+            freshness=SourceFreshness.CACHED,
+            is_fallback=True,
+            confidence_weight=0.75,
+            coverage=1.0,
+            degradation_reason="local_quote_snapshot_cache",
+        ).to_dict()
+        return {
+            "stock_code": snapshot.symbol,
+            "stock_name": None,
+            "current_price": float(snapshot.last),
+            "change": change,
+            "change_percent": change_percent,
+            "open": None,
+            "high": None,
+            "low": None,
+            "prev_close": previous_close,
+            "volume": snapshot.volume,
+            "amount": None,
+            "update_time": observed_at,
+            "source": snapshot.source,
+            "source_type": "local_quote_snapshot_cache",
+            "market_timestamp": snapshot.as_dict().get("asOf"),
+            "observed_at": observed_at,
+            "freshness": source_confidence["freshness"],
+            "is_fallback": source_confidence["isFallback"],
+            "is_stale": source_confidence["isStale"],
+            "is_partial": source_confidence["isPartial"],
+            "is_synthetic": source_confidence["isSynthetic"],
+            "is_unavailable": source_confidence["isUnavailable"],
+            "availability_state": result.readiness.get("availabilityState"),
+            "provider_state": result.readiness.get("providerState"),
+            "missing_requirements": result.readiness.get("missingRequirements") or [],
+            "quoteReadiness": result.readiness,
+            "sourceConfidence": source_confidence,
+        }
+
+    def _get_unavailable_quote_state(
+        self,
+        stock_code: str,
+        *,
+        observed_at: str,
+        reason: str,
+    ) -> Dict[str, Any]:
+        readiness = QuoteSnapshotReadinessService().fetch(
+            QuoteSnapshotReadinessRequest(symbols=(stock_code,), market="us")
+        ).readiness
+        missing_requirements = list(readiness.get("missingRequirements") or [])
+        if reason not in missing_requirements:
+            missing_requirements.append(reason)
+        readiness = {
+            **readiness,
+            "missingRequirements": missing_requirements,
+            "availabilityState": "missing",
+            "freshnessState": "missing",
+            "consumerSafe": True,
+        }
+        source_confidence = SourceConfidenceContract(
+            source="unavailable",
+            source_label="Quote unavailable",
+            as_of=None,
+            freshness=SourceFreshness.UNAVAILABLE,
+            is_partial=True,
+            is_unavailable=True,
+            confidence_weight=0.0,
+            coverage=0.0,
+            degradation_reason=reason,
+        ).to_dict()
+        return {
+            "stock_code": stock_code,
+            "stock_name": None,
+            "current_price": None,
+            "change": None,
+            "change_percent": None,
+            "open": None,
+            "high": None,
+            "low": None,
+            "prev_close": None,
+            "volume": None,
+            "amount": None,
+            "update_time": observed_at,
+            "source": "unavailable",
+            "source_type": "unavailable",
+            "market_timestamp": None,
+            "observed_at": observed_at,
+            "freshness": source_confidence["freshness"],
+            "is_fallback": source_confidence["isFallback"],
+            "is_stale": source_confidence["isStale"],
+            "is_partial": source_confidence["isPartial"],
+            "is_synthetic": source_confidence["isSynthetic"],
+            "is_unavailable": source_confidence["isUnavailable"],
+            "availability_state": "missing",
+            "provider_state": readiness.get("providerState"),
+            "missing_requirements": missing_requirements,
+            "unavailable_reason": reason,
+            "quoteReadiness": readiness,
+            "sourceConfidence": source_confidence,
+        }
     
     def get_history_data(
         self,
         stock_code: str,
         period: str = "daily",
-        days: int = 30
+        days: int = 90
     ) -> Dict[str, Any]:
         """
         获取股票历史行情
@@ -262,6 +420,14 @@ class StockService:
                         "data": [],
                         "source": "unavailable",
                         "diagnostics": diagnostics,
+                        "historicalOhlcvReadiness": self._build_history_ohlcv_readiness(
+                            stock_code=stock_code,
+                            period=period,
+                            requested_days=fetch_days,
+                            rows=[],
+                            source_available=False,
+                            unavailable_reason="provider_missing" if is_us_stock_code(stock_code) else "provider_unavailable",
+                        ),
                         "sourceConfidence": self._build_history_source_confidence(
                             "unavailable",
                             rows=0,
@@ -300,6 +466,14 @@ class StockService:
                         "data": [],
                         "source": "unavailable",
                         "diagnostics": diagnostics,
+                        "historicalOhlcvReadiness": self._build_history_ohlcv_readiness(
+                            stock_code=stock_code,
+                            period=period,
+                            requested_days=fetch_days,
+                            rows=[],
+                            source_available=False,
+                            unavailable_reason="provider_unavailable",
+                        ),
                         "sourceConfidence": self._build_history_source_confidence(
                             "unavailable",
                             rows=0,
@@ -339,6 +513,13 @@ class StockService:
                 "data": data,
                 "source": source or "unknown",
                 "diagnostics": diagnostics,
+                "historicalOhlcvReadiness": self._build_history_ohlcv_readiness(
+                    stock_code=stock_code,
+                    period=period,
+                    requested_days=fetch_days,
+                    rows=data,
+                    source_available=bool(data) and str(source or "").lower() != "unavailable",
+                ),
                 "sourceConfidence": self._build_history_source_confidence(
                     source or "unknown",
                     rows=len(data),
@@ -364,6 +545,14 @@ class StockService:
                 "data": [],
                 "source": "unavailable",
                 "diagnostics": diagnostics,
+                "historicalOhlcvReadiness": self._build_history_ohlcv_readiness(
+                    stock_code=stock_code,
+                    period=period,
+                    requested_days=days,
+                    rows=[],
+                    source_available=False,
+                    unavailable_reason="provider_missing",
+                ),
                 "sourceConfidence": self._build_history_source_confidence(
                     "unavailable",
                     rows=0,
@@ -389,6 +578,14 @@ class StockService:
                 "data": [],
                 "source": "unavailable",
                 "diagnostics": diagnostics,
+                "historicalOhlcvReadiness": self._build_history_ohlcv_readiness(
+                    stock_code=stock_code,
+                    period=period,
+                    requested_days=days,
+                    rows=[],
+                    source_available=False,
+                    unavailable_reason="provider_unavailable",
+                ),
                 "sourceConfidence": self._build_history_source_confidence(
                     "unavailable",
                     rows=0,
@@ -445,6 +642,13 @@ class StockService:
             "data": response_data,
             "source": runtime_payload.get("source") or "unknown",
             "diagnostics": diagnostics,
+            "historicalOhlcvReadiness": self._build_history_ohlcv_readiness(
+                stock_code=stock_code,
+                period=period,
+                requested_days=fetch_days,
+                rows=response_data,
+                source_available=bool(response_data),
+            ),
             "sourceConfidence": runtime_payload.get("sourceConfidence") or {},
         }
 
@@ -765,6 +969,34 @@ class StockService:
             degradation_reason=str(diagnostics.get("reason") or "") or None,
         )
         return coerce_source_confidence_contract(contract).to_dict()
+
+    @staticmethod
+    def _build_history_ohlcv_readiness(
+        *,
+        stock_code: str,
+        period: str,
+        requested_days: int,
+        rows: List[Dict[str, Any]],
+        source_available: bool,
+        unavailable_reason: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        timeframe = "1d" if period == "daily" else period
+        required_bars = max(0, int(requested_days or 0)) if period == "daily" else 0
+        request = HistoricalOhlcvReadinessRequest(
+            symbol=stock_code,
+            market="US" if is_us_stock_code(stock_code) else "unknown",
+            timeframe=timeframe,
+            lookback_bars=max(0, int(requested_days or 0)),
+            required_bars=required_bars,
+            require_adjusted=False,
+        )
+        return HistoricalOhlcvReadinessService().assess_supplied_history(
+            request,
+            rows,
+            source_available=bool(source_available),
+            adjustments_available=None,
+            unavailable_reason=unavailable_reason or ("provider_missing" if not source_available else None),
+        ).readiness
 
     @staticmethod
     def _build_intraday_metadata(

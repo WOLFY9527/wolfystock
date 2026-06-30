@@ -22,6 +22,7 @@ from src.services.yfinance_us_ohlcv_cache_provider import (
     YFINANCE_US_OHLCV_ENABLE_ENV,
 )
 from src.services.us_history_helper import get_configured_us_stock_parquet_dir
+from src.services.starter_market_data import STARTER_MARKET_DATA_SYMBOLS
 from src.utils.symbol_classification import is_us_stock_code
 
 
@@ -30,7 +31,7 @@ HISTORICAL_OHLCV_CACHE_PRELIGHT_CONTRACT_VERSION = HISTORICAL_OHLCV_CACHE_PREFLI
 HISTORICAL_OHLCV_ACTIVATION_CHECKLIST_CONTRACT_VERSION = "historical_ohlcv_data_activation_checklist_v1"
 HISTORICAL_OHLCV_CACHE_SEED_ENABLED_ENV = "WOLFYSTOCK_HISTORICAL_OHLCV_CACHE_SEED_ENABLED"
 DEFAULT_CN_REPRESENTATIVE_SYMBOLS = ("600519", "000001", "601398")
-DEFAULT_US_REPRESENTATIVE_SYMBOLS = ("SPY", "QQQ", "AAPL", "MSFT")
+DEFAULT_US_REPRESENTATIVE_SYMBOLS = STARTER_MARKET_DATA_SYMBOLS
 _ACTIVATION_STATE_DISABLED = "disabled_by_config"
 _ACTIVATION_STATE_DEPENDENCY_MISSING = "dependency_missing"
 _ACTIVATION_STATE_READY_TO_SEED = "ready_to_seed"

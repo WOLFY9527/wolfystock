@@ -10180,7 +10180,8 @@ class MarketOverviewService:
             try:
                 quote = self._latest_quote(ticker)
             except Exception:
-                items.append(self._quote_unavailable_item(label, symbol, unit, updated_at))
+                proxy_item = self._quote_proxy_item(symbol, label, unit, updated_at)
+                items.append(proxy_item or self._quote_unavailable_item(label, symbol, unit, updated_at))
                 continue
             value = quote.get("value")
             change_pct = quote.get("change_pct")
@@ -10200,6 +10201,38 @@ class MarketOverviewService:
                 "asOf": quote.get("asOf") or updated_at,
             })
         return items
+
+    def _quote_proxy_item(self, symbol: str, label: str, unit: str, updated_at: str) -> Dict[str, Any] | None:
+        if symbol != "SPX":
+            return None
+        try:
+            quote = self._latest_quote("SPY")
+        except Exception:
+            return None
+        change_pct = quote.get("change_pct")
+        return {
+            "symbol": symbol,
+            "label": "S&P 500 proxy (SPY ETF)",
+            "value": quote.get("value"),
+            "unit": "USD",
+            "change_pct": change_pct,
+            "changePercent": change_pct,
+            "risk_direction": self._risk_direction(change_pct),
+            "trend": quote.get("trend", []),
+            "source": "yfinance_proxy",
+            "sourceLabel": self._source_label("yfinance_proxy"),
+            "sourceType": "unofficial_proxy",
+            "updatedAt": updated_at,
+            "asOf": quote.get("asOf") or updated_at,
+            "proxyFor": symbol,
+            "proxySymbol": "SPY",
+            "proxyLabel": label,
+            "isProxy": True,
+            "isFallback": False,
+            "proxyFallback": True,
+            "warning": "Official SPX quote unavailable; showing SPY ETF proxy.",
+            "degradationReason": "official_index_unavailable_using_etf_proxy",
+        }
 
     def _quote_unavailable_item(self, label: str, symbol: str, unit: str, updated_at: str) -> Dict[str, Any]:
         message = "Yahoo Finance 行情暂不可用"
