@@ -2669,6 +2669,108 @@ class MarketScannerService:
             return "Scanner 已生成候选，但部分数据覆盖仍需复核。", "补充缺口数据后复核候选稳定性。"
         return "Scanner 数据准备度暂时无法判断。", "补充运行记录后再复核。"
 
+    @staticmethod
+    def _exact_candidate_blocked_states(
+        *,
+        status: str,
+        candidate_generation_blockers: Sequence[str],
+        selected_count: int,
+        universe_availability: str,
+    ) -> List[str]:
+        states: List[str] = []
+
+        def add(value: str) -> None:
+            if value and value not in states:
+                states.append(value)
+
+        if status == "not_run":
+            add("scanner_run_not_executed")
+        if universe_availability in {"missing", "empty", "stale"}:
+            add("no_local_universe")
+        blocker_tokens = {str(item or "").strip().lower() for item in candidate_generation_blockers}
+        if blocker_tokens.intersection(
+            {
+                "missing_history",
+                "provider_missing",
+                "provider_unavailable",
+                "entitlement_required",
+                "insufficient_history",
+                "missing_adjustments",
+                "missing_benchmark",
+            }
+        ):
+            add("insufficient_ohlcv")
+        if blocker_tokens.intersection({"missing_quote_snapshot", "stale_quote_snapshot"}):
+            add("quote_unavailable_or_stale")
+        if status in {"empty", "failed"} and selected_count <= 0 and not states:
+            add("candidate_scoring_unavailable")
+        return states
+
+    @staticmethod
+    def _scanner_run_lineage(
+        *,
+        diagnostics: Mapping[str, Any],
+        candidates: Sequence[Mapping[str, Any]],
+        ohlcv_readiness: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        candidate_diagnostics = (
+            diagnostics.get("candidate_diagnostics")
+            if isinstance(diagnostics.get("candidate_diagnostics"), Mapping)
+            else {}
+        )
+        symbols_evaluated: List[str] = []
+        symbols_with_sufficient_data: List[str] = []
+        symbols_skipped: List[str] = []
+
+        def add(target: List[str], value: Any) -> None:
+            symbol = str(value or "").strip().upper()
+            if symbol and symbol not in target:
+                target.append(symbol)
+
+        for key, payload in candidate_diagnostics.items():
+            item = payload if isinstance(payload, Mapping) else {}
+            symbol = str(item.get("symbol") or key or "").strip().upper()
+            status_value = str(item.get("status") or "").strip().lower()
+            if status_value in {"selected", "rejected", "evaluated"}:
+                add(symbols_evaluated, symbol)
+                add(symbols_with_sufficient_data, symbol)
+            elif status_value:
+                add(symbols_skipped, symbol)
+
+        for item in candidates:
+            symbol = str(item.get("symbol") or "").strip().upper()
+            status_value = str(item.get("status") or "").strip().lower()
+            if status_value in {"selected", "rejected", "evaluated"}:
+                add(symbols_evaluated, symbol)
+                add(symbols_with_sufficient_data, symbol)
+
+        for item in ohlcv_readiness.get("symbolStates") or []:
+            if not isinstance(item, Mapping):
+                continue
+            symbol = str(item.get("symbol") or "").strip().upper()
+            if str(item.get("overallState") or "").strip().lower() == "ready":
+                add(symbols_with_sufficient_data, symbol)
+
+        scanner_data = diagnostics.get("scanner_data") if isinstance(diagnostics.get("scanner_data"), Mapping) else {}
+        universe_resolution = (
+            scanner_data.get("universe_resolution")
+            if isinstance(scanner_data.get("universe_resolution"), Mapping)
+            else {}
+        )
+        universe_source = str(
+            diagnostics.get("universeSource")
+            or universe_resolution.get("universeSource")
+            or universe_resolution.get("source")
+            or diagnostics.get("stock_list_source")
+            or "unknown"
+        )
+        return {
+            "universeSource": universe_source,
+            "symbolsEvaluated": symbols_evaluated[:50],
+            "symbolsWithSufficientData": symbols_with_sufficient_data[:50],
+            "symbolsSkipped": symbols_skipped[:50],
+        }
+
     def _build_data_readiness(
         self,
         *,
@@ -2930,6 +3032,15 @@ class MarketScannerService:
             elif quote_snapshot_state == "partial":
                 quote_coverage = "partial"
 
+        quote_optional_limitation = (
+            str(market or "").strip().lower() == "us"
+            and normalized_status == "completed"
+            and selected_count > 0
+            and history_coverage in {"available", "partial"}
+            and quote_coverage in {"missing", "stale"}
+        )
+        if quote_optional_limitation and blocker_hint in {"missing_quote_snapshot", "stale_quote_snapshot"}:
+            blocker_hint = "unknown"
         universe_reason = (
             "universe_missing"
             if universe_availability == "missing"
@@ -2970,11 +3081,16 @@ class MarketScannerService:
         )
 
         candidate_generation_blockers: List[str] = []
+        candidate_generation_limitations: List[str] = []
         if universe_availability in {"missing", "empty", "stale"}:
             candidate_generation_blockers.append(universe_reason)
-        if quote_coverage == "missing":
+        if quote_coverage == "missing" and quote_optional_limitation:
+            candidate_generation_limitations.append("quote_unavailable_or_stale")
+        elif quote_coverage == "missing":
             candidate_generation_blockers.append("missing_quote_snapshot")
-        if quote_coverage == "stale":
+        if quote_coverage == "stale" and quote_optional_limitation:
+            candidate_generation_limitations.append("quote_unavailable_or_stale")
+        elif quote_coverage == "stale":
             candidate_generation_blockers.append("stale_quote_snapshot")
         if (
             quote_snapshot_state == "available"
@@ -2992,6 +3108,13 @@ class MarketScannerService:
         if blocker_hint not in {"unknown", *candidate_generation_blockers}:
             candidate_generation_blockers.append(blocker_hint)
         candidate_generation_blockers = list(dict.fromkeys(candidate_generation_blockers))
+        candidate_generation_limitations = list(dict.fromkeys(candidate_generation_limitations))
+        exact_blocked_states = self._exact_candidate_blocked_states(
+            status=normalized_status,
+            candidate_generation_blockers=candidate_generation_blockers,
+            selected_count=selected_count,
+            universe_availability=universe_availability,
+        )
         missing_data_families = self._scanner_missing_data_families(
             universe_availability=universe_availability,
             quote_coverage=quote_coverage,
@@ -3061,6 +3184,8 @@ class MarketScannerService:
         )
         if state == "ready" and not candidate_generation_blockers:
             candidate_generation_state = "ready"
+        elif selected_count > 0 and not candidate_generation_blockers and candidate_generation_limitations:
+            candidate_generation_state = "degraded"
         elif state == "partial" and not any(
             item in candidate_generation_blockers
             for item in (
@@ -3078,6 +3203,11 @@ class MarketScannerService:
         else:
             candidate_generation_state = "blocked"
         consumer_summary, next_data_action = self._data_readiness_copy(blocker_hint, state)
+        lineage = self._scanner_run_lineage(
+            diagnostics=diagnostics,
+            candidates=candidates,
+            ohlcv_readiness=ohlcv_readiness,
+        )
 
         return {
             "state": state,
@@ -3131,7 +3261,19 @@ class MarketScannerService:
             },
             "candidateGenerationState": candidate_generation_state,
             "candidateGenerationBlockers": candidate_generation_blockers,
+            "candidateGenerationLimitations": candidate_generation_limitations,
+            "blockedStates": exact_blocked_states,
+            "primaryBlockedState": exact_blocked_states[0] if exact_blocked_states else None,
             "freshness": freshness,
+            "quoteFreshness": diagnostics.get("quoteFreshness") or quote_coverage,
+            "quoteReadinessLimitation": diagnostics.get("quoteReadinessLimitation"),
+            "universeSource": diagnostics.get("universeSource") or lineage["universeSource"],
+            "symbolsEvaluated": lineage["symbolsEvaluated"],
+            "symbolsWithSufficientData": lineage["symbolsWithSufficientData"],
+            "symbolsSkipped": lineage["symbolsSkipped"],
+            "noExternalCalls": bool(diagnostics.get("noExternalCalls")) if diagnostics.get("noExternalCalls") is not None else False,
+            "providerCallsEnabled": bool(diagnostics.get("providerCallsEnabled")) if diagnostics.get("providerCallsEnabled") is not None else True,
+            "historicalOhlcvReadinessSummary": ohlcv_readiness,
             "requiredBars": int(ohlcv_readiness.get("requiredBars") or 0),
             "usableBars": int(ohlcv_readiness.get("usableBars") or 0),
             "missingBars": int(ohlcv_readiness.get("missingBars") or 0),
@@ -3566,16 +3708,27 @@ class MarketScannerService:
             )
 
         preselected_df = market_options["compute_pre_rank"](universe_df).head(resolved_detail_limit).reset_index(drop=True)
+        use_history_only_quote_context = (
+            profile_config.market == "us"
+            and str((universe_selection or {}).get("universe_type") or "default").strip().lower() == "default"
+            and coverage_strategy == "bounded_starter_local_only"
+        )
         evaluated_candidates, quote_diag_rollup = self._evaluate_quote_market_candidates(
             preselected_rows=preselected_df.to_dict("records"),
             history_cache=history_cache,
-            quote_loader=market_options["load_quote_context"],
+            quote_loader=(
+                self._load_us_history_only_quote_context
+                if use_history_only_quote_context
+                else market_options["load_quote_context"]
+            ),
             candidate_builder=market_options["build_candidate"],
             benchmark_context=benchmark_context,
             profile_config=profile_config,
         )
         if (
-            self._readiness_int(quote_diag_rollup.get("attempted_candidates")) > 0
+            profile_config.market != "us"
+            and not use_history_only_quote_context
+            and self._readiness_int(quote_diag_rollup.get("attempted_candidates")) > 0
             and self._readiness_int(quote_diag_rollup.get("available_candidates")) <= 0
         ):
             snapshot_resolution = self._build_quote_snapshot_resolution(
@@ -3715,6 +3868,16 @@ class MarketScannerService:
             },
             "universe_selection": self._public_universe_selection(universe_selection),
             "candidate_diagnostics": history_cache.get("candidate_diagnostics") or {},
+            "universeSource": str(universe_resolution.get("universeSource") or universe_source),
+            "noExternalCalls": bool(use_history_only_quote_context or universe_resolution.get("noExternalCalls")),
+            "providerCallsEnabled": False if use_history_only_quote_context else None,
+            "quoteFreshness": "unavailable" if use_history_only_quote_context else "unknown",
+            "quoteReadinessLimitation": (
+                "Quote data was unavailable for this local bounded run; candidates use historical OHLCV evidence only."
+                if use_history_only_quote_context
+                else None
+            ),
+            "boundedStarterUniverse": list(universe_resolution.get("boundedStarterUniverse") or []),
         }
         source_summary = self._build_source_summary(
             universe_source=universe_source,
@@ -4127,7 +4290,12 @@ class MarketScannerService:
             return added
 
         parquet_dir = get_us_stock_parquet_dir()
-        parquet_symbols = self._load_local_us_universe_from_parquet(parquet_dir)
+        starter_symbols = set(BOUNDED_US_LOCAL_SCANNER_UNIVERSE_SYMBOLS)
+        parquet_symbols = [
+            symbol
+            for symbol in self._load_local_us_universe_from_parquet(parquet_dir)
+            if symbol in starter_symbols
+        ]
         if parquet_symbols:
             added = _merge_symbols(parquet_symbols, source_name="local_us_parquet_dir")
             attempts.append(
@@ -4147,7 +4315,11 @@ class MarketScannerService:
                 }
             )
 
-        db_symbols = self._load_local_us_universe_from_db()
+        db_symbols = [
+            symbol
+            for symbol in self._load_local_us_universe_from_db()
+            if symbol in starter_symbols
+        ]
         if db_symbols:
             added = _merge_symbols(db_symbols, source_name="local_db_us_history")
             attempts.append(
@@ -4168,48 +4340,30 @@ class MarketScannerService:
             )
 
         local_symbol_count = int(len(combined_symbols))
-        resolved_target_symbol_count = min(
-            max(int(target_symbol_count or 0), int(profile.detail_limit or 0), MIN_US_SCANNER_SEED_TARGET),
-            MAX_US_SCANNER_SUPPLEMENT_TARGET,
-        )
+        resolved_target_symbol_count = len(BOUNDED_US_LOCAL_SCANNER_UNIVERSE_SYMBOLS)
         supplemented_seed_count = 0
-        if len(combined_symbols) < resolved_target_symbol_count:
-            supplement_pool = [symbol for symbol in CURATED_US_LIQUID_SEED_SYMBOLS if symbol not in seen_symbols]
-            required = max(0, resolved_target_symbol_count - len(combined_symbols))
-            supplement_symbols = supplement_pool[:required]
-            supplemented_seed_count = _merge_symbols(
-                supplement_symbols,
-                source_name="curated_us_liquid_seed",
-            )
-            if supplemented_seed_count:
-                attempts.append(
-                    {
-                        "fetcher": "curated_us_liquid_seed",
-                        "status": "success",
-                        "rows": int(supplemented_seed_count),
-                        "reason_code": "coverage_supplement",
-                    }
-                )
 
         if combined_symbols:
-            coverage_strategy = (
-                "seed_only"
-                if local_symbol_count == 0 and supplemented_seed_count > 0
-                else "seed_supplemented"
-                if supplemented_seed_count > 0
-                else "local_only"
-            )
+            ordered_symbols = [
+                symbol
+                for symbol in BOUNDED_US_LOCAL_SCANNER_UNIVERSE_SYMBOLS
+                if symbol in seen_symbols
+            ]
             return {
                 "success": True,
                 "source": "+".join(source_parts) if source_parts else "curated_us_liquid_seed",
-                "data": combined_symbols,
+                "data": ordered_symbols,
                 "attempts": attempts,
                 "path": str(parquet_dir),
                 "local_symbol_count": local_symbol_count,
                 "supplemented_seed_count": int(supplemented_seed_count),
-                "final_symbol_count": int(len(combined_symbols)),
+                "final_symbol_count": int(len(ordered_symbols)),
                 "target_symbol_count": int(resolved_target_symbol_count),
-                "coverage_strategy": coverage_strategy,
+                "coverage_strategy": "bounded_starter_local_only",
+                "universeSource": "bounded_starter_market_data_spine",
+                "boundedStarterUniverse": list(BOUNDED_US_LOCAL_SCANNER_UNIVERSE_SYMBOLS),
+                "noExternalCalls": True,
+                "providerCallsEnabled": False,
             }
 
         return {
@@ -4217,8 +4371,8 @@ class MarketScannerService:
             "source": None,
             "data": [],
             "attempts": attempts,
-            "error_code": "us_universe_unavailable",
-            "error_message": "未发现可扫描的美股 universe。请准备 LOCAL_US_PARQUET_DIR/US_STOCK_PARQUET_DIR，或先让本地 stock_daily 落入可用的美股日线数据。",
+            "error_code": "no_local_universe",
+            "error_message": "未发现可扫描的 bounded starter 美股 universe。请准备 SPY/QQQ/AAPL/MSFT/NVDA/TSLA 的本地历史数据。",
         }
 
     @staticmethod
@@ -4683,6 +4837,28 @@ class MarketScannerService:
             "message": None,
         }
 
+    @staticmethod
+    def _load_us_history_only_quote_context(
+        *,
+        symbol: str,
+        reference_close: Optional[float],
+    ) -> Dict[str, Any]:
+        _ = symbol, reference_close
+        return {
+            "available": False,
+            "status": "not_required",
+            "source": "history_only_us_scan",
+            "price": None,
+            "change_pct": None,
+            "volume": None,
+            "amount": None,
+            "pre_close": None,
+            "gap_pct": None,
+            "name": None,
+            "trace": [],
+            "message": "quote unavailable; candidate generated from local historical OHLCV only",
+        }
+
     def _build_us_candidate_from_history(
         self,
         *,
@@ -4756,6 +4932,7 @@ class MarketScannerService:
                 "snapshot_source": quote_context.get("source") or "history_only_us_scan",
                 "quote_context": quote_context,
                 "benchmark_code": benchmark_context.get("benchmark_code"),
+                "market": profile.market,
                 "profile": profile.key,
             },
         }
@@ -9168,9 +9345,26 @@ class MarketScannerService:
         raw_score = explainability.get("raw_score")
         payload = {
             "symbol": candidate.symbol,
+            "market": str(diagnostics.get("market") or "").strip().lower(),
             "name": candidate.name,
             "rank": int(candidate.rank),
             "score": float(candidate.score),
+            "priority": self._candidate_priority(float(candidate.score)),
+            "reason": candidate.reason_summary,
+            "limitation": self._candidate_limitation(
+                {
+                    "risk_notes": _json_load(candidate.risk_notes_json, []),
+                    "watch_context": _json_load(candidate.watch_context_json, []),
+                    "quote_available": dict(diagnostics.get("quote_context") or {}).get("available"),
+                },
+                diagnostics if isinstance(diagnostics, dict) else {},
+            ),
+            "nextCheck": self._candidate_next_check(
+                {"watch_context": _json_load(candidate.watch_context_json, [])}
+            ),
+            "evidenceQuality": self._candidate_evidence_quality_label({}, diagnostics if isinstance(diagnostics, dict) else {}),
+            "dataFreshness": self._candidate_data_freshness({}, diagnostics if isinstance(diagnostics, dict) else {}),
+            "noAdviceDisclosure": "Observation-only research context; not investment advice.",
             "raw_score": float(raw_score) if raw_score is not None else float(candidate.score),
             "final_score": float(final_score) if final_score is not None else float(candidate.score),
             "quality_hint": candidate.quality_hint,
@@ -9207,6 +9401,73 @@ class MarketScannerService:
         _attach_candidate_public_boundaries(payload)
         return payload
 
+    @staticmethod
+    def _candidate_priority(score: Any) -> str:
+        value = _safe_float(score)
+        if value >= 70:
+            return "high"
+        if value >= 45:
+            return "medium"
+        return "low"
+
+    @staticmethod
+    def _candidate_limitation(candidate: Mapping[str, Any], diagnostics: Mapping[str, Any]) -> str:
+        quote_context = diagnostics.get("quote_context") if isinstance(diagnostics.get("quote_context"), Mapping) else {}
+        if quote_context and quote_context.get("available") is not True:
+            return "Latest quote freshness is unavailable or stale; this candidate uses historical price and volume observations only."
+        risk_notes = candidate.get("risk_notes")
+        if isinstance(risk_notes, Sequence) and not isinstance(risk_notes, (str, bytes, bytearray)):
+            for item in risk_notes:
+                text = str(item or "").strip()
+                if text:
+                    return text
+        return "Evidence remains observation-only and needs a freshness check before further research."
+
+    @staticmethod
+    def _candidate_next_check(candidate: Mapping[str, Any]) -> str:
+        watch_context = candidate.get("watch_context")
+        if isinstance(watch_context, Sequence) and not isinstance(watch_context, (str, bytes, bytearray)):
+            for item in watch_context:
+                if isinstance(item, Mapping):
+                    text = str(item.get("value") or item.get("label") or "").strip()
+                else:
+                    text = str(item or "").strip()
+                if text:
+                    return text
+        return "Recheck price, volume, and evidence freshness on the next scanner run."
+
+    @staticmethod
+    def _candidate_evidence_quality_label(candidate: Mapping[str, Any], diagnostics: Mapping[str, Any]) -> str:
+        readiness = sanitize_historical_ohlcv_readiness(
+            candidate.get("historicalOhlcvReadiness")
+            or diagnostics.get("historicalOhlcvReadiness")
+            or (diagnostics.get("history") if isinstance(diagnostics.get("history"), Mapping) else {}).get("historicalOhlcvReadiness")
+        )
+        if readiness:
+            state = str(readiness.get("overallState") or readiness.get("providerState") or "unknown").strip().lower()
+            if state == "ready":
+                return "sufficient_ohlcv"
+            if state:
+                return state
+        explainability = diagnostics.get("score_explainability") if isinstance(diagnostics.get("score_explainability"), Mapping) else {}
+        coverage = _safe_float(explainability.get("evidence_coverage"), default=0.0)
+        if coverage >= 0.7:
+            return "sufficient"
+        if coverage > 0:
+            return "partial"
+        return "unknown"
+
+    @staticmethod
+    def _candidate_data_freshness(candidate: Mapping[str, Any], diagnostics: Mapping[str, Any]) -> Dict[str, Any]:
+        history = diagnostics.get("history") if isinstance(diagnostics.get("history"), Mapping) else {}
+        quote_context = diagnostics.get("quote_context") if isinstance(diagnostics.get("quote_context"), Mapping) else {}
+        return {
+            "historySource": history.get("source") or candidate.get("history_source") or "unknown",
+            "historyLatestTradeDate": history.get("latest_trade_date") or candidate.get("last_trade_date"),
+            "quoteState": "available" if quote_context.get("available") is True else "unavailable_or_stale",
+            "quoteSource": quote_context.get("source"),
+        }
+
     def _public_candidate_dict(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
         diagnostics = {
             **dict(candidate.get("_diagnostics") or {}),
@@ -9218,9 +9479,17 @@ class MarketScannerService:
         raw_score = candidate.get("raw_score", explainability.get("raw_score", candidate.get("score")))
         payload = {
             "symbol": candidate["symbol"],
+            "market": str(candidate.get("market") or diagnostics.get("market") or "").strip().lower(),
             "name": candidate["name"],
             "rank": int(candidate.get("rank") or 0),
             "score": float(final_score or 0.0),
+            "priority": self._candidate_priority(final_score or 0.0),
+            "reason": str(candidate.get("reason_summary") or ""),
+            "limitation": self._candidate_limitation(candidate, diagnostics),
+            "nextCheck": self._candidate_next_check(candidate),
+            "evidenceQuality": self._candidate_evidence_quality_label(candidate, diagnostics),
+            "dataFreshness": self._candidate_data_freshness(candidate, diagnostics),
+            "noAdviceDisclosure": "Observation-only research context; not investment advice.",
             "raw_score": float(raw_score or 0.0),
             "final_score": float(final_score or 0.0),
             "quality_hint": candidate.get("quality_hint"),

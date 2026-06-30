@@ -475,6 +475,19 @@ class ResearchRadarService:
             "symbol": symbol,
             "ticker": symbol,
             "priority": _priority(item.get("priority")),
+            "reason": _safe_public_sentence(
+                source_candidate.get("reason") or source_candidate.get("reason_summary"),
+                fallback="Scanner surfaced this symbol from observable price, volume, or structure evidence.",
+            ),
+            "limitation": _safe_public_sentence(
+                source_candidate.get("limitation"),
+                fallback="Evidence remains observation-only and needs a freshness check before further research.",
+            ),
+            "nextCheck": _safe_public_sentence(
+                source_candidate.get("nextCheck") or source_candidate.get("next_check"),
+                fallback="Recheck price, volume, and evidence freshness on the next scanner run.",
+            ),
+            "dataFreshness": dict(_mapping(source_candidate.get("dataFreshness") or source_candidate.get("data_freshness"))),
             "researchBias": research_bias["label"],
             "researchBiasRaw": research_bias_raw,
             "researchBiasLabel": research_bias["label"],
@@ -1254,8 +1267,24 @@ def _scanner_candidate_to_engine_input(candidate: Any) -> dict[str, Any]:
         ]
     )
     evidence_score = _evidence_score_from_frame(evidence_frame)
+    risk_notes = payload["risk_notes"] if isinstance(payload["risk_notes"], list) else []
+    watch_context = payload["watch_context"] if isinstance(payload["watch_context"], list) else []
+    limitation = _first_text(risk_notes) or "Evidence remains observation-only and needs a freshness check before further research."
+    next_check = _watch_context_text(watch_context) or "Recheck price, volume, and evidence freshness on the next scanner run."
+    quote_context = _mapping(diagnostics.get("quote_context"))
+    history = _mapping(diagnostics.get("history"))
     return {
         "ticker": payload["symbol"],
+        "symbol": payload["symbol"],
+        "reason": payload["reason_summary"] or "Scanner surfaced this symbol from observable price, volume, or structure evidence.",
+        "limitation": limitation,
+        "nextCheck": next_check,
+        "dataFreshness": {
+            "historySource": history.get("source") or "unknown",
+            "historyLatestTradeDate": history.get("latest_trade_date"),
+            "quoteState": "available" if quote_context.get("available") is True else "unavailable_or_stale",
+            "quoteSource": quote_context.get("source"),
+        },
         "relativeStrength": payload["score"],
         "volumeExpansion": _safe_float(component_scores.get("volume")) or None,
         "trendScore": _safe_float(component_scores.get("trend")) or None,
@@ -1399,6 +1428,25 @@ def _first_number(*mappings: Mapping[str, Any], keys: Sequence[str]) -> float | 
             if number is not None:
                 return number
     return None
+
+
+def _first_text(values: Sequence[Any]) -> str:
+    for value in values:
+        text = _text(value)
+        if text:
+            return text
+    return ""
+
+
+def _watch_context_text(values: Sequence[Any]) -> str:
+    for value in values:
+        if isinstance(value, Mapping):
+            text = _text(value.get("value") or value.get("label"))
+        else:
+            text = _text(value)
+        if text:
+            return text
+    return ""
 
 
 def _safe_float(value: Any) -> float | None:

@@ -749,6 +749,13 @@ def test_latest_scanner_reader_is_read_only_and_uses_user_scope() -> None:
     )
     assert repo.calls[1] == ("get_candidates_for_run", {"run_id": 8})
     assert payload["aggregateSummary"]["source"]["scannerRunId"] == 8
+    assert payload["marketLevelFallback"] is None
+    item = payload["researchQueue"][0]
+    assert item["reason"] == "Trend structure needs verification."
+    assert item["limitation"] == "Evidence is partial."
+    assert item["nextCheck"] == "Verify volume persistence."
+    assert item["dataFreshness"]["historyLatestTradeDate"] == "2026-06-14"
+    assert item["dataFreshness"]["quoteState"] == "unavailable_or_stale"
 
 
 def test_empty_consumer_radar_adds_onboarding_without_admin_leak_or_mutation() -> None:

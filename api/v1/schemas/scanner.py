@@ -893,9 +893,17 @@ def _build_candidate_diagnostic_consumer_projection(
 
 class ScannerCandidateResponse(BaseModel):
     symbol: str
+    market: Optional[str] = None
     name: str
     rank: int
     score: float
+    priority: Optional[str] = None
+    reason: Optional[str] = None
+    limitation: Optional[str] = None
+    nextCheck: Optional[str] = None
+    evidenceQuality: Optional[str] = None
+    dataFreshness: Dict[str, Any] = Field(default_factory=dict)
+    noAdviceDisclosure: Optional[str] = None
     raw_score: Optional[float] = None
     final_score: Optional[float] = None
     quality_hint: Optional[str] = None
