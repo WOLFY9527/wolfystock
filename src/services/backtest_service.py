@@ -27,12 +27,13 @@ from src.services.historical_ohlcv_readiness import (
     HistoricalOhlcvReadinessRequest,
     HistoricalOhlcvReadinessService,
 )
+from src.services.starter_market_data import STARTER_MARKET_DATA_SYMBOLS
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback
 from src.services.yfinance_us_ohlcv_cache_provider import build_readonly_local_us_ohlcv_cache_provider_from_env
 from src.storage import AnalysisHistory, BacktestResult, BacktestRun, BacktestSummary, DatabaseManager, StockDaily
 
 logger = logging.getLogger(__name__)
-LOCAL_BACKTEST_STARTER_SYMBOLS = ("SPY", "QQQ", "AAPL", "MSFT")
+LOCAL_BACKTEST_STARTER_SYMBOLS = STARTER_MARKET_DATA_SYMBOLS
 
 
 @dataclass(frozen=True)

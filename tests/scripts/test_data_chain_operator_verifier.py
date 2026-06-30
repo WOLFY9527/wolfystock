@@ -10,7 +10,7 @@ from scripts.data_chain_operator_verifier import build_data_chain_verifier_paylo
 
 
 START_DATE = date(2026, 1, 2)
-SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT"]
+SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"]
 
 
 def _write_ohlcv_cache(
@@ -124,7 +124,7 @@ def test_adjusted_ohlcv_available_but_quote_missing_reports_quote_snapshot(tmp_p
     payload = _build_payload(
         tmp_path,
         ohlcv_symbols=SYMBOLS,
-        quote_symbols=["SPY", "QQQ", "MSFT"],
+        quote_symbols=["SPY", "QQQ", "MSFT", "NVDA", "TSLA"],
     )
 
     assert payload["status"] == "partial"
@@ -139,7 +139,7 @@ def test_adjusted_ohlcv_available_but_quote_missing_reports_quote_snapshot(tmp_p
 def test_ohlcv_missing_reports_historical_ohlcv(tmp_path: Path) -> None:
     payload = _build_payload(
         tmp_path,
-        ohlcv_symbols=["SPY", "QQQ", "MSFT"],
+        ohlcv_symbols=["SPY", "QQQ", "MSFT", "NVDA", "TSLA"],
         quote_symbols=SYMBOLS,
     )
 

@@ -25,7 +25,7 @@ def test_cli_defaults_to_dry_run_and_emits_safe_summary() -> None:
     assert payload["networkCallsEnabled"] is False
     assert payload["mutationEnabled"] is False
     assert payload["representativeSymbols"]["cn"] == ["600519", "000001", "601398"]
-    assert payload["representativeSymbols"]["us"] == ["SPY", "QQQ", "AAPL", "MSFT"]
+    assert payload["representativeSymbols"]["us"] == ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"]
     assert "AkshareFetcher" not in json.dumps(payload, ensure_ascii=False)
 
 

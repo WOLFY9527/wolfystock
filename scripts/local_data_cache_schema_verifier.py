@@ -23,10 +23,11 @@ from src.services.quote_snapshot_readiness import (
     QuoteSnapshotReadinessRequest,
     QuoteSnapshotReadinessService,
 )
+from src.services.starter_market_data import STARTER_MARKET_DATA_SYMBOLS
 
 
 CONTRACT_VERSION = "local_data_cache_schema_verifier_v1"
-DEFAULT_US_SYMBOLS = ("SPY", "QQQ", "AAPL", "MSFT")
+DEFAULT_US_SYMBOLS = STARTER_MARKET_DATA_SYMBOLS
 CANONICAL_ADJUSTED_COLUMN = "adjusted_close"
 ADJUSTED_ALIASES = (
     "adjusted_close",

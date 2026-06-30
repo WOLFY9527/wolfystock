@@ -259,6 +259,39 @@ def test_spx_configured_quote_carries_delayed_source_and_trust_metadata() -> Non
     assert unavailable["trustLevel"] == "unavailable"
 
 
+def test_spx_uses_explicit_spy_proxy_when_index_quote_unavailable() -> None:
+    MarketOverviewService._cache.clear()
+    MarketOverviewService._market_data_cache.clear()
+    MarketOverviewService._market_cache.clear()
+    service = MarketOverviewService()
+    as_of = datetime.now(CN_TZ) - timedelta(minutes=20)
+
+    def history(ticker: str) -> _HistoryFrame:
+        if ticker == "SPY":
+            return _HistoryFrame([510.0, 512.5], as_of=as_of, volumes=[1_000_000, 1_100_000])
+        raise RuntimeError(f"{ticker} fixture unavailable")
+
+    log_patcher = _log_patch()
+    try:
+        with patch("src.services.market_overview_service.fetch_yfinance_quote_history_frame", side_effect=history):
+            payload = service.get_indices()
+    finally:
+        log_patcher.stop()
+
+    spx = _item(payload, "SPX")
+    assert spx["value"] == 512.5
+    assert spx["label"] == "S&P 500 proxy (SPY ETF)"
+    assert spx["unit"] == "USD"
+    assert spx["source"] == "yfinance_proxy"
+    assert spx["sourceType"] == "unofficial_proxy"
+    assert spx["proxyFor"] == "SPX"
+    assert spx["proxySymbol"] == "SPY"
+    assert spx["isProxy"] is True
+    assert spx["proxyFallback"] is True
+    assert spx["isFallback"] is False
+    assert spx["degradationReason"] == "official_index_unavailable_using_etf_proxy"
+
+
 def test_vix_official_quote_keeps_delayed_macro_semantics() -> None:
     service = MarketOverviewService()
     as_of = (datetime.now(CN_TZ) - timedelta(days=1)).date().isoformat()

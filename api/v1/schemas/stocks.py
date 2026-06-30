@@ -47,7 +47,7 @@ class StockQuote(BaseModel):
 
     stock_code: str = Field(..., description="股票代码")
     stock_name: Optional[str] = Field(None, description="股票名称")
-    current_price: float = Field(..., description="当前价格")
+    current_price: Optional[float] = Field(None, description="当前价格；不可用时为空，不使用占位价格")
     change: Optional[float] = Field(None, description="涨跌额")
     change_percent: Optional[float] = Field(None, description="涨跌幅 (%)")
     open: Optional[float] = Field(None, description="开盘价")
@@ -66,6 +66,12 @@ class StockQuote(BaseModel):
     is_stale: Optional[bool] = Field(None, alias="isStale", description="是否已标记为 stale")
     is_partial: Optional[bool] = Field(None, alias="isPartial", description="是否缺少部分 freshness/provenance 信息")
     is_synthetic: Optional[bool] = Field(None, alias="isSynthetic", description="是否为本地合成/占位行情")
+    is_unavailable: Optional[bool] = Field(None, alias="isUnavailable", description="是否为结构化不可用行情")
+    availability_state: Optional[str] = Field(None, alias="availabilityState", description="quote snapshot 可用性状态")
+    provider_state: Optional[str] = Field(None, alias="providerState", description="quote provider/cache 状态")
+    missing_requirements: List[str] = Field(default_factory=list, alias="missingRequirements", description="缺失的 quote 输入")
+    unavailable_reason: Optional[str] = Field(None, alias="unavailableReason", description="结构化不可用原因")
+    quote_readiness: Optional[Dict[str, Any]] = Field(None, alias="quoteReadiness", description="consumer-safe quote readiness")
     source_confidence: Optional[Dict[str, Any]] = Field(None, alias="sourceConfidence", description="行情来源可信度元信息")
 
 
@@ -140,6 +146,11 @@ class StockHistoryResponse(BaseModel):
     data: List[KLineData] = Field(default_factory=list, description="K 线数据列表")
     source: Optional[str] = Field(None, description="历史行情数据来源")
     diagnostics: Optional[Dict[str, Any]] = Field(None, description="历史行情数据可用性诊断")
+    historical_ohlcv_readiness: Optional[Dict[str, Any]] = Field(
+        None,
+        alias="historicalOhlcvReadiness",
+        description="consumer-safe historical OHLCV readiness metadata",
+    )
     source_confidence: Optional[Dict[str, Any]] = Field(None, alias="sourceConfidence", description="数据来源可信度元信息")
 
 

@@ -61,6 +61,7 @@ from src.services.scanner_universe_readiness import (
     build_scanner_universe_readiness_from_cache,
     build_scanner_universe_readiness_from_coverage,
 )
+from src.services.starter_market_data import STARTER_MARKET_DATA_SYMBOLS
 from src.services.provider_capability_matrix import get_provider_capability_support_contract
 from src.services.research_readiness_contract import build_research_readiness_v1
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback, get_us_stock_parquet_dir
@@ -86,7 +87,7 @@ DEFAULT_SCANNER_REVIEW_WINDOW_DAYS = 3
 DEFAULT_SCANNER_BENCHMARK_CODE = "000300"
 DEFAULT_US_SCANNER_BENCHMARK_CODE = "SPY"
 DEFAULT_HK_SCANNER_BENCHMARK_CODE = "HK02800"
-BOUNDED_US_LOCAL_SCANNER_UNIVERSE_SYMBOLS = ("SPY", "QQQ", "AAPL", "MSFT")
+BOUNDED_US_LOCAL_SCANNER_UNIVERSE_SYMBOLS = STARTER_MARKET_DATA_SYMBOLS
 MIN_US_SCANNER_SEED_TARGET = 24
 MAX_US_SCANNER_SUPPLEMENT_TARGET = 80
 MAX_HK_SCANNER_SUPPLEMENT_TARGET = 60

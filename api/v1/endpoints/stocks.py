@@ -582,6 +582,7 @@ def get_stock_quote(
             amount=result.get("amount"),
             update_time=result.get("update_time"),
             source=_consumer_safe_quote_source(result),
+            source_type=result.get("sourceType") or result.get("source_type"),
             market_timestamp=result.get("marketTimestamp") or result.get("market_timestamp"),
             observed_at=result.get("observedAt") or result.get("observed_at"),
             freshness=result.get("freshness"),
@@ -589,6 +590,13 @@ def get_stock_quote(
             is_stale=result.get("isStale") if "isStale" in result else result.get("is_stale"),
             is_partial=result.get("isPartial") if "isPartial" in result else result.get("is_partial"),
             is_synthetic=result.get("isSynthetic") if "isSynthetic" in result else result.get("is_synthetic"),
+            is_unavailable=result.get("isUnavailable") if "isUnavailable" in result else result.get("is_unavailable"),
+            availability_state=result.get("availabilityState") or result.get("availability_state"),
+            provider_state=result.get("providerState") or result.get("provider_state"),
+            missing_requirements=result.get("missingRequirements") or result.get("missing_requirements") or [],
+            unavailable_reason=result.get("unavailableReason") or result.get("unavailable_reason"),
+            quote_readiness=result.get("quoteReadiness") or result.get("quote_readiness"),
+            source_confidence=result.get("sourceConfidence") or result.get("source_confidence"),
         )
         
     except HTTPException:
@@ -687,7 +695,7 @@ def get_stock_intraday(
 def get_stock_history(
     stock_code: str,
     period: str = Query("daily", description="K 线周期", pattern="^(daily|weekly|monthly|yearly)$"),
-    days: int = Query(30, ge=1, le=3650, description="获取天数")
+    days: int = Query(90, ge=1, le=3650, description="获取天数")
 ) -> StockHistoryResponse:
     """
     获取股票历史行情
@@ -734,6 +742,7 @@ def get_stock_history(
             data=data,
             source=result.get("source"),
             diagnostics=result.get("diagnostics"),
+            historical_ohlcv_readiness=result.get("historicalOhlcvReadiness") or result.get("historical_ohlcv_readiness"),
             source_confidence=result.get("sourceConfidence") or result.get("source_confidence"),
         )
     

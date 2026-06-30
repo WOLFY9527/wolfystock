@@ -14,10 +14,11 @@ from src.services.quote_snapshot_readiness import (
     QuoteSnapshotReadinessRequest,
     QuoteSnapshotReadinessService,
 )
+from src.services.starter_market_data import STARTER_MARKET_DATA_SYMBOLS
 
 
 MARKET_REGIME_EVIDENCE_CONTRACT_VERSION = "market_regime_evidence_pack_v1"
-DEFAULT_MARKET_REGIME_SYMBOLS = ("SPY", "QQQ", "AAPL", "MSFT")
+DEFAULT_MARKET_REGIME_SYMBOLS = STARTER_MARKET_DATA_SYMBOLS
 DEFAULT_BENCHMARK_SYMBOL = "SPY"
 DEFAULT_GROWTH_PROXY_SYMBOL = "QQQ"
 DEFAULT_REQUIRED_BARS = 60

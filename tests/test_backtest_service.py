@@ -541,7 +541,7 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["missingBars"], status["eval_window_days"])
 
     def test_aggregate_sample_status_exposes_local_symbol_readiness_without_masking(self) -> None:
-        for symbol in ("SPY", "QQQ", "AAPL", "MSFT"):
+        for symbol in ("SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"):
             self._write_local_us_parquet(self._temp_dir.name, symbol, rows=90)
         service = BacktestService(self.db)
 
@@ -562,7 +562,7 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(aggregate["scope"], "aggregate")
         self.assertEqual(aggregate["sample_readiness_state"], "missing_cache")
         symbol_readiness = aggregate["symbolSpecificReadiness"]
-        self.assertEqual([item["symbol"] for item in symbol_readiness], ["SPY", "QQQ", "AAPL", "MSFT"])
+        self.assertEqual([item["symbol"] for item in symbol_readiness], ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"])
         self.assertTrue(all(item["historicalOhlcvState"] == "ready" for item in symbol_readiness))
         self.assertTrue(all(item["providerState"] == "available" for item in symbol_readiness))
         self.assertEqual(spy["historicalOhlcvReadiness"]["providerState"], "available")

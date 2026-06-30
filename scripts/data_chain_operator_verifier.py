@@ -27,11 +27,12 @@ from src.services.local_quote_snapshot_provider import LocalQuoteSnapshotJsonPro
 from src.services.quote_snapshot_readiness import QuoteSnapshotReadinessRequest, QuoteSnapshotReadinessService
 from src.services.scanner_ohlcv_readiness import summarize_scanner_ohlcv_readiness
 from src.services.scanner_universe_readiness import build_scanner_universe_readiness_from_coverage
+from src.services.starter_market_data import STARTER_MARKET_DATA_SYMBOLS
 from src.services.yfinance_us_ohlcv_cache_provider import YfinanceUsOhlcvCacheProvider
 
 
 CONTRACT_VERSION = "data_chain_operator_verifier_v1"
-DEFAULT_US_SYMBOLS = ("SPY", "QQQ", "AAPL", "MSFT")
+DEFAULT_US_SYMBOLS = STARTER_MARKET_DATA_SYMBOLS
 SCANNER_BLOCKING_FAMILIES = ("historical_ohlcv", "adjusted_prices", "quote_snapshot")
 
 

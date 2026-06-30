@@ -134,7 +134,7 @@ class _ScannerUniverseOperatorFixture:
                 "lastUpdatedAt": "2026-06-20T00:00:00+00:00",
                 "sourceClass": "local_bounded_us_parquet_universe",
                 "sourcePath": "LOCAL_US_PARQUET_DIR",
-                "symbols": ["SPY", "QQQ", "AAPL", "MSFT"],
+                "symbols": ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"],
                 "generatedFrom": "LOCAL_US_PARQUET_DIR",
                 "noExternalCalls": True,
                 "providerCallsEnabled": False,
@@ -364,7 +364,7 @@ def test_admin_scanner_universe_readiness_preserves_local_source_metadata(app: F
     readiness = payload["scannerUniverseReadiness"]
     assert readiness["sourceClass"] == "local_bounded_us_parquet_universe"
     assert readiness["sourcePath"] == "LOCAL_US_PARQUET_DIR"
-    assert readiness["symbols"] == ["SPY", "QQQ", "AAPL", "MSFT"]
+    assert readiness["symbols"] == ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"]
     assert readiness["generatedFrom"] == "LOCAL_US_PARQUET_DIR"
     assert readiness["noExternalCalls"] is True
     assert readiness["providerCallsEnabled"] is False

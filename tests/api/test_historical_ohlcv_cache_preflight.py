@@ -95,7 +95,7 @@ class _FakePreflightService:
                     "failed_safely",
                 ],
                 "starterSymbolSets": {
-                    "us": {"label": "US first cache activation set", "symbols": ["SPY", "QQQ", "AAPL", "MSFT"], "supported": True},
+                    "us": {"label": "US first cache activation set", "symbols": ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"], "supported": True},
                     "cnIfSupported": {"label": "CN first cache activation set if the local CN runtime is supported", "symbols": ["600519", "000001", "601398"], "supported": True},
                 },
                 "workflowUnlocks": ["Stock", "Scanner", "Backtest", "Technical Indicators", "Market Regime"],
@@ -132,7 +132,7 @@ class _FakePreflightService:
                     "failed_safely",
                 ],
                 "starterSymbolSets": {
-                    "us": {"label": "US first cache activation set", "symbols": ["SPY", "QQQ", "AAPL", "MSFT"], "supported": True},
+                    "us": {"label": "US first cache activation set", "symbols": ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"], "supported": True},
                     "cnIfSupported": {"label": "CN first cache activation set if the local CN runtime is supported", "symbols": ["600519", "000001", "601398"], "supported": True},
                 },
                 "workflowUnlocks": ["Stock", "Scanner", "Backtest", "Technical Indicators", "Market Regime"],
@@ -184,7 +184,7 @@ def test_preflight_endpoint_returns_dry_run_payload_and_parses_symbols() -> None
             "failed_safely",
         ],
         "starterSymbolSets": {
-            "us": {"label": "US first cache activation set", "symbols": ["SPY", "QQQ", "AAPL", "MSFT"], "supported": True},
+            "us": {"label": "US first cache activation set", "symbols": ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"], "supported": True},
             "cnIfSupported": {"label": "CN first cache activation set if the local CN runtime is supported", "symbols": ["600519", "000001", "601398"], "supported": True},
         },
         "workflowUnlocks": ["Stock", "Scanner", "Backtest", "Technical Indicators", "Market Regime"],
@@ -192,7 +192,7 @@ def test_preflight_endpoint_returns_dry_run_payload_and_parses_symbols() -> None
     }
     assert service.preflight_calls == [
         {
-            "symbols_by_market": {"cn": ["600519", "000001"], "us": ["SPY", "QQQ", "AAPL", "MSFT"]},
+            "symbols_by_market": {"cn": ["600519", "000001"], "us": ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"]},
             "required_bars": 30,
             "require_adjusted": True,
             "dry_run": True,
