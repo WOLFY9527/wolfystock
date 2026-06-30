@@ -3927,6 +3927,56 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["ohlcvReadiness"]["blockedSymbols"], [])
         self.assertEqual(data_manager.daily_history_calls, [])
 
+    def test_default_us_scan_generates_bounded_starter_candidates_from_local_ohlcv_without_live_quotes(self) -> None:
+        cache_dir = Path(self._cache_temp_dir.name) / "us-starter-cache"
+        for symbol in ("SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA", "PLTR"):
+            _write_local_us_parquet(cache_dir, symbol, rows=90)
+        data_manager = FakeUsScannerDataManager()
+        data_manager.us_quotes.clear()
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": str(cache_dir),
+                "US_STOCK_PARQUET_DIR": "",
+                "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "",
+                "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "",
+            },
+            clear=False,
+        ):
+            service = MarketScannerService(self.db, data_manager=data_manager)
+            detail = service.run_scan(
+                market="us",
+                profile="us_preopen_v1",
+                shortlist_size=3,
+                universe_limit=50,
+                detail_limit=10,
+            )
+
+        self.assertEqual(detail["status"], "completed")
+        self.assertGreater(len(detail["shortlist"]), 0)
+        self.assertEqual(data_manager.realtime_quote_calls, [])
+        self.assertNotIn("PLTR", detail["dataReadiness"]["symbolsEvaluated"])
+        self.assertEqual(detail["dataReadiness"]["universeSource"], "bounded_starter_market_data_spine")
+        self.assertTrue(detail["dataReadiness"]["noExternalCalls"])
+        self.assertFalse(detail["dataReadiness"]["providerCallsEnabled"])
+        self.assertEqual(detail["dataReadiness"]["candidateGenerationState"], "degraded")
+        self.assertEqual(detail["dataReadiness"]["candidateGenerationLimitations"], ["quote_unavailable_or_stale"])
+        self.assertEqual(detail["dataReadiness"]["candidateGenerationBlockers"], [])
+        self.assertEqual(detail["dataReadiness"]["blockedStates"], [])
+        self.assertEqual(detail["dataReadiness"]["historicalOhlcvReadinessSummary"]["executionState"], "executable")
+        self.assertTrue(set(detail["dataReadiness"]["symbolsEvaluated"]).issubset({"QQQ", "AAPL", "MSFT", "NVDA", "TSLA"}))
+
+        candidate = detail["shortlist"][0]
+        self.assertEqual(candidate["market"], "us")
+        self.assertIn(candidate["priority"], {"high", "medium", "low"})
+        self.assertTrue(candidate["reason"])
+        self.assertIn("Latest quote freshness", candidate["limitation"])
+        self.assertTrue(candidate["nextCheck"])
+        self.assertEqual(candidate["evidenceQuality"], "sufficient_ohlcv")
+        self.assertEqual(candidate["dataFreshness"]["quoteState"], "unavailable_or_stale")
+        self.assertEqual(candidate["noAdviceDisclosure"], "Observation-only research context; not investment advice.")
+
     def test_not_run_status_activates_bounded_us_local_parquet_universe(self) -> None:
         cache_dir = Path(self._cache_temp_dir.name) / "us-parquet-cache"
         for symbol in ("SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"):
@@ -4027,7 +4077,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["candidateGenerationBlockers"], [])
         self.assertEqual(data_manager.realtime_quote_calls, ["NVDA", "AAPL"])
 
-    def test_stale_quote_snapshot_blocks_scanner_readiness_with_freshness_family(self) -> None:
+    def test_stale_quote_snapshot_limits_scanner_candidates_with_freshness_family(self) -> None:
         provider = FakeHistoricalOhlcvProvider(
             {
                 symbol: HistoricalOhlcvProviderResult.available(
@@ -4049,29 +4099,31 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             quote_snapshot_provider=FakeQuoteSnapshotProvider(stale_quotes),
         )
 
-        with self.assertRaises(ScannerRuntimeError) as ctx:
-            service.run_scan(
-                market="us",
-                profile="us_preopen_v1",
-                shortlist_size=2,
-                universe_limit=50,
-                detail_limit=10,
-                universe_type="symbols",
-                symbols=["NVDA", "AAPL"],
-            )
+        detail = service.run_scan(
+            market="us",
+            profile="us_preopen_v1",
+            shortlist_size=2,
+            universe_limit=50,
+            detail_limit=10,
+            universe_type="symbols",
+            symbols=["NVDA", "AAPL"],
+        )
 
-        readiness = ctx.exception.diagnostics["dataReadiness"]
+        readiness = detail["dataReadiness"]
+        self.assertEqual(detail["status"], "completed")
+        self.assertGreater(len(detail["shortlist"]), 0)
         self.assertEqual(readiness["quoteReadiness"]["state"], "stale")
         self.assertEqual(readiness["quoteReadiness"]["staleSymbols"], ["NVDA", "AAPL"])
-        self.assertIn("stale_quote_snapshot", readiness["candidateGenerationBlockers"])
+        self.assertEqual(readiness["candidateGenerationBlockers"], [])
+        self.assertEqual(readiness["candidateGenerationLimitations"], ["quote_unavailable_or_stale"])
         self.assertIn("quote_snapshot", readiness["scannerUniverseReadiness"]["missingDataFamilies"])
         self.assertIn("freshness", readiness["scannerUniverseReadiness"]["missingDataFamilies"])
         self.assertIn("Refresh quote snapshot", readiness["scannerUniverseReadiness"]["nextOperatorAction"])
         self.assertNotIn("Configure", readiness["scannerUniverseReadiness"]["nextOperatorAction"])
-        self.assertEqual(readiness["candidateEvaluationCount"], 0)
-        self.assertEqual(readiness["selectedCount"], 0)
+        self.assertGreater(readiness["candidateEvaluationCount"], 0)
+        self.assertGreater(readiness["selectedCount"], 0)
 
-    def test_seeded_ohlcv_symbols_are_visible_but_missing_quotes_do_not_emit_candidates(self) -> None:
+    def test_seeded_ohlcv_symbols_emit_observation_candidates_when_quotes_are_missing(self) -> None:
         provider = FakeHistoricalOhlcvProvider(
             {
                 symbol: HistoricalOhlcvProviderResult.available(
@@ -4089,26 +4141,25 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             historical_ohlcv_provider=provider,
         )
 
-        with patch.object(service, "_prepare_shortlist", wraps=service._prepare_shortlist) as prepare_shortlist:
-            with self.assertRaises(ScannerRuntimeError) as ctx:
-                service.run_scan(
-                    market="us",
-                    profile="us_preopen_v1",
-                    shortlist_size=2,
-                    universe_limit=50,
-                    detail_limit=10,
-                    universe_type="symbols",
-                    symbols=["NVDA", "AAPL"],
-                )
+        detail = service.run_scan(
+            market="us",
+            profile="us_preopen_v1",
+            shortlist_size=2,
+            universe_limit=50,
+            detail_limit=10,
+            universe_type="symbols",
+            symbols=["NVDA", "AAPL"],
+        )
 
-        self.assertEqual(ctx.exception.reason_code, "missing_quote_or_snapshot")
-        prepare_shortlist.assert_not_called()
-        readiness = ctx.exception.diagnostics["dataReadiness"]
+        readiness = detail["dataReadiness"]
+        self.assertEqual(detail["status"], "completed")
+        self.assertGreater(len(detail["shortlist"]), 0)
         self.assertEqual(readiness["universeSize"], 2)
         self.assertEqual(readiness["historyReadiness"]["state"], "available")
         self.assertEqual(readiness["quoteReadiness"]["state"], "missing")
-        self.assertEqual(readiness["candidateGenerationState"], "blocked")
-        self.assertIn("missing_quote_snapshot", readiness["candidateGenerationBlockers"])
+        self.assertEqual(readiness["candidateGenerationState"], "degraded")
+        self.assertEqual(readiness["candidateGenerationLimitations"], ["quote_unavailable_or_stale"])
+        self.assertEqual(readiness["candidateGenerationBlockers"], [])
         universe_readiness = readiness["scannerUniverseReadiness"]
         self.assertEqual(universe_readiness["status"], "insufficient_coverage")
         self.assertEqual(universe_readiness["availableDataClasses"], ["universe", "historical_ohlcv"])
@@ -4117,7 +4168,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(universe_readiness["eligibleSymbols"], ["NVDA", "AAPL"])
         self.assertEqual(universe_readiness["blockedSymbols"], [])
         self.assertIn("Seeded historical OHLCV is usable", universe_readiness["nextOperatorAction"])
-        self.assertEqual(ctx.exception.diagnostics.get("shortlist"), None)
+        self.assertEqual(detail["shortlist"][0]["dataFreshness"]["quoteState"], "unavailable_or_stale")
 
     def test_seeded_degraded_ohlcv_symbols_block_candidates_when_quotes_and_adjustments_are_missing(self) -> None:
         provider = FakeHistoricalOhlcvProvider(

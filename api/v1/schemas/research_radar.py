@@ -109,6 +109,10 @@ class ResearchRadarQueueItemResponse(_ResearchRadarModel):
     symbol: str
     ticker: str
     priority: Literal["high", "medium", "low"]
+    reason: str | None = None
+    limitation: str | None = None
+    nextCheck: str | None = None
+    dataFreshness: dict[str, Any] = Field(default_factory=dict)
     researchBias: str
     researchBiasRaw: str
     researchBiasLabel: str
