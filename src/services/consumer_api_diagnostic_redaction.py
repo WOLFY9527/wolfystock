@@ -188,11 +188,14 @@ def _project_node(value: Any, *, surface: str | None = None) -> tuple[Any, dict[
 
 
 def _is_allowed_surface_value(surface: str | None, key: str, value: Any) -> bool:
-    if surface != "symbol-research-packet" or not isinstance(value, str):
+    if not isinstance(value, str):
         return False
-    if _normalize_key(key) not in {"state", "readinessstate"}:
-        return False
-    return value in {"provider_unavailable"}
+    normalized_key = _normalize_key(key)
+    if surface == "symbol-research-packet":
+        return normalized_key in {"state", "readinessstate"} and value in {"provider_unavailable"}
+    if surface == "options-chain":
+        return normalized_key == "providername" and value == "synthetic_fixture"
+    return False
 
 
 def _apply_context(output: dict[str, Any], context: dict[str, Any]) -> None:
