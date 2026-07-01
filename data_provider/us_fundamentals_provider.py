@@ -200,6 +200,9 @@ def get_yfinance_fundamentals(symbol: str) -> Dict[str, Any]:
     info = ticker.info or {}
 
     payload = {
+        "companyName": _first_defined(info.get("longName"), info.get("shortName"), info.get("displayName")),
+        "sector": _first_defined(info.get("sector"), info.get("sectorDisp")),
+        "industry": _first_defined(info.get("industry"), info.get("industryDisp")),
         "marketCap": _num(_first_defined(info.get("marketCap"), info.get("enterpriseValue"))),
         "trailingPE": _num(info.get("trailingPE")),
         "forwardPE": _num(info.get("forwardPE")),
@@ -222,6 +225,9 @@ def get_yfinance_fundamentals(symbol: str) -> Dict[str, Any]:
         "returnOnAssets": _num(info.get("returnOnAssets")),
         "_meta": {
             "field_periods": {
+                "companyName": "latest",
+                "sector": "latest",
+                "industry": "latest",
                 "marketCap": "latest",
                 "trailingPE": "ttm",
                 "forwardPE": "consensus",
@@ -244,6 +250,9 @@ def get_yfinance_fundamentals(symbol: str) -> Dict[str, Any]:
                 "returnOnAssets": "ttm",
             },
             "field_sources": {
+                "companyName": "yfinance",
+                "sector": "yfinance",
+                "industry": "yfinance",
                 "marketCap": "yfinance",
                 "trailingPE": "yfinance",
                 "forwardPE": "yfinance",
