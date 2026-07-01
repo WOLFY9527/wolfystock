@@ -3655,6 +3655,8 @@ class MarketOverviewService:
             return payload
         if not isinstance(payload.get("items"), list):
             return payload
+        if self._official_macro_runtime_overlay_present(payload):
+            return payload
         if self._official_macro_payload_has_required_authority(cache_key, payload):
             return payload
 
@@ -3669,6 +3671,21 @@ class MarketOverviewService:
         if cache_key == "rates":
             return self._align_official_macro_rates_payload(payload, official_points)
         return self._align_official_macro_macro_payload(payload, official_points)
+
+    @staticmethod
+    def _official_macro_runtime_overlay_present(payload: Mapping[str, Any]) -> bool:
+        items = payload.get("items")
+        if not isinstance(items, list):
+            return False
+        return any(
+            isinstance(item, Mapping)
+            and (
+                "officialOverlayAttempted" in item
+                or "officialOverlayAvailable" in item
+                or "officialOverlayFailureReason" in item
+            )
+            for item in items
+        )
 
     def _align_official_macro_volatility_payload(
         self,
@@ -5517,7 +5534,21 @@ class MarketOverviewService:
             proxy_seen = proxy_seen or item_proxy or item_state == "proxy"
             states.append(item_state)
         unique_states = set(states)
+        anchor_state = ""
+        source_freshness = payload.get("sourceFreshnessEvidence")
+        if isinstance(source_freshness, Mapping):
+            anchor_state = cls._normalize_market_overview_freshness_state(
+                source_freshness.get("freshness")
+            )
+            if source_freshness.get("isUnavailable"):
+                anchor_state = "unavailable"
+            elif source_freshness.get("isStale") and anchor_state in {"live", "delayed", "cached", "proxy"}:
+                anchor_state = "stale"
+            elif source_freshness.get("isProxy") and anchor_state in {"live", "delayed", "cached"}:
+                anchor_state = "proxy"
         if unavailable_seen and len(unique_states) > 1:
+            if anchor_state in {"live", "delayed", "cached", "proxy", "stale"}:
+                return anchor_state, None, proxy_seen or anchor_state == "proxy", True
             return "unavailable", "partial_unavailable_inputs", proxy_seen, True
         if unavailable_seen:
             return "unavailable", "unavailable_source", proxy_seen, False
@@ -7658,84 +7689,22 @@ class MarketOverviewService:
             self._official_macro_overlay_diagnostic_details = diagnostic_details
             return points
 
-        def fred_timeout_cap_for_series(series_id: str) -> float:
-            if series_id not in critical_fred_series_ids:
-                return float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
-            remaining_critical = [
-                critical_series_id
-                for critical_series_id in self.OFFICIAL_MACRO_CRITICAL_FRED_SERIES_IDS
-                if critical_series_id not in points and critical_series_id not in attempted_fred_series
-            ]
-            if len(remaining_critical) <= 1:
-                return float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
-            remaining_budget = self._deadline_remaining(deadline)
-            if remaining_budget <= 0:
-                return float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
-            fair_share = remaining_budget / float(len(remaining_critical))
-            floor = critical_fred_timeout_floor()
-            if floor > 0 and remaining_budget >= floor:
-                return min(
-                    float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS),
-                    max(floor, fair_share),
-                )
-            return min(
-                float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS),
-                fair_share,
-            )
-
-        for index, series_id in enumerate(fred_series_ids):
-            if series_id in points and points[series_id]:
-                continue
-            if series_id in attempted_fred_series:
-                continue
-            timeout_cap = fred_timeout_cap_for_series(series_id)
-            timeout = self._deadline_timeout(deadline, timeout_cap)
-            if timeout is None:
-                for remaining_series_id in fred_series_ids[index:]:
-                    if remaining_series_id not in points and remaining_series_id not in attempted_fred_series:
-                        self._record_official_macro_diagnostic(
-                            diagnostics,
-                            remaining_series_id,
-                            "budget_exhausted",
-                            diagnostic_details=diagnostic_details,
-                            details=self._official_macro_failure_details(
-                                remaining_series_id,
-                                "budget_exhausted",
-                                provider_name="fred",
-                                source_id=f"fred:{remaining_series_id}",
-                                attempted_at=_now_iso(),
-                            ),
-                        )
-                break
-            fetch_fred_series(series_id, timeout_cap=timeout_cap)
-            if fred_refresh_disabled_reason is not None:
-                for remaining_series_id in fred_series_ids[index + 1:]:
-                    if remaining_series_id not in points:
-                        self._record_official_macro_diagnostic(
-                            diagnostics,
-                            remaining_series_id,
-                            fred_refresh_disabled_reason,
-                            diagnostic_details=diagnostic_details,
-                            details=self._official_macro_failure_details(
-                                remaining_series_id,
-                                fred_refresh_disabled_reason,
-                                provider_name="fred",
-                                source_id=f"fred:{remaining_series_id}",
-                                attempted_at=_now_iso(),
-                                transport_details=fred_refresh_disabled_details,
-                            ),
-                        )
-                break
-
         missing_treasury_series_ids = {
             series_id for series_id in initial_missing_treasury_series_ids if series_id not in points
         }
-        treasury_attempt_series_ids = set(initial_missing_treasury_series_ids)
+        treasury_attempt_series_ids = set(missing_treasury_series_ids)
         if treasury_attempt_series_ids:
+            remaining_budget = self._deadline_remaining(deadline)
+            critical_missing_treasury_count = sum(
+                1 for series_id in treasury_attempt_series_ids if series_id in critical_fred_series_ids
+            )
+            treasury_budget_cap = remaining_budget
+            if critical_missing_treasury_count:
+                treasury_budget_cap = remaining_budget / float(critical_missing_treasury_count + 1)
             treasury_timeout_cap = min(
                 float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS),
                 float(self.OFFICIAL_MACRO_TREASURY_FALLBACK_TIMEOUT_CAP_SECONDS),
-                self._deadline_remaining(deadline),
+                treasury_budget_cap,
             )
             timeout = self._deadline_timeout(deadline, treasury_timeout_cap)
         else:
@@ -7889,6 +7858,75 @@ class MarketOverviewService:
                         attempted_at=_now_iso(),
                     ),
                 )
+
+        def fred_timeout_cap_for_series(series_id: str) -> float:
+            if series_id not in critical_fred_series_ids:
+                return float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
+            remaining_critical = [
+                critical_series_id
+                for critical_series_id in self.OFFICIAL_MACRO_CRITICAL_FRED_SERIES_IDS
+                if critical_series_id not in points and critical_series_id not in attempted_fred_series
+            ]
+            if len(remaining_critical) <= 1:
+                return float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
+            remaining_budget = self._deadline_remaining(deadline)
+            if remaining_budget <= 0:
+                return float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS)
+            fair_share = remaining_budget / float(len(remaining_critical))
+            floor = critical_fred_timeout_floor()
+            if floor > 0 and remaining_budget >= floor:
+                return min(
+                    float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS),
+                    max(floor, fair_share),
+                )
+            return min(
+                float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS),
+                fair_share,
+            )
+
+        for index, series_id in enumerate(fred_series_ids):
+            if series_id in points and points[series_id]:
+                continue
+            if series_id in attempted_fred_series:
+                continue
+            timeout_cap = fred_timeout_cap_for_series(series_id)
+            timeout = self._deadline_timeout(deadline, timeout_cap)
+            if timeout is None:
+                for remaining_series_id in fred_series_ids[index:]:
+                    if remaining_series_id not in points and remaining_series_id not in attempted_fred_series:
+                        self._record_official_macro_diagnostic(
+                            diagnostics,
+                            remaining_series_id,
+                            "budget_exhausted",
+                            diagnostic_details=diagnostic_details,
+                            details=self._official_macro_failure_details(
+                                remaining_series_id,
+                                "budget_exhausted",
+                                provider_name="fred",
+                                source_id=f"fred:{remaining_series_id}",
+                                attempted_at=_now_iso(),
+                            ),
+                        )
+                break
+            fetch_fred_series(series_id, timeout_cap=timeout_cap)
+            if fred_refresh_disabled_reason is not None:
+                for remaining_series_id in fred_series_ids[index + 1:]:
+                    if remaining_series_id not in points:
+                        self._record_official_macro_diagnostic(
+                            diagnostics,
+                            remaining_series_id,
+                            fred_refresh_disabled_reason,
+                            diagnostic_details=diagnostic_details,
+                            details=self._official_macro_failure_details(
+                                remaining_series_id,
+                                fred_refresh_disabled_reason,
+                                provider_name="fred",
+                                source_id=f"fred:{remaining_series_id}",
+                                attempted_at=_now_iso(),
+                                transport_details=fred_refresh_disabled_details,
+                            ),
+                        )
+                break
         attach_provider_attempt_details()
         self._official_macro_overlay_diagnostics = diagnostics
         self._official_macro_overlay_diagnostic_details = diagnostic_details
