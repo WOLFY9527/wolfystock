@@ -4054,6 +4054,30 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["selectedCount"], 0)
         self.assertEqual(readiness["candidateEvaluationCount"], 0)
 
+    def test_not_run_status_keeps_scanner_starter_universe_when_tier1_coverage_is_configured(self) -> None:
+        cache_dir = Path(self._cache_temp_dir.name) / "us-tier1-cache"
+        for symbol in ("SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA", "PLTR"):
+            (cache_dir / f"{symbol}.parquet").parent.mkdir(parents=True, exist_ok=True)
+            (cache_dir / f"{symbol}.parquet").touch()
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": str(cache_dir),
+                "US_STOCK_PARQUET_DIR": "",
+                "WOLFYSTOCK_US_OHLCV_TIER1_SYMBOLS": "NVDA,AAPL,PLTR",
+                "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "",
+                "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "",
+            },
+            clear=False,
+        ):
+            service = MarketScannerService(self.db, data_manager=FakeUsScannerDataManager())
+            status = service.get_operational_status(market="us", profile="us_preopen_v1")
+
+        scanner_readiness = status["dataReadiness"]["scannerUniverseReadiness"]
+        self.assertEqual(scanner_readiness["symbols"], ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"])
+        self.assertNotIn("PLTR", scanner_readiness["symbols"])
+
     def test_not_run_status_keeps_us_local_universe_missing_when_parquet_cache_missing(self) -> None:
         missing_dir = Path(self._cache_temp_dir.name) / "missing-us-parquet-cache"
 

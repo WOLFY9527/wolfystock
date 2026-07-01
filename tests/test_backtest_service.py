@@ -572,6 +572,38 @@ class BacktestServiceTestCase(unittest.TestCase):
             spy["historicalOhlcvReadiness"]["providerState"],
         )
 
+    def test_aggregate_sample_status_uses_configured_tier1_us_coverage_symbols(self) -> None:
+        service = BacktestService(self.db)
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": self._temp_dir.name,
+                "US_STOCK_PARQUET_DIR": "",
+                "WOLFYSTOCK_US_OHLCV_TIER1_SYMBOLS": "NVDA,AAPL,PLTR",
+            },
+            clear=False,
+        ), patch.object(
+            service,
+            "_build_historical_ohlcv_readiness",
+            side_effect=lambda *, code, rows, required_bars, **_: {
+                "overallState": "ready",
+                "providerState": "available",
+                "usableBars": required_bars,
+                "missingBars": 0,
+                "missingRequirements": [],
+            },
+        ) as readiness_mock:
+            aggregate = service.get_sample_status(code=None)
+
+        self.assertEqual(
+            [call.kwargs["code"] for call in readiness_mock.call_args_list],
+            ["NVDA", "AAPL", "PLTR"],
+        )
+        symbol_readiness = aggregate["symbolSpecificReadiness"]
+        self.assertEqual([item["symbol"] for item in symbol_readiness], ["NVDA", "AAPL", "PLTR"])
+        self.assertTrue(all(item["providerState"] == "available" for item in symbol_readiness))
+
     def test_run_history_is_recorded_and_results_can_be_reopened(self) -> None:
         service = BacktestService(self.db)
         stats = service.run_backtest(code="600519", force=False, eval_window_days=3, min_age_days=0, limit=10)
