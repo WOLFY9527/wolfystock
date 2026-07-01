@@ -12,13 +12,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 import src.auth as auth
 from api.middlewares.auth import add_auth_middleware
 from api.v1 import api_v1_router
 from api.v1.endpoints import options, scanner
+from tests.api.route_table_helpers import iter_effective_api_routes
 from src.services.stock_structure_decision_service import STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION
 
 
@@ -356,8 +356,7 @@ def test_launch_surface_route_inventory_remains_stable_and_fixture_safe() -> Non
     app.include_router(api_v1_router)
     routes = {
         (method, route.path)
-        for route in app.routes
-        if isinstance(route, APIRoute)
+        for route in iter_effective_api_routes(app.routes)
         for method in (route.methods or set())
         if method not in {"HEAD", "OPTIONS"}
     }
@@ -412,8 +411,7 @@ def test_legacy_api_v1_openapi_path_is_unsupported_not_a_docs_surface() -> None:
     app.include_router(api_v1_router)
     route_signatures = {
         (method, route.path)
-        for route in app.routes
-        if isinstance(route, APIRoute)
+        for route in iter_effective_api_routes(app.routes)
         for method in (route.methods or set())
         if method not in {"HEAD", "OPTIONS"}
     }
