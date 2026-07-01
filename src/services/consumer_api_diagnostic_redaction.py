@@ -238,7 +238,10 @@ def _collect_from_removed(key: str, value: Any, context: dict[str, Any]) -> None
 
 def _is_forbidden_key(key: str) -> bool:
     normalized = _normalize_key(key)
-    if normalized in {"providerneutralnextdataaction", "scorecontributionallowed", "sourceauthorityallowed"}:
+    if normalized in {
+        "providerfreshness",
+        "providerneutralnextdataaction",
+    }:
         return False
     if normalized in FORBIDDEN_CONSUMER_DIAGNOSTIC_KEYS:
         return True

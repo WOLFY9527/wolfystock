@@ -13,6 +13,13 @@ from src.services.consumer_api_diagnostic_redaction import project_consumer_api_
 from src.services.market_overview_service import MarketOverviewService
 
 router = APIRouter()
+_DEFAULT_MARKET_OVERVIEW_PANEL_ORDER = (
+    ("indices", "get_indices"),
+    ("volatility", "get_volatility"),
+    ("sentiment", "get_sentiment"),
+    ("fundsFlow", "get_funds_flow"),
+    ("macro", "get_macro"),
+)
 
 
 def _actor(current_user: Optional[CurrentUser]) -> Optional[Dict[str, Any]]:
@@ -32,6 +39,49 @@ def _consumer_safe_market_overview_payload(payload: Any, *, surface: str) -> Any
     return project_consumer_api_payload(
         sanitize_consumer_reason_payload(payload),
         surface=surface,
+    )
+
+
+def _aggregate_market_overview_status(panels: Dict[str, Any]) -> str:
+    statuses = {
+        str(panel.get("status") or "").strip().lower()
+        for panel in panels.values()
+        if isinstance(panel, dict)
+    }
+    if not statuses:
+        return "unavailable"
+    if statuses <= {"success"}:
+        return "success"
+    if statuses & {"success", "partial"}:
+        return "partial"
+    if statuses & {"failure", "unavailable", "error"}:
+        return "unavailable"
+    return "partial"
+
+
+def _build_market_overview_payload(
+    service: MarketOverviewService,
+    *,
+    actor: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    panels: Dict[str, Any] = {}
+    for payload_key, method_name in _DEFAULT_MARKET_OVERVIEW_PANEL_ORDER:
+        panels[payload_key] = getattr(service, method_name)(actor=actor)
+    return {
+        "status": _aggregate_market_overview_status(panels),
+        "panels": panels,
+        **panels,
+    }
+
+
+@router.get("", summary="Get aggregate market overview")
+def get_market_overview(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
+    return _consumer_safe_market_overview_payload(
+        _build_market_overview_payload(
+            MarketOverviewService(),
+            actor=_actor(current_user),
+        ),
+        surface="market-overview",
     )
 
 

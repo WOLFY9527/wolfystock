@@ -7,6 +7,10 @@ import json
 import unittest
 from unittest.mock import MagicMock, patch
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from api.v1 import api_v1_router
 from api.v1.endpoints import market_overview
 from src.services.market_overview_service import MarketOverviewService
 
@@ -19,6 +23,21 @@ FORBIDDEN_CONSUMER_REASON_TOKENS = (
     "source_authority_blocked",
     "score_gate",
 )
+ALLOWED_PROVIDER_FRESHNESS_STATES = {"live", "delayed", "cached", "stale", "unavailable", "proxy"}
+
+
+def _collect_provider_freshness_nodes(value):
+    nodes = []
+    if isinstance(value, dict):
+        freshness = value.get("providerFreshness")
+        if isinstance(freshness, dict):
+            nodes.append(freshness)
+        for child in value.values():
+            nodes.extend(_collect_provider_freshness_nodes(child))
+    elif isinstance(value, list):
+        for child in value:
+            nodes.extend(_collect_provider_freshness_nodes(child))
+    return nodes
 
 
 class MarketOverviewApiTestCase(unittest.TestCase):
@@ -762,6 +781,118 @@ def test_market_overview_sentiment_returns_unavailable_when_no_usable_value_exis
     assert payload["items"] == []
     assert payload["providerHealth"]["status"] == "unavailable"
     assert payload["error_message"] == "数据源暂不可用"
+
+
+def test_market_overview_default_endpoint_exposes_recursive_provider_freshness() -> None:
+    app = FastAPI()
+    app.include_router(api_v1_router)
+    client = TestClient(app)
+
+    service = MagicMock()
+    service.get_indices.return_value = {
+        "panel_name": "IndexTrendsCard",
+        "status": "success",
+        "source": "yfinance_proxy",
+        "sourceLabel": "Yahoo Finance proxy",
+        "freshness": "proxy",
+        "updatedAt": "2026-06-30T15:59:00+00:00",
+        "asOf": "2026-06-30T15:59:00+00:00",
+        "providerFreshness": {
+            "state": "proxy",
+            "sourceLabel": "Yahoo Finance proxy",
+            "dataSource": "yfinance_proxy",
+            "asOf": "2026-06-30T15:59:00+00:00",
+            "isProxy": True,
+            "proxyFor": "SPX",
+            "proxySymbol": "SPY",
+            "proxyLabel": "S&P 500",
+            "degradationReason": "official_index_unavailable_using_etf_proxy",
+        },
+        "items": [
+            {
+                "symbol": "SPX",
+                "label": "S&P 500 proxy (SPY ETF)",
+                "source": "yfinance_proxy",
+                "sourceLabel": "Yahoo Finance proxy",
+                "freshness": "proxy",
+                "asOf": "2026-06-30T15:59:00+00:00",
+                "providerFreshness": {
+                    "state": "proxy",
+                    "sourceLabel": "Yahoo Finance proxy",
+                    "dataSource": "yfinance_proxy",
+                    "asOf": "2026-06-30T15:59:00+00:00",
+                    "isProxy": True,
+                    "proxyFor": "SPX",
+                    "proxySymbol": "SPY",
+                    "proxyLabel": "S&P 500",
+                    "degradationReason": "official_index_unavailable_using_etf_proxy",
+                },
+            }
+        ],
+    }
+    service.get_volatility.return_value = {
+        "panel_name": "VolatilityCard",
+        "status": "success",
+        "source": "fred",
+        "sourceLabel": "FRED",
+        "freshness": "delayed",
+        "providerFreshness": {"state": "delayed", "sourceLabel": "FRED", "dataSource": "fred"},
+        "items": [],
+    }
+    service.get_sentiment.return_value = {
+        "panel_name": "MarketSentimentCard",
+        "status": "partial",
+        "source": "alternative_me",
+        "sourceLabel": "Alternative.me",
+        "freshness": "stale",
+        "providerFreshness": {
+            "state": "stale",
+            "sourceLabel": "Alternative.me",
+            "dataSource": "alternative_me",
+            "degradationReason": "stale_source",
+        },
+        "items": [],
+    }
+    service.get_funds_flow.return_value = {
+        "panel_name": "FundsFlowCard",
+        "status": "failure",
+        "source": "unavailable",
+        "freshness": "unavailable",
+        "providerFreshness": {
+            "state": "unavailable",
+            "dataSource": "unavailable",
+            "degradationReason": "unavailable_source",
+        },
+        "items": [],
+    }
+    service.get_macro.return_value = {
+        "panel_name": "MacroIndicatorsCard",
+        "status": "success",
+        "source": "cache",
+        "freshness": "cached",
+        "providerFreshness": {"state": "cached", "dataSource": "cache"},
+        "items": [],
+    }
+
+    with patch("api.v1.endpoints.market_overview.MarketOverviewService", return_value=service):
+        response = client.get("/api/v1/market-overview")
+
+    assert response.status_code == 200
+    payload = response.json()
+    nodes = _collect_provider_freshness_nodes(payload)
+    assert len(nodes) > 0
+    states = {node.get("state") for node in nodes}
+    assert states <= ALLOWED_PROVIDER_FRESHNESS_STATES
+    assert {"proxy", "stale", "unavailable"} <= states
+
+    proxy_nodes = [node for node in nodes if node.get("state") == "proxy"]
+    assert proxy_nodes
+    for node in proxy_nodes:
+        assert node.get("isProxy") is True
+        assert node.get("proxySymbol") == "SPY"
+        assert node.get("proxyFor") == "SPX"
+        serialized = json.dumps(node, ensure_ascii=False).lower()
+        assert "official index" not in serialized
 
 
 if __name__ == "__main__":

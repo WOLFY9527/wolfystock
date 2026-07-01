@@ -804,6 +804,7 @@ def test_public_api_abuse_limiter_safe_market_read_allowlist_is_narrow() -> None
         assert limiter._is_safe_read_bypass(method, path)
     for path in (
         "/api/v1/market/market-briefing",
+        "/api/v1/market-overview",
         "/api/v1/market-overview/indices",
         "/api/v1/market-overview/volatility",
         "/api/v1/market-overview/sentiment",
@@ -866,6 +867,10 @@ def test_hot_public_bucket_allows_public_route_policy_reads(monkeypatch) -> None
             return_value=True,
         ):
             responses = {
+                "/api/v1/market-overview": client.get(
+                    "/api/v1/market-overview",
+                    headers={"X-Forwarded-For": ip_address},
+                ),
                 "/api/v1/market-overview/indices": client.get(
                     "/api/v1/market-overview/indices",
                     headers={"X-Forwarded-For": ip_address},
@@ -897,6 +902,7 @@ def test_hot_public_bucket_allows_public_route_policy_reads(monkeypatch) -> None
             }
 
         assert {path: response.status_code for path, response in responses.items()} == {
+            "/api/v1/market-overview": 200,
             "/api/v1/market-overview/indices": 200,
             "/api/v1/market-overview/volatility": 200,
             "/api/v1/market-overview/sentiment": 200,
