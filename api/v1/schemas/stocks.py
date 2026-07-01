@@ -291,8 +291,29 @@ class SymbolResearchFundamentalsState(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    state: Literal["available", "missing", "not_integrated", "not_configured", "insufficient_permissions", "stale", "unknown"] = Field(..., description="基本面覆盖状态")
-    readiness_state: Literal["available", "missing", "not_configured", "insufficient_permissions", "stale", "unknown"] = Field(
+    state: Literal[
+        "available",
+        "partial",
+        "missing",
+        "not_integrated",
+        "not_configured",
+        "insufficient_permissions",
+        "stale",
+        "unsupported",
+        "provider_unavailable",
+        "unknown",
+    ] = Field(..., description="基本面覆盖状态")
+    readiness_state: Literal[
+        "available",
+        "partial",
+        "missing",
+        "not_configured",
+        "insufficient_permissions",
+        "stale",
+        "unsupported",
+        "provider_unavailable",
+        "unknown",
+    ] = Field(
         "unknown",
         alias="readinessState",
         description="基本面字段级就绪状态",
@@ -304,6 +325,18 @@ class SymbolResearchFundamentalsState(BaseModel):
     stale_fields: Dict[str, List[str]] = Field(default_factory=dict, alias="staleFields", description="按类别分组的过期字段")
     blocked_fields: Dict[str, List[str]] = Field(default_factory=dict, alias="blockedFields", description="按类别分组的权限或配置阻塞字段")
     categories: Dict[str, Dict[str, Any]] = Field(default_factory=dict, description="类别级基本面就绪状态")
+    company_name: Optional[str] = Field(None, alias="companyName", description="公司名称")
+    sector: Optional[str] = Field(None, description="行业板块")
+    industry: Optional[str] = Field(None, description="细分行业")
+    market_cap: Optional[float] = Field(None, alias="marketCap", description="市值")
+    revenue_ttm: Optional[float] = Field(None, alias="revenueTtm", description="滚动营收或 provider 报告营收")
+    profitability_margin: Optional[float] = Field(None, alias="profitabilityMargin", description="盈利能力或利润率字段")
+    valuation_ratio: Optional[float] = Field(None, alias="valuationRatio", description="基础估值比例")
+    fiscal_period: Optional[str] = Field(None, alias="fiscalPeriod", description="基本面字段周期标签")
+    as_of: Optional[str] = Field(None, alias="asOf", description="基本面归一化观察时间或 provider as-of")
+    source: Optional[str] = Field(None, description="归一化基本面来源标签")
+    freshness: Optional[str] = Field(None, description="基本面新鲜度标签")
+    missing_field_reasons: Dict[str, str] = Field(default_factory=dict, alias="missingFieldReasons", description="字段级缺失原因")
     provider_neutral_next_data_action: str = Field(
         "",
         alias="providerNeutralNextDataAction",

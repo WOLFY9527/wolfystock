@@ -10,6 +10,7 @@ from typing import Any, Optional
 from src.services.agent_stock_evidence_service import StockEvidenceService
 from src.services.stock_service import StockService
 from src.services.stock_structure_decision_service import StockStructureDecisionService
+from src.services.us_fundamentals_service import USFundamentalsService
 from src.utils.symbol_validation import ConsumerSymbolPrecheck, validate_consumer_symbol_precheck
 
 logger = logging.getLogger(__name__)
@@ -33,10 +34,18 @@ _FUNDAMENTALS_FIELD_CATEGORY = {
     for category, fields in _FUNDAMENTALS_SUPPORTED_FIELDS.items()
     for field in fields
 }
+_FUNDAMENTALS_FIELD_CATEGORY.update(
+    {
+        "profitabilityMargin": "margins",
+        "valuationRatio": "valuation",
+    }
+)
 _FUNDAMENTALS_STATUS_STALE = {"stale", "delayed"}
 _FUNDAMENTALS_STATUS_MISSING = {"", "missing", "unavailable", "no_evidence", "insufficient", "unknown"}
-_FUNDAMENTALS_STATUS_NOT_CONFIGURED = {"not_configured", "disabled", "unsupported", "not_integrated"}
+_FUNDAMENTALS_STATUS_NOT_CONFIGURED = {"not_configured", "disabled", "not_integrated"}
 _FUNDAMENTALS_STATUS_PERMISSION = {"insufficient_permissions", "permission_denied", "unauthorized", "forbidden"}
+_FUNDAMENTALS_STATUS_UNSUPPORTED = {"unsupported"}
+_FUNDAMENTALS_STATUS_PROVIDER_UNAVAILABLE = {"provider_unavailable"}
 
 
 class _ReadOnlyEvidenceFetcherManager:
@@ -120,9 +129,24 @@ def _categorized_fields(fields: list[str]) -> dict[str, list[str]]:
     return categorized
 
 
+def _categorized_extra_fields(fields: list[str]) -> dict[str, list[str]]:
+    categorized = _empty_field_map()
+    for field in fields:
+        category = _FUNDAMENTALS_FIELD_CATEGORY.get(field)
+        if category and field not in _FUNDAMENTALS_SUPPORTED_FIELDS.get(category, ()) and field not in categorized[category]:
+            categorized[category].append(field)
+    return categorized
+
+
 def _fundamentals_readiness_state(status: str, available_fields: list[str], explicit_missing: list[str]) -> str:
+    if status == "partial":
+        return "partial"
     if status in _FUNDAMENTALS_STATUS_PERMISSION:
         return "insufficient_permissions"
+    if status in _FUNDAMENTALS_STATUS_UNSUPPORTED:
+        return "unsupported"
+    if status in _FUNDAMENTALS_STATUS_PROVIDER_UNAVAILABLE:
+        return "provider_unavailable"
     if status in _FUNDAMENTALS_STATUS_NOT_CONFIGURED:
         return "not_configured"
     if status in _FUNDAMENTALS_STATUS_STALE:
@@ -147,24 +171,40 @@ def _category_state(
         return "insufficient_permissions"
     if stale or (available and fallback_state == "stale"):
         return "stale"
-    if available and not missing:
+    if "marketCap" in supported and "marketCap" in available and any(
+        field in available for field in ("valuationRatio", "peTtm", "pb", "beta")
+    ):
+        return "available"
+    required_visible = [
+        field for field in supported
+        if field not in {"exchange", "country"}
+    ]
+    if available and all(field in available for field in required_visible):
         return "available"
     if available:
-        return "stale" if fallback_state == "stale" else "available"
+        return "stale" if fallback_state == "stale" else "partial"
     if missing:
         return "missing"
     if fallback_state == "not_configured":
         return "not_configured"
     if fallback_state == "insufficient_permissions":
         return "insufficient_permissions"
+    if fallback_state in {"unsupported", "provider_unavailable"}:
+        return fallback_state
     return "missing" if supported else "unknown"
 
 
 def _fundamentals_consumer_copy(state: str) -> str:
     if state == "available":
         return "基本面字段可用于研究观察，仍不构成投资建议。"
+    if state == "partial":
+        return "基本面字段部分可用于研究观察，缺失字段已标注。"
     if state == "stale":
         return "基本面数据缺失或更新不完整，已标记为研究观察边界。"
+    if state == "unsupported":
+        return "当前市场暂不支持该基本面数据路径。"
+    if state == "provider_unavailable":
+        return "基本面数据源暂不可用，暂不展示财务或估值指标。"
     if state == "not_configured":
         return "基本面数据路径尚未配置，暂不展示财务或估值指标。"
     if state == "insufficient_permissions":
@@ -177,9 +217,18 @@ def _fundamentals_contract(
     state: str,
     fields_available: list[str],
     explicit_missing: list[str],
+    values: Mapping[str, Any] | None = None,
+    missing_field_reasons: Mapping[str, Any] | None = None,
+    include_extra_available_fields: bool = False,
 ) -> dict[str, Any]:
     readiness_state = _fundamentals_readiness_state(state, fields_available, explicit_missing)
     available_fields = _categorized_fields(fields_available)
+    if include_extra_available_fields:
+        extra_available = _categorized_extra_fields(fields_available)
+        for category, fields in extra_available.items():
+            available_fields[category].extend(
+                field for field in fields if field not in available_fields[category]
+            )
     blocked_fields = _empty_field_map()
     stale_fields = _empty_field_map()
     if readiness_state == "insufficient_permissions":
@@ -197,10 +246,13 @@ def _fundamentals_contract(
             field for field in supported
             if field not in available_fields[category] and field not in blocked_fields[category]
         ]
-        missing_fields[category] = [
-            field for field in supported
-            if field in explicit_for_category or field in inferred_for_category
-        ]
+        if readiness_state == "available":
+            missing_fields[category] = explicit_for_category
+        else:
+            missing_fields[category] = [
+                field for field in supported
+                if field in explicit_for_category or field in inferred_for_category
+            ]
 
     categories = {}
     for category, supported in _FUNDAMENTALS_SUPPORTED_FIELDS.items():
@@ -220,6 +272,11 @@ def _fundamentals_contract(
             "blockedFields": blocked_fields[category],
         }
 
+    value_payload = _as_mapping(values)
+    reason_payload = {
+        str(key): str(value)
+        for key, value in _as_mapping(missing_field_reasons).items()
+    }
     return {
         "state": readiness_state,
         "readinessState": readiness_state,
@@ -230,6 +287,8 @@ def _fundamentals_contract(
         "staleFields": stale_fields,
         "blockedFields": blocked_fields,
         "categories": categories,
+        **value_payload,
+        "missingFieldReasons": reason_payload,
         "providerNeutralNextDataAction": FUNDAMENTALS_NEXT_DATA_ACTION,
         "consumerSafeCopy": _fundamentals_consumer_copy(readiness_state),
     }
@@ -361,7 +420,109 @@ def _fundamentals_packet(item: Mapping[str, Any] | None) -> dict[str, Any]:
         state = "missing"
     else:
         state = "unknown"
-    return _fundamentals_contract(state=status or state, fields_available=fields_available, explicit_missing=explicit_missing)
+    contract_state = "stale" if status == "partial" else (status or state)
+    return _fundamentals_contract(state=contract_state, fields_available=fields_available, explicit_missing=explicit_missing)
+
+
+def _normalized_us_fundamentals_packet(payload: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    data = _as_mapping(payload)
+    if not data:
+        return None
+    state = str(data.get("state") or "").strip().lower()
+    if not state:
+        return None
+    fields_available = [
+        str(field)
+        for field in _as_list(data.get("fieldsAvailable"))
+        if str(field or "").strip()
+    ]
+    missing_field_reasons = _as_mapping(data.get("missingFieldReasons"))
+    explicit_missing = [
+        field
+        for field, reason in missing_field_reasons.items()
+        if str(reason or "").strip()
+        and field in _FUNDAMENTALS_FIELD_CATEGORY
+    ]
+    values = {
+        key: data.get(key)
+        for key in (
+            "companyName",
+            "sector",
+            "industry",
+            "marketCap",
+            "revenueTtm",
+            "profitabilityMargin",
+            "valuationRatio",
+            "fiscalPeriod",
+            "asOf",
+            "source",
+            "freshness",
+        )
+        if key in data
+    }
+    return _fundamentals_contract(
+        state=state,
+        fields_available=fields_available,
+        explicit_missing=explicit_missing,
+        values=values,
+        missing_field_reasons=missing_field_reasons,
+        include_extra_available_fields=True,
+    )
+
+
+def _should_use_us_fundamentals(
+    us_payload: Mapping[str, Any] | None,
+    evidence_item: Mapping[str, Any] | None,
+) -> bool:
+    payload = _as_mapping(us_payload)
+    if not payload:
+        return False
+    state = str(payload.get("state") or "").strip().lower()
+    fields_available = _as_list(payload.get("fieldsAvailable"))
+    if state in {"available", "partial", "stale"} and fields_available:
+        return True
+    return evidence_item is None
+
+
+def _get_us_fundamentals(symbol: str, market: Optional[str]) -> dict[str, Any] | None:
+    if str(market or "").strip().lower() != "us":
+        return None
+    try:
+        return USFundamentalsService().get_us_fundamentals(symbol)
+    except Exception:
+        logger.warning("US fundamentals normalization failed for %s", symbol, exc_info=True)
+        return {
+            "symbol": symbol,
+            "state": "provider_unavailable",
+            "companyName": None,
+            "sector": None,
+            "industry": None,
+            "marketCap": None,
+            "revenueTtm": None,
+            "profitabilityMargin": None,
+            "valuationRatio": None,
+            "fiscalPeriod": None,
+            "asOf": None,
+            "source": "unavailable",
+            "freshness": "unknown",
+            "fieldsAvailable": [],
+            "missingFieldReasons": {
+                field: "provider_unavailable"
+                for field in (
+                    "companyName",
+                    "sector",
+                    "industry",
+                    "marketCap",
+                    "revenueTtm",
+                    "profitabilityMargin",
+                    "valuationRatio",
+                    "fiscalPeriod",
+                    "asOf",
+                    "source",
+                    "freshness",
+                )
+            },
+        }
 
 
 def _events_packet(item: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -430,7 +591,7 @@ def _missing_data_families(
         missing.append("price_history")
     if structure.get("state") != "available":
         missing.append("structure_analysis")
-    if fundamentals.get("state") != "available":
+    if fundamentals.get("state") not in {"available", "partial"}:
         missing.append("fundamentals")
     if events.get("state") != "available":
         missing.append("filing_event_catalyst")
@@ -588,7 +749,11 @@ def build_symbol_research_packet(stock_code: str, *, market: Optional[str] = Non
     history = _history_packet(_as_mapping(history_payload))
     structure = _structure_packet(_as_mapping(structure_payload))
     evidence_item = _first_evidence_item(_as_mapping(evidence_payload), symbol)
-    fundamentals = _fundamentals_packet(evidence_item)
+    us_fundamentals_payload = _get_us_fundamentals(symbol, precheck.market)
+    if _should_use_us_fundamentals(us_fundamentals_payload, evidence_item):
+        fundamentals = _normalized_us_fundamentals_packet(us_fundamentals_payload) or _fundamentals_packet(evidence_item)
+    else:
+        fundamentals = _fundamentals_packet(evidence_item)
     events = _events_packet(evidence_item)
     peer = _peer_packet(_as_mapping(structure_payload))
     missing_data = _missing_data_families(
@@ -609,15 +774,18 @@ def build_symbol_research_packet(stock_code: str, *, market: Optional[str] = Non
     }
     research_status = _research_status(packet_parts)
     name = consumer_safe_stock_name(
-        _get_nested(_as_mapping(quote_payload), "stock_name", "stockName")
+        _get_nested(fundamentals, "companyName")
+        or _get_nested(_as_mapping(quote_payload), "stock_name", "stockName")
         or _get_nested(_as_mapping(history_payload), "stock_name", "stockName"),
         symbol,
     )
+    sector = consumer_safe_stock_name(_get_nested(fundamentals, "sector"), symbol)
+    industry = consumer_safe_stock_name(_get_nested(fundamentals, "industry"), symbol)
 
     return {
         "symbol": symbol,
         "market": precheck.market or "unknown",
-        "identity": {"name": name, "exchange": None, "sector": None, "industry": None},
+        "identity": {"name": name, "exchange": None, "sector": sector, "industry": industry},
         "quote": quote,
         "history": history,
         "structure": structure,

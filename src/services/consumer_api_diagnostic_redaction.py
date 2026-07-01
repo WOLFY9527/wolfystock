@@ -121,19 +121,22 @@ _FIELD_REFERENCE_FALLBACK = "evidence"
 def project_consumer_api_payload(payload: Any, *, surface: str | None = None) -> Any:
     """Return a recursively consumer-safe projection for API responses."""
 
-    projected, context = _project_node(_model_to_plain(payload))
+    projected, context = _project_node(_model_to_plain(payload), surface=surface)
     if isinstance(projected, dict):
         _apply_context(projected, context)
     return projected
 
 
-def _project_node(value: Any) -> tuple[Any, dict[str, Any]]:
+def _project_node(value: Any, *, surface: str | None = None) -> tuple[Any, dict[str, Any]]:
     context = _new_context()
 
     if isinstance(value, Mapping):
         output: dict[str, Any] = {}
         for key, child in value.items():
             key_text = str(key)
+            if _is_allowed_surface_value(surface, key_text, child):
+                output[key_text] = child
+                continue
             if _is_forbidden_key(key_text):
                 _collect_from_removed(key_text, child, context)
                 continue
@@ -143,9 +146,12 @@ def _project_node(value: Any) -> tuple[Any, dict[str, Any]]:
                     output[key_text] = _FIELD_REFERENCE_FALLBACK
                     continue
 
-            projected_child, child_context = _project_node(child)
+            projected_child, child_context = _project_node(child, surface=surface)
             _merge_context(context, child_context)
 
+            if _is_allowed_surface_value(surface, key_text, projected_child):
+                output[key_text] = projected_child
+                continue
             if _is_reason_like_key(key_text):
                 sanitized_child = _sanitize_reason_like_value(projected_child, context)
                 output[key_text] = sanitized_child
@@ -166,7 +172,7 @@ def _project_node(value: Any) -> tuple[Any, dict[str, Any]]:
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         items: list[Any] = []
         for item in value:
-            projected_item, child_context = _project_node(item)
+            projected_item, child_context = _project_node(item, surface=surface)
             _merge_context(context, child_context)
             items.append(projected_item)
         return items, context
@@ -176,6 +182,14 @@ def _project_node(value: Any) -> tuple[Any, dict[str, Any]]:
         return _safe_text_for(value), context
 
     return value, context
+
+
+def _is_allowed_surface_value(surface: str | None, key: str, value: Any) -> bool:
+    if surface != "symbol-research-packet" or not isinstance(value, str):
+        return False
+    if _normalize_key(key) not in {"state", "readinessstate"}:
+        return False
+    return value in {"provider_unavailable"}
 
 
 def _apply_context(output: dict[str, Any], context: dict[str, Any]) -> None:

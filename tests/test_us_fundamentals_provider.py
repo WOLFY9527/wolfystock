@@ -27,6 +27,9 @@ from data_provider.us_fundamentals_provider import (
 class _FakeTicker:
     def __init__(self):
         self.info = {
+            "longName": "Oracle Corporation",
+            "sector": "Technology",
+            "industry": "Software - Infrastructure",
             "marketCap": 123,
             "trailingPE": 20.1,
             "forwardPE": 18.4,
@@ -95,6 +98,9 @@ class TestUsFundamentalsProvider(unittest.TestCase):
     def test_get_yfinance_fundamentals_maps_core_fields(self, _mock_ticker):
         payload = get_yfinance_fundamentals("ORCL")
         self.assertEqual(payload["marketCap"], 123)
+        self.assertEqual(payload["companyName"], "Oracle Corporation")
+        self.assertEqual(payload["sector"], "Technology")
+        self.assertEqual(payload["industry"], "Software - Infrastructure")
         self.assertEqual(payload["trailingPE"], 20.1)
         self.assertEqual(payload["freeCashflow"], 88)
         self.assertEqual(payload["priceToBook"], 6.2)

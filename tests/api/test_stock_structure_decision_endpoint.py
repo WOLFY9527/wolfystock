@@ -177,6 +177,16 @@ class _FakeStockEvidenceService:
         return self.payload
 
 
+class _NoUSFundamentalsService:
+    def get_us_fundamentals(self, symbol: str) -> dict[str, Any]:
+        return {
+            "symbol": symbol,
+            "state": "not_configured",
+            "fieldsAvailable": [],
+            "missingFieldReasons": {},
+        }
+
+
 class _BlockingHistoryService:
     def __init__(self) -> None:
         self.started = threading.Event()
@@ -431,6 +441,7 @@ def test_research_packet_endpoint_assembles_existing_data_and_missing_families(m
     monkeypatch.setattr(symbol_research_packet_service, "StockService", lambda: fake_stock, raising=False)
     monkeypatch.setattr(symbol_research_packet_service, "StockStructureDecisionService", lambda: fake_structure, raising=False)
     monkeypatch.setattr(symbol_research_packet_service, "StockEvidenceService", lambda: fake_evidence, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "USFundamentalsService", lambda: _NoUSFundamentalsService(), raising=False)
 
     response = _client().get("/api/v1/stocks/AAPL/research-packet", params={"market": "us"})
 
@@ -515,6 +526,7 @@ def test_research_packet_endpoint_exposes_fundamentals_readiness_contract(monkey
     monkeypatch.setattr(symbol_research_packet_service, "StockService", lambda: fake_stock, raising=False)
     monkeypatch.setattr(symbol_research_packet_service, "StockStructureDecisionService", lambda: fake_structure, raising=False)
     monkeypatch.setattr(symbol_research_packet_service, "StockEvidenceService", lambda: fake_evidence, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "USFundamentalsService", lambda: _NoUSFundamentalsService(), raising=False)
 
     response = _client().get("/api/v1/stocks/AAPL/research-packet", params={"market": "us"})
 
@@ -571,6 +583,7 @@ def test_research_packet_endpoint_marks_fundamentals_not_configured(monkeypatch)
     monkeypatch.setattr(symbol_research_packet_service, "StockService", lambda: fake_stock, raising=False)
     monkeypatch.setattr(symbol_research_packet_service, "StockStructureDecisionService", lambda: fake_structure, raising=False)
     monkeypatch.setattr(symbol_research_packet_service, "StockEvidenceService", lambda: fake_evidence, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "USFundamentalsService", lambda: _NoUSFundamentalsService(), raising=False)
 
     response = _client().get("/api/v1/stocks/AAPL/research-packet", params={"market": "us"})
 
@@ -597,6 +610,7 @@ def test_research_packet_endpoint_marks_fundamentals_permission_blocked(monkeypa
     monkeypatch.setattr(symbol_research_packet_service, "StockService", lambda: fake_stock, raising=False)
     monkeypatch.setattr(symbol_research_packet_service, "StockStructureDecisionService", lambda: fake_structure, raising=False)
     monkeypatch.setattr(symbol_research_packet_service, "StockEvidenceService", lambda: fake_evidence, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "USFundamentalsService", lambda: _NoUSFundamentalsService(), raising=False)
 
     response = _client().get("/api/v1/stocks/AAPL/research-packet", params={"market": "us"})
 
@@ -641,6 +655,7 @@ def test_research_packet_endpoint_marks_fundamentals_available_without_fake_miss
     monkeypatch.setattr(symbol_research_packet_service, "StockService", lambda: fake_stock, raising=False)
     monkeypatch.setattr(symbol_research_packet_service, "StockStructureDecisionService", lambda: fake_structure, raising=False)
     monkeypatch.setattr(symbol_research_packet_service, "StockEvidenceService", lambda: fake_evidence, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "USFundamentalsService", lambda: _NoUSFundamentalsService(), raising=False)
 
     response = _client().get("/api/v1/stocks/AAPL/research-packet", params={"market": "us"})
 
@@ -652,6 +667,168 @@ def test_research_packet_endpoint_marks_fundamentals_available_without_fake_miss
     assert fundamentals["missingFields"]["valuation"] == []
     assert fundamentals["categories"]["valuation"]["state"] == "available"
     assert "revenueTtm" not in fundamentals["availableFields"]["financialStatements"]
+
+
+def test_research_packet_endpoint_uses_us_fundamentals_service_for_company_context(monkeypatch) -> None:
+    fake_stock = _FakeStockService(
+        quote={
+            "stock_code": "AAPL",
+            "stock_name": "Apple",
+            "current_price": 214.55,
+            "change_percent": 1.11,
+            "market_timestamp": "2026-05-28T09:30:00Z",
+            "freshness": "live",
+        },
+        history=_history_payload(),
+    )
+    fake_structure = _FakeStructureDecisionService(_payload())
+    fake_evidence = _FakeStockEvidenceService(_evidence_payload())
+
+    class _FakeUSFundamentalsService:
+        calls: list[str] = []
+
+        def get_us_fundamentals(self, symbol: str) -> dict[str, Any]:
+            self.calls.append(symbol)
+            return {
+                "symbol": symbol,
+                "state": "partial",
+                "companyName": "Apple Inc.",
+                "sector": "Technology",
+                "industry": "Consumer Electronics",
+                "marketCap": 3_000_000_000_000.0,
+                "revenueTtm": 390_000_000_000.0,
+                "profitabilityMargin": 0.31,
+                "valuationRatio": 29.4,
+                "fiscalPeriod": "mixed",
+                "asOf": "2026-07-01T00:00:00+00:00",
+                "source": "yfinance",
+                "freshness": "current",
+                "fieldsAvailable": [
+                    "companyName",
+                    "sector",
+                    "industry",
+                    "marketCap",
+                    "revenueTtm",
+                    "profitabilityMargin",
+                    "valuationRatio",
+                ],
+                "missingFieldReasons": {
+                    "companyName": "",
+                    "sector": "",
+                    "industry": "",
+                    "marketCap": "",
+                    "revenueTtm": "",
+                    "profitabilityMargin": "",
+                    "valuationRatio": "",
+                    "fiscalPeriod": "mixed_periods",
+                    "asOf": "",
+                    "source": "",
+                    "freshness": "",
+                },
+            }
+
+    fake_us_fundamentals = _FakeUSFundamentalsService()
+    monkeypatch.setattr(symbol_research_packet_service, "StockService", lambda: fake_stock, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "StockStructureDecisionService", lambda: fake_structure, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "StockEvidenceService", lambda: fake_evidence, raising=False)
+    monkeypatch.setattr(
+        symbol_research_packet_service,
+        "USFundamentalsService",
+        lambda: fake_us_fundamentals,
+        raising=False,
+    )
+
+    response = _client().get("/api/v1/stocks/AAPL/research-packet", params={"market": "us"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert fake_us_fundamentals.calls == ["AAPL"]
+    assert payload["identity"] == {
+        "name": "Apple Inc.",
+        "exchange": None,
+        "sector": "Technology",
+        "industry": "Consumer Electronics",
+    }
+    fundamentals = payload["fundamentals"]
+    assert fundamentals["state"] == "partial"
+    assert fundamentals["readinessState"] == "partial"
+    assert fundamentals["fieldsAvailable"] == [
+        "companyName",
+        "sector",
+        "industry",
+        "marketCap",
+        "revenueTtm",
+        "profitabilityMargin",
+        "valuationRatio",
+    ]
+    assert fundamentals["availableFields"]["companyProfile"] == ["companyName", "sector", "industry"]
+    assert fundamentals["availableFields"]["financialStatements"] == ["revenueTtm"]
+    assert fundamentals["availableFields"]["margins"] == ["profitabilityMargin"]
+    assert fundamentals["availableFields"]["valuation"] == ["marketCap", "valuationRatio"]
+    assert fundamentals["categories"]["companyProfile"]["state"] == "available"
+    assert fundamentals["categories"]["financialStatements"]["state"] == "partial"
+    assert fundamentals["categories"]["valuation"]["state"] == "available"
+    assert fundamentals["fiscalPeriod"] == "mixed"
+    assert fundamentals["asOf"] == "2026-07-01T00:00:00+00:00"
+    assert fundamentals["source"] == "yfinance"
+    assert fundamentals["freshness"] == "current"
+    assert fundamentals["missingFieldReasons"]["fiscalPeriod"] == "mixed_periods"
+    assert payload["missingData"] == ["filing_event_catalyst", "peer_benchmark"]
+
+
+def test_research_packet_endpoint_sanitizes_us_fundamentals_provider_unavailable(monkeypatch) -> None:
+    fake_stock = _FakeStockService(quote=None, history=_history_payload(status="unavailable", source="unavailable", rows=0))
+    fake_structure = _FakeStructureDecisionService(_payload(data_status="unavailable"))
+    fake_evidence = _FakeStockEvidenceService({"symbols": [], "items": []})
+
+    class _FakeUSFundamentalsService:
+        def get_us_fundamentals(self, symbol: str) -> dict[str, Any]:
+            return {
+                "symbol": symbol,
+                "state": "provider_unavailable",
+                "companyName": None,
+                "sector": None,
+                "industry": None,
+                "marketCap": None,
+                "revenueTtm": None,
+                "profitabilityMargin": None,
+                "valuationRatio": None,
+                "fiscalPeriod": None,
+                "asOf": None,
+                "source": "unavailable",
+                "freshness": "unknown",
+                "fieldsAvailable": [],
+                "missingFieldReasons": {
+                    "companyName": "provider_unavailable",
+                    "sector": "provider_unavailable",
+                    "industry": "provider_unavailable",
+                    "marketCap": "provider_unavailable",
+                    "revenueTtm": "provider_unavailable",
+                    "profitabilityMargin": "provider_unavailable",
+                    "valuationRatio": "provider_unavailable",
+                    "fiscalPeriod": "provider_unavailable",
+                    "asOf": "provider_unavailable",
+                    "source": "provider_unavailable",
+                    "freshness": "provider_unavailable",
+                },
+            }
+
+    monkeypatch.setattr(symbol_research_packet_service, "StockService", lambda: fake_stock, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "StockStructureDecisionService", lambda: fake_structure, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "StockEvidenceService", lambda: fake_evidence, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "USFundamentalsService", lambda: _FakeUSFundamentalsService(), raising=False)
+
+    response = _client().get("/api/v1/stocks/AAPL/research-packet", params={"market": "us"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["fundamentals"]["state"] == "provider_unavailable"
+    assert payload["fundamentals"]["readinessState"] == "provider_unavailable"
+    assert payload["fundamentals"]["missingFieldReasons"]["marketCap"] == "Evidence is limited for this observation."
+    serialized = json.dumps(payload, ensure_ascii=False)
+    assert "timeout" not in serialized.lower()
+    assert "traceback" not in serialized.lower()
+    assert "token" not in serialized.lower()
 
 
 def test_research_packet_endpoint_fail_closes_absent_quote_history_and_evidence(monkeypatch) -> None:
@@ -676,6 +853,7 @@ def test_research_packet_endpoint_fail_closes_absent_quote_history_and_evidence(
     monkeypatch.setattr(symbol_research_packet_service, "StockService", lambda: fake_stock, raising=False)
     monkeypatch.setattr(symbol_research_packet_service, "StockStructureDecisionService", lambda: fake_structure, raising=False)
     monkeypatch.setattr(symbol_research_packet_service, "StockEvidenceService", lambda: fake_evidence, raising=False)
+    monkeypatch.setattr(symbol_research_packet_service, "USFundamentalsService", lambda: _NoUSFundamentalsService(), raising=False)
 
     response = _client().get("/api/v1/stocks/AAPL/research-packet", params={"market": "us"})
 
