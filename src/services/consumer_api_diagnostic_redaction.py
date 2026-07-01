@@ -134,6 +134,9 @@ def _project_node(value: Any, *, surface: str | None = None) -> tuple[Any, dict[
         output: dict[str, Any] = {}
         for key, child in value.items():
             key_text = str(key)
+            if _is_provider_health_key(key_text):
+                output[key_text] = _project_provider_health(child, surface=surface)
+                continue
             if _is_allowed_surface_value(surface, key_text, child):
                 output[key_text] = child
                 continue
@@ -241,6 +244,7 @@ def _is_forbidden_key(key: str) -> bool:
     if normalized in {
         "providerfreshness",
         "providerneutralnextdataaction",
+        "providerhealth",
     }:
         return False
     if normalized in FORBIDDEN_CONSUMER_DIAGNOSTIC_KEYS:
@@ -260,6 +264,39 @@ def _is_forbidden_key(key: str) -> bool:
     if normalized.endswith("diagnostics") and normalized != "consumerdiagnostics":
         return True
     return False
+
+
+def _is_provider_health_key(key: str) -> bool:
+    return _normalize_key(key) == "providerhealth"
+
+
+def _project_provider_health(value: Any, *, surface: str | None = None) -> Any:
+    if not isinstance(value, Mapping):
+        return value
+
+    allowed_keys = {
+        "provider",
+        "status",
+        "asOf",
+        "updatedAt",
+        "latencyMs",
+        "errorSummary",
+        "isFallback",
+        "isStale",
+        "isRefreshing",
+        "sourceLabel",
+        "card",
+    }
+    projected: dict[str, Any] = {}
+    for key in allowed_keys:
+        if key not in value:
+            continue
+        child = value.get(key)
+        sanitized_child, _ = _project_node(_model_to_plain(child), surface=surface)
+        if isinstance(sanitized_child, str) and _is_unsafe_text(sanitized_child):
+            sanitized_child = _safe_text_for(sanitized_child)
+        projected[key] = sanitized_child
+    return projected
 
 
 def _is_reason_like_key(key: str) -> bool:
