@@ -8,6 +8,7 @@ import re
 PUBLIC_BASELINE_PATHS = frozenset(
     {
         "/api/v1/market/market-briefing",
+        "/api/v1/market-overview",
         "/api/v1/market-overview/indices",
         "/api/v1/market-overview/volatility",
         "/api/v1/market-overview/sentiment",
