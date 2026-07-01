@@ -575,13 +575,30 @@ PROVIDER_HEALTH_STATUSES = {
     "error",
     "refreshing",
 }
+MARKET_OVERVIEW_NORMALIZED_FRESHNESS_STATES = frozenset(
+    {"live", "delayed", "cached", "stale", "unavailable", "proxy"}
+)
+MARKET_OVERVIEW_PROXY_SOURCE_TYPES = frozenset(
+    {"public_proxy", "proxy_public"}
+)
+MARKET_OVERVIEW_PROXY_SOURCES = frozenset(
+    {"yfinance_proxy", "yahoo_finance_proxy"}
+)
+MARKET_OVERVIEW_CONSUMER_FRESHNESS_LABELS = {
+    "live": "实时",
+    "delayed": "延迟",
+    "cached": "缓存",
+    "stale": "过期",
+    "unavailable": "不可用",
+    "proxy": "代理",
+}
 CN_INDICES_OBSERVATION_PROVIDER_TIMEOUT_SECONDS = 1.0
 CN_INDICES_AKSHARE_OBSERVATION_TIMEOUT_SECONDS = 1.0
 MARKET_OVERVIEW_OBSERVATION_ROUTE_REJECTED_REASON = "market_overview_observation_route_rejected"
 MARKET_OVERVIEW_OBSERVATION_AUTHORITY_REJECTED_REASON = "market_overview_observation_authority_claim_rejected"
 MARKET_OVERVIEW_OBSERVATION_METADATA_MISSING_REASON = "market_overview_observation_metadata_missing"
 MARKET_OVERVIEW_OBSERVATION_INVALID_METADATA_REASON = "market_overview_observation_invalid_metadata"
-MARKET_OVERVIEW_OBSERVATION_ALLOWED_FRESHNESS = frozenset({"delayed", "cached", "stale", "unavailable", "t_plus_1_or_delayed"})
+MARKET_OVERVIEW_OBSERVATION_ALLOWED_FRESHNESS = frozenset({"delayed", "cached", "stale", "unavailable", "proxy", "t_plus_1_or_delayed"})
 MARKET_OVERVIEW_OBSERVATION_AUTHORITY_FRESHNESS = frozenset({"fresh", "live", "realtime"})
 MARKET_OVERVIEW_OBSERVATION_AUTHORITY_TRUST_LEVELS = frozenset(
     {
@@ -881,20 +898,26 @@ def get_freshness_status(
 ) -> Dict[str, Any]:
     """Return normalized market data freshness metadata for UI trust labeling."""
     source_key = str(source or "").lower()
+    source_type_key = str(source_type or "").lower()
     current = (now or datetime.now(CN_TZ)).astimezone(CN_TZ)
     if source_key == "mock":
         return {
             "freshness": "mock",
             "isFallback": True,
             "isStale": False,
+            "isUnavailable": True,
+            "isProxy": False,
             "delayMinutes": 0,
             "warning": "模拟数据，不代表当前行情",
         }
     if is_fallback or source_key in {"fallback", "synthetic", "unavailable"}:
+        unavailable = source_key == "unavailable"
         return {
-            "freshness": "fallback",
+            "freshness": "unavailable" if unavailable else "fallback",
             "isFallback": True,
             "isStale": False,
+            "isUnavailable": unavailable,
+            "isProxy": False,
             "delayMinutes": 0,
             "warning": FALLBACK_WARNING,
         }
@@ -920,7 +943,6 @@ def get_freshness_status(
         "sentiment": 24 * 60,
     }
 
-    source_type_key = str(source_type or "").lower()
     delayed_public_quote_source = source_key == "yfinance_proxy" or source_type_key in {
         "unofficial_proxy",
         "public_proxy",
@@ -975,6 +997,8 @@ def get_freshness_status(
         "freshness": freshness,
         "isFallback": False,
         "isStale": freshness == "stale",
+        "isUnavailable": freshness == "unavailable",
+        "isProxy": bool(delayed_public_quote_source),
         "delayMinutes": delay_minutes,
         "warning": "数据可能已过期，请以交易所/券商行情为准" if freshness == "stale" else None,
     }
@@ -4478,50 +4502,35 @@ class MarketOverviewService:
             return payload
 
         updated_at = _now_iso()
-        fallback_items = [
-            ("BTC", "Bitcoin", 75800.0, -0.2, [75220.0, 75640.0, 76110.0, 75800.0]),
-            ("ETH", "Ethereum", 3120.0, -0.4, [3090.0, 3148.0, 3162.0, 3120.0]),
-            ("SOL", "Solana", 143.2, 0.0, [140.0, 141.0, 142.0, 143.2]),
-            ("BNB", "BNB", 590.0, 0.3, [584.0, 588.0, 586.0, 590.0]),
+        spot_items = [
+            self._unavailable_item("Bitcoin", "BTC", "暂不可用", updated_at, detail="Bitcoin spot quote：暂不可用"),
+            self._unavailable_item("Ethereum", "ETH", "暂不可用", updated_at, detail="Ethereum spot quote：暂不可用"),
+            self._unavailable_item("Solana", "SOL", "暂不可用", updated_at, detail="Solana spot quote：暂不可用"),
+            self._unavailable_item("BNB", "BNB", "暂不可用", updated_at, detail="BNB spot quote：暂不可用"),
         ]
-        return {
-            "items": [
-                {
-                    "symbol": symbol,
-                    "name": name,
-                    "label": name,
-                    "value": value,
-                    "price": value,
-                    "changePercent": change_percent,
-                    "change": change_percent,
-                    "sparkline": sparkline,
-                    "trend": sparkline,
-                    "unit": "USD",
-                    "risk_direction": self._risk_direction(change_percent),
-                    "source": "fallback",
-                    "sourceLabel": "备用数据",
-                    "updatedAt": updated_at,
-                    "asOf": updated_at,
-                    "last_update": updated_at,
-                    "freshness": "fallback",
-                    "isFallback": True,
-                    "warning": "正在获取实时加密货币行情，当前显示备用快照",
-                }
-                for symbol, name, value, change_percent, sparkline in fallback_items
-            ] + self._crypto_funding_unavailable_items(updated_at) + self._crypto_unavailable_context_items(updated_at),
+        payload = {
+            "items": spot_items + self._crypto_funding_unavailable_items(updated_at) + self._crypto_unavailable_context_items(updated_at),
             "last_update": updated_at,
             "updatedAt": updated_at,
             "asOf": updated_at,
-            "error": None,
+            "error": "crypto provider unavailable",
             "fallback_used": True,
             "fallbackUsed": True,
             "isFallback": True,
+            "isUnavailable": True,
             "isRefreshing": True,
-            "freshness": "fallback",
-            "source": "fallback",
-            "sourceLabel": "备用数据",
-            "warning": "正在获取实时加密货币行情，当前显示备用快照",
+            "freshness": "unavailable",
+            "source": "unavailable",
+            "sourceLabel": self._source_label("unavailable"),
+            "warning": "加密货币行情暂不可用；未生成备用价格。",
         }
+        payload["providerFreshness"] = self._consumer_provider_freshness(
+            payload,
+            freshness="unavailable",
+            is_proxy=False,
+            degradation_reason="unavailable_source",
+        )
+        return payload
 
     def _ttl_for_cache_key(self, cache_key: str) -> int:
         ttl_key = {
@@ -4617,22 +4626,22 @@ class MarketOverviewService:
         ]
         real_items = [item for item in items if item not in fallback_items]
         has_error = bool(payload.get("lastError") or payload.get("refreshError") or payload.get("error"))
+        if payload.get("isUnavailable") or source == "unavailable" or (not items and freshness in {"fallback", "unavailable", "error"}):
+            return "unavailable"
         if payload.get("isRefreshing") and (payload.get("lastError") or payload.get("refreshError")) and (payload.get("isStale") or payload.get("isFromSnapshot")):
             return "stale"
         if payload.get("isRefreshing"):
             return "refreshing"
-        if source == "unavailable" or (not items and freshness in {"fallback", "error"}):
-            return "unavailable"
         if has_error and (payload.get("isStale") or payload.get("isFromSnapshot")) and items:
             return "stale"
         if has_error and not items:
             return "error"
+        if payload.get("isFallback") or freshness in {"fallback", "mock"} or source in {"fallback", "mock"}:
+            return "fallback"
         if has_error and items:
             return "partial"
         if real_items and fallback_items:
             return "partial"
-        if payload.get("isFallback") or freshness in {"fallback", "mock"} or source in {"fallback", "mock"}:
-            return "fallback"
         if payload.get("fallbackUsed") and real_items:
             return "partial"
         if payload.get("isPartial") or freshness == "partial":
@@ -4862,6 +4871,9 @@ class MarketOverviewService:
             or source.lower() == "unavailable"
             or freshness in {"unavailable", "error"}
         )
+        if is_fallback and source.lower() == "fallback":
+            freshness = "fallback"
+            is_unavailable = bool(value.get("isUnavailable") and value.get("source") == "unavailable")
         is_synthetic = bool(
             value.get("isSynthetic")
             or freshness in {"synthetic", "mock"}
@@ -5324,21 +5336,200 @@ class MarketOverviewService:
         is_stale = bool(preserved.get("isStale"))
         is_partial = bool(preserved.get("isPartial"))
         is_unavailable = bool(preserved.get("isUnavailable"))
+        is_proxy = bool(preserved.get("isProxy"))
         if is_unavailable and explicit_freshness in {"live", "fresh", "delayed", "cached"}:
             explicit_freshness = "unavailable"
-        elif is_fallback and explicit_freshness in {"live", "fresh", "delayed", "cached", "partial"}:
+        elif is_proxy and explicit_freshness in {"live", "fresh", "delayed", "cached"}:
+            explicit_freshness = "proxy"
+        elif is_fallback and explicit_freshness in {"live", "fresh", "delayed", "partial"}:
             explicit_freshness = "fallback"
         elif is_stale and explicit_freshness in {"live", "fresh"}:
             explicit_freshness = "stale"
-        elif is_partial and explicit_freshness in {"live", "fresh"}:
-            explicit_freshness = "partial"
+        elif explicit_freshness in {"mock", "synthetic", "error"}:
+            explicit_freshness = "unavailable" if is_unavailable else "fallback"
+        elif explicit_freshness == "fresh":
+            explicit_freshness = "live"
         return {
             **freshness,
             "freshness": explicit_freshness,
             "isFallback": bool(freshness.get("isFallback") or is_fallback or explicit_freshness in {"fallback", "mock"}),
             "isStale": bool(freshness.get("isStale") or is_stale or explicit_freshness == "stale"),
+            "isUnavailable": bool(freshness.get("isUnavailable") or is_unavailable or explicit_freshness == "unavailable"),
+            "isProxy": bool(freshness.get("isProxy") or is_proxy or explicit_freshness == "proxy"),
             "warning": preserved.get("warning") or freshness.get("warning"),
         }
+
+    @staticmethod
+    def _is_proxy_source(*, source: Any, source_type: Any, value: Mapping[str, Any]) -> bool:
+        source_key = str(source or "").strip().lower()
+        source_type_key = str(source_type or "").strip().lower()
+        return bool(
+            value.get("isProxy")
+            or value.get("proxyFallback")
+            or value.get("proxySymbol")
+            or source_key in MARKET_OVERVIEW_PROXY_SOURCES
+            or source_type_key in MARKET_OVERVIEW_PROXY_SOURCE_TYPES
+        )
+
+    @staticmethod
+    def _normalize_market_overview_freshness_state(value: Any) -> str:
+        freshness = str(value or "").strip().lower()
+        aliases = {
+            "fresh": "live",
+            "realtime": "live",
+            "current": "live",
+            "t_plus_1_or_delayed": "delayed",
+            "t+1_or_delayed": "delayed",
+            "fallback": "cached",
+            "mock": "unavailable",
+            "synthetic": "unavailable",
+            "error": "unavailable",
+            "partial": "cached",
+        }
+        normalized = aliases.get(freshness, freshness)
+        if normalized in MARKET_OVERVIEW_NORMALIZED_FRESHNESS_STATES:
+            return normalized
+        if normalized == "fallback":
+            return "cached"
+        return "unavailable"
+
+    @classmethod
+    def _degradation_reason_for_freshness(
+        cls,
+        payload: Mapping[str, Any],
+        freshness: str,
+        *,
+        is_proxy: bool,
+    ) -> Optional[str]:
+        source_authority_reason = str(payload.get("sourceAuthorityReason") or "").strip()
+        route_reasons = payload.get("routeRejectedReasonCodes")
+        route_reason = ""
+        if isinstance(route_reasons, Sequence) and not isinstance(route_reasons, (str, bytes)):
+            for reason in route_reasons:
+                normalized_reason = str(reason or "").strip()
+                if normalized_reason:
+                    route_reason = normalized_reason
+                    break
+        explicit = str(payload.get("degradationReason") or payload.get("fallbackReason") or "").strip()
+        if explicit and explicit != "provider_missing":
+            if explicit in {"unavailable_source", "fallback_source"}:
+                return source_authority_reason or route_reason or explicit
+            return explicit
+        if source_authority_reason:
+            return source_authority_reason
+        if route_reason:
+            return route_reason
+        if bool(payload.get("isUnavailable")) or freshness == "unavailable":
+            return "unavailable_source"
+        if bool(payload.get("isStale")) or freshness == "stale":
+            return "stale_source"
+        if bool(payload.get("isPartial")):
+            return "partial_coverage"
+        if is_proxy:
+            return "etf_proxy_for_index" if payload.get("proxySymbol") else "proxy_source"
+        return None
+
+    @classmethod
+    def _source_confidence_for_freshness(
+        cls,
+        payload: Mapping[str, Any],
+        freshness: str,
+        *,
+        is_proxy: bool,
+    ) -> str:
+        if bool(payload.get("isUnavailable")) or freshness == "unavailable":
+            return "unavailable"
+        if is_proxy or freshness == "proxy":
+            return "proxy"
+        if bool(payload.get("isStale")) or freshness == "stale":
+            return "stale"
+        if freshness in {"delayed", "cached"}:
+            return "limited"
+        return "direct"
+
+    @classmethod
+    def _consumer_provider_freshness(
+        cls,
+        payload: Mapping[str, Any],
+        *,
+        freshness: str,
+        is_proxy: bool,
+        degradation_reason: Optional[str],
+    ) -> Dict[str, Any]:
+        state = cls._normalize_market_overview_freshness_state(freshness)
+        is_unavailable = bool(payload.get("isUnavailable") or state == "unavailable")
+        is_stale = bool(payload.get("isStale") or state == "stale")
+        summary = {
+            "state": state,
+            "label": MARKET_OVERVIEW_CONSUMER_FRESHNESS_LABELS[state],
+            "available": bool(state in {"live", "delayed", "cached", "proxy"} and not is_unavailable and not is_stale),
+            "sourceConfidence": cls._source_confidence_for_freshness(payload, state, is_proxy=is_proxy),
+            "isProxy": bool(is_proxy or state == "proxy"),
+            "isStale": is_stale,
+            "isUnavailable": is_unavailable,
+            "asOf": payload.get("asOf"),
+            "sourceLabel": payload.get("sourceLabel"),
+            "dataSource": payload.get("source"),
+        }
+        if degradation_reason:
+            summary["degradationReason"] = degradation_reason
+        for key in ("proxyFor", "proxySymbol", "proxyLabel"):
+            if payload.get(key):
+                summary[key] = payload.get(key)
+        return summary
+
+    @classmethod
+    def _bundle_freshness_from_items(
+        cls,
+        payload: Mapping[str, Any],
+        fallback_freshness: str,
+    ) -> tuple[str, Optional[str], bool, bool]:
+        items = [item for item in payload.get("items", []) if isinstance(item, Mapping)]
+        if not items:
+            return fallback_freshness, None, False, False
+        states: List[str] = []
+        proxy_seen = False
+        unavailable_seen = False
+        stale_seen = False
+        for item in items:
+            item_proxy = cls._is_proxy_source(
+                source=item.get("source") or payload.get("source"),
+                source_type=item.get("sourceType") or payload.get("sourceType"),
+                value=item,
+            )
+            source_freshness = item.get("sourceFreshnessEvidence")
+            raw_freshness = item.get("freshness")
+            if isinstance(source_freshness, Mapping) and source_freshness.get("freshness"):
+                raw_freshness = source_freshness.get("freshness")
+            if not raw_freshness and not item_proxy and not item.get("isUnavailable"):
+                continue
+            if not raw_freshness and item_proxy:
+                raw_freshness = "proxy"
+            item_state = cls._normalize_market_overview_freshness_state(raw_freshness)
+            if item.get("isUnavailable") or str(item.get("source") or "").lower() == "unavailable":
+                item_state = "unavailable"
+            elif item_proxy and item_state in {"live", "delayed", "cached"}:
+                item_state = "proxy"
+            if item_state == "unavailable":
+                unavailable_seen = True
+            if item_state == "stale":
+                stale_seen = True
+            proxy_seen = proxy_seen or item_proxy or item_state == "proxy"
+            states.append(item_state)
+        unique_states = set(states)
+        if unavailable_seen and len(unique_states) > 1:
+            return "unavailable", "partial_unavailable_inputs", proxy_seen, True
+        if unavailable_seen:
+            return "unavailable", "unavailable_source", proxy_seen, False
+        if stale_seen:
+            return "stale", "stale_source", proxy_seen, len(unique_states) > 1
+        if proxy_seen and unique_states <= {"proxy", "delayed", "cached", "live"}:
+            return "proxy", "proxy_source", True, len(unique_states) > 1
+        if "cached" in unique_states:
+            return "cached", "delayed_source", proxy_seen, len(unique_states) > 1
+        if "delayed" in unique_states:
+            return "delayed", "delayed_source", proxy_seen, len(unique_states) > 1
+        return fallback_freshness, None, proxy_seen, len(unique_states) > 1
 
     def _with_market_meta(self, payload: Dict[str, Any], category: str) -> Dict[str, Any]:
         source = str(payload.get("source") or ("fallback" if payload.get("fallbackUsed") or payload.get("fallback_used") else "mixed"))
@@ -5364,40 +5555,145 @@ class MarketOverviewService:
             if snapshot_freshness in {"stale", "fallback", "mock", "error"}:
                 freshness = {
                     **freshness,
-                    "freshness": snapshot_freshness,
+                    "freshness": self._normalize_market_overview_freshness_state(snapshot_freshness),
                     "isStale": True,
-                    "isFallback": bool(is_fallback or snapshot_freshness in {"fallback", "mock"}),
+                    "isFallback": bool(is_fallback),
                     "warning": payload.get("warning") or "数据源刷新失败，当前显示最近成功快照",
                 }
-        reliability = classify_market_payload_reliability({**payload, "source": source, "freshness": freshness["freshness"], "isFallback": freshness["isFallback"]}, category)
-        fallback_reason = payload.get("fallbackReason") or _fallback_reason_code(raw_error)
-        return {
+        legacy_freshness = str(freshness["freshness"] or "").strip().lower()
+        normalized_freshness = self._normalize_market_overview_freshness_state(legacy_freshness)
+        if legacy_freshness in {"fallback", "partial", "mock"}:
+            normalized_freshness = legacy_freshness
+        item_freshness, item_reason, item_proxy, item_partial = self._bundle_freshness_from_items(
+            payload,
+            normalized_freshness,
+        )
+        if normalized_freshness == "stale" and item_freshness == "proxy":
+            item_reason = None
+            item_freshness = "stale"
+        summary_freshness = item_freshness
+        if item_reason in {"partial_unavailable_inputs", "unavailable_source", "stale_source"} or item_freshness in {"unavailable", "stale"}:
+            normalized_freshness = item_freshness
+            freshness = {
+                **freshness,
+                "freshness": normalized_freshness,
+                "isStale": bool(freshness.get("isStale") or normalized_freshness == "stale"),
+                "isUnavailable": bool(freshness.get("isUnavailable") or normalized_freshness == "unavailable"),
+                "isProxy": bool(freshness.get("isProxy") or item_proxy or normalized_freshness == "proxy"),
+            }
+        elif (
+            item_proxy
+            and normalized_freshness in {"live", "delayed", "cached"}
+            and not bool(payload.get("isStale") or freshness.get("isStale"))
+        ):
+            summary_freshness = "proxy"
+            freshness = {**freshness, "isProxy": True}
+        if legacy_freshness in {"fallback", "partial", "mock"} and item_reason not in {
+            "partial_unavailable_inputs",
+            "unavailable_source",
+            "stale_source",
+        }:
+            summary_freshness = legacy_freshness
+        proxy_source = self._is_proxy_source(source=source, source_type=payload.get("sourceType") or "", value=payload)
+        proxy_source = bool(proxy_source or item_proxy or normalized_freshness == "proxy")
+        reliability = classify_market_payload_reliability({**payload, "source": source, "freshness": normalized_freshness, "isFallback": freshness["isFallback"]}, category)
+        normalized_payload = {
             **payload,
             "source": source,
             "sourceLabel": payload.get("sourceLabel") or self._source_label(source),
             "sourceType": payload.get("sourceType") or reliability.get("sourceType"),
             "updatedAt": updated_at,
             "asOf": as_of,
-            "freshness": freshness["freshness"],
+            "freshness": normalized_freshness,
             "isFallback": freshness["isFallback"],
-            "isStale": bool(payload.get("isStale") or freshness["isStale"]),
-            "isPartial": bool(payload.get("isPartial") or preserved_freshness.get("isPartial") or freshness["freshness"] == "partial"),
-            "isUnavailable": bool(payload.get("isUnavailable") or preserved_freshness.get("isUnavailable") or freshness["freshness"] in {"unavailable", "error"}),
+            "isStale": bool(payload.get("isStale") or freshness.get("isStale") or normalized_freshness == "stale"),
+            "isPartial": bool(payload.get("isPartial") or preserved_freshness.get("isPartial") or item_partial),
+            "isUnavailable": bool(
+                payload.get("isUnavailable")
+                or preserved_freshness.get("isUnavailable")
+                or (self._normalize_market_overview_freshness_state(normalized_freshness) == "unavailable" and not item_partial)
+            ),
+            "isProxy": proxy_source,
             "delayMinutes": freshness["delayMinutes"],
             "warning": payload.get("warning") or (REFRESH_WARNING if payload.get("lastError") else None) or freshness["warning"],
             "fallbackUsed": bool(payload.get("fallbackUsed") or freshness["isFallback"]),
-            "fallbackReason": fallback_reason if (bool(payload.get("fallbackUsed") or freshness["isFallback"]) or bool(raw_error) or bool(payload.get("isStale"))) else None,
             "isRefreshing": bool(payload.get("isRefreshing")),
             "lastError": _compact_error_summary(payload.get("lastError")),
             "refreshError": _compact_error_summary(payload.get("refreshError") or payload.get("lastError")),
             "isFromSnapshot": bool(payload.get("isFromSnapshot")),
             "lastSuccessfulAt": payload.get("lastSuccessfulAt"),
         }
+        degradation_reason = self._degradation_reason_for_freshness(
+            normalized_payload,
+            normalized_freshness,
+            is_proxy=proxy_source,
+        )
+        if item_reason in {"partial_unavailable_inputs", "unavailable_source", "stale_source"}:
+            degradation_reason = item_reason
+        if bool(normalized_payload.get("isPartial")) and degradation_reason in {"delayed_source", "fallback_source"}:
+            degradation_reason = "partial_coverage"
+        normalized_payload["sourceConfidence"] = self._source_confidence_for_freshness(
+            normalized_payload,
+            normalized_freshness,
+            is_proxy=proxy_source,
+        )
+        original_reason = str(payload.get("degradationReason") or payload.get("fallbackReason") or "").strip()
+        should_write_reason = bool(
+            degradation_reason
+            and (
+                original_reason == "provider_missing"
+                or bool(payload.get("isUnavailable"))
+                or bool(payload.get("isStale"))
+                or bool(payload.get("isPartial"))
+                or item_reason in {"partial_unavailable_inputs", "unavailable_source", "stale_source"}
+            )
+        )
+        if (
+            should_write_reason
+            and degradation_reason == "unavailable_source"
+            and (payload.get("sourceAuthorityReason") or payload.get("routeRejectedReasonCodes"))
+        ):
+            degradation_reason = self._degradation_reason_for_freshness(
+                {**payload, **normalized_payload},
+                normalized_freshness,
+                is_proxy=proxy_source,
+            )
+        if should_write_reason:
+            normalized_payload["degradationReason"] = degradation_reason
+        fallback_reason = degradation_reason or _fallback_reason_code(raw_error)
+        normalized_payload["fallbackReason"] = (
+            fallback_reason
+            if (
+                bool(normalized_payload.get("fallbackUsed"))
+                or bool(raw_error)
+                or bool(normalized_payload.get("isStale"))
+                or bool(normalized_payload.get("isUnavailable"))
+                or bool(normalized_payload.get("isPartial"))
+                or original_reason == "provider_missing"
+            )
+            else None
+        )
+        normalized_payload["providerFreshness"] = self._consumer_provider_freshness(
+            normalized_payload,
+            freshness=summary_freshness if summary_freshness in MARKET_OVERVIEW_NORMALIZED_FRESHNESS_STATES else normalized_freshness,
+            is_proxy=proxy_source,
+            degradation_reason=degradation_reason,
+        )
+        return normalized_payload
 
     def _source_degradation_reason(self, payload: Dict[str, Any], freshness: str) -> Optional[str]:
         explicit = payload.get("degradationReason") or payload.get("fallbackReason")
         if explicit:
             return str(explicit)
+        source_authority_reason = payload.get("sourceAuthorityReason")
+        if source_authority_reason:
+            return str(source_authority_reason)
+        route_reasons = payload.get("routeRejectedReasonCodes")
+        if isinstance(route_reasons, Sequence) and not isinstance(route_reasons, (str, bytes)):
+            for reason in route_reasons:
+                normalized_reason = str(reason or "").strip()
+                if normalized_reason:
+                    return normalized_reason
         if bool(payload.get("isUnavailable")) or freshness in {"unavailable", "error"}:
             return "unavailable_source"
         if bool(payload.get("isFallback") or payload.get("fallbackUsed")) or freshness in {"fallback", "mock"}:
@@ -5651,12 +5947,28 @@ class MarketOverviewService:
             if snapshot_freshness in {"stale", "fallback", "mock", "error"}:
                 freshness = {
                     **freshness,
-                    "freshness": snapshot_freshness,
+                    "freshness": self._normalize_market_overview_freshness_state(snapshot_freshness),
                     "isStale": True,
-                    "isFallback": bool(is_fallback or snapshot_freshness in {"fallback", "mock"}),
+                    "isFallback": bool(is_fallback),
                     "warning": item.get("warning") or panel.get("warning") or "数据源刷新失败，当前显示最近成功快照",
                 }
-        reliability = classify_market_payload_reliability({**item, "source": source, "freshness": freshness["freshness"], "isFallback": freshness["isFallback"]}, category)
+        legacy_item_freshness = str(freshness["freshness"] or "").strip().lower()
+        normalized_freshness = self._normalize_market_overview_freshness_state(legacy_item_freshness)
+        proxy_source = self._is_proxy_source(
+            source=source,
+            source_type=item.get("sourceType") or panel.get("sourceType") or "",
+            value=item,
+        )
+        if item.get("isUnavailable") or str(source).lower() == "unavailable":
+            legacy_item_freshness = "unavailable"
+            normalized_freshness = "unavailable"
+            freshness = {**freshness, "freshness": "unavailable", "isUnavailable": True}
+        elif proxy_source and normalized_freshness in {"live", "delayed", "cached"}:
+            legacy_item_freshness = "proxy"
+            normalized_freshness = "proxy"
+            freshness = {**freshness, "freshness": "proxy", "isProxy": True}
+        output_freshness = legacy_item_freshness if legacy_item_freshness in {"fallback", "partial", "mock"} else normalized_freshness
+        reliability = classify_market_payload_reliability({**item, "source": source, "freshness": normalized_freshness, "isFallback": freshness["isFallback"]}, category)
         normalized = {
             **item,
             "source": source,
@@ -5664,15 +5976,32 @@ class MarketOverviewService:
             "sourceType": item.get("sourceType") or reliability.get("sourceType"),
             "updatedAt": updated_at,
             "asOf": as_of,
-            "freshness": freshness["freshness"],
+            "freshness": output_freshness,
             "isFallback": freshness["isFallback"],
-            "isStale": freshness["isStale"],
-            "isPartial": bool(item.get("isPartial") or preserved_freshness.get("isPartial") or freshness["freshness"] == "partial"),
-            "isUnavailable": bool(item.get("isUnavailable") or preserved_freshness.get("isUnavailable") or freshness["freshness"] in {"unavailable", "error"}),
+            "isStale": bool(freshness.get("isStale") or normalized_freshness == "stale"),
+            "isPartial": bool(item.get("isPartial") or preserved_freshness.get("isPartial")),
+            "isUnavailable": bool(item.get("isUnavailable") or preserved_freshness.get("isUnavailable") or normalized_freshness == "unavailable"),
+            "isProxy": bool(proxy_source),
             "delayMinutes": freshness["delayMinutes"],
             "warning": item.get("warning") or freshness["warning"],
             "isFromSnapshot": bool(item.get("isFromSnapshot") or panel.get("isFromSnapshot")),
         }
+        degradation_reason = self._degradation_reason_for_freshness(
+            normalized,
+            normalized_freshness,
+            is_proxy=proxy_source,
+        )
+        normalized["sourceConfidence"] = self._source_confidence_for_freshness(
+            normalized,
+            normalized_freshness,
+            is_proxy=proxy_source,
+        )
+        if degradation_reason:
+            normalized["degradationReason"] = degradation_reason
+        if proxy_source:
+            normalized["sourceAuthorityAllowed"] = False
+            normalized["scoreContributionAllowed"] = False
+            normalized["observationOnly"] = True
         official_freshness_details = (
             _official_daily_detail_payload(freshness)
             or _official_daily_detail_payload(item.get("officialFreshnessDetails"))
@@ -5696,7 +6025,16 @@ class MarketOverviewService:
             normalized["sourceFreshnessEvidence"] = source_evidence
         normalized = normalize_vix_quote_metadata(normalized)
         normalized = {**normalized, **self._source_trust_meta(normalized)}
-        return {**normalized, **self._source_activation_meta(normalized)}
+        normalized = {**normalized, **self._source_activation_meta(normalized)}
+        if degradation_reason:
+            normalized["degradationReason"] = degradation_reason
+        normalized["providerFreshness"] = self._consumer_provider_freshness(
+            normalized,
+            freshness=normalized_freshness,
+            is_proxy=proxy_source,
+            degradation_reason=degradation_reason,
+        )
+        return normalized
 
     def _fetch_indices(self) -> PanelPayload:
         return self._quote_panel("IndexTrendsCard", self.INDEX_SYMBOLS)
@@ -10366,6 +10704,7 @@ class MarketOverviewService:
             "error_message": error_message,
             "warning": FALLBACK_WARNING,
             "source": "fallback",
+            "freshness": "fallback",
             "fallbackUsed": True,
             "isFallback": True,
             "items": self._fallback_overview_items(cache_key, updated_at),

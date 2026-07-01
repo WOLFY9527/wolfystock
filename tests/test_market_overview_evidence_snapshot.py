@@ -520,26 +520,26 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
             payload = service.get_cn_breadth()
 
         evidence = payload["evidenceSnapshot"]
-        assert evidence["source"] == "fallback"
-        assert evidence["freshness"] == "fallback"
+        assert evidence["source"] == "unavailable"
+        assert evidence["freshness"] == "unavailable"
         assert evidence["isFallback"] is True
         assert evidence["isStale"] is False
         assert evidence["isPartial"] is False
-        assert evidence["isUnavailable"] is False
+        assert evidence["isUnavailable"] is True
         assert evidence["coverage"] == 0.0
         assert evidence["confidenceWeight"] == 0.0
-        assert evidence["degradationReason"] == "provider_unavailable"
-        assert evidence["capReason"] == "fallback_source"
+        assert evidence["degradationReason"] == "unavailable_source"
+        assert evidence["capReason"] == "unavailable_source"
         assert evidence["reasonFamilies"] == [
             {
-                "rawCode": "provider_unavailable",
-                "family": "unclassified",
-                "scope": None,
+                "rawCode": "unavailable_source",
+                "family": "unavailable",
+                "scope": "source_confidence",
                 "sourceField": "degradationReason",
             },
             {
-                "rawCode": "fallback_source",
-                "family": "fallback",
+                "rawCode": "unavailable_source",
+                "family": "unavailable",
                 "scope": "source_confidence",
                 "sourceField": "capReason",
             },
