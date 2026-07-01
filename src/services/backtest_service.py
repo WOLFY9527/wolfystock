@@ -27,13 +27,16 @@ from src.services.historical_ohlcv_readiness import (
     HistoricalOhlcvReadinessRequest,
     HistoricalOhlcvReadinessService,
 )
-from src.services.starter_market_data import STARTER_MARKET_DATA_SYMBOLS
+from src.services.us_ohlcv_coverage_readiness import (
+    resolve_us_ohlcv_coverage_universe,
+    starter_us_ohlcv_coverage_symbols,
+)
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback
 from src.services.yfinance_us_ohlcv_cache_provider import build_readonly_local_us_ohlcv_cache_provider_from_env
 from src.storage import AnalysisHistory, BacktestResult, BacktestRun, BacktestSummary, DatabaseManager, StockDaily
 
 logger = logging.getLogger(__name__)
-LOCAL_BACKTEST_STARTER_SYMBOLS = STARTER_MARKET_DATA_SYMBOLS
+LOCAL_BACKTEST_STARTER_SYMBOLS = starter_us_ohlcv_coverage_symbols()
 
 
 @dataclass(frozen=True)
@@ -1327,7 +1330,13 @@ class BacktestService:
 
     def _aggregate_local_symbol_readiness(self, *, settings: BacktestRuntimeSettings) -> List[Dict[str, Any]]:
         rows: List[Dict[str, Any]] = []
-        for symbol in LOCAL_BACKTEST_STARTER_SYMBOLS:
+        tier1_universe = resolve_us_ohlcv_coverage_universe(tier="tier1")
+        symbols = (
+            tuple(tier1_universe["symbols"])
+            if tier1_universe.get("configured") is True
+            else LOCAL_BACKTEST_STARTER_SYMBOLS
+        )
+        for symbol in symbols:
             readiness = self._build_historical_ohlcv_readiness(
                 code=symbol,
                 rows=[],
