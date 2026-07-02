@@ -79,13 +79,62 @@ def test_dry_run_builds_refresh_plan_without_provider_calls_or_writes() -> None:
     assert payload["contractVersion"] == US_OHLCV_CACHE_REFRESH_CONTRACT_VERSION
     assert payload["dryRun"] is True
     assert payload["providerPolicy"]["liveProviderCallsAllowed"] is False
+    assert payload["estimatedMaxProviderCalls"] == 1
+    assert payload["plannedProviderCalls"] == 1
+    assert payload["actualProviderCallsMade"] == 0
+    assert payload["providerPolicy"]["plannedProviderCalls"] == 1
+    assert payload["providerPolicy"]["actualProviderCallsMade"] == 0
     assert payload["providerPolicy"]["providerCallsMade"] == 0
+    assert payload["plannedCacheWrites"] == 1
+    assert payload["plannedSymbolsToWrite"] == ["TSLA"]
+    assert payload["plannedRowsUnknown"] is True
     assert payload["writePolicy"]["cacheWritesAllowed"] is False
     assert payload["writePolicy"]["databaseWritesAllowed"] is False
+    assert payload["writePolicy"]["plannedCacheWrites"] == 1
+    assert payload["writePolicy"]["plannedSymbolsToWrite"] == ["TSLA"]
+    assert payload["writePolicy"]["actualRowsWritten"] == 0
     assert payload["writePolicy"]["rowsWritten"] == 0
+    assert payload["actualSymbolsWritten"] == 0
+    assert payload["actualRowsWritten"] == 0
     assert payload["alreadyAvailableSymbols"] == ["AAPL"]
     assert payload["missingOrStaleSymbols"] == ["TSLA"]
     assert payload["skippedSymbols"] == [{"symbol": "BAD!", "reason": "not_us_stock_symbol"}]
+    assert fetcher.calls == []
+    assert cache.save_calls == []
+
+
+def test_dry_run_reports_budgeted_planned_metrics_separate_from_actual_metrics() -> None:
+    cache = _FakeCache()
+    fetcher = _FakeFetcher({"TSLA": _frame(4), "NVDA": _frame(4)})
+    service = UsOhlcvCacheRefreshService(cache=cache, fetcher=fetcher, today=date(2026, 1, 10))
+
+    payload = service.refresh(symbols=["TSLA", "NVDA"], execute=False, max_symbols=2, required_bars=3)
+
+    planned_provider_symbol_count = len(
+        [item for item in payload["plan"]["symbols"] if item["providerCallPlanned"]]
+    )
+    planned_write_symbol_count = len([item for item in payload["plan"]["symbols"] if item["writePlanned"]])
+    assert payload["missingOrStaleSymbols"] == ["TSLA", "NVDA"]
+    assert payload["estimatedMaxProviderCalls"] == 2
+    assert payload["plannedProviderCalls"] == 2
+    assert payload["providerPolicy"]["plannedProviderCalls"] == 2
+    assert payload["summary"]["plannedProviderCalls"] == 2
+    assert planned_provider_symbol_count == payload["plannedProviderCalls"]
+    assert payload["actualProviderCallsMade"] == 0
+    assert payload["providerPolicy"]["providerCallsMade"] == 0
+    assert payload["providerPolicy"]["actualProviderCallsMade"] == 0
+    assert payload["plannedCacheWrites"] == 2
+    assert payload["plannedSymbolsToWrite"] == ["TSLA", "NVDA"]
+    assert payload["plan"]["plannedCacheWrites"] == 2
+    assert payload["plan"]["writePlanSemantics"] == "would_write_if_execute_true"
+    assert planned_write_symbol_count == payload["plannedCacheWrites"]
+    assert payload["writePolicy"]["cacheWritesAllowed"] is False
+    assert payload["writePolicy"]["databaseWritesAllowed"] is False
+    assert payload["writePolicy"]["plannedCacheWrites"] == 2
+    assert payload["writePolicy"]["symbolsWritten"] == []
+    assert payload["writePolicy"]["rowsWritten"] == 0
+    assert payload["actualSymbolsWritten"] == 0
+    assert payload["actualRowsWritten"] == 0
     assert fetcher.calls == []
     assert cache.save_calls == []
 
@@ -120,9 +169,16 @@ def test_execution_refreshes_only_missing_or_stale_symbols_within_budget() -> No
     assert results["MSFT"]["status"] == "skipped_budget"
     assert fetcher.calls == ["TSLA", "NVDA"]
     assert cache.save_calls == [("TSLA", 5), ("NVDA", 5)]
+    assert payload["estimatedMaxProviderCalls"] == 2
+    assert payload["plannedProviderCalls"] == 2
+    assert payload["actualProviderCallsMade"] == 2
     assert payload["providerPolicy"]["providerCallsMade"] == 2
+    assert payload["plannedCacheWrites"] == 2
     assert payload["writePolicy"]["symbolsWritten"] == ["TSLA", "NVDA"]
     assert payload["writePolicy"]["rowsWritten"] == 10
+    assert payload["actualSymbolsWritten"] == 2
+    assert payload["actualRowsWritten"] == 10
+    assert payload["summary"]["skippedBudget"] == 1
 
 
 def test_execution_reports_provider_failure_per_symbol_without_marking_available() -> None:

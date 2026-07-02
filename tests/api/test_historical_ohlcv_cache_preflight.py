@@ -171,6 +171,7 @@ class _FakeUsRefreshService:
                 "require_adjusted": require_adjusted,
             }
         )
+        refresh_count = min(max_symbols, len(symbols or []))
         return {
             "contractVersion": "us_ohlcv_cache_refresh_v1",
             "dryRun": not execute,
@@ -181,7 +182,14 @@ class _FakeUsRefreshService:
             "alreadyAvailableSymbols": [],
             "missingOrStaleSymbols": list(symbols or []),
             "skippedSymbols": [],
-            "estimatedMaxProviderCalls": 0 if not execute else min(max_symbols, len(symbols or [])),
+            "estimatedMaxProviderCalls": refresh_count,
+            "plannedProviderCalls": refresh_count,
+            "actualProviderCallsMade": 0,
+            "plannedCacheWrites": refresh_count,
+            "plannedSymbolsToWrite": list(symbols or [])[:refresh_count],
+            "plannedRowsUnknown": refresh_count > 0,
+            "actualSymbolsWritten": 0,
+            "actualRowsWritten": 0,
             "writeTarget": "local_us_parquet_cache",
             "refreshPolicy": {
                 "explicitExecutionRequired": True,
@@ -191,6 +199,8 @@ class _FakeUsRefreshService:
             },
             "providerPolicy": {
                 "liveProviderCallsAllowed": execute,
+                "plannedProviderCalls": refresh_count,
+                "actualProviderCallsMade": 0,
                 "providerCallsMade": 0,
                 "providerCallBoundary": "missing_or_stale_symbols_only",
                 "consumerSafe": True,
@@ -199,11 +209,25 @@ class _FakeUsRefreshService:
                 "cacheWritesAllowed": execute,
                 "databaseWritesAllowed": False,
                 "writeTarget": "local_us_parquet_cache",
+                "plannedCacheWrites": refresh_count,
+                "plannedSymbolsToWrite": list(symbols or [])[:refresh_count],
+                "plannedRowsUnknown": refresh_count > 0,
                 "symbolsWritten": [],
                 "rowsWritten": 0,
+                "actualSymbolsWritten": 0,
+                "actualRowsWritten": 0,
                 "consumerSafe": True,
             },
-            "plan": {"symbols": [], "alreadyAvailableCount": 0, "refreshCandidateCount": 0, "skippedCount": 0},
+            "plan": {
+                "symbols": [],
+                "alreadyAvailableCount": 0,
+                "refreshCandidateCount": refresh_count,
+                "plannedProviderCalls": refresh_count,
+                "plannedCacheWrites": refresh_count,
+                "plannedSymbolsToWrite": list(symbols or [])[:refresh_count],
+                "writePlanSemantics": "would_write_if_execute_true",
+                "skippedCount": 0,
+            },
             "results": [],
             "summary": {},
             "consumerSafe": True,
@@ -257,12 +281,26 @@ def test_us_ohlcv_refresh_route_is_registered_with_operator_friendly_schema() ->
     route = schema["paths"]["/api/v1/admin/historical-ohlcv/us-cache-refresh"]["post"]
     request_schema_ref = route["requestBody"]["content"]["application/json"]["schema"]["$ref"]
     request_schema_name = request_schema_ref.rsplit("/", 1)[-1]
+    response_schema_ref = route["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+    response_schema_name = response_schema_ref.rsplit("/", 1)[-1]
     properties = schema["components"]["schemas"][request_schema_name]["properties"]
+    response_properties = schema["components"]["schemas"][response_schema_name]["properties"]
 
     assert route["summary"] == "Plan or explicitly execute bounded US OHLCV cache refresh"
     assert request_schema_name == "UsOhlcvCacheRefreshRequest"
     for field_name in ("symbols", "target", "universe", "execute", "dryRun", "maxSymbols"):
         assert field_name in properties
+    for field_name in (
+        "estimatedMaxProviderCalls",
+        "plannedProviderCalls",
+        "actualProviderCallsMade",
+        "plannedCacheWrites",
+        "plannedSymbolsToWrite",
+        "plannedRowsUnknown",
+        "actualSymbolsWritten",
+        "actualRowsWritten",
+    ):
+        assert field_name in response_properties
 
 
 def test_preflight_endpoint_requires_provider_read_capability() -> None:
@@ -512,10 +550,28 @@ def test_us_ohlcv_refresh_endpoint_dry_run_does_not_call_provider_or_write_cache
     assert response.status_code == 200
     payload = response.json()
     assert payload["dryRun"] is True
-    assert payload["estimatedMaxProviderCalls"] == 0
+    assert payload["estimatedMaxProviderCalls"] == 2
+    assert payload["plannedProviderCalls"] == 2
+    assert payload["actualProviderCallsMade"] == 0
+    assert payload["providerPolicy"]["plannedProviderCalls"] == 2
     assert payload["providerPolicy"]["providerCallsMade"] == 0
+    assert payload["providerPolicy"]["actualProviderCallsMade"] == 0
+    planned_provider_symbol_count = len(
+        [item for item in payload["plan"]["symbols"] if item["providerCallPlanned"]]
+    )
+    planned_write_symbol_count = len([item for item in payload["plan"]["symbols"] if item["writePlanned"]])
+    assert planned_provider_symbol_count == payload["plannedProviderCalls"]
+    assert planned_write_symbol_count == payload["plannedCacheWrites"]
+    assert payload["plannedCacheWrites"] == 2
+    assert payload["plannedSymbolsToWrite"] == ["TSLA", "NVDA"]
+    assert payload["writePolicy"]["plannedCacheWrites"] == 2
+    assert payload["writePolicy"]["plannedSymbolsToWrite"] == ["TSLA", "NVDA"]
     assert payload["writePolicy"]["cacheWritesAllowed"] is False
     assert payload["writePolicy"]["databaseWritesAllowed"] is False
+    assert payload["writePolicy"]["actualRowsWritten"] == 0
+    assert payload["writePolicy"]["rowsWritten"] == 0
+    assert payload["actualSymbolsWritten"] == 0
+    assert payload["actualRowsWritten"] == 0
     assert provider.calls == []
     assert cache.save_calls == []
     assert cache.load_calls == [("TSLA", 60), ("NVDA", 60)]
@@ -553,6 +609,22 @@ def test_us_ohlcv_refresh_endpoint_rejects_ambiguous_execution_contract_with_fie
     response = client.post(
         "/api/v1/admin/historical-ohlcv/us-cache-refresh",
         json={"symbols": ["TSLA"], "execute": True, "dryRun": True},
+    )
+
+    assert response.status_code == 422
+    payload_text = str(response.json()).lower()
+    assert "dryrun" in payload_text or "dry_run" in payload_text
+    assert "execute" in payload_text
+    assert service.calls == []
+
+
+def test_us_ohlcv_refresh_endpoint_rejects_dry_run_false_without_execute() -> None:
+    service = _FakeUsRefreshService()
+    client = _refresh_client_for(_provider_read_admin, service)
+
+    response = client.post(
+        "/api/v1/admin/historical-ohlcv/us-cache-refresh",
+        json={"symbols": ["TSLA"], "execute": False, "dryRun": False},
     )
 
     assert response.status_code == 422

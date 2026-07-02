@@ -285,7 +285,54 @@ class UsOhlcvCacheRefreshRequest(BaseModel):
 
 
 class UsOhlcvCacheRefreshResponse(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(
+        extra="allow",
+        json_schema_extra={
+            "examples": [
+                {
+                    "summary": "Dry-run with planned execution work but no side effects",
+                    "value": {
+                        "contractVersion": "us_ohlcv_cache_refresh_v1",
+                        "dryRun": True,
+                        "execute": False,
+                        "target": {"market": "us", "tier": "starter", "source": "explicit", "configured": True},
+                        "requestedSymbols": ["TSLA", "NVDA"],
+                        "normalizedSymbols": ["TSLA", "NVDA"],
+                        "alreadyAvailableSymbols": [],
+                        "missingOrStaleSymbols": ["TSLA", "NVDA"],
+                        "skippedSymbols": [],
+                        "estimatedMaxProviderCalls": 2,
+                        "plannedProviderCalls": 2,
+                        "actualProviderCallsMade": 0,
+                        "plannedCacheWrites": 2,
+                        "plannedSymbolsToWrite": ["TSLA", "NVDA"],
+                        "plannedRowsUnknown": True,
+                        "actualSymbolsWritten": 0,
+                        "actualRowsWritten": 0,
+                        "maxSymbols": 2,
+                        "writeTarget": "local_us_parquet_cache",
+                        "providerPolicy": {
+                            "liveProviderCallsAllowed": False,
+                            "plannedProviderCalls": 2,
+                            "actualProviderCallsMade": 0,
+                            "providerCallsMade": 0,
+                        },
+                        "writePolicy": {
+                            "cacheWritesAllowed": False,
+                            "databaseWritesAllowed": False,
+                            "plannedCacheWrites": 2,
+                            "plannedSymbolsToWrite": ["TSLA", "NVDA"],
+                            "plannedRowsUnknown": True,
+                            "symbolsWritten": [],
+                            "rowsWritten": 0,
+                            "actualSymbolsWritten": 0,
+                            "actualRowsWritten": 0,
+                        },
+                    },
+                }
+            ]
+        },
+    )
 
     contractVersion: str
     dryRun: bool
@@ -296,7 +343,41 @@ class UsOhlcvCacheRefreshResponse(BaseModel):
     alreadyAvailableSymbols: List[str] = Field(default_factory=list)
     missingOrStaleSymbols: List[str] = Field(default_factory=list)
     skippedSymbols: List[Dict[str, Any]] = Field(default_factory=list)
-    estimatedMaxProviderCalls: int = 0
+    estimatedMaxProviderCalls: int = Field(
+        default=0,
+        description=(
+            "Backward-compatible budgeted estimate of provider calls planned under execution. "
+            "In dry-run this is nonzero when missing/stale symbols would be refreshed."
+        ),
+    )
+    plannedProviderCalls: int = Field(
+        default=0,
+        description="Provider calls that would be attempted for missing/stale symbols if execute=true.",
+    )
+    actualProviderCallsMade: int = Field(
+        default=0,
+        description="Provider calls actually made during this request; remains 0 for dry-run.",
+    )
+    plannedCacheWrites: int = Field(
+        default=0,
+        description="Cache write attempts that would be made if execute=true and provider fetches succeeded.",
+    )
+    plannedSymbolsToWrite: List[str] = Field(
+        default_factory=list,
+        description="Symbols that would be written if execute=true and provider fetches succeeded.",
+    )
+    plannedRowsUnknown: bool = Field(
+        default=False,
+        description="True when planned write rows are unknown until live provider responses are fetched.",
+    )
+    actualSymbolsWritten: int = Field(
+        default=0,
+        description="Symbols actually written during this request; remains 0 for dry-run.",
+    )
+    actualRowsWritten: int = Field(
+        default=0,
+        description="Rows actually written during this request; remains 0 for dry-run.",
+    )
     writeTarget: str
     refreshPolicy: Dict[str, Any]
     providerPolicy: Dict[str, Any]
