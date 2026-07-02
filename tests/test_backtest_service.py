@@ -134,6 +134,26 @@ class BacktestServiceTestCase(unittest.TestCase):
             )
             session.commit()
 
+    def _insert_backtest_sample(self, code: str = "AAPL", sample_date: date = date(2024, 3, 1)) -> None:
+        owner_id = self.db.require_user_id(None)
+        with self.db.get_session() as session:
+            session.add(
+                AnalysisHistory(
+                    owner_id=owner_id,
+                    query_id=f"bt-sample:{code}:{sample_date.isoformat()}:w3",
+                    code=code,
+                    name=code,
+                    report_type="backtest_sample",
+                    sentiment_score=50,
+                    operation_advice="观望",
+                    trend_prediction="中性",
+                    analysis_summary="sample",
+                    created_at=datetime(2024, 3, 2, 0, 0, 0),
+                    context_snapshot=f'{{"enhanced_context": {{"date": "{sample_date.isoformat()}"}}}}',
+                )
+            )
+            session.commit()
+
     @staticmethod
     def _write_local_us_parquet(cache_dir: str, symbol: str, *, rows: int = 90) -> None:
         end_date = datetime.now().date()
@@ -674,6 +694,82 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(aggregate["historicalOhlcvReadiness"]["overallState"], "all_available")
         self.assertEqual(aggregate["resolved_source"], "LocalParquet")
         self.assertNotIn("provider_missing", aggregate["sample_blocking_reasons"])
+
+    def test_aggregate_ready_sample_status_does_not_emit_stale_missing_adjustments(self) -> None:
+        self._insert_backtest_sample(code="TSLA")
+        for symbol in ("TSLA", "NVDA"):
+            self._write_local_us_parquet(self._temp_dir.name, symbol, rows=90)
+        service = BacktestService(self.db)
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": self._temp_dir.name,
+                "US_STOCK_PARQUET_DIR": "",
+                "WOLFYSTOCK_US_OHLCV_TIER1_SYMBOLS": "TSLA,NVDA",
+            },
+            clear=False,
+        ), patch("src.services.us_history_helper.DataFetcherManager") as manager_cls:
+            aggregate = service.get_sample_status(code=None)
+            tsla = service.get_sample_status(code="TSLA")
+
+        manager_cls.assert_not_called()
+        self._history_fetch_mock.assert_not_called()
+        self.assertEqual(aggregate["sample_readiness_state"], "ready")
+        readiness = aggregate["historicalOhlcvReadiness"]
+        self.assertEqual(readiness["overallState"], "all_available")
+        self.assertEqual(readiness["providerState"], "available")
+        self.assertEqual(readiness["missingRequirements"], [])
+        self.assertEqual(readiness["adjustmentState"], "not_required")
+        self.assertFalse(
+            any(
+                "missing_adjustments" in item["missingRequirements"]
+                for item in aggregate["symbolSpecificReadiness"]
+            )
+        )
+        self.assertEqual(aggregate["execution_readiness"]["state"], "executable")
+        self.assertNotIn("missing_adjustments", aggregate["execution_readiness"]["reason_codes"])
+        self.assertFalse(aggregate["probePolicy"]["liveProviderProbingAllowed"])
+        self.assertFalse(aggregate["writePolicy"]["cacheWritesAllowed"])
+        self.assertFalse(aggregate["writePolicy"]["databaseWritesAllowed"])
+        self.assertEqual(aggregate["probePolicy"]["runtimeProbedSymbols"], 0)
+        self.assertEqual(tsla["sample_readiness_state"], "ready")
+        self.assertEqual(tsla["execution_readiness"]["state"], "executable")
+
+    def test_aggregate_sample_status_preserves_true_missing_adjustments(self) -> None:
+        self._insert_backtest_sample(code="AAPL")
+        service = BacktestService(self.db)
+
+        def fake_readiness(*, code, required_bars, **_):
+            return (
+                {
+                    "overallState": "degraded",
+                    "providerState": "available",
+                    "runtimeStatus": "available",
+                    "usableBars": required_bars,
+                    "missingBars": 0,
+                    "missingRequirements": ["missing_adjustments"],
+                },
+                service._build_source_metadata_from_fetch_source(code=code, source="local_us_parquet"),
+            )
+
+        with patch.dict(
+            os.environ,
+            {
+                "WOLFYSTOCK_US_OHLCV_TIER1_SYMBOLS": "AAPL",
+            },
+            clear=False,
+        ), patch.object(
+            service,
+            "_build_historical_ohlcv_readiness_with_metadata",
+            side_effect=fake_readiness,
+        ):
+            aggregate = service.get_sample_status(code=None)
+
+        self.assertEqual(aggregate["historicalOhlcvReadiness"]["adjustmentState"], "missing")
+        self.assertIn("missing_adjustments", aggregate["historicalOhlcvReadiness"]["missingRequirements"])
+        self.assertIn("missing_adjustments", aggregate["sample_blocking_reasons"])
+        self.assertIn("missing_adjustments", aggregate["execution_readiness"]["reason_codes"])
 
     def test_sample_status_uses_runtime_truth_for_tsla_without_local_cache(self) -> None:
         service = BacktestService(self.db)
