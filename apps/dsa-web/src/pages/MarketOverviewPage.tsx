@@ -1312,6 +1312,32 @@ function sanitizeRegimeReadModelText(value?: unknown, fallback = 'Evidence unava
     .replace(/proxy/g, 'context');
 }
 
+function regimeReadModelConsumerLabel(value: unknown, language: 'zh' | 'en', fallback?: string): string {
+  const raw = sanitizeRegimeReadModelText(value, fallback || (language === 'en' ? 'Evidence unavailable' : '证据暂不可用'));
+  const normalized = raw.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const labels: Record<string, { zh: string; en: string }> = {
+    available: { zh: '可用', en: 'Available' },
+    unavailable: { zh: '暂不可用', en: 'Unavailable' },
+    missing: { zh: '待补', en: 'Missing' },
+    stale: { zh: '待更新', en: 'Needs refresh' },
+    partial: { zh: '部分可用', en: 'Partly available' },
+    blocked: { zh: '已阻断', en: 'Blocked' },
+    degraded: { zh: '部分缺口', en: 'Partial context' },
+    unknown: { zh: '待确认', en: 'To confirm' },
+    insufficient_data: { zh: '数据不足', en: 'Insufficient data' },
+    product_ready: { zh: '产品可用', en: 'Product-ready' },
+    failed_closed: { zh: '已失败关闭', en: 'Failed closed' },
+    none: { zh: '无', en: 'none' },
+  };
+  if (labels[normalized]) {
+    return labels[normalized][language];
+  }
+  if (language === 'zh' && /\b(quote|snapshot|ohlcv|universe|provider|cache|raw|schema|diagnostic)\b/i.test(raw)) {
+    return '证据细节已折叠';
+  }
+  return raw;
+}
+
 function formatRegimeReadModelMetricValue(value: unknown): string {
   if (value == null || value === '') {
     return 'n/a';
@@ -1339,6 +1365,8 @@ const MarketRegimeReadModelSurface = ({
   error: string | null;
   onRetry: () => void;
 }) => {
+  const { language } = useI18n();
+  const locale = language === 'en' ? 'en' : 'zh';
   const readinessLabel = payload?.readiness?.label || 'unavailable';
   const status = payload?.status || 'unavailable';
   const missingFamilies = payload?.missingDataFamilies || payload?.readiness?.missingDataFamilies || [];
@@ -1353,30 +1381,30 @@ const MarketRegimeReadModelSurface = ({
     >
       <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <p className="text-[11px] font-medium text-white/48">Market regime read model</p>
+          <p className="text-[11px] font-medium text-white/48">{locale === 'en' ? 'Market regime read model' : '市场状态证据口径'}</p>
           <p className="mt-1 text-sm font-semibold text-white/86">
             {loading
-              ? 'Loading local regime evidence'
+              ? (locale === 'en' ? 'Loading local regime evidence' : '正在读取本地市场证据')
               : error
-                ? 'Local regime evidence unavailable'
-                : `${sanitizeRegimeReadModelText(payload?.regime?.label, 'insufficient_data')} · ${status}`}
+                ? (locale === 'en' ? 'Local regime evidence unavailable' : '本地市场证据暂不可用')
+                : `${regimeReadModelConsumerLabel(payload?.regime?.label, locale, 'insufficient_data')} · ${regimeReadModelConsumerLabel(status, locale)}`}
           </p>
           <p className="mt-1 max-w-4xl text-[11px] leading-5 text-white/50">
             {loading
-              ? 'Waiting for read-only local evidence fields.'
+              ? (locale === 'en' ? 'Waiting for read-only local evidence fields.' : '正在等待只读市场证据字段。')
               : error
-                ? error
-                : sanitizeRegimeReadModelText(payload?.productSummary, 'Market regime evidence is not available.')}
+                ? (locale === 'en' ? 'Local regime evidence is unavailable; readiness stays visible as blocked.' : '本地市场证据暂不可用；就绪状态保持为阻断说明。')
+                : regimeReadModelConsumerLabel(payload?.productSummary, locale, locale === 'en' ? 'Market regime evidence is not available.' : '市场状态证据暂不可用。')}
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-1.5">
           <TerminalChip variant={MARKET_REGIME_READ_MODEL_CHIP_VARIANT[readinessLabel] || 'neutral'}>
-            {readinessLabel}
+            {regimeReadModelConsumerLabel(readinessLabel, locale)}
           </TerminalChip>
           <TerminalChip variant={MARKET_REGIME_READ_MODEL_CHIP_VARIANT[status] || 'neutral'}>
-            {status}
+            {regimeReadModelConsumerLabel(status, locale)}
           </TerminalChip>
-          {payload?.noAdvice ? <TerminalChip variant="info">observation only</TerminalChip> : null}
+          {payload?.noAdvice ? <TerminalChip variant="info">{locale === 'en' ? 'Research context only' : '仅作研究语境'}</TerminalChip> : null}
         </div>
       </div>
 
@@ -1441,29 +1469,29 @@ const MarketRegimeReadModelSurface = ({
 
           <div className="mt-3 grid gap-3 lg:grid-cols-3">
             <section className="rounded-md border border-white/[0.05] bg-black/10 px-3 py-2.5">
-              <p className="text-[11px] font-medium text-white/48">Data quality</p>
+              <p className="text-[11px] font-medium text-white/48">{locale === 'en' ? 'Data quality' : '数据质量'}</p>
               <div className="mt-2 grid gap-1.5 text-[11px] text-white/62">
-                <p>adjusted: {sanitizeRegimeReadModelText(dataQuality?.adjustedCoverageState, 'unknown')}</p>
-                <p>OHLCV: {sanitizeRegimeReadModelText(dataQuality?.ohlcvCoverage?.state, 'unknown')}</p>
-                <p>quote snapshot: {sanitizeRegimeReadModelText(dataQuality?.quoteSnapshotCoverage?.state, 'unknown')}</p>
+                <p>{locale === 'en' ? 'Adjusted series' : '复权序列'}: {regimeReadModelConsumerLabel(dataQuality?.adjustedCoverageState, locale, 'unknown')}</p>
+                <p>{locale === 'en' ? 'Price bars' : '价格走势'}: {regimeReadModelConsumerLabel(dataQuality?.ohlcvCoverage?.state, locale, 'unknown')}</p>
+                <p>{locale === 'en' ? 'Price state' : '报价状态'}: {regimeReadModelConsumerLabel(dataQuality?.quoteSnapshotCoverage?.state, locale, 'unknown')}</p>
               </div>
             </section>
             <section className="rounded-md border border-white/[0.05] bg-black/10 px-3 py-2.5">
-              <p className="text-[11px] font-medium text-white/48">Missing data families</p>
+              <p className="text-[11px] font-medium text-white/48">{locale === 'en' ? 'Missing evidence groups' : '待补证据组'}</p>
               <p className="mt-2 text-[11px] leading-5 text-white/62">
-                {missingFamilies.length ? missingFamilies.map((item) => sanitizeRegimeReadModelText(item)).join(', ') : 'none'}
+                {missingFamilies.length ? missingFamilies.map((item) => regimeReadModelConsumerLabel(item, locale)).join(locale === 'en' ? ', ' : '、') : regimeReadModelConsumerLabel('none', locale)}
               </p>
             </section>
             <section className="rounded-md border border-white/[0.05] bg-black/10 px-3 py-2.5">
-              <p className="text-[11px] font-medium text-white/48">Blocked surfaces</p>
+              <p className="text-[11px] font-medium text-white/48">{locale === 'en' ? 'Blocked surfaces' : '暂不可用界面'}</p>
               <p className="mt-2 text-[11px] leading-5 text-white/62">
-                {blockedSurfaces.length ? blockedSurfaces.map((item) => sanitizeRegimeReadModelText(item)).join(', ') : 'none'}
+                {blockedSurfaces.length ? blockedSurfaces.map((item) => regimeReadModelConsumerLabel(item, locale)).join(locale === 'en' ? ', ' : '、') : regimeReadModelConsumerLabel('none', locale)}
               </p>
             </section>
           </div>
 
           <p className="mt-3 text-[11px] leading-5 text-white/42">
-            {sanitizeRegimeReadModelText(payload?.nextOperatorAction || payload?.readiness?.nextOperatorAction, 'No next operator action returned.')}
+            {regimeReadModelConsumerLabel(payload?.nextOperatorAction || payload?.readiness?.nextOperatorAction, locale, locale === 'en' ? 'No next operator action returned.' : '暂未返回下一步证据动作。')}
           </p>
         </>
       )}
@@ -1745,7 +1773,7 @@ const MarketOverviewPage = () => {
     } catch {
       if (!cancelledRef?.current) {
         setRegimeReadModel(null);
-        setRegimeReadModelError('Local regime evidence is unavailable; readiness stays visible as blocked.');
+        setRegimeReadModelError('unavailable');
       }
     } finally {
       if (!cancelledRef?.current) {

@@ -1720,8 +1720,8 @@ function buildHomeResearchPacketAvailableCopy(
 ): string {
   const isEnglish = locale === 'en';
   const routeCopy = isEnglish
-    ? 'first-read summary, Stock Structure, Research Radar, Market Overview, and Scenario Lab remain available.'
-    : '首读摘要、结构面板、研究雷达、市场总览与情景实验室仍可用。';
+    ? 'first-read summary, Stock Structure, Research Radar, and Market Overview remain available.'
+    : '首读摘要、结构面板、研究雷达与市场总览仍可用。';
   if (labels.length) {
     return isEnglish
       ? `${labels.join(' / ')} are confirmed; ${routeCopy}`
@@ -1748,8 +1748,8 @@ function buildHomeResearchPacketMissingCopy(locale: DashboardLocale, labels: str
 
 function buildHomeResearchPacketRouteCopy(locale: DashboardLocale): string {
   return locale === 'en'
-    ? 'Next path: open Stock Structure, Research Radar, Market Overview, or Scenario Lab to inspect evidence boundaries.'
-    : '下一步路径：打开结构面板、研究雷达、市场总览或情景实验室，先检查证据边界。';
+    ? 'Next path: open Stock Structure, Research Radar, or Market Overview to inspect evidence boundaries.'
+    : '下一步路径：打开结构面板、研究雷达或市场总览，先检查证据边界。';
 }
 
 function buildHomeResearchPacketJudgmentBoundary(locale: DashboardLocale, status: HomeResearchPacketStatus): string {
@@ -2102,12 +2102,6 @@ function HomeConclusionFirstConsole({
       key: 'market-overview',
       label: isEnglish ? 'Market Overview' : '市场总览',
       href: routeLocale ? buildLocalizedPath('/market-overview', routeLocale) : '/market-overview',
-      primary: false,
-    },
-    {
-      key: 'scenario-lab',
-      label: isEnglish ? 'Scenario Lab' : '情景实验室',
-      href: routeLocale ? buildLocalizedPath('/scenario-lab', routeLocale) : '/scenario-lab',
       primary: false,
     },
   ] as const;
@@ -4897,8 +4891,8 @@ function buildMemberMarketBriefView(
       : (isEnglish ? 'Research-ready' : '研究可读');
   const reliabilityDetail = limited
     ? (isEnglish
-      ? 'OHLCV and returned market facts can still be read; some quote snapshots may be delayed or incomplete.'
-      : 'OHLCV 与已返回市场事实仍可阅读；部分报价快照可能延迟或不完整。')
+      ? 'Returned price bars and market facts can still be read; some prices may be delayed or incomplete.'
+      : '已返回的价格走势与市场事实仍可阅读；部分报价可能延迟或不完整。')
     : isLoading && !briefing
       ? (isEnglish ? 'Waiting for the latest returned market snapshot.' : '等待最新市场快照返回。')
       : (isEnglish ? 'Returned market facts are fresh enough for research observation.' : '已返回市场事实足以支持研究观察。');

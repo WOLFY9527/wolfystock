@@ -1,5 +1,6 @@
 import type { UiLanguage } from '../../i18n/core';
 import { stripLocalePrefix } from '../../utils/localeRouting';
+import { PRIMARY_CONSUMER_ROUTES } from './coreProductRoutes';
 
 export type ConsumerNavGroupKey = 'cockpit' | 'research' | 'context' | 'observe';
 export type ConsumerNavItemKey =
@@ -57,15 +58,13 @@ export const CONSUMER_NAV_GROUPS: Array<{
 ];
 
 export const CONSUMER_NAV_ITEMS: ConsumerNavItem[] = [
-  { key: 'decision-cockpit', labelKey: 'nav.marketDecisionCockpit', to: '/market/decision-cockpit', group: 'cockpit', requiresAuth: false },
-  { key: 'market-overview', labelKey: 'nav.marketOverview', to: '/market-overview', group: 'cockpit', requiresAuth: false },
-  { key: 'research-radar', labelKey: 'nav.researchRadar', to: '/research/radar', group: 'research', requiresAuth: true },
-  { key: 'stock-structure', labelKey: 'nav.stockStructure', to: '/stocks/structure-decision', group: 'research', requiresAuth: false },
-  { key: 'scanner', labelKey: 'nav.scanner', to: '/scanner', group: 'context', requiresAuth: true },
-  { key: 'watchlist', labelKey: 'nav.watchlist', to: '/watchlist', group: 'context', requiresAuth: true },
-  { key: 'portfolio', labelKey: 'nav.portfolio', to: '/portfolio', group: 'context', requiresAuth: true },
-  { key: 'backtest', labelKey: 'nav.backtest', to: '/backtest', group: 'observe', requiresAuth: true },
-  { key: 'scenario-lab', labelKey: 'nav.scenarioLab', to: '/scenario-lab', group: 'observe', requiresAuth: true },
+  ...PRIMARY_CONSUMER_ROUTES.map((route) => ({
+    key: route.key,
+    labelKey: route.labelKey,
+    to: route.path,
+    group: route.group,
+    requiresAuth: route.requiresAuth,
+  })),
 ];
 
 export const ROUTE_STORIES: ConsumerRouteStory[] = [

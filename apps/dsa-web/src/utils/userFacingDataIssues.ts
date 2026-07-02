@@ -85,7 +85,7 @@ const EXACT_REASON_LABELS: Record<string, { zh: string; en: string }> = {
   },
   price_fallback: {
     zh: '价格数据暂不可完整确认',
-    en: 'Price evidence limited',
+    en: 'Price data incomplete',
   },
 };
 
@@ -141,7 +141,7 @@ function mapInternalReasonToUserMessage(
     return isEnglish ? 'FX data unavailable' : '汇率数据暂不可用';
   }
   if (normalized.includes('price_fallback') || (normalized.includes('price') && normalized.includes('fallback'))) {
-    return isEnglish ? 'Price evidence limited' : '价格数据暂不可完整确认';
+    return isEnglish ? 'Price data incomplete' : '价格数据暂不可完整确认';
   }
   if (normalized.includes('quote') || normalized.includes('realtime') || normalized.includes('snapshot')) {
     return isEnglish ? 'Realtime missing' : '实时缺失';

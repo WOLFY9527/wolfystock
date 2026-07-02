@@ -371,7 +371,8 @@ describe('research IA pages', () => {
     expect(screen.getAllByRole('link', { name: '查看证据：研究雷达' }).some((link) => link.getAttribute('href') === '/zh/research/radar')).toBe(true);
     expect(screen.getByRole('link', { name: '查看证据：扫描器' })).toHaveAttribute('href', '/zh/scanner');
     expect(screen.getAllByRole('link', { name: '查看证据：结构详情' })[0]).toHaveAttribute('href', '/zh/stocks/ALFA/structure-decision');
-    expect(screen.getByRole('link', { name: '情景实验室' })).toHaveAttribute('href', '/zh/scenario-lab');
+    expect(screen.getByRole('link', { name: '市场总览' })).toHaveAttribute('href', '/zh/market-overview');
+    expect(screen.queryByRole('link', { name: '情景实验室' })).not.toBeInTheDocument();
     const onboardingPanel = within(page).getByTestId('daily-intelligence-onboarding-cta');
     expect(onboardingPanel).toHaveTextContent('首次研究路径');
     expect(onboardingPanel).toHaveTextContent('先看市场概览');

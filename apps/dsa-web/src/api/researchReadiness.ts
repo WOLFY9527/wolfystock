@@ -282,11 +282,11 @@ function localizedUniversePolicyLabel(
   locale: ReadinessLocale,
 ): string {
   const labels: Record<string, { zh: string; en: string }> = {
-    default: { zh: '默认池', en: 'Default universe' },
-    theme: { zh: '主题池', en: 'Theme universe' },
+    default: { zh: '默认池', en: 'Default scope' },
+    theme: { zh: '主题池', en: 'Theme scope' },
     symbols: { zh: '自选池', en: 'Custom symbols' },
   };
-  return labels[String(type || '').trim().toLowerCase()]?.[locale] || (locale === 'en' ? 'Universe pending' : '标的池待确认');
+  return labels[String(type || '').trim().toLowerCase()]?.[locale] || (locale === 'en' ? 'Scope pending' : '标的池待确认');
 }
 
 function themeLabels(frame: ScannerContextFrame | null | undefined): string[] {
@@ -917,7 +917,7 @@ export function buildScannerTopDownContextView(
       },
       {
         key: 'universe',
-        label: `${locale === 'en' ? 'Universe' : '标的池'}：${localizedUniversePolicyLabel(frame?.universePolicy?.type, locale)}`,
+        label: `${locale === 'en' ? 'Scope' : '标的池'}：${localizedUniversePolicyLabel(frame?.universePolicy?.type, locale)}`,
       },
       {
         key: 'boundary',

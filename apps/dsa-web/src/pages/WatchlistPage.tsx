@@ -1640,7 +1640,7 @@ function getCopy(language: 'zh' | 'en') {
       searchPlaceholder: 'Symbol or name',
       market: 'Market',
       source: 'Added via',
-      context: 'Theme / universe',
+      context: 'Theme / scope',
       sort: 'Sort',
       all: 'All',
       newest: 'Newest',
@@ -1736,7 +1736,7 @@ function getCopy(language: 'zh' | 'en') {
       scoreRefreshComplete: 'Scores refreshed.',
       signInModule: 'Watchlist',
       themePrefix: 'Theme',
-      universePrefix: 'Universe',
+      universePrefix: 'Scope',
     };
   }
   return {

@@ -3328,7 +3328,7 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     fireEvent.click(await within(screen.getByTestId('scanner-market-toggle')).findByRole('button', { name: /美股|US/ }));
-    fireEvent.click(within(screen.getByTestId('scanner-scope-selector')).getByRole('button', { name: /主题标的池|Theme universe/i }));
+    fireEvent.click(within(screen.getByTestId('scanner-scope-selector')).getByRole('button', { name: /主题标的池|Theme scope/i }));
     await openAdvancedControls();
     const themeSelect = await screen.findByTestId('scanner-theme-select');
     expect(themeSelect).toHaveTextContent(/AI 半导体|AI semiconductors/);
@@ -3912,8 +3912,8 @@ describe('UserScannerPage', () => {
     expect(await screen.findByTestId('scanner-launch-bar')).toBeInTheDocument();
     expect(screen.queryByText(/基础扫描|Basic scan/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/高级参数|Advanced controls/i)).not.toBeInTheDocument();
-    expect(screen.getByTestId('scanner-launch-controls')).toHaveTextContent(/候选上限.*评估深度|Universe cap.*Detailed review/i);
-    fireEvent.click(within(screen.getByTestId('scanner-scope-selector')).getByRole('button', { name: /主题标的池|Theme universe/i }));
+    expect(screen.getByTestId('scanner-launch-controls')).toHaveTextContent(/候选上限.*评估深度|Scope cap.*Detailed review/i);
+    fireEvent.click(within(screen.getByTestId('scanner-scope-selector')).getByRole('button', { name: /主题标的池|Theme scope/i }));
     await openAdvancedControls();
     const themeSelect = await screen.findByTestId('scanner-theme-select');
     expect(themeSelect).toHaveClass('absolute', 'inset-0', 'opacity-0');
@@ -4054,7 +4054,7 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     fireEvent.click(await screen.findByRole('button', { name: /美股|US/ }));
-    fireEvent.click(within(screen.getByTestId('scanner-scope-selector')).getByRole('button', { name: /Theme universe|主题标的池/i }));
+    fireEvent.click(within(screen.getByTestId('scanner-scope-selector')).getByRole('button', { name: /Theme scope|主题标的池/i }));
     await openAdvancedControls();
     fireEvent.change(await screen.findByTestId('scanner-ai-theme-label-input'), { target: { value: 'White House Stocks' } });
     fireEvent.change(screen.getByTestId('scanner-ai-theme-prompt-input'), {
@@ -4096,7 +4096,7 @@ describe('UserScannerPage', () => {
   it('shows field-level validation for AI theme generation before sending requests', async () => {
     renderUserScannerPage();
 
-    fireEvent.click(within(screen.getByTestId('scanner-scope-selector')).getByRole('button', { name: /主题标的池|Theme universe/i }));
+    fireEvent.click(within(screen.getByTestId('scanner-scope-selector')).getByRole('button', { name: /主题标的池|Theme scope/i }));
     await openAdvancedControls();
     fireEvent.change(screen.getByTestId('scanner-ai-theme-label-input'), { target: { value: 'A' } });
     fireEvent.change(screen.getByTestId('scanner-ai-theme-prompt-input'), { target: { value: 'too short' } });
@@ -4161,7 +4161,7 @@ describe('UserScannerPage', () => {
     expect(screen.getByRole('button', { name: /启动扫描|运行扫描|Run scanner/i })).toBeInTheDocument();
     expect(screen.getByTestId('scanner-history-trigger')).toBeInTheDocument();
 
-    fireEvent.click(within(screen.getByTestId('scanner-scope-selector')).getByRole('button', { name: /主题标的池|Theme universe/i }));
+    fireEvent.click(within(screen.getByTestId('scanner-scope-selector')).getByRole('button', { name: /主题标的池|Theme scope/i }));
     await openAdvancedControls();
 
     expect(screen.getByRole('textbox', { name: /AI 主题名称|AI theme name/i })).toBeInTheDocument();
@@ -4183,7 +4183,7 @@ describe('UserScannerPage', () => {
     }));
     renderUserScannerPage();
 
-    fireEvent.click(within(screen.getByTestId('scanner-scope-selector')).getByRole('button', { name: /主题标的池|Theme universe/i }));
+    fireEvent.click(within(screen.getByTestId('scanner-scope-selector')).getByRole('button', { name: /主题标的池|Theme scope/i }));
     await openAdvancedControls();
     const themeSelect = screen.getByTestId('scanner-theme-select') as HTMLSelectElement;
     expect(within(themeSelect).getByRole('option', { name: /Optical modules \/ CPO.*not configured|光模块 CPO.*未配置/ })).toBeDisabled();
@@ -4320,9 +4320,9 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const conclusion = await screen.findByTestId('scanner-conclusion-band');
-    expect(conclusion).toHaveTextContent(/标的池待更新|Universe stale/);
-    expect(conclusion).toHaveTextContent(/扫描标的池已过期|Universe/);
-    expect(conclusion).toHaveTextContent(/标的池状态|Universe readiness/);
+    expect(conclusion).toHaveTextContent(/标的池待更新|Scope stale/);
+    expect(conclusion).toHaveTextContent(/扫描标的池已过期|Scope/);
+    expect(conclusion).toHaveTextContent(/标的池状态|Scope readiness/);
     expect(conclusion).toHaveTextContent(/缺口|Missing/);
     expect(screen.queryByTestId(/^scanner-result-row-/)).not.toBeInTheDocument();
     const emptyState = screen.getByTestId('scanner-workbench-empty-state');
@@ -4381,9 +4381,9 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const conclusion = await screen.findByTestId('scanner-conclusion-band');
-    expect(conclusion).toHaveTextContent(/标的池缺失|Universe missing/);
-    expect(conclusion).toHaveTextContent(/扫描标的池缺失|Universe/);
-    expect(conclusion).not.toHaveTextContent(/标的池待更新|Universe stale/);
+    expect(conclusion).toHaveTextContent(/标的池缺失|Scope missing/);
+    expect(conclusion).toHaveTextContent(/扫描标的池缺失|Scope/);
+    expect(conclusion).not.toHaveTextContent(/标的池待更新|Scope stale/);
     expect(screen.queryByTestId(/^scanner-result-row-/)).not.toBeInTheDocument();
   });
 

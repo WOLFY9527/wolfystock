@@ -1161,8 +1161,8 @@ export default function MarketDecisionCockpitPage() {
     }
   }, [locale]);
 
-  const load = useCallback(() => {
-    void loadCockpit();
+  const load = useCallback(async () => {
+    await loadCockpit();
     void loadDailyIntelligence();
   }, [loadCockpit, loadDailyIntelligence]);
 
@@ -1171,7 +1171,7 @@ export default function MarketDecisionCockpitPage() {
   }, [locale]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   const driverRows = useMemo(
@@ -1228,10 +1228,10 @@ export default function MarketDecisionCockpitPage() {
                     {locale === 'en' ? 'Research radar' : '研究雷达'}
                   </Link>
                   <Link
-                    to={localize('/scenario-lab')}
+                    to={localize('/market-overview')}
                     className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
                   >
-                    {locale === 'en' ? 'Scenario lab' : '情景实验室'}
+                    {locale === 'en' ? 'Market overview' : '市场总览'}
                   </Link>
                   <TerminalButton variant="compact" onClick={() => void load()}>
                     {locale === 'en' ? 'Refresh' : '刷新'}
@@ -1240,7 +1240,9 @@ export default function MarketDecisionCockpitPage() {
               )}
             >
               <div className="text-xs text-[color:var(--wolfy-text-secondary)]">
-                {locale === 'en' ? 'Primary market-structure entry for the current backdrop, research queue, and next checks.' : '市场结构主入口，集中呈现当前背景、研究队列与下一步检查。'}
+                {locale === 'en'
+                  ? 'Market Overview can use broader returned snapshots; this cockpit keeps stricter evidence gates and fails closed when those gates are not met.'
+                  : '市场总览可使用更宽的已返回快照；本驾驶舱采用更严格证据门槛，未满足时保持关闭或降级说明。'}
               </div>
             </WolfyCommandBar>
           )}
