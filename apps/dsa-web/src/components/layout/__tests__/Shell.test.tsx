@@ -219,6 +219,34 @@ describe('Shell', () => {
     ]);
   });
 
+  it.each([
+    ['nav.marketDecisionCockpit', '/zh/market/decision-cockpit'],
+    ['nav.marketOverview', '/zh/market-overview'],
+    ['nav.researchRadar', '/zh/research/radar'],
+    ['nav.scanner', '/zh/scanner'],
+    ['nav.watchlist', '/zh/watchlist'],
+    ['nav.backtest', '/zh/backtest'],
+  ])('maps localized core nav label %s to the intended route', (labelKey, expectedHref) => {
+    render(
+      <MemoryRouter initialEntries={['/zh/market-overview']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    const link = within(screen.getByTestId('shell-consumer-primary-nav')).getByRole('link', {
+      name: translate('zh', labelKey),
+    });
+    const hrefs = Array.from(screen.getAllByRole('link')).map((item) => item.getAttribute('href'));
+
+    expect(link).toHaveAttribute('href', expectedHref);
+    expect(hrefs).not.toContain('/zh/lab');
+    expect(hrefs).not.toContain('/lab');
+  });
+
   it('keeps dedicated guest route metadata separate from Home for base and localized paths', () => {
     expect(resolveConsumerNavItem('/guest')).toBeNull();
     expect(resolveConsumerNavItem('/en/guest')).toBeNull();

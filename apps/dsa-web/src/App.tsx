@@ -259,6 +259,7 @@ function isProtectedProductPath(pathname: string): boolean {
     || pathname === '/scanner'
     || pathname === '/holdings'
     || pathname === '/radar'
+    || pathname === '/research'
     || pathname === '/research-radar'
     || isPathMatch(pathname, '/portfolio')
     || isPathMatch(pathname, '/radar')
@@ -557,6 +558,7 @@ export const AppContent: React.FC = () => {
         <Route path="/cockpit" element={<Navigate to="/market/decision-cockpit" replace />} />
         <Route path="/decision-cockpit" element={<Navigate to="/market/decision-cockpit" replace />} />
         <Route path="/radar" element={<Navigate to="/research/radar" replace />} />
+        <Route path="/research" element={<Navigate to="/research/radar" replace />} />
         <Route path="/research-radar" element={<Navigate to="/research/radar" replace />} />
         <Route path="/holdings" element={<Navigate to="/portfolio" replace />} />
         <Route path="/liquidity" element={<Navigate to="/market/liquidity-monitor" replace />} />
@@ -610,6 +612,7 @@ export const AppContent: React.FC = () => {
           <Route path="cockpit" element={<Navigate to="../market/decision-cockpit" replace />} />
           <Route path="decision-cockpit" element={<Navigate to="../market/decision-cockpit" replace />} />
           <Route path="radar" element={<Navigate to="../research/radar" replace />} />
+          <Route path="research" element={<Navigate to="../research/radar" replace />} />
           <Route path="research-radar" element={<Navigate to="../research/radar" replace />} />
           <Route path="holdings" element={<Navigate to="../portfolio" replace />} />
           <Route path="liquidity" element={<Navigate to="../market/liquidity-monitor" replace />} />

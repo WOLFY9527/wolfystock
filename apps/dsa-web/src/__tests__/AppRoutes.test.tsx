@@ -1617,6 +1617,56 @@ describe('AppContent route flows', () => {
     expect(await screen.findByText('scanner-surface-page')).toBeInTheDocument();
   });
 
+  it.each([
+    ['/market-overview', 'market-overview-page'],
+    ['/zh/market-overview', 'market-overview-page'],
+    ['/market/decision-cockpit', 'market-decision-cockpit-page'],
+    ['/zh/market/decision-cockpit', 'market-decision-cockpit-page'],
+    ['/scanner', 'scanner-surface-page'],
+    ['/zh/scanner', 'scanner-surface-page'],
+    ['/watchlist', 'watchlist-page'],
+    ['/zh/watchlist', 'watchlist-page'],
+    ['/backtest', 'backtest-page'],
+    ['/zh/backtest', 'backtest-page'],
+    ['/research/radar', 'research-radar-page'],
+    ['/zh/research/radar', 'research-radar-page'],
+  ])('renders the intended core product page for %s', async (path, pageText) => {
+    mockSignedInConsumer();
+
+    renderAt(path);
+
+    expect(await screen.findByText(pageText)).toBeInTheDocument();
+    expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
+    expect(screen.queryByText(/stock-structure-decision-page:AAPL/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('stock-structure-entry-page')).not.toBeInTheDocument();
+    expect(screen.queryByText('auth-guard:Scanner')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['/research', '/research/radar'],
+    ['/zh/research', '/zh/research/radar'],
+    ['/research-radar', '/research/radar'],
+    ['/zh/research-radar', '/zh/research/radar'],
+  ])('redirects research route alias %s to the Research Radar page', async (path, expectedPath) => {
+    mockSignedInConsumer();
+
+    renderAtWithLocationProbe(path);
+
+    expect(await screen.findByText('research-radar-page')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(expectedPath));
+    expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
+  });
+
+  it('keeps unknown routes on the Not Found page', async () => {
+    mockSignedInConsumer();
+
+    renderAt('/zh/unknown-route');
+
+    expect(await screen.findByText('not-found-page')).toBeInTheDocument();
+    expect(screen.queryByText('research-radar-page')).not.toBeInTheDocument();
+    expect(screen.queryByText('market-overview-page')).not.toBeInTheDocument();
+  });
+
   it('renders the localized market rotation radar route', async () => {
     languageState.value = 'zh';
 
