@@ -8,10 +8,15 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query
 
 from api.deps import CurrentUser, require_admin_capability
-from api.v1.schemas.market_provider_operations import MarketProviderOperationsResponse
+from api.v1.schemas.market_provider_operations import (
+    MarketProviderOperationsResponse,
+    UsOhlcvCacheRefreshRequest,
+    UsOhlcvCacheRefreshResponse,
+)
 from src.services.historical_ohlcv_cache_preflight import HistoricalOhlcvCachePreflightService
 from src.services.market_provider_operations_service import MarketProviderOperationsService
 from src.services.provider_activation_verifier import ProviderActivationVerifierService
+from src.services.us_ohlcv_cache_refresh import UsOhlcvCacheRefreshService
 
 router = APIRouter()
 
@@ -87,6 +92,10 @@ def get_historical_ohlcv_cache_preflight_service() -> HistoricalOhlcvCachePrefli
     return HistoricalOhlcvCachePreflightService()
 
 
+def get_us_ohlcv_cache_refresh_service() -> UsOhlcvCacheRefreshService:
+    return UsOhlcvCacheRefreshService()
+
+
 @router.get(
     "/historical-ohlcv/cache-preflight",
     summary="Get dry-run historical OHLCV cache preflight",
@@ -127,6 +136,28 @@ def seed_historical_ohlcv_cache(
         required_bars=_bounded_int(body.get("requiredBars"), default=60, minimum=1, maximum=500),
         require_adjusted=bool(body.get("requireAdjusted", True)),
         dry_run=dry_run,
+    )
+
+
+@router.post(
+    "/historical-ohlcv/us-cache-refresh",
+    response_model=UsOhlcvCacheRefreshResponse,
+    summary="Plan or explicitly execute bounded US OHLCV cache refresh",
+)
+def refresh_us_ohlcv_cache(
+    body: UsOhlcvCacheRefreshRequest,
+    service: UsOhlcvCacheRefreshService = Depends(get_us_ohlcv_cache_refresh_service),
+    read_user: CurrentUser = Depends(require_admin_capability("ops:providers:read")),
+):
+    if body.execute:
+        require_admin_capability("ops:providers:write")(read_user)
+    return service.refresh(
+        symbols=body.symbols,
+        tier=body.tier,
+        execute=body.execute,
+        max_symbols=body.max_symbols,
+        required_bars=body.required_bars,
+        require_adjusted=body.require_adjusted,
     )
 
 

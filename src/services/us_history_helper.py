@@ -171,11 +171,14 @@ def load_local_us_daily_history(
 def persist_local_us_daily_history(
     stock_code: str,
     dataframe: Optional[pd.DataFrame],
+    *,
+    parquet_dir: Optional[Path] = None,
 ) -> LocalUsHistoryPersistResult:
     """Persist normalized US daily history to the existing local parquet cache."""
 
     normalized_code = str(stock_code or "").strip().upper()
-    path = get_local_us_history_path(normalized_code)
+    root_dir = parquet_dir or get_us_stock_parquet_dir()
+    path = root_dir / f"{normalized_code}.parquet"
     if not normalized_code or not is_us_stock_code(normalized_code):
         return LocalUsHistoryPersistResult(
             stock_code=normalized_code,

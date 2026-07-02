@@ -626,6 +626,23 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertFalse(status["probePolicy"]["liveProviderProbingAllowed"])
         self.assertFalse(status["writePolicy"]["cacheWritesAllowed"])
 
+    def test_aggregate_sample_status_does_not_invoke_us_ohlcv_refresh_control(self) -> None:
+        service = BacktestService(self.db)
+
+        with patch(
+            "src.services.us_ohlcv_cache_refresh.UsOhlcvCacheRefreshService.refresh",
+            side_effect=AssertionError("refresh control called"),
+        ) as refresh_mock:
+            status = service.get_sample_status(code=None)
+
+        refresh_mock.assert_not_called()
+        self._history_fetch_mock.assert_not_called()
+        self.assertEqual(status["code"], "__all__")
+        self.assertEqual(status["scope"], "aggregate")
+        self.assertFalse(status["probePolicy"]["liveProviderProbingAllowed"])
+        self.assertFalse(status["writePolicy"]["cacheWritesAllowed"])
+        self.assertFalse(status["writePolicy"]["databaseWritesAllowed"])
+
     def test_aggregate_sample_status_exposes_local_symbol_readiness_without_masking(self) -> None:
         for symbol in ("SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"):
             self._write_local_us_parquet(self._temp_dir.name, symbol, rows=90)

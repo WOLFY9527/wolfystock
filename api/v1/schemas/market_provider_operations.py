@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.schemas.trust_evidence import TrustEvidenceSnapshotV1
 
@@ -136,3 +136,37 @@ class MarketProviderOperationsResponse(BaseModel):
     limitations: List[str] = Field(default_factory=list)
     adminLogDrillThrough: AdminLogDrillThroughModel
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class UsOhlcvCacheRefreshRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    symbols: List[str] = Field(default_factory=list)
+    tier: str = "starter"
+    execute: bool = False
+    max_symbols: int = Field(default=5, ge=1, le=100, alias="maxSymbols")
+    required_bars: int = Field(default=60, ge=1, le=1000, alias="requiredBars")
+    require_adjusted: bool = Field(default=True, alias="requireAdjusted")
+
+
+class UsOhlcvCacheRefreshResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    contractVersion: str
+    dryRun: bool
+    execute: bool
+    target: Dict[str, Any]
+    requestedSymbols: List[str] = Field(default_factory=list)
+    normalizedSymbols: List[str] = Field(default_factory=list)
+    alreadyAvailableSymbols: List[str] = Field(default_factory=list)
+    missingOrStaleSymbols: List[str] = Field(default_factory=list)
+    skippedSymbols: List[Dict[str, Any]] = Field(default_factory=list)
+    estimatedMaxProviderCalls: int = 0
+    writeTarget: str
+    refreshPolicy: Dict[str, Any]
+    providerPolicy: Dict[str, Any]
+    writePolicy: Dict[str, Any]
+    plan: Dict[str, Any]
+    results: List[Dict[str, Any]] = Field(default_factory=list)
+    summary: Dict[str, Any]
+    consumerSafe: bool = True

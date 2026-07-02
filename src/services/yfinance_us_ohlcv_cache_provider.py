@@ -104,7 +104,7 @@ class LocalUsOhlcvParquetCache:
         return None
 
     def save(self, symbol: str, frame: pd.DataFrame) -> int:
-        result = persist_local_us_daily_history(symbol, frame)
+        result = persist_local_us_daily_history(symbol, frame, parquet_dir=self.root_dir)
         if result.status != "saved":
             return 0
         return int(result.rows)
