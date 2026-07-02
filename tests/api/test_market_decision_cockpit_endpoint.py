@@ -241,6 +241,56 @@ class _ReadModelCockpitService:
             "readinessLabel": "product_ready",
             "status": "ok",
             "regimeLabel": "risk_off",
+            "regimeEvidenceProjection": {
+                "consumerSafe": True,
+                "contractVersion": "market_regime_evidence_projection_v1",
+                "sourceContractVersion": "market_regime_evidence_pack_v1",
+                "status": "ready",
+                "readiness": "ready",
+                "label": "risk_off",
+                "confidence": 0.69,
+                "asOf": "2026-03-02",
+                "generatedAt": "2026-03-02T00:00:00+00:00",
+                "noAdviceDisclosure": "Observation-only market structure evidence; not investment advice.",
+                "dataQuality": {"status": "ready", "summary": "Local evidence is available.", "reasonCodes": []},
+                "evidencePreview": {
+                    "indexTrend": {"symbol": "SPY", "return20d": -0.04, "closeVsMa20": "below", "state": "available"},
+                    "breadth": {
+                        "percentAboveMovingAverage": 0.2,
+                        "aboveMovingAverageCount": 1,
+                        "evaluatedCount": 5,
+                        "skippedCount": 0,
+                        "state": "available",
+                    },
+                    "volatilityRisk": {
+                        "realizedVolatility20d": 0.24,
+                        "volatilityState": "normal",
+                        "state": "available",
+                    },
+                    "concentrationLeadership": {
+                        "state": "leaders_lagging",
+                        "evaluatedCount": 4,
+                        "skippedCount": 0,
+                        "relativeReturn20d": -0.01,
+                    },
+                    "dataCoverage": {
+                        "state": "available",
+                        "usedSymbolCount": 5,
+                        "skippedSymbolCount": 0,
+                        "usedSymbols": ["SPY", "QQQ", "AAPL", "MSFT", "NVDA"],
+                        "skippedSymbols": [],
+                    },
+                },
+                "readOnlyBoundary": {
+                    "localEvidenceOnly": True,
+                    "externalCallsEnabled": False,
+                    "networkCallsEnabled": False,
+                    "mutationEnabled": False,
+                },
+                "providerCallsEnabled": False,
+                "networkCallsEnabled": False,
+                "mutationEnabled": False,
+            },
             "summary": "Risk-off evidence is currently dominant across the bounded read model.",
             "evidenceCards": [
                 {
@@ -275,11 +325,9 @@ class _ReadModelCockpitService:
 
 
 def test_market_decision_cockpit_route_is_exposed() -> None:
-    app = FastAPI()
-    app.include_router(market.router, prefix="/api/v1/market")
     routes = {
-        (method, route.path)
-        for route in app.routes
+        (method, f"/api/v1/market{route.path}")
+        for route in market.router.routes
         if hasattr(route, "methods")
         for method in (route.methods or set())
         if method not in {"HEAD", "OPTIONS"}
@@ -345,6 +393,10 @@ def test_market_decision_cockpit_endpoint_preserves_primary_read_model_context(m
     assert read_model["primaryContext"] is True
     assert read_model["readinessLabel"] == "product_ready"
     assert read_model["regimeLabel"] == "risk_off"
+    assert read_model["regimeEvidenceProjection"]["contractVersion"] == "market_regime_evidence_projection_v1"
+    assert read_model["regimeEvidenceProjection"]["label"] == "risk_off"
+    assert read_model["regimeEvidenceProjection"]["evidencePreview"]["dataCoverage"]["usedSymbolCount"] == 5
+    assert read_model["regimeEvidenceProjection"]["readOnlyBoundary"]["externalCallsEnabled"] is False
     assert payload["marketRegimeDecision"]["regime"] == "risk_off"
     assert payload["marketRegimeSummary"]["regime"] == "Risk-off observation"
     assert payload["dataQuality"]["status"] == "ready"

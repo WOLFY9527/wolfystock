@@ -895,5 +895,99 @@ def test_market_overview_default_endpoint_exposes_recursive_provider_freshness()
         assert "official index" not in serialized
 
 
+def test_market_overview_default_endpoint_includes_regime_evidence_projection() -> None:
+    app = FastAPI()
+    app.include_router(api_v1_router)
+    client = TestClient(app)
+
+    service = MagicMock()
+    service.get_indices.return_value = {"status": "success", "items": [{"symbol": "SPX"}]}
+    service.get_volatility.return_value = {"status": "success", "items": []}
+    service.get_sentiment.return_value = {"status": "success", "items": []}
+    service.get_funds_flow.return_value = {"status": "success", "items": []}
+    service.get_macro.return_value = {"status": "success", "items": []}
+    projection = {
+        "consumerSafe": True,
+        "contractVersion": "market_regime_evidence_projection_v1",
+        "sourceContractVersion": "market_regime_evidence_pack_v1",
+        "status": "ready",
+        "readiness": "ready",
+        "label": "risk_on",
+        "confidence": 0.72,
+        "asOf": "2026-03-02",
+        "generatedAt": "2026-03-02T00:00:00+00:00",
+        "noAdviceDisclosure": "Observation-only market structure evidence; not investment advice.",
+        "dataQuality": {"status": "ready", "summary": "Local evidence is available.", "reasonCodes": []},
+        "evidencePreview": {
+            "indexTrend": {"symbol": "SPY", "return20d": 0.12, "closeVsMa20": "above", "state": "available"},
+            "breadth": {
+                "percentAboveMovingAverage": 1.0,
+                "aboveMovingAverageCount": 6,
+                "evaluatedCount": 6,
+                "skippedCount": 0,
+                "state": "available",
+            },
+            "volatilityRisk": {
+                "realizedVolatility20d": 0.09,
+                "volatilityState": "low",
+                "state": "available",
+            },
+            "concentrationLeadership": {
+                "state": "leaders_ahead",
+                "evaluatedCount": 5,
+                "skippedCount": 0,
+                "relativeReturn20d": 0.02,
+            },
+            "dataCoverage": {
+                "state": "available",
+                "usedSymbolCount": 6,
+                "skippedSymbolCount": 0,
+                "usedSymbols": ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"],
+                "skippedSymbols": [],
+            },
+        },
+        "readOnlyBoundary": {
+            "localEvidenceOnly": True,
+            "externalCallsEnabled": False,
+            "networkCallsEnabled": False,
+            "mutationEnabled": False,
+        },
+        "providerCallsEnabled": False,
+        "networkCallsEnabled": False,
+        "mutationEnabled": False,
+    }
+
+    with patch("api.v1.endpoints.market_overview.MarketOverviewService", return_value=service), patch(
+        "api.v1.endpoints.market_overview.build_market_regime_read_model",
+        return_value={"regimeEvidenceProjection": projection},
+    ) as read_model:
+        response = client.get("/api/v1/market-overview")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "success"
+    assert payload["panels"]["indices"]["items"] == [{"symbol": "SPX"}]
+    assert payload["indices"] == payload["panels"]["indices"]
+    regime = payload["regimeEvidenceProjection"]
+    assert regime["contractVersion"] == "market_regime_evidence_projection_v1"
+    assert regime["sourceContractVersion"] == "market_regime_evidence_pack_v1"
+    assert regime["status"] == "ready"
+    assert regime["label"] == "risk_on"
+    assert regime["confidence"] == 0.72
+    assert regime["consumerSafe"] is True
+    assert regime["readOnlyBoundary"] == {
+        "localEvidenceOnly": True,
+        "externalCallsEnabled": False,
+        "networkCallsEnabled": False,
+        "mutationEnabled": False,
+    }
+    assert regime["networkCallsEnabled"] is False
+    assert regime["mutationEnabled"] is False
+    assert regime["evidencePreview"]["indexTrend"]["return20d"] == 0.12
+    assert regime["evidencePreview"]["breadth"]["aboveMovingAverageCount"] == 6
+    assert regime["evidencePreview"]["dataCoverage"]["usedSymbolCount"] == 6
+    read_model.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

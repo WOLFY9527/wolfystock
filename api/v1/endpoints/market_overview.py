@@ -11,6 +11,12 @@ from api.deps import CurrentUser, get_optional_current_user
 from src.services.consumer_issue_labels import sanitize_consumer_reason_payload
 from src.services.consumer_api_diagnostic_redaction import project_consumer_api_payload
 from src.services.market_overview_service import MarketOverviewService
+from src.services.market_regime_read_model_service import (
+    build_market_regime_read_model,
+    project_market_regime_evidence,
+)
+from src.services.quote_snapshot_config import get_configured_us_quote_snapshot_cache_path
+from src.services.us_history_helper import get_configured_us_stock_parquet_dir
 
 router = APIRouter()
 _DEFAULT_MARKET_OVERVIEW_PANEL_ORDER = (
@@ -69,9 +75,25 @@ def _build_market_overview_payload(
         panels[payload_key] = getattr(service, method_name)(actor=actor)
     return {
         "status": _aggregate_market_overview_status(panels),
+        "regimeEvidenceProjection": _build_market_regime_evidence_projection(),
         "panels": panels,
         **panels,
     }
+
+
+def _build_market_regime_evidence_projection() -> Dict[str, Any]:
+    try:
+        read_model = build_market_regime_read_model(
+            market="US",
+            ohlcv_cache_dir=get_configured_us_stock_parquet_dir(),
+            quote_snapshot_cache_path=get_configured_us_quote_snapshot_cache_path(),
+        )
+        projection = read_model.get("regimeEvidenceProjection")
+        if isinstance(projection, dict):
+            return projection
+    except Exception:
+        pass
+    return project_market_regime_evidence(None)
 
 
 @router.get("", summary="Get aggregate market overview")
