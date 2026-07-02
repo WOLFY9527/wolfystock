@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from src.schemas.trust_evidence import TrustEvidenceSnapshotV1
 
@@ -138,15 +138,150 @@ class MarketProviderOperationsResponse(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
-class UsOhlcvCacheRefreshRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+_US_OHLCV_REFRESH_UNIVERSE_ALIASES = {
+    "0": "starter",
+    "starter": "starter",
+    "tier0": "starter",
+    "tier_0": "starter",
+    "tier-0": "starter",
+    "1": "tier1",
+    "tier1": "tier1",
+    "tier_1": "tier1",
+    "tier-1": "tier1",
+    "configured_tier1": "tier1",
+    "configured-tier1": "tier1",
+}
+_US_OHLCV_REFRESH_TARGET_ALIASES = {
+    "symbols": "symbols",
+    **_US_OHLCV_REFRESH_UNIVERSE_ALIASES,
+}
 
-    symbols: List[str] = Field(default_factory=list)
-    tier: str = "starter"
-    execute: bool = False
-    max_symbols: int = Field(default=5, ge=1, le=100, alias="maxSymbols")
-    required_bars: int = Field(default=60, ge=1, le=1000, alias="requiredBars")
-    require_adjusted: bool = Field(default=True, alias="requireAdjusted")
+
+def _normalize_optional_contract_label(value: Optional[str]) -> Optional[str]:
+    normalized = str(value or "").strip().lower()
+    return normalized or None
+
+
+class UsOhlcvCacheRefreshRequest(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "summary": "Explicit symbols dry-run",
+                    "value": {
+                        "symbols": ["TSLA", "NVDA"],
+                        "execute": False,
+                        "dryRun": True,
+                        "maxSymbols": 2,
+                    },
+                },
+                {
+                    "summary": "Starter universe dry-run",
+                    "value": {
+                        "universe": "starter",
+                        "execute": False,
+                        "dryRun": True,
+                        "maxSymbols": 2,
+                    },
+                },
+                {
+                    "summary": "Configured tier1 dry-run",
+                    "value": {
+                        "target": "tier1",
+                        "execute": False,
+                        "dryRun": True,
+                        "maxSymbols": 5,
+                    },
+                },
+                {
+                    "summary": "Explicit bounded execution",
+                    "value": {
+                        "target": "symbols",
+                        "symbols": ["TSLA", "NVDA"],
+                        "execute": True,
+                        "dryRun": False,
+                        "maxSymbols": 2,
+                    },
+                },
+            ]
+        },
+    )
+
+    symbols: List[str] = Field(
+        default_factory=list,
+        description="Explicit US symbols to plan or refresh, for example ['TSLA', 'NVDA'].",
+    )
+    target: Optional[str] = Field(
+        default=None,
+        description="Operator-friendly target: 'symbols', 'starter', or 'tier1'.",
+    )
+    universe: Optional[str] = Field(
+        default=None,
+        description="Universe shortcut when symbols are omitted: 'starter' or 'tier1'.",
+    )
+    tier: str = Field(
+        default="starter",
+        description="Compatibility universe selector. Prefer 'universe' or 'target' for new callers.",
+    )
+    execute: bool = Field(
+        default=False,
+        description="Must be true to run provider calls and cache writes. Omitted or false plans only.",
+    )
+    dry_run: Optional[bool] = Field(
+        default=None,
+        alias="dryRun",
+        description="Optional clarity flag. true means plan only; false is valid only with execute=true.",
+    )
+    max_symbols: int = Field(
+        default=5,
+        ge=1,
+        le=100,
+        alias="maxSymbols",
+        description="Maximum missing/stale symbols to execute when execute=true.",
+    )
+    required_bars: int = Field(
+        default=60,
+        ge=1,
+        le=1000,
+        alias="requiredBars",
+        description="Required usable daily bars for each symbol before refresh is skipped.",
+    )
+    require_adjusted: bool = Field(
+        default=True,
+        alias="requireAdjusted",
+        description="Require adjusted close availability when deciding whether cached data is usable.",
+    )
+
+    @model_validator(mode="after")
+    def validate_operator_contract(self) -> "UsOhlcvCacheRefreshRequest":
+        self.target = _normalize_optional_contract_label(self.target)
+        self.universe = _normalize_optional_contract_label(self.universe)
+        self.tier = _normalize_optional_contract_label(self.tier) or "starter"
+
+        if self.target is not None and self.target not in _US_OHLCV_REFRESH_TARGET_ALIASES:
+            raise ValueError("target must be one of: symbols, starter, tier1")
+        if self.universe is not None and self.universe not in _US_OHLCV_REFRESH_UNIVERSE_ALIASES:
+            raise ValueError("universe must be one of: starter, tier1")
+        if self.tier not in _US_OHLCV_REFRESH_UNIVERSE_ALIASES:
+            raise ValueError("tier must be one of: starter, tier1")
+        if self.target == "symbols" and not self.symbols:
+            raise ValueError("target=symbols requires at least one symbol")
+        if self.target == "symbols" and self.universe is not None:
+            raise ValueError("target=symbols cannot be combined with universe")
+        if self.dry_run is True and self.execute:
+            raise ValueError("dryRun=true conflicts with execute=true; use dryRun=false for explicit execution")
+        if self.dry_run is False and not self.execute:
+            raise ValueError("dryRun=false requires execute=true; dryRun=false alone cannot execute writes")
+        return self
+
+    def resolved_tier(self) -> str:
+        for value in (self.universe, self.target, self.tier):
+            resolved = _US_OHLCV_REFRESH_UNIVERSE_ALIASES.get(str(value or ""))
+            if resolved:
+                return resolved
+        return "starter"
 
 
 class UsOhlcvCacheRefreshResponse(BaseModel):
