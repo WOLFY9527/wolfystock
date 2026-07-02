@@ -142,11 +142,82 @@ class _FakePreflightService:
         }
 
 
+class _FakeUsRefreshService:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def refresh(
+        self,
+        *,
+        symbols=None,
+        tier="starter",
+        execute=False,
+        max_symbols=5,
+        required_bars=60,
+        require_adjusted=True,
+    ):
+        self.calls.append(
+            {
+                "symbols": symbols,
+                "tier": tier,
+                "execute": execute,
+                "max_symbols": max_symbols,
+                "required_bars": required_bars,
+                "require_adjusted": require_adjusted,
+            }
+        )
+        return {
+            "contractVersion": "us_ohlcv_cache_refresh_v1",
+            "dryRun": not execute,
+            "execute": execute,
+            "target": {"market": "us", "tier": tier, "source": "test", "configured": False},
+            "requestedSymbols": list(symbols or []),
+            "normalizedSymbols": list(symbols or []),
+            "alreadyAvailableSymbols": [],
+            "missingOrStaleSymbols": list(symbols or []),
+            "skippedSymbols": [],
+            "estimatedMaxProviderCalls": 0 if not execute else min(max_symbols, len(symbols or [])),
+            "writeTarget": "local_us_parquet_cache",
+            "refreshPolicy": {
+                "explicitExecutionRequired": True,
+                "dryRunDefault": True,
+                "boundedByMaxSymbols": True,
+                "consumerSafe": True,
+            },
+            "providerPolicy": {
+                "liveProviderCallsAllowed": execute,
+                "providerCallsMade": 0,
+                "providerCallBoundary": "missing_or_stale_symbols_only",
+                "consumerSafe": True,
+            },
+            "writePolicy": {
+                "cacheWritesAllowed": execute,
+                "databaseWritesAllowed": False,
+                "writeTarget": "local_us_parquet_cache",
+                "symbolsWritten": [],
+                "rowsWritten": 0,
+                "consumerSafe": True,
+            },
+            "plan": {"symbols": [], "alreadyAvailableCount": 0, "refreshCandidateCount": 0, "skippedCount": 0},
+            "results": [],
+            "summary": {},
+            "consumerSafe": True,
+        }
+
+
 def _client_for(user_factory, service: _FakePreflightService) -> TestClient:
     app = FastAPI()
     app.include_router(market_provider_operations.router, prefix="/api/v1/admin")
     app.dependency_overrides[get_current_user] = user_factory
     app.dependency_overrides[market_provider_operations.get_historical_ohlcv_cache_preflight_service] = lambda: service
+    return TestClient(app)
+
+
+def _refresh_client_for(user_factory, service: _FakeUsRefreshService) -> TestClient:
+    app = FastAPI()
+    app.include_router(market_provider_operations.router, prefix="/api/v1/admin")
+    app.dependency_overrides[get_current_user] = user_factory
+    app.dependency_overrides[market_provider_operations.get_us_ohlcv_cache_refresh_service] = lambda: service
     return TestClient(app)
 
 
@@ -192,7 +263,7 @@ def test_preflight_endpoint_returns_dry_run_payload_and_parses_symbols() -> None
     }
     assert service.preflight_calls == [
         {
-            "symbols_by_market": {"cn": ["600519", "000001"], "us": ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"]},
+            "symbols_by_market": {"cn": ["600519", "000001"], "us": ["SPY", "QQQ", "AAPL", "MSFT"]},
             "required_bars": 30,
             "require_adjusted": True,
             "dry_run": True,
@@ -277,3 +348,51 @@ def test_non_admin_route_failures_do_not_leak_activation_checklist_internals() -
         assert "nvda" not in payload_text
         assert "market regime" not in payload_text
         assert "wolfystock_" not in payload_text
+
+
+def test_us_ohlcv_refresh_endpoint_defaults_to_dry_run_with_provider_read_capability() -> None:
+    service = _FakeUsRefreshService()
+    client = _refresh_client_for(_provider_read_admin, service)
+
+    response = client.post(
+        "/api/v1/admin/historical-ohlcv/us-cache-refresh",
+        json={"symbols": ["spy", "aapl"], "maxSymbols": 2, "requiredBars": 30},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["dryRun"] is True
+    assert service.calls == [
+        {
+            "symbols": ["spy", "aapl"],
+            "tier": "starter",
+            "execute": False,
+            "max_symbols": 2,
+            "required_bars": 30,
+            "require_adjusted": True,
+        }
+    ]
+
+
+def test_us_ohlcv_refresh_endpoint_requires_provider_write_for_execute() -> None:
+    service = _FakeUsRefreshService()
+    read_client = _refresh_client_for(_provider_read_admin, service)
+
+    blocked = read_client.post(
+        "/api/v1/admin/historical-ohlcv/us-cache-refresh",
+        json={"symbols": ["AAPL"], "execute": True},
+    )
+
+    assert blocked.status_code == 403
+    assert blocked.json()["detail"]["error"] == "admin_capability_required"
+    assert service.calls == []
+
+    write_client = _refresh_client_for(_provider_write_admin, service)
+    executed = write_client.post(
+        "/api/v1/admin/historical-ohlcv/us-cache-refresh",
+        json={"symbols": ["AAPL"], "execute": True, "maxSymbols": 1},
+    )
+
+    assert executed.status_code == 200
+    assert executed.json()["execute"] is True
+    assert service.calls[-1]["execute"] is True
+    assert service.calls[-1]["max_symbols"] == 1
