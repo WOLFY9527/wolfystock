@@ -22,6 +22,12 @@ describe('consumer raw leakage guard', () => {
       'https://provider.example.invalid/options?token=secret',
       'req-synth-123',
       'Traceback stack trace',
+      'historical ohlcv',
+      'quote snapshot',
+      'Observation-only research readiness; not personalized financial advice',
+      'Observe whether downside volume pressure fades or remains persistent',
+      'No portfolio exposure available',
+      'evidence limited',
     ] as const;
 
     for (const example of examples) {

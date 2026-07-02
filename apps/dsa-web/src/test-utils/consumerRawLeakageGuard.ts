@@ -35,6 +35,12 @@ const defaultForbiddenPatterns = [
   /\b(?:traceback|stack trace)\b/i,
   /\braw\s+(?:payload|response|json|provider\s+payload)\b/i,
   /\bprovider\s+(?:runtime|trace|payload|debug|route)\b/i,
+  /\bhistorical\s+ohlcv\b/i,
+  /\bquote\s+snapshot\b/i,
+  /\bObservation-only research readiness; not personalized financial advice\b/i,
+  /\bObserve whether downside volume pressure fades or remains persistent\b/i,
+  /\bNo portfolio exposure available\b/i,
+  /\bevidence limited\b/i,
 ] as const;
 
 function stripAllowedPhrases(text: string, allowedPhrases: readonly string[]) {

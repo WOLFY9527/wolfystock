@@ -389,11 +389,11 @@ const SCANNER_DATA_READINESS_STATE_LABELS: Record<string, { zh: string; en: stri
 };
 
 const SCANNER_DATA_READINESS_BLOCKER_LABELS: Record<string, { zh: string; en: string }> = {
-  missing_universe: { zh: '标的池待补', en: 'Universe pending' },
-  universe_missing: { zh: '标的池缺失', en: 'Universe missing' },
-  universe_not_configured: { zh: '标的池未配置', en: 'Universe not configured' },
-  stale_universe: { zh: '标的池待更新', en: 'Universe stale' },
-  empty_universe: { zh: '标的池为空', en: 'Universe empty' },
+  missing_universe: { zh: '标的池待补', en: 'Scope pending' },
+  universe_missing: { zh: '标的池缺失', en: 'Scope missing' },
+  universe_not_configured: { zh: '标的池未配置', en: 'Scope not configured' },
+  stale_universe: { zh: '标的池待更新', en: 'Scope stale' },
+  empty_universe: { zh: '标的池为空', en: 'Scope empty' },
   insufficient_coverage: { zh: '覆盖不足', en: 'Coverage insufficient' },
   missing_quote_snapshot: { zh: '报价快照待补', en: 'Quote snapshot pending' },
   missing_history: { zh: '历史数据待补', en: 'History pending' },
@@ -460,16 +460,18 @@ function buildScannerDataReadinessView(
     || blockerLabel;
   const coverageChips = [
     universeStatus ? {
-      label: language === 'en' ? 'Universe readiness' : '标的池状态',
+      label: language === 'en' ? 'Scope readiness' : '标的池状态',
       value: localizedDataReadinessLabel(universeStatus, SCANNER_DATA_READINESS_COVERAGE_LABELS, language)
         || (language === 'en' ? 'To confirm' : '待确认'),
     } : null,
     readiness.quoteCoverage ? { label: language === 'en' ? 'Quote' : '报价', value: localizedDataReadinessLabel(readiness.quoteCoverage, SCANNER_DATA_READINESS_COVERAGE_LABELS, language) || (language === 'en' ? 'To confirm' : '待确认') } : null,
     readiness.historyCoverage ? { label: language === 'en' ? 'History' : '历史', value: localizedDataReadinessLabel(readiness.historyCoverage, SCANNER_DATA_READINESS_COVERAGE_LABELS, language) || (language === 'en' ? 'To confirm' : '待确认') } : null,
-    readiness.universeSize != null ? { label: language === 'en' ? 'Universe' : '标的池', value: String(readiness.universeSize) } : null,
+    readiness.universeSize != null ? { label: language === 'en' ? 'Scope' : '标的池', value: String(readiness.universeSize) } : null,
     universeReadiness?.missingDataClasses?.length ? {
       label: language === 'en' ? 'Missing' : '缺口',
-      value: universeReadiness.missingDataClasses.slice(0, 3).map((item) => String(item).replace(/_/g, ' ')).join(' / '),
+      value: universeReadiness.missingDataClasses.slice(0, 3)
+        .map((item) => sanitizeUserFacingDataIssue(String(item), language))
+        .join(' / '),
     } : null,
   ].filter((item): item is ScannerLabeledValue => Boolean(item));
 
@@ -1024,7 +1026,7 @@ function buildScannerRunFactItems(runDetail: ScannerRunDetail | null, language: 
   }
 
   [
-    { label: language === 'en' ? 'Universe' : '标的池', value: counts.universe },
+    { label: language === 'en' ? 'Scope' : '标的池', value: counts.universe },
     { label: language === 'en' ? 'Preselected' : '预筛', value: counts.preselected },
     { label: language === 'en' ? 'Evaluated' : '评估', value: counts.evaluated },
     { label: language === 'en' ? 'Selected' : '入选', value: counts.selected },
@@ -1433,7 +1435,7 @@ function buildScannerSafeEmptyReason({
     || runDetail.universeType === 'custom'
     || (runDetail.acceptedSymbolsCount > 0 && runDetail.acceptedSymbolsCount < runDetail.requestedSymbolsCount);
   const countSummary = language === 'en'
-    ? `Universe ${formatScannerCount(counts.universe)} · preselected ${formatScannerCount(counts.preselected)} · evaluated ${formatScannerCount(counts.evaluated)} · selected ${formatScannerCount(counts.selected)}.`
+    ? `Scope ${formatScannerCount(counts.universe)} · preselected ${formatScannerCount(counts.preselected)} · evaluated ${formatScannerCount(counts.evaluated)} · selected ${formatScannerCount(counts.selected)}.`
     : `标的池 ${formatScannerCount(counts.universe)} · 预筛 ${formatScannerCount(counts.preselected)} · 评估 ${formatScannerCount(counts.evaluated)} · 入选 ${formatScannerCount(counts.selected)}。`;
 
   if (hasCoverageGap) {
@@ -1580,7 +1582,7 @@ function buildScannerWorkbenchEmptyState({
   return {
     title: language === 'en' ? 'No rows in the current filter' : '当前过滤无候选行',
     body: language === 'en'
-      ? 'Switch the candidate view, inspect limited-data rows, or adjust market, universe, detailed review, and shortlist controls in the top command bar.'
+      ? 'Switch the candidate view, inspect limited-data rows, or adjust market, scope, detailed review, and candidate limit controls in the top command bar.'
       : '切换候选视图、查看数据受限行，或在顶部命令栏调整市场、范围、评估深度与候选上限。',
   };
 }
@@ -2297,7 +2299,7 @@ function buildScannerFirstRunSetupLabel({
   const parts = [getScannerMarketLabel(market, language)];
 
   if (scanScope === 'theme') {
-    parts.push(language === 'en' ? 'Theme universe' : '主题标的池');
+    parts.push(language === 'en' ? 'Theme scope' : '主题标的池');
     parts.push(selectedTheme ? getThemeLabel(selectedTheme, language) : (language === 'en' ? 'Select a theme' : '选择主题'));
   } else if (scanScope === 'symbols') {
     parts.push(language === 'en' ? 'Custom symbols' : '自定义标的');
@@ -2307,7 +2309,7 @@ function buildScannerFirstRunSetupLabel({
         : (language === 'en' ? 'Add symbols' : '补充代码'),
     );
   } else {
-    parts.push(language === 'en' ? 'Default market universe' : '默认市场池');
+    parts.push(language === 'en' ? 'Default market scope' : '默认市场池');
     parts.push(language === 'en' ? `${universeLimit} names` : `${universeLimit} 只`);
   }
 
@@ -2777,7 +2779,7 @@ const UserScannerPage: React.FC = () => {
       nextErrors.run = language === 'en' ? 'Choose a valid shortlist size.' : '请选择有效的入选数量。';
     }
     if (!Number.isFinite(parsedUniverseLimit) || parsedUniverseLimit < 50) {
-      nextErrors.run = language === 'en' ? 'Universe size must be at least 50.' : '候选池数量至少为 50。';
+      nextErrors.run = language === 'en' ? 'Scope size must be at least 50.' : '候选池数量至少为 50。';
     }
     if (!Number.isFinite(parsedDetailLimit) || parsedDetailLimit < 10) {
       nextErrors.run = language === 'en' ? 'Detail evaluation count must be at least 10.' : '详细评估数量至少为 10。';
@@ -3748,8 +3750,8 @@ const UserScannerPage: React.FC = () => {
   ]);
 
   const scannerScopeLabel = runDetail
-    ? `${runDetail.market.toUpperCase()} · ${runDetail.universeType === 'theme' ? (language === 'en' ? 'Theme universe' : '主题标的池') : runDetail.universeType === 'custom' || runDetail.universeType === 'symbols' ? (language === 'en' ? 'Custom symbols' : '自定义标的') : (language === 'en' ? 'Default universe' : '默认市场池')}`
-    : `${market.toUpperCase()} · ${scanScope === 'theme' ? (language === 'en' ? 'Theme universe' : '主题标的池') : scanScope === 'symbols' ? (language === 'en' ? 'Custom symbols' : '自定义标的') : (language === 'en' ? 'Default universe' : '默认市场池')}`;
+    ? `${runDetail.market.toUpperCase()} · ${runDetail.universeType === 'theme' ? (language === 'en' ? 'Theme scope' : '主题标的池') : runDetail.universeType === 'custom' || runDetail.universeType === 'symbols' ? (language === 'en' ? 'Custom symbols' : '自定义标的') : (language === 'en' ? 'Default scope' : '默认市场池')}`
+    : `${market.toUpperCase()} · ${scanScope === 'theme' ? (language === 'en' ? 'Theme scope' : '主题标的池') : scanScope === 'symbols' ? (language === 'en' ? 'Custom symbols' : '自定义标的') : (language === 'en' ? 'Default scope' : '默认市场池')}`;
   const scannerThemeLabel = runDetail?.themeLabel || runDetail?.themeId || (selectedTheme ? getThemeLabel(selectedTheme, language) : (language === 'en' ? 'No theme' : '无主题'));
   const scannerDataStateLabel = runDetail
     ? (scannerDataReadinessView?.isMeaningful
@@ -3847,7 +3849,7 @@ const UserScannerPage: React.FC = () => {
       : `当前配置可查看 ${currentSelectedCount} 个扫描候选；进入下游验证前先核对数据限制。`)
     : scannerConclusion.state === 'waiting'
       ? (language === 'en'
-        ? 'Choose market, strategy, and universe, then run the scanner when the setup is ready.'
+        ? 'Choose market, strategy, and scope, then run the scanner when the setup is ready.'
         : '先选择市场、策略与标的池；配置确认后即可运行扫描。')
       : scannerConclusion.state === 'no-candidate'
         ? (language === 'en'
@@ -3858,8 +3860,8 @@ const UserScannerPage: React.FC = () => {
           : '扫描输出受数据覆盖限制；先完成下一步动作，再把结果作为研究证据。');
   const scannerConsumerTrustItems = [
     {
-      label: language === 'en' ? 'Universe' : '标的池',
-      value: scannerDataReadinessView?.coverageChips.find((item) => item.label === (language === 'en' ? 'Universe readiness' : '标的池状态'))?.value
+      label: language === 'en' ? 'Scope' : '标的池',
+      value: scannerDataReadinessView?.coverageChips.find((item) => item.label === (language === 'en' ? 'Scope readiness' : '标的池状态'))?.value
         || scannerScopeLabel,
     },
     {
@@ -4075,7 +4077,7 @@ const UserScannerPage: React.FC = () => {
                       {[
                         [language === 'en' ? 'Market' : '市场', market.toUpperCase()],
                         [language === 'en' ? 'Strategy' : '策略', scannerRailProfileLabel || '--'],
-                        [language === 'en' ? 'Universe' : '标的池', scannerScopeLabel],
+                        [language === 'en' ? 'Scope' : '标的池', scannerScopeLabel],
                         [language === 'en' ? 'Output' : '输出', scannerShouldHideEmptyRunCounts ? (language === 'en' ? 'Pending' : '待产出') : String(currentSelectedCount)],
                       ].map(([label, value]) => (
                         <div key={label} className="min-w-0 rounded-lg border border-white/8 bg-black/20 px-2 py-2">
@@ -4349,12 +4351,12 @@ const UserScannerPage: React.FC = () => {
                       <div data-testid="scanner-launch-controls" className="contents">
                         <PillTagGroup
                           compact
-                          label={language === 'en' ? 'Universe' : '标的池'}
+                          label={language === 'en' ? 'Scope' : '标的池'}
                           value={scanScope}
                           onChange={(next) => setScanScope(next as ScanScope)}
                           options={[
-                            { value: 'default', label: language === 'en' ? 'Default market universe' : '默认市场池' },
-                            { value: 'theme', label: language === 'en' ? 'Theme universe' : '主题标的池' },
+                            { value: 'default', label: language === 'en' ? 'Default market scope' : '默认市场池' },
+                            { value: 'theme', label: language === 'en' ? 'Theme scope' : '主题标的池' },
                             { value: 'symbols', label: language === 'en' ? 'Custom symbols' : '自定义标的' },
                           ]}
                           testId="scanner-scope-selector"

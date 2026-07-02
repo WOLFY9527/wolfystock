@@ -183,6 +183,26 @@ describe('GuestHomePage', () => {
     expect(screen.queryByTestId('home-research-console')).not.toBeInTheDocument();
   });
 
+  it('keeps the guest first screen populated at 375px mobile width', async () => {
+    window.innerWidth = 375;
+    window.dispatchEvent(new Event('resize'));
+
+    renderGuest();
+
+    const firstScreen = screen.getByTestId('guest-home-clean-search');
+    const commandSurface = screen.getByTestId('guest-home-command-surface');
+
+    expect(firstScreen).toBeInTheDocument();
+    expect(commandSurface).toHaveAttribute('data-visual-role', 'guest-command-console');
+    expect(screen.getByRole('heading', { name: 'WolfyStock 研究控制台' })).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-omnibar-input')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '分析' })).toBeEnabled();
+    expect(screen.getByTestId('guest-home-registration-link')).toHaveAttribute('href', '/zh/register?redirect=%2Fzh');
+    expect(await screen.findByTestId('guest-home-market-preview-strip')).toHaveTextContent('只用于市场观察，不构成买卖建议');
+    expect(firstScreen.textContent?.trim().length).toBeGreaterThan(80);
+    expect(firstScreen).not.toHaveTextContent(/^\s*$/);
+  });
+
   it('shows an honest unavailable state when the market briefing cannot be loaded', async () => {
     languageState.value = 'en';
     window.history.replaceState(window.history.state, '', '/en');

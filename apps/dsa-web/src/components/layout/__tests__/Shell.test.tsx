@@ -14,6 +14,7 @@ import {
   resolveConsumerNavItem,
   resolveConsumerRouteStory,
 } from '../consumerAppNavigation';
+import { CORE_PRODUCT_ROUTES, PRIMARY_CONSUMER_ROUTES } from '../coreProductRoutes';
 import { setAdminSurfaceMode } from '../../../hooks/useProductSurface';
 import { useStockPoolStore } from '../../../stores/stockPoolStore';
 
@@ -182,17 +183,28 @@ describe('Shell', () => {
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveClass('is-active');
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.portfolio') })).toBeInTheDocument();
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.backtest') })).toHaveAttribute('href', '/backtest');
-    expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.scenarioLab') })).toBeInTheDocument();
+    expect(within(primaryNav).queryByRole('link', { name: translate('zh', 'nav.scenarioLab') })).not.toBeInTheDocument();
     expect(within(primaryNav).queryByRole('link', { name: translate('zh', 'nav.optionsLab') })).not.toBeInTheDocument();
     expect(within(primaryNav).queryByRole('link', { name: translate('zh', 'nav.home') })).not.toBeInTheDocument();
     expect(within(primaryNav).queryByRole('link', { name: '流动性监测' })).not.toBeInTheDocument();
     expect(within(primaryNav).queryByRole('link', { name: '轮动雷达' })).not.toBeInTheDocument();
     expect(within(primaryNav).queryByRole('link', { name: '决策台' })).not.toBeInTheDocument();
     expect(within(primaryNav).queryByRole('link', { name: 'Decision Desk' })).not.toBeInTheDocument();
-    expect(within(primaryNav).getAllByRole('link')).toHaveLength(9);
+    expect(within(primaryNav).getAllByRole('link')).toHaveLength(8);
   });
 
   it('keeps consumer IA metadata aligned with the live anonymous Shell navigation', () => {
+    expect(PRIMARY_CONSUMER_ROUTES.map((route) => route.key)).toEqual([
+      'decision-cockpit',
+      'market-overview',
+      'research-radar',
+      'stock-structure',
+      'scanner',
+      'watchlist',
+      'portfolio',
+      'backtest',
+    ]);
+    expect(CORE_PRODUCT_ROUTES.find((route) => route.key === 'scenario-lab')?.primaryNav).toBe(false);
     expect(CONSUMER_NAV_GROUPS.map((group) => group.key)).toEqual([
       'cockpit',
       'research',
@@ -208,7 +220,6 @@ describe('Shell', () => {
       ['watchlist', 'context', '/watchlist', true],
       ['portfolio', 'context', '/portfolio', true],
       ['backtest', 'observe', '/backtest', true],
-      ['scenario-lab', 'observe', '/scenario-lab', true],
     ]);
     expect(CONSUMER_NAV_ITEMS.find((item) => item.key === 'decision-cockpit')?.to).not.toBe('/cockpit');
     expect(CONSUMER_NAV_ITEMS.find((item) => item.key === 'research-radar')?.to).not.toBe('/research-radar');
@@ -263,7 +274,8 @@ describe('Shell', () => {
     expect(resolveConsumerNavItem('/en/research/radar')?.key).toBe('research-radar');
     expect(resolveConsumerNavItem('/en/scanner')?.key).toBe('scanner');
     expect(resolveConsumerNavItem('/zh/backtest')?.key).toBe('backtest');
-    expect(resolveConsumerNavItem('/zh/scenario-lab')?.key).toBe('scenario-lab');
+    expect(resolveConsumerNavItem('/zh/scenario-lab')).toBeNull();
+    expect(resolveConsumerRouteStory('/zh/scenario-lab')?.routeKey).toBe('scenario-lab');
     expect(resolveConsumerNavItem('/unknown')).toBeNull();
   });
 
@@ -320,7 +332,7 @@ describe('Shell', () => {
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.stockStructure') })).toHaveAttribute('href', '/stocks/structure-decision');
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.scanner') })).toHaveAttribute('href', '/scanner');
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.portfolio') })).toHaveAttribute('href', '/portfolio');
-    expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.scenarioLab') })).toHaveAttribute('href', '/scenario-lab');
+    expect(within(primaryNav).queryByRole('link', { name: translate('zh', 'nav.scenarioLab') })).not.toBeInTheDocument();
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.backtest') })).toHaveAttribute('href', '/backtest');
     expect(screen.getByRole('link', { name: translate('zh', 'nav.signIn') })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '账户中心' })).not.toBeInTheDocument();
@@ -352,7 +364,7 @@ describe('Shell', () => {
     expect(within(primaryNav).getByRole('link', { name: translate('en', 'nav.stockStructure') })).toHaveAttribute('href', '/en/stocks/structure-decision');
     expect(within(primaryNav).getByRole('link', { name: translate('en', 'nav.scanner') })).toHaveAttribute('href', '/en/scanner');
     expect(within(primaryNav).getByRole('link', { name: translate('en', 'nav.portfolio') })).toHaveAttribute('href', '/en/portfolio');
-    expect(within(primaryNav).getByRole('link', { name: translate('en', 'nav.scenarioLab') })).toHaveAttribute('href', '/en/scenario-lab');
+    expect(within(primaryNav).queryByRole('link', { name: translate('en', 'nav.scenarioLab') })).not.toBeInTheDocument();
     expect(within(primaryNav).getByRole('link', { name: translate('en', 'nav.backtest') })).toHaveAttribute('href', '/en/backtest');
     expect(screen.getByRole('link', { name: translate('en', 'nav.signIn') })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Account Center' })).not.toBeInTheDocument();
@@ -453,7 +465,7 @@ describe('Shell', () => {
     expect(screen.getByRole('link', { name: translate('zh', 'nav.scanner') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.portfolio') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.marketOverview') })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: translate('zh', 'nav.scenarioLab') })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: translate('zh', 'nav.scenarioLab') })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.backtest') })).toHaveAttribute('href', '/backtest');
     expect(screen.getByRole('link', { name: translate('zh', 'nav.signIn') })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '账户中心' })).not.toBeInTheDocument();
@@ -707,7 +719,7 @@ describe('Shell', () => {
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.researchRadar') })).toBeInTheDocument();
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.stockStructure') })).toBeInTheDocument();
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveClass('is-active');
-    expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.scenarioLab') })).toBeInTheDocument();
+    expect(within(drawerNav).queryByRole('link', { name: translate('zh', 'nav.scenarioLab') })).not.toBeInTheDocument();
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.backtest') })).toHaveAttribute('href', '/backtest');
     expect(within(drawerNav).queryByRole('link', { name: translate('zh', 'nav.optionsLab') })).not.toBeInTheDocument();
     expect(within(drawerNav).queryByRole('link', { name: '轮动雷达' })).not.toBeInTheDocument();

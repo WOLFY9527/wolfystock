@@ -37,6 +37,7 @@ import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '
 import { BrandLogo, BRAND_WORDMARK_CLASSNAME } from '../common/BrandLogo';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { useThemeStyle } from '../theme/themeState';
+import { PRIMARY_CONSUMER_ROUTES } from './coreProductRoutes';
 
 type SidebarNavProps = {
   layout?: 'header' | 'drawer';
@@ -102,15 +103,20 @@ const BrandWordmark: React.FC<{
 );
 
 const NAV_ITEMS: NavItem[] = [
-  { key: 'decision-cockpit', labelKey: 'nav.marketDecisionCockpit', to: '/market/decision-cockpit', icon: Gauge },
-  { key: 'market-overview', labelKey: 'nav.marketOverview', to: '/market-overview', icon: Activity },
-  { key: 'research-radar', labelKey: 'nav.researchRadar', to: '/research/radar', icon: Radar },
-  { key: 'stock-structure', labelKey: 'nav.stockStructure', to: '/stocks/structure-decision', icon: BarChart3 },
-  { key: 'scanner', labelKey: 'nav.scanner', to: '/scanner', icon: Radar },
-  { key: 'watchlist', labelKey: 'nav.watchlist', to: '/watchlist', icon: ListChecks },
-  { key: 'portfolio', labelKey: 'nav.portfolio', to: '/portfolio', icon: BriefcaseBusiness },
-  { key: 'backtest', labelKey: 'nav.backtest', to: '/backtest', icon: FileCheck2 },
-  { key: 'scenario-lab', labelKey: 'nav.scenarioLab', to: '/scenario-lab', icon: FlaskConical },
+  ...PRIMARY_CONSUMER_ROUTES.map((route) => ({
+    key: route.key,
+    labelKey: route.labelKey,
+    to: route.path,
+    icon: route.key === 'decision-cockpit' ? Gauge
+      : route.key === 'market-overview' ? Activity
+      : route.key === 'research-radar' ? Radar
+      : route.key === 'stock-structure' ? BarChart3
+      : route.key === 'scanner' ? Radar
+      : route.key === 'watchlist' ? ListChecks
+      : route.key === 'portfolio' ? BriefcaseBusiness
+      : route.key === 'backtest' ? FileCheck2
+      : FlaskConical,
+  })),
 ];
 
 const HEADER_UTILITY_TEXT_CLASS = 'px-2.5 py-1 text-[11px] font-medium text-white/42 transition-colors hover:text-white/78';
