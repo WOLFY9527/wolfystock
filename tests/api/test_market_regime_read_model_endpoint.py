@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import importlib
 from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
@@ -193,6 +194,77 @@ def test_market_regime_read_model_route_is_exposed() -> None:
 
     assert "get" in paths["/api/v1/market/regime-read-model"]
     assert "get" in paths["/api/v1/market/regime-evidence-pack"]
+
+
+def test_market_regime_runtime_contracts_are_registered_on_default_app(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("LOG_DIR", str(tmp_path))
+    api_app = importlib.import_module("api.app")
+    market_overview_endpoint = importlib.import_module("api.v1.endpoints.market_overview")
+    cockpit_service_module = importlib.import_module("src.services.market_decision_cockpit_service")
+    read_model_service = importlib.import_module("src.services.market_regime_read_model_service")
+    cockpit_service = importlib.import_module("src.services.market_decision_cockpit_service")
+
+    class NoProviderMarketOverviewService:
+        def get_indices(self, **_kwargs):
+            return {"status": "success", "providerCallsEnabled": False}
+
+        def get_volatility(self, **_kwargs):
+            return {"status": "success", "providerCallsEnabled": False}
+
+        def get_sentiment(self, **_kwargs):
+            return {"status": "success", "providerCallsEnabled": False}
+
+        def get_funds_flow(self, **_kwargs):
+            return {"status": "success", "providerCallsEnabled": False}
+
+        def get_macro(self, **_kwargs):
+            return {"status": "success", "providerCallsEnabled": False}
+
+        def get_market_regime_decision(self, **_kwargs):
+            return {
+                "regime": "lowConfidence",
+                "confidence": "low",
+                "confidenceScore": 0,
+                "driverScores": {},
+                "explanation": {},
+                "researchPriorities": {},
+                "missingEvidence": ["market_regime_low_confidence"],
+            }
+
+    def failed_closed_read_model():
+        return {
+            "status": "failed_closed",
+            "readiness": "failed_closed",
+            "label": "insufficient_data",
+            "regimeEvidenceProjection": read_model_service.project_market_regime_evidence(None),
+        }
+
+    monkeypatch.setattr(market_overview_endpoint, "MarketOverviewService", lambda: NoProviderMarketOverviewService())
+    monkeypatch.setattr(cockpit_service_module, "MarketOverviewService", lambda: NoProviderMarketOverviewService())
+    monkeypatch.setattr(
+        market,
+        "MarketDecisionCockpitService",
+        lambda: cockpit_service.MarketDecisionCockpitService(
+            market_overview_service=NoProviderMarketOverviewService(),
+            market_regime_read_model_provider=failed_closed_read_model,
+        ),
+    )
+    client = TestClient(api_app.app)
+
+    evidence_response = client.get("/api/v1/market/regime-evidence-pack")
+    overview_response = client.get("/api/v1/market-overview")
+    cockpit_response = client.get("/api/v1/market/decision-cockpit")
+
+    assert evidence_response.status_code == 200
+    assert evidence_response.json()["contractVersion"] == "market_regime_evidence_pack_v1"
+
+    assert overview_response.status_code == 200
+    overview_projection = overview_response.json()["regimeEvidenceProjection"]
+    assert overview_projection["contractVersion"] == "market_regime_evidence_projection_v1"
+
+    assert cockpit_response.status_code == 200
+    cockpit_projection = cockpit_response.json()["marketRegimeReadModel"]["regimeEvidenceProjection"]
+    assert cockpit_projection["contractVersion"] == "market_regime_evidence_projection_v1"
 
 
 def test_market_regime_evidence_pack_endpoint_returns_ready_computed_contract(tmp_path, monkeypatch) -> None:
