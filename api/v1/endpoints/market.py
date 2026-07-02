@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -43,6 +44,8 @@ from src.services.market_regime_evidence_service import (
     DEFAULT_MARKET_REGIME_SYMBOLS,
     DEFAULT_REQUIRED_BARS,
     MARKET_REGIME_EVIDENCE_CONTRACT_VERSION,
+    MARKET_REGIME_NO_ADVICE_DISCLOSURE,
+    build_market_regime_evidence_pack,
 )
 from src.services.market_regime_read_model_service import (
     build_market_regime_read_model,
@@ -218,6 +221,101 @@ def _failed_closed_regime_read_model(
         "providerCallsEnabled": False,
     }
     return build_market_regime_read_model_from_evidence(source)
+
+
+def _failed_closed_regime_evidence_pack(
+    *,
+    market: str,
+    symbols: list[str],
+    benchmark_symbol: str,
+    growth_proxy_symbol: str,
+    required_bars: int,
+    require_adjusted: bool,
+) -> dict[str, Any]:
+    normalized_market = "US" if str(market or "").strip().upper() == "US" else "UNKNOWN"
+    generated_at = datetime.now(timezone.utc).isoformat()
+    return {
+        "consumerSafe": True,
+        "contractVersion": MARKET_REGIME_EVIDENCE_CONTRACT_VERSION,
+        "status": "failed_closed",
+        "readiness": "failed_closed",
+        "market": normalized_market,
+        "tier": "tier1",
+        "universe": {"market": normalized_market, "tier": "tier1", "symbols": list(symbols)},
+        "evaluatedSymbols": list(symbols),
+        "symbols": list(symbols),
+        "benchmarkSymbol": benchmark_symbol,
+        "growthProxySymbol": growth_proxy_symbol,
+        "requiredBars": required_bars,
+        "requireAdjusted": require_adjusted,
+        "generatedAt": generated_at,
+        "asOf": None,
+        "noAdviceDisclosure": MARKET_REGIME_NO_ADVICE_DISCLOSURE,
+        "availableDataClasses": [],
+        "missingDataFamilies": ["historical_ohlcv"],
+        "blockedProductSurfaces": ["Market Overview", "Research Radar"],
+        "nextOperatorAction": "Provide readable local market regime evidence inputs, then rerun.",
+        "evidence": {
+            "historicalOhlcvCoverage": {
+                "requiredBars": required_bars,
+                "usableBars": {},
+                "usableRange": {},
+                "adjustedCoverageState": "missing",
+                "availableSymbols": [],
+                "missingSymbols": [],
+            },
+            "benchmarkTrend": {},
+            "growthRiskProxy": {},
+            "breadthProxy": {},
+            "volatilityProxy": {},
+            "indexTrend": {},
+            "breadth": {"state": "insufficient_data"},
+            "momentum": {"state": "insufficient_data"},
+            "volatilityRisk": {},
+            "concentrationLeadership": {"state": "insufficient_data"},
+            "dataCoverage": {
+                "requiredBars": required_bars,
+                "usedSymbols": [],
+                "skippedSymbols": [],
+                "coverageBySymbol": {},
+                "usableRangeBySymbol": {},
+                "asOf": None,
+                "state": "missing",
+            },
+        },
+        "regimeSummary": {
+            "label": "insufficient_data",
+            "status": "failed_closed",
+            "confidence": 0.0,
+            "explanation": "Local market regime inputs failed closed, so no regime evidence is published.",
+            "derivation": "deterministic_evidence_fields",
+        },
+        "symbolEvidence": {},
+        "benchmarkEvidence": {},
+        "quoteSnapshotEvidence": {
+            "availableSymbols": [],
+            "missingSymbols": [],
+            "staleSymbols": [],
+            "freshnessState": "not_requested",
+            "availabilityState": "not_requested",
+            "sourceFamilies": [],
+            "providerCallsEnabled": False,
+            "state": "not_requested",
+        },
+        "dataQuality": {
+            "status": "failed_closed",
+            "summary": "Local market regime inputs failed closed.",
+            "missingBars": {},
+            "missingAdjustedData": [],
+            "missingQuoteSnapshot": list(symbols),
+            "staleOrUnknownFreshness": list(symbols),
+            "failClosedReasons": ["source_unavailable"],
+            "reasonCodes": ["source_unavailable"],
+        },
+        "networkCallsEnabled": False,
+        "mutationEnabled": False,
+        "providerCallsEnabled": False,
+    }
 
 
 def _consumer_safe_market_payload(payload: Any, *, surface: str) -> Any:
@@ -461,6 +559,61 @@ def get_regime_read_model(
         )
     return JSONResponse(
         content=jsonable_encoder(_consumer_safe_market_payload(payload, surface="market-regime-read-model"))
+    )
+
+
+@router.get("/regime-evidence-pack", summary="Get read-only market regime OHLCV evidence pack")
+def get_regime_evidence_pack(
+    market: str = Query("US", description="Market code for the bounded evidence pack universe."),
+    symbols: Optional[str] = Query(
+        default=None,
+        description="Optional comma-separated symbols for local evidence generation.",
+    ),
+    benchmark_symbol: str = Query(DEFAULT_BENCHMARK_SYMBOL, alias="benchmarkSymbol"),
+    growth_proxy_symbol: str = Query(DEFAULT_GROWTH_PROXY_SYMBOL, alias="growthProxySymbol"),
+    required_bars: int = Query(DEFAULT_REQUIRED_BARS, alias="requiredBars", ge=20, le=260),
+    require_adjusted: bool = Query(True, alias="requireAdjusted"),
+    ohlcv_cache_dir: Optional[str] = Query(
+        default=None,
+        alias="ohlcvCacheDir",
+        description="Optional local OHLCV parquet cache directory. The resolved path is not returned.",
+    ),
+    quote_snapshot_cache_path: Optional[str] = Query(
+        default=None,
+        alias="quoteSnapshotCachePath",
+        description="Optional local quote snapshot JSON path. The resolved path is not returned.",
+    ),
+    quote_max_age_seconds: int = Query(60 * 60 * 24, alias="quoteMaxAgeSeconds", ge=1, le=60 * 60 * 24 * 30),
+) -> JSONResponse:
+    requested_symbols = _parse_regime_read_model_symbols(symbols)
+    benchmark = _parse_regime_read_model_symbols(benchmark_symbol)[0]
+    growth_proxy = _parse_regime_read_model_symbols(growth_proxy_symbol)[0]
+    try:
+        payload = build_market_regime_evidence_pack(
+            market=market,
+            symbols=requested_symbols,
+            benchmark_symbol=benchmark,
+            growth_proxy_symbol=growth_proxy,
+            required_bars=_bounded_required_bars(required_bars),
+            ohlcv_cache_dir=_safe_local_path(ohlcv_cache_dir, default=get_configured_us_stock_parquet_dir()),
+            quote_snapshot_cache_path=_safe_local_path(
+                quote_snapshot_cache_path,
+                default=get_configured_us_quote_snapshot_cache_path(),
+            ),
+            require_adjusted=require_adjusted,
+            quote_max_age_seconds=quote_max_age_seconds,
+        )
+    except Exception:
+        payload = _failed_closed_regime_evidence_pack(
+            market=market,
+            symbols=requested_symbols,
+            benchmark_symbol=benchmark,
+            growth_proxy_symbol=growth_proxy,
+            required_bars=_bounded_required_bars(required_bars),
+            require_adjusted=require_adjusted,
+        )
+    return JSONResponse(
+        content=jsonable_encoder(_consumer_safe_market_payload(payload, surface="market-regime-evidence-pack"))
     )
 
 
