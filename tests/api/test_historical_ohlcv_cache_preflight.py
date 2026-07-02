@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from datetime import date
+from types import SimpleNamespace
+from typing import Any
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import market_provider_operations
+from src.services.us_ohlcv_cache_refresh import UsOhlcvCacheRefreshService
 
 
 def _provider_read_admin() -> CurrentUser:
@@ -205,6 +210,29 @@ class _FakeUsRefreshService:
         }
 
 
+class _CountingUsCache:
+    def __init__(self) -> None:
+        self.load_calls: list[tuple[str, int | None]] = []
+        self.save_calls: list[str] = []
+
+    def load_result(self, symbol: str, **kwargs: Any) -> SimpleNamespace:
+        self.load_calls.append((str(symbol).upper(), kwargs.get("days")))
+        return SimpleNamespace(status="missing", dataframe=None)
+
+    def save(self, symbol: str, *_: Any) -> int:
+        self.save_calls.append(str(symbol).upper())
+        raise AssertionError("dry-run cache write called")
+
+
+class _ProviderShouldNotRun:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def get_daily_data(self, *, stock_code: str, **_: Any) -> Any:
+        self.calls.append(str(stock_code).upper())
+        raise AssertionError("dry-run provider called")
+
+
 def _client_for(user_factory, service: _FakePreflightService) -> TestClient:
     app = FastAPI()
     app.include_router(market_provider_operations.router, prefix="/api/v1/admin")
@@ -219,6 +247,22 @@ def _refresh_client_for(user_factory, service: _FakeUsRefreshService) -> TestCli
     app.dependency_overrides[get_current_user] = user_factory
     app.dependency_overrides[market_provider_operations.get_us_ohlcv_cache_refresh_service] = lambda: service
     return TestClient(app)
+
+
+def test_us_ohlcv_refresh_route_is_registered_with_operator_friendly_schema() -> None:
+    app = FastAPI()
+    app.include_router(market_provider_operations.router, prefix="/api/v1/admin")
+
+    schema = app.openapi()
+    route = schema["paths"]["/api/v1/admin/historical-ohlcv/us-cache-refresh"]["post"]
+    request_schema_ref = route["requestBody"]["content"]["application/json"]["schema"]["$ref"]
+    request_schema_name = request_schema_ref.rsplit("/", 1)[-1]
+    properties = schema["components"]["schemas"][request_schema_name]["properties"]
+
+    assert route["summary"] == "Plan or explicitly execute bounded US OHLCV cache refresh"
+    assert request_schema_name == "UsOhlcvCacheRefreshRequest"
+    for field_name in ("symbols", "target", "universe", "execute", "dryRun", "maxSymbols"):
+        assert field_name in properties
 
 
 def test_preflight_endpoint_requires_provider_read_capability() -> None:
@@ -373,6 +417,110 @@ def test_us_ohlcv_refresh_endpoint_defaults_to_dry_run_with_provider_read_capabi
     ]
 
 
+def test_us_ohlcv_refresh_endpoint_accepts_explicit_symbols_dry_run_contract() -> None:
+    service = _FakeUsRefreshService()
+    client = _refresh_client_for(_provider_read_admin, service)
+
+    response = client.post(
+        "/api/v1/admin/historical-ohlcv/us-cache-refresh",
+        json={"symbols": ["TSLA", "NVDA"], "execute": False, "dryRun": True, "maxSymbols": 2},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["dryRun"] is True
+    assert payload["execute"] is False
+    assert payload["providerPolicy"]["liveProviderCallsAllowed"] is False
+    assert payload["writePolicy"]["cacheWritesAllowed"] is False
+    assert payload["writePolicy"]["databaseWritesAllowed"] is False
+    assert service.calls[-1] == {
+        "symbols": ["TSLA", "NVDA"],
+        "tier": "starter",
+        "execute": False,
+        "max_symbols": 2,
+        "required_bars": 60,
+        "require_adjusted": True,
+    }
+
+
+def test_us_ohlcv_refresh_endpoint_accepts_target_symbols_dry_run_contract() -> None:
+    service = _FakeUsRefreshService()
+    client = _refresh_client_for(_provider_read_admin, service)
+
+    response = client.post(
+        "/api/v1/admin/historical-ohlcv/us-cache-refresh",
+        json={
+            "target": "symbols",
+            "symbols": ["TSLA", "NVDA"],
+            "execute": False,
+            "dryRun": True,
+            "maxSymbols": 2,
+        },
+    )
+
+    assert response.status_code == 200
+    assert service.calls[-1]["symbols"] == ["TSLA", "NVDA"]
+    assert service.calls[-1]["tier"] == "starter"
+    assert service.calls[-1]["execute"] is False
+
+
+def test_us_ohlcv_refresh_endpoint_accepts_starter_and_tier1_dry_run_contracts() -> None:
+    service = _FakeUsRefreshService()
+    client = _refresh_client_for(_provider_read_admin, service)
+
+    starter = client.post(
+        "/api/v1/admin/historical-ohlcv/us-cache-refresh",
+        json={"universe": "starter", "execute": False, "dryRun": True, "maxSymbols": 2},
+    )
+    tier1 = client.post(
+        "/api/v1/admin/historical-ohlcv/us-cache-refresh",
+        json={"target": "tier1", "execute": False, "dryRun": True, "maxSymbols": 2},
+    )
+
+    assert starter.status_code == 200
+    assert tier1.status_code == 200
+    assert service.calls[-2]["symbols"] == []
+    assert service.calls[-2]["tier"] == "starter"
+    assert service.calls[-1]["symbols"] == []
+    assert service.calls[-1]["tier"] == "tier1"
+
+
+def test_us_ohlcv_refresh_endpoint_accepts_snake_case_equivalents() -> None:
+    service = _FakeUsRefreshService()
+    client = _refresh_client_for(_provider_read_admin, service)
+
+    response = client.post(
+        "/api/v1/admin/historical-ohlcv/us-cache-refresh",
+        json={"symbols": ["TSLA"], "execute": False, "dry_run": True, "max_symbols": 1},
+    )
+
+    assert response.status_code == 200
+    assert service.calls[-1]["max_symbols"] == 1
+
+
+def test_us_ohlcv_refresh_endpoint_dry_run_does_not_call_provider_or_write_cache() -> None:
+    cache = _CountingUsCache()
+    provider = _ProviderShouldNotRun()
+    service = UsOhlcvCacheRefreshService(cache=cache, fetcher=provider, today=date(2026, 1, 10))
+    client = _refresh_client_for(_provider_read_admin, service)
+
+    response = client.post(
+        "/api/v1/admin/historical-ohlcv/us-cache-refresh",
+        json={"symbols": ["TSLA", "NVDA"], "execute": False, "dryRun": True, "maxSymbols": 2},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["dryRun"] is True
+    assert payload["estimatedMaxProviderCalls"] == 0
+    assert payload["providerPolicy"]["providerCallsMade"] == 0
+    assert payload["writePolicy"]["cacheWritesAllowed"] is False
+    assert payload["writePolicy"]["databaseWritesAllowed"] is False
+    assert provider.calls == []
+    assert cache.save_calls == []
+    assert cache.load_calls == [("TSLA", 60), ("NVDA", 60)]
+
+
 def test_us_ohlcv_refresh_endpoint_requires_provider_write_for_execute() -> None:
     service = _FakeUsRefreshService()
     read_client = _refresh_client_for(_provider_read_admin, service)
@@ -396,3 +544,19 @@ def test_us_ohlcv_refresh_endpoint_requires_provider_write_for_execute() -> None
     assert executed.json()["execute"] is True
     assert service.calls[-1]["execute"] is True
     assert service.calls[-1]["max_symbols"] == 1
+
+
+def test_us_ohlcv_refresh_endpoint_rejects_ambiguous_execution_contract_with_field_detail() -> None:
+    service = _FakeUsRefreshService()
+    client = _refresh_client_for(_provider_read_admin, service)
+
+    response = client.post(
+        "/api/v1/admin/historical-ohlcv/us-cache-refresh",
+        json={"symbols": ["TSLA"], "execute": True, "dryRun": True},
+    )
+
+    assert response.status_code == 422
+    payload_text = str(response.json()).lower()
+    assert "dryrun" in payload_text or "dry_run" in payload_text
+    assert "execute" in payload_text
+    assert service.calls == []

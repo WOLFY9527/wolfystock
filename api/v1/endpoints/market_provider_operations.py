@@ -153,7 +153,7 @@ def refresh_us_ohlcv_cache(
         require_admin_capability("ops:providers:write")(read_user)
     return service.refresh(
         symbols=body.symbols,
-        tier=body.tier,
+        tier=body.resolved_tier(),
         execute=body.execute,
         max_symbols=body.max_symbols,
         required_bars=body.required_bars,
