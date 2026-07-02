@@ -522,7 +522,7 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(status["min_age_days"], 0)
         self.assertEqual(status["maturity_calendar_days"], 0)
         self.assertEqual(status["requested_mode"], "auto")
-        self.assertEqual(status["resolved_source"], "Unknown")
+        self.assertEqual(status["resolved_source"], "DatabaseCache")
         self.assertFalse(status["fallback_used"])
 
     def test_get_sample_status_without_code_returns_safe_aggregate(self) -> None:
@@ -535,10 +535,14 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(status["sample_readiness_state"], "missing_cache")
         self.assertIn("provider_missing", status["sample_blocking_reasons"])
         readiness = status["historicalOhlcvReadiness"]
-        self.assertEqual(readiness["providerState"], "provider_missing")
+        self.assertEqual(readiness["providerState"], "missing_cache")
+        self.assertEqual(readiness["overallState"], "missing_cache")
         self.assertEqual(readiness["requiredBars"], status["eval_window_days"])
         self.assertEqual(readiness["usableBars"], 0)
-        self.assertEqual(readiness["missingBars"], status["eval_window_days"])
+        self.assertEqual(
+            readiness["missingBars"],
+            status["eval_window_days"] * len(status["symbolSpecificReadiness"]),
+        )
 
     def test_aggregate_sample_status_exposes_local_symbol_readiness_without_masking(self) -> None:
         for symbol in ("SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"):
@@ -560,20 +564,89 @@ class BacktestServiceTestCase(unittest.TestCase):
         manager_cls.assert_not_called()
         self.assertEqual(aggregate["code"], "__all__")
         self.assertEqual(aggregate["scope"], "aggregate")
-        self.assertEqual(aggregate["sample_readiness_state"], "missing_cache")
+        self.assertEqual(aggregate["sample_readiness_state"], "no_samples")
         symbol_readiness = aggregate["symbolSpecificReadiness"]
         self.assertEqual([item["symbol"] for item in symbol_readiness], ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"])
         self.assertTrue(all(item["historicalOhlcvState"] == "ready" for item in symbol_readiness))
         self.assertTrue(all(item["providerState"] == "available" for item in symbol_readiness))
         self.assertEqual(spy["historicalOhlcvReadiness"]["providerState"], "available")
         self.assertEqual(aapl["historicalOhlcvReadiness"]["providerState"], "available")
-        self.assertNotEqual(
-            aggregate["historicalOhlcvReadiness"]["providerState"],
-            spy["historicalOhlcvReadiness"]["providerState"],
+        self.assertEqual(aggregate["historicalOhlcvReadiness"]["providerState"], "available")
+        self.assertEqual(aggregate["historicalOhlcvReadiness"]["overallState"], "all_available")
+        self.assertEqual(aggregate["resolved_source"], "LocalParquet")
+        self.assertNotIn("provider_missing", aggregate["sample_blocking_reasons"])
+
+    def test_sample_status_uses_runtime_truth_for_tsla_without_local_cache(self) -> None:
+        service = BacktestService(self.db)
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=89)
+        frame = pd.DataFrame(
+            [
+                {
+                    "date": (start_date + timedelta(days=index)).isoformat(),
+                    "open": 200.0 + index,
+                    "high": 201.0 + index,
+                    "low": 199.0 + index,
+                    "close": 200.5 + index,
+                    "volume": 1_000_000 + index,
+                }
+                for index in range(90)
+            ]
         )
 
-    def test_aggregate_sample_status_uses_configured_tier1_us_coverage_symbols(self) -> None:
+        with patch(
+            "src.services.backtest_service.fetch_daily_history_with_local_us_fallback",
+            return_value=(frame, "AlpacaFetcher"),
+        ) as fetch_mock:
+            status = service.get_sample_status(code="TSLA")
+
+        fetch_mock.assert_called_once()
+        self.assertGreater(status["prepared_count"], 0)
+        self.assertEqual(status["sample_readiness_state"], "ready")
+        self.assertEqual(status["resolved_source"], "AlpacaFetcher")
+        self.assertEqual(status["historicalOhlcvReadiness"]["providerState"], "available")
+        self.assertEqual(status["historicalOhlcvReadiness"]["missingBars"], 0)
+        self.assertNotIn("provider_missing", status["sample_blocking_reasons"])
+
+    def test_aggregate_sample_status_uses_configured_tier1_truth_without_collapsing_to_provider_missing(self) -> None:
         service = BacktestService(self.db)
+
+        def fake_readiness(*, code, rows, required_bars, **_):
+            if code == "NVDA":
+                return (
+                    {
+                        "overallState": "ready",
+                        "providerState": "available",
+                        "runtimeStatus": "available",
+                        "usableBars": required_bars,
+                        "missingBars": 0,
+                        "missingRequirements": [],
+                    },
+                    service._build_source_metadata_from_fetch_source(code=code, source="local_us_parquet"),
+                )
+            if code == "AAPL":
+                return (
+                    {
+                        "overallState": "ready",
+                        "providerState": "available",
+                        "runtimeStatus": "available",
+                        "usableBars": required_bars + 30,
+                        "missingBars": 0,
+                        "missingRequirements": [],
+                    },
+                    service._build_source_metadata_from_fetch_source(code=code, source="AlpacaFetcher"),
+                )
+            return (
+                {
+                    "overallState": "blocked",
+                    "providerState": "provider_missing",
+                    "runtimeStatus": "missing",
+                    "usableBars": 0,
+                    "missingBars": required_bars,
+                    "missingRequirements": ["provider_missing", "insufficient_history"],
+                },
+                service._build_source_metadata_from_fetch_source(code=code, source=None),
+            )
 
         with patch.dict(
             os.environ,
@@ -585,14 +658,8 @@ class BacktestServiceTestCase(unittest.TestCase):
             clear=False,
         ), patch.object(
             service,
-            "_build_historical_ohlcv_readiness",
-            side_effect=lambda *, code, rows, required_bars, **_: {
-                "overallState": "ready",
-                "providerState": "available",
-                "usableBars": required_bars,
-                "missingBars": 0,
-                "missingRequirements": [],
-            },
+            "_build_historical_ohlcv_readiness_with_metadata",
+            side_effect=fake_readiness,
         ) as readiness_mock:
             aggregate = service.get_sample_status(code=None)
 
@@ -602,7 +669,19 @@ class BacktestServiceTestCase(unittest.TestCase):
         )
         symbol_readiness = aggregate["symbolSpecificReadiness"]
         self.assertEqual([item["symbol"] for item in symbol_readiness], ["NVDA", "AAPL", "PLTR"])
-        self.assertTrue(all(item["providerState"] == "available" for item in symbol_readiness))
+        self.assertEqual(
+            {item["symbol"]: item["historicalOhlcvState"] for item in symbol_readiness},
+            {
+                "NVDA": "ready",
+                "AAPL": "ready",
+                "PLTR": "missing_cache",
+            },
+        )
+        self.assertEqual(aggregate["historicalOhlcvReadiness"]["overallState"], "partial")
+        self.assertEqual(aggregate["historicalOhlcvReadiness"]["providerState"], "partial")
+        self.assertIn("PLTR", aggregate["historicalOhlcvReadiness"]["missingCacheSymbols"])
+        self.assertEqual(symbol_readiness[1]["resolvedSource"], "AlpacaFetcher")
+        self.assertNotEqual(aggregate["historicalOhlcvReadiness"]["providerState"], "provider_missing")
 
     def test_run_history_is_recorded_and_results_can_be_reopened(self) -> None:
         service = BacktestService(self.db)
