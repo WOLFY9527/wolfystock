@@ -28,6 +28,7 @@ from src.services.historical_ohlcv_readiness import (
     HistoricalOhlcvReadinessService,
 )
 from src.services.us_ohlcv_coverage_readiness import (
+    build_us_ohlcv_coverage_readiness,
     resolve_us_ohlcv_coverage_universe,
     starter_us_ohlcv_coverage_symbols,
 )
@@ -455,6 +456,7 @@ class BacktestService:
                 eval_window_days=settings.eval_window_days,
                 sample_count=20,
                 force_refresh=False,
+                allow_provider_fallback=True,
             )
             self._ensure_cached_backtest_samples(code=code, settings=settings, sample_count=20)
             rows = self.repo.get_sample_rows(code=code, **self._owner_kwargs())
@@ -474,10 +476,14 @@ class BacktestService:
         )
 
         stock_rows = self._load_stock_daily_rows(code)
-        ohlcv_readiness = self._build_historical_ohlcv_readiness(
+        ohlcv_readiness, ohlcv_source_metadata = self._build_historical_ohlcv_readiness_with_metadata(
             code=code,
             rows=stock_rows,
             required_bars=settings.eval_window_days,
+        )
+        source_metadata = self._prefer_more_truthful_source_metadata(
+            primary=source_metadata,
+            fallback=ohlcv_source_metadata,
         )
         sample_state, sample_reasons = self._sample_readiness_from_inputs(
             prepared_count=len(rows),
@@ -609,6 +615,7 @@ class BacktestService:
             eval_window_days=settings.eval_window_days,
             sample_count=sample_count,
             force_refresh=force_refresh,
+            allow_provider_fallback=False,
         )
 
         rows = self._load_stock_daily_rows(normalized_code)
@@ -623,6 +630,7 @@ class BacktestService:
                 code=normalized_code,
                 rows=rows,
                 required_bars=settings.eval_window_days,
+                allow_runtime_probe=False,
             )
             sample_state, sample_reasons = self._sample_readiness_from_inputs(
                 prepared_count=0,
@@ -733,6 +741,7 @@ class BacktestService:
             code=normalized_code,
             rows=rows,
             required_bars=settings.eval_window_days,
+            allow_runtime_probe=False,
         )
         sample_state, sample_reasons = self._sample_readiness_from_inputs(
             prepared_count=prepared + skipped_existing,
@@ -1117,7 +1126,28 @@ class BacktestService:
         required_bars: int,
         benchmark_required: bool = False,
         benchmark_symbol: Optional[str] = None,
+        allow_runtime_probe: bool = True,
     ) -> Dict[str, Any]:
+        readiness, _ = self._build_historical_ohlcv_readiness_with_metadata(
+            code=code,
+            rows=rows,
+            required_bars=required_bars,
+            benchmark_required=benchmark_required,
+            benchmark_symbol=benchmark_symbol,
+            allow_runtime_probe=allow_runtime_probe,
+        )
+        return readiness
+
+    def _build_historical_ohlcv_readiness_with_metadata(
+        self,
+        *,
+        code: str,
+        rows: List[StockDaily],
+        required_bars: int,
+        benchmark_required: bool = False,
+        benchmark_symbol: Optional[str] = None,
+        allow_runtime_probe: bool = True,
+    ) -> tuple[Dict[str, Any], BacktestSourceMetadata]:
         if rows:
             start = rows[0].date
             end = rows[-1].date
@@ -1126,43 +1156,94 @@ class BacktestService:
             start = None
             end = None
             source_available = False
+        request = HistoricalOhlcvReadinessRequest(
+            symbol=code,
+            market="US" if self._requested_mode_for_code(code) == "local_first" else "unknown",
+            timeframe="1d",
+            start=start,
+            end=end,
+            lookback_bars=required_bars,
+            required_bars=max(0, int(required_bars or 0)),
+            require_adjusted=False,
+            benchmark_symbol=benchmark_symbol,
+            benchmark_required=benchmark_required,
+        )
+        stock_source_metadata = self._build_source_metadata_for_stock_rows(
+            code=code,
+            rows=rows,
+            default_to_cache=bool(rows),
+        )
         provider = build_readonly_local_us_ohlcv_cache_provider_from_env()
+        cached_readiness: Optional[Dict[str, Any]] = None
         if provider is not None and (not source_available or benchmark_required):
-            result = HistoricalOhlcvReadinessService(provider=provider).fetch(
-                HistoricalOhlcvReadinessRequest(
-                    symbol=code,
-                    market="US",
-                    timeframe="1d",
-                    start=start,
-                    end=end,
-                    lookback_bars=required_bars,
-                    required_bars=max(0, int(required_bars or 0)),
-                    require_adjusted=False,
-                    benchmark_symbol=benchmark_symbol,
-                    benchmark_required=benchmark_required,
+            result = HistoricalOhlcvReadinessService(provider=provider).fetch(request)
+            cached_readiness = result.readiness
+            if result.readiness.get("providerState") == "available":
+                return result.readiness, self._build_source_metadata_from_fetch_source(
+                    code=code,
+                    source="local_us_parquet",
                 )
+        if not source_available and allow_runtime_probe:
+            runtime_probe = self._probe_runtime_historical_ohlcv_readiness(
+                request=request,
+                code=code,
             )
-            if result.readiness.get("providerState") == "available" or not source_available:
-                return result.readiness
+            if runtime_probe is not None:
+                return runtime_probe
+            if cached_readiness is not None:
+                return cached_readiness, stock_source_metadata
         result = HistoricalOhlcvReadinessService().assess_supplied_history(
-            HistoricalOhlcvReadinessRequest(
-                symbol=code,
-                market="unknown",
-                timeframe="1d",
-                start=start,
-                end=end,
-                lookback_bars=required_bars,
-                required_bars=max(0, int(required_bars or 0)),
-                require_adjusted=False,
-                benchmark_symbol=benchmark_symbol,
-                benchmark_required=benchmark_required,
-            ),
+            request,
             [self._stock_daily_to_ohlcv_bar(row) for row in rows],
             source_available=source_available,
             adjustments_available=None,
             unavailable_reason="provider_missing" if not source_available else None,
         )
-        return result.readiness
+        return result.readiness, stock_source_metadata
+
+    def _probe_runtime_historical_ohlcv_readiness(
+        self,
+        *,
+        request: HistoricalOhlcvReadinessRequest,
+        code: str,
+    ) -> tuple[Dict[str, Any], BacktestSourceMetadata] | None:
+        days = max(1, int(request.lookback_bars or request.required_bars or 1))
+        frame, source = fetch_daily_history_with_local_us_fallback(
+            code,
+            start_date=request.start,
+            end_date=request.end,
+            days=days,
+            log_context="[backtest readiness]",
+            allow_provider_fallback=True,
+        )
+        if frame is None or getattr(frame, "empty", True):
+            return None
+        benchmark_rows = None
+        benchmark_source_available = None
+        if request.benchmark_required and request.benchmark_symbol:
+            benchmark_frame, _ = fetch_daily_history_with_local_us_fallback(
+                request.benchmark_symbol,
+                start_date=request.start,
+                end_date=request.end,
+                days=days,
+                log_context="[backtest readiness benchmark]",
+                allow_provider_fallback=True,
+            )
+            if benchmark_frame is None or getattr(benchmark_frame, "empty", True):
+                benchmark_rows = []
+                benchmark_source_available = False
+            else:
+                benchmark_rows = benchmark_frame.to_dict("records")
+                benchmark_source_available = True
+        readiness = HistoricalOhlcvReadinessService().assess_supplied_history(
+            request,
+            frame.to_dict("records"),
+            benchmark_bars=benchmark_rows,
+            benchmark_source_available=benchmark_source_available,
+            source_available=True,
+            adjustments_available=None,
+        ).readiness
+        return readiness, self._build_source_metadata_from_fetch_source(code=code, source=source)
 
     @staticmethod
     def _stock_daily_to_ohlcv_bar(row: StockDaily) -> Dict[str, Any]:
@@ -1261,6 +1342,16 @@ class BacktestService:
             sample_status=sample_status,
         )
 
+    @staticmethod
+    def _prefer_more_truthful_source_metadata(
+        *,
+        primary: BacktestSourceMetadata,
+        fallback: BacktestSourceMetadata,
+    ) -> BacktestSourceMetadata:
+        if primary.resolved_source != "Unknown":
+            return primary
+        return fallback
+
     def _get_aggregate_sample_status(self, *, settings: BacktestRuntimeSettings) -> Dict[str, Any]:
         with self.db.get_session() as session:
             rows = session.execute(
@@ -1279,24 +1370,25 @@ class BacktestService:
                 parsed_dates.append(parsed)
             if row.created_at and (latest_created_at is None or row.created_at > latest_created_at):
                 latest_created_at = row.created_at
-        readiness = HistoricalOhlcvReadinessService().assess_supplied_history(
-            HistoricalOhlcvReadinessRequest(
-                symbol="__ALL__",
-                market="unknown",
-                timeframe="1d",
-                lookback_bars=settings.eval_window_days,
-                required_bars=settings.eval_window_days,
-            ),
-            [],
-            source_available=False,
-            unavailable_reason="provider_missing",
-        ).readiness
-        state, reasons = self._sample_readiness_from_inputs(
-            prepared_count=len(rows),
-            ohlcv_readiness=readiness,
-            sample_observability={},
+        symbol_specific_readiness = self._aggregate_symbol_readiness(settings=settings)
+        readiness = self._build_aggregate_historical_ohlcv_readiness(
+            settings=settings,
+            symbol_specific_readiness=symbol_specific_readiness,
         )
-        symbol_specific_readiness = self._aggregate_local_symbol_readiness(settings=settings)
+        state, reasons = self._aggregate_sample_readiness_from_inputs(
+            prepared_count=len(rows),
+            aggregate_readiness=readiness,
+        )
+        resolved_sources = [
+            str(item.get("resolvedSource") or "")
+            for item in symbol_specific_readiness
+            if str(item.get("resolvedSource") or "").strip()
+        ]
+        source_metadata = self._build_source_metadata_from_runtime_sources(
+            code=None,
+            runtime_sources=resolved_sources,
+            fallback_used=len(set(resolved_sources)) > 1,
+        )
         return {
             "code": "__all__",
             "scope": "aggregate",
@@ -1313,10 +1405,10 @@ class BacktestService:
             "evaluation_window_trading_bars": settings.eval_window_days,
             "maturity_calendar_days": settings.min_age_days,
             "requested_mode": "aggregate",
-            "resolved_source": "Unknown",
-            "fallback_used": False,
-            "pricing_resolved_source": "Unknown",
-            "pricing_fallback_used": False,
+            "resolved_source": source_metadata.resolved_source,
+            "fallback_used": source_metadata.fallback_used,
+            "pricing_resolved_source": source_metadata.resolved_source,
+            "pricing_fallback_used": source_metadata.fallback_used,
             "sample_readiness_state": state,
             "sample_blocking_reasons": reasons,
             "execution_readiness": self._sample_execution_readiness(
@@ -1328,7 +1420,7 @@ class BacktestService:
             "symbolSpecificReadiness": symbol_specific_readiness,
         }
 
-    def _aggregate_local_symbol_readiness(self, *, settings: BacktestRuntimeSettings) -> List[Dict[str, Any]]:
+    def _aggregate_symbol_readiness(self, *, settings: BacktestRuntimeSettings) -> List[Dict[str, Any]]:
         rows: List[Dict[str, Any]] = []
         tier1_universe = resolve_us_ohlcv_coverage_universe(tier="tier1")
         symbols = (
@@ -1336,17 +1428,34 @@ class BacktestService:
             if tier1_universe.get("configured") is True
             else LOCAL_BACKTEST_STARTER_SYMBOLS
         )
+        local_coverage = build_us_ohlcv_coverage_readiness(
+            symbols=symbols,
+            required_bars=settings.eval_window_days,
+        )
+        local_by_symbol = {
+            str(item.get("symbol") or "").strip().upper(): item
+            for item in local_coverage.get("symbols", [])
+            if str(item.get("symbol") or "").strip()
+        }
         for symbol in symbols:
-            readiness = self._build_historical_ohlcv_readiness(
+            stock_rows = self._load_stock_daily_rows(symbol)
+            readiness, source_metadata = self._build_historical_ohlcv_readiness_with_metadata(
                 code=symbol,
-                rows=[],
+                rows=stock_rows,
                 required_bars=settings.eval_window_days,
+            )
+            normalized_state = self._normalize_symbol_readiness_state(
+                readiness,
+                local_coverage=local_by_symbol.get(symbol),
             )
             rows.append(
                 {
                     "symbol": symbol,
-                    "historicalOhlcvState": str(readiness.get("overallState") or "unknown"),
+                    "historicalOhlcvState": normalized_state,
+                    "overallState": str(readiness.get("overallState") or "unknown"),
                     "providerState": str(readiness.get("providerState") or "unknown"),
+                    "runtimeStatus": str(readiness.get("runtimeStatus") or "unknown"),
+                    "resolvedSource": source_metadata.resolved_source,
                     "usableBars": int(readiness.get("usableBars") or 0),
                     "missingBars": int(readiness.get("missingBars") or 0),
                     "missingRequirements": list(readiness.get("missingRequirements") or []),
@@ -1354,6 +1463,137 @@ class BacktestService:
                 }
             )
         return rows
+
+    def _build_aggregate_historical_ohlcv_readiness(
+        self,
+        *,
+        settings: BacktestRuntimeSettings,
+        symbol_specific_readiness: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        states = {
+            "ready": [],
+            "insufficient_history": [],
+            "missing_cache": [],
+            "provider_unavailable": [],
+            "blocked": [],
+        }
+        missing_requirements: List[str] = []
+        total_usable_bars = 0
+        total_missing_bars = 0
+        for item in symbol_specific_readiness:
+            state = str(item.get("historicalOhlcvState") or "blocked")
+            states.setdefault(state, []).append(str(item.get("symbol") or ""))
+            total_usable_bars += int(item.get("usableBars") or 0)
+            total_missing_bars += int(item.get("missingBars") or 0)
+            for reason in item.get("missingRequirements") or []:
+                normalized = str(reason or "").strip()
+                if normalized and normalized not in missing_requirements:
+                    missing_requirements.append(normalized)
+
+        ready_count = len(states["ready"])
+        insufficient_count = len(states["insufficient_history"])
+        missing_count = len(states["missing_cache"])
+        unavailable_count = len(states["provider_unavailable"])
+        total = len(symbol_specific_readiness)
+
+        if total > 0 and ready_count == total:
+            overall_state = "all_available"
+            provider_state = "available"
+            runtime_status = "available"
+        elif ready_count > 0:
+            overall_state = "partial"
+            provider_state = "partial"
+            runtime_status = "available"
+        elif unavailable_count > 0:
+            overall_state = "provider_unavailable"
+            provider_state = "provider_unavailable"
+            runtime_status = "unavailable"
+        elif missing_count == total and total > 0:
+            overall_state = "missing_cache"
+            provider_state = "missing_cache"
+            runtime_status = "missing"
+        elif insufficient_count == total and total > 0:
+            overall_state = "insufficient_history"
+            provider_state = "available"
+            runtime_status = "insufficient_coverage"
+        else:
+            overall_state = "blocked"
+            provider_state = "blocked"
+            runtime_status = "unavailable"
+
+        return {
+            "contractVersion": "historical_ohlcv_readiness_v1",
+            "symbol": "__ALL__",
+            "market": "mixed",
+            "timeframe": "1d",
+            "requestedRange": {"start": None, "end": None},
+            "lookbackBars": settings.eval_window_days,
+            "requiredBars": settings.eval_window_days,
+            "usableBars": total_usable_bars,
+            "missingBars": total_missing_bars,
+            "providerState": provider_state,
+            "runtimeStatus": runtime_status,
+            "overallState": overall_state,
+            "missingRequirements": missing_requirements,
+            "symbolCount": total,
+            "availableSymbols": states["ready"],
+            "insufficientHistorySymbols": states["insufficient_history"],
+            "missingCacheSymbols": states["missing_cache"],
+            "providerUnavailableSymbols": states["provider_unavailable"],
+            "consumerSafe": True,
+        }
+
+    @staticmethod
+    def _aggregate_sample_readiness_from_inputs(
+        *,
+        prepared_count: int,
+        aggregate_readiness: Dict[str, Any],
+    ) -> tuple[str, List[str]]:
+        overall_state = str(aggregate_readiness.get("overallState") or "blocked")
+        reasons = [
+            str(item)
+            for item in (aggregate_readiness.get("missingRequirements") or [])
+            if str(item or "").strip()
+        ]
+        if prepared_count <= 0 and overall_state in {"all_available", "partial"} and "no_samples" not in reasons:
+            reasons.insert(0, "no_samples")
+        if overall_state == "all_available":
+            return ("ready" if prepared_count > 0 else "no_samples"), reasons
+        if overall_state == "partial":
+            return ("partial" if prepared_count > 0 else "no_samples"), reasons
+        if overall_state == "missing_cache":
+            return "missing_cache", reasons
+        if overall_state == "insufficient_history":
+            return "insufficient_history", reasons
+        return "blocked", reasons
+
+    @staticmethod
+    def _normalize_symbol_readiness_state(
+        readiness: Dict[str, Any],
+        *,
+        local_coverage: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        provider_state = str(readiness.get("providerState") or "").strip().lower()
+        runtime_status = str(readiness.get("runtimeStatus") or "").strip().lower()
+        missing_bars = int(readiness.get("missingBars") or 0)
+        missing_requirements = {
+            str(item or "").strip().lower()
+            for item in (readiness.get("missingRequirements") or [])
+            if str(item or "").strip()
+        }
+        if provider_state in {"provider_unavailable", "entitlement_required"}:
+            return "provider_unavailable"
+        if provider_state == "available" and missing_bars <= 0 and not missing_requirements:
+            return "ready"
+        if provider_state == "available" and (missing_bars > 0 or "insufficient_history" in missing_requirements):
+            return "insufficient_history"
+        if provider_state == "provider_missing":
+            local_state = str((local_coverage or {}).get("overallState") or "").strip().lower()
+            if runtime_status in {"missing", "not_configured"} or local_state == "missing_cache":
+                return "missing_cache"
+        if "insufficient_history" in missing_requirements:
+            return "insufficient_history"
+        return "blocked"
 
     def _try_fill_daily_data(self, *, code: str, analysis_date: date, eval_window_days: int) -> Optional[BacktestSourceMetadata]:
         try:
@@ -1392,6 +1632,7 @@ class BacktestService:
         eval_window_days: int,
         sample_count: int,
         force_refresh: bool,
+        allow_provider_fallback: bool,
     ) -> tuple[int, Optional[BacktestSourceMetadata]]:
         """Ensure enough market history exists for sample generation."""
         lookback_days = max(min_age_days + eval_window_days + sample_count + 30, 90)
@@ -1415,7 +1656,7 @@ class BacktestService:
                 end_date=end_date,
                 days=lookback_days,
                 log_context="[historical-eval warmup]",
-                allow_provider_fallback=False,
+                allow_provider_fallback=allow_provider_fallback,
             )
             if df is None or df.empty:
                 return 0, None
@@ -1872,6 +2113,7 @@ class BacktestService:
                 eval_window_days=row.eval_window_days,
             ),
             required_bars=row.eval_window_days,
+            allow_runtime_probe=False,
         )
         data_quality["historicalOhlcvReadiness"] = historical_ohlcv_readiness
         data_sufficiency = assess_backtest_data_sufficiency(
@@ -2023,6 +2265,8 @@ class BacktestService:
         if not normalized:
             return None
         lower = normalized.lower()
+        if lower == "alpacafetcher":
+            return "AlpacaFetcher"
         if lower == "databasecache":
             return "DatabaseCache"
         if lower in {"local_us_parquet", "localparquet"} or "parquet" in lower or "stooq" in lower:
