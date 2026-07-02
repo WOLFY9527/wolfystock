@@ -166,6 +166,8 @@ class BacktestSampleStatusResponse(BaseModel):
     sample_readiness_state: Optional[str] = None
     sample_blocking_reasons: List[str] = Field(default_factory=list)
     execution_readiness: Dict[str, Any] = Field(default_factory=dict)
+    probePolicy: Dict[str, Any] = Field(default_factory=dict)
+    writePolicy: Dict[str, Any] = Field(default_factory=dict)
     historicalOhlcvReadiness: Dict[str, Any] = Field(default_factory=dict)
     symbolSpecificReadiness: List[Dict[str, Any]] = Field(default_factory=list)
 

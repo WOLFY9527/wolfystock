@@ -40,7 +40,7 @@ class BacktestServiceTestCase(unittest.TestCase):
             "src.services.backtest_service.fetch_daily_history_with_local_us_fallback",
             return_value=(None, None),
         )
-        self._history_fetch_patch.start()
+        self._history_fetch_mock = self._history_fetch_patch.start()
         self._history_fetch_patch_active = True
 
         # Ensure analysis is old enough for default min_age_days=14
@@ -530,19 +530,101 @@ class BacktestServiceTestCase(unittest.TestCase):
 
         status = service.get_sample_status(code=None)
 
+        self._history_fetch_mock.assert_not_called()
         self.assertEqual(status["code"], "__all__")
         self.assertEqual(status["scope"], "aggregate")
         self.assertEqual(status["sample_readiness_state"], "missing_cache")
         self.assertIn("provider_missing", status["sample_blocking_reasons"])
+        self.assertEqual(
+            status["probePolicy"],
+            {
+                "scope": "aggregate",
+                "runtimeProbeMode": "disabled_by_default",
+                "liveProviderProbingAllowed": False,
+                "maxRuntimeProbeSymbols": 0,
+                "evaluatedSymbols": len(status["symbolSpecificReadiness"]),
+                "runtimeProbedSymbols": 0,
+                "runtimeProbeSkippedSymbols": len(status["symbolSpecificReadiness"]),
+                "runtimeProbeSkippedReason": "aggregate_side_effect_boundary",
+                "readinessSources": ["existing_database_rows", "local_us_parquet_cache"],
+                "consumerSafe": True,
+            },
+        )
+        self.assertEqual(
+            status["writePolicy"],
+            {
+                "scope": "aggregate",
+                "mode": "read_only",
+                "cacheWritesAllowed": False,
+                "databaseWritesAllowed": False,
+                "consumerSafe": True,
+            },
+        )
         readiness = status["historicalOhlcvReadiness"]
         self.assertEqual(readiness["providerState"], "missing_cache")
         self.assertEqual(readiness["overallState"], "missing_cache")
+        self.assertFalse(readiness["probePolicy"]["liveProviderProbingAllowed"])
+        self.assertFalse(readiness["writePolicy"]["databaseWritesAllowed"])
         self.assertEqual(readiness["requiredBars"], status["eval_window_days"])
         self.assertEqual(readiness["usableBars"], 0)
         self.assertEqual(
             readiness["missingBars"],
             status["eval_window_days"] * len(status["symbolSpecificReadiness"]),
         )
+        self.assertTrue(
+            all(item["runtimeProbeSkippedReason"] == "aggregate_side_effect_boundary" for item in status["symbolSpecificReadiness"])
+        )
+
+    def test_aggregate_sample_status_does_not_call_live_fallback_or_write_cache_by_default(self) -> None:
+        service = BacktestService(self.db)
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=89)
+        frame = pd.DataFrame(
+            [
+                {
+                    "date": (start_date + timedelta(days=index)).isoformat(),
+                    "open": 200.0 + index,
+                    "high": 201.0 + index,
+                    "low": 199.0 + index,
+                    "close": 200.5 + index,
+                    "volume": 1_000_000 + index,
+                }
+                for index in range(90)
+            ]
+        )
+
+        def unsafe_fetch(*args, **_kwargs):
+            symbol = str(args[0] or "").upper()
+            self.db.save_daily_data(frame, code=symbol, data_source="YfinanceFetcher")
+            return frame, "YfinanceFetcher"
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": self._temp_dir.name,
+                "US_STOCK_PARQUET_DIR": "",
+                "WOLFYSTOCK_US_OHLCV_TIER1_SYMBOLS": "TSLA,AAPL",
+            },
+            clear=False,
+        ), patch(
+            "src.services.backtest_service.fetch_daily_history_with_local_us_fallback",
+            side_effect=unsafe_fetch,
+        ) as fetch_mock:
+            status = service.get_sample_status(code=None)
+
+        fetch_mock.assert_not_called()
+        with self.db.get_session() as session:
+            persisted_symbols = {
+                row[0]
+                for row in session.query(StockDaily.code)
+                .filter(StockDaily.code.in_(["TSLA", "AAPL"]))
+                .all()
+            }
+        self.assertEqual(persisted_symbols, set())
+        self.assertEqual([item["symbol"] for item in status["symbolSpecificReadiness"]], ["TSLA", "AAPL"])
+        self.assertEqual(status["historicalOhlcvReadiness"]["overallState"], "missing_cache")
+        self.assertFalse(status["probePolicy"]["liveProviderProbingAllowed"])
+        self.assertFalse(status["writePolicy"]["cacheWritesAllowed"])
 
     def test_aggregate_sample_status_exposes_local_symbol_readiness_without_masking(self) -> None:
         for symbol in ("SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA"):
@@ -667,6 +749,7 @@ class BacktestServiceTestCase(unittest.TestCase):
             [call.kwargs["code"] for call in readiness_mock.call_args_list],
             ["NVDA", "AAPL", "PLTR"],
         )
+        self.assertTrue(all(call.kwargs["allow_runtime_probe"] is False for call in readiness_mock.call_args_list))
         symbol_readiness = aggregate["symbolSpecificReadiness"]
         self.assertEqual([item["symbol"] for item in symbol_readiness], ["NVDA", "AAPL", "PLTR"])
         self.assertEqual(
