@@ -38,6 +38,7 @@ from src.storage import AnalysisHistory, BacktestResult, BacktestRun, BacktestSu
 
 logger = logging.getLogger(__name__)
 LOCAL_BACKTEST_STARTER_SYMBOLS = starter_us_ohlcv_coverage_symbols()
+AGGREGATE_RUNTIME_PROBE_SKIPPED_REASON = "aggregate_side_effect_boundary"
 
 
 @dataclass(frozen=True)
@@ -1375,6 +1376,10 @@ class BacktestService:
             settings=settings,
             symbol_specific_readiness=symbol_specific_readiness,
         )
+        probe_policy = self._aggregate_probe_policy(symbol_specific_readiness=symbol_specific_readiness)
+        write_policy = self._aggregate_write_policy()
+        readiness["probePolicy"] = probe_policy
+        readiness["writePolicy"] = write_policy
         state, reasons = self._aggregate_sample_readiness_from_inputs(
             prepared_count=len(rows),
             aggregate_readiness=readiness,
@@ -1383,6 +1388,7 @@ class BacktestService:
             str(item.get("resolvedSource") or "")
             for item in symbol_specific_readiness
             if str(item.get("resolvedSource") or "").strip()
+            and str(item.get("resolvedSource") or "").strip().lower() != "unknown"
         ]
         source_metadata = self._build_source_metadata_from_runtime_sources(
             code=None,
@@ -1416,6 +1422,8 @@ class BacktestService:
                 sample_reasons=reasons,
                 ohlcv_readiness=readiness,
             ),
+            "probePolicy": probe_policy,
+            "writePolicy": write_policy,
             "historicalOhlcvReadiness": readiness,
             "symbolSpecificReadiness": symbol_specific_readiness,
         }
@@ -1443,6 +1451,7 @@ class BacktestService:
                 code=symbol,
                 rows=stock_rows,
                 required_bars=settings.eval_window_days,
+                allow_runtime_probe=False,
             )
             normalized_state = self._normalize_symbol_readiness_state(
                 readiness,
@@ -1459,10 +1468,41 @@ class BacktestService:
                     "usableBars": int(readiness.get("usableBars") or 0),
                     "missingBars": int(readiness.get("missingBars") or 0),
                     "missingRequirements": list(readiness.get("missingRequirements") or []),
+                    "runtimeProbeAllowed": False,
+                    "runtimeProbeMode": "disabled_by_default",
+                    "runtimeProbeSkippedReason": AGGREGATE_RUNTIME_PROBE_SKIPPED_REASON,
+                    "cacheWritesAllowed": False,
+                    "databaseWritesAllowed": False,
                     "consumerSafe": True,
                 }
             )
         return rows
+
+    @staticmethod
+    def _aggregate_probe_policy(*, symbol_specific_readiness: List[Dict[str, Any]]) -> Dict[str, Any]:
+        symbol_count = len(symbol_specific_readiness)
+        return {
+            "scope": "aggregate",
+            "runtimeProbeMode": "disabled_by_default",
+            "liveProviderProbingAllowed": False,
+            "maxRuntimeProbeSymbols": 0,
+            "evaluatedSymbols": symbol_count,
+            "runtimeProbedSymbols": 0,
+            "runtimeProbeSkippedSymbols": symbol_count,
+            "runtimeProbeSkippedReason": AGGREGATE_RUNTIME_PROBE_SKIPPED_REASON,
+            "readinessSources": ["existing_database_rows", "local_us_parquet_cache"],
+            "consumerSafe": True,
+        }
+
+    @staticmethod
+    def _aggregate_write_policy() -> Dict[str, Any]:
+        return {
+            "scope": "aggregate",
+            "mode": "read_only",
+            "cacheWritesAllowed": False,
+            "databaseWritesAllowed": False,
+            "consumerSafe": True,
+        }
 
     def _build_aggregate_historical_ohlcv_readiness(
         self,
