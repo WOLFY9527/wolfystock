@@ -77,6 +77,13 @@ class UsOhlcvCacheRefreshService:
             for item in plan_items
             if item["planState"] in {"missing_cache", "insufficient_history", "stale"}
         ]
+        planned_provider_calls = min(budget, len(refresh_candidates))
+        planned_symbols_to_write = [
+            str(item.get("symbol") or "")
+            for item in refresh_candidates[:planned_provider_calls]
+            if item.get("writePlanned")
+        ]
+        planned_cache_writes = len(planned_symbols_to_write)
         results = []
         if execute:
             results.extend(
@@ -103,6 +110,7 @@ class UsOhlcvCacheRefreshService:
             if int(item.get("rowsWritten") or 0) > 0
         ]
         rows_written = sum(int(item.get("rowsWritten") or 0) for item in results)
+        provider_calls_made = len([item for item in results if item.get("providerCalled")])
         return {
             "contractVersion": US_OHLCV_CACHE_REFRESH_CONTRACT_VERSION,
             "dryRun": dry_run,
@@ -118,7 +126,14 @@ class UsOhlcvCacheRefreshService:
             "alreadyAvailableSymbols": already_available,
             "missingOrStaleSymbols": [item["symbol"] for item in refresh_candidates],
             "skippedSymbols": skipped_symbols,
-            "estimatedMaxProviderCalls": 0 if dry_run else min(budget, len(refresh_candidates)),
+            "estimatedMaxProviderCalls": planned_provider_calls,
+            "plannedProviderCalls": planned_provider_calls,
+            "actualProviderCallsMade": provider_calls_made,
+            "plannedCacheWrites": planned_cache_writes,
+            "plannedSymbolsToWrite": planned_symbols_to_write,
+            "plannedRowsUnknown": planned_cache_writes > 0,
+            "actualSymbolsWritten": len(symbols_written),
+            "actualRowsWritten": rows_written,
             "maxSymbols": budget,
             "requiredBars": required,
             "requireAdjusted": bool(require_adjusted),
@@ -131,7 +146,9 @@ class UsOhlcvCacheRefreshService:
             },
             "providerPolicy": {
                 "liveProviderCallsAllowed": bool(execute),
-                "providerCallsMade": len([item for item in results if item.get("providerCalled")]),
+                "plannedProviderCalls": planned_provider_calls,
+                "actualProviderCallsMade": provider_calls_made,
+                "providerCallsMade": provider_calls_made,
                 "providerCallBoundary": "missing_or_stale_symbols_only",
                 "consumerSafe": True,
             },
@@ -139,20 +156,31 @@ class UsOhlcvCacheRefreshService:
                 "cacheWritesAllowed": cache_writes_allowed,
                 "databaseWritesAllowed": False,
                 "writeTarget": write_target,
+                "plannedCacheWrites": planned_cache_writes,
+                "plannedSymbolsToWrite": planned_symbols_to_write,
+                "plannedRowsUnknown": planned_cache_writes > 0,
                 "symbolsWritten": symbols_written,
                 "rowsWritten": rows_written,
+                "actualSymbolsWritten": len(symbols_written),
+                "actualRowsWritten": rows_written,
                 "consumerSafe": True,
             },
             "plan": {
                 "symbols": plan_items,
                 "alreadyAvailableCount": len(already_available),
                 "refreshCandidateCount": len(refresh_candidates),
+                "plannedProviderCalls": planned_provider_calls,
+                "plannedCacheWrites": planned_cache_writes,
+                "plannedSymbolsToWrite": planned_symbols_to_write,
+                "writePlanSemantics": "would_write_if_execute_true",
                 "skippedCount": len(skipped_symbols),
             },
             "results": results,
             "summary": self._summary(
                 plan_items=plan_items,
                 results=results,
+                planned_provider_calls=planned_provider_calls,
+                planned_cache_writes=planned_cache_writes,
                 symbols_written=symbols_written,
                 rows_written=rows_written,
             ),
@@ -320,14 +348,20 @@ class UsOhlcvCacheRefreshService:
         *,
         plan_items: Sequence[Mapping[str, Any]],
         results: Sequence[Mapping[str, Any]],
+        planned_provider_calls: int,
+        planned_cache_writes: int,
         symbols_written: Sequence[str],
         rows_written: int,
     ) -> dict[str, Any]:
         statuses = [str(item.get("status") or "") for item in results]
+        provider_calls_made = len([item for item in results if item.get("providerCalled")])
         return {
             "totalSymbols": len(plan_items),
             "alreadyAvailable": len([item for item in plan_items if item.get("planState") == "already_available"]),
             "refreshCandidates": len([item for item in plan_items if item.get("planState") != "already_available"]),
+            "plannedProviderCalls": int(planned_provider_calls),
+            "actualProviderCallsMade": provider_calls_made,
+            "plannedCacheWrites": int(planned_cache_writes),
             "refreshed": statuses.count("refreshed"),
             "providerUnavailable": statuses.count("provider_unavailable"),
             "insufficientHistory": statuses.count("insufficient_history"),
@@ -335,6 +369,8 @@ class UsOhlcvCacheRefreshService:
             "skippedBudget": statuses.count("skipped_budget"),
             "symbolsWritten": len(symbols_written),
             "rowsWritten": int(rows_written),
+            "actualSymbolsWritten": len(symbols_written),
+            "actualRowsWritten": int(rows_written),
         }
 
 
