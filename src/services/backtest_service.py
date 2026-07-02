@@ -1560,6 +1560,7 @@ class BacktestService:
             overall_state = "blocked"
             provider_state = "blocked"
             runtime_status = "unavailable"
+        adjustment_state = "missing" if "missing_adjustments" in missing_requirements else "not_required"
 
         return {
             "contractVersion": "historical_ohlcv_readiness_v1",
@@ -1574,6 +1575,7 @@ class BacktestService:
             "providerState": provider_state,
             "runtimeStatus": runtime_status,
             "overallState": overall_state,
+            "adjustmentState": adjustment_state,
             "missingRequirements": missing_requirements,
             "symbolCount": total,
             "availableSymbols": states["ready"],
