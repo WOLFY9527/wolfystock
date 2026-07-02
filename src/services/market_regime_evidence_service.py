@@ -4,6 +4,7 @@ import json
 import math
 import statistics
 from collections.abc import Mapping, Sequence
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -18,11 +19,17 @@ from src.services.starter_market_data import STARTER_MARKET_DATA_SYMBOLS
 
 
 MARKET_REGIME_EVIDENCE_CONTRACT_VERSION = "market_regime_evidence_pack_v1"
+MARKET_REGIME_NO_ADVICE_DISCLOSURE = (
+    "Observation-only market structure evidence derived from local OHLCV inputs; "
+    "not investment advice or an execution instruction."
+)
 DEFAULT_MARKET_REGIME_SYMBOLS = STARTER_MARKET_DATA_SYMBOLS
 DEFAULT_BENCHMARK_SYMBOL = "SPY"
 DEFAULT_GROWTH_PROXY_SYMBOL = "QQQ"
 DEFAULT_REQUIRED_BARS = 60
 DEFAULT_QUOTE_MAX_AGE_SECONDS = 60 * 60 * 24
+DEFAULT_UNIVERSE_TIER = "tier1"
+LEADERSHIP_SYMBOLS = ("QQQ", "AAPL", "MSFT", "NVDA", "TSLA")
 
 
 def build_market_regime_evidence_pack(
@@ -64,25 +71,44 @@ def build_market_regime_evidence_pack(
     )
     if validation_errors:
         reasons = [item["code"] for item in validation_errors]
+        empty_evidence = _evidence_sections(
+            historical_coverage=_empty_historical_coverage(required_bars=required),
+            benchmark_trend=_empty_trend_evidence(benchmark),
+            growth_proxy={},
+            breadth={},
+            volatility={},
+            symbol_evidence={},
+            required_bars=required,
+            benchmark_symbol=benchmark,
+        )
         return _sanitize_pack(
             {
                 **base,
                 "status": "failed_closed",
+                "readiness": "failed_closed",
                 "availableDataClasses": [],
                 "missingDataFamilies": _fail_closed_missing_families(reasons),
                 "blockedProductSurfaces": ["Scanner", "Market Overview", "Watchlist", "Research Radar"],
                 "nextOperatorAction": _fail_closed_operator_action(reasons),
-                "evidence": _empty_evidence(required_bars=required),
-                "regimeSummary": _regime_summary("insufficient_data", status="failed_closed"),
+                "evidence": empty_evidence,
+                "regimeSummary": _regime_summary(
+                    "insufficient_data",
+                    status="failed_closed",
+                    confidence=0.0,
+                    explanation="Local market regime inputs failed validation, so no regime evidence is published.",
+                ),
                 "symbolEvidence": {},
                 "benchmarkEvidence": _empty_trend_evidence(benchmark),
                 "quoteSnapshotEvidence": _empty_quote_evidence(requested_symbols),
                 "dataQuality": {
+                    "status": "failed_closed",
+                    "summary": "Local market regime inputs failed validation.",
                     "missingBars": {},
                     "missingAdjustedData": [],
                     "missingQuoteSnapshot": requested_symbols,
                     "staleOrUnknownFreshness": requested_symbols,
                     "failClosedReasons": reasons,
+                    "reasonCodes": reasons,
                 },
             }
         )
@@ -140,7 +166,7 @@ def build_market_regime_evidence_pack(
         missing_families=missing_families,
         require_adjusted=require_adjusted,
     )
-    status = "ok" if not missing_families else "partial"
+    status = _status_from_evidence(symbol_evidence=symbol_evidence, missing_families=missing_families)
     regime_label = _derive_regime_label(
         status=status,
         missing_families=missing_families,
@@ -148,23 +174,61 @@ def build_market_regime_evidence_pack(
         growth_proxy=growth_proxy_evidence,
         breadth=breadth,
     )
+    confidence = _regime_confidence(
+        status=status,
+        regime_label=regime_label,
+        missing_families=missing_families,
+        benchmark_trend=benchmark_trend,
+        growth_proxy=growth_proxy_evidence,
+        breadth=breadth,
+        volatility=volatility,
+    )
+    historical_coverage = _historical_coverage(symbol_evidence, required)
+    evidence_sections = _evidence_sections(
+        historical_coverage=historical_coverage,
+        benchmark_trend=benchmark_trend,
+        growth_proxy=growth_proxy_evidence,
+        breadth=breadth,
+        volatility=volatility,
+        symbol_evidence=symbol_evidence,
+        required_bars=required,
+        benchmark_symbol=benchmark,
+    )
+    if status == "failed_closed":
+        evidence_sections = _evidence_sections(
+            historical_coverage=historical_coverage,
+            benchmark_trend=_empty_trend_evidence(benchmark),
+            growth_proxy={},
+            breadth={},
+            volatility={},
+            symbol_evidence=symbol_evidence,
+            required_bars=required,
+            benchmark_symbol=benchmark,
+        )
+    data_quality = {
+        **data_quality,
+        "status": status,
+        "summary": _data_quality_summary(status=status, missing_families=missing_families, data_quality=data_quality),
+        "reasonCodes": _reason_codes(status=status, missing_families=missing_families, data_quality=data_quality),
+    }
     payload = {
         **base,
         "status": status,
+        "readiness": status,
+        "asOf": evidence_sections["dataCoverage"].get("asOf"),
         "availableDataClasses": available_classes,
         "missingDataFamilies": missing_families,
         "blockedProductSurfaces": _blocked_surfaces(missing_families),
         "nextOperatorAction": _next_operator_action(status=status, missing_families=missing_families),
-        "evidence": {
-            "historicalOhlcvCoverage": _historical_coverage(symbol_evidence, required),
-            "benchmarkTrend": benchmark_trend,
-            "growthRiskProxy": growth_proxy_evidence,
-            "breadthProxy": breadth,
-            "volatilityProxy": volatility,
-        },
-        "regimeSummary": _regime_summary(regime_label, status=status),
+        "evidence": evidence_sections,
+        "regimeSummary": _regime_summary(
+            regime_label,
+            status=status,
+            confidence=confidence,
+            explanation=_regime_explanation(regime_label, status=status),
+        ),
         "symbolEvidence": symbol_evidence,
-        "benchmarkEvidence": benchmark_trend,
+        "benchmarkEvidence": evidence_sections["benchmarkTrend"],
         "quoteSnapshotEvidence": quote,
         "dataQuality": data_quality,
     }
@@ -184,12 +248,19 @@ def _base_payload(
         "consumerSafe": True,
         "contractVersion": MARKET_REGIME_EVIDENCE_CONTRACT_VERSION,
         "status": "failed_closed",
+        "readiness": "failed_closed",
         "market": market,
+        "tier": DEFAULT_UNIVERSE_TIER,
+        "universe": {"market": market, "tier": DEFAULT_UNIVERSE_TIER, "symbols": list(symbols)},
+        "evaluatedSymbols": list(symbols),
         "symbols": list(symbols),
         "benchmarkSymbol": benchmark_symbol,
         "growthProxySymbol": growth_proxy_symbol,
         "requiredBars": required_bars,
         "requireAdjusted": bool(require_adjusted),
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "asOf": None,
+        "noAdviceDisclosure": MARKET_REGIME_NO_ADVICE_DISCLOSURE,
         "networkCallsEnabled": False,
         "mutationEnabled": False,
         "providerCallsEnabled": False,
@@ -245,7 +316,8 @@ def _load_symbol_frames(cache_dir: Path, symbols: Sequence[str]) -> dict[str, pd
             result[symbol] = None
             continue
         try:
-            result[symbol] = _normalize_ohlcv_frame(pd.read_parquet(path))
+            normalized = _normalize_ohlcv_frame(pd.read_parquet(path))
+            result[symbol] = normalized if normalized is not None else pd.DataFrame()
         except Exception:
             result[symbol] = pd.DataFrame()
     return result
@@ -286,7 +358,7 @@ def _build_symbol_evidence(
         return _empty_symbol_evidence(symbol, required_bars)
     if frame.empty:
         evidence = _empty_symbol_evidence(symbol, required_bars)
-        evidence["coverage"]["state"] = "unreadable"
+        evidence["coverage"]["state"] = "malformed"
         return evidence
 
     usable = int(len(frame))
@@ -476,6 +548,149 @@ def _historical_coverage(
     }
 
 
+def _empty_historical_coverage(*, required_bars: int) -> dict[str, Any]:
+    return {
+        "requiredBars": required_bars,
+        "usableBars": {},
+        "usableRange": {},
+        "adjustedCoverageState": "missing",
+        "availableSymbols": [],
+        "missingSymbols": [],
+    }
+
+
+def _evidence_sections(
+    *,
+    historical_coverage: Mapping[str, Any],
+    benchmark_trend: Mapping[str, Any],
+    growth_proxy: Mapping[str, Any],
+    breadth: Mapping[str, Any],
+    volatility: Mapping[str, Any],
+    symbol_evidence: Mapping[str, Mapping[str, Any]],
+    required_bars: int,
+    benchmark_symbol: str,
+) -> dict[str, Any]:
+    trend = dict(benchmark_trend or _empty_trend_evidence(benchmark_symbol))
+    coverage = _data_coverage(symbol_evidence=symbol_evidence, required_bars=required_bars)
+    usable_ranges = dict(historical_coverage.get("usableRange") or {})
+    if trend.get("symbol") and isinstance(usable_ranges.get(str(trend.get("symbol"))), Mapping):
+        trend["usableRange"] = dict(usable_ranges[str(trend.get("symbol"))])
+    return {
+        "historicalOhlcvCoverage": dict(historical_coverage),
+        "benchmarkTrend": trend,
+        "growthRiskProxy": dict(growth_proxy),
+        "breadthProxy": dict(breadth),
+        "volatilityProxy": dict(volatility),
+        "indexTrend": trend,
+        "breadth": _breadth_section(breadth),
+        "momentum": _momentum_section(trend),
+        "volatilityRisk": dict(volatility),
+        "concentrationLeadership": _concentration_leadership(symbol_evidence=symbol_evidence, benchmark_trend=trend),
+        "dataCoverage": coverage,
+    }
+
+
+def _breadth_section(breadth: Mapping[str, Any]) -> dict[str, Any]:
+    available_count = int(breadth.get("availableCount") or 0)
+    percent_above = breadth.get("percentAboveMa20")
+    above_count = None if percent_above is None else int(round(float(percent_above) * available_count))
+    positive_return = breadth.get("percentPositiveReturn20d")
+    positive_count = None if positive_return is None else int(round(float(positive_return) * available_count))
+    return {
+        "percentAboveMovingAverage": percent_above,
+        "aboveMovingAverageCount": above_count,
+        "percentPositiveMomentum": positive_return,
+        "positiveMomentumCount": positive_count,
+        "evaluatedCount": available_count,
+        "skippedCount": int(breadth.get("missingCount") or 0),
+        "state": str(breadth.get("state") or "insufficient_data"),
+    }
+
+
+def _momentum_section(index_trend: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "symbol": index_trend.get("symbol"),
+        "shortWindow": "20d",
+        "shortWindowReturn": index_trend.get("return20d"),
+        "mediumWindow": "60d",
+        "mediumWindowReturn": index_trend.get("return60d"),
+        "state": "available" if index_trend.get("return20d") is not None else "insufficient_data",
+    }
+
+
+def _concentration_leadership(
+    *,
+    symbol_evidence: Mapping[str, Mapping[str, Any]],
+    benchmark_trend: Mapping[str, Any],
+) -> dict[str, Any]:
+    benchmark_return = benchmark_trend.get("return20d")
+    leader_returns: list[float] = []
+    evaluated: list[str] = []
+    skipped: list[str] = []
+    for symbol in LEADERSHIP_SYMBOLS:
+        evidence = dict(symbol_evidence.get(symbol) or {})
+        trend = dict(evidence.get("trend") or {})
+        value = trend.get("return20d")
+        if value is None:
+            skipped.append(symbol)
+            continue
+        leader_returns.append(float(value))
+        evaluated.append(symbol)
+    average = round(sum(leader_returns) / len(leader_returns), 6) if leader_returns else None
+    relative = _relative_return(average, float(benchmark_return)) if average is not None and benchmark_return is not None else None
+    if relative is None:
+        state = "insufficient_data"
+    elif relative > 0.01:
+        state = "leaders_ahead"
+    elif relative < -0.01:
+        state = "leaders_lagging"
+    else:
+        state = "leaders_inline"
+    return {
+        "leadershipSymbols": list(LEADERSHIP_SYMBOLS),
+        "evaluatedSymbols": evaluated,
+        "skippedSymbols": skipped,
+        "averageLeaderReturn20d": average,
+        "benchmarkReturn20d": benchmark_return,
+        "relativeReturn20d": relative,
+        "state": state,
+    }
+
+
+def _data_coverage(
+    *,
+    symbol_evidence: Mapping[str, Mapping[str, Any]],
+    required_bars: int,
+) -> dict[str, Any]:
+    used: list[str] = []
+    skipped: list[dict[str, str]] = []
+    ranges: dict[str, Mapping[str, str]] = {}
+    as_of_values: list[str] = []
+    for symbol, evidence in symbol_evidence.items():
+        coverage = dict(evidence.get("coverage") or {})
+        state = str(coverage.get("state") or "missing")
+        usable_range = dict(coverage.get("usableRange") or {})
+        if state == "available":
+            used.append(symbol)
+            ranges[symbol] = usable_range
+            if usable_range.get("end"):
+                as_of_values.append(str(usable_range["end"]))
+        else:
+            skipped.append({"symbol": symbol, "reason": state})
+    return {
+        "requiredBars": required_bars,
+        "usedSymbols": used,
+        "skippedSymbols": skipped,
+        "coverageBySymbol": {
+            symbol: dict((evidence.get("coverage") if isinstance(evidence, Mapping) else {}) or {})
+            for symbol, evidence in symbol_evidence.items()
+        },
+        "usableRangeBySymbol": ranges,
+        "asOf": max(as_of_values) if as_of_values else None,
+        "state": "available" if used and not skipped else "partial" if used else "missing",
+    }
+
+
 def _data_quality(
     *,
     symbol_evidence: Mapping[str, Mapping[str, Any]],
@@ -522,6 +737,9 @@ def _missing_data_families(
 
     for evidence in symbol_evidence.values():
         coverage = dict(evidence.get("coverage") or {})
+        if coverage.get("state") == "malformed":
+            add("malformed_ohlcv")
+            continue
         if coverage.get("state") != "available":
             add("historical_ohlcv")
         if require_adjusted and coverage.get("adjustedCoverageState") != "available":
@@ -537,6 +755,24 @@ def _missing_data_families(
     if quote.get("availabilityState") not in {"available", "not_requested", "stale"}:
         add("quote_snapshot")
     return families
+
+
+def _status_from_evidence(
+    *,
+    symbol_evidence: Mapping[str, Mapping[str, Any]],
+    missing_families: Sequence[str],
+) -> str:
+    states = {
+        str(dict(evidence.get("coverage") or {}).get("state") or "missing")
+        for evidence in symbol_evidence.values()
+    }
+    if "malformed" in states or "malformed_ohlcv" in set(missing_families):
+        return "failed_closed"
+    if "historical_ohlcv" in set(missing_families):
+        return "blocked"
+    if missing_families:
+        return "partial"
+    return "ready"
 
 
 def _available_data_classes(
@@ -579,7 +815,7 @@ def _derive_regime_label(
     growth_proxy: Mapping[str, Any],
     breadth: Mapping[str, Any],
 ) -> str:
-    if status != "ok" or any(
+    if status != "ready" or any(
         family in set(missing_families)
         for family in ("historical_ohlcv", "adjusted_prices", "benchmark_ohlcv", "quote_snapshot")
     ):
@@ -594,24 +830,72 @@ def _derive_regime_label(
         and _gte(breadth_ma20, 0.60)
         and _gte(relative20, 0)
     ):
-        return "risk_on_confirming"
+        return "risk_on"
     if _lt(benchmark20, 0) and close_vs_ma20 == "below" and _lte(breadth_ma20, 0.40):
         return "risk_off"
     return "mixed"
 
 
-def _regime_summary(label: str, *, status: str) -> dict[str, Any]:
+def _regime_summary(
+    label: str,
+    *,
+    status: str,
+    confidence: float = 0.0,
+    explanation: str | None = None,
+) -> dict[str, Any]:
     return {
         "label": label,
-        "status": "partial" if label == "insufficient_data" and status != "failed_closed" else status,
+        "status": "partial" if label == "insufficient_data" and status not in {"failed_closed", "blocked"} else status,
+        "confidence": max(0.0, min(1.0, round(float(confidence or 0.0), 3))),
+        "explanation": explanation or _regime_explanation(label, status=status),
         "derivation": "deterministic_evidence_fields",
     }
 
 
+def _regime_confidence(
+    *,
+    status: str,
+    regime_label: str,
+    missing_families: Sequence[str],
+    benchmark_trend: Mapping[str, Any],
+    growth_proxy: Mapping[str, Any],
+    breadth: Mapping[str, Any],
+    volatility: Mapping[str, Any],
+) -> float:
+    if status != "ready" or regime_label == "insufficient_data":
+        return 0.0 if status == "failed_closed" else 0.25
+    inputs = [
+        benchmark_trend.get("return20d") is not None,
+        benchmark_trend.get("closeVsMa20") in {"above", "below", "at"},
+        growth_proxy.get("relativeReturn20d") is not None,
+        breadth.get("percentAboveMa20") is not None,
+        volatility.get("realizedVolatility20d") is not None,
+    ]
+    coverage_score = sum(1 for item in inputs if item) / float(len(inputs))
+    penalty = min(0.4, 0.08 * len(set(missing_families)))
+    return max(0.1, min(0.85, coverage_score - penalty))
+
+
+def _regime_explanation(label: str, *, status: str) -> str:
+    if status == "failed_closed":
+        return "One or more local OHLCV inputs were malformed, so no market-regime conclusion is published."
+    if status == "blocked":
+        return "Required local OHLCV coverage is missing or insufficient, so the regime label remains insufficient_data."
+    if label == "risk_on":
+        return "Benchmark trend, breadth, and growth proxy evidence are aligned positively from local OHLCV inputs."
+    if label == "risk_off":
+        return "Benchmark trend and breadth evidence are aligned negatively from local OHLCV inputs."
+    if label == "mixed":
+        return "Observable OHLCV evidence is available but benchmark, breadth, and leadership signals are not aligned."
+    return "Observable evidence is insufficient for a market-regime label."
+
+
 def _next_operator_action(*, status: str, missing_families: Sequence[str]) -> str:
-    if status == "ok":
+    if status == "ready":
         return "Market regime evidence is available from local adjusted OHLCV and quote snapshot inputs."
     missing = set(missing_families)
+    if "malformed_ohlcv" in missing:
+        return "Replace malformed local OHLCV parquet files with valid cache files, then rerun."
     if "historical_ohlcv" in missing:
         return "Provide local OHLCV parquet coverage for every explicitly requested symbol, then rerun."
     if "adjusted_prices" in missing:
@@ -639,6 +923,54 @@ def _fail_closed_missing_families(reasons: Sequence[str]) -> list[str]:
     if "malformed_quote_snapshot" in reasons:
         return ["quote_snapshot"]
     return ["historical_ohlcv"]
+
+
+def _data_quality_summary(
+    *,
+    status: str,
+    missing_families: Sequence[str],
+    data_quality: Mapping[str, Any],
+) -> str:
+    if status == "ready":
+        return "All requested local OHLCV evidence sections were computed from available fixture/cache inputs."
+    if status == "failed_closed":
+        return "At least one local OHLCV input was malformed or unreadable, so evidence generation failed closed."
+    if "historical_ohlcv" in set(missing_families):
+        return "Required local OHLCV coverage is missing or insufficient for at least one requested symbol."
+    if data_quality.get("missingAdjustedData"):
+        return "Adjusted close coverage is missing for at least one requested symbol."
+    if data_quality.get("missingQuoteSnapshot"):
+        return "Quote snapshot coverage is missing for at least one requested symbol."
+    return "Market regime evidence is partial because one or more evidence families are unavailable."
+
+
+def _reason_codes(
+    *,
+    status: str,
+    missing_families: Sequence[str],
+    data_quality: Mapping[str, Any],
+) -> list[str]:
+    codes: list[str] = []
+    if status == "ready":
+        return []
+    missing = set(missing_families)
+    if "malformed_ohlcv" in missing:
+        codes.append("malformed_ohlcv")
+    if "historical_ohlcv" in missing:
+        codes.append("historical_ohlcv_missing_or_insufficient")
+    if data_quality.get("missingAdjustedData"):
+        codes.append("adjusted_prices_missing")
+    if data_quality.get("missingQuoteSnapshot"):
+        codes.append("quote_snapshot_missing")
+    for family in missing_families:
+        if family not in codes and family not in {
+            "malformed_ohlcv",
+            "historical_ohlcv",
+            "adjusted_prices",
+            "quote_snapshot",
+        }:
+            codes.append(str(family))
+    return codes
 
 
 def _fail_closed_operator_action(reasons: Sequence[str]) -> str:
@@ -832,5 +1164,6 @@ __all__ = [
     "DEFAULT_MARKET_REGIME_SYMBOLS",
     "DEFAULT_REQUIRED_BARS",
     "MARKET_REGIME_EVIDENCE_CONTRACT_VERSION",
+    "MARKET_REGIME_NO_ADVICE_DISCLOSURE",
     "build_market_regime_evidence_pack",
 ]

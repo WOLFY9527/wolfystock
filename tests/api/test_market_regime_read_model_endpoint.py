@@ -192,6 +192,49 @@ def test_market_regime_read_model_route_is_exposed() -> None:
     paths = TestClient(app).get("/openapi.json").json()["paths"]
 
     assert "get" in paths["/api/v1/market/regime-read-model"]
+    assert "get" in paths["/api/v1/market/regime-evidence-pack"]
+
+
+def test_market_regime_evidence_pack_endpoint_returns_ready_computed_contract(tmp_path, monkeypatch) -> None:
+    ohlcv_dir = tmp_path / "us-parquet-cache"
+    quote_path = tmp_path / "quote-snapshot-cache" / "us-starter-quotes.json"
+    _write_ohlcv(
+        ohlcv_dir,
+        {
+            "SPY": _series(100, 1.0),
+            "QQQ": _series(100, 1.25),
+            "AAPL": _series(90, 0.9),
+            "MSFT": _series(95, 1.1),
+            "NVDA": _series(110, 1.4),
+            "TSLA": _series(80, 0.7),
+        },
+    )
+    _write_quote_cache(quote_path)
+    monkeypatch.setenv("LOCAL_US_PARQUET_DIR", str(ohlcv_dir))
+    monkeypatch.setenv("LOCAL_US_QUOTE_SNAPSHOT_CACHE_PATH", str(quote_path))
+
+    response = _client().get("/api/v1/market/regime-evidence-pack")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["contractVersion"] == "market_regime_evidence_pack_v1"
+    assert payload["status"] == "ready"
+    assert payload["readiness"] == "ready"
+    assert payload["consumerSafe"] is True
+    assert payload["noAdviceDisclosure"]
+    assert payload["tier"] == "tier1"
+    assert payload["evaluatedSymbols"] == SYMBOLS
+    assert payload["regimeSummary"]["label"] == "risk_on"
+    assert payload["regimeSummary"]["confidence"] > 0
+    assert payload["evidence"]["indexTrend"]["return20d"] is not None
+    assert payload["evidence"]["momentum"]["shortWindowReturn"] is not None
+    assert payload["evidence"]["breadth"]["aboveMovingAverageCount"] == len(SYMBOLS)
+    assert payload["evidence"]["volatilityRisk"]["realizedVolatility20d"] is not None
+    assert payload["evidence"]["concentrationLeadership"]["state"] in {"leaders_ahead", "leaders_inline", "leaders_lagging"}
+    assert payload["evidence"]["dataCoverage"]["usedSymbols"] == SYMBOLS
+    assert payload["networkCallsEnabled"] is False
+    assert payload["mutationEnabled"] is False
+    assert payload["providerCallsEnabled"] is False
 
 
 def test_market_regime_read_model_endpoint_returns_product_ready_payload(monkeypatch) -> None:

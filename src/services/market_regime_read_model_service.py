@@ -17,6 +17,7 @@ from src.services.market_regime_evidence_service import (
 
 MARKET_REGIME_READ_MODEL_CONTRACT_VERSION = "market_regime_read_model_v1"
 ALLOWED_REGIME_LABELS = {
+    "risk_on",
     "risk_on_confirming",
     "risk_on_fragile",
     "mixed",
@@ -151,9 +152,9 @@ def _failed_closed_source(
 
 
 def _read_model_status(source_status: str) -> str:
-    if source_status == "ok":
+    if source_status in {"ok", "ready"}:
         return "ok"
-    if source_status == "partial":
+    if source_status in {"partial", "blocked"}:
         return "partial"
     return "failed_closed"
 
@@ -202,7 +203,7 @@ def _product_summary(regime_label: str, evidence: Mapping[str, Any], readiness_l
             "Risk-off evidence is currently dominant because the benchmark is below its 20-day moving average, "
             "20-day return is negative, and breadth is weak."
         )
-    if regime_label == "risk_on_confirming":
+    if regime_label in {"risk_on", "risk_on_confirming"}:
         return (
             "Risk-on confirming evidence is currently present because the benchmark is above its 20-day moving average, "
             "20-day return is positive, and breadth is broad."
