@@ -193,6 +193,36 @@ def test_ok_source_evidence_returns_product_ready_read_model(tmp_path: Path) -> 
         "Research Radar",
         "Scanner",
     }
+    projection = model["regimeEvidenceProjection"]
+    assert projection["contractVersion"] == "market_regime_evidence_projection_v1"
+    assert projection["sourceContractVersion"] == "market_regime_evidence_pack_v1"
+    assert projection["status"] == "ready"
+    assert projection["readiness"] == "ready"
+    assert projection["label"] in {"risk_on", "risk_on_confirming", "risk_off", "mixed"}
+    assert 0.0 < projection["confidence"] <= 1.0
+    assert projection["consumerSafe"] is True
+    assert projection["providerCallsEnabled"] is False
+    assert projection["networkCallsEnabled"] is False
+    assert projection["mutationEnabled"] is False
+    assert projection["readOnlyBoundary"] == {
+        "localEvidenceOnly": True,
+        "externalCallsEnabled": False,
+        "networkCallsEnabled": False,
+        "mutationEnabled": False,
+    }
+    assert projection["asOf"]
+    assert projection["generatedAt"]
+    assert projection["noAdviceDisclosure"]
+    assert projection["dataQuality"]["reasonCodes"] == []
+    preview = projection["evidencePreview"]
+    assert preview["indexTrend"]["return20d"] is not None
+    assert preview["indexTrend"]["closeVsMa20"] == "above"
+    assert preview["breadth"]["percentAboveMovingAverage"] == 1.0
+    assert preview["breadth"]["aboveMovingAverageCount"] == len(SYMBOLS)
+    assert preview["volatilityRisk"]["realizedVolatility20d"] is not None
+    assert preview["concentrationLeadership"]["state"] in {"leaders_ahead", "leaders_inline", "leaders_lagging"}
+    assert preview["dataCoverage"]["usedSymbolCount"] == len(SYMBOLS)
+    assert preview["dataCoverage"]["skippedSymbolCount"] == 0
 
 
 def test_risk_off_cards_are_negative_or_warning_without_advice_text(tmp_path: Path) -> None:
@@ -232,6 +262,65 @@ def test_missing_quote_snapshot_preserves_source_state_and_marks_quote_card_bloc
     assert model["dataQuality"]["quoteSnapshotCoverage"]["state"] == "partial"
     assert model["dataQuality"]["quoteSnapshotCoverage"]["missingSymbols"] == ["AAPL"]
     assert model["surfaceHints"][0]["statusHint"] == "quote_snapshot_missing"
+
+
+def test_missing_local_ohlcv_projects_blocked_regime_evidence_without_claim(tmp_path: Path) -> None:
+    values = _full_values()
+    values.pop("AAPL")
+    model = _build_model(tmp_path, values_by_symbol=values)
+
+    projection = model["regimeEvidenceProjection"]
+
+    assert model["status"] == "partial"
+    assert projection["status"] == "blocked"
+    assert projection["readiness"] == "blocked"
+    assert projection["label"] == "insufficient_data"
+    assert "historical_ohlcv_missing_or_insufficient" in projection["dataQuality"]["reasonCodes"]
+    assert projection["evidencePreview"]["dataCoverage"]["usedSymbolCount"] == len(SYMBOLS) - 1
+    assert projection["evidencePreview"]["dataCoverage"]["skippedSymbolCount"] == 1
+    assert projection["evidencePreview"]["dataCoverage"]["skippedSymbols"] == [
+        {"symbol": "AAPL", "reason": "missing"}
+    ]
+    serialized = json.dumps(projection, ensure_ascii=False).lower()
+    assert str(tmp_path).lower() not in serialized
+    assert "traceback" not in serialized
+    assert "exception" not in serialized
+
+
+def test_malformed_local_ohlcv_projects_failed_closed_without_computed_claim(tmp_path: Path) -> None:
+    ohlcv_dir = tmp_path / "us-parquet-cache"
+    quote_path = tmp_path / "quote-snapshot-cache" / "us-starter-quotes.json"
+    _write_ohlcv(ohlcv_dir, _full_values())
+    pd.DataFrame([{"date": START_DATE.isoformat(), "close": "not-a-number"}]).to_parquet(
+        ohlcv_dir / "AAPL.parquet",
+        index=False,
+    )
+    _write_quote_cache(quote_path, SYMBOLS)
+
+    model = build_market_regime_read_model(
+        market="US",
+        symbols=SYMBOLS,
+        benchmark_symbol="SPY",
+        growth_proxy_symbol="QQQ",
+        required_bars=60,
+        ohlcv_cache_dir=ohlcv_dir,
+        quote_snapshot_cache_path=quote_path,
+        require_adjusted=True,
+    )
+    projection = model["regimeEvidenceProjection"]
+
+    assert model["status"] == "failed_closed"
+    assert projection["status"] == "failed_closed"
+    assert projection["readiness"] == "failed_closed"
+    assert projection["label"] == "insufficient_data"
+    assert projection["confidence"] == 0.0
+    assert "malformed_ohlcv" in projection["dataQuality"]["reasonCodes"]
+    assert projection["evidencePreview"]["indexTrend"]["return20d"] is None
+    assert projection["evidencePreview"]["indexTrend"]["state"] == "insufficient_data"
+    serialized = json.dumps(projection, ensure_ascii=False).lower()
+    assert str(tmp_path).lower() not in serialized
+    assert "traceback" not in serialized
+    assert "exception" not in serialized
 
 
 def test_stale_quote_snapshot_is_consumed_and_degraded_not_not_requested(tmp_path: Path) -> None:

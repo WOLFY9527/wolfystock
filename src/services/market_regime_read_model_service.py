@@ -11,11 +11,13 @@ from src.services.market_regime_evidence_service import (
     DEFAULT_MARKET_REGIME_SYMBOLS,
     DEFAULT_REQUIRED_BARS,
     MARKET_REGIME_EVIDENCE_CONTRACT_VERSION,
+    MARKET_REGIME_NO_ADVICE_DISCLOSURE,
     build_market_regime_evidence_pack,
 )
 
 
 MARKET_REGIME_READ_MODEL_CONTRACT_VERSION = "market_regime_read_model_v1"
+MARKET_REGIME_EVIDENCE_PROJECTION_CONTRACT_VERSION = "market_regime_evidence_projection_v1"
 ALLOWED_REGIME_LABELS = {
     "risk_on",
     "risk_on_confirming",
@@ -94,6 +96,7 @@ def build_market_regime_read_model_from_evidence(source: Mapping[str, Any]) -> d
         "regimeStatus": str(regime_summary.get("status") or status),
         "productSummary": _product_summary(regime_label, evidence, readiness["label"]),
         "evidenceCards": _evidence_cards(source, data_quality),
+        "regimeEvidenceProjection": project_market_regime_evidence(source),
         "symbolContext": _symbol_context(source),
         "dataQuality": data_quality,
         "readiness": readiness,
@@ -110,6 +113,56 @@ def build_market_regime_read_model_from_evidence(source: Mapping[str, Any]) -> d
         "providerCallsEnabled": False,
     }
     return _sanitize(payload)
+
+
+def project_market_regime_evidence(source: Mapping[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(source, Mapping):
+        source = {}
+    evidence = dict(source.get("evidence") or {})
+    regime_summary = dict(source.get("regimeSummary") or {})
+    data_quality = dict(source.get("dataQuality") or {})
+    data_coverage = dict(evidence.get("dataCoverage") or {})
+    status = str(source.get("status") or source.get("readiness") or "failed_closed")
+    readiness = str(source.get("readiness") or status)
+    label = _safe_regime_label(regime_summary.get("label"))
+    confidence = _number(regime_summary.get("confidence"))
+    reason_codes = _string_list(
+        data_quality.get("reasonCodes")
+        or data_quality.get("failClosedReasons")
+        or source.get("missingDataFamilies")
+    )
+    projection = {
+        "consumerSafe": True,
+        "contractVersion": MARKET_REGIME_EVIDENCE_PROJECTION_CONTRACT_VERSION,
+        "sourceContractVersion": str(
+            source.get("contractVersion") or MARKET_REGIME_EVIDENCE_CONTRACT_VERSION
+        ),
+        "status": status,
+        "readiness": readiness,
+        "label": label,
+        "confidence": confidence if confidence is not None else 0.0,
+        "asOf": source.get("asOf") or data_coverage.get("asOf"),
+        "generatedAt": source.get("generatedAt"),
+        "noAdviceDisclosure": str(
+            source.get("noAdviceDisclosure") or MARKET_REGIME_NO_ADVICE_DISCLOSURE
+        ),
+        "dataQuality": {
+            "status": str(data_quality.get("status") or status),
+            "summary": str(data_quality.get("summary") or ""),
+            "reasonCodes": reason_codes,
+        },
+        "evidencePreview": _evidence_preview(evidence),
+        "readOnlyBoundary": {
+            "localEvidenceOnly": True,
+            "externalCallsEnabled": False,
+            "networkCallsEnabled": False,
+            "mutationEnabled": False,
+        },
+        "providerCallsEnabled": False,
+        "networkCallsEnabled": False,
+        "mutationEnabled": False,
+    }
+    return _sanitize(projection)
 
 
 def _failed_closed_source(
@@ -610,6 +663,86 @@ def _surface_status_hint(*, readiness: Mapping[str, Any], data_quality: Mapping[
     return "evidence_unknown"
 
 
+def _evidence_preview(evidence: Mapping[str, Any]) -> dict[str, Any]:
+    index_trend = dict(evidence.get("indexTrend") or evidence.get("benchmarkTrend") or {})
+    breadth = dict(evidence.get("breadth") or {})
+    breadth_proxy = dict(evidence.get("breadthProxy") or {})
+    volatility = dict(evidence.get("volatilityRisk") or evidence.get("volatilityProxy") or {})
+    leadership = dict(evidence.get("concentrationLeadership") or {})
+    coverage = dict(evidence.get("dataCoverage") or {})
+    used_symbols = _string_list(coverage.get("usedSymbols"))
+    skipped_symbols = [
+        {"symbol": str(item.get("symbol") or ""), "reason": str(item.get("reason") or "")}
+        for item in list(coverage.get("skippedSymbols") or [])
+        if isinstance(item, Mapping)
+    ]
+    return {
+        "indexTrend": {
+            "symbol": index_trend.get("symbol"),
+            "return20d": _number(index_trend.get("return20d")),
+            "closeVsMa20": str(index_trend.get("closeVsMa20") or "insufficient_data"),
+            "state": str(index_trend.get("state") or "insufficient_data"),
+        },
+        "breadth": {
+            "percentAboveMovingAverage": _number(
+                breadth.get("percentAboveMovingAverage")
+                if breadth.get("percentAboveMovingAverage") is not None
+                else breadth_proxy.get("percentAboveMa20")
+            ),
+            "aboveMovingAverageCount": _optional_int(breadth.get("aboveMovingAverageCount")),
+            "evaluatedCount": _optional_int(
+                breadth.get("evaluatedCount")
+                if breadth.get("evaluatedCount") is not None
+                else breadth_proxy.get("availableCount")
+            ),
+            "skippedCount": _optional_int(
+                breadth.get("skippedCount")
+                if breadth.get("skippedCount") is not None
+                else breadth_proxy.get("missingCount")
+            ),
+            "state": str(breadth.get("state") or breadth_proxy.get("state") or "insufficient_data"),
+        },
+        "volatilityRisk": {
+            "realizedVolatility20d": _number(volatility.get("realizedVolatility20d")),
+            "volatilityState": str(volatility.get("volatilityState") or "insufficient_data"),
+            "state": str(volatility.get("state") or "insufficient_data"),
+        },
+        "concentrationLeadership": {
+            "state": str(leadership.get("state") or "insufficient_data"),
+            "evaluatedCount": len(_string_list(leadership.get("evaluatedSymbols"))),
+            "skippedCount": len(_string_list(leadership.get("skippedSymbols"))),
+            "relativeReturn20d": _number(leadership.get("relativeReturn20d")),
+        },
+        "dataCoverage": {
+            "state": str(coverage.get("state") or "missing"),
+            "usedSymbolCount": len(used_symbols),
+            "skippedSymbolCount": len(skipped_symbols),
+            "usedSymbols": used_symbols,
+            "skippedSymbols": skipped_symbols,
+        },
+    }
+
+
+def _optional_int(value: Any) -> int | None:
+    try:
+        if value is None:
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        return []
+    result: list[str] = []
+    for item in value:
+        text = str(item or "").strip()
+        if text:
+            result.append(text)
+    return result
+
+
 def _number(value: Any) -> float | None:
     try:
         if value is None:
@@ -642,7 +775,9 @@ def _sanitize(payload: Mapping[str, Any]) -> dict[str, Any]:
 
 
 __all__ = [
+    "MARKET_REGIME_EVIDENCE_PROJECTION_CONTRACT_VERSION",
     "MARKET_REGIME_READ_MODEL_CONTRACT_VERSION",
     "build_market_regime_read_model",
     "build_market_regime_read_model_from_evidence",
+    "project_market_regime_evidence",
 ]

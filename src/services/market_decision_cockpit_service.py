@@ -16,6 +16,7 @@ from urllib.parse import quote
 from src.services.confidence_evidence_consistency import project_confidence_evidence_state
 from src.services.market_overview_service import MarketOverviewService
 from src.services.market_regime_read_model_service import build_market_regime_read_model
+from src.services.market_regime_read_model_service import project_market_regime_evidence
 from src.services.market_regime_decision_engine import build_market_regime_decision
 from src.services.options_market_structure_observation import build_options_market_structure_observation
 from src.services.quote_snapshot_config import get_configured_us_quote_snapshot_cache_path
@@ -1291,11 +1292,13 @@ class MarketDecisionCockpitService:
                 "readinessLabel": "failed_closed",
                 "status": "failed_closed",
                 "regimeLabel": "insufficient_data",
+                "regimeEvidenceProjection": project_market_regime_evidence(None),
                 "evidenceCards": [],
                 "summary": "Market Regime Read Model is unavailable for this cockpit snapshot.",
             }
         readiness_label = _read_model_readiness_label(read_model)
         regime_label = _read_model_regime_label(read_model)
+        projection = read_model.get("regimeEvidenceProjection")
         return {
             "available": True,
             "primaryContext": readiness_label == "product_ready",
@@ -1304,6 +1307,11 @@ class MarketDecisionCockpitService:
             "regimeLabel": regime_label,
             "regimeStatus": str(read_model.get("regimeStatus") or _mapping(read_model.get("regime")).get("status") or ""),
             "summary": _safe_public_text(read_model.get("productSummary") or ""),
+            "regimeEvidenceProjection": (
+                dict(projection)
+                if isinstance(projection, Mapping)
+                else project_market_regime_evidence(None)
+            ),
             "evidenceCards": _read_model_evidence_summary(read_model),
             "missingDataFamilies": list(read_model.get("missingDataFamilies") or []),
             "blockedProductSurfaces": list(read_model.get("blockedProductSurfaces") or []),

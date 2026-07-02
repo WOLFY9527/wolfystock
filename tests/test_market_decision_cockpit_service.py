@@ -189,6 +189,60 @@ def _read_model(
     status: str = "ok",
     regime_label: str = "risk_off",
 ) -> dict[str, Any]:
+    projection = {
+        "consumerSafe": True,
+        "contractVersion": "market_regime_evidence_projection_v1",
+        "sourceContractVersion": "market_regime_evidence_pack_v1",
+        "status": "ready" if readiness_label == "product_ready" else status,
+        "readiness": "ready" if readiness_label == "product_ready" else readiness_label,
+        "label": regime_label,
+        "confidence": 0.71 if readiness_label == "product_ready" else 0.0,
+        "asOf": "2026-03-02",
+        "generatedAt": "2026-03-02T00:00:00+00:00",
+        "noAdviceDisclosure": "Observation-only market structure evidence; not investment advice.",
+        "dataQuality": {
+            "status": "ready" if readiness_label == "product_ready" else status,
+            "summary": "Local evidence is available." if readiness_label == "product_ready" else "Local evidence is blocked.",
+            "reasonCodes": [] if readiness_label == "product_ready" else ["historical_ohlcv"],
+        },
+        "evidencePreview": {
+            "indexTrend": {"symbol": "SPY", "return20d": -0.08, "closeVsMa20": "below", "state": "available"},
+            "breadth": {
+                "percentAboveMovingAverage": 0.0,
+                "aboveMovingAverageCount": 0,
+                "evaluatedCount": 4,
+                "skippedCount": 0 if readiness_label == "product_ready" else 1,
+                "state": "available" if readiness_label == "product_ready" else "insufficient_data",
+            },
+            "volatilityRisk": {
+                "realizedVolatility20d": 0.2,
+                "volatilityState": "normal",
+                "state": "available",
+            },
+            "concentrationLeadership": {
+                "state": "leaders_lagging",
+                "evaluatedCount": 4,
+                "skippedCount": 0,
+                "relativeReturn20d": -0.02,
+            },
+            "dataCoverage": {
+                "state": "available" if readiness_label == "product_ready" else "missing",
+                "usedSymbolCount": 4 if readiness_label == "product_ready" else 0,
+                "skippedSymbolCount": 0 if readiness_label == "product_ready" else 4,
+                "usedSymbols": ["SPY", "QQQ", "AAPL", "MSFT"] if readiness_label == "product_ready" else [],
+                "skippedSymbols": [],
+            },
+        },
+        "readOnlyBoundary": {
+            "localEvidenceOnly": True,
+            "externalCallsEnabled": False,
+            "networkCallsEnabled": False,
+            "mutationEnabled": False,
+        },
+        "providerCallsEnabled": False,
+        "networkCallsEnabled": False,
+        "mutationEnabled": False,
+    }
     return {
         "consumerSafe": True,
         "noAdvice": True,
@@ -203,6 +257,7 @@ def _read_model(
         "regimeLabel": regime_label,
         "regimeStatus": status,
         "productSummary": "Risk-off evidence is currently dominant across the bounded read model.",
+        "regimeEvidenceProjection": projection,
         "evidenceCards": [
             {
                 "id": "benchmark_trend",
@@ -501,6 +556,19 @@ def test_product_ready_read_model_becomes_primary_regime_context_without_low_con
     assert payload["marketRegimeReadModel"]["primaryContext"] is True
     assert payload["marketRegimeReadModel"]["readinessLabel"] == "product_ready"
     assert payload["marketRegimeReadModel"]["regimeLabel"] == "risk_off"
+    projection = payload["marketRegimeReadModel"]["regimeEvidenceProjection"]
+    assert projection["contractVersion"] == "market_regime_evidence_projection_v1"
+    assert projection["sourceContractVersion"] == "market_regime_evidence_pack_v1"
+    assert projection["status"] == "ready"
+    assert projection["label"] == "risk_off"
+    assert projection["confidence"] == 0.71
+    assert projection["consumerSafe"] is True
+    assert projection["providerCallsEnabled"] is False
+    assert projection["networkCallsEnabled"] is False
+    assert projection["mutationEnabled"] is False
+    assert projection["readOnlyBoundary"]["externalCallsEnabled"] is False
+    assert projection["evidencePreview"]["indexTrend"]["closeVsMa20"] == "below"
+    assert projection["evidencePreview"]["breadth"]["evaluatedCount"] == 4
     assert payload["marketRegimeDecision"]["regime"] == "risk_off"
     assert payload["marketRegimeDecision"]["readModelPrimaryContext"] is True
     assert payload["marketRegimeDecision"]["missingEvidence"] == []
@@ -562,6 +630,12 @@ def test_unready_read_model_fails_closed_as_primary_market_context() -> None:
 
     assert payload["marketRegimeReadModel"]["primaryContext"] is False
     assert payload["marketRegimeReadModel"]["readinessLabel"] == "failed_closed"
+    projection = payload["marketRegimeReadModel"]["regimeEvidenceProjection"]
+    assert projection["status"] == "failed_closed"
+    assert projection["readiness"] == "failed_closed"
+    assert projection["label"] == "insufficient_data"
+    assert projection["confidence"] == 0.0
+    assert projection["dataQuality"]["reasonCodes"] == ["historical_ohlcv"]
     assert payload["marketRegimeDecision"]["regime"] == "insufficient_data"
     assert payload["marketRegimeDecision"]["confidence"] == "low"
     assert payload["marketRegimeSummary"]["regime"] == "Insufficient market evidence"
