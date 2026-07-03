@@ -1564,6 +1564,38 @@ describe('UserScannerPage', () => {
     expectNoRawI18nKeys(container);
   });
 
+  it('sanitizes WorkBuddy raw research-packet and scanner gap wording before rendering', async () => {
+    const nvda = makeCandidate({ symbol: 'NVDA', rank: 1, score: 94 });
+    (nvda as ScannerCandidate & Record<string, unknown>).candidateResearchPacket = makeCandidateResearchPacket({
+      whySurfaced: 'Some symbol evidence is present, but the packet is not complete enough for a clean research handoff.',
+      primaryEvidence: ['No verified local peer group metadata is available for AAPL.'],
+      limitingEvidence: ['Missing or incomplete evidence families: quote, fundamental, news.'],
+      dataQualityNotes: ['Load recent local daily OHLCV for the symbol and at least two verified peers.'],
+      rejectedOrLimitedReasonSafeLabel: 'Observation-only research readiness; not personalized financial advice or an instruction.',
+      researchNextStep: 'Add fundamental coverage before business-quality review.',
+      observationOnly: true,
+    });
+
+    getRun.mockResolvedValue(makeRunDetail({
+      shortlist: [nvda],
+      selected: [nvda],
+      scoringNotes: ['universe / historical ohlcv / quote snapshot'],
+    }));
+
+    const { container } = renderUserScannerPage();
+
+    const rowPacket = await screen.findByTestId('scanner-candidate-research-packet-row-NVDA');
+    expect(rowPacket).toHaveTextContent('支持证据仍待补');
+    expect(rowPacket).toHaveTextContent('同业对比信息待确认');
+    expect(rowPacket.textContent || '').not.toMatch(/clean research handoff|evidence families|business-quality review|peer group metadata|daily OHLCV|Observation-only research readiness|personalized financial advice/i);
+
+    const detailPacket = await screen.findByTestId('scanner-inline-candidate-research-packet-NVDA');
+    expect(detailPacket).toHaveTextContent('当前仅达到观察级，暂不形成判断。');
+    expect(detailPacket.textContent || '').not.toMatch(/clean research handoff|evidence families|business-quality review|peer group metadata|daily OHLCV|Observation-only research readiness|personalized financial advice/i);
+
+    expect(container.textContent || '').not.toMatch(/universe\s*\/\s*historical ohlcv\s*\/\s*quote snapshot/i);
+  });
+
   it('renders candidate provenance additively inside evidence areas without changing row order or score labels', async () => {
     const nvda = makeCandidate({ symbol: 'NVDA', rank: 1, score: 94 });
     (nvda as ScannerCandidate & Record<string, unknown>).candidateEvidenceFrame = makeCandidateEvidenceFrame();
@@ -2344,10 +2376,10 @@ describe('UserScannerPage', () => {
     await screen.findByTestId('scanner-result-row-NVDA');
     const observationBoundary = screen.getByTestId('observation-only-boundary');
     expect(observationBoundary).toHaveAttribute('data-observation-boundary-surface', 'scanner');
-    expect(observationBoundary).toHaveTextContent('observation-only');
-    expect(observationBoundary).toHaveTextContent('证据摘要');
-    expect(observationBoundary).toHaveTextContent('不构成交易建议');
-    expect(observationBoundary).toHaveTextContent('不提供买入、卖出、持有指令');
+    expect(observationBoundary).toHaveTextContent('研究边界摘要');
+    expect(observationBoundary).toHaveTextContent('受边界约束的模型或规则输出');
+    expect(observationBoundary).toHaveTextContent('请独立核验适用性');
+    expect(observationBoundary.textContent || '').not.toMatch(/observation-only|OBSERVATION-ONLY|交易建议|买入|卖出|持有/i);
     expect(screen.getByTestId('scanner-wide-workspace-scope')).toHaveAttribute('data-workspace-width', 'near-full');
     expect(screen.getByTestId('user-scanner-workspace')).toHaveAttribute('data-terminal-primitive', 'page-shell');
     expect(screen.getByTestId('scanner-page-heading')).toHaveAttribute('data-terminal-primitive', 'dense-page-header');

@@ -125,6 +125,9 @@ function mapInternalReasonToUserMessage(
   if (normalized.includes('optional_news_timeout') || normalized.includes('news')) {
     return isEnglish ? 'News data temporarily unavailable' : '新闻数据暂缺';
   }
+  if (normalized.includes('business_quality_review')) {
+    return isEnglish ? 'Fundamental data missing' : '基本面数据缺失';
+  }
   if (normalized.includes('fundamentals_unavailable') || normalized.includes('fundamental')) {
     return isEnglish ? 'Fundamental data missing' : '基本面数据缺失';
   }

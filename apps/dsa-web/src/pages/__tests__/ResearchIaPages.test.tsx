@@ -611,6 +611,77 @@ describe('research IA pages', () => {
     expect(findConsumerRawLeakage(narrative.textContent || '')).toEqual([]);
   });
 
+  it('maps evidence limited cockpit status to consumer-safe wording', async () => {
+    getDecisionCockpitMock.mockResolvedValue({
+      schemaVersion: 'market_decision_cockpit.v1',
+      generatedAt: '2026-06-15T09:30:00Z',
+      marketRegimeDecision: {
+        regime: 'neutral',
+        confidence: 'medium',
+        confidenceScore: 0.44,
+        driverScores: {
+          dealerGamma: { score: 41, evidenceState: 'evidence limited', reasons: [] },
+          breadthParticipation: { score: 0, evidenceState: 'unavailable', reasons: [] },
+          volatilityStructure: { score: 29, evidenceState: 'partial', reasons: [] },
+          ratesDollar: { score: 26, evidenceState: 'score_grade', reasons: [] },
+          liquidityCredit: { score: 14, evidenceState: 'partial', reasons: [] },
+          crossAssetRisk: { score: 0, evidenceState: 'blocked', reasons: [] },
+          sectorThemeRotation: { score: 0, evidenceState: 'evidence limited', reasons: [] },
+          eventCatalyst: { score: 0, evidenceState: 'pending', reasons: [] },
+        },
+        explanation: {
+          whyThisRegime: [],
+          whatConfirmsIt: [],
+          whatInvalidatesIt: [],
+        },
+        invalidationConditions: [],
+        researchPriorities: {
+          watchToday: [],
+          needsMoreEvidence: [],
+          investigateNext: [],
+        },
+      },
+      researchQueuePreview: {
+        topCandidates: [],
+        queueQuality: 'thin',
+        evidenceGaps: [],
+        previewOnly: true,
+      },
+      optionsStructureStatus: {
+        gammaEvidenceStatus: 'partial',
+        observationOnly: true,
+        decisionGrade: false,
+        missingEvidence: [],
+        blockedReasonCodes: [],
+      },
+      cockpitSummary: {
+        whatChanged: [],
+        whyItMatters: [],
+        whatToWatch: [],
+        confidenceLimits: [],
+      },
+      noAdviceDisclosure: '仅供研究语境参考。',
+      dataQuality: {
+        status: 'evidence limited',
+        reason: 'evidence limited',
+        reasonCodes: [],
+        freshness: 'stale',
+        asOf: '2026-06-15T09:25:00Z',
+        blockingModules: [],
+        operatorAction: '',
+        consumerSafeMessage: '关键市场证据仍待补齐，驾驶舱保持观察边界。',
+      },
+    });
+    getDailyIntelligenceMock.mockRejectedValue(new Error('briefing unavailable'));
+
+    renderRoute(<MarketDecisionCockpitPage />, '/zh/market/decision-cockpit');
+
+    const page = await screen.findByTestId('market-decision-cockpit-page');
+    expect(page).toHaveTextContent('证据仍待补');
+    expect(page).not.toHaveTextContent('evidence limited');
+    expect(findConsumerRawLeakage(page.textContent || '')).toEqual([]);
+  });
+
   it('keeps the cockpit first viewport mobile-safe at 390px with wrapped readiness and evidence copy', async () => {
     Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
     window.dispatchEvent(new Event('resize'));
@@ -1407,6 +1478,82 @@ describe('research IA pages', () => {
     await waitFor(() => expect(getResearchQueueMock).toHaveBeenCalledTimes(1));
   });
 
+  it('sanitizes WorkBuddy raw research-radar queue wording before rendering', async () => {
+    languageState.value = 'en';
+
+    getResearchRadarMock.mockResolvedValue({
+      schemaVersion: 'research_radar_api_v1',
+      generatedAt: '2026-06-15T09:30:00Z',
+      researchQueue: [],
+      aggregateSummary: {
+        queueQuality: 'low_evidence',
+        priorityCounts: {},
+      },
+      evidenceGaps: ['fundamentals'],
+      marketContextFit: 'neutral',
+      onboardingGuidance: null,
+      emptyStateActions: [],
+      starterResearchWorkflow: [],
+      firstRunChecklist: [],
+      suggestedResearchEntrypoints: [],
+      noAdviceDisclosure: 'Research-only queue.',
+      dataQuality: { status: 'partial' },
+    });
+    getResearchQueueMock.mockResolvedValue({
+      schemaVersion: 'research_queue_v1',
+      researchQueue: [
+        {
+          queueItemId: 'raw-aapl-item-1',
+          sourceSurface: 'manual_gap',
+          symbol: 'AAPL',
+          title: 'Some symbol evidence is present, but the packet is not complete enough for a clean research handoff.',
+          priorityTier: 'follow_up',
+          whyQueued: ['Missing or incomplete evidence families: quote, fundamental, news.'],
+          evidenceUsed: ['Observation-only research readiness; not personalized financial advice or an instruction.'],
+          evidenceGaps: ['fundamentals'],
+          freshness: { state: 'needs_review', lastReviewedAt: null },
+          suggestedResearchPath: [
+            {
+              label: 'Stock Structure',
+              route: '/stocks/AAPL/structure-decision',
+              section: 'researchRadar',
+              reason: 'Add fundamental coverage before business-quality review.',
+            },
+          ],
+          observationOnly: true,
+        },
+      ],
+      aggregateSummary: {
+        itemCount: 1,
+        limit: 5,
+        bounded: false,
+        bySourceSurface: { manual_gap: 1 },
+        byPriorityTier: { urgent_review: 0, follow_up: 1, monitor: 0 },
+      },
+      sourceSurfacesAggregated: ['manual_gap'],
+      evidenceGaps: ['fundamentals'],
+      dataQuality: {
+        state: 'partial',
+        itemCount: 1,
+        sourceSurfacesAvailable: ['manual_gap'],
+        sourceSurfacesExpected: ['scanner', 'watchlist', 'market', 'manual_gap'],
+        failClosed: true,
+      },
+      noAdviceDisclosure: 'Research-only queue.',
+      observationOnly: true,
+      decisionGrade: false,
+    });
+
+    renderRoute(<ResearchRadarPage />, '/en/research/radar');
+
+    const hub = await screen.findByTestId('research-queue-hub');
+    expect(hub).toHaveTextContent('Supporting evidence still incomplete');
+    expect(hub).toHaveTextContent('Observation-only for now');
+    expect(hub).toHaveTextContent('Fundamental data missing');
+    expect(hub.textContent || '').not.toMatch(/clean research handoff|evidence families|business-quality review|Observation-only research readiness|personalized financial advice/i);
+    expect(findConsumerRawLeakage(hub.textContent || '')).toEqual([]);
+  });
+
   it('keeps Research Radar visible when the unified research queue endpoint is unavailable', async () => {
     getResearchRadarMock.mockResolvedValue({
       schemaVersion: 'research_radar_api_v1',
@@ -1468,12 +1615,15 @@ describe('research IA pages', () => {
     renderRoute(<StockStructureDecisionEntryPage />, '/zh/stocks/structure-decision?symbols=AAPL');
 
     const page = screen.getByTestId('stock-structure-entry-page');
-    expect(page).toHaveTextContent('个股结构从研究队列进入');
+    expect(page).toHaveTextContent('个股结构决策');
+    expect(page).toHaveTextContent('输入标的进入结构视图');
     expect(page).toHaveTextContent('入口不调用');
     expect(page).toHaveTextContent('不展示原始载荷');
     expect(page).toHaveTextContent('已带入 AAPL');
     expect(page).toHaveTextContent('输入或添加另一个标的后，可进行结构对比。');
-    expect(page).toHaveTextContent('对比仅展示结构差异和证据完整度，不给出买卖排序。');
+    expect(page).toHaveTextContent('直接输入股票代码，或从 Scanner、观察列表、研究雷达继续进入。');
+    expect(page).toHaveTextContent('报价、基本面、催化、同业或历史行情证据缺失时，会在详情页继续显示就绪边界。');
+    expect(page).not.toHaveTextContent('OHLCV');
     expect(screen.getByRole('link', { name: '研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
     expect(findConsumerRawLeakage(page.textContent || '')).toEqual([]);
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|下单|目标价|止损|仓位建议|优先于其他标的|投资偏好/);
@@ -1937,7 +2087,8 @@ describe('research IA pages', () => {
     expect(packet).toHaveTextContent('置信度受到上限约束');
     expect(packet).toHaveTextContent('当前证据还不足以支撑更高置信度，只能作为研究观察。');
     expect(packet).toHaveTextContent('后续研究');
-    expect(packet).toHaveTextContent('Add daily OHLCV evidence for MSFT before using divergence observations.');
+    expect(packet).toHaveTextContent('历史行情待补');
+    expect(packet.textContent || '').not.toMatch(/daily OHLCV|divergence observations/i);
     expect(packet.textContent || '').not.toMatch(/reasonCodes|policyVersion|local_db|sourceRef|requestId|trace|raw|debug|provider|schemaVersion|price_history_stale|symbol_evidence_unavailable/i);
     expect(packet.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy now|sell now|hold|target price|stop loss|position sizing/i);
   });
