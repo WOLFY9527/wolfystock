@@ -59,6 +59,7 @@ import { TerminalChip, TerminalGrid, TerminalPanel } from '../terminal/TerminalP
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
 import { mapConsumerStatusText } from '../../utils/consumerStatusLabels';
+import { getConsumerDataStateEntry } from '../../utils/consumerDataStateVocabulary';
 import type { OfficialMacroAuthorityRecord } from '../common/officialMacroAuthorityDiagnosticsData';
 import {
   buildMarketDirectionalSummary,
@@ -2197,13 +2198,15 @@ function summarizeTopLevelDataStatus(params: {
     return hasRefreshing
       ? {
         kind: 'refreshing',
-        headline: '正在更新',
+        headline: getConsumerDataStateEntry('maintenance').label,
+        detail: getConsumerDataStateEntry('maintenance').explanation,
         hasUsableData: false,
         hasMissingPanels: true,
       }
       : {
         kind: 'fallbackOnlyUnavailable',
-        headline: '部分数据暂不可用',
+        headline: getConsumerDataStateEntry('unavailable').label,
+        detail: getConsumerDataStateEntry('unavailable').explanation,
         hasUsableData: false,
         hasMissingPanels: true,
       };
@@ -2245,15 +2248,15 @@ function formatTopLevelDataStatus(status: TopLevelDataStatus): string {
 function explainTopLevelDataStatus(status: TopLevelDataStatus): string {
   switch (status.kind) {
     case 'refreshing':
-      return '数据更新中，稍后将自动刷新。';
+      return `${getConsumerDataStateEntry('maintenance').explanation}${getConsumerDataStateEntry('maintenance').nextStep}`;
     case 'fallbackOnlyUnavailable':
-      return '部分数据暂不可用，当前评分已暂停。';
+      return `${getConsumerDataStateEntry('failed_closed').explanation}${getConsumerDataStateEntry('failed_closed').nextStep}`;
     case 'mixedDataAvailable':
-      return '当前信号置信度较低，仅供观察。';
+      return getConsumerDataStateEntry('partial').explanation;
     case 'proxyPartialAvailable':
-      return '当前信号置信度较低，仅供观察。';
+      return getConsumerDataStateEntry('partial').explanation;
     case 'delayedAvailable':
-      return '已使用最近一次可用数据。';
+      return getConsumerDataStateEntry('stale').explanation;
     default:
       return formatTopLevelDataStatus(status);
   }
@@ -2312,7 +2315,7 @@ function buildMarketDecision(params: {
     ? '刷新中'
     : topLevelDataStatus.hasUsableData
       ? '观察中'
-      : '数据不足';
+      : getConsumerDataStateEntry('missing').label;
   const riskLabel = reliable ? scoreStateLabel(temperature.scores.overall) : fallbackRiskLabel;
   const disabledLabel = temperatureDisabledStateLabel(temperature);
   const liquidityLabel = reliable ? scoreStateLabel(temperature.scores.liquidity) : topLevelDataStatus.hasUsableData ? '部分可用' : disabledLabel;

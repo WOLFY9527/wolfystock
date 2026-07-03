@@ -24,10 +24,16 @@ describe('consumer raw leakage guard', () => {
       'Traceback stack trace',
       'historical ohlcv',
       'quote snapshot',
+      'universe',
+      'provider error',
+      'debug',
+      'dry-run',
+      'pipeline',
       'Observation-only research readiness; not personalized financial advice',
       'Observe whether downside volume pressure fades or remains persistent',
       'No portfolio exposure available',
       'evidence limited',
+      '数据不足，暂不形成结论。数据不足，暂不形成结论。数据不足，暂不形成结论。',
     ] as const;
 
     for (const example of examples) {

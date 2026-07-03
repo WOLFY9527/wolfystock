@@ -25,6 +25,26 @@ function formatPercent(value?: number | null): string {
   return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
 }
 
+function formatUniverseNote(note: string, language: 'zh' | 'en'): string | null {
+  const text = note.trim();
+  if (!text) return null;
+  const themeMatch = text.match(/^theme\s+universe:\s*(.+?)(?:\s*·\s*(\d+)\s*symbols?)?\.?$/i);
+  if (themeMatch) {
+    const theme = themeMatch[1]?.trim() || (language === 'en' ? 'selected theme' : '所选主题');
+    const count = themeMatch[2]?.trim();
+    return language === 'en'
+      ? `Theme scope: ${theme}${count ? ` · ${count} names` : ''}.`
+      : `主题标的范围：${theme}${count ? ` · ${count} 个标的` : ''}。`;
+  }
+  const cleaned = text
+    .replace(/\bprofile\s+default\s+universe\b/gi, language === 'en' ? 'default scope' : '默认标的范围')
+    .replace(/\bcustom\s+symbol\s+universe\b/gi, language === 'en' ? 'custom symbol scope' : '自定义标的范围')
+    .replace(/\buniverse\b/gi, language === 'en' ? 'scope' : '标的范围')
+    .replace(/\bsymbols?\b/gi, language === 'en' ? 'names' : '个标的')
+    .replace(/\s+\./g, '.');
+  return cleaned || null;
+}
+
 function toDisplayText(value: unknown): string | null {
   if (value == null) return null;
   if (typeof value === 'string') return value.trim() || null;
@@ -146,6 +166,9 @@ export const ScannerDiagnosticsPanel = Object.assign(function ScannerDiagnostics
   runDetail,
   language,
 }: ScannerDiagnosticsPanelProps) {
+  const universeNotes = runDetail.universeNotes
+    .map((note) => formatUniverseNote(note, language))
+    .filter((note): note is string => Boolean(note));
   const coverage = getRunCoverageSummary(runDetail);
   const provider = getRunProviderDiagnostics(runDetail);
   const aiDiagnostics = getAiDiagnostics(runDetail);
@@ -203,13 +226,13 @@ export const ScannerDiagnosticsPanel = Object.assign(function ScannerDiagnostics
             <p className="text-xs leading-relaxed text-white/64">{formatProviderDiagnostics(provider, language)}</p>
           </section>
         ) : null}
-        {runDetail.universeNotes.length ? (
+        {universeNotes.length ? (
           <section className="min-w-0 border-t border-white/8 py-2">
             <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
-              {language === 'en' ? 'Universe' : '范围'}
+              {language === 'en' ? 'Scope' : '范围'}
             </h5>
             <ul className="space-y-1">
-              {runDetail.universeNotes.map((note) => (
+              {universeNotes.map((note) => (
                 <li key={note} className="text-xs leading-relaxed text-white/64">
                   {note}
                 </li>

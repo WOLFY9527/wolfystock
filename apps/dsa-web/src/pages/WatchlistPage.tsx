@@ -464,8 +464,8 @@ function formatScoreDisclosureNotice(item: WatchlistItem, state: WatchlistScoreD
   }
   if (state === 'stale') {
     return language === 'en'
-      ? 'Using the most recent available data.'
-      : '已使用最近一次可用数据。';
+      ? 'Using the most recent available historical observation; this is not a live signal.'
+      : '已使用最近一次可用历史观察，不代表实时信号。';
   }
   if (state === 'cached') {
     return language === 'en'
@@ -479,8 +479,8 @@ function formatScoreDisclosureNotice(item: WatchlistItem, state: WatchlistScoreD
   }
   if (state === 'limitedConfidence') {
     return language === 'en'
-      ? 'Some watchlist data is temporarily unavailable; using the most recent available data.'
-      : '部分自选股数据暂不可用，已使用最近一次可用数据。';
+      ? 'Some watchlist data is temporarily unavailable; rows remain historical observations, not live signals.'
+      : '部分自选股数据暂不可用；当前行仅为历史观察，不代表实时信号。';
   }
   if (state === 'unknown') {
     return language === 'en'
@@ -972,12 +972,12 @@ function buildWatchlistConclusion(items: WatchlistItem[], language: 'zh' | 'en')
   const symbol = normalizeText(topItem.symbol).toUpperCase() || topItem.symbol || '--';
   const detail = limitedConfidenceCount > 0
     ? (language === 'en'
-      ? 'Current signal confidence is limited; use for observation only.'
-      : '当前信号置信度较低，仅供观察。')
+      ? 'Current data confidence is limited; rows remain historical observations, not live signals.'
+      : '当前数据置信度较低；列表行仅为历史观察，不代表实时信号。')
     : staleCount > 0
       ? (language === 'en'
-        ? 'Some watchlist data is temporarily unavailable; using the most recent available data.'
-        : '部分自选股数据暂不可用，已使用最近一次可用数据。')
+        ? 'Some watchlist data is temporarily unavailable; using the most recent historical observation, not a live signal.'
+        : '部分自选股数据暂不可用，已使用最近一次历史观察，不代表实时信号。')
       : unknownCount > 0
         ? (language === 'en'
           ? 'Data is updating and will refresh shortly.'

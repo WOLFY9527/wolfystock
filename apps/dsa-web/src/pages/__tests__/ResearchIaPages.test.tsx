@@ -574,13 +574,28 @@ describe('research IA pages', () => {
         confidenceLimits: ['provider_timeout'],
       },
       noAdviceDisclosure: '仅供研究语境参考。',
-      dataQuality: { status: 'degraded', reasonCodes: ['provider_timeout'] },
+      dataQuality: {
+        status: 'failed_closed',
+        reason: 'quote snapshot provider error',
+        reasonCodes: ['provider_timeout'],
+        freshness: 'stale',
+        asOf: '2026-06-15T09:25:00Z',
+        blockingModules: ['Decision Cockpit'],
+        operatorAction: 'Refresh quote snapshot pipeline before rerun.',
+        consumerSafeMessage: '关键市场证据暂不可用，驾驶舱保持关闭。',
+      },
     });
     getDailyIntelligenceMock.mockRejectedValue(new Error('briefing unavailable'));
 
     renderRoute(<MarketDecisionCockpitPage />, '/zh/market/decision-cockpit');
 
     const page = await screen.findByTestId('market-decision-cockpit-page');
+    const firstViewport = await within(page).findByTestId('decision-cockpit-first-viewport-summary');
+    const readinessSummary = within(firstViewport).getByTestId('decision-cockpit-readiness-summary');
+    expect(readinessSummary).toHaveTextContent('已安全关闭');
+    expect(readinessSummary).toHaveTextContent('数据管道维护中');
+    expect(firstViewport).toHaveTextContent('关键市场证据暂不可用，驾驶舱保持关闭。');
+    expect(firstViewport.textContent || '').not.toMatch(/quote snapshot|provider error|pipeline|operatorAction|failed_closed/i);
     const narrative = await within(page).findByTestId('market-cockpit-narrative');
     expect(narrative).toHaveTextContent('当前市场状态仍处于低置信观察区间');
     expect(narrative).toHaveTextContent('多数驱动项缺少可评分证据');

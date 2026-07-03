@@ -25,6 +25,11 @@ import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRout
 import { formatDateTime } from '../utils/format';
 import { sanitizeUserFacingDataIssue, sanitizeUserFacingDataIssues } from '../utils/userFacingDataIssues';
 import {
+  consumerSafeOperatorAction,
+  getConsumerDataStateEntry,
+  sanitizeConsumerDataStateText,
+} from '../utils/consumerDataStateVocabulary';
+import {
   buildMarketDecisionCockpitNarrative,
   getCockpitConsumerStatusLabel,
   getDriverEvidenceStateLabel,
@@ -302,7 +307,7 @@ function safeReadModelDisplayText(value: string | null | undefined, language: 'z
   }
   return FORBIDDEN_CONSUMER_WORDING.test(raw)
     ? (language === 'en' ? 'Review after evidence is refreshed.' : '等待证据刷新后再复核。')
-    : raw;
+    : sanitizeConsumerDataStateText(raw, 'partial');
 }
 
 function pushUniqueLabel(target: string[], label: string | null | undefined, limit = Number.POSITIVE_INFINITY) {
@@ -522,6 +527,16 @@ function CockpitFirstViewportSummary({
     const missingData: string[] = [];
     const readModel = data?.marketRegimeReadModel;
     const readModelPrimary = Boolean(readModel?.primaryContext && readModel.readinessLabel === 'product_ready');
+    const readinessState = data?.dataQuality?.status || readModel?.readinessLabel || readModel?.status || null;
+    const readinessEntry = getConsumerDataStateEntry(readinessState);
+    const readinessMessage = data?.dataQuality?.consumerSafeMessage
+      || readModel?.consumerSafeMessage
+      || data?.dataQuality?.reason
+      || null;
+    const readinessAction = data?.dataQuality?.operatorAction
+      || readModel?.operatorAction
+      || readModel?.nextOperatorAction
+      || null;
 
     if (readModelPrimary) {
       pushUniqueLabel(whatHappened, safeReadModelDisplayText(readModel?.summary, locale), 3);
@@ -536,6 +551,14 @@ function CockpitFirstViewportSummary({
         pushUniqueLabel(nextChecks, safeReadModelDisplayText(card.headline || card.title || '', locale), 3);
       });
     }
+    pushUniqueLabel(
+      whatMatters,
+      locale === 'en'
+        ? `${readinessEntry.label}: ${readinessEntry.explanation}`
+        : `${readinessEntry.label}：${readinessEntry.explanation}`,
+      3,
+    );
+    pushUniqueLabel(nextChecks, consumerSafeOperatorAction(readinessAction, readinessEntry.state), 3);
     pushSanitizedLabels(whatHappened, briefing?.whatChanged, locale, 3);
     pushSanitizedLabels(whatHappened, data?.cockpitSummary?.whatChanged, locale, 3);
     pushSanitizedLabels(whatHappened, narrativeSentences.slice(0, 1), locale, 3);
@@ -571,6 +594,10 @@ function CockpitFirstViewportSummary({
       });
     }
     pushSanitizedLabels(missingData, data?.dataQuality?.reasonCodes, locale, 3);
+    pushSanitizedLabels(missingData, data?.dataQuality?.blockingModules, locale, 3);
+    if (readinessMessage) {
+      pushUniqueLabel(missingData, sanitizeConsumerDataStateText(readinessMessage, readinessEntry.state), 3);
+    }
     pushSanitizedLabels(missingData, data?.researchQueuePreview?.degradedState?.reasonCodes, locale, 3);
     pushSanitizedLabels(missingData, data?.researchQueuePreview?.evidenceGaps, locale, 3);
     consumerMissingEvidenceLabels(data?.optionsStructureStatus?.missingEvidence, locale)
@@ -592,6 +619,12 @@ function CockpitFirstViewportSummary({
       nextChecks,
       missingData,
       readModelPrimary,
+      readiness: {
+        label: readinessEntry.label,
+        explanation: readinessEntry.explanation,
+        nextStep: consumerSafeOperatorAction(readinessAction, readinessEntry.state),
+        asOf: data?.dataQuality?.asOf || readModel?.asOf || data?.generatedAt || null,
+      },
       regime: regimeLabel(readModel?.regimeLabel || data?.marketRegimeDecision.regime || briefing?.marketRegimeSummary.regime, locale),
       confidence: confidenceLabel(data?.marketRegimeDecision.confidence || briefing?.marketRegimeSummary.confidence, locale),
       evidenceStrip: buildCockpitEvidenceStrip(data, locale),
@@ -641,6 +674,16 @@ function CockpitFirstViewportSummary({
               />
             </div>
             <p className="mt-3 text-base leading-7 text-[color:var(--wolfy-text-primary)]">{summary.headline}</p>
+            <div className="mt-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]" data-testid="decision-cockpit-readiness-summary">
+              <span className="font-medium text-[color:var(--wolfy-text-primary)]">{summary.readiness.label}</span>
+              <span>{`：${summary.readiness.explanation}`}</span>
+              <span>{` ${summary.readiness.nextStep}`}</span>
+              {summary.readiness.asOf ? (
+                <span className="text-[color:var(--wolfy-text-muted)]">
+                  {` ${locale === 'en' ? 'As of' : '截至'} ${formatDateTime(summary.readiness.asOf, { locale: locale === 'en' ? 'en-US' : 'zh-CN' })}`}
+                </span>
+              ) : null}
+            </div>
           </div>
           <div className="grid gap-3 xl:grid-cols-3">
             <BriefingBlock
