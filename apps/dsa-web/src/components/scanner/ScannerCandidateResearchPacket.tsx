@@ -93,7 +93,7 @@ function buildResearchSignalLabels({
           : 'Sector/ETF context pending',
         tone: contextAvailable ? 'neutral' : 'warning',
       },
-      { label: 'Research packet available' },
+      { label: 'Research brief available' },
       ...(observationOnly
         ? [
           { label: 'Observation only', tone: 'warning' as const },
@@ -150,7 +150,7 @@ export function ScannerCandidateResearchPacket({
 }) {
   if (!packet || !hasVisiblePacket(packet)) return null;
 
-  const title = language === 'en' ? 'Research packet' : '研究包';
+  const title = language === 'en' ? 'Research brief' : '研究资料';
   const whySurfaced = safePacketText(packet.whySurfaced);
   const primaryEvidence = safePacketList(packet.primaryEvidence);
   const limitingEvidence = safePacketList(packet.limitingEvidence);

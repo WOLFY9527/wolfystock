@@ -254,6 +254,8 @@ describe('Shell', () => {
     const hrefs = Array.from(screen.getAllByRole('link')).map((item) => item.getAttribute('href'));
 
     expect(link).toHaveAttribute('href', expectedHref);
+    expect(hrefs).not.toContain('/market/watchlist');
+    expect(hrefs).not.toContain('/zh/market/watchlist');
     expect(hrefs).not.toContain('/zh/lab');
     expect(hrefs).not.toContain('/lab');
   });

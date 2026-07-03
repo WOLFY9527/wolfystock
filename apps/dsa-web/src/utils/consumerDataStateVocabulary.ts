@@ -78,7 +78,7 @@ const CONSUMER_DATA_STATE_VOCABULARY: Record<ConsumerDataState, ConsumerDataStat
 };
 
 const RAW_CONSUMER_DATA_STATE_PATTERN =
-  /\b(provider|debug|trace|schema|raw|runtime|cache|pipeline|dry[-_\s]?run|operator|sourceauthority|reasoncode|contractversion|universe|historical[-_\s]?ohlcv|quote[-_\s]?snapshot)\b|sourceAuthority|reasonCode|contractVersion|historical_ohlcv|quote_snapshot/i;
+  /\b(provider|debug|trace|schema|raw|runtime|cache|pipeline|dry[-_\s]?run|operator|sourceauthority|reasoncode|contractversion|universe|historical[-_\s]?ohlcv|quote[-_\s]?snapshot|packet|handoff|evidence[-_\s]?famil(?:y|ies)|peer[-_\s]?group[-_\s]?metadata)\b|sourceAuthority|reasonCode|contractVersion|historical_ohlcv|quote_snapshot/i;
 
 function normalizeStateToken(value: string | null | undefined): string {
   return String(value || '')
@@ -137,7 +137,7 @@ export function consumerSafeOperatorAction(
   if (/schedule|next_refresh|wait|pending|refreshing|updating/.test(normalized)) {
     return '等待下一次数据刷新。';
   }
-  if (/universe|scanner|rerun|refresh|quote|ohlcv|history|cache/.test(normalized)) {
+  if (/universe|scanner|rerun|refresh|quote|ohlcv|history|cache|daily|handoff|packet/.test(normalized)) {
     return '等待数据刷新后再查看。';
   }
   if (isRawConsumerDataStateText(text)) return entry.nextStep;

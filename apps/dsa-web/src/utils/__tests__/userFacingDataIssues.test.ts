@@ -34,6 +34,9 @@ describe('userFacingDataIssues', () => {
     expect(sanitizeUserFacingDataIssue('price_fallback', 'zh')).toBe('价格数据暂不可完整确认');
     expect(sanitizeUserFacingDataIssue('error quote', 'zh')).toBe('实时缺失');
     expect(sanitizeUserFacingDataIssue('quote', 'en')).toBe('Realtime missing');
+    expect(sanitizeUserFacingDataIssue('No verified local peer group metadata for this symbol.', 'zh')).toBe('同业对比信息待确认');
+    expect(sanitizeUserFacingDataIssue('Load recent local daily OHLCV before opening this page.', 'zh')).toBe('历史行情待补');
+    expect(sanitizeUserFacingDataIssue('research packet handoff evidence families', 'zh')).toBe('支持证据仍待补');
   });
 
   it('preserves already human-readable consumer copy', () => {

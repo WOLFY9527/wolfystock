@@ -763,7 +763,7 @@ describe('StockStructureDecisionPage', () => {
     expect(panel).toHaveTextContent('新闻线索待补');
     expect(panel).toHaveTextContent('风险来源待补');
     expect(panel).toHaveTextContent('市场线索待补');
-    expect(panel).toHaveTextContent('研究包可用');
+    expect(panel).toHaveTextContent('研究资料可用');
     expect(panel).toHaveTextContent('下一证据缺口');
     expect(panel).toHaveTextContent('基本面待补');
     expect(panel).toHaveTextContent('新闻线索待补');
@@ -1496,7 +1496,7 @@ describe('StockStructureDecisionPage', () => {
     expect(panel).toHaveTextContent('催化线索可用');
     expect(panel).toHaveTextContent('风险来源可用');
     expect(panel).toHaveTextContent('市场线索可用');
-    expect(panel).toHaveTextContent('研究包可用');
+    expect(panel).toHaveTextContent('研究资料可用');
     expect(panel).not.toHaveTextContent('报价可用');
     expect(panel).not.toHaveTextContent('历史可用');
     expect(panel).not.toHaveTextContent('下一证据缺口');
@@ -1613,7 +1613,7 @@ describe('StockStructureDecisionPage', () => {
     const page = await screen.findByTestId('stock-structure-decision-page');
     const panel = await within(page).findByTestId('stock-research-packet-panel');
 
-    expect(panel).toHaveTextContent('研究包待更新');
+    expect(panel).toHaveTextContent('研究资料待更新');
     expect(page).toHaveTextContent('突破观察');
     expect(page).toHaveTextContent('主要结构线索');
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/sorry|apology|available|not_integrated|observationOnly/i);

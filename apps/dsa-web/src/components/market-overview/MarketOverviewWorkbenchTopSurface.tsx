@@ -1447,13 +1447,13 @@ const MarketOverviewCategoryControls: React.FC<{
       data-testid="market-overview-category-tabs"
       data-selector-position="static-safe"
       data-mobile-order="controls"
-      className="flex w-full min-w-0 flex-col gap-2 rounded-xl border border-white/8 bg-white/[0.02] p-2 backdrop-blur-md md:flex-row md:items-center md:justify-between"
+      className="flex w-full min-w-0 flex-col gap-2 overflow-hidden rounded-xl border border-white/8 bg-white/[0.02] p-2 backdrop-blur-md md:flex-row md:items-center md:justify-between"
     >
-      <div className="flex min-w-0 items-center gap-2">
+      <div className="flex w-full min-w-0 items-center gap-2 overflow-hidden md:w-auto">
         <span className="shrink-0 rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1 text-[10px] font-semibold text-white/42">
           筛选
         </span>
-        <div className="ui-scroll-x-quiet min-w-0">
+        <div className="ui-scroll-x-quiet min-w-0 max-w-full overflow-x-auto overscroll-x-contain">
           <div className="flex w-max gap-2">
             {categoryTabs.map((tab) => (
               <button

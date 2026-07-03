@@ -1399,7 +1399,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
         <div className="flex items-start gap-3">
           <span className="mt-1 h-3 w-1 rounded-full bg-cyan-400" />
           <div>
-            <h3 className="text-sm font-bold text-white">{language === 'en' ? 'Launch rail and history handoff' : '发射协议与历史接力'}</h3>
+            <h3 className="text-sm font-bold text-white">{language === 'en' ? 'Launch rail and history context' : '发射协议与历史接力'}</h3>
             <p className="mt-1 text-sm text-white/45">{language === 'en' ? 'The config page only launches runs. Full inspection still lives on the dedicated result route.' : '配置页只负责发起运行，完整分析仍在独立结果页完成。'}</p>
           </div>
         </div>

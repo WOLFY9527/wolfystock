@@ -449,7 +449,7 @@ function useSidebarNavView({
       ) : (
         <span className="inline-flex items-center gap-1.5">
           <ThemeIcon className="size-3.5" aria-hidden="true" />
-          <span>{colorMode === 'light' ? t('theme.terminal') : t('theme.spacex')}</span>
+          {!isGuest ? <span>{colorMode === 'light' ? t('theme.terminal') : t('theme.spacex')}</span> : null}
         </span>
       )}
     </button>

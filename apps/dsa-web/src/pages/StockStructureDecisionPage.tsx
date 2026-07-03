@@ -1024,8 +1024,8 @@ function marketEvidenceLabel(bucket: EvidenceStackBucket, language: 'zh' | 'en')
 function researchPacketEvidenceLabel(value: string | null | undefined, language: 'zh' | 'en'): string {
   const token = normalizeStockConsumerToken(value);
   return token === 'blocked' || token === 'unknown'
-    ? (language === 'en' ? 'Research packet pending' : '研究包待生成')
-    : (language === 'en' ? 'Research packet ready' : '研究包可用');
+    ? (language === 'en' ? 'Research brief pending' : '研究资料待生成')
+    : (language === 'en' ? 'Research brief ready' : '研究资料可用');
 }
 
 function missingDataLabel(value: string, language: 'zh' | 'en'): string {
@@ -1124,7 +1124,7 @@ function buildEvidenceStackRows(packet: SymbolResearchPacket, language: 'zh' | '
     },
     {
       key: 'research-packet',
-      label: language === 'en' ? 'Research packet' : '研究包',
+      label: language === 'en' ? 'Research brief' : '研究资料',
       value: researchPacketEvidenceLabel(packet.researchStatus, language),
       bucket: packetBucket,
     },
@@ -2517,9 +2517,9 @@ function StockResearchPacketPanel({
   if (failed) {
     return (
       <div className="border-t border-[color:var(--wolfy-divider)] p-3" data-testid="stock-research-packet-panel">
-        <RoughSectionCard eyebrow={isEnglish ? 'Research packet' : '研究包'} title={isEnglish ? 'Research packet pending' : '研究包待更新'}>
+        <RoughSectionCard eyebrow={isEnglish ? 'Research brief' : '研究资料'} title={isEnglish ? 'Research brief pending' : '研究资料待更新'}>
           <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-            {isEnglish ? 'Refresh the packet after the stock data endpoint updates.' : '待个股数据接口更新后再复核。'}
+            {isEnglish ? 'Refresh the research view after the stock data endpoint updates.' : '待个股数据接口更新后再复核。'}
           </p>
         </RoughSectionCard>
       </div>
@@ -2923,8 +2923,8 @@ function SymbolCompareEvidencePacketPanel({
     <div className="grid gap-3 border-t border-[color:var(--wolfy-divider)] p-3 md:grid-cols-2" data-testid="symbol-compare-evidence-packet">
       <RoughSectionCard
         className="md:col-span-2"
-        eyebrow={language === 'en' ? 'Evidence packet' : '证据包'}
-        title={language === 'en' ? 'Compare evidence packet' : '对比证据包'}
+        eyebrow={language === 'en' ? 'Supporting evidence' : '支持证据'}
+        title={language === 'en' ? 'Compare supporting evidence' : '对比支持证据'}
       >
         <div className="flex flex-wrap items-center gap-2">
           {displaySymbols.map((symbol) => (

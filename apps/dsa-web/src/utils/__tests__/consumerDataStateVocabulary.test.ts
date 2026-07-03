@@ -7,7 +7,7 @@ import {
   sanitizeConsumerDataStateText,
 } from '../consumerDataStateVocabulary';
 
-const RAW_PATTERN = /universe|historical ohlcv|quote snapshot|provider|debug|dry-run|pipeline|operatorAction|failed_closed/i;
+const RAW_PATTERN = /universe|historical ohlcv|quote snapshot|provider|debug|dry-run|pipeline|operatorAction|failed_closed|packet|handoff|evidence families/i;
 
 describe('consumerDataStateVocabulary', () => {
   it('defines the unified consumer data-state vocabulary with Chinese labels and next steps', () => {
@@ -36,8 +36,11 @@ describe('consumerDataStateVocabulary', () => {
     expect(getConsumerDataStateEntry('insufficient_coverage').label).toBe('部分可用');
     expect(getConsumerDataStateEntry('not_configured').label).toBe('证据待补');
     expect(isRawConsumerDataStateText('historical ohlcv provider debug pipeline')).toBe(true);
+    expect(isRawConsumerDataStateText('research packet handoff evidence families')).toBe(true);
     expect(sanitizeConsumerDataStateText('quote snapshot provider error', 'missing')).toBe('关键输入暂缺，当前不形成候选或强结论。');
+    expect(sanitizeConsumerDataStateText('No verified local peer group metadata', 'partial')).toBe('已返回部分真实数据，但仍有证据缺口，结论强度需要降低。');
     expect(consumerSafeOperatorAction('Refresh the scanner local universe and rerun readiness checks.', 'stale')).toBe('等待数据刷新后再查看。');
+    expect(consumerSafeOperatorAction('Load recent local daily OHLCV before handoff', 'missing')).toBe('等待数据刷新后再查看。');
     expect(consumerSafeOperatorAction('pipeline repair required', 'maintenance')).toBe('数据管道维护中。');
   });
 });
