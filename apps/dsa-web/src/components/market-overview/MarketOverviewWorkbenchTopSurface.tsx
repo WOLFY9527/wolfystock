@@ -591,8 +591,18 @@ export const MarketOverviewVisualEvidenceStrip: React.FC<{
           data-testid={`market-overview-visual-card-${card.id}`}
           className="min-w-0 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-3"
         >
-          <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-white/38">{card.eyebrow}</p>
-          <h3 className="mt-1 truncate text-sm font-semibold text-white/86">{card.title}</h3>
+          <p
+            data-testid={`market-overview-visual-card-eyebrow-${card.id}`}
+            className="break-words whitespace-normal text-[10px] font-semibold uppercase tracking-widest text-white/38 md:truncate"
+          >
+            {card.eyebrow}
+          </p>
+          <h3
+            data-testid={`market-overview-visual-card-title-${card.id}`}
+            className="mt-1 break-words whitespace-normal text-sm font-semibold text-white/86 md:truncate"
+          >
+            {card.title}
+          </h3>
           <p className="mt-1 text-[11px] leading-5 text-white/50">{card.summary}</p>
           {card.points.length > 0 ? (
             <div
@@ -607,7 +617,7 @@ export const MarketOverviewVisualEvidenceStrip: React.FC<{
                 >
                   <div className="min-w-0">
                     <div className="flex min-w-0 items-center justify-between gap-3">
-                      <p className="truncate text-[11px] font-semibold text-white/76">{point.label}</p>
+                      <p className="break-words whitespace-normal text-[11px] font-semibold text-white/76 md:truncate">{point.label}</p>
                       <p className="shrink-0 font-mono text-[11px] text-white/50">{point.valueText}</p>
                     </div>
                     <div className="mt-1 flex min-w-0 items-center gap-3">
@@ -1043,7 +1053,9 @@ const MarketOverviewConclusionLayer: React.FC<{
             data-testid="market-decision-semantics-advice-boundary"
             className="mt-2 text-2xl font-semibold leading-8 text-white/94 md:text-[34px]"
           >
-            <span data-testid="market-overview-top-verdict">{verdict.label}</span>
+            <span data-testid="market-overview-top-verdict" className="break-words whitespace-normal">
+              {verdict.label}
+            </span>
           </h2>
           <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">
             {verdict.headline}

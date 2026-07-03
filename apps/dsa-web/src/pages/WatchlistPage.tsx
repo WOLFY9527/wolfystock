@@ -2899,8 +2899,18 @@ const WatchlistPage: React.FC = () => {
                                 <TerminalChip variant="neutral">{formatMarket(item.market)}</TerminalChip>
                                 {isRecentlyAdded(item) ? <TerminalChip variant="info">{copy.recentlyAdded}</TerminalChip> : null}
                               </div>
-                              <p className="truncate text-sm text-white/78">{identityLabel}</p>
-                              <p className="truncate text-[11px] text-white/45">{originLabel}</p>
+                              <p
+                                data-testid={`watchlist-row-identity-${item.symbol}`}
+                                className="break-words whitespace-normal text-sm text-white/78 md:truncate"
+                              >
+                                {identityLabel}
+                              </p>
+                              <p
+                                data-testid={`watchlist-row-origin-${item.symbol}`}
+                                className="break-words whitespace-normal text-[11px] text-white/45 md:truncate"
+                              >
+                                {originLabel}
+                              </p>
                             </button>
                           </div>
 
@@ -2958,7 +2968,12 @@ const WatchlistPage: React.FC = () => {
                                 </TerminalChip>
                               ) : null}
                             </div>
-                            <p className="truncate text-xs font-mono text-white/55">{rowStateLine || `${copy.score} ${formatScore(score)}`}</p>
+                            <p
+                              data-testid={`watchlist-row-state-${item.symbol}`}
+                              className="break-words whitespace-normal text-xs font-mono text-white/55 md:truncate"
+                            >
+                              {rowStateLine || `${copy.score} ${formatScore(score)}`}
+                            </p>
                             {rowDecisionContext ? (
                               <div
                                 data-testid={`watchlist-row-decision-context-${item.symbol}`}
@@ -2990,7 +3005,10 @@ const WatchlistPage: React.FC = () => {
                             <p className="text-sm leading-6 text-white/72">{rowObservation}</p>
                             <p className="text-xs text-white/58">{language === 'en' ? 'Next' : '下一步'} {rowNextAction}</p>
                             {rowNotes ? (
-                              <p className="text-xs leading-5 text-white/52" data-testid={`watchlist-row-note-${item.symbol}`}>
+                              <p
+                                className="break-words text-xs leading-5 text-white/52"
+                                data-testid={`watchlist-row-note-${item.symbol}`}
+                              >
                                 {rowNotes}
                               </p>
                             ) : scannerFailure && scannerStatusLabel === '扫描失败' ? (

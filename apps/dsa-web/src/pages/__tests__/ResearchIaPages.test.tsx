@@ -611,6 +611,90 @@ describe('research IA pages', () => {
     expect(findConsumerRawLeakage(narrative.textContent || '')).toEqual([]);
   });
 
+  it('keeps the cockpit first viewport mobile-safe at 390px with wrapped readiness and evidence copy', async () => {
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
+    window.dispatchEvent(new Event('resize'));
+    getDecisionCockpitMock.mockResolvedValue({
+      schemaVersion: 'market_decision_cockpit.v1',
+      generatedAt: '2026-06-15T09:30:00Z',
+      marketRegimeDecision: {
+        regime: 'neutral',
+        confidence: 'medium',
+        driverScores: {
+          breadthParticipation: { score: 52, evidenceState: 'partial' },
+        },
+        explanation: {
+          whyThisRegime: ['横向等待更多确认'],
+        },
+        invalidationConditions: ['广度明显收窄'],
+        researchPriorities: {
+          watchToday: ['先核对市场广度是否继续改善'],
+          needsMoreEvidence: ['期权链观察仍待补齐'],
+          investigateNext: ['确认跨资产压力是否同步缓和'],
+        },
+      },
+      researchQueuePreview: {
+        topCandidates: [],
+        queueQuality: 'thin',
+        evidenceGaps: ['research_candidates_unavailable'],
+        previewOnly: true,
+      },
+      optionsStructureStatus: {
+        gammaEvidenceStatus: 'unavailable',
+        observationOnly: true,
+        decisionGrade: false,
+        missingEvidence: [{ code: 'missing_contracts' }],
+        blockedReasonCodes: ['option_chain_unavailable'],
+      },
+      cockpitSummary: {
+        whatChanged: ['市场仍在等待更完整确认。'],
+        whyItMatters: ['当前更适合先看结构再继续深入。'],
+        whatToWatch: ['确认广度、利率与美元是否同步改善。'],
+        confidenceLimits: ['期权与更深层市场证据暂未补齐。'],
+      },
+      noAdviceDisclosure: '仅供研究语境参考。',
+      dataQuality: {
+        status: 'degraded',
+        reasonCodes: ['delayed'],
+        blockingModules: [],
+        consumerSafeMessage: '当前市场证据部分待补，先按观察路径阅读。',
+      },
+    });
+    getDailyIntelligenceMock.mockResolvedValue({
+      schemaVersion: 'daily_intelligence_briefing_v1',
+      generatedAt: '2026-06-15T09:30:00Z',
+      briefingDate: '2026-06-15',
+      sessionLabel: 'pre-market',
+      marketRegimeSummary: {
+        regime: 'neutral',
+        confidence: 'medium',
+        summary: '市场维持中性观察。',
+        supportingObservations: ['广度与流动性仍需继续确认。'],
+        invalidationObservations: [],
+      },
+      whatChanged: ['市场暂未形成更明确主线。'],
+      sectionLinks: [],
+      topResearchPriorities: [],
+      scannerHighlights: [],
+      watchlistHighlights: [],
+      portfolioStructureHighlights: [],
+      scenarioRisks: [],
+      evidenceGaps: [],
+      degradedInputs: [],
+      firstRunChecklist: [],
+      starterResearchWorkflow: [],
+    });
+
+    renderRoute(<MarketDecisionCockpitPage />, '/zh/market/decision-cockpit');
+
+    const firstViewport = await screen.findByTestId('decision-cockpit-first-viewport-summary');
+    expect(screen.getByTestId('decision-cockpit-readiness-summary')).toHaveClass('break-words');
+    expect(screen.getByTestId('decision-cockpit-key-evidence-strip')).toHaveClass('grid-cols-1');
+    expect(screen.getByTestId('decision-cockpit-missing-summary')).toHaveClass('break-words');
+    expect(screen.getByTestId('decision-cockpit-summary-headline')).toHaveClass('break-words');
+    expect(firstViewport).toHaveTextContent('研究观察，不构成投资建议。');
+  });
+
   it('keeps partial cockpit evidence narrative visible instead of placeholder-only side rail copy', async () => {
     getDecisionCockpitMock.mockResolvedValue({
       schemaVersion: 'market_decision_cockpit.v1',

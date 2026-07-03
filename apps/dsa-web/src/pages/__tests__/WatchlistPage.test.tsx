@@ -2243,6 +2243,20 @@ describe('WatchlistPage', () => {
     expect(screen.getByTestId('watchlist-primary-filters').className).not.toContain('overflow-hidden');
   });
 
+  it('keeps watchlist mobile rows wrap-safe instead of truncating stale research context at 390px', async () => {
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
+    window.dispatchEvent(new Event('resize'));
+
+    renderWatchlist();
+
+    const row = await screen.findByTestId('watchlist-row-NVDA');
+    expect(screen.getByTestId('watchlist-board-shell')).toHaveClass('grid', 'min-w-0');
+    expect(screen.getByTestId('watchlist-row-identity-NVDA')).toHaveClass('break-words', 'whitespace-normal');
+    expect(screen.getByTestId('watchlist-row-origin-NVDA')).toHaveClass('break-words', 'whitespace-normal');
+    expect(screen.getByTestId('watchlist-row-state-NVDA')).toHaveClass('break-words', 'whitespace-normal');
+    expect(within(row).getByTestId('watchlist-row-note-NVDA')).toHaveClass('break-words');
+  });
+
   it('starts analysis for a candidate and navigates to the workspace', async () => {
     renderWatchlist();
     const row = await screen.findByTestId('watchlist-row-NVDA');

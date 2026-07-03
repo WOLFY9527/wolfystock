@@ -203,6 +203,25 @@ describe('GuestHomePage', () => {
     expect(firstScreen).not.toHaveTextContent(/^\s*$/);
   });
 
+  it('keeps guest mobile entry actions wrap-safe instead of clipping the first screen at 375px', async () => {
+    window.innerWidth = 375;
+    window.dispatchEvent(new Event('resize'));
+
+    renderGuest();
+
+    const firstScreen = screen.getByTestId('guest-home-clean-search');
+    const firstScreenStack = screen.getByTestId('guest-home-first-screen-stack');
+    const commandSurface = screen.getByTestId('guest-home-command-surface');
+    const marketPreviewStrip = await screen.findByTestId('guest-home-market-preview-strip');
+    const registrationLink = screen.getByTestId('guest-home-registration-link');
+
+    expect(firstScreen).toHaveClass('overflow-x-hidden');
+    expect(firstScreenStack).toHaveClass('overflow-x-hidden');
+    expect(commandSurface).toHaveClass('overflow-x-hidden');
+    expect(marketPreviewStrip).toHaveClass('min-w-0');
+    expect(registrationLink).toHaveClass('w-full', 'sm:w-auto');
+  });
+
   it('shows an honest unavailable state when the market briefing cannot be loaded', async () => {
     languageState.value = 'en';
     window.history.replaceState(window.history.state, '', '/en');
