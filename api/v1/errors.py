@@ -51,6 +51,8 @@ def build_safe_error_payload(
     }
     if status_code is not None:
         payload["status"] = int(status_code)
+    payload["reason"] = error_code
+    payload["consumerSafeMessage"] = payload["message"]
     if retryable is not None:
         payload["retryable"] = bool(retryable)
     if detail is not None:
