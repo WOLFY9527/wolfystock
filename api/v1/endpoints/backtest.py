@@ -10,6 +10,7 @@ from typing import Any, Callable, Optional, Type, TypeVar
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 
 from api.deps import CurrentUser, get_current_user, get_current_user_id, get_database_manager
+from api.v1.errors import safe_api_error
 from api.v1.schemas.backtest import (
     BacktestRunRequest,
     BacktestRunResponse,
@@ -234,24 +235,29 @@ def _run_rule_backtest_parameter_sweep_with_supplied_bars(
 def _validation_error(exc: ValueError) -> HTTPException:
     if isinstance(exc, RuleBacktestExecutionModelUnsupportedError):
         return HTTPException(status_code=400, detail=exc.to_error_detail())
-    return HTTPException(
+    return safe_api_error(
         status_code=400,
-        detail={"error": "validation_error", "message": str(exc)},
+        error="validation_error",
+        message=str(exc) or "Backtest request could not be processed.",
+        fallback_message="Backtest request could not be processed.",
     )
 
 
 def _not_found_error(message: str) -> HTTPException:
-    return HTTPException(
+    return safe_api_error(
         status_code=404,
-        detail={"error": "not_found", "message": message},
+        error="not_found",
+        message=message,
     )
 
 
 def _internal_error(action_label: str, exc: Exception) -> HTTPException:
     logger.error("%s: %s", action_label, exc, exc_info=True)
-    return HTTPException(
+    return safe_api_error(
         status_code=500,
-        detail={"error": "internal_error", "message": f"{action_label}: {str(exc)}"},
+        error="internal_error",
+        message="Backtest data is temporarily unavailable. Please retry later.",
+        retryable=True,
     )
 
 
