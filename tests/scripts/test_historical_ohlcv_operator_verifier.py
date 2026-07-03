@@ -180,6 +180,16 @@ def test_dry_run_does_not_mutate_cache_or_call_provider() -> None:
     assert cache.save_calls == []
     assert fetcher.calls == []
     assert payload["preflight"]["markets"]["us"]["symbols"][0]["seedResult"] == "dry_run"
+    assert payload["operatorRunbook"]["checkReadinessCommand"].startswith(
+        "python scripts/historical_ohlcv_operator_verifier.py --mode inspect"
+    )
+    assert "--mode dry-run" in payload["operatorRunbook"]["dryRunRefreshPlanningCommand"]
+    assert payload["operatorRunbook"]["executeRefreshCommand"].endswith("--execute")
+    assert payload["operatorRunbook"]["noFakeDataVerification"] == [
+        "Confirm dryRun is true before any planning output is treated as non-mutating.",
+        "Confirm networkCallsEnabled and mutationEnabled are false for inspect, dry-run, verify-cache, and verify-chain.",
+        "Confirm seeded rows report cache_hit with cachedBars greater than zero before marking a symbol ready.",
+    ]
 
 
 def test_execute_mode_refuses_without_explicit_flag_and_required_gates() -> None:
@@ -281,9 +291,14 @@ def test_verify_chain_reads_cache_backed_rows_for_scanner_and_backtest_readiness
     assert scanner["seededSymbols"] == ["SPY", "QQQ", "AAPL", "MSFT"]
     assert scanner["availableDataClasses"] == ["universe", "historical_ohlcv"]
     assert scanner["status"] == "insufficient_coverage"
+    assert scanner["reason"] == "scanner_universe_insufficient_coverage"
+    assert scanner["blockingModules"] == ["Scanner", "Research Radar", "Backtest", "Market Overview"]
+    assert scanner["operatorAction"] == scanner["operatorNextAction"]
     assert "quote_snapshot" in scanner["missingDataFamilies"]
     assert backtest["status"] == "available"
     assert backtest["executable"] is True
+    assert backtest["reason"] == "ready"
+    assert backtest["blockingModules"] == []
     assert backtest["adjustedDataRequirement"] == {"required": True, "state": "available"}
     assert backtest["symbolBarsAvailable"] == 5
     assert backtest["benchmarkReadiness"]["availableBarCount"] == 5

@@ -164,6 +164,10 @@ def test_ok_source_evidence_returns_product_ready_read_model(tmp_path: Path) -> 
     assert model["sourceEvidenceContractVersion"] == "market_regime_evidence_pack_v1"
     assert model["status"] == "ok"
     assert model["readiness"]["label"] == "product_ready"
+    assert model["readiness"]["reason"] == "ready"
+    assert model["readiness"]["blockingModules"] == []
+    assert model["readiness"]["operatorAction"] == model["readiness"]["nextOperatorAction"]
+    assert model["readiness"]["consumerSafeMessage"] == "市场状态证据已具备本地只读就绪依据。"
     assert model["consumerSafe"] is True
     assert model["noAdvice"] is True
     assert model["networkCallsEnabled"] is False
@@ -198,6 +202,9 @@ def test_ok_source_evidence_returns_product_ready_read_model(tmp_path: Path) -> 
     assert projection["sourceContractVersion"] == "market_regime_evidence_pack_v1"
     assert projection["status"] == "ready"
     assert projection["readiness"] == "ready"
+    assert projection["reason"] == "ready"
+    assert projection["blockingModules"] == []
+    assert projection["consumerSafeMessage"] == "市场状态证据已具备本地只读就绪依据。"
     assert projection["label"] in {"risk_on", "risk_on_confirming", "risk_off", "mixed"}
     assert 0.0 < projection["confidence"] <= 1.0
     assert projection["consumerSafe"] is True
@@ -244,6 +251,17 @@ def test_missing_adjusted_prices_preserves_missing_family_and_blocks_readiness(t
 
     assert model["status"] == "partial"
     assert model["readiness"]["label"] == "blocked"
+    assert model["readiness"]["reason"] == "market_regime_read_model_blocked"
+    assert model["readiness"]["blockingModules"] == [
+        "Market Regime",
+        "Decision Cockpit",
+        "Scanner",
+        "Market Overview",
+        "Watchlist",
+        "Research Radar",
+    ]
+    assert model["readiness"]["operatorAction"] == model["readiness"]["nextOperatorAction"]
+    assert model["readiness"]["consumerSafeMessage"] == "市场状态证据缺失或不可用，暂不形成结论。"
     assert "adjusted_prices" in model["missingDataFamilies"]
     assert model["dataQuality"]["adjustedCoverageState"] == "missing"
     assert model["regime"]["label"] == "insufficient_data"
@@ -274,6 +292,17 @@ def test_missing_local_ohlcv_projects_blocked_regime_evidence_without_claim(tmp_
     assert model["status"] == "partial"
     assert projection["status"] == "blocked"
     assert projection["readiness"] == "blocked"
+    assert projection["reason"] == "market_regime_read_model_blocked"
+    assert projection["blockingModules"] == [
+        "Market Regime",
+        "Decision Cockpit",
+        "Scanner",
+        "Market Overview",
+        "Watchlist",
+        "Research Radar",
+    ]
+    assert projection["operatorAction"]
+    assert projection["consumerSafeMessage"] == "市场状态证据缺失或不可用，暂不形成结论。"
     assert projection["label"] == "insufficient_data"
     assert "historical_ohlcv_missing_or_insufficient" in projection["dataQuality"]["reasonCodes"]
     assert projection["evidencePreview"]["dataCoverage"]["usedSymbolCount"] == len(SYMBOLS) - 1
@@ -312,6 +341,14 @@ def test_malformed_local_ohlcv_projects_failed_closed_without_computed_claim(tmp
     assert model["status"] == "failed_closed"
     assert projection["status"] == "failed_closed"
     assert projection["readiness"] == "failed_closed"
+    assert projection["reason"] == "market_regime_read_model_failed_closed"
+    assert projection["blockingModules"] == [
+        "Market Regime",
+        "Decision Cockpit",
+        "Market Overview",
+        "Research Radar",
+    ]
+    assert projection["consumerSafeMessage"] == "市场状态证据缺失或不可用，暂不形成结论。"
     assert projection["label"] == "insufficient_data"
     assert projection["confidence"] == 0.0
     assert "malformed_ohlcv" in projection["dataQuality"]["reasonCodes"]
@@ -368,6 +405,10 @@ def test_invalid_source_input_fails_closed_without_raw_exception_leakage(tmp_pat
 
     assert model["status"] == "failed_closed"
     assert model["readiness"]["label"] == "failed_closed"
+    assert model["readiness"]["reason"] == "market_regime_read_model_failed_closed"
+    assert model["readiness"]["operatorAction"] == model["readiness"]["nextOperatorAction"]
+    assert model["operatorAction"] == model["nextOperatorAction"]
+    assert model["consumerSafeMessage"] == "市场状态证据缺失或不可用，暂不形成结论。"
     assert model["regime"]["label"] == "insufficient_data"
     serialized = json.dumps(model, ensure_ascii=False).lower()
     for forbidden in ("traceback", "exception", "filenotfounderror", "rawpayload", str(missing_dir).lower()):

@@ -118,6 +118,9 @@ def test_activation_verifier_fails_closed_when_dependencies_and_config_are_absen
     scanner = _row(payload, "scanner.universe")
     assert "Scanner" in scanner["blockedProductSurfaces"]
     assert scanner["adminNextAction"]
+    assert scanner["operatorAction"] == scanner["adminNextAction"]
+    assert scanner["reason"] == "scanner_universe_missing"
+    assert scanner["consumerSafeMessage"] == "扫描标的池缺失，暂时无法生成候选。"
     assert scanner["minimumValidationCheck"]
 
     text = _json_text(payload)
@@ -162,6 +165,10 @@ def test_activation_verifier_classifies_permission_sample_and_stale_states(tmp_p
     assert _row(payload, "yfinance.market_data")["status"] == "available"
     assert _row(payload, "fmp.fundamentals_earnings")["status"] == "insufficient_permissions"
     assert _row(payload, "historical_ohlcv.runtime")["status"] == "stale"
+    historical = _row(payload, "historical_ohlcv.runtime")
+    assert historical["reason"] == "historical_ohlcv_stale"
+    assert historical["operatorAction"] == historical["adminNextAction"]
+    assert historical["consumerSafeMessage"] == "历史行情缓存已过期，需要刷新后再使用相关研究流程。"
     assert _row(payload, "earnings_fundamentals.readiness")["status"] == "sample_only"
     assert _row(payload, "scanner.universe")["status"] == "stale"
 
