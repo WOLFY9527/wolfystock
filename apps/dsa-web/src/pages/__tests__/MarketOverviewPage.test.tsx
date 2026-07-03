@@ -3135,7 +3135,9 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-top-stack')).toContainElement(screen.getByTestId('market-overview-category-tabs'));
     expect(screen.getByTestId('market-overview-top-stack').firstElementChild).toContainElement(screen.getByTestId('market-decision-semantics-strip'));
     expect(screen.getByTestId('market-overview-category-tabs')).toHaveAttribute('data-selector-position', 'static-safe');
-    expect(screen.getByTestId('market-overview-category-tabs').querySelector('.ui-scroll-x-quiet')).not.toBeNull();
+    const categoryScroller = screen.getByTestId('market-overview-category-tabs').querySelector('.ui-scroll-x-quiet');
+    expect(categoryScroller).not.toBeNull();
+    expect(categoryScroller).toHaveClass('max-w-full', 'overflow-x-auto', 'overscroll-x-contain');
     expect(shell).toContainElement(screen.getByTestId('market-overview-category-tabs'));
     expect(shell).toContainElement(screen.getByTestId('market-overview-workbench'));
     expect(shell).toContainElement(screen.getByTestId('market-overview-hero-ribbon'));
@@ -3295,6 +3297,9 @@ describe('MarketOverviewPage', () => {
 
     expect(await screen.findByTestId('market-overview-pulse-header')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-category-tabs')).toBeInTheDocument();
+    const categoryScroller = screen.getByTestId('market-overview-category-tabs').querySelector('.ui-scroll-x-quiet');
+    expect(categoryScroller).not.toBeNull();
+    expect(categoryScroller).toHaveClass('max-w-full', 'overflow-x-auto', 'overscroll-x-contain');
     expect(screen.getByTestId('market-overview-market-monitor')).toBeInTheDocument();
     expect(screen.getByTestId('market-decision-semantics-strip')).toBeInTheDocument();
 
@@ -3333,6 +3338,9 @@ describe('MarketOverviewPage', () => {
       screen.getByTestId('market-decision-semantics-strip'),
     );
     expect(screen.getByTestId('market-overview-top-stack')).toContainElement(screen.getByTestId('market-overview-category-tabs'));
+    const categoryScroller = screen.getByTestId('market-overview-category-tabs').querySelector('.ui-scroll-x-quiet');
+    expect(categoryScroller).not.toBeNull();
+    expect(categoryScroller).toHaveClass('max-w-full', 'overflow-x-auto', 'overscroll-x-contain');
     expect(screen.getByTestId('market-overview-top-stack')).toContainElement(screen.getByTestId('market-overview-hero-ribbon'));
   });
 

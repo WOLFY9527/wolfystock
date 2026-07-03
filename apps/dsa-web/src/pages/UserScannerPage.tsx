@@ -400,7 +400,7 @@ const SCANNER_DATA_READINESS_BLOCKER_LABELS: Record<string, { zh: string; en: st
   stale_universe: { zh: '标的池待更新', en: 'Scope stale' },
   empty_universe: { zh: '标的池为空', en: 'Scope empty' },
   insufficient_coverage: { zh: '覆盖不足', en: 'Coverage insufficient' },
-  missing_quote_snapshot: { zh: '报价快照待补', en: 'Quote snapshot pending' },
+  missing_quote_snapshot: { zh: '报价信息待补', en: 'Quote input pending' },
   missing_history: { zh: '历史数据待补', en: 'History pending' },
   stale_history: { zh: '历史数据待更新', en: 'History refresh pending' },
   profile_filters_rejected_all: { zh: '条件过窄', en: 'Filters too narrow' },
@@ -412,7 +412,7 @@ const SCANNER_DATA_READINESS_BLOCKER_LABELS: Record<string, { zh: string; en: st
 const SCANNER_DATA_CLASS_LABELS: Record<string, { zh: string; en: string }> = {
   universe: { zh: '标的范围', en: 'Scope' },
   historical_ohlcv: { zh: '历史行情', en: 'Price history' },
-  quote_snapshot: { zh: '报价快照', en: 'Quote freshness' },
+  quote_snapshot: { zh: '报价信息', en: 'Quote readiness' },
 };
 
 const SCANNER_DATA_READINESS_COVERAGE_LABELS: Record<string, { zh: string; en: string }> = {
@@ -1478,10 +1478,10 @@ function buildScannerSafeEmptyReason({
   }
 
   return {
-    label: language === 'en' ? 'Evidence insufficient for handoff' : '证据不足，未形成交接候选',
+    label: language === 'en' ? 'Evidence insufficient for review' : '证据不足，未形成复核候选',
     body: language === 'en'
-      ? `${countSummary} No official handoff candidate. Use history, retry, or adjust settings.`
-      : `${countSummary} 未形成官方交接候选，可查看历史、重试或调整设置。`,
+      ? `${countSummary} No review-ready candidate. Use history, retry, or adjust settings.`
+      : `${countSummary} 未形成可复核候选，可查看历史、重试或调整设置。`,
   };
 }
 
@@ -3818,8 +3818,8 @@ const UserScannerPage: React.FC = () => {
       : '先运行当前配置，无候选时可使用手动研究路径。')
     : scannerConclusion.state === 'insufficient'
       ? (language === 'en'
-        ? 'Evidence insufficient for handoff. Use manual symbol research until coverage improves.'
-        : '证据不足，暂不适合交接。先手动研究单个代码。')
+        ? 'Evidence insufficient for review. Use manual symbol research until coverage improves.'
+        : '证据不足，暂不适合复核。先手动研究单个代码。')
       : scannerConclusion.state === 'no-candidate'
         ? (language === 'en'
           ? 'No official candidate formed. Use manual symbol research as next step.'

@@ -238,7 +238,7 @@ function candidateNextAction(item: ResearchRadarItem, locale: 'zh' | 'en') {
   return safeResearchQueueList(
     item.whatToVerify,
     locale,
-    locale === 'en' ? 'Open the structure panel and verify the evidence packet.' : '打开结构面板，复核该标的的证据包。',
+    locale === 'en' ? 'Open the structure panel and review the supporting evidence.' : '打开结构面板，复核该标的的支持证据。',
   )[0];
 }
 

@@ -160,12 +160,13 @@ vi.mock('../pages/LiquidityMonitorPage', () => ({
 
 vi.mock('../pages/StockStructureDecisionPage', async () => {
   const { useLocation, useParams } = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  function StockStructureDecisionPageMock() {
+    const { stockCode } = useParams<{ stockCode: string }>();
+    const location = useLocation();
+    return <div>{`stock-structure-decision-page:${stockCode}:${location.pathname}`}</div>;
+  }
   return {
-    default: () => {
-      const { stockCode } = useParams<{ stockCode: string }>();
-      const location = useLocation();
-      return <div>{`stock-structure-decision-page:${stockCode}:${location.pathname}`}</div>;
-    },
+    default: StockStructureDecisionPageMock,
   };
 });
 
@@ -1622,6 +1623,8 @@ describe('AppContent route flows', () => {
     ['/zh/market-overview', 'market-overview-page'],
     ['/market/decision-cockpit', 'market-decision-cockpit-page'],
     ['/zh/market/decision-cockpit', 'market-decision-cockpit-page'],
+    ['/portfolio', 'portfolio-page'],
+    ['/zh/portfolio', 'portfolio-page'],
     ['/scanner', 'scanner-surface-page'],
     ['/zh/scanner', 'scanner-surface-page'],
     ['/watchlist', 'watchlist-page'],
@@ -1640,13 +1643,18 @@ describe('AppContent route flows', () => {
     expect(screen.queryByText(/stock-structure-decision-page:AAPL/i)).not.toBeInTheDocument();
     expect(screen.queryByText('stock-structure-entry-page')).not.toBeInTheDocument();
     expect(screen.queryByText('auth-guard:Scanner')).not.toBeInTheDocument();
+    if (path.includes('portfolio')) {
+      expect(screen.queryByText('scanner-surface-page')).not.toBeInTheDocument();
+    }
   });
 
   it.each([
     ['/research', '/research/radar'],
     ['/zh/research', '/zh/research/radar'],
+    ['/en/research', '/en/research/radar'],
     ['/research-radar', '/research/radar'],
     ['/zh/research-radar', '/zh/research/radar'],
+    ['/en/research-radar', '/en/research/radar'],
   ])('redirects research route alias %s to the Research Radar page', async (path, expectedPath) => {
     mockSignedInConsumer();
 
@@ -1657,6 +1665,15 @@ describe('AppContent route flows', () => {
     expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
   });
 
+  it('keeps guest /portfolio on the portfolio gate without falling through to Scanner', async () => {
+    renderAtWithLocationProbe('/portfolio');
+
+    expect(await screen.findByText('auth-guard:Portfolio')).toBeInTheDocument();
+    expect(screen.getByTestId('location-path')).toHaveTextContent('/portfolio');
+    expect(screen.queryByText('scanner-surface-page')).not.toBeInTheDocument();
+    expect(screen.queryByText('auth-guard:Scanner')).not.toBeInTheDocument();
+  });
+
   it('keeps unknown routes on the Not Found page', async () => {
     mockSignedInConsumer();
 
@@ -1665,6 +1682,20 @@ describe('AppContent route flows', () => {
     expect(await screen.findByText('not-found-page')).toBeInTheDocument();
     expect(screen.queryByText('research-radar-page')).not.toBeInTheDocument();
     expect(screen.queryByText('market-overview-page')).not.toBeInTheDocument();
+  });
+
+  it('renders guest unknown routes through a safe 404 shell without admin navigation', async () => {
+    languageState.value = 'zh';
+
+    renderAt('/zh/research-missing');
+
+    expect(await screen.findByText('not-found-page')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '账户中心' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '设置' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '退出' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Workspace Shell')).not.toBeInTheDocument();
+    expect(screen.queryByText('system-settings-page')).not.toBeInTheDocument();
+    expect(screen.queryByText('admin-users-page')).not.toBeInTheDocument();
   });
 
   it('renders the localized market rotation radar route', async () => {

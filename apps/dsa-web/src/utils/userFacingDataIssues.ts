@@ -100,7 +100,7 @@ function looksLikeInternalIssue(value?: string | null): boolean {
   const normalized = normalizeIssue(raw);
   return /[.:=]/.test(raw)
     || /\b[a-z0-9]+_[a-z0-9_]+\b/.test(lowered)
-    || /\b(?:provider|authority|freshness|schema|debug|trace|diagnostic|runtime|cache|raw|reason|score|observationonly|decisiongrade|contract|gamma|gex|methodology|redistribution|fallback|proxy|unavailable|insufficient|missing|quote|realtime|snapshot|data|failed|error|news|fundamental|fundamentals|fx|price)\b/.test(lowered)
+    || /\b(?:provider|authority|freshness|schema|debug|trace|diagnostic|runtime|cache|raw|reason|score|observationonly|decisiongrade|contract|gamma|gex|methodology|redistribution|fallback|proxy|unavailable|insufficient|missing|quote|realtime|snapshot|data|failed|error|news|fundamental|fundamentals|fx|price|packet|handoff|evidence|families|family|ohlcv|universe|peer)\b/.test(lowered)
     || /(?:source_?refs?|reason_?codes?)/.test(normalized);
 }
 
@@ -142,6 +142,15 @@ function mapInternalReasonToUserMessage(
   }
   if (normalized.includes('price_fallback') || (normalized.includes('price') && normalized.includes('fallback'))) {
     return isEnglish ? 'Price data incomplete' : '价格数据暂不可完整确认';
+  }
+  if (normalized.includes('peer_group') || normalized.includes('peer_metadata') || normalized.includes('peer')) {
+    return isEnglish ? 'Peer comparison unconfirmed' : '同业对比信息待确认';
+  }
+  if (normalized.includes('ohlcv') || normalized.includes('daily') || normalized.includes('history')) {
+    return isEnglish ? 'Price history pending' : '历史行情待补';
+  }
+  if (normalized.includes('packet') || normalized.includes('handoff') || normalized.includes('evidence_family') || normalized.includes('evidence_families')) {
+    return isEnglish ? 'Supporting evidence still incomplete' : '支持证据仍待补';
   }
   if (normalized.includes('quote') || normalized.includes('realtime') || normalized.includes('snapshot')) {
     return isEnglish ? 'Realtime missing' : '实时缺失';

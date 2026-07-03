@@ -1782,7 +1782,7 @@ describe('UserScannerPage', () => {
 
     const band = await screen.findByTestId('scanner-conclusion-band');
     expect(band).toHaveTextContent('数据待补');
-    expect(band).toHaveTextContent('报价快照待补');
+    expect(band).toHaveTextContent('报价信息待补');
     expect(band).toHaveTextContent('补充报价快照后重新运行。');
     expect(container).not.toHaveTextContent(/missing_quote_snapshot|0ms|0\s*\/\s*0\s*\/\s*0/);
     expect(textContentWithoutObservationBoundary(container)).not.toMatch(/buy|sell|hold|target price|stop-loss|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);

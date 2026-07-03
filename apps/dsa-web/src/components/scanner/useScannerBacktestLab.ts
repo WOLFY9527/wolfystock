@@ -198,7 +198,7 @@ export function useScannerBacktestLab({
   );
 
   const backtestUnavailableLabel = language === 'en'
-    ? 'Backtest handoff requires a candidate symbol.'
+    ? 'Backtest review requires a candidate symbol.'
     : '候选标的代码缺失时无法发起回测。';
 
   return {

@@ -117,7 +117,7 @@ function localizeSourceAuthority(value: string | null | undefined, language: 'zh
   const normalized = normalizeKey(value);
   const labels: Record<string, { zh: string; en: string }> = {
     scoregradeallowed: { zh: '研究证据可用', en: 'Research evidence usable' },
-    observationonly: { zh: '观察级线索', en: 'Observation-only signals' },
+    observationonly: { zh: '仅研究观察线索', en: 'Research-only signals' },
     unavailable: { zh: '来源待确认', en: 'Source confirmation pending' },
     blocked: { zh: '来源待确认', en: 'Source confirmation pending' },
     unknown: { zh: '来源待确认', en: 'Source confirmation pending' },
