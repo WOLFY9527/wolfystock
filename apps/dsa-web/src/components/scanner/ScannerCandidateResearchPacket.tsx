@@ -1,5 +1,6 @@
 import type { ScannerCandidateResearchPacket as ScannerCandidateResearchPacketView } from '../../types/scanner';
 import { consumerSafeReportText } from '../../utils/homeReportIdentity';
+import { sanitizeUserFacingDataIssue } from '../../utils/userFacingDataIssues';
 import { TerminalChip } from '../terminal/TerminalPrimitives';
 import { FieldChip } from './ScannerDisplayAtoms';
 
@@ -9,16 +10,25 @@ type ResearchSignalLabel = {
   tone?: 'neutral' | 'warning';
 };
 
-function safePacketText(value: unknown): string | null {
+const PACKET_INTERNAL_COPY_PATTERN =
+  /clean research handoff|evidence famil(?:y|ies)|business-quality review|peer group metadata|daily ohlcv|observation-only research readiness|personalized financial advice/i;
+
+function safePacketText(value: unknown, language: 'zh' | 'en'): string | null {
+  const raw = String(value ?? '').trim();
   const text = consumerSafeReportText(value, '').trim();
-  return text && text !== '--' ? text : null;
+  if (!text || text === '--') return null;
+  if (!raw || text !== raw) return text;
+  if (PACKET_INTERNAL_COPY_PATTERN.test(raw)) {
+    return sanitizeUserFacingDataIssue(raw, language);
+  }
+  return text;
 }
 
-function safePacketList(value?: string[] | null, limit = 4): string[] {
+function safePacketList(value: string[] | null | undefined, language: 'zh' | 'en', limit = 4): string[] {
   if (!Array.isArray(value)) return [];
   const result: string[] = [];
   value.forEach((item) => {
-    const text = safePacketText(item);
+    const text = safePacketText(item, language);
     if (text && !result.includes(text) && result.length < limit) {
       result.push(text);
     }
@@ -26,14 +36,14 @@ function safePacketList(value?: string[] | null, limit = 4): string[] {
   return result;
 }
 
-function hasVisiblePacket(packet?: ScannerCandidateResearchPacketView | null): boolean {
+function hasVisiblePacket(packet: ScannerCandidateResearchPacketView | null | undefined, language: 'zh' | 'en'): boolean {
   return Boolean(
-    safePacketText(packet?.whySurfaced)
-    || safePacketText(packet?.researchNextStep)
-    || safePacketText(packet?.rejectedOrLimitedReasonSafeLabel)
-    || safePacketList(packet?.primaryEvidence, 1).length
-    || safePacketList(packet?.limitingEvidence, 1).length
-    || safePacketList(packet?.dataQualityNotes, 1).length,
+    safePacketText(packet?.whySurfaced, language)
+    || safePacketText(packet?.researchNextStep, language)
+    || safePacketText(packet?.rejectedOrLimitedReasonSafeLabel, language)
+    || safePacketList(packet?.primaryEvidence, language, 1).length
+    || safePacketList(packet?.limitingEvidence, language, 1).length
+    || safePacketList(packet?.dataQualityNotes, language, 1).length,
   );
 }
 
@@ -148,15 +158,15 @@ export function ScannerCandidateResearchPacket({
   variant?: ResearchPacketVariant;
   testId?: string;
 }) {
-  if (!packet || !hasVisiblePacket(packet)) return null;
+  if (!packet || !hasVisiblePacket(packet, language)) return null;
 
   const title = language === 'en' ? 'Research brief' : '研究资料';
-  const whySurfaced = safePacketText(packet.whySurfaced);
-  const primaryEvidence = safePacketList(packet.primaryEvidence);
-  const limitingEvidence = safePacketList(packet.limitingEvidence);
-  const dataQualityNotes = safePacketList(packet.dataQualityNotes);
-  const safeLabel = safePacketText(packet.rejectedOrLimitedReasonSafeLabel);
-  const researchNextStep = safePacketText(packet.researchNextStep);
+  const whySurfaced = safePacketText(packet.whySurfaced, language);
+  const primaryEvidence = safePacketList(packet.primaryEvidence, language);
+  const limitingEvidence = safePacketList(packet.limitingEvidence, language);
+  const dataQualityNotes = safePacketList(packet.dataQualityNotes, language);
+  const safeLabel = safePacketText(packet.rejectedOrLimitedReasonSafeLabel, language);
+  const researchNextStep = safePacketText(packet.researchNextStep, language);
   const boundaryLabel = language === 'en' ? 'Research only' : '仅研究观察';
   const researchSignalTitle = language === 'en' ? 'Research signal' : '研究信号';
   const researchSignalLabels = buildResearchSignalLabels({

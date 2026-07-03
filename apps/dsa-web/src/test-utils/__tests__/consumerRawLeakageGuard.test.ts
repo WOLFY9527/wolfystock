@@ -26,8 +26,12 @@ describe('consumer raw leakage guard', () => {
       'evidence packet',
       'scanner handoff',
       'evidence families',
+      'Some symbol evidence is present, but the packet is not complete enough for a clean research handoff.',
+      'Missing or incomplete evidence families: quote, fundamental, news.',
+      'Add fundamental coverage before business-quality review.',
       'OBSERVATION-ONLY',
       'No verified local peer group metadata for this symbol.',
+      'Add verified local peer group metadata before interpreting peer movement.',
       'Load recent local daily OHLCV before opening this page.',
       'historical ohlcv',
       'quote snapshot',
@@ -46,6 +50,23 @@ describe('consumer raw leakage guard', () => {
     for (const example of examples) {
       expect(findConsumerRawLeakage(example), example).not.toEqual([]);
     }
+  });
+
+  it('supports explicitly checking zh guest-gate english fallback phrases without making them globally forbidden', () => {
+    const sample = 'Sign-in required Go to sign in Return home';
+    const hits = findConsumerRawLeakage(sample, {
+      extraForbiddenPatterns: [
+        /\bSign-in required\b/i,
+        /\bGo to sign in\b/i,
+        /\bReturn home\b/i,
+      ],
+    });
+
+    expect(hits.map((hit) => hit.match)).toEqual([
+      'Sign-in required',
+      'Go to sign in',
+      'Return home',
+    ]);
   });
 
   it('does not flag ordinary market labels or symbols', () => {

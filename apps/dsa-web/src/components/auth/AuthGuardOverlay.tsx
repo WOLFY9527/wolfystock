@@ -4,6 +4,7 @@ import { Lock } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { TerminalButton } from '../terminal/TerminalPrimitives';
 import { useI18n } from '../../contexts/UiLanguageContext';
+import { translate } from '../../i18n/core';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../../utils/localeRouting';
 
 type AuthGuardOverlayProps = {
@@ -32,7 +33,7 @@ function getFocusableElements(container: HTMLElement | null): HTMLElement[] {
 export const AuthGuardOverlay: React.FC<AuthGuardOverlayProps> = ({ moduleName, children }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { language, t } = useI18n();
+  const { language } = useI18n();
   const titleId = useId();
   const bodyId = useId();
   const dialogRef = useRef<HTMLElement | null>(null);
@@ -40,16 +41,17 @@ export const AuthGuardOverlay: React.FC<AuthGuardOverlayProps> = ({ moduleName, 
   const loginButtonRef = useRef<HTMLButtonElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const routeLocale = parseLocaleFromPathname(location.pathname);
+  const displayLocale = routeLocale || language;
   const currentRoute = `${location.pathname}${location.search}${location.hash}`;
   const loginPath = routeLocale
     ? buildLocalizedPath(`/login?redirect=${encodeURIComponent(currentRoute)}`, routeLocale)
     : `/login?redirect=${encodeURIComponent(currentRoute)}`;
   const homePath = routeLocale ? buildLocalizedPath('/', routeLocale) : '/';
-  const title = t('common.authRequiredState.title');
-  const body = t('common.authRequiredState.body');
-  const followup = t('common.authRequiredState.followup');
-  const buttonLabel = t('common.authRequiredState.primaryAction');
-  const safeExitLabel = language === 'en' ? 'Return home' : '返回首页';
+  const title = translate(displayLocale, 'common.authRequiredState.title');
+  const body = translate(displayLocale, 'common.authRequiredState.body');
+  const followup = translate(displayLocale, 'common.authRequiredState.followup');
+  const buttonLabel = translate(displayLocale, 'common.authRequiredState.primaryAction');
+  const safeExitLabel = displayLocale === 'en' ? 'Return home' : '返回首页';
 
   useEffect(() => {
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;

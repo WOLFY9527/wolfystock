@@ -69,7 +69,7 @@ function driverLabel(key: string, language: 'zh' | 'en') {
 
 const RESEARCH_QUEUE_SOURCE_ORDER: UnifiedResearchQueueItem['sourceSurface'][] = ['watchlist', 'scanner', 'market', 'manual_gap'];
 const ADVICE_OR_TRADE_WORDS = /建议(买入|卖出|加仓|减仓|持有)|买入|卖出|下单|交易建议|投资建议|止损|止盈|目标价|仓位建议|\b(buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing|trade advice|investment advice)\b/i;
-const INTERNAL_DIAGNOSTIC_WORDS = /sourceRefs?|reasonCodes?|sourceRefId|request[_\s-]?id|trace[_\s-]?id|correlation[_\s-]?id|queueItemId|provider|cache|runtime|debug|raw|json|schemaVersion|admin|diagnostic|payload|backend snake_case|\b[a-z]+(?:_[a-z0-9]+)+\b/i;
+const INTERNAL_DIAGNOSTIC_WORDS = /sourceRefs?|reasonCodes?|sourceRefId|request[_\s-]?id|trace[_\s-]?id|correlation[_\s-]?id|queueItemId|provider|cache|runtime|debug|raw|json|schemaVersion|admin|diagnostic|payload|backend snake_case|\b[a-z]+(?:_[a-z0-9]+)+\b|clean research handoff|evidence famil(?:y|ies)|business-quality review|peer group metadata|daily ohlcv|observation-only research readiness|personalized financial advice/i;
 
 function safeResearchQueueText(value: string | null | undefined, locale: 'zh' | 'en', fallback?: string): string | null {
   const raw = String(value || '').trim();

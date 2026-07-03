@@ -108,6 +108,21 @@ describe('AuthGuardOverlay', () => {
     expect(navigate).toHaveBeenCalledWith('/en/login?redirect=%2Fen%2Fportfolio');
   });
 
+  it('prefers zh guest-gate copy on zh routes even when the UI language state is English', () => {
+    languageState.value = 'en';
+
+    render(
+      <MemoryRouter initialEntries={['/zh/portfolio']}>
+        <AuthGuardOverlay moduleName="持仓管理" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: '需要登录' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Sign-in required' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '前往登录 持仓管理' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '返回首页' })).toBeInTheDocument();
+  });
+
   it('moves focus to the primary login CTA when the blocking dialog opens', () => {
     const trigger = document.createElement('button');
     trigger.textContent = 'Protected route trigger';

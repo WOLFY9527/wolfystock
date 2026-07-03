@@ -104,7 +104,7 @@ export default function StockStructureDecisionEntryPage() {
                     locale === 'en' ? 'Enter a symbol directly when you already know what to inspect.' : '已知道代码时，可直接输入标的进入结构视图。',
                     locale === 'en' ? 'Use Scanner, Watchlist, or Research Radar rows when exploring candidates.' : '探索候选时，可从 Scanner、观察列表或研究雷达进入。',
                     locale === 'en' ? 'Direct URL pattern: /stocks/{ticker}/structure-decision.' : '直接 URL 形态：/stocks/{ticker}/structure-decision。',
-                    locale === 'en' ? 'Missing or degraded OHLCV evidence stays visible on the detail page.' : 'K 线证据缺失或降级会在详情页可见。',
+                    locale === 'en' ? 'Missing or degraded price-history evidence stays visible on the detail page.' : '历史行情证据缺失或降级会在详情页可见。',
                     locale === 'en'
                       ? 'After entering or adding another symbol, compare mode focuses on structural differences and evidence completeness only.'
                       : '输入或添加另一个标的后，可进行结构对比。',
@@ -185,8 +185,8 @@ export default function StockStructureDecisionEntryPage() {
                     </p>
                     <p>
                       {locale === 'en'
-                        ? 'Missing quote, fundamentals, catalyst, peer, or OHLCV evidence remains visible on the detail page.'
-                        : '报价、基本面、催化、同业或 OHLCV 证据缺失时，会在详情页继续显示就绪边界。'}
+                        ? 'Missing quote, fundamentals, catalyst, peer, or price-history evidence remains visible on the detail page.'
+                        : '报价、基本面、催化、同业或历史行情证据缺失时，会在详情页继续显示就绪边界。'}
                     </p>
                   </div>
                 </TerminalEmptyState>

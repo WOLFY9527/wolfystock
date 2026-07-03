@@ -6,6 +6,10 @@ import type {
   ScannerProviderDiagnostics,
   ScannerRunDetail,
 } from '../../types/scanner';
+import {
+  isRawConsumerDataStateText,
+  sanitizeConsumerDataStateText,
+} from '../../utils/consumerDataStateVocabulary';
 import { sanitizeUserFacingDataIssue } from '../../utils/userFacingDataIssues';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -42,7 +46,17 @@ function formatUniverseNote(note: string, language: 'zh' | 'en'): string | null 
     .replace(/\buniverse\b/gi, language === 'en' ? 'scope' : '标的范围')
     .replace(/\bsymbols?\b/gi, language === 'en' ? 'names' : '个标的')
     .replace(/\s+\./g, '.');
-  return cleaned || null;
+  return sanitizeScannerDiagnosticNote(cleaned, language);
+}
+
+function sanitizeScannerDiagnosticNote(note: string, language: 'zh' | 'en'): string | null {
+  const text = note.trim();
+  if (!text) return null;
+  if (isRawConsumerDataStateText(text)) {
+    return sanitizeConsumerDataStateText(text, 'missing');
+  }
+  const sanitized = sanitizeUserFacingDataIssue(text, language);
+  return sanitized || null;
 }
 
 function toDisplayText(value: unknown): string | null {
@@ -246,11 +260,15 @@ export const ScannerDiagnosticsPanel = Object.assign(function ScannerDiagnostics
               {language === 'en' ? 'Scoring' : '评分'}
             </h5>
             <ul className="space-y-1">
-              {runDetail.scoringNotes.map((note) => (
-                <li key={note} className="text-xs leading-relaxed text-white/64">
-                  {note}
-                </li>
-              ))}
+              {runDetail.scoringNotes.map((note) => {
+                const safeNote = sanitizeScannerDiagnosticNote(note, language);
+                if (!safeNote) return null;
+                return (
+                  <li key={note} className="text-xs leading-relaxed text-white/64">
+                    {safeNote}
+                  </li>
+                );
+              })}
             </ul>
           </section>
         ) : null}

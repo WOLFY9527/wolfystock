@@ -239,12 +239,12 @@ function stockStructureStateLabel(value: string | null | undefined, language: 'z
     breakdown: { zh: '结构走弱', en: 'Structure under pressure' },
     breakout: { zh: '突破观察', en: 'Breakout watch' },
     distribution: { zh: '派发压力', en: 'Distribution pressure' },
-    low_confidence: { zh: '证据不足', en: 'Evidence limited' },
+    low_confidence: { zh: '证据不足', en: 'Evidence incomplete' },
     mixed: { zh: '结构分化', en: 'Mixed structure' },
     neutral: { zh: '结构中性', en: 'Neutral structure' },
     pullback: { zh: '回撤观察', en: 'Pullback watch' },
     range: { zh: '区间震荡', en: 'Range-bound' },
-    insufficient_evidence: { zh: '证据不足', en: 'Evidence limited' },
+    insufficient_evidence: { zh: '证据不足', en: 'Evidence incomplete' },
     unavailable: { zh: '数据暂缺', en: 'Data temporarily missing' },
   };
   const mapped = labels[token]?.[language];

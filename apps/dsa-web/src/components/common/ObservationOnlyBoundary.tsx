@@ -11,12 +11,12 @@ type ObservationOnlyBoundaryProps = {
 
 const COPY = {
   en: {
-    title: 'observation-only evidence summary',
-    body: 'This page summarizes data, evidence, and model or rule outputs. It is not investment advice and not a buy/sell/hold recommendation. Verify data freshness and suitability independently.',
+    title: 'Research boundary summary',
+    body: 'This page summarizes research context, visible evidence, and bounded model or rule outputs. Conclusions remain limited by current freshness and coverage, so verify suitability independently.',
   },
   zh: {
-    title: 'observation-only 证据摘要',
-    body: '本页面汇总数据、证据与模型或规则输出，不构成交易建议，不提供买入、卖出、持有指令。请独立核验数据新鲜度与适用性。',
+    title: '研究边界摘要',
+    body: '本页面汇总研究语境、可见证据与受边界约束的模型或规则输出。结论仍受当前时效与覆盖限制，请独立核验适用性。',
   },
 } as const;
 
