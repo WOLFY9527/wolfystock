@@ -44,6 +44,12 @@ export type MarketDecisionCockpitResponse = {
     }>;
     missingDataFamilies?: string[];
     blockedProductSurfaces?: string[];
+    freshness?: string | null;
+    asOf?: string | null;
+    blockingModules?: string[];
+    operatorAction?: string | null;
+    consumerSafeMessage?: string | null;
+    nextOperatorAction?: string | null;
     noAdvice?: boolean;
   } | null;
   marketRegimeDecision: {
@@ -100,7 +106,13 @@ export type MarketDecisionCockpitResponse = {
   noAdviceDisclosure?: string | null;
   dataQuality?: {
     status?: string | null;
+    reason?: string | null;
     reasonCodes?: string[];
+    freshness?: string | null;
+    asOf?: string | null;
+    blockingModules?: string[];
+    operatorAction?: string | null;
+    consumerSafeMessage?: string | null;
     primaryReadModelReady?: boolean;
     primaryReadModelStatus?: string | null;
     advancedEvidenceStatus?: string | null;
@@ -112,7 +124,12 @@ function normalizeCockpitResponse(payload: unknown): MarketDecisionCockpitRespon
   return {
     schemaVersion: normalized.schemaVersion,
     generatedAt: normalized.generatedAt ?? null,
-    marketRegimeReadModel: normalized.marketRegimeReadModel ?? null,
+    marketRegimeReadModel: normalized.marketRegimeReadModel ? {
+      ...normalized.marketRegimeReadModel,
+      missingDataFamilies: normalized.marketRegimeReadModel.missingDataFamilies ?? [],
+      blockedProductSurfaces: normalized.marketRegimeReadModel.blockedProductSurfaces ?? [],
+      blockingModules: normalized.marketRegimeReadModel.blockingModules ?? [],
+    } : null,
     marketRegimeDecision: {
       regime: normalized.marketRegimeDecision?.regime ?? null,
       confidence: normalized.marketRegimeDecision?.confidence ?? null,
@@ -146,7 +163,19 @@ function normalizeCockpitResponse(payload: unknown): MarketDecisionCockpitRespon
     },
     degradedInputs: normalized.degradedInputs ?? [],
     noAdviceDisclosure: normalized.noAdviceDisclosure ?? null,
-    dataQuality: normalized.dataQuality ?? null,
+    dataQuality: normalized.dataQuality ? {
+      status: normalized.dataQuality.status ?? null,
+      reason: normalized.dataQuality.reason ?? null,
+      reasonCodes: normalized.dataQuality.reasonCodes ?? [],
+      freshness: normalized.dataQuality.freshness ?? null,
+      asOf: normalized.dataQuality.asOf ?? null,
+      blockingModules: normalized.dataQuality.blockingModules ?? [],
+      operatorAction: normalized.dataQuality.operatorAction ?? null,
+      consumerSafeMessage: normalized.dataQuality.consumerSafeMessage ?? null,
+      primaryReadModelReady: normalized.dataQuality.primaryReadModelReady,
+      primaryReadModelStatus: normalized.dataQuality.primaryReadModelStatus ?? null,
+      advancedEvidenceStatus: normalized.dataQuality.advancedEvidenceStatus ?? null,
+    } : null,
   };
 }
 

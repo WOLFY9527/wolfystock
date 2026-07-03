@@ -111,6 +111,11 @@ import type { TrustDisclosureBucket } from '../utils/trustDisclosure';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 import { getConsumerSafeApiErrorCopy } from '../utils/consumerErrorCopy';
 import {
+  consumerSafeOperatorAction,
+  getConsumerDataStateEntry,
+  sanitizeConsumerDataStateText,
+} from '../utils/consumerDataStateVocabulary';
+import {
   getScannerDetailOptions,
   getScannerProfileOptions,
   getScannerUniverseOptions,
@@ -404,6 +409,12 @@ const SCANNER_DATA_READINESS_BLOCKER_LABELS: Record<string, { zh: string; en: st
   unknown: { zh: '待确认', en: 'To confirm' },
 };
 
+const SCANNER_DATA_CLASS_LABELS: Record<string, { zh: string; en: string }> = {
+  universe: { zh: '标的范围', en: 'Scope' },
+  historical_ohlcv: { zh: '历史行情', en: 'Price history' },
+  quote_snapshot: { zh: '报价快照', en: 'Quote freshness' },
+};
+
 const SCANNER_DATA_READINESS_COVERAGE_LABELS: Record<string, { zh: string; en: string }> = {
   available: { zh: '可用', en: 'Available' },
   partial: { zh: '部分可用', en: 'Partial' },
@@ -428,8 +439,16 @@ function localizedDataReadinessLabel(
 function sanitizeScannerDataReadinessText(value: string | null | undefined, language: 'zh' | 'en'): string | null {
   const text = String(value || '').trim();
   if (!text) return null;
-  if (/provider|debug|trace|schema|raw|request|cache|runtime|sourceauthority|blockerbucket/i.test(text)) return null;
+  if (/provider|debug|trace|schema|raw|request|cache|runtime|sourceauthority|blockerbucket|pipeline|dry[-_\s]?run|\bscanner\b/i.test(text)) {
+    return sanitizeConsumerDataStateText(text, 'partial');
+  }
   return sanitizeUserFacingDataIssue(text, language);
+}
+
+function scannerDataClassLabel(value: string, language: 'zh' | 'en'): string {
+  const normalized = normalizeScannerDataReadinessState(value);
+  return SCANNER_DATA_CLASS_LABELS[normalized]?.[language]
+    || getConsumerDataStateEntry(normalized).label;
 }
 
 function buildScannerDataReadinessView(
@@ -454,9 +473,11 @@ function buildScannerDataReadinessView(
     ? localizedDataReadinessLabel(blockerBucket, SCANNER_DATA_READINESS_BLOCKER_LABELS, language)
       || (language === 'en' ? 'To confirm' : '待确认')
     : null);
+  const operatorAction = universeReadiness?.operatorNextAction;
   const nextDataLabel = sanitizeScannerDataReadinessText(universeReadiness?.consumerSafeMessage, language)
     || sanitizeScannerDataReadinessText(readiness.nextDataAction, language)
     || sanitizeScannerDataReadinessText(readiness.consumerSummary, language)
+    || (operatorAction ? consumerSafeOperatorAction(operatorAction, universeStatus || state) : null)
     || blockerLabel;
   const coverageChips = [
     universeStatus ? {
@@ -470,7 +491,7 @@ function buildScannerDataReadinessView(
     universeReadiness?.missingDataClasses?.length ? {
       label: language === 'en' ? 'Missing' : '缺口',
       value: universeReadiness.missingDataClasses.slice(0, 3)
-        .map((item) => sanitizeUserFacingDataIssue(String(item), language))
+        .map((item) => scannerDataClassLabel(String(item), language))
         .join(' / '),
     } : null,
   ].filter((item): item is ScannerLabeledValue => Boolean(item));

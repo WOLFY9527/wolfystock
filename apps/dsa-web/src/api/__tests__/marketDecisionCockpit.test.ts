@@ -76,8 +76,14 @@ describe('marketDecisionCockpitApi', () => {
         },
         no_advice_disclosure: 'Research context only.',
         data_quality: {
-          status: 'degraded',
+          status: 'failed_closed',
+          reason: 'quote snapshot provider error',
           reason_codes: ['option_chain_unavailable'],
+          freshness: 'stale',
+          as_of: '2026-06-15T09:25:00Z',
+          blocking_modules: ['Decision Cockpit'],
+          operator_action: 'Refresh quote snapshot pipeline before rerun.',
+          consumer_safe_message: '关键市场证据暂不可用，驾驶舱保持关闭。',
         },
       },
     });
@@ -91,6 +97,9 @@ describe('marketDecisionCockpitApi', () => {
     expect(payload.researchQueuePreview.topCandidates[0]?.researchBias).toBe('strengthContinuation');
     expect(payload.optionsStructureStatus.blockedReasonCodes).toEqual(['option_chain_unavailable']);
     expect(payload.cockpitSummary.whatToWatch).toEqual(['Watch breadth participation.']);
+    expect(payload.dataQuality?.status).toBe('failed_closed');
+    expect(payload.dataQuality?.operatorAction).toBe('Refresh quote snapshot pipeline before rerun.');
+    expect(payload.dataQuality?.consumerSafeMessage).toBe('关键市场证据暂不可用，驾驶舱保持关闭。');
   });
 
   it('composes a plain-language narrative for a healthy driver set', async () => {

@@ -37,10 +37,16 @@ const defaultForbiddenPatterns = [
   /\bprovider\s+(?:runtime|trace|payload|debug|route)\b/i,
   /\bhistorical\s+ohlcv\b/i,
   /\bquote\s+snapshot\b/i,
+  /\buniverse\b/i,
+  /\bprovider\s+error\b/i,
+  /\bdebug\b/i,
+  /\bdry[-\s]?run\b/i,
+  /\bpipeline\b/i,
   /\bObservation-only research readiness; not personalized financial advice\b/i,
   /\bObserve whether downside volume pressure fades or remains persistent\b/i,
   /\bNo portfolio exposure available\b/i,
   /\bevidence limited\b/i,
+  /数据不足(?:[\s\S]{0,80}数据不足){2}/,
 ] as const;
 
 function stripAllowedPhrases(text: string, allowedPhrases: readonly string[]) {

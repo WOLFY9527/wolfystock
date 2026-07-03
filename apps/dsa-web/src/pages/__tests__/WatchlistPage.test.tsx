@@ -478,7 +478,7 @@ describe('WatchlistPage', () => {
     expect(band).toHaveTextContent('观察标的 3');
     expect(band).toHaveTextContent('最新1');
     expect(band).toHaveTextContent('需留意3');
-    expect(band).toHaveTextContent('当前信号置信度较低，仅供观察。');
+    expect(band).toHaveTextContent(/当前数据置信度较低|历史观察|不代表实时信号/);
     expect(band).not.toHaveTextContent(/fallback|proxy|备用\/代理|备用数据|代理证据|reasonFamilies|sourceAuthorityAllowed|scoreContributionAllowed/i);
     expect(band).not.toHaveTextContent(/买入|卖出|加仓|减仓|buy|sell|recommend(?:ation)?/i);
   });
@@ -1631,7 +1631,7 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     const page = await screen.findByTestId('watchlist-page');
-    expect(page).toHaveTextContent('已使用最近一次可用数据。');
+    expect(page).toHaveTextContent(/历史观察|不代表实时信号/);
     expect(page).toHaveTextContent('置信度较低');
     expect(page).not.toHaveTextContent(/reasonFamilies|reasonCode|sourceAuthorityAllowed|scoreContributionAllowed|observationOnly|source_confidence|score_blocked|raw diagnostics|JSON|provider_down|provider_error|proxy_fallback|fallback|proxy|备用\/代理|刷新或重新扫描后再使用|来源未知 \/ 需要刷新/i);
   });

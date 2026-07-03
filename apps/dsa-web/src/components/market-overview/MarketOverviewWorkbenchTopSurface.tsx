@@ -139,7 +139,7 @@ type ConsumerConfidenceSummaryView = {
 };
 
 type MarketNarrativeVerdictView = {
-  label: '偏强观察' | '中性观察' | '偏弱观察' | '数据不足';
+  label: '偏强观察' | '中性观察' | '偏弱观察' | '证据待补';
   variant: 'success' | 'info' | 'caution' | 'danger' | 'neutral';
   headline: string;
   detail: string;
@@ -271,7 +271,7 @@ function buildMarketNarrativeVerdict(params: {
 
   if (insufficient) {
     return {
-      label: '数据不足',
+      label: '证据待补',
       variant: summary.state === 'waiting' ? 'neutral' : 'caution',
       headline: '已返回部分市场线索，关键证据仍待补齐。',
       detail: marketNarrativeCopy(summary.blockers[0] || statusSummary.detail || '关键证据仍待补齐。'),
@@ -1050,7 +1050,7 @@ const MarketOverviewConclusionLayer: React.FC<{
           </p>
         </div>
         <div data-testid="market-overview-status-line" className="max-w-sm text-left text-[11px] leading-5 text-white/46 lg:text-right">
-          {marketNarrativeCopy(`${verdict.label === '数据不足' ? '事实有限' : verdict.label} · ${dataStatusLabel(summary, dataState)} · 信心水平 ${confidenceSummary.value}`)}
+          {marketNarrativeCopy(`${verdict.label === '证据待补' ? '事实有限' : verdict.label} · ${dataStatusLabel(summary, dataState)} · 信心水平 ${confidenceSummary.value}`)}
         </div>
       </div>
       <section

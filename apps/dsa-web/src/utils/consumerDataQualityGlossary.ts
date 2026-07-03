@@ -5,6 +5,7 @@ export interface ConsumerDataQualityGlossaryEntry {
   shortExplanation: string;
   severity: ConsumerDataQualityGlossarySeverity;
   observationOnly: boolean;
+  nextStep?: string;
 }
 
 type GlossaryKey =

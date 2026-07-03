@@ -4324,10 +4324,11 @@ describe('UserScannerPage', () => {
     expect(conclusion).toHaveTextContent(/扫描标的池已过期|Scope/);
     expect(conclusion).toHaveTextContent(/标的池状态|Scope readiness/);
     expect(conclusion).toHaveTextContent(/缺口|Missing/);
+    expect(conclusion).toHaveTextContent(/历史行情|报价快照|Price history|Quote freshness/);
     expect(screen.queryByTestId(/^scanner-result-row-/)).not.toBeInTheDocument();
     const emptyState = screen.getByTestId('scanner-workbench-empty-state');
     expect(emptyState).toHaveTextContent(/刷新扫描标的池|标的池已过期/);
-    expect(conclusion).not.toHaveTextContent(/provider|raw|cacheKey|traceId|requestId|token|secret|buy|sell|hold|target|stop|position/i);
+    expect(conclusion).not.toHaveTextContent(/universe|historical_ohlcv|quote_snapshot|provider|raw|cacheKey|traceId|requestId|token|secret|buy|sell|hold|target|stop|position/i);
     expect(emptyState).not.toHaveTextContent(/provider|raw|cacheKey|traceId|requestId|token|secret|buy|sell|hold|target|stop|position/i);
   });
 
@@ -4384,6 +4385,7 @@ describe('UserScannerPage', () => {
     expect(conclusion).toHaveTextContent(/标的池缺失|Scope missing/);
     expect(conclusion).toHaveTextContent(/扫描标的池缺失|Scope/);
     expect(conclusion).not.toHaveTextContent(/标的池待更新|Scope stale/);
+    expect(conclusion).not.toHaveTextContent(/universe|historical_ohlcv|quote_snapshot/i);
     expect(screen.queryByTestId(/^scanner-result-row-/)).not.toBeInTheDocument();
   });
 

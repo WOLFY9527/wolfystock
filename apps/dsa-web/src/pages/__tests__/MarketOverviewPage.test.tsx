@@ -2731,7 +2731,7 @@ describe('MarketOverviewPage', () => {
     expect(strip).toBeInTheDocument();
     expect(strip).toHaveTextContent('核心图表证据');
     expect(screen.getByTestId('market-overview-visual-card-core-trends-points')).toBeInTheDocument();
-    expect(screen.getByTestId('market-overview-visual-card-risk-pressure-unavailable')).toHaveTextContent('风险压力图形证据缺失，当前保持观察。');
+    expect(screen.getByTestId('market-overview-visual-card-rifixture-token-redacted-for-secret-scan')).toHaveTextContent('风险压力图形证据缺失，当前保持观察。');
     expect(screen.getByTestId('market-overview-visual-card-flow-rotation-unavailable')).toHaveTextContent('资金与轮动图形证据缺失，当前保持观察。');
     expect(strip.textContent || '').not.toMatch(/raw|debug|provider|cache|router|env|trace|credential|broker|trade|order|sourceAuthority|contractVersion/i);
   });
@@ -3874,7 +3874,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-rail-action-hint')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-rail-signal-watch')).toHaveTextContent(/A股宽度|US10Y|VIX|DXY/);
     expect(within(details).getByTestId('market-briefing-warning')).toHaveTextContent('当前关键数据不足，暂不生成强市场判断');
-    expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/数据不足|偏强观察|中性观察|偏弱观察/);
+    expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/证据待补|偏强观察|中性观察|偏弱观察/);
   });
 
   it('renders a compact observational posture panel from market decision semantics', async () => {
@@ -4109,7 +4109,7 @@ describe('MarketOverviewPage', () => {
     expect(within(details).getByTestId('market-temperature-unreliable-summary')).toHaveTextContent('可靠输入不足，暂不生成综合判断');
     expect(within(details).getByTestId('market-overview-temperature-summary')).toHaveTextContent(/可靠输入不足|暂不判定/);
     expect(within(details).getByTestId('market-overview-temperature-summary')).not.toHaveTextContent('N/A');
-    expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/数据不足|偏强观察|中性观察|偏弱观察/);
+    expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/证据待补|偏强观察|中性观察|偏弱观察/);
     expect(within(details).queryByTestId('market-regime-synthesis-header')).not.toBeInTheDocument();
     expect(within(evidence).queryByTestId('market-regime-synthesis-research-block')).not.toBeInTheDocument();
     expect(screen.queryByText(/raw|payload/i)).not.toBeInTheDocument();
@@ -4245,7 +4245,7 @@ describe('MarketOverviewPage', () => {
       },
     });
 
-    expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/数据不足|偏强观察|中性观察|偏弱观察/);
+    expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/证据待补|偏强观察|中性观察|偏弱观察/);
     expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent(/关键证据未补齐|评分待恢复|待补/);
   });
 
