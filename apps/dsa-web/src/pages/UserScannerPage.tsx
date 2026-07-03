@@ -4096,14 +4096,23 @@ const UserScannerPage: React.FC = () => {
                     </div>
                     <div data-testid="scanner-consumer-control-summary" className="grid min-w-0 grid-cols-2 gap-1.5 text-xs sm:grid-cols-4 lg:min-w-[34rem]">
                       {[
-                        [language === 'en' ? 'Market' : '市场', market.toUpperCase()],
-                        [language === 'en' ? 'Strategy' : '策略', scannerRailProfileLabel || '--'],
-                        [language === 'en' ? 'Scope' : '标的池', scannerScopeLabel],
-                        [language === 'en' ? 'Output' : '输出', scannerShouldHideEmptyRunCounts ? (language === 'en' ? 'Pending' : '待产出') : String(currentSelectedCount)],
-                      ].map(([label, value]) => (
-                        <div key={label} className="min-w-0 rounded-lg border border-white/8 bg-black/20 px-2 py-2">
-                          <p className="text-[10px] text-white/38">{label}</p>
-                          <p className="mt-1 truncate font-mono text-white/76">{value}</p>
+                        { label: language === 'en' ? 'Market' : '市场', value: market.toUpperCase(), testId: 'scanner-consumer-control-value-market' },
+                        { label: language === 'en' ? 'Strategy' : '策略', value: scannerRailProfileLabel || '--', testId: 'scanner-consumer-control-value-strategy' },
+                        { label: language === 'en' ? 'Scope' : '标的池', value: scannerScopeLabel, testId: 'scanner-consumer-control-value-scope' },
+                        {
+                          label: language === 'en' ? 'Output' : '输出',
+                          value: scannerShouldHideEmptyRunCounts ? (language === 'en' ? 'Pending' : '待产出') : String(currentSelectedCount),
+                          testId: 'scanner-consumer-control-value-output',
+                        },
+                      ].map((item) => (
+                        <div key={item.label} className="min-w-0 rounded-lg border border-white/8 bg-black/20 px-2 py-2">
+                          <p className="text-[10px] text-white/38">{item.label}</p>
+                          <p
+                            data-testid={item.testId}
+                            className="mt-1 break-words whitespace-normal font-mono text-white/76 md:truncate"
+                          >
+                            {item.value}
+                          </p>
                         </div>
                       ))}
                     </div>
@@ -4112,7 +4121,16 @@ const UserScannerPage: React.FC = () => {
                     {scannerConsumerTrustItems.map((item) => (
                       <div key={item.label} className="min-w-0 rounded-lg border border-white/8 bg-black/15 px-2.5 py-2">
                         <p className="text-[10px] text-white/38">{item.label}</p>
-                        <p className="mt-1 truncate text-white/72">{item.value}</p>
+                        <p
+                          data-testid={
+                            item.label === (language === 'en' ? 'Scope' : '标的池')
+                              ? 'scanner-consumer-trust-value-universe'
+                              : undefined
+                          }
+                          className="mt-1 break-words whitespace-normal text-white/72 md:truncate"
+                        >
+                          {item.value}
+                        </p>
                       </div>
                     ))}
                   </div>
@@ -4148,7 +4166,7 @@ const UserScannerPage: React.FC = () => {
               {showWorkflowNextSteps ? (
                 <section
                   data-testid="scanner-workflow-next-steps"
-                  className="mx-3 rounded-xl border border-white/10 bg-white/[0.025] px-3 py-3 text-sm"
+                  className="mx-3 overflow-x-hidden rounded-xl border border-white/10 bg-white/[0.025] px-3 py-3 text-sm"
                   aria-label={language === 'en' ? 'Scanner workflow next steps' : '扫描工作流下一步'}
                 >
                   <div className="flex min-w-0 flex-col gap-3">
@@ -4291,7 +4309,7 @@ const UserScannerPage: React.FC = () => {
                               <span>{language === 'en' ? `Switch to ${option.label}` : `切到${option.label}`}</span>
                             </TerminalButton>
                           ))}
-                          <span className="ml-auto text-[11px] text-white/42">
+                          <span data-testid="scanner-secondary-route-copy" className="text-[11px] text-white/42 sm:ml-auto">
                             {language === 'en' ? 'Secondary routes:' : '辅助入口：'}
                           </span>
                           <a

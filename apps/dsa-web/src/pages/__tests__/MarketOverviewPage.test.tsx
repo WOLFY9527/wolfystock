@@ -3336,6 +3336,23 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-top-stack')).toContainElement(screen.getByTestId('market-overview-hero-ribbon'));
   });
 
+  it('keeps mobile overview cards wrap-safe at 390px instead of truncating first-read evidence copy', async () => {
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
+    window.dispatchEvent(new Event('resize'));
+
+    render(createElement(MarketOverviewPage));
+
+    const visualCard = await screen.findByTestId('market-overview-visual-card-core-trends');
+    const visualTitle = within(visualCard).getByTestId('market-overview-visual-card-title-core-trends');
+    const visualEyebrow = within(visualCard).getByTestId('market-overview-visual-card-eyebrow-core-trends');
+    const summaryStrip = screen.getByTestId('market-overview-summary-strip');
+
+    expect(summaryStrip).toHaveClass('grid-cols-1');
+    expect(visualTitle).toHaveClass('break-words', 'whitespace-normal');
+    expect(visualEyebrow).toHaveClass('break-words', 'whitespace-normal');
+    expect(screen.getByTestId('market-overview-top-verdict')).toHaveClass('break-words');
+  });
+
   it('puts market state and compact data status ahead of controls and panel sprawl', async () => {
     render(createElement(MarketOverviewPage));
 

@@ -7375,12 +7375,12 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           </section>
         ) : !shouldRenderDashboardPanels ? (
           <section
-            className="mx-auto flex w-full max-w-[1880px] flex-1 min-w-0 flex-col px-3 py-3 sm:px-4 xl:px-6 2xl:px-8"
+            className="mx-auto flex w-full max-w-[1880px] flex-1 min-w-0 flex-col overflow-x-hidden px-3 py-3 sm:px-4 xl:px-6 2xl:px-8"
             data-testid="guest-home-clean-search"
           >
-            <div className="flex w-full min-w-0 flex-col gap-4" data-testid="guest-home-first-screen-stack">
+            <div className="flex w-full min-w-0 flex-col gap-4 overflow-x-hidden" data-testid="guest-home-first-screen-stack">
               <section
-                className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-4 sm:px-5 sm:py-5')}
+                className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'overflow-x-hidden px-4 py-4 sm:px-5 sm:py-5')}
                 data-testid="guest-home-command-surface"
                 data-layout-zone="RouteConsole"
                 data-visual-role="guest-command-console"
@@ -7419,7 +7419,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                     {omnibarModule}
                   </div>
                   <aside
-                    className={cn(HOME_LOCAL_INSET_PANEL_CLASS, 'px-4 py-4')}
+                    className={cn(HOME_LOCAL_INSET_PANEL_CLASS, 'min-w-0 px-4 py-4')}
                     data-testid="guest-home-market-preview-strip"
                     aria-busy={guestMarketSnapshot?.state === 'loading' ? 'true' : 'false'}
                   >
@@ -7462,7 +7462,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                     </p>
                     <Link
                       to={registrationPath}
-                      className="mt-3 inline-flex min-h-10 items-center justify-center rounded-lg border border-[color:var(--wolfy-border-focus)] bg-[var(--wolfy-accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#8178e7]"
+                      className="mt-3 inline-flex min-h-10 w-full items-center justify-center rounded-lg border border-[color:var(--wolfy-border-focus)] bg-[var(--wolfy-accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#8178e7] sm:w-auto"
                       data-testid="guest-home-registration-link"
                     >
                       {guestCommandConsoleCopy.unlockAction}

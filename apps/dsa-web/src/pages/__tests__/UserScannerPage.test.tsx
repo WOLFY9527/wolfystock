@@ -1262,6 +1262,38 @@ describe('UserScannerPage', () => {
     expect(getRun).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps scanner mobile summary and recovery actions wrap-safe at 390px', async () => {
+    const blockedRun = makeRunDetail();
+    blockedRun.shortlist = [];
+    blockedRun.selected = [];
+    blockedRun.diagnostics = {
+      ...(blockedRun.diagnostics || {}),
+      dataReadiness: {
+        state: 'blocked',
+        blockerBucket: 'missing_history',
+        nextDataAction: '补齐历史数据后再重试。',
+      },
+    };
+    blockedRun.summary = {
+      ...blockedRun.summary,
+      selectedCount: 0,
+      rejectedCount: 18,
+      dataFailedCount: 22,
+      errorCount: 0,
+    };
+    getRun.mockResolvedValue(blockedRun);
+
+    renderUserScannerPage({ initialEntry: '/zh/scanner', viewportWidth: 390 });
+
+    expect(await screen.findByTestId('scanner-workflow-next-steps')).toBeInTheDocument();
+    expect(screen.getByTestId('scanner-consumer-control-summary')).toHaveClass('grid-cols-2');
+    expect(screen.getByTestId('scanner-consumer-control-value-market')).toHaveClass('break-words', 'whitespace-normal');
+    expect(screen.getByTestId('scanner-consumer-control-value-strategy')).toHaveClass('break-words', 'whitespace-normal');
+    expect(screen.getByTestId('scanner-consumer-trust-value-universe')).toHaveClass('break-words', 'whitespace-normal');
+    expect(screen.getByTestId('scanner-workflow-next-steps')).toHaveClass('overflow-x-hidden');
+    expect(screen.getByTestId('scanner-secondary-route-copy')).toHaveClass('sm:ml-auto');
+  });
+
   it('renders scanner score without misleading AI score copy for normal scanner scores', async () => {
     const { container } = renderUserScannerPage();
 

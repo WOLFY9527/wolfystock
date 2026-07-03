@@ -673,8 +673,16 @@ function CockpitFirstViewportSummary({
                 size="sm"
               />
             </div>
-            <p className="mt-3 text-base leading-7 text-[color:var(--wolfy-text-primary)]">{summary.headline}</p>
-            <div className="mt-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]" data-testid="decision-cockpit-readiness-summary">
+            <p
+              data-testid="decision-cockpit-summary-headline"
+              className="mt-3 break-words whitespace-normal text-base leading-7 text-[color:var(--wolfy-text-primary)]"
+            >
+              {summary.headline}
+            </p>
+            <div
+              className="mt-3 break-words whitespace-normal rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]"
+              data-testid="decision-cockpit-readiness-summary"
+            >
               <span className="font-medium text-[color:var(--wolfy-text-primary)]">{summary.readiness.label}</span>
               <span>{`：${summary.readiness.explanation}`}</span>
               <span>{` ${summary.readiness.nextStep}`}</span>
@@ -714,7 +722,7 @@ function CockpitFirstViewportSummary({
               />
             </BriefingBlock>
           </div>
-          <div className="grid gap-3 md:grid-cols-3" data-testid="decision-cockpit-key-evidence-strip">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3" data-testid="decision-cockpit-key-evidence-strip">
             {summary.evidenceStrip.map((item) => (
               <div key={item.key} className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
                 <div className="text-[11px] text-[color:var(--wolfy-text-muted)]">{item.label}</div>
@@ -725,7 +733,10 @@ function CockpitFirstViewportSummary({
             ))}
           </div>
           {summary.missingData.length ? (
-            <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-black/10 p-3" data-testid="decision-cockpit-missing-summary">
+            <div
+              className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-black/10 p-3 break-words whitespace-normal"
+              data-testid="decision-cockpit-missing-summary"
+            >
               <div className="text-xs font-medium text-[color:var(--wolfy-text-primary)]">
                 {summary.readModelPrimary
                   ? (locale === 'en' ? 'Secondary advanced evidence gaps' : '次级高级证据缺口')
