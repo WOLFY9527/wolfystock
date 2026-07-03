@@ -129,7 +129,9 @@ class _Verifier:
             "requireAdjusted": self.require_adjusted,
             "envGates": self.env_gates(),
             "cacheLocation": self.cache_location_summary(),
+            "operatorAction": next_action,
             "nextOperatorAction": next_action,
+            "operatorRunbook": self.operator_runbook(),
         }
 
     def inspect(self) -> dict[str, Any]:
@@ -342,6 +344,7 @@ class _Verifier:
         if backtest["status"] == "available":
             backtest["operatorNextAction"] = "Backtest DATA-110 symbol and benchmark OHLCV requirements are met for this verifier request."
             backtest["nextOperatorAction"] = backtest["operatorNextAction"]
+            backtest["operatorAction"] = backtest["operatorNextAction"]
 
         status = "ok" if eligible_symbols and backtest["status"] == "available" else "partial"
         payload = self.base(
@@ -414,6 +417,45 @@ class _Verifier:
             "legacyFallbackEnv": "US_STOCK_PARQUET_DIR",
             "configuredBy": configured_by or "default",
             "resolvedPathExposed": False,
+        }
+
+    def operator_runbook(self) -> dict[str, Any]:
+        symbols = ",".join(self.symbols)
+        return {
+            "checkReadinessCommand": (
+                "python scripts/historical_ohlcv_operator_verifier.py --mode inspect "
+                f"--us-symbols {symbols} --required-bars {self.required_bars}"
+            ),
+            "dryRunRefreshPlanningCommand": (
+                "python scripts/historical_ohlcv_operator_verifier.py --mode dry-run "
+                f"--us-symbols {symbols} --required-bars {self.required_bars}"
+            ),
+            "verifyCacheCommand": (
+                "python scripts/historical_ohlcv_operator_verifier.py --mode verify-cache "
+                f"--us-symbols {symbols} --required-bars {self.required_bars}"
+            ),
+            "verifyChainCommand": (
+                "python scripts/historical_ohlcv_operator_verifier.py --mode verify-chain "
+                f"--us-symbols {symbols} --required-bars {self.required_bars}"
+            ),
+            "executeRefreshCommand": (
+                "python scripts/historical_ohlcv_operator_verifier.py --mode execute "
+                f"--us-symbols {symbols} --required-bars {self.required_bars} --execute"
+            ),
+            "manualEnableInstructions": [
+                "Set WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED=true outside .env edits in this task.",
+                "Set WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED=true only for an approved operator shell.",
+                "Set WOLFYSTOCK_HISTORICAL_OHLCV_CACHE_SEED_ENABLED=true only when executing the explicit seed workflow.",
+            ],
+            "scannerUniverseRefreshInstructions": [
+                "Use scanner universe readiness/status first; do not run scanner refresh writes from this verifier.",
+                "Refresh scanner universe only through the approved scanner operator workflow after dry-run review.",
+            ],
+            "noFakeDataVerification": [
+                "Confirm dryRun is true before any planning output is treated as non-mutating.",
+                "Confirm networkCallsEnabled and mutationEnabled are false for inspect, dry-run, verify-cache, and verify-chain.",
+                "Confirm seeded rows report cache_hit with cachedBars greater than zero before marking a symbol ready.",
+            ],
         }
 
 
@@ -556,7 +598,24 @@ def _chain_next_action(scanner_universe: Mapping[str, Any], backtest: Mapping[st
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog=(
+            "Operator readiness workflow:\n"
+            "  check readiness: python scripts/historical_ohlcv_operator_verifier.py --mode inspect --us-symbols SPY,QQQ,AAPL,MSFT\n"
+            "  dry-run refresh planning: python scripts/historical_ohlcv_operator_verifier.py --mode dry-run --us-symbols SPY,QQQ,AAPL,MSFT\n"
+            "  verify local cache only: python scripts/historical_ohlcv_operator_verifier.py --mode verify-cache --us-symbols SPY,QQQ,AAPL,MSFT\n"
+            "  verify scanner/backtest readiness chain: python scripts/historical_ohlcv_operator_verifier.py --mode verify-chain --us-symbols SPY,QQQ,AAPL,MSFT\n"
+            "  execute approved seed only: python scripts/historical_ohlcv_operator_verifier.py --mode execute --execute --us-symbols SPY,QQQ,AAPL,MSFT\n"
+            "\n"
+            "Safe enablement notes:\n"
+            "  Enable WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED outside .env edits for an approved operator shell.\n"
+            "  Refresh Scanner universe only through the approved scanner operator workflow after its dry-run review.\n"
+            "  Review dry-run output before any cache seed; inspect/dry-run/verify-cache/verify-chain do not mutate cache.\n"
+            "  Treat readiness as real only when cache rows report cache_hit and cachedBars > 0; do not use fake market data.\n"
+        ),
+    )
     parser.add_argument(
         "--mode",
         choices=("inspect", "dry-run", "execute", "verify-cache", "verify-chain"),

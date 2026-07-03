@@ -640,7 +640,12 @@ def test_unready_read_model_fails_closed_as_primary_market_context() -> None:
     assert payload["marketRegimeDecision"]["confidence"] == "low"
     assert payload["marketRegimeSummary"]["regime"] == "Insufficient market evidence"
     assert payload["dataQuality"]["status"] == "blocked"
-    assert payload["cockpitReadiness"]["status"] in {"degraded", "insufficient"}
+    readiness = payload["cockpitReadiness"]
+    assert readiness["status"] in {"degraded", "insufficient"}
+    assert readiness["reason"] == "decision_cockpit_market_regime_read_model_failed_closed"
+    assert readiness["blockingModules"] == ["Market Regime", "Options", "Decision Cockpit"]
+    assert "Market Regime Read Model" in readiness["operatorAction"]
+    assert readiness["consumerSafeMessage"] == "数据证据不足，决策驾驶舱暂不形成结论。"
     assert "Market Regime Read Model failed closed" in payload["dataQuality"]["reasonCodes"]
     assert payload["advancedDecisionDiagnostics"]["status"] == "primary"
     _assert_no_forbidden_public_terms(payload)
@@ -669,11 +674,17 @@ def test_missing_inputs_fail_closed_with_empty_research_preview_and_blocked_opti
     assert "option_chain_unavailable" not in payload["dataQuality"]["reasonCodes"]
     assert payload["cockpitReadiness"] == {
         "status": "insufficient",
+        "reason": "decision_cockpit_market_regime_evidence_insufficient",
         "reasons": [
             "market regime evidence is insufficient",
             "research radar candidates are unavailable",
             "options structure evidence is unavailable",
         ],
+        "freshness": "unknown",
+        "asOf": "2026-06-15T00:00:00+00:00",
+        "blockingModules": ["Market Regime", "Research Radar", "Options", "Decision Cockpit"],
+        "operatorAction": "Resolve market regime evidence, research candidates, and options structure blockers, then rerun Decision Cockpit readiness.",
+        "consumerSafeMessage": "数据证据不足，决策驾驶舱暂不形成结论。",
     }
     assert payload["confidenceDiagnostics"]["missingEvidenceImpact"]
     assert payload["whatChanged"] == [
@@ -925,7 +936,13 @@ def test_options_evidence_remains_observation_only_even_when_contract_inputs_are
     assert options["missingEvidence"] == []
     assert payload["cockpitReadiness"] == {
         "status": "ready",
+        "reason": "ready",
         "reasons": ["core evidence is available for read-only decision support"],
+        "freshness": "ready",
+        "asOf": "2026-06-15T00:00:00+00:00",
+        "blockingModules": [],
+        "operatorAction": "Decision Cockpit has enough read-only evidence for observation-only context.",
+        "consumerSafeMessage": "决策驾驶舱已有足够只读证据，但仍仅用于观察。",
     }
 
     serialized = _serialized_values(options)

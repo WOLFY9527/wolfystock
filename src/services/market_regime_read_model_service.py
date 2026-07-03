@@ -106,7 +106,9 @@ def build_market_regime_read_model_from_evidence(source: Mapping[str, Any]) -> d
         ),
         "missingDataFamilies": missing_families,
         "blockedProductSurfaces": blocked_surfaces,
+        "operatorAction": str(source.get("nextOperatorAction") or readiness["nextOperatorAction"]),
         "nextOperatorAction": str(source.get("nextOperatorAction") or readiness["nextOperatorAction"]),
+        "consumerSafeMessage": readiness["consumerSafeMessage"],
         "noAdvice": True,
         "networkCallsEnabled": False,
         "mutationEnabled": False,
@@ -124,6 +126,8 @@ def project_market_regime_evidence(source: Mapping[str, Any] | None) -> dict[str
     data_coverage = dict(evidence.get("dataCoverage") or {})
     status = str(source.get("status") or source.get("readiness") or "failed_closed")
     readiness = str(source.get("readiness") or status)
+    reason = _readiness_reason(readiness)
+    operator_action = str(source.get("nextOperatorAction") or _readiness_operator_action(reason))
     label = _safe_regime_label(regime_summary.get("label"))
     confidence = _number(regime_summary.get("confidence"))
     reason_codes = _string_list(
@@ -139,9 +143,18 @@ def project_market_regime_evidence(source: Mapping[str, Any] | None) -> dict[str
         ),
         "status": status,
         "readiness": readiness,
+        "reason": reason,
         "label": label,
         "confidence": confidence if confidence is not None else 0.0,
         "asOf": source.get("asOf") or data_coverage.get("asOf"),
+        "freshness": _readiness_freshness(reason),
+        "blockingModules": _readiness_blocking_modules(
+            _readiness_label(readiness),
+            _string_list(source.get("blockedProductSurfaces")),
+        ),
+        "operatorAction": operator_action,
+        "operatorNextAction": operator_action,
+        "consumerSafeMessage": _readiness_consumer_message(reason),
         "generatedAt": source.get("generatedAt"),
         "noAdviceDisclosure": str(
             source.get("noAdviceDisclosure") or MARKET_REGIME_NO_ADVICE_DISCLOSURE
@@ -239,8 +252,64 @@ def _readiness(*, source_status: str, missing_families: Sequence[str], blocked_s
         "status": status,
         "missingDataFamilies": list(missing_families),
         "blockedProductSurfaces": list(blocked_surfaces),
+        "reason": _readiness_reason(label),
+        "freshness": _readiness_freshness(_readiness_reason(label)),
+        "blockingModules": _readiness_blocking_modules(label, blocked_surfaces),
+        "operatorAction": action,
         "nextOperatorAction": action,
+        "consumerSafeMessage": _readiness_consumer_message(_readiness_reason(label)),
     }
+
+
+def _readiness_label(value: str) -> str:
+    if value in {"ready", "ok", "product_ready"}:
+        return "product_ready"
+    if value in {"blocked", "partial"}:
+        return "blocked"
+    if value in {"failed_closed", "unavailable"}:
+        return "failed_closed"
+    if value == "degraded":
+        return "degraded"
+    return value or "failed_closed"
+
+
+def _readiness_reason(label: str) -> str:
+    normalized = _readiness_label(label)
+    if normalized == "product_ready":
+        return "ready"
+    if normalized == "failed_closed":
+        return "market_regime_read_model_failed_closed"
+    if normalized == "blocked":
+        return "market_regime_read_model_blocked"
+    if normalized == "degraded":
+        return "market_regime_read_model_degraded"
+    return "market_regime_read_model_unavailable"
+
+
+def _readiness_freshness(reason: str) -> str:
+    return "ready" if reason == "ready" else "unknown"
+
+
+def _readiness_blocking_modules(label: str, blocked_surfaces: Sequence[str]) -> list[str]:
+    if _readiness_label(label) == "product_ready":
+        return []
+    return _dedupe(["Market Regime", "Decision Cockpit", *blocked_surfaces])
+
+
+def _readiness_operator_action(reason: str) -> str:
+    if reason == "ready":
+        return "Market regime read model is available from local evidence inputs."
+    if reason == "market_regime_read_model_failed_closed":
+        return "Provide readable local market regime evidence inputs, then rerun."
+    if reason == "market_regime_read_model_blocked":
+        return "Resolve missing local evidence families or blocked product surfaces, then rerun."
+    return "Review degraded local market regime evidence before exposing dependent surfaces."
+
+
+def _readiness_consumer_message(reason: str) -> str:
+    if reason == "ready":
+        return "市场状态证据已具备本地只读就绪依据。"
+    return "市场状态证据缺失或不可用，暂不形成结论。"
 
 
 def _product_summary(regime_label: str, evidence: Mapping[str, Any], readiness_label: str) -> str:
@@ -740,6 +809,18 @@ def _string_list(value: Any) -> list[str]:
         text = str(item or "").strip()
         if text:
             result.append(text)
+    return result
+
+
+def _dedupe(values: Sequence[Any]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
     return result
 
 

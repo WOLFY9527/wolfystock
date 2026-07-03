@@ -234,6 +234,7 @@ class ProviderActivationVerifierService:
             freshness_state=freshness_state,
             validation="GET /api/v1/admin/historical-ohlcv/cache-preflight",
             surfaces=("Scanner", "Backtest", "Stock Fundamentals", "Market Overview"),
+            reason="ready" if status == "available" else f"historical_ohlcv_{status}",
         )
 
     def _earnings_fundamentals(self) -> dict[str, Any]:
@@ -280,6 +281,8 @@ class ProviderActivationVerifierService:
             freshness_state=str(readiness.get("freshnessState") or "unknown"),
             validation="GET /api/v1/scanner/status",
             surfaces=("Scanner", "Market Overview", "Backtest"),
+            reason=str(readiness.get("reason") or f"scanner_universe_{status}"),
+            consumer_safe_message=str(readiness.get("consumerSafeMessage") or ""),
         )
 
     @staticmethod
@@ -294,20 +297,34 @@ class ProviderActivationVerifierService:
         freshness_state: str,
         validation: str,
         surfaces: tuple[str, ...],
+        reason: str | None = None,
+        consumer_safe_message: str | None = None,
     ) -> dict[str, Any]:
+        normalized_status = status if status in SUPPORTED_STATUSES else "unavailable"
+        public_action = str(action or "").strip()
         return {
             "capabilityId": capability_id,
             "provider": provider,
             "dataClass": data_class,
-            "status": status if status in SUPPORTED_STATUSES else "unavailable",
+            "status": normalized_status,
+            "reason": reason or _default_reason(capability_id=capability_id, status=normalized_status),
             "userFacingImpact": impact,
-            "adminNextAction": action,
+            "adminNextAction": public_action,
+            "operatorAction": public_action,
             "freshnessCacheStatus": {
                 "state": freshness_state,
                 "known": freshness_state not in {"unknown", "unavailable"},
             },
+            "freshness": freshness_state,
+            "asOf": None,
             "minimumValidationCheck": validation,
             "blockedProductSurfaces": list(surfaces),
+            "blockingModules": [] if normalized_status == "available" else list(surfaces),
+            "consumerSafeMessage": consumer_safe_message or _default_consumer_safe_message(
+                capability_id=capability_id,
+                status=normalized_status,
+            ),
+            "consumerSafe": True,
         }
 
     def _module_state(self, module_name: str) -> str:
@@ -348,6 +365,39 @@ class ProviderActivationVerifierService:
             return datetime.fromtimestamp(value).date()
         except (OSError, OverflowError, ValueError):
             return None
+
+
+def _default_reason(*, capability_id: str, status: str) -> str:
+    safe_id = capability_id.replace(".", "_").replace("-", "_")
+    if status == "available":
+        return "ready"
+    return f"{safe_id}_{status}"
+
+
+def _default_consumer_safe_message(*, capability_id: str, status: str) -> str:
+    if capability_id == "historical_ohlcv.runtime":
+        if status == "available":
+            return "历史行情运行时已具备本地就绪证据。"
+        if status == "not_configured":
+            return "历史行情运行时尚未启用，相关研究流程暂不可用。"
+        if status == "stale":
+            return "历史行情缓存已过期，需要刷新后再使用相关研究流程。"
+        if status == "missing":
+            return "历史行情依赖或缓存缺失，相关研究流程暂不可用。"
+        return "历史行情运行时暂不可用，相关研究流程暂不可用。"
+    if capability_id == "scanner.universe":
+        if status == "available":
+            return "扫描标的池具备本地就绪证据。"
+        if status == "stale":
+            return "扫描标的池已过期，需要更新后再扫描。"
+        if status == "not_configured":
+            return "扫描标的池尚未配置，暂时无法生成候选。"
+        if status == "missing":
+            return "扫描标的池缺失，暂时无法生成候选。"
+        return "扫描标的池状态无法确认，暂时无法生成候选。"
+    if status == "available":
+        return "该数据能力具备本地就绪证据。"
+    return "该数据能力尚未具备足够就绪证据，相关研究流程保持受限。"
 
 
 __all__ = [

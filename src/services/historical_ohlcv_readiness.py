@@ -284,8 +284,24 @@ class HistoricalOhlcvReadinessService:
             benchmark_state=benchmark_state,
             benchmark_adjustment_state=benchmark_adjustment_state,
         )
+        status = _historical_contract_status(
+            provider_state=provider_state,
+            missing_bars=missing_bars,
+            freshness_state=freshness_state,
+            adjustment_state=adjustment_state,
+            benchmark_state=benchmark_state,
+            missing_requirements=missing_requirements,
+        )
+        reason = _historical_contract_reason(
+            status=status,
+            provider_state=provider_state,
+            missing_requirements=missing_requirements,
+        )
+        operator_action = _historical_operator_action(status, reason=reason)
         readiness = {
             "contractVersion": HISTORICAL_OHLCV_READINESS_CONTRACT_VERSION,
+            "status": status,
+            "reason": reason,
             "symbol": _normalize_symbol(request.symbol),
             "market": _safe_code(request.market) or "unknown",
             "timeframe": _safe_code(request.timeframe) or HISTORICAL_OHLCV_DEFAULT_TIMEFRAME,
@@ -299,6 +315,8 @@ class HistoricalOhlcvReadinessService:
             "missingBars": missing_bars,
             "usableRange": _usable_range(bars),
             "freshnessState": freshness_state,
+            "freshness": freshness_state,
+            "asOf": _historical_as_of(bars),
             "adjustmentState": adjustment_state,
             "benchmarkState": benchmark_state,
             "benchmarkSymbol": _normalize_symbol(str(request.benchmark_symbol or "")) or None,
@@ -310,6 +328,10 @@ class HistoricalOhlcvReadinessService:
             "runtimeStatus": _runtime_status(provider_result.metadata),
             "overallState": _overall_state(missing_requirements),
             "missingRequirements": missing_requirements,
+            "blockingModules": _historical_blocking_modules(status),
+            "operatorAction": operator_action,
+            "operatorNextAction": operator_action,
+            "consumerSafeMessage": _historical_consumer_message(status),
             "consumerSafe": True,
         }
         return HistoricalOhlcvAcquisitionResult(
@@ -367,6 +389,7 @@ def build_backtest_historical_ohlcv_readiness(
         status=status,
         missing_classes=missing_classes,
     )
+    reason = blocked_reason or "ready"
     next_action = _clean_public_text(operator_next_action) or _default_backtest_operator_action(
         status,
         missing_classes=missing_classes,
@@ -374,6 +397,7 @@ def build_backtest_historical_ohlcv_readiness(
     return {
         "contractVersion": BACKTEST_HISTORICAL_OHLCV_READINESS_CONTRACT_VERSION,
         "status": status,
+        "reason": reason,
         "executable": status == "available",
         "requestedSymbol": _normalize_symbol(str(source.get("symbol") or "")),
         "requestedMarket": _safe_code(source.get("market")) or "unknown",
@@ -386,6 +410,8 @@ def build_backtest_historical_ohlcv_readiness(
             "end": _clean_public_text(requested_range.get("end")),
         },
         "usableRange": _sanitize_range(source.get("usableRange")),
+        "freshness": freshness_state or "unknown",
+        "asOf": _clean_public_text(source.get("asOf")) or _sanitize_range(source.get("usableRange")).get("end"),
         "requiredBarCount": required_bars,
         "availableBarCount": available_bars,
         "symbolBarsAvailable": available_bars,
@@ -409,10 +435,12 @@ def build_backtest_historical_ohlcv_readiness(
             "usableRange": _sanitize_range(benchmark_range),
         },
         "historicalOhlcvRuntimeStatus": normalized_runtime,
+        "operatorAction": next_action,
         "operatorNextAction": next_action,
         "nextOperatorAction": next_action,
         "consumerSafeMessage": _backtest_consumer_message(status, missing_classes=missing_classes),
         "blockedExecutionReason": blocked_reason,
+        "blockingModules": [] if status == "available" else ["Backtest"],
         "missingDataClasses": missing_classes,
         "missingDataFamilies": list(missing_classes),
         "sourceReadiness": _sanitize_source_readiness(source),
@@ -618,9 +646,83 @@ def _backtest_consumer_message(status: str, *, missing_classes: Sequence[str] | 
     return "Backtest cannot run because historical OHLCV runtime is unavailable."
 
 
+def _historical_contract_status(
+    *,
+    provider_state: str,
+    missing_bars: int,
+    freshness_state: str,
+    adjustment_state: str,
+    benchmark_state: str,
+    missing_requirements: Sequence[str],
+) -> str:
+    if provider_state == _PROVIDER_MISSING:
+        return "missing"
+    if provider_state in {_PROVIDER_UNAVAILABLE, _ENTITLEMENT_REQUIRED}:
+        return "unavailable"
+    if (
+        missing_bars > 0
+        or _INSUFFICIENT_HISTORY in missing_requirements
+        or benchmark_state in {"missing", "insufficient_coverage"}
+        or adjustment_state == "missing"
+    ):
+        return "missing"
+    if freshness_state == "stale":
+        return "stale"
+    return "ready"
+
+
+def _historical_contract_reason(
+    *,
+    status: str,
+    provider_state: str,
+    missing_requirements: Sequence[str],
+) -> str:
+    if status == "ready":
+        return "ready"
+    if provider_state in {_PROVIDER_MISSING, _PROVIDER_UNAVAILABLE, _ENTITLEMENT_REQUIRED}:
+        return provider_state
+    if missing_requirements:
+        return str(missing_requirements[0])
+    return f"historical_ohlcv_{status}"
+
+
+def _historical_as_of(bars: Sequence[HistoricalOhlcvBar]) -> str | None:
+    return _usable_range(bars).get("end")
+
+
+def _historical_blocking_modules(status: str) -> list[str]:
+    if status == "ready":
+        return []
+    return ["Scanner", "Backtest", "Market Regime", "Decision Cockpit"]
+
+
+def _historical_operator_action(status: str, *, reason: str) -> str:
+    if status == "ready":
+        return "Historical OHLCV cache and runtime readiness are available for dependent research workflows."
+    if reason == _PROVIDER_MISSING:
+        return "Enable the historical OHLCV runtime, then run the dry-run cache preflight for representative symbols."
+    if reason == _STALE_DATA or status == "stale":
+        return "Refresh the local historical OHLCV cache through the approved operator workflow, then rerun readiness checks."
+    if reason == _MISSING_ADJUSTMENTS:
+        return "Provide adjusted historical prices or real adjustment metadata before promoting dependent workflows."
+    return "Run the historical OHLCV dry-run preflight and verify cache coverage before retrying dependent workflows."
+
+
+def _historical_consumer_message(status: str) -> str:
+    if status == "ready":
+        return "历史行情覆盖已满足本轮研究流程。"
+    if status == "stale":
+        return "历史行情已过期，需要更新后再继续研究流程。"
+    if status == "unavailable":
+        return "历史行情暂不可用，暂时无法完成依赖历史数据的研究流程。"
+    return "历史行情不可用，暂时无法完成依赖历史数据的研究流程。"
+
+
 def _sanitize_source_readiness(source: Mapping[str, Any]) -> dict[str, Any]:
     allowed = {
         "contractVersion",
+        "status",
+        "reason",
         "symbol",
         "market",
         "timeframe",
@@ -630,6 +732,8 @@ def _sanitize_source_readiness(source: Mapping[str, Any]) -> dict[str, Any]:
         "usableBars",
         "missingBars",
         "usableRange",
+        "freshness",
+        "asOf",
         "freshnessState",
         "adjustmentState",
         "benchmarkState",
@@ -638,6 +742,10 @@ def _sanitize_source_readiness(source: Mapping[str, Any]) -> dict[str, Any]:
         "runtimeStatus",
         "overallState",
         "missingRequirements",
+        "blockingModules",
+        "operatorAction",
+        "operatorNextAction",
+        "consumerSafeMessage",
         "consumerSafe",
     }
     sanitized = {key: value for key, value in dict(source or {}).items() if key in allowed}

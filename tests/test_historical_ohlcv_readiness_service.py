@@ -200,6 +200,18 @@ def test_no_provider_configured_returns_provider_missing_readiness_without_bars(
     assert result.readiness["overallState"] == "blocked"
     assert result.readiness["providerState"] == "provider_missing"
     assert result.readiness["missingRequirements"] == ["provider_missing", "insufficient_history"]
+    assert result.readiness["status"] == "missing"
+    assert result.readiness["reason"] == "provider_missing"
+    assert result.readiness["freshness"] == "unknown"
+    assert result.readiness["asOf"] is None
+    assert result.readiness["blockingModules"] == [
+        "Scanner",
+        "Backtest",
+        "Market Regime",
+        "Decision Cockpit",
+    ]
+    assert "historical OHLCV runtime" in result.readiness["operatorAction"]
+    assert result.readiness["consumerSafeMessage"] == "历史行情不可用，暂时无法完成依赖历史数据的研究流程。"
 
 
 def test_backtest_projection_maps_provider_missing_to_not_configured_actionable_contract() -> None:
@@ -238,6 +250,11 @@ def test_backtest_projection_maps_provider_missing_to_not_configured_actionable_
     assert projection["benchmarkReadiness"]["availableBarCount"] == 0
     assert projection["historicalOhlcvRuntimeStatus"] == "not_configured"
     assert projection["blockedExecutionReason"] == "historical_ohlcv_not_configured"
+    assert projection["reason"] == "historical_ohlcv_not_configured"
+    assert projection["freshness"] == "unknown"
+    assert projection["asOf"] is None
+    assert projection["blockingModules"] == ["Backtest"]
+    assert "historical OHLCV runtime" in projection["operatorAction"]
     assert "historical_ohlcv" in projection["missingDataClasses"]
     assert "adjusted_prices" in projection["missingDataClasses"]
     assert "benchmark_ohlcv" in projection["missingDataClasses"]
@@ -283,6 +300,8 @@ def test_backtest_projection_distinguishes_insufficient_coverage_stale_adjustmen
     assert available_projection["status"] == "available"
     assert available_projection["executable"] is True
     assert available_projection["blockedExecutionReason"] is None
+    assert available_projection["reason"] == "ready"
+    assert available_projection["blockingModules"] == []
 
 
 def test_fake_provider_with_sufficient_bars_returns_normalized_available_payload() -> None:

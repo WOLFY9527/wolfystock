@@ -166,13 +166,17 @@ def build_scanner_universe_readiness_contract(
     }
     surfaces = list(blocked_product_surfaces or (() if effectively_available else SCANNER_UNIVERSE_BLOCKED_SURFACES))
     next_action = operator_next_action or _operator_next_action(normalized_status)
+    reason = _reason_code(normalized_status)
     return {
         "contractVersion": SCANNER_UNIVERSE_READINESS_CONTRACT_VERSION,
         "status": normalized_status,
+        "reason": reason,
         "market": _safe_market(market),
         "universeSize": max(0, int(universe_size or 0)),
         "lastUpdatedAt": last_updated_at,
+        "asOf": last_updated_at,
         "freshnessState": str(freshness_state or "unknown"),
+        "freshness": str(freshness_state or "unknown"),
         "requiredDataClasses": required,
         "availableDataClasses": available,
         "missingDataClasses": missing,
@@ -190,6 +194,8 @@ def build_scanner_universe_readiness_contract(
         "activationState": str(activation_state or normalized_status).strip() or normalized_status,
         "blockedProductSurfaces": surfaces,
         "affectedProductSurfaces": surfaces,
+        "blockingModules": surfaces,
+        "operatorAction": next_action,
         "operatorNextAction": next_action,
         "nextOperatorAction": next_action,
         "consumerSafeMessage": consumer_safe_message or _consumer_safe_message(normalized_status),
@@ -356,6 +362,12 @@ def _operator_next_action(status: str) -> str:
     if status in {"available", "local_universe_available", "local_universe_seeded"}:
         return "Run Scanner with bounded candidate generation from the current universe."
     return "Inspect scanner data readiness and refresh the current universe path."
+
+
+def _reason_code(status: str) -> str:
+    if status in {"available", "local_universe_available", "local_universe_seeded"}:
+        return "ready"
+    return f"scanner_universe_{status or 'unavailable'}"
 
 
 def _consumer_safe_message(status: str) -> str:

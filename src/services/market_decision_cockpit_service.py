@@ -201,6 +201,7 @@ class MarketDecisionCockpitService:
                 research_preview,
                 options_status,
                 data_quality,
+                generated_at=generated_at,
             ),
             "scenarioHints": self._build_scenario_hints(decision),
             "consumerIssues": consumer_issues,
@@ -1232,16 +1233,26 @@ class MarketDecisionCockpitService:
         research_preview: Mapping[str, Any],
         options_status: Mapping[str, Any],
         data_quality: Mapping[str, Any],
+        *,
+        generated_at: str,
     ) -> dict[str, Any]:
         reasons: list[str] = []
         confidence = str(market_regime_decision.get("confidence") or "low").lower()
         regime_quality = _mapping(market_regime_decision.get("dataQuality"))
+        as_of = _cockpit_as_of(market_regime_decision, generated_at)
         if _is_read_model_primary(market_regime_decision):
-            return {
-                "status": "ready",
-                "reasons": ["Market Regime Read Model is product-ready for the primary market context."],
-                "advancedEvidenceStatus": "secondary_unavailable",
-            }
+            payload = _cockpit_readiness_payload(
+                status="ready",
+                reason="ready",
+                reasons=["Market Regime Read Model is product-ready for the primary market context."],
+                freshness="ready",
+                as_of=as_of,
+                blocking_modules=[],
+                operator_action="Decision Cockpit can use the product-ready Market Regime Read Model as primary context.",
+                consumer_safe_message="决策驾驶舱已有足够只读证据，但仍仅用于观察。",
+            )
+            payload["advancedEvidenceStatus"] = "secondary_unavailable"
+            return payload
         scoring_driver_count = int(
             regime_quality.get("scoringDriverCount")
             or data_quality.get("availableDriverCount")
@@ -1258,13 +1269,40 @@ class MarketDecisionCockpitService:
             reasons.append("options structure evidence is unavailable")
 
         if not reasons:
-            return {
-                "status": "ready",
-                "reasons": ["core evidence is available for read-only decision support"],
-            }
+            return _cockpit_readiness_payload(
+                status="ready",
+                reason="ready",
+                reasons=["core evidence is available for read-only decision support"],
+                freshness="ready",
+                as_of=as_of,
+                blocking_modules=[],
+                operator_action="Decision Cockpit has enough read-only evidence for observation-only context.",
+                consumer_safe_message="决策驾驶舱已有足够只读证据，但仍仅用于观察。",
+            )
+        reason = _cockpit_reason(market_regime_decision, reasons)
+        blocking_modules = _cockpit_blocking_modules(reasons, reason)
+        operator_action = _cockpit_operator_action(reasons, reason)
         if data_quality.get("status") == "blocked" or len(reasons) >= 3:
-            return {"status": "insufficient", "reasons": reasons}
-        return {"status": "degraded", "reasons": reasons}
+            return _cockpit_readiness_payload(
+                status="insufficient",
+                reason=reason,
+                reasons=reasons,
+                freshness="unknown",
+                as_of=as_of,
+                blocking_modules=blocking_modules,
+                operator_action=operator_action,
+                consumer_safe_message="数据证据不足，决策驾驶舱暂不形成结论。",
+            )
+        return _cockpit_readiness_payload(
+            status="degraded",
+            reason=reason,
+            reasons=reasons,
+            freshness="unknown",
+            as_of=as_of,
+            blocking_modules=blocking_modules,
+            operator_action=operator_action,
+            consumer_safe_message="数据证据不足，决策驾驶舱暂不形成结论。",
+        )
 
     def _build_scenario_hints(self, market_regime_decision: Mapping[str, Any]) -> list[str]:
         explanation = _mapping(market_regime_decision.get("explanation"))
@@ -1509,6 +1547,73 @@ def _is_read_model_primary(market_regime_decision: Mapping[str, Any]) -> bool:
     return bool(market_regime_decision.get("readModelPrimaryContext")) and (
         str(market_regime_decision.get("readModelReadinessLabel") or "") == "product_ready"
     )
+
+
+def _cockpit_readiness_payload(
+    *,
+    status: str,
+    reason: str,
+    reasons: Sequence[str],
+    freshness: str,
+    as_of: str | None,
+    blocking_modules: Sequence[str],
+    operator_action: str,
+    consumer_safe_message: str,
+) -> dict[str, Any]:
+    return {
+        "status": status,
+        "reason": reason,
+        "reasons": list(reasons),
+        "freshness": freshness,
+        "asOf": as_of,
+        "blockingModules": list(blocking_modules),
+        "operatorAction": operator_action,
+        "consumerSafeMessage": consumer_safe_message,
+    }
+
+
+def _cockpit_as_of(market_regime_decision: Mapping[str, Any], generated_at: str) -> str | None:
+    value = (
+        market_regime_decision.get("asOf")
+        or market_regime_decision.get("generatedAt")
+        or generated_at
+    )
+    return str(value) if value else None
+
+
+def _cockpit_reason(market_regime_decision: Mapping[str, Any], reasons: Sequence[str]) -> str:
+    if str(market_regime_decision.get("readModelReadinessLabel") or "") == "failed_closed":
+        return "decision_cockpit_market_regime_read_model_failed_closed"
+    if "market regime evidence is insufficient" in reasons:
+        return "decision_cockpit_market_regime_evidence_insufficient"
+    if "research radar candidates are unavailable" in reasons:
+        return "decision_cockpit_research_radar_unavailable"
+    if "options structure evidence is unavailable" in reasons:
+        return "decision_cockpit_options_structure_unavailable"
+    return "decision_cockpit_evidence_unavailable"
+
+
+def _cockpit_blocking_modules(reasons: Sequence[str], reason: str) -> list[str]:
+    modules: list[str] = []
+    if (
+        reason == "decision_cockpit_market_regime_read_model_failed_closed"
+        or "market regime evidence is insufficient" in reasons
+    ):
+        modules.append("Market Regime")
+    if "research radar candidates are unavailable" in reasons:
+        modules.append("Research Radar")
+    if "options structure evidence is unavailable" in reasons:
+        modules.append("Options")
+    modules.append("Decision Cockpit")
+    return _dedupe(modules)
+
+
+def _cockpit_operator_action(reasons: Sequence[str], reason: str) -> str:
+    if reason == "decision_cockpit_market_regime_read_model_failed_closed":
+        return "Repair Market Regime Read Model local evidence inputs, then rerun Decision Cockpit readiness."
+    if len(reasons) >= 3:
+        return "Resolve market regime evidence, research candidates, and options structure blockers, then rerun Decision Cockpit readiness."
+    return "Resolve listed upstream evidence blockers, then rerun Decision Cockpit readiness."
 
 
 def _float_value(value: Any) -> float | None:
