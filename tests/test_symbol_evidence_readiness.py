@@ -49,11 +49,11 @@ def test_symbol_evidence_readiness_marks_clean_complete_evidence_sufficient() ->
         "staleInputs": [],
         "conflictingEvidence": [],
         "dataQualityNotes": [
-            "Core quote, technical, fundamental, and news evidence are present without stale markers."
+            "核心行情、技术面、基本面与新闻资讯证据已返回，未见过期标记。"
         ],
         "suggestedResearchPath": [
-            "Continue by reviewing quote, technical, fundamental, and news evidence together.",
-            "Keep any downstream thesis work separate from trading instructions.",
+            "继续一起复核行情、技术面、基本面与新闻资讯证据。",
+            "后续研究假设继续与交易指令保持分离。",
         ],
         "observationOnly": True,
         "noAdviceDisclosure": "仅供研究观察，不构成个性化行动指令。",
@@ -76,12 +76,13 @@ def test_symbol_evidence_readiness_marks_partial_without_fabricating_missing_new
     assert readiness["readinessTier"] == "partial"
     assert readiness["evidenceUsed"] == ["quote", "fundamental"]
     assert readiness["evidenceMissing"] == ["technical", "fundamental", "news"]
+    assert "待补证据类别：技术面、基本面、新闻资讯。" in readiness["dataQualityNotes"]
     assert readiness["staleInputs"] == ["quote"]
     assert readiness["suggestedResearchPath"] == [
-        "Add recent OHLC or technical context.",
+        "补充近期 K 线或技术面上下文。",
         "补充基本面证据后再复核研究主线。",
-        "Add recent news or filing context before catalyst review.",
-        "Refresh stale or delayed inputs before comparing research scenarios.",
+        "补充近期新闻或公告语境后再复核催化因素。",
+        "刷新过期或延迟输入后再比较研究场景。",
     ]
 
 
@@ -110,6 +111,7 @@ def test_symbol_evidence_readiness_fails_closed_for_sparse_evidence_and_redacts_
     assert readiness["readinessTier"] == "insufficient"
     assert readiness["evidenceUsed"] == ["secFilingEvidence"]
     assert readiness["evidenceMissing"] == ["quote", "technical", "fundamental", "news"]
+    assert "待补证据类别：行情、技术面、基本面、新闻资讯。" in readiness["dataQualityNotes"]
     serialized = json.dumps(readiness, sort_keys=True)
     for forbidden in (
         "must-not-emit",
@@ -122,3 +124,4 @@ def test_symbol_evidence_readiness_fails_closed_for_sparse_evidence_and_redacts_
         assert forbidden not in serialized
     for forbidden in ("buy", "sell", "target price", "stop loss", "position sizing"):
         assert forbidden not in serialized.lower()
+    assert "quote, fundamental, news" not in serialized.lower()

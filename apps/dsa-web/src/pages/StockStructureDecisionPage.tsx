@@ -827,6 +827,9 @@ function missingEvidenceCopy(
     : `${symbol} 的部分对比证据暂未就绪。`;
   const raw = gap.message || gap.kind || gap.code || gap.field || '';
   if (!raw) return fallback;
+  if (/^OHLCV\s*证据缺失时/i.test(raw)) {
+    return safeConsumerText(raw, language, fallback);
+  }
   if (looksUnsafeForConsumer(raw)) return fallback;
   return safeConsumerText(raw || evidenceKindLabel(gap.kind, language), language, fallback);
 }
@@ -1954,7 +1957,7 @@ function technicalStatusLabel(status: string | null | undefined, language: 'zh' 
     return { label: language === 'en' ? 'Indicators available' : '指标可用', status: 'success' };
   }
   if (token === 'missing_cache' || token === 'missing') {
-    return { label: language === 'en' ? 'OHLCV cache missing' : '本地数据待补', status: 'warning' };
+    return { label: language === 'en' ? 'Price history missing' : '本地行情待补', status: 'warning' };
   }
   if (token === 'insufficient_history' || token === 'insufficient') {
     return { label: language === 'en' ? 'History insufficient' : '历史样本不足', status: 'warning' };
@@ -2057,7 +2060,7 @@ function technicalSourceBoundaryLabel(
 ): string {
   const safeLabel = safeOptionalConsumerText(indicators.sourceLabel, language);
   if (safeLabel) return safeLabel;
-  return language === 'en' ? 'Local OHLCV boundary' : '本地 OHLCV 边界';
+  return language === 'en' ? 'Local price-history boundary' : '本地价格历史边界';
 }
 
 function technicalHistoryRows(
@@ -2133,7 +2136,7 @@ function StockTechnicalIndicatorsPanel({
       <div className="border-t border-[color:var(--wolfy-divider)] p-3" data-testid="stock-technical-indicators-panel">
         <RoughSectionCard eyebrow={isEnglish ? 'Technical indicators' : '技术指标'} title={isEnglish ? 'Loading indicators' : '正在读取技术指标'}>
           <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-            {isEnglish ? 'Loading cached OHLCV indicator context.' : '正在读取本地 OHLCV 指标上下文。'}
+            {isEnglish ? 'Loading cached price-history indicator context.' : '正在读取本地价格历史指标上下文。'}
           </p>
         </RoughSectionCard>
       </div>
@@ -2176,7 +2179,7 @@ function StockTechnicalIndicatorsPanel({
   if (isAvailable && rows.length) {
     return (
       <div className="border-t border-[color:var(--wolfy-divider)] p-3" data-testid="stock-technical-indicators-panel">
-        <RoughSectionCard eyebrow={isEnglish ? 'Technical indicators' : '技术指标'} title={isEnglish ? 'Cached OHLCV indicators' : '本地 OHLCV 技术指标'}>
+        <RoughSectionCard eyebrow={isEnglish ? 'Technical indicators' : '技术指标'} title={isEnglish ? 'Cached price-history indicators' : '本地价格历史技术指标'}>
           <div className="mb-3 flex flex-wrap gap-2">
             <StatusBadge status={status.status} label={status.label} size="sm" />
             {boundaryChips.map((label) => (
@@ -2186,8 +2189,8 @@ function StockTechnicalIndicatorsPanel({
           <RoughKeyValueRows rows={rows} />
           <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
             {isEnglish
-              ? 'Research-only context from cached OHLCV. No action instruction is generated.'
-              : '仅作研究观察上下文，来自本地 OHLCV，不生成操作指令。'}
+              ? 'Research-only context from cached price history. No action instruction is generated.'
+              : '仅作研究观察上下文，来自本地价格历史，不生成操作指令。'}
           </p>
         </RoughSectionCard>
       </div>
@@ -2195,14 +2198,14 @@ function StockTechnicalIndicatorsPanel({
   }
 
   const title = statusToken === 'missing_cache'
-    ? (isEnglish ? 'Cached OHLCV data not available' : '本地 OHLCV 数据暂不可用')
+    ? (isEnglish ? 'Cached price history not available' : '本地价格历史暂不可用')
     : statusToken === 'insufficient_history'
       ? (isEnglish ? 'History is insufficient for indicators' : '历史样本不足，暂不计算指标')
       : (isEnglish ? 'Indicators not populated' : '技术指标待补证');
   const detail = statusToken === 'missing_cache'
     ? (isEnglish
-      ? 'The cached OHLCV input is not available, so SMA, EMA, RSI, MACD, and Bollinger values are not shown.'
-      : '本地 OHLCV 输入暂不可用，因此不展示 SMA、EMA、RSI、MACD 与布林带数值。')
+      ? 'The cached price-history input is not available, so SMA, EMA, RSI, MACD, and Bollinger values are not shown.'
+      : '本地价格历史暂不可用，因此不展示 SMA、EMA、RSI、MACD 与布林带数值。')
     : statusToken === 'insufficient_history'
       ? (isEnglish
         ? 'The observed history is shorter than the required window. The page does not calculate partial indicator values.'
@@ -3446,7 +3449,7 @@ export default function StockStructureDecisionPage() {
                   >
                     <StockResearchCockpitStage
                       order={2}
-                      eyebrow={locale === 'en' ? 'OHLCV / technicals' : 'OHLCV / 技术'}
+                      eyebrow={locale === 'en' ? 'Price history / technicals' : '价格历史 / 技术'}
                       title={locale === 'en' ? 'History and indicator readiness' : '历史与指标就绪度'}
                       testId="stock-cockpit-stage-history-technical"
                     >

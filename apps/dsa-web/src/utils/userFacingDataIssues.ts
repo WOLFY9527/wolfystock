@@ -87,6 +87,22 @@ const EXACT_REASON_LABELS: Record<string, { zh: string; en: string }> = {
     zh: '价格数据暂不可完整确认',
     en: 'Price data incomplete',
   },
+  universe_historical_ohlcv_quote_snapshot: {
+    zh: '数据缺口：标的池行情 / 历史日线 / 实时报价',
+    en: 'Data gap: scope quotes / price history / realtime quotes',
+  },
+  missing_or_incomplete_evidence_families_quote_fundamental_news: {
+    zh: '待补证据类别：行情、基本面、新闻资讯。',
+    en: 'Evidence still needed: market data, fundamentals, and news.',
+  },
+  peer_correlation_was_not_evaluated_because_structure_evidence_exceeded_the_latency_boundary: {
+    zh: '因结构证据超过时效边界，未评估同业相关性。',
+    en: 'Peer correlation was not evaluated because structure evidence was outside the freshness boundary.',
+  },
+  peer_correlation_was_not_evaluated_because_structure_computation_exceeded_the_latency_boundary: {
+    zh: '因结构计算超过时效边界，未评估同业相关性。',
+    en: 'Peer correlation was not evaluated because structure computation was outside the freshness boundary.',
+  },
 };
 
 function exactReasonLabel(normalized: string, locale: UserFacingIssueLocale): string | null {
@@ -118,6 +134,19 @@ function mapInternalReasonToUserMessage(
   const exactLabel = exactReasonLabel(normalized, locale);
   if (exactLabel) {
     return exactLabel;
+  }
+  if (/^ohlcv_证据缺失时/.test(normalized) || /^ohlcv\s*证据缺失时/i.test(raw)) {
+    return isEnglish
+      ? 'When price-history evidence is missing, only confirmed readiness boundaries are shown.'
+      : 'K线行情证据缺失时，页面仅展示已确认的就绪边界。';
+  }
+  if (/missing\s+or\s+incomplete\s+evidence\s+families\b/i.test(raw)
+    && /\bquote\b/i.test(raw)
+    && /\bfundamental\b/i.test(raw)
+    && /\bnews\b/i.test(raw)) {
+    return isEnglish
+      ? 'Evidence still needed: market data, fundamentals, and news.'
+      : '待补证据类别：行情、基本面、新闻资讯。';
   }
   if (!looksLikeInternalIssue(raw)) {
     return raw;

@@ -219,7 +219,7 @@ const technicalIndicatorsAvailable = () => ({
   timeframe: 'daily',
   asOf: '2026-05-28T09:30:00Z',
   freshness: 'fresh',
-  sourceLabel: 'Local OHLCV boundary',
+  sourceLabel: '本地价格历史边界',
   dataQuality: {
     status: 'available',
     requiredBars: 200,
@@ -911,7 +911,7 @@ describe('StockStructureDecisionPage', () => {
         reason: 'history_source_disabled',
       },
       missingEvidence: [
-        { kind: 'daily_ohlcv', message: 'Need local historical bars.' },
+        { kind: 'daily_ohlcv', message: 'OHLCV 证据缺失时，不形成结构结论。' },
       ],
     });
     getHistoryMock.mockResolvedValue({
@@ -953,6 +953,8 @@ describe('StockStructureDecisionPage', () => {
     const summary = within(page).getByTestId('stock-consumer-research-summary');
     expect(summary).toHaveTextContent('历史数据暂缺，价格走势图暂不可用。');
     expect(summary).toHaveTextContent('置信度为低：关键价格、历史或结构证据不足，页面只保留可核验事实。');
+    expect(page).toHaveTextContent('K线行情证据缺失时，页面仅展示已确认的就绪边界。');
+    expect(page).not.toHaveTextContent('OHLCV 证据缺失时');
     const emptyChart = within(page).getByTestId('stock-history-empty-chart-state');
     expect(within(page).getByTestId('stock-price-history-visual-block')).toContainElement(
       emptyChart,
@@ -1016,7 +1018,7 @@ describe('StockStructureDecisionPage', () => {
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
   });
 
-  it('renders cached OHLCV technical indicator values as research-only context', async () => {
+  it('renders cached price-history technical indicator values as research-only context', async () => {
     getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
     getTechnicalIndicatorsMock.mockResolvedValue(technicalIndicatorsAvailable());
 
@@ -1030,9 +1032,9 @@ describe('StockStructureDecisionPage', () => {
     const panel = await within(page).findByTestId('stock-technical-indicators-panel');
 
     expect(getTechnicalIndicatorsMock).toHaveBeenCalledWith('AAPL');
-    expect(panel).toHaveTextContent('本地 OHLCV 技术指标');
+    expect(panel).toHaveTextContent('本地价格历史技术指标');
     expect(panel).toHaveTextContent('指标可用');
-    expect(panel).toHaveTextContent('本地 OHLCV 边界');
+    expect(panel).toHaveTextContent('本地价格历史边界');
     expect(panel).toHaveTextContent('最新可用');
     expect(panel).toHaveTextContent('SMA 20');
     expect(panel).toHaveTextContent('210.12');
@@ -1059,6 +1061,7 @@ describe('StockStructureDecisionPage', () => {
     expect(panel).toHaveTextContent('布林带下轨');
     expect(panel).toHaveTextContent('198.79');
     expect(panel).toHaveTextContent('仅作研究观察上下文');
+    expect(panel.textContent || '').not.toMatch(/OHLCV|daily OHLCV|historical OHLCV/i);
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
   });
 
@@ -1075,8 +1078,8 @@ describe('StockStructureDecisionPage', () => {
     const page = await screen.findByTestId('stock-structure-decision-page');
     const panel = await within(page).findByTestId('stock-technical-indicators-panel');
 
-    expect(panel).toHaveTextContent('本地 OHLCV 数据暂不可用');
-    expect(panel).toHaveTextContent('本地数据待补');
+    expect(panel).toHaveTextContent('本地价格历史暂不可用');
+    expect(panel).toHaveTextContent('本地行情待补');
     expect(panel).toHaveTextContent('所需历史');
     expect(panel).toHaveTextContent('200');
     expect(panel).toHaveTextContent('已观察历史');
@@ -1086,6 +1089,7 @@ describe('StockStructureDecisionPage', () => {
     expect(panel).toHaveTextContent('不推断指标');
     expect(panel).not.toHaveTextContent('210.12');
     expect(panel).not.toHaveTextContent('SMA 20');
+    expect(panel.textContent || '').not.toMatch(/OHLCV|daily OHLCV|historical OHLCV/i);
     expect(findConsumerRawLeakage(panel.textContent || '', {
       extraForbiddenPatterns: [/cacheKey|provider|rawPayload|requestId|traceId|missing_cache/i],
     })).toEqual([]);
@@ -1744,6 +1748,7 @@ describe('StockStructureDecisionPage', () => {
         missingInputs: [
           'No verified local peer group metadata is available for AAPL.',
           'Load recent local daily OHLCV for the symbol and at least two verified peers.',
+          'Peer correlation was not evaluated because structure evidence exceeded the latency boundary.',
         ],
         confidenceCap: 'low',
         observationBoundary: 'Observation-only peer movement context; no personalized action instruction.',
@@ -1764,9 +1769,10 @@ describe('StockStructureDecisionPage', () => {
     const snapshot = await within(page).findByTestId('stock-structure-peer-correlation-snapshot');
     expect(snapshot).toHaveTextContent('同业对比信息待确认');
     expect(snapshot).toHaveTextContent('历史行情待补');
+    expect(snapshot).toHaveTextContent('因结构证据超过时效边界，未评估同业相关性。');
     expect(snapshot).toHaveTextContent('补齐本地同业分组后再复核同业走势。');
-    expect(snapshot.textContent || '').not.toMatch(/No verified local peer group metadata|Add verified local peer group metadata|Load recent local daily OHLCV/i);
-    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/No verified local peer group metadata|Add verified local peer group metadata|Load recent local daily OHLCV/i);
+    expect(snapshot.textContent || '').not.toMatch(/No verified local peer group metadata|Add verified local peer group metadata|Load recent local daily OHLCV|Peer correlation was not evaluated because structure evidence exceeded the latency boundary/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/No verified local peer group metadata|Add verified local peer group metadata|Load recent local daily OHLCV|Peer correlation was not evaluated because structure evidence exceeded the latency boundary/i);
     expect(findConsumerRawLeakage(snapshot.textContent || '')).toEqual([]);
   });
 });
