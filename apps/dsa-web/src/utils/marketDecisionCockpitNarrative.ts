@@ -47,6 +47,7 @@ const EVIDENCE_STATE_LABELS: Record<string, { zh: string; en: string; state: Dri
   mixed: { zh: '部分证据', en: 'partial evidence', state: 'partial' },
   thin: { zh: '证据偏薄', en: 'thin evidence', state: 'partial' },
   evidence_limited: { zh: '证据仍待补', en: 'evidence still incomplete', state: 'partial' },
+  evidence_incomplete: { zh: '证据仍待补', en: 'evidence still incomplete', state: 'partial' },
   stale: { zh: '数据可能已过期', en: 'data may be stale', state: 'partial' },
   proxy: { zh: '间接参考，证据强度受限', en: 'proxy reference; evidence strength is limited', state: 'partial' },
   proxy_only: { zh: '间接参考，证据强度受限', en: 'proxy reference; evidence strength is limited', state: 'partial' },
@@ -133,7 +134,7 @@ export function getCockpitConsumerStatusLabel(value: string | null | undefined, 
   if (normalized.includes('stale')) {
     return locale === 'en' ? 'data may be stale' : '数据可能已过期';
   }
-  if (normalized.includes('evidence_limited')) {
+  if (normalized.includes('evidence_limited') || normalized.includes('evidence_incomplete')) {
     return locale === 'en' ? 'evidence still incomplete' : '证据仍待补';
   }
   if (normalized.includes('low_confidence')) {

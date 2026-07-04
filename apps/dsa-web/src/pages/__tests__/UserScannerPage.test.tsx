@@ -1596,6 +1596,33 @@ describe('UserScannerPage', () => {
     expect(container.textContent || '').not.toMatch(/universe\s*\/\s*historical ohlcv\s*\/\s*quote snapshot/i);
   });
 
+  it('sanitizes WorkBuddy scanner readiness wording from direct reason and scoring-note render paths', async () => {
+    const nvda = makeCandidate({ symbol: 'NVDA', rank: 1, score: 94 });
+    nvda.reasonSummary = 'universe / historical ohlcv / quote snapshot';
+    nvda.reasons = [];
+    nvda.featureSignals = [];
+
+    getRun.mockResolvedValue(makeRunDetail({
+      shortlist: [nvda],
+      selected: [nvda],
+      scoringNotes: ['universe / historical ohlcv / quote snapshot'],
+    }));
+
+    const { container } = renderUserScannerPage();
+
+    const row = await screen.findByTestId('scanner-result-row-NVDA');
+    expect(row).toHaveTextContent('历史行情待补');
+    expect(row).not.toHaveTextContent('universe / historical ohlcv / quote snapshot');
+
+    const detail = await screen.findByTestId('scanner-result-detail-NVDA');
+    expect(detail).toHaveTextContent('历史行情待补');
+    expect(detail).not.toHaveTextContent('universe / historical ohlcv / quote snapshot');
+
+    expect(screen.getByTestId('scanner-consumer-next-action')).not.toHaveTextContent('universe / historical ohlcv / quote snapshot');
+    expect(container.textContent || '').not.toMatch(/universe\s*\/\s*historical ohlcv\s*\/\s*quote snapshot/i);
+    expect(container.textContent || '').not.toContain('OBSERVATION-ONLY 证据摘要');
+  });
+
   it('renders candidate provenance additively inside evidence areas without changing row order or score labels', async () => {
     const nvda = makeCandidate({ symbol: 'NVDA', rank: 1, score: 94 });
     (nvda as ScannerCandidate & Record<string, unknown>).candidateEvidenceFrame = makeCandidateEvidenceFrame();

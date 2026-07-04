@@ -320,12 +320,12 @@ def _payload(
             "peerEvidence": [],
             "divergenceEvidence": [],
             "staleInputs": [],
-            "missingInputs": ["No verified local peer group metadata is available for this symbol."],
+            "missingInputs": ["同业对比信息待确认。"],
             "confidenceCap": "low",
             "observationBoundary": "Observation-only peer movement context; no personalized action instruction.",
             "researchNextSteps": [
-                "Add verified local peer group metadata before interpreting peer movement.",
-                "Load recent local daily OHLCV for the symbol and at least two verified peers.",
+                "补齐本地同业分组后再复核同业走势。",
+                "补齐标的及至少两个同业的近期日线数据。",
             ],
         },
         "consumerIssues": (
@@ -1186,7 +1186,7 @@ def test_structure_decision_endpoint_preserves_confidence_evidence_guard_fields(
                 "policyVersion": "confidence_evidence_consistency_v1",
             },
             "confidenceState": {
-                "status": "evidence limited",
+                "status": "evidence incomplete",
                 "label": "medium",
                 "reasons": ["critical evidence missing"],
                 "freshnessConstrained": False,
@@ -1212,7 +1212,7 @@ def test_structure_decision_endpoint_preserves_confidence_evidence_guard_fields(
     assert payload["confidenceCap"]["label"] == "medium"
     assert payload["confidenceCap"]["reasons"] == ["critical evidence missing"]
     assert "policyVersion" not in payload["confidenceCap"]
-    assert payload["confidenceState"]["status"] == "evidence limited"
+    assert payload["confidenceState"]["status"] == "evidence incomplete"
     assert payload["confidenceState"]["label"] == "medium"
     assert payload["confidenceState"]["reasons"] == ["critical evidence missing"]
     assert payload["confidenceState"]["freshnessConstrained"] is False

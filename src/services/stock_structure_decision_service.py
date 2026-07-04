@@ -642,7 +642,7 @@ def _finalize_structure_contract(
     if not isinstance(peer_correlation_snapshot, Mapping):
         peer_correlation_snapshot = _insufficient_peer_correlation_snapshot(
             str(payload.get("ticker") or ""),
-            missing_inputs=["No verified local peer group metadata is available for this symbol."],
+            missing_inputs=["同业对比信息待确认。"],
         )
     confidence_projection = project_confidence_evidence_state(
         payload={
@@ -837,7 +837,7 @@ def _insufficient_peer_correlation_snapshot(
 def _load_local_peer_group(stock_repo: Any, ticker: str) -> tuple[dict[str, Any], list[str]]:
     getter = getattr(stock_repo, "get_local_peer_group", None)
     if not callable(getter):
-        return _unavailable_peer_group(), [f"No verified local peer group metadata is available for {ticker}."]
+        return _unavailable_peer_group(), ["同业对比信息待确认。"]
     try:
         raw_group = getter(ticker)
     except Exception as exc:
@@ -1039,8 +1039,8 @@ def _stale_peer_inputs(
 def _peer_research_next_steps(correlation_state: str, missing_inputs: Sequence[str]) -> list[str]:
     if missing_inputs or correlation_state == "insufficient_evidence":
         return [
-            "Add verified local peer group metadata before interpreting peer movement.",
-            "Load recent local daily OHLCV for the symbol and at least two verified peers.",
+            "补齐本地同业分组后再复核同业走势。",
+            "补齐标的及至少两个同业的近期日线数据。",
         ]
     if correlation_state == "aligned":
         return [

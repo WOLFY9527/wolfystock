@@ -1711,4 +1711,62 @@ describe('StockStructureDecisionPage', () => {
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/provider|cache|runtime|schema|requestId|traceId|fallback|proxy|sourceAuthority|score-grade|raw|debug/i);
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓|buy|sell|hold|target price|stop loss|position sizing/i);
   });
+
+  it('sanitizes WorkBuddy peer metadata and history wording in the rendered peer snapshot', async () => {
+    verifyTickerExistsMock.mockResolvedValue({
+      stockCode: 'AAPL',
+      normalizedSymbol: 'AAPL',
+      market: 'us',
+      status: 'verified',
+      valid: true,
+      exists: true,
+      stockName: 'Apple',
+      message: 'verified',
+    });
+    getQuoteMock.mockResolvedValue(baseQuote());
+    getHistoryMock.mockResolvedValue(baseHistory('AAPL', 0));
+    getTechnicalIndicatorsMock.mockResolvedValue(null);
+    getOptionsStructureMock.mockResolvedValue(null);
+    getResearchPacketMock.mockResolvedValue(null);
+    getStructureDecisionMock.mockResolvedValue({
+      ...baseStructureDecision(),
+      peerCorrelationSnapshot: {
+        symbol: 'AAPL',
+        peerGroup: {
+          status: 'unavailable',
+          label: 'No verified local peer group metadata is available for AAPL.',
+          symbols: [],
+        },
+        correlationState: 'insufficient_evidence',
+        peerEvidence: [],
+        divergenceEvidence: [],
+        staleInputs: [],
+        missingInputs: [
+          'No verified local peer group metadata is available for AAPL.',
+          'Load recent local daily OHLCV for the symbol and at least two verified peers.',
+        ],
+        confidenceCap: 'low',
+        observationBoundary: 'Observation-only peer movement context; no personalized action instruction.',
+        researchNextSteps: [
+          'Add verified local peer group metadata before interpreting peer movement.',
+          'Load recent local daily OHLCV for the symbol and at least two verified peers.',
+        ],
+      },
+    });
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const snapshot = await within(page).findByTestId('stock-structure-peer-correlation-snapshot');
+    expect(snapshot).toHaveTextContent('同业对比信息待确认');
+    expect(snapshot).toHaveTextContent('历史行情待补');
+    expect(snapshot).toHaveTextContent('补齐本地同业分组后再复核同业走势。');
+    expect(snapshot.textContent || '').not.toMatch(/No verified local peer group metadata|Add verified local peer group metadata|Load recent local daily OHLCV/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/No verified local peer group metadata|Add verified local peer group metadata|Load recent local daily OHLCV/i);
+    expect(findConsumerRawLeakage(snapshot.textContent || '')).toEqual([]);
+  });
 });

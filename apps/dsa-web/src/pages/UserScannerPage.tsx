@@ -743,9 +743,12 @@ function getRiskScore(candidate: ScannerCandidate): number | null {
 }
 
 function isInternalScannerIssue(value?: string | null): boolean {
+  const raw = String(value || '').trim();
+  const lowered = raw.toLowerCase();
   const normalized = normalizeRunState(value);
   if (!normalized) return false;
-  return /provider|timeout|schema|debug|raw|trace|cache|not_enough|unavailable|missing|insufficient|data_failed|technical_indicators|fundamentals|earnings|optional_news/.test(normalized);
+  return /provider|timeout|schema|debug|raw|trace|cache|not_enough|unavailable|missing|insufficient|data_failed|technical_indicators|fundamentals|earnings|optional_news|universe|historical|ohlcv|quote|snapshot|packet|handoff|evidence|famil(?:y|ies)|peer/.test(normalized)
+    || /\buniverse\s*\/\s*historical\s+ohlcv\s*\/\s*quote\s+snapshot\b/i.test(lowered);
 }
 
 function sanitizeScannerUserText(value: string | null | undefined, language: 'zh' | 'en', fallback: string): string {

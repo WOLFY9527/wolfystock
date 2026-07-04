@@ -317,7 +317,7 @@ describe('stocksApi', () => {
           reasons: ['critical evidence missing'],
         },
         confidence_state: {
-          status: 'evidence limited',
+          status: 'evidence incomplete',
           label: 'medium',
           reasons: ['critical evidence missing'],
           freshness_constrained: false,
@@ -406,7 +406,7 @@ describe('stocksApi', () => {
       reasons: ['critical evidence missing'],
     });
     expect(payload.confidenceState).toEqual({
-      status: 'evidence limited',
+      status: 'evidence incomplete',
       label: 'medium',
       reasons: ['critical evidence missing'],
       freshnessConstrained: false,

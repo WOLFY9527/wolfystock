@@ -72,7 +72,7 @@ def test_raw_high_confidence_with_blocked_thesis_caps_to_low_evidence_limited() 
         "policyVersion": CONFIDENCE_EVIDENCE_CONSISTENCY_VERSION,
     }
     assert projection["confidenceState"] == {
-        "status": "evidence limited",
+        "status": "evidence incomplete",
         "label": "low",
         "reasons": ["research thesis blocked", "critical evidence missing"],
         "freshnessConstrained": False,
@@ -91,7 +91,7 @@ def test_raw_high_confidence_with_benchmark_gap_is_capped_below_high() -> None:
     assert projection["confidenceCap"]["value"] == 60
     assert projection["confidenceCap"]["label"] == "medium"
     assert projection["confidenceCap"]["reasons"] == ["critical evidence missing"]
-    assert projection["confidenceState"]["status"] == "evidence limited"
+    assert projection["confidenceState"]["status"] == "evidence incomplete"
 
 
 def test_medium_confidence_with_stale_inputs_marks_freshness_constrained() -> None:
@@ -126,7 +126,7 @@ def test_nested_consumer_payload_projection_caps_high_confidence_by_evidence_gap
         "confidence": "high",
         "evidenceGaps": ["Peer evidence is missing."],
         "peerCorrelationSnapshot": {
-            "missingInputs": ["No verified local peer group metadata is available for AAPL."],
+            "missingInputs": ["同业对比信息待确认。"],
             "staleInputs": [],
             "confidenceCap": "low",
         },
@@ -135,6 +135,6 @@ def test_nested_consumer_payload_projection_caps_high_confidence_by_evidence_gap
     projection = project_confidence_evidence_state(payload=payload)
 
     assert projection["consumerConfidence"] == "medium"
-    assert projection["confidenceState"]["status"] == "evidence limited"
+    assert projection["confidenceState"]["status"] == "evidence incomplete"
     assert projection["confidenceCap"]["reasons"] == ["critical evidence missing"]
     assert "rawConfidence" not in projection["confidenceState"]

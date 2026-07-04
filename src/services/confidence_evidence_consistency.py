@@ -175,7 +175,7 @@ def _state_status(
     freshness_constrained: bool,
 ) -> str:
     if thesis_blocked or critical_missing or blocked_drivers:
-        return "evidence limited"
+        return "evidence incomplete"
     if source_quality_limited:
         return "source quality limited"
     if freshness_constrained:

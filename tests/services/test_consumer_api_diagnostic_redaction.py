@@ -144,7 +144,7 @@ def test_project_consumer_api_payload_recursively_removes_forbidden_diagnostic_k
     assert projected["dataQualityState"] == "limited"
     assert projected["freshnessState"] == "limited"
     assert "benchmark evidence" in projected["missingInputs"]
-    assert "evidence limited" in projected["evidenceGaps"]
+    assert "evidence incomplete" in projected["evidenceGaps"]
     assert projected["observationBoundary"]
     assert projected["researchNextSteps"]
 
