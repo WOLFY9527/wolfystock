@@ -17,7 +17,7 @@ type PeerCorrelationSnapshotBlockProps = {
 };
 
 const PEER_COPY_UNSAFE_PATTERN =
-  /\b(provider|debug|trace|raw|sourceRef|reasonCode|requestId|cache|schema|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing|observation-only|insufficient_evidence|freshness\s*=\s*unavailable|peer group metadata|daily ohlcv|verified peers?)\b|\b[a-z]+(?:_[a-z0-9]+)+\b|买入|卖出|持有|推荐|目标价|止损|仓位建议/i;
+  /\b(provider|debug|trace|raw|sourceRef|reasonCode|requestId|cache|schema|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing|observation-only|insufficient_evidence|freshness\s*=\s*unavailable|peer group metadata|daily ohlcv|verified peers?|peer correlation|latency boundary)\b|\b[a-z]+(?:_[a-z0-9]+)+\b|买入|卖出|持有|推荐|目标价|止损|仓位建议/i;
 
 function stateVariant(state: StockPeerCorrelationState): React.ComponentProps<typeof TerminalChip>['variant'] {
   if (state === 'aligned') return 'success';
@@ -75,6 +75,8 @@ function mapKnownPeerCopy(locale: 'zh' | 'en', value: string): string | null {
       'no verified local peer group metadata is available for aapl': '同业对比信息待确认',
       'add verified local peer group metadata before interpreting peer movement': '补齐本地同业分组后再复核同业走势。',
       'load recent local daily ohlcv for the symbol and at least two verified peers': '历史行情待补',
+      'peer correlation was not evaluated because structure evidence exceeded the latency boundary': '因结构证据超过时效边界，未评估同业相关性。',
+      'peer correlation was not evaluated because structure computation exceeded the latency boundary': '因结构计算超过时效边界，未评估同业相关性。',
     };
     return labels[normalized] ?? null;
   }

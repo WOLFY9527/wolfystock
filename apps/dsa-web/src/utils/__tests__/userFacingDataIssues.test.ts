@@ -37,6 +37,10 @@ describe('userFacingDataIssues', () => {
     expect(sanitizeUserFacingDataIssue('No verified local peer group metadata for this symbol.', 'zh')).toBe('同业对比信息待确认');
     expect(sanitizeUserFacingDataIssue('Load recent local daily OHLCV before opening this page.', 'zh')).toBe('历史行情待补');
     expect(sanitizeUserFacingDataIssue('research packet handoff evidence families', 'zh')).toBe('支持证据仍待补');
+    expect(sanitizeUserFacingDataIssue('universe / historical ohlcv / quote snapshot', 'zh')).toBe('数据缺口：标的池行情 / 历史日线 / 实时报价');
+    expect(sanitizeUserFacingDataIssue('Missing or incomplete evidence families: quote, fundamental, news.', 'zh')).toBe('待补证据类别：行情、基本面、新闻资讯。');
+    expect(sanitizeUserFacingDataIssue('OHLCV 证据缺失时，不形成结构结论。', 'zh')).toBe('K线行情证据缺失时，页面仅展示已确认的就绪边界。');
+    expect(sanitizeUserFacingDataIssue('Peer correlation was not evaluated because structure evidence exceeded the latency boundary.', 'zh')).toBe('因结构证据超过时效边界，未评估同业相关性。');
   });
 
   it('preserves already human-readable consumer copy', () => {

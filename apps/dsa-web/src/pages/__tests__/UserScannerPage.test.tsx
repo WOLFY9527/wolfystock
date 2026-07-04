@@ -1494,7 +1494,7 @@ describe('UserScannerPage', () => {
     expect(detail).toHaveTextContent('市场：仅观察');
     expect(detail).toHaveTextContent('流动性：支持');
     expect(detail).toHaveTextContent('主题：仅观察');
-    expect(detail).toHaveTextContent('观察级线索');
+    expect(detail).toHaveTextContent('仅研究观察线索');
     expect(detail).toHaveTextContent('延迟更新');
     expect(detail).toHaveTextContent('先补充基本面与新闻催化');
     expect(detail).not.toHaveTextContent(/debugRef|source_authority_router_rejected|missing_required_evidence|Top-down market context available/i);
@@ -1587,6 +1587,7 @@ describe('UserScannerPage', () => {
     const rowPacket = await screen.findByTestId('scanner-candidate-research-packet-row-NVDA');
     expect(rowPacket).toHaveTextContent('支持证据仍待补');
     expect(rowPacket).toHaveTextContent('同业对比信息待确认');
+    expect(rowPacket).toHaveTextContent('待补证据类别：行情、基本面、新闻资讯。');
     expect(rowPacket.textContent || '').not.toMatch(/clean research handoff|evidence families|business-quality review|peer group metadata|daily OHLCV|Observation-only research readiness|personalized financial advice/i);
 
     const detailPacket = await screen.findByTestId('scanner-inline-candidate-research-packet-NVDA');
@@ -1611,11 +1612,11 @@ describe('UserScannerPage', () => {
     const { container } = renderUserScannerPage();
 
     const row = await screen.findByTestId('scanner-result-row-NVDA');
-    expect(row).toHaveTextContent('历史行情待补');
+    expect(row).toHaveTextContent('数据缺口：标的池行情 / 历史日线 / 实时报价');
     expect(row).not.toHaveTextContent('universe / historical ohlcv / quote snapshot');
 
     const detail = await screen.findByTestId('scanner-result-detail-NVDA');
-    expect(detail).toHaveTextContent('历史行情待补');
+    expect(detail).toHaveTextContent('数据缺口：标的池行情 / 历史日线 / 实时报价');
     expect(detail).not.toHaveTextContent('universe / historical ohlcv / quote snapshot');
 
     expect(screen.getByTestId('scanner-consumer-next-action')).not.toHaveTextContent('universe / historical ohlcv / quote snapshot');

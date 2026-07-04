@@ -753,7 +753,7 @@ def _latency_boundary_payload(
             "stateReason": "timed_out",
             "message": _STRUCTURE_COMPUTATION_TIMEOUT_MESSAGE,
         }
-        peer_missing_inputs = ["Peer correlation was not evaluated because structure computation exceeded the latency boundary."]
+        peer_missing_inputs = ["因结构计算超过时效边界，未评估同业相关性。"]
     else:
         missing_evidence = [
             {
@@ -770,7 +770,7 @@ def _latency_boundary_payload(
             "stateReason": "timed_out",
             "message": _STRUCTURE_DECISION_TIMEOUT_MESSAGE,
         }
-        peer_missing_inputs = ["Peer correlation was not evaluated because structure evidence exceeded the latency boundary."]
+        peer_missing_inputs = ["因结构证据超过时效边界，未评估同业相关性。"]
 
     return {
         "schemaVersion": STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION,

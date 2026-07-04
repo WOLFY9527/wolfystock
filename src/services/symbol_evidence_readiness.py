@@ -24,6 +24,13 @@ _MISSING_STATUSES = {"", "missing", "unknown", "unavailable", "error", "rejected
 _STALE_FRESHNESS = {"stale", "fallback", "delayed", "partial", "synthetic"}
 _STALE_SOURCE_TYPES = {"fallback", "synthetic", "unofficial_proxy"}
 _NEWS_PLACEHOLDER_TOKENS = ("placeholder", "unknown", "no recent headlines", "not available")
+_CONSUMER_FAMILY_LABELS = {
+    "quote": "行情",
+    "technical": "技术面",
+    "fundamental": "基本面",
+    "news": "新闻资讯",
+    "secFilingEvidence": "公告文件",
+}
 
 
 def _as_mapping(value: Any) -> dict[str, Any]:
@@ -83,6 +90,10 @@ def _explicit_conflicting_families(families: Mapping[str, Mapping[str, Any]]) ->
     return conflicting
 
 
+def _consumer_family_labels(families: list[str]) -> str:
+    return "、".join(_CONSUMER_FAMILY_LABELS.get(family, family) for family in families)
+
+
 def _readiness_tier(
     *,
     evidence_used: list[str],
@@ -117,18 +128,18 @@ def _data_quality_notes(
 ) -> list[str]:
     notes: list[str] = []
     if readiness_tier == "sufficient":
-        notes.append("Core quote, technical, fundamental, and news evidence are present without stale markers.")
+        notes.append("核心行情、技术面、基本面与新闻资讯证据已返回，未见过期标记。")
     elif readiness_tier == "partial":
         notes.append("已返回部分标的证据，但仍有关键缺口，暂不形成完整研究交接。")
     else:
         notes.append("标的证据仍然不足，暂不形成完整研究交接。")
 
     if evidence_missing:
-        notes.append(f"待补证据类别：{', '.join(evidence_missing)}。")
+        notes.append(f"待补证据类别：{_consumer_family_labels(evidence_missing)}。")
     if stale_inputs:
-        notes.append(f"Stale or delayed input markers are present for: {', '.join(stale_inputs)}.")
+        notes.append(f"存在过期或延迟输入：{_consumer_family_labels(stale_inputs)}。")
     if conflicting_evidence:
-        notes.append(f"Explicit conflict markers are present for: {', '.join(conflicting_evidence)}.")
+        notes.append(f"存在需要复核的冲突标记：{_consumer_family_labels(conflicting_evidence)}。")
     if "secFilingEvidence" in evidence_used:
         notes.append("SEC filing evidence is treated as observation-only context.")
     return notes
@@ -142,25 +153,25 @@ def _suggested_research_path(
 ) -> list[str]:
     if readiness_tier == "sufficient":
         return [
-            "Continue by reviewing quote, technical, fundamental, and news evidence together.",
-            "Keep any downstream thesis work separate from trading instructions.",
+            "继续一起复核行情、技术面、基本面与新闻资讯证据。",
+            "后续研究假设继续与交易指令保持分离。",
         ]
 
     path: list[str] = []
     if readiness_tier == "insufficient":
-        path.append("Collect core symbol evidence before symbol-specific thesis work.")
+        path.append("先补齐标的核心证据，再开展个股研究假设。")
     if "quote" in evidence_missing:
-        path.append("Confirm a quote snapshot and freshness context.")
+        path.append("补齐实时报价与时效信息。")
     if "technical" in evidence_missing:
-        path.append("Add recent OHLC or technical context.")
+        path.append("补充近期 K 线或技术面上下文。")
     if "fundamental" in evidence_missing:
         path.append("补充基本面证据后再复核研究主线。")
     if "news" in evidence_missing:
-        path.append("Add recent news or filing context before catalyst review.")
+        path.append("补充近期新闻或公告语境后再复核催化因素。")
     if stale_inputs:
-        path.append("Refresh stale or delayed inputs before comparing research scenarios.")
+        path.append("刷新过期或延迟输入后再比较研究场景。")
     if not path:
-        path.append("Review the available evidence and fill the weakest missing family first.")
+        path.append("先复核已有证据，并优先补齐最薄弱的证据类别。")
     return path
 
 
