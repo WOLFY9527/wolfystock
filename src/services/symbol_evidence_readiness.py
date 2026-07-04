@@ -12,7 +12,7 @@ from typing import Any, Mapping
 
 
 SYMBOL_EVIDENCE_READINESS_NO_ADVICE_DISCLOSURE = (
-    "Observation-only research readiness; not personalized financial advice or an instruction."
+    "仅供研究观察，不构成个性化行动指令。"
 )
 
 _REQUIRED_FAMILIES = ("quote", "technical", "fundamental", "news")
@@ -119,12 +119,12 @@ def _data_quality_notes(
     if readiness_tier == "sufficient":
         notes.append("Core quote, technical, fundamental, and news evidence are present without stale markers.")
     elif readiness_tier == "partial":
-        notes.append("Some symbol evidence is present, but the packet is not complete enough for a clean research handoff.")
+        notes.append("已返回部分标的证据，但仍有关键缺口，暂不形成完整研究交接。")
     else:
-        notes.append("Symbol evidence is too sparse for a clean research handoff.")
+        notes.append("标的证据仍然不足，暂不形成完整研究交接。")
 
     if evidence_missing:
-        notes.append(f"Missing or incomplete evidence families: {', '.join(evidence_missing)}.")
+        notes.append(f"待补证据类别：{', '.join(evidence_missing)}。")
     if stale_inputs:
         notes.append(f"Stale or delayed input markers are present for: {', '.join(stale_inputs)}.")
     if conflicting_evidence:
@@ -154,7 +154,7 @@ def _suggested_research_path(
     if "technical" in evidence_missing:
         path.append("Add recent OHLC or technical context.")
     if "fundamental" in evidence_missing:
-        path.append("Add fundamental coverage before business-quality review.")
+        path.append("补充基本面证据后再复核研究主线。")
     if "news" in evidence_missing:
         path.append("Add recent news or filing context before catalyst review.")
     if stale_inputs:

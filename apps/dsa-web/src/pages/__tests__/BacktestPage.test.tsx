@@ -1100,6 +1100,7 @@ describe('BacktestPage', () => {
     expect(researchBoundary).toHaveTextContent('研究边界摘要');
     expect(researchBoundary).toHaveTextContent('受边界约束的模型或规则输出');
     expect(researchBoundary).toHaveTextContent('请独立核验适用性');
+    expect(researchBoundary).not.toHaveTextContent('OBSERVATION-ONLY 证据摘要');
     expect(researchBoundary.textContent || '').not.toMatch(/observation-only|OBSERVATION-ONLY|交易建议|买入|卖出|持有/i);
     expect(pageShell).not.toHaveTextContent(/立即交易|连接经纪商|真实下单|AI recommends you buy|must buy|must sell|buy now|sell now|place order|submit order|connect broker/i);
     expect(await screen.findByText('模板仅用于研究模拟，不构成交易建议。')).toBeInTheDocument();

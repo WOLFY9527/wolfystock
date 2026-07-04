@@ -577,7 +577,7 @@ def _research_linkage(
                 _degraded_linkage(
                     surface="stockStructure",
                     status="degraded",
-                    reason="Structure evidence limited.",
+                    reason="Structure evidence incomplete.",
                     message="Structure evidence is limited for this cached holding.",
                 )
             ]
@@ -633,7 +633,7 @@ def _research_linkage(
                 _degraded_linkage(
                     surface="stockStructure",
                     status="degraded",
-                    reason="Structure evidence limited.",
+                    reason="Structure evidence incomplete.",
                     message="Structure evidence is limited for at least one holding.",
                 )
             )

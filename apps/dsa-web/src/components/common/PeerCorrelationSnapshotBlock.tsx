@@ -17,7 +17,7 @@ type PeerCorrelationSnapshotBlockProps = {
 };
 
 const PEER_COPY_UNSAFE_PATTERN =
-  /\b(provider|debug|trace|raw|sourceRef|reasonCode|requestId|cache|schema|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing|observation-only|insufficient_evidence|freshness\s*=\s*unavailable)\b|\b[a-z]+(?:_[a-z0-9]+)+\b|买入|卖出|持有|推荐|目标价|止损|仓位建议/i;
+  /\b(provider|debug|trace|raw|sourceRef|reasonCode|requestId|cache|schema|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing|observation-only|insufficient_evidence|freshness\s*=\s*unavailable|peer group metadata|daily ohlcv|verified peers?)\b|\b[a-z]+(?:_[a-z0-9]+)+\b|买入|卖出|持有|推荐|目标价|止损|仓位建议/i;
 
 function stateVariant(state: StockPeerCorrelationState): React.ComponentProps<typeof TerminalChip>['variant'] {
   if (state === 'aligned') return 'success';
@@ -72,6 +72,9 @@ function mapKnownPeerCopy(locale: 'zh' | 'en', value: string): string | null {
       'peer behavior remains bounded by current evidence': '同业行为仍受当前证据窗口约束。',
       'need broader peer evidence': '需要补充更广泛的同业证据。',
       'review the next close': '复核下一次收盘后的结构变化。',
+      'no verified local peer group metadata is available for aapl': '同业对比信息待确认',
+      'add verified local peer group metadata before interpreting peer movement': '补齐本地同业分组后再复核同业走势。',
+      'load recent local daily ohlcv for the symbol and at least two verified peers': '历史行情待补',
     };
     return labels[normalized] ?? null;
   }

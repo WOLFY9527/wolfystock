@@ -841,7 +841,7 @@ def test_high_regime_confidence_is_limited_when_critical_evidence_is_blocked() -
         "label": "medium",
         "reasons": ["critical evidence missing"],
     }
-    assert payload["marketRegimeSummary"]["confidenceState"]["status"] == "evidence limited"
+    assert payload["marketRegimeSummary"]["confidenceState"]["status"] == "evidence incomplete"
     assert payload["confidenceDiagnostics"]["evidenceStrength"]["consumerConfidence"] == "medium"
     assert payload["confidenceDiagnostics"]["evidenceStrength"]["rawConfidence"] == "high"
     assert payload["whatChanged"][0] == "Current regime observation is Risk-on observation with moderate confidence."

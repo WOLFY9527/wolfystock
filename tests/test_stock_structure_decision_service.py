@@ -252,7 +252,7 @@ def test_service_builds_observation_only_structure_decision_from_daily_ohlcv() -
     ]
     assert payload["peerCorrelationSnapshot"]["correlationState"] == "insufficient_evidence"
     assert payload["peerCorrelationSnapshot"]["missingInputs"] == [
-        "No verified local peer group metadata is available for AAPL."
+        "同业对比信息待确认。"
     ]
     assert "Breakout quality is supported by a close above the recent range and stronger volume." in payload["evidenceNotes"]
     assert payload["riskObservations"]
@@ -304,7 +304,7 @@ def test_service_caps_high_structure_confidence_when_critical_evidence_is_missin
         "policyVersion": "confidence_evidence_consistency_v1",
     }
     assert payload["confidenceState"] == {
-        "status": "evidence limited",
+        "status": "evidence incomplete",
         "label": "medium",
         "reasons": ["critical evidence missing"],
         "freshnessConstrained": False,

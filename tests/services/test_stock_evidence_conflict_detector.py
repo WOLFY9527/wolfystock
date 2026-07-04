@@ -45,7 +45,7 @@ def _base_input() -> dict[str, Any]:
             "staleInputs": [],
             "conflictingEvidence": [],
             "observationOnly": True,
-            "noAdviceDisclosure": "Observation-only research readiness; not personalized financial advice or an instruction.",
+            "noAdviceDisclosure": "仅供研究观察，不构成个性化行动指令。",
         },
         "stockEvidencePacket": {
             "schemaVersion": "stock_evidence_packet_v1",

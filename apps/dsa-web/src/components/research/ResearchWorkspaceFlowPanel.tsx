@@ -12,6 +12,7 @@ import {
   type ResearchWorkspaceSource,
   type ResearchWorkspaceSurface,
 } from '../../utils/researchWorkspaceRoute';
+import { sanitizeUserFacingDataIssue } from '../../utils/userFacingDataIssues';
 import { TerminalChip } from '../terminal/TerminalPrimitives';
 
 type ResearchWorkspaceFlowPanelProps = {
@@ -83,6 +84,7 @@ const SAFE_COPY = {
 } as const;
 
 const INTERNAL_PATTERN = /sourceauthority|scorecontribution|reasoncode|\bprovider\b|\bcache\b|\bfallback\b|\braw\b|\bdebug\b|\bjson\b|\bruntime\b|\bdiagnostic\b|\bschema\b|\btrace\b/i;
+const RAW_CONSUMER_COPY_PATTERN = /universe\s*\/\s*historical\s+ohlcv\s*\/\s*quote\s+snapshot|clean research handoff|evidence famil(?:y|ies)|business-quality review|peer group metadata|daily ohlcv|observation-only research readiness|personalized financial advice/i;
 const STALE_PATTERN = /stale|expired|older|过期|陈旧|较旧/i;
 const SAMPLE_PATTERN = /fixture|mock|synthetic|sample|样例|演示/i;
 const CONFIDENCE_PATTERN = /confidence|置信|cap|limited/i;
@@ -91,6 +93,9 @@ function normalizeEvidenceLine(value: string | null | undefined, language: UiLan
   const text = String(value || '').trim();
   if (!text) return null;
   const copy = SAFE_COPY[language === 'en' ? 'en' : 'zh'];
+  if (RAW_CONSUMER_COPY_PATTERN.test(text)) {
+    return sanitizeUserFacingDataIssue(text, language === 'en' ? 'en' : 'zh');
+  }
   if (SAMPLE_PATTERN.test(text)) return copy.localSample;
   if (STALE_PATTERN.test(text) || /\bfallback\b|\bcache\b/i.test(text)) return copy.latestAvailable;
   if (CONFIDENCE_PATTERN.test(text)) return copy.limitedConfidence;

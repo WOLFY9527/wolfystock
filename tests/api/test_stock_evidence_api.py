@@ -143,14 +143,14 @@ def test_stock_evidence_endpoint_serializes_symbol_evidence_readiness(
         "staleInputs": ["quote"],
         "conflictingEvidence": [],
         "dataQualityNotes": [
-            "Some symbol evidence is present, but the packet is not complete enough for a clean research handoff.",
+            "已返回部分标的证据，但仍有关键缺口，暂不形成完整研究交接。",
         ],
         "suggestedResearchPath": [
             "Add recent OHLC or technical context.",
             "Add recent news or filing context before catalyst review.",
         ],
         "observationOnly": True,
-        "noAdviceDisclosure": "Observation-only research readiness; not personalized financial advice or an instruction.",
+        "noAdviceDisclosure": "仅供研究观察，不构成个性化行动指令。",
     }
     fake_service = _FakeStockEvidenceService(payload)
     monkeypatch.setattr(
@@ -172,7 +172,7 @@ def test_stock_evidence_endpoint_serializes_symbol_evidence_readiness(
     assert readiness["staleInputs"] == ["quote"]
     assert readiness["conflictingEvidence"] == []
     assert readiness["observationOnly"] is True
-    assert "financial advice" in readiness["noAdviceDisclosure"]
+    assert readiness["noAdviceDisclosure"] == "仅供研究观察，不构成个性化行动指令。"
 
 
 def test_stock_evidence_endpoint_does_not_fabricate_missing_fundamentals_summary(

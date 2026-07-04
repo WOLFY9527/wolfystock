@@ -11,6 +11,7 @@ import type {
   ScannerLabeledValue,
 } from '../../types/scanner';
 import type { TrustDisclosureBucket } from '../../utils/trustDisclosure';
+import { sanitizeUserFacingDataIssue } from '../../utils/userFacingDataIssues';
 import {
   CompactEmptyRow,
 } from '../terminal/DenseWorkbenchPrimitives';
@@ -41,6 +42,16 @@ type ScannerCandidateWithEvidence = ScannerCandidate & {
 
 function withCandidateEvidence(candidate: ScannerCandidate): ScannerCandidateWithEvidence {
   return candidate as ScannerCandidateWithEvidence;
+}
+
+const RAW_SCANNER_WORKFLOW_COPY_PATTERN = /universe\s*\/\s*historical\s+ohlcv\s*\/\s*quote\s+snapshot|clean research handoff|evidence famil(?:y|ies)|business-quality review|peer group metadata|daily ohlcv|observation-only research readiness|personalized financial advice/i;
+
+function safeScannerWorkflowText(value: string | null | undefined, language: 'zh' | 'en'): string {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  return RAW_SCANNER_WORKFLOW_COPY_PATTERN.test(text)
+    ? sanitizeUserFacingDataIssue(text, language)
+    : text;
 }
 
 function consumerTrustNoticeFromBuckets(buckets: TrustDisclosureBucket[], language: 'zh' | 'en'): string | null {
@@ -707,7 +718,7 @@ export function ScannerWorkflowSummaryPanel({
             />
           ) : candidate.reasonSummary ? (
             <p className="text-[11px] leading-relaxed text-white/58">
-              {candidate.reasonSummary}
+              {safeScannerWorkflowText(candidate.reasonSummary, language)}
             </p>
           ) : null}
           {candidateWithEvidence.candidateEvidenceFrame || candidateWithEvidence.candidateResearchReadiness ? (

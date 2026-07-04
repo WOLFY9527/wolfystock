@@ -2313,7 +2313,7 @@ def test_decision_endpoint_tradier_live_provider_opt_in_uses_mocked_http_and_fai
         assert payload["decisionLabel"] == "数据不足，禁止判断"
         assert "failClosedReasonCodes" not in payload
         assert payload["consumerSafeSourceLabel"] == "部分数据源暂不可用"
-        assert payload["evidenceGaps"] == ["evidence limited"]
+        assert payload["evidenceGaps"] == ["evidence incomplete"]
         assert payload["researchNextSteps"]
         readiness = payload["optionsReadiness"]
         assert payload["optionsResearchReadiness"] == readiness
@@ -2323,7 +2323,7 @@ def test_decision_endpoint_tradier_live_provider_opt_in_uses_mocked_http_and_fai
         assert "providerAuthority" not in readiness
         assert readiness["decisionGrade"] is False
         assert readiness["consumerSafeSourceLabel"] == "部分数据源暂不可用"
-        assert readiness["evidenceGaps"] == ["evidence limited"]
+        assert readiness["evidenceGaps"] == ["evidence incomplete"]
         assert set(readiness["blockingReasons"]) == {"Evidence is limited for this observation."}
         assert readiness["nextEvidenceNeeded"] == ["Evidence is limited for this observation."]
         assert payload["metadata"]["readOnly"] is True
@@ -2369,7 +2369,7 @@ def test_decision_endpoint_delayed_fixture_keeps_tradeability_cap() -> None:
         assert payload["decisionGrade"] is False
         assert "failClosedReasonCodes" not in payload
         assert payload["consumerSafeSourceLabel"] == "部分数据源暂不可用"
-        assert payload["evidenceGaps"] == ["evidence limited"]
+        assert payload["evidenceGaps"] == ["evidence incomplete"]
         assert payload["staleInputs"] == ["freshness constrained"]
         assert payload["gateDecision"] in {"数据不足，禁止判断", "仅观察", "需人工复核"}
         assert payload["metadata"]["readOnly"] is True

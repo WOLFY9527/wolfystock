@@ -71,7 +71,7 @@ describe('stockEvidenceApi', () => {
               data_quality_notes: ['Core evidence is incomplete; keep the research context bounded.'],
               suggested_research_path: ['Add recent OHLC or technical context.'],
               observation_only: true,
-              no_advice_disclosure: 'Observation-only research readiness; not personalized financial advice or an instruction.',
+              no_advice_disclosure: '仅供研究观察，不构成个性化行动指令。',
               raw_provider_payload: { redacted_id: 'must-not-emit-readiness' },
               admin_diagnostics: { provider_route: 'must-not-emit-readiness' },
               source_ref_id: 'must-not-emit-readiness',
@@ -131,7 +131,7 @@ describe('stockEvidenceApi', () => {
       dataQualityNotes: ['Core evidence is incomplete; keep the research context bounded.'],
       suggestedResearchPath: ['Add recent OHLC or technical context.'],
       observationOnly: true,
-      noAdviceDisclosure: 'Observation-only research readiness; not personalized financial advice or an instruction.',
+      noAdviceDisclosure: '仅供研究观察，不构成个性化行动指令。',
     });
 
     const serialized = JSON.stringify(summary);

@@ -782,7 +782,7 @@ class StockStructureConfidenceState(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    status: Literal["ready", "evidence limited", "freshness constrained", "source quality limited"] = Field(
+    status: Literal["ready", "evidence incomplete", "freshness constrained", "source quality limited"] = Field(
         ...,
         description="消费端置信状态",
     )

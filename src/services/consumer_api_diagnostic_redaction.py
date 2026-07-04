@@ -228,18 +228,18 @@ def _collect_from_removed(key: str, value: Any, context: dict[str, Any]) -> None
     if "stale" in normalized_key or "cache" in normalized_key or "fallback" in normalized_key:
         _append_unique(context["staleInputs"], "freshness constrained")
     if "provider" in normalized_key or "source" in normalized_key or "authority" in normalized_key:
-        _append_unique(context["evidenceGaps"], "evidence limited")
+        _append_unique(context["evidenceGaps"], "evidence incomplete")
 
     for text in _iter_strings(value):
         lowered = text.lower()
         if "benchmark" in lowered:
             _append_unique(context["missingInputs"], "benchmark evidence")
         if any(token in lowered for token in ("missing", "unavailable", "timeout", "provider", "source_authority")):
-            _append_unique(context["evidenceGaps"], "evidence limited")
+            _append_unique(context["evidenceGaps"], "evidence incomplete")
         if any(token in lowered for token in ("stale", "cached", "cache", "fallback", "delayed")):
             _append_unique(context["staleInputs"], "freshness constrained")
         if _ADVICE_RE.search(text):
-            _append_unique(context["evidenceGaps"], "evidence limited")
+            _append_unique(context["evidenceGaps"], "evidence incomplete")
 
 
 def _is_forbidden_key(key: str) -> bool:

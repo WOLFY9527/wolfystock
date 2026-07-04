@@ -56,7 +56,7 @@ def test_symbol_evidence_readiness_marks_clean_complete_evidence_sufficient() ->
             "Keep any downstream thesis work separate from trading instructions.",
         ],
         "observationOnly": True,
-        "noAdviceDisclosure": "Observation-only research readiness; not personalized financial advice or an instruction.",
+        "noAdviceDisclosure": "仅供研究观察，不构成个性化行动指令。",
     }
 
 
@@ -79,7 +79,7 @@ def test_symbol_evidence_readiness_marks_partial_without_fabricating_missing_new
     assert readiness["staleInputs"] == ["quote"]
     assert readiness["suggestedResearchPath"] == [
         "Add recent OHLC or technical context.",
-        "Add fundamental coverage before business-quality review.",
+        "补充基本面证据后再复核研究主线。",
         "Add recent news or filing context before catalyst review.",
         "Refresh stale or delayed inputs before comparing research scenarios.",
     ]
