@@ -19,7 +19,7 @@ from src.services.historical_ohlcv_readiness import (
     HistoricalOhlcvReadinessService,
 )
 from src.services.historical_ohlcv_runtime_adapter import HistoricalOhlcvRuntimeAdapter
-from src.services.stock_service import StockService
+from src.services.stock_service import StockService, uat_no_live_providers_enabled
 from src.services.stock_structure_decision_engine import (
     MIN_REQUIRED_BARS,
     NO_ADVICE_DISCLOSURE,
@@ -340,6 +340,29 @@ class StockStructureDecisionService:
         )
 
     def _load_structure_ohlcv_evidence(self, ticker: str) -> dict[str, Any]:
+        if uat_no_live_providers_enabled():
+            readiness = _fallback_historical_ohlcv_readiness(
+                symbol=ticker,
+                data_quality={
+                    "status": "unavailable",
+                    "source": "unavailable",
+                    "reason": "provider_missing",
+                },
+            )
+            return {
+                "bars": [],
+                "data_quality": {
+                    "status": "unavailable",
+                    "source": "unavailable",
+                    "period": "daily",
+                    "requestedDays": DEFAULT_STRUCTURE_DECISION_HISTORY_DAYS,
+                    "observedBars": 0,
+                    "usableBars": 0,
+                    "reason": "uat_no_live_providers",
+                },
+                "historical_ohlcv_readiness": readiness,
+            }
+
         runtime_result = self._load_runtime_ohlcv(ticker)
         if runtime_result is not None:
             bars = [bar.as_dict() for bar in runtime_result.bars]

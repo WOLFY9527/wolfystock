@@ -11,13 +11,13 @@
     "candidateMarkdownAfterPolicy": 3,
     "excludedByReason": {
       "legacy_untracked_agent_mirror": 3,
-      "not_in_hard_collapse_source_set": 1,
+      "not_in_hard_collapse_source_set": 3,
       "required_ai_governance_symlink": 1,
       "required_github_workflow_markdown": 7,
       "required_repository_skill_asset": 4
     },
     "includedSourceCount": 3,
-    "markdownDiscovered": 19,
+    "markdownDiscovered": 21,
     "prunedDirectoryNames": [
       ".cache",
       ".codex",
@@ -75,15 +75,15 @@
       "title": "AGENTS.md"
     },
     {
-      "bytes": 2685,
+      "bytes": 3797,
       "categories": [
         "onboarding",
         "product"
       ],
-      "lineCount": 90,
+      "lineCount": 116,
       "path": "README.md",
       "purpose": "human product entrypoint and supported run commands",
-      "sha256": "31912002a67163a1ab72dd571d8d8836b05d218c4e46f31ac7f3cff89622eea3",
+      "sha256": "5b04e529131459091ecc04228dc6cc09523a841916efca02571f7c3fc6ca5939",
       "title": "WolfyStock"
     },
     {
@@ -102,7 +102,7 @@
   "outputs": {
     "manifest": "docs/AI_PROJECT_MANUAL_SOURCES.json",
     "manual": "docs/AI_PROJECT_MANUAL.md",
-    "manualSha256": "2ef059b4b91a00d0f6bc05df2bf03ea526ebb44c0f4d0f2448444db4f2716a85"
+    "manualSha256": "c5a796a1a2d5c657df4fce440d130aee3d362f0812e2190c6e4f8e8e44bc6191"
   },
   "schemaVersion": 2,
   "sections": [

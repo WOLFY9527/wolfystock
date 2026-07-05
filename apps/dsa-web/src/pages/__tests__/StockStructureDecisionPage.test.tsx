@@ -652,10 +652,18 @@ describe('StockStructureDecisionPage', () => {
     const catalystPanel = await within(page).findByTestId('stock-earnings-catalyst-readiness-panel');
     const optionsStage = await within(page).findByTestId('stock-cockpit-stage-options');
     const nextStepsPanel = await within(page).findByTestId('stock-missing-data-next-steps-panel');
+    const workflow = await within(page).findByTestId('stock-research-workspace-flow');
 
     expect(getQuoteMock).toHaveBeenCalledWith('AAPL');
     expect(getHistoryMock).toHaveBeenCalledWith('AAPL', { period: 'daily', days: 180 });
     expect(getResearchPacketMock).toHaveBeenCalledWith('AAPL');
+    expect(workflow).toHaveTextContent('Beta 研究旅程');
+    expect(workflow).toHaveTextContent('AAPL');
+    expect(within(workflow).getByTestId('research-workspace-link-stock-structure')).toHaveAttribute('href', expect.stringContaining('/zh/stocks/AAPL/structure-decision?'));
+    expect(within(workflow).getByTestId('research-workspace-link-watchlist')).toHaveAttribute('href', expect.stringContaining('/zh/watchlist?'));
+    expect(within(workflow).getByTestId('research-workspace-link-backtest')).toHaveAttribute('href', expect.stringContaining('/zh/backtest?'));
+    expect(workflow).toHaveTextContent('只有需要持续观察时，再加入观察列表。');
+    expect(workflow).not.toHaveTextContent(/provider|cache|runtime|debug|scannerRunId|watchlistItemId|立即买入|立即卖出|下单|保证收益/i);
     expect(within(page).getByTestId('stock-cockpit-stage-quote')).toHaveTextContent('安全基线');
     expect(within(page).getByTestId('stock-cockpit-stage-history-technical')).toHaveTextContent('历史与指标就绪度');
     expect(within(page).getByTestId('stock-cockpit-stage-earnings')).toHaveTextContent('先看就绪度');

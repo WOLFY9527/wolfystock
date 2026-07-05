@@ -558,23 +558,43 @@ def test_service_preserves_ohlcv_readiness_when_structure_computation_times_out(
     readiness = payload["historicalOhlcvReadiness"]
     assert readiness["providerState"] == "available"
     assert readiness["overallState"] == "ready"
+
+
+def test_uat_no_live_provider_mode_keeps_aapl_structure_decision_on_unavailable_local_path(monkeypatch) -> None:
+    monkeypatch.setenv("WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS", "true")
+
+    class ForbiddenHistoryService:
+        def get_history_data(self, **_kwargs):
+            raise AssertionError("live history runtime must not be called in UAT no-live mode")
+
+    payload = StockStructureDecisionService(history_service=ForbiddenHistoryService()).get_structure_decision("AAPL")
+
+    _assert_required_contract(payload)
+    assert payload["ticker"] == "AAPL"
+    assert payload["structureState"] == "lowConfidence"
+    assert payload["confidence"] == "low"
+    assert payload["dataQuality"]["status"] == "unavailable"
+    assert payload["dataQuality"]["reason"] == "uat_no_live_providers"
+    readiness = payload["historicalOhlcvReadiness"]
+    assert payload["historicalOhlcvReadiness"]["providerState"] == "provider_missing"
+    assert payload["historicalOhlcvReadiness"]["overallState"] == "blocked"
     assert readiness["requiredBars"] == 90
-    assert readiness["usableBars"] == 120
-    assert readiness["missingBars"] == 0
-    assert readiness["missingRequirements"] == []
+    assert readiness["usableBars"] == 0
+    assert readiness["missingBars"] == 90
+    assert readiness["missingRequirements"] == ["provider_missing", "insufficient_history"]
     assert payload["structureComputation"] == {
-        "status": "degraded",
-        "stateReason": "timed_out",
-        "message": "Daily OHLCV data is available, but structure computation timed out; this read remains observation-only.",
+        "status": "unavailable",
+        "stateReason": "data_unavailable",
+        "message": "Structure computation is unavailable because daily OHLCV data is unavailable.",
     }
     assert {
-        "section": "structureComputation",
-        "status": "degraded",
-        "reason": "structure_computation_timeout",
+        "section": "structureEvidence",
+        "status": "unavailable",
+        "reason": "uat_no_live_providers",
     } in payload["degradedInputs"]
     assert payload["missingEvidence"][0] == {
-        "kind": "structure_computation",
-        "message": "Daily OHLCV data is available, but structure computation timed out; this read remains observation-only.",
+        "kind": "daily_ohlcv",
+        "message": "Daily OHLCV history is unavailable, so the structure state is low confidence.",
     }
 
 

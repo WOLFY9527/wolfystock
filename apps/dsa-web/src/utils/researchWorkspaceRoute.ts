@@ -1,7 +1,7 @@
 import type { UiLanguage } from '../i18n/core';
 import { buildLocalizedPath } from './localeRouting';
 
-export type ResearchWorkspaceSurface = 'scanner' | 'watchlist' | 'portfolio' | 'backtest' | 'options';
+export type ResearchWorkspaceSurface = 'scanner' | 'stock-structure' | 'watchlist' | 'portfolio' | 'backtest' | 'options';
 export type ResearchWorkspaceSource = ResearchWorkspaceSurface | 'manual';
 
 export type ResearchWorkspaceRouteContext = {
@@ -12,6 +12,7 @@ export type ResearchWorkspaceRouteContext = {
 
 const SOURCE_VALUES = new Set<ResearchWorkspaceSource>([
   'scanner',
+  'stock-structure',
   'watchlist',
   'portfolio',
   'backtest',
@@ -21,6 +22,7 @@ const SOURCE_VALUES = new Set<ResearchWorkspaceSource>([
 
 const SURFACE_PATHS: Record<ResearchWorkspaceSurface, string> = {
   scanner: '/scanner',
+  'stock-structure': '/stocks/structure-decision',
   watchlist: '/watchlist',
   portfolio: '/portfolio',
   backtest: '/backtest',
@@ -67,7 +69,10 @@ export function buildResearchWorkspacePath(
   if (market) params.set('market', market);
   if (source) params.set('source', source);
 
+  const basePath = surface === 'stock-structure' && symbol
+    ? `/stocks/${encodeURIComponent(symbol)}/structure-decision`
+    : SURFACE_PATHS[surface];
   const query = params.toString();
-  const path = query ? `${SURFACE_PATHS[surface]}?${query}` : SURFACE_PATHS[surface];
+  const path = query ? `${basePath}?${query}` : basePath;
   return buildLocalizedPath(path, language);
 }

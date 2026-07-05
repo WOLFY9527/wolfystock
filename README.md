@@ -86,5 +86,31 @@ npm run build
 - AI/docs governance: `python scripts/build_ai_project_manual.py --check` and
   `python scripts/check_ai_assets.py`.
 
+Local UAT runtime:
+
+```bash
+python scripts/uat_runtime_harness.py --expected-sha "$(git rev-parse HEAD)"
+```
+
+This canonical local harness validates a clean source tree and expected SHA,
+builds `apps/dsa-web` when needed, launches `main.py --serve-only` from the
+current worktree, checks localhost with an explicit no-proxy HTTP client, and
+writes JSON evidence under `output/runtime-verification/`. It fails closed on
+unknown port owners, runtime CWD/SHA mismatch, stale frontend asset identity, or
+non-WolfyStock HTML. The runtime it starts uses UAT-only isolation flags:
+`CRYPTO_REALTIME_ENABLED=false`, `WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS=true`,
+`WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED=false`, and
+`WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED=false`.
+
+To seed deterministic non-production consumer test accounts, opt in explicitly:
+
+```bash
+python scripts/uat_runtime_harness.py --expected-sha "$(git rev-parse HEAD)" --prepare-uat-accounts
+```
+
+That option writes only local/UAT non-admin app users via
+`scripts/seed_uat_consumer_test_accounts.py`; it refuses production mode and
+does not print secrets.
+
 Protected domains, no-advice policy, provider/data reality boundaries, and
 landing workflow are covered in `AGENTS.md` and the generated project manual.
