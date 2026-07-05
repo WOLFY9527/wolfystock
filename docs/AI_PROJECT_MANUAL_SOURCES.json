@@ -11,13 +11,13 @@
     "candidateMarkdownAfterPolicy": 3,
     "excludedByReason": {
       "legacy_untracked_agent_mirror": 3,
-      "not_in_hard_collapse_source_set": 2,
+      "not_in_hard_collapse_source_set": 3,
       "required_ai_governance_symlink": 1,
       "required_github_workflow_markdown": 7,
       "required_repository_skill_asset": 4
     },
     "includedSourceCount": 3,
-    "markdownDiscovered": 20,
+    "markdownDiscovered": 21,
     "prunedDirectoryNames": [
       ".cache",
       ".codex",
@@ -102,7 +102,7 @@
   "outputs": {
     "manifest": "docs/AI_PROJECT_MANUAL_SOURCES.json",
     "manual": "docs/AI_PROJECT_MANUAL.md",
-    "manualSha256": "6b86a870782e0584e008d8ec044c56d6bb9c40d571df50666c18d33d2ab7dd47"
+    "manualSha256": "c5a796a1a2d5c657df4fce440d130aee3d362f0812e2190c6e4f8e8e44bc6191"
   },
   "schemaVersion": 2,
   "sections": [
