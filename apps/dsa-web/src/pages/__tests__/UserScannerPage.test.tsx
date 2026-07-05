@@ -2408,6 +2408,7 @@ describe('UserScannerPage', () => {
     expect(observationBoundary).toHaveTextContent('受边界约束的模型或规则输出');
     expect(observationBoundary).toHaveTextContent('请独立核验适用性');
     expect(observationBoundary.textContent || '').not.toMatch(/observation-only|OBSERVATION-ONLY|交易建议|买入|卖出|持有/i);
+    expect(screen.getByTestId('user-scanner-workspace').textContent || '').not.toMatch(/\bOBSERVATION-ONLY\b|OBSERVATION-ONLY 证据摘要/i);
     expect(screen.getByTestId('scanner-wide-workspace-scope')).toHaveAttribute('data-workspace-width', 'near-full');
     expect(screen.getByTestId('user-scanner-workspace')).toHaveAttribute('data-terminal-primitive', 'page-shell');
     expect(screen.getByTestId('scanner-page-heading')).toHaveAttribute('data-terminal-primitive', 'dense-page-header');
@@ -2775,7 +2776,7 @@ describe('UserScannerPage', () => {
           excludedTotal: 90,
           excludedByReason: [],
           likelyBottleneck: 'data_availability',
-          likelyBottleneckLabel: 'Data availability',
+          likelyBottleneckLabel: 'universe / historical ohlcv / quote snapshot',
         },
         providerDiagnostics: {
           configuredPrimaryProvider: 'synthetic_provider_url=https://provider.example.invalid/options?token=secret',
@@ -2794,6 +2795,7 @@ describe('UserScannerPage', () => {
           ],
         },
         aiInterpretation: {
+          summary: 'universe / historical ohlcv / quote snapshot',
           synthetic_provider_url: 'https://provider.example.invalid/raw?token=secret',
           synthetic_cache_key: 'scanner:cn:cache-key',
           synthetic_request_id: 'req-scanner-raw-123',
@@ -2818,6 +2820,8 @@ describe('UserScannerPage', () => {
     const panelText = panel.textContent || '';
 
     expect(panel).toHaveTextContent(/诊断详情已保留|Diagnostic details retained/);
+    expect(panel).toHaveTextContent('数据缺口：标的池行情 / 历史日线 / 实时报价');
+    expect(panelText).not.toMatch(/universe\s*\/\s*historical\s+ohlcv\s*\/\s*quote\s+snapshot/i);
     expect(panel).not.toHaveTextContent(forbiddenSyntheticMarkers);
     expect(findConsumerRawLeakage(panelText, {
       extraForbiddenPatterns: [
@@ -4416,7 +4420,7 @@ describe('UserScannerPage', () => {
     expect(conclusion).toHaveTextContent(/扫描标的池已过期|Scope/);
     expect(conclusion).toHaveTextContent(/标的池状态|Scope readiness/);
     expect(conclusion).toHaveTextContent(/缺口|Missing/);
-    expect(conclusion).toHaveTextContent(/历史行情|报价快照|Price history|Quote freshness/);
+    expect(conclusion).toHaveTextContent(/历史日线|实时报价|Price history|Realtime quotes/);
     expect(screen.queryByTestId(/^scanner-result-row-/)).not.toBeInTheDocument();
     const emptyState = screen.getByTestId('scanner-workbench-empty-state');
     expect(emptyState).toHaveTextContent(/刷新扫描标的池|标的池已过期/);

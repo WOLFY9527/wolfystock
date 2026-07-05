@@ -52,11 +52,14 @@ function formatUniverseNote(note: string, language: 'zh' | 'en'): string | null 
 function sanitizeScannerDiagnosticNote(note: string, language: 'zh' | 'en'): string | null {
   const text = note.trim();
   if (!text) return null;
+  const userFacing = sanitizeUserFacingDataIssue(text, language);
+  if (userFacing && userFacing !== text && !isRawConsumerDataStateText(userFacing)) {
+    return userFacing;
+  }
   if (isRawConsumerDataStateText(text)) {
     return sanitizeConsumerDataStateText(text, 'missing');
   }
-  const sanitized = sanitizeUserFacingDataIssue(text, language);
-  return sanitized || null;
+  return userFacing || null;
 }
 
 function toDisplayText(value: unknown): string | null {
@@ -102,7 +105,9 @@ function getAiDiagnosticDisplayEntries(
         return items;
       }
       if (!value) return items;
-      items.push({ key, label: key, value });
+      const safeValue = sanitizeScannerDiagnosticNote(value, language);
+      if (!safeValue) return items;
+      items.push({ key, label: key, value: safeValue });
       return items;
     }, [])
     .slice(0, 5);
@@ -226,7 +231,9 @@ export const ScannerDiagnosticsPanel = Object.assign(function ScannerDiagnostics
               {coverage.likelyBottleneckLabel || coverage.likelyBottleneck ? (
                 <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
                   <span className="shrink-0 text-white/36">{language === 'en' ? 'Bottleneck' : '瓶颈'}</span>
-                  <span className="min-w-0 truncate">{coverage.likelyBottleneckLabel || coverage.likelyBottleneck || ''}</span>
+                  <span className="min-w-0 truncate">
+                    {sanitizeScannerDiagnosticNote(coverage.likelyBottleneckLabel || coverage.likelyBottleneck || '', language)}
+                  </span>
                 </TerminalChip>
               ) : null}
             </div>

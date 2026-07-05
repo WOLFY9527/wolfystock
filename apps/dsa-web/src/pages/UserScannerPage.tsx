@@ -410,9 +410,9 @@ const SCANNER_DATA_READINESS_BLOCKER_LABELS: Record<string, { zh: string; en: st
 };
 
 const SCANNER_DATA_CLASS_LABELS: Record<string, { zh: string; en: string }> = {
-  universe: { zh: '标的范围', en: 'Scope' },
-  historical_ohlcv: { zh: '历史行情', en: 'Price history' },
-  quote_snapshot: { zh: '报价信息', en: 'Quote readiness' },
+  universe: { zh: '标的池行情', en: 'Scope quotes' },
+  historical_ohlcv: { zh: '历史日线', en: 'Price history' },
+  quote_snapshot: { zh: '实时报价', en: 'Realtime quotes' },
 };
 
 const SCANNER_DATA_READINESS_COVERAGE_LABELS: Record<string, { zh: string; en: string }> = {

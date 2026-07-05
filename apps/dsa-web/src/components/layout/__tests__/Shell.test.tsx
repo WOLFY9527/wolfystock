@@ -473,6 +473,7 @@ describe('Shell', () => {
     expect(screen.queryByRole('button', { name: '账户中心' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: translate('zh', 'nav.settings') })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: translate('zh', 'nav.logout') })).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('Workspace Shell');
   });
 
   it('falls back to the guest-safe shell when auth is disabled and no user is logged in', () => {
@@ -610,6 +611,7 @@ describe('Shell', () => {
     expect(await screen.findByRole('heading', { name: translate('zh', 'shell.drawerTitle') })).toBeInTheDocument();
     expect(screen.queryByTestId('shell-mobile-account-center')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: '登录' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '导航菜单' })).not.toHaveTextContent('Workspace Shell');
   });
 
   it('renders a compact mobile header with the active route label', () => {

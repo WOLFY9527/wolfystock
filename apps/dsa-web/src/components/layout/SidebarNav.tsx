@@ -443,7 +443,7 @@ function useSidebarNavView({
           </span>
           <DrawerUtilityLabel
             label={t('theme.label')}
-            value={colorMode === 'light' ? t('theme.terminal') : t('theme.spacex')}
+            value={!isGuest ? (colorMode === 'light' ? t('theme.terminal') : t('theme.spacex')) : undefined}
           />
         </>
       ) : (
