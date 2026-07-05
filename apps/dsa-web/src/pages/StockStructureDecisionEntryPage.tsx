@@ -10,6 +10,10 @@ import {
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { TerminalChip, TerminalEmptyState } from '../components/terminal/TerminalPrimitives';
 import { useI18n } from '../contexts/UiLanguageContext';
+import {
+  consumerPresentationRouteHint,
+  consumerPresentationText,
+} from '../utils/consumerPresentationBoundary';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import { RoughBulletList, RoughSectionCard, RoughSurfaceIntro } from './roughShellShared';
 
@@ -103,7 +107,7 @@ export default function StockStructureDecisionEntryPage() {
                   items={[
                     locale === 'en' ? 'Enter a symbol directly when you already know what to inspect.' : '已知道代码时，可直接输入标的进入结构视图。',
                     locale === 'en' ? 'Use Scanner, Watchlist, or Research Radar rows when exploring candidates.' : '探索候选时，可从 Scanner、观察列表或研究雷达进入。',
-                    locale === 'en' ? 'Direct URL pattern: /stocks/{ticker}/structure-decision.' : '直接 URL 形态：/stocks/{ticker}/structure-decision。',
+                    consumerPresentationRouteHint(locale),
                     locale === 'en' ? 'Missing or degraded price-history evidence stays visible on the detail page.' : '历史行情证据缺失或降级会在详情页可见。',
                     locale === 'en'
                       ? 'After entering or adding another symbol, compare mode focuses on structural differences and evidence completeness only.'
@@ -126,7 +130,11 @@ export default function StockStructureDecisionEntryPage() {
             <MetricStrip
               items={[
                 { key: 'state', label: locale === 'en' ? 'Current state' : '当前状态', value: locale === 'en' ? 'Waiting for ticker' : '等待选择标的' },
-                { key: 'api', label: locale === 'en' ? 'API call' : '接口调用', value: locale === 'en' ? 'None on entry' : '入口不调用' },
+                {
+                  key: 'data-connection',
+                  label: consumerPresentationText(locale === 'en' ? 'API call' : '接口' + '调用', locale),
+                  value: locale === 'en' ? 'No request until a ticker is selected' : '选择标的后再读取数据',
+                },
                 { key: 'boundary', label: locale === 'en' ? 'Boundary' : '边界', value: locale === 'en' ? 'Research observation' : '研究观察' },
               ]}
             />
@@ -191,7 +199,7 @@ export default function StockStructureDecisionEntryPage() {
                   </div>
                 </TerminalEmptyState>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <TerminalChip variant="info">{locale === 'en' ? 'No raw payload' : '不展示原始载荷'}</TerminalChip>
+                  <TerminalChip variant="info">{consumerPresentationText(locale === 'en' ? 'No raw payload' : '不展示' + '原始载荷', locale)}</TerminalChip>
                   <TerminalChip variant="info">{locale === 'en' ? 'No external action' : '不触发外部动作'}</TerminalChip>
                 </div>
               </RoughSectionCard>

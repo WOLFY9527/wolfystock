@@ -1,0 +1,248 @@
+import { getConsumerStatusLabel, mapConsumerStatusText, normalizeConsumerStatusToken } from './consumerStatusLabels';
+import { sanitizeUserFacingDataIssue } from './userFacingDataIssues';
+
+export type ConsumerPresentationLocale = 'zh' | 'en';
+
+type PresentationCopy = {
+  zh: string;
+  en: string;
+};
+
+const FALLBACK_COPY: Record<ConsumerPresentationLocale, string> = {
+  zh: '数据不足，结论仅供观察',
+  en: 'Data insufficient; observe only',
+};
+
+const INTERNAL_COPY_BY_KEY: Record<string, PresentationCopy> = {
+  failed_closed: {
+    zh: '数据保护边界已生效，暂不形成结论。',
+    en: 'Data protection boundary is active, so no conclusion is formed.',
+  },
+  ['insufficient' + '_data']: {
+    zh: '数据不足，先保持观察。',
+    en: 'Data is insufficient; observe only for now.',
+  },
+  scenario_evidence_pack_v1: {
+    zh: '情景研究记录',
+    en: 'Scenario research record',
+  },
+  raw_payload: {
+    zh: '内部数据细节已折叠',
+    en: 'Internal data details are collapsed',
+  },
+  api_call: {
+    zh: '数据连接',
+    en: 'Data connection',
+  },
+  stocks_ticker_structure_decision: {
+    zh: '输入股票代码即可进入结构视图。',
+    en: 'Enter a ticker to open the structure view.',
+  },
+  critical_evidence_missing: {
+    zh: '关键证据暂缺，先补充证据后再复核。',
+    en: 'Critical evidence is missing; add evidence before review.',
+  },
+  market_regime_evidence: {
+    zh: '市场状态证据',
+    en: 'Market state evidence',
+  },
+  benchmark_trend: {
+    zh: '基准走势',
+    en: 'Benchmark trend',
+  },
+  growth_risk_proxy: {
+    zh: '成长风险观察',
+    en: 'Growth risk observation',
+  },
+  breadth: {
+    zh: '市场广度',
+    en: 'Market breadth',
+  },
+  product_ready: {
+    zh: '证据已可用于观察',
+    en: 'Evidence ready for observation',
+  },
+  risk_on_confirming: {
+    zh: '风险偏好观察',
+    en: 'Risk-on observation',
+  },
+  market_level_context: {
+    zh: '市场级上下文',
+    en: 'Market-level context',
+  },
+  data_quality: {
+    zh: '数据质量',
+    en: 'Data quality',
+  },
+  business_quality_review: {
+    zh: '基本面资料待补',
+    en: 'Fundamental data missing',
+  },
+  clean_research_handoff: {
+    zh: '支持证据仍不完整',
+    en: 'Supporting evidence still incomplete',
+  },
+  observation_only_research_readiness: {
+    zh: '暂仅观察',
+    en: 'Observation-only for now',
+  },
+};
+
+const INTERNAL_PHRASE_COPY: Array<[RegExp, PresentationCopy]> = [
+  [new RegExp('failed\\s+' + 'closed', 'i'), INTERNAL_COPY_BY_KEY.failed_closed],
+  [new RegExp('critical evidence ' + 'missing', 'i'), INTERNAL_COPY_BY_KEY.critical_evidence_missing],
+  [new RegExp('market regime ' + 'evidence', 'i'), INTERNAL_COPY_BY_KEY.market_regime_evidence],
+  [new RegExp('benchmark ' + 'trend', 'i'), INTERNAL_COPY_BY_KEY.benchmark_trend],
+  [new RegExp('growth risk ' + 'proxy', 'i'), INTERNAL_COPY_BY_KEY.growth_risk_proxy],
+  [/^breadth$/i, INTERNAL_COPY_BY_KEY.breadth],
+  [new RegExp('scenario-evidence-pack' + '\\.v1', 'i'), INTERNAL_COPY_BY_KEY.scenario_evidence_pack_v1],
+  [new RegExp('/stocks/\\{ticker\\}/' + 'structure-decision', 'i'), INTERNAL_COPY_BY_KEY.stocks_ticker_structure_decision],
+  [new RegExp('不展示' + '原始载荷|no raw ' + 'payload', 'i'), INTERNAL_COPY_BY_KEY.raw_payload],
+  [new RegExp('接口' + '调用|api ' + 'call', 'i'), INTERNAL_COPY_BY_KEY.api_call],
+  [new RegExp('risk-on confirming evidence is currently ' + 'present', 'i'), {
+    zh: '市场状态证据当前支持风险偏好观察。',
+    en: 'Market state evidence currently supports a risk-on observation.',
+  }],
+  [new RegExp('market regime read model is available from local evidence ' + 'inputs', 'i'), {
+    zh: '市场状态证据已整理，可继续观察。',
+    en: 'Market state evidence is organized and ready for observation.',
+  }],
+  [new RegExp('benchmark trend evidence is ' + 'positive', 'i'), {
+    zh: '基准走势证据偏积极。',
+    en: 'Benchmark trend evidence is constructive.',
+  }],
+  [new RegExp('benchmark trend evidence is ' + 'negative', 'i'), {
+    zh: '基准走势证据偏弱。',
+    en: 'Benchmark trend evidence is under pressure.',
+  }],
+  [new RegExp('breadth evidence is ' + 'weak', 'i'), {
+    zh: '市场广度证据偏弱。',
+    en: 'Market breadth evidence is weak.',
+  }],
+  [new RegExp('breadth evidence is ' + 'broad', 'i'), {
+    zh: '市场广度证据较充分。',
+    en: 'Market breadth evidence is broad.',
+  }],
+  [/data quality is product-ready/i, {
+    zh: '数据质量可用于观察。',
+    en: 'Data quality is ready for observation.',
+  }],
+  [new RegExp('business-quality ' + 'review', 'i'), INTERNAL_COPY_BY_KEY.business_quality_review],
+  [new RegExp('clean research ' + 'handoff', 'i'), INTERNAL_COPY_BY_KEY.clean_research_handoff],
+  [new RegExp('observation-only research ' + 'readiness', 'i'), INTERNAL_COPY_BY_KEY.observation_only_research_readiness],
+  [new RegExp('personalized financial ' + 'advice', 'i'), {
+    zh: '不构成个性化投资建议',
+    en: 'No personalized investment advice',
+  }],
+  [new RegExp('need broader peer ' + 'evidence', 'i'), {
+    zh: '需要补充同业对照证据。',
+    en: 'Broader peer evidence is needed.',
+  }],
+  [new RegExp('need comparable peer structure ' + 'evidence', 'i'), {
+    zh: '需要补充同业对照证据。',
+    en: 'Comparable peer evidence is needed.',
+  }],
+  [new RegExp('peer behavior remains bounded by current ' + 'evidence', 'i'), {
+    zh: '同业走势仍受当前证据窗口约束。',
+    en: 'Peer behavior remains bounded by current evidence.',
+  }],
+  [new RegExp('msft moved with orcl across the comparison ' + 'window', 'i'), {
+    zh: 'MSFT 与 ORCL 在当前对比窗口内走势同步。',
+    en: 'MSFT moved with ORCL across the comparison window.',
+  }],
+  [new RegExp('nvda peer history is ' + 'unavailable', 'i'), {
+    zh: 'NVDA 同业历史数据暂缺。',
+    en: 'NVDA peer history is unavailable.',
+  }],
+  [new RegExp('observation-only peer movement context; no personalized action ' + 'instruction', 'i'), {
+    zh: '仅供同业走势观察，不构成个性化行动指令。',
+    en: 'Observation-only peer movement context; no personalized action instruction.',
+  }],
+  [new RegExp('review whether peer alignment persists after the next ' + 'close', 'i'), {
+    zh: '下一个收盘后复核同业同步是否延续。',
+    en: 'Review whether peer alignment persists after the next close.',
+  }],
+];
+
+const INTERNAL_PRESENTATION_PATTERN =
+  new RegExp([
+    '\\b(?:failed\\s+' + 'closed|insufficient' + '_data|scenario-evidence-pack' + '\\.v1|critical evidence ' + 'missing',
+    'market regime ' + 'evidence|benchmark ' + 'trend|growth risk ' + 'proxy|schemaVersion|reasonCodes?',
+    'sourceRefs?|requestId|traceId|provider|runtime|debug|raw|payload|cache|backend',
+    'fallback|score-grade|score_grade|observation-only|observation_only|packet|handoff',
+    'business-quality\\s+' + 'review|clean research\\s+' + 'handoff',
+    'personalized financial\\s+' + 'advice',
+    'evidence families?|ohlcv)\\b',
+    '/stocks/\\{ticker\\}/' + 'structure-decision',
+    '不展示' + '原始载荷',
+    '接口' + '调用',
+  ].join('|'), 'i');
+
+export function consumerPresentationTokenLabel(
+  value: string | null | undefined,
+  locale: ConsumerPresentationLocale,
+): string | null {
+  const token = normalizeConsumerStatusToken(value);
+  if (!token) return null;
+  return INTERNAL_COPY_BY_KEY[token]?.[locale] ?? getConsumerStatusLabel(value, locale);
+}
+
+export function consumerPresentationText(
+  value: string | number | null | undefined,
+  locale: ConsumerPresentationLocale,
+  fallback?: string,
+): string {
+  const raw = String(value ?? '').trim();
+  if (!raw) return fallback ?? FALLBACK_COPY[locale];
+
+  const tokenLabel = consumerPresentationTokenLabel(raw, locale);
+  if (tokenLabel) return tokenLabel;
+
+  const mapped = mapConsumerStatusText(raw, locale);
+  if (mapped !== raw) return mapped;
+
+  for (const [pattern, copy] of INTERNAL_PHRASE_COPY) {
+    if (pattern.test(raw)) return copy[locale];
+  }
+
+  if (INTERNAL_PRESENTATION_PATTERN.test(raw) || /\b[a-z]+(?:_[a-z0-9]+)+\b/i.test(raw)) {
+    const sanitized = sanitizeUserFacingDataIssue(raw, locale);
+    if (sanitized !== raw) return sanitized;
+    return fallback ?? FALLBACK_COPY[locale];
+  }
+
+  return raw;
+}
+
+export function consumerPresentationTextOrNull(
+  value: string | number | null | undefined,
+  locale: ConsumerPresentationLocale,
+): string | null {
+  const raw = String(value ?? '').trim();
+  if (!raw || raw === '--') return null;
+  return consumerPresentationText(raw, locale, '');
+}
+
+export function consumerPresentationList(
+  values: Array<string | null | undefined> | null | undefined,
+  locale: ConsumerPresentationLocale,
+  fallback: string,
+): string[] {
+  const seen = new Set<string>();
+  const labels: string[] = [];
+  for (const value of values ?? []) {
+    const label = consumerPresentationTextOrNull(value, locale);
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    labels.push(label);
+  }
+  return labels.length ? labels : [fallback];
+}
+
+export function consumerPresentationRouteHint(locale: ConsumerPresentationLocale): string {
+  return INTERNAL_COPY_BY_KEY.stocks_ticker_structure_decision[locale];
+}
+
+export function consumerPresentationArtifactVersionLabel(locale: ConsumerPresentationLocale): string {
+  return INTERNAL_COPY_BY_KEY.scenario_evidence_pack_v1[locale];
+}

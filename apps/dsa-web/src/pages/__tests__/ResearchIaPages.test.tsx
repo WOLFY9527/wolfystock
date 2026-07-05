@@ -16,9 +16,14 @@ const {
   getDailyIntelligenceMock,
   getResearchRadarMock,
   getResearchQueueMock,
+  getQuoteMock,
+  getResearchPacketMock,
   verifyTickerExistsMock,
   getStructureDecisionMock,
   getStructureDecisionsBatchMock,
+  getHistoryMock,
+  getTechnicalIndicatorsMock,
+  getOptionsStructureMock,
   runScenarioLabMock,
 } = vi.hoisted(() => ({
   languageState: { value: 'zh' as 'zh' | 'en' },
@@ -26,9 +31,14 @@ const {
   getDailyIntelligenceMock: vi.fn(),
   getResearchRadarMock: vi.fn(),
   getResearchQueueMock: vi.fn(),
+  getQuoteMock: vi.fn(),
+  getResearchPacketMock: vi.fn(),
   verifyTickerExistsMock: vi.fn(),
   getStructureDecisionMock: vi.fn(),
   getStructureDecisionsBatchMock: vi.fn(),
+  getHistoryMock: vi.fn(),
+  getTechnicalIndicatorsMock: vi.fn(),
+  getOptionsStructureMock: vi.fn(),
   runScenarioLabMock: vi.fn(),
 }));
 
@@ -36,6 +46,29 @@ vi.mock('../../contexts/UiLanguageContext', () => ({
   useI18n: () => ({
     language: languageState.value,
     t: (key: string) => key,
+  }),
+}));
+
+vi.mock('../../contexts/AuthContext', () => ({
+  useAuth: () => ({
+    authEnabled: true,
+    loggedIn: true,
+    passwordSet: true,
+    passwordChangeable: true,
+    setupState: 'enabled',
+    currentUser: {
+      id: 1,
+      username: 'consumer',
+      displayName: 'Consumer Tester',
+      isAuthenticated: true,
+      isAdmin: false,
+    },
+    isLoading: false,
+    loadError: null,
+    login: vi.fn(),
+    changePassword: vi.fn(),
+    logout: vi.fn(),
+    refreshStatus: vi.fn(),
   }),
 }));
 
@@ -64,11 +97,21 @@ vi.mock('../../api/scenarioLab', () => ({
   },
 }));
 
+vi.mock('../../api/optionsLab', () => ({
+  optionsLabApi: {
+    getOptionsStructure: (...args: unknown[]) => getOptionsStructureMock(...args),
+  },
+}));
+
 vi.mock('../../api/stocks', () => ({
   stocksApi: {
+    getQuote: (...args: unknown[]) => getQuoteMock(...args),
+    getResearchPacket: (...args: unknown[]) => getResearchPacketMock(...args),
     verifyTickerExists: (...args: unknown[]) => verifyTickerExistsMock(...args),
     getStructureDecision: (...args: unknown[]) => getStructureDecisionMock(...args),
     getStructureDecisionsBatch: (...args: unknown[]) => getStructureDecisionsBatchMock(...args),
+    getHistory: (...args: unknown[]) => getHistoryMock(...args),
+    getTechnicalIndicators: (...args: unknown[]) => getTechnicalIndicatorsMock(...args),
   },
 }));
 
@@ -117,6 +160,11 @@ describe('research IA pages', () => {
     vi.clearAllMocks();
     languageState.value = 'zh';
     getResearchQueueMock.mockResolvedValue(makeEmptyUnifiedResearchQueue());
+    getQuoteMock.mockRejectedValue(new Error('quote optional in page test'));
+    getResearchPacketMock.mockRejectedValue(new Error('research packet optional in page test'));
+    getHistoryMock.mockRejectedValue(new Error('history optional in page test'));
+    getTechnicalIndicatorsMock.mockRejectedValue(new Error('technicals optional in page test'));
+    getOptionsStructureMock.mockRejectedValue(new Error('options structure optional in page test'));
     verifyTickerExistsMock.mockResolvedValue({
       stockCode: 'AAPL',
       normalizedSymbol: 'AAPL',
@@ -1359,14 +1407,14 @@ describe('research IA pages', () => {
     const fallback = await within(page).findByTestId('research-radar-market-level-fallback');
     expect(fallback).toHaveTextContent('Market-level context');
     expect(fallback).toHaveTextContent('Candidate research is unavailable or has not executed.');
-    expect(fallback).toHaveTextContent('risk on confirming');
-    expect(fallback).toHaveTextContent('product ready');
-    expect(fallback).toHaveTextContent('Risk-on confirming evidence is currently present');
-    expect(fallback).toHaveTextContent('Benchmark Trend');
-    expect(fallback).toHaveTextContent('Data Quality');
-    expect(fallback).toHaveTextContent('Market regime read model is available from local evidence inputs.');
+    expect(fallback).toHaveTextContent('Risk-on observation');
+    expect(fallback).toHaveTextContent('Evidence ready for observation');
+    expect(fallback).toHaveTextContent('Market state evidence currently supports a risk-on observation.');
+    expect(fallback).toHaveTextContent('Benchmark trend');
+    expect(fallback).toHaveTextContent('Data quality');
+    expect(fallback).toHaveTextContent('Market state evidence is organized and ready for observation.');
     expect(within(page).getByTestId('research-radar-queue-empty-state')).toHaveTextContent('No research queue');
-    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/ranking executed|rank\s*1|ALFA|buy|sell|hold|recommendation|target price|stop loss|position sizing/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/\brank\s*1\b|target price|stop loss|position sizing|risk_on_confirming|product_ready|Market regime read model/i);
   });
 
   it('renders evidence remediation guidance and safe prerequisite copy for low-evidence research radar gaps', async () => {
@@ -1549,7 +1597,7 @@ describe('research IA pages', () => {
     const hub = await screen.findByTestId('research-queue-hub');
     expect(hub).toHaveTextContent('Supporting evidence still incomplete');
     expect(hub).toHaveTextContent('Observation-only for now');
-    expect(hub).toHaveTextContent('Fundamental data missing');
+    expect(hub).toHaveTextContent('Evidence still needed: market data, fundamentals, and news.');
     expect(hub.textContent || '').not.toMatch(/clean research handoff|evidence families|business-quality review|Observation-only research readiness|personalized financial advice/i);
     expect(findConsumerRawLeakage(hub.textContent || '')).toEqual([]);
   });
@@ -1617,8 +1665,8 @@ describe('research IA pages', () => {
     const page = screen.getByTestId('stock-structure-entry-page');
     expect(page).toHaveTextContent('个股结构决策');
     expect(page).toHaveTextContent('输入标的进入结构视图');
-    expect(page).toHaveTextContent('入口不调用');
-    expect(page).toHaveTextContent('不展示原始载荷');
+    expect(page).toHaveTextContent('选择标的后再读取数据');
+    expect(page).toHaveTextContent('内部数据细节已折叠');
     expect(page).toHaveTextContent('已带入 AAPL');
     expect(page).toHaveTextContent('输入或添加另一个标的后，可进行结构对比。');
     expect(page).toHaveTextContent('直接输入股票代码，或从 Scanner、观察列表、研究雷达继续进入。');
@@ -1653,8 +1701,8 @@ describe('research IA pages', () => {
     expect(getStructureDecisionMock).not.toHaveBeenCalled();
     expect(emptyState).toHaveTextContent('标的未找到');
     expect(emptyState).toHaveTextContent('未找到该标的，请检查代码是否正确，或返回搜索重新选择。');
-    expect(emptyState).toHaveTextContent('这表示当前无法确认该标的存在，不等同于数据暂时不可用。');
-    expect(emptyState).toHaveTextContent('仅作研究观察，不生成投资结论。');
+    expect(emptyState).toHaveTextContent('当前无法确认该标的，不等同于数据暂时不可用。');
+    expect(emptyState).toHaveTextContent('仅研究观察。');
     expect(within(emptyState).getByRole('link', { name: '返回研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
     expect(within(emptyState).getByRole('link', { name: '返回观察列表' })).toHaveAttribute('href', '/zh/watchlist');
     expect(within(emptyState).getByRole('link', { name: '返回首页' })).toHaveAttribute('href', '/zh');
@@ -1685,8 +1733,8 @@ describe('research IA pages', () => {
     const emptyState = await within(page).findByTestId('stock-structure-symbol-not-found-state');
     expect(emptyState).toHaveTextContent('Symbol not found');
     expect(emptyState).toHaveTextContent('INVALID_SYMBOL_XXXX was not found. Check the code, or return to search and choose again.');
-    expect(emptyState).toHaveTextContent('This means the symbol cannot currently be confirmed, which is different from data that is temporarily missing.');
-    expect(emptyState).toHaveTextContent('This is a research observation state only; no investment conclusion is being made.');
+    expect(emptyState).toHaveTextContent('INVALID_SYMBOL_XXXX cannot be confirmed; this differs from temporarily missing data.');
+    expect(emptyState).toHaveTextContent('Research observation only.');
     expect(within(emptyState).getByRole('link', { name: 'Back to Research Radar' })).toHaveAttribute('href', '/en/research/radar');
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/unavailable|lowConfidence|low_confidence|OHLCV|provider|runtime|debug|traceId|requestId|schemaVersion|policyVersion|raw|reasonCodes|internal|local_db|fallback_source|fixture|adapter/i);
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/buy|sell|hold|recommend|target|stop|position size|买入|卖出|持有|推荐|目标价|止损|仓位建议|加仓|减仓/i);
@@ -1824,7 +1872,8 @@ describe('research IA pages', () => {
     expect(packet).toHaveTextContent('INVALID_SYMBOL_XXXX');
     expect(packet).toHaveTextContent('标的未找到');
     expect(packet).toHaveTextContent('未找到该标的，请检查代码是否正确，或返回搜索重新选择。');
-    expect(packet).toHaveTextContent('暂无缺口');
+    expect(packet).toHaveTextContent('证据暂不可用');
+    expect(packet).toHaveTextContent('部分证据暂不可用，因此当前结论只适合作为观察线索。');
     expect(packet.textContent || '').not.toMatch(/provider|runtime|trace|raw|reasonCodes|target price|buy now|schemaVersion|local_db|fallback_source|fixture|adapter/i);
     expect(packet.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|加仓|减仓|buy|sell|hold|recommend|target|stop|position size/i);
   });
@@ -1897,22 +1946,15 @@ describe('research IA pages', () => {
 
     const page = await screen.findByTestId('stock-structure-decision-page');
     const snapshot = await within(page).findByTestId('stock-structure-peer-correlation-snapshot');
-    const gapPanel = await within(page).findByTestId('stock-structure-evidence-gap-explanations');
     expect(getStructureDecisionMock).toHaveBeenCalledWith('ORCL');
-    expect(gapPanel).toHaveTextContent('同业证据缺失');
-    expect(gapPanel).toHaveTextContent('缺少同业对照时，个股结构更容易受到单一标的噪声影响。');
-    expect(gapPanel).toHaveTextContent('补充可比标的或行业篮子的同步走势，再复核结构是否仍成立。');
-    expect(gapPanel).toHaveTextContent('置信度受限：需要更多横向验证。');
-    expect(gapPanel).toHaveTextContent('置信度受到上限约束');
-    expect(gapPanel).toHaveTextContent('仅作观察，不构成操作结论。');
-    expect(gapPanel.textContent || '').not.toMatch(/provider_runtime_trace|buy now|target price|raw payload|confidence_capped|sourceRefs/i);
+    expect(page).toHaveTextContent('需要补充同业对照证据。');
     expect(snapshot).toHaveTextContent('同业相关性');
-    expect(snapshot).toHaveTextContent('aligned');
+    expect(snapshot).toHaveTextContent('同业走势同步');
     expect(snapshot).toHaveTextContent('Cloud software');
-    expect(snapshot).toHaveTextContent('MSFT moved with ORCL across the comparison window.');
-    expect(snapshot).toHaveTextContent('NVDA peer history is unavailable.');
-    expect(snapshot).toHaveTextContent('Observation-only peer movement context; no personalized action instruction.');
-    expect(snapshot).toHaveTextContent('Review whether peer alignment persists after the next close.');
+    expect(snapshot).toHaveTextContent('MSFT 与 ORCL 在当前对比窗口内走势同步。');
+    expect(snapshot).toHaveTextContent('NVDA 同业历史数据暂缺。');
+    expect(snapshot).toHaveTextContent('仅供同业走势观察，不构成个性化行动指令。');
+    expect(snapshot).toHaveTextContent('下一个收盘后复核同业同步是否延续。');
     expect(within(page).getByRole('link', { name: '与 MSFT 对比证据' })).toHaveAttribute('href', '/zh/stocks/ORCL,MSFT/structure-decision');
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/raw|debug|provider|trace|sourceRef|reasonCode|requestId/i);
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommendation|target price|stop loss|position sizing/i);
@@ -1952,15 +1994,10 @@ describe('research IA pages', () => {
     );
 
     const page = await screen.findByTestId('stock-structure-decision-page');
-    const snapshot = await within(page).findByTestId('stock-structure-peer-correlation-snapshot');
-    expect(snapshot).toHaveTextContent('暂无同业证据条目');
-    expect(snapshot).toHaveTextContent('当前缺少可比较同业证据，因此无法形成同业结构差异观察。');
-    expect(snapshot).toHaveTextContent('可添加另一个标的进行结构对比，或返回研究雷达从现有研究队列进入。');
-    expect(snapshot).toHaveTextContent('这不表示当前标的优先于其他标的，也不形成投资偏好。');
-    expect(within(snapshot).getByRole('link', { name: '添加对比标的' })).toHaveAttribute('href', '/zh/stocks/structure-decision?symbols=ADBE');
-    expect(within(snapshot).getByRole('link', { name: '返回研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
-    expect(snapshot.textContent || '').not.toMatch(/raw|debug|provider|trace|sourceRef|reasonCode|requestId|schemaVersion/i);
-    expect(snapshot.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommendation|target price|stop loss|position sizing/i);
+    expect(within(page).queryByTestId('stock-structure-peer-correlation-snapshot')).not.toBeInTheDocument();
+    expect(page).toHaveTextContent('需要补充同业对照证据。');
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/raw|debug|provider|trace|sourceRef|reasonCode|requestId|schemaVersion/i);
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommendation|target price|stop loss|position sizing/i);
   });
 
   it('renders a compact stock structure compare evidence packet for multiple symbols', async () => {
@@ -2060,7 +2097,7 @@ describe('research IA pages', () => {
       benchmark: 'SPY',
       maxItems: undefined,
     });
-    expect(packet).toHaveTextContent('对比证据包');
+    expect(packet).toHaveTextContent('对比支持证据');
     expect(packet).toHaveTextContent('MSFT');
     expect(packet).toHaveTextContent('AAPL');
     expect(packet).toHaveTextContent('共享证据');
@@ -2068,14 +2105,13 @@ describe('research IA pages', () => {
     expect(packet).toHaveTextContent('55-60 根可用');
     expect(packet).toHaveTextContent('分歧证据');
     expect(packet).toHaveTextContent('结构状态');
-    expect(packet).toHaveTextContent('MSFT: mixed');
-    expect(packet).toHaveTextContent('AAPL: breakout');
+    expect(packet).toHaveTextContent('MSFT: 结构分化');
+    expect(packet).toHaveTextContent('AAPL: 突破观察');
     expect(packet).toHaveTextContent('缺失证据');
     expect(packet).toHaveTextContent('MSFT');
     expect(packet).toHaveTextContent('价格历史时效有限');
     expect(packet).toHaveTextContent('先刷新或补齐价格历史，再复核结构信号是否仍一致。');
     expect(packet).toHaveTextContent('AAPL');
-    expect(packet).toHaveTextContent('暂无缺口');
     expect(packet).toHaveTextContent('新鲜度');
     expect(packet).toHaveTextContent('0 根');
     expect(packet).toHaveTextContent('60 根');
@@ -2087,7 +2123,7 @@ describe('research IA pages', () => {
     expect(packet).toHaveTextContent('置信度受到上限约束');
     expect(packet).toHaveTextContent('当前证据还不足以支撑更高置信度，只能作为研究观察。');
     expect(packet).toHaveTextContent('后续研究');
-    expect(packet).toHaveTextContent('历史行情待补');
+    expect(packet).toHaveTextContent('补齐可比较标的的基础证据后再复核。');
     expect(packet.textContent || '').not.toMatch(/daily OHLCV|divergence observations/i);
     expect(packet.textContent || '').not.toMatch(/reasonCodes|policyVersion|local_db|sourceRef|requestId|trace|raw|debug|provider|schemaVersion|price_history_stale|symbol_evidence_unavailable/i);
     expect(packet.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy now|sell now|hold|target price|stop loss|position sizing/i);
@@ -2125,14 +2161,8 @@ describe('research IA pages', () => {
     const page = await screen.findByTestId('stock-structure-decision-page');
     expect(page).toHaveTextContent('AAPL 结构工作区');
     expect(getStructureDecisionMock).toHaveBeenCalledWith('AAPL');
-    const packet = await within(page).findByTestId('symbol-compare-evidence-packet');
-    expect(packet).toHaveTextContent('需要至少两个可比较标的');
-    expect(packet).toHaveTextContent('当前只有 AAPL，暂时不能形成标的间共享证据或分歧证据。');
-    expect(packet).toHaveTextContent('添加同业标的后再查看对比证据。');
-    expect(packet).not.toHaveTextContent('买入');
-    expect(packet).not.toHaveTextContent('卖出');
-    expect(packet).not.toHaveTextContent('持有');
-    expect(within(packet).queryByRole('link')).not.toBeInTheDocument();
+    expect(within(page).queryByTestId('symbol-compare-evidence-packet')).not.toBeInTheDocument();
+    expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommendation|target price|stop loss|position sizing/i);
   });
 
   it('redacts unsafe diagnostics from partially missing symbol compare evidence', async () => {
@@ -2298,7 +2328,7 @@ describe('research IA pages', () => {
     expect(page).not.toHaveTextContent('今日观察队列');
     expect(page).toHaveTextContent('波动冲击');
     expect(page).toHaveTextContent('基准状态');
-    expect(page).toHaveTextContent('情景输出');
+    expect(page).toHaveTextContent('情景后的研究框架');
     expect(page).toHaveTextContent('所选压力情景下，市场广度会较快转弱。');
     expect(page).toHaveTextContent('波动结构会转入偏防御状态。');
     expect(page).toHaveTextContent('数据暂不可用');

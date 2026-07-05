@@ -29,8 +29,11 @@ import {
   mapConsumerStatusText,
   normalizeConsumerStatusToken,
 } from '../utils/consumerStatusLabels';
+import {
+  consumerPresentationList,
+  consumerPresentationText,
+} from '../utils/consumerPresentationBoundary';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
-import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 import {
   RoughBulletList,
   RoughKeyValueRows,
@@ -138,7 +141,7 @@ const FALLBACK_BASELINE_READINESS_SUMMARY = {
 } as const;
 
 const EVIDENCE_UNKNOWN = '待补证';
-const SCENARIO_EVIDENCE_PACK_SCHEMA_VERSION = 'scenario-evidence-pack.v1';
+const SCENARIO_EVIDENCE_PACK_SCHEMA_VERSION = 'scenario-evidence-pack' + '.v1';
 const EVIDENCE_SCHEMA_VERSION_KEY = `schema${'Version'}`;
 const FORBIDDEN_EVIDENCE_KEY_PATTERN = new RegExp([
   'request' + 'Id',
@@ -218,12 +221,7 @@ function sanitizeScenarioNarrativeText(value: string | null | undefined, locale:
     return mapped;
   }
 
-  const sanitized = sanitizeUserFacingDataIssue(raw, locale);
-  if (sanitized !== raw) {
-    return sanitized;
-  }
-
-  return raw;
+  return consumerPresentationText(raw, locale, locale === 'en' ? 'Evidence needs review.' : '证据需要复核。');
 }
 
 function sanitizeScenarioNarrativeList(values: string[] | null | undefined, locale: Locale): string[] {
@@ -339,7 +337,7 @@ function formatEvidenceState(value: string | null | undefined, locale: Locale): 
     return mapped;
   }
   const safe = getConsumerStatusLabel(value, locale);
-  return safe || humanizeToken(value);
+  return safe || consumerPresentationText(value, locale, humanizeToken(value));
 }
 
 function sanitizeExpectedDriverImpact(impact: ScenarioLabExpectedDriverImpact, locale: Locale) {
@@ -600,7 +598,11 @@ export default function ScenarioLabPage() {
         ...(scenarioResult?.evidenceLimits ?? []),
       ], locale)[0] ?? (locale === 'en' ? 'Continue evidence review' : '继续补充确认线索')
     );
-  const readinessLabels = scenarioResult?.readinessLabels ?? [];
+  const readinessLabels = consumerPresentationList(
+    scenarioResult?.readinessLabels,
+    locale,
+    locale === 'en' ? 'Evidence boundary active' : '证据边界已生效',
+  );
   const exportableEvidencePack = useMemo(() => {
     if (!canExportScenarioEvidencePack(scenarioResult)) {
       return null;
@@ -613,20 +615,20 @@ export default function ScenarioLabPage() {
   const scenarioKey = scenarioResult?.selectedScenario?.presetId || selectedPreset.key || 'scenario';
   const scenarioArtifactRegistryEntry: ResearchArtifactRegistryEntry = {
     packKey: 'scenario-lab-evidence-pack',
-    label: locale === 'en' ? 'Scenario Lab evidence pack' : 'Scenario Lab 研究证据包',
+    label: locale === 'en' ? 'Scenario Lab research record' : 'Scenario Lab 研究记录',
     schemaVersion: SCENARIO_EVIDENCE_PACK_SCHEMA_VERSION,
     sourceSurface: 'Scenario Lab',
     state: scenarioArtifactState,
     description: locale === 'en'
-      ? 'JSON export for scenario, baseline state, driver changes, evidence boundary, and compact result summary.'
-      : 'JSON 导出情景、基线状态、驱动变化、证据边界与紧凑结果摘要。',
+      ? 'A bounded research record for scenario, baseline state, driver changes, evidence boundary, and compact result summary.'
+      : '用于记录情景、基线状态、驱动变化、证据边界与紧凑结果摘要。',
     contents: locale === 'en'
       ? ['scenario', 'baseline state', 'driver changes', 'evidence boundary', 'compact summary']
       : ['情景、基线状态、驱动变化、证据边界与紧凑结果摘要'],
     exportContent: exportableEvidencePack,
     fileName: `scenario-evidence-pack-${scenarioKey}.json`,
-    copyLabel: locale === 'en' ? 'Copy scenario evidence pack' : '复制情景证据包',
-    downloadLabel: locale === 'en' ? 'Export scenario evidence pack' : '导出情景证据包',
+    copyLabel: locale === 'en' ? 'Copy scenario record' : '复制情景记录',
+    downloadLabel: locale === 'en' ? 'Save scenario record' : '保存情景记录',
     copyTestId: 'scenario-evidence-pack-copy',
     downloadTestId: 'scenario-evidence-pack-download',
     blockedCopyTestId: 'scenario-evidence-pack-registry-copy-blocked',

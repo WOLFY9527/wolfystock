@@ -307,17 +307,18 @@ describe('ScenarioLabPage', () => {
     expect(page).toHaveTextContent('所选压力情景下，市场广度会较快转弱。');
     expect(page).toHaveTextContent('波动结构会转入偏防御状态。');
     const registry = screen.getByTestId('scenario-evidence-pack-registry');
-    expect(registry).toHaveTextContent('研究证据包');
-    expect(registry).toHaveTextContent('scenario-evidence-pack.v1');
+    expect(registry).toHaveTextContent('研究记录');
+    expect(registry).toHaveTextContent('情景研究记录');
+    expect(registry).not.toHaveTextContent('scenario-evidence-pack.v1');
     expect(registry).toHaveTextContent('Scenario Lab');
     expect(registry).toHaveTextContent('情景、基线状态、驱动变化、证据边界与紧凑结果摘要');
-    expect(registry).toHaveTextContent('证据包版本');
+    expect(registry).toHaveTextContent('记录类型');
     expect(registry).toHaveTextContent('来源页面');
     expect(registry).not.toHaveTextContent('Artifact key');
     expect(registry).not.toHaveTextContent('Schema version');
     expect(registry).not.toHaveTextContent('Source surface');
-    expect(screen.getByTestId('scenario-evidence-pack-copy')).toHaveTextContent('复制情景证据包');
-    expect(screen.getByTestId('scenario-evidence-pack-download')).toHaveTextContent('导出情景证据包');
+    expect(screen.getByTestId('scenario-evidence-pack-copy')).toHaveTextContent('复制情景记录');
+    expect(screen.getByTestId('scenario-evidence-pack-download')).toHaveTextContent('保存情景记录');
     expect(page.textContent || '').not.toMatch(/Artifact key|Source surface|scenario contract|frontend contract/i);
 
     await waitFor(() => expect(runScenarioLabMock).toHaveBeenCalledWith(expect.objectContaining({
@@ -337,8 +338,8 @@ describe('ScenarioLabPage', () => {
 
     expect(screen.queryByTestId('scenario-evidence-pack-copy')).not.toBeInTheDocument();
     expect(await screen.findByTestId('scenario-evidence-pack-registry')).toBeInTheDocument();
-    expect(screen.getByTestId('scenario-evidence-pack-copy')).toHaveTextContent('复制情景证据包');
-    expect(screen.getByTestId('scenario-evidence-pack-download')).toHaveTextContent('导出情景证据包');
+    expect(screen.getByTestId('scenario-evidence-pack-copy')).toHaveTextContent('复制情景记录');
+    expect(screen.getByTestId('scenario-evidence-pack-download')).toHaveTextContent('保存情景记录');
   });
 
   it('copies deterministic scenario evidence pack JSON without advice or internal fields', async () => {
