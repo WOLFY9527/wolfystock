@@ -29,10 +29,13 @@ import {
 } from '../api/researchRadar';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { getConsumerStatusLabel, mapConsumerStatusText } from '../utils/consumerStatusLabels';
+import {
+  consumerPresentationList,
+  consumerPresentationText,
+} from '../utils/consumerPresentationBoundary';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import { formatDateTime } from '../utils/format';
 import { createConsumerDataHealthSummary } from '../utils/consumerDataQualityViewModel';
-import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 import {
   RoughBulletList,
   RoughKeyValueRows,
@@ -74,17 +77,12 @@ const INTERNAL_DIAGNOSTIC_WORDS = /sourceRefs?|reasonCodes?|sourceRefId|request[
 function safeResearchQueueText(value: string | null | undefined, locale: 'zh' | 'en', fallback?: string): string | null {
   const raw = String(value || '').trim();
   if (!raw) return fallback ?? null;
-  const mapped = mapConsumerStatusText(raw, locale);
-  if (mapped !== raw) {
-    return mapped;
-  }
   if (ADVICE_OR_TRADE_WORDS.test(raw)) {
     return locale === 'en' ? 'Observation detail withheld.' : '观察细节已折叠。';
   }
-  if (INTERNAL_DIAGNOSTIC_WORDS.test(raw)) {
-    return sanitizeUserFacingDataIssue(raw, locale);
-  }
-  return raw;
+  const safe = consumerPresentationText(raw, locale, fallback ?? (locale === 'en' ? 'Evidence needs review.' : '证据需要复核。'));
+  if (INTERNAL_DIAGNOSTIC_WORDS.test(raw)) return safe;
+  return safe || raw;
 }
 
 function safeResearchQueueList(values: string[] | null | undefined, locale: 'zh' | 'en', fallback: string): string[] {
@@ -158,7 +156,7 @@ function readModelLabel(value: string | null | undefined, locale: 'zh' | 'en'): 
   const raw = String(value || '').trim();
   const mapped = consumerStatusValue(value, locale);
   if (mapped !== '--' && mapped !== raw) return mapped;
-  return (raw || '--').replace(/_/g, ' ');
+  return raw ? consumerPresentationText(raw, locale, '--') : '--';
 }
 
 function freshnessLabel(state: UnifiedResearchQueueItem['freshness']['state'], locale: 'zh' | 'en'): string {
@@ -862,12 +860,12 @@ function MarketLevelFallbackPanel({
     return null;
   }
   const cards = (fallback.evidenceCards ?? []).filter((card) => card.observationOnly !== false && card.decisionGrade !== true);
-  const missingFamilies = safeResearchQueueList(
+  const missingFamilies = consumerPresentationList(
     fallback.missingDataFamilies ?? fallback.readiness?.missingDataFamilies ?? fallback.dataQuality?.missingDataFamilies,
     locale,
     locale === 'en' ? 'No missing market evidence family reported.' : '未报告缺失的市场证据族。',
   );
-  const blockedSurfaces = safeResearchQueueList(
+  const blockedSurfaces = consumerPresentationList(
     fallback.blockedProductSurfaces ?? fallback.readiness?.blockedProductSurfaces ?? fallback.dataQuality?.blockedProductSurfaces,
     locale,
     locale === 'en' ? 'No blocked product surface reported.' : '未报告阻塞的产品界面。',
@@ -888,7 +886,7 @@ function MarketLevelFallbackPanel({
           <div className="rounded-lg border border-[color:var(--wolfy-divider)] bg-black/10 p-3">
             <div className="text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Scope' : '范围'}</div>
             <div className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">
-              {safeResearchQueueText(fallback.label, locale, locale === 'en' ? 'Market-level context' : '市场级上下文')}
+              {consumerPresentationText(fallback.label, locale, locale === 'en' ? 'Market-level context' : '市场级上下文')}
             </div>
             <div className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
               {locale === 'en'
@@ -916,19 +914,19 @@ function MarketLevelFallbackPanel({
           </div>
         </div>
         <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-          {safeResearchQueueText(fallback.productSummary, locale, locale === 'en' ? 'Market-level evidence summary is unavailable.' : '市场级证据摘要暂不可用。')}
+          {consumerPresentationText(fallback.productSummary, locale, locale === 'en' ? 'Market-level evidence summary is unavailable.' : '市场级证据摘要暂不可用。')}
         </p>
         <div className="grid gap-3 md:grid-cols-3">
           {cards.map((card, index) => (
             <div key={`${card.cardId || card.title || 'card'}-${index}`} className="rounded-lg border border-[color:var(--wolfy-divider)] bg-black/10 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">
-                  {safeResearchQueueText(card.title, locale, locale === 'en' ? 'Evidence card' : '证据卡')}
+                  {consumerPresentationText(card.title, locale, locale === 'en' ? 'Evidence card' : '证据卡')}
                 </div>
                 <StatusBadge status={toneFor(card.status)} label={readModelLabel(card.status, locale)} size="sm" />
               </div>
               <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
-                {safeResearchQueueText(card.headline, locale, locale === 'en' ? 'Evidence needs review.' : '证据需要复核。')}
+                {consumerPresentationText(card.headline, locale, locale === 'en' ? 'Evidence needs review.' : '证据需要复核。')}
               </p>
             </div>
           ))}

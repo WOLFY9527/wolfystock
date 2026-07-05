@@ -37,8 +37,8 @@ import ResearchWorkspaceFlowPanel from '../components/research/ResearchWorkspace
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 import { getConsumerStatusLabel, mapConsumerStatusText } from '../utils/consumerStatusLabels';
+import { consumerPresentationText } from '../utils/consumerPresentationBoundary';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
-import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 import {
   productReadClassificationDisplayState,
   productReadFreshnessLabel,
@@ -79,8 +79,8 @@ function safeConsumerText(
 ): string {
   const text = String(value ?? '').trim();
   if (!text) return fallback;
-  if (!looksUnsafeForConsumer(text)) return text;
-  const sanitized = sanitizeUserFacingDataIssue(text, language);
+  if (!looksUnsafeForConsumer(text)) return consumerPresentationText(text, language, fallback);
+  const sanitized = consumerPresentationText(text, language, fallback);
   return looksUnsafeForConsumer(sanitized) ? fallback : sanitized;
 }
 

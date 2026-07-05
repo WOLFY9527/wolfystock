@@ -3,6 +3,11 @@ import { useState } from 'react';
 import { Copy, Download } from 'lucide-react';
 import { TerminalChip } from '../terminal/TerminalPrimitives';
 import { cn } from '../../utils/cn';
+import {
+  consumerPresentationArtifactVersionLabel,
+  consumerPresentationText,
+  type ConsumerPresentationLocale,
+} from '../../utils/consumerPresentationBoundary';
 
 export type ResearchArtifactRegistryLocale = 'zh' | 'en';
 export type ResearchArtifactRegistryState = 'available' | 'blocked' | 'unavailable';
@@ -44,9 +49,9 @@ const STATE_LABELS: Record<ResearchArtifactRegistryState, Record<ResearchArtifac
 };
 
 const STATUS_MESSAGES: Record<string, Record<ResearchArtifactRegistryLocale, string>> = {
-  copied: { zh: '证据包已复制。', en: 'Evidence pack copied.' },
-  exported: { zh: '证据包已导出。', en: 'Evidence pack exported.' },
-  pending: { zh: '证据包待补证，未复制。', en: 'Evidence pack pending; nothing copied.' },
+  copied: { zh: '研究记录已复制。', en: 'Research record copied.' },
+  exported: { zh: '研究记录已保存。', en: 'Research record saved.' },
+  pending: { zh: '研究记录待补证，未复制。', en: 'Research record pending; nothing copied.' },
 };
 
 function stateVariant(state: ResearchArtifactRegistryState): React.ComponentProps<typeof TerminalChip>['variant'] {
@@ -61,7 +66,11 @@ function unknown(locale: ResearchArtifactRegistryLocale): string {
 
 function safeText(value: string | null | undefined, locale: ResearchArtifactRegistryLocale): string {
   const text = String(value || '').trim();
-  return text || unknown(locale);
+  return text ? consumerPresentationText(text, locale as ConsumerPresentationLocale, unknown(locale)) : unknown(locale);
+}
+
+function versionText(value: string | null | undefined, locale: ResearchArtifactRegistryLocale): string {
+  return value ? consumerPresentationArtifactVersionLabel(locale as ConsumerPresentationLocale) : unknown(locale);
 }
 
 function normalizeEntryState(entry: ResearchArtifactRegistryEntry): ResearchArtifactRegistryState {
@@ -87,7 +96,7 @@ export default function ResearchArtifactRegistry({
   testId,
 }: ResearchArtifactRegistryProps) {
   const [statusByKey, setStatusByKey] = useState<Record<string, string>>({});
-  const resolvedTitle = title || (locale === 'en' ? 'Research evidence packs' : '研究证据包');
+  const resolvedTitle = title || (locale === 'en' ? 'Research records' : '研究记录');
   const actionBaseClass = 'inline-flex min-h-[36px] items-center justify-center gap-1.5 rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-xs font-semibold text-white/78 transition-colors hover:border-white/20 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45';
 
   if (!entries.length) return null;
@@ -142,11 +151,11 @@ export default function ResearchArtifactRegistry({
                     <h4 className="text-sm font-semibold text-white/88">{entry.label}</h4>
                     <TerminalChip variant={stateVariant(state)}>{STATE_LABELS[state][locale]}</TerminalChip>
                   </div>
-                  <p className="mt-1 text-xs leading-5 text-white/58">{entry.description}</p>
+                  <p className="mt-1 text-xs leading-5 text-white/58">{safeText(entry.description, locale)}</p>
                   <dl className="mt-2 grid gap-2 text-[11px] leading-5 text-white/58 sm:grid-cols-2">
                     <div>
-                      <dt className="text-white/38">{locale === 'en' ? 'Pack version' : '证据包版本'}</dt>
-                      <dd className="break-all font-mono text-white/72">{safeText(entry.schemaVersion, locale)}</dd>
+                      <dt className="text-white/38">{locale === 'en' ? 'Record type' : '记录类型'}</dt>
+                      <dd className="break-all text-white/72">{versionText(entry.schemaVersion, locale)}</dd>
                     </div>
                     <div>
                       <dt className="text-white/38">{locale === 'en' ? 'Source page' : '来源页面'}</dt>
@@ -172,7 +181,7 @@ export default function ResearchArtifactRegistry({
                         data-testid={entry.copyTestId}
                       >
                         <Copy className="size-3.5" aria-hidden="true" />
-                        {entry.copyLabel || (locale === 'en' ? 'Copy pack' : '复制证据包')}
+                        {entry.copyLabel || (locale === 'en' ? 'Copy record' : '复制研究记录')}
                       </button>
                       <button
                         type="button"
@@ -181,7 +190,7 @@ export default function ResearchArtifactRegistry({
                         data-testid={entry.downloadTestId}
                       >
                         <Download className="size-3.5" aria-hidden="true" />
-                        {entry.downloadLabel || (locale === 'en' ? 'Download pack' : '下载证据包')}
+                        {entry.downloadLabel || (locale === 'en' ? 'Save record' : '保存研究记录')}
                       </button>
                     </>
                   ) : (
