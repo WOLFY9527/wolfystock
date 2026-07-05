@@ -383,6 +383,7 @@ describe('WatchlistPage', () => {
     const panel = await screen.findByTestId('watchlist-research-workspace-flow');
     expect(panel).toHaveTextContent('TSM');
     expect(panel).not.toHaveTextContent(/Run #|Rank #|scannerRunId|watchlistItemId|provider|cache|runtime|debug/i);
+    expect(within(panel).getByTestId('research-workspace-link-stock-structure')).toHaveAttribute('href', expect.stringContaining('/stocks/TSM/structure-decision?'));
     for (const link of within(panel).getAllByRole('link')) {
       expect(link).toHaveAttribute('href', expect.not.stringMatching(/scannerRunId|scannerRank|watchlistItemId|themeId|universeType|provider|cache|runtime|debug/i));
     }

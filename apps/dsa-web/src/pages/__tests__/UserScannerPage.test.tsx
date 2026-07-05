@@ -3944,6 +3944,12 @@ describe('UserScannerPage', () => {
     expect(watchlistLink).toHaveAttribute('href', expect.stringContaining('market=US'));
     expect(watchlistLink).toHaveAttribute('href', expect.stringContaining('source=scanner'));
 
+    const stockStructureLink = within(panel).getByTestId('research-workspace-link-stock-structure');
+    expect(stockStructureLink).toHaveAttribute('href', expect.stringContaining('/stocks/WULF/structure-decision?'));
+    expect(stockStructureLink).toHaveAttribute('href', expect.stringContaining('symbol=WULF'));
+    expect(stockStructureLink).toHaveAttribute('href', expect.stringContaining('market=US'));
+    expect(stockStructureLink).toHaveAttribute('href', expect.stringContaining('source=scanner'));
+
     for (const link of within(panel).getAllByRole('link')) {
       expect(link).toHaveAttribute('href', expect.not.stringMatching(/scannerRunId|scannerRank|watchlistItemId|themeId|universeType|provider|cache|runtime|debug/i));
     }

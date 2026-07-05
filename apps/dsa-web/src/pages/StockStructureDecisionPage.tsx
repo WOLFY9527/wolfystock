@@ -32,6 +32,7 @@ import {
 } from '../api/stocks';
 import { optionsLabApi, type OptionsStructureSummary, type OptionContractStructureRow } from '../api/optionsLab';
 import { EvidenceGapExplanationList } from '../components/research/EvidenceGapExplanation';
+import ResearchWorkspaceFlowPanel from '../components/research/ResearchWorkspaceFlowPanel';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 import { getConsumerStatusLabel, mapConsumerStatusText } from '../utils/consumerStatusLabels';
@@ -3204,6 +3205,36 @@ export default function StockStructureDecisionPage() {
   );
   const missingDataSummary = data ? buildMissingDataSummary(data, locale) : null;
   const safeWatchNext = data ? safeConsumerList(data.researchNotes.watchNext ?? [], locale) : [];
+  const quoteBoundaryView = useMemo(
+    () => buildQuoteBoundaryView(quote, quoteFailed, locale),
+    [locale, quote, quoteFailed],
+  );
+  const stockWorkflowKnownEvidence = data ? safeConsumerList([
+    data.structureState ? (locale === 'en' ? `Structure: ${stockStructureStateLabel(data.structureState, locale)}` : `结构：${stockStructureStateLabel(data.structureState, locale)}`) : null,
+    quoteBoundaryView?.title,
+    data.dataQuality.usableBars != null
+      ? (locale === 'en' ? `Usable bars: ${data.dataQuality.usableBars}` : `可用 K 线：${data.dataQuality.usableBars}`)
+      : null,
+    researchPacket ? (locale === 'en' ? 'Research packet returned.' : '研究包已返回。') : null,
+  ], locale) : [];
+  const stockWorkflowMissingEvidence = data ? safeConsumerList([
+    ...((data.missingEvidence ?? []).map((item) => item.message || item.kind)),
+    ...(data.researchNotes.needsMoreEvidence ?? []),
+    missingDataSummary,
+  ], locale) : [];
+  const stockWorkflowStateNotes = data ? safeConsumerList([
+    data.noAdviceDisclosure,
+    quoteBoundaryView?.detail,
+    data.confidenceCap?.label,
+    ...(data.confidenceCap?.reasons ?? []),
+    statusLabel(data.dataQuality.status, locale),
+  ], locale) : [];
+  const stockWorkflowNextSteps = data ? safeConsumerList([
+    ...(data.researchNotes.watchNext ?? []),
+    locale === 'en' ? 'Compare queue context in Research Radar.' : '到研究雷达对比队列上下文。',
+    locale === 'en' ? 'Track only if ongoing observation is needed.' : '只有需要持续观察时，再加入观察列表。',
+    locale === 'en' ? 'Use Backtest for read-only validation before scenario review.' : '需要验证假设时，先用回测做只读复核。',
+  ], locale) : [];
   const explainRows = data ? [
     {
       key: 'why',
@@ -3243,10 +3274,6 @@ export default function StockStructureDecisionPage() {
       detail: level.value != null ? safeOptionalConsumerText(level.description, locale) || undefined : undefined,
     }))
     .filter((row) => row.value != null && row.value !== '') : [];
-  const quoteBoundaryView = useMemo(
-    () => buildQuoteBoundaryView(quote, quoteFailed, locale),
-    [locale, quote, quoteFailed],
-  );
   const singleStockEvidencePackEntry = useMemo(
     () => (data ? buildSingleStockEvidencePackEntry({
       data,
@@ -3346,6 +3373,23 @@ export default function StockStructureDecisionPage() {
             ) : null}
             {data ? (
               <>
+                <div className="p-3 md:p-4">
+                  <ResearchWorkspaceFlowPanel
+                    language={locale}
+                    current="stock-structure"
+                    symbol={data.ticker || primarySymbol}
+                    source="stock-structure"
+                    title={locale === 'en' ? 'Beta research journey' : 'Beta 研究旅程'}
+                    summary={locale === 'en'
+                      ? 'Investigate this symbol, compare evidence, track only as a research record, then continue with validation surfaces.'
+                      : '在这里研究单个标的，再对比证据；只有作为研究记录需要持续观察时才跟踪，并继续进入验证工作台。'}
+                    knownEvidence={stockWorkflowKnownEvidence}
+                    missingEvidence={stockWorkflowMissingEvidence}
+                    stateNotes={stockWorkflowStateNotes}
+                    nextSteps={stockWorkflowNextSteps}
+                    testId="stock-research-workspace-flow"
+                  />
+                </div>
                 <StockConsumerResearchSummary
                   data={data}
                   quote={quote}
