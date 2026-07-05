@@ -7,6 +7,7 @@ import { authApi } from '../api/auth';
 import { resetAdminSurfaceMode } from '../hooks/productSurfaceMode';
 import { useStockPoolStore } from '../stores/stockPoolStore';
 import { hardRedirect } from '../utils/browserRedirect';
+import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 
 const AUTH_STATUS_PATH = '/api/v1/auth/status';
 
@@ -94,6 +95,15 @@ function extractLoginError(err: unknown): ParsedApiError {
   return parsed;
 }
 
+function buildUnconfirmedLoginError(): ParsedApiError {
+  return createParsedApiError({
+    title: '登录状态未确认',
+    message: '登录响应已返回，但会话状态未恢复，请重试。',
+    rawMessage: 'auth_status_not_authenticated_after_login',
+    category: 'auth_required',
+  });
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authEnabled, setAuthEnabled] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
@@ -132,6 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (status.authEnabled && !nextLoggedIn) {
         useStockPoolStore.getState().resetDashboardState();
       }
+      return status;
     } catch (err) {
       setLoadError(getParsedApiError(err));
       setAuthEnabled(false);
@@ -141,12 +152,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSetupState('no_password');
       setCurrentUser(null);
       useStockPoolStore.getState().resetDashboardState();
+      return null;
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  const fetchStatus = useCallback(() => loadAuthStatus({ primeLoading: true }), [loadAuthStatus]);
+  const fetchStatus = useCallback(async () => {
+    await loadAuthStatus({ primeLoading: true });
+  }, [loadAuthStatus]);
 
   useEffect(() => {
     void loadAuthStatus({ primeLoading: false });
@@ -175,7 +189,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await authApi.login(params);
       }
       invalidateApiShortWindowCache(AUTH_STATUS_PATH);
-      await fetchStatus();
+      const confirmedStatus = await loadAuthStatus({ primeLoading: true });
+      if (!confirmedStatus) {
+        return { success: false, error: buildUnconfirmedLoginError() };
+      }
+      const confirmedUser = confirmedStatus.currentUser ?? null;
+      const confirmedLoggedIn = Boolean(confirmedUser?.isAuthenticated ?? confirmedStatus.loggedIn);
+      if (!confirmedLoggedIn) {
+        return {
+          success: false,
+          error: buildUnconfirmedLoginError(),
+        };
+      }
       return { success: true };
     } catch (err: unknown) {
       return { success: false, error: extractLoginError(err) };
@@ -209,7 +234,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     invalidateApiShortWindowCache(AUTH_STATUS_PATH);
     clearSessionState();
     await wait(100);
-    hardRedirect('/guest');
+    const routeLocale = parseLocaleFromPathname(window.location.pathname);
+    hardRedirect(routeLocale ? buildLocalizedPath('/guest', routeLocale) : '/guest');
 
     if (logoutError && getParsedApiError(logoutError).status !== 401) {
       throw logoutError;

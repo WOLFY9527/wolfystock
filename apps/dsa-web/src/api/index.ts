@@ -234,15 +234,33 @@ function wrapGetDedupeAdapter(config: InternalAxiosRequestConfig): void {
   };
 }
 
+function isAuthOwnershipRequest(config: InternalAxiosRequestConfig | undefined): boolean {
+  const path = config ? resolveRequestPath(config) : '';
+  return path === '/api/v1/auth/status' || path === '/api/v1/auth/me';
+}
+
+function shouldRedirectToLogin(error: unknown): boolean {
+  const response = (error as { response?: { status?: number; config?: InternalAxiosRequestConfig } })?.response;
+  if (response?.status !== 401) {
+    return false;
+  }
+  if (isAuthOwnershipRequest(response.config)) {
+    return false;
+  }
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  const path = window.location.pathname + window.location.search;
+  return !path.startsWith('/login') && !path.startsWith('/register');
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    if (shouldRedirectToLogin(error)) {
       const path = window.location.pathname + window.location.search;
-      if (!path.startsWith('/login')) {
-        const redirect = encodeURIComponent(path);
-        window.location.assign(`/login?redirect=${redirect}`);
-      }
+      const redirect = encodeURIComponent(path);
+      window.location.assign(`/login?redirect=${redirect}`);
     }
     attachParsedApiError(error);
     return Promise.reject(error);

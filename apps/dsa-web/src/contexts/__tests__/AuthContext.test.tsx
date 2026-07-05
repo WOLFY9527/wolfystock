@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApiError, createParsedApiError } from '../../api/error';
@@ -84,6 +85,7 @@ describe('AuthContext', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
+    window.history.replaceState(window.history.state, '', '/');
     window.localStorage.clear();
     window.sessionStorage.clear();
   });
@@ -116,6 +118,58 @@ describe('AuthContext', () => {
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('logged-in'));
     expect(screen.getByTestId('password-set')).toHaveTextContent('set');
     expect(invalidateApiShortWindowCache).toHaveBeenCalledWith('/api/v1/auth/status');
+  });
+
+  it('does not report login success when the post-login auth status remains unauthenticated', async () => {
+    getStatus
+      .mockResolvedValueOnce({
+        authEnabled: true,
+        loggedIn: false,
+        passwordSet: true,
+        passwordChangeable: true,
+        setupState: 'enabled',
+      })
+      .mockResolvedValueOnce({
+        authEnabled: true,
+        loggedIn: false,
+        passwordSet: true,
+        passwordChangeable: true,
+        setupState: 'enabled',
+      });
+    login.mockResolvedValue(undefined);
+
+    const LoginResultProbe = () => {
+      const auth = useAuth();
+      const [result, setResult] = useState('');
+
+      return (
+        <div>
+          <span data-testid="status">{auth.loggedIn ? 'logged-in' : 'logged-out'}</span>
+          <span data-testid="login-result">{result}</span>
+          <button
+            type="button"
+            onClick={() => void auth.login({ username: 'admin', password: PROBE_PASSWORD }).then((value) => {
+              setResult(value.success ? 'success' : value.error?.message || 'failed');
+            })}
+          >
+            trigger-login
+          </button>
+        </div>
+      );
+    };
+
+    render(
+      <AuthProvider>
+        <LoginResultProbe />
+      </AuthProvider>
+    );
+
+    await screen.findByTestId('status');
+    fireEvent.click(screen.getByRole('button', { name: 'trigger-login' }));
+
+    await waitFor(() => expect(screen.getByTestId('login-result')).toHaveTextContent('登录响应已返回，但会话状态未恢复，请重试。'));
+    expect(screen.getByTestId('status')).toHaveTextContent('logged-out');
+    expect(resetDashboardState).toHaveBeenCalled();
   });
 
   it('recognizes an authenticated current user when the top-level loggedIn flag is stale', async () => {
@@ -279,6 +333,30 @@ describe('AuthContext', () => {
     await new Promise((resolve) => window.setTimeout(resolve, 120));
     expect(hardRedirectMock).toHaveBeenCalledWith('/guest');
     expect(invalidateApiShortWindowCache).toHaveBeenCalledWith('/api/v1/auth/status');
+  });
+
+  it('keeps logout on the active locale guest route', async () => {
+    window.history.replaceState(window.history.state, '', '/zh/watchlist');
+    getStatus.mockResolvedValueOnce({
+      authEnabled: true,
+      loggedIn: true,
+      passwordSet: true,
+      passwordChangeable: true,
+      setupState: 'enabled',
+    });
+    logout.mockResolvedValue(undefined);
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>
+    );
+
+    await screen.findByTestId('status');
+    fireEvent.click(screen.getByRole('button', { name: 'trigger-logout' }));
+
+    await new Promise((resolve) => window.setTimeout(resolve, 120));
+    expect(hardRedirectMock).toHaveBeenCalledWith('/zh/guest');
   });
 
   it('does not reset dashboard state when auth is disabled', async () => {

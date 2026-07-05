@@ -237,6 +237,29 @@ function isAuthEntryPath(pathname: string): boolean {
   return pathname === '/login' || pathname === '/register' || pathname === '/reset-password';
 }
 
+function getPostAuthRedirectTarget(search: string, fallbackPath: string): string {
+  const redirect = new URLSearchParams(search).get('redirect');
+  if (!redirect || !redirect.startsWith('/') || redirect.startsWith('//')) {
+    return fallbackPath;
+  }
+
+  try {
+    const redirectUrl = new URL(redirect, 'http://wolfystock.local');
+    if (redirectUrl.origin !== 'http://wolfystock.local') {
+      return fallbackPath;
+    }
+
+    const routePathname = stripLocalePrefix(redirectUrl.pathname);
+    if (isAuthEntryPath(routePathname)) {
+      return fallbackPath;
+    }
+
+    return `${redirectUrl.pathname}${redirectUrl.search}${redirectUrl.hash}`;
+  } catch {
+    return fallbackPath;
+  }
+}
+
 function isAdminSurfacePath(pathname: string): boolean {
   return isPathMatch(pathname, '/settings/system') || isPathMatch(pathname, '/admin');
 }
@@ -491,6 +514,7 @@ export const AppContent: React.FC = () => {
   const routePathname = stripLocalePrefix(location.pathname);
   const authBootstrapRouteKind = getAuthBootstrapRouteKind(routePathname);
   const localizedHomePath = routeLocale ? buildLocalizedPath('/', routeLocale) : '/';
+  const postAuthRedirectPath = getPostAuthRedirectTarget(location.search, localizedHomePath);
   const guestHomeElement = loggedIn ? <Navigate to={localizedHomePath} replace /> : <GuestHomePage />;
 
   useEffect(() => {
@@ -691,7 +715,7 @@ export const AppContent: React.FC = () => {
     if (routePathname === '/login' || routePathname === '/register') {
       const canRenderLogin = authEnabled || setupState === 'no_password' || setupState === 'password_retained';
       if (loggedIn) {
-        content = <Navigate to={localizedHomePath} replace />;
+        content = <Navigate to={postAuthRedirectPath} replace />;
       } else if (!canRenderLogin) {
         content = <Navigate to={localizedHomePath} replace />;
       } else {

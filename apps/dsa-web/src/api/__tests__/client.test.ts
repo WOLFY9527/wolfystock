@@ -86,6 +86,39 @@ describe('apiClient auth redirect handling', () => {
     expect(assignSpy).toHaveBeenCalledWith('/login?redirect=%2Fportfolio%3Fview%3Dholdings');
   });
 
+  it.each(['/api/v1/auth/status', '/api/v1/auth/me'])(
+    'lets auth ownership handle 401 responses from %s without a full-page redirect',
+    async (path) => {
+      const assignSpy = vi.fn();
+      window.history.replaceState({}, '', '/portfolio?view=holdings');
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: {
+          ...window.location,
+          assign: assignSpy,
+        },
+      });
+
+      await expect(apiClient.get(path, {
+        adapter: async (config) => Promise.reject({
+          config,
+          response: {
+            config,
+            data: {
+              error: 'unauthorized',
+              message: 'Login required',
+            },
+            headers: {},
+            status: 401,
+            statusText: 'Unauthorized',
+          },
+        }),
+      })).rejects.toBeTruthy();
+
+      expect(assignSpy).not.toHaveBeenCalled();
+    },
+  );
+
   it('sends the selected ui language with outgoing requests', async () => {
     window.localStorage.setItem('dsa-ui-language', 'en');
 
