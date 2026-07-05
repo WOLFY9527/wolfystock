@@ -827,7 +827,7 @@ function missingEvidenceCopy(
     : `${symbol} 的部分对比证据暂未就绪。`;
   const raw = gap.message || gap.kind || gap.code || gap.field || '';
   if (!raw) return fallback;
-  if (/^OHLCV\s*证据缺失时/i.test(raw)) {
+  if (/\bohlcv\b\s*证据缺失时/i.test(raw)) {
     return safeConsumerText(raw, language, fallback);
   }
   if (looksUnsafeForConsumer(raw)) return fallback;
