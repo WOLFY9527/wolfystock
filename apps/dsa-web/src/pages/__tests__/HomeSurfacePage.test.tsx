@@ -1114,7 +1114,6 @@ describe('HomeSurfacePage', () => {
 
     const firstReadSummary = screen.getByRole('region', { name: /首读摘要|first-read summary/i });
     const trustStrip = screen.getByTestId('home-research-trust-strip');
-    const dashboardText = screen.getByTestId('home-bento-dashboard').textContent || '';
 
     expect(within(firstReadSummary).getAllByText(/研究状态|Research state/i)).toHaveLength(1);
     expect(within(firstReadSummary).getAllByText(/数据边界|Data boundary/i)).toHaveLength(1);
@@ -2816,6 +2815,19 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('member-home-market-action-scanner')).toHaveTextContent('查看扫描器');
     expect(screen.getByTestId('member-home-market-action-stock-search')).toHaveTextContent('搜索个股');
     expect(screen.getByTestId('member-home-market-safety')).toHaveTextContent('研究观察，不构成投资建议。');
+    const betaEntry = screen.getByTestId('member-home-beta-entry');
+    expect(betaEntry).toHaveTextContent('Limited Private Beta');
+    expect(betaEntry).toHaveTextContent('发现');
+    expect(betaEntry).toHaveTextContent('研究');
+    expect(betaEntry).toHaveTextContent('对比证据');
+    expect(betaEntry).toHaveTextContent('跟踪');
+    expect(betaEntry).toHaveTextContent('继续研究');
+    expect(screen.getByTestId('member-home-beta-boundary')).toHaveTextContent('证据不足时，WolfyStock 会保留更强结论。');
+    expect(screen.getByTestId('member-home-beta-boundary')).toHaveTextContent('仅用于研究观察');
+    expect(screen.getByTestId('member-home-beta-boundary')).toHaveTextContent('不输出个性化交易指令');
+    expect(screen.getByTestId('member-home-beta-feedback-link')).toHaveAttribute('href', 'https://github.com/ZhuLinsen/daily_stock_analysis/discussions');
+    expect(screen.getByTestId('member-home-beta-feedback-note')).toHaveTextContent('当前未发现结构化站内反馈后端');
+    expect(betaEntry.textContent || '').not.toMatch(/立即买入|立即卖出|下单|保证收益|buy recommendation|sell recommendation|trade now|order now/i);
     expect((marketBrief.textContent || '').match(/研究观察，不构成投资建议/g)).toHaveLength(1);
     expect(screen.queryByTestId('home-research-console')).not.toBeInTheDocument();
     expect(screen.queryByText('Oracle Corporation')).not.toBeInTheDocument();

@@ -138,6 +138,13 @@ type MemberMarketBriefView = {
   evidence: Array<{ key: string; label: string; value: string; detail: string }>;
   actions: Array<{ key: string; label: string; href: string; primary?: boolean }>;
   safety: string;
+  betaWorkflow: string[];
+  betaLimits: string[];
+  feedback: {
+    label: string;
+    href: string;
+    detail: string;
+  };
 };
 
 const HOME_LOCAL_SURFACE_PANEL_CLASS = 'min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)]';
@@ -4939,6 +4946,29 @@ function buildMemberMarketBriefView(
       { key: 'stock-search', label: isEnglish ? 'Search Symbol' : '搜索个股', href: buildHref('/stocks/structure-decision') },
     ],
     safety: isEnglish ? 'Research observation, not investment advice.' : '研究观察，不构成投资建议。',
+    betaWorkflow: isEnglish
+      ? ['Discover', 'Investigate', 'Compare evidence', 'Track', 'Continue research']
+      : ['发现', '研究', '对比证据', '跟踪', '继续研究'],
+    betaLimits: isEnglish
+      ? [
+        'Coverage can be partial across markets and evidence categories.',
+        'Freshness or quote history may be delayed or incomplete.',
+        'WolfyStock withholds stronger conclusions when evidence is insufficient.',
+        'Observation only: no buy, sell, hold, target price, stop-loss, or position-size instruction.',
+      ]
+      : [
+        '不同市场和证据类别的覆盖可能不完整。',
+        '报价、历史或新鲜度可能延迟或待补。',
+        '证据不足时，WolfyStock 会保留更强结论。',
+        '仅用于研究观察：不输出个性化交易指令或仓位执行方案。',
+      ],
+    feedback: {
+      label: isEnglish ? 'Send Beta feedback' : '提交 Beta 反馈',
+      href: 'https://github.com/ZhuLinsen/daily_stock_analysis/discussions',
+      detail: isEnglish
+        ? 'Existing supported channel: GitHub Discussions. No structured in-app feedback backend is exposed here.'
+        : '现有支持通道：GitHub Discussions。当前未发现结构化站内反馈后端。',
+    },
   };
 }
 
@@ -7370,6 +7400,54 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                     {memberMarketBrief.safety}
                   </p>
                 </aside>
+              </section>
+
+              <section
+                className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-4 sm:px-5')}
+                data-testid="member-home-beta-entry"
+                aria-label={locale === 'en' ? 'Limited Private Beta research journey' : 'Limited Private Beta 研究旅程'}
+              >
+                <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">Limited Private Beta</p>
+                    <h2 className="mt-2 text-xl font-semibold tracking-[0] text-white sm:text-2xl">
+                      {locale === 'en' ? 'Follow one research journey across existing workspaces.' : '沿着一条研究旅程使用现有工作台。'}
+                    </h2>
+                    <p className="mt-2 max-w-4xl text-sm leading-6 text-white/62">
+                      {locale === 'en'
+                        ? 'Start with Market Overview or Scanner, investigate one symbol in Stock Structure, compare evidence in Research Radar and validation workspaces, keep monitored names in Watchlist, then return when evidence changes.'
+                        : '先从市场总览或扫描器发现线索，在个股结构面板研究单个标的，再到研究雷达和验证工作台对比证据，把需要持续观察的标的留在观察列表，证据变化后再回来继续研究。'}
+                    </p>
+                    <div className="mt-4 grid min-w-0 grid-cols-2 overflow-hidden rounded-[10px] border border-white/[0.06] text-[11px] md:grid-cols-5">
+                      {memberMarketBrief.betaWorkflow.map((item, index) => (
+                        <div key={item} className="min-w-0 border-b border-r border-white/[0.06] px-3 py-2.5 last:border-r-0 even:border-r-0 md:border-b-0 md:even:border-r md:last:border-r-0">
+                          <span className="block font-mono text-[10px] text-white/26">{String(index + 1).padStart(2, '0')}</span>
+                          <span className="mt-1 block truncate font-semibold text-white/72">{item}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <aside className={cn(HOME_LOCAL_INSET_PANEL_CLASS, 'px-4 py-4')} data-testid="member-home-beta-boundary">
+                    <p className="text-[11px] font-medium text-white/40">{locale === 'en' ? 'Capability boundary' : '能力边界'}</p>
+                    <ul className="mt-3 space-y-2 text-xs leading-5 text-white/58">
+                      {memberMarketBrief.betaLimits.map((item) => (
+                        <li key={item} className="break-words">{item}</li>
+                      ))}
+                    </ul>
+                    <a
+                      href={memberMarketBrief.feedback.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      data-testid="member-home-beta-feedback-link"
+                      className="mt-4 inline-flex min-h-10 w-full items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.035] px-4 text-sm font-semibold text-white/72 transition-colors hover:border-white/[0.12] hover:bg-white/[0.06] hover:text-white/88"
+                    >
+                      {memberMarketBrief.feedback.label}
+                    </a>
+                    <p className="mt-3 text-[11px] leading-5 text-white/38" data-testid="member-home-beta-feedback-note">
+                      {memberMarketBrief.feedback.detail}
+                    </p>
+                  </aside>
+                </div>
               </section>
             </div>
           </section>

@@ -26,6 +26,12 @@ describe('ResearchWorkspaceFlowPanel', () => {
     expect(watchlistLink).toHaveAttribute('href', expect.stringContaining('market=US'));
     expect(watchlistLink).toHaveAttribute('href', expect.stringContaining('source=scanner'));
 
+    const stockStructureLink = screen.getByTestId('research-workspace-link-stock-structure');
+    expect(stockStructureLink).toHaveAttribute('href', expect.stringContaining('/en/stocks/NVDA/structure-decision?'));
+    expect(stockStructureLink).toHaveAttribute('href', expect.stringContaining('symbol=NVDA'));
+    expect(stockStructureLink).toHaveAttribute('href', expect.stringContaining('market=US'));
+    expect(stockStructureLink).toHaveAttribute('href', expect.stringContaining('source=scanner'));
+
     const backtestLink = screen.getByTestId('research-workspace-link-backtest');
     expect(backtestLink).toHaveAttribute('href', expect.stringContaining('/en/backtest?'));
     for (const link of screen.getAllByRole('link')) {
