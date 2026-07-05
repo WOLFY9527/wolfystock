@@ -10,6 +10,7 @@
 """
 
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 
@@ -40,6 +41,13 @@ from src.utils.symbol_classification import is_us_stock_code
 from src.utils.yfinance_symbol import to_yfinance_symbol
 
 logger = logging.getLogger(__name__)
+
+UAT_NO_LIVE_PROVIDERS_ENV = "WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS"
+
+
+def uat_no_live_providers_enabled() -> bool:
+    """Return whether explicit UAT runtime validation should block live provider reads."""
+    return str(os.getenv(UAT_NO_LIVE_PROVIDERS_ENV) or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _is_meaningful_stock_name(name: Optional[str], stock_code: str) -> bool:
@@ -99,6 +107,9 @@ class StockService:
         if not normalized_code:
             return {"stock_code": normalized_code, "exists": False, "stock_name": None}
 
+        if uat_no_live_providers_enabled():
+            return {"stock_code": normalized_code, "exists": False, "stock_name": None}
+
         try:
             adapter = StockServiceProviderAdapter()
             stock_name = adapter.get_stock_name(normalized_code, allow_realtime=False)
@@ -135,6 +146,9 @@ class StockService:
             实时行情数据字典
         """
         observed_at = datetime.now().isoformat()
+        if uat_no_live_providers_enabled():
+            return self._get_consumer_safe_quote_recovery(stock_code, observed_at=observed_at)
+
         try:
             adapter = StockServiceProviderAdapter()
             quote = adapter.get_quote_snapshot(stock_code)
@@ -356,6 +370,14 @@ class StockService:
             elif period == "yearly":
                 fetch_days = max(days, 365 * 5)
 
+            if uat_no_live_providers_enabled() and is_cn_a_share_symbol(stock_code):
+                return self._build_provider_isolated_history_state(
+                    stock_code=stock_code,
+                    period=period,
+                    requested_days=fetch_days,
+                    unavailable_reason="provider_missing",
+                )
+
             if is_cn_a_share_symbol(stock_code):
                 return self._get_cn_history_data(
                     stock_code=stock_code,
@@ -363,10 +385,12 @@ class StockService:
                     fetch_days=fetch_days,
                 )
 
-            # 调用数据获取器获取历史数据
-            from data_provider.base import DataFetcherManager
+            # 调用数据获取器获取历史数据；UAT validation mode only reads local caches.
+            manager = None
+            if not uat_no_live_providers_enabled():
+                from data_provider.base import DataFetcherManager
 
-            manager = DataFetcherManager()
+                manager = DataFetcherManager()
 
             df = None
             source = None
@@ -378,6 +402,7 @@ class StockService:
                     days=fetch_days,
                     manager=manager,
                     log_context="[stock history]",
+                    allow_provider_fallback=not uat_no_live_providers_enabled(),
                 )
                 provider_trace = self._get_manager_daily_trace(manager)
             except Exception as exc:
@@ -560,6 +585,7 @@ class StockService:
                     diagnostics=diagnostics,
                 ),
             }
+
         except Exception as e:
             logger.error(f"获取历史数据失败: {e}", exc_info=True)
             diagnostics = self._build_history_diagnostics(
@@ -593,6 +619,46 @@ class StockService:
                     diagnostics=diagnostics,
                 ),
             }
+
+    def _build_provider_isolated_history_state(
+        self,
+        *,
+        stock_code: str,
+        period: str,
+        requested_days: int,
+        unavailable_reason: str,
+    ) -> Dict[str, Any]:
+        diagnostics = self._build_history_diagnostics(
+            status="unavailable",
+            reason="uat_no_live_providers",
+            source="unavailable",
+            rows=0,
+            requested_days=requested_days,
+            provider_trace=[],
+            message="UAT validation mode disables live provider history reads; callers should render an unavailable state.",
+        )
+        return {
+            "stock_code": stock_code,
+            "stock_name": None,
+            "period": period,
+            "data": [],
+            "source": "unavailable",
+            "diagnostics": diagnostics,
+            "historicalOhlcvReadiness": self._build_history_ohlcv_readiness(
+                stock_code=stock_code,
+                period=period,
+                requested_days=requested_days,
+                rows=[],
+                source_available=False,
+                unavailable_reason=unavailable_reason,
+            ),
+            "sourceConfidence": self._build_history_source_confidence(
+                "unavailable",
+                rows=0,
+                requested_days=requested_days,
+                diagnostics=diagnostics,
+            ),
+        }
 
     def _get_cn_history_data(self, *, stock_code: str, period: str, fetch_days: int) -> Dict[str, Any]:
         runtime_payload = AkshareCnOhlcvRuntime(repository=self.repo).get_history_data(
