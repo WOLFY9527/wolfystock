@@ -40,14 +40,21 @@ def _optional_current_user():
 
 
 ENDPOINT_PATH = Path(__file__).resolve().parents[2] / "api/v1/endpoints/dashboard_overview.py"
-sys.modules.setdefault(
-    "api.deps",
-    types.SimpleNamespace(CurrentUser=_CurrentUser, get_optional_current_user=_optional_current_user),
-)
+_previous_api_deps = sys.modules.get("api.deps")
+_api_deps_stub = types.ModuleType("api.deps")
+_api_deps_stub.CurrentUser = _CurrentUser
+_api_deps_stub.get_optional_current_user = _optional_current_user
+sys.modules["api.deps"] = _api_deps_stub
 _endpoint_spec = util.spec_from_file_location("dashboard_overview_under_test", ENDPOINT_PATH)
 assert _endpoint_spec is not None and _endpoint_spec.loader is not None
 dashboard_overview = util.module_from_spec(_endpoint_spec)
-_endpoint_spec.loader.exec_module(dashboard_overview)
+try:
+    _endpoint_spec.loader.exec_module(dashboard_overview)
+finally:
+    if _previous_api_deps is None:
+        sys.modules.pop("api.deps", None)
+    else:
+        sys.modules["api.deps"] = _previous_api_deps
 
 ROUTE_PATH = "/api/v1/dashboard/market-intelligence-overview"
 FORBIDDEN_ADVICE_TERMS = (
@@ -146,6 +153,7 @@ def test_dashboard_overview_endpoint_returns_stable_top_level_sections() -> None
         "sectorThemeRotation",
         "researchQueue",
         "dataQuality",
+        "productReadModel",
         "noAdviceDisclosure",
     }
     assert payload["status"] in {"ready", "partial", "no_evidence", "unavailable"}
@@ -161,6 +169,23 @@ def test_dashboard_overview_endpoint_returns_stable_top_level_sections() -> None
     assert isinstance(payload["sectorThemeRotation"]["laggingThemes"], list)
     assert isinstance(payload["researchQueue"]["items"], list)
     assert payload["dataQuality"]["state"] in ALLOWED_DATA_QUALITY_STATES
+    read_model = payload["productReadModel"]
+    assert read_model["contractVersion"] == "product_read_model_v1"
+    assert read_model["surface"] == "Dashboard"
+    assert read_model["state"] in {
+        "available",
+        "partial",
+        "stale",
+        "unavailable",
+        "insufficient",
+        "no_evidence",
+        "degraded",
+        "rejected",
+        "pending",
+    }
+    assert read_model["ready"] is (read_model["state"] == "available")
+    assert read_model["aggregationRules"]["readyRequiresAllCriticalAvailable"] is True
+    assert read_model["provenance"]["sourceClass"] == "dashboard_read_models"
 
 
 def test_dashboard_overview_uses_bounded_scaffold_compatible_subcontracts() -> None:

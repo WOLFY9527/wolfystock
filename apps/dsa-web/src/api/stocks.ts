@@ -1,5 +1,6 @@
 import apiClient from './index';
 import { toCamelCase } from './utils';
+import type { ProductReadModel } from '../types/productReadModel';
 
 export type ExtractItem = {
   code?: string | null;
@@ -245,6 +246,7 @@ export type SymbolResearchPacket = {
   events: SymbolResearchEventsState;
   peer: SymbolResearchPeerCoverageState;
   missingData: string[];
+  productReadModel?: ProductReadModel | null;
   researchStatus: SymbolResearchStatus;
   nextDataAction: string;
   observationOnly: boolean;
@@ -343,6 +345,7 @@ export type StockStructureDecisionResponse = {
     reason?: string | null;
   };
   missingEvidence: StockStructureDecisionMissingEvidence[];
+  productReadModel?: ProductReadModel | null;
   peerCorrelationSnapshot?: StockPeerCorrelationSnapshot;
   noAdviceDisclosure: string;
 };
@@ -668,6 +671,7 @@ function normalizeSymbolResearchPacket(payload: unknown): SymbolResearchPacket {
       benchmark: normalized.peer?.benchmark ?? null,
     },
     missingData: Array.isArray(normalized.missingData) ? normalized.missingData : [],
+    productReadModel: normalized.productReadModel ?? null,
     researchStatus: normalized.researchStatus ?? 'unknown',
     nextDataAction: normalized.nextDataAction ?? '',
     observationOnly: Boolean(normalized.observationOnly),
@@ -822,6 +826,7 @@ function normalizeStockStructureDecisionResponse(payload: unknown): StockStructu
       reason: normalized.dataQuality?.reason ?? null,
     },
     missingEvidence: normalized.missingEvidence ?? [],
+    productReadModel: normalized.productReadModel ?? null,
     peerCorrelationSnapshot: normalizePeerCorrelationSnapshot(normalized.peerCorrelationSnapshot),
     noAdviceDisclosure: normalized.noAdviceDisclosure,
   };

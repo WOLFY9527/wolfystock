@@ -27,6 +27,7 @@ from src.services.historical_ohlcv_readiness import (
     HistoricalOhlcvReadinessRequest,
     HistoricalOhlcvReadinessService,
 )
+from src.services.product_read_model import build_backtest_readiness_read_model
 from src.services.us_ohlcv_coverage_readiness import (
     build_us_ohlcv_coverage_readiness,
     resolve_us_ohlcv_coverage_universe,
@@ -519,6 +520,7 @@ class BacktestService:
                 sample_reasons=sample_reasons,
                 ohlcv_readiness=ohlcv_readiness,
             ),
+            "productReadModel": build_backtest_readiness_read_model(ohlcv_readiness),
             "historicalOhlcvReadiness": ohlcv_readiness,
         }
 
@@ -941,6 +943,7 @@ class BacktestService:
                 calculation_status="engine_disabled",
                 sample_status="engine_disabled",
             ),
+            "productReadModel": build_backtest_readiness_read_model(readiness),
             "historicalOhlcvReadiness": readiness,
         }
 
@@ -1422,6 +1425,7 @@ class BacktestService:
                 sample_reasons=reasons,
                 ohlcv_readiness=readiness,
             ),
+            "productReadModel": build_backtest_readiness_read_model(readiness),
             "probePolicy": probe_policy,
             "writePolicy": write_policy,
             "historicalOhlcvReadiness": readiness,

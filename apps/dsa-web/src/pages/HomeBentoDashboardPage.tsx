@@ -4,6 +4,16 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { History, Lock, MoreHorizontal, Search, Star, Upload } from 'lucide-react';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import {
+  dashboardOverviewApi,
+  type DashboardMarketIntelligenceOverview,
+} from '../api/dashboardOverview';
+import ProductReadModelStatusStrip from '../components/common/ProductReadModelStatusStrip';
+import type { ProductReadModel } from '../types/productReadModel';
+import {
+  productReadModelIsBlocking,
+  productReadStateLabel,
+} from '../utils/productReadModelView';
+import {
   marketApi,
   normalizeMarketBriefingConsumerCopy,
   type MarketBriefingResponse,
@@ -145,6 +155,7 @@ type MemberMarketBriefView = {
     href: string;
     detail: string;
   };
+  productReadModel?: ProductReadModel | null;
 };
 
 const HOME_LOCAL_SURFACE_PANEL_CLASS = 'min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)]';
@@ -4855,9 +4866,13 @@ function buildMemberMarketBriefView(
   isLoading: boolean,
   isUnavailable: boolean,
   routeLocale: 'zh' | 'en' | null,
+  overview: DashboardMarketIntelligenceOverview | null,
 ): MemberMarketBriefView {
   const isEnglish = locale === 'en';
   const buildHref = (path: string) => (routeLocale ? buildLocalizedPath(path, routeLocale) : path);
+  const productReadModel = overview?.productReadModel ?? null;
+  const productReadBlocking = productReadModelIsBlocking(productReadModel);
+  const productStateLabel = productReadModel ? productReadStateLabel(productReadModel.state, locale) : null;
   const safeItems = (briefing?.items || [])
     .map((item) => ({
       title: String(item.title || '').trim(),
@@ -4870,9 +4885,11 @@ function buildMemberMarketBriefView(
   const severityText = safeItems.map((item) => `${item.severity} ${item.title} ${item.message}`).join(' ');
   const riskOff = /negative|bear|volatility|pressure|stress|回落|压力|风险|波动|走弱|防守/i.test(severityText);
   const riskOn = /positive|bull|breadth|flow|improve|走强|改善|资金|广度|修复/i.test(severityText);
-  const limited = Boolean(briefing?.isFallback || briefing?.isStale || briefing?.isReliable === false || isUnavailable);
+  const limited = Boolean(briefing?.isFallback || briefing?.isStale || briefing?.isReliable === false || isUnavailable || productReadBlocking);
   const regimeLabel = isLoading && !briefing
     ? (isEnglish ? 'Updating' : '更新中')
+    : productReadBlocking && productStateLabel
+      ? productStateLabel
     : riskOff
       ? 'Risk-off'
       : riskOn
@@ -4893,6 +4910,8 @@ function buildMemberMarketBriefView(
         : (isEnglish ? 'No dominant market conclusion has been returned yet; start from the visible evidence and refresh later.' : '暂未返回强主线结论；先从已可见证据开始，并在稍后刷新复核。'));
   const reliabilityLabel = isLoading && !briefing
     ? (isEnglish ? 'Checking data reliability' : '正在检查数据可靠性')
+    : productReadBlocking && productStateLabel
+      ? productStateLabel
     : limited
       ? (isEnglish ? 'Partially usable' : '部分可用')
       : (isEnglish ? 'Research-ready' : '研究可读');
@@ -4969,6 +4988,7 @@ function buildMemberMarketBriefView(
         ? 'Existing supported channel: GitHub Discussions. No structured in-app feedback backend is exposed here.'
         : '现有支持通道：GitHub Discussions。当前未发现结构化站内反馈后端。',
     },
+    productReadModel,
   };
 }
 
@@ -6392,6 +6412,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [memberMarketBriefing, setMemberMarketBriefing] = useState<MarketBriefingResponse | null>(null);
   const [isMemberMarketBriefingLoading, setMemberMarketBriefingLoading] = useState(false);
   const [isMemberMarketBriefingUnavailable, setMemberMarketBriefingUnavailable] = useState(false);
+  const [dashboardOverview, setDashboardOverview] = useState<DashboardMarketIntelligenceOverview | null>(null);
   const [guestError, setGuestError] = useState<ParsedApiError | null>(null);
   const [guestFallbackNotice, setGuestFallbackNotice] = useState<string | null>(null);
   const [pendingHistoryDelete, setPendingHistoryDelete] = useState<PendingHistoryDelete | null>(null);
@@ -6650,6 +6671,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         setMemberMarketBriefingLoading(false);
         setMemberMarketBriefingUnavailable(false);
       }
+      setDashboardOverview(null);
       return;
     }
 
@@ -6657,19 +6679,21 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     setMemberMarketBriefingLoading(true);
     setMemberMarketBriefingUnavailable(false);
 
-    void marketApi.getMarketBriefing()
-      .then((response) => {
+    void Promise.allSettled([
+      marketApi.getMarketBriefing(),
+      dashboardOverviewApi.getMarketIntelligenceOverview(),
+    ])
+      .then(([briefingResult, overviewResult]) => {
         if (isCancelled) {
           return;
         }
-        setMemberMarketBriefing(normalizeMarketBriefingConsumerCopy(response));
-      })
-      .catch(() => {
-        if (isCancelled) {
-          return;
+        if (briefingResult.status === 'fulfilled') {
+          setMemberMarketBriefing(normalizeMarketBriefingConsumerCopy(briefingResult.value));
+        } else {
+          setMemberMarketBriefing(null);
+          setMemberMarketBriefingUnavailable(true);
         }
-        setMemberMarketBriefing(null);
-        setMemberMarketBriefingUnavailable(true);
+        setDashboardOverview(overviewResult.status === 'fulfilled' ? overviewResult.value : null);
       })
       .finally(() => {
         if (!isCancelled) {
@@ -7172,6 +7196,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         isMemberMarketBriefingLoading,
         isMemberMarketBriefingUnavailable,
         routeLocale,
+        dashboardOverview,
       )
     : null;
   const guestCommandConsoleCopy = locale === 'en'
@@ -7333,18 +7358,25 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                       {memberMarketBrief.summary}
                     </p>
                   </div>
-                  <aside
-                    className={cn(HOME_LOCAL_INSET_PANEL_CLASS, 'max-w-xl px-4 py-4')}
-                    data-testid="member-home-market-reliability"
-                  >
+	                  <aside
+	                    className={cn(HOME_LOCAL_INSET_PANEL_CLASS, 'max-w-xl px-4 py-4')}
+	                    data-testid="member-home-market-reliability"
+	                  >
                     <p className="text-[11px] font-medium text-white/40">
                       {locale === 'en' ? 'Data reliability' : '数据可靠性'}
                     </p>
                     <h2 className="mt-2 text-sm font-semibold text-white/88">{memberMarketBrief.reliabilityLabel}</h2>
-                    <p className="mt-2 text-sm leading-6 text-white/62">
-                      {memberMarketBrief.reliabilityDetail}
-                    </p>
-                  </aside>
+	                    <p className="mt-2 text-sm leading-6 text-white/62">
+	                      {memberMarketBrief.reliabilityDetail}
+	                    </p>
+	                    <ProductReadModelStatusStrip
+	                      model={memberMarketBrief.productReadModel}
+	                      language={locale}
+	                      title={locale === 'en' ? 'Dashboard readiness' : 'Dashboard 就绪度'}
+	                      testId="member-home-dashboard-product-read-model"
+	                      className="mt-3"
+	                    />
+	                  </aside>
                 </div>
               </section>
 

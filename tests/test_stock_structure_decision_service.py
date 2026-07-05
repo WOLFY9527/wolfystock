@@ -216,6 +216,12 @@ def _assert_required_contract(payload: dict[str, Any], *, ticker: str = "AAPL") 
     assert payload["structureComputation"]["status"] in {"available", "degraded", "unavailable"}
     assert payload["structureComputation"]["stateReason"]
     assert payload["structureComputation"]["message"]
+    read_model = payload["productReadModel"]
+    assert read_model["contractVersion"] == "product_read_model_v1"
+    assert read_model["surface"] == "Structure Decision"
+    assert read_model["observationOnly"] is True
+    assert read_model["decisionGrade"] is False
+    assert read_model["classification"]["observedState"] == payload["structureState"]
 
 
 def test_service_builds_observation_only_structure_decision_from_daily_ohlcv() -> None:
@@ -575,6 +581,9 @@ def test_uat_no_live_provider_mode_keeps_aapl_structure_decision_on_unavailable_
     assert payload["confidence"] == "low"
     assert payload["dataQuality"]["status"] == "unavailable"
     assert payload["dataQuality"]["reason"] == "uat_no_live_providers"
+    assert payload["productReadModel"]["state"] == "no_evidence"
+    assert payload["productReadModel"]["ready"] is False
+    assert payload["productReadModel"]["classification"]["displayState"] == "lowConfidence"
     readiness = payload["historicalOhlcvReadiness"]
     assert payload["historicalOhlcvReadiness"]["providerState"] == "provider_missing"
     assert payload["historicalOhlcvReadiness"]["overallState"] == "blocked"
@@ -626,6 +635,9 @@ def test_service_marks_available_bars_as_structure_insufficient_without_erasing_
     assert readiness["usableBars"] == 40
     assert readiness["missingBars"] == 50
     assert readiness["overallState"] == "blocked"
+    assert payload["productReadModel"]["state"] == "insufficient"
+    assert payload["productReadModel"]["ready"] is False
+    assert payload["productReadModel"]["classification"]["displayState"] == "lowConfidence"
     assert readiness["missingRequirements"] == ["insufficient_history"]
     assert payload["structureComputation"]["status"] == "degraded"
     assert payload["structureComputation"]["stateReason"] == "insufficient_history_for_structure"

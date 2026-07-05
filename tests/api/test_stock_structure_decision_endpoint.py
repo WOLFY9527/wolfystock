@@ -343,6 +343,31 @@ def _payload(
         "noAdviceDisclosure": "Observation-only research context; not personalized financial advice and not an instruction.",
         "observationOnly": True,
         "decisionGrade": False,
+        "productReadModel": {
+            "contractVersion": "product_read_model_v1",
+            "surface": "Structure Decision",
+            "state": "available" if data_status == "available" else "no_evidence",
+            "ready": data_status == "available",
+            "classification": {
+                "observedState": structure_state,
+                "displayState": structure_state if data_status == "available" else "withheld",
+                "strongConclusionAllowed": data_status == "available" and confidence in {"high", "medium"},
+            },
+            "confidence": {
+                "label": confidence if confidence in {"high", "medium", "low"} else "low",
+                "state": "ready" if data_status == "available" else "evidence incomplete",
+                "strongConclusionAllowed": data_status == "available" and confidence in {"high", "medium"},
+                "reasons": [],
+            },
+            "evidence": {
+                "missingEvidenceCount": len(missing_evidence or []),
+                "readinessState": "available" if data_status == "available" else "no_evidence",
+                "dataQualityState": "available" if data_status == "available" else "unavailable",
+            },
+            "observationOnly": True,
+            "decisionGrade": False,
+            "blockingChildren": [] if data_status == "available" else ["historical_coverage", "data_quality"],
+        },
         "drilldownLinks": [],
     }
 
@@ -477,6 +502,18 @@ def test_research_packet_endpoint_assembles_existing_data_and_missing_families(m
     assert payload["peer"] == {"state": "missing", "benchmark": None}
     assert payload["missingData"] == ["fundamentals", "filing_event_catalyst", "peer_benchmark"]
     assert payload["researchStatus"] == "partial"
+    read_model = payload["productReadModel"]
+    assert read_model["contractVersion"] == "product_read_model_v1"
+    assert read_model["surface"] == "Stock Research"
+    assert read_model["state"] == "partial"
+    assert read_model["ready"] is False
+    assert read_model["criticalChildStates"] == {
+        "quote": "available",
+        "history": "available",
+        "structure": "available",
+    }
+    assert read_model["freshness"]["state"] == "no_evidence"
+    assert read_model["provenance"]["sourceClass"] == "stock_research_packet"
     assert payload["observationOnly"] is True
     assert payload["decisionGrade"] is False
     assert payload["noAdviceDisclosure"] == "Observation-only research packet; no personalized action instruction."
@@ -921,6 +958,7 @@ def test_structure_decision_endpoint_returns_required_contract(monkeypatch) -> N
         "evidenceGaps",
         "dataQuality",
         "historicalOhlcvReadiness",
+        "productReadModel",
         "missingEvidence",
         "degradedInputs",
         "peerCorrelationSnapshot",
@@ -931,6 +969,12 @@ def test_structure_decision_endpoint_returns_required_contract(monkeypatch) -> N
         "drilldownLinks",
     ):
         assert key in payload
+    read_model = payload["productReadModel"]
+    assert read_model["contractVersion"] == "product_read_model_v1"
+    assert read_model["surface"] == "Structure Decision"
+    assert read_model["classification"]["observedState"] == payload["structureState"]
+    assert read_model["observationOnly"] is True
+    assert read_model["decisionGrade"] is False
 
 
 def test_structure_decision_endpoint_requires_authenticated_user(monkeypatch) -> None:
@@ -1368,6 +1412,7 @@ def test_structure_decision_openapi_locks_required_response_fields() -> None:
         "drilldownLinks",
     ]
     properties = response_schema["properties"]
+    assert properties["productReadModel"]["type"] == "object"
     assert properties["schemaVersion"]["type"] == "string"
     assert properties["ticker"]["type"] == "string"
     assert properties["symbol"]["type"] == "string"
@@ -1375,6 +1420,7 @@ def test_structure_decision_openapi_locks_required_response_fields() -> None:
     assert "rawConfidence" not in properties
     assert properties["confidenceCap"]["anyOf"][0]["$ref"].endswith("StockStructureConfidenceCap")
     assert properties["confidenceState"]["anyOf"][0]["$ref"].endswith("StockStructureConfidenceState")
+    assert properties["productReadModel"]["type"] == "object"
     cap_schema = schema["StockStructureConfidenceCap"]["properties"]
     state_schema = schema["StockStructureConfidenceState"]["properties"]
     assert "policyVersion" not in cap_schema

@@ -1,6 +1,9 @@
 import type React from 'react';
 import { AlertTriangle, CheckCircle2, CircleDashed, ShieldCheck, XCircle } from 'lucide-react';
 import type { BacktestExecutionReadiness, BacktestHistoricalOhlcvReadiness } from '../../types/backtest';
+import type { ProductReadModel } from '../../types/productReadModel';
+import ProductReadModelStatusStrip from '../common/ProductReadModelStatusStrip';
+import { productReadModelIsBlocking, productReadStateLabel } from '../../utils/productReadModelView';
 
 type BacktestLanguage = 'zh' | 'en';
 
@@ -8,6 +11,7 @@ type BacktestExecutionReadinessPanelProps = {
   language: BacktestLanguage;
   readiness?: BacktestExecutionReadiness | null;
   historicalOhlcvReadiness?: BacktestHistoricalOhlcvReadiness | null;
+  productReadModel?: ProductReadModel | null;
   noAdviceDisclosure?: string | null;
   attempted?: boolean;
   isLoading?: boolean;
@@ -135,12 +139,20 @@ const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelP
   language,
   readiness,
   historicalOhlcvReadiness,
+  productReadModel,
   attempted = false,
   isLoading = false,
   className = '',
   testId = 'backtest-execution-readiness-panel',
 }) => {
-  const stateInfo = getStateInfo(readiness);
+  const productBlocked = productReadModelIsBlocking(productReadModel);
+  const stateInfo = productBlocked && productReadModel?.state
+    ? {
+      zh: productReadStateLabel(productReadModel.state, 'zh'),
+      en: productReadStateLabel(productReadModel.state, 'en'),
+      tone: 'blocked' as ReadinessTone,
+    }
+    : getStateInfo(readiness);
   const reasonLabels = getReasonLabels(readiness, language);
   const hasReadiness = Boolean(readiness?.state);
   const resultAvailable = readiness?.resultContractAvailable === true;
@@ -151,13 +163,19 @@ const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelP
   const benchmarkReadiness = historicalOhlcvReadiness?.benchmarkReadiness;
   const adjustedRequirement = historicalOhlcvReadiness?.adjustedDataRequirement;
   const title = language === 'en' ? 'Data readiness' : '数据就绪度';
-  const subtitle = !hasReadiness
+  const subtitle = productBlocked && productReadModel?.state
+    ? productReadStateLabel(productReadModel.state, language)
+    : !hasReadiness
     ? (language === 'en'
       ? 'Waiting for sample status or a run receipt.'
       : '等待样本状态或运行回执。')
     : stateInfo[language];
   const body = isLoading
     ? (language === 'en' ? 'Checking data and result conditions...' : '正在检查数据与结果条件…')
+    : productBlocked
+      ? (language === 'en'
+        ? 'Read-only readiness is not execution-ready because coverage, freshness, or quality evidence is blocking.'
+        : '只读就绪度未达到可执行状态：覆盖、新鲜度或质量证据仍阻塞。')
     : resultAvailable
       ? (language === 'en'
         ? 'A consumer-safe result view is ready. Metrics are shown only when returned by the backend.'
@@ -173,8 +191,9 @@ const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelP
   return (
     <section
       data-testid={testId}
-      data-readiness-state={normalizeToken(readiness?.state) || 'unknown'}
-      data-result-contract-available={String(resultAvailable)}
+      data-readiness-state={productReadModel?.state || normalizeToken(readiness?.state) || 'unknown'}
+      data-result-contract-available={String(!productBlocked && resultAvailable)}
+      data-product-read-ready={String(productReadModel?.ready === true)}
       className={`rounded-xl border p-4 ${toneClasses(stateInfo.tone)} ${className}`}
     >
       <div className="flex min-w-0 items-start gap-3">
@@ -190,6 +209,13 @@ const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelP
           </div>
           <h3 className="mt-2 text-sm font-semibold">{subtitle}</h3>
           <p className="mt-2 text-sm leading-6 opacity-[0.78]">{body}</p>
+          <ProductReadModelStatusStrip
+            model={productReadModel}
+            language={language}
+            title={language === 'en' ? 'Backtest readiness read model' : '回测只读就绪度'}
+            testId={`${testId}-product-read-model`}
+            className="mt-3"
+          />
 
           <div className="mt-3 grid gap-2 text-xs md:grid-cols-3">
             <div className="rounded-lg border border-current/10 bg-black/10 px-3 py-2">

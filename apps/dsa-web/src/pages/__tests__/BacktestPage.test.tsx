@@ -1959,6 +1959,105 @@ describe('BacktestPage', () => {
     expect(readiness).toHaveTextContent('仅供研究');
   });
 
+  it('uses productReadModel sample status to keep historical readiness fail-closed before execution', async () => {
+    getSampleStatus.mockResolvedValue({
+      code: 'ORCL',
+      preparedCount: 8,
+      preparedStartDate: '2026-03-01',
+      preparedEndDate: '2026-03-18',
+      latestPreparedAt: '2026-04-07T08:00:00Z',
+      latestPreparedSampleDate: '2026-03-18',
+      latestEligibleSampleDate: '2026-03-18',
+      excludedRecentReason: 'evaluation_window_not_satisfied',
+      excludedRecentMessage: '最新行情到 2026-04-07，但评估需要完整的 10 根未来窗口，所以最新可用于样本生成的日期只到 2026-03-18。',
+      evalWindowDays: 10,
+      minAgeDays: 14,
+      requestedMode: 'local_first',
+      resolvedSource: 'LocalParquet',
+      fallbackUsed: false,
+      pricingResolvedSource: 'LocalParquet',
+      pricingFallbackUsed: false,
+      evaluationWindowTradingBars: 10,
+      maturityCalendarDays: 14,
+      sampleReadinessState: 'ready',
+      sampleBlockingReasons: [],
+      executionReadiness: {
+        contractVersion: 'backtest_execution_readiness_v1',
+        state: 'degraded',
+        resultContractAvailable: true,
+        engineState: 'enabled',
+        dataStatus: 'ready',
+        calculationStatus: 'ready',
+        sampleStatus: 'ready',
+        benchmarkState: 'not_requested',
+        reasonCodes: [],
+        observationOnly: true,
+        consumerSafe: true,
+        noAdviceDisclosure: 'Research diagnostic only; not personalized financial advice and not an executable instruction.',
+      },
+      historicalOhlcvReadiness: {
+        contractVersion: 'backtest_historical_ohlcv_readiness_v1',
+        status: 'insufficient_coverage',
+        executable: false,
+        requestedSymbol: 'ORCL',
+        requestedMarket: 'us',
+        requestedDateRange: { start: '2026-01-01', end: '2026-04-01' },
+        requiredBarCount: 60,
+        availableBarCount: 12,
+        missingDateCoverage: { missingBarCount: 48, state: 'missing' },
+        adjustedDataRequirement: { required: true, state: 'missing' },
+        benchmarkReadiness: { required: false, symbol: null, status: 'not_requested' },
+        historicalOhlcvRuntimeStatus: 'available',
+        operatorNextAction: 'Use an older window or wait for more prepared history.',
+        consumerSafeMessage: 'Historical coverage is insufficient for the requested evaluation window.',
+        blockedExecutionReason: 'historical_ohlcv_insufficient_coverage',
+        missingDataClasses: ['date_coverage'],
+        consumerSafe: true,
+      },
+      productReadModel: {
+        contractVersion: 'product_read_model_v1',
+        surface: 'Backtest readiness',
+        state: 'insufficient',
+        ready: false,
+        readOnly: true,
+        backtestExecuted: false,
+        blockingChildren: ['coverage'],
+        coverage: { state: 'insufficient', requiredBars: 60, availableBars: 12 },
+        freshness: { state: 'stale', asOf: '2026-03-18' },
+        quality: { state: 'degraded', missingDataClasses: ['date_coverage'] },
+        provenance: { sourceClass: 'historical_market_data', asOf: '2026-03-18', freshness: 'stale', quality: 'degraded' },
+      },
+    });
+
+    renderBacktestRoutes();
+
+    await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
+    expect(await screen.findByTestId('normal-backtest-workspace')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '历史评估' }));
+    const scopeSection = await screen.findByTestId('historical-control-section-scope-samples');
+    fireEvent.change(within(scopeSection).getByLabelText('股票代码'), { target: { value: 'ORCL' } });
+    fireEvent.click(within(scopeSection).getByRole('button', { name: '应用筛选' }));
+
+    await waitFor(() => expect(getSampleStatus).toHaveBeenCalledWith('ORCL'));
+
+    const readiness = await screen.findByTestId('historical-backtest-execution-readiness');
+    const readModel = await screen.findByTestId('historical-backtest-execution-readiness-product-read-model');
+    const historicalReadiness = await screen.findByTestId('historical-backtest-execution-readiness-historical-ohlcv');
+    expect(readiness).toHaveAttribute('data-readiness-state', 'insufficient');
+    expect(readiness).toHaveAttribute('data-result-contract-available', 'false');
+    expect(readiness).toHaveAttribute('data-product-read-ready', 'false');
+    expect(readiness).toHaveTextContent('证据不足');
+    expect(readiness).toHaveTextContent('只读就绪度未达到可执行状态');
+    expect(readModel).toHaveAttribute('data-product-read-state', 'insufficient');
+    expect(readModel).toHaveTextContent('关键证据阻塞：覆盖证据');
+    expect(readModel).toHaveTextContent('覆盖：证据不足 · 12/60 根');
+    expect(readModel).toHaveTextContent('新鲜度：已过期');
+    expect(readModel).toHaveTextContent('历史行情证据');
+    expect(historicalReadiness).toHaveAttribute('data-historical-ohlcv-status', 'insufficient_coverage');
+    expect(historicalReadiness).toHaveTextContent('历史 OHLCV 覆盖不足');
+    expect(readModel).not.toHaveTextContent(/可执行，证据降级|Sharpe|CAGR|alpha|beta|跑赢|实盘|交易指令|requestId|traceId|cacheKey|token|credential/i);
+  });
+
   it('keeps blocked deterministic run attempts on the setup page with specific data-readiness blockers', async () => {
     let resolveRun: ((value: RuleBacktestRunResponse) => void) | null = null;
     const blockedRun = makeRuleRunResponse({
@@ -2036,7 +2135,7 @@ describe('BacktestPage', () => {
     expect(readiness).toHaveTextContent('历史数据不足');
     expect(readiness).toHaveTextContent('历史 OHLCV 窗口不足，无法计算安全结果。');
     expect(readiness).toHaveTextContent('缺少基准，基准相对指标不可用。');
-    expect(readiness).toHaveTextContent('本次运行被阻塞或尚未具备结果条件');
+    expect(readiness).toHaveTextContent('只读就绪度未达到可执行状态');
     expect(readiness).toHaveTextContent('仅供研究');
     expect(readiness).not.toHaveTextContent(/Sharpe|CAGR|alpha|beta|跑赢|实盘|交易指令/i);
   });

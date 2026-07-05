@@ -12,6 +12,7 @@ import {
 } from '../components/linear/LinearPrimitives';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import PeerCorrelationSnapshotBlock from '../components/common/PeerCorrelationSnapshotBlock';
+import ProductReadModelStatusStrip from '../components/common/ProductReadModelStatusStrip';
 import { CoreMarketChart, type CoreMarketChartPoint } from '../components/charts/CoreMarketChart';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { TerminalButton, TerminalChip, TerminalEmptyState } from '../components/terminal/TerminalPrimitives';
@@ -38,6 +39,11 @@ import { useProductSurface } from '../hooks/useProductSurface';
 import { getConsumerStatusLabel, mapConsumerStatusText } from '../utils/consumerStatusLabels';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
+import {
+  productReadClassificationDisplayState,
+  productReadFreshnessLabel,
+  productReadStrongConclusionAllowed,
+} from '../utils/productReadModelView';
 import {
   RoughBulletList,
   RoughKeyValueRows,
@@ -156,8 +162,8 @@ function formatSignedPercent(value: number | null | undefined): string {
 function toneFor(value: string | null | undefined): string {
   const normalized = String(value || '').toLowerCase();
   if (['available', 'high', 'ready', 'complete', 'breakout'].includes(normalized)) return 'success';
-  if (['medium', 'partial', 'range', 'neutral'].includes(normalized)) return 'warning';
-  if (['low', 'unavailable', 'lowconfidence', 'low_confidence', 'blocked'].includes(normalized)) return 'error';
+  if (['medium', 'partial', 'stale', 'degraded', 'pending', 'range', 'neutral'].includes(normalized)) return 'warning';
+  if (['low', 'unavailable', 'insufficient', 'no_evidence', 'rejected', 'withheld', 'lowconfidence', 'low_confidence', 'blocked'].includes(normalized)) return 'error';
   return 'info';
 }
 
@@ -245,6 +251,7 @@ function stockStructureStateLabel(value: string | null | undefined, language: 'z
     neutral: { zh: '结构中性', en: 'Neutral structure' },
     pullback: { zh: '回撤观察', en: 'Pullback watch' },
     range: { zh: '区间震荡', en: 'Range-bound' },
+    withheld: { zh: '暂不形成强结论', en: 'Strong conclusion withheld' },
     insufficient_evidence: { zh: '证据不足', en: 'Evidence incomplete' },
     unavailable: { zh: '数据暂缺', en: 'Data temporarily missing' },
   };
@@ -1624,7 +1631,10 @@ function stockConsumerSummarySentence({
       ? 'Historical data is not available yet, so the price history visual is unavailable.'
       : '历史数据暂缺，价格走势图暂不可用。';
   }
-  const state = stockStructureStateLabel(data.structureState, language) || (language === 'en' ? 'under review' : '待确认');
+  const displayState = productReadStrongConclusionAllowed(data.productReadModel)
+    ? data.structureState
+    : (productReadClassificationDisplayState(data.productReadModel) || 'withheld');
+  const state = stockStructureStateLabel(displayState, language) || (language === 'en' ? 'under review' : '待确认');
   const freshness = quote ? quoteBoundaryFreshnessLabel(quote, language).label : (language === 'en' ? 'pending' : '待确认');
   return language === 'en'
     ? `${data.ticker} is currently ${state}; quote freshness is ${freshness}, and historical bars can be reviewed for price context.`
@@ -1679,10 +1689,15 @@ function StockConsumerResearchSummary({
     quote?.sourceConfidence?.asOf || quote?.marketTimestamp || quote?.observedAt || quote?.updateTime || researchPacket?.quote.asOf || null,
     language,
   );
-  const structureState = stockStructureStateLabel(data.structureState, language) || (language === 'en' ? 'Under review' : '待确认');
+  const displayStructureState = productReadStrongConclusionAllowed(data.productReadModel)
+    ? data.structureState
+    : (productReadClassificationDisplayState(data.productReadModel) || 'withheld');
+  const structureState = stockStructureStateLabel(displayStructureState, language) || (language === 'en' ? 'Under review' : '待确认');
   const summary = stockConsumerSummarySentence({ data, quote, history, historyFailed, language });
-  const confidence = confidenceLabel(data.confidence, language);
-  const confidenceText = stockConfidenceExplanation(data.confidence, language);
+  const confidenceValue = data.productReadModel?.confidence?.label || data.confidence;
+  const confidence = confidenceLabel(confidenceValue, language);
+  const confidenceText = stockConfidenceExplanation(confidenceValue, language);
+  const productFreshness = productReadFreshnessLabel(data.productReadModel || researchPacket?.productReadModel || null, language);
   const canCopyEvidence = Boolean(evidenceEntry?.exportContent);
   const availableBars = historyBarsCount(history, data);
   const requiredBars = requiredHistoryBars(history, data);
@@ -1735,8 +1750,8 @@ function StockConsumerResearchSummary({
             <div className="mt-3 flex min-w-0 flex-wrap items-end gap-3">
               <span className="text-3xl font-semibold text-[color:var(--wolfy-text-primary)]">{price}</span>
               <span className={change.startsWith('-') ? 'text-sm font-medium text-rose-300' : 'text-sm font-medium text-emerald-300'}>{change}</span>
-              <StatusBadge status={toneFor(data.confidence)} label={`${language === 'en' ? 'Confidence' : '置信度'}：${confidence}`} size="sm" />
-              <StatusBadge status={toneFor(data.structureState)} label={structureState} size="sm" />
+              <StatusBadge status={toneFor(confidenceValue)} label={`${language === 'en' ? 'Confidence' : '置信度'}：${confidence}`} size="sm" />
+              <StatusBadge status={toneFor(displayStructureState)} label={structureState} size="sm" />
             </div>
           </div>
           <div data-testid="stock-price-history-visual-block">
@@ -1750,9 +1765,16 @@ function StockConsumerResearchSummary({
         </div>
         <aside className="min-w-0 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] p-4" data-testid="stock-first-viewport-summary-panel">
           <div className="flex flex-wrap gap-2">
-            <StatusBadge status={toneFor(data.confidence)} label={`${language === 'en' ? 'Research state' : '研究状态'}：${confidence}`} size="sm" />
+            <StatusBadge status={toneFor(confidenceValue)} label={`${language === 'en' ? 'Research state' : '研究状态'}：${confidence}`} size="sm" />
             <StatusBadge status={historyToneStatus(historyState.tone)} label={historyState.label} size="sm" />
           </div>
+          <ProductReadModelStatusStrip
+            model={data.productReadModel || researchPacket?.productReadModel || null}
+            language={language}
+            title={language === 'en' ? 'Structure readiness' : '结构读模型'}
+            testId="stock-structure-product-read-model"
+            className="mt-3"
+          />
           <div className="mt-4 space-y-4">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-normal text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Current observation' : '当前观察'}</p>
@@ -1789,6 +1811,11 @@ function StockConsumerResearchSummary({
           <p className="mt-4 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-muted)] px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]" data-testid="stock-compact-no-advice">
             {disclosure}
           </p>
+          {productFreshness ? (
+            <p className="mt-3 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-muted)] px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]" data-testid="stock-product-read-model-freshness">
+              {productFreshness}
+            </p>
+          ) : null}
           <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{confidenceText}</p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Link

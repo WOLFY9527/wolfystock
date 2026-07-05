@@ -3,6 +3,8 @@
  * Mirrors api/v1/schemas/backtest.py
  */
 
+import type { ProductReadModel } from './productReadModel';
+
 export type AssumptionMap = Record<string, unknown>;
 
 export interface BacktestDiagnosticWarning {
@@ -273,6 +275,7 @@ export interface BacktestSampleStatusResponse {
   sampleReadinessState?: string | null;
   sampleBlockingReasons?: string[];
   executionReadiness?: BacktestExecutionReadiness;
+  productReadModel?: ProductReadModel | null;
   historicalOhlcvReadiness?: BacktestHistoricalOhlcvReadiness;
 }
 

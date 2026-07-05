@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from typing import Any, Optional
 
 from src.services.agent_stock_evidence_service import StockEvidenceService
+from src.services.product_read_model import aggregate_product_readiness
 from src.services.stock_service import StockService
 from src.services.stock_structure_decision_service import StockStructureDecisionService
 from src.services.us_fundamentals_service import USFundamentalsService
@@ -613,6 +614,53 @@ def _research_status(packet_parts: Mapping[str, Mapping[str, Any]]) -> str:
     return "ready"
 
 
+def _research_packet_product_read_model(
+    *,
+    packet_parts: Mapping[str, Mapping[str, Any]],
+    research_status: str,
+) -> dict[str, Any]:
+    model = aggregate_product_readiness(
+        surface="Stock Research",
+        children=[
+            {"name": "quote", "state": packet_parts["quote"].get("state"), "critical": True},
+            {"name": "history", "state": packet_parts["history"].get("state"), "critical": True},
+            {"name": "structure", "state": packet_parts["structure"].get("state"), "critical": True},
+            {"name": "fundamentals", "state": packet_parts["fundamentals"].get("state"), "critical": False},
+            {"name": "events", "state": packet_parts["events"].get("state"), "critical": False},
+            {"name": "peer", "state": packet_parts["peer"].get("state"), "critical": False},
+        ],
+    )
+    quote_as_of = packet_parts["quote"].get("asOf")
+    history_as_of = packet_parts["history"].get("asOf")
+    return {
+        **model,
+        "researchStatus": research_status,
+        "freshness": {
+            "state": _research_packet_freshness_state(packet_parts),
+            "asOf": quote_as_of or history_as_of,
+        },
+        "provenance": {
+            "sourceClass": "stock_research_packet",
+            "asOf": quote_as_of or history_as_of,
+            "freshness": _research_packet_freshness_state(packet_parts),
+            "quality": model["state"],
+        },
+    }
+
+
+def _research_packet_freshness_state(packet_parts: Mapping[str, Mapping[str, Any]]) -> str:
+    states = {str(part.get("state") or "") for part in packet_parts.values()}
+    if "missing" in states or "unknown" in states:
+        return "no_evidence"
+    if "stale" in states:
+        return "stale"
+    if "insufficient" in states:
+        return "insufficient"
+    if any(state not in {"available"} for state in states):
+        return "partial"
+    return "available"
+
+
 def _next_data_action(missing_data: list[str], research_status: str) -> str:
     if research_status == "ready":
         return "Refresh the packet before reusing this research context."
@@ -696,6 +744,17 @@ def build_symbol_research_packet_from_parts(stock_code: str, *, market: Optional
         "events": events,
         "peer": peer,
         "missingData": missing_data,
+        "productReadModel": _research_packet_product_read_model(
+            packet_parts={
+                "quote": quote,
+                "history": history,
+                "structure": structure,
+                "fundamentals": fundamentals,
+                "events": events,
+                "peer": peer,
+            },
+            research_status=research_status,
+        ),
         "researchStatus": research_status,
         "nextDataAction": _next_data_action(missing_data, research_status),
         "observationOnly": True,
@@ -793,6 +852,10 @@ def build_symbol_research_packet(stock_code: str, *, market: Optional[str] = Non
         "events": events,
         "peer": peer,
         "missingData": missing_data,
+        "productReadModel": _research_packet_product_read_model(
+            packet_parts=packet_parts,
+            research_status=research_status,
+        ),
         "researchStatus": research_status,
         "nextDataAction": _next_data_action(missing_data, research_status),
         "observationOnly": True,

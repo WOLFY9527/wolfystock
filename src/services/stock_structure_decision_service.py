@@ -19,6 +19,7 @@ from src.services.historical_ohlcv_readiness import (
     HistoricalOhlcvReadinessService,
 )
 from src.services.historical_ohlcv_runtime_adapter import HistoricalOhlcvRuntimeAdapter
+from src.services.product_read_model import build_structure_decision_product_read_model
 from src.services.stock_service import StockService, uat_no_live_providers_enabled
 from src.services.stock_structure_decision_engine import (
     MIN_REQUIRED_BARS,
@@ -700,6 +701,7 @@ def _finalize_structure_contract(
             "drilldownLinks": [dict(source_context)] if source_context is not None else [],
         }
     )
+    result["productReadModel"] = build_structure_decision_product_read_model(result)
     if source_context is not None:
         result["sourceContext"] = dict(source_context)
     return result

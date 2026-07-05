@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, waitForElementToBeRem
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { analysisApi } from '../../api/analysis';
+import { dashboardOverviewApi } from '../../api/dashboardOverview';
 import { marketApi } from '../../api/market';
 import { createApiError, createParsedApiError } from '../../api/error';
 import { historyApi } from '../../api/history';
@@ -71,6 +72,12 @@ vi.mock('../../api/market', () => ({
   normalizeMarketBriefingConsumerCopy: <T,>(value: T) => value,
 }));
 
+vi.mock('../../api/dashboardOverview', () => ({
+  dashboardOverviewApi: {
+    getMarketIntelligenceOverview: vi.fn(),
+  },
+}));
+
 vi.mock('../../api/publicAnalysis', () => ({
   publicAnalysisApi: {
     preview: vi.fn(),
@@ -117,6 +124,10 @@ async function closeOpenDrawerWithEscape() {
 
 async function waitForHistoryDrawerToClose() {
   await waitForElementToBeRemoved(() => screen.queryByTestId('home-bento-history-drawer'));
+}
+
+function persistSelectedHistoryIdForTest(recordId: number | string) {
+  window.localStorage.setItem('dsa-selected-history-id', String(recordId));
 }
 
 const defaultHistoryReport = {
@@ -465,6 +476,43 @@ describe('HomeSurfacePage', () => {
         },
       ],
     });
+    vi.mocked(dashboardOverviewApi.getMarketIntelligenceOverview).mockResolvedValue({
+      status: 'ready',
+      asOf: '2026-06-08T08:00:00Z',
+      marketPulse: {
+        sp500: { label: 'S&P 500', value: '5,300', change: '+0.4%', status: 'ready' },
+        nasdaq: { label: 'Nasdaq', value: '18,100', change: '+0.7%', status: 'ready' },
+        russell2000: { label: 'Russell 2000', value: '2,100', change: '+0.2%', status: 'ready' },
+        vix: { label: 'VIX', value: '14.2', change: '-0.3', status: 'ready' },
+        tenYearYield: { label: '10Y', value: '4.2%', change: '+0.01', status: 'ready' },
+        dollarIndex: { label: 'DXY', value: '104.0', change: '-0.1', status: 'ready' },
+        marketBreadth: { summary: 'Breadth is improving.', status: 'ready' },
+        liquidityState: 'stable',
+      },
+      marketBrief: { headline: 'Market breadth improves', summary: 'Breadth improved.', status: 'ready' },
+      moneyFlow: {
+        topInflows: ['Software'],
+        topOutflows: [],
+        styleBias: 'balanced',
+        offensiveDefensiveBias: 'balanced',
+        sourceStatus: 'ready',
+        status: 'ready',
+      },
+      liquidityRisk: { summary: 'Stable', volatilityTone: 'calm', fundingStress: 'low', dollarRatePressure: 'low', status: 'ready' },
+      sectorThemeRotation: { leadingThemes: ['Software'], laggingThemes: [], diffusion: 'broadening', summary: 'Rotation improving.', status: 'ready' },
+      researchQueue: { status: 'ready', items: [] },
+      dataQuality: { state: 'ready', label: 'Ready', summary: 'Ready', sections: {} },
+      productReadModel: {
+        contractVersion: 'product_read_model_v1',
+        surface: 'Dashboard',
+        state: 'available',
+        ready: true,
+        blockingChildren: [],
+        freshness: { state: 'available', asOf: '2026-06-08T08:00:00Z' },
+        provenance: { sourceClass: 'dashboard_read_models', asOf: '2026-06-08T08:00:00Z', freshness: 'available', quality: 'available' },
+      },
+      noAdviceDisclosure: 'Research observation only.',
+    });
     vi.mocked(historyApi.getList).mockResolvedValue({
       total: 3,
       page: 1,
@@ -534,6 +582,67 @@ describe('HomeSurfacePage', () => {
       </UiPreferencesProvider>
     </MemoryRouter>,
   );
+
+  it('uses dashboard productReadModel to prevent false-ready market brief states', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 0,
+      page: 1,
+      limit: 20,
+      items: [],
+    });
+    vi.mocked(dashboardOverviewApi.getMarketIntelligenceOverview).mockResolvedValue({
+      status: 'partial',
+      asOf: '2026-06-08T08:00:00Z',
+      marketPulse: {
+        sp500: { label: 'S&P 500', value: '--', change: '--', status: 'partial' },
+        nasdaq: { label: 'Nasdaq', value: '--', change: '--', status: 'partial' },
+        russell2000: { label: 'Russell 2000', value: '--', change: '--', status: 'partial' },
+        vix: { label: 'VIX', value: '--', change: '--', status: 'partial' },
+        tenYearYield: { label: '10Y', value: '--', change: '--', status: 'partial' },
+        dollarIndex: { label: 'DXY', value: '--', change: '--', status: 'partial' },
+        marketBreadth: { summary: 'Breadth unavailable.', status: 'no_evidence' },
+        liquidityState: 'unknown',
+      },
+      marketBrief: { headline: 'Market brief limited', summary: 'Evidence is incomplete.', status: 'partial' },
+      moneyFlow: {
+        topInflows: [],
+        topOutflows: [],
+        styleBias: 'unknown',
+        offensiveDefensiveBias: 'unknown',
+        sourceStatus: 'no_evidence',
+        status: 'no_evidence',
+      },
+      liquidityRisk: { summary: 'Risk checks pending.', volatilityTone: 'unknown', fundingStress: 'unknown', dollarRatePressure: 'unknown', status: 'partial' },
+      sectorThemeRotation: { leadingThemes: [], laggingThemes: [], diffusion: 'unknown', summary: 'Rotation unavailable.', status: 'partial' },
+      researchQueue: { status: 'partial', items: [] },
+      dataQuality: { state: 'partial', label: 'Partial', summary: 'Partial', sections: { moneyFlow: 'no_evidence' } },
+      productReadModel: {
+        contractVersion: 'product_read_model_v1',
+        surface: 'Dashboard',
+        state: 'no_evidence',
+        ready: false,
+        blockingChildren: ['money_flow'],
+        freshness: { state: 'no_evidence', asOf: '2026-06-08T08:00:00Z' },
+        provenance: { sourceClass: 'dashboard_read_models', asOf: '2026-06-08T08:00:00Z', freshness: 'no_evidence', quality: 'no_evidence' },
+      },
+      noAdviceDisclosure: 'Research observation only.',
+    });
+
+    renderSurface();
+
+    const strip = await screen.findByTestId('member-home-dashboard-product-read-model');
+    const regime = await screen.findByTestId('member-home-market-regime');
+    expect(vi.mocked(dashboardOverviewApi.getMarketIntelligenceOverview)).toHaveBeenCalledTimes(1);
+    expect(strip).toHaveAttribute('data-product-read-state', 'no_evidence');
+    expect(strip).toHaveAttribute('data-product-read-ready', 'false');
+    expect(strip).toHaveTextContent('暂无证据');
+    expect(strip).toHaveTextContent('关键证据阻塞：资金流证据');
+    expect(strip).toHaveTextContent('市场读模型');
+    expect(regime).not.toHaveTextContent('当前状态：Risk-on');
+    expect(regime).not.toHaveTextContent('当前状态：中性');
+    expect(regime).toHaveTextContent('当前状态：暂无证据');
+  });
 
   it('renders the guest homepage when the current surface role is guest', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: true });
@@ -1600,6 +1709,7 @@ describe('HomeSurfacePage', () => {
 
   it('normalizes Home summary fields from decision trace when legacy dashboard fields are missing', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    persistSelectedHistoryIdForTest(68);
     vi.mocked(historyApi.getList).mockResolvedValueOnce({
       total: 1,
       page: 1,
@@ -1707,6 +1817,7 @@ describe('HomeSurfacePage', () => {
 
   it('normalizes a HOOD-style live payload without collapsing to placeholder cards', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    persistSelectedHistoryIdForTest(88);
     vi.mocked(historyApi.getList).mockResolvedValueOnce({
       total: 1,
       page: 1,
@@ -2759,6 +2870,7 @@ describe('HomeSurfacePage', () => {
 
   it('disables safe re-analysis when the selected report has no symbol', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    persistSelectedHistoryIdForTest(55);
     vi.mocked(historyApi.getList).mockResolvedValueOnce({
       total: 1,
       page: 1,
@@ -3775,6 +3887,7 @@ describe('HomeSurfacePage', () => {
 
   it('renders sparse completed reports with neutral values instead of local demo presets', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    persistSelectedHistoryIdForTest(8);
     vi.mocked(historyApi.getList).mockResolvedValueOnce({
       total: 1,
       page: 1,
