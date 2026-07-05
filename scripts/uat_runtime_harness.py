@@ -13,6 +13,7 @@ import argparse
 import hashlib
 import json
 import os
+import signal
 import shutil
 import socket
 import subprocess
@@ -25,6 +26,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
+from uuid import uuid4
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -49,6 +51,8 @@ DEFAULT_EVIDENCE_DIR = Path("output/runtime-verification")
 DEFAULT_READINESS_TIMEOUT_SECONDS = 90.0
 DEFAULT_HTTP_TIMEOUT_SECONDS = 5.0
 WOLFYSTOCK_HTML_MARKERS = ("WolfyStock", "/assets/")
+FRONTEND_REQUIRED_BINARIES = ("tsc", "vite")
+FRONTEND_INSTALL_COMMAND = ("npm", "--prefix", "apps/dsa-web", "ci")
 UAT_ENV_OVERRIDES = {
     "APP_ENV": "uat",
     "CRYPTO_REALTIME_ENABLED": "false",
@@ -69,6 +73,15 @@ class PortOwner:
     pid: int
     cwd: str | None
     command: str | None
+
+
+@dataclass(frozen=True)
+class RunContext:
+    run_id: str
+    start_time: str
+    evidence_dir: Path
+    evidence_path: Path
+    run_log_path: Path
 
 
 class DirectNoProxyHttpClient:
@@ -150,6 +163,62 @@ def validate_source(repo_root: Path, expected_sha: str | None) -> dict[str, Any]
         "expectedGitSha": expected_sha,
         "errorCodes": errors,
     }
+
+
+def ensure_frontend_dependencies(repo_root: Path) -> dict[str, Any]:
+    web_dir = Path(repo_root) / "apps" / "dsa-web"
+    lockfile = web_dir / "package-lock.json"
+    missing_bins = [
+        name
+        for name in FRONTEND_REQUIRED_BINARIES
+        if not (web_dir / "node_modules" / ".bin" / name).is_file()
+    ]
+    npm_path = shutil.which("npm")
+    install_command = list(FRONTEND_INSTALL_COMMAND)
+    result: dict[str, Any] = {
+        "required": bool(missing_bins),
+        "action": "pending" if missing_bins else "skipped",
+        "skipReason": None if missing_bins else "frontend_toolchain_available",
+        "installCommand": install_command,
+        "exitStatus": None,
+        "missingBinaries": missing_bins,
+        "lockfile": {
+            "path": "apps/dsa-web/package-lock.json",
+            "sha256": _sha256_file(lockfile),
+            "exists": lockfile.is_file(),
+        },
+        "reasonCodes": [],
+    }
+    if not missing_bins:
+        return result
+    if not lockfile.is_file():
+        result.update(
+            {
+                "action": "failed",
+                "exitStatus": None,
+                "reasonCodes": ["frontend_package_lock_missing"],
+            }
+        )
+        return result
+    if not npm_path:
+        result.update(
+            {
+                "action": "failed",
+                "exitStatus": None,
+                "reasonCodes": ["npm_unavailable"],
+            }
+        )
+        return result
+
+    completed = subprocess.run([npm_path, *FRONTEND_INSTALL_COMMAND[1:]], cwd=repo_root, check=False)
+    result["exitStatus"] = int(completed.returncode)
+    if completed.returncode == 0:
+        result["action"] = "installed"
+        result["reasonCodes"] = []
+    else:
+        result["action"] = "failed"
+        result["reasonCodes"] = ["frontend_dependency_install_failed"]
+    return result
 
 
 def find_port_owner(host: str, port: int) -> PortOwner | None:
@@ -253,15 +322,74 @@ def start_runtime(repo_root: Path, *, host: str, port: int, python_bin: str | No
     )
 
 
-def stop_owned_runtime(process: subprocess.Popen[str] | None) -> None:
+def stop_owned_runtime(process: subprocess.Popen[str] | None) -> dict[str, Any]:
     if process is None or process.poll() is not None:
-        return
+        return {"status": "absent", "reasonCode": "runtime_already_absent"}
     process.terminate()
     try:
         process.wait(timeout=10)
+        return {"status": "stopped", "signal": "terminate"}
     except subprocess.TimeoutExpired:
         process.kill()
         process.wait(timeout=10)
+        return {"status": "stopped", "signal": "kill_after_timeout"}
+
+
+def pid_is_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
+    evidence = load_evidence(evidence_path)
+    run = evidence.get("run") if isinstance(evidence.get("run"), Mapping) else {}
+    pid = _safe_int(run.get("pid"))
+    expected_cwd = str(run.get("cwd") or "")
+    if pid <= 0:
+        return {"status": "rejected", "reasonCode": "pid_missing", "pid": pid}
+
+    observed_cwd = process_cwd(pid)
+    if expected_cwd and observed_cwd and Path(observed_cwd).resolve() != Path(expected_cwd).resolve():
+        result = {
+            "status": "rejected",
+            "reasonCode": "pid_cwd_mismatch",
+            "pid": pid,
+            "expectedCwd": expected_cwd,
+            "observedCwd": observed_cwd,
+        }
+        _append_lifecycle_event(evidence_path, result)
+        return result
+    if not pid_is_alive(pid):
+        result = {"status": "absent", "reasonCode": "runtime_already_absent", "pid": pid}
+        _append_lifecycle_event(evidence_path, result)
+        return result
+    if expected_cwd and not observed_cwd:
+        result = {
+            "status": "rejected",
+            "reasonCode": "pid_cwd_unavailable",
+            "pid": pid,
+            "expectedCwd": expected_cwd,
+            "observedCwd": observed_cwd,
+        }
+        _append_lifecycle_event(evidence_path, result)
+        return result
+
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        result = {"status": "absent", "reasonCode": "runtime_already_absent", "pid": pid}
+        _append_lifecycle_event(evidence_path, result)
+        return result
+    result = {"status": "stopped", "reasonCode": "task_owned_pid_terminated", "pid": pid, "cwd": observed_cwd}
+    _append_lifecycle_event(evidence_path, result)
+    return result
 
 
 def wait_for_readiness(client: DirectNoProxyHttpClient, base_url: str, *, timeout_seconds: float) -> dict[str, Any]:
@@ -311,17 +439,30 @@ def build_asset_identity(static_root: Path, local_payload: Mapping[str, Any]) ->
 
 def build_workbuddy_handoff(
     *,
+    run_id: str,
     base_url: str,
     expected_git_sha: str,
     runtime_pid: int,
     runtime_cwd: str | None,
     asset_identity: Mapping[str, Any],
+    run_log_path: str,
+    run_start_time: str,
 ) -> dict[str, Any]:
     return {
+        "runId": run_id,
         "directUrl": base_url,
         "expectedGitSha": expected_git_sha,
         "runtimePid": runtime_pid,
         "runtimeCwd": runtime_cwd,
+        "browserActionWindow": {
+            "startAfter": run_start_time,
+            "correlationOnly": True,
+            "note": "Use this window to correlate browser actions with the run log; it does not prove causal network attribution.",
+        },
+        "runtimeLogWindow": {
+            "path": run_log_path,
+            "startTime": run_start_time,
+        },
         "assetIdentity": {
             "indexHtmlHash": asset_identity.get("indexHtmlHash"),
             "mainJsAssetFilename": asset_identity.get("mainJsAssetFilename"),
@@ -337,11 +478,87 @@ def build_workbuddy_handoff(
     }
 
 
-def write_evidence(evidence_dir: Path, evidence: Mapping[str, Any]) -> Path:
+def create_run_context(evidence_dir: Path) -> RunContext:
+    start_time = datetime.now(timezone.utc).isoformat()
+    compact_time = start_time.replace("-", "").replace(":", "").split(".", 1)[0]
+    run_id = f"uat-{compact_time}-{uuid4().hex[:8]}"
     evidence_dir.mkdir(parents=True, exist_ok=True)
-    path = evidence_dir / "uat-runtime-harness-evidence.json"
+    return RunContext(
+        run_id=run_id,
+        start_time=start_time,
+        evidence_dir=evidence_dir,
+        evidence_path=evidence_dir / f"{run_id}-evidence.json",
+        run_log_path=evidence_dir / f"{run_id}-runtime.log",
+    )
+
+
+def write_evidence(evidence_dir: Path, evidence: Mapping[str, Any], *, run_context: RunContext | None = None) -> Path:
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    path = run_context.evidence_path if run_context else evidence_dir / "uat-runtime-harness-evidence.json"
     path.write_text(json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
+
+
+def load_evidence(evidence_path: Path) -> dict[str, Any]:
+    payload = json.loads(Path(evidence_path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("evidence_root_not_object")
+    return payload
+
+
+def build_run_identity(
+    *,
+    run_context: RunContext,
+    repo_root: Path,
+    source: Mapping[str, Any],
+    pid: int | None,
+    cwd: str | None,
+    port: int,
+    asset_identity: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "runId": run_context.run_id,
+        "sha": source.get("gitSha"),
+        "pid": pid,
+        "cwd": cwd or str(repo_root),
+        "startTime": run_context.start_time,
+        "port": int(port),
+        "assetIdentity": dict(asset_identity or {}),
+        "evidencePath": str(run_context.evidence_path),
+        "runLogPath": str(run_context.run_log_path),
+    }
+
+
+def build_runtime_log(run_context: RunContext, process: subprocess.Popen[str] | None = None) -> dict[str, Any]:
+    run_context.run_log_path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        f"runId={run_context.run_id}",
+        f"startTime={run_context.start_time}",
+    ]
+    if process is not None:
+        lines.append(f"pid={process.pid}")
+    if not run_context.run_log_path.exists():
+        run_context.run_log_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {
+        "path": str(run_context.run_log_path),
+        "startTime": run_context.start_time,
+        "boundary": "per_run_file",
+        "historicalLogsRetained": True,
+    }
+
+
+def contamination_awareness(owner_before: PortOwner | None, *, direct_http: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    flags: list[str] = []
+    if owner_before is not None:
+        flags.append("port_already_owned_before_harness_start")
+    if direct_http and not bool(direct_http.get("ok")):
+        flags.append("direct_http_identity_unverified")
+    return {
+        "browserAttribution": "correlation_only",
+        "unrelatedActivityMayContaminateCausalAttribution": bool(flags),
+        "reasonCodes": flags,
+        "coordination": "does_not_kill_browsers_or_unrelated_processes",
+    }
 
 
 def run_harness(
@@ -358,28 +575,79 @@ def run_harness(
 ) -> tuple[int, dict[str, Any]]:
     repo_root = repo_root.resolve()
     static_root = repo_root / "static"
+    evidence_dir = evidence_dir.resolve()
+    run_context = create_run_context(evidence_dir)
     base_url = clean_base_url(f"http://{host}:{int(port)}")
     source = validate_source(repo_root, expected_sha)
     if not source["ok"]:
         evidence = _base_evidence(repo_root, base_url, source, status="FAIL")
-        evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence))
+        evidence["run"] = build_run_identity(
+            run_context=run_context,
+            repo_root=repo_root,
+            source=source,
+            pid=None,
+            cwd=str(repo_root),
+            port=port,
+        )
+        evidence["runtimeLog"] = build_runtime_log(run_context)
+        evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence, run_context=run_context))
         return EXIT_FAILED, evidence
 
     owner = find_port_owner(host, port)
     if owner is not None:
         evidence = _base_evidence(repo_root, base_url, source, status="FAIL")
+        evidence["run"] = build_run_identity(
+            run_context=run_context,
+            repo_root=repo_root,
+            source=source,
+            pid=None,
+            cwd=str(repo_root),
+            port=port,
+        )
+        evidence["runtimeLog"] = build_runtime_log(run_context)
         evidence["portOwner"] = owner.__dict__
         evidence["failure"] = "port_occupied_by_unrelated_process"
-        evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence))
+        evidence["contaminationAwareness"] = contamination_awareness(owner)
+        evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence, run_context=run_context))
+        evidence["run"]["evidencePath"] = evidence["evidencePath"]
+        return EXIT_FAILED, evidence
+
+    dependency_bootstrap = ensure_frontend_dependencies(repo_root)
+    if dependency_bootstrap.get("action") == "failed":
+        evidence = _base_evidence(repo_root, base_url, source, status="FAIL")
+        evidence["run"] = build_run_identity(
+            run_context=run_context,
+            repo_root=repo_root,
+            source=source,
+            pid=None,
+            cwd=str(repo_root),
+            port=port,
+        )
+        evidence["runtimeLog"] = build_runtime_log(run_context)
+        evidence["frontendDependencyBootstrap"] = dependency_bootstrap
+        evidence["failure"] = "frontend_dependency_bootstrap_failed"
+        evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence, run_context=run_context))
+        evidence["run"]["evidencePath"] = evidence["evidencePath"]
         return EXIT_FAILED, evidence
 
     if not skip_build:
         build_exit = run_frontend_build(repo_root)
         if build_exit != 0:
             evidence = _base_evidence(repo_root, base_url, source, status="FAIL")
+            evidence["run"] = build_run_identity(
+                run_context=run_context,
+                repo_root=repo_root,
+                source=source,
+                pid=None,
+                cwd=str(repo_root),
+                port=port,
+            )
+            evidence["runtimeLog"] = build_runtime_log(run_context)
+            evidence["frontendDependencyBootstrap"] = dependency_bootstrap
             evidence["failure"] = "frontend_build_failed"
             evidence["buildExitCode"] = build_exit
-            evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence))
+            evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence, run_context=run_context))
+            evidence["run"]["evidencePath"] = evidence["evidencePath"]
             return EXIT_FAILED, evidence
 
     local_build = verify_frontend_static_build(
@@ -389,9 +657,20 @@ def run_harness(
     )
     if not local_build.ok:
         evidence = _base_evidence(repo_root, base_url, source, status="FAIL")
+        evidence["run"] = build_run_identity(
+            run_context=run_context,
+            repo_root=repo_root,
+            source=source,
+            pid=None,
+            cwd=str(repo_root),
+            port=port,
+        )
+        evidence["runtimeLog"] = build_runtime_log(run_context)
+        evidence["frontendDependencyBootstrap"] = dependency_bootstrap
         evidence["failure"] = "frontend_build_provenance_failed"
         evidence["localBuild"] = _verification_dict(local_build)
-        evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence))
+        evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence, run_context=run_context))
+        evidence["run"]["evidencePath"] = evidence["evidencePath"]
         return EXIT_FAILED, evidence
 
     uat_accounts = None
@@ -399,14 +678,26 @@ def run_harness(
         uat_accounts = seed_uat_consumer_test_accounts()
         if uat_accounts.get("status") != "seeded":
             evidence = _base_evidence(repo_root, base_url, source, status="FAIL")
+            evidence["run"] = build_run_identity(
+                run_context=run_context,
+                repo_root=repo_root,
+                source=source,
+                pid=None,
+                cwd=str(repo_root),
+                port=port,
+            )
+            evidence["runtimeLog"] = build_runtime_log(run_context)
+            evidence["frontendDependencyBootstrap"] = dependency_bootstrap
             evidence["failure"] = "uat_account_preparation_failed"
             evidence["uatAccountPreparation"] = uat_accounts
-            evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence))
+            evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence, run_context=run_context))
+            evidence["run"]["evidencePath"] = evidence["evidencePath"]
             return EXIT_FAILED, evidence
 
     process: subprocess.Popen[str] | None = None
     try:
         process = start_runtime(repo_root, host=host, port=port)
+        runtime_log = build_runtime_log(run_context, process)
         client = DirectNoProxyHttpClient()
         readiness = wait_for_readiness(client, base_url, timeout_seconds=readiness_timeout_seconds)
         runtime_cwd = process_cwd(process.pid)
@@ -446,8 +737,20 @@ def run_harness(
             identity_errors.append("served_asset_identity_unverified")
 
         evidence = _base_evidence(repo_root, base_url, source, status="PASS" if not identity_errors else "FAIL")
+        run_identity = build_run_identity(
+            run_context=run_context,
+            repo_root=repo_root,
+            source=source,
+            pid=process.pid,
+            cwd=runtime_cwd,
+            port=port,
+            asset_identity=asset_identity,
+        )
         evidence.update(
             {
+                "run": run_identity,
+                "runtimeLog": runtime_log,
+                "frontendDependencyBootstrap": dependency_bootstrap,
                 "runtime": runtime,
                 "readiness": readiness,
                 "proxyIsolation": {
@@ -467,17 +770,22 @@ def run_harness(
                     "optInFlag": "--prepare-uat-accounts",
                 },
                 "smokeReport": smoke_report,
+                "contaminationAwareness": contamination_awareness(owner, direct_http=direct_http),
                 "workbuddyHandoff": build_workbuddy_handoff(
+                    run_id=run_context.run_id,
                     base_url=base_url,
                     expected_git_sha=source["gitSha"],
                     runtime_pid=process.pid,
                     runtime_cwd=runtime_cwd,
                     asset_identity=asset_identity,
+                    run_log_path=str(run_context.run_log_path),
+                    run_start_time=run_context.start_time,
                 ),
                 "identityErrors": identity_errors,
             }
         )
-        evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence))
+        evidence["evidencePath"] = str(write_evidence(evidence_dir, evidence, run_context=run_context))
+        evidence["run"]["evidencePath"] = evidence["evidencePath"]
         return (EXIT_OK if not identity_errors else EXIT_FAILED), evidence
     finally:
         if stop_runtime_after:
@@ -486,6 +794,22 @@ def run_harness(
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build, launch, and verify a deterministic local UAT runtime.")
+    parser.add_argument(
+        "--preflight",
+        action="store_true",
+        help="Read an existing run evidence JSON and emit machine-readable preflight JSON.",
+    )
+    parser.add_argument(
+        "--stop-from-evidence",
+        action="store_true",
+        help="Stop only the task-owned runtime described by an evidence JSON file.",
+    )
+    parser.add_argument(
+        "--evidence-path",
+        type=Path,
+        default=None,
+        help="Evidence JSON path for --preflight or --stop-from-evidence.",
+    )
     parser.add_argument("--repo-root", type=Path, default=None, help="Repository root. Defaults to git root.")
     parser.add_argument("--expected-sha", default=None, help="Fail if HEAD does not match this SHA.")
     parser.add_argument("--host", default=DEFAULT_HOST, help="Local bind host.")
@@ -506,6 +830,36 @@ def main(argv: Sequence[str] | None = None) -> int:
     evidence_dir = args.evidence_dir
     if not evidence_dir.is_absolute():
         evidence_dir = repo_root / evidence_dir
+
+    if args.preflight:
+        evidence_path = args.evidence_path or _latest_evidence_path(evidence_dir)
+        try:
+            result = run_preflight(
+                evidence_path=evidence_path,
+                expected_sha=args.expected_sha,
+                host=args.host,
+                port=args.port,
+            )
+        except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
+            result = _preflight_error_result(evidence_path=evidence_path, error=exc)
+        json.dump(result, sys.stdout, ensure_ascii=False, indent=2, sort_keys=True)
+        sys.stdout.write("\n")
+        return EXIT_OK if result.get("status") == "PASS" else EXIT_FAILED
+
+    if args.stop_from_evidence:
+        evidence_path = args.evidence_path or _latest_evidence_path(evidence_dir)
+        try:
+            result = stop_runtime_from_evidence(evidence_path)
+        except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
+            result = {
+                "status": "rejected",
+                "reasonCode": "evidence_unreadable",
+                "evidencePath": str(evidence_path),
+                "errorType": type(exc).__name__,
+            }
+        json.dump(result, sys.stdout, ensure_ascii=False, indent=2, sort_keys=True)
+        sys.stdout.write("\n")
+        return EXIT_OK if result.get("status") in {"stopped", "absent"} else EXIT_FAILED
 
     exit_code, evidence = run_harness(
         repo_root=repo_root,
@@ -544,6 +898,97 @@ def _verification_dict(result: VerificationResult) -> dict[str, Any]:
         "payload": result.payload,
         "errorCodes": result.error_codes,
         "warningCodes": result.warning_codes,
+    }
+
+
+def run_preflight(
+    *,
+    evidence_path: Path,
+    expected_sha: str | None,
+    host: str,
+    port: int | None = None,
+) -> dict[str, Any]:
+    evidence = load_evidence(evidence_path)
+    run = evidence.get("run") if isinstance(evidence.get("run"), Mapping) else {}
+    source = evidence.get("source") if isinstance(evidence.get("source"), Mapping) else {}
+    frontend = evidence.get("frontend") if isinstance(evidence.get("frontend"), Mapping) else {}
+    run_port = _safe_int(port if port is not None else run.get("port"))
+    run_pid = _safe_int(run.get("pid"))
+    expected_cwd = str(run.get("cwd") or "")
+    expected_asset = dict(run.get("assetIdentity") if isinstance(run.get("assetIdentity"), Mapping) else frontend)
+    expected_asset_name = str(expected_asset.get("mainJsAssetFilename") or frontend.get("mainJsAssetFilename") or "")
+
+    checks: dict[str, dict[str, Any]] = {}
+    evidence_status = str(evidence.get("status") or "")
+    checks["evidenceStatus"] = _preflight_check(evidence_status == "PASS", expected="PASS", observed=evidence_status)
+
+    observed_sha = str(source.get("gitSha") or run.get("sha") or "")
+    sha_expected = expected_sha or str(run.get("sha") or "")
+    checks["sha"] = _preflight_check(
+        bool(observed_sha and (not sha_expected or observed_sha == sha_expected)),
+        expected=sha_expected,
+        observed=observed_sha,
+    )
+
+    alive = pid_is_alive(run_pid)
+    checks["pidAlive"] = _preflight_check(alive, expected=True, observed=alive)
+
+    owner = find_port_owner(host, run_port)
+    owner_payload = owner.__dict__ if owner else None
+    checks["pidOwnsPort"] = _preflight_check(
+        bool(owner and owner.pid == run_pid),
+        expected={"pid": run_pid, "port": run_port},
+        observed=owner_payload,
+    )
+
+    observed_cwd = process_cwd(run_pid) if run_pid > 0 else None
+    cwd_ok = bool(
+        expected_cwd
+        and observed_cwd
+        and Path(observed_cwd).resolve() == Path(expected_cwd).resolve()
+    )
+    checks["cwd"] = _preflight_check(cwd_ok, expected=expected_cwd, observed=observed_cwd)
+
+    asset_ok = bool(expected_asset.get("indexHtmlHash") or expected_asset_name)
+    checks["assetIdentity"] = _preflight_check(asset_ok, expected="non-empty", observed=expected_asset)
+
+    direct_http = _preflight_direct_http(host=host, port=run_port, expected_asset_name=expected_asset_name)
+    checks["directNoProxyHttp"] = _preflight_check(
+        bool(direct_http.get("ok")),
+        expected={"noProxy": True, "asset": expected_asset_name or None},
+        observed=direct_http,
+    )
+
+    start_time = str(run.get("startTime") or "")
+    checks["runStartTimestamp"] = _preflight_check(bool(start_time), expected="present", observed=start_time)
+
+    run_log_path = str(run.get("runLogPath") or "")
+    checks["runLogPath"] = _preflight_check(
+        bool(run_log_path),
+        expected="bound_run_log_path",
+        observed={"path": run_log_path, "exists": Path(run_log_path).exists() if run_log_path else False},
+    )
+
+    status = "PASS" if all(item["status"] == "PASS" for item in checks.values()) else "FAIL"
+    return {
+        "contract": "wolfystock_uat_runtime_preflight_v1",
+        "status": status,
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "evidencePath": str(evidence_path),
+        "host": host,
+        "port": run_port,
+        "run": {
+            "runId": run.get("runId"),
+            "sha": observed_sha,
+            "pid": run_pid,
+            "cwd": expected_cwd,
+            "startTime": start_time,
+            "port": run_port,
+            "assetIdentity": expected_asset,
+            "evidencePath": str(run.get("evidencePath") or evidence_path),
+            "runLogPath": run_log_path,
+        },
+        "checks": checks,
     }
 
 
@@ -588,6 +1033,88 @@ def _asset_hashes(static_root: Path, filenames: Sequence[str]) -> dict[str, str 
             continue
         hashes[filename] = _sha256_file(static_root / "assets" / filename)
     return hashes
+
+
+def _preflight_direct_http(*, host: str, port: int, expected_asset_name: str) -> dict[str, Any]:
+    base_url = clean_base_url(f"http://{host}:{int(port)}")
+    try:
+        response = DirectNoProxyHttpClient().request("GET", base_url + "/")
+        body = response.text or ""
+        marker_ok = int(response.status_code) == 200 and all(marker in body for marker in WOLFYSTOCK_HTML_MARKERS)
+        asset_ok = bool(not expected_asset_name or expected_asset_name in body)
+        return {
+            "ok": marker_ok and asset_ok,
+            "httpStatus": int(response.status_code),
+            "wolfyStockHtml": marker_ok,
+            "expectedAssetPresent": asset_ok,
+            "expectedAssetFilename": expected_asset_name or None,
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": type(exc).__name__,
+            "expectedAssetFilename": expected_asset_name or None,
+        }
+
+
+def _preflight_check(ok: bool, *, expected: Any, observed: Any) -> dict[str, Any]:
+    return {
+        "status": "PASS" if ok else "FAIL",
+        "expected": expected,
+        "observed": observed,
+    }
+
+
+def _preflight_error_result(*, evidence_path: Path, error: Exception) -> dict[str, Any]:
+    return {
+        "contract": "wolfystock_uat_runtime_preflight_v1",
+        "status": "FAIL",
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "evidencePath": str(evidence_path),
+        "checks": {
+            "evidenceReadable": {
+                "status": "FAIL",
+                "expected": "readable_json_object",
+                "observed": {
+                    "errorType": type(error).__name__,
+                    "reasonCode": "evidence_unreadable",
+                },
+            }
+        },
+    }
+
+
+def _append_lifecycle_event(evidence_path: Path, result: Mapping[str, Any]) -> None:
+    try:
+        evidence = load_evidence(evidence_path)
+        events = evidence.get("lifecycleEvents")
+        if not isinstance(events, list):
+            events = []
+        events.append({"at": datetime.now(timezone.utc).isoformat(), **dict(result)})
+        evidence["lifecycleEvents"] = events
+        Path(evidence_path).write_text(
+            json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+    except Exception:
+        return
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _latest_evidence_path(evidence_dir: Path) -> Path:
+    matches = sorted(evidence_dir.glob("uat-*-evidence.json"), key=lambda item: item.stat().st_mtime, reverse=True)
+    if matches:
+        return matches[0]
+    legacy = evidence_dir / "uat-runtime-harness-evidence.json"
+    if legacy.exists():
+        return legacy
+    raise FileNotFoundError(f"no UAT runtime evidence JSON found under {evidence_dir}")
 
 
 def _print_summary(evidence: Mapping[str, Any]) -> None:
