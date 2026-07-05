@@ -1202,7 +1202,7 @@ describe('AppContent route flows', () => {
     expect(screen.getByTestId('location-path')).toHaveTextContent('/en/portfolio');
   });
 
-  it('redirects away from login to the home workspace after authentication succeeds', async () => {
+  it('redirects away from login to the intended destination after authentication succeeds', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: true,
@@ -1219,7 +1219,29 @@ describe('AppContent route flows', () => {
 
     renderAt('/login?redirect=%2Fportfolio');
 
-    expect(await screen.findByText('Home Workspace')).toBeInTheDocument();
+    expect(await screen.findByText('portfolio-page')).toBeInTheDocument();
+    expect(screen.queryByText('login-page')).not.toBeInTheDocument();
+  });
+
+  it('preserves locale-prefixed login redirect destinations after authentication succeeds', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: false,
+      isAdminMode: false,
+      adminCapabilities: noCapabilities,
+    });
+
+    renderAt('/zh/login?redirect=%2Fzh%2Fscanner');
+
+    expect(await screen.findByText('scanner-surface-page')).toBeInTheDocument();
+    expect(screen.queryByText('首页工作区')).not.toBeInTheDocument();
     expect(screen.queryByText('login-page')).not.toBeInTheDocument();
   });
 

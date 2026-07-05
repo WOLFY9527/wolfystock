@@ -22,7 +22,7 @@ const protectedRoutes: RouteIdentity[] = [
     path: '/zh/market-overview',
     expectedUrl: /\/zh\/market-overview$/,
     readyTestId: 'market-overview-shell',
-    heading: /市场总览/,
+    heading: /市场状态概览/,
     extra: async (page) => {
       await expect(page.getByTestId('market-overview-card-indices')).toBeVisible();
       await expect(page.getByTestId('market-overview-decision-readiness')).toBeVisible();
@@ -41,7 +41,7 @@ const protectedRoutes: RouteIdentity[] = [
     path: '/zh/watchlist',
     expectedUrl: /\/zh\/watchlist$/,
     readyTestId: 'watchlist-page',
-    heading: /观察列表|watchlist/i,
+    heading: /观察监控板/,
   },
   {
     label: '/portfolio',
@@ -160,6 +160,264 @@ async function expectAuthenticatedAdminSession(page: Page) {
 }
 
 async function installRouteIdentityMocks(page: Page) {
+  await page.route('**/api/v1/stocks/*/validate', async (route) => {
+    const symbol = decodeURIComponent(new URL(route.request().url()).pathname.split('/')[4] || 'ORCL');
+    await fulfillJson(route, {
+      stock_code: symbol,
+      normalized_symbol: symbol,
+      market: 'us',
+      status: 'valid',
+      valid: true,
+      exists: true,
+      stock_name: symbol,
+    });
+  });
+  await page.route('**/api/v1/stocks/*/quote', async (route) => {
+    const symbol = decodeURIComponent(new URL(route.request().url()).pathname.split('/')[4] || 'ORCL');
+    await fulfillJson(route, {
+      stock_code: symbol,
+      stock_name: symbol,
+      current_price: 211.32,
+      change: 1.24,
+      change_percent: 0.59,
+      update_time: '2026-06-07T09:45:00-04:00',
+      freshness: 'delayed',
+      source_confidence: {
+        source_label: 'Playwright Fixture',
+        as_of: '2026-06-07T09:45:00-04:00',
+        freshness: 'delayed',
+        is_stale: false,
+        is_partial: false,
+        is_synthetic: false,
+        is_unavailable: false,
+      },
+    });
+  });
+  await page.route('**/api/v1/stocks/*/research-packet', async (route) => {
+    const symbol = decodeURIComponent(new URL(route.request().url()).pathname.split('/')[4] || 'ORCL');
+    await fulfillJson(route, {
+      symbol,
+      market: 'us',
+      identity: { name: symbol, exchange: 'NASDAQ', sector: 'Technology', industry: 'Software' },
+      quote: { state: 'available', price: 211.32, change_percent: 0.59, as_of: '2026-06-07T09:45:00-04:00' },
+      history: { state: 'available', bars: 90, period: 'daily', as_of: '2026-06-07' },
+      structure: { state: 'available', label: 'Range-bound', confidence: 'medium', as_of: '2026-06-07' },
+      fundamentals: { state: 'not_integrated', fields_available: [] },
+      events: { state: 'missing', latest: [] },
+      peer: { state: 'insufficient', benchmark: 'QQQ' },
+      missing_data: ['peer evidence'],
+      research_status: 'partial',
+      next_data_action: 'Review comparable evidence before drawing conclusions.',
+      observation_only: true,
+      decision_grade: false,
+      no_advice_disclosure: 'Research observation only.',
+    });
+  });
+  await page.route('**/api/v1/stocks/*/history**', async (route) => {
+    await fulfillJson(route, {
+      symbol: 'ORCL',
+      period: 'daily',
+      data: [
+        { date: '2026-06-05', open: 207, high: 213, low: 205, close: 211.32, volume: 14200000 },
+        { date: '2026-06-06', open: 211, high: 214, low: 209, close: 212.56, volume: 11800000 },
+      ],
+      source_confidence: {
+        source_label: 'Playwright Fixture',
+        as_of: '2026-06-07T09:45:00-04:00',
+        freshness: 'delayed',
+        is_stale: false,
+        is_partial: false,
+        is_synthetic: false,
+        is_unavailable: false,
+      },
+    });
+  });
+  await page.route('**/api/v1/stocks/*/evidence**', async (route) => {
+    const symbol = decodeURIComponent(new URL(route.request().url()).pathname.split('/')[4] || 'ORCL');
+    await fulfillJson(route, {
+      symbol,
+      evidence: [],
+      missing_evidence: [{ kind: 'peer', message: 'Comparable evidence pending.' }],
+      no_advice_disclosure: 'Research observation only.',
+    });
+  });
+  await page.route('**/api/v1/stocks/*/structure-decision', async (route) => {
+    const symbol = decodeURIComponent(new URL(route.request().url()).pathname.split('/')[4] || 'ORCL');
+    await fulfillJson(route, {
+      schema_version: 'uat_route_identity_stock_structure_fixture_v1',
+      ticker: symbol,
+      structure_state: 'range',
+      confidence: 'medium',
+      confidence_cap: { value: 55, label: 'Medium', reasons: ['Fixture route smoke evidence is bounded.'] },
+      confidence_state: {
+        status: 'partial',
+        label: 'Evidence limited',
+        reasons: ['Peer evidence remains incomplete.'],
+      },
+      component_scores: {
+        trend: 58,
+        relativeStrength: 52,
+        evidenceQuality: 45,
+      },
+      explanation: {
+        why_this_structure: 'Price evidence remains range-bound in the route smoke fixture.',
+        what_confirms_it: ['Fresh price evidence remains available.'],
+        what_invalidates_it: ['Evidence falls out of date.'],
+        key_levels: [{ kind: 'support', value: 198.5, description: 'Fixture support level.' }],
+      },
+      research_notes: {
+        watch_next: ['Refresh quote evidence before deeper review.'],
+        needs_more_evidence: ['Comparable peer evidence.'],
+        risk_flags: ['Evidence is partial.'],
+      },
+      data_quality: {
+        status: 'partial',
+        period: 'daily',
+        requested_days: 120,
+        observed_bars: 90,
+        usable_bars: 90,
+        reason: 'Fixture route smoke coverage.',
+      },
+      missing_evidence: [{ kind: 'peer', message: 'Comparable evidence pending.' }],
+      no_advice_disclosure: 'Research observation only.',
+    });
+  });
+
+  await page.route('**/api/v1/market/professional-data-capabilities', async (route) => {
+    await fulfillJson(route, {
+      contract_version: 'uat_route_identity_professional_data_capability_registry_v1',
+      consumer_safe: true,
+      summary: {
+        total_capabilities: 0,
+        live_count: 0,
+        degraded_count: 0,
+        entitlement_required_count: 0,
+        configured_missing_count: 0,
+        unavailable_count: 0,
+        readiness_label: 'Fixture coverage only',
+        operator_next_action: 'Use targeted UAT data fixtures for route verification.',
+      },
+      categories: [],
+      capabilities: [],
+      generated_at: '2026-06-07T09:45:00-04:00',
+    });
+  });
+  await page.route('**/api/v1/market/professional-data-capabilities/admin', async (route) => {
+    await fulfillJson(route, {
+      contract_version: 'uat_route_identity_professional_data_capability_registry_v1',
+      consumer_safe: true,
+      summary: {
+        total_capabilities: 0,
+        live_count: 0,
+        degraded_count: 0,
+        entitlement_required_count: 0,
+        configured_missing_count: 0,
+        unavailable_count: 0,
+        readiness_label: 'Admin fixture coverage only',
+        operator_next_action: 'Use targeted provider UAT outside route identity coverage.',
+      },
+      categories: [],
+      capabilities: [],
+      generated_at: '2026-06-07T09:45:00-04:00',
+    });
+  });
+  await page.route('**/api/v1/market/data-source-gap-registry', async (route) => {
+    await fulfillJson(route, {
+      contract_version: 'uat_route_identity_data_source_gap_registry_v1',
+      diagnostic_only: true,
+      provider_runtime_called: false,
+      network_calls_enabled: false,
+      score_authority_allowed: false,
+      summary: {
+        total_families: 0,
+        ready_count: 0,
+        partial_count: 0,
+        missing_count: 0,
+        blocked_count: 0,
+        unavailable_count: 0,
+        protected_review_count: 0,
+      },
+      families: [],
+      acquisition_priority_queue: [],
+    });
+  });
+  await page.route('**/api/v1/market/regime-read-model', async (route) => {
+    await fulfillJson(route, {
+      contract_version: 'uat_route_identity_market_regime_read_model_v1',
+      status: 'partial',
+      symbols: ['SPY', 'QQQ'],
+      regime: {
+        label: 'fixture_observation',
+        status: 'partial',
+        source: 'uat_route_identity_fixture',
+      },
+      product_summary: 'Route identity fixture keeps market overview data diagnostics bounded.',
+      evidence_cards: [],
+      symbol_context: [],
+      surface_hints: [],
+      missing_data_families: [],
+      blocked_product_surfaces: [],
+      readiness: {
+        label: 'fixture_only',
+        status: 'partial',
+        missing_data_families: [],
+        blocked_product_surfaces: [],
+        next_operator_action: 'Run dedicated data UAT outside route identity coverage.',
+      },
+      data_quality: {
+        adjusted_coverage_state: 'partial',
+        ohlcv_coverage: { state: 'partial', required_bars: 60, available_symbols: ['SPY'], missing_symbols: [] },
+        quote_snapshot_coverage: { state: 'partial', availability_state: 'partial', freshness_state: 'fixture', available_symbols: ['SPY'], missing_symbols: [], stale_symbols: [] },
+        missing_data_families: [],
+        blocked_product_surfaces: [],
+      },
+    });
+  });
+  await page.route('**/api/v1/scanner/status**', async (route) => {
+    await fulfillJson(route, {
+      status: 'ready',
+      market: 'cn',
+      profile: 'cn_preopen_v1',
+      last_run_at: '2026-06-07T09:45:00-04:00',
+      latest_run_id: 'uat-route-identity-scanner-run',
+      data_readiness: {
+        state: 'ready',
+        market: 'cn',
+        profile: 'cn_preopen_v1',
+        universe_size: 0,
+        scanner_universe_readiness: {
+          contract_version: 'uat_route_identity_scanner_universe_readiness_v1',
+          status: 'available',
+          market: 'cn',
+          universe_size: 0,
+          freshness_state: 'fixture',
+          required_data_classes: [],
+          available_data_classes: [],
+          missing_data_classes: [],
+          blocked_product_surfaces: [],
+          consumer_safe: true,
+          consumer_safe_message: 'Scanner route identity fixture is available.',
+        },
+        candidate_evaluation_count: 0,
+        selected_count: 0,
+        rejected_count: 0,
+        failed_count: 0,
+        consumer_summary: 'Scanner route identity fixture is available.',
+        next_data_action: 'Run scanner data UAT separately.',
+      },
+    });
+  });
+  await page.route('**/api/v1/watchlist/research-overlay', async (route) => {
+    await fulfillJson(route, {
+      schema_version: 'watchlist_research_overlay_v1',
+      overlay_state: 'ready',
+      research_summary: 'Route identity fixture keeps watchlist overlay bounded.',
+      research_priority_queue: [],
+      observation_only: true,
+      decision_grade: false,
+    });
+  });
+
   await page.route('**/api/v1/portfolio/accounts**', async (route) => {
     await fulfillJson(route, {
       accounts: [
@@ -203,6 +461,28 @@ async function installRouteIdentityMocks(page: Page) {
       sector_concentration: { total_market_value: 0, top_weight_pct: 0, alert: false, top_sectors: [], coverage: {}, errors: [] },
       drawdown: { series_points: 0, max_drawdown_pct: 0, current_drawdown_pct: 0, alert: false, fx_stale: false },
       stop_loss: { near_alert: false, triggered_count: 0, near_count: 0, items: [] },
+    });
+  });
+  await page.route('**/api/v1/portfolio/structure-review**', async (route) => {
+    await fulfillJson(route, {
+      schema_version: 'portfolio_structure_review_v1',
+      as_of: '2026-06-07',
+      account_id: null,
+      cost_method: 'fifo',
+      benchmark: 'SPY',
+      holdings_structure: [],
+      strongest_structures: [],
+      weakest_evidence: [],
+      common_risk_flags: [],
+      missing_evidence: [],
+      data_quality: {
+        status: 'partial',
+        holding_metadata_status: 'available',
+        structure_evidence_status: 'available',
+        read_only: true,
+        fail_closed: false,
+      },
+      no_advice_disclosure: 'Observation-only research context; not personalized financial advice.',
     });
   });
 
@@ -311,6 +591,48 @@ async function installRouteIdentityMocks(page: Page) {
       metadata: { read_only: true, fixture_backed: true, no_external_calls: true, no_trading_recommendation: true },
     });
   });
+  await page.route('**/api/v1/options/strategies/analyze', async (route) => {
+    await fulfillJson(route, {
+      symbol: 'TEM',
+      expiration: '2026-06-19',
+      scenario_prices: [45, 52.34, 65],
+      analyses: [
+        {
+          strategy_type: 'long_strangle',
+          legs: [],
+          net_debit: 758,
+          breakevens: [42.42, 62.58],
+          payoff_table: [
+            { underlying_price: 45, net_payoff: -258 },
+            { underlying_price: 52.34, net_payoff: -758 },
+            { underlying_price: 65, net_payoff: 242 },
+          ],
+          aggregate_greeks: {
+            delta: 0.06,
+            theta: -0.09,
+            gamma: 0.02,
+            vega: 0.18,
+          },
+          model_implied_probability: {
+            model_implied_probability_of_profit: 0.4123,
+            inputs: { risk_free_rate: 0.04 },
+          },
+          historical_win_rate: {
+            state: 'unavailable',
+            value: null,
+            blockers: ['historical_options_chain_data_unavailable'],
+          },
+          readiness: {
+            data_blockers: ['historical_options_chain_data_unavailable'],
+          },
+        },
+      ],
+      metadata: {
+        read_only: true,
+        no_order_placement: true,
+      },
+    });
+  });
 
   await page.route('**/api/v1/market/data-readiness**', async (route) => {
     await fulfillJson(route, {
@@ -367,6 +689,30 @@ async function expectProtectedRouteIdentity(page: Page, route: RouteIdentity) {
   }
 }
 
+async function expectAuthenticatedRouteState(
+  page: Page,
+  expectedUrl: RegExp,
+  readyLocator: ReturnType<Page['locator']>,
+) {
+  await expect(page).toHaveURL(expectedUrl);
+  await expectAuthenticatedAdminSession(page);
+  await expect(readyLocator).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('auth-guard-overlay')).toHaveCount(0);
+  await expect(page).not.toHaveURL(/\/login(?:$|[?#/])/);
+  await expect(page).not.toHaveURL(/\/guest(?:$|[?#/])/);
+}
+
+async function clickPrimaryNav(page: Page, name: string | RegExp) {
+  const desktopLink = page.getByTestId('shell-consumer-primary-nav').getByRole('link', { name }).first();
+  if (await desktopLink.isVisible().catch(() => false)) {
+    await desktopLink.click();
+    return;
+  }
+
+  await page.getByRole('button', { name: '打开导航菜单' }).click();
+  await page.getByRole('navigation', { name: '导航菜单' }).getByRole('link', { name }).click();
+}
+
 test.describe('UAT route identity auth-session gate', () => {
   test('proves admin session before trusting protected route identity', async ({ page }) => {
     await installAdminLoginSession(page);
@@ -378,5 +724,59 @@ test.describe('UAT route identity auth-session gate', () => {
     for (const route of protectedRoutes) {
       await expectProtectedRouteIdentity(page, route);
     }
+  });
+
+  test('keeps auth and route coherent across real browser history navigation', async ({ page }) => {
+    await installAdminLoginSession(page);
+    await installRouteIdentityMocks(page);
+
+    await loginAsAdmin(page);
+    await expectAuthenticatedRouteState(
+      page,
+      /\/zh\/market-overview$/,
+      page.getByTestId('market-overview-shell'),
+    );
+
+    await clickPrimaryNav(page, '市场总览');
+    await expectAuthenticatedRouteState(
+      page,
+      /\/zh\/market-overview$/,
+      page.getByTestId('market-overview-shell'),
+    );
+
+    await clickPrimaryNav(page, '扫描器');
+    await expectAuthenticatedRouteState(
+      page,
+      /\/zh\/scanner$/,
+      page.getByTestId('user-scanner-workspace'),
+    );
+
+    await clickPrimaryNav(page, '个股结构');
+    await expectAuthenticatedRouteState(
+      page,
+      /\/zh\/stocks\/structure-decision$/,
+      page.getByTestId('stock-structure-entry-page'),
+    );
+
+    await clickPrimaryNav(page, '观察列表');
+    await expectAuthenticatedRouteState(
+      page,
+      /\/zh\/watchlist$/,
+      page.getByTestId('watchlist-page'),
+    );
+
+    await page.goBack();
+    await expectAuthenticatedRouteState(
+      page,
+      /\/zh\/stocks\/structure-decision$/,
+      page.getByTestId('stock-structure-entry-page'),
+    );
+
+    await page.goForward();
+    await expectAuthenticatedRouteState(
+      page,
+      /\/zh\/watchlist$/,
+      page.getByTestId('watchlist-page'),
+    );
   });
 });
