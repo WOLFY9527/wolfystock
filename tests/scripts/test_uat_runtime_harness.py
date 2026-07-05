@@ -59,6 +59,23 @@ class _FakeProcess:
         return 0
 
 
+class _AlreadyAbsentProcess:
+    pid = 54321
+
+    def __init__(self) -> None:
+        self.terminated = False
+        self.killed = False
+
+    def poll(self) -> int:
+        return 7
+
+    def terminate(self) -> None:
+        self.terminated = True
+
+    def kill(self) -> None:
+        self.killed = True
+
+
 def _write_static(root: Path, *, asset_name: str = "index-CKPdXr8Q.js") -> None:
     static = root / "static"
     assets = static / "assets"
@@ -86,6 +103,17 @@ def _local_build(asset_name: str = "index-CKPdXr8Q.js") -> VerificationResult:
     )
 
 
+def _valid_source(expected_sha: str = "45b6965d") -> dict[str, object]:
+    return {
+        "ok": True,
+        "gitSha": expected_sha,
+        "branch": "codex/t164-uat-harness-hardening",
+        "commitTimestamp": "2026-07-05T00:00:00+00:00",
+        "expectedGitSha": expected_sha,
+        "errorCodes": [],
+    }
+
+
 def test_build_uat_runtime_env_removes_proxy_vars_and_sets_isolation_flags() -> None:
     env = harness.build_uat_runtime_env(
         {
@@ -105,6 +133,71 @@ def test_build_uat_runtime_env_removes_proxy_vars_and_sets_isolation_flags() -> 
     assert env["WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED"] == "false"
     assert "127.0.0.1" in env["NO_PROXY"]
     assert "localhost" in env["NO_PROXY"]
+
+
+def test_frontend_dependency_bootstrap_runs_npm_ci_when_required(monkeypatch, tmp_path: Path) -> None:
+    web_dir = tmp_path / "apps" / "dsa-web"
+    (web_dir / "node_modules" / ".bin").mkdir(parents=True)
+    (web_dir / "node_modules" / ".bin" / "vite").write_text("#!/bin/sh\n", encoding="utf-8")
+    (web_dir / "package-lock.json").write_text('{"lockfileVersion":3}\n', encoding="utf-8")
+    commands: list[tuple[str, ...]] = []
+
+    monkeypatch.setattr(harness.shutil, "which", lambda name: "/usr/local/bin/npm" if name == "npm" else None)
+
+    def _run(command, cwd, check):
+        commands.append(tuple(command))
+        assert cwd == tmp_path
+        assert check is False
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(harness.subprocess, "run", _run)
+
+    result = harness.ensure_frontend_dependencies(tmp_path)
+
+    assert result["action"] == "installed"
+    assert result["required"] is True
+    assert result["installCommand"] == ["npm", "--prefix", "apps/dsa-web", "ci"]
+    assert result["exitStatus"] == 0
+    assert result["lockfile"]["path"] == "apps/dsa-web/package-lock.json"
+    assert result["lockfile"]["sha256"]
+    assert commands == [("/usr/local/bin/npm", "--prefix", "apps/dsa-web", "ci")]
+
+
+def test_frontend_dependency_bootstrap_skips_when_toolchain_usable(monkeypatch, tmp_path: Path) -> None:
+    web_dir = tmp_path / "apps" / "dsa-web"
+    (web_dir / "node_modules" / ".bin").mkdir(parents=True)
+    (web_dir / "node_modules" / ".bin" / "tsc").write_text("#!/bin/sh\n", encoding="utf-8")
+    (web_dir / "node_modules" / ".bin" / "vite").write_text("#!/bin/sh\n", encoding="utf-8")
+    (web_dir / "package-lock.json").write_text('{"lockfileVersion":3}\n', encoding="utf-8")
+    monkeypatch.setattr(harness.shutil, "which", lambda name: "/usr/local/bin/npm" if name == "npm" else None)
+    monkeypatch.setattr(harness.subprocess, "run", lambda *_args, **_kwargs: pytest.fail("npm ci must be skipped"))
+
+    result = harness.ensure_frontend_dependencies(tmp_path)
+
+    assert result["action"] == "skipped"
+    assert result["required"] is False
+    assert result["skipReason"] == "frontend_toolchain_available"
+    assert result["installCommand"] == ["npm", "--prefix", "apps/dsa-web", "ci"]
+    assert result["exitStatus"] is None
+
+
+def test_frontend_dependency_bootstrap_records_install_failure(monkeypatch, tmp_path: Path) -> None:
+    web_dir = tmp_path / "apps" / "dsa-web"
+    web_dir.mkdir(parents=True)
+    (web_dir / "package-lock.json").write_text('{"lockfileVersion":3}\n', encoding="utf-8")
+    monkeypatch.setattr(harness.shutil, "which", lambda name: "/usr/local/bin/npm" if name == "npm" else None)
+    monkeypatch.setattr(
+        harness.subprocess,
+        "run",
+        lambda command, cwd, check: subprocess.CompletedProcess(command, 19),
+    )
+
+    result = harness.ensure_frontend_dependencies(tmp_path)
+
+    assert result["action"] == "failed"
+    assert result["required"] is True
+    assert result["exitStatus"] == 19
+    assert result["reasonCodes"] == ["frontend_dependency_install_failed"]
 
 
 def test_run_harness_rejects_existing_port_owner_without_starting_runtime(monkeypatch, tmp_path: Path) -> None:
@@ -150,19 +243,22 @@ def test_run_harness_rejects_existing_port_owner_without_starting_runtime(monkey
 def test_run_harness_writes_machine_readable_evidence_and_stops_owned_runtime(monkeypatch, tmp_path: Path) -> None:
     _write_static(tmp_path)
     fake_process = _FakeProcess()
+    monkeypatch.setattr(harness, "validate_source", lambda _repo_root, _expected_sha: _valid_source())
+    monkeypatch.setattr(harness, "find_port_owner", lambda _host, _port: None)
     monkeypatch.setattr(
         harness,
-        "validate_source",
-        lambda _repo_root, _expected_sha: {
-            "ok": True,
-            "gitSha": "45b6965d",
-            "branch": "codex/t157-deterministic-uat-runtime-harness",
-            "commitTimestamp": "2026-07-05T00:00:00+00:00",
-            "expectedGitSha": "45b6965d",
-            "errorCodes": [],
+        "ensure_frontend_dependencies",
+        lambda _repo_root: {
+            "action": "skipped",
+            "required": False,
+            "skipReason": "frontend_toolchain_available",
+            "installCommand": ["npm", "--prefix", "apps/dsa-web", "ci"],
+            "exitStatus": None,
+            "lockfile": {"path": "apps/dsa-web/package-lock.json", "sha256": "lockhash"},
+            "reasonCodes": [],
         },
     )
-    monkeypatch.setattr(harness, "find_port_owner", lambda _host, _port: None)
+    monkeypatch.setattr(harness, "run_frontend_build", lambda _repo_root: 0)
     monkeypatch.setattr(harness, "verify_frontend_static_build", lambda **_kwargs: _local_build())
     monkeypatch.setattr(harness, "read_backend_info", lambda _repo_root: object())
     monkeypatch.setattr(harness, "start_runtime", lambda *_args, **_kwargs: fake_process)
@@ -188,6 +284,14 @@ def test_run_harness_writes_machine_readable_evidence_and_stops_owned_runtime(mo
 
     assert exit_code == 0
     assert fake_process.terminated is True
+    assert evidence["run"]["runId"]
+    assert evidence["run"]["pid"] == 43210
+    assert evidence["run"]["cwd"] == str(tmp_path.resolve())
+    assert evidence["run"]["port"] == 8000
+    assert evidence["run"]["evidencePath"] == evidence["evidencePath"]
+    assert evidence["run"]["runLogPath"] == evidence["runtimeLog"]["path"]
+    assert Path(evidence["runtimeLog"]["path"]).name.startswith(evidence["run"]["runId"])
+    assert evidence["frontendDependencyBootstrap"]["action"] == "skipped"
     assert evidence["status"] == "PASS"
     assert evidence["runtime"]["pid"] == 43210
     assert evidence["runtime"]["cwd"] == str(tmp_path.resolve())
@@ -196,10 +300,194 @@ def test_run_harness_writes_machine_readable_evidence_and_stops_owned_runtime(mo
     assert evidence["directHttpHtml"]["ok"] is True
     assert evidence["providerIsolation"]["productionBehaviorUnchanged"] is True
     assert evidence["cryptoRealtimeIsolation"]["productionDefaultChanged"] is False
+    assert evidence["contaminationAwareness"]["browserAttribution"] == "correlation_only"
+    assert evidence["contaminationAwareness"]["unrelatedActivityMayContaminateCausalAttribution"] is False
+    assert evidence["workbuddyHandoff"]["runId"] == evidence["run"]["runId"]
+    assert evidence["workbuddyHandoff"]["runtimeLogWindow"]["path"] == evidence["runtimeLog"]["path"]
     assert evidence["workbuddyHandoff"]["browserRequirements"]["freshContextSession"] is True
     written = json.loads(Path(evidence["evidencePath"]).read_text(encoding="utf-8"))
     assert written["contract"] == "wolfystock_uat_runtime_harness_v1"
     assert written["workbuddyHandoff"]["expectedGitSha"] == "45b6965d"
+    assert written["run"]["evidencePath"] == evidence["evidencePath"]
+
+
+def test_run_harness_fails_when_dependency_bootstrap_fails(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(harness, "validate_source", lambda _repo_root, _expected_sha: _valid_source())
+    monkeypatch.setattr(harness, "find_port_owner", lambda _host, _port: None)
+    monkeypatch.setattr(
+        harness,
+        "ensure_frontend_dependencies",
+        lambda _repo_root: {
+            "action": "failed",
+            "required": True,
+            "skipReason": None,
+            "installCommand": ["npm", "--prefix", "apps/dsa-web", "ci"],
+            "exitStatus": 19,
+            "lockfile": {"path": "apps/dsa-web/package-lock.json", "sha256": "lockhash"},
+            "reasonCodes": ["frontend_dependency_install_failed"],
+        },
+    )
+    monkeypatch.setattr(harness, "run_frontend_build", lambda _repo_root: pytest.fail("build must not run after install failure"))
+
+    exit_code, evidence = harness.run_harness(
+        repo_root=tmp_path,
+        expected_sha="45b6965d",
+        host="127.0.0.1",
+        port=8101,
+        evidence_dir=tmp_path / "output" / "runtime-verification",
+    )
+
+    assert exit_code == 1
+    assert evidence["status"] == "FAIL"
+    assert evidence["failure"] == "frontend_dependency_bootstrap_failed"
+    assert evidence["frontendDependencyBootstrap"]["exitStatus"] == 19
+
+
+def test_preflight_pass_reports_machine_readable_current_run_identity(monkeypatch, tmp_path: Path) -> None:
+    evidence = {
+        "contract": "wolfystock_uat_runtime_harness_v1",
+        "status": "PASS",
+        "source": {"gitSha": "45b6965d"},
+        "run": {
+            "runId": "uat-20260705T000000Z-abc12345",
+            "pid": 43210,
+            "cwd": str(tmp_path.resolve()),
+            "startTime": "2026-07-05T00:00:00+00:00",
+            "port": 8102,
+            "assetIdentity": {"indexHtmlHash": "indexhash", "mainJsAssetFilename": "index-CKPdXr8Q.js"},
+            "evidencePath": str(tmp_path / "evidence.json"),
+            "runLogPath": str(tmp_path / "run.log"),
+        },
+        "runtime": {"pid": 43210, "cwd": str(tmp_path.resolve()), "listener": {"port": 8102}},
+        "frontend": {"indexHtmlHash": "indexhash", "mainJsAssetFilename": "index-CKPdXr8Q.js"},
+        "directHttpHtml": {"ok": True},
+        "runtimeLog": {"path": str(tmp_path / "run.log"), "startTime": "2026-07-05T00:00:00+00:00"},
+    }
+    evidence_path = tmp_path / "evidence.json"
+    evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+    monkeypatch.setattr(harness, "process_cwd", lambda _pid: str(tmp_path.resolve()))
+    monkeypatch.setattr(harness, "pid_is_alive", lambda _pid: True)
+    monkeypatch.setattr(
+        harness,
+        "find_port_owner",
+        lambda _host, _port: harness.PortOwner(pid=43210, cwd=str(tmp_path.resolve()), command="python main.py --serve-only"),
+    )
+    monkeypatch.setattr(harness, "DirectNoProxyHttpClient", lambda: _FakeClient())
+
+    result = harness.run_preflight(
+        evidence_path=evidence_path,
+        expected_sha="45b6965d",
+        host="127.0.0.1",
+        port=8102,
+    )
+
+    assert result["status"] == "PASS"
+    assert result["checks"]["pidAlive"]["status"] == "PASS"
+    assert result["checks"]["pidOwnsPort"]["status"] == "PASS"
+    assert result["checks"]["cwd"]["status"] == "PASS"
+    assert result["checks"]["directNoProxyHttp"]["status"] == "PASS"
+    assert result["run"]["runId"] == "uat-20260705T000000Z-abc12345"
+    assert result["run"]["runLogPath"] == str(tmp_path / "run.log")
+
+
+def test_preflight_fails_for_wrong_port_owner(monkeypatch, tmp_path: Path) -> None:
+    evidence_path = tmp_path / "evidence.json"
+    evidence_path.write_text(
+        json.dumps(
+            {
+                "status": "PASS",
+                "source": {"gitSha": "45b6965d"},
+                "run": {
+                    "runId": "uat-run",
+                    "pid": 43210,
+                    "cwd": str(tmp_path.resolve()),
+                    "startTime": "2026-07-05T00:00:00+00:00",
+                    "port": 8103,
+                    "assetIdentity": {"mainJsAssetFilename": "index-CKPdXr8Q.js"},
+                    "evidencePath": str(evidence_path),
+                    "runLogPath": str(tmp_path / "run.log"),
+                },
+                "frontend": {"mainJsAssetFilename": "index-CKPdXr8Q.js"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(harness, "pid_is_alive", lambda _pid: True)
+    monkeypatch.setattr(harness, "process_cwd", lambda _pid: str(tmp_path.resolve()))
+    monkeypatch.setattr(
+        harness,
+        "find_port_owner",
+        lambda _host, _port: harness.PortOwner(pid=99999, cwd="/tmp/other", command="python other.py"),
+    )
+    monkeypatch.setattr(harness, "DirectNoProxyHttpClient", lambda: _FakeClient())
+
+    result = harness.run_preflight(
+        evidence_path=evidence_path,
+        expected_sha="45b6965d",
+        host="127.0.0.1",
+        port=8103,
+    )
+
+    assert result["status"] == "FAIL"
+    assert result["checks"]["pidOwnsPort"]["status"] == "FAIL"
+    assert result["checks"]["pidOwnsPort"]["observed"]["pid"] == 99999
+
+
+def test_preflight_cli_returns_machine_readable_failure_for_missing_evidence(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    missing = tmp_path / "missing-evidence.json"
+
+    result = harness.main(["--preflight", "--evidence-path", str(missing), "--json"])
+
+    assert result == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["contract"] == "wolfystock_uat_runtime_preflight_v1"
+    assert payload["status"] == "FAIL"
+    assert payload["checks"]["evidenceReadable"]["status"] == "FAIL"
+    assert payload["checks"]["evidenceReadable"]["observed"]["reasonCode"] == "evidence_unreadable"
+
+
+def test_safe_stop_rejects_wrong_pid_cwd_identity(monkeypatch, tmp_path: Path) -> None:
+    evidence_path = tmp_path / "evidence.json"
+    evidence_path.write_text(
+        json.dumps({"run": {"pid": 43210, "cwd": str(tmp_path.resolve()), "runId": "uat-run"}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(harness, "process_cwd", lambda _pid: "/tmp/other")
+    monkeypatch.setattr(harness.os, "kill", lambda *_args, **_kwargs: pytest.fail("wrong cwd process must not be killed"))
+
+    result = harness.stop_runtime_from_evidence(evidence_path)
+
+    assert result["status"] == "rejected"
+    assert result["reasonCode"] == "pid_cwd_mismatch"
+    assert result["pid"] == 43210
+
+
+def test_safe_stop_records_already_absent_without_killing(monkeypatch, tmp_path: Path) -> None:
+    evidence_path = tmp_path / "evidence.json"
+    evidence_path.write_text(
+        json.dumps({"run": {"pid": 43210, "cwd": str(tmp_path.resolve()), "runId": "uat-run"}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(harness, "pid_is_alive", lambda _pid: False)
+    monkeypatch.setattr(harness.os, "kill", lambda *_args, **_kwargs: pytest.fail("absent process must not be killed"))
+
+    result = harness.stop_runtime_from_evidence(evidence_path)
+
+    assert result["status"] == "absent"
+    assert result["reasonCode"] == "runtime_already_absent"
+
+
+def test_stop_owned_runtime_reports_already_absent() -> None:
+    process = _AlreadyAbsentProcess()
+
+    result = harness.stop_owned_runtime(process)
+
+    assert result["status"] == "absent"
+    assert process.terminated is False
+    assert process.killed is False
 
 
 def test_direct_script_help_entrypoint_runs_from_repo_root() -> None:

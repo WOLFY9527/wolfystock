@@ -93,14 +93,34 @@ python scripts/uat_runtime_harness.py --expected-sha "$(git rev-parse HEAD)"
 ```
 
 This canonical local harness validates a clean source tree and expected SHA,
-builds `apps/dsa-web` when needed, launches `main.py --serve-only` from the
-current worktree, checks localhost with an explicit no-proxy HTTP client, and
-writes JSON evidence under `output/runtime-verification/`. It fails closed on
-unknown port owners, runtime CWD/SHA mismatch, stale frontend asset identity, or
-non-WolfyStock HTML. The runtime it starts uses UAT-only isolation flags:
+bootstraps missing Web toolchain dependencies through the deterministic
+`npm --prefix apps/dsa-web ci` path, builds `apps/dsa-web`, launches
+`main.py --serve-only` from the current worktree, checks localhost with an
+explicit no-proxy HTTP client, and writes run-scoped JSON evidence plus a
+per-run runtime log under `output/runtime-verification/`. It fails closed on
+unknown port owners, dependency install/build failure, runtime CWD/SHA mismatch,
+stale frontend asset identity, or non-WolfyStock HTML. The runtime it starts uses UAT-only isolation flags:
 `CRYPTO_REALTIME_ENABLED=false`, `WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS=true`,
 `WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED=false`, and
 `WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED=false`.
+
+To verify a current run for WorkBuddy or another browser validator, use the
+read-only machine-readable preflight against the run evidence:
+
+```bash
+python scripts/uat_runtime_harness.py --preflight --expected-sha "$(git rev-parse HEAD)" --evidence-path output/runtime-verification/<run-id>-evidence.json --json
+```
+
+The preflight checks evidence status, SHA, PID liveness, PID port ownership,
+CWD, served asset identity, direct no-proxy HTTP, run start timestamp, and the
+run log path. Lifecycle cleanup is also evidence-bound:
+
+```bash
+python scripts/uat_runtime_harness.py --stop-from-evidence --evidence-path output/runtime-verification/<run-id>-evidence.json --json
+```
+
+The stop command refuses wrong PID/CWD identity, reports already absent runtimes,
+and never kills unrelated listeners or browser processes.
 
 To seed deterministic non-production consumer test accounts, opt in explicitly:
 
