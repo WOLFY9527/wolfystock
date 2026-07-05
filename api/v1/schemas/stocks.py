@@ -374,6 +374,11 @@ class SymbolResearchPacketResponse(BaseModel):
     events: SymbolResearchEventsState = Field(..., description="事件/公告/催化剂覆盖")
     peer: SymbolResearchPeerState = Field(..., description="同业/基准覆盖")
     missing_data: List[str] = Field(default_factory=list, alias="missingData", description="缺失数据族")
+    product_read_model: Dict[str, Any] = Field(
+        default_factory=dict,
+        alias="productReadModel",
+        description="统一产品读模型状态、聚合规则、新鲜度与来源摘要",
+    )
     research_status: Literal["ready", "partial", "blocked", "unknown"] = Field(
         ...,
         alias="researchStatus",
@@ -825,6 +830,11 @@ class StockStructureDecisionResponse(BaseModel):
         ...,
         alias="historicalOhlcvReadiness",
         description="历史 OHLCV readiness 与采集缺口状态",
+    )
+    product_read_model: Dict[str, Any] = Field(
+        default_factory=dict,
+        alias="productReadModel",
+        description="统一产品读模型状态、结构置信边界与消费者安全来源摘要",
     )
     structure_computation: Optional[StockStructureComputationState] = Field(
         None,

@@ -858,6 +858,74 @@ describe('StockStructureDecisionPage', () => {
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
   });
 
+  it('uses productReadModel to withhold strong structure conclusions and surface stale freshness', async () => {
+    getResearchPacketMock.mockResolvedValue({
+      ...completeResearchPacket(),
+      productReadModel: {
+        contractVersion: 'product_read_model_v1',
+        surface: 'Stock Research',
+        state: 'stale',
+        ready: false,
+        blockingChildren: ['historical_coverage'],
+        freshness: { state: 'stale', asOf: '2026-05-20' },
+        provenance: { sourceClass: 'historical_market_data', asOf: '2026-05-20', freshness: 'stale', quality: 'partial' },
+      },
+    });
+    getStructureDecisionMock.mockResolvedValue({
+      ...baseStructureDecision(),
+      confidence: 'high',
+      missingEvidence: [{ kind: 'historical_coverage', message: 'Historical coverage is stale.' }],
+      productReadModel: {
+        contractVersion: 'product_read_model_v1',
+        surface: 'Structure Decision',
+        state: 'insufficient',
+        ready: false,
+        classification: {
+          observedState: 'breakout',
+          displayState: 'withheld',
+          strongConclusionAllowed: false,
+        },
+        confidence: {
+          label: 'low',
+          state: 'evidence incomplete',
+          strongConclusionAllowed: false,
+          reasons: ['critical_evidence_missing'],
+        },
+        evidence: {
+          missingEvidenceCount: 1,
+          readinessState: 'stale',
+          dataQualityState: 'partial',
+        },
+        blockingChildren: ['historical_coverage'],
+        freshness: { state: 'stale', asOf: '2026-05-20' },
+        provenance: { sourceClass: 'historical_market_data', asOf: '2026-05-20', freshness: 'stale', quality: 'partial' },
+      },
+    });
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const summary = within(page).getByTestId('stock-consumer-research-summary');
+    const firstViewportPanel = within(page).getByTestId('stock-first-viewport-summary-panel');
+    const productReadModel = await within(firstViewportPanel).findByTestId('stock-structure-product-read-model');
+    const freshness = within(firstViewportPanel).getByTestId('stock-product-read-model-freshness');
+
+    expect(summary).toHaveTextContent('暂不形成强结论');
+    expect(summary).toHaveTextContent('置信度：低');
+    expect(summary).not.toHaveTextContent('突破观察');
+    expect(productReadModel).toHaveAttribute('data-product-read-state', 'insufficient');
+    expect(productReadModel).toHaveAttribute('data-product-read-ready', 'false');
+    expect(productReadModel).toHaveTextContent('关键证据阻塞：历史覆盖证据');
+    expect(productReadModel).toHaveTextContent('历史行情证据');
+    expect(freshness).toHaveTextContent('新鲜度：已过期');
+    expect(freshness).toHaveTextContent('截至 2026-05-20');
+    expect(textContentWithoutObservationBoundary(firstViewportPanel)).not.toMatch(/\bbreakout\b|provider|trace|raw|sourceAuthority|sourceConfidence/i);
+  });
+
   it('renders a 600519 history-disabled or missing state without chart inference', async () => {
     verifyTickerExistsMock.mockResolvedValueOnce({
       stockCode: '600519',

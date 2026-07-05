@@ -9,6 +9,7 @@ from typing import Any, Mapping
 from api.v1.schemas.dashboard_overview import DashboardMarketIntelligenceOverviewResponse
 from src.services.market_pulse_service import MarketPulseService
 from src.services.money_flow_service import MoneyFlowService
+from src.services.product_read_model import aggregate_product_readiness
 from src.services.public_data_quality_service import build_public_data_quality_summary
 from src.services.research_queue_service import ResearchQueueService
 from src.services.sector_theme_strength_service import SectorThemeStrengthService
@@ -75,6 +76,7 @@ class DashboardOverviewService:
             sectorThemeRotation=_project_sector_theme_rotation(sector_theme),
             researchQueue=_project_research_queue(research_queue),
             dataQuality=_project_data_quality(public_quality, section_states),
+            productReadModel=_dashboard_product_read_model(section_states, as_of=as_of),
             noAdviceDisclosure="本概览仅用于市场研究观察，不构成投资建议或交易指令。",
         )
         return payload.model_dump(mode="json")
@@ -163,6 +165,29 @@ def _project_data_quality(
         "label": _text(public_quality.get("label")) or "正常",
         "summary": _text(public_quality.get("message")) or "核心模块已更新，适合研究观察",
         "sections": {key: _dashboard_state(value) for key, value in section_states.items()},
+    }
+
+
+def _dashboard_product_read_model(section_states: Mapping[str, str], *, as_of: str) -> dict[str, Any]:
+    model = aggregate_product_readiness(
+        surface="Dashboard",
+        children=[
+            {"name": key, "state": value, "critical": key != "marketBrief"}
+            for key, value in section_states.items()
+        ],
+    )
+    return {
+        **model,
+        "freshness": {
+            "state": "available" if model["state"] == "available" else model["state"],
+            "asOf": as_of,
+        },
+        "provenance": {
+            "sourceClass": "dashboard_read_models",
+            "asOf": as_of,
+            "freshness": "available" if model["state"] == "available" else model["state"],
+            "quality": model["state"],
+        },
     }
 
 

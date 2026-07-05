@@ -546,6 +546,8 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
           <BacktestExecutionReadinessPanel
             language="zh"
             readiness={historicalExecutionReadiness}
+            productReadModel={sampleStatus?.productReadModel || null}
+            historicalOhlcvReadiness={sampleStatus?.historicalOhlcvReadiness || null}
             noAdviceDisclosure={historicalNoAdviceDisclosure}
             attempted={Boolean(runResult)}
             isLoading={isLoadingSampleStatus || isRunningHistoricalEval}

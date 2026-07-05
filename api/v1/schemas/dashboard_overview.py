@@ -159,4 +159,5 @@ class DashboardMarketIntelligenceOverviewResponse(_DashboardOverviewBase):
     sectorThemeRotation: DashboardSectorThemeRotation
     researchQueue: DashboardResearchQueue
     dataQuality: DashboardDataQuality
+    productReadModel: dict[str, Any] = Field(default_factory=dict)
     noAdviceDisclosure: str
