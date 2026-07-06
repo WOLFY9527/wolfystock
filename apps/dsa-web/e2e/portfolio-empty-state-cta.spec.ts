@@ -110,7 +110,7 @@ async function openPortfolioEmptyState(page: Page) {
 }
 
 test.describe('portfolio empty-state CTA', () => {
-  test('suppresses duplicate header CTAs on desktop while keeping the empty-state actions', async ({ page }) => {
+  test('suppresses operator CTAs on desktop while keeping consumer research entrypoints', async ({ page }) => {
     const consoleErrors: string[] = [];
     const pageErrors: string[] = [];
     page.on('console', (message) => {
@@ -129,11 +129,15 @@ test.describe('portfolio empty-state CTA', () => {
     await expect(commandStrip.getByRole('button', { name: '添加持仓' })).toHaveCount(0);
     await expect(commandStrip.getByRole('button', { name: '导入记录' })).toHaveCount(0);
     await expect(commandStrip.getByRole('button', { name: '同步数据' })).toHaveCount(0);
-    await expect(emptyWorkflowColumn.getByRole('button', { name: '添加持仓' })).toHaveCount(1);
-    await expect(emptyWorkflowColumn.getByRole('button', { name: '导入记录' })).toHaveCount(1);
+    await expect(emptyWorkflowColumn.getByRole('button', { name: '添加持仓' })).toHaveCount(0);
+    await expect(emptyWorkflowColumn.getByRole('button', { name: '导入记录' })).toHaveCount(0);
+    await expect(emptyWorkflowColumn.getByRole('button', { name: '同步数据' })).toHaveCount(0);
+    await expect(emptyWorkflowColumn.getByRole('link', { name: '先看市场概览' })).toHaveAttribute('href', '/zh/market-overview');
+    await expect(emptyWorkflowColumn.getByRole('link', { name: '运行 Scanner' })).toHaveAttribute('href', '/zh/scanner');
+    await expect(emptyWorkflowColumn.getByRole('link', { name: '查看研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
     await expect(emptyWorkflowColumn).toContainText('首次配置路径');
     await expect(emptyWorkflowColumn).toContainText('保存后会在下方自动展开真实持仓、风险摘要与近期活动。');
-    await expect(page.getByTestId('portfolio-preview-card')).toContainText('非持久预览');
+    await expect(page.getByTestId('portfolio-start-card')).toContainText('创建或导入首个组合');
     await expectNoHorizontalOverflow(page);
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
@@ -159,35 +163,37 @@ test.describe('portfolio empty-state CTA', () => {
     await expect(commandStrip.getByRole('button', { name: '添加持仓' })).toHaveCount(0);
     await expect(commandStrip.getByRole('button', { name: '导入记录' })).toHaveCount(0);
     await expect(commandStrip.getByRole('button', { name: '同步数据' })).toHaveCount(0);
-    await expect(emptyWorkflowColumn.getByRole('button', { name: '添加持仓' })).toHaveCount(1);
-    await expect(emptyWorkflowColumn.getByRole('button', { name: '导入记录' })).toHaveCount(1);
+    await expect(emptyWorkflowColumn.getByRole('button', { name: '添加持仓' })).toHaveCount(0);
+    await expect(emptyWorkflowColumn.getByRole('button', { name: '导入记录' })).toHaveCount(0);
+    await expect(emptyWorkflowColumn.getByRole('link', { name: '先看市场概览' })).toBeVisible();
+    await expect(emptyWorkflowColumn.getByRole('link', { name: '查看研究雷达' })).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
     const layout = await emptyWorkflowColumn.evaluate((node) => {
       const element = node as HTMLElement;
+      const onboardingCta = element.querySelector('[data-testid="portfolio-empty-onboarding-cta"]') as HTMLElement | null;
       const startCard = element.querySelector('[data-testid="portfolio-start-card"]') as HTMLElement | null;
-      const actionRow = element.querySelector('[data-testid="portfolio-empty-actions"]') as HTMLElement | null;
       const helpText = element.querySelector('[data-testid="portfolio-empty-help"]') as HTMLElement | null;
 
-      if (!startCard || !actionRow || !helpText) {
+      if (!onboardingCta || !startCard || !helpText) {
         return null;
       }
 
+      const ctaRect = onboardingCta.getBoundingClientRect();
       const startRect = startCard.getBoundingClientRect();
-      const actionRect = actionRow.getBoundingClientRect();
       const helpRect = helpText.getBoundingClientRect();
 
       return {
-        actionTop: actionRect.top,
-        cardBottom: startRect.bottom,
+        cardTop: startRect.top,
+        ctaBottom: ctaRect.bottom,
         helpTop: helpRect.top,
-        actionBottom: actionRect.bottom,
+        cardBottom: startRect.bottom,
       };
     });
 
     expect(layout).not.toBeNull();
-    expect(layout?.actionTop ?? 0).toBeGreaterThanOrEqual((layout?.cardBottom ?? 0) - 1);
-    expect(layout?.helpTop ?? 0).toBeGreaterThanOrEqual((layout?.actionBottom ?? 0) - 1);
+    expect(layout?.cardTop ?? 0).toBeGreaterThanOrEqual((layout?.ctaBottom ?? 0) - 1);
+    expect(layout?.helpTop ?? 0).toBeGreaterThanOrEqual((layout?.cardBottom ?? 0) - 1);
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
     await page.unrouteAll({ behavior: 'ignoreErrors' });

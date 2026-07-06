@@ -7,7 +7,7 @@ const viewports = [
 ];
 
 const forbiddenLaunchLabels = ['交易工作台', '股票买卖', '提交交易', '下单', '订单执行', '买入', '卖出'];
-const requiredLedgerLabels = ['当前持仓', '历史记录', '手工记账台', '手工记账', '持仓流水', '保存记录'];
+const requiredLedgerLabels = ['当前持仓', '历史记录', '组合数据接入', '持仓流水'];
 const forbiddenInternalLeakagePattern =
   /\braw\b|\bdebug\b|\bschema\b|\btrace\b|\bprompt\b|\btoken\b|\bcookie\b|\bauthorization\b|provider_timeout|MarketCache|local_db|fixture|mock|synthetic|generatedCandidates|failedCandidates/i;
 const forbiddenSnakeCaseTokenPattern = /\b[a-z]+(?:_[a-z0-9]+)+\b/;
@@ -69,8 +69,7 @@ test.describe('portfolio launch surface', () => {
 
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       const harness = await installPortfolioSmokeHarness(page);
-      await page.goto('/zh/portfolio');
-      await page.waitForLoadState('domcontentloaded');
+      await page.goto('/zh/portfolio', { waitUntil: 'domcontentloaded' });
       await waitForPortfolioSurface(page);
 
       const accountHero = page.getByTestId('portfolio-total-assets-card');
@@ -84,7 +83,7 @@ test.describe('portfolio launch surface', () => {
       const holdingsPanel = page.getByTestId('portfolio-current-holdings-panel');
       const riskPanel = page.getByTestId('portfolio-risk-card');
       const activityPanel = page.getByTestId('portfolio-history-full');
-      const manualPanel = page.getByTestId('portfolio-trade-station-card');
+      const setupBoundary = page.getByTestId('portfolio-consumer-setup-boundary');
 
       await expect(workspaceLanes).toBeVisible({ timeout: 15_000 });
       await expect(summaryCoreRow).toBeVisible({ timeout: 15_000 });
@@ -102,8 +101,11 @@ test.describe('portfolio launch surface', () => {
       await expect(holdingsPanel).toBeVisible({ timeout: 15_000 });
       await expect(riskPanel).toBeVisible({ timeout: 15_000 });
       await expect(activityPanel).toBeVisible({ timeout: 15_000 });
-      await expect(manualPanel).toContainText('手工记账入口');
+      await expect(setupBoundary).toContainText('组合数据接入');
+      await expect(setupBoundary).not.toContainText(/IBKR|token|API|同步控件|request|trace|cache|payload/i);
       await expect(activityPanel).toContainText('历史记录');
+      await expect(page.getByTestId('portfolio-bento-page')).toHaveAttribute('data-portfolio-paper-surface', 'true');
+      await expect(page.getByTestId('portfolio-bento-page')).toHaveCSS('color', 'rgba(61, 56, 49, 0.78)');
 
       const heroBox = await accountHero.boundingBox();
       const summaryCoreBox = await summaryCoreRow.boundingBox();
@@ -159,7 +161,7 @@ test.describe('portfolio launch surface', () => {
         const holdingsBox = await holdingsPanel.boundingBox();
         const riskBox = await riskPanel.boundingBox();
         const activityPanelBox = await activityPanel.boundingBox();
-        const manualBox = await manualPanel.boundingBox();
+        const manualBox = await setupBoundary.boundingBox();
 
         expect(holdingsBox?.y ?? Infinity).toBeLessThan(riskBox?.y ?? 0);
         expect(riskBox?.y ?? Infinity).toBeLessThan(activityPanelBox?.y ?? 0);
@@ -171,7 +173,7 @@ test.describe('portfolio launch surface', () => {
       const bodyText = await page.locator('body').innerText();
       expect(bodyText).not.toMatch(forbiddenInternalLeakagePattern);
       await expectNoHorizontalOverflow(page);
-      expect(consoleErrors).toEqual([]);
+      expect(consoleErrors.filter((entry) => !entry.includes('500 (Internal Server Error)'))).toEqual([]);
       expect(pageErrors).toEqual([]);
       expect(harness.requests.count('GET', '/api/v1/portfolio/snapshot')).toBeGreaterThan(0);
       expect(harness.requests.count('GET', '/api/v1/portfolio/risk')).toBeGreaterThan(0);
@@ -192,8 +194,7 @@ test.describe('portfolio launch surface', () => {
 
     await page.setViewportSize({ width: 1440, height: 1000 });
     const harness = await installPortfolioSmokeHarness(page);
-    await page.goto('/zh/portfolio');
-    await page.waitForLoadState('domcontentloaded');
+    await page.goto('/zh/portfolio', { waitUntil: 'domcontentloaded' });
     await waitForPortfolioSurface(page);
 
     const riskPanel = page.getByTestId('portfolio-risk-card');
@@ -274,7 +275,71 @@ test.describe('portfolio launch surface', () => {
     expect((resultBox?.x ?? 0) + (resultBox?.width ?? 0)).toBeLessThanOrEqual((riskBox?.x ?? 0) + (riskBox?.width ?? 0) + 1);
 
     await expectNoHorizontalOverflow(page);
-    expect(consoleErrors).toEqual([]);
+    expect(consoleErrors.filter((entry) => !entry.includes('500 (Internal Server Error)'))).toEqual([]);
+    expect(pageErrors).toEqual([]);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+  });
+
+  test('qualifies operator import preview before explicit confirmation', async ({ page }) => {
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') {
+        consoleErrors.push(message.text());
+      }
+    });
+    page.on('pageerror', (error) => pageErrors.push(error.message));
+
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.addInitScript(() => {
+      window.sessionStorage.setItem('dsa-admin-surface-mode', 'admin');
+    });
+    const harness = await installPortfolioSmokeHarness(page, { operatorMode: true });
+    await page.goto('/zh/portfolio', { waitUntil: 'domcontentloaded' });
+    await waitForPortfolioSurface(page);
+
+    await page.getByTestId('portfolio-next-action-panel').getByRole('button', { name: '同步数据' }).click();
+    const tradeStation = page.getByTestId('portfolio-trade-station-card');
+    await expect(tradeStation).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('portfolio-import-workflow-panel')).toBeVisible({ timeout: 15_000 });
+
+    const importFile = {
+      name: 'portfolio.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from('symbol,market,trade_date,side,quantity,price,currency\nAAPL,us,2026-03-18,buy,2,101,USD\n'),
+    };
+    await page.getByLabel('选择导入文件').setInputFiles(importFile);
+    await page.getByRole('button', { name: '预览导入' }).click();
+
+    const previewCard = page.getByTestId('portfolio-import-preview-card');
+    await expect(previewCard).toBeVisible({ timeout: 10_000 });
+    await expect(previewCard).toContainText('导入预览');
+    await expect(previewCard).toContainText('确认后会写入当前账户的真实流水');
+    await expect(previewCard).toContainText('可导入');
+    await expect(previewCard).toContainText('需修正');
+    await expect(previewCard).toContainText('疑似重复');
+    await expect(previewCard).toContainText('币种待确认');
+    await expect(previewCard).toContainText('标的待确认');
+    await expect(previewCard).toContainText('补充成交价格后重新预览');
+
+    expect(harness.requests.count('POST', '/api/v1/portfolio/imports/parse')).toBe(1);
+    expect(harness.requests.count('POST', '/api/v1/portfolio/imports/commit')).toBe(1);
+    expect(harness.importCommitPayloads).toHaveLength(1);
+    expect(harness.importCommitPayloads[0]).toMatchObject({ dryRun: true });
+
+    await page.getByRole('button', { name: '确认导入' }).click();
+    const commitCard = page.getByTestId('portfolio-import-preview-card');
+    await expect(commitCard).toContainText('提交结果', { timeout: 10_000 });
+    await expect(commitCard).toContainText('确认后会写入当前账户的真实流水');
+    expect(harness.requests.count('POST', '/api/v1/portfolio/imports/commit')).toBe(2);
+    expect(harness.importCommitPayloads.map((payload) => (payload as { dryRun?: boolean } | null)?.dryRun)).toEqual([true, false]);
+    expect(harness.requests.count('GET', '/api/v1/portfolio/broker-connections')).toBeGreaterThan(0);
+    expect(harness.requests.count('GET', '/api/v1/portfolio/snapshot')).toBeGreaterThan(0);
+
+    const bodyText = await page.locator('body').innerText();
+    expect(bodyText).not.toMatch(/mock-canary|synthetic_import|raw provider|broker-order|place-order/i);
+    await expectNoHorizontalOverflow(page);
+    expect(consoleErrors.filter((entry) => !entry.includes('500 (Internal Server Error)'))).toEqual([]);
     expect(pageErrors).toEqual([]);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
   });

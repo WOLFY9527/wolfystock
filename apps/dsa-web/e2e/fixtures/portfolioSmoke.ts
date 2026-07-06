@@ -9,6 +9,11 @@ type ApiRequestLog = {
 type PortfolioSmokeHarness = {
   requests: ApiRequestLog;
   scenarioRiskPayloads: unknown[];
+  importCommitPayloads: unknown[];
+};
+
+type PortfolioSmokeHarnessOptions = {
+  operatorMode?: boolean;
 };
 
 const timestamp = '2026-05-06T09:45:00-04:00';
@@ -46,7 +51,22 @@ function createRequestLog(calls: string[]): ApiRequestLog {
   };
 }
 
-function currentUser() {
+function currentUser(options: PortfolioSmokeHarnessOptions = {}) {
+  if (options.operatorMode) {
+    return {
+      id: 'user-1',
+      username: 'wolfy-operator',
+      displayName: 'Wolfy Operator',
+      role: 'admin',
+      isAdmin: true,
+      isAuthenticated: true,
+      transitional: false,
+      authEnabled: true,
+      canReadProviders: true,
+      adminCapabilities: ['ops:providers:read'],
+    };
+  }
+
   return {
     id: 'user-1',
     username: 'wolfy-user',
@@ -56,6 +76,63 @@ function currentUser() {
     isAuthenticated: true,
     transitional: false,
     authEnabled: true,
+  };
+}
+
+function importParsePayload() {
+  return {
+    broker: 'huatai',
+    record_count: 2,
+    skipped_count: 0,
+    error_count: 0,
+    records: [],
+    cash_record_count: 0,
+    cash_entries: [],
+    corporate_action_count: 0,
+    corporate_actions: [],
+    warnings: ['possible duplicate candidate'],
+    metadata: {},
+    errors: [],
+  };
+}
+
+function importCommitPayload(dryRun: boolean) {
+  return {
+    account_id: 1,
+    record_count: 2,
+    inserted_count: dryRun ? 0 : 1,
+    duplicate_count: dryRun ? 1 : 0,
+    failed_count: dryRun ? 1 : 0,
+    cash_record_count: 0,
+    cash_inserted_count: 0,
+    cash_failed_count: 0,
+    corporate_action_count: 0,
+    corporate_action_inserted_count: 0,
+    corporate_action_failed_count: 0,
+    dry_run: dryRun,
+    duplicate_import: false,
+    broker_connection_id: 9,
+    warnings: dryRun ? [{ row: 3, reason: 'possible duplicate', recovery_action: '确认是否已导入同一笔交易' }] : [],
+    metadata: {},
+    errors: dryRun ? [{ row: 4, reason: 'missing price', recovery_action: '补充成交价格后重新预览' }] : [],
+    accepted_count: dryRun ? 1 : 1,
+    rejected_count: dryRun ? 1 : 0,
+    preview_only: dryRun,
+    requires_confirmation: dryRun,
+    duplicate_candidates: dryRun ? [{ row: 3, symbol: 'AAPL', trade_date: '2026-03-18' }] : [],
+    unknown_symbols: dryRun ? [{ row: 4, symbol: 'UNKNOWN' }] : [],
+    currency_issues: dryRun ? [{ row: 5, currency: 'EUR', reason: 'cross_currency' }] : [],
+    account_mapping: { account_id: 1, status: 'matched', account_name: 'Launch Owner Main' },
+    validation_checks: dryRun
+      ? {
+          date_quantity_price: { ok: false, failed_rows: [4] },
+          duplicate_detection: { ok: true, duplicate_candidates: 1 },
+        }
+      : {
+          date_quantity_price: { ok: true },
+          duplicate_detection: { ok: true, duplicate_candidates: 0 },
+        },
+    recovery_actions: dryRun ? ['补充成交价格后重新预览'] : [],
   };
 }
 
@@ -230,14 +307,67 @@ function riskPayload() {
   };
 }
 
+function structureReviewPayload() {
+  return {
+    schema_version: 'portfolio_structure_review_v1',
+    aggregate_summary: {
+      as_of: '2026-04-15',
+      account_count: 1,
+      holding_count: 1,
+      evaluated_count: 1,
+      largest_holding: { ticker: 'AAPL', percent: 100 },
+    },
+    exposure_by_theme_or_sector: [],
+    counts_by_structure_state: { mixed: 1 },
+    holdings_structure: [
+      {
+        ticker: 'AAPL',
+        structure_state: 'mixed',
+        confidence: 'medium',
+        evidence_quality: { score: 74, status: 'partial' },
+        risk_flags: ['Evidence still thin'],
+        research_notes: {
+          watch_next: ['Wait for cleaner follow-through confirmation.'],
+          needs_more_evidence: ['Daily structure evidence needs more bars.'],
+          risk_flags: ['Crowded theme sensitivity remains elevated.'],
+        },
+        missing_evidence: [
+          { kind: 'daily_ohlcv', message: 'Daily structure evidence needs more bars.' },
+        ],
+        structure_decision_route: '/stocks/AAPL/structure-decision',
+      },
+    ],
+    strongest_structures: [
+      { ticker: 'AAPL', structure_state: 'mixed', score: 74 },
+    ],
+    weakest_evidence: [],
+    common_risk_flags: [
+      { flag: 'Evidence still thin', count: 1, tickers: ['AAPL'] },
+    ],
+    missing_evidence: [],
+    data_quality: {
+      status: 'partial',
+      holding_metadata_status: 'partial',
+      structure_evidence_status: 'partial',
+      read_only: true,
+      fail_closed: false,
+    },
+    no_advice_disclosure: 'Observation-only research context; not personalized financial advice and not an instruction.',
+  };
+}
+
 function emptyListPayload() {
   return { items: [], total: 0, page: 1, page_size: 20 };
 }
 
-export async function installPortfolioSmokeHarness(page: Page): Promise<PortfolioSmokeHarness> {
+export async function installPortfolioSmokeHarness(
+  page: Page,
+  options: PortfolioSmokeHarnessOptions = {},
+): Promise<PortfolioSmokeHarness> {
   const calls: string[] = [];
   const requests = createRequestLog(calls);
   const scenarioRiskPayloads: unknown[] = [];
+  const importCommitPayloads: unknown[] = [];
 
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
@@ -253,12 +383,12 @@ export async function installPortfolioSmokeHarness(page: Page): Promise<Portfoli
         passwordSet: true,
         passwordChangeable: true,
         setupState: 'enabled',
-        currentUser: currentUser(),
+        currentUser: currentUser(options),
       });
     }
 
     if (method === 'GET' && path === '/api/v1/auth/me') {
-      return fulfillJson(route, currentUser());
+      return fulfillJson(route, currentUser(options));
     }
 
     if (method === 'GET' && path === '/api/v1/agent/status') {
@@ -291,6 +421,10 @@ export async function installPortfolioSmokeHarness(page: Page): Promise<Portfoli
 
     if (method === 'GET' && path === '/api/v1/portfolio/risk') {
       return fulfillJson(route, riskPayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/portfolio/structure-review') {
+      return fulfillJson(route, structureReviewPayload());
     }
 
     if (method === 'GET' && path === '/api/v1/portfolio/trades') {
@@ -328,6 +462,23 @@ export async function installPortfolioSmokeHarness(page: Page): Promise<Portfoli
         verify_ssl: false,
         warnings: [],
       });
+    }
+
+    if (method === 'POST' && path === '/api/v1/portfolio/imports/parse') {
+      return fulfillJson(route, importParsePayload());
+    }
+
+    if (method === 'POST' && path === '/api/v1/portfolio/imports/commit') {
+      try {
+        const formData = await request.postDataBuffer();
+        const bodyText = formData.toString('utf8');
+        const dryRun = bodyText.includes('name="dry_run"') && bodyText.includes('true');
+        importCommitPayloads.push({ dryRun, bodyText });
+        return fulfillJson(route, importCommitPayload(dryRun));
+      } catch {
+        importCommitPayloads.push(null);
+        return fulfillJson(route, importCommitPayload(false));
+      }
     }
 
     if (method === 'POST' && path === '/api/v1/portfolio/scenario-risk') {
@@ -414,7 +565,7 @@ export async function installPortfolioSmokeHarness(page: Page): Promise<Portfoli
     return fulfillJson(route, { error: `Unhandled portfolio smoke route: ${method} ${path}` }, 500);
   });
 
-  return { requests, scenarioRiskPayloads };
+  return { requests, scenarioRiskPayloads, importCommitPayloads };
 }
 
 export { expect };
