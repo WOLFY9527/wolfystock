@@ -124,7 +124,7 @@ def test_stock_evidence_base_fields_are_preserved_with_packet_without_sec_sideca
     assert readiness["staleInputs"] == []
     assert readiness["conflictingEvidence"] == []
     assert readiness["observationOnly"] is True
-    assert "financial advice" in readiness["noAdviceDisclosure"]
+    assert "个性化行动指令" in readiness["noAdviceDisclosure"]
     assert "secFilingEvidence" not in payload["items"][0]
 
 
@@ -295,7 +295,7 @@ def test_stock_evidence_omits_packet_when_projector_fails_without_breaking_paylo
     assert readiness["evidenceUsed"] == []
     assert readiness["evidenceMissing"] == ["quote", "technical", "fundamental", "news"]
     assert readiness["observationOnly"] is True
-    assert "financial advice" in readiness["noAdviceDisclosure"]
+    assert "个性化行动指令" in readiness["noAdviceDisclosure"]
 
 
 def test_stock_evidence_accepts_injected_projected_sec_records_without_mutating_other_fields() -> None:
@@ -589,3 +589,23 @@ def test_service_packet_keeps_quote_provenance_but_blocks_live_claim_without_fre
     assert quote_ref["sourceType"] == "local_or_reported"
     assert quote_ref["freshness"] == "unknown"
     assert blocked["price_is_live"]["reasonCode"] == "quote_freshness_not_proven"
+
+    near_live = item["nearLiveCoverage"]
+    assert near_live["contractVersion"] == "near_live_coverage_qualification_v1"
+    assert near_live["surface"] == "stock_evidence_quote"
+    assert near_live["requiredEvidenceFamilies"] == ["quote"]
+    assert near_live["availableEvidenceFamilies"] == []
+    assert near_live["coverageState"] == "stale"
+    assert near_live["usableState"] == "readable_stale"
+    assert near_live["ready"] is False
+    assert near_live["freshness"]["state"] == "stale"
+    assert near_live["freshness"]["asOf"] == "2026-05-13T08:30:00Z"
+
+    product_read_model = item["productReadModel"]
+    assert product_read_model["nearLiveCoverage"]["usableState"] == "readable_stale"
+    assert product_read_model["freshness"]["state"] == "stale"
+    assert product_read_model["freshness"]["asOf"] == "2026-05-13T08:30:00Z"
+    assert product_read_model["ready"] is False
+    serialized = json.dumps(product_read_model, sort_keys=True)
+    for forbidden in ("providerName", "rawPayload", "sourceConfidence", "requestId", "traceId", "token"):
+        assert forbidden not in serialized

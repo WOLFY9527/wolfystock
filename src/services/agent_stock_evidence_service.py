@@ -23,6 +23,7 @@ from src.services.sec_edgar_evidence_service import (
 )
 from src.services.stock_evidence_packet import project_stock_evidence_packet
 from src.services.product_read_model import build_stock_evidence_product_read_model
+from src.services.near_live_market_data import qualify_near_live_coverage
 from src.services.stock_evidence_quote_adapter import (
     StockEvidenceQuoteAdapter,
     build_quote_diagnostic_source_metadata,
@@ -162,6 +163,30 @@ def _compact_or_find_field(fields: Any, aliases: Iterable[str], *values: Any) ->
     if number is not None:
         return number
     return _find_field(fields, aliases)
+
+
+def _near_live_source_class(payload: Mapping[str, Any]) -> str:
+    if payload.get("isUnavailable"):
+        return "unavailable"
+    source_type = _text(payload.get("sourceType") or payload.get("source_type")).lower()
+    if source_type in {"local_historical_data", "delayed_market_data", "near_live_market_data"}:
+        return source_type
+    source = _text(payload.get("source") or payload.get("provider")).lower()
+    if source in {"unavailable", "missing"}:
+        return "unavailable"
+    if "delay" in source or payload.get("isStale"):
+        return "delayed_market_data"
+    return "near_live_market_data"
+
+
+def _near_live_source_quality(payload: Mapping[str, Any]) -> str:
+    if payload.get("isUnavailable"):
+        return "unavailable"
+    if payload.get("isStale"):
+        return "stale"
+    if payload.get("isPartial"):
+        return "partial"
+    return "reported"
 
 
 def _fundamental_period(field_periods: Any) -> Optional[str]:
@@ -357,8 +382,62 @@ class StockEvidenceService:
         }
         self._attach_stock_evidence_packets(payload)
         self._attach_symbol_evidence_readiness(payload)
+        self._attach_near_live_coverage(payload)
         self._attach_product_read_models(payload)
         return payload
+
+    def _attach_near_live_coverage(self, payload: EvidencePayload) -> None:
+        items = payload.get("items")
+        if not isinstance(items, list):
+            return
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            try:
+                market = _infer_market(str(item.get("symbol") or ""))
+                observations = []
+                quote = item.get("quote")
+                if isinstance(quote, Mapping):
+                    observations.append(
+                        {
+                            "market": market,
+                            "symbol": item.get("symbol"),
+                            "observationType": "quote",
+                            "value": quote.get("price"),
+                            "currency": quote.get("currency"),
+                            "asOf": quote.get("asOf") or quote.get("updatedAt"),
+                            "receivedAt": quote.get("updatedAt"),
+                            "sourceClass": _near_live_source_class(quote),
+                            "sourceQuality": _near_live_source_quality(quote),
+                        }
+                    )
+                technical = item.get("technical")
+                if isinstance(technical, Mapping):
+                    observations.append(
+                        {
+                            "market": market,
+                            "symbol": item.get("symbol"),
+                            "observationType": "technical_indicator",
+                            "boundedPayloadRef": f"stock_daily:{item.get('symbol') or ''}:{technical.get('updatedAt') or ''}",
+                            "asOf": technical.get("asOf") or technical.get("updatedAt"),
+                            "receivedAt": technical.get("updatedAt"),
+                            "sourceClass": "local_historical_data",
+                            "sourceQuality": "usable" if technical.get("status") in {"available", "partial"} else "unknown",
+                        }
+                    )
+                item["nearLiveCoverage"] = qualify_near_live_coverage(
+                    surface="stock_evidence_quote",
+                    market=market,
+                    symbol=str(item.get("symbol") or ""),
+                    observations=observations,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Near-live coverage projection failed for %s: %s",
+                    item.get("symbol") or "unknown",
+                    exc,
+                    exc_info=True,
+                )
 
     def _attach_stock_evidence_packets(self, payload: EvidencePayload) -> None:
         meta = payload.get("meta") if isinstance(payload.get("meta"), Mapping) else {}
