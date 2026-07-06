@@ -1,7 +1,7 @@
 /**
- * SpaceX live refinement: preserves the standard-report IA and chart/execution/detail
- * modules while allowing the homepage to suppress the duplicated hero decision summary
- * so the chart becomes the first lower full-width module beneath the top workspace.
+ * Paper workbench report panel: preserves the standard-report IA and
+ * chart/execution/detail modules while allowing the homepage to suppress the
+ * duplicated hero decision summary.
  */
 import React from 'react';
 import { translateForCurrentLanguage } from '../../i18n/core';

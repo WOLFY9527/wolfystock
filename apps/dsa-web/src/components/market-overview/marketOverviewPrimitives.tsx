@@ -35,14 +35,14 @@ const STATUS_LABELS: Record<MarketProviderHealthStatus, string> = {
 };
 
 const FRESHNESS_CLASSES: Record<MarketProviderHealthStatus, string> = {
-  live: 'border-emerald-300/30 bg-emerald-400/10 text-emerald-200',
-  cache: 'border-white/15 bg-white/[0.06] text-white/65',
-  stale: 'border-amber-300/30 bg-amber-400/10 text-amber-200',
-  fallback: 'border-orange-300/30 bg-orange-400/10 text-orange-200',
-  partial: 'border-cyan-300/25 bg-cyan-400/10 text-cyan-200',
-  unavailable: 'border-white/12 bg-white/[0.04] text-white/48',
-  error: 'border-rose-300/35 bg-rose-400/10 text-rose-200',
-  refreshing: 'border-sky-300/25 bg-sky-400/10 text-sky-200',
+  live: 'border-[color:var(--state-success-border)] bg-[var(--state-success-bg)] text-[color:var(--state-success-text)]',
+  cache: 'border-[color:var(--line)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)]',
+  stale: 'border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] text-[color:var(--state-warning-text)]',
+  fallback: 'border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] text-[color:var(--state-warning-text)]',
+  partial: 'border-[color:var(--state-info-border)] bg-[var(--state-info-bg)] text-[color:var(--state-info-text)]',
+  unavailable: 'border-[color:var(--line)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)]',
+  error: 'border-[color:var(--state-danger-border)] bg-[var(--state-danger-bg)] text-[color:var(--state-danger-text)]',
+  refreshing: 'border-[color:var(--state-info-border)] bg-[var(--state-info-bg)] text-[color:var(--state-info-text)]',
 };
 
 const CONSUMER_UNSAFE_DETAIL_PATTERN = /provider|fallback|proxy|raw|debug|reason|sourceauthority|scorecontribution|marketcache|runtime|diagnostic|json/i;
@@ -91,13 +91,13 @@ export const MarketOverviewCardFrame: React.FC<{
   >
     {title || eyebrow || subtitle ? (
       <div className="mb-3 min-w-0 shrink-0">
-        {eyebrow ? <p className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{eyebrow}</p> : null}
-        {title ? <h2 className="mt-1 truncate text-sm font-semibold text-white/84">{title}</h2> : null}
-        {subtitle ? <p className="mt-1 truncate text-[11px] leading-4 text-white/42">{subtitle}</p> : null}
+        {eyebrow ? <p className="truncate text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{eyebrow}</p> : null}
+        {title ? <h2 className="mt-1 truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{title}</h2> : null}
+        {subtitle ? <p className="mt-1 truncate text-[11px] leading-4 text-[color:var(--wolfy-text-muted)]">{subtitle}</p> : null}
       </div>
     ) : null}
     <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</div>
-    {footer ? <div className="mt-3 shrink-0 border-t border-white/5 pt-2 text-[10px] leading-4 text-white/34">{footer}</div> : null}
+    {footer ? <div className="mt-3 shrink-0 border-t border-[color:var(--line)] pt-2 text-[10px] leading-4 text-[color:var(--wolfy-text-muted)]">{footer}</div> : null}
   </TerminalPanel>
 );
 
@@ -246,7 +246,7 @@ export const MarketOverviewRefreshButton: React.FC<{
     aria-label={label}
     onClick={onRefresh}
     disabled={refreshing}
-    className="inline-flex h-[36px] w-[36px] items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/45 transition-all hover:bg-white/10 hover:text-white cursor-pointer disabled:cursor-wait disabled:text-white/45 sm:h-[32px] sm:w-[32px]"
+    className="inline-flex h-[36px] w-[36px] items-center justify-center rounded-lg border border-[color:var(--line)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)] transition-all hover:bg-[var(--surface-3)] hover:text-[color:var(--wolfy-text-primary)] cursor-pointer disabled:cursor-wait disabled:text-[color:var(--wolfy-text-muted)] sm:h-[32px] sm:w-[32px]"
   >
     <RefreshCcw className={cn('size-4', refreshing ? 'animate-spin' : '')} aria-hidden="true" />
   </button>

@@ -53,7 +53,7 @@ describe('LinearPrimitives', () => {
     expect(screen.getByText('Search').closest('[data-linear-primitive="research-console-shell"]')).toHaveClass(
       'bg-[var(--wolfy-surface-console)]',
       'border-[color:var(--wolfy-border-subtle)]',
-      'rounded-[18px]',
+      'rounded-[var(--theme-panel-radius-lg)]',
     );
     expect(screen.getByText('Search').closest('[data-linear-primitive="research-console-shell"]')).toHaveAttribute('data-route-console', 'ResearchConsole');
     expect(screen.getByText('Search').closest('[data-linear-primitive="research-console-shell"]')).toHaveAttribute('data-visual-tier', 'dominant');

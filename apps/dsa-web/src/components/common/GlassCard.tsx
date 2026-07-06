@@ -6,7 +6,7 @@ type GlassCardProps = React.HTMLAttributes<HTMLElement> & {
   children: React.ReactNode;
 };
 
-const GLASS_CARD_BASE_CLASS = 'rounded-[24px] border border-white/5 bg-white/[0.02] backdrop-blur-sm';
+const GLASS_CARD_BASE_CLASS = 'rounded-[var(--theme-panel-radius-md)] border border-[color:var(--line)] bg-[var(--wolfy-surface-input)]';
 
 export const GlassCard: React.FC<GlassCardProps> = ({
   as: Component = 'div',

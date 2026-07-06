@@ -1,7 +1,6 @@
 /**
- * SpaceX live refactor: preserves labeling, validation, and password visibility
- * behavior while moving shared text inputs toward quieter ghost surfaces,
- * cleaner inline accessories, and theme-driven control typography.
+ * Paper workbench input: preserves labeling, validation, and password
+ * visibility behavior while relying on shared control tokens.
  */
 import type React from 'react';
 import { useId, useState } from 'react';

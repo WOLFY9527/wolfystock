@@ -1,7 +1,6 @@
 /**
- * SpaceX live refactor: preserves the existing confirmation flow and portal
- * behavior while restyling dialogs around restrained spectral typography,
- * lighter ghost actions, and a calmer modal surface.
+ * Paper workbench dialog: preserves the existing confirmation flow and portal
+ * behavior while using shared modal, field, and action tokens.
  */
 import type React from 'react';
 import { useEffect, useEffectEvent, useReducer } from 'react';

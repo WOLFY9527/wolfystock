@@ -58,16 +58,16 @@ describe('ThemeProvider', () => {
     document.body.removeAttribute('data-color-mode');
   });
 
-  it('keeps SpaceX as the default visual style while defaulting to dark mode', async () => {
+  it('keeps Paper as the default visual style while defaulting to light mode', async () => {
     renderThemeProbe();
 
     await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme', DEFAULT_THEME_MODE));
-    expect(document.documentElement).toHaveAttribute('data-theme-style', 'spacex');
+    expect(document.documentElement).toHaveAttribute('data-theme-style', 'paper');
     expect(document.body).toHaveAttribute('data-theme', DEFAULT_THEME_MODE);
-    expect(document.body).toHaveAttribute('data-theme-style', 'spacex');
-    expect(screen.getByTestId('theme-style')).toHaveTextContent('spacex');
+    expect(document.body).toHaveAttribute('data-theme-style', 'paper');
+    expect(screen.getByTestId('theme-style')).toHaveTextContent('paper');
     expect(screen.getByTestId('theme-mode')).toHaveTextContent(DEFAULT_THEME_MODE);
-    expect(window.localStorage.getItem(THEME_STYLE_STORAGE_KEY)).toBe('spacex');
+    expect(window.localStorage.getItem(THEME_STYLE_STORAGE_KEY)).toBe('paper');
     expect(window.localStorage.getItem(THEME_MODE_STORAGE_KEY)).toBe(DEFAULT_THEME_MODE);
   });
 
@@ -101,8 +101,9 @@ describe('ThemeProvider', () => {
 
     await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme', 'light'));
     expect(screen.getByTestId('theme-mode')).toHaveTextContent('light');
-    expect(document.documentElement).toHaveAttribute('data-theme-style', 'spacex');
+    expect(document.documentElement).toHaveAttribute('data-theme-style', 'paper');
     expect(window.localStorage.getItem(THEME_MODE_STORAGE_KEY)).toBe('light');
+    expect(window.localStorage.getItem(THEME_STYLE_STORAGE_KEY)).toBe('paper');
   });
 
   it('falls back safely when stored theme values are invalid', async () => {
@@ -113,8 +114,8 @@ describe('ThemeProvider', () => {
 
     await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme', DEFAULT_THEME_MODE));
     expect(screen.getByTestId('theme-mode')).toHaveTextContent(DEFAULT_THEME_MODE);
-    expect(document.documentElement).toHaveAttribute('data-theme-style', 'spacex');
+    expect(document.documentElement).toHaveAttribute('data-theme-style', 'paper');
     expect(window.localStorage.getItem(THEME_MODE_STORAGE_KEY)).toBe(DEFAULT_THEME_MODE);
-    expect(window.localStorage.getItem(THEME_STYLE_STORAGE_KEY)).toBe('spacex');
+    expect(window.localStorage.getItem(THEME_STYLE_STORAGE_KEY)).toBe('paper');
   });
 });

@@ -1,0 +1,962 @@
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WolfyStock · Research Workbench</title>
+  <style>
+    :root{
+      --paper:#F5F0EB;
+      --paper-deep:#E9DFD3;
+      --surface:#FBF8F3;
+      --surface-soft:rgba(255,255,255,.56);
+      --ink:#25221D;
+      --ink-soft:#3D3831;
+      --muted:#746B60;
+      --muted-2:#9B9184;
+      --line:rgba(54,48,40,.16);
+      --line-strong:rgba(54,48,40,.3);
+      --sage:#6B8F71;
+      --sage-deep:#365D3D;
+      --sage-wash:#DCE7DC;
+      --gold:#D4A574;
+      --gold-wash:#EFE0C9;
+      --blue:#6F8FA1;
+      --danger:#A75E55;
+      --danger-wash:#F0DCD8;
+      --ok:#5D8663;
+      --warn:#AA7A3D;
+      --shadow:0 18px 44px rgba(55,44,31,.09);
+      --shadow-tight:0 8px 20px rgba(55,44,31,.07);
+      --radius:18px;
+      --radius-sm:12px;
+      --font-display:"Noto Serif SC","Songti SC","STSong","Iowan Old Style",Georgia,serif;
+      --font-body:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+      --font-mono:"SFMono-Regular","JetBrains Mono",ui-monospace,Menlo,monospace;
+      --ease:cubic-bezier(.16,1,.3,1);
+    }
+
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%;color:var(--ink)}
+    body{
+      font-family:var(--font-body);
+      background:
+        linear-gradient(90deg,rgba(37,33,27,.035) 1px,transparent 1px),
+        linear-gradient(rgba(37,33,27,.03) 1px,transparent 1px),
+        linear-gradient(180deg,#F7F2EC 0%,var(--paper) 44%,#EFE7DE 100%);
+      background-size:36px 36px,36px 36px,100% 100%;
+      -webkit-font-smoothing:antialiased;
+      text-rendering:optimizeLegibility;
+      overflow-x:hidden;
+    }
+    body:after{
+      content:"";
+      position:fixed;
+      inset:0;
+      pointer-events:none;
+      opacity:.26;
+      background-image:repeating-linear-gradient(0deg,rgba(255,255,255,.22) 0 1px,transparent 1px 5px);
+      mix-blend-mode:multiply;
+      z-index:-1;
+    }
+    a{color:inherit;text-decoration:none}
+    button,input,select{font:inherit}
+    button{cursor:pointer}
+    :focus-visible{
+      outline:3px solid color-mix(in srgb,var(--gold) 72%,white);
+      outline-offset:3px;
+    }
+    .skip-link{
+      position:fixed;
+      top:10px;
+      left:12px;
+      z-index:99;
+      transform:translateY(-140%);
+      padding:9px 13px;
+      border-radius:999px;
+      background:var(--ink);
+      color:white;
+      font-weight:800;
+      font-size:13px;
+      transition:transform .16s var(--ease);
+    }
+    .skip-link:focus{transform:translateY(0)}
+    .sr-only{
+      position:absolute!important;
+      width:1px;height:1px;
+      padding:0;margin:-1px;
+      overflow:hidden;
+      clip:rect(0,0,0,0);
+      white-space:nowrap;
+      border:0;
+    }
+
+    .topbar{
+      position:sticky;
+      top:0;
+      z-index:50;
+      background:rgba(245,240,235,.93);
+      border-bottom:1px solid var(--line);
+      backdrop-filter:blur(18px);
+    }
+    .nav{
+      max-width:1880px;
+      margin:0 auto;
+      padding:9px 18px;
+      display:grid;
+      grid-template-columns:auto minmax(0,1fr) auto;
+      gap:16px;
+      align-items:center;
+    }
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      font-weight:850;
+      white-space:nowrap;
+      letter-spacing:.01em;
+    }
+    .seal{
+      width:34px;
+      height:34px;
+      border-radius:50%;
+      border:1px solid var(--line-strong);
+      background:radial-gradient(circle at 35% 30%,#fff 0 16%,var(--gold-wash) 17% 39%,var(--sage) 40% 100%);
+      display:grid;
+      place-items:center;
+      flex:0 0 auto;
+    }
+    .seal svg{width:21px;height:21px}
+    .navlinks{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:3px;
+      min-width:0;
+      overflow:auto;
+      scrollbar-width:none;
+    }
+    .navlinks::-webkit-scrollbar{display:none}
+    .navlink,.more-btn{
+      border:0;
+      background:transparent;
+      color:var(--muted);
+      min-height:34px;
+      padding:0 10px;
+      border-radius:999px;
+      display:inline-flex;
+      align-items:center;
+      font-size:12px;
+      font-weight:820;
+      white-space:nowrap;
+      transition:background .14s var(--ease),color .14s var(--ease),transform .14s var(--ease);
+    }
+    .navlink:hover,.more-btn:hover{
+      background:rgba(107,143,113,.1);
+      color:var(--sage-deep);
+    }
+    .navlink.active,.more-btn.active,.navlink[aria-current="page"]{
+      background:rgba(107,143,113,.14);
+      color:var(--sage-deep);
+      box-shadow:inset 0 0 0 1px rgba(107,143,113,.1);
+    }
+    .navlink:active,.more-btn:active,.btn:active{transform:translateY(1px)}
+    .more{position:relative}
+    .more-menu{
+      position:absolute;
+      right:0;
+      top:40px;
+      min-width:218px;
+      display:none;
+      padding:7px;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:rgba(255,255,255,.97);
+      box-shadow:var(--shadow);
+      transform-origin:top right;
+    }
+    .more.open .more-menu{display:grid;gap:3px;animation:menuIn .14s var(--ease) both}
+    .more-menu a{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      padding:10px;
+      border-radius:11px;
+      color:var(--muted);
+      font-size:12px;
+      font-weight:780;
+    }
+    .more-menu a:hover,.more-menu a.active{
+      background:rgba(107,143,113,.1);
+      color:var(--sage-deep);
+    }
+    .right-tools{display:flex;align-items:center;gap:8px}
+    .search{
+      position:relative;
+      width:min(390px,25vw);
+      border:1px solid var(--line);
+      border-radius:999px;
+      background:rgba(255,255,255,.66);
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 11px;
+      transition:background .14s var(--ease),border-color .14s var(--ease);
+    }
+    .search:focus-within{background:#fff;border-color:rgba(107,143,113,.5)}
+    .search input{width:100%;border:0;background:transparent;outline:0;font-size:13px;color:var(--ink)}
+    .search kbd{
+      font:10px/1 var(--font-mono);
+      color:var(--muted);
+      border:1px solid var(--line);
+      border-radius:7px;
+      padding:3px 5px;
+      background:rgba(255,255,255,.65);
+    }
+    .tool-chip{
+      min-height:34px;
+      padding:0 10px;
+      border:1px solid var(--line);
+      border-radius:999px;
+      background:rgba(255,255,255,.5);
+      display:inline-flex;
+      align-items:center;
+      color:var(--muted);
+      font-size:11px;
+      font-weight:820;
+      white-space:nowrap;
+    }
+    .search-results{
+      display:none;
+      position:absolute;
+      right:0;
+      top:44px;
+      width:410px;
+      max-width:88vw;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:#fff;
+      padding:7px;
+      box-shadow:var(--shadow);
+    }
+    .search-results.open{display:block;animation:menuIn .14s var(--ease) both}
+    .result{
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:10px;
+      padding:10px;
+      border-radius:10px;
+      cursor:pointer;
+    }
+    .result:hover,.result:focus{background:rgba(107,143,113,.1)}
+    .result-empty{
+      padding:14px;
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.5;
+    }
+
+    .shell{
+      width:100%;
+      max-width:1880px;
+      margin:0 auto;
+      padding:14px 18px 38px;
+    }
+    .page-head{
+      display:grid;
+      grid-template-columns:minmax(0,1fr) auto;
+      gap:18px;
+      align-items:end;
+      margin:4px 0 12px;
+      padding-bottom:10px;
+      border-bottom:1px solid var(--line);
+    }
+    .eyebrow{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      color:var(--sage-deep);
+      font:820 11px var(--font-mono);
+      letter-spacing:.12em;
+      text-transform:uppercase;
+    }
+    .dot{width:7px;height:7px;border-radius:50%;background:var(--gold)}
+    h1,h2,h3{margin:0;font-family:var(--font-display);font-weight:720;letter-spacing:-.035em}
+    h1{margin:10px 0 7px;max-width:1080px;font-size:clamp(34px,4.1vw,66px);line-height:.99;text-wrap:balance}
+    h2{font-size:clamp(26px,2.8vw,42px);line-height:1.06}
+    h3{font-size:20px;line-height:1.13}
+    .lead{margin:0;max-width:1060px;color:var(--muted);font-size:clamp(15px,1vw,17px);line-height:1.58}
+    .status-row{display:flex;flex-wrap:wrap;gap:7px;justify-content:flex-end}
+    .badge{
+      min-height:27px;
+      padding:0 9px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.62);
+      color:var(--muted);
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      font-size:11px;
+      font-weight:830;
+      white-space:nowrap;
+    }
+    .badge.ok{background:rgba(107,143,113,.12);color:var(--sage-deep)}
+    .badge.gold{background:rgba(212,165,116,.17);border-color:rgba(212,165,116,.4);color:#76522F}
+    .badge.danger{background:var(--danger-wash);border-color:rgba(167,94,85,.32);color:#7A3F38}
+    .ticker{font-family:var(--font-mono);font-size:11px;color:var(--sage-deep)}
+    .muted{color:var(--muted)}
+    .up{color:var(--ok)}.down{color:var(--danger)}.flat{color:var(--warn)}
+
+    .grid-12{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:10px}
+    .span-2{grid-column:span 2}.span-3{grid-column:span 3}.span-4{grid-column:span 4}.span-5{grid-column:span 5}.span-6{grid-column:span 6}.span-7{grid-column:span 7}.span-8{grid-column:span 8}.span-9{grid-column:span 9}.span-12{grid-column:span 12}
+    .grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+    .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+    .grid-5{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+    .grid-6{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+
+    .panel{
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      background:rgba(251,248,243,.76);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+    .primary-card{padding:16px}
+    .card{
+      padding:13px;
+      border:1px solid var(--line);
+      border-radius:var(--radius-sm);
+      background:rgba(255,255,255,.5);
+    }
+    .section-rule{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
+    .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
+    .fig{color:var(--muted);font:11px var(--font-mono);letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px}
+    .brief{
+      display:grid;
+      gap:9px;
+      padding:14px;
+      border-radius:14px;
+      border:1px solid rgba(107,143,113,.2);
+      background:linear-gradient(180deg,rgba(220,231,220,.55),rgba(255,255,255,.36));
+    }
+    .brief strong{font-family:var(--font-display);font-size:24px;line-height:1.12;letter-spacing:-.03em}
+    .brief p{margin:0;color:var(--muted);line-height:1.52;font-size:14px}
+    .btn{
+      min-height:35px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:7px;
+      padding:0 12px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.66);
+      color:var(--ink);
+      font-weight:830;
+      font-size:12px;
+      transition:background .14s var(--ease),border-color .14s var(--ease),transform .14s var(--ease),opacity .14s var(--ease);
+    }
+    .btn:hover{background:#fff;border-color:var(--line-strong)}
+    .btn:active{transform:translateY(1px)}
+    .btn.primary{background:var(--sage);border-color:var(--sage);color:#fff}
+    .btn.primary:hover{background:var(--sage-deep)}
+    .btn.gold{background:rgba(212,165,116,.2);border-color:rgba(212,165,116,.42);color:#76522F}
+    .btn[disabled],.btn[aria-disabled="true"]{opacity:.45;cursor:not-allowed;transform:none}
+
+    .metric .label{font-size:11px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase}
+    .metric .value{font:820 25px/1.02 var(--font-mono);letter-spacing:-.06em;margin:7px 0 4px}
+    .metric span{font-size:12px}
+    .chart{
+      width:100%;
+      min-height:274px;
+      border-radius:14px;
+      overflow:hidden;
+      border:1px solid rgba(54,48,40,.08);
+      background:
+        linear-gradient(rgba(37,33,27,.045) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(37,33,27,.035) 1px,transparent 1px),
+        rgba(255,255,255,.3);
+      background-size:42px 42px;
+    }
+    .chart.compact{min-height:188px}
+    .chart svg{display:block;width:100%;height:100%;min-height:inherit}
+    .seg{
+      display:flex;
+      flex-wrap:wrap;
+      padding:3px;
+      border:1px solid var(--line);
+      border-radius:999px;
+      background:rgba(255,255,255,.6)
+    }
+    .seg button{
+      border:0;
+      background:transparent;
+      border-radius:999px;
+      padding:7px 9px;
+      color:var(--muted);
+      font-size:11px;
+      font-weight:830;
+    }
+    .seg button:hover{background:rgba(107,143,113,.1);color:var(--sage-deep)}
+    .seg button.active{background:var(--sage);color:white}
+    .row-list{display:grid;gap:7px}
+    .row{
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:10px;
+      align-items:center;
+      padding:10px;
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:rgba(255,255,255,.44);
+    }
+    .row b{display:block;font-size:13px}
+    .row small{color:var(--muted);font-size:12px;line-height:1.42}
+    .spark{width:90px;height:33px}
+
+    .research-strip{
+      display:grid;
+      grid-template-columns:1.2fr .9fr .9fr auto;
+      gap:10px;
+      align-items:center;
+      padding:10px;
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:rgba(255,255,255,.45);
+    }
+    .research-strip b{display:block;font-size:13px}
+    .research-strip small{display:block;color:var(--muted);font-size:12px;line-height:1.45}
+    .research-strip .action-stack{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+
+    .candidate{
+      text-align:left;
+      padding:13px;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:rgba(255,255,255,.5);
+      transition:transform .14s var(--ease),border-color .14s var(--ease),background .14s var(--ease);
+    }
+    .candidate:hover{transform:translateY(-1px);border-color:rgba(107,143,113,.38)}
+    .candidate.active{border-color:rgba(107,143,113,.62);background:rgba(220,231,220,.62)}
+    .candidate h3{font-size:18px;margin:4px 0}
+    .candidate p{margin:0;color:var(--muted);font-size:12px;line-height:1.45}
+    .radar-wrap{min-height:308px;display:grid;place-items:center}
+    .radar-wrap svg{width:100%;max-height:344px}
+    .factor-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+    .factor{padding:10px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.5)}
+    .factor span{display:block;color:var(--muted);font-size:11px;margin-bottom:7px}
+    .bar{height:7px;border-radius:999px;background:rgba(37,33,27,.08);overflow:hidden}
+    .bar i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--sage),var(--gold));transition:width .36s var(--ease)}
+
+    .form-grid{display:grid;gap:10px}
+    label.field span{display:block;color:var(--muted);font-size:11px;font-weight:830;margin-bottom:6px}
+    .field input,.field select{
+      width:100%;
+      padding:10px 11px;
+      border:1px solid var(--line);
+      border-radius:11px;
+      background:rgba(255,255,255,.68);
+      outline:0;
+      color:var(--ink);
+      font-size:13px;
+    }
+    .field input:focus,.field select:focus{border-color:rgba(107,143,113,.5);background:#fff}
+    input[type=range]{width:100%;accent-color:var(--sage)}
+    table{width:100%;border-collapse:separate;border-spacing:0 6px;min-width:860px}
+    caption{text-align:left;color:var(--muted);font:11px var(--font-mono);letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px}
+    th{text-align:left;color:var(--muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:0 10px}
+    td{
+      padding:10px;
+      background:rgba(255,255,255,.46);
+      border-top:1px solid var(--line);
+      border-bottom:1px solid var(--line);
+      font-size:13px;
+      vertical-align:middle;
+    }
+    tbody tr:hover td{background:rgba(255,255,255,.7)}
+    td:first-child{border-left:1px solid var(--line);border-radius:11px 0 0 11px}
+    td:last-child{border-right:1px solid var(--line);border-radius:0 11px 11px 0}
+    .table-wrap{overflow:auto}
+    details{border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.48);overflow:hidden}
+    summary{list-style:none;cursor:pointer;padding:12px 14px;font-weight:830;display:flex;justify-content:space-between;gap:12px;font-size:13px}
+    summary::-webkit-details-marker{display:none}
+    details p{margin:0;padding:0 14px 14px;color:var(--muted);line-height:1.55;font-size:13px}
+    .state-card{
+      min-height:244px;
+      padding:24px;
+      border:1px dashed var(--line-strong);
+      border-radius:14px;
+      background:rgba(255,255,255,.45);
+      display:grid;
+      place-items:center;
+      text-align:center;
+    }
+    .state-card h3{margin:8px 0}
+    .state-card p{max-width:460px;margin:0 auto;color:var(--muted);font-size:14px;line-height:1.55}
+    .spinner{
+      width:32px;
+      height:32px;
+      border-radius:50%;
+      border:3px solid rgba(107,143,113,.18);
+      border-top-color:var(--sage);
+      animation:spin .9s linear infinite;
+    }
+    .skeleton{
+      display:block;
+      height:14px;
+      border-radius:999px;
+      background:linear-gradient(90deg,rgba(255,255,255,.25),rgba(107,143,113,.14),rgba(255,255,255,.25));
+      background-size:200% 100%;
+      animation:shimmer 1.2s linear infinite;
+    }
+    .ledger-note{font-size:12px;color:var(--muted);line-height:1.5}
+    .is-animating{will-change:transform,opacity;backface-visibility:hidden}
+
+    @keyframes menuIn{from{opacity:0;transform:translateY(-3px) scale(.992)}to{opacity:1;transform:translateY(0) scale(1)}}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    @keyframes shimmer{to{background-position:-200% 0}}
+    @media (prefers-reduced-motion:reduce){
+      *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition:none!important}
+    }
+    @media (max-width:1280px){
+      .nav{grid-template-columns:1fr}
+      .navlinks{justify-content:flex-start}
+      .right-tools{width:100%}
+      .search{width:100%}
+      .page-head{grid-template-columns:1fr}
+      .status-row{justify-content:flex-start}
+      .span-2,.span-3,.span-4{grid-column:span 6}
+      .span-5,.span-6,.span-7,.span-8,.span-9{grid-column:span 12}
+      .grid-5,.grid-6{grid-template-columns:repeat(3,1fr)}
+      .research-strip{grid-template-columns:1fr 1fr}
+      .research-strip .action-stack{justify-content:flex-start}
+    }
+    @media (max-width:760px){
+      .shell{padding:12px 12px 34px}
+      .nav{padding:10px 12px}
+      h1{font-size:37px}
+      .span-2,.span-3,.span-4,.span-5,.span-6,.span-7,.span-8,.span-9,.span-12{grid-column:span 12}
+      .grid-2,.grid-3,.grid-4,.grid-5,.grid-6,.factor-grid,.research-strip{grid-template-columns:1fr}
+      .tool-chip{display:none}
+      table{min-width:760px}
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#app">跳到主要内容</a>
+
+  <header class="topbar" data-od-id="topbar">
+    <nav class="nav" data-od-id="main-navigation" aria-label="WolfyStock 主导航">
+      <a class="brand route-link" href="home.html" data-page="home" data-od-id="brand-link" aria-label="WolfyStock 首页">
+        <span class="seal" aria-hidden="true">
+          <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+            <path d="M12 30c7-2 9-15 14-15 4 0 5 8 10 8" stroke="#355B3B" stroke-width="3" stroke-linecap="round"/>
+            <path d="M14 35c6-7 13-6 21-4" stroke="#D4A574" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <span>WolfyStock</span>
+      </a>
+
+      <div class="navlinks" data-od-id="primary-nav">
+        <a class="navlink route-link" href="home.html" data-page="home">首页</a>
+        <a class="navlink route-link" href="market-overview.html" data-page="market">市场总览</a>
+        <a class="navlink route-link" href="research-radar.html" data-page="radar">研究雷达</a>
+        <a class="navlink route-link" href="stock-detail.html" data-page="stock">个股研究</a>
+        <a class="navlink route-link" href="watchlist.html" data-page="watchlist">观察列表</a>
+        <div class="more" id="moreMenu">
+          <button class="more-btn" id="moreButton" type="button" aria-haspopup="true" aria-expanded="false">更多 ▾</button>
+          <div class="more-menu" role="menu" aria-label="更多模块">
+            <a class="route-link" href="scanner.html" data-page="scanner" role="menuitem">扫描器 <span>Scanner</span></a>
+            <a class="route-link" href="backtest.html" data-page="backtest" role="menuitem">回测 <span>Backtest</span></a>
+            <a class="route-link" href="scenario-lab.html" data-page="scenario" role="menuitem">情景实验室 <span>Scenario</span></a>
+          </div>
+        </div>
+      </div>
+
+      <div class="right-tools" data-od-id="right-tools">
+        <label class="search" data-od-id="global-stock-search">
+          <span aria-hidden="true">⌕</span>
+          <span class="sr-only">全局股票搜索</span>
+          <input id="globalSearch" placeholder="搜索 AAPL / NVDA / 600519" autocomplete="off" aria-label="全局股票搜索" aria-controls="searchResults" />
+          <kbd aria-hidden="true">⌘K</kbd>
+          <div class="search-results" id="searchResults" role="listbox" aria-label="搜索结果" aria-hidden="true"></div>
+        </label>
+        <span class="tool-chip">实时 / 延迟混合</span>
+        <span class="tool-chip">研究工作台</span>
+      </div>
+    </nav>
+  </header>
+
+  <main class="shell" id="app" tabindex="-1" aria-live="polite" data-od-id="app"></main>
+  <div class="sr-only" id="liveStatus" aria-live="polite"></div>
+
+  <script>
+    const stocks = [
+      {symbol:"AAPL", name:"Apple Inc.", price:"$288.90", change:"+1.24%", note:"站上 20 日均线，但放量不足", quality:"历史数据可用", score:82},
+      {symbol:"NVDA", name:"NVIDIA", price:"$126.18", change:"+2.86%", note:"AI 主题继续扩散，波动偏高", quality:"延迟", score:88},
+      {symbol:"MSFT", name:"Microsoft", price:"$462.40", change:"+0.74%", note:"云业务韧性支撑趋势", quality:"实时", score:80},
+      {symbol:"600519", name:"贵州茅台", price:"¥1,682.40", change:"+1.42%", note:"防御属性稳定，弹性有限", quality:"历史数据可用", score:74},
+      {symbol:"300750", name:"宁德时代", price:"¥192.18", change:"-0.38%", note:"修复仍待成交确认", quality:"延迟", score:70}
+    ];
+
+    const pageMeta = {
+      home:{file:"home.html", label:"首页", title:"今天先判断市场水温，再决定研究顺序。", intro:"首页只做每日研究入口：市场状态、候选队列、观察变化和数据质量被放在同一工作台里，避免像功能目录。", status:["实时","研究观察","09:42 更新"]},
+      market:{file:"market-overview.html", label:"市场总览", title:"风险偏好回升，但趋势确认还差成交量。", intro:"市场页只回答环境问题：指数结构、波动率、利率、美元和市场宽度是否支持继续做多。", status:["延迟","置信度 72%","历史数据可用"]},
+      radar:{file:"research-radar.html", label:"研究雷达", title:"今日候选 5 个，证据强度不均。", intro:"研究雷达不是推荐列表，而是将候选、因子贡献、风险温度和下一步研究动作放在一起。", status:["部分延迟","5 个候选","证据质量中高"]},
+      stock:{file:"stock-detail.html", label:"个股研究", title:"AAPL 趋势没有破坏，但不适合追价。", intro:"个股页先给结论，再展示价格路径、关键证据、同业比较、数据限制与下一步动作。", status:["历史数据可用","报价延迟","研究观察"]},
+      watchlist:{file:"watchlist.html", label:"观察列表", title:"12 个观察标的，3 个需要今天复查。", intro:"观察列表不是收藏夹，而是研究任务账本：每个标的都应该有触发原因、数据状态和下一步动作。", status:["12 个标的","3 个提醒","09:40 更新"]},
+      scanner:{file:"scanner.html", label:"扫描器", title:"按策略模板筛出候选，不直接给结论。", intro:"扫描器用于发现值得研究的标的。结果表保留入选原因、风险限制、数据状态和下一步。", status:["示例扫描","Top 20","数据完整优先"]},
+      backtest:{file:"backtest.html", label:"回测", title:"策略过去有效，但回撤集中在高波动阶段。", intro:"回测页验证研究假设是否站得住，重点看收益曲线、回撤、胜率、交易样本和失败条件。", status:["样本 60 月","Benchmark SPY","非交易建议"]},
+      scenario:{file:"scenario-lab.html", label:"情景实验室", title:"VIX 冲击首先影响成长股和高波动仓位。", intro:"情景实验室将冲击幅度、影响时间、资产敏感度和观察列表映射到同一屏。", status:["预设情景","观察列表映射","代理数据"]}
+    };
+
+    const pathToPage = {"/":"home","/index.html":"home","/home.html":"home","/market-overview.html":"market","/research-radar.html":"radar","/stock-detail.html":"stock","/watchlist.html":"watchlist","/scanner.html":"scanner","/backtest.html":"backtest","/scenario-lab.html":"scenario"};
+    const motion = { reduce: window.matchMedia("(prefers-reduced-motion: reduce)").matches, active: [] };
+
+    function track(anim, el){
+      if(!anim || !el) return anim;
+      el.classList.add("is-animating");
+      motion.active.push(anim);
+      const done=()=>{el.classList.remove("is-animating");motion.active=motion.active.filter(a=>a!==anim)};
+      anim.addEventListener("finish",done,{once:true});
+      anim.addEventListener("cancel",done,{once:true});
+      return anim;
+    }
+    function cancelMotions(){
+      motion.active.forEach(a=>{try{a.cancel()}catch(_){}});
+      motion.active=[];
+      document.querySelectorAll(".is-animating").forEach(el=>el.classList.remove("is-animating"));
+    }
+    function animate(el,frames,options){
+      if(motion.reduce||!el||!el.animate)return null;
+      return track(el.animate(frames,options),el);
+    }
+    function lineDraw(path,delay=90){
+      if(motion.reduce||!path||!path.getTotalLength)return;
+      let l=900;
+      try{l=path.getTotalLength()}catch(_){}
+      path.style.strokeDasharray=l;
+      path.style.strokeDashoffset=l;
+      const anim=path.animate([{strokeDashoffset:l},{strokeDashoffset:0}],{duration:520,delay,easing:"cubic-bezier(.22,.61,.36,1)",fill:"forwards"});
+      motion.active.push(anim);
+      const done=()=>{path.style.strokeDasharray="";path.style.strokeDashoffset="";motion.active=motion.active.filter(a=>a!==anim)};
+      anim.addEventListener("finish",done,{once:true});
+      anim.addEventListener("cancel",done,{once:true});
+    }
+    function routeMotion(){
+      cancelMotions();
+      if(motion.reduce) return;
+      const app=document.getElementById("app");
+      animate(app.querySelector(".page-head"),[{opacity:0,transform:"translateY(5px)"},{opacity:1,transform:"translateY(0)"}],{duration:300,easing:"cubic-bezier(.16,1,.3,1)",fill:"both"});
+      [...app.querySelectorAll(".panel,.card,.candidate,.row,details,.state-card,.research-strip")].slice(0,18).forEach((el,i)=>{
+        animate(el,[{opacity:0,transform:"translateY(7px)"},{opacity:1,transform:"translateY(0)"}],{duration:280,delay:46+Math.min(i,10)*16,easing:"cubic-bezier(.16,1,.3,1)",fill:"both"});
+      });
+      document.querySelectorAll("#app .chart svg path:first-of-type").forEach((p,i)=>lineDraw(p,110+i*40));
+    }
+    function micro(el){
+      if(!el)return;
+      animate(el,[{opacity:.9,transform:"translateY(3px)"},{opacity:1,transform:"translateY(0)"}],{duration:170,easing:"cubic-bezier(.16,1,.3,1)",fill:"both"});
+    }
+    function state(el){
+      if(!el)return;
+      animate(el,[{opacity:.86,transform:"translateY(5px)"},{opacity:1,transform:"translateY(0)"}],{duration:210,easing:"cubic-bezier(.16,1,.3,1)",fill:"both"});
+    }
+
+    function header(meta){
+      return `<section class="page-head" data-od-id="page-header">
+        <div><span class="eyebrow"><i class="dot"></i> ${meta.label} · ${meta.file}</span><h1>${meta.title}</h1><p class="lead">${meta.intro}</p></div>
+        <div class="status-row" aria-label="数据状态">${meta.status.map((s,i)=>`<span class="badge ${i===0?"ok":i===1?"gold":""}">${s}</span>`).join("")}</div>
+      </section>`;
+    }
+
+    function chart(color="#6B8F71",dashed=false,compact=false){
+      return `<div class="chart ${compact?"compact":""}"><svg viewBox="0 0 900 320" preserveAspectRatio="none" role="img" aria-label="价格与证据路径图">
+        <path d="M0 260 C95 242 130 198 218 210 S348 266 438 176 566 122 646 144 764 82 900 96" fill="none" stroke="${color}" stroke-width="5" stroke-linecap="round"/>
+        <path d="M0 286 C95 266 130 230 218 232 S348 288 438 202 566 154 646 174 764 116 900 124 L900 320 L0 320Z" fill="rgba(107,143,113,.13)"/>
+        <path d="M0 210 C110 196 160 222 260 176 S410 110 520 134 700 176 900 126" fill="none" stroke="#D4A574" stroke-width="3" stroke-dasharray="${dashed?"8 11":"0"}"/>
+        <g fill="#746D63" font-family="Inter,system-ui" font-size="12"><text x="18" y="28">Plate · price / evidence path</text><text x="764" y="296">research watch</text></g>
+      </svg></div>`;
+    }
+    function spark(){
+      return `<svg class="spark" viewBox="0 0 120 48" preserveAspectRatio="none" role="img" aria-label="迷你趋势线"><path d="M0 36 C18 30 25 18 42 22 S70 38 84 18 103 14 120 10" fill="none" stroke="#6B8F71" stroke-width="4" stroke-linecap="round"/><path d="M0 42 C18 36 25 26 42 28 S70 43 84 25 103 21 120 18 L120 48 L0 48Z" fill="rgba(107,143,113,.16)"/></svg>`;
+    }
+    function radar(){
+      return `<div class="radar-wrap" data-od-id="signature-radar"><svg viewBox="0 0 640 420" role="img" aria-label="手绘感虚线同心网格上的三色叠加雷达图">
+        <defs><filter id="rough"><feTurbulence type="fractalNoise" baseFrequency=".018" numOctaves="2" seed="8"/><feDisplacementMap in="SourceGraphic" scale="1.25"/></filter></defs>
+        <g transform="translate(320 210)" fill="none" filter="url(#rough)">
+          <circle r="168" stroke="#776F65" stroke-width="1" stroke-dasharray="7 11" opacity=".28"/><circle r="126" stroke="#776F65" stroke-width="1" stroke-dasharray="6 10" opacity=".34"/><circle r="84" stroke="#776F65" stroke-width="1" stroke-dasharray="5 9" opacity=".38"/><circle r="42" stroke="#776F65" stroke-width="1" stroke-dasharray="4 8" opacity=".42"/>
+          <g stroke="#776F65" opacity=".24"><path d="M0-182V182"/><path d="M158-91L-158 91"/><path d="M158 91L-158-91"/><path d="M182 0H-182"/></g>
+          <path id="radarShape" d="M0-138 126-46 112 92 0 126-120 68-106-61Z" fill="rgba(107,143,113,.25)" stroke="#6B8F71" stroke-width="4"/>
+          <path d="M0-106 82-34 154 88 0 88-136 78-68-44Z" fill="rgba(212,165,116,.2)" stroke="#D4A574" stroke-width="4"/>
+          <path d="M0-84 144-78 98 58 0 148-74 42-138-74Z" fill="rgba(109,143,163,.17)" stroke="#6F8FA1" stroke-width="4"/>
+          <g fill="#25231F" font-family="Inter,system-ui" font-size="15" font-weight="760"><text x="-26" y="-192">趋势</text><text x="158" y="-88">赔率</text><text x="164" y="104">质量</text><text x="-26" y="204">风险</text><text x="-208" y="104">情绪</text><text x="-214" y="-88">证据</text></g>
+        </g>
+      </svg></div>`;
+    }
+    function metrics(items){
+      return items.map(i=>`<div class="card metric"><div class="label">${i[0]}</div><div class="value">${i[1]}</div><span class="${i[3]||""}">${i[2]}</span></div>`).join("");
+    }
+
+    function home(){
+      return `${header(pageMeta.home)}
+      <section class="grid-12">
+        <div class="panel primary-card span-7">
+          <div class="fig">Morning decision note</div>
+          <div class="brief"><strong>市场允许继续研究强势股，但不支持无条件追高。</strong><p>SPY、QQQ 重新站上短期均线，宽度改善；VIX 仍高于近 20 日中位数，说明突破需要成交量确认。</p><div><a class="btn primary route-link" href="market-overview.html" data-page="market">市场总览</a> <a class="btn gold route-link" href="research-radar.html" data-page="radar">研究雷达</a></div></div>
+          <div class="grid-6 section-rule">${metrics([["SPY","+0.86%","站上短均","up"],["QQQ","+1.12%","科技领涨","up"],["VIX","17.8","波动未退","flat"],["宽度","62%","扩散中","up"],["DXY","103.4","横盘","flat"],["US10Y","4.21","-5bp","down"]])}</div>
+        </div>
+        <aside class="panel primary-card span-5">
+          <div class="card-head"><div><div class="fig">Research queue</div><h3>今日研究顺序</h3></div><span class="badge ok">5 个候选</span></div>
+          <div class="row-list">${stocks.map((s,i)=>`<div class="research-strip"><div><b>${i+1}. ${s.symbol} · ${s.name}</b><small>${s.note}</small></div><div><b>${s.score}</b><small>雷达分</small></div><div><b>${s.quality}</b><small>数据状态</small></div><div class="action-stack"><a class="btn route-link" href="stock-detail.html" data-page="stock">看证据</a></div></div>`).join("")}</div>
+        </aside>
+
+        <div class="panel primary-card span-4">
+          <div class="fig">Watch changes</div><h3>观察变化</h3>
+          <div class="row-list section-rule">
+            <div class="row"><div><b>NVDA 重新入队</b><small>相对强度上升，波动同步抬高。</small></div><span class="badge gold">复查</span></div>
+            <div class="row"><div><b>AAPL 接近 MA20</b><small>趋势未破坏，开盘看量能。</small></div><span class="badge ok">观察</span></div>
+            <div class="row"><div><b>MSFT 证据质量提升</b><small>财务与价格结构同步改善。</small></div><span class="badge ok">稳定</span></div>
+          </div>
+        </div>
+        <div class="panel primary-card span-5">
+          <div class="card-head"><div><div class="fig">Index path</div><h3>主指数路径</h3></div><div class="seg" role="tablist" aria-label="图表区间"><button class="range active" role="tab">1D</button><button class="range" role="tab">1W</button><button class="range" role="tab">1M</button></div></div>
+          ${chart("#6B8F71",true,true)}
+        </div>
+        <div class="panel primary-card span-3">
+          <div class="fig">Data ledger</div><h3>数据状态</h3>
+          <div class="row-list section-rule">
+            <div class="row"><div><b>行情</b><small>部分标的延迟。</small></div><span class="badge gold">延迟</span></div>
+            <div class="row"><div><b>历史 OHLCV</b><small>可用于回测和趋势确认。</small></div><span class="badge ok">可用</span></div>
+            <p class="ledger-note">所有研究结论仅用于观察，不构成交易建议。</p>
+          </div>
+        </div>
+      </section>`;
+    }
+
+    function market(){
+      return `${header(pageMeta.market)}
+      <section class="grid-12">
+        <div class="panel primary-card span-8"><div class="card-head"><div><div class="fig">SPY / QQQ proxy</div><h3>主市场趋势</h3></div><div class="seg" role="tablist" aria-label="市场图表区间"><button class="range active">1D</button><button class="range">1W</button><button class="range">1M</button><button class="range">3M</button><button class="range">YTD</button></div></div>${chart()}</div>
+        <aside class="panel primary-card span-4"><div class="fig">Regime summary</div><div class="brief"><strong>状态：中性偏强</strong><p>风险偏好回升，利率压力暂缓；但突破行情需要更多市场宽度确认。</p></div><div class="grid-2 section-rule">${metrics([["VIX","17.8","高于均值","flat"],["US10Y","4.21","-5 bp","down"],["DXY","103.4","横盘","flat"],["上涨家数","62%","改善","up"]])}</div></aside>
+        ${["风险偏好回升","波动率未完全释放","利率边际缓和","科技板块领涨","美元指数横盘","小盘股跟随不足"].map((t,i)=>`<div class="card span-2"><div class="fig">Driver 0${i+1}</div><h3>${t}</h3><p class="muted" style="font-size:13px;line-height:1.45">继续跟踪成交量、宽度与波动率是否同步确认。</p><span class="badge ${i===0?"ok":"gold"}">${i===0?"+ 强化":"观察"}</span></div>`).join("")}
+      </section>`;
+    }
+
+    function radarPage(){
+      return `${header(pageMeta.radar)}
+      <section class="grid-12">
+        <div class="span-12 grid-5">${stocks.map((s,i)=>`<button class="candidate ${i===0?"active":""}" data-candidate="${i}" aria-pressed="${i===0?"true":"false"}"><span class="ticker">${s.symbol}</span><h3>${s.name}</h3>${spark()}<p>${s.note}</p><div style="margin-top:10px"><span class="badge ${i<2?"ok":"gold"}">${s.score} · ${s.quality}</span></div></button>`).join("")}</div>
+        <div class="panel primary-card span-7" id="radarPanel"><div class="card-head"><div><div class="fig">Structure radar</div><h3 id="radarTitle">AAPL 结构评分：82</h3></div><a class="btn primary route-link" href="stock-detail.html" data-page="stock">看证据账本</a></div>${radar()}<div class="factor-grid">${["趋势","相对强度","波动","市场匹配","证据质量"].map((f,i)=>`<div class="factor"><span>${f}</span><div class="bar" aria-label="${f} ${[78,82,64,72,86][i]}%"><i id="factor${i}" style="width:${[78,82,64,72,86][i]}%"></i></div></div>`).join("")}</div></div>
+        <aside class="panel primary-card span-5" id="radarReasonPanel"><div class="fig">Why in queue</div><div class="brief"><strong id="radarWhy">趋势仍在，但动能放缓。</strong><p id="radarNext">下一步：观察开盘后是否守住近 20 日均线区域，并检查成交量是否放大。</p></div><div class="grid-2 section-rule">${metrics([["候选池","218","今日扫描",""],["入队","5","需研究","gold"],["证据强度","B+","可解释","ok"],["风险温度","0.64","中性偏高","flat"]])}</div><details class="section-rule" open><summary>查看证据来源 <span>展开</span></summary><p>价格结构、相对强度、成交量变化、市场匹配度与观察列表触发共同构成当前候选原因。</p></details></aside>
+        <section class="panel primary-card table-wrap span-12">
+          <div class="fig">Queue ledger</div>
+          <table><caption>候选队列 · 入选原因、风险限制与下一步动作</caption><thead><tr><th>候选</th><th>雷达分</th><th>入选原因</th><th>风险限制</th><th>下一步</th><th>操作</th></tr></thead><tbody>${stocks.map((s,i)=>`<tr><td><b>${s.symbol}</b><br><span class="muted">${s.name}</span></td><td>${s.score}</td><td>${s.note}</td><td>${i<2?"波动偏高，避免追价":"需要成交量确认"}</td><td>${i<2?"看开盘量能":"等待二次确认"}</td><td><a class="btn route-link" href="stock-detail.html" data-page="stock">看证据</a></td></tr>`).join("")}</tbody></table>
+        </section>
+      </section>`;
+    }
+
+    function stock(){
+      return `${header(pageMeta.stock)}
+      <section class="grid-12">
+        <div class="panel primary-card span-7"><div class="card-head"><div><span class="ticker">AAPL · NASDAQ</span><h3>Apple Inc. · $288.90 <span class="up" style="font-family:var(--font-mono);font-size:18px">+1.24%</span></h3></div><div class="seg" role="tablist" aria-label="个股图表区间"><button class="range active">1D</button><button class="range">1W</button><button class="range">1M</button><button class="range">3M</button><button class="range">全部</button></div></div>${chart("#6B8F71",true)}</div>
+        <aside class="panel primary-card span-5"><div class="fig">Analyst memo</div><div class="brief"><strong>当前观察：趋势仍在，但不适合追价。</strong><p>价格仍高于 MA20，成交量未明显放大；报价延迟，开盘后需要重新确认。</p><p><b>下一步：</b>检查是否守住近 20 日均线区域；若量能不足，只保留观察。</p></div><div class="grid-4 section-rule">${metrics([["置信度","中","观察",""],["数据可靠","B+","可用","ok"],["雷达分","82","入队","gold"],["波动","偏高","确认","flat"]])}</div></aside>
+        ${["技术结构|趋势未破坏|价格位于 MA20 上方，但斜率趋缓。","基本面|现金流稳健|近季利润率稳定，硬件周期仍需观察。","事件 / 催化|发布会临近|新品预期可能影响短期波动。","同业比较|弱于 NVDA|AI 主题弹性不如半导体龙头。","风险触发|跌破 MA20|若放量跌破，趋势评分下调。","数据限制|报价延迟|盘中动作需开盘后复核。"].map(x=>{const p=x.split("|");return `<div class="card span-2"><div class="fig">${p[0]}</div><h3>${p[1]}</h3><p class="muted" style="font-size:13px;line-height:1.45">${p[2]}</p></div>`}).join("")}
+        <section class="panel primary-card span-12"><div class="card-head"><div><div class="fig">Evidence ledger</div><h3>证据账本</h3></div><div class="seg"><button class="active">全部</button><button>技术</button><button>财务</button><button>风险</button></div></div><div class="grid-3 section-rule"><details open><summary>技术证据 <span>展开</span></summary><p>近期价格高于 MA20，但成交量未同步放大；若跌破短期均线，趋势评分会下降。</p></details><details><summary>数据来源与限制 <span>展开</span></summary><p>报价存在延迟，历史 OHLCV 可用；盘前数据不完整，因此不直接给出交易动作。</p></details><details><summary>同业与主题 <span>展开</span></summary><p>与 NVDA 相比主题弹性不足，但稳定性更强；适合作为观察型核心资产。</p></details></div></section>
+      </section>`;
+    }
+
+    function watchlist(){
+      return `${header(pageMeta.watchlist)}
+      <section class="grid-12">
+        <div class="panel primary-card span-3"><div class="fig">Needs review</div><h3>NVDA 重新入队</h3><p class="muted">相对强度上升，波动同步抬高。</p><span class="badge gold">今日复查</span></div>
+        <div class="panel primary-card span-3"><div class="fig">Price trigger</div><h3>AAPL 接近 MA20</h3><p class="muted">需要确认是否守住短期结构。</p><span class="badge ok">观察</span></div>
+        <div class="panel primary-card span-3"><div class="fig">Data change</div><h3>MSFT 证据提升</h3><p class="muted">财务与价格结构同时改善。</p><span class="badge ok">稳定</span></div>
+        <div class="panel primary-card span-3"><div class="fig">Risk queue</div><h3>无新增高危提醒</h3><p class="muted">当前没有需要立即处理的风险事件。</p><span class="badge">正常</span></div>
+        <section class="panel primary-card table-wrap span-12"><div class="card-head"><div><div class="fig">Watchlist ledger</div><h3>研究任务账本</h3></div><button class="btn primary">添加标的</button></div><table><caption>价格、结构状态、证据质量与下一步动作</caption><thead><tr><th>Symbol</th><th>最新价格</th><th>今日变化</th><th>结构状态</th><th>证据质量</th><th>最近触发</th><th>下一步</th><th>操作</th></tr></thead><tbody>${stocks.concat(stocks.slice(0,3)).map((s,i)=>`<tr><td><b>${s.symbol}</b><br><span class="muted">${s.name}</span></td><td>${s.price}</td><td class="${s.change.includes("-")?"down":"up"}">${s.change}</td><td>趋势观察</td><td>${s.quality}</td><td>${s.note}</td><td>${i%2?"等开盘量能":"复查证据"}</td><td><a class="btn route-link" href="stock-detail.html" data-page="stock">查看</a></td></tr>`).join("")}</tbody></table></section>
+      </section>`;
+    }
+
+    function scanner(){
+      return `${header(pageMeta.scanner)}
+      <section class="grid-12">
+        <aside class="panel primary-card span-3"><div class="fig">Scan setup</div><h3>扫描策略</h3><div class="form-grid section-rule"><label class="field"><span>市场</span><select id="scanMarket"><option>US</option><option>CN</option><option>HK</option></select></label><label class="field"><span>策略模板</span><select id="scanTemplate"><option>趋势延续</option><option>波动压缩突破</option><option>相对强度</option><option>回撤修复</option></select></label><label class="field"><span>数据要求</span><select id="dataMode"><option>只看数据完整标的</option><option>允许部分数据</option></select></label><label class="field"><span>Top N</span><input id="scanTop" type="number" value="20" min="5" max="100"></label><button class="btn primary" id="runScan">运行扫描</button></div></aside>
+        <div class="panel primary-card span-9" id="scannerResultsWrap"><div class="card-head"><div><div class="fig">Scan results</div><h3>候选结果</h3></div><span class="badge ok" id="scanStatusBadge">可加入雷达</span></div><div class="table-wrap" id="scanTableHost" aria-live="polite"></div></div>
+      </section>`;
+    }
+
+    function backtest(){
+      return `${header(pageMeta.backtest)}
+      <section class="grid-12">
+        <aside class="panel primary-card span-3"><div class="fig">Strategy template</div><h3>回测配置</h3><div class="form-grid section-rule"><label class="field"><span>策略模板</span><select><option>趋势延续</option><option>均线回踩</option><option>波动压缩突破</option><option>防守轮动</option></select></label><label class="field"><span>标的</span><input value="AAPL, NVDA, MSFT"></label><label class="field"><span>时间范围</span><select><option>近 5 年</option><option>近 3 年</option><option>近 1 年</option></select></label><label class="field"><span>Benchmark</span><select><option>SPY</option><option>QQQ</option></select></label><button class="btn primary">运行回测</button></div></aside>
+        <div class="panel primary-card span-6"><div class="card-head"><div><div class="fig">Equity curve</div><h3>回测结果</h3></div><span class="badge gold">样本足够</span></div>${chart("#6B8F71")}</div>
+        <div class="span-3 grid-2">${metrics([["年化收益","18.4%","vs SPY 8.7%","up"],["最大回撤","-12.8","中等","flat"],["胜率","61%","60 月","up"],["交易次数","48","月度再平衡",""],["夏普","1.21","可接受","ok"],["换手","中","成本可控","flat"]])}</div>
+        <section class="panel primary-card table-wrap span-12"><div class="fig">Where it breaks</div><table><caption>样本交易与策略失效环境</caption><thead><tr><th>日期</th><th>标的</th><th>信号</th><th>持有期</th><th>收益</th><th>回撤贡献</th><th>备注</th></tr></thead><tbody>${["2024-02-12|NVDA|趋势延续|34 日|+18.2%|-3.1%|主题强势","2024-04-08|AAPL|均线回踩|21 日|+6.4%|-2.2%|量能不足","2024-06-18|MSFT|防守轮动|42 日|+9.8%|-1.7%|结构稳定"].map(r=>`<tr>${r.split("|").map(v=>`<td class="${v.includes("+")?"up":v.includes("-")?"down":""}">${v}</td>`).join("")}</tr>`).join("")}</tbody></table></section>
+      </section>`;
+    }
+
+    function scenario(){
+      return `${header(pageMeta.scenario)}
+      <section class="grid-12">
+        <aside class="panel primary-card span-3"><div class="fig">Scenario parameters</div><h3>情景参数</h3><div class="form-grid section-rule"><label class="field"><span>预设情景</span><select><option>VIX 冲击</option><option>利率上行</option><option>美元走强</option><option>AI 主题回调</option></select></label><label class="field"><span>冲击幅度 <b id="shockVal">+18%</b></span><input id="shock" type="range" min="5" max="40" value="18" aria-label="冲击幅度"></label><label class="field"><span>影响时间 <b id="timeVal">10 日</b></span><input id="time" type="range" min="1" max="30" value="10" aria-label="影响时间"></label><button class="btn primary" id="runScenario">重算冲击路径</button></div></aside>
+        <div class="panel primary-card span-5"><div class="card-head"><div><div class="fig">Impact map</div><h3>影响地图</h3></div><span class="badge gold">代理数据</span></div>${radar()}</div>
+        <div class="span-4 grid-2">${metrics([["科技成长","高","估值敏感","down"],["防御消费","中","相对稳定","flat"],["金融股","低","利率相关","up"],["美元资产","中","相关性提升","flat"],["波动因子","高","需降仓","down"],["现金权重","+5%","建议上调","gold"]])}</div>
+      </section>`;
+    }
+
+    const renderers={home,market,radar:radarPage,stock,watchlist,scanner,backtest,scenario};
+
+    function setActive(page){
+      document.querySelectorAll(".navlink,.more-menu a").forEach(a=>{
+        const active=a.dataset.page===page;
+        a.classList.toggle("active",active);
+        active?a.setAttribute("aria-current","page"):a.removeAttribute("aria-current");
+      });
+      document.getElementById("moreButton").classList.toggle("active",["scanner","backtest","scenario"].includes(page));
+    }
+    function render(page,push=true){
+      const key=renderers[page]?page:"home";
+      const app=document.getElementById("app");
+      cancelMotions();
+      app.innerHTML=renderers[key]();
+      document.title=`WolfyStock · ${pageMeta[key].label}`;
+      document.getElementById("liveStatus").textContent=`已打开 ${pageMeta[key].label}`;
+      setActive(key);
+      bindPage(key);
+      if(push) history.pushState({page:key},"",pageMeta[key].file);
+      window.scrollTo({top:0,left:0,behavior:"auto"});
+      routeMotion();
+      requestAnimationFrame(()=>app.focus({preventScroll:true}));
+    }
+    function currentPage(){return pathToPage[window.location.pathname.replace(/\\/g,"/")]||"home"}
+    function bindRoutes(){
+      document.body.addEventListener("click",e=>{
+        const l=e.target.closest(".route-link");
+        if(l&&l.dataset.page){
+          e.preventDefault();
+          closeMore();
+          render(l.dataset.page,true);
+        }
+      });
+    }
+    function bindPage(page){
+      document.querySelectorAll(".range").forEach(btn=>btn.addEventListener("click",()=>{
+        btn.parentElement.querySelectorAll("button").forEach(b=>b.classList.remove("active"));
+        btn.classList.add("active");
+        micro(btn.closest(".panel")?.querySelector(".chart")||btn.closest(".panel"));
+      }));
+      if(page==="radar"){
+        const data=[
+          {title:"AAPL 结构评分：82",why:"趋势仍在，但动能放缓。",next:"下一步：观察开盘后是否守住近 20 日均线区域，并检查成交量是否放大。",f:[78,82,64,72,86]},
+          {title:"NVDA 结构评分：88",why:"AI 主题与相对强度同步上升。",next:"下一步：确认波动率没有继续扩张，避免追高。",f:[92,94,72,88,80]},
+          {title:"MSFT 结构评分：80",why:"云业务韧性与价格结构较稳定。",next:"下一步：观察财报后市场是否继续给予估值溢价。",f:[76,78,60,74,84]},
+          {title:"600519 结构评分：74",why:"防御属性稳定，但短期弹性有限。",next:"下一步：跟踪消费数据和估值分位是否继续改善。",f:[70,62,58,68,82]},
+          {title:"300750 结构评分：70",why:"修复观察，但量能确认不足。",next:"下一步：等待成交放大和行业温度改善。",f:[64,72,66,58,70]}
+        ];
+        document.querySelectorAll(".candidate").forEach(btn=>btn.addEventListener("click",()=>{
+          document.querySelectorAll(".candidate").forEach(b=>{b.classList.remove("active");b.setAttribute("aria-pressed","false")});
+          btn.classList.add("active");
+          btn.setAttribute("aria-pressed","true");
+          const item=data[+btn.dataset.candidate];
+          radarTitle.textContent=item.title;
+          radarWhy.textContent=item.why;
+          radarNext.textContent=item.next;
+          item.f.forEach((v,i)=>document.getElementById("factor"+i).style.width=v+"%");
+          micro(radarPanel);
+          micro(radarReasonPanel);
+        }));
+      }
+      if(page==="scanner"){
+        const rows=[["01","NVDA","88","相对强度与主题热度同步上升","波动偏高","延迟","先看风险"],["02","AAPL","82","回踩短期均线后仍未破位","动能放缓","历史数据可用","等开盘量"],["03","MSFT","80","云业务韧性与趋势结构稳定","催化不足","实时","加入观察"],["04","600519","74","防御资产中证据质量较高","弹性有限","历史数据可用","低吸观察"],["05","300750","70","估值修复但量能不足","波动未收敛","延迟","等待确认"]];
+        const table=(slice)=>`<table><caption>扫描结果 · 排名、分数、原因、风险限制和下一步</caption><thead><tr><th>排名</th><th>候选</th><th>分数</th><th>原因</th><th>风险限制</th><th>数据状态</th><th>下一步</th><th>操作</th></tr></thead><tbody>${slice.map(r=>`<tr><td>${r[0]}</td><td><b>${r[1]}</b>${spark()}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td><td>${r[6]}</td><td><button class="btn">加入雷达</button></td></tr>`).join("")}</tbody></table>`;
+        function ready(limit=20){scanStatusBadge.className="badge ok";scanStatusBadge.textContent="可加入雷达";scanTableHost.innerHTML=table(rows.slice(0,Math.max(1,Math.min(rows.length,limit))));state(scannerResultsWrap)}
+        function loading(){scanStatusBadge.className="badge gold";scanStatusBadge.textContent="正在扫描";scanTableHost.innerHTML=`<div class="state-card"><div class="spinner" aria-hidden="true"></div><h3>正在扫描候选池</h3><p>正在匹配市场、策略模板、数据完整性和风险限制。</p><div style="width:min(420px,100%);display:grid;gap:10px;margin-top:18px"><span class="skeleton"></span><span class="skeleton" style="width:82%"></span><span class="skeleton" style="width:64%"></span></div></div>`;state(scannerResultsWrap)}
+        function empty(){scanStatusBadge.className="badge";scanStatusBadge.textContent="无候选";scanTableHost.innerHTML=`<div class="state-card"><span class="badge">Empty</span><h3>当前条件没有候选</h3><p>可以降低分数阈值、切换策略模板，或允许部分延迟数据进入扫描结果。</p><button class="btn gold" type="button" id="relaxFilter">放宽条件</button></div>`;document.getElementById("relaxFilter").addEventListener("click",()=>ready(5));state(scannerResultsWrap)}
+        function error(){scanStatusBadge.className="badge danger";scanStatusBadge.textContent="需要复试";scanTableHost.innerHTML=`<div class="state-card"><span class="badge danger">Error</span><h3>部分数据源暂时不可用</h3><p>行情源延迟或连接不稳定。历史数据仍可用，建议稍后重试或切换到数据完整优先模式。</p><button class="btn primary" type="button" id="retryScan">重试扫描</button></div>`;document.getElementById("retryScan").addEventListener("click",()=>ready(5));state(scannerResultsWrap)}
+        function mode(){if(scanMarket.value==="HK")return"empty";if(scanMarket.value==="CN"&&scanTemplate.value==="波动压缩突破")return"error";return"ready"}
+        ready(5);
+        runScan.addEventListener("click",()=>{
+          runScan.disabled=true;
+          loading();
+          setTimeout(()=>{
+            runScan.disabled=false;
+            const m=mode();
+            m==="empty"?empty():m==="error"?error():ready(+scanTop.value||20);
+          },520);
+        });
+      }
+      if(page==="scenario"){
+        const update=()=>{
+          shockVal.textContent="+"+shock.value+"%";
+          timeVal.textContent=time.value+" 日";
+          micro(document.querySelector('[data-od-id="signature-radar"]'));
+        };
+        shock.addEventListener("input",update);
+        time.addEventListener("input",update);
+      }
+    }
+    function bindSearch(){
+      const input=document.getElementById("globalSearch");
+      const box=document.getElementById("searchResults");
+      input.addEventListener("input",()=>{
+        const q=input.value.trim().toLowerCase();
+        const matches=stocks.filter(s=>(s.symbol+s.name+s.note).toLowerCase().includes(q)).slice(0,5);
+        if(q && !matches.length){
+          box.innerHTML=`<div class="result-empty">没有找到匹配标的。可以尝试输入代码，例如 AAPL、NVDA 或 600519。</div>`;
+        }else{
+          box.innerHTML=matches.map((s,i)=>`<div class="result" data-symbol="${s.symbol}" role="option" tabindex="0" aria-selected="${i===0?"true":"false"}"><div><b>${s.symbol} · ${s.name}</b><br><span class="muted">${s.note}</span></div><span class="ticker">${s.price}</span></div>`).join("");
+        }
+        const open=q.length>0;
+        box.classList.toggle("open",open);
+        box.setAttribute("aria-hidden",open?"false":"true");
+      });
+      box.addEventListener("click",e=>{
+        const r=e.target.closest(".result");
+        if(!r)return;
+        input.value=r.dataset.symbol;
+        box.classList.remove("open");
+        box.setAttribute("aria-hidden","true");
+        render("stock",true);
+      });
+      box.addEventListener("keydown",e=>{
+        if(e.key==="Enter"){
+          const r=e.target.closest(".result");
+          if(r){
+            input.value=r.dataset.symbol;
+            box.classList.remove("open");
+            box.setAttribute("aria-hidden","true");
+            render("stock",true);
+          }
+        }
+      });
+      window.addEventListener("keydown",e=>{
+        if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="k"){
+          e.preventDefault();
+          input.focus();
+        }
+        if(e.key==="Escape"){
+          box.classList.remove("open");
+          box.setAttribute("aria-hidden","true");
+          closeMore();
+        }
+      });
+    }
+    function closeMore(){
+      moreMenu.classList.remove("open");
+      moreButton.setAttribute("aria-expanded","false");
+    }
+    moreButton.addEventListener("click",()=>{
+      const open=!moreMenu.classList.contains("open");
+      moreMenu.classList.toggle("open",open);
+      moreButton.setAttribute("aria-expanded",open?"true":"false");
+    });
+    document.addEventListener("click",e=>{if(!e.target.closest("#moreMenu"))closeMore()});
+    window.addEventListener("popstate",()=>render(currentPage(),false));
+    bindRoutes();
+    bindSearch();
+    render(currentPage(),false);
+  </script>
+</body>
+</html>

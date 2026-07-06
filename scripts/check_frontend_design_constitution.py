@@ -583,17 +583,17 @@ def scan_text(path: str, text: str) -> ScanResult:
                     rule="page-level-solid-slab",
                     path=normalized,
                     line=index + 1,
-                    message="Avoid page-level solid black/gray/zinc/slate/neutral slabs; use terminal shell/panel primitives.",
+                    message="Avoid page-level solid black/gray/zinc/slate/neutral slabs; use DESIGN.md paper shell/panel primitives.",
                     excerpt=line.strip()[:180],
                 ))
         if key_route_page and is_loud_warning_material(line):
-            findings.append(Finding(
-                rule="loud-warning-material",
-                path=normalized,
-                line=index + 1,
-                message="Avoid loud yellow/amber warning slabs; use TerminalNotice or TerminalChip caution.",
-                excerpt=line.strip()[:180],
-            ))
+                findings.append(Finding(
+                    rule="loud-warning-material",
+                    path=normalized,
+                    line=index + 1,
+                    message="Avoid loud yellow/amber warning slabs; use semantic paper-token caution states.",
+                    excerpt=line.strip()[:180],
+                ))
         if key_route_page and is_user_page(normalized) and is_visible_line(line):
             lowered = line.lower()
             for term in INTERNAL_TERMS:
@@ -622,7 +622,7 @@ def scan_text(path: str, text: str) -> ScanResult:
             rule="migrated-page-terminal-primitives",
             path=normalized,
             line=1,
-            message="Migrated pages must import and use terminal primitives.",
+            message="Migrated pages must import and use shared research primitives.",
             excerpt="missing Terminal primitive import/use",
         ))
 
@@ -638,7 +638,7 @@ def scan_text(path: str, text: str) -> ScanResult:
                 normalized,
                 text,
                 start,
-                "Migrated pages should use TerminalPanel/TerminalNestedBlock/TerminalButton/TerminalChip instead of page-local material classes.",
+                "Migrated pages should use shared paper-token primitives instead of page-local material classes.",
                 match.group(0),
             )
             break

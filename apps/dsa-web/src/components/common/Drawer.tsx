@@ -1,7 +1,6 @@
 /**
- * SpaceX live refactor: preserves side-drawer mounting, focus escape, and body
- * scroll locking while simplifying the shell into a quieter translucent panel
- * with restrained header typography and lighter close controls.
+ * Paper workbench drawer: preserves mounting, focus escape, and body scroll
+ * locking while using the shared surface, border, and typography tokens.
  */
 import type React from 'react';
 import { useEffect, useEffectEvent, useId, useReducer, useRef } from 'react';
@@ -311,7 +310,7 @@ export const Drawer: React.FC<DrawerProps> = ({
         data-testid="drawer-backdrop"
         data-state={state.uiState}
         className={cn(
-          'absolute inset-0 border-0 bg-black/60 p-0 transition-opacity duration-200 ease-out',
+          'absolute inset-0 border-0 bg-[color:var(--theme-overlay-backdrop)] p-0 transition-opacity duration-200 ease-out',
           state.uiState === 'open' && state.isInteractionReady ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
         )}
         onClick={handleBackdropClick}
@@ -325,15 +324,15 @@ export const Drawer: React.FC<DrawerProps> = ({
           aria-hidden={shouldGuardA11y && !state.isInteractionReady ? true : undefined}
           aria-live={shouldGuardA11y ? (state.isInteractionReady ? 'polite' : 'off') : undefined}
           className={cn(
-            'drawer__panel relative m-0 flex h-full max-h-none w-full max-w-none flex-col border-0 bg-white/[0.02] p-0 backdrop-blur-sm transition-all duration-200 ease-out',
+            'drawer__panel relative m-0 flex h-full max-h-none w-full max-w-none flex-col border-0 bg-[color:var(--surface)] p-0 transition-all duration-200 ease-out',
             borderClass,
-            'border-white/5',
+            'border-[color:var(--line)]',
             state.isInteractionReady ? 'pointer-events-auto' : 'pointer-events-none',
             panelStateClass,
           )}
           data-state={state.uiState}
         >
-          <div className="drawer__header flex items-center justify-between border-b border-white/10 px-4 py-3 sm:px-5 [padding-top:max(0.9rem,env(safe-area-inset-top))]">
+          <div className="drawer__header flex items-center justify-between border-b border-[color:var(--line)] px-4 py-3 sm:px-5 [padding-top:max(0.9rem,env(safe-area-inset-top))]">
             {title ? (
               <h2 id={titleId} className="drawer__title text-[11px] font-semibold uppercase tracking-[0.16em] text-secondary-text">
                 {title}
@@ -343,7 +342,7 @@ export const Drawer: React.FC<DrawerProps> = ({
               ref={closeButtonRef}
               type="button"
               onClick={onClose}
-              className="drawer__close inline-flex size-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-secondary-text transition-colors hover:border-white/20 hover:bg-white/[0.06] hover:text-foreground"
+              className="drawer__close inline-flex size-9 items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-3)] text-secondary-text transition-colors hover:border-[color:var(--sage)] hover:bg-[color:var(--surface-2)] hover:text-foreground"
               aria-label={t('common.closeDrawer')}
             >
               <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

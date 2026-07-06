@@ -297,7 +297,7 @@ describe('AuthContext', () => {
     window.localStorage.setItem('dsa-task-queue-v1', '[{"taskId":"task-1"}]');
     window.localStorage.setItem('wolfystock.ruleBacktestPresets.v1', '[{"id":"preset-1"}]');
     window.localStorage.setItem('dsa-ui-language', 'en');
-    window.localStorage.setItem('dsa-theme-style', 'spacex');
+    window.localStorage.setItem('dsa-theme-style', 'paper');
     window.sessionStorage.setItem('dsa-admin-surface-mode', 'admin');
 
     getStatus.mockResolvedValueOnce({
@@ -327,7 +327,7 @@ describe('AuthContext', () => {
     expect(window.localStorage.getItem('dsa-task-queue-v1')).toBeNull();
     expect(window.localStorage.getItem('wolfystock.ruleBacktestPresets.v1')).toBeNull();
     expect(window.localStorage.getItem('dsa-ui-language')).toBe('en');
-    expect(window.localStorage.getItem('dsa-theme-style')).toBe('spacex');
+    expect(window.localStorage.getItem('dsa-theme-style')).toBe('paper');
     expect(window.sessionStorage.getItem('dsa-admin-surface-mode')).toBeNull();
     expect(hardRedirectMock).not.toHaveBeenCalled();
     await new Promise((resolve) => window.setTimeout(resolve, 120));

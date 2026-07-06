@@ -42,18 +42,18 @@ export default function ProductReadModelStatusStrip({
       data-testid={testId}
       data-product-read-state={model.state || 'no_evidence'}
       data-product-read-ready={String(model.ready === true)}
-      className={`rounded-lg border border-white/10 bg-white/[0.035] px-3 py-3 text-xs text-white/72 ${className}`}
+      className={`rounded-lg border border-[color:var(--line)] bg-[var(--wolfy-surface-input)] px-3 py-3 text-xs text-[color:var(--wolfy-text-secondary)] ${className}`}
     >
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-normal text-white/42">
+        <p className="text-[11px] font-semibold uppercase tracking-normal text-[color:var(--wolfy-text-muted)]">
           {title || (language === 'en' ? 'Read model' : '读模型')}
         </p>
         <StatusBadge status={productReadModelTone(model.state)} label={stateLabel} size="sm" />
       </div>
-      <p className="mt-2 leading-5 text-white/72">{description}</p>
-      {coverage && coverage !== description ? <p className="mt-1 leading-5 text-white/50">{coverage}</p> : null}
-      {freshness && freshness !== description ? <p className="mt-1 leading-5 text-white/50">{freshness}</p> : null}
-      {provenance && provenance !== description ? <p className="mt-1 leading-5 text-white/42">{provenance}</p> : null}
+      <p className="mt-2 leading-5 text-[color:var(--wolfy-text-secondary)]">{description}</p>
+      {coverage && coverage !== description ? <p className="mt-1 leading-5 text-[color:var(--wolfy-text-muted)]">{coverage}</p> : null}
+      {freshness && freshness !== description ? <p className="mt-1 leading-5 text-[color:var(--wolfy-text-muted)]">{freshness}</p> : null}
+      {provenance && provenance !== description ? <p className="mt-1 leading-5 text-[color:var(--wolfy-text-muted)]">{provenance}</p> : null}
     </section>
   );
 }
