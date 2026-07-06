@@ -323,7 +323,14 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
         self.assertEqual(readiness["minimumCoverageThreshold"], 2)
         self.assertEqual(readiness["coverageState"], "sufficient")
         self.assertEqual(readiness["blockingReasons"], [])
-        self.assertEqual(readiness["downstreamImpact"]["blockedProducts"], [])
+        self.assertEqual(
+            readiness["downstreamImpact"]["blockedProducts"],
+            ["Scanner", "Research Radar", "Backtest", "Market Overview"],
+        )
+        self.assertIn(
+            "market_data_readiness_not_evaluated",
+            readiness["downstreamImpact"]["blockingReasons"],
+        )
         self.assertTrue(str(readiness["universeVersion"]).startswith("scanner-universe-cn-"))
         scanner_readiness = readiness["scannerUniverseReadiness"]
         self.assertEqual(scanner_readiness["symbols"], ["600001", "300123", "000005"])
