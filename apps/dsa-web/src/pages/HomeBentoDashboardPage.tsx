@@ -4797,8 +4797,8 @@ function buildGuestMarketSnapshotView(
 ): GuestMarketSnapshotView {
   const isEnglish = locale === 'en';
   const note = isEnglish
-    ? 'Public snapshot only. Observation, not a trading instruction.'
-    : '当前摘要只用于市场观察，不构成买卖建议。';
+    ? 'Research observation, not investment advice.'
+    : '研究观察，不构成投资建议。';
 
   if (isLoading && !briefing) {
     return {
@@ -4986,7 +4986,7 @@ function buildMemberMarketBriefView(
         'Coverage can be partial across markets and evidence categories.',
         'Freshness or quote history may be delayed or incomplete.',
         'WolfyStock withholds stronger conclusions when evidence is insufficient.',
-        'Observation only: no buy, sell, hold, target price, stop-loss, or position-size instruction.',
+        'Research observation only; no personalized trading instruction.',
       ]
       : [
         '不同市场和证据类别的覆盖可能不完整。',

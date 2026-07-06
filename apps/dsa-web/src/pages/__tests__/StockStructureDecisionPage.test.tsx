@@ -777,6 +777,10 @@ describe('StockStructureDecisionPage', () => {
     expect(ledger).toHaveTextContent('证据就绪度');
     expect(ledger).toHaveTextContent('部分可用');
     expect(ledger).toHaveTextContent('缺失字段');
+    const ledgerScroll = ledger.querySelector('.stock-evidence-ledger__scroll');
+    expect(ledgerScroll).toHaveClass('overflow-x-auto');
+    expect(ledgerScroll?.querySelector('table')).toHaveClass('stock-evidence-ledger__table', 'product-table');
+    expect(within(ledger).getByRole('columnheader', { name: '来源边界' })).toBeInTheDocument();
     const stockCoreChart = within(page).getByTestId('stock-history-core-chart');
     expect(within(page).getByTestId('stock-price-history-visual-block')).toContainElement(stockCoreChart);
     expect(stockCoreChart.compareDocumentPosition(within(page).getByTestId('stock-cockpit-stage-quote')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -873,6 +877,31 @@ describe('StockStructureDecisionPage', () => {
     })).toEqual([]);
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/available|not_integrated|insufficient|blocked|observationOnly|not personalized financial advice/i);
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/buy|sell|hold|target price|stop-loss|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
+  });
+
+  it('keeps stock evidence-package headings semantic without changing compact typography', async () => {
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1, name: 'AAPL 研究工作区' })).toBeInTheDocument();
+
+    const detailBoundary = await within(page).findByTestId('stock-detail-collapsed-evidence-boundary');
+    fireEvent.click(within(detailBoundary).getByText('详细证据与数据边界'));
+
+    const registry = await within(page).findByTestId('single-stock-evidence-pack-registry');
+    const evidencePackHeading = within(registry).getByRole('heading', { level: 3, name: '个股证据包' });
+    expect(evidencePackHeading.tagName).toBe('H3');
+    expect(evidencePackHeading).toHaveClass('text-sm', 'font-semibold', 'text-[color:var(--wolfy-text-primary)]');
+    expect(registry.querySelector('h4')).toBeNull();
+    expect(within(registry).getByTestId('single-stock-evidence-pack-copy')).toBeEnabled();
+    expect(within(registry).getByTestId('single-stock-evidence-pack-download')).toBeEnabled();
   });
 
   it('renders ORCL-specific history readiness instead of a default symbol', async () => {

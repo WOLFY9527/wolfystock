@@ -1703,7 +1703,7 @@ function SingleStockEvidencePackControls({
       <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h4 className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{entry.label}</h4>
+            <h3 className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{entry.label}</h3>
             <TerminalChip variant={canExport ? 'success' : 'caution'}>
               {canExport ? (language === 'en' ? 'Available' : '可用') : (language === 'en' ? 'Pending evidence' : '待补证')}
             </TerminalChip>
