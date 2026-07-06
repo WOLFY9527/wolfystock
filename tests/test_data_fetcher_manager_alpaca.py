@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import unittest
+from os import environ
 from ssl import SSLEOFError
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -56,6 +57,74 @@ class _AlpacaStub:
 
 
 class DataFetcherManagerAlpacaTestCase(unittest.TestCase):
+    def test_uat_no_live_providers_blocks_us_daily_direct_route_before_fetchers(self) -> None:
+        yfinance = _YfinanceStub(
+            UnifiedRealtimeQuote(code="MSFT", source=RealtimeSource.YFINANCE, price=410.0),
+            daily_result=(pd.DataFrame([{"date": "2026-04-14", "close": 410.0}]), "YfinanceFetcher"),
+        )
+        manager = DataFetcherManager(fetchers=[yfinance])
+        alpaca = _AlpacaStub(
+            UnifiedRealtimeQuote(code="MSFT", source=RealtimeSource.ALPACA, price=411.0),
+            daily_result=(pd.DataFrame([{"date": "2026-04-14", "close": 411.0}]), "AlpacaFetcher"),
+        )
+
+        with patch.dict(environ, {"WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS": "true"}, clear=False), \
+             patch("data_provider.base.get_provider_credentials") as mock_credentials, \
+             patch.object(manager, "_get_alpaca_fetcher", return_value=alpaca):
+            mock_credentials.return_value = ProviderCredentialBundle(
+                provider="alpaca",
+                auth_mode="key_secret",
+                key_id="alpaca-id",
+                secret_key="alpaca-secret",
+            )
+            with self.assertRaises(DataFetchError):
+                manager.get_daily_data("MSFT", days=20)
+
+        self.assertEqual(alpaca.daily_calls, [])
+        self.assertEqual(yfinance.daily_calls, [])
+        trace = manager.get_last_daily_history_trace()
+        self.assertTrue(
+            any(
+                item["provider"] == "datafetchermanager"
+                and item["status"] == "blocked"
+                and item["reason"] == "uat_no_live_providers"
+                for item in trace
+            )
+        )
+
+    def test_uat_no_live_providers_blocks_us_realtime_direct_route_before_fetchers(self) -> None:
+        yfinance = _YfinanceStub(
+            UnifiedRealtimeQuote(code="MSFT", source=RealtimeSource.YFINANCE, price=410.0)
+        )
+        manager = DataFetcherManager(fetchers=[yfinance])
+        alpaca = _AlpacaStub(
+            UnifiedRealtimeQuote(code="MSFT", source=RealtimeSource.ALPACA, price=411.0)
+        )
+
+        with patch.dict(environ, {"WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS": "true"}, clear=False), \
+             patch("data_provider.base.get_provider_credentials") as mock_credentials, \
+             patch.object(manager, "_get_alpaca_fetcher", return_value=alpaca):
+            mock_credentials.return_value = ProviderCredentialBundle(
+                provider="alpaca",
+                auth_mode="key_secret",
+                key_id="alpaca-id",
+                secret_key="alpaca-secret",
+            )
+            quote = manager.get_realtime_quote("MSFT")
+
+        self.assertIsNone(quote)
+        self.assertEqual(alpaca.calls, [])
+        self.assertEqual(yfinance.calls, [])
+        trace = manager.get_last_realtime_quote_trace()
+        self.assertTrue(
+            any(
+                item["provider"] == "datafetchermanager"
+                and item["status"] == "blocked"
+                and item["reason"] == "uat_no_live_providers"
+                for item in trace
+            )
+        )
+
     def test_us_quote_prefers_alpaca_when_configured(self) -> None:
         yfinance = _YfinanceStub(
             UnifiedRealtimeQuote(code="AAPL", source=RealtimeSource.YFINANCE, price=210.0)

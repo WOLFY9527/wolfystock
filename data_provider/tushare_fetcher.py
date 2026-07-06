@@ -34,6 +34,7 @@ from tenacity import (
 from .base import BaseFetcher, DataFetchError, RateLimitError, STANDARD_COLUMNS,is_bse_code, is_st_stock, is_kc_cy_stock, normalize_stock_code, _is_hk_market
 from .realtime_types import UnifiedRealtimeQuote, ChipDistribution
 from src.config import get_config
+from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
 import os
 from zoneinfo import ZoneInfo
 
@@ -160,6 +161,11 @@ class TushareFetcher(BaseFetcher):
         _timeout = getattr(self._api, '_DataApi__timeout', 30)
 
         def patched_query(self_api, api_name, fields='', **kwargs):
+            require_uat_provider_dispatch_allowed(
+                provider="tushare",
+                capability=str(api_name or "query"),
+                route="TushareFetcher.patched_query",
+            )
             req_params = {
                 'api_name': api_name,
                 'token': _token,
@@ -491,6 +497,12 @@ class TushareFetcher(BaseFetcher):
         if _is_hk_market(stock_code):
             return None
 
+        require_uat_provider_dispatch_allowed(
+            provider="tushare",
+            capability="stock_name",
+            route="TushareFetcher.get_stock_name",
+        )
+
         # 检查缓存
         if hasattr(self, '_stock_name_cache') and stock_code in self._stock_name_cache:
             return self._stock_name_cache[stock_code]
@@ -541,6 +553,12 @@ class TushareFetcher(BaseFetcher):
         if self._api is None:
             logger.warning("Tushare API 未初始化，无法获取股票列表")
             raise DataFetchError("Tushare API 未初始化，无法获取股票列表")
+
+        require_uat_provider_dispatch_allowed(
+            provider="tushare",
+            capability="stock_list",
+            route="TushareFetcher.get_stock_list",
+        )
         
         try:
             # 速率限制检查
@@ -593,6 +611,12 @@ class TushareFetcher(BaseFetcher):
         if _is_hk_market(stock_code):
             logger.debug(f"TushareFetcher 跳过港股实时行情 {stock_code}")
             return None
+
+        require_uat_provider_dispatch_allowed(
+            provider="tushare",
+            capability="realtime_quote",
+            route="TushareFetcher.get_realtime_quote",
+        )
 
         from .realtime_types import (
             RealtimeSource,
@@ -703,6 +727,12 @@ class TushareFetcher(BaseFetcher):
         if self._api is None:
             return None
 
+        require_uat_provider_dispatch_allowed(
+            provider="tushare",
+            capability="realtime_quote",
+            route="TushareFetcher.get_main_indices",
+        )
+
         from .realtime_types import safe_float
 
         # 指数映射：Tushare代码 -> 名称
@@ -773,6 +803,12 @@ class TushareFetcher(BaseFetcher):
         """
         if self._api is None:
             return None
+
+        require_uat_provider_dispatch_allowed(
+            provider="tushare",
+            capability="market_stats",
+            route="TushareFetcher.get_market_stats",
+        )
 
         try:
             logger.info("[Tushare] ts.pro_api() 获取市场统计...")
@@ -1059,6 +1095,12 @@ class TushareFetcher(BaseFetcher):
         if _is_etf_code(stock_code):
             logger.warning(f"[Tushare] TushareFetcher 不支持 ETF {stock_code} 的筹码分布")
             return None
+
+        require_uat_provider_dispatch_allowed(
+            provider="tushare",
+            capability="chip_distribution",
+            route="TushareFetcher.get_chip_distribution",
+        )
         
         try:
             # 19点之后才有当天数据

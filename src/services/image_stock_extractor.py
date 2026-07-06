@@ -21,6 +21,7 @@ from typing import List, Optional, Tuple
 
 from src.config import Config, get_config
 from src.services.llm_instrumentation import emit_llm_event, provider_from_model
+from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -246,6 +247,11 @@ def _call_litellm_vision(image_b64: str, mime_type: str, api_key: Optional[str] 
     model = _resolve_vision_model()
     if not model:
         raise ValueError("未配置 Vision API。请设置 LITELLM_MODEL 或相关 API Key。")
+    require_uat_provider_dispatch_allowed(
+        provider=provider_from_model(model),
+        capability="llm_vision",
+        route="image_stock_extractor._call_litellm_vision",
+    )
 
     keys = _get_api_keys_for_model(model, cfg)
     if not keys:

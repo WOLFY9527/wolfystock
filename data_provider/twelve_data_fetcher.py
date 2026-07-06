@@ -13,6 +13,7 @@ import requests
 from .base import BaseFetcher, DataFetchError, STANDARD_COLUMNS, normalize_stock_code
 from .realtime_types import RealtimeSource, UnifiedRealtimeQuote, safe_float, safe_int
 from .us_index_mapping import is_us_stock_code
+from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,11 @@ class TwelveDataFetcher(BaseFetcher):
             pass
 
     def _request_json(self, path: str, *, params: Optional[Dict[str, Any]] = None) -> Any:
+        require_uat_provider_dispatch_allowed(
+            provider="twelve_data",
+            capability="market_data",
+            route="TwelveDataFetcher._request_json",
+        )
         request_params = dict(params or {})
         request_params["apikey"] = self.api_key
         response = self.session.get(

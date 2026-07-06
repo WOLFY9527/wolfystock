@@ -7,11 +7,18 @@ from typing import Dict, List, Sequence
 
 import requests
 
+from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
+
 
 SINA_TIMEOUT_SECONDS = 8
 
 
 def fetch_sina_cn_index_rows(symbols: Sequence[str]) -> Dict[str, List[str]]:
+    require_uat_provider_dispatch_allowed(
+        provider="sina",
+        capability="market_overview_realtime_quote",
+        route="market_overview_sina_transport.fetch_sina_cn_index_rows",
+    )
     response = requests.get(
         "https://hq.sinajs.cn/list=" + ",".join(symbols),
         headers={"Referer": "https://finance.sina.com.cn/"},

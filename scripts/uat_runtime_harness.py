@@ -25,24 +25,12 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, IO, Mapping, Sequence
 from uuid import uuid4
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
-
-from scripts.seed_uat_consumer_test_accounts import seed_uat_consumer_test_accounts
-from scripts.uat_fresh_build_verifier import (
-    VerificationResult,
-    read_backend_info,
-    resolve_repo_root,
-    run_frontend_build,
-    verify_frontend_static_build,
-    verify_generated_artifact_hygiene,
-    verify_git_preflight,
-)
-from scripts.uat_runtime_smoke_pack import clean_base_url, run_runtime_smoke
 
 
 DEFAULT_HOST = "127.0.0.1"
@@ -116,6 +104,63 @@ class _HttpResponse:
         if not isinstance(payload, dict):
             raise ValueError("json_root_not_object")
         return payload
+
+
+def resolve_repo_root(start: Path | None = None) -> Path:
+    """Resolve repo root without importing the full application graph."""
+    current = (start or Path.cwd()).resolve()
+    for candidate in (current, *current.parents):
+        if (candidate / ".git").exists() or (candidate / "AGENTS.md").is_file():
+            return candidate
+    return REPO_ROOT
+
+
+def read_backend_info(repo_root: Path) -> Any:
+    from scripts.uat_fresh_build_verifier import read_backend_info as _read_backend_info
+
+    return _read_backend_info(repo_root)
+
+
+def run_frontend_build(repo_root: Path) -> int:
+    from scripts.uat_fresh_build_verifier import run_frontend_build as _run_frontend_build
+
+    return _run_frontend_build(repo_root)
+
+
+def verify_frontend_static_build(**kwargs: Any) -> Any:
+    from scripts.uat_fresh_build_verifier import verify_frontend_static_build as _verify_frontend_static_build
+
+    return _verify_frontend_static_build(**kwargs)
+
+
+def verify_generated_artifact_hygiene(repo_root: Path) -> list[str]:
+    from scripts.uat_fresh_build_verifier import verify_generated_artifact_hygiene as _verify_generated_artifact_hygiene
+
+    return _verify_generated_artifact_hygiene(repo_root)
+
+
+def verify_git_preflight(repo_root: Path) -> list[str]:
+    from scripts.uat_fresh_build_verifier import verify_git_preflight as _verify_git_preflight
+
+    return _verify_git_preflight(repo_root)
+
+
+def seed_uat_consumer_test_accounts() -> dict[str, Any]:
+    from scripts.seed_uat_consumer_test_accounts import (
+        seed_uat_consumer_test_accounts as _seed_uat_consumer_test_accounts,
+    )
+
+    return _seed_uat_consumer_test_accounts()
+
+
+def clean_base_url(raw_url: str) -> str:
+    return str(raw_url or "").strip().rstrip("/")
+
+
+def run_runtime_smoke(**kwargs: Any) -> dict[str, Any]:
+    from scripts.uat_runtime_smoke_pack import run_runtime_smoke as _run_runtime_smoke
+
+    return _run_runtime_smoke(**kwargs)
 
 
 def build_uat_runtime_env(base_env: Mapping[str, str] | None = None) -> dict[str, str]:
@@ -307,32 +352,50 @@ def process_start_time(pid: int) -> str | None:
     return completed.stdout.strip() or None if completed.returncode == 0 else None
 
 
-def start_runtime(repo_root: Path, *, host: str, port: int, python_bin: str | None = None) -> subprocess.Popen[str]:
+def start_runtime(
+    repo_root: Path,
+    *,
+    host: str,
+    port: int,
+    python_bin: str | None = None,
+    run_log_path: Path | None = None,
+) -> subprocess.Popen[str]:
     python = python_bin or str(repo_root / ".venv" / "bin" / "python")
     if not Path(python).exists():
         python = sys.executable
     command = [python, str(repo_root / "main.py"), "--serve-only", "--host", host, "--port", str(port)]
-    return subprocess.Popen(
+    log_handle: IO[str] | int
+    if run_log_path is not None:
+        run_log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_handle = run_log_path.open("a", encoding="utf-8", buffering=1)
+    else:
+        log_handle = subprocess.DEVNULL
+    process = subprocess.Popen(
         command,
         cwd=repo_root,
         env=build_uat_runtime_env(),
-        stdout=subprocess.PIPE,
+        stdout=log_handle,
         stderr=subprocess.STDOUT,
         text=True,
     )
+    if run_log_path is not None and hasattr(log_handle, "close"):
+        setattr(process, "_wolfystock_run_log_handle", log_handle)
+    return process
 
 
 def stop_owned_runtime(process: subprocess.Popen[str] | None) -> dict[str, Any]:
-    if process is None or process.poll() is not None:
+    if process is None:
+        return {"status": "absent", "reasonCode": "runtime_already_absent"}
+    if process.poll() is not None:
+        _close_runtime_log_handle(process)
         return {"status": "absent", "reasonCode": "runtime_already_absent"}
     process.terminate()
     try:
         process.wait(timeout=10)
+        _close_runtime_log_handle(process)
         return {"status": "stopped", "signal": "terminate"}
     except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait(timeout=10)
-        return {"status": "stopped", "signal": "kill_after_timeout"}
+        return {"status": "rejected", "reasonCode": "terminate_timeout", "signal": "terminate"}
 
 
 def pid_is_alive(pid: int) -> bool:
@@ -350,10 +413,38 @@ def pid_is_alive(pid: int) -> bool:
 def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
     evidence = load_evidence(evidence_path)
     run = evidence.get("run") if isinstance(evidence.get("run"), Mapping) else {}
+    runtime = evidence.get("runtime") if isinstance(evidence.get("runtime"), Mapping) else {}
     pid = _safe_int(run.get("pid"))
     expected_cwd = str(run.get("cwd") or "")
     if pid <= 0:
         return {"status": "rejected", "reasonCode": "pid_missing", "pid": pid}
+
+    if runtime.get("ownedByHarness") is not True:
+        result = {
+            "status": "rejected",
+            "reasonCode": "not_harness_owned",
+            "pid": pid,
+        }
+        _append_lifecycle_event(evidence_path, result)
+        return result
+
+    if not pid_is_alive(pid):
+        result = {"status": "absent", "reasonCode": "runtime_already_absent", "pid": pid}
+        _append_lifecycle_event(evidence_path, result)
+        return result
+
+    expected_start = str(runtime.get("processStartTime") or "").strip()
+    observed_start = str(process_start_time(pid) or "").strip()
+    if expected_start and observed_start and expected_start != observed_start:
+        result = {
+            "status": "rejected",
+            "reasonCode": "pid_reused",
+            "pid": pid,
+            "expectedProcessStartTime": expected_start,
+            "observedProcessStartTime": observed_start,
+        }
+        _append_lifecycle_event(evidence_path, result)
+        return result
 
     observed_cwd = process_cwd(pid)
     if expected_cwd and observed_cwd and Path(observed_cwd).resolve() != Path(expected_cwd).resolve():
@@ -366,10 +457,6 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
         }
         _append_lifecycle_event(evidence_path, result)
         return result
-    if not pid_is_alive(pid):
-        result = {"status": "absent", "reasonCode": "runtime_already_absent", "pid": pid}
-        _append_lifecycle_event(evidence_path, result)
-        return result
     if expected_cwd and not observed_cwd:
         result = {
             "status": "rejected",
@@ -380,6 +467,31 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
         }
         _append_lifecycle_event(evidence_path, result)
         return result
+
+    listener = runtime.get("listener") if isinstance(runtime.get("listener"), Mapping) else {}
+    expected_port = _safe_int(listener.get("port") or run.get("port"))
+    expected_host = str(listener.get("host") or DEFAULT_HOST)
+    if expected_port > 0:
+        owner = find_port_owner(expected_host, expected_port)
+        if owner is not None and owner.pid != pid:
+            result = {
+                "status": "rejected",
+                "reasonCode": "pid_port_owner_mismatch",
+                "pid": pid,
+                "expectedPort": expected_port,
+                "observedPortOwner": owner.__dict__,
+            }
+            _append_lifecycle_event(evidence_path, result)
+            return result
+        if owner is None:
+            result = {
+                "status": "rejected",
+                "reasonCode": "pid_not_port_owner",
+                "pid": pid,
+                "expectedPort": expected_port,
+            }
+            _append_lifecycle_event(evidence_path, result)
+            return result
 
     try:
         os.kill(pid, signal.SIGTERM)
@@ -462,6 +574,12 @@ def build_workbuddy_handoff(
         "runtimeLogWindow": {
             "path": run_log_path,
             "startTime": run_start_time,
+            "activityScope": "run_scoped_child_stdout_stderr",
+            "correlationOnly": True,
+            "causalAttribution": {
+                "automatic": False,
+                "mode": "correlation_only",
+            },
         },
         "assetIdentity": {
             "indexHtmlHash": asset_identity.get("indexHtmlHash"),
@@ -537,12 +655,19 @@ def build_runtime_log(run_context: RunContext, process: subprocess.Popen[str] | 
     ]
     if process is not None:
         lines.append(f"pid={process.pid}")
-    if not run_context.run_log_path.exists():
+    existing = run_context.run_log_path.read_text(encoding="utf-8") if run_context.run_log_path.exists() else ""
+    missing = [line for line in lines if line and line not in existing.splitlines()]
+    if missing:
+        with run_context.run_log_path.open("a", encoding="utf-8") as handle:
+            handle.write("\n".join(missing) + "\n")
+    if not existing and not missing:
         run_context.run_log_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return {
         "path": str(run_context.run_log_path),
         "startTime": run_context.start_time,
+        "pid": process.pid if process is not None else None,
         "boundary": "per_run_file",
+        "activityScope": "child_stdout_stderr_for_run",
         "historicalLogsRetained": True,
     }
 
@@ -696,7 +821,8 @@ def run_harness(
 
     process: subprocess.Popen[str] | None = None
     try:
-        process = start_runtime(repo_root, host=host, port=port)
+        runtime_log = build_runtime_log(run_context)
+        process = start_runtime(repo_root, host=host, port=port, run_log_path=run_context.run_log_path)
         runtime_log = build_runtime_log(run_context, process)
         client = DirectNoProxyHttpClient()
         readiness = wait_for_readiness(client, base_url, timeout_seconds=readiness_timeout_seconds)
@@ -789,7 +915,18 @@ def run_harness(
         return (EXIT_OK if not identity_errors else EXIT_FAILED), evidence
     finally:
         if stop_runtime_after:
-            stop_owned_runtime(process)
+            stop_result = stop_owned_runtime(process)
+            if process is not None:
+                build_runtime_log(run_context, process)
+            try:
+                if "evidence" in locals():
+                    evidence["runtimeStop"] = {
+                        **stop_result,
+                        "stopTime": datetime.now(timezone.utc).isoformat(),
+                    }
+                    write_evidence(evidence_dir, evidence, run_context=run_context)
+            except Exception:
+                pass
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -892,7 +1029,7 @@ def _base_evidence(repo_root: Path, base_url: str, source: Mapping[str, Any], *,
     }
 
 
-def _verification_dict(result: VerificationResult) -> dict[str, Any]:
+def _verification_dict(result: Any) -> dict[str, Any]:
     return {
         "ok": result.ok,
         "payload": result.payload,
@@ -1098,6 +1235,15 @@ def _append_lifecycle_event(evidence_path: Path, result: Mapping[str, Any]) -> N
         )
     except Exception:
         return
+
+
+def _close_runtime_log_handle(process: subprocess.Popen[str]) -> None:
+    handle = getattr(process, "_wolfystock_run_log_handle", None)
+    if handle is not None:
+        try:
+            handle.close()
+        except Exception:
+            pass
 
 
 def _safe_int(value: Any) -> int:

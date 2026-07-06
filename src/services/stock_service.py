@@ -10,7 +10,6 @@
 """
 
 import logging
-import os
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 
@@ -37,17 +36,15 @@ from src.services.starter_market_data import is_starter_market_data_symbol
 from src.services.stock_service_provider_adapter import StockServiceProviderAdapter
 from src.services.akshare_cn_ohlcv_cache import AkshareCnOhlcvRuntime, is_cn_a_share_symbol
 from src.services.us_history_helper import LOCAL_US_PARQUET_SOURCE, fetch_daily_history_with_local_us_fallback
+from src.services.uat_provider_isolation import (
+    UAT_NO_LIVE_PROVIDERS_ENV,
+    check_uat_provider_dispatch,
+    uat_no_live_providers_enabled,
+)
 from src.utils.symbol_classification import is_us_stock_code
 from src.utils.yfinance_symbol import to_yfinance_symbol
 
 logger = logging.getLogger(__name__)
-
-UAT_NO_LIVE_PROVIDERS_ENV = "WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS"
-
-
-def uat_no_live_providers_enabled() -> bool:
-    """Return whether explicit UAT runtime validation should block live provider reads."""
-    return str(os.getenv(UAT_NO_LIVE_PROVIDERS_ENV) or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _is_meaningful_stock_name(name: Optional[str], stock_code: str) -> bool:
@@ -727,6 +724,34 @@ class StockService:
         """
         获取分钟级 / 日内行情，优先用于报告图表展示。
         """
+        dispatch = check_uat_provider_dispatch(
+            provider="yfinance",
+            capability="intraday_history",
+            route="StockService.get_intraday_data",
+        )
+        if not dispatch.allowed:
+            metadata = self._build_intraday_metadata(
+                source="unavailable",
+                as_of=None,
+                has_data=False,
+                degradation_reason=dispatch.reason_code,
+            )
+            return {
+                "stock_code": stock_code,
+                "interval": interval,
+                "range": range_period,
+                "data": [],
+                "source": metadata["source"],
+                "source_type": metadata["source_type"],
+                "freshness": metadata["freshness"],
+                "is_fallback": metadata["is_fallback"],
+                "is_stale": metadata["is_stale"],
+                "is_partial": metadata["is_partial"],
+                "is_synthetic": metadata["is_synthetic"],
+                "is_unavailable": metadata["is_unavailable"],
+                "sourceConfidence": metadata["sourceConfidence"],
+                "reasonCode": dispatch.reason_code,
+            }
         try:
             import yfinance as yf
             from data_provider.base import DataFetcherManager

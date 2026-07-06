@@ -33,6 +33,7 @@ from tenacity import (
 
 from .base import BaseFetcher, DataFetchError, STANDARD_COLUMNS
 from .realtime_types import UnifiedRealtimeQuote, RealtimeSource
+from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
 from src.utils.symbol_classification import is_us_stock_code
 from src.utils.yfinance_symbol import get_us_index_yf_symbol, to_yfinance_symbol
 
@@ -132,6 +133,11 @@ class YfinanceFetcher(BaseFetcher):
         2. 调用 yfinance API
         3. 处理返回数据
         """
+        require_uat_provider_dispatch_allowed(
+            provider="yfinance",
+            capability="daily_history",
+            route="YfinanceFetcher._fetch_raw_data",
+        )
         import yfinance as yf
 
         # 转换代码格式
@@ -240,6 +246,11 @@ class YfinanceFetcher(BaseFetcher):
         Returns:
             行情字典，失败时返回 None
         """
+        require_uat_provider_dispatch_allowed(
+            provider="yfinance",
+            capability="realtime_quote",
+            route="YfinanceFetcher._fetch_yf_ticker_data",
+        )
         ticker = yf.Ticker(yf_code)
         # 取近两日数据以计算涨跌幅
         hist = ticker.history(period='2d')
@@ -352,6 +363,11 @@ class YfinanceFetcher(BaseFetcher):
         Stooq 提供的是最新交易日行情，精度不如分时实时接口，但在 Yahoo / yfinance
         被限流时，至少能为 Web UI 提供可用价格；若可获取到昨收价，则同时提供涨跌幅等衍生指标。
         """
+        require_uat_provider_dispatch_allowed(
+            provider="stooq",
+            capability="realtime_quote",
+            route="YfinanceFetcher._get_us_stock_quote_from_stooq",
+        )
         symbol = stock_code.strip().upper()
         stooq_symbol = f"{symbol.lower()}.us"
         url = f"https://stooq.com/q/l/?s={stooq_symbol}"
@@ -513,6 +529,11 @@ class YfinanceFetcher(BaseFetcher):
         Returns:
             UnifiedRealtimeQuote or None
         """
+        require_uat_provider_dispatch_allowed(
+            provider="yfinance",
+            capability="realtime_quote",
+            route="YfinanceFetcher._get_us_index_realtime_quote",
+        )
         import yfinance as yf
 
         try:
@@ -594,6 +615,11 @@ class YfinanceFetcher(BaseFetcher):
         Returns:
             UnifiedRealtimeQuote 对象，获取失败返回 None
         """
+        require_uat_provider_dispatch_allowed(
+            provider="yfinance",
+            capability="realtime_quote",
+            route="YfinanceFetcher.get_realtime_quote",
+        )
         import yfinance as yf
 
         # 美股指数：使用映射（SPX -> ^GSPC）

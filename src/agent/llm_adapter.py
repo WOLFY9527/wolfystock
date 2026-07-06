@@ -29,6 +29,7 @@ from src.config import (
     get_effective_agent_primary_model,
 )
 from src.services.llm_instrumentation import emit_llm_event, provider_from_model
+from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -377,6 +378,11 @@ class LLMToolAdapter:
         timeout: Optional[float] = None,
     ) -> LLMResponse:
         """Call a specific litellm model with OpenAI-format messages and tools."""
+        require_uat_provider_dispatch_allowed(
+            provider=provider_from_model(model),
+            capability="llm",
+            route="LLMToolAdapter._call_litellm_model",
+        )
         openai_messages = self._convert_messages(messages)
 
         # Use short model name (without provider prefix) for thinking model lookup

@@ -14,6 +14,7 @@ import requests
 from .base import BaseFetcher, DataFetchError, STANDARD_COLUMNS
 from .realtime_types import RealtimeSource, UnifiedRealtimeQuote, safe_float, safe_int
 from .us_index_mapping import is_us_stock_code
+from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +140,11 @@ class AlpacaFetcher(BaseFetcher):
     def endpoint_reachability(self, *, timeout: Optional[float] = None) -> Dict[str, Any]:
         """Run a payload-free HEAD probe and return only sanitized reachability data."""
 
+        require_uat_provider_dispatch_allowed(
+            provider="alpaca",
+            capability="endpoint_reachability",
+            route="AlpacaFetcher.endpoint_reachability",
+        )
         request_timeout = self.timeout
         if timeout is not None:
             request_timeout = max(0.001, float(timeout))
@@ -166,6 +172,11 @@ class AlpacaFetcher(BaseFetcher):
         }
 
     def _request_json(self, path: str, *, params: Optional[Dict[str, Any]] = None) -> Any:
+        require_uat_provider_dispatch_allowed(
+            provider="alpaca",
+            capability="market_data",
+            route="AlpacaFetcher._request_json",
+        )
         response = self.session.get(
             f"{self.base_url}{path}",
             params=params or {},

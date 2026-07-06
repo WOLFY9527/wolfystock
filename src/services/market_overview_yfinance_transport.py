@@ -9,6 +9,8 @@ from typing import Any, Callable
 
 import yfinance as yf
 
+from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
+
 
 YFINANCE_HISTORY_TIMEOUT_SECONDS = 1.5
 YFINANCE_HISTORY_TIMEOUT_WORKERS = 4
@@ -21,6 +23,11 @@ _YFINANCE_HISTORY_SLOTS = BoundedSemaphore(YFINANCE_HISTORY_TIMEOUT_WORKERS)
 
 
 def fetch_yfinance_quote_history_frame(ticker: str, *, timeout: float = YFINANCE_HISTORY_TIMEOUT_SECONDS) -> Any:
+    require_uat_provider_dispatch_allowed(
+        provider="yfinance",
+        capability="market_overview_history",
+        route="market_overview_yfinance_transport.fetch_yfinance_quote_history_frame",
+    )
     return _run_yfinance_history_with_timeout(
         lambda: yf.Ticker(ticker).history(period="5d", interval="1d", auto_adjust=False),
         timeout=timeout,
@@ -29,6 +36,11 @@ def fetch_yfinance_quote_history_frame(ticker: str, *, timeout: float = YFINANCE
 
 
 def fetch_yfinance_spy_atr_history_frame(*, timeout: float = YFINANCE_HISTORY_TIMEOUT_SECONDS) -> Any:
+    require_uat_provider_dispatch_allowed(
+        provider="yfinance",
+        capability="market_overview_history",
+        route="market_overview_yfinance_transport.fetch_yfinance_spy_atr_history_frame",
+    )
     return _run_yfinance_history_with_timeout(
         lambda: yf.Ticker("SPY").history(period="1mo", interval="1d", auto_adjust=False),
         timeout=timeout,

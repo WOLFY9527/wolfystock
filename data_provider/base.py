@@ -28,6 +28,7 @@ import numpy as np
 from src.data.stock_mapping import STOCK_NAME_MAP, is_meaningful_stock_name
 from src.utils.symbol_classification import is_bse_code, is_kc_cy_stock, is_st_stock
 from src.utils.symbol_normalization import canonical_stock_code, normalize_stock_code
+from src.services.uat_provider_isolation import check_uat_provider_dispatch
 from .fundamental_adapter import AkshareFundamentalAdapter
 from .provider_credentials import get_provider_credentials
 
@@ -544,6 +545,14 @@ class BaseFetcher(ABC):
         Returns:
             标准化的 DataFrame，包含技术指标
         """
+        dispatch = check_uat_provider_dispatch(
+            provider=str(getattr(self, "name", "unknown")),
+            capability="daily_history",
+            route=f"{self.__class__.__name__}.get_daily_data",
+        )
+        if not dispatch.allowed:
+            raise DataFetchError(dispatch.reason_code)
+
         # 计算日期范围
         if end_date is None:
             end_date = datetime.now().strftime('%Y-%m-%d')
@@ -1337,19 +1346,45 @@ class DataFetcherManager:
             outcome: str = "unknown",
             reason: Optional[str] = None,
             message: Optional[str] = None,
+            status: Optional[str] = None,
+            capability: Optional[str] = None,
+            route: Optional[str] = None,
         ) -> None:
             daily_trace_entries.append(
                 {
                     "provider": provider,
                     "action": action,
                     "outcome": outcome,
+                    "status": status or outcome,
                     "reason": reason,
                     "message": message,
+                    "capability": capability,
+                    "route": route,
                 }
             )
 
         # 快速路径：美股指数/美股股票走受控 provider 链路
         if is_us_index_code(stock_code) or is_us_stock_code(stock_code):
+            route_guard = check_uat_provider_dispatch(
+                provider="DataFetcherManager",
+                capability="daily_history",
+                route="DataFetcherManager.get_daily_data.us_direct_route",
+            )
+            if not route_guard.allowed:
+                append_daily_trace(**route_guard.to_trace())
+                append_daily_trace(
+                    provider="market_history",
+                    action="completed",
+                    outcome="blocked",
+                    status="blocked",
+                    reason=route_guard.reason_code,
+                    message="UAT isolation blocked US daily history provider dispatch.",
+                    capability="daily_history",
+                    route="DataFetcherManager.get_daily_data.us_direct_route",
+                )
+                self._set_last_daily_history_trace(daily_trace_entries)
+                raise DataFetchError(route_guard.reason_code)
+
             us_candidates: List[Tuple[str, Any]] = []
             if is_us_stock_code(stock_code):
                 alpaca_credentials = get_provider_credentials("alpaca")
@@ -1462,6 +1497,16 @@ class DataFetcherManager:
 
         # 港股优先尝试 Twelve Data，再回退到现有 fetcher 链
         if _is_hk_market(stock_code):
+            route_guard = check_uat_provider_dispatch(
+                provider="DataFetcherManager",
+                capability="daily_history",
+                route="DataFetcherManager.get_daily_data.hk_route",
+            )
+            if not route_guard.allowed:
+                append_daily_trace(**route_guard.to_trace())
+                self._set_last_daily_history_trace(daily_trace_entries)
+                raise DataFetchError(route_guard.reason_code)
+
             twelve_data_fetcher = self._get_twelve_data_fetcher()
             if twelve_data_fetcher is not None:
                 try:
@@ -1496,6 +1541,14 @@ class DataFetcherManager:
                     errors.append(error_msg)
 
         for attempt, fetcher in enumerate(self._fetchers, start=1):
+            route_guard = check_uat_provider_dispatch(
+                provider=str(getattr(fetcher, "name", "unknown")),
+                capability="daily_history",
+                route="DataFetcherManager.get_daily_data.default_fallback",
+            )
+            if not route_guard.allowed:
+                append_daily_trace(**route_guard.to_trace())
+                continue
             try:
                 logger.info(f"[数据源尝试 {attempt}/{total_fetchers}] [{fetcher.name}] 获取 {stock_code}...")
                 df = fetcher.get_daily_data(
@@ -1531,6 +1584,8 @@ class DataFetcherManager:
         error_summary = f"所有数据源获取 {stock_code} 失败:\n" + "\n".join(errors)
         elapsed = time.time() - request_start
         logger.error(f"[数据源终止] {stock_code} 获取失败: elapsed={elapsed:.2f}s\n{error_summary}")
+        if daily_trace_entries:
+            self._set_last_daily_history_trace(daily_trace_entries)
         raise DataFetchError(error_summary)
     
     @property
@@ -1649,6 +1704,8 @@ class DataFetcherManager:
             reason: Optional[str] = None,
             message: Optional[str] = None,
             status: Optional[str] = None,
+            capability: Optional[str] = None,
+            route: Optional[str] = None,
         ) -> None:
             trace_entries.append(
                 {
@@ -1658,6 +1715,8 @@ class DataFetcherManager:
                     "status": status or outcome,
                     "reason": reason,
                     "message": message,
+                    "capability": capability,
+                    "route": route,
                 }
             )
 
@@ -1682,6 +1741,16 @@ class DataFetcherManager:
 
         # 美股指数由 YfinanceFetcher 处理（在美股股票检查之前）
         if is_us_index_code(stock_code):
+            route_guard = check_uat_provider_dispatch(
+                provider="yfinance",
+                capability="realtime_quote",
+                route="DataFetcherManager.get_realtime_quote.us_index",
+            )
+            if not route_guard.allowed:
+                append_trace(**route_guard.to_trace())
+                self._set_last_realtime_quote_trace(trace_entries)
+                return None
+
             append_trace(
                 provider="market_route",
                 action="selected",
@@ -1741,6 +1810,16 @@ class DataFetcherManager:
 
         # 美股单独处理，使用 YfinanceFetcher
         if _is_us_code(stock_code):
+            route_guard = check_uat_provider_dispatch(
+                provider="DataFetcherManager",
+                capability="realtime_quote",
+                route="DataFetcherManager.get_realtime_quote.us_direct_route",
+            )
+            if not route_guard.allowed:
+                append_trace(**route_guard.to_trace())
+                self._set_last_realtime_quote_trace(trace_entries)
+                return None
+
             alpaca_credentials = get_provider_credentials("alpaca")
             route_steps: List[str] = []
             if alpaca_credentials.is_configured:
@@ -1879,6 +1958,16 @@ class DataFetcherManager:
 
         # 港股实时行情走专用入口：优先 Twelve Data，再回退 akshare_hk。
         if _is_hk_market(stock_code):
+            route_guard = check_uat_provider_dispatch(
+                provider="DataFetcherManager",
+                capability="realtime_quote",
+                route="DataFetcherManager.get_realtime_quote.hk_route",
+            )
+            if not route_guard.allowed:
+                append_trace(**route_guard.to_trace())
+                self._set_last_realtime_quote_trace(trace_entries)
+                return None
+
             route_steps: List[str] = []
             if self._get_twelve_data_fetcher() is not None:
                 route_steps.append("twelve_data")
@@ -2017,6 +2106,15 @@ class DataFetcherManager:
         for source in source_priority:
             source = source.strip().lower()
             if not source:
+                continue
+
+            route_guard = check_uat_provider_dispatch(
+                provider=source,
+                capability="realtime_quote",
+                route="DataFetcherManager.get_realtime_quote.cn_source_priority",
+            )
+            if not route_guard.allowed:
+                append_trace(**route_guard.to_trace())
                 continue
             
             try:

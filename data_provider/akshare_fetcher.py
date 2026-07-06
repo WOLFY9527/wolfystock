@@ -47,6 +47,7 @@ from patch.eastmoney_patch import eastmoney_patch
 from src.config import get_config
 from src.contracts.source_confidence import evaluate_market_intelligence_trust
 from src.services.market_data_source_registry import project_source_provenance
+from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
 from .base import BaseFetcher, DataFetchError, RateLimitError, STANDARD_COLUMNS, is_bse_code, is_st_stock, is_kc_cy_stock, normalize_stock_code
 from .realtime_types import (
     UnifiedRealtimeQuote, ChipDistribution, RealtimeSource,
@@ -426,6 +427,11 @@ class AkshareFetcher(BaseFetcher):
 
         数据来源：ak.stock_info_a_code_name()
         """
+        require_uat_provider_dispatch_allowed(
+            provider="akshare",
+            capability="stock_list",
+            route="AkshareFetcher.get_stock_list",
+        )
         import akshare as ak
 
         try:
@@ -958,6 +964,11 @@ class AkshareFetcher(BaseFetcher):
         Returns:
             UnifiedRealtimeQuote 对象，获取失败返回 None
         """
+        require_uat_provider_dispatch_allowed(
+            provider="akshare",
+            capability="realtime_quote",
+            route="AkshareFetcher.get_realtime_quote",
+        )
         circuit_breaker = get_realtime_circuit_breaker()
 
         # 根据代码类型选择不同的获取方法
@@ -1684,6 +1695,11 @@ class AkshareFetcher(BaseFetcher):
         Returns:
             ChipDistribution 对象（最新一天的数据），获取失败返回 None
         """
+        require_uat_provider_dispatch_allowed(
+            provider="akshare",
+            capability="chip_distribution",
+            route="AkshareFetcher.get_chip_distribution",
+        )
         import akshare as ak
 
         # 美股没有筹码分布数据（Akshare 不支持）
@@ -1786,6 +1802,11 @@ class AkshareFetcher(BaseFetcher):
         """
         if region != "cn":
             return None
+        require_uat_provider_dispatch_allowed(
+            provider="akshare",
+            capability="realtime_quote",
+            route="AkshareFetcher.get_main_indices",
+        )
         import akshare as ak
 
         # 主要指数代码映射
@@ -1854,6 +1875,11 @@ class AkshareFetcher(BaseFetcher):
         1. 东财接口 (ak.stock_zh_a_spot_em)
         2. 新浪接口 (ak.stock_zh_a_spot)
         """
+        require_uat_provider_dispatch_allowed(
+            provider="akshare",
+            capability="market_stats",
+            route="AkshareFetcher.get_market_stats",
+        )
         import akshare as ak
 
         # 优先东财接口

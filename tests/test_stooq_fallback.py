@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
+import os
 import unittest
 from unittest.mock import patch, MagicMock, PropertyMock
 
 from data_provider.yfinance_fetcher import YfinanceFetcher
 from data_provider.realtime_types import RealtimeSource
+from src.services.uat_provider_isolation import UatProviderIsolationError
 
 try:
     import yfinance  # noqa: F401
@@ -16,6 +18,14 @@ except Exception:
 class TestStooqFallback(unittest.TestCase):
     def setUp(self):
         self.fetcher = YfinanceFetcher()
+
+    @patch('data_provider.yfinance_fetcher.urlopen')
+    def test_uat_no_live_providers_blocks_stooq_direct_route_before_http(self, mock_urlopen):
+        with patch.dict(os.environ, {"WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS": "true"}, clear=False):
+            with self.assertRaises(UatProviderIsolationError):
+                self.fetcher._get_us_stock_quote_from_stooq("AAPL")
+
+        mock_urlopen.assert_not_called()
 
     @patch('data_provider.yfinance_fetcher.urlopen')
     def test_stooq_success_logic(self, mock_urlopen):

@@ -27,6 +27,7 @@ from src.services.us_breadth_contracts import (
     US_BREADTH_MISSING_PROVIDER_REASON,
     US_BREADTH_SYMBOLS,
 )
+from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
 
 
 POLYGON_US_EASTERN_TZ = ZoneInfo("America/New_York")
@@ -1021,6 +1022,11 @@ def _default_polygon_transport(
     api_key: str,
     timeout_seconds: float,
 ) -> tuple[int, Mapping[str, Any] | None]:
+    require_uat_provider_dispatch_allowed(
+        provider="polygon",
+        capability="us_market_breadth_history",
+        route="polygon_us_breadth_provider._default_polygon_transport",
+    )
     query = urlencode({
         "adjusted": "true",
         "include_otc": "false",

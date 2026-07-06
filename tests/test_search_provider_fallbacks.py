@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Tests for Finnhub/GNews provider integration and dimension fallback."""
 
+import os
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -17,6 +18,7 @@ from src.search_service import (
     SearchResponse,
     SearchResult,
     SearchService,
+    TavilySearchProvider,
     fetch_url_content,
     reset_url_content_cache,
 )
@@ -99,6 +101,33 @@ class SearchProviderFallbacksTestCase(unittest.TestCase):
             resp.results[0].published_date,
             service._normalize_news_publish_date(published_ts).isoformat(),
         )
+
+    @patch("src.search_service.requests.get")
+    def test_uat_no_live_providers_blocks_search_news_before_http(self, mock_get) -> None:
+        service = SearchService(
+            finnhub_keys=["fh-key"],
+            gnews_keys=["gnews-key"],
+            searxng_public_instances_enabled=False,
+            news_max_age_days=3,
+            news_strategy_profile="short",
+        )
+
+        with patch.dict(os.environ, {"WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS": "true"}, clear=False):
+            resp = service.search_stock_news("NVDA", "NVIDIA", max_results=2)
+
+        self.assertFalse(resp.success)
+        self.assertIn("uat_no_live_providers", resp.error_message or "")
+        mock_get.assert_not_called()
+
+    def test_uat_no_live_providers_blocks_tavily_topic_route_before_client_import(self) -> None:
+        provider = TavilySearchProvider(["tv-key"])
+
+        with patch.dict(os.environ, {"WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS": "true"}, clear=False):
+            resp = provider.search("AAPL news", max_results=2, topic="news")
+
+        self.assertFalse(resp.success)
+        self.assertEqual(resp.error_message, "uat_no_live_providers")
+        self.assertEqual(resp.diagnostics["blocked_by_uat"], 1)
 
     @patch("src.search_service.requests.get")
     def test_search_stock_news_falls_back_from_finnhub_to_gnews(self, mock_get) -> None:

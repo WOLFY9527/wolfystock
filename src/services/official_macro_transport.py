@@ -19,6 +19,8 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
+from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
+
 
 FRED_OBSERVATIONS_URL = "https://api.stlouisfed.org/fred/series/observations"
 TREASURY_DAILY_RATES_CSV_URL = (
@@ -891,6 +893,11 @@ def _fetch_transport_bytes(request: MacroTransportRequest, *, timeout: float) ->
     url = f"{request.url}?{query}" if query else request.url
     http_request = Request(url=url, headers=request.headers, method=request.method)
     try:
+        require_uat_provider_dispatch_allowed(
+            provider=str(request.source_id or "official_macro"),
+            capability="official_macro",
+            route="official_macro_transport._fetch_transport_bytes",
+        )
         https_context, ca_bundle_source = _build_https_context()
         with urlopen(http_request, timeout=timeout, context=https_context) as response:
             status_code = _response_status_code(response)
