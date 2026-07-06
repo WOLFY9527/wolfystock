@@ -14,6 +14,12 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from src.services.scanner_universe_lifecycle import (
+    SCANNER_UNIVERSE_DEFAULT_MAX_AGE_DAYS,
+    SCANNER_UNIVERSE_DEFAULT_MINIMUM_COVERAGE,
+    SCANNER_UNIVERSE_LIFECYCLE_CONTRACT_VERSION,
+)
+
 
 SCANNER_UNIVERSE_READINESS_CONTRACT_VERSION = "scanner_universe_readiness_v1"
 SCANNER_UNIVERSE_SUPPORTED_STATUSES = (
@@ -145,6 +151,7 @@ def build_scanner_universe_readiness_contract(
     provider_calls_enabled: bool = False,
     read_only: bool = True,
     activation_state: str | None = None,
+    lifecycle_readiness: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     normalized_status = str(status or "").strip().lower()
     if normalized_status == "ready":
@@ -167,16 +174,62 @@ def build_scanner_universe_readiness_contract(
     surfaces = list(blocked_product_surfaces or (() if effectively_available else SCANNER_UNIVERSE_BLOCKED_SURFACES))
     next_action = operator_next_action or _operator_next_action(normalized_status)
     reason = _reason_code(normalized_status)
+    lifecycle = dict(lifecycle_readiness or {})
+    symbol_count = int(lifecycle.get("symbolCount") or universe_size or 0)
+    minimum_coverage_threshold = int(
+        lifecycle.get("minimumCoverageThreshold")
+        or SCANNER_UNIVERSE_DEFAULT_MINIMUM_COVERAGE.get(_safe_market(market), 1)
+    )
+    has_lifecycle_contract = bool(lifecycle)
+    blocking_reasons = _safe_reason_list(lifecycle.get("blockingReasons"))
+    if not blocking_reasons:
+        if normalized_status in {"missing", "not_configured"}:
+            blocking_reasons.append("source_missing")
+        elif normalized_status == "stale":
+            blocking_reasons.append("stale_universe")
+        elif normalized_status == "unavailable":
+            blocking_reasons.append("metadata_malformed")
+        elif normalized_status == "insufficient_coverage" and not has_lifecycle_contract:
+            blocking_reasons.append("below_minimum_coverage")
+    coverage_state = str(
+        lifecycle.get("coverageState")
+        or ("sufficient" if symbol_count >= minimum_coverage_threshold and symbol_count > 0 else "insufficient")
+    )
+    usable = bool(lifecycle.get("usable")) if "usable" in lifecycle else bool(effectively_available and not blocking_reasons)
+    downstream_impact = (
+        dict(lifecycle.get("downstreamImpact"))
+        if isinstance(lifecycle.get("downstreamImpact"), dict)
+        else {
+            "contractVersion": "scanner_universe_downstream_impact_v1",
+            "blockedProducts": [] if usable else surfaces,
+            "blockingReasons": blocking_reasons,
+            "readOnly": True,
+            "consumerSafe": True,
+        }
+    )
     return {
         "contractVersion": SCANNER_UNIVERSE_READINESS_CONTRACT_VERSION,
+        "lifecycleContractVersion": str(
+            lifecycle.get("contractVersion") or SCANNER_UNIVERSE_LIFECYCLE_CONTRACT_VERSION
+        ),
         "status": normalized_status,
         "reason": reason,
         "market": _safe_market(market),
+        "universeVersion": lifecycle.get("universeVersion"),
+        "generatedAt": lifecycle.get("generatedAt") or last_updated_at,
         "universeSize": max(0, int(universe_size or 0)),
+        "symbolCount": symbol_count,
         "lastUpdatedAt": last_updated_at,
-        "asOf": last_updated_at,
-        "freshnessState": str(freshness_state or "unknown"),
+        "asOf": lifecycle.get("asOf") or last_updated_at,
+        "freshnessState": str(lifecycle.get("freshnessState") or freshness_state or "unknown"),
         "freshness": str(freshness_state or "unknown"),
+        "age": lifecycle.get("age") or {"days": None, "maxAgeDays": SCANNER_UNIVERSE_DEFAULT_MAX_AGE_DAYS},
+        "coverageState": coverage_state,
+        "usable": usable,
+        "blockingReasons": blocking_reasons,
+        "downstreamImpact": downstream_impact,
+        "lastSuccessfulActivation": lifecycle.get("lastSuccessfulActivation"),
+        "lastRejectedImportReason": lifecycle.get("lastRejectedImportReason"),
         "requiredDataClasses": required,
         "availableDataClasses": available,
         "missingDataClasses": missing,
@@ -323,6 +376,11 @@ def build_scanner_universe_readiness_from_coverage(
         status = "available"
 
     metadata = dict(source_metadata or {})
+    lifecycle_readiness = (
+        dict(metadata.get("lifecycleReadiness"))
+        if isinstance(metadata.get("lifecycleReadiness"), dict)
+        else None
+    )
     return build_scanner_universe_readiness_contract(
         market=market,
         status=status,
@@ -343,7 +401,19 @@ def build_scanner_universe_readiness_from_coverage(
         provider_calls_enabled=bool(metadata.get("providerCallsEnabled", False)),
         read_only=bool(metadata.get("readOnly", True)),
         activation_state=str(metadata.get("activationState") or status),
+        lifecycle_readiness=lifecycle_readiness,
     )
+
+
+def _safe_reason_list(values: Any) -> list[str]:
+    result: list[str] = []
+    if not isinstance(values, list):
+        return result
+    for value in values:
+        reason = str(value or "").strip()
+        if reason and reason not in result:
+            result.append(reason)
+    return result
 
 
 def _operator_next_action(status: str) -> str:

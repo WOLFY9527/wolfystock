@@ -15,6 +15,7 @@ from src.multi_user import OWNERSHIP_SCOPE_SYSTEM, OWNERSHIP_SCOPE_USER
 from src.notification import NotificationService
 from src.services.execution_log_service import ExecutionLogService
 from src.services.market_scanner_service import MarketScannerService, ScannerRuntimeError
+from src.services.scanner_universe_lifecycle import build_scanner_universe_lifecycle_readiness
 from src.storage import DatabaseManager
 
 logger = logging.getLogger(__name__)
@@ -163,13 +164,37 @@ class MarketScannerOperationsService:
         operator_status = self._operator_universe_status(raw_status)
         affected_surfaces = self._operator_affected_surfaces(scanner_readiness)
         next_action = self._operator_next_action(scanner_readiness, operator_status=operator_status)
+        lifecycle_readiness = build_scanner_universe_lifecycle_readiness(market=resolved_profile.market)
         return {
             "contractVersion": "scanner_universe_operator_readiness_v1",
             "status": operator_status,
             "scannerUniverseStatus": raw_status,
             "market": resolved_profile.market,
             "profile": resolved_profile.key,
+            "universeVersion": scanner_readiness.get("universeVersion") or lifecycle_readiness.get("universeVersion"),
+            "generatedAt": scanner_readiness.get("generatedAt") or lifecycle_readiness.get("generatedAt"),
+            "asOf": scanner_readiness.get("asOf") or lifecycle_readiness.get("asOf"),
+            "sourceClass": scanner_readiness.get("sourceClass") or lifecycle_readiness.get("sourceClass"),
+            "symbolCount": int(
+                scanner_readiness.get("symbolCount")
+                or lifecycle_readiness.get("symbolCount")
+                or scanner_readiness.get("universeSize")
+                or 0
+            ),
             "freshnessState": str(scanner_readiness.get("freshnessState") or data_readiness.get("freshness") or "unknown"),
+            "age": scanner_readiness.get("age") or lifecycle_readiness.get("age"),
+            "minimumCoverageThreshold": lifecycle_readiness.get("minimumCoverageThreshold"),
+            "coverageState": scanner_readiness.get("coverageState") or lifecycle_readiness.get("coverageState"),
+            "usable": scanner_readiness.get("usable") if scanner_readiness.get("usable") is not None else lifecycle_readiness.get("usable"),
+            "blockingReasons": list(
+                scanner_readiness.get("blockingReasons")
+                if "blockingReasons" in scanner_readiness
+                else lifecycle_readiness.get("blockingReasons")
+                or []
+            ),
+            "downstreamImpact": scanner_readiness.get("downstreamImpact") or lifecycle_readiness.get("downstreamImpact") or {},
+            "lastSuccessfulActivation": scanner_readiness.get("lastSuccessfulActivation") or lifecycle_readiness.get("lastSuccessfulActivation"),
+            "lastRejectedImportReason": scanner_readiness.get("lastRejectedImportReason") or lifecycle_readiness.get("lastRejectedImportReason"),
             "lastUpdatedAt": scanner_readiness.get("lastUpdatedAt"),
             "universeSize": int(scanner_readiness.get("universeSize") or data_readiness.get("universeSize") or 0),
             "affectedProductSurfaces": affected_surfaces,

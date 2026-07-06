@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 import os
 import tempfile
@@ -15,6 +16,10 @@ from src.repositories.stock_repo import StockRepository
 from src.services.execution_log_service import ExecutionLogService
 from src.services.market_scanner_ops_service import MarketScannerOperationsService
 from src.services.market_scanner_service import MarketScannerService, ScannerRuntimeError
+from src.services.scanner_universe_lifecycle import (
+    ScannerUniverseLifecycleStore,
+    activate_scanner_universe_from_file,
+)
 from src.storage import DatabaseManager
 from tests.test_market_scanner_service import (
     FakeScannerDataManager,
@@ -281,6 +286,48 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
         self.assertFalse(scanner_readiness["providerCallsEnabled"])
         self.assertIn("universe", scanner_readiness["availableDataClasses"])
         self.assertNotIn("universe_missing", readiness["candidateGenerationBlockers"])
+
+    def test_operator_universe_readiness_projects_active_lifecycle_metadata(self) -> None:
+        lifecycle_root = Path(self._cache_temp_dir.name) / "scanner-universe-lifecycle"
+        source_path = Path(self._cache_temp_dir.name) / "cn-lifecycle-source.json"
+        source_path.write_text(
+            json.dumps(
+                {
+                    "market": "cn",
+                    "sourceClass": "repo_fixture",
+                    "generatedAt": "2026-07-05T00:00:00+00:00",
+                    "asOf": "2026-07-05",
+                    "symbols": ["600001", "SH600001", "300123", "000005"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        activate_scanner_universe_from_file(
+            source_path=source_path,
+            store=ScannerUniverseLifecycleStore(root=lifecycle_root),
+            market="cn",
+            minimum_coverage_threshold=2,
+        )
+        ops_service = MarketScannerOperationsService(
+            scanner_service=self.scanner_service,
+            config=_make_config(scanner_notification_enabled=False),
+            notifier_factory=lambda: FakeNotifier(available=False),
+        )
+
+        with patch.dict(os.environ, {"SCANNER_UNIVERSE_LIFECYCLE_ROOT": str(lifecycle_root)}, clear=False):
+            readiness = ops_service.get_universe_operator_readiness(market="cn", profile="cn_preopen_v1")
+
+        self.assertTrue(readiness["usable"])
+        self.assertEqual(readiness["sourceClass"], "repo_fixture")
+        self.assertEqual(readiness["symbolCount"], 3)
+        self.assertEqual(readiness["minimumCoverageThreshold"], 2)
+        self.assertEqual(readiness["coverageState"], "sufficient")
+        self.assertEqual(readiness["blockingReasons"], [])
+        self.assertEqual(readiness["downstreamImpact"]["blockedProducts"], [])
+        self.assertTrue(str(readiness["universeVersion"]).startswith("scanner-universe-cn-"))
+        scanner_readiness = readiness["scannerUniverseReadiness"]
+        self.assertEqual(scanner_readiness["symbols"], ["600001", "300123", "000005"])
+        self.assertEqual(scanner_readiness["sourceClass"], "repo_fixture")
 
     def test_operator_universe_refresh_deferred_without_safe_refresh_seam_or_cache_mutation(self) -> None:
         os.utime(self._scanner_cache_path, (1, 1))
