@@ -79,7 +79,7 @@ export function RoughBulletList({
   return (
     <ul className={cn('space-y-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]', className)}>
       {items.map((item, index) => (
-        <li key={index} className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 px-3 py-2">
+        <li key={index} className="rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2">
           {item}
         </li>
       ))}

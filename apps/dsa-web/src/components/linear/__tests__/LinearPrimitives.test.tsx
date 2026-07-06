@@ -23,7 +23,7 @@ import {
 } from '../LinearPrimitives';
 
 describe('LinearPrimitives', () => {
-  it('renders shell surfaces with the charcoal token ladder', () => {
+  it('renders shell surfaces with the paper token ladder', () => {
     render(
       <WolfyShellSurface data-testid="surface">
         Surface

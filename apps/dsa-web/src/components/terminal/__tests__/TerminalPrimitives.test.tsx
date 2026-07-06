@@ -9,7 +9,7 @@ import {
 } from '../TerminalPrimitives';
 
 describe('TerminalPrimitives', () => {
-  it('renders legacy panels with Linear OS material', () => {
+  it('renders legacy panels with paper research material', () => {
     render(<TerminalPanel data-testid="panel">Panel</TerminalPanel>);
 
     const panel = screen.getByTestId('panel');
@@ -23,7 +23,7 @@ describe('TerminalPrimitives', () => {
     expect(panel).not.toHaveClass('backdrop-blur-md', 'bg-white/[0.02]', 'rounded-[16px]');
   });
 
-  it('renders button variants with Linear OS tokens', () => {
+  it('renders button variants with paper research tokens', () => {
     render(
       <>
         <TerminalButton variant="primary">Run</TerminalButton>
@@ -33,14 +33,14 @@ describe('TerminalPrimitives', () => {
       </>,
     );
 
-    expect(screen.getByRole('button', { name: 'Run' })).toHaveClass('bg-[var(--wolfy-accent)]', 'rounded-md');
+    expect(screen.getByRole('button', { name: 'Run' })).toHaveClass('bg-[var(--theme-button-primary-bg)]', 'rounded-md');
     expect(screen.getByRole('button', { name: 'Run' }).className).not.toContain('gradient');
     expect(screen.getByRole('button', { name: 'Cancel' })).toHaveClass('bg-[var(--wolfy-surface-input)]', 'border-[color:var(--wolfy-border-subtle)]');
     expect(screen.getByRole('button', { name: 'More' })).toHaveClass('bg-transparent', 'text-xs');
     expect(screen.getByRole('button', { name: 'Delete' })).toHaveClass('text-[color:var(--wolfy-market-down)]');
   });
 
-  it('renders chip variants with quiet Linear OS materials', () => {
+  it('renders chip variants with quiet paper research materials', () => {
     render(
       <>
         <TerminalChip variant="neutral">Neutral</TerminalChip>
@@ -51,9 +51,10 @@ describe('TerminalPrimitives', () => {
       </>,
     );
 
-    expect(screen.getByText('Neutral')).toHaveClass('bg-[var(--wolfy-surface-input)]', 'text-[color:var(--wolfy-text-muted)]');
+    expect(screen.getByText('Neutral')).toHaveClass('bg-[var(--wolfy-surface-input)]', 'text-[color:var(--wolfy-text-muted)]', 'font-medium');
+    expect(screen.getByText('Neutral')).not.toHaveClass('font-mono');
     expect(screen.getByText('Success')).toHaveClass('text-[color:var(--wolfy-market-up)]');
-    expect(screen.getByText('Caution')).toHaveClass('bg-transparent', 'text-amber-200');
+    expect(screen.getByText('Caution')).toHaveClass('bg-[var(--state-warning-bg)]', 'text-[color:var(--state-warning-text)]');
     expect(screen.getByText('Danger')).toHaveClass('text-[color:var(--wolfy-market-down)]');
     expect(screen.getByText('Info')).toHaveClass('text-[color:var(--wolfy-accent)]');
   });

@@ -13,7 +13,7 @@ type PanelProps = PrimitiveProps & {
   dense?: boolean;
 };
 
-// Legacy-compatible names; new user-facing work should prefer components/linear.
+// Legacy-compatible names; consumer material semantics come from shared paper tokens.
 export function TerminalPageShell({ className, children, ...props }: PrimitiveProps<HTMLDivElement>) {
   return (
     <div
@@ -175,7 +175,7 @@ export const TerminalButton = /* @__PURE__ */ ({
 type TerminalChipVariant = 'neutral' | 'success' | 'caution' | 'danger' | 'info';
 
 const TERMINAL_CHIP_CLASSES: Record<TerminalChipVariant, string> = {
-  neutral: 'bg-[var(--wolfy-surface-input)] border border-[color:var(--wolfy-border-subtle)] text-[color:var(--wolfy-text-muted)] text-xs font-mono px-2.5 py-1 rounded-md',
+  neutral: 'bg-[var(--wolfy-surface-input)] border border-[color:var(--wolfy-border-subtle)] text-[color:var(--wolfy-text-muted)] text-xs font-medium px-2.5 py-1 rounded-md',
   success: 'bg-transparent border border-[color:color-mix(in_srgb,var(--wolfy-market-up)_32%,transparent)] text-[color:var(--wolfy-market-up)] text-xs px-2.5 py-1 rounded-md',
   caution: 'bg-[var(--state-warning-bg)] border border-[color:var(--state-warning-border)] text-[color:var(--state-warning-text)] text-xs px-2.5 py-1 rounded-md',
   danger: 'bg-transparent border border-[color:color-mix(in_srgb,var(--wolfy-market-down)_32%,transparent)] text-[color:var(--wolfy-market-down)] text-xs px-2.5 py-1 rounded-md',

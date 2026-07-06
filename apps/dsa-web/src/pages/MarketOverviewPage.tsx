@@ -1859,6 +1859,7 @@ const MarketOverviewPage = () => {
     <ConsumerWorkspaceScope className="min-h-0 flex-1">
       <ConsumerWorkspacePageShell
         data-testid="market-overview-shell"
+        data-product-surface="market-overview"
         className="flex min-h-0 flex-1 flex-col gap-4 md:gap-6"
       >
         <MarketOverviewWorkbench

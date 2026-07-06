@@ -95,7 +95,7 @@ describe('ThemeProvider', () => {
 
   it('restores the saved light preference when persistence exists', async () => {
     window.localStorage.setItem(THEME_MODE_STORAGE_KEY, 'light');
-    window.localStorage.setItem(THEME_STYLE_STORAGE_KEY, 'spacex');
+    window.localStorage.setItem(THEME_STYLE_STORAGE_KEY, 'legacy-theme');
 
     renderThemeProbe();
 
@@ -107,7 +107,7 @@ describe('ThemeProvider', () => {
   });
 
   it('falls back safely when stored theme values are invalid', async () => {
-    window.localStorage.setItem(THEME_MODE_STORAGE_KEY, 'spacex');
+    window.localStorage.setItem(THEME_MODE_STORAGE_KEY, 'legacy-mode');
     window.localStorage.setItem(THEME_STYLE_STORAGE_KEY, 'neon');
 
     renderThemeProbe();

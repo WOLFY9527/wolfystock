@@ -16,7 +16,7 @@ export const DEFAULT_THEME_STYLE: ThemeStylePreset = 'paper';
 export const DEFAULT_THEME_MODE: ThemeColorMode = 'light';
 
 export function normalizeThemeStyle(value?: string | null): ThemeStylePreset {
-  if (value === 'paper' || value === 'spacex') {
+  if (value === 'paper') {
     return DEFAULT_THEME_STYLE;
   }
   return DEFAULT_THEME_STYLE;

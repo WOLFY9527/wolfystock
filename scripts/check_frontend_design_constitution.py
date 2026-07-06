@@ -37,6 +37,13 @@ USER_PAGE_PARTS = (
     "/MarketOverviewPage.tsx",
     "/BacktestPage.tsx",
     "/DeterministicBacktestResultPage.tsx",
+    "/ResearchRadarPage.tsx",
+    "/MarketRotationRadarPage.tsx",
+    "/MarketDecisionCockpitPage.tsx",
+    "/WatchlistPage.tsx",
+    "/ScenarioLabPage.tsx",
+    "/StockStructureDecisionPage.tsx",
+    "/StockStructureDecisionEntryPage.tsx",
     "/ChatPage.tsx",
 )
 
@@ -57,6 +64,31 @@ INTERNAL_TERMS = (
 )
 
 RAW_VISIBLE_TERMS = ("raw", "debug", "schema", "trace")
+
+CONSUMER_VISIBLE_INTERNAL_COPY_RULES = (
+    (
+        re.compile(r"\braw\s+OHLCV\s+(?:readiness|status|state|quality)\b", re.IGNORECASE),
+        "Raw OHLCV readiness/status wording must be mapped before it is shown in consumer status surfaces.",
+    ),
+    (
+        re.compile(r"\b(?:provider|runtime|internal|cache|source)[_-](?:status|state|key|payload|trace|error|reason)\b", re.IGNORECASE),
+        "Consumer-visible copy must not expose provider/runtime/internal snake_case keys.",
+    ),
+    (
+        re.compile(r"\b(?:internal|runtime|cache|source)\s+(?:key|payload|trace|enum)\b", re.IGNORECASE),
+        "Consumer-visible copy must not expose internal/runtime implementation keys.",
+    ),
+    (
+        re.compile(r"\b(?:broker adapter|broker protocol|accounting engine|ledger implementation|order execution adapter|order router)\b", re.IGNORECASE),
+        "Ordinary consumer pages must not expose broker/accounting/order implementation-boundary wording.",
+    ),
+)
+
+ADVICE_DENY_LIST_CONTEXT_RE = re.compile(
+    r"(?:not\s+(?:investment\s+)?advice|not\s+a\s+recommendation|不(?:构成|提供|作为).{0,12}(?:投资建议|交易建议)|非投资建议)",
+    re.IGNORECASE,
+)
+ADVICE_ACTION_RE = re.compile(r"\b(?:buy|sell|hold)\b|买入|卖出|持有|加仓|减仓", re.IGNORECASE)
 
 WATCHLIST_RETIRED_TERMINAL_SURFACE_RULES = [
     (
@@ -595,9 +627,8 @@ def scan_text(path: str, text: str) -> ScanResult:
                     excerpt=line.strip()[:180],
                 ))
         if key_route_page and is_user_page(normalized) and is_visible_line(line):
-            lowered = line.lower()
             for term in INTERNAL_TERMS:
-                if term.lower() in lowered:
+                if term.lower() in lower_line:
                     findings.append(Finding(
                         rule="user-facing-internal-term",
                         path=normalized,
@@ -607,7 +638,7 @@ def scan_text(path: str, text: str) -> ScanResult:
                     ))
                     break
             for term in RAW_VISIBLE_TERMS:
-                if re.search(rf"\b{re.escape(term)}\b", lowered):
+                if re.search(rf"\b{re.escape(term)}\b", lower_line):
                     findings.append(Finding(
                         rule="user-facing-internal-term",
                         path=normalized,
@@ -616,6 +647,26 @@ def scan_text(path: str, text: str) -> ScanResult:
                         excerpt=line.strip()[:180],
                     ))
                     break
+
+        if is_user_page(normalized) and is_visible_line(line):
+            for pattern, message in CONSUMER_VISIBLE_INTERNAL_COPY_RULES:
+                if pattern.search(line):
+                    findings.append(Finding(
+                        rule="consumer-visible-internal-boundary-copy",
+                        path=normalized,
+                        line=index + 1,
+                        message=message,
+                        excerpt=line.strip()[:180],
+                    ))
+                    break
+            if ADVICE_DENY_LIST_CONTEXT_RE.search(line) and len(ADVICE_ACTION_RE.findall(line)) >= 2:
+                findings.append(Finding(
+                    rule="consumer-visible-advice-deny-list",
+                    path=normalized,
+                    line=index + 1,
+                    message="Avoid deny-list style advice disclaimers that enumerate trading actions; use the product research boundary wording.",
+                    excerpt=line.strip()[:180],
+                ))
 
     if normalized in MIGRATED_PAGES and "Terminal" not in text:
         findings.append(Finding(

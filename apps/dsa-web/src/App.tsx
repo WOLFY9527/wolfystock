@@ -397,8 +397,8 @@ const AuthBootstrapStatusPanel: React.FC<{
     >
       <div className="flex min-w-0 flex-col gap-3">
         <div className="flex min-w-0 flex-col gap-1">
-          <p className="text-sm font-semibold text-white">{copy.title}</p>
-          <p className="text-sm leading-6 text-white/70">{copy.description}</p>
+          <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{copy.title}</p>
+          <p className="text-sm leading-6 text-[color:var(--wolfy-text-muted)]">{copy.description}</p>
         </div>
         <div className="flex justify-end">
           <button type="button" className="btn-primary" onClick={onRetry}>
