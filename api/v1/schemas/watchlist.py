@@ -16,6 +16,20 @@ WatchlistResearchState = Literal[
     "symbol_unknown",
     "unsupported_market",
     "stale_or_cached",
+    "available",
+    "partial",
+    "stale",
+    "pending",
+    "unknown",
+]
+
+WatchlistResearchReadinessState = Literal[
+    "available",
+    "partial",
+    "stale",
+    "unavailable",
+    "pending",
+    "unknown",
 ]
 
 
@@ -31,6 +45,29 @@ class WatchlistRowResearchIdentityResponse(BaseModel):
     exchange: Optional[str] = None
     sector: Optional[str] = None
     industry: Optional[str] = None
+    canonicalSymbol: Optional[str] = None
+    displaySymbol: Optional[str] = None
+    displayName: Optional[str] = None
+    identityState: Optional[str] = None
+
+
+class WatchlistSymbolIdentityResponse(BaseModel):
+    canonical_symbol: str
+    display_symbol: str
+    market: str
+    exchange: Optional[str] = None
+    display_name: Optional[str] = None
+    identity_state: str
+
+
+class WatchlistResearchReadinessResponse(BaseModel):
+    contract_version: Literal["product_read_model_v1"] = "product_read_model_v1"
+    state: WatchlistResearchReadinessState
+    freshness_state: WatchlistResearchReadinessState
+    identity_state: str
+    last_reviewed_at: Optional[str] = None
+    score_freshness_implied: bool = False
+    source_authority_implied: bool = False
 
 
 class WatchlistRowResearchQuoteResponse(BaseModel):
@@ -56,6 +93,7 @@ class WatchlistRowResearchPacketResponse(BaseModel):
     quote: WatchlistRowResearchQuoteResponse
     scannerLineage: WatchlistRowScannerLineageResponse = Field(default_factory=WatchlistRowScannerLineageResponse)
     researchStatus: Literal["ready", "partial", "blocked", "unknown"]
+    researchReadiness: Optional[WatchlistResearchReadinessResponse] = None
     missingData: List[str] = Field(default_factory=list)
     nextDataAction: str
     observationOnly: Literal[True] = True
@@ -122,8 +160,11 @@ class WatchlistItemResponse(BaseModel):
     id: int
     symbol: str
     market: str
+    identity: Optional[WatchlistSymbolIdentityResponse] = None
     name: Optional[str] = None
     source: str
+    created_new: bool = False
+    duplicate_of_id: Optional[int] = None
     scanner_run_id: Optional[int] = None
     scanner_rank: Optional[int] = None
     scanner_score: Optional[float] = None
@@ -138,6 +179,7 @@ class WatchlistItemResponse(BaseModel):
     research_status: Optional[WatchlistResearchState] = None
     data_quality: Optional[WatchlistResearchState] = None
     last_reviewed_at: Optional[str] = None
+    research_readiness: Optional[WatchlistResearchReadinessResponse] = None
     evidence_status: Optional[WatchlistResearchState] = None
     notes_available: bool = False
     user_note_present: bool = False

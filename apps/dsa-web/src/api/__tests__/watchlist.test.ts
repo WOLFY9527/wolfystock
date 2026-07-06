@@ -220,6 +220,10 @@ describe('watchlistApi investor signal normalization', () => {
         exchange: 'NASDAQ',
         sector: 'Technology',
         industry: 'Software',
+        canonicalSymbol: 'MSFT',
+        displaySymbol: 'MSFT',
+        displayName: 'Microsoft',
+        identityState: 'unknown',
       },
       savedItemSource: 'manual',
       quote: {
@@ -236,6 +240,7 @@ describe('watchlistApi investor signal normalization', () => {
         lastScoredAt: null,
       },
       researchStatus: 'partial',
+      researchReadiness: null,
       missingData: ['fundamentals', 'filing_event_catalyst', 'peer_benchmark'],
       nextDataAction: 'Add fundamentals, filing/event/catalyst, and peer evidence.',
       observationOnly: true,

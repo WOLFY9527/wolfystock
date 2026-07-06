@@ -29,6 +29,10 @@ type WatchlistRowResearchPacketQuoteState = 'available' | 'missing' | 'stale' | 
 type WatchlistRowResearchPacketStatus = 'ready' | 'partial' | 'blocked' | 'unknown';
 
 export type WatchlistRowResearchPacketConsumerCopy = {
+  identityStateLabel: string | null;
+  identityStateVariant: 'success' | 'info' | 'caution';
+  freshnessStateLabel: string | null;
+  freshnessStateVariant: 'success' | 'info' | 'caution' | 'danger';
   quoteStateLabel: string;
   quoteStateVariant: 'success' | 'info' | 'caution';
   quotePrice: number | null;
@@ -101,8 +105,8 @@ const PACKET_QUOTE_LABELS: Record<WatchlistRowResearchPacketQuoteState, Record<R
     en: 'Quote needs confirmation',
   },
   unknown: {
-    zh: '报价待确认',
-    en: 'Quote needs confirmation',
+    zh: '时效未知',
+    en: 'Freshness unknown',
   },
 };
 
@@ -120,10 +124,86 @@ const PACKET_STATUS_LABELS: Record<WatchlistRowResearchPacketStatus, Record<Rese
     en: 'Data needed',
   },
   unknown: {
-    zh: '待确认',
-    en: 'Needs confirmation',
+    zh: '研究状态未知',
+    en: 'Research status unknown',
   },
 };
+
+function packetIdentityStateLabel(
+  state: string | null | undefined,
+  locale: ResearchQueueConsumerLocale,
+): { label: string | null; variant: WatchlistRowResearchPacketConsumerCopy['identityStateVariant'] } {
+  const token = normalizeConsumerStatusToken(state);
+  if (token === 'resolved') {
+    return {
+      label: locale === 'en' ? 'Identity confirmed' : '身份已确认',
+      variant: 'success',
+    };
+  }
+  if (token === 'unsupported' || token === 'unavailable') {
+    return {
+      label: locale === 'en' ? 'Identity unavailable' : '身份暂不可用',
+      variant: 'caution',
+    };
+  }
+  if (token === 'unresolved') {
+    return {
+      label: locale === 'en' ? 'Identity unresolved' : '身份待确认',
+      variant: 'caution',
+    };
+  }
+  return {
+    label: null,
+    variant: 'info',
+  };
+}
+
+function packetFreshnessStateLabel(
+  state: string | null | undefined,
+  locale: ResearchQueueConsumerLocale,
+): { label: string | null; variant: WatchlistRowResearchPacketConsumerCopy['freshnessStateVariant'] } {
+  const token = normalizeConsumerStatusToken(state);
+  if (token === 'available') {
+    return {
+      label: locale === 'en' ? 'Freshness available' : '时效可用',
+      variant: 'success',
+    };
+  }
+  if (token === 'partial') {
+    return {
+      label: locale === 'en' ? 'Freshness partial' : '时效部分可用',
+      variant: 'info',
+    };
+  }
+  if (token === 'stale') {
+    return {
+      label: locale === 'en' ? 'Freshness stale' : '时效较旧',
+      variant: 'caution',
+    };
+  }
+  if (token === 'unavailable') {
+    return {
+      label: locale === 'en' ? 'Freshness unavailable' : '时效不可用',
+      variant: 'danger',
+    };
+  }
+  if (token === 'pending') {
+    return {
+      label: locale === 'en' ? 'Freshness pending' : '时效待确认',
+      variant: 'caution',
+    };
+  }
+  if (token === 'unknown') {
+    return {
+      label: locale === 'en' ? 'Freshness unknown' : '时效未知',
+      variant: 'caution',
+    };
+  }
+  return {
+    label: null,
+    variant: 'caution',
+  };
+}
 
 function normalizeCopyKey(value: string | null | undefined): string {
   return String(value || '')
@@ -223,7 +303,12 @@ function packetNextDataActionLabel(
   quoteState: WatchlistRowResearchPacketQuoteState,
   researchStatus: WatchlistRowResearchPacketStatus,
   locale: ResearchQueueConsumerLocale,
+  readinessState?: string | null,
 ): string {
+  const normalizedReadiness = normalizeConsumerStatusToken(readinessState);
+  if (normalizedReadiness === 'unknown') {
+    return locale === 'en' ? 'Review stock structure' : '查看个股结构';
+  }
   const tokens = missingData.map((item) => normalizeConsumerStatusToken(item));
   if (hasPacketMissingData(tokens, ['quote', 'price_history', 'history'])) {
     return locale === 'en' ? 'Add quote and history' : '补报价与历史';
@@ -383,13 +468,28 @@ export function getWatchlistRowResearchPacketConsumerCopy(
   const quoteState = normalizePacketQuoteState(packet.quote?.state);
   const researchStatus = normalizePacketResearchStatus(packet.researchStatus);
   const scannerLineage = packetScannerLineageLabel(packet, locale);
+  const identityState = packetIdentityStateLabel(
+    packet.researchReadiness?.identityState || packet.identity?.identityState,
+    locale,
+  );
+  const freshnessState = packetFreshnessStateLabel(packet.researchReadiness?.freshnessState, locale);
   const missingSummary = packetMissingDataSummary(packet.missingData || [], quoteState, locale);
-  const nextDataActionLabel = packetNextDataActionLabel(packet.missingData || [], quoteState, researchStatus, locale);
+  const nextDataActionLabel = packetNextDataActionLabel(
+    packet.missingData || [],
+    quoteState,
+    researchStatus,
+    locale,
+    packet.researchReadiness?.state,
+  );
   const noAdviceLabel = packet.observationOnly || packet.noAdviceDisclosure
     ? (locale === 'en' ? 'Observation only' : '仅供观察')
     : null;
 
   return {
+    identityStateLabel: identityState.label,
+    identityStateVariant: identityState.variant,
+    freshnessStateLabel: freshnessState.label,
+    freshnessStateVariant: freshnessState.variant,
     quoteStateLabel: packetQuoteStateLabel(quoteState, locale),
     quoteStateVariant: quoteState === 'available' ? 'success' : 'caution',
     quotePrice: typeof packet.quote?.price === 'number' && Number.isFinite(packet.quote.price) ? packet.quote.price : null,

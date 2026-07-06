@@ -178,6 +178,9 @@ function normalizeRowResearchPacket(
   const scannerLineage = record.scannerLineage && typeof record.scannerLineage === 'object'
     ? record.scannerLineage as unknown as Record<string, unknown>
     : {};
+  const researchReadiness = record.researchReadiness && typeof record.researchReadiness === 'object'
+    ? record.researchReadiness as unknown as Record<string, unknown>
+    : null;
   const researchStatus = normalizeOptionalText(record.researchStatus)?.toLowerCase() ?? 'unknown';
   if (!symbol || !market) return null;
 
@@ -189,6 +192,10 @@ function normalizeRowResearchPacket(
       exchange: normalizeOptionalText(identity.exchange),
       sector: normalizeOptionalText(identity.sector),
       industry: normalizeOptionalText(identity.industry),
+      canonicalSymbol: normalizeOptionalText(identity.canonicalSymbol)?.toUpperCase() ?? symbol,
+      displaySymbol: normalizeOptionalText(identity.displaySymbol)?.toUpperCase() ?? symbol,
+      displayName: normalizeOptionalText(identity.displayName) ?? normalizeOptionalText(identity.name),
+      identityState: normalizeOptionalText(identity.identityState) ?? 'unknown',
     },
     savedItemSource: normalizeOptionalText(record.savedItemSource) ?? 'unknown',
     quote: {
@@ -209,6 +216,15 @@ function normalizeRowResearchPacket(
     researchStatus: SAFE_ROW_RESEARCH_STATUS.has(researchStatus)
       ? researchStatus as 'ready' | 'partial' | 'blocked' | 'unknown'
       : 'unknown',
+    researchReadiness: researchReadiness ? {
+      contractVersion: normalizeOptionalText(researchReadiness.contractVersion),
+      state: normalizeOptionalText(researchReadiness.state)?.toLowerCase() ?? 'unknown',
+      freshnessState: normalizeOptionalText(researchReadiness.freshnessState)?.toLowerCase() ?? 'unknown',
+      identityState: normalizeOptionalText(researchReadiness.identityState) ?? 'unknown',
+      lastReviewedAt: normalizeOptionalText(researchReadiness.lastReviewedAt),
+      scoreFreshnessImplied: normalizeOptionalBoolean(researchReadiness.scoreFreshnessImplied),
+      sourceAuthorityImplied: normalizeOptionalBoolean(researchReadiness.sourceAuthorityImplied),
+    } : null,
     missingData: normalizeConsumerTextList(record.missingData),
     nextDataAction: normalizeOptionalText(record.nextDataAction) ?? '',
     observationOnly: true,
@@ -223,9 +239,32 @@ function normalizeWatchlistItem(item: WatchlistItem): WatchlistItem {
       .filter((exposure): exposure is WatchlistCatalystExposure => Boolean(exposure))
     : item.intelligence?.catalystExposures;
   const rowResearchPacket = normalizeRowResearchPacket(item.rowResearchPacket);
+  const identity = item.identity && typeof item.identity === 'object'
+    ? item.identity as unknown as Record<string, unknown>
+    : null;
+  const researchReadiness = item.researchReadiness && typeof item.researchReadiness === 'object'
+    ? item.researchReadiness as unknown as Record<string, unknown>
+    : null;
 
   return {
     ...item,
+    identity: identity ? {
+      canonicalSymbol: normalizeOptionalText(identity.canonicalSymbol)?.toUpperCase() ?? item.symbol,
+      displaySymbol: normalizeOptionalText(identity.displaySymbol)?.toUpperCase() ?? item.symbol,
+      market: normalizeOptionalText(identity.market)?.toLowerCase() ?? item.market,
+      exchange: normalizeOptionalText(identity.exchange),
+      displayName: normalizeOptionalText(identity.displayName),
+      identityState: normalizeOptionalText(identity.identityState) ?? 'unknown',
+    } : item.identity,
+    researchReadiness: researchReadiness ? {
+      contractVersion: normalizeOptionalText(researchReadiness.contractVersion),
+      state: normalizeOptionalText(researchReadiness.state)?.toLowerCase() ?? 'unknown',
+      freshnessState: normalizeOptionalText(researchReadiness.freshnessState)?.toLowerCase() ?? 'unknown',
+      identityState: normalizeOptionalText(researchReadiness.identityState) ?? 'unknown',
+      lastReviewedAt: normalizeOptionalText(researchReadiness.lastReviewedAt),
+      scoreFreshnessImplied: normalizeOptionalBoolean(researchReadiness.scoreFreshnessImplied),
+      sourceAuthorityImplied: normalizeOptionalBoolean(researchReadiness.sourceAuthorityImplied),
+    } : rowResearchPacket?.researchReadiness ?? item.researchReadiness,
     rowResearchPacket,
     intelligence: item.intelligence
       ? {

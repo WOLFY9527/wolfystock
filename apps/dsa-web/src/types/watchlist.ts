@@ -95,6 +95,10 @@ export interface WatchlistRowResearchIdentity {
   exchange?: string | null;
   sector?: string | null;
   industry?: string | null;
+  canonicalSymbol?: string | null;
+  displaySymbol?: string | null;
+  displayName?: string | null;
+  identityState?: string | null;
 }
 
 export interface WatchlistRowResearchQuote {
@@ -120,18 +124,41 @@ export interface WatchlistRowResearchPacketResponse {
   quote: WatchlistRowResearchQuote;
   scannerLineage: WatchlistRowScannerLineage;
   researchStatus: 'ready' | 'partial' | 'blocked' | 'unknown' | string;
+  researchReadiness?: WatchlistResearchReadiness | null;
   missingData: string[];
   nextDataAction: string;
   observationOnly: true;
   noAdviceDisclosure: string;
 }
 
+export interface WatchlistSymbolIdentity {
+  canonicalSymbol: string;
+  displaySymbol: string;
+  market: string;
+  exchange?: string | null;
+  displayName?: string | null;
+  identityState: string;
+}
+
+export interface WatchlistResearchReadiness {
+  contractVersion?: string | null;
+  state: 'available' | 'partial' | 'stale' | 'unavailable' | 'pending' | 'unknown' | string;
+  freshnessState: 'available' | 'partial' | 'stale' | 'unavailable' | 'pending' | 'unknown' | string;
+  identityState: string;
+  lastReviewedAt?: string | null;
+  scoreFreshnessImplied?: boolean | null;
+  sourceAuthorityImplied?: boolean | null;
+}
+
 export interface WatchlistItem {
   id: number;
   symbol: string;
   market: string;
+  identity?: WatchlistSymbolIdentity | null;
   name?: string | null;
   source: string;
+  createdNew?: boolean | null;
+  duplicateOfId?: number | null;
   scannerRunId?: number | null;
   scannerRank?: number | null;
   scannerScore?: number | null;
@@ -142,6 +169,7 @@ export interface WatchlistItem {
   scoreStatus?: string | null;
   scoreStatusContext?: WatchlistScoreStatusContext | null;
   scoreError?: string | null;
+  researchReadiness?: WatchlistResearchReadiness | null;
   themeId?: string | null;
   universeType?: string | null;
   notes?: string | null;
