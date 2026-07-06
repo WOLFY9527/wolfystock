@@ -664,7 +664,8 @@ describe('HomeSurfacePage', () => {
     expect(guestMarketPreviewStrip).toHaveTextContent('公开市场观察已准备');
     expect(guestMarketPreviewStrip).toHaveTextContent('市场广度改善');
     expect(guestMarketPreviewStrip).toHaveTextContent('主要宽度与资金线索继续支持观察。');
-    expect(guestMarketPreviewStrip).toHaveTextContent('当前摘要只用于市场观察，不构成买卖建议。');
+    expect(guestMarketPreviewStrip).toHaveTextContent('研究观察，不构成投资建议。');
+    expect(guestMarketPreviewStrip.textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|buy|sell|hold|target price|stop-loss|stop loss/i);
     expect(screen.getByTestId('guest-home-registration-link')).toHaveAttribute('href', '/register?redirect=%2F');
     expect(guestTrustStrip).toHaveClass('rounded-[12px]');
     expect(guestTrustStrip).toHaveTextContent('安全下一步');
@@ -2953,6 +2954,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('member-home-beta-boundary')).toHaveTextContent('证据不足时，WolfyStock 会保留更强结论。');
     expect(screen.getByTestId('member-home-beta-boundary')).toHaveTextContent('仅用于研究观察');
     expect(screen.getByTestId('member-home-beta-boundary')).toHaveTextContent('不输出个性化交易指令');
+    expect(screen.getByTestId('member-home-beta-boundary').textContent || '').not.toMatch(/买入|卖出|持有|目标价|止损|buy|sell|hold|target price|stop-loss|stop loss/i);
     expect(screen.getByTestId('member-home-beta-feedback-link')).toHaveAttribute('href', 'https://github.com/ZhuLinsen/daily_stock_analysis/discussions');
     expect(screen.getByTestId('member-home-beta-feedback-note')).toHaveTextContent('当前未发现结构化站内反馈后端');
     expect(betaEntry.textContent || '').not.toMatch(/立即买入|立即卖出|下单|保证收益|buy recommendation|sell recommendation|trade now|order now/i);

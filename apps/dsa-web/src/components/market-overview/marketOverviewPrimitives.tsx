@@ -14,31 +14,37 @@ import { resolveMarketOverviewDisplayLabel } from './marketOverviewLabels';
 
 const FRESHNESS_LABELS: Record<MarketDataFreshness, string> = {
   live: '实时',
-  delayed: '最近可用',
-  cached: '最近可用',
+  delayed: '延迟可读',
+  cached: '保存快照',
   stale: '可能延迟',
-  fallback: '最近可用',
-  mock: '最近可用',
-  error: '暂不可用',
+  fallback: '替代快照',
+  mock: '示例观察',
+  error: '读取异常',
   unavailable: '暂不可用',
 };
 
-const STATUS_LABELS: Record<MarketProviderHealthStatus, string> = {
+type MarketFreshnessBadgeKey = MarketProviderHealthStatus | 'delayed' | 'mock';
+
+const STATUS_LABELS: Record<MarketFreshnessBadgeKey, string> = {
   live: '实时',
-  cache: '最近可用',
+  cache: '保存快照',
+  delayed: '延迟可读',
   stale: '可能延迟',
-  fallback: '最近可用',
+  fallback: '替代快照',
+  mock: '示例观察',
   partial: '部分可用',
   unavailable: '暂不可用',
-  error: '暂不可用',
+  error: '读取异常',
   refreshing: '更新中',
 };
 
-const FRESHNESS_CLASSES: Record<MarketProviderHealthStatus, string> = {
+const FRESHNESS_CLASSES: Record<MarketFreshnessBadgeKey, string> = {
   live: 'border-[color:var(--state-success-border)] bg-[var(--state-success-bg)] text-[color:var(--state-success-text)]',
   cache: 'border-[color:var(--line)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)]',
+  delayed: 'border-[color:var(--state-info-border)] bg-[var(--state-info-bg)] text-[color:var(--state-info-text)]',
   stale: 'border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] text-[color:var(--state-warning-text)]',
   fallback: 'border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] text-[color:var(--state-warning-text)]',
+  mock: 'border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] text-[color:var(--state-warning-text)]',
   partial: 'border-[color:var(--state-info-border)] bg-[var(--state-info-bg)] text-[color:var(--state-info-text)]',
   unavailable: 'border-[color:var(--line)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)]',
   error: 'border-[color:var(--state-danger-border)] bg-[var(--state-danger-bg)] text-[color:var(--state-danger-text)]',
@@ -149,8 +155,27 @@ function legacyFreshnessToStatus(freshness?: MarketDataFreshness): MarketProvide
   return 'cache';
 }
 
+function resolveFreshnessBadgeKey(freshness?: MarketDataFreshness, status?: MarketProviderHealthStatus): MarketFreshnessBadgeKey {
+  if (status === 'cache' && freshness === 'delayed') {
+    return 'delayed';
+  }
+  if (status === 'fallback' && freshness === 'mock') {
+    return 'mock';
+  }
+  if (status) {
+    return status;
+  }
+  if (freshness === 'delayed') {
+    return 'delayed';
+  }
+  if (freshness === 'mock') {
+    return 'mock';
+  }
+  return legacyFreshnessToStatus(freshness);
+}
+
 export const DataFreshnessBadge: React.FC<{ freshness?: MarketDataFreshness; status?: MarketProviderHealthStatus; className?: string }> = ({ freshness, status, className }) => {
-  const resolved = status || legacyFreshnessToStatus(freshness);
+  const resolved = resolveFreshnessBadgeKey(freshness, status);
   return (
     <span
       data-testid={`data-freshness-badge-${resolved}`}
@@ -178,6 +203,31 @@ function compactMetaText(meta?: Partial<MarketDataMeta>): string {
   return formatMarketOverviewTimestamp(meta?.asOf)
     || formatMarketOverviewTimestamp(meta?.updatedAt)
     || '';
+}
+
+function sortableTimestamp(value?: string | null): { time: number; label: string } | null {
+  const text = String(value || '').trim();
+  if (!text) {
+    return null;
+  }
+  const time = new Date(text).getTime();
+  const label = formatMarketOverviewTimestamp(text);
+  if (!label || Number.isNaN(time)) {
+    return null;
+  }
+  return { time, label };
+}
+
+function evidenceTimestampWindow(panel?: MarketOverviewPanel): string {
+  const timestamps = (panel?.items || [])
+    .map((item) => sortableTimestamp(item.asOf || item.updatedAt))
+    .filter((item): item is { time: number; label: string } => Boolean(item))
+    .sort((left, right) => left.time - right.time);
+  const uniqueLabels = Array.from(new Set(timestamps.map((item) => item.label)));
+  if (uniqueLabels.length < 2) {
+    return '';
+  }
+  return `时间窗口 ${uniqueLabels[0]} - ${uniqueLabels[uniqueLabels.length - 1]}`;
 }
 
 function sanitizeConsumerDetails(details?: string[] | null): string[] {
@@ -268,7 +318,12 @@ export const MarketOverviewPanelFooter: React.FC<{ panel?: MarketOverviewPanel; 
   if (resolvedMeta?.isRefreshing) {
     details.push(t('marketOverviewPage.footer.refreshingSnapshot'));
   }
-  const compactDetails = compactMetaText(resolvedMeta)
+  const timestampWindow = evidenceTimestampWindow(panel);
+  if (timestampWindow) {
+    details.unshift(timestampWindow);
+  }
+  const compactDetails = timestampWindow
+    || compactMetaText(resolvedMeta)
     || fallbackUpdatedAt
     || (resolvedMeta?.isRefreshing ? t('marketOverviewPage.footer.refreshingSnapshot') : pendingLabel);
   const freshness = resolveFreshness(resolvedMeta);
@@ -276,7 +331,7 @@ export const MarketOverviewPanelFooter: React.FC<{ panel?: MarketOverviewPanel; 
   return (
     <div className="mt-auto min-w-0 border-t border-white/5 pt-3">
       <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap">
-        <DataFreshnessBadge status={freshness} />
+        <DataFreshnessBadge freshness={resolvedMeta?.freshness} status={freshness} />
         <span
           data-testid="market-overview-footer-meta"
           className="min-w-0 truncate text-[10px] uppercase tracking-widest text-white/34"
@@ -336,7 +391,7 @@ export const MarketDataRow: React.FC<{
           title={metadataTitle(itemDetails, item.warning, item.hoverDetails)}
           className="col-start-2 flex min-w-0 max-w-full items-center gap-x-1.5 overflow-hidden whitespace-nowrap text-[9px] text-white/32 max-[640px]:col-start-1 max-[640px]:row-start-2 max-[640px]:pl-3.5"
         >
-          {!suppressFreshnessBadge ? <DataFreshnessBadge status={freshness} className="shrink-0 px-1.5 text-[9px]" /> : null}
+          {!suppressFreshnessBadge ? <DataFreshnessBadge freshness={item.freshness} status={freshness} className="shrink-0 px-1.5 text-[9px]" /> : null}
           {compactDetails ? <span className="min-w-0 overflow-hidden text-ellipsis leading-4">{compactDetails}</span> : null}
         </div>
       ) : null}
@@ -402,7 +457,7 @@ export const MarketOverviewDenseQuoteItem: React.FC<{
         title={metadataTitle(itemDetails, item.warning, item.hoverDetails)}
         className="col-start-2 flex min-w-0 max-w-full items-center gap-x-1.5 overflow-hidden whitespace-nowrap text-[9px] text-white/32 max-[720px]:col-start-1 max-[720px]:row-start-2 max-[720px]:pl-3.5"
       >
-        {!suppressFreshnessBadge ? <DataFreshnessBadge status={freshness} className="shrink-0 px-1.5 text-[9px]" /> : null}
+        {!suppressFreshnessBadge ? <DataFreshnessBadge freshness={item.freshness} status={freshness} className="shrink-0 px-1.5 text-[9px]" /> : null}
         {compactDetails ? <span className="min-w-0 overflow-hidden text-ellipsis leading-4">{compactDetails}</span> : null}
       </div>
 

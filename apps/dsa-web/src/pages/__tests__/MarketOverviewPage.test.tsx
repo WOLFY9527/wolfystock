@@ -8,7 +8,7 @@ import { MarketOverviewWorkbench } from '../../components/market-overview/Market
 import { MARKET_OVERVIEW_TAB_CONFIG } from '../MarketOverviewTabConfig';
 import { marketOverviewApi } from '../../api/marketOverview';
 import { marketApi } from '../../api/market';
-import { DataFreshnessBadge, MarketDataRow } from '../../components/market-overview/marketOverviewPrimitives';
+import { DataFreshnessBadge, MarketDataRow, MarketOverviewPanelFooter } from '../../components/market-overview/marketOverviewPrimitives';
 import { TerminalPageHeading } from '../../components/terminal/TerminalPrimitives';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { UI_LANGUAGE_STORAGE_KEY } from '../../i18n/core';
@@ -4432,7 +4432,7 @@ describe('MarketOverviewPage', () => {
     expect(within(firstQuote).getByText('标普500')).toBeInTheDocument();
     expect(within(firstQuote).getByText('SPX')).toBeInTheDocument();
     expect(within(firstQuote).getByText('5,120.25')).toBeInTheDocument();
-    expect(within(firstQuote).getByTestId('data-freshness-badge-cache')).toBeInTheDocument();
+    expect(within(firstQuote).getByTestId('data-freshness-badge-delayed')).toBeInTheDocument();
   });
 
   it('keeps quote-heavy cards out of the insight rail and reserves it for compact helpers', async () => {
@@ -4852,21 +4852,62 @@ describe('MarketOverviewPage', () => {
     expect(MockEventSource.instances).toHaveLength(0);
   });
 
-  it('renders all provider health badge states in Chinese', () => {
+  it('keeps consumer freshness states materially distinct', () => {
     render(
       <div>
         {(['live', 'cache', 'stale', 'fallback', 'partial', 'unavailable', 'refreshing', 'error'] as const).map((status) => (
           <DataFreshnessBadge key={status} status={status} />
         ))}
+        <DataFreshnessBadge freshness="delayed" />
       </div>,
     );
 
     expect(screen.getByText('实时')).toBeInTheDocument();
-    expect(screen.getAllByText('最近可用').length).toBeGreaterThan(0);
+    expect(screen.getByText('保存快照')).toBeInTheDocument();
+    expect(screen.getByText('延迟可读')).toBeInTheDocument();
+    expect(screen.getByText('替代快照')).toBeInTheDocument();
     expect(screen.getByText('可能延迟')).toBeInTheDocument();
     expect(screen.getByText('部分可用')).toBeInTheDocument();
-    expect(screen.getAllByText('暂不可用').length).toBeGreaterThan(0);
+    expect(screen.getByText('暂不可用')).toBeInTheDocument();
+    expect(screen.getByText('读取异常')).toBeInTheDocument();
     expect(screen.getByText('更新中')).toBeInTheDocument();
+    expect(screen.getByTestId('data-freshness-badge-error')).not.toHaveTextContent('暂不可用');
+    expect(screen.getByTestId('data-freshness-badge-fallback')).not.toHaveTextContent('实时');
+  });
+
+  it('summarizes mixed market footer timestamps as an evidence window', () => {
+    render(
+      <UiLanguageProvider>
+        <MarketOverviewPanelFooter
+          panel={{
+            panelName: 'MixedFamilyPanel',
+            lastRefreshAt: '2026-04-29T10:20:00+08:00',
+            status: 'partial',
+            updatedAt: '2026-04-29T10:20:00+08:00',
+            asOf: '2026-04-29T10:15:00+08:00',
+            freshness: 'cached',
+            items: [
+              {
+                symbol: 'VIX',
+                label: 'VIX',
+                updatedAt: '2026-04-29T09:35:00+08:00',
+                asOf: '2026-04-29T09:30:00+08:00',
+                freshness: 'cached',
+              },
+              {
+                symbol: 'DXY',
+                label: 'DXY',
+                updatedAt: '2026-04-29T10:16:00+08:00',
+                asOf: '2026-04-29T10:15:00+08:00',
+                freshness: 'delayed',
+              },
+            ],
+          }}
+        />
+      </UiLanguageProvider>,
+    );
+
+    expect(screen.getByTestId('market-overview-footer-meta')).toHaveTextContent('时间窗口 2026-04-29 09:30:00 - 2026-04-29 10:15:00');
   });
 
   it('shows stale card data as expired data', async () => {
