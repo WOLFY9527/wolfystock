@@ -208,6 +208,7 @@ type ScannerDataReadinessView = {
   blockerLabel: string | null;
   nextDataLabel: string | null;
   coverageChips: ScannerLabeledValue[];
+  readinessLayers: ScannerLabeledValue[];
   isMeaningful: boolean;
 };
 type ScannerVisualSummaryBarSegment = {
@@ -495,12 +496,54 @@ function buildScannerDataReadinessView(
         .join(' / '),
     } : null,
   ].filter((item): item is ScannerLabeledValue => Boolean(item));
+  const quoteLabel = readiness.quoteCoverage
+    ? localizedDataReadinessLabel(readiness.quoteCoverage, SCANNER_DATA_READINESS_COVERAGE_LABELS, language)
+      || (language === 'en' ? 'To confirm' : '待确认')
+    : null;
+  const historyLabel = readiness.historyCoverage
+    ? localizedDataReadinessLabel(readiness.historyCoverage, SCANNER_DATA_READINESS_COVERAGE_LABELS, language)
+      || (language === 'en' ? 'To confirm' : '待确认')
+    : null;
+  const membershipLabel = universeBlockerLabel
+    || (universeStatus
+      ? localizedDataReadinessLabel(universeStatus, SCANNER_DATA_READINESS_COVERAGE_LABELS, language)
+        || (language === 'en' ? 'To confirm' : '待确认')
+      : readiness.universeSize != null
+        ? (language === 'en' ? `${readiness.universeSize} symbols` : `${readiness.universeSize} 个标的`)
+        : stateLabel);
+  const marketDataParts = [quoteLabel, historyLabel].filter(Boolean);
+  const marketDataLabel = marketDataParts.length
+    ? marketDataParts.join(language === 'en' ? ' / ' : ' / ')
+    : (readiness.freshness
+      ? localizedDataReadinessLabel(readiness.freshness, SCANNER_DATA_READINESS_COVERAGE_LABELS, language)
+        || stateLabel
+      : stateLabel);
+  const candidateGenerationLabel = readiness.selectedCount != null
+    ? (language === 'en'
+      ? `${readiness.selectedCount} selected${readiness.rejectedCount != null ? ` / ${readiness.rejectedCount} filtered` : ''}`
+      : `产出 ${readiness.selectedCount} 个${readiness.rejectedCount != null ? ` / 过滤 ${readiness.rejectedCount} 个` : ''}`)
+    : blockerLabel || stateLabel;
+  const readinessLayers = [
+    {
+      label: language === 'en' ? 'Universe membership' : '标的池成员',
+      value: membershipLabel,
+    },
+    {
+      label: language === 'en' ? 'Market data' : '市场数据',
+      value: marketDataLabel,
+    },
+    {
+      label: language === 'en' ? 'Candidate generation' : '候选生成',
+      value: candidateGenerationLabel,
+    },
+  ];
 
   return {
     stateLabel,
     blockerLabel,
     nextDataLabel,
     coverageChips,
+    readinessLayers,
     isMeaningful: ['ready', 'partial', 'blocked'].includes(state) || Boolean(blockerLabel) || Boolean(universeStatus),
   };
 }
@@ -1916,7 +1959,7 @@ function previewDecisionClass(candidate: ScannerCandidateDiagnostic, threshold: 
   if (isOfficialSelected(candidate)) return 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100';
   if (isDataUnavailable(candidate)) return 'border-rose-400/25 bg-rose-400/10 text-rose-100';
   if (isPreviewSelected(candidate, threshold)) return 'border-blue-400/25 bg-blue-400/10 text-blue-100 shadow-[0_0_14px_rgba(59,130,246,0.12)]';
-  return 'border-white/10 bg-white/[0.035] text-white/58';
+  return 'border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)]';
 }
 
 function sortDiagnosticsForDecision(
@@ -3573,18 +3616,18 @@ const UserScannerPage: React.FC = () => {
 
     return (
       <div data-testid={`scanner-result-detail-${getCandidateIdentity(candidate)}`} className="space-y-3">
-        <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-3">
+        <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
           <div className="flex min-w-0 items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-2">
-                <span className="truncate font-mono text-lg font-semibold text-white">{candidate.symbol || '--'}</span>
-                <span className="rounded border border-white/8 bg-white/[0.04] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/72">
+                <span className="truncate font-mono text-lg font-semibold text-[color:var(--wolfy-text-primary)]">{candidate.symbol || '--'}</span>
+                <span className="rounded border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-console)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--wolfy-text-secondary)]">
                   {language === 'en' ? 'Focus candidate' : '当前候选'}
                 </span>
               </div>
-              <p className="mt-1 truncate text-xs text-white/42">{candidate.companyName || candidate.name || candidate.symbol || '--'}</p>
+              <p className="mt-1 truncate text-xs text-[color:var(--wolfy-text-muted)]">{candidate.companyName || candidate.name || candidate.symbol || '--'}</p>
               {detailQualityNotice ? (
-                <p className="mt-2 max-w-[32rem] text-[11px] leading-relaxed text-white/52">
+                <p className="mt-2 max-w-[32rem] text-[11px] leading-relaxed text-[color:var(--wolfy-text-secondary)]">
                   {detailQualityNotice}
                 </p>
               ) : null}
@@ -3598,27 +3641,27 @@ const UserScannerPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid gap-2 rounded-xl border border-white/8 bg-white/[0.015] p-3">
-          <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-2 border-b border-white/8 pb-2">
-            <span className="text-[10px] uppercase tracking-[0.14em] text-white/36">{language === 'en' ? 'Why now' : '当前信号'}</span>
-            <p className="min-w-0 text-xs leading-relaxed text-white/72">
+        <div className="grid gap-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
+          <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-2 border-b border-[color:var(--wolfy-divider)] pb-2">
+            <span className="text-[10px] uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Why now' : '当前信号'}</span>
+            <p className="min-w-0 text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">
               {summaryOverride || compactNotes[0] || candidate.reasonSummary || compactMetricItems[0]?.value || ai?.status || (language === 'en' ? 'No decision note' : '暂无结论')}
             </p>
           </div>
-          <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-2 border-b border-white/8 pb-2">
-            <span className="text-[10px] uppercase tracking-[0.14em] text-white/36">{language === 'en' ? 'Risk' : '风险'}</span>
-            <p className="min-w-0 text-xs leading-relaxed text-white/64">
+          <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-2 border-b border-[color:var(--wolfy-divider)] pb-2">
+            <span className="text-[10px] uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Risk' : '风险'}</span>
+            <p className="min-w-0 text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">
               {compactRiskNotes[0] || candidate.riskNotes?.[0] || (language === 'en' ? 'No risk note' : '暂无风险说明')}
             </p>
           </div>
           <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-2">
-            <span className="text-[10px] uppercase tracking-[0.14em] text-white/36">{language === 'en' ? 'Next' : '下一步'}</span>
+            <span className="text-[10px] uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Next' : '下一步'}</span>
             <div className="flex min-w-0 flex-wrap gap-1.5">
               {getEntryRange(candidate) ? <FieldChip label={language === 'en' ? 'Observation zone' : '观察区'} value={getEntryRange(candidate) || '--'} /> : null}
               {getTargetPrice(candidate) ? <FieldChip label={language === 'en' ? 'Reference range' : '参考区间'} value={getTargetPrice(candidate) || '--'} /> : null}
               {getStopLoss(candidate) ? <FieldChip label={language === 'en' ? 'Risk boundary' : '风险边界'} value={getStopLoss(candidate) || '--'} /> : null}
               {!getEntryRange(candidate) && !getTargetPrice(candidate) && !getStopLoss(candidate) ? (
-                <span className="text-xs text-white/44">
+                <span className="text-xs text-[color:var(--wolfy-text-muted)]">
                   {language === 'en' ? 'Watch next update before acting.' : '等待下次更新后再行动。'}
                 </span>
               ) : null}
@@ -3636,8 +3679,8 @@ const UserScannerPage: React.FC = () => {
         </div>
 
         {candidateWithEvidence.candidateEvidenceFrame || candidateWithEvidence.candidateResearchReadiness ? (
-          <div className="grid gap-2 rounded-xl border border-white/8 bg-white/[0.015] p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+          <div className="grid gap-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
               {language === 'en' ? 'Evidence coverage' : '证据覆盖'}
             </p>
             <ScannerCandidateEvidenceStrip
@@ -3810,10 +3853,9 @@ const UserScannerPage: React.FC = () => {
       : (isRetryScanState ? '重新扫描' : '启动扫描');
   const heroLatestLabel = `${language === 'en' ? 'Latest' : '最近'} ${generatedAt ? formatTimestamp(generatedAt, language) : '--'}`;
   const showWorkflowNextSteps = !scannerHasPseudoEmptyRun && (!runDetail
-    || scannerConclusion.state !== 'top-candidate'
-    || scannerConclusion.trustSummary.staleCount > 0
-    || scannerConclusion.trustSummary.partialCount > 0
-    || scannerConclusion.trustSummary.limitedCount > 0
+    || scannerConclusion.state === 'waiting'
+    || scannerConclusion.state === 'no-candidate'
+    || scannerConclusion.state === 'insufficient'
     || Boolean(pageErrorSummary));
   const scannerWorkflowDetail = scannerConclusion.state === 'waiting'
     ? (language === 'en'
@@ -4049,7 +4091,7 @@ const UserScannerPage: React.FC = () => {
 	              <div className="mx-3 mt-3 rounded-xl border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-sm text-rose-100" role="alert" data-testid="scanner-page-error-summary">
 	                <div className="flex flex-wrap items-center gap-2">
 	                  <span className="font-medium">{language === 'en' ? 'Scan did not complete' : '扫描未完成'}</span>
-	                  <span className="rounded border border-rose-300/20 bg-black/20 px-1.5 py-0.5 text-[11px]">{pageErrorSummary}</span>
+	                  <span className="rounded border border-rose-300/25 bg-rose-50/10 px-1.5 py-0.5 text-[11px]">{pageErrorSummary}</span>
 	                </div>
 	                <p className="mt-2 text-xs text-rose-50/70">
 	                  {language === 'en' ? 'Internal error details are hidden on this page.' : '内部错误详情已隐藏。'}
@@ -4083,16 +4125,16 @@ const UserScannerPage: React.FC = () => {
 
               <section
                 data-testid="scanner-consumer-first-viewport"
-                className="mx-3 rounded-xl border border-white/10 bg-white/[0.025] p-3"
+                className="mx-3 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 shadow-sm"
                 aria-label={language === 'en' ? 'Scanner consumer summary' : '扫描器消费级摘要'}
               >
                 <div className="flex min-w-0 flex-col gap-3">
                   <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
-                      <p data-testid="scanner-consumer-status-sentence" className="text-sm font-semibold leading-6 text-white">
+                      <p data-testid="scanner-consumer-status-sentence" className="text-sm font-semibold leading-6 text-[color:var(--wolfy-text-primary)]">
                         {scannerConsumerStatusSentence}
                       </p>
-                      <p data-testid="scanner-consumer-readiness-summary" className="mt-1 text-xs leading-5 text-white/58">
+                      <p data-testid="scanner-consumer-readiness-summary" className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                         {scannerDataStateLabel}
                         {scannerDataReadinessView?.nextDataLabel ? ` · ${scannerDataReadinessView.nextDataLabel}` : ''}
                       </p>
@@ -4108,11 +4150,11 @@ const UserScannerPage: React.FC = () => {
                           testId: 'scanner-consumer-control-value-output',
                         },
                       ].map((item) => (
-                        <div key={item.label} className="min-w-0 rounded-lg border border-white/8 bg-black/20 px-2 py-2">
-                          <p className="text-[10px] text-white/38">{item.label}</p>
+                        <div key={item.label} className="min-w-0 rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-rail)] px-2 py-2">
+                          <p className="text-[10px] text-[color:var(--wolfy-text-muted)]">{item.label}</p>
                           <p
                             data-testid={item.testId}
-                            className="mt-1 break-words whitespace-normal font-mono text-white/76 md:truncate"
+                            className="mt-1 break-words whitespace-normal font-mono text-[color:var(--wolfy-text-primary)] md:truncate"
                           >
                             {item.value}
                           </p>
@@ -4122,22 +4164,40 @@ const UserScannerPage: React.FC = () => {
                   </div>
                   <div data-testid="scanner-data-trust-row" className="grid min-w-0 gap-1.5 text-xs sm:grid-cols-2 xl:grid-cols-4">
                     {scannerConsumerTrustItems.map((item) => (
-                      <div key={item.label} className="min-w-0 rounded-lg border border-white/8 bg-black/15 px-2.5 py-2">
-                        <p className="text-[10px] text-white/38">{item.label}</p>
+                      <div key={item.label} className="min-w-0 rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-rail)] px-2.5 py-2">
+                        <p className="text-[10px] text-[color:var(--wolfy-text-muted)]">{item.label}</p>
                         <p
                           data-testid={
                             item.label === (language === 'en' ? 'Scope' : '标的池')
                               ? 'scanner-consumer-trust-value-universe'
                               : undefined
                           }
-                          className="mt-1 break-words whitespace-normal text-white/72 md:truncate"
+                          className="mt-1 break-words whitespace-normal text-[color:var(--wolfy-text-primary)] md:truncate"
                         >
                           {item.value}
                         </p>
                       </div>
                     ))}
                   </div>
-                  <p data-testid="scanner-consumer-next-action" className="rounded-lg border border-indigo-300/15 bg-indigo-300/[0.06] px-2.5 py-2 text-xs leading-5 text-indigo-50/78">
+                  {scannerDataReadinessView?.readinessLayers?.length ? (
+                    <div
+                      data-testid="scanner-readiness-hierarchy"
+                      className="grid min-w-0 gap-1.5 text-xs sm:grid-cols-3"
+                      aria-label={language === 'en' ? 'Scanner readiness hierarchy' : '扫描器就绪层级'}
+                    >
+                      {scannerDataReadinessView.readinessLayers.map((item, index) => (
+                        <div
+                          key={item.label}
+                          data-testid={`scanner-readiness-layer-${index}`}
+                          className="min-w-0 rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-2.5 py-2"
+                        >
+                          <p className="text-[10px] font-semibold text-[color:var(--wolfy-text-muted)]">{item.label}</p>
+                          <p className="mt-1 break-words whitespace-normal text-[color:var(--wolfy-text-primary)] md:truncate">{item.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  <p data-testid="scanner-consumer-next-action" className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_8%,var(--wolfy-surface-input))] px-2.5 py-2 text-xs leading-5 text-[color:var(--wolfy-text-primary)]">
                     {scannerDataReadinessView?.nextDataLabel || scannerWorkflowDetail}
                   </p>
                 </div>
@@ -4157,7 +4217,7 @@ const UserScannerPage: React.FC = () => {
                   <a
                     data-testid="scanner-operator-readiness-link"
                     href={scannerOperatorReadinessHref}
-                    className="inline-flex min-h-9 items-center rounded-md border border-white/10 bg-white/[0.03] px-3 text-xs font-semibold text-white/70 transition hover:border-white/20 hover:bg-white/[0.07] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300"
+                    className="inline-flex min-h-9 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 text-xs font-semibold text-[color:var(--wolfy-text-secondary)] transition hover:border-[color:var(--wolfy-accent)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--wolfy-accent)]"
                   >
                     {language === 'en' ? 'Open data readiness' : '打开数据就绪'}
                   </a>
@@ -4169,21 +4229,21 @@ const UserScannerPage: React.FC = () => {
               {showWorkflowNextSteps ? (
                 <section
                   data-testid="scanner-workflow-next-steps"
-                  className="mx-3 overflow-x-hidden rounded-xl border border-white/10 bg-white/[0.025] px-3 py-3 text-sm"
+                  className="mx-3 overflow-x-hidden rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3 text-sm shadow-sm"
                   aria-label={language === 'en' ? 'Scanner workflow next steps' : '扫描工作流下一步'}
                 >
                   <div className="flex min-w-0 flex-col gap-3">
                     <div className="flex min-w-0 flex-col gap-1 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0">
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
-                          <span className="text-xs font-semibold text-white">
+                          <span className="text-xs font-semibold text-[color:var(--wolfy-text-primary)]">
                             {language === 'en' ? 'Next steps' : '下一步'}
                           </span>
-                          <span className="rounded-md border border-white/10 bg-black/20 px-2 py-0.5 text-[11px] text-white/58">
+                          <span className="rounded-md border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-rail)] px-2 py-0.5 text-[11px] text-[color:var(--wolfy-text-secondary)]">
                             {scannerWorkflowStats}
                           </span>
                         </div>
-                        <p className="mt-1 max-w-4xl text-xs leading-relaxed text-white/58">
+                        <p className="mt-1 max-w-4xl text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">
                           {scannerWorkflowDetail}
                         </p>
                       </div>
@@ -4217,22 +4277,22 @@ const UserScannerPage: React.FC = () => {
                     <div className="grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(260px,0.58fr)_minmax(260px,0.58fr)]">
                       <div
                         data-testid="scanner-primary-research-path"
-                        className="min-w-0 rounded-lg border border-indigo-300/18 bg-indigo-300/[0.07] p-3"
+                        className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_8%,var(--wolfy-surface-input))] p-3"
                       >
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
-                          <span className="rounded-md border border-indigo-300/25 bg-indigo-300/12 px-2 py-0.5 text-[11px] font-semibold text-indigo-100/88">
+                          <span className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2 py-0.5 text-[11px] font-semibold text-[color:var(--wolfy-text-primary)]">
                             {language === 'en' ? 'Primary research path' : '首选研究路径'}
                           </span>
-                          <span className="text-[11px] text-white/48">
+                          <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">
                             {language === 'en'
                               ? 'Research one symbol, read-only.'
                               : '只读研究单个代码。'}
                           </span>
                         </div>
-                        <label htmlFor="scanner-manual-recovery-symbol" className="mt-3 block text-[11px] font-semibold text-white/78">
+                        <label htmlFor="scanner-manual-recovery-symbol" className="mt-3 block text-[11px] font-semibold text-[color:var(--wolfy-text-primary)]">
                           {language === 'en' ? 'Manual research symbol' : '手动补充研究代码'}
                         </label>
-                        <p className="mt-1 text-[11px] leading-relaxed text-white/50">
+                        <p className="mt-1 text-[11px] leading-relaxed text-[color:var(--wolfy-text-secondary)]">
                           {language === 'en'
                             ? 'Research a symbol when candidates are unavailable. Does not add to Watchlist unless saved.'
                             : '候选不可用时手动研究代码，不会自动写入观察名单。'}
@@ -4242,7 +4302,7 @@ const UserScannerPage: React.FC = () => {
                             id="scanner-manual-recovery-symbol"
                             data-testid="scanner-manual-recovery-symbol-input"
                             value={manualRecoverySymbol}
-                            className="h-9 min-w-0 flex-1 rounded-md border border-white/10 bg-black/35 px-3 text-sm font-mono text-white outline-none placeholder:text-white/22 focus:border-indigo-300/50"
+                            className="h-9 min-w-0 flex-1 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-panel)] px-3 text-sm font-mono text-[color:var(--wolfy-text-primary)] outline-none placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--wolfy-accent)]"
                             onChange={(event) => setManualRecoverySymbol(event.target.value)}
                             aria-label={language === 'en' ? 'Manual research symbol' : '手动补充研究代码'}
                             placeholder={language === 'en' ? 'TSLA' : 'TSLA'}
@@ -4260,7 +4320,7 @@ const UserScannerPage: React.FC = () => {
                           </TerminalButton>
                         </div>
                         <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
-                          <span className="text-[11px] text-white/44">
+                          <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">
                             {language === 'en'
                               ? 'Optional save path: only keep it in Watchlist if you explicitly want to monitor it.'
                               : '可选保存路径：只有你明确需要继续跟踪时，再加入观察名单。'}
@@ -4288,12 +4348,12 @@ const UserScannerPage: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="min-w-0 rounded-lg border border-white/8 bg-black/20 p-3">
+                      <div className="min-w-0 rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-rail)] p-3">
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
-                          <span className="text-[11px] font-semibold text-white/74">
+                          <span className="text-[11px] font-semibold text-[color:var(--wolfy-text-primary)]">
                             {language === 'en' ? 'Switch market or setup' : '换市场或配置'}
                           </span>
-                          <span className="text-[11px] text-white/42">
+                          <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">
                             {language === 'en'
                               ? 'Market buttons reset the profile defaults; detailed setup stays in the command bar.'
                               : '市场按钮会切换到对应默认配置；更细的 profile 和范围设置在上方命令栏调整。'}
@@ -4312,18 +4372,18 @@ const UserScannerPage: React.FC = () => {
                               <span>{language === 'en' ? `Switch to ${option.label}` : `切到${option.label}`}</span>
                             </TerminalButton>
                           ))}
-                          <span data-testid="scanner-secondary-route-copy" className="text-[11px] text-white/42 sm:ml-auto">
+                          <span data-testid="scanner-secondary-route-copy" className="text-[11px] text-[color:var(--wolfy-text-muted)] sm:ml-auto">
                             {language === 'en' ? 'Secondary routes:' : '辅助入口：'}
                           </span>
                           <a
                             href={buildLocalizedPath('/watchlist', language)}
-                            className="inline-flex h-8 items-center rounded-md px-2 text-xs font-medium text-white/60 underline decoration-white/20 underline-offset-4 hover:text-white"
+                            className="inline-flex h-8 items-center rounded-md px-2 text-xs font-medium text-[color:var(--wolfy-text-secondary)] underline decoration-[color:var(--wolfy-divider)] underline-offset-4 hover:text-[color:var(--wolfy-text-primary)]"
                           >
                             {language === 'en' ? 'Open Watchlist' : '打开 Watchlist'}
                           </a>
                           <a
                             href={buildLocalizedPath('/market-overview', language)}
-                            className="inline-flex h-8 items-center rounded-md px-2 text-xs font-medium text-white/60 underline decoration-white/20 underline-offset-4 hover:text-white"
+                            className="inline-flex h-8 items-center rounded-md px-2 text-xs font-medium text-[color:var(--wolfy-text-secondary)] underline decoration-[color:var(--wolfy-divider)] underline-offset-4 hover:text-[color:var(--wolfy-text-primary)]"
                           >
                             {language === 'en' ? 'Open Market Overview' : '打开 Market Overview'}
                           </a>
@@ -4337,20 +4397,7 @@ const UserScannerPage: React.FC = () => {
                 readiness={scannerResearchReadinessView}
                 title={language === 'en' ? 'Research readiness' : '研究就绪度'}
                 testId="scanner-research-readiness-strip"
-                className="mx-3"
-              />
-              <ResearchWorkspaceFlowPanel
-                language={language}
-                current="scanner"
-                symbol={researchWorkflowSymbol}
-                market={researchWorkflowMarket}
-                source="scanner"
-                knownEvidence={researchWorkflowKnownEvidence}
-                missingEvidence={researchWorkflowMissingEvidence}
-                stateNotes={researchWorkflowStateNotes}
-                nextSteps={researchWorkflowNextSteps}
-                className="mx-3"
-                testId="scanner-research-workspace-flow"
+                className="mx-3 hidden xl:block"
               />
               {scannerTopDownContextView ? (
                 <ScannerTopDownContextStrip
@@ -4365,7 +4412,7 @@ const UserScannerPage: React.FC = () => {
                   data-testid="scanner-status-strip"
                   ariaLabel={language === 'en' ? 'Scanner summary strip' : '扫描摘要条'}
                   items={scannerStatusItems}
-                  className="ui-scroll-x-quiet flex-nowrap overflow-x-auto border-y border-white/10 bg-transparent px-2 py-1"
+                  className="ui-scroll-x-quiet flex-nowrap overflow-x-auto border-y border-[color:var(--wolfy-border-subtle)] bg-transparent px-2 py-1"
                 />
                 <span aria-hidden="true" className="pointer-events-none absolute inset-y-1 right-0 w-8 bg-gradient-to-l from-[var(--wolfy-surface-console)] to-transparent sm:hidden" />
               </div>
@@ -4375,12 +4422,12 @@ const UserScannerPage: React.FC = () => {
                 <DenseTableShell
                   data-testid="scanner-launch-bar"
                   variant="board"
-                  className="flex min-h-[520px] flex-1 flex-col gap-3 rounded-xl border border-white/10 bg-[var(--wolfy-surface-console)] p-2"
+                  className="flex min-h-[520px] flex-1 flex-col gap-3 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-2 shadow-sm"
                 >
                   <section
                     data-testid="scanner-command-panel"
                     data-layout-zone="CommandBar"
-                    className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-[var(--wolfy-surface-input)]"
+                    className="min-w-0 overflow-hidden rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]"
                   >
                   <DenseCommandBar
                     data-testid="scanner-command-bar"
@@ -4432,7 +4479,7 @@ const UserScannerPage: React.FC = () => {
                       >
                         {scanScope === 'theme' ? (
                           <div className="flex min-w-0 flex-col gap-2" data-testid="scanner-theme-control">
-                            <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">{language === 'en' ? 'Theme' : '主题'}</span>
+                            <span className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Theme' : '主题'}</span>
                             <div className="select-field__control ui-control-shell group relative min-w-0 w-full max-w-full">
                               <select
                                 data-testid="scanner-theme-select"
@@ -4464,10 +4511,10 @@ const UserScannerPage: React.FC = () => {
                               </select>
                               <div
                                 aria-hidden="true"
-                                className={`select-field__overlay pointer-events-none flex h-12 w-full min-w-0 items-center rounded-lg border bg-black/40 px-3 py-2 text-sm text-white transition-all md:h-9 md:px-2.5 md:py-1.5 md:text-xs ${
+                                className={`select-field__overlay pointer-events-none flex h-12 w-full min-w-0 items-center rounded-lg border bg-[var(--wolfy-surface-input)] px-3 py-2 text-sm text-[color:var(--wolfy-text-primary)] transition-all md:h-9 md:px-2.5 md:py-1.5 md:text-xs ${
                                   validationErrors.theme
                                     ? 'border-rose-500/50 text-rose-100'
-                                    : 'border-white/8 group-focus-within:border-indigo-400/50'
+                                    : 'border-[color:var(--wolfy-divider)] group-focus-within:border-[color:var(--wolfy-accent)]'
                                 }`}
                               >
                                 <span className="select-field__value min-w-0 flex-1 truncate">
@@ -4475,7 +4522,7 @@ const UserScannerPage: React.FC = () => {
                                     ? `${getThemeLabel(selectedTheme, language)} · ${selectedTheme.symbols.length}`
                                     : (language === 'en' ? 'Select a theme' : '选择主题')}
                                 </span>
-                                <ChevronDown className="select-field__icon ui-control-icon ml-2 h-4 w-4 shrink-0 text-white/40" aria-hidden="true" />
+                                <ChevronDown className="select-field__icon ui-control-icon ml-2 h-4 w-4 shrink-0 text-[color:var(--wolfy-text-muted)]" aria-hidden="true" />
                               </div>
                             </div>
                             {selectedTheme && !selectedTheme.symbols.length ? (
@@ -4488,15 +4535,15 @@ const UserScannerPage: React.FC = () => {
                                 {validationErrors.theme}
                               </p>
                             ) : null}
-                            <div className="mt-2 flex flex-col gap-2 border-t border-white/8 pt-2" data-testid="scanner-ai-theme-builder">
-                              <div className="flex items-center gap-2 text-[11px] font-medium text-white/70">
+                            <div className="mt-2 flex flex-col gap-2 border-t border-[color:var(--wolfy-divider)] pt-2" data-testid="scanner-ai-theme-builder">
+                              <div className="flex items-center gap-2 text-[11px] font-medium text-[color:var(--wolfy-text-secondary)]">
                                 <Sparkles className="h-3.5 w-3.5 text-indigo-200/80" aria-hidden="true" />
                                 <span>{language === 'en' ? 'AI custom theme' : 'AI 自定义主题'}</span>
                               </div>
                               <input
                                 data-testid="scanner-ai-theme-label-input"
                                 value={customThemeLabel}
-                                className="w-full appearance-none rounded-lg border border-white/8 bg-black/40 px-3 py-2 text-sm text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50 md:px-2.5 md:py-1.5 md:text-xs"
+                                className="w-full appearance-none rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-sm text-[color:var(--wolfy-text-primary)] outline-none placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--wolfy-accent)] md:px-2.5 md:py-1.5 md:text-xs"
                                 onChange={(event) => setCustomThemeLabel(event.target.value)}
                                 aria-label={language === 'en' ? 'AI theme name' : 'AI 主题名称'}
                                 aria-invalid={Boolean(validationErrors.customThemeLabel)}
@@ -4519,7 +4566,7 @@ const UserScannerPage: React.FC = () => {
                                 maxLength={600}
                                 rows={3}
                                 placeholder={language === 'en' ? 'Stocks associated with White House policy, federal contracts, and government decisions.' : '例如：与白宫政策、联邦合同和政府决策相关的股票。'}
-                                className="w-full resize-none rounded-lg border border-white/8 bg-black/40 px-3 py-2 text-sm text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50 md:px-2.5 md:py-1.5 md:text-xs"
+                                className="w-full resize-none rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-sm text-[color:var(--wolfy-text-primary)] outline-none placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--wolfy-accent)] md:px-2.5 md:py-1.5 md:text-xs"
                               />
                               {validationErrors.customThemePrompt ? (
                                 <p id="scanner-ai-theme-prompt-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
@@ -4529,7 +4576,7 @@ const UserScannerPage: React.FC = () => {
                               <input
                                 data-testid="scanner-ai-theme-manual-symbols-input"
                                 value={customThemeManualSymbols}
-                                className="w-full appearance-none rounded-lg border border-white/8 bg-black/40 px-3 py-2 text-sm text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50 md:px-2.5 md:py-1.5 md:text-xs"
+                                className="w-full appearance-none rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-sm text-[color:var(--wolfy-text-primary)] outline-none placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--wolfy-accent)] md:px-2.5 md:py-1.5 md:text-xs"
                                 onChange={(event) => setCustomThemeManualSymbols(event.target.value)}
                                 aria-label={language === 'en' ? 'Manual symbol additions' : '手动补充股票代码'}
                                 aria-invalid={Boolean(validationErrors.customThemeManualSymbols)}
@@ -4556,12 +4603,12 @@ const UserScannerPage: React.FC = () => {
                               {themeSuggestions.length ? (
                                 <div className="flex flex-col gap-1.5" data-testid="scanner-ai-theme-suggestions">
                                   {themeSuggestions.slice(0, 6).map((suggestion) => (
-                                    <div key={suggestion.symbol} className="shrink-0 border-t border-white/8 px-0 py-1.5">
-                                      <div className="flex items-center justify-between gap-2 text-[11px] text-white/75">
-                                        <span className="font-semibold text-white">{suggestion.symbol}</span>
+                                    <div key={suggestion.symbol} className="shrink-0 border-t border-[color:var(--wolfy-divider)] px-0 py-1.5">
+                                      <div className="flex items-center justify-between gap-2 text-[11px] text-[color:var(--wolfy-text-secondary)]">
+                                        <span className="font-semibold text-[color:var(--wolfy-text-primary)]">{suggestion.symbol}</span>
                                         <span>{Math.round(suggestion.confidence * 100)}%</span>
                                       </div>
-                                      <p className="mt-1 text-[10px] leading-snug text-white/45">{suggestion.reason}</p>
+                                      <p className="mt-1 text-[10px] leading-snug text-[color:var(--wolfy-text-muted)]">{suggestion.reason}</p>
                                     </div>
                                   ))}
                                 </div>
@@ -4571,7 +4618,7 @@ const UserScannerPage: React.FC = () => {
                         ) : null}
                         {scanScope === 'symbols' ? (
                           <div className="flex flex-col gap-1.5" data-testid="scanner-custom-symbols-control">
-                            <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">{language === 'en' ? 'Symbols' : '代码'}</span>
+                            <span className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Symbols' : '代码'}</span>
                             <textarea
                               data-testid="scanner-custom-symbols-input"
                               value={customSymbols}
@@ -4581,9 +4628,9 @@ const UserScannerPage: React.FC = () => {
                               aria-describedby={validationErrors.customSymbols ? 'scanner-custom-symbols-error' : undefined}
                               rows={3}
                               placeholder={language === 'en' ? 'MARA RIOT CLSK' : 'MARA RIOT CLSK'}
-                              className="w-full resize-none rounded-lg border border-white/8 bg-black/40 px-3 py-2 text-sm text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50 md:px-2.5 md:py-1.5 md:text-xs"
+                              className="w-full resize-none rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-sm text-[color:var(--wolfy-text-primary)] outline-none placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--wolfy-accent)] md:px-2.5 md:py-1.5 md:text-xs"
                             />
-                            <p className="text-[11px] text-white/45">
+                            <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">
                               {language === 'en' ? `Parsed ${parsedCustomSymbols.length}` : `已解析 ${parsedCustomSymbols.length}`}
                             </p>
                             {validationErrors.customSymbols ? (
@@ -4606,14 +4653,14 @@ const UserScannerPage: React.FC = () => {
                   <section
                     data-testid="scanner-results-panel"
                     data-layout-zone="PrimaryWorkRegion"
-                    className="flex min-h-0 flex-1 min-w-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-black/[0.16]"
+                    className="flex min-h-0 flex-1 min-w-0 flex-col overflow-hidden rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)]"
                   >
                   <div data-testid="scanner-ranked-workbench" className="flex min-h-0 flex-1 min-w-0 flex-col">
                     <div data-testid="scanner-primary-actions" className="flex shrink-0 flex-row flex-wrap items-center justify-between gap-3 px-2 py-2">
                       <div className="flex min-w-0 flex-row flex-wrap items-center gap-2">
                         {runDetail && hasCandidateDiagnostics ? (
                           <div data-testid="scanner-compact-filter-bar" className="min-w-0">
-                            <div data-testid="scanner-candidate-filters" className="ui-scroll-x-quiet flex min-w-0 max-w-full gap-1.5 border-r border-white/10 pr-2 [&_button]:h-9 [&_button]:px-2.5 [&_button]:py-1.5 md:[&_button]:h-7 md:[&_button]:py-0.5" role="group" aria-label={language === 'en' ? 'Candidate view' : '候选视图'}>
+                            <div data-testid="scanner-candidate-filters" className="ui-scroll-x-quiet flex min-w-0 max-w-full gap-1.5 border-r border-[color:var(--wolfy-divider)] pr-2 [&_button]:h-9 [&_button]:px-2.5 [&_button]:py-1.5 md:[&_button]:h-7 md:[&_button]:py-0.5" role="group" aria-label={language === 'en' ? 'Candidate view' : '候选视图'}>
                               {([
                                 ['selected', language === 'en' ? 'Selected' : '入选'],
                                 ['pool', language === 'en' ? 'Candidate pool' : '候选池'],
@@ -4626,8 +4673,8 @@ const UserScannerPage: React.FC = () => {
                                   type="button"
                                   className={`inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 text-xs ${
                                     candidateFilter === key
-                                      ? 'border-white/16 bg-white/[0.08] text-white'
-                                      : 'border-transparent text-white/45 hover:text-white/75'
+                                      ? 'border-[color:var(--wolfy-accent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_12%,transparent)] text-[color:var(--wolfy-text-primary)]'
+                                      : 'border-transparent text-[color:var(--wolfy-text-muted)] hover:bg-[var(--wolfy-surface-input)] hover:text-[color:var(--wolfy-text-secondary)]'
                                   }`}
                                   onClick={() => setCandidateFilter(key)}
                                 >
@@ -4637,7 +4684,7 @@ const UserScannerPage: React.FC = () => {
                             </div>
                           </div>
                         ) : null}
-                        <div data-testid="scanner-ranked-sortbar" className="flex flex-wrap items-center gap-1.5 text-xs text-white/42 [&_button]:h-9 [&_button]:px-2.5 [&_button]:py-1.5 md:[&_button]:h-7 md:[&_button]:py-0.5">
+                        <div data-testid="scanner-ranked-sortbar" className="flex flex-wrap items-center gap-1.5 text-xs text-[color:var(--wolfy-text-muted)] [&_button]:h-9 [&_button]:px-2.5 [&_button]:py-1.5 md:[&_button]:h-7 md:[&_button]:py-0.5">
                           <span>{language === 'en' ? 'Sort by' : '排序'}</span>
                           {([
                             ['score', language === 'en' ? 'scanner score' : '扫描评分'],
@@ -4648,7 +4695,7 @@ const UserScannerPage: React.FC = () => {
                             <button
                               key={key}
                               type="button"
-                              className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 ${sortKey === key ? 'border-white/16 bg-white/[0.08] text-white' : 'border-white/5 bg-white/[0.02] text-white/48 hover:text-white/75'}`}
+                              className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 ${sortKey === key ? 'border-[color:var(--wolfy-accent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_12%,transparent)] text-[color:var(--wolfy-text-primary)]' : 'border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)] hover:text-[color:var(--wolfy-text-secondary)]'}`}
                               onClick={() => handleSortChange(key)}
                             >
                               {label}
@@ -4659,10 +4706,10 @@ const UserScannerPage: React.FC = () => {
                       </div>
                       <div className="flex min-w-0 flex-row flex-wrap items-center justify-end gap-2">
                         {runDetail ? (
-                          <div data-testid="scanner-summary-counters" className="flex flex-wrap items-center gap-1.5 text-[11px] text-white/42">
+                          <div data-testid="scanner-summary-counters" className="flex flex-wrap items-center gap-1.5 text-[11px] text-[color:var(--wolfy-text-muted)]">
                             {scannerHasPseudoEmptyRun ? (
                               <span className="inline-flex items-baseline gap-1 rounded-md border border-amber-300/15 bg-amber-300/[0.045] px-2 py-0.5">
-                                <span className="text-white/36">{language === 'en' ? 'Candidate set' : '候选集'}</span>
+                                <span className="text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Candidate set' : '候选集'}</span>
                                 <span className="font-mono text-amber-100/88">{language === 'en' ? 'Not produced' : '未产出'}</span>
                               </span>
                             ) : ([
@@ -4671,9 +4718,9 @@ const UserScannerPage: React.FC = () => {
                               [language === 'en' ? 'Rejected' : '淘汰', runDetail.summary?.rejectedCount ?? 0],
                               [language === 'en' ? 'Limited data' : '数据受限', runDetail.summary?.dataFailedCount ?? 0],
                             ].map(([label, value]) => (
-                              <span key={String(label)} className="inline-flex items-baseline gap-1 rounded-md border border-white/8 bg-white/[0.03] px-2 py-0.5">
-                                <span className="text-white/36">{label}</span>
-                                <span className="font-mono text-white/78">{value}</span>
+                              <span key={String(label)} className="inline-flex items-baseline gap-1 rounded-md border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-2 py-0.5">
+                                <span className="text-[color:var(--wolfy-text-muted)]">{label}</span>
+                                <span className="font-mono text-[color:var(--wolfy-text-primary)]">{value}</span>
                               </span>
                             )))}
                           </div>
@@ -4691,7 +4738,7 @@ const UserScannerPage: React.FC = () => {
                             <span>{language === 'en' ? 'More' : '更多'}</span>
                           </TerminalButton>
                           {isMoreActionsOpen ? (
-                            <div data-testid="scanner-more-actions-panel" className="absolute right-0 z-20 mt-2 grid min-w-[220px] gap-1.5 rounded-xl border border-white/10 bg-black/90 p-2 shadow-xl">
+                            <div data-testid="scanner-more-actions-panel" className="absolute right-0 z-20 mt-2 grid min-w-[220px] gap-1.5 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] p-2 shadow-[var(--wolfy-shadow-panel)]">
                               <ActionButton
                                 label={language === 'en' ? 'Export CSV' : '导出 CSV'}
                                 icon={<Download className="h-3.5 w-3.5" />}
@@ -4758,12 +4805,12 @@ const UserScannerPage: React.FC = () => {
                           <>
                             <div
                               data-testid="scanner-ranked-list"
-                              className="overflow-x-auto overscroll-x-contain rounded-xl border border-white/5 bg-white/[0.02] [-webkit-overflow-scrolling:touch]"
+                              className="overflow-x-auto overscroll-x-contain rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] [-webkit-overflow-scrolling:touch]"
                               aria-label={language === 'en' ? 'Ranked scanner results' : '扫描排名结果'}
                               tabIndex={0}
                             >
                               <div data-testid="scanner-result-table" className="contents md:block md:min-w-[1220px]">
-                                <div className="hidden items-center gap-3 border-b border-white/5 bg-black/[0.18] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-white/38 md:grid md:grid-cols-[64px_minmax(180px,1fr)_92px_110px_minmax(220px,1.3fr)_minmax(150px,0.9fr)_minmax(190px,1fr)_auto]">
+                                <div className="hidden items-center gap-3 border-b border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)] md:grid md:grid-cols-[64px_minmax(180px,1fr)_92px_110px_minmax(220px,1.3fr)_minmax(150px,0.9fr)_minmax(190px,1fr)_auto]">
                                   <span>{language === 'en' ? 'Rank' : '排名'}</span>
                                   <span>{language === 'en' ? 'Symbol / name' : '代码 / 名称'}</span>
                                   <span>{language === 'en' ? 'Score' : '评分'}</span>
@@ -4871,7 +4918,7 @@ const UserScannerPage: React.FC = () => {
                       {activeDetailCandidate ? (
                         <div data-testid="scanner-context-rail" className="min-w-0">
                           {!showDetailRail ? (
-                          <div data-testid="scanner-inline-detail-panel" className="max-h-[min(72vh,42rem)] overflow-y-auto rounded-xl border border-white/5 bg-black/20 p-3 no-scrollbar ui-scroll-y-quiet">
+                          <div data-testid="scanner-inline-detail-panel" className="max-h-[min(72vh,42rem)] overflow-y-auto rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 no-scrollbar ui-scroll-y-quiet">
                             <div data-testid={`scanner-candidate-detail-${activeDetailCandidate.symbol || 'unknown'}`} className="contents">
                               <div data-testid="scanner-candidate-inspector" className="contents">
                                 {renderCandidateDetailPanel(
@@ -4891,7 +4938,7 @@ const UserScannerPage: React.FC = () => {
                           ) : null}
 
                           {showDetailRail ? (
-                          <aside data-testid="scanner-detail-rail" className="sticky top-4 self-start max-h-[min(72vh,42rem)] overflow-y-auto rounded-xl border border-white/5 bg-black/20 p-3 no-scrollbar ui-scroll-y-quiet">
+                          <aside data-testid="scanner-detail-rail" className="sticky top-4 self-start max-h-[min(72vh,42rem)] overflow-y-auto rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 no-scrollbar ui-scroll-y-quiet">
                             <div data-testid={`scanner-candidate-detail-${activeDetailCandidate.symbol || 'unknown'}`} className="contents">
                               <div data-testid="scanner-candidate-inspector" className="contents">
                                 {renderCandidateDetailPanel(
@@ -4914,7 +4961,7 @@ const UserScannerPage: React.FC = () => {
                     </div>
 
                     {runDetail && hasCandidateDiagnostics ? (
-                      <div data-testid="scanner-secondary-deck" className="border-t border-white/10 px-2 py-0">
+                      <div data-testid="scanner-secondary-deck" className="border-t border-[color:var(--wolfy-divider)] px-2 py-0">
                         <div data-testid="scanner-secondary-sections" className="grid gap-2 xl:grid-cols-2 2xl:grid-cols-4">
                           <AdvancedDisclosure
                             testId="scanner-run-status-disclosure"
@@ -4925,18 +4972,18 @@ const UserScannerPage: React.FC = () => {
                             icon="info"
                           >
                             <div className="max-h-[min(28vh,18rem)] overflow-y-auto no-scrollbar ui-scroll-y-quiet space-y-2">
-                              <div className="grid gap-1.5 rounded-xl border border-white/8 bg-white/[0.02] p-3 text-xs">
-                                <div className="flex items-center justify-between gap-2 border-b border-white/8 pb-1.5">
-                                  <span className="text-[10px] uppercase tracking-[0.14em] text-white/36">{language === 'en' ? 'Data' : '数据'}</span>
-                                  <span className="truncate font-mono text-white/72">{scannerDataStateLabel}</span>
+                              <div className="grid gap-1.5 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-3 text-xs">
+                                <div className="flex items-center justify-between gap-2 border-b border-[color:var(--wolfy-divider)] pb-1.5">
+                                  <span className="text-[10px] uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Data' : '数据'}</span>
+                                  <span className="truncate font-mono text-[color:var(--wolfy-text-primary)]">{scannerDataStateLabel}</span>
                                 </div>
-                                <div className="flex items-center justify-between gap-2 border-b border-white/8 pb-1.5">
-                                  <span className="text-[10px] uppercase tracking-[0.14em] text-white/36">{language === 'en' ? 'Latest' : '最近'}</span>
-                                  <span className="truncate font-mono text-white/72">{generatedAt ? formatTimestamp(generatedAt, language) : '--'}</span>
+                                <div className="flex items-center justify-between gap-2 border-b border-[color:var(--wolfy-divider)] pb-1.5">
+                                  <span className="text-[10px] uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Latest' : '最近'}</span>
+                                  <span className="truncate font-mono text-[color:var(--wolfy-text-primary)]">{generatedAt ? formatTimestamp(generatedAt, language) : '--'}</span>
                                 </div>
                                 <div className="flex items-center justify-between gap-2">
-                                  <span className="text-[10px] uppercase tracking-[0.14em] text-white/36">{language === 'en' ? 'Theme' : '主题'}</span>
-                                  <span className="truncate font-mono text-white/72">{scannerThemeLabel}</span>
+                                  <span className="text-[10px] uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Theme' : '主题'}</span>
+                                  <span className="truncate font-mono text-[color:var(--wolfy-text-primary)]">{scannerThemeLabel}</span>
                                 </div>
                               </div>
                             </div>
@@ -4952,9 +4999,9 @@ const UserScannerPage: React.FC = () => {
                               icon="info"
                             >
                               <div className="max-h-[min(34vh,20rem)] overflow-y-auto no-scrollbar ui-scroll-y-quiet">
-                                <div data-testid="scanner-diagnostics-summary" className="mb-2 border-t border-white/8 py-2 text-xs">
+                                <div data-testid="scanner-diagnostics-summary" className="mb-2 border-t border-[color:var(--wolfy-divider)] py-2 text-xs">
                                   <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                                    <p className="min-w-0 text-white/64">
+                                    <p className="min-w-0 text-[color:var(--wolfy-text-secondary)]">
                                       {language === 'en'
                                         ? `Evaluated ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize} · selected ${runDetail.summary?.selectedCount ?? shortlistCount} · main rejection ${rejectionBuckets[0]?.label || 'n/a'}`
                                         : `评估 ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize} · 入选 ${runDetail.summary?.selectedCount ?? shortlistCount} · 主要淘汰 ${rejectionBuckets[0]?.label || '暂无'}`}
@@ -4970,11 +5017,11 @@ const UserScannerPage: React.FC = () => {
                                         <button
                                           key={bucket.label}
                                           type="button"
-                                          className="inline-flex max-w-full items-baseline gap-1 border-b border-white/15 px-1.5 py-0.5 text-[10px] text-white/62 hover:text-white"
+                                          className="inline-flex max-w-full items-baseline gap-1 border-b border-[color:var(--wolfy-divider)] px-1.5 py-0.5 text-[10px] text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)]"
                                           onClick={() => setCandidateFilter(bucket.label === rejectionBucketLabel('data', language) ? 'data_failed' : 'rejected')}
                                         >
                                           <span className="truncate">{bucket.label}</span>
-                                          <span className="font-mono text-white/82">{bucket.value}</span>
+                                          <span className="font-mono text-[color:var(--wolfy-text-primary)]">{bucket.value}</span>
                                         </button>
                                       ))}
                                     </div>
@@ -5003,17 +5050,17 @@ const UserScannerPage: React.FC = () => {
                                 language={language}
                               />
                               <div className="ui-scroll-x-quiet flex max-w-full items-center gap-1.5">
-                                <span className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                                <span className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
                                   {language === 'en' ? 'Compared with previous run' : '上次对比'}
                                 </span>
                                 {comparisonState.previousRun && comparisonState.chips.length ? (
                                   comparisonState.chips.map((chip) => (
-                                    <span key={chip} className="shrink-0 border-b border-white/15 px-1.5 py-0.5 text-white/62">
+                                    <span key={chip} className="shrink-0 border-b border-[color:var(--wolfy-divider)] px-1.5 py-0.5 text-[color:var(--wolfy-text-secondary)]">
                                       {chip}
                                     </span>
                                   ))
                                 ) : (
-                                  <span className="shrink-0 border-b border-white/15 px-1.5 py-0.5 text-white/42">
+                                  <span className="shrink-0 border-b border-[color:var(--wolfy-divider)] px-1.5 py-0.5 text-[color:var(--wolfy-text-muted)]">
                                     {language === 'en' ? 'No previous comparable run' : '暂无上次扫描对比'}
                                   </span>
                                 )}
@@ -5030,10 +5077,10 @@ const UserScannerPage: React.FC = () => {
                             <div className="max-h-[min(38vh,24rem)] overflow-y-auto no-scrollbar ui-scroll-y-quiet space-y-3">
                               <div
                                 data-testid="scanner-strategy-preview"
-                                className="border-t border-white/8 py-2 text-xs"
+                                className="border-t border-[color:var(--wolfy-divider)] py-2 text-xs"
                               >
                                 <div className="flex flex-wrap items-center gap-1.5">
-                                  <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                                  <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
                                     <LineChart className="h-3.5 w-3.5" aria-hidden="true" />
                                     {language === 'en' ? 'Threshold preview' : '阈值预览'}
                                   </span>
@@ -5042,7 +5089,7 @@ const UserScannerPage: React.FC = () => {
                                       key={threshold}
                                       type="button"
                                       aria-pressed={previewThreshold === threshold}
-                                      className={`rounded-md border px-2 py-0.5 font-mono text-[11px] ${previewThreshold === threshold ? 'border-blue-400/30 bg-blue-400/12 text-blue-100' : 'border-white/10 bg-white/5 text-white/58 hover:bg-white/10'}`}
+                                      className={`rounded-md border px-2 py-0.5 font-mono text-[11px] ${previewThreshold === threshold ? 'border-[color:var(--wolfy-accent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_12%,transparent)] text-[color:var(--wolfy-text-primary)]' : 'border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)] hover:text-[color:var(--wolfy-text-secondary)]'}`}
                                       onClick={() => setPreviewThreshold(threshold)}
                                     >
                                       {threshold}
@@ -5091,41 +5138,41 @@ const UserScannerPage: React.FC = () => {
                   padding="sm"
                   data-testid="scanner-summary-rail"
                   data-layout-zone="ContextRail"
-                  className="min-w-0 self-start rounded-xl border-white/10 lg:sticky lg:top-4"
+                  className="min-w-0 self-start rounded-xl border-[color:var(--wolfy-border-subtle)] lg:sticky lg:top-4"
                   aria-label={language === 'en' ? 'Scanner workspace summary' : '扫描工作区摘要'}
                 >
                   <div className="flex min-w-0 flex-col gap-4">
-                    <div className="min-w-0 border-b border-white/10 pb-3">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                    <div className="min-w-0 border-b border-[color:var(--wolfy-divider)] pb-3">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
                         {language === 'en' ? 'Workspace summary' : '工作区摘要'}
                       </p>
-                      <h2 className="mt-1 text-sm font-semibold text-white">
+                      <h2 className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
                         {scannerConclusion.title}
                       </h2>
-                      <p className="mt-2 text-xs leading-5 text-white/58">
+                      <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                         {scannerConclusion.detail}
                       </p>
                     </div>
 
                     <div className="grid min-w-0 grid-cols-3 gap-2" data-testid="scanner-summary-rail-counts">
                       {scannerRailCounts.map((item) => (
-                        <div key={item.label} className="min-w-0 rounded-lg border border-white/8 bg-white/[0.025] px-2 py-2">
-                          <p className="truncate text-[10px] text-white/38">{item.label}</p>
-                          <p className="mt-1 font-mono text-base font-semibold text-white">{item.value}</p>
+                        <div key={item.label} className="min-w-0 rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-2 py-2">
+                          <p className="truncate text-[10px] text-[color:var(--wolfy-text-muted)]">{item.label}</p>
+                          <p className="mt-1 font-mono text-base font-semibold text-[color:var(--wolfy-text-primary)]">{item.value}</p>
                         </div>
                       ))}
                     </div>
 
                     {scannerRunFactItems.length ? (
-                      <section data-testid="scanner-run-facts" className="grid min-w-0 gap-2 border-b border-white/10 pb-3">
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                      <section data-testid="scanner-run-facts" className="grid min-w-0 gap-2 border-b border-[color:var(--wolfy-divider)] pb-3">
+                        <p className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
                           {language === 'en' ? 'Run facts' : '运行事实'}
                         </p>
                         <dl className="grid min-w-0 gap-1.5 text-xs">
                           {scannerRunFactItems.map((item) => (
                             <div key={`${item.label}-${item.value}`} className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
-                              <dt className="text-white/38">{item.label}</dt>
-                              <dd className="truncate text-right font-mono text-white/72">{item.value}</dd>
+                              <dt className="text-[color:var(--wolfy-text-muted)]">{item.label}</dt>
+                              <dd className="truncate text-right font-mono text-[color:var(--wolfy-text-primary)]">{item.value}</dd>
                             </div>
                           ))}
                         </dl>
@@ -5134,18 +5181,37 @@ const UserScannerPage: React.FC = () => {
 
                     <dl className="grid min-w-0 gap-2 text-xs" data-testid="scanner-summary-rail-context">
                       {scannerRailItems.map((item) => (
-                        <div key={item.label} className="grid min-w-0 grid-cols-[4.5rem_minmax(0,1fr)] gap-2 border-b border-white/8 pb-2 last:border-b-0 last:pb-0">
-                          <dt className="text-white/38">{item.label}</dt>
-                          <dd className="truncate text-right font-mono text-white/72">{item.value}</dd>
+                        <div key={item.label} className="grid min-w-0 grid-cols-[4.5rem_minmax(0,1fr)] gap-2 border-b border-[color:var(--wolfy-divider)] pb-2 last:border-b-0 last:pb-0">
+                          <dt className="text-[color:var(--wolfy-text-muted)]">{item.label}</dt>
+                          <dd className="truncate text-right font-mono text-[color:var(--wolfy-text-primary)]">{item.value}</dd>
                         </div>
                       ))}
                     </dl>
-                    <p data-testid="scanner-history-scope-hint" className="rounded-lg border border-white/8 bg-white/[0.02] px-2.5 py-2 text-[11px] leading-relaxed text-white/50">
+                    <p data-testid="scanner-history-scope-hint" className="rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-2.5 py-2 text-[11px] leading-relaxed text-[color:var(--wolfy-text-secondary)]">
                       {scannerHistoryScopeHint}
                     </p>
                   </div>
                 </WolfyShellSurface>
 		          </div>
+              <ResearchWorkspaceFlowPanel
+                language={language}
+                current="scanner"
+                symbol={researchWorkflowSymbol}
+                market={researchWorkflowMarket}
+                source="scanner"
+                knownEvidence={researchWorkflowKnownEvidence}
+                missingEvidence={researchWorkflowMissingEvidence}
+                stateNotes={researchWorkflowStateNotes}
+                nextSteps={researchWorkflowNextSteps}
+                className="mx-3"
+                testId="scanner-research-workspace-flow"
+              />
+              <ConsumerResearchReadinessStrip
+                readiness={scannerResearchReadinessView}
+                title={language === 'en' ? 'Research readiness' : '研究就绪度'}
+                testId="scanner-research-readiness-strip-secondary"
+                className="mx-3 xl:hidden"
+              />
 	        </ConsumerWorkspacePageShell>
           </ConsumerWorkspaceScope>
       </div>

@@ -1251,6 +1251,46 @@ describe('UserScannerPage', () => {
     });
   });
 
+  it('keeps page load passive while presenting scanner readiness as membership, market-data, and candidate-generation layers', async () => {
+    const readinessRun = makeRunDetail();
+    readinessRun.diagnostics = {
+      ...(readinessRun.diagnostics || {}),
+      dataReadiness: {
+        state: 'blocked',
+        market: 'cn',
+        profile: 'cn_preopen_v1',
+        universeSize: 320,
+        scannerUniverseReadiness: {
+          status: 'available',
+          market: 'cn',
+          universeSize: 320,
+          consumerSafeMessage: '标的池已准备，仍需补齐市场数据。',
+        },
+        quoteCoverage: 'partial',
+        historyCoverage: 'blocked',
+        blockerBucket: 'missing_history',
+        selectedCount: 0,
+        rejectedCount: 0,
+        failedCount: 18,
+        nextDataAction: '补齐历史数据后再重试。',
+      },
+    };
+    getRun.mockResolvedValue(readinessRun);
+
+    renderUserScannerPage({ initialEntry: '/zh/scanner', viewportWidth: 1280 });
+
+    await screen.findByTestId('scanner-result-row-NVDA');
+    const firstViewport = screen.getByTestId('scanner-consumer-first-viewport');
+    const hierarchy = screen.getByTestId('scanner-readiness-hierarchy');
+    expect(firstViewport).toHaveClass('bg-[var(--wolfy-surface-input)]');
+    expect(firstViewport).not.toHaveClass('bg-white/[0.025]');
+    expect(hierarchy).toHaveTextContent('标的池成员');
+    expect(hierarchy).toHaveTextContent('市场数据');
+    expect(hierarchy).toHaveTextContent('候选生成');
+    expect(hierarchy).not.toHaveTextContent(/source_missing|activationReady|candidate_generation_blocked|sourceClass|contractVersion|provider/i);
+    expect(runScan).not.toHaveBeenCalled();
+  });
+
   it('fetches scanner run history once on the initial zh narrow route load', async () => {
     renderUserScannerPage({ initialEntry: '/zh/scanner', viewportWidth: 390 });
 

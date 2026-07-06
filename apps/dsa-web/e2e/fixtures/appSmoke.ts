@@ -1092,6 +1092,50 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
       return fulfillJson(route, scannerThemes);
     }
 
+    if (method === 'GET' && path === '/api/v1/scanner/status') {
+      return fulfillJson(route, {
+        market: 'cn',
+        profile: 'cn_preopen_v1',
+        watchlist_date: '2026-05-02',
+        today_trading_day: true,
+        schedule_enabled: false,
+        schedule_run_immediately: false,
+        notification_enabled: false,
+        quality_summary: {
+          available: true,
+          review_window_days: 5,
+          run_count: 1,
+          reviewed_run_count: 1,
+          reviewed_candidate_count: scannerShortlist.length,
+          strong_count: 1,
+          mixed_count: 0,
+          weak_count: 0,
+        },
+        data_readiness: {
+          state: 'partial',
+          market: 'cn',
+          profile: 'cn_preopen_v1',
+          universe_size: 320,
+          scanner_universe_readiness: {
+            status: 'available',
+            market: 'cn',
+            universe_size: 320,
+            consumer_safe_message: '标的池已准备，仍需复核市场数据完整度。',
+          },
+          quote_coverage: 'available',
+          history_coverage: 'partial',
+          freshness: 'partial',
+          candidate_evaluation_count: 48,
+          selected_count: scannerShortlist.length,
+          rejected_count: 0,
+          failed_count: 2,
+          blocker_bucket: 'unknown',
+          consumer_summary: '扫描器可用于观察，部分数据仍需复核。',
+          next_data_action: '继续复核市场数据完整度。',
+        },
+      });
+    }
+
     if (method === 'POST' && path === '/api/v1/scanner/themes') {
       return fulfillJson(route, {
         theme: scannerThemes.items[0],

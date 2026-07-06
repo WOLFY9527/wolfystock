@@ -9,10 +9,6 @@ import {
   MoreHorizontal,
 } from 'lucide-react';
 import type { ScannerLabeledValue } from '../../types/scanner';
-import {
-  TerminalChip,
-  TerminalPanel,
-} from '../terminal/TerminalPrimitives';
 
 export type ScannerDisclosureIcon = 'info' | 'history' | 'backtest' | 'watchlist' | 'more';
 
@@ -36,10 +32,10 @@ function safeScannerFieldLabel(label: string): string {
 
 export function FieldChip({ label, value }: { label: string; value: string }) {
   return (
-    <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
-      <span className="shrink-0 text-white/36">{safeScannerFieldLabel(label)}</span>
+    <span className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-md border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--wolfy-text-secondary)]">
+      <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{safeScannerFieldLabel(label)}</span>
       <span className="min-w-0 truncate">{value}</span>
-    </TerminalChip>
+    </span>
   );
 }
 
@@ -51,7 +47,7 @@ export function LabeledValueGrid({
   empty: string;
 }) {
   if (!items.length) {
-    return <p className="text-xs text-white/32">{empty}</p>;
+    return <p className="text-xs text-[color:var(--wolfy-text-muted)]">{empty}</p>;
   }
   return (
     <div className="flex flex-wrap gap-2">
@@ -64,12 +60,12 @@ export function LabeledValueGrid({
 
 export function NotesList({ notes, empty }: { notes: string[]; empty: string }) {
   if (!notes.length) {
-    return <p className="text-xs text-white/32">{empty}</p>;
+    return <p className="text-xs text-[color:var(--wolfy-text-muted)]">{empty}</p>;
   }
   return (
     <ul className="space-y-1">
       {notes.map((note) => (
-        <li key={note} className="text-xs leading-relaxed text-white/64">
+        <li key={note} className="text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">
           {note}
         </li>
       ))}
@@ -98,7 +94,7 @@ export function AdvancedDisclosure({
 }) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
   const open = controlledOpen ?? uncontrolledOpen;
-  const iconClassName = 'size-3.5 shrink-0 text-white/38';
+  const iconClassName = 'size-3.5 shrink-0 text-[color:var(--wolfy-text-muted)]';
   const leadingIcon = {
     info: <Info className={iconClassName} aria-hidden="true" />,
     history: <History className={iconClassName} aria-hidden="true" />,
@@ -111,25 +107,23 @@ export function AdvancedDisclosure({
     : (title.match(/[A-Za-z]/) ? `Expand ${title}` : `展开 ${title}`);
 
   return (
-    <TerminalPanel
-      as="section"
-      dense
+    <section
       data-testid={testId}
-      className="px-2.5 py-2 text-xs"
+      className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-2 text-xs text-[color:var(--wolfy-text-secondary)]"
     >
       <div className="flex min-w-0 items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           {leadingIcon}
           <div className="min-w-0">
-            <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{title}</h3>
-            {summary ? <p className="mt-0.5 truncate text-[11px] text-white/38">{summary}</p> : null}
+            <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{title}</h3>
+            {summary ? <p className="mt-0.5 truncate text-[11px] text-[color:var(--wolfy-text-muted)]">{summary}</p> : null}
           </div>
         </div>
         <button
           type="button"
           aria-expanded={open}
           aria-label={actionLabel}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/8 bg-white/[0.035] px-2 py-1 text-[11px] text-white/58 hover:bg-white/[0.07] hover:text-white"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-console)] px-2 py-1 text-[11px] text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-border-subtle)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--wolfy-accent)]"
           onClick={() => {
             const nextOpen = !open;
             if (controlledOpen == null) {
@@ -143,6 +137,6 @@ export function AdvancedDisclosure({
         </button>
       </div>
       {open ? <div className="mt-2">{children}</div> : null}
-    </TerminalPanel>
+    </section>
   );
 }
