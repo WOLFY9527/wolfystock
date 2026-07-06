@@ -106,6 +106,30 @@ describe('LoginPage', () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/settings', { replace: true }));
   });
 
+  it.each([
+    ['redirect=%2Flogin%3Fredirect%3D%252Fportfolio', '/'],
+    ['redirect=%2Fzh%2Flogin%3Fredirect%3D%252Fzh%252Fportfolio', '/zh'],
+    ['redirect=%2Fregister%3Fredirect%3D%252Fscanner', '/'],
+    ['redirect=https%3A%2F%2Fevil.example%2Fportfolio', '/'],
+  ])('falls back instead of following unsafe auth redirect %s', async (search, expectedPath) => {
+    const route = expectedPath === '/zh' ? `/zh/login?${search}` : `/login?${search}`;
+    window.history.replaceState(window.history.state, '', route);
+    useSearchParamsMock.mockReturnValue([new URLSearchParams(search)]);
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      login: vi.fn().mockResolvedValue({ success: true }),
+      passwordSet: true,
+      setupState: 'enabled',
+    });
+
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.passwordLabelLogin')), { target: { value: 'passwd6' } });
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'auth.login.submitLogin') }));
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(expectedPath, { replace: true }));
+  });
+
   it('re-enables submit controls after an unsuccessful login response', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,

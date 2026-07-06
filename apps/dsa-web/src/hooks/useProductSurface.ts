@@ -1,7 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getStoredUiLanguage } from '../i18n/core';
-import { buildLocalizedPath, parseLocaleFromPathname, shouldLocalizePath } from '../utils/localeRouting';
+import { buildLocalizedPath, parseLocaleFromPathname, shouldLocalizePath, stripLocalePrefix } from '../utils/localeRouting';
 import { resolveAdminCapabilityFlags } from '../utils/adminCapabilities';
 import {
   ADMIN_SURFACE_MODE_STORAGE_KEY,
@@ -36,10 +36,25 @@ export function normalizeRedirectPath(
   redirectTo: string | null | undefined,
   fallback = '/',
 ): string {
-  const normalized = typeof redirectTo === 'string' && redirectTo.startsWith('/') && !redirectTo.startsWith('//')
-    ? redirectTo
-    : fallback;
-  return normalized.startsWith('/') && !normalized.startsWith('//') ? normalized : fallback;
+  if (typeof redirectTo !== 'string' || !redirectTo.startsWith('/') || redirectTo.startsWith('//')) {
+    return fallback;
+  }
+
+  try {
+    const redirectUrl = new URL(redirectTo, 'http://wolfystock.local');
+    if (redirectUrl.origin !== 'http://wolfystock.local') {
+      return fallback;
+    }
+
+    const routePathname = stripLocalePrefix(redirectUrl.pathname);
+    if (routePathname === '/login' || routePathname === '/register' || routePathname === '/reset-password') {
+      return fallback;
+    }
+
+    return `${redirectUrl.pathname}${redirectUrl.search}${redirectUrl.hash}`;
+  } catch {
+    return fallback;
+  }
 }
 
 export function resolveAuthRedirect(search: string, fallback = '/'): string {
