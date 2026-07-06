@@ -51,6 +51,15 @@ const ConsumerDataHealthSummaryPanel: React.FC<ConsumerDataHealthSummaryPanelPro
             <TerminalChip variant={variantForState(item.state)}>{item.stateLabel}</TerminalChip>
           </div>
           <p className="mt-2 min-w-0 break-words text-[11px] leading-5 text-white/56">{item.whyItMatters}</p>
+          {item.supportingNotes?.length ? (
+            <ul className="mt-2 space-y-1">
+              {item.supportingNotes.map((note) => (
+                <li key={note} className="min-w-0 break-words text-[11px] leading-5 text-white/56">
+                  {note}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           <p className="mt-1 min-w-0 break-words text-[11px] leading-5 text-white/62">{item.confidenceEffect}</p>
           <p className="mt-1 min-w-0 break-words text-[11px] leading-5 text-white/48">{item.nextResearchStep}</p>
         </article>

@@ -1,6 +1,7 @@
 import apiClient from './index';
 import { normalizePeerCorrelationSnapshot } from './stocks';
 import { toCamelCase } from './utils';
+import type { ProductReadModel } from '../types/productReadModel';
 import type {
   SymbolEvidenceReadiness,
   SymbolEvidenceReadinessTier,
@@ -106,6 +107,29 @@ function normalizeOpaqueObject(payload: unknown): Record<string, unknown> | null
   return isRecord(payload) ? payload : undefined;
 }
 
+function normalizeProductReadModel(payload: unknown): ProductReadModel | null | undefined {
+  if (payload === null) {
+    return null;
+  }
+  if (!isRecord(payload)) {
+    return undefined;
+  }
+
+  const {
+    rawProviderPayload,
+    rawPayload,
+    providerPayload,
+    adminDiagnostics,
+    ...safePayload
+  } = payload;
+  void rawProviderPayload;
+  void rawPayload;
+  void providerPayload;
+  void adminDiagnostics;
+
+  return safePayload as ProductReadModel;
+}
+
 function normalizeStockEvidencePacket(payload: unknown): StockEvidencePacket | undefined {
   if (!isRecord(payload)) {
     return undefined;
@@ -173,6 +197,7 @@ function normalizeStockEvidenceItem(payload: unknown): StockEvidenceItem | null 
   const item: StockEvidenceItem = {
     symbol: payload.symbol,
     market: typeof payload.market === 'string' ? payload.market : payload.market === null ? null : undefined,
+    productReadModel: normalizeProductReadModel(payload.productReadModel),
     quote: normalizeOpaqueObject(payload.quote),
     technical: normalizeOpaqueObject(payload.technical),
     fundamental: normalizeOpaqueObject(payload.fundamental),

@@ -86,6 +86,18 @@ const INTERNAL_COPY_BY_KEY: Record<string, PresentationCopy> = {
     zh: '暂仅观察',
     en: 'Observation-only for now',
   },
+  growth_proxy_unavailable: {
+    zh: '成长风险观察证据暂不可用。',
+    en: 'Growth-risk observation evidence is unavailable.',
+  },
+  breadth_evidence_unavailable: {
+    zh: '市场广度证据暂不可用。',
+    en: 'Market breadth evidence is unavailable.',
+  },
+  freshness_constrained: {
+    zh: '数据新鲜度受限，当前仅供观察。',
+    en: 'Freshness is limited for this observation.',
+  },
 };
 
 const INTERNAL_PHRASE_COPY: Array<[RegExp, PresentationCopy]> = [
@@ -115,6 +127,8 @@ const INTERNAL_PHRASE_COPY: Array<[RegExp, PresentationCopy]> = [
     zh: '基准走势证据偏弱。',
     en: 'Benchmark trend evidence is under pressure.',
   }],
+  [new RegExp('growth proxy evidence is ' + 'unavailable', 'i'), INTERNAL_COPY_BY_KEY.growth_proxy_unavailable],
+  [new RegExp('freshness is constrained for this ' + 'observation', 'i'), INTERNAL_COPY_BY_KEY.freshness_constrained],
   [new RegExp('breadth evidence is ' + 'weak', 'i'), {
     zh: '市场广度证据偏弱。',
     en: 'Market breadth evidence is weak.',
@@ -123,6 +137,7 @@ const INTERNAL_PHRASE_COPY: Array<[RegExp, PresentationCopy]> = [
     zh: '市场广度证据较充分。',
     en: 'Market breadth evidence is broad.',
   }],
+  [new RegExp('breadth evidence is ' + 'unavailable', 'i'), INTERNAL_COPY_BY_KEY.breadth_evidence_unavailable],
   [/data quality is product-ready/i, {
     zh: '数据质量可用于观察。',
     en: 'Data quality is ready for observation.',

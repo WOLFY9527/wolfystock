@@ -46,6 +46,7 @@ from src.services.import_parser import (
     parse_import_from_text,
 )
 from src.services.agent_stock_evidence_service import StockEvidenceService
+from src.services.product_read_model import build_stock_evidence_product_read_model
 from src.services.stock_service import StockService
 from src.services.stock_structure_decision_service import StockStructureDecisionService
 from src.services.symbol_research_packet_service import (
@@ -464,6 +465,10 @@ def get_stock_evidence(stock_code: str) -> StockEvidenceResponse:
                     "message": f"未找到股票 {stock_code} 的证据数据",
                 },
             )
+
+        for item in items:
+            if isinstance(item, dict) and not isinstance(item.get("productReadModel"), dict):
+                item["productReadModel"] = build_stock_evidence_product_read_model(item)
 
         return consumer_safe_json_response(
             StockEvidenceResponse.model_validate(payload),

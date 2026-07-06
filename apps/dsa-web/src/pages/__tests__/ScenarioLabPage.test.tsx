@@ -214,9 +214,9 @@ describe('ScenarioLabPage', () => {
         confidenceScore: 0.43,
       },
       baselineReadiness: {
-        status: 'partial',
+        status: 'insufficient_data',
         baselineSnapshot: {
-          state: 'partial',
+          state: 'insufficient_data',
           available: false,
           lastUpdated: '2026-06-15T09:30:00Z',
           affectedComponents: ['baselineSnapshot'],
@@ -289,6 +289,8 @@ describe('ScenarioLabPage', () => {
     const firstRead = await screen.findByTestId('scenario-lab-first-read-summary');
 
     expect(firstRead).toHaveTextContent('情景摘要');
+    expect(firstRead).toHaveTextContent('数据不足，先保持观察。');
+    expect(firstRead).not.toHaveTextContent('insufficient_data');
     expect(firstRead).toHaveTextContent('当前框架');
     expect(firstRead).toHaveTextContent('风险偏好观察');
     expect(firstRead).toHaveTextContent('波动冲击');
@@ -546,7 +548,7 @@ describe('ScenarioLabPage', () => {
     expect(screen.getByRole('button', { name: 'Gamma 缺口' })).toBeInTheDocument();
 
     const visibleText = page.textContent || '';
-    expect(visibleText).not.toMatch(/unavailable|degraded|insufficient|provider|runtime|credential|sourceAuthority|debug/i);
+    expect(visibleText).not.toMatch(/insufficient_data|unavailable|degraded|insufficient|provider|runtime|credential|sourceAuthority|debug/i);
     expect(visibleText).not.toMatch(/not personalized financial advice|not an instruction|buy|sell|hold|target price|stop-loss|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
     expect(findConsumerRawLeakage(visibleText)).toEqual([]);
   });

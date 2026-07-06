@@ -22,6 +22,7 @@ from src.services.sec_edgar_evidence_service import (
     build_sec_filing_evidence_sidecar,
 )
 from src.services.stock_evidence_packet import project_stock_evidence_packet
+from src.services.product_read_model import build_stock_evidence_product_read_model
 from src.services.stock_evidence_quote_adapter import (
     StockEvidenceQuoteAdapter,
     build_quote_diagnostic_source_metadata,
@@ -356,6 +357,7 @@ class StockEvidenceService:
         }
         self._attach_stock_evidence_packets(payload)
         self._attach_symbol_evidence_readiness(payload)
+        self._attach_product_read_models(payload)
         return payload
 
     def _attach_stock_evidence_packets(self, payload: EvidencePayload) -> None:
@@ -390,6 +392,23 @@ class StockEvidenceService:
             except Exception as exc:
                 logger.warning(
                     "Symbol evidence readiness projection failed for %s: %s",
+                    item.get("symbol") or "unknown",
+                    exc,
+                    exc_info=True,
+                )
+
+    def _attach_product_read_models(self, payload: EvidencePayload) -> None:
+        items = payload.get("items")
+        if not isinstance(items, list):
+            return
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            try:
+                item["productReadModel"] = build_stock_evidence_product_read_model(item)
+            except Exception as exc:
+                logger.warning(
+                    "Stock evidence product read model projection failed for %s: %s",
                     item.get("symbol") or "unknown",
                     exc,
                     exc_info=True,
