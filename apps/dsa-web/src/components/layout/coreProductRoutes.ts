@@ -1,6 +1,7 @@
 import type { UiLanguage } from '../../i18n/core';
 
 export type CoreProductRouteKey =
+  | 'home'
   | 'decision-cockpit'
   | 'market-overview'
   | 'research-radar'
@@ -9,7 +10,8 @@ export type CoreProductRouteKey =
   | 'watchlist'
   | 'portfolio'
   | 'backtest'
-  | 'scenario-lab';
+  | 'scenario-lab'
+  | 'options-lab';
 
 export type CoreProductRoute = {
   key: CoreProductRouteKey;
@@ -23,12 +25,21 @@ export type CoreProductRoute = {
 
 export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
   {
+    key: 'home',
+    labelKey: 'nav.home',
+    path: '/',
+    group: 'cockpit',
+    requiresAuth: false,
+    primaryNav: true,
+    pageIdentity: { zh: '首页', en: 'Home' },
+  },
+  {
     key: 'decision-cockpit',
     labelKey: 'nav.marketDecisionCockpit',
     path: '/market/decision-cockpit',
     group: 'cockpit',
     requiresAuth: false,
-    primaryNav: true,
+    primaryNav: false,
     pageIdentity: { zh: '市场决策驾驶舱', en: 'Decision Cockpit' },
   },
   {
@@ -56,7 +67,7 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     group: 'research',
     requiresAuth: false,
     primaryNav: true,
-    pageIdentity: { zh: '个股结构入口', en: 'Stock Structure Entry' },
+    pageIdentity: { zh: '个股研究入口', en: 'Stock Research Entry' },
   },
   {
     key: 'scanner',
@@ -64,7 +75,7 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     path: '/scanner',
     group: 'context',
     requiresAuth: true,
-    primaryNav: true,
+    primaryNav: false,
     pageIdentity: { zh: '扫描工作台', en: 'Scanner workspace' },
   },
   {
@@ -82,7 +93,7 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     path: '/portfolio',
     group: 'context',
     requiresAuth: true,
-    primaryNav: true,
+    primaryNav: false,
     pageIdentity: { zh: '持仓管理', en: 'Holdings and portfolio exposure' },
   },
   {
@@ -91,7 +102,7 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     path: '/backtest',
     group: 'observe',
     requiresAuth: true,
-    primaryNav: true,
+    primaryNav: false,
     pageIdentity: { zh: '回测工作台', en: 'Backtest workbench' },
   },
   {
@@ -103,6 +114,16 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     primaryNav: false,
     pageIdentity: { zh: '情景实验室：假设推演工作台', en: 'Scenario Lab what-if workbench' },
   },
+  {
+    key: 'options-lab',
+    labelKey: 'nav.optionsLab',
+    path: '/options-lab',
+    group: 'observe',
+    requiresAuth: true,
+    primaryNav: false,
+    pageIdentity: { zh: '期权实验室', en: 'Options Lab' },
+  },
 ];
 
 export const PRIMARY_CONSUMER_ROUTES = CORE_PRODUCT_ROUTES.filter((route) => route.primaryNav);
+export const SECONDARY_CONSUMER_ROUTES = CORE_PRODUCT_ROUTES.filter((route) => !route.primaryNav);

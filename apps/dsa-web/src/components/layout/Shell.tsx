@@ -94,10 +94,10 @@ function resolveMobileRouteLabel(pathname: string, t: (key: string) => string, l
     return language === 'en' ? 'Market Decision Cockpit' : '市场决策驾驶舱';
   }
   if (pathname === '/stocks/structure-decision') {
-    return language === 'en' ? 'Stock Structure Entry' : '个股结构入口';
+    return language === 'en' ? 'Stock Research Entry' : '个股研究入口';
   }
   if (/^\/stocks\/[^/]+\/structure-decision(?:\/)?$/i.test(pathname)) {
-    return language === 'en' ? 'Stock Structure Panel' : '个股结构面板';
+    return language === 'en' ? 'Stock Research' : '个股研究';
   }
   if (pathname === '/radar' || pathname === '/research-radar' || pathname.startsWith('/research/radar')) {
     return language === 'en' ? 'Research Radar' : '研究雷达';
@@ -690,8 +690,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                 <div className="shell-mobile-actions flex shrink-0 items-center gap-2" data-testid="shell-mobile-actions">
                   <button
                     type="button"
-                    onClick={() => setColorMode(nextColorMode)}
                     className="shell-mobile-button"
+                    onClick={() => setColorMode(nextColorMode)}
                     style={{
                       width: MOBILE_MENU_TOUCH_TARGET_PX,
                       minWidth: MOBILE_MENU_TOUCH_TARGET_PX,
@@ -758,8 +758,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
               ref={accountTriggerRef}
               type="button"
               className={cn(
-                'flex h-9 min-w-0 max-w-[11rem] items-center gap-2 rounded-lg border border-transparent bg-white/[0.03] px-2.5 text-left text-[11px] font-medium text-white/70 transition-colors hover:bg-white/[0.05] hover:text-white',
-                accountMenuOpen ? 'border-[color:var(--wolfy-accent)] bg-white/[0.06] text-white shadow-[0_0_0_1px_rgba(118,109,219,0.14)]' : '',
+                'flex h-9 min-w-0 max-w-[11rem] items-center gap-2 rounded-lg border border-transparent bg-[var(--wolfy-surface-input)] px-2.5 text-left text-[11px] font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:bg-[var(--overlay-hover)] hover:text-[color:var(--wolfy-text-primary)]',
+                accountMenuOpen ? 'border-[color:var(--wolfy-accent)] bg-[var(--overlay-selected)] text-[color:var(--wolfy-text-primary)]' : '',
               )}
               aria-label={accountCopy.accountCenter}
               aria-haspopup="menu"
@@ -775,13 +775,13 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
               onKeyDown={handleAccountTriggerKeyDown}
             >
               <span
-                className="flex size-5 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.06] text-[10px] font-semibold text-white/82"
+                className="flex size-5 shrink-0 items-center justify-center rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[10px] font-semibold text-[color:var(--wolfy-text-primary)]"
                 aria-hidden="true"
               >
                 {accountDisplayName.slice(0, 1)}
               </span>
               <span className="min-w-0 truncate">{accountDisplayName}</span>
-              <ChevronDown className={cn('size-3.5 shrink-0 text-white/44 transition-transform', accountMenuOpen ? 'rotate-180 text-white/70' : '')} />
+              <ChevronDown className={cn('size-3.5 shrink-0 text-[color:var(--wolfy-text-muted)] transition-transform', accountMenuOpen ? 'rotate-180 text-[color:var(--wolfy-text-primary)]' : '')} />
             </button>
 
             {accountMenuOpen ? (
@@ -792,7 +792,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                 aria-label={accountCopy.menuLabel}
                 aria-orientation="vertical"
                 data-testid="shell-account-center-menu"
-                className="absolute right-0 top-full z-20 mt-2 flex min-w-[15rem] max-w-[min(22rem,calc(100vw-2rem))] flex-col gap-1 rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-2 shadow-[0_20px_48px_rgba(0,0,0,0.28)]"
+                className="absolute right-0 top-full z-20 mt-2 flex min-w-[15rem] max-w-[min(22rem,calc(100vw-2rem))] flex-col gap-1 rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--theme-floating-bg)] p-2 shadow-[var(--shadow-tight)]"
                 onKeyDown={handleAccountMenuKeyDown}
               >
                 {accountMenuItems.map(({ label, to, icon: Icon }, index) => (
@@ -805,12 +805,12 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                     role="menuitem"
                     tabIndex={-1}
                     className={({ isActive }) => cn(
-                      'flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-white/72 transition-colors hover:bg-white/[0.04] hover:text-white',
-                      isActive ? 'bg-white/[0.05] text-white' : '',
+                      'flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-[color:var(--wolfy-text-secondary)] transition-colors hover:bg-[var(--overlay-hover)] hover:text-[color:var(--wolfy-text-primary)]',
+                      isActive ? 'bg-[var(--overlay-selected)] text-[color:var(--wolfy-text-primary)]' : '',
                     )}
                     onClick={() => closeAccountMenu()}
                   >
-                    <Icon className="size-4 shrink-0 text-white/56" />
+                    <Icon className="size-4 shrink-0 text-[color:var(--wolfy-text-muted)]" />
                     <span className="truncate">{label}</span>
                   </NavLink>
                 ))}
@@ -824,13 +824,13 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                   tabIndex={-1}
                   variant="ghost"
                   size="sm"
-                  className="w-full min-w-0 !justify-start gap-3 rounded-xl border-0 bg-transparent px-3 text-left text-sm font-normal text-red-200/80 hover:bg-red-500/10 hover:text-red-100"
+                  className="w-full min-w-0 !justify-start gap-3 rounded-xl border-0 bg-transparent px-3 text-left text-sm font-normal text-[color:var(--state-danger-text)] hover:bg-[var(--state-danger-bg)] hover:text-[color:var(--wolfy-text-primary)]"
                   onClick={() => {
                     closeAccountMenu();
                     setShowLogoutConfirm(true);
                   }}
                 >
-                  <LogOut className="size-4 shrink-0 text-red-200/70" />
+                  <LogOut className="size-4 shrink-0 text-[color:var(--state-danger-text)]" />
                   <span className="truncate">{accountCopy.logout}</span>
                 </Button>
               </div>

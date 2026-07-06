@@ -4,6 +4,7 @@ import { PRIMARY_CONSUMER_ROUTES } from './coreProductRoutes';
 
 export type ConsumerNavGroupKey = 'cockpit' | 'research' | 'context' | 'observe';
 export type ConsumerNavItemKey =
+  | 'home'
   | 'decision-cockpit'
   | 'market-overview'
   | 'research-radar'
@@ -12,8 +13,9 @@ export type ConsumerNavItemKey =
   | 'watchlist'
   | 'portfolio'
   | 'backtest'
-  | 'scenario-lab';
-export type ConsumerRouteKey = ConsumerNavItemKey | 'home' | 'guest' | 'liquidity-monitor' | 'rotation-radar' | 'backtest' | 'options-lab';
+  | 'scenario-lab'
+  | 'options-lab';
+export type ConsumerRouteKey = ConsumerNavItemKey | 'guest' | 'liquidity-monitor' | 'rotation-radar';
 
 export type ConsumerNavItem = {
   key: ConsumerNavItemKey;
@@ -168,20 +170,20 @@ export const ROUTE_STORIES: ConsumerRouteStory[] = [
         eyebrow: '研究队列 / 雷达',
         title: '把市场结构线索转成可复核的个股研究队列。',
         purpose: '研究雷达承接驾驶舱，把优先级、研究偏向、验证项和风险标记放在同一队列。',
-        nextStep: '选择队列条目进入个股结构，或回到扫描器补充候选来源。',
+        nextStep: '选择队列条目进入个股研究，或回到扫描器补充候选来源。',
         evidence: '证据边界：队列展示原因、待验证事项、失效观察和数据质量，不暴露底层诊断细节。',
         boundary: '研究雷达只排序研究关注点，不触发提醒、账户动作或外部执行。',
-        primaryAction: '打开个股结构',
+        primaryAction: '打开个股研究',
         secondaryAction: '查看扫描器',
       },
       en: {
         eyebrow: 'Research Queue / Radar',
         title: 'Translate market-structure clues into a reviewable single-name queue.',
         purpose: 'Research Radar follows the cockpit with priority, research bias, verification items, and risk flags.',
-        nextStep: 'Open Stock Structure for a queue item, or return to Scanner for candidate context.',
+        nextStep: 'Open Stock Research for a queue item, or return to Scanner for candidate context.',
         evidence: 'Evidence boundary: queue rationale, verification items, invalidation observations, and data quality are shown without lower-level diagnostic detail.',
         boundary: 'Research Radar ranks research attention only; it triggers no alert, account action, or external execution.',
-        primaryAction: 'Open Stock Structure',
+        primaryAction: 'Open Stock Research',
         secondaryAction: 'Review Scanner',
       },
     },
@@ -196,7 +198,7 @@ export const ROUTE_STORIES: ConsumerRouteStory[] = [
       zh: {
         eyebrow: '个股研究 / 结构',
         title: '先看结构状态、证据缺口和失效观察，再沉淀到上下文。',
-        purpose: '个股结构入口用于进入具体标的结构页，并把趋势、相对强弱、关键位置和研究备注组织到同一工作区。',
+        purpose: '个股研究入口用于进入具体标的研究页，并把趋势、相对强弱、关键位置和研究备注组织到同一工作区。',
         nextStep: '从研究雷达选择标的，或把需要持续观察的对象沉淀到观察列表。',
         evidence: '证据边界：结构页显示可用 K 线、缺失证据和 no-advice 披露。',
         boundary: '结构状态是研究观察，不是外部动作、记录变更或个性化建议。',
@@ -206,7 +208,7 @@ export const ROUTE_STORIES: ConsumerRouteStory[] = [
       en: {
         eyebrow: 'Single-name Research / Structure',
         title: 'Read structure state, evidence gaps, and invalidation observations before adding context.',
-        purpose: 'Stock Structure opens a specific ticker workspace with trend, relative strength, key levels, and research notes.',
+        purpose: 'Stock Research opens a specific ticker workspace with trend, relative strength, key levels, and research notes.',
         nextStep: 'Choose a ticker from Research Radar, or keep ongoing names in Watchlist.',
         evidence: 'Evidence boundary: the structure page exposes usable bars, missing evidence, and no-advice disclosure.',
         boundary: 'Structure state is research observation, not external action, record mutation, or personalized advice.',
@@ -500,7 +502,12 @@ function isPathMatch(pathname: string, target: string, exact = false): boolean {
 }
 
 export function resolveConsumerNavItem(pathname: string): ConsumerNavItem | null {
-  return CONSUMER_NAV_ITEMS.find((item) => isPathMatch(pathname, item.to, item.to === '/')) || null;
+  const normalizedPathname = normalizeConsumerPathname(pathname);
+  const stockDetailPath = /^\/stocks\/[^/]+\/structure-decision(?:\/)?$/i.test(normalizedPathname);
+  return CONSUMER_NAV_ITEMS.find((item) => {
+    if (item.key === 'stock-structure' && stockDetailPath) return true;
+    return isPathMatch(pathname, item.to, item.to === '/');
+  }) || null;
 }
 
 export function resolveConsumerRouteStory(pathname: string): ConsumerRouteStory | null {
