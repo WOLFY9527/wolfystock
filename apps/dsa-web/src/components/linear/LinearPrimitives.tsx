@@ -292,7 +292,7 @@ export function ResearchConsoleShell({
       data-route-console="ResearchConsole"
       data-visual-tier="dominant"
       className={cn(
-        'relative isolate flex w-full min-w-0 flex-col gap-3 overflow-hidden rounded-[var(--theme-panel-radius-lg)] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-2.5 shadow-[var(--wolfy-shadow-console)] md:p-3',
+        'relative isolate flex w-full min-w-0 flex-col gap-3 overflow-hidden rounded-[var(--theme-panel-radius-lg)] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-2.5 shadow-[var(--shadow-tight)] md:p-3',
         className,
       )}
       {...props}

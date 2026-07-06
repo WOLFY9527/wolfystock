@@ -50,6 +50,72 @@ def test_flags_user_page_internal_terms():
     assert "user-facing-internal-term" in rules
 
 
+def test_flags_consumer_visible_raw_ohlcv_readiness_copy():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/MarketOverviewPage.tsx",
+        "<p>raw OHLCV readiness is missing</p>",
+    )
+
+    assert any(item.rule == "consumer-visible-internal-boundary-copy" for item in result.findings)
+
+
+def test_flags_consumer_visible_provider_runtime_keys():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/WatchlistPage.tsx",
+        "<span>provider_status: provider_timeout</span>",
+    )
+
+    assert any(item.rule == "consumer-visible-internal-boundary-copy" for item in result.findings)
+
+
+def test_flags_consumer_visible_implementation_boundary_wording():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/PortfolioPage.tsx",
+        "<p>broker adapter and accounting engine are unavailable</p>",
+    )
+
+    assert any(item.rule == "consumer-visible-internal-boundary-copy" for item in result.findings)
+
+
+def test_flags_deny_list_style_advice_disclaimer():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/StockStructureDecisionPage.tsx",
+        "<p>Not investment advice: do not buy, sell, or hold based on this page.</p>",
+    )
+
+    assert any(item.rule == "consumer-visible-advice-deny-list" for item in result.findings)
+
+
+def test_allows_backtest_strategy_action_descriptions():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/BacktestPage.tsx",
+        "<p>Strategy rule: buy on breakout and sell on trailing stop.</p>",
+    )
+
+    assert not any(item.rule == "consumer-visible-advice-deny-list" for item in result.findings)
+
+
+def test_allows_admin_internal_vocabulary():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/AdminProviderCircuitDiagnosticsPage.tsx",
+        "<p>provider_status provider_timeout raw OHLCV readiness</p>",
+    )
+
+    assert not any(item.rule == "consumer-visible-internal-boundary-copy" for item in result.findings)
+
+
 def test_flags_key_route_page_missing_semantic_heading():
     guard = load_guard_module()
 

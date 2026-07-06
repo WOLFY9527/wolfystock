@@ -25,6 +25,13 @@ export default {
           '"Microsoft YaHei"',
           'sans-serif',
         ],
+        display: [
+          '"Noto Serif SC"',
+          '"Songti SC"',
+          'STSong',
+          'Georgia',
+          'serif',
+        ],
         mono: [
           '"JetBrains Mono"',
           'ui-monospace',
@@ -53,7 +60,7 @@ export default {
           foreground: 'hsl(var(--destructive-foreground))',
         },
         muted: {
-          DEFAULT: 'hsl(var(--muted))',
+          DEFAULT: 'hsl(var(--muted-bg-hsl))',
           foreground: 'hsl(var(--muted-foreground))',
         },
         accent: {
@@ -97,7 +104,7 @@ export default {
         elevated: 'hsl(var(--elevated))',
         hover: 'hsl(var(--hover))',
         'secondary-bg': 'hsl(var(--secondary))',
-        'muted-bg': 'hsl(var(--muted))',
+        'muted-bg': 'hsl(var(--muted-bg-hsl))',
         'secondary-text': 'hsl(var(--secondary-text))',
         'muted-text': 'hsl(var(--muted-text))',
         // 设计令牌 (Design Tokens)
@@ -131,8 +138,6 @@ export default {
       },
       boxShadow: {
         'soft-card': 'var(--shadow)',
-        'glow-cyan': 'var(--shadow-tight)',
-        'glow-purple': 'var(--shadow-tight)',
         'glow-success': 'var(--shadow-tight)',
         'glow-danger': 'var(--shadow-tight)',
         'cyan/20': 'var(--shadow-tight)',
@@ -158,7 +163,6 @@ export default {
         'fade-in': 'fadeIn 0.3s ease-out',
         'slide-up': 'slideUp 0.4s ease-out',
         'slide-in-right': 'slideInRight 0.3s ease-out',
-        'pulse-glow': 'pulseGlow 2s ease-in-out infinite',
         'spin-slow': 'spin 2s linear infinite',
         'float-in': 'floatIn 0.45s ease-out',
         'ghost-scan': 'ghostScan 3s ease-in-out infinite',
@@ -179,10 +183,6 @@ export default {
         floatIn: {
           from: { opacity: '0', transform: 'translateY(16px)' },
           to: { opacity: '1', transform: 'translateY(0)' },
-        },
-        pulseGlow: {
-          '0%, 100%': { boxShadow: 'var(--shadow-tight)' },
-          '50%': { boxShadow: 'var(--shadow)' },
         },
         ghostScan: {
           '0%': { transform: 'translateY(-110%)', opacity: '0' },
