@@ -412,7 +412,10 @@ describe('WatchlistPage', () => {
     expect(screen.getByTestId('watchlist-compact-filter-bar')).toHaveAttribute('data-linear-primitive', 'compact-filter-bar');
     expect(screen.getByTestId('watchlist-compact-filter-bar')).toHaveAttribute('data-layout-zone', 'CommandBar');
     expect(screen.getByTestId('watchlist-command-bar')).toHaveAttribute('data-terminal-primitive', 'dense-command-bar');
+    expect(screen.getByRole('table', { name: '观察列表研究台账' })).toBe(screen.getByTestId('watchlist-candidate-list'));
     expect(screen.getByTestId('watchlist-candidate-list')).toHaveAttribute('data-linear-primitive', 'dense-rows');
+    expect(screen.getByTestId('watchlist-candidate-list')).toHaveClass('min-w-[860px]');
+    expect(screen.getByTestId('watchlist-list-header')).toHaveAttribute('role', 'row');
     expect(screen.getByTestId('watchlist-primary-work-region')).toHaveAttribute('data-layout-zone', 'PrimaryWorkRegion');
     expect(screen.getByTestId('watchlist-detail-rail')).toHaveAttribute('data-linear-primitive', 'context-rail');
     expect(screen.getByTestId('watchlist-detail-rail')).toHaveAttribute('data-layout-zone', 'ContextRail');
@@ -673,7 +676,7 @@ describe('WatchlistPage', () => {
     expect(queue).not.toHaveTextContent(/buy|sell|hold|recommend(?:ation)?|target|stop|position sizing|买入|卖出|持有|目标价|止损|仓位/i);
     expect(queue).not.toHaveTextContent(/Missing evidence needs review|Price-history evidence|Scanner score evidence|Queue review pending from backend memo|evidence_missing|attention|follow_up|provider|source|runtime|debug|request[_\s-]?id|trace[_\s-]?id|schemaVersion|raw|internal|cache|observationOnly|queue_debug_path/i);
 
-    const rowIds = Array.from(document.querySelectorAll('article[data-testid^="watchlist-row-"]'))
+    const rowIds = Array.from(document.querySelectorAll('[role="row"][data-testid^="watchlist-row-"]'))
       .map((row) => row.getAttribute('data-testid'));
     expect(rowIds).toEqual(['watchlist-row-NVDA', 'watchlist-row-TSM', 'watchlist-row-600519']);
     expect(addWatchlistItem).not.toHaveBeenCalled();
@@ -850,7 +853,7 @@ describe('WatchlistPage', () => {
 
     fireEvent.change(screen.getByLabelText('排序'), { target: { value: 'scannerScore' } });
 
-    const rows = Array.from(screen.getByTestId('watchlist-candidate-list').querySelectorAll('article[data-testid^="watchlist-row-"]'));
+    const rows = Array.from(screen.getByTestId('watchlist-candidate-list').querySelectorAll('[role="row"][data-testid^="watchlist-row-"]'));
     expect(within(rows[0] as HTMLElement).getByText('NVDA')).toBeInTheDocument();
     expect(within(rows[1] as HTMLElement).getByText('TSM')).toBeInTheDocument();
     expect(within(rows[2] as HTMLElement).getByText('600519')).toBeInTheDocument();
@@ -1642,11 +1645,11 @@ describe('WatchlistPage', () => {
     await screen.findByTestId('watchlist-row-NVDA');
 
     fireEvent.change(screen.getByLabelText('排序'), { target: { value: 'backtestReturn' } });
-    let rows = Array.from(screen.getByTestId('watchlist-candidate-list').querySelectorAll('article[data-testid^="watchlist-row-"]'));
+    let rows = Array.from(screen.getByTestId('watchlist-candidate-list').querySelectorAll('[role="row"][data-testid^="watchlist-row-"]'));
     expect(within(rows[0] as HTMLElement).getByText('NVDA')).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('排序'), { target: { value: 'historicalHitRate' } });
-    rows = Array.from(screen.getByTestId('watchlist-candidate-list').querySelectorAll('article[data-testid^="watchlist-row-"]'));
+    rows = Array.from(screen.getByTestId('watchlist-candidate-list').querySelectorAll('[role="row"][data-testid^="watchlist-row-"]'));
     expect(within(rows[0] as HTMLElement).getByText('NVDA')).toBeInTheDocument();
   });
 
@@ -2495,15 +2498,8 @@ describe('WatchlistPage', () => {
     expect(emptyState).toHaveTextContent('当前已保存覆盖下还没有可用观察行。可先在这里手动研究一个代码，确认后再决定是否保存到观察列表。');
     expect(emptyState).toHaveTextContent('只有你明确保留观察后，已保存的候选证据与状态才会回到这里。');
     expect(emptyState).toHaveTextContent('这里优先保留单标的研究与明确保存观察的路径。');
-    const preview = within(emptyState).getByTestId('watchlist-empty-preview');
-    expect(preview).toHaveTextContent('功能预览');
-    expect(preview).toHaveTextContent('示例预览');
-    expect(preview).toHaveTextContent('保存观察');
-    expect(preview).toHaveTextContent('证据状态');
-    expect(preview).toHaveTextContent('下一步研究');
-    expect(preview).toHaveTextContent('不会持久化');
-    expect(preview).toHaveTextContent('不计入观察名单数量');
-    expect(preview).toHaveTextContent('不会进入扫描器官方排名');
+    expect(within(emptyState).queryByTestId('watchlist-empty-preview')).not.toBeInTheDocument();
+    expect(emptyState).not.toHaveTextContent(/功能预览|示例预览|Demo sample|sample only/i);
     const researchPath = within(emptyState).getByTestId('watchlist-empty-manual-research');
     expect(researchPath).toHaveTextContent('首选研究路径');
     expect(researchPath).toHaveTextContent('手动研究代码');

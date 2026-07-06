@@ -130,11 +130,6 @@ type WatchlistConclusionModel = {
   limitedConfidenceCount: number;
   tone: 'success' | 'caution' | 'neutral';
 };
-type WatchlistEmptyPreviewItem = {
-  label: string;
-  value: string;
-  detail: string;
-};
 type BatchProgress = {
   kind: 'scan' | 'backtest';
   total: number;
@@ -1714,15 +1709,6 @@ function getCopy(language: 'zh' | 'en') {
       emptyTitle: 'No tracked candidates yet.',
       emptyBody: 'Under the current saved coverage, no watchlist rows are available yet. Start with one manual symbol research task here, then save only if you decide to keep observing it.',
       emptyHelp: 'Saved rows return here after you explicitly keep a symbol for ongoing observation.',
-      emptyPreviewEyebrow: 'Feature preview',
-      emptyPreviewTitle: 'Example preview',
-      emptyPreviewBody: 'A saved observation row can show source, evidence state, latest observation, and the next research step.',
-      emptyPreviewItems: [
-        { label: 'Saved observation', value: 'Symbol / market / source', detail: 'Real rows appear only after the user saves a symbol.' },
-        { label: 'Evidence state', value: 'Research score / data state', detail: 'State labels explain freshness and limits without making a recommendation.' },
-        { label: 'Next research step', value: 'Open analysis / refresh / backtest', detail: 'Actions are explicit user research steps, not execution shortcuts.' },
-      ] as WatchlistEmptyPreviewItem[],
-      emptyPreviewFootnote: 'Demo sample only. It is not persisted, counted as a watchlist item, exported as user data, or used by scanner ranking.',
       emptyScannerHelp: 'Keep the first step here focused on one-symbol research and explicit save decisions.',
       savedObservationHelp: 'Saved observations are created only after you explicitly save a symbol; this preview does not create one.',
       manualResearchLabel: 'Manual research symbol',
@@ -1836,15 +1822,6 @@ function getCopy(language: 'zh' | 'en') {
     emptyTitle: '还没有观察标的',
       emptyBody: '当前已保存覆盖下还没有可用观察行。可先在这里手动研究一个代码，确认后再决定是否保存到观察列表。',
     emptyHelp: '只有你明确保留观察后，已保存的候选证据与状态才会回到这里。',
-    emptyPreviewEyebrow: '功能预览',
-    emptyPreviewTitle: '示例预览',
-    emptyPreviewBody: '真实保存后，观察行会展示加入来源、证据状态、最近观察与下一步研究动作。',
-    emptyPreviewItems: [
-      { label: '保存观察', value: '代码 / 市场 / 加入路径', detail: '只有用户明确保存后，真实观察行才会出现。' },
-      { label: '证据状态', value: '研究评分 / 数据状态', detail: '状态标签说明时效与限制，不给出推荐。' },
-      { label: '下一步研究', value: '打开分析 / 刷新 / 回测', detail: '全部是用户触发的研究步骤，不是执行入口。' },
-    ] as WatchlistEmptyPreviewItem[],
-    emptyPreviewFootnote: '仅为演示样例；不会持久化，不计入观察名单数量，不导出为用户数据，也不会进入扫描器官方排名。',
     emptyScannerHelp: '这里优先保留单标的研究与明确保存观察的路径。',
     savedObservationHelp: '保存观察只会在你明确保存代码后创建；这里的预览不会创建观察项。',
     manualResearchLabel: '手动研究代码',
@@ -2748,7 +2725,7 @@ const WatchlistPage: React.FC = () => {
           className={isWatchlistEmptyWorkspace ? 'grid min-w-0' : 'grid min-w-0 lg:grid-cols-[minmax(0,1fr)_340px]'}
         >
           <div data-layout-zone="PrimaryWorkRegion" data-testid="watchlist-primary-work-region" className="min-w-0">
-            <ConsoleBoard className="rounded-none border-0 bg-transparent">
+            <ConsoleBoard className="overflow-x-auto rounded-none border-0 bg-transparent">
               {!isWatchlistEmptyWorkspace ? (
                 <div className="flex min-w-0 items-center justify-between gap-3 border-b border-[color:var(--wolfy-divider)] px-4 py-3">
                   <div className="min-w-0">
@@ -2763,12 +2740,13 @@ const WatchlistPage: React.FC = () => {
               {!isWatchlistEmptyWorkspace ? (
                 <div
                   data-testid="watchlist-list-header"
-                  className="hidden min-w-0 grid-cols-[minmax(0,1.35fr)_minmax(0,1.15fr)_minmax(0,1.05fr)_auto] gap-4 border-b border-[color:var(--wolfy-divider)] px-4 py-2 text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)] lg:grid"
+                  role="row"
+                  className="hidden min-w-[860px] grid-cols-[minmax(0,1.35fr)_minmax(0,1.15fr)_minmax(0,1.05fr)_auto] gap-4 border-b border-[color:var(--wolfy-divider)] px-4 py-2 text-[11px] uppercase text-[color:var(--wolfy-text-muted)] lg:grid"
                 >
-                  <span>{language === 'en' ? 'Symbol' : '标的'}</span>
-                  <span>{language === 'en' ? 'Price / update' : '价格 / 更新'}</span>
-                  <span>{language === 'en' ? 'Research / next' : '研究 / 下一步'}</span>
-                  <span className="text-right">{copy.actions}</span>
+                  <span role="columnheader">{language === 'en' ? 'Symbol' : '标的'}</span>
+                  <span role="columnheader">{language === 'en' ? 'Price / update' : '价格 / 更新'}</span>
+                  <span role="columnheader">{language === 'en' ? 'Research / next' : '研究 / 下一步'}</span>
+                  <span role="columnheader" className="text-right">{copy.actions}</span>
                 </div>
               ) : null}
               {isLoading ? (
@@ -2776,7 +2754,12 @@ const WatchlistPage: React.FC = () => {
                   {copy.loading}
                 </TerminalPanel>
               ) : filteredItems.length > 0 ? (
-                <DenseRows data-testid="watchlist-candidate-list">
+                <DenseRows
+                  data-testid="watchlist-candidate-list"
+                  role="table"
+                  aria-label={language === 'en' ? 'Watchlist research ledger' : '观察列表研究台账'}
+                  className="min-w-[860px]"
+                >
                   {filteredItems.map((item) => {
                     const scanner = item.intelligence?.scanner;
                     const strategySimulation = item.intelligence?.strategySimulation;
@@ -2862,10 +2845,11 @@ const WatchlistPage: React.FC = () => {
                       <article
                         key={item.id}
                         data-testid={`watchlist-row-${item.symbol}`}
+                        role="row"
                         className={`min-w-0 border-b border-[color:var(--wolfy-divider)] px-3 py-3 transition-colors md:px-4 ${isActive ? 'bg-white/[0.045]' : 'bg-transparent hover:bg-white/[0.02]'}`}
                       >
                         <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1.15fr)_minmax(0,1.05fr)_auto] lg:items-start lg:gap-4">
-                          <div className="flex min-w-0 gap-3">
+                          <div role="cell" className="flex min-w-0 gap-3">
                             <button
                               type="button"
                               className={`${ROW_SELECTION_BUTTON_CLASS} ${
@@ -2899,37 +2883,37 @@ const WatchlistPage: React.FC = () => {
                               onClick={() => setActiveItemId(item.id)}
                             >
                               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                <span className="font-semibold text-white">{item.symbol}</span>
+                                <span className="font-semibold text-[color:var(--wolfy-text-primary)]">{item.symbol}</span>
                                 <TerminalChip variant="neutral">{formatMarket(item.market)}</TerminalChip>
                                 {isRecentlyAdded(item) ? <TerminalChip variant="info">{copy.recentlyAdded}</TerminalChip> : null}
                               </div>
                               <p
                                 data-testid={`watchlist-row-identity-${item.symbol}`}
-                                className="break-words whitespace-normal text-sm text-white/78 md:truncate"
+                                className="break-words whitespace-normal text-sm text-[color:var(--wolfy-text-secondary)] md:truncate"
                               >
                                 {identityLabel}
                               </p>
                               <p
                                 data-testid={`watchlist-row-origin-${item.symbol}`}
-                                className="break-words whitespace-normal text-[11px] text-white/45 md:truncate"
+                                className="break-words whitespace-normal text-[11px] text-[color:var(--wolfy-text-muted)] md:truncate"
                               >
                                 {originLabel}
                               </p>
                             </button>
                           </div>
 
-                          <div className="min-w-0 space-y-2">
+                          <div role="cell" className="min-w-0 space-y-2">
                             <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
                               {language === 'en' ? 'Price / update' : '价格 / 更新'}
                             </p>
-                            <p className="text-sm font-medium text-white/82">{priceLabel}</p>
-                            <p className="font-mono text-xs text-white/55">{updateLabel}</p>
+                            <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">{priceLabel}</p>
+                            <p className="font-mono text-xs text-[color:var(--wolfy-text-muted)]">{updateLabel}</p>
                             <div
                               data-testid={`watchlist-row-workflow-${item.symbol}`}
                               className="flex min-w-0 flex-wrap items-center gap-1.5"
                               aria-label={language === 'zh' ? `${item.symbol} 研究流程` : `${item.symbol} research workflow`}
                             >
-                              <span className="text-[11px] text-white/38">{language === 'zh' ? '研究流程' : 'Workflow'}</span>
+                              <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '研究流程' : 'Workflow'}</span>
                               {rowPacketView ? (
                                 <>
                                   {rowPacketView.identityStateLabel ? (
@@ -2950,7 +2934,7 @@ const WatchlistPage: React.FC = () => {
                             </div>
                           </div>
 
-                          <div className="min-w-0 space-y-2">
+                          <div role="cell" className="min-w-0 space-y-2">
                             <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
                               {language === 'en' ? 'Research / next' : '研究 / 下一步'}
                             </p>
@@ -2986,31 +2970,31 @@ const WatchlistPage: React.FC = () => {
                             </div>
                             <p
                               data-testid={`watchlist-row-state-${item.symbol}`}
-                              className="break-words whitespace-normal text-xs font-mono text-white/55 md:truncate"
+                              className="break-words whitespace-normal text-xs font-mono text-[color:var(--wolfy-text-muted)] md:truncate"
                             >
                               {rowStateLine || `${copy.score} ${formatScore(score)}`}
                             </p>
                             {rowDecisionContext ? (
                               <div
                                 data-testid={`watchlist-row-decision-context-${item.symbol}`}
-                                className="rounded-lg border border-white/10 bg-white/[0.025] px-2.5 py-2"
+                                className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-2"
                               >
                                 <div className="mb-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
-                                  <span className="text-[11px] text-white/45">
+                                  <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">
                                     {language === 'en' ? 'Research state' : '研究状态'}
                                   </span>
                                   {rowDecisionContext.chips.map((chip) => (
                                     <TerminalChip key={chip.label} variant={chip.variant}>{chip.label}</TerminalChip>
                                   ))}
                                 </div>
-                                <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/58">
+                                <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[color:var(--wolfy-text-secondary)]">
                                   {rowDecisionContext.evidenceGapSummary ? (
                                     <span>{rowDecisionContext.evidenceGapSummary}</span>
                                   ) : null}
                                   <button
                                     type="button"
                                     aria-label={rowDecisionContext.evidenceStackAriaLabel}
-                                    className="inline-flex min-h-[28px] items-center rounded-md border border-cyan-300/20 px-2 text-cyan-100/85 transition hover:border-cyan-200/40 hover:bg-cyan-300/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/35"
+                                    className="inline-flex min-h-[28px] items-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-2 text-[color:var(--wolfy-text-secondary)] transition hover:border-[color:var(--wolfy-accent)] hover:bg-[var(--wolfy-surface-panel)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]"
                                     onClick={() => navigate(buildStockStructurePath(item, language))}
                                   >
                                     {rowDecisionContext.evidenceStackLabel}
@@ -3018,11 +3002,11 @@ const WatchlistPage: React.FC = () => {
                                 </div>
                               </div>
                             ) : null}
-                            <p className="text-sm leading-6 text-white/72">{rowObservation}</p>
-                            <p className="text-xs text-white/58">{language === 'en' ? 'Next' : '下一步'} {rowNextAction}</p>
+                            <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{rowObservation}</p>
+                            <p className="text-xs text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Next' : '下一步'} {rowNextAction}</p>
                             {rowNotes ? (
                               <p
-                                className="break-words text-xs leading-5 text-white/52"
+                                className="break-words text-xs leading-5 text-[color:var(--wolfy-text-muted)]"
                                 data-testid={`watchlist-row-note-${item.symbol}`}
                               >
                                 {rowNotes}
@@ -3032,7 +3016,7 @@ const WatchlistPage: React.FC = () => {
                             ) : null}
                           </div>
 
-                          <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+                          <div role="cell" className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
                             <TerminalButton
                               type="button"
                               variant="compact"
@@ -3164,51 +3148,28 @@ const WatchlistPage: React.FC = () => {
 
                     {isWatchlistEmptyWorkspace ? (
                       <div
-                        data-testid="watchlist-empty-preview"
-                        className="grid min-w-0 gap-3 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3 text-left"
-                      >
-                        <div className="flex min-w-0 flex-wrap items-center gap-2">
-                          <TerminalChip variant="info">{copy.emptyPreviewEyebrow}</TerminalChip>
-                          <span className="text-[11px] font-semibold text-white/72">{copy.emptyPreviewTitle}</span>
-                        </div>
-                        <p className="text-xs leading-5 text-white/58">{copy.emptyPreviewBody}</p>
-                        <div className="grid min-w-0 gap-2 md:grid-cols-3">
-                          {copy.emptyPreviewItems.map((item) => (
-                            <div key={item.label} className="min-w-0 rounded-lg border border-white/8 bg-black/20 px-2.5 py-2">
-                              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/38">{item.label}</p>
-                              <p className="mt-1 text-xs font-medium text-white/76">{item.value}</p>
-                              <p className="mt-1 text-[11px] leading-relaxed text-white/45">{item.detail}</p>
-                            </div>
-                          ))}
-                        </div>
-                        <p className="text-[11px] leading-relaxed text-white/42">{copy.emptyPreviewFootnote}</p>
-                      </div>
-                    ) : null}
-
-                    {isWatchlistEmptyWorkspace ? (
-                      <div
                         data-testid="watchlist-empty-manual-research"
                         data-research-path="primary"
-                        className="grid min-w-0 gap-2 rounded-xl border border-indigo-300/18 bg-indigo-300/[0.07] px-3 py-3 text-left"
+                        className="grid min-w-0 gap-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3 text-left"
                       >
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
                           <TerminalChip variant="info">{language === 'en' ? 'Primary research path' : '首选研究路径'}</TerminalChip>
-                          <span className="text-[11px] text-white/48">
+                          <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">
                             {language === 'en'
                               ? 'Research one symbol first; save only if you explicitly want to keep monitoring it.'
                               : '先研究单个代码；只有你明确要继续跟踪时，才再保存到观察列表。'}
                           </span>
                         </div>
-                        <label htmlFor="watchlist-empty-manual-symbol" className="text-[11px] font-semibold text-white/78">
+                        <label htmlFor="watchlist-empty-manual-symbol" className="text-[11px] font-semibold text-[color:var(--wolfy-text-primary)]">
                           {copy.manualResearchLabel}
                         </label>
-                        <p className="text-[11px] leading-relaxed text-white/45">{copy.manualResearchHelp}</p>
+                        <p className="text-[11px] leading-relaxed text-[color:var(--wolfy-text-muted)]">{copy.manualResearchHelp}</p>
                         <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
                           <input
                             id="watchlist-empty-manual-symbol"
                             data-testid="watchlist-empty-manual-symbol-input"
                             value={emptyResearchSymbol}
-                            className="h-9 min-w-0 flex-1 rounded-md border border-white/10 bg-black/35 px-3 text-sm font-mono text-white outline-none placeholder:text-white/22 focus:border-indigo-300/50"
+                            className="h-9 min-w-0 flex-1 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-panel)] px-3 text-sm font-mono text-[color:var(--wolfy-text-primary)] outline-none placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--wolfy-accent)]"
                             onChange={(event) => setEmptyResearchSymbol(event.target.value)}
                             aria-label={copy.manualResearchLabel}
                             placeholder={copy.manualResearchPlaceholder}
@@ -3229,8 +3190,8 @@ const WatchlistPage: React.FC = () => {
                                 : copy.manualResearchButton}
                           </TerminalButton>
                         </div>
-                        <p className="text-[11px] leading-relaxed text-white/42">{copy.savedObservationHelp}</p>
-                        <p className="pt-1 text-[11px] leading-relaxed text-white/42">{copy.emptyScannerHelp}</p>
+                        <p className="text-[11px] leading-relaxed text-[color:var(--wolfy-text-muted)]">{copy.savedObservationHelp}</p>
+                        <p className="pt-1 text-[11px] leading-relaxed text-[color:var(--wolfy-text-muted)]">{copy.emptyScannerHelp}</p>
                       </div>
                     ) : null}
                   </div>
@@ -3250,14 +3211,14 @@ const WatchlistPage: React.FC = () => {
                 <section className="min-w-0 pb-4">
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-[11px] text-white/40">{language === 'zh' ? '已选项目' : 'Selected item'}</p>
-                      <h2 className="truncate text-base font-semibold text-white">{activeItem.symbol}</h2>
-                      <p className="truncate text-xs text-white/58">{activeIdentityLabel}</p>
+                      <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '已选项目' : 'Selected item'}</p>
+                      <h2 className="truncate text-base font-semibold text-[color:var(--wolfy-text-primary)]">{activeItem.symbol}</h2>
+                      <p className="truncate text-xs text-[color:var(--wolfy-text-muted)]">{activeIdentityLabel}</p>
                     </div>
                     <TerminalChip variant="neutral">{formatMarket(activeItem.market)}</TerminalChip>
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                    <TerminalChip variant="info" className="font-mono text-cyan-100">
+                    <TerminalChip variant="info" className="font-mono text-[color:var(--wolfy-accent)]">
                       {language === 'zh' ? '分数' : 'SCORE'} {formatScore(activeScore)}
                     </TerminalChip>
                     <TerminalChip variant={scoreDisclosureChipVariant(activeScoreDisclosureState)}>
@@ -3274,7 +3235,7 @@ const WatchlistPage: React.FC = () => {
                     data-testid="watchlist-detail-workflow"
                     className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5"
                   >
-                    <span className="text-[11px] text-white/40">{language === 'zh' ? '研究流程' : 'Workflow'}</span>
+                    <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '研究流程' : 'Workflow'}</span>
                     {activeWorkflowSteps.map((step) => (
                       <TerminalChip key={step.key} variant={step.variant}>{step.label}</TerminalChip>
                     ))}
@@ -3283,28 +3244,28 @@ const WatchlistPage: React.FC = () => {
 
                 <section className="grid min-w-0 gap-3 border-y border-[color:var(--wolfy-divider)] py-4">
                   <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
-                    <p className="text-[11px] text-white/40">{language === 'zh' ? '当前状态' : 'Current state'}</p>
-                    <p className="mt-1 text-sm text-white/78">{formatScoreDisclosureFreshness(activeItem, activeLatestTime, language)}</p>
+                    <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '当前状态' : 'Current state'}</p>
+                    <p className="mt-1 text-sm text-[color:var(--wolfy-text-secondary)]">{formatScoreDisclosureFreshness(activeItem, activeLatestTime, language)}</p>
                     {activeScannerLineageCue ? (
-                      <p className="mt-2 text-xs leading-5 text-white/52">{activeScannerLineageCue.detail}</p>
+                      <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{activeScannerLineageCue.detail}</p>
                     ) : null}
                   </div>
                   <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
-                    <p className="text-[11px] text-white/40">{language === 'zh' ? '风险提示' : 'Risk note'}</p>
-                    <p className="mt-1 text-sm text-white/78">{activeRiskNote || (language === 'en' ? 'State is stable for observation.' : '当前状态适合继续观察。')}</p>
+                    <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '风险提示' : 'Risk note'}</p>
+                    <p className="mt-1 text-sm text-[color:var(--wolfy-text-secondary)]">{activeRiskNote || (language === 'en' ? 'State is stable for observation.' : '当前状态适合继续观察。')}</p>
                   </div>
                   <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
-                    <p className="text-[11px] text-white/40">{language === 'zh' ? '下一步' : 'Next step'}</p>
-                    <p className="mt-1 text-sm text-white/78">{activeNextActionLabel}</p>
+                    <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '下一步' : 'Next step'}</p>
+                    <p className="mt-1 text-sm text-[color:var(--wolfy-text-secondary)]">{activeNextActionLabel}</p>
                   </div>
                 </section>
 
                 <section className="min-w-0 py-4">
                   <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold text-white">{language === 'zh' ? '观察摘要' : 'Observation summary'}</h3>
+                    <h3 className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{language === 'zh' ? '观察摘要' : 'Observation summary'}</h3>
                   </div>
                   <div className="space-y-3">
-                    <p className="text-sm leading-6 text-white/72">{activeObservationSummary}</p>
+                    <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{activeObservationSummary}</p>
                     <div className="divide-y divide-[color:var(--wolfy-divider)]">
                       {[
                         { label: copy.lastScored, value: formatDateTime(activeItem.lastScoredAt, language) },
@@ -3312,8 +3273,8 @@ const WatchlistPage: React.FC = () => {
                         { label: copy.latestUpdate, value: activeLatestTime ? formatDateTime(activeLatestTime, language) : '--' },
                       ].map((row) => (
                         <div key={String(row.label)} className="flex min-w-0 items-start justify-between gap-4 py-2.5 text-[11px]">
-                          <span className="truncate text-white/38">{row.label}</span>
-                          <span className="min-w-0 text-right text-white/68">{row.value}</span>
+                          <span className="truncate text-[color:var(--wolfy-text-muted)]">{row.label}</span>
+                          <span className="min-w-0 text-right text-[color:var(--wolfy-text-secondary)]">{row.value}</span>
                         </div>
                       ))}
                     </div>
@@ -3327,22 +3288,22 @@ const WatchlistPage: React.FC = () => {
                     title={copy.scannerLineage}
                     summary={activeScannerLineageView.summary}
                   >
-                    <div className="space-y-3 text-xs leading-5 text-white/68">
+                    <div className="space-y-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                       <div className="flex min-w-0 flex-wrap gap-1.5">
                         <TerminalChip variant="neutral">{activeScannerLineageView.snapshotLabel}</TerminalChip>
                         <TerminalChip variant="caution">{activeScannerLineageView.stateLabel}</TerminalChip>
                         <TerminalChip variant="neutral">{activeScannerLineageView.freshnessLabel}</TerminalChip>
                       </div>
                       <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
-                        <p className="text-[11px] text-white/40">{language === 'zh' ? '研究原因' : 'Research reason'}</p>
-                        <p className="mt-1 text-sm text-white/75">{activeScannerLineageView.reason}</p>
+                        <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '研究原因' : 'Research reason'}</p>
+                        <p className="mt-1 text-sm text-[color:var(--wolfy-text-secondary)]">{activeScannerLineageView.reason}</p>
                       </div>
                       <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
-                        <p className="text-[11px] text-white/40">{language === 'zh' ? '下一步' : 'Next step'}</p>
-                        <p className="mt-1 text-sm text-white/75">{activeScannerLineageView.nextStep}</p>
+                        <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '下一步' : 'Next step'}</p>
+                        <p className="mt-1 text-sm text-[color:var(--wolfy-text-secondary)]">{activeScannerLineageView.nextStep}</p>
                       </div>
                       {activeScannerLineageView.metadata.length ? (
-                        <div className="flex min-w-0 flex-wrap gap-2 text-[11px] text-white/45">
+                        <div className="flex min-w-0 flex-wrap gap-2 text-[11px] text-[color:var(--wolfy-text-muted)]">
                           {activeScannerLineageView.metadata.map((label) => (
                             <span key={label}>{label}</span>
                           ))}
@@ -3354,9 +3315,9 @@ const WatchlistPage: React.FC = () => {
 
                 <section className="min-w-0 py-4">
                   <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold text-white">{copy.intelligence}</h3>
+                    <h3 className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{copy.intelligence}</h3>
                   </div>
-                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3 text-xs leading-5 text-white/68">
+                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                     {activeBacktestSummary}
                   </div>
                 </section>
@@ -3373,15 +3334,15 @@ const WatchlistPage: React.FC = () => {
                     title={copy.catalystExposures}
                     summary={copy.catalystExposuresSummary}
                   >
-                    <div className="space-y-3 text-xs leading-5 text-white/68">
+                    <div className="space-y-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                       {activeCatalystExposures.items.map((exposure) => (
                         <div
                           key={exposure.id}
                           className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3"
                         >
-                          <p className="truncate text-sm text-white/82">{exposure.title}</p>
+                          <p className="truncate text-sm text-[color:var(--wolfy-text-primary)]">{exposure.title}</p>
                           {exposure.summary ? (
-                            <p className="mt-1 text-xs leading-5 text-white/65">{exposure.summary}</p>
+                            <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{exposure.summary}</p>
                           ) : null}
                           {exposure.statusLabels.length ? (
                             <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
@@ -3391,7 +3352,7 @@ const WatchlistPage: React.FC = () => {
                             </div>
                           ) : null}
                           {exposure.metadata.length ? (
-                            <div className="mt-2 flex min-w-0 flex-wrap gap-2 text-[11px] text-white/45">
+                            <div className="mt-2 flex min-w-0 flex-wrap gap-2 text-[11px] text-[color:var(--wolfy-text-muted)]">
                               {exposure.metadata.map((label) => (
                                 <span key={`${exposure.id}:${label}`}>{label}</span>
                               ))}
@@ -3399,7 +3360,7 @@ const WatchlistPage: React.FC = () => {
                           ) : null}
                           {exposure.reasonLabels.length ? (
                             <div className="mt-2 space-y-1.5">
-                              <p className="text-[11px] uppercase tracking-[0.18em] text-white/38">{copy.catalystExposuresReasons}</p>
+                              <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{copy.catalystExposuresReasons}</p>
                               <div className="flex min-w-0 flex-wrap gap-1.5">
                                 {exposure.reasonLabels.map((label) => (
                                   <TerminalChip key={`${exposure.id}:reason:${label}`} variant="caution">{label}</TerminalChip>
@@ -3410,7 +3371,7 @@ const WatchlistPage: React.FC = () => {
                         </div>
                       ))}
                       {activeCatalystExposures.hiddenCount > 0 ? (
-                        <p className="text-[11px] text-white/45">{copy.catalystExposuresBounded}</p>
+                        <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.catalystExposuresBounded}</p>
                       ) : null}
                     </div>
                   </DenseSecondaryDisclosure>
@@ -3423,24 +3384,24 @@ const WatchlistPage: React.FC = () => {
                     title={copy.investorSignal}
                     summary={copy.investorSignalSummary}
                   >
-                    <div className="space-y-3 text-xs leading-5 text-white/68">
+                    <div className="space-y-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                       <div className="grid min-w-0 gap-2 sm:grid-cols-3">
                         {activeInvestorSignal.stateLabel ? (
                           <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
-                            <p className="text-[11px] text-white/40">{copy.investorSignalState}</p>
-                            <p className="mt-1 text-sm text-white/78">{activeInvestorSignal.stateLabel}</p>
+                            <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.investorSignalState}</p>
+                            <p className="mt-1 text-sm text-[color:var(--wolfy-text-secondary)]">{activeInvestorSignal.stateLabel}</p>
                           </div>
                         ) : null}
                         {activeInvestorSignal.confidenceLabel ? (
                           <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
-                            <p className="text-[11px] text-white/40">{copy.investorSignalConfidence}</p>
-                            <p className="mt-1 text-sm text-white/78">{activeInvestorSignal.confidenceLabel}</p>
+                            <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.investorSignalConfidence}</p>
+                            <p className="mt-1 text-sm text-[color:var(--wolfy-text-secondary)]">{activeInvestorSignal.confidenceLabel}</p>
                           </div>
                         ) : null}
                         {activeInvestorSignal.freshnessLabel ? (
                           <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
-                            <p className="text-[11px] text-white/40">{copy.investorSignalFreshness}</p>
-                            <p className="mt-1 text-sm text-white/78">{activeInvestorSignal.freshnessLabel}</p>
+                            <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.investorSignalFreshness}</p>
+                            <p className="mt-1 text-sm text-[color:var(--wolfy-text-secondary)]">{activeInvestorSignal.freshnessLabel}</p>
                           </div>
                         ) : null}
                       </div>
@@ -3449,7 +3410,7 @@ const WatchlistPage: React.FC = () => {
                       ) : null}
                       {activeInvestorSignal.reasonCodes.length ? (
                         <div className="space-y-1.5">
-                          <p className="text-[11px] uppercase tracking-[0.18em] text-white/38">{copy.investorSignalReasons}</p>
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{copy.investorSignalReasons}</p>
                           <div className="flex min-w-0 flex-wrap gap-1.5">
                             {activeInvestorSignal.reasonCodes.map((reason) => (
                               <TerminalChip key={reason} variant="neutral">{reason}</TerminalChip>
@@ -3459,7 +3420,7 @@ const WatchlistPage: React.FC = () => {
                       ) : null}
                       {activeInvestorSignal.contradictionCodes.length ? (
                         <div className="space-y-1.5">
-                          <p className="text-[11px] uppercase tracking-[0.18em] text-white/38">{copy.investorSignalContradictions}</p>
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{copy.investorSignalContradictions}</p>
                           <div className="flex min-w-0 flex-wrap gap-1.5">
                             {activeInvestorSignal.contradictionCodes.map((reason) => (
                               <TerminalChip key={reason} variant="caution">{reason}</TerminalChip>
@@ -3484,12 +3445,12 @@ const WatchlistPage: React.FC = () => {
                   summary={language === 'zh' ? '默认收起' : 'Collapsed by default'}
                   className="pt-4"
                 >
-                  <div className="space-y-3 text-xs leading-5 text-white/62">
+                  <div className="space-y-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                     <p>{formatWatchlistOrigin(activeItem.source, language)}</p>
                     {activeSavedNote ? (
                       <div data-testid="watchlist-saved-note" className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
-                        <p className="text-[11px] text-white/40">{language === 'zh' ? '保存备注' : 'Observation note'}</p>
-                        <p className="mt-1 whitespace-pre-wrap break-words text-white/72">{activeSavedNote}</p>
+                        <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '保存备注' : 'Observation note'}</p>
+                        <p className="mt-1 whitespace-pre-wrap break-words text-[color:var(--wolfy-text-secondary)]">{activeSavedNote}</p>
                       </div>
                     ) : null}
                     {activeScannerReason ? <p>{activeScannerReason}</p> : null}

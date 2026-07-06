@@ -36,6 +36,7 @@ import {
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import { formatDateTime } from '../utils/format';
 import { createConsumerDataHealthSummary } from '../utils/consumerDataQualityViewModel';
+import { buildResearchWorkspacePath } from '../utils/researchWorkspaceRoute';
 import {
   RoughBulletList,
   RoughKeyValueRows,
@@ -240,6 +241,37 @@ function candidateNextAction(item: ResearchRadarItem, locale: 'zh' | 'en') {
   )[0];
 }
 
+function candidateSymbol(item: ResearchRadarItem): string {
+  return String(item.ticker || item.symbol || '').trim().toUpperCase();
+}
+
+function candidateLimitations(item: ResearchRadarItem, locale: 'zh' | 'en'): string[] {
+  return safeResearchQueueList(
+    item.riskFlags?.length ? item.riskFlags : item.invalidationObservations,
+    locale,
+    locale === 'en' ? 'No primary limitation reported; keep the observation bounded.' : '未报告主要限制，继续保持观察边界。',
+  );
+}
+
+function candidateVerificationItems(item: ResearchRadarItem, locale: 'zh' | 'en'): string[] {
+  return safeResearchQueueList(
+    item.whatToVerify,
+    locale,
+    locale === 'en' ? 'Review structure evidence before extending the research loop.' : '继续研究前先复核结构证据。',
+  );
+}
+
+function candidateDriverScoreRows(item: ResearchRadarItem, locale: 'zh' | 'en') {
+  return Object.entries(item.driverScores ?? {})
+    .filter(([, value]) => typeof value === 'number' && Number.isFinite(value))
+    .sort(([, left], [, right]) => (right ?? 0) - (left ?? 0))
+    .map(([key, value]) => ({
+      key,
+      label: driverLabel(key, locale),
+      value: Math.max(0, Math.min(100, Number(value))),
+    }));
+}
+
 function buildEvidenceQualityDistribution(items: ResearchRadarItem[], fallbackQuality: string | null | undefined, locale: 'zh' | 'en') {
   if (!items.length) {
     return locale === 'en' ? 'No candidates' : '暂无候选';
@@ -260,16 +292,23 @@ function ResearchRadarQueueOverview({
   unifiedQueueSize,
   market,
   locale,
-  localize,
+  linkLocale,
 }: {
   data: ResearchRadarResponse;
   items: ResearchRadarItem[];
   unifiedQueueSize: number;
   market: string | undefined;
   locale: 'zh' | 'en';
-  localize: (path: string) => string;
+  linkLocale: 'zh' | 'en';
 }) {
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const queueQuality = data.aggregateSummary.queueQuality;
+  const selectedItem = useMemo(() => {
+    if (!items.length) return null;
+    return items.find((item, index) => `${candidateSymbol(item) || 'candidate'}-${index}` === selectedKey) ?? items[0];
+  }, [items, selectedKey]);
+  const selectedSymbol = selectedItem ? candidateSymbol(selectedItem) : null;
+  const selectedFactors = selectedItem ? candidateDriverScoreRows(selectedItem, locale) : [];
   const summaryItems = [
     {
       key: 'candidate-count',
@@ -308,52 +347,156 @@ function ResearchRadarQueueOverview({
             </TerminalChip>
           </div>
           {items.length ? (
-            <div className="space-y-3">
-              {items.map((item, index) => {
-                const symbol = item.ticker || item.symbol || '--';
-                return (
-                  <article
-                    key={`${symbol}-${index}`}
-                    data-testid={`research-radar-candidate-${symbol}`}
-                    className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 p-3"
-                  >
-                    <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="font-mono text-base font-semibold text-[color:var(--wolfy-text-primary)]">{symbol}</div>
-                        <p className="mt-1 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-                          {candidateReason(item, locale)}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-                        {item.priority ? <StatusBadge status={toneFor(item.priority)} label={consumerStatusValue(item.priority, locale)} size="sm" /> : null}
-                        <StatusBadge
-                          status={evidenceQualityTone(item, queueQuality)}
-                          label={evidenceQualityLabel(item, queueQuality, locale)}
-                          size="sm"
-                        />
-                      </div>
-                    </div>
-                    <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-                      <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
-                        <div className="text-[11px] text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Main limitation' : '主要限制'}</div>
-                        <div className="mt-1 text-sm leading-5 text-[color:var(--wolfy-text-secondary)]">{candidateMainGap(item, locale)}</div>
-                      </div>
-                      <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
-                        <div className="text-[11px] text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Next check' : '下一步检查'}</div>
-                        <div className="mt-1 text-sm leading-5 text-[color:var(--wolfy-text-secondary)]">{candidateNextAction(item, locale)}</div>
-                      </div>
-                      {item.ticker ? (
-                        <Link
-                          to={localize(`/stocks/${encodeURIComponent(item.ticker)}/structure-decision`)}
-                          className="inline-flex min-h-11 items-center justify-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 text-xs text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+            <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(24rem,0.9fr)]">
+              <div
+                data-testid="research-radar-candidate-ledger"
+                className="min-w-0 overflow-x-auto rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-panel)]"
+              >
+                <table className="min-w-[760px] w-full border-collapse text-left text-sm">
+                  <caption className="sr-only">
+                    {locale === 'en' ? 'Research Radar candidate queue' : '研究雷达候选队列'}
+                  </caption>
+                  <thead className="border-b border-[color:var(--wolfy-divider)] text-[11px] uppercase text-[color:var(--wolfy-text-muted)]">
+                    <tr>
+                      <th scope="col" className="px-3 py-2 font-medium">{locale === 'en' ? 'Symbol' : '标的'}</th>
+                      <th scope="col" className="px-3 py-2 font-medium">{locale === 'en' ? 'Why queued' : '入队原因'}</th>
+                      <th scope="col" className="px-3 py-2 font-medium">{locale === 'en' ? 'Evidence' : '证据强度'}</th>
+                      <th scope="col" className="px-3 py-2 font-medium">{locale === 'en' ? 'Limitation' : '限制'}</th>
+                      <th scope="col" className="px-3 py-2 font-medium">{locale === 'en' ? 'Next check' : '下一步检查'}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[color:var(--wolfy-divider)]">
+                    {items.map((item, index) => {
+                      const symbol = candidateSymbol(item) || '--';
+                      const rowKey = `${symbol || 'candidate'}-${index}`;
+                      const selected = selectedItem === item;
+                      return (
+                        <tr
+                          key={rowKey}
+                          data-testid={`research-radar-candidate-${symbol}`}
+                          className={selected ? 'bg-[var(--wolfy-surface-input)]' : 'bg-transparent'}
                         >
-                          {locale === 'en' ? 'Open detail' : '查看详情'}
-                        </Link>
-                      ) : null}
+                          <th scope="row" className="px-3 py-3 align-top">
+                            <button
+                              type="button"
+                              aria-pressed={selected}
+                              aria-label={locale === 'en' ? `Inspect ${symbol}` : `查看 ${symbol} 研究细节`}
+                              className="flex min-w-0 flex-col items-start rounded-md border border-transparent px-2 py-1 text-left transition hover:border-[color:var(--wolfy-border-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]"
+                              onClick={() => setSelectedKey(rowKey)}
+                            >
+                              <span className="font-mono text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{symbol}</span>
+                              {item.priority ? (
+                                <span className="mt-1">
+                                  <StatusBadge status={toneFor(item.priority)} label={consumerStatusValue(item.priority, locale)} size="sm" />
+                                </span>
+                              ) : null}
+                            </button>
+                          </th>
+                          <td className="max-w-[18rem] px-3 py-3 align-top text-[color:var(--wolfy-text-secondary)]">{candidateReason(item, locale)}</td>
+                          <td className="px-3 py-3 align-top">
+                            <StatusBadge
+                              status={evidenceQualityTone(item, queueQuality)}
+                              label={evidenceQualityLabel(item, queueQuality, locale)}
+                              size="sm"
+                            />
+                          </td>
+                          <td className="max-w-[16rem] px-3 py-3 align-top text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{candidateMainGap(item, locale)}</td>
+                          <td className="max-w-[16rem] px-3 py-3 align-top text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{candidateNextAction(item, locale)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {selectedItem && selectedSymbol ? (
+                <section
+                  data-testid="research-radar-selected-candidate-detail"
+                  aria-labelledby="research-radar-selected-candidate-title"
+                  className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-panel)] p-4"
+                >
+                  <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Selected research observation' : '已选研究观察'}</p>
+                      <h3 id="research-radar-selected-candidate-title" className="mt-1 font-mono text-lg font-semibold text-[color:var(--wolfy-text-primary)]">
+                        {selectedSymbol}
+                      </h3>
                     </div>
-                  </article>
-                );
-              })}
+                    <StatusBadge
+                      status={evidenceQualityTone(selectedItem, queueQuality)}
+                      label={evidenceQualityLabel(selectedItem, queueQuality, locale)}
+                      size="sm"
+                    />
+                  </div>
+
+                  <div className="mt-4 space-y-4">
+                    <section>
+                      <h4 className="text-xs font-semibold text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Current observation' : '当前研究观察'}</h4>
+                      <p className="mt-1 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{candidateReason(selectedItem, locale)}</p>
+                    </section>
+                    <section>
+                      <h4 className="text-xs font-semibold text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Factor contribution' : '因子贡献'}</h4>
+                      {selectedFactors.length ? (
+                        <div className="mt-2 space-y-2" data-testid="research-radar-factor-bars">
+                          {selectedFactors.map((factor) => (
+                            <div key={factor.key} className="grid min-w-0 grid-cols-[7.5rem_minmax(0,1fr)_3rem] items-center gap-2 text-xs">
+                              <span className="truncate text-[color:var(--wolfy-text-secondary)]">{factor.label}</span>
+                              <div
+                                className="h-2 overflow-hidden rounded-full bg-[var(--wolfy-surface-input)]"
+                                aria-label={`${factor.label} ${Math.round(factor.value)}`}
+                              >
+                                <div
+                                  className="h-full rounded-full bg-[var(--wolfy-accent)]"
+                                  style={{ width: `${factor.value}%` }}
+                                />
+                              </div>
+                              <span className="text-right font-mono text-[color:var(--wolfy-text-muted)]">{Math.round(factor.value)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+                          {locale === 'en' ? 'No factor dimensions are available for this candidate.' : '该候选暂无可展示的真实因子维度。'}
+                        </p>
+                      )}
+                    </section>
+                    <section>
+                      <h4 className="text-xs font-semibold text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Limitation / risk' : '限制 / 风险'}</h4>
+                      <RoughBulletList
+                        items={candidateLimitations(selectedItem, locale)}
+                        emptyText={locale === 'en' ? 'No limitation reported.' : '未报告限制。'}
+                      />
+                    </section>
+                    <section>
+                      <h4 className="text-xs font-semibold text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Data freshness' : '数据时效'}</h4>
+                      <p className="mt-1 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+                        {locale === 'en' ? 'Queue updated ' : '队列更新 '}
+                        <span className="font-mono">{formatDateTime(data.generatedAt, { locale: locale === 'en' ? 'en-US' : 'zh-CN' })}</span>
+                      </p>
+                    </section>
+                    <section>
+                      <h4 className="text-xs font-semibold text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Next research check' : '下一步研究检查'}</h4>
+                      <RoughBulletList
+                        items={candidateVerificationItems(selectedItem, locale)}
+                        emptyText={locale === 'en' ? 'No next check reported.' : '暂未报告下一步检查。'}
+                      />
+                    </section>
+                    <div className="flex min-w-0 flex-wrap gap-2 pt-1">
+                      <Link
+                        to={buildResearchWorkspacePath('stock-structure', linkLocale, { symbol: selectedSymbol, market })}
+                        className="inline-flex min-h-9 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]"
+                      >
+                        {locale === 'en' ? 'Open stock research' : '查看个股研究'}
+                      </Link>
+                      <Link
+                        to={buildResearchWorkspacePath('watchlist', linkLocale, { symbol: selectedSymbol, market })}
+                        className="inline-flex min-h-9 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]"
+                      >
+                        {locale === 'en' ? 'Open watchlist' : '查看观察列表'}
+                      </Link>
+                    </div>
+                  </div>
+                </section>
+              ) : null}
             </div>
           ) : (
             <ConsumerResearchEmptyState
@@ -1141,7 +1284,7 @@ export default function ResearchRadarPage() {
                   unifiedQueueSize={unifiedQueueSize}
                   market={market}
                   locale={locale}
-                  localize={localize}
+                  linkLocale={routeLocale || locale}
                 />
                 {hasMarketLevelFallback ? (
                   <div className="grid gap-3 p-3 md:grid-cols-2">
