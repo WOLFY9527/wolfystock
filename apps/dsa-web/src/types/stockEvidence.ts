@@ -1,3 +1,5 @@
+import type { ProductReadModel } from './productReadModel';
+
 export interface StockEvidenceFundamentalsSummary {
   marketCap?: number;
   peTtm?: number;
@@ -43,6 +45,7 @@ export interface SymbolEvidenceReadiness {
 export interface StockEvidenceItem {
   symbol: string;
   market?: string | null;
+  productReadModel?: ProductReadModel | null;
   quote?: Record<string, unknown> | null;
   technical?: Record<string, unknown> | null;
   fundamental?: Record<string, unknown> | null;

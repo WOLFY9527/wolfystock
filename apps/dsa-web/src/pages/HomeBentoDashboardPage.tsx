@@ -2856,6 +2856,7 @@ function LinearObservationPanel({
   dataQualityReport,
   fundamentalsSummary,
   symbolEvidenceReadiness,
+  productReadModel,
   peerCorrelationSnapshot,
   isFundamentalsLoading,
   isGuest,
@@ -2868,6 +2869,7 @@ function LinearObservationPanel({
   dataQualityReport?: DataQualityReport;
   fundamentalsSummary: StockEvidenceFundamentalsSummary | null;
   symbolEvidenceReadiness: SymbolEvidenceReadiness | null;
+  productReadModel: ProductReadModel | null;
   peerCorrelationSnapshot: StockPeerCorrelationSnapshot | null;
   isFundamentalsLoading: boolean;
   isGuest: boolean;
@@ -2932,6 +2934,7 @@ function LinearObservationPanel({
         locale={locale}
         summary={fundamentalsSummary}
         symbolEvidenceReadiness={symbolEvidenceReadiness}
+        productReadModel={productReadModel}
         isLoading={isFundamentalsLoading}
         onOpenFundamentals={onOpenFundamentals}
       />
@@ -3281,12 +3284,14 @@ function HomeFundamentalsSummaryBlock({
   locale,
   summary,
   symbolEvidenceReadiness,
+  productReadModel,
   isLoading,
   onOpenFundamentals,
 }: {
   locale: DashboardLocale;
   summary: StockEvidenceFundamentalsSummary | null;
   symbolEvidenceReadiness: SymbolEvidenceReadiness | null;
+  productReadModel: ProductReadModel | null;
   isLoading: boolean;
   onOpenFundamentals: () => void;
 }) {
@@ -3379,6 +3384,14 @@ function HomeFundamentalsSummaryBlock({
       )}
 
       <HomeSymbolEvidenceReadinessBlock locale={locale} readiness={symbolEvidenceReadiness} />
+
+      <ProductReadModelStatusStrip
+        model={productReadModel}
+        language={locale}
+        title={isEnglish ? 'Stock evidence readiness' : '个股证据就绪度'}
+        testId="home-stock-evidence-product-read-model"
+        className="mt-3"
+      />
 
       {hasObservableCoverage && !hasStableCoverage ? (
         <p className="mt-3 text-[11px] leading-5 text-white/46">{partialNoticeCopy}</p>
@@ -6423,6 +6436,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [homeChartContext, setHomeChartContext] = useState<HomeCandlestickChartContext | null>(null);
   const [stockEvidenceFundamentals, setStockEvidenceFundamentals] = useState<StockEvidenceFundamentalsSummary | null>(null);
   const [stockSymbolEvidenceReadiness, setStockSymbolEvidenceReadiness] = useState<SymbolEvidenceReadiness | null>(null);
+  const [stockEvidenceProductReadModel, setStockEvidenceProductReadModel] = useState<ProductReadModel | null>(null);
   const [stockPeerCorrelationSnapshot, setStockPeerCorrelationSnapshot] = useState<StockPeerCorrelationSnapshot | null>(null);
   const [isStockEvidenceLoading, setStockEvidenceLoading] = useState(false);
   const routeTaskId = searchParams.get('task_id') || searchParams.get('taskId') || null;
@@ -6710,6 +6724,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     if (isGuest || !activeEvidenceTicker) {
       setStockEvidenceFundamentals(null);
       setStockSymbolEvidenceReadiness(null);
+      setStockEvidenceProductReadModel(null);
       setStockEvidenceLoading(false);
       return;
     }
@@ -6718,6 +6733,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     setStockEvidenceLoading(true);
     setStockEvidenceFundamentals(null);
     setStockSymbolEvidenceReadiness(null);
+    setStockEvidenceProductReadModel(null);
 
     void stockEvidenceApi.getStockEvidence(activeEvidenceTicker)
       .then((response) => {
@@ -6728,11 +6744,13 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           || response.items[0];
         setStockEvidenceFundamentals(matchedItem?.stockEvidencePacket?.fundamentalsSummary ?? null);
         setStockSymbolEvidenceReadiness(matchedItem?.symbolEvidenceReadiness ?? null);
+        setStockEvidenceProductReadModel(matchedItem?.productReadModel ?? null);
       })
       .catch(() => {
         if (!isCancelled) {
           setStockEvidenceFundamentals(null);
           setStockSymbolEvidenceReadiness(null);
+          setStockEvidenceProductReadModel(null);
         }
       })
       .finally(() => {
@@ -7645,6 +7663,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               dataQualityReport={activeDataQualityReport}
               fundamentalsSummary={stockEvidenceFundamentals}
               symbolEvidenceReadiness={stockSymbolEvidenceReadiness}
+              productReadModel={stockEvidenceProductReadModel}
               peerCorrelationSnapshot={stockPeerCorrelationSnapshot}
               isFundamentalsLoading={isStockEvidenceLoading}
               isGuest={Boolean(isGuest)}

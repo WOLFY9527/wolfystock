@@ -279,6 +279,74 @@ def build_structure_decision_product_read_model(payload: Mapping[str, Any]) -> d
     }
 
 
+def build_stock_evidence_product_read_model(item: Mapping[str, Any]) -> dict[str, Any]:
+    """Project a stock evidence item into the shared product read-model contract."""
+
+    quote = _mapping(item.get("quote"))
+    technical = _mapping(item.get("technical"))
+    fundamental = _mapping(item.get("fundamental"))
+    news = _mapping(item.get("news"))
+    families = {
+        "quote": quote,
+        "technical": technical,
+        "fundamental": fundamental,
+        "news": news,
+    }
+    child_states = {
+        name: _stock_evidence_family_state(payload)
+        for name, payload in families.items()
+    }
+    aggregate = aggregate_product_readiness(
+        surface="Stock Evidence",
+        children=[
+            {"name": name, "state": state, "critical": True}
+            for name, state in child_states.items()
+        ],
+    )
+    freshness_state, freshness_as_of = _stock_evidence_freshness(families)
+    state = aggregate["state"]
+    precise_technical_readable = child_states.get("technical") in {"available", "stale", "partial", "degraded"}
+    quote_readable = child_states.get("quote") in {"available", "stale", "partial", "degraded"}
+    if (
+        freshness_state in {"stale", "partial", "degraded"}
+        and (precise_technical_readable or quote_readable)
+    ):
+        state = freshness_state
+    elif state == "available" and freshness_state != "available":
+        state = freshness_state
+    blockers = [
+        name
+        for name, state_value in child_states.items()
+        if state_value in _CRITICAL_BLOCKING_STATES
+    ]
+    bounded_provenance = {
+        "sourceClass": "stock_evidence",
+        "asOf": freshness_as_of,
+        "freshness": freshness_state,
+        "quality": _stock_evidence_quality_state(child_states.values()),
+    }
+    return {
+        **aggregate,
+        "surface": "Stock Evidence",
+        "state": state,
+        "ready": state == "available" and not blockers,
+        "criticalChildStates": child_states,
+        "freshness": {
+            "state": freshness_state,
+            "asOf": freshness_as_of,
+        },
+        "provenance": bounded_provenance,
+        "evidence": {
+            "criticalFamilies": list(child_states.keys()),
+            "blockers": blockers,
+            "preciseValuesMayBeReadableWhenStale": True,
+        },
+        "observationOnly": True,
+        "decisionGrade": False,
+        "blockingChildren": blockers,
+    }
+
+
 def build_backtest_readiness_read_model(readiness: Mapping[str, Any]) -> dict[str, Any]:
     status = normalize_product_state(readiness.get("status") or readiness.get("overallState"))
     explicit_executable = "executable" in readiness
@@ -286,6 +354,11 @@ def build_backtest_readiness_read_model(readiness: Mapping[str, Any]) -> dict[st
     required_bars = _safe_int(readiness.get("requiredBarCount") or readiness.get("requiredBars"))
     available_bars = _safe_int(readiness.get("availableBarCount") or readiness.get("usableBars"))
     missing_classes = [str(item) for item in readiness.get("missingDataClasses") or readiness.get("missingRequirements") or []]
+    prepared_count = _safe_int(readiness.get("preparedCount") or readiness.get("prepared_count"))
+    initializing_samples = bool(readiness.get("samplesInitializing")) or (
+        prepared_count <= 0
+        and normalize_product_state(readiness.get("sampleReadinessState")) == "pending"
+    )
     coverage_state = "available"
     if required_bars and available_bars < required_bars:
         coverage_state = "insufficient"
@@ -296,6 +369,10 @@ def build_backtest_readiness_read_model(readiness: Mapping[str, Any]) -> dict[st
     if raw_freshness is None and status == "available":
         freshness_state = "available"
     quality_state = "available" if status == "available" and executable else "degraded"
+    if initializing_samples:
+        quality_state = "pending"
+        if "samples_initializing" not in missing_classes:
+            missing_classes.insert(0, "samples_initializing")
     aggregate = aggregate_product_readiness(
         surface="Backtest readiness",
         children=[
@@ -305,11 +382,13 @@ def build_backtest_readiness_read_model(readiness: Mapping[str, Any]) -> dict[st
         ],
     )
     state = status if status != "available" else aggregate["state"]
+    if initializing_samples and coverage_state == "available":
+        state = "pending"
     return {
         "contractVersion": PRODUCT_READ_MODEL_CONTRACT_VERSION,
         "surface": "Backtest readiness",
         "state": state,
-        "ready": executable and state == "available" and aggregate["ready"],
+        "ready": executable and state == "available" and aggregate["ready"] and not initializing_samples,
         "readOnly": True,
         "backtestExecuted": False,
         "coverage": {
@@ -330,6 +409,10 @@ def build_backtest_readiness_read_model(readiness: Mapping[str, Any]) -> dict[st
             "asOf": _clean_public_text(readiness.get("asOf")),
             "freshness": freshness_state,
             "quality": quality_state,
+        },
+        "evidence": {
+            "preparedCount": prepared_count,
+            "transition": "initializing" if initializing_samples else "stable",
         },
         "blockingChildren": aggregate["blockingChildren"],
     }
@@ -373,6 +456,68 @@ def _most_severe(states: Sequence[str] | Any) -> str:
         if candidate in observed:
             return candidate
     return "no_evidence"
+
+
+def _stock_evidence_family_state(payload: Mapping[str, Any]) -> str:
+    if not payload:
+        return "no_evidence"
+    state = normalize_product_state(payload.get("status") or payload.get("state"))
+    if bool(payload.get("isUnavailable")):
+        return "unavailable"
+    if state == "available" and bool(payload.get("missingFields")):
+        state = "partial"
+    if state == "available" and bool(payload.get("isPartial")):
+        state = "partial"
+    freshness_state = normalize_product_state(payload.get("freshness") or payload.get("freshnessState"))
+    if bool(payload.get("isStale")) or freshness_state == "stale":
+        return "stale"
+    if bool(payload.get("isFallback")) and state == "available":
+        return "partial"
+    if state == "no_evidence" and _safe_text(payload.get("status")).lower() == "unknown":
+        return "unavailable" if bool(payload.get("isUnavailable")) else "no_evidence"
+    return state
+
+
+def _stock_evidence_freshness(families: Mapping[str, Mapping[str, Any]]) -> tuple[str, str | None]:
+    states: list[str] = []
+    readable_states: list[str] = []
+    as_of_values: list[str] = []
+    for payload in families.values():
+        if not payload:
+            continue
+        if payload.get("asOf") is not None:
+            cleaned = _clean_public_text(payload.get("asOf"))
+            if cleaned:
+                as_of_values.append(cleaned)
+        elif payload.get("updatedAt") is not None:
+            cleaned = _clean_public_text(payload.get("updatedAt"))
+            if cleaned:
+                as_of_values.append(cleaned)
+        if bool(payload.get("isUnavailable")):
+            states.append("unavailable")
+            continue
+        if bool(payload.get("isStale")):
+            states.append("stale")
+            readable_states.append("stale")
+            continue
+        if bool(payload.get("isPartial")):
+            states.append("partial")
+            readable_states.append("partial")
+            continue
+        state = normalize_product_state(payload.get("freshness") or payload.get("freshnessState") or payload.get("status"))
+        states.append(state)
+        if state not in _CRITICAL_BLOCKING_STATES:
+            readable_states.append(state)
+    freshness_state = _most_severe(readable_states or states) if states else "no_evidence"
+    return freshness_state, min(as_of_values) if as_of_values else None
+
+
+def _stock_evidence_quality_state(states: Sequence[str]) -> str:
+    if any(state in _CRITICAL_BLOCKING_STATES for state in states):
+        return "partial"
+    if any(state in _DEGRADED_STATES for state in states):
+        return "partial"
+    return "available"
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -423,6 +568,7 @@ __all__ = [
     "PRODUCT_READ_STATES",
     "aggregate_product_readiness",
     "build_backtest_readiness_read_model",
+    "build_stock_evidence_product_read_model",
     "build_structure_decision_product_read_model",
     "normalize_product_state",
     "product_read_model_from_historical_foundation",

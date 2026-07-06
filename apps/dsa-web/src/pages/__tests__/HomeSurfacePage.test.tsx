@@ -616,7 +616,7 @@ describe('HomeSurfacePage', () => {
       liquidityRisk: { summary: 'Risk checks pending.', volatilityTone: 'unknown', fundingStress: 'unknown', dollarRatePressure: 'unknown', status: 'partial' },
       sectorThemeRotation: { leadingThemes: [], laggingThemes: [], diffusion: 'unknown', summary: 'Rotation unavailable.', status: 'partial' },
       researchQueue: { status: 'partial', items: [] },
-      dataQuality: { state: 'partial', label: 'Partial', summary: 'Partial', sections: { moneyFlow: 'no_evidence' } },
+      dataQuality: { state: 'ready', label: 'Ready', summary: 'Legacy ready', sections: { moneyFlow: 'ready' } },
       productReadModel: {
         contractVersion: 'product_read_model_v1',
         surface: 'Dashboard',
@@ -663,6 +663,8 @@ describe('HomeSurfacePage', () => {
     expect(guestMarketPreviewStrip).toHaveTextContent('当前市场观察');
     expect(guestMarketPreviewStrip).toHaveTextContent('公开市场观察已准备');
     expect(guestMarketPreviewStrip).toHaveTextContent('市场广度改善');
+    expect(guestMarketPreviewStrip).toHaveTextContent('主要宽度与资金线索继续支持观察。');
+    expect(guestMarketPreviewStrip).toHaveTextContent('当前摘要只用于市场观察，不构成买卖建议。');
     expect(screen.getByTestId('guest-home-registration-link')).toHaveAttribute('href', '/register?redirect=%2F');
     expect(guestTrustStrip).toHaveClass('rounded-[12px]');
     expect(guestTrustStrip).toHaveTextContent('安全下一步');
@@ -1126,6 +1128,20 @@ describe('HomeSurfacePage', () => {
       items: [
         {
           symbol: 'ORCL',
+          productReadModel: {
+            contractVersion: 'product_read_model_v1',
+            surface: 'Stock Evidence',
+            state: 'stale',
+            ready: false,
+            blockingChildren: [],
+            freshness: { state: 'stale', asOf: '2026-06-01' },
+            provenance: {
+              sourceClass: 'stock_evidence',
+              asOf: '2026-06-01',
+              freshness: 'stale',
+              quality: 'partial',
+            },
+          },
           stockEvidencePacket: {
             fundamentalsSummary: {
               marketCap: 512_300_000_000,
@@ -1156,6 +1172,8 @@ describe('HomeSurfacePage', () => {
     expect(fundamentalsSummary).toHaveTextContent('待补充 4 项');
     expect(fundamentalsSummary).toHaveTextContent('TTM');
     expect(fundamentalsSummary).toHaveTextContent('部分更新');
+    expect(fundamentalsSummary).toHaveTextContent('新鲜度：已过期 · 截至 2026-06-01');
+    expect(fundamentalsSummary).toHaveTextContent('证据摘要 · 已过期 · 部分可用 · 截至 2026-06-01');
     expect(fundamentalsSummary).toHaveTextContent('当前先展示较稳定字段，其余内容仍作为待补背景。');
     expect(within(fundamentalsSummary).getByTestId('home-stock-fundamentals-metric-market-cap')).toHaveTextContent('512.3B');
     expect(within(fundamentalsSummary).queryByTestId('home-symbol-evidence-readiness')).not.toBeInTheDocument();
@@ -2481,7 +2499,6 @@ describe('HomeSurfacePage', () => {
     expect(quickActions).toHaveTextContent('结构面板');
     expect(quickActions).toHaveTextContent('研究雷达');
     expect(quickActions).toHaveTextContent('市场总览');
-    expect(quickActions).toHaveTextContent('情景实验室');
     expect(panel).toHaveTextContent('证据不足');
     expect(panel).toHaveTextContent('研究包证据不足，当前不能视为完整研究结论。');
     expect(panel).toHaveTextContent('仍可用');
@@ -2489,7 +2506,6 @@ describe('HomeSurfacePage', () => {
     expect(panel).toHaveTextContent('结构面板');
     expect(panel).toHaveTextContent('研究雷达');
     expect(panel).toHaveTextContent('市场总览');
-    expect(panel).toHaveTextContent('情景实验室');
     expect(panel).toHaveTextContent('待补证据');
     expect(panel).toHaveTextContent('行情与 K 线');
     expect(panel).toHaveTextContent('基本面');
@@ -4816,10 +4832,9 @@ describe('HomeSurfacePage', () => {
     expect(resultCard).toHaveTextContent('Netflix completion replaced neutral cards.');
     const boundary = screen.getByTestId('observation-only-boundary');
     expect(boundary).toHaveAttribute('data-observation-boundary-surface', 'home-report');
-    expect(boundary).toHaveTextContent('observation-only');
-    expect(boundary).toHaveTextContent('证据摘要');
-    expect(boundary).toHaveTextContent('不构成交易建议');
-    expect(boundary).toHaveTextContent('不提供买入、卖出、持有指令');
+    expect(boundary).toHaveTextContent('研究边界摘要');
+    expect(boundary).toHaveTextContent('结论仍受当前时效与覆盖限制');
+    expect(boundary.textContent || '').not.toMatch(/observation-only|交易建议|买入|卖出|持有/);
     expect(scrollIntoView).not.toHaveBeenCalled();
   });
 

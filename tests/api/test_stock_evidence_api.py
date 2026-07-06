@@ -175,6 +175,79 @@ def test_stock_evidence_endpoint_serializes_symbol_evidence_readiness(
     assert readiness["noAdviceDisclosure"] == "仅供研究观察，不构成个性化行动指令。"
 
 
+def test_stock_evidence_endpoint_projects_product_read_model_for_stale_precise_technicals(
+    monkeypatch,
+) -> None:
+    payload = _base_payload()
+    payload["items"][0]["quote"] = {
+        "status": "available",
+        "freshness": "stale",
+        "asOf": "2026-06-01",
+        "isStale": True,
+        "price": 192.34,
+    }
+    payload["items"][0]["technical"] = {
+        "status": "available",
+        "freshness": "stale",
+        "asOf": "2026-06-01",
+        "isStale": True,
+        "rsi14": 62.5,
+        "ma20": 188.4,
+        "ma50": 180.2,
+        "missingFields": [],
+    }
+    payload["items"][0]["fundamental"] = {
+        "status": "partial",
+        "freshness": "unknown",
+        "missingFields": ["fcfTtm"],
+    }
+    payload["items"][0]["news"] = {
+        "status": "unknown",
+        "isUnavailable": True,
+    }
+    fake_service = _FakeStockEvidenceService(payload)
+    monkeypatch.setattr(
+        stocks_endpoint,
+        "StockEvidenceService",
+        lambda: fake_service,
+        raising=False,
+    )
+
+    response = _client().get("/api/v1/stocks/AAPL/evidence")
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["technical"]["rsi14"] == 62.5
+    assert item["technical"]["ma20"] == 188.4
+    assert item["technical"]["ma50"] == 180.2
+    read_model = item["productReadModel"]
+    assert read_model["contractVersion"] == "product_read_model_v1"
+    assert read_model["surface"] == "Stock Evidence"
+    assert read_model["state"] == "stale"
+    assert read_model["ready"] is False
+    assert read_model["criticalChildStates"] == {
+        "quote": "stale",
+        "technical": "stale",
+        "fundamental": "partial",
+        "news": "unavailable",
+    }
+    assert read_model["freshness"]["state"] == "stale"
+    assert read_model["freshness"]["asOf"] == "2026-06-01"
+    assert read_model["provenance"]["sourceClass"] == "stock_evidence"
+    assert read_model["provenance"]["asOf"] == "2026-06-01"
+    assert read_model["evidence"]["blockers"] == ["news"]
+    _assert_no_forbidden_keys(
+        read_model,
+        (
+            "providerId",
+            "providerName",
+            "rawPayload",
+            "records",
+            "sourceConfidence",
+        ),
+    )
+
+
 def test_stock_evidence_endpoint_does_not_fabricate_missing_fundamentals_summary(
     monkeypatch,
 ) -> None:
@@ -218,6 +291,7 @@ def test_stock_evidence_openapi_locks_item_metadata_schema() -> None:
 
     item_schema = schema["StockEvidenceItemResponse"]["properties"]
     assert "symbolEvidenceReadiness" in item_schema
+    assert item_schema["productReadModel"]["type"] == "object"
 
     for block_key in ("quote", "technical", "fundamental", "news", "secFilingEvidence"):
         metadata_schema = next(

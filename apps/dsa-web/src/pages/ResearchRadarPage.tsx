@@ -391,6 +391,22 @@ function buildResearchRadarDataHealthSummary({
   const stockEvidenceQuality = (unifiedQueue?.evidenceGaps.length ?? data?.evidenceGaps.length ?? 0) > 0
     ? { status: 'partial', isPartial: true }
     : dataHealthQualityFromStatus(data?.aggregateSummary.queueQuality || unifiedQueue?.dataQuality.state || data?.dataQuality?.status);
+  const fallbackCards = (data?.marketLevelFallback?.evidenceCards ?? [])
+    .filter((card) => card.observationOnly !== false && card.decisionGrade !== true);
+  const notesForCategory = (category: 'marketBreadth' | 'stockEvidence' | 'researchQueueFreshness'): string[] => {
+    const patterns: Record<typeof category, RegExp[]> = {
+      marketBreadth: [/breadth/i],
+      stockEvidence: [/growth|proxy/i],
+      researchQueueFreshness: [/freshness|stale|recency/i],
+    };
+    return consumerPresentationList(
+      fallbackCards
+        .filter((card) => patterns[category].some((pattern) => pattern.test(`${card.cardId || ''} ${card.title || ''} ${card.headline || ''}`)))
+        .map((card) => card.headline),
+      locale,
+      '',
+    ).filter((note) => note.trim().length > 0);
+  };
 
   return createConsumerDataHealthSummary({
     locale,
@@ -398,14 +414,17 @@ function buildResearchRadarDataHealthSummary({
       {
         category: 'marketBreadth',
         quality: dataHealthQualityFromStatus(data?.dataQuality?.status),
+        supportingNotes: notesForCategory('marketBreadth'),
       },
       {
         category: 'stockEvidence',
         quality: stockEvidenceQuality,
+        supportingNotes: notesForCategory('stockEvidence'),
       },
       {
         category: 'researchQueueFreshness',
         quality: queueFreshnessQuality,
+        supportingNotes: notesForCategory('researchQueueFreshness'),
       },
     ],
   });

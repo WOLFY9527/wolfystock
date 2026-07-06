@@ -599,7 +599,11 @@ export default function ScenarioLabPage() {
       ], locale)[0] ?? (locale === 'en' ? 'Continue evidence review' : '继续补充确认线索')
     );
   const readinessLabels = consumerPresentationList(
-    scenarioResult?.readinessLabels,
+    [
+      scenarioResult?.baselineReadiness?.status,
+      scenarioResult?.baselineReadiness?.baselineSnapshot?.state,
+      ...(scenarioResult?.readinessLabels ?? []),
+    ],
     locale,
     locale === 'en' ? 'Evidence boundary active' : '证据边界已生效',
   );

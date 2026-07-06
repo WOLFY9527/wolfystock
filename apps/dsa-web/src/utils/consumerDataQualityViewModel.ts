@@ -59,6 +59,7 @@ export type ConsumerDataHealthLocale = 'zh' | 'en';
 export interface ConsumerDataHealthSummaryInputItem {
   category: ConsumerDataHealthCategory;
   quality?: ConsumerDataQualityInput | null;
+  supportingNotes?: string[];
 }
 
 export interface ConsumerDataHealthSummaryInput {
@@ -74,6 +75,7 @@ export interface ConsumerDataHealthSummaryItem {
   whyItMatters: string;
   confidenceEffect: string;
   nextResearchStep: string;
+  supportingNotes?: string[];
 }
 
 export interface ConsumerDataHealthSummary {
@@ -562,6 +564,7 @@ export function createConsumerDataHealthSummary(
       whyItMatters: categoryCopy.whyItMatters,
       confidenceEffect: DATA_HEALTH_CONFIDENCE_EFFECT[state][locale],
       nextResearchStep: categoryCopy.nextStep,
+      supportingNotes: item.supportingNotes?.filter((note) => note.trim().length > 0),
     };
   });
 

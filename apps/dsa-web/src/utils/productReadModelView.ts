@@ -108,6 +108,7 @@ export function productReadSourceClassLabel(sourceClass: string | null | undefin
   const labels: Record<string, { zh: string; en: string }> = {
     historical_market_data: { zh: '历史行情证据', en: 'Historical evidence' },
     dashboard_read_models: { zh: '市场读模型', en: 'Market read model' },
+    stock_evidence: { zh: '证据摘要', en: 'Evidence summary' },
     stock_research_packet: { zh: '个股研究包', en: 'Stock research packet' },
     structure_decision: { zh: '结构观察读模型', en: 'Structure read model' },
   };

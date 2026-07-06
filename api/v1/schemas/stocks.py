@@ -514,6 +514,11 @@ class StockEvidenceItemResponse(BaseModel):
         alias="stockEvidencePacket",
         description="现有 stock evidence packet 投影",
     )
+    product_read_model: Dict[str, Any] = Field(
+        default_factory=dict,
+        alias="productReadModel",
+        description="统一产品读模型状态、证据阻塞、新鲜度、as-of 与来源摘要",
+    )
     symbol_evidence_readiness: Optional[SymbolEvidenceReadinessResponse] = Field(
         None,
         alias="symbolEvidenceReadiness",

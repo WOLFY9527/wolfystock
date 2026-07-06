@@ -1031,7 +1031,32 @@ describe('research IA pages', () => {
         candidateGenerationExecuted: false,
         regime: { label: 'neutral', status: 'partial' },
         productSummary: 'Market-level evidence is secondary when the candidate queue has rows.',
-        evidenceCards: [],
+        evidenceCards: [
+          {
+            cardId: 'growth_risk_proxy',
+            title: 'Growth Risk Proxy',
+            status: 'unavailable',
+            severity: 'warning',
+            headline: 'Growth proxy evidence is unavailable.',
+            reasons: ['growth proxy missing'],
+          },
+          {
+            cardId: 'breadth',
+            title: 'Breadth',
+            status: 'unavailable',
+            severity: 'warning',
+            headline: 'Breadth evidence is unavailable.',
+            reasons: ['breadth missing'],
+          },
+          {
+            cardId: 'research_queue_freshness',
+            title: 'Freshness',
+            status: 'stale',
+            severity: 'warning',
+            headline: 'Freshness is constrained for this observation.',
+            reasons: ['freshness constrained'],
+          },
+        ],
         missingDataFamilies: [],
         blockedProductSurfaces: [],
         nextOperatorAction: 'Use candidate rows first, then review market context if needed.',
@@ -1197,6 +1222,12 @@ describe('research IA pages', () => {
     expect(healthSummary).toHaveTextContent('部分可用');
     expect(healthSummary).toHaveTextContent('已延迟');
     expect(healthSummary).toHaveTextContent('队列时效影响后续复核顺序。');
+    expect(healthSummary).not.toHaveTextContent('Growth proxy evidence is unavailable.');
+    expect(healthSummary).not.toHaveTextContent('Breadth evidence is unavailable.');
+    expect(healthSummary).not.toHaveTextContent('Freshness is constrained for this observation.');
+    expect(healthSummary).toHaveTextContent('成长风险观察证据暂不可用。');
+    expect(healthSummary).toHaveTextContent('市场广度证据暂不可用。');
+    expect(healthSummary).toHaveTextContent('数据新鲜度受限，当前仅供观察。');
     expect(healthSummary.textContent || '').not.toMatch(/sourceRefs|reasonCodes|provider_timeout|optional_news_timeout|benchmark_missing|price_history_stale|provider_runtime_trace|queueItemId|request[_\s-]?id|trace[_\s-]?id|raw|debug|runtime|cache|schemaVersion/i);
     expect(findConsumerRawLeakage(healthSummary.textContent || '')).toEqual([]);
     expect(healthSummary.textContent || '').not.toMatch(/买入|卖出|持有|推荐|目标价|止损|仓位建议|buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing/i);

@@ -25,6 +25,26 @@ describe('stockEvidenceApi', () => {
           {
             symbol: 'AAPL',
             market: 'US',
+            product_read_model: {
+              contract_version: 'product_read_model_v1',
+              surface: 'Stock Evidence',
+              state: 'stale',
+              ready: false,
+              freshness: {
+                state: 'stale',
+                as_of: '2026-06-01',
+              },
+              provenance: {
+                source_class: 'stock_evidence',
+                as_of: '2026-06-01',
+                freshness: 'stale',
+                quality: 'partial',
+              },
+              evidence: {
+                blockers: ['news'],
+              },
+              raw_provider_payload: { redacted_id: 'must-not-emit-prm' },
+            },
             stock_evidence_packet: {
               schema_version: 'stock_evidence_packet_v1',
               not_investment_advice: true,
@@ -99,6 +119,26 @@ describe('stockEvidenceApi', () => {
     expect(packet?.schemaVersion).toBe('stock_evidence_packet_v1');
     expect(packet?.notInvestmentAdvice).toBe(true);
     expect(packet?.observationOnly).toBe(true);
+    expect(payload.items[0].productReadModel).toMatchObject({
+      contractVersion: 'product_read_model_v1',
+      surface: 'Stock Evidence',
+      state: 'stale',
+      ready: false,
+      freshness: {
+        state: 'stale',
+        asOf: '2026-06-01',
+      },
+      provenance: {
+        sourceClass: 'stock_evidence',
+        asOf: '2026-06-01',
+        freshness: 'stale',
+        quality: 'partial',
+      },
+      evidence: {
+        blockers: ['news'],
+      },
+    });
+    expect(JSON.stringify(payload.items[0].productReadModel)).not.toMatch(/rawProviderPayload|must-not-emit-prm/i);
     expect(summary).toEqual({
       marketCap: 2800000000000,
       peTtm: 28.5,

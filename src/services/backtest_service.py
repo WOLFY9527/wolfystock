@@ -520,7 +520,14 @@ class BacktestService:
                 sample_reasons=sample_reasons,
                 ohlcv_readiness=ohlcv_readiness,
             ),
-            "productReadModel": build_backtest_readiness_read_model(ohlcv_readiness),
+            "productReadModel": build_backtest_readiness_read_model(
+                {
+                    **ohlcv_readiness,
+                    "preparedCount": len(rows),
+                    "sampleReadinessState": sample_state,
+                    "samplesInitializing": len(rows) <= 0 and sample_state == "no_samples",
+                }
+            ),
             "historicalOhlcvReadiness": ohlcv_readiness,
         }
 
@@ -943,7 +950,13 @@ class BacktestService:
                 calculation_status="engine_disabled",
                 sample_status="engine_disabled",
             ),
-            "productReadModel": build_backtest_readiness_read_model(readiness),
+            "productReadModel": build_backtest_readiness_read_model(
+                {
+                    **readiness,
+                    "preparedCount": 0,
+                    "sampleReadinessState": "engine_disabled",
+                }
+            ),
             "historicalOhlcvReadiness": readiness,
         }
 
@@ -1425,7 +1438,14 @@ class BacktestService:
                 sample_reasons=reasons,
                 ohlcv_readiness=readiness,
             ),
-            "productReadModel": build_backtest_readiness_read_model(readiness),
+            "productReadModel": build_backtest_readiness_read_model(
+                {
+                    **readiness,
+                    "preparedCount": len(rows),
+                    "sampleReadinessState": state,
+                    "samplesInitializing": len(rows) <= 0 and state == "no_samples",
+                }
+            ),
             "probePolicy": probe_policy,
             "writePolicy": write_policy,
             "historicalOhlcvReadiness": readiness,
