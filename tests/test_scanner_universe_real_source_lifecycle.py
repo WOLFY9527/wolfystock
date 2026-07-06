@@ -15,6 +15,7 @@ from scripts.scanner_universe_lifecycle_import import main as scanner_universe_i
 from src.services.scanner_universe_lifecycle import (
     ScannerUniverseLifecycleStore,
     activate_scanner_universe_from_source,
+    build_scanner_universe_activation_qualification_pack,
     build_scanner_universe_lifecycle_readiness,
     build_scanner_universe_source_inventory,
     dry_run_scanner_universe_source,
@@ -154,7 +155,10 @@ def test_dry_run_diff_does_not_activate_and_explicit_activation_preserves_proven
     assert after["membershipReadiness"]["usable"] is True
     assert after["marketDataReadiness"]["status"] == "not_evaluated"
     assert after["candidateGenerationReadiness"]["status"] == "blocked"
-    assert after["downstreamImpact"]["blockedProducts"] == []
+    assert after["downstreamImpact"]["blockedProducts"] == ["Scanner", "Research Radar", "Backtest", "Market Overview"]
+    assert after["downstreamReadiness"]["consumers"]["Scanner"]["finalProductState"] == "blocked"
+    assert after["downstreamReadiness"]["consumers"]["Scanner"]["membershipState"] == "ready"
+    assert "market_data_readiness_not_evaluated" in after["downstreamReadiness"]["consumers"]["Scanner"]["blockingReasons"]
 
 
 def test_suspicious_shrink_is_blocked_but_bounded_diff_is_accepted(tmp_path: Path) -> None:
@@ -290,3 +294,154 @@ def test_cli_supports_inspect_dry_run_and_explicit_activate_without_network(tmp_
     assert active_payload["readiness"]["usable"] is True
     assert active_payload["scannerRefreshExecuted"] is False
     assert active_payload["providerCallsEnabled"] is False
+
+
+def test_repo_local_stock_index_discovery_blocks_activation_without_policy_approval(tmp_path: Path) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    store = ScannerUniverseLifecycleStore(root=tmp_path / "store")
+
+    pack = build_scanner_universe_activation_qualification_pack(
+        market="cn",
+        store=store,
+        repo_root=repo_root,
+        now=datetime(2026, 7, 6, tzinfo=timezone.utc),
+        attempt_activation=True,
+    )
+
+    candidates = pack["sourceArtifactDiscoveryMatrix"]["candidates"]
+    stock_index = next(
+        item
+        for item in candidates
+        if item["sourceId"] == "repo:frontend_stock_index:CN"
+    )
+    assert stock_index["artifactPath"] == "apps/dsa-web/public/stocks.index.json"
+    assert stock_index["sourceClass"] == "repository_local_frontend_stock_index"
+    assert stock_index["sourcePolicyState"] == "unknown_policy"
+    assert stock_index["symbolCount"] >= 300
+    assert stock_index["eligibleForActivation"] is False
+    assert "source_policy_unknown" in stock_index["blockingReasons"]
+
+    decision = pack["activationQualificationDecision"]
+    assert decision["status"] == "blocked_policy_unknown"
+    assert decision["activationEligible"] is False
+    assert decision["dryRunEligible"] is True
+    assert decision["selectedSourceId"] == "repo:frontend_stock_index:CN"
+
+    dry_run = pack["realDryRunProof"]
+    assert dry_run["status"] == "rejected"
+    assert dry_run["activeVersionChanged"] is False
+    assert dry_run["rawCount"] == stock_index["rawSymbolCount"]
+    assert dry_run["normalizedCount"] == stock_index["symbolCount"]
+    assert dry_run["rejectedCount"] > 0
+    assert dry_run["normalizationRejectionRate"] == round(dry_run["rejectedCount"] / dry_run["rawCount"] * 100, 4)
+    assert "source_policy_unknown" in dry_run["blockingReasons"]
+    assert "source_metadata_missing" in dry_run["blockingReasons"]
+
+    activation = pack["realActivationProof"]
+    assert activation["status"] == "rejected"
+    assert activation["beforeActiveVersion"] is None
+    assert activation["afterActiveVersion"] is None
+    assert "source_policy_unknown" in activation["blockingReasons"]
+    assert store.load_active("cn") is None
+    assert store.load_rejected("cn")["primaryReason"] == "source_as_of_missing"
+    assert pack["productionSafetyProof"]["dryRunNeverWritesActiveState"] is True
+    assert pack["productionSafetyProof"]["explicitActivationRequired"] is True
+
+
+def test_operator_supplied_source_qualification_pack_activates_isolated_membership_only(tmp_path: Path) -> None:
+    store = ScannerUniverseLifecycleStore(root=tmp_path / "store")
+    source_path = _write_json(
+        tmp_path / "operator-us-source.json",
+        _source(
+            market="us",
+            source_policy_state="operator_supplied",
+            source_id="operator/us-tier1-membership",
+            source_class="operator_supplied_membership_json",
+            symbols=["aapl", "MSFT", "NVDA", "aapl"],
+        ),
+    )
+
+    pack = build_scanner_universe_activation_qualification_pack(
+        market="us",
+        source_path=source_path,
+        store=store,
+        minimum_coverage_threshold=3,
+        now=datetime(2026, 7, 6, tzinfo=timezone.utc),
+        attempt_activation=True,
+    )
+
+    decision = pack["activationQualificationDecision"]
+    assert decision["status"] == "qualified_for_activation"
+    assert decision["activationEligible"] is True
+    assert decision["selectedSourceId"] == "operator/us-tier1-membership"
+
+    dry_run = pack["realDryRunProof"]
+    assert dry_run["status"] == "accepted"
+    assert dry_run["rawCount"] == 4
+    assert dry_run["normalizedCount"] == 3
+    assert dry_run["duplicateCount"] == 1
+    assert dry_run["rejectedCount"] == 0
+    assert dry_run["normalizationRejectionRate"] == 0.0
+    assert dry_run["addedCount"] == 3
+    assert dry_run["removedCount"] == 0
+    assert dry_run["activeVersionChanged"] is False
+
+    activation = pack["realActivationProof"]
+    assert activation["status"] == "activated"
+    assert activation["beforeActiveVersion"] is None
+    assert activation["candidateVersion"] == dry_run["candidateUniverseVersion"]
+    assert activation["activatedVersion"] == dry_run["candidateUniverseVersion"]
+    assert activation["activeSourceIdentity"] == "operator/us-tier1-membership@2026-07-05"
+    assert activation["activePolicyState"] == "operator_supplied"
+    assert activation["activeSymbolCount"] == 3
+    assert activation["membershipUsable"] is True
+    assert activation["versionDeterminism"]["sameSourceSameVersion"] is True
+
+    downstream = pack["downstreamReadinessSeparation"]["consumers"]
+    assert downstream["Scanner"]["membershipState"] == "ready"
+    assert downstream["Scanner"]["marketDataState"] == "not_evaluated"
+    assert downstream["Scanner"]["candidateGenerationState"] == "blocked"
+    assert downstream["Scanner"]["finalProductState"] == "blocked"
+    assert "market_data_readiness_not_evaluated" in downstream["Scanner"]["blockingReasons"]
+    assert downstream["Research Radar"]["finalProductState"] == "blocked"
+    assert "scanner_candidates_unavailable" in downstream["Research Radar"]["blockingReasons"]
+    assert downstream["Backtest preparation"]["historicalCoverageState"] == "not_evaluated"
+    assert downstream["Market Overview"]["finalProductState"] == "blocked"
+
+    coverage = {row["market"]: row for row in pack["coverageProof"]["rows"]}
+    assert coverage["US"]["candidateSymbolCount"] == 3
+    assert coverage["US"]["minimumThreshold"] == 3
+    assert coverage["US"]["coverageState"] == "sufficient"
+    assert coverage["US"]["policyQualification"] == "qualified_for_activation"
+    assert coverage["US"]["membershipUsability"] == "ready"
+
+    assert pack["operatorActivationPack"]["explicitActivationCommand"]
+    assert "--activate" in pack["operatorActivationPack"]["explicitActivationCommand"]
+    assert pack["operatorActivationPack"]["implicitStartupActivation"] is False
+
+
+def test_qualification_pack_cli_is_read_only_without_activate_and_uses_no_network(tmp_path: Path, capsys) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    store_root = tmp_path / "store"
+
+    with patch.object(socket.socket, "connect", side_effect=AssertionError("network must not be used")):
+        exit_code = scanner_universe_import_main(
+            [
+                "--market",
+                "cn",
+                "--root",
+                str(store_root),
+                "--qualification-pack",
+                "--repo-root",
+                str(repo_root),
+            ]
+        )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["action"]["status"] == "blocked_policy_unknown"
+    assert payload["action"]["realActivationProof"]["status"] == "not_requested"
+    assert payload["action"]["productionSafetyProof"]["pageReadsActivateUniverse"] is False
+    assert payload["action"]["productionSafetyProof"]["scannerPageLoadMutatesUniverse"] is False
+    assert payload["action"]["productionSafetyProof"]["startupAutoActivationEnabled"] is False
+    assert ScannerUniverseLifecycleStore(root=store_root).load_active("cn") is None

@@ -66,7 +66,9 @@ def test_valid_universe_activation_normalizes_deduplicates_and_versions(tmp_path
     assert readiness["coverageState"] == "sufficient"
     assert readiness["usable"] is True
     assert readiness["blockingReasons"] == []
-    assert readiness["downstreamImpact"]["blockedProducts"] == []
+    assert readiness["downstreamImpact"]["blockedProducts"] == ["Scanner", "Research Radar", "Backtest", "Market Overview"]
+    assert readiness["downstreamReadiness"]["consumers"]["Scanner"]["membershipState"] == "ready"
+    assert readiness["downstreamReadiness"]["consumers"]["Scanner"]["finalProductState"] == "blocked"
     assert readiness["readOnly"] is True
     assert readiness["noExternalCalls"] is True
     assert readiness["providerCallsEnabled"] is False

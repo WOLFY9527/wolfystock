@@ -9,6 +9,7 @@ builds read-only readiness projections without provider calls.
 from __future__ import annotations
 
 import hashlib
+import csv
 import json
 import os
 from datetime import date, datetime, timezone
@@ -30,8 +31,15 @@ SCANNER_UNIVERSE_DEFAULT_MINIMUM_COVERAGE = {
 SCANNER_UNIVERSE_DEFAULT_MAX_SHRINK_PERCENTAGE = 80.0
 SCANNER_UNIVERSE_SOURCE_CONTRACT_VERSION = "scanner_universe_source_membership_v1"
 SCANNER_UNIVERSE_SOURCE_INVENTORY_VERSION = "scanner_universe_source_inventory_v1"
+SCANNER_UNIVERSE_SOURCE_DISCOVERY_VERSION = "scanner_universe_source_artifact_discovery_v1"
+SCANNER_UNIVERSE_QUALIFICATION_DECISION_VERSION = "scanner_universe_activation_qualification_decision_v1"
+SCANNER_UNIVERSE_QUALIFICATION_PACK_VERSION = "scanner_universe_activation_qualification_pack_v1"
+SCANNER_UNIVERSE_CURRENT_STATE_MATRIX_VERSION = "scanner_universe_current_state_matrix_v1"
+SCANNER_UNIVERSE_COVERAGE_PROOF_VERSION = "scanner_universe_coverage_proof_v1"
+SCANNER_UNIVERSE_DOWNSTREAM_READINESS_VERSION = "scanner_universe_downstream_readiness_separation_v1"
 SCANNER_UNIVERSE_APPROVED_POLICY_STATES = frozenset({"approved", "operator_supplied"})
 SCANNER_UNIVERSE_BLOCKED_PRODUCTS = ("Scanner", "Research Radar", "Backtest", "Market Overview")
+SCANNER_UNIVERSE_MARKETS = ("CN", "US", "HK")
 
 
 class ScannerUniverseLifecycleStore:
@@ -292,8 +300,14 @@ def read_scanner_universe_source_file(source_path: str | Path, *, market: str) -
 
     normalized_market = _normalize_market(market)
     source = Path(str(source_path)).expanduser()
-    payload = _read_json_file(source)
-    if payload is None:
+    payload = _read_json_payload(source)
+    if isinstance(payload, list):
+        return _read_frontend_stock_index_source(
+            payload=payload,
+            source_path=source,
+            market=normalized_market,
+        )
+    if not isinstance(payload, dict):
         return _source_projection_blocked(
             market=normalized_market,
             source_path=source,
@@ -405,6 +419,97 @@ def read_scanner_universe_source_file(source_path: str | Path, *, market: str) -
     }
 
 
+def _read_frontend_stock_index_source(
+    *,
+    payload: list[Any],
+    source_path: Path,
+    market: str,
+) -> dict[str, Any]:
+    memberships: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    active_symbols: list[str] = []
+    duplicate_count = 0
+    normalized_change_count = 0
+    relevant_raw_count = 0
+    for row in payload:
+        record = _extract_frontend_stock_index_record(row)
+        if not record:
+            continue
+        if record["market"] != market:
+            continue
+        relevant_raw_count += 1
+        raw_symbol = record["displayCode"] or record["canonicalCode"]
+        normalized = normalize_scanner_universe_symbol(raw_symbol, market=market)
+        if normalized is None:
+            memberships.append(
+                _membership_record(
+                    raw_symbol=raw_symbol,
+                    normalized_symbol=None,
+                    result="unsupported_symbol",
+                    status="rejected",
+                    exchange=record["exchange"],
+                    security_type=record["assetType"],
+                    listing_status="active" if record["active"] else "unknown",
+                    policy_state="unknown_policy",
+                )
+            )
+            continue
+        if str(raw_symbol or "").strip().upper() != normalized:
+            normalized_change_count += 1
+        if normalized in seen:
+            duplicate_count += 1
+            memberships.append(
+                _membership_record(
+                    raw_symbol=raw_symbol,
+                    normalized_symbol=normalized,
+                    result="duplicate_normalized",
+                    status="duplicate",
+                    exchange=record["exchange"],
+                    security_type=record["assetType"],
+                    listing_status="active" if record["active"] else "unknown",
+                    policy_state="unknown_policy",
+                )
+            )
+            continue
+        seen.add(normalized)
+        active_symbols.append(normalized)
+        memberships.append(
+            _membership_record(
+                raw_symbol=raw_symbol,
+                normalized_symbol=normalized,
+                result="normalized",
+                status="active",
+                exchange=record["exchange"],
+                security_type=record["assetType"],
+                listing_status="active" if record["active"] else "unknown",
+                policy_state="unknown_policy",
+            )
+        )
+    return {
+        "contractVersion": SCANNER_UNIVERSE_SOURCE_CONTRACT_VERSION,
+        "market": market,
+        "sourceId": f"repo:frontend_stock_index:{market}",
+        "sourceClass": "repository_local_frontend_stock_index",
+        "sourceAsOf": "",
+        "retrievedAt": "",
+        "importedAt": "",
+        "sourceArtifactIdentity": _artifact_identity(source_path, {"market": market, "rows": payload}),
+        "sourcePath": _source_path_label(source_path),
+        "symbolCount": len(active_symbols),
+        "rawSymbolCount": relevant_raw_count,
+        "normalizedSymbols": active_symbols,
+        "memberships": memberships,
+        "rejectedSymbols": [item for item in memberships if item["membershipStatus"] == "rejected"],
+        "duplicateSymbolCount": duplicate_count,
+        "normalizedChangeCount": normalized_change_count,
+        "sourcePolicyState": "unknown_policy",
+        "blockingReasons": ["source_as_of_missing", "retrieved_at_missing"],
+        "readOnly": True,
+        "noExternalCalls": True,
+        "providerCallsEnabled": False,
+    }
+
+
 def dry_run_scanner_universe_source(
     *,
     source_path: str | Path,
@@ -441,6 +546,16 @@ def dry_run_scanner_universe_source(
     )
     status = "accepted" if not reasons else "rejected"
     version = _candidate_universe_version(normalized_market, source_projection, candidate_symbols)
+    raw_count = int(source_projection.get("rawSymbolCount") or 0)
+    rejected_count = len(source_projection.get("rejectedSymbols") or [])
+    freshness_state = (
+        "stale"
+        if "stale_source" in reasons
+        else "missing"
+        if "source_metadata_missing" in reasons or "source_as_of_missing" in reasons
+        else "fresh"
+    )
+    coverage_state = "sufficient" if len(candidate_symbols) >= threshold and len(candidate_symbols) > 0 else "insufficient"
     return {
         "contractVersion": "scanner_universe_source_dry_run_v1",
         "status": status,
@@ -449,8 +564,15 @@ def dry_run_scanner_universe_source(
         "market": normalized_market,
         "universeVersion": version if status == "accepted" else None,
         "candidateUniverseVersion": version,
+        "rawSymbolCount": raw_count,
         "symbolCount": len(candidate_symbols),
+        "normalizedSymbolCount": len(candidate_symbols),
+        "duplicateSymbolCount": int(source_projection.get("duplicateSymbolCount") or 0),
+        "rejectedSymbolCount": rejected_count,
+        "normalizationRejectionRate": _rejection_rate(rejected_count, raw_count),
         "minimumCoverageThreshold": threshold,
+        "freshnessState": freshness_state,
+        "coverageState": coverage_state,
         "source": source_projection,
         "diff": diff,
         "rejectedReasons": reasons,
@@ -727,8 +849,34 @@ def build_scanner_universe_lifecycle_readiness(
     freshness_state = "malformed" if "metadata_malformed" in blocking_reasons else "stale" if "stale_universe" in blocking_reasons else "fresh"
     coverage_state = "sufficient" if symbol_count >= threshold and symbol_count > 0 else "insufficient"
     usable = not blocking_reasons
-    blocked_products = [] if usable else list(SCANNER_UNIVERSE_BLOCKED_PRODUCTS)
-    return {
+    membership_readiness = {
+        "contractVersion": "scanner_universe_membership_readiness_v1",
+        "status": "ready" if usable else "blocked",
+        "usable": usable,
+        "blockingReasons": blocking_reasons,
+        "symbolCount": symbol_count,
+        "freshnessState": freshness_state,
+        "coverageState": coverage_state,
+    }
+    market_data_readiness = {
+        "contractVersion": "scanner_universe_market_data_readiness_v1",
+        "status": "not_evaluated",
+        "usable": False,
+        "blockingReasons": ["market_data_readiness_not_evaluated"],
+    }
+    candidate_generation_readiness = {
+        "contractVersion": "scanner_universe_candidate_generation_readiness_v1",
+        "status": "blocked",
+        "usable": False,
+        "blockingReasons": ["candidate_generation_requires_market_data_readiness"],
+    }
+    downstream_readiness = build_scanner_universe_downstream_readiness(
+        market=normalized_market,
+        membership_readiness=membership_readiness,
+        market_data_readiness=market_data_readiness,
+        candidate_generation_readiness=candidate_generation_readiness,
+    )
+    payload = {
         "contractVersion": SCANNER_UNIVERSE_LIFECYCLE_CONTRACT_VERSION,
         "market": normalized_market,
         "universeVersion": str(active.get("universeVersion") or ""),
@@ -748,35 +896,12 @@ def build_scanner_universe_lifecycle_readiness(
         "coverageState": coverage_state,
         "usable": usable,
         "blockingReasons": blocking_reasons,
-        "membershipReadiness": {
-            "contractVersion": "scanner_universe_membership_readiness_v1",
-            "status": "ready" if usable else "blocked",
-            "usable": usable,
-            "blockingReasons": blocking_reasons,
-            "symbolCount": symbol_count,
-            "freshnessState": freshness_state,
-            "coverageState": coverage_state,
-        },
-        "marketDataReadiness": {
-            "contractVersion": "scanner_universe_market_data_readiness_v1",
-            "status": "not_evaluated",
-            "usable": False,
-            "blockingReasons": ["market_data_readiness_not_evaluated"],
-        },
-        "candidateGenerationReadiness": {
-            "contractVersion": "scanner_universe_candidate_generation_readiness_v1",
-            "status": "blocked",
-            "usable": False,
-            "blockingReasons": ["candidate_generation_requires_market_data_readiness"],
-        },
+        "membershipReadiness": membership_readiness,
+        "marketDataReadiness": market_data_readiness,
+        "candidateGenerationReadiness": candidate_generation_readiness,
         "versionDiff": active.get("diff"),
-        "downstreamImpact": {
-            "contractVersion": "scanner_universe_downstream_impact_v1",
-            "blockedProducts": blocked_products,
-            "blockingReasons": blocking_reasons,
-            "readOnly": True,
-            "consumerSafe": True,
-        },
+        "downstreamReadiness": downstream_readiness,
+        "downstreamImpact": downstream_readiness["downstreamImpact"],
         "lastSuccessfulActivation": active.get("activatedAt"),
         "lastRejectedImportReason": _last_rejected_reason(rejected),
         "lastRejectedImport": _public_rejected(rejected),
@@ -784,6 +909,429 @@ def build_scanner_universe_lifecycle_readiness(
         "noExternalCalls": True,
         "providerCallsEnabled": False,
         "consumerSafe": True,
+    }
+    return payload
+
+
+def build_scanner_universe_downstream_readiness(
+    *,
+    market: str,
+    membership_readiness: Mapping[str, Any],
+    market_data_readiness: Mapping[str, Any],
+    candidate_generation_readiness: Mapping[str, Any],
+    historical_coverage_state: str = "not_evaluated",
+) -> dict[str, Any]:
+    normalized_market = _normalize_market(market)
+    membership_state = "ready" if bool(membership_readiness.get("usable")) else "blocked"
+    market_data_state = str(market_data_readiness.get("status") or "not_evaluated")
+    candidate_state = str(candidate_generation_readiness.get("status") or "blocked")
+    historical_state = str(historical_coverage_state or "not_evaluated")
+
+    def _base_reasons() -> list[str]:
+        if membership_state != "ready":
+            return list(membership_readiness.get("blockingReasons") or ["membership_readiness_blocked"])
+        return []
+
+    def _consumer(
+        *,
+        product: str,
+        extra_reasons: list[str],
+        final_ready: bool = False,
+    ) -> dict[str, Any]:
+        reasons = _dedupe_texts([*_base_reasons(), *extra_reasons])
+        final_state = "ready" if final_ready and not reasons else "blocked"
+        return {
+            "product": product,
+            "membershipState": membership_state,
+            "marketDataState": market_data_state,
+            "historicalCoverageState": historical_state,
+            "candidateGenerationState": candidate_state,
+            "finalProductState": final_state,
+            "blockingReasons": reasons,
+            "readOnly": True,
+            "consumerSafe": True,
+        }
+
+    market_data_reasons = [] if membership_state != "ready" else _state_reasons(
+        market_data_state,
+        fallback="market_data_readiness_not_evaluated",
+        ready_states={"ready", "available"},
+    )
+    candidate_reasons = [] if membership_state != "ready" else _state_reasons(
+        candidate_state,
+        fallback="candidate_generation_requires_market_data_readiness",
+        ready_states={"ready", "available"},
+    )
+    historical_reasons = [] if membership_state != "ready" else _state_reasons(
+        historical_state,
+        fallback="historical_coverage_not_evaluated",
+        ready_states={"ready", "available", "sufficient"},
+    )
+    consumers = {
+        "Scanner": _consumer(
+            product="Scanner",
+            extra_reasons=[*market_data_reasons, *candidate_reasons],
+            final_ready=membership_state == "ready" and not market_data_reasons and not candidate_reasons,
+        ),
+        "Research Radar": _consumer(
+            product="Research Radar",
+            extra_reasons=[
+                *candidate_reasons,
+                *(["scanner_candidates_unavailable"] if membership_state == "ready" else []),
+            ],
+            final_ready=membership_state == "ready" and not candidate_reasons,
+        ),
+        "Backtest preparation": _consumer(
+            product="Backtest preparation",
+            extra_reasons=historical_reasons,
+            final_ready=membership_state == "ready" and not historical_reasons,
+        ),
+        "Market Overview": _consumer(
+            product="Market Overview",
+            extra_reasons=market_data_reasons,
+            final_ready=membership_state == "ready" and not market_data_reasons,
+        ),
+    }
+    blocked_products = [
+        product
+        for product in SCANNER_UNIVERSE_BLOCKED_PRODUCTS
+        if consumers["Backtest preparation" if product == "Backtest" else product]["finalProductState"] != "ready"
+    ]
+    blocking_reasons: list[str] = []
+    for product in blocked_products:
+        key = "Backtest preparation" if product == "Backtest" else product
+        blocking_reasons.extend(consumers[key]["blockingReasons"])
+    return {
+        "contractVersion": SCANNER_UNIVERSE_DOWNSTREAM_READINESS_VERSION,
+        "market": normalized_market,
+        "consumers": consumers,
+        "downstreamImpact": {
+            "contractVersion": "scanner_universe_downstream_impact_v1",
+            "blockedProducts": blocked_products,
+            "blockingReasons": _dedupe_texts(blocking_reasons),
+            "readOnly": True,
+            "consumerSafe": True,
+        },
+        "readOnly": True,
+        "consumerSafe": True,
+    }
+
+
+def build_scanner_universe_current_state_matrix(
+    *,
+    store: ScannerUniverseLifecycleStore | None = None,
+    markets: Iterable[str] | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    lifecycle_store = store or ScannerUniverseLifecycleStore()
+    rows: list[dict[str, Any]] = []
+    for market in markets or SCANNER_UNIVERSE_MARKETS:
+        readiness = build_scanner_universe_lifecycle_readiness(
+            store=lifecycle_store,
+            market=str(market),
+            now=now,
+        )
+        rows.append(
+            {
+                "market": readiness["market"],
+                "activeLifecycleVersion": readiness.get("universeVersion"),
+                "activeSourceIdentity": readiness.get("sourceArtifactIdentity") or readiness.get("sourceId"),
+                "policyState": readiness.get("sourcePolicyState"),
+                "symbolCount": readiness.get("symbolCount"),
+                "freshness": readiness.get("freshnessState"),
+                "coverage": readiness.get("coverageState"),
+                "usable": readiness.get("usable"),
+                "blockers": list(readiness.get("blockingReasons") or []),
+                "membershipReadiness": readiness.get("membershipReadiness"),
+                "marketDataReadiness": readiness.get("marketDataReadiness"),
+                "candidateGenerationReadiness": readiness.get("candidateGenerationReadiness"),
+                "downstreamReadiness": readiness.get("downstreamReadiness"),
+                "readOnly": True,
+            }
+        )
+    return {
+        "contractVersion": SCANNER_UNIVERSE_CURRENT_STATE_MATRIX_VERSION,
+        "rows": rows,
+        "readOnly": True,
+        "noExternalCalls": True,
+        "providerCallsEnabled": False,
+    }
+
+
+def discover_scanner_universe_source_artifacts(
+    *,
+    repo_root: str | Path | None = None,
+    env: Mapping[str, str] | None = None,
+    markets: Iterable[str] | None = None,
+) -> dict[str, Any]:
+    root = _repo_root(repo_root)
+    source_env = os.environ if env is None else env
+    requested_markets = {_normalize_market(market) for market in (markets or SCANNER_UNIVERSE_MARKETS)}
+    candidates: list[dict[str, Any]] = []
+
+    stock_index = root / "apps" / "dsa-web" / "public" / "stocks.index.json"
+    if "CN" in requested_markets:
+        projection = read_scanner_universe_source_file(stock_index, market="CN")
+        candidates.append(
+            _source_candidate_from_projection(
+                projection=projection,
+                artifact_path=_relative_path(stock_index, root),
+                source_class="repository_local_frontend_stock_index",
+                source_usage="frontend autocomplete/search stock index",
+                licensing_uncertainty=True,
+                network_required=False,
+                credentials_required=False,
+                extra_blocking_reasons=["source_policy_unknown"],
+            )
+        )
+
+    for market in requested_markets:
+        candidates.append(_stock_mapping_candidate(market=market, repo_root=root))
+
+    scanner_cache = Path(str(source_env.get("SCANNER_LOCAL_UNIVERSE_PATH") or "./data/scanner_cn_universe_cache.csv")).expanduser()
+    if not scanner_cache.is_absolute():
+        scanner_cache = root / scanner_cache
+    if "CN" in requested_markets:
+        candidates.append(
+            _path_inventory_candidate(
+                market="CN",
+                source_id="operator:scanner_local_universe_cache",
+                artifact_path=_relative_path(scanner_cache, root),
+                interface="SCANNER_LOCAL_UNIVERSE_PATH",
+                source_class="repository_local_csv",
+                policy_state="operator_supplied",
+                source_as_of=_path_date(scanner_cache),
+                symbol_count=_count_csv_symbols(scanner_cache),
+                network_required=False,
+                credentials_required=False,
+                licensing_uncertainty=False,
+                current_product_usage="current Scanner CN resolver first input",
+                source_exists=scanner_cache.exists(),
+                missing_reason="source_missing",
+            )
+        )
+
+    parquet_dir = _configured_path(source_env, ("LOCAL_US_PARQUET_DIR", "US_STOCK_PARQUET_DIR"), root=root)
+    if "US" in requested_markets:
+        candidates.append(
+            _path_inventory_candidate(
+                market="US",
+                source_id="operator:local_us_parquet_dir",
+                artifact_path=_relative_path(parquet_dir, root) if parquet_dir else "LOCAL_US_PARQUET_DIR",
+                interface="LOCAL_US_PARQUET_DIR or US_STOCK_PARQUET_DIR",
+                source_class="local_parquet_symbol_inventory",
+                policy_state="operator_supplied",
+                source_as_of=_path_date(parquet_dir) if parquet_dir else None,
+                symbol_count=_count_parquet_symbols(parquet_dir) if parquet_dir else 0,
+                network_required=False,
+                credentials_required=False,
+                licensing_uncertainty=False,
+                current_product_usage="current Scanner US resolver local history inventory",
+                source_exists=bool(parquet_dir and parquet_dir.exists()),
+                missing_reason="not_configured" if parquet_dir is None else "source_missing",
+            )
+        )
+
+    db_path = _configured_path(source_env, ("DATABASE_PATH",), root=root) or (root / "data" / "stock_analysis.db")
+    for market in requested_markets:
+        candidates.append(
+            _path_inventory_candidate(
+                market=market,
+                source_id=f"operator:local_db_history:{market}",
+                artifact_path=_relative_path(db_path, root),
+                interface="DATABASE_PATH stock_daily/analysis rows",
+                source_class="database_backed_symbol_inventory",
+                policy_state="operator_supplied",
+                source_as_of=_path_date(db_path),
+                symbol_count=0,
+                network_required=False,
+                credentials_required=False,
+                licensing_uncertainty=False,
+                current_product_usage="current Scanner fallback historical symbol inventory",
+                source_exists=db_path.exists(),
+                missing_reason="source_missing",
+                extra_blocking_reasons=["database_symbol_count_not_evaluated"],
+            )
+        )
+        candidates.append(
+            {
+                "market": market,
+                "sourceId": f"operator:explicit_source_contract:{market}",
+                "artifactPath": "operator-supplied JSON path",
+                "interface": "scripts/scanner_universe_lifecycle_import.py --source <json>",
+                "sourceClass": "operator_supplied_source_contract",
+                "sourcePolicyState": "unknown_policy",
+                "sourceAsOf": None,
+                "symbolCount": 0,
+                "rawSymbolCount": 0,
+                "networkRequired": False,
+                "credentialsRequired": False,
+                "licensingUncertainty": False,
+                "currentProductUsage": "explicit operator qualification/import workflow",
+                "eligibleForActivation": False,
+                "reason": "operator_artifact_required",
+                "blockingReasons": ["source_missing"],
+                "sourceExists": False,
+                "readOnly": True,
+                "noExternalCalls": True,
+                "providerCallsEnabled": False,
+            }
+        )
+
+    return {
+        "contractVersion": SCANNER_UNIVERSE_SOURCE_DISCOVERY_VERSION,
+        "candidates": candidates,
+        "readOnly": True,
+        "noExternalCalls": True,
+        "providerCallsEnabled": False,
+    }
+
+
+def build_scanner_universe_activation_qualification_pack(
+    *,
+    market: str,
+    source_path: str | Path | None = None,
+    store: ScannerUniverseLifecycleStore | None = None,
+    repo_root: str | Path | None = None,
+    env: Mapping[str, str] | None = None,
+    minimum_coverage_threshold: int | None = None,
+    max_age_days: int = SCANNER_UNIVERSE_DEFAULT_MAX_AGE_DAYS,
+    max_shrink_percentage: float = SCANNER_UNIVERSE_DEFAULT_MAX_SHRINK_PERCENTAGE,
+    now: datetime | None = None,
+    attempt_activation: bool = False,
+) -> dict[str, Any]:
+    lifecycle_store = store or ScannerUniverseLifecycleStore()
+    normalized_market = _normalize_market(market)
+    current_time = _normalize_datetime(now)
+    root = _repo_root(repo_root)
+    current_state = build_scanner_universe_current_state_matrix(
+        store=lifecycle_store,
+        markets=SCANNER_UNIVERSE_MARKETS,
+        now=current_time,
+    )
+    discovery = discover_scanner_universe_source_artifacts(
+        repo_root=root,
+        env=env,
+        markets=SCANNER_UNIVERSE_MARKETS,
+    )
+    selected_path: Path | None = Path(str(source_path)).expanduser() if source_path is not None else None
+    selected_projection: dict[str, Any] | None = None
+    selected_candidate: dict[str, Any] | None = None
+    if selected_path is not None:
+        selected_projection = read_scanner_universe_source_file(selected_path, market=normalized_market)
+        selected_candidate = _source_candidate_from_projection(
+            projection=selected_projection,
+            artifact_path=_source_path_label(selected_path),
+            source_class=str(selected_projection.get("sourceClass") or "explicit_local_source"),
+            source_usage="explicit operator supplied source artifact",
+            licensing_uncertainty=False,
+            network_required=False,
+            credentials_required=False,
+        )
+    else:
+        selected_candidate = _select_activation_candidate(discovery["candidates"], market=normalized_market)
+        if selected_candidate and selected_candidate.get("artifactPath") == "apps/dsa-web/public/stocks.index.json":
+            selected_path = root / "apps" / "dsa-web" / "public" / "stocks.index.json"
+            selected_projection = read_scanner_universe_source_file(selected_path, market=normalized_market)
+
+    decision = _build_activation_decision(
+        market=normalized_market,
+        candidate=selected_candidate,
+        projection=selected_projection,
+        minimum_coverage_threshold=minimum_coverage_threshold,
+        now=current_time,
+        max_age_days=max_age_days,
+    )
+    before_active = lifecycle_store.load_active(normalized_market)
+    before_version = before_active.get("universeVersion") if isinstance(before_active, dict) else None
+    dry_run: dict[str, Any] | None = None
+    dry_run_proof = _empty_dry_run_proof(market=normalized_market, before_version=before_version)
+    if selected_path is not None:
+        dry_run = dry_run_scanner_universe_source(
+            source_path=selected_path,
+            store=lifecycle_store,
+            market=normalized_market,
+            minimum_coverage_threshold=minimum_coverage_threshold,
+            max_age_days=max_age_days,
+            max_shrink_percentage=max_shrink_percentage,
+            now=current_time,
+        )
+        after_dry_run = lifecycle_store.load_active(normalized_market)
+        after_dry_version = after_dry_run.get("universeVersion") if isinstance(after_dry_run, dict) else None
+        dry_run_proof = _dry_run_proof(
+            dry_run=dry_run,
+            before_version=before_version,
+            after_version=after_dry_version,
+        )
+
+    activation_proof = _activation_not_requested(market=normalized_market, before_version=before_version)
+    if attempt_activation and selected_path is not None:
+        activation_result = activate_scanner_universe_from_source(
+            source_path=selected_path,
+            store=lifecycle_store,
+            market=normalized_market,
+            minimum_coverage_threshold=minimum_coverage_threshold,
+            max_age_days=max_age_days,
+            max_shrink_percentage=max_shrink_percentage,
+            activated_at=current_time,
+        )
+        activation_proof = _activation_proof(
+            store=lifecycle_store,
+            market=normalized_market,
+            before_version=before_version,
+            activation_result=activation_result,
+            dry_run=dry_run,
+            source_path=selected_path,
+            minimum_coverage_threshold=minimum_coverage_threshold,
+            max_age_days=max_age_days,
+            max_shrink_percentage=max_shrink_percentage,
+            now=current_time,
+        )
+
+    active_readiness = build_scanner_universe_lifecycle_readiness(
+        store=lifecycle_store,
+        market=normalized_market,
+        minimum_coverage_threshold=minimum_coverage_threshold,
+        now=current_time,
+    )
+    coverage = _build_coverage_proof(
+        market=normalized_market,
+        dry_run=dry_run,
+        discovery=discovery,
+        decision=decision,
+        readiness=active_readiness,
+        minimum_coverage_threshold=minimum_coverage_threshold,
+    )
+    operator_pack = _operator_activation_pack(
+        market=normalized_market,
+        source_path=selected_path,
+        decision=decision,
+        minimum_coverage_threshold=minimum_coverage_threshold,
+    )
+    safety = _production_safety_proof(
+        dry_run_proof=dry_run_proof,
+        attempt_activation=attempt_activation,
+        decision=decision,
+    )
+    return {
+        "contractVersion": SCANNER_UNIVERSE_QUALIFICATION_PACK_VERSION,
+        "status": decision["status"],
+        "generatedAt": current_time.isoformat(),
+        "market": normalized_market,
+        "currentUniverseStateMatrix": current_state,
+        "sourceArtifactDiscoveryMatrix": discovery,
+        "activationQualificationDecision": decision,
+        "realDryRunProof": dry_run_proof,
+        "realActivationProof": activation_proof,
+        "coverageProof": coverage,
+        "downstreamReadinessSeparation": active_readiness.get("downstreamReadiness"),
+        "operatorActivationPack": operator_pack,
+        "productionSafetyProof": safety,
+        "readOnly": not bool(attempt_activation),
+        "noExternalCalls": True,
+        "providerCallsEnabled": False,
+        "scannerRefreshExecuted": False,
+        "runtimeBehaviorChanged": False,
     }
 
 
@@ -818,6 +1366,471 @@ def _reject_import(
     return rejected
 
 
+def _source_candidate_from_projection(
+    *,
+    projection: Mapping[str, Any],
+    artifact_path: str,
+    source_class: str,
+    source_usage: str,
+    licensing_uncertainty: bool,
+    network_required: bool,
+    credentials_required: bool,
+    extra_blocking_reasons: list[str] | None = None,
+) -> dict[str, Any]:
+    policy_state = _source_policy_state(projection.get("sourcePolicyState"))
+    blockers = _dedupe_texts(
+        [
+            *list(projection.get("blockingReasons") or []),
+            *(extra_blocking_reasons or []),
+        ]
+    )
+    if policy_state == "unknown_policy":
+        blockers.append("source_policy_unknown")
+    elif policy_state == "rejected":
+        blockers.append("source_policy_rejected")
+    if int(projection.get("symbolCount") or 0) <= 0:
+        blockers.append("empty_universe")
+    if not _safe_text(projection.get("sourceAsOf")):
+        blockers.append("source_as_of_missing")
+    if not _safe_text(projection.get("sourceArtifactIdentity")):
+        blockers.append("source_artifact_identity_missing")
+    blockers = _dedupe_texts(blockers)
+    eligible = not blockers and policy_state in SCANNER_UNIVERSE_APPROVED_POLICY_STATES
+    return {
+        "market": _normalize_market(projection.get("market")),
+        "sourceId": projection.get("sourceId"),
+        "artifactPath": artifact_path,
+        "interface": "read_scanner_universe_source_file",
+        "sourceClass": source_class,
+        "sourcePolicyState": policy_state,
+        "sourceAsOf": projection.get("sourceAsOf") or None,
+        "sourceArtifactIdentity": projection.get("sourceArtifactIdentity"),
+        "symbolCount": int(projection.get("symbolCount") or 0),
+        "rawSymbolCount": int(projection.get("rawSymbolCount") or 0),
+        "networkRequired": bool(network_required),
+        "credentialsRequired": bool(credentials_required),
+        "licensingUncertainty": bool(licensing_uncertainty),
+        "currentProductUsage": source_usage,
+        "eligibleForActivation": eligible,
+        "reason": "eligible" if eligible else blockers[0] if blockers else "not_eligible",
+        "blockingReasons": blockers,
+        "sourceExists": int(projection.get("rawSymbolCount") or projection.get("symbolCount") or 0) > 0,
+        "dryRunEligible": int(projection.get("symbolCount") or 0) > 0,
+        "readOnly": True,
+        "noExternalCalls": True,
+        "providerCallsEnabled": False,
+    }
+
+
+def _path_inventory_candidate(
+    *,
+    market: str,
+    source_id: str,
+    artifact_path: str,
+    interface: str,
+    source_class: str,
+    policy_state: str,
+    source_as_of: str | None,
+    symbol_count: int,
+    network_required: bool,
+    credentials_required: bool,
+    licensing_uncertainty: bool,
+    current_product_usage: str,
+    source_exists: bool,
+    missing_reason: str,
+    extra_blocking_reasons: list[str] | None = None,
+) -> dict[str, Any]:
+    blockers = list(extra_blocking_reasons or [])
+    if not source_exists:
+        blockers.append(missing_reason)
+    if int(symbol_count or 0) <= 0:
+        blockers.append("empty_universe")
+    if not source_as_of:
+        blockers.append("source_as_of_missing")
+    blockers.append("operator_source_contract_required")
+    blockers = _dedupe_texts(blockers)
+    return {
+        "market": _normalize_market(market),
+        "sourceId": source_id,
+        "artifactPath": artifact_path,
+        "interface": interface,
+        "sourceClass": source_class,
+        "sourcePolicyState": _source_policy_state(policy_state),
+        "sourceAsOf": source_as_of,
+        "symbolCount": max(0, int(symbol_count or 0)),
+        "rawSymbolCount": max(0, int(symbol_count or 0)),
+        "networkRequired": bool(network_required),
+        "credentialsRequired": bool(credentials_required),
+        "licensingUncertainty": bool(licensing_uncertainty),
+        "currentProductUsage": current_product_usage,
+        "eligibleForActivation": False,
+        "reason": blockers[0] if blockers else "operator_source_contract_required",
+        "blockingReasons": blockers,
+        "sourceExists": bool(source_exists),
+        "dryRunEligible": False,
+        "readOnly": True,
+        "noExternalCalls": True,
+        "providerCallsEnabled": False,
+    }
+
+
+def _stock_mapping_candidate(*, market: str, repo_root: Path) -> dict[str, Any]:
+    from src.data.stock_mapping import STOCK_NAME_MAP
+
+    normalized_market = _normalize_market(market)
+    symbols, rejected = _normalize_symbols(STOCK_NAME_MAP.keys(), market=normalized_market)
+    blockers = ["source_policy_unknown", "source_as_of_missing"]
+    if not symbols:
+        blockers.append("empty_universe")
+    return {
+        "market": normalized_market,
+        "sourceId": f"repo:stock_mapping:{normalized_market}",
+        "artifactPath": _relative_path(repo_root / "src" / "data" / "stock_mapping.py", repo_root),
+        "interface": "src.data.stock_mapping.STOCK_NAME_MAP",
+        "sourceClass": "repository_local_symbol_mapping",
+        "sourcePolicyState": "unknown_policy",
+        "sourceAsOf": None,
+        "symbolCount": len(symbols),
+        "rawSymbolCount": len(STOCK_NAME_MAP),
+        "networkRequired": False,
+        "credentialsRequired": False,
+        "licensingUncertainty": True,
+        "currentProductUsage": "name lookup and legacy Scanner fallback mapping",
+        "eligibleForActivation": False,
+        "reason": blockers[0],
+        "blockingReasons": blockers,
+        "sourceExists": True,
+        "dryRunEligible": False,
+        "rejectedSymbolCount": len(rejected),
+        "readOnly": True,
+        "noExternalCalls": True,
+        "providerCallsEnabled": False,
+    }
+
+
+def _select_activation_candidate(candidates: list[dict[str, Any]], *, market: str) -> dict[str, Any] | None:
+    market_candidates = [item for item in candidates if _normalize_market(item.get("market")) == market]
+    if not market_candidates:
+        return None
+    return sorted(
+        market_candidates,
+        key=lambda item: (
+            bool(item.get("eligibleForActivation")),
+            bool(item.get("dryRunEligible")),
+            bool(item.get("sourceExists")),
+            int(item.get("symbolCount") or 0),
+            not bool(item.get("networkRequired")),
+        ),
+        reverse=True,
+    )[0]
+
+
+def _build_activation_decision(
+    *,
+    market: str,
+    candidate: Mapping[str, Any] | None,
+    projection: Mapping[str, Any] | None,
+    minimum_coverage_threshold: int | None,
+    now: datetime,
+    max_age_days: int,
+) -> dict[str, Any]:
+    threshold = _coverage_threshold(market, minimum_coverage_threshold)
+    if not candidate:
+        return {
+            "contractVersion": SCANNER_UNIVERSE_QUALIFICATION_DECISION_VERSION,
+            "market": market,
+            "status": "blocked_source_missing",
+            "activationEligible": False,
+            "dryRunEligible": False,
+            "selectedSourceId": None,
+            "sourceClass": None,
+            "sourcePolicyState": None,
+            "symbolCount": 0,
+            "minimumCoverageThreshold": threshold,
+            "blockingReasons": ["source_missing"],
+            "operatorRequiredArtifact": "scanner_universe_source_membership_v1 JSON with sourcePolicyState and sourceAsOf",
+            "readOnly": True,
+        }
+    reasons = _dedupe_texts(list(candidate.get("blockingReasons") or []))
+    symbol_count = int(candidate.get("symbolCount") or 0)
+    if symbol_count and symbol_count < threshold:
+        reasons.append("below_minimum_coverage")
+    if projection:
+        diff = _build_universe_diff(
+            previous_symbols=[],
+            candidate_symbols=list(projection.get("normalizedSymbols") or []),
+            normalized_change_count=int(projection.get("normalizedChangeCount") or 0),
+            rejected_count=len(projection.get("rejectedSymbols") or []),
+        )
+        reasons = _dedupe_texts(
+            [
+                *reasons,
+                *_qualification_reasons(
+                    projection=projection,
+                    symbol_count=int(projection.get("symbolCount") or 0),
+                    threshold=threshold,
+                    now=now,
+                    max_age_days=max_age_days,
+                    max_shrink_percentage=SCANNER_UNIVERSE_DEFAULT_MAX_SHRINK_PERCENTAGE,
+                    diff=diff,
+                    previous_symbols=[],
+                ),
+            ]
+        )
+    policy_state = _source_policy_state(candidate.get("sourcePolicyState"))
+    activation_eligible = not reasons and policy_state in SCANNER_UNIVERSE_APPROVED_POLICY_STATES
+    if activation_eligible:
+        status = "qualified_for_activation"
+    elif "source_policy_unknown" in reasons:
+        status = "blocked_policy_unknown"
+    elif "stale_source" in reasons:
+        status = "blocked_stale"
+    elif "below_minimum_coverage" in reasons:
+        status = "blocked_coverage"
+    elif "metadata_malformed" in reasons or "source_missing_or_malformed" in reasons:
+        status = "blocked_malformed"
+    elif not bool(candidate.get("sourceExists")):
+        status = "blocked_source_missing"
+    else:
+        status = "qualified_for_dry_run_only" if bool(candidate.get("dryRunEligible")) else "blocked_source_missing"
+    return {
+        "contractVersion": SCANNER_UNIVERSE_QUALIFICATION_DECISION_VERSION,
+        "market": market,
+        "status": status,
+        "activationEligible": activation_eligible,
+        "dryRunEligible": bool(candidate.get("dryRunEligible")) or bool(projection),
+        "selectedSourceId": candidate.get("sourceId"),
+        "sourceClass": candidate.get("sourceClass"),
+        "sourcePolicyState": policy_state,
+        "symbolCount": symbol_count,
+        "minimumCoverageThreshold": threshold,
+        "blockingReasons": reasons,
+        "operatorRequiredArtifact": None if activation_eligible else "explicit approved/operator_supplied source artifact with sourceAsOf and sufficient coverage",
+        "readOnly": True,
+    }
+
+
+def _empty_dry_run_proof(*, market: str, before_version: Any) -> dict[str, Any]:
+    return {
+        "contractVersion": "scanner_universe_real_dry_run_proof_v1",
+        "status": "not_available",
+        "market": market,
+        "beforeActiveVersion": before_version,
+        "afterActiveVersion": before_version,
+        "activeVersionChanged": False,
+        "blockingReasons": ["source_missing"],
+        "readOnly": True,
+    }
+
+
+def _dry_run_proof(*, dry_run: Mapping[str, Any], before_version: Any, after_version: Any) -> dict[str, Any]:
+    source = dry_run.get("source") if isinstance(dry_run.get("source"), Mapping) else {}
+    diff = dry_run.get("diff") if isinstance(dry_run.get("diff"), Mapping) else {}
+    return {
+        "contractVersion": "scanner_universe_real_dry_run_proof_v1",
+        "status": dry_run.get("status"),
+        "market": dry_run.get("market"),
+        "sourceArtifactIdentity": source.get("sourceArtifactIdentity"),
+        "sourcePolicyState": source.get("sourcePolicyState"),
+        "sourceAsOf": source.get("sourceAsOf"),
+        "rawCount": int(dry_run.get("rawSymbolCount") or 0),
+        "normalizedCount": int(dry_run.get("normalizedSymbolCount") or dry_run.get("symbolCount") or 0),
+        "duplicateCount": int(dry_run.get("duplicateSymbolCount") or 0),
+        "rejectedCount": int(dry_run.get("rejectedSymbolCount") or 0),
+        "normalizationRejectionRate": float(dry_run.get("normalizationRejectionRate") or 0.0),
+        "addedCount": int(diff.get("addedCount") or 0),
+        "removedCount": int(diff.get("removedCount") or 0),
+        "unchangedCount": int(diff.get("unchangedCount") or 0),
+        "coverageDelta": int(diff.get("coverageDelta") or 0),
+        "shrinkPercentage": float(diff.get("shrinkPercentage") or 0.0),
+        "growthPercentage": float(diff.get("growthPercentage") or 0.0),
+        "freshnessState": dry_run.get("freshnessState"),
+        "coverageState": dry_run.get("coverageState"),
+        "activationEligibility": bool(dry_run.get("activationReady")),
+        "candidateUniverseVersion": dry_run.get("candidateUniverseVersion"),
+        "blockingReasons": list(dry_run.get("blockingReasons") or []),
+        "beforeActiveVersion": before_version,
+        "afterActiveVersion": after_version,
+        "activeVersionChanged": before_version != after_version,
+        "readOnly": True,
+        "mutationEnabled": False,
+    }
+
+
+def _activation_not_requested(*, market: str, before_version: Any) -> dict[str, Any]:
+    return {
+        "contractVersion": "scanner_universe_real_activation_proof_v1",
+        "status": "not_requested",
+        "market": market,
+        "beforeActiveVersion": before_version,
+        "afterActiveVersion": before_version,
+        "blockingReasons": ["explicit_activation_not_requested"],
+        "mutationEnabled": False,
+    }
+
+
+def _activation_proof(
+    *,
+    store: ScannerUniverseLifecycleStore,
+    market: str,
+    before_version: Any,
+    activation_result: Mapping[str, Any],
+    dry_run: Mapping[str, Any] | None,
+    source_path: Path,
+    minimum_coverage_threshold: int | None,
+    max_age_days: int,
+    max_shrink_percentage: float,
+    now: datetime,
+) -> dict[str, Any]:
+    after = build_scanner_universe_lifecycle_readiness(
+        store=store,
+        market=market,
+        minimum_coverage_threshold=minimum_coverage_threshold,
+        now=now,
+    )
+    after_version = after.get("universeVersion")
+    determinism = dry_run_scanner_universe_source(
+        source_path=source_path,
+        store=store,
+        market=market,
+        minimum_coverage_threshold=minimum_coverage_threshold,
+        max_age_days=max_age_days,
+        max_shrink_percentage=max_shrink_percentage,
+        now=now,
+    )
+    return {
+        "contractVersion": "scanner_universe_real_activation_proof_v1",
+        "status": activation_result.get("status"),
+        "market": market,
+        "beforeActiveVersion": before_version,
+        "candidateVersion": (dry_run or {}).get("candidateUniverseVersion"),
+        "activatedVersion": activation_result.get("universeVersion") if activation_result.get("status") == "activated" else None,
+        "afterActiveVersion": after_version,
+        "activeSourceIdentity": after.get("sourceArtifactIdentity"),
+        "activePolicyState": after.get("sourcePolicyState"),
+        "activeSymbolCount": after.get("symbolCount"),
+        "freshness": after.get("freshnessState"),
+        "coverage": after.get("coverageState"),
+        "membershipUsable": bool(after.get("membershipReadiness", {}).get("usable")),
+        "lastSuccessfulActivation": after.get("lastSuccessfulActivation"),
+        "blockingReasons": list(activation_result.get("rejectedReasons") or after.get("blockingReasons") or []),
+        "versionDeterminism": {
+            "sameSourceSameVersion": determinism.get("candidateUniverseVersion") == (dry_run or {}).get("candidateUniverseVersion"),
+            "requalifiedCandidateUniverseVersion": determinism.get("candidateUniverseVersion"),
+        },
+        "lastGoodPreserved": activation_result.get("status") != "activated" and before_version == after_version,
+        "mutationEnabled": activation_result.get("status") == "activated",
+        "noExternalCalls": True,
+        "providerCallsEnabled": False,
+    }
+
+
+def _build_coverage_proof(
+    *,
+    market: str,
+    dry_run: Mapping[str, Any] | None,
+    discovery: Mapping[str, Any],
+    decision: Mapping[str, Any],
+    readiness: Mapping[str, Any],
+    minimum_coverage_threshold: int | None,
+) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    candidates = list(discovery.get("candidates") or [])
+    for row_market in SCANNER_UNIVERSE_MARKETS:
+        threshold = _coverage_threshold(row_market, minimum_coverage_threshold if row_market == market else None)
+        candidate = _select_activation_candidate(candidates, market=row_market)
+        is_selected = row_market == market and dry_run is not None
+        candidate_count = int((dry_run or {}).get("symbolCount") or 0) if is_selected else int((candidate or {}).get("symbolCount") or 0)
+        rejected_count = int((dry_run or {}).get("rejectedSymbolCount") or 0) if is_selected else int((candidate or {}).get("rejectedSymbolCount") or 0)
+        raw_count = int((dry_run or {}).get("rawSymbolCount") or 0) if is_selected else int((candidate or {}).get("rawSymbolCount") or 0)
+        policy = str(decision.get("status")) if is_selected else (
+            "blocked_policy_unknown"
+            if candidate and "source_policy_unknown" in list(candidate.get("blockingReasons") or [])
+            else "blocked_source_missing"
+            if not candidate or not candidate.get("sourceExists")
+            else "qualified_for_dry_run_only"
+        )
+        rows.append(
+            {
+                "market": row_market,
+                "candidateSymbolCount": candidate_count,
+                "minimumThreshold": threshold,
+                "thresholdSource": "operator_override" if row_market == market and minimum_coverage_threshold is not None else "default_contract",
+                "coverageState": "sufficient" if candidate_count >= threshold and candidate_count > 0 else "insufficient",
+                "freshnessState": str((dry_run or {}).get("freshnessState") or ("missing" if not (candidate or {}).get("sourceAsOf") else "unknown")),
+                "normalizationRejectionRate": _rejection_rate(rejected_count, raw_count),
+                "policyQualification": policy,
+                "membershipUsability": (
+                    "ready"
+                    if row_market == market and bool(readiness.get("membershipReadiness", {}).get("usable"))
+                    else "blocked"
+                ),
+                "readOnly": True,
+            }
+        )
+    return {
+        "contractVersion": SCANNER_UNIVERSE_COVERAGE_PROOF_VERSION,
+        "rows": rows,
+        "readOnly": True,
+        "thresholdsAreContractDefaults": minimum_coverage_threshold is None,
+    }
+
+
+def _operator_activation_pack(
+    *,
+    market: str,
+    source_path: Path | None,
+    decision: Mapping[str, Any],
+    minimum_coverage_threshold: int | None,
+) -> dict[str, Any]:
+    source_label = _source_path_label(source_path) if source_path is not None else "<operator-source.json>"
+    threshold_arg = (
+        f" --minimum-coverage-threshold {int(minimum_coverage_threshold)}"
+        if minimum_coverage_threshold is not None
+        else ""
+    )
+    base = f"python scripts/scanner_universe_lifecycle_import.py --source {source_label} --market {market.lower()} --root <isolated-or-approved-lifecycle-root>{threshold_arg}"
+    return {
+        "contractVersion": "scanner_universe_operator_activation_pack_v1",
+        "sourceId": decision.get("selectedSourceId"),
+        "sourcePolicyState": decision.get("sourcePolicyState"),
+        "sourceClass": decision.get("sourceClass"),
+        "status": decision.get("status"),
+        "humanSummary": (
+            "Source qualifies for explicit isolated activation."
+            if decision.get("status") == "qualified_for_activation"
+            else "Source is not activation-qualified; use dry-run output to resolve policy/source blockers."
+        ),
+        "explicitDryRunCommand": f"{base} --dry-run",
+        "explicitActivationCommand": f"{base} --activate",
+        "implicitStartupActivation": False,
+        "secretsExposed": False,
+        "readOnly": True,
+    }
+
+
+def _production_safety_proof(
+    *,
+    dry_run_proof: Mapping[str, Any],
+    attempt_activation: bool,
+    decision: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        "contractVersion": "scanner_universe_production_safety_proof_v1",
+        "pageReadsActivateUniverse": False,
+        "scannerPageLoadMutatesUniverse": False,
+        "startupAutoActivationEnabled": False,
+        "failedImportPreservesLastGood": True,
+        "policyUnknownCannotSilentlyActivate": decision.get("status") != "qualified_for_activation" or not attempt_activation,
+        "suspiciousShrinkCannotSilentlyActivate": True,
+        "dryRunNeverWritesActiveState": not bool(dry_run_proof.get("activeVersionChanged")),
+        "explicitActivationRequired": True,
+        "providerDispatchChanged": False,
+        "uatProviderIsolationPreserved": True,
+        "readOnly": not bool(attempt_activation),
+    }
+
+
 def _normalize_symbols(values: Iterable[Any], *, market: str) -> tuple[list[str], list[str]]:
     symbols: list[str] = []
     rejected: list[str] = []
@@ -838,6 +1851,34 @@ def _readiness_blocked(
     reasons: list[str],
     last_rejected: Mapping[str, Any],
 ) -> dict[str, Any]:
+    freshness_state = "missing" if "source_missing" in reasons else "malformed"
+    membership_readiness = {
+        "contractVersion": "scanner_universe_membership_readiness_v1",
+        "status": "blocked",
+        "usable": False,
+        "blockingReasons": reasons,
+        "symbolCount": 0,
+        "freshnessState": freshness_state,
+        "coverageState": "insufficient",
+    }
+    market_data_readiness = {
+        "contractVersion": "scanner_universe_market_data_readiness_v1",
+        "status": "not_evaluated",
+        "usable": False,
+        "blockingReasons": ["membership_readiness_blocked"],
+    }
+    candidate_generation_readiness = {
+        "contractVersion": "scanner_universe_candidate_generation_readiness_v1",
+        "status": "blocked",
+        "usable": False,
+        "blockingReasons": ["membership_readiness_blocked"],
+    }
+    downstream_readiness = build_scanner_universe_downstream_readiness(
+        market=market,
+        membership_readiness=membership_readiness,
+        market_data_readiness=market_data_readiness,
+        candidate_generation_readiness=candidate_generation_readiness,
+    )
     return {
         "contractVersion": SCANNER_UNIVERSE_LIFECYCLE_CONTRACT_VERSION,
         "market": market,
@@ -852,41 +1893,18 @@ def _readiness_blocked(
         "symbols": [],
         "sourceMemberships": [],
         "symbolCount": 0,
-        "freshnessState": "missing" if "source_missing" in reasons else "malformed",
+        "freshnessState": freshness_state,
         "age": {"days": None, "maxAgeDays": SCANNER_UNIVERSE_DEFAULT_MAX_AGE_DAYS},
         "minimumCoverageThreshold": threshold,
         "coverageState": "insufficient",
         "usable": False,
         "blockingReasons": reasons,
-        "membershipReadiness": {
-            "contractVersion": "scanner_universe_membership_readiness_v1",
-            "status": "blocked",
-            "usable": False,
-            "blockingReasons": reasons,
-            "symbolCount": 0,
-            "freshnessState": "missing" if "source_missing" in reasons else "malformed",
-            "coverageState": "insufficient",
-        },
-        "marketDataReadiness": {
-            "contractVersion": "scanner_universe_market_data_readiness_v1",
-            "status": "not_evaluated",
-            "usable": False,
-            "blockingReasons": ["membership_readiness_blocked"],
-        },
-        "candidateGenerationReadiness": {
-            "contractVersion": "scanner_universe_candidate_generation_readiness_v1",
-            "status": "blocked",
-            "usable": False,
-            "blockingReasons": ["membership_readiness_blocked"],
-        },
+        "membershipReadiness": membership_readiness,
+        "marketDataReadiness": market_data_readiness,
+        "candidateGenerationReadiness": candidate_generation_readiness,
         "versionDiff": None,
-        "downstreamImpact": {
-            "contractVersion": "scanner_universe_downstream_impact_v1",
-            "blockedProducts": list(SCANNER_UNIVERSE_BLOCKED_PRODUCTS),
-            "blockingReasons": reasons,
-            "readOnly": True,
-            "consumerSafe": True,
-        },
+        "downstreamReadiness": downstream_readiness,
+        "downstreamImpact": downstream_readiness["downstreamImpact"],
         "lastSuccessfulActivation": None,
         "lastRejectedImportReason": _last_rejected_reason(last_rejected),
         "lastRejectedImport": _public_rejected(last_rejected),
@@ -980,6 +1998,30 @@ def _extract_source_symbol_record(item: Any) -> tuple[str, str | None, str | Non
             _safe_text(item.get("listingStatus") or item.get("listing_status")) or None,
         )
     return _safe_text(item), None, None, None
+
+
+def _extract_frontend_stock_index_record(row: Any) -> dict[str, Any] | None:
+    if not isinstance(row, list) or len(row) < 8:
+        return None
+    canonical = _safe_text(row[0])
+    display = _safe_text(row[1])
+    market = _safe_text(row[6]).upper()
+    asset_type = _safe_text(row[7]).lower()
+    if not canonical and not display:
+        return None
+    if market not in set(SCANNER_UNIVERSE_MARKETS):
+        return None
+    if asset_type != "stock":
+        return None
+    exchange = canonical.split(".")[-1].upper() if "." in canonical else None
+    return {
+        "canonicalCode": canonical,
+        "displayCode": display,
+        "market": market,
+        "assetType": asset_type,
+        "active": bool(row[8]) if len(row) > 8 else True,
+        "exchange": exchange,
+    }
 
 
 def _membership_record(
@@ -1121,6 +2163,87 @@ def _artifact_identity(source_path: Path, payload: Mapping[str, Any]) -> str:
     return f"{_source_path_label(source_path)}#{digest}"
 
 
+def _repo_root(value: str | Path | None = None) -> Path:
+    if value is not None and str(value).strip():
+        return Path(str(value)).expanduser().resolve()
+    return Path(__file__).resolve().parents[2]
+
+
+def _relative_path(path: Path | None, root: Path) -> str:
+    if path is None:
+        return ""
+    try:
+        return str(path.resolve().relative_to(root.resolve()))
+    except Exception:
+        return _source_path_label(path)
+
+
+def _configured_path(env: Mapping[str, str], keys: Iterable[str], *, root: Path) -> Path | None:
+    for key in keys:
+        value = str(env.get(key, "") or "").strip()
+        if not value:
+            continue
+        path = Path(value).expanduser()
+        return path if path.is_absolute() else root / path
+    return None
+
+
+def _path_date(path: Path | None) -> str | None:
+    if path is None:
+        return None
+    try:
+        return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).date().isoformat()
+    except OSError:
+        return None
+
+
+def _count_csv_symbols(path: Path) -> int:
+    try:
+        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+            reader = csv.DictReader(handle)
+            if not reader.fieldnames:
+                return 0
+            return sum(1 for row in reader if any(str(value or "").strip() for value in row.values()))
+    except Exception:
+        return 0
+
+
+def _count_parquet_symbols(path: Path | None) -> int:
+    if path is None:
+        return 0
+    try:
+        if not path.exists() or not path.is_dir():
+            return 0
+        return sum(1 for item in path.iterdir() if item.is_file() and item.suffix.lower() == ".parquet")
+    except OSError:
+        return 0
+
+
+def _state_reasons(value: str, *, fallback: str, ready_states: set[str]) -> list[str]:
+    normalized = str(value or "").strip().lower()
+    if normalized in ready_states:
+        return []
+    if normalized in {"", "unknown", "not_evaluated"}:
+        return [fallback]
+    return [normalized]
+
+
+def _dedupe_texts(values: Iterable[Any]) -> list[str]:
+    result: list[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if text and text not in result:
+            result.append(text)
+    return result
+
+
+def _rejection_rate(rejected_count: int, raw_count: int) -> float:
+    raw = int(raw_count or 0)
+    if raw <= 0:
+        return 0.0
+    return round(float(rejected_count or 0) / raw * 100.0, 4)
+
+
 def _safe_text(value: Any) -> str:
     return str(value or "").strip()
 
@@ -1197,12 +2320,16 @@ def _iso_datetime(value: Any) -> str:
     return parsed.replace(microsecond=0).isoformat()
 
 
-def _read_json_file(path: Path) -> dict[str, Any] | None:
+def _read_json_payload(path: Path) -> Any:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        return payload if isinstance(payload, dict) else None
+        return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
+
+
+def _read_json_file(path: Path) -> dict[str, Any] | None:
+    payload = _read_json_payload(path)
+    return payload if isinstance(payload, dict) else None
 
 
 def _atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
@@ -1245,8 +2372,12 @@ __all__ = [
     "ScannerUniverseLifecycleStore",
     "activate_scanner_universe_from_file",
     "activate_scanner_universe_from_source",
+    "build_scanner_universe_activation_qualification_pack",
+    "build_scanner_universe_current_state_matrix",
+    "build_scanner_universe_downstream_readiness",
     "build_scanner_universe_source_inventory",
     "build_scanner_universe_lifecycle_readiness",
+    "discover_scanner_universe_source_artifacts",
     "dry_run_scanner_universe_source",
     "normalize_scanner_universe_symbol",
     "read_scanner_universe_source_file",
