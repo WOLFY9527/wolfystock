@@ -147,7 +147,20 @@ class AdminScannerUniverseReadinessResponse(_AdminOpsStatusModel):
     scanner_universe_status: Optional[str] = Field(default=None, alias="scannerUniverseStatus")
     market: str = "cn"
     profile: str = "cn_preopen_v1"
+    universe_version: Optional[str] = Field(default=None, alias="universeVersion")
+    generated_at: Optional[str] = Field(default=None, alias="generatedAt")
+    as_of: Optional[str] = Field(default=None, alias="asOf")
+    source_class: Optional[str] = Field(default=None, alias="sourceClass")
+    symbol_count: int = Field(default=0, alias="symbolCount")
     freshness_state: str = Field(default="unknown", alias="freshnessState")
+    age: Optional[Dict[str, Any]] = None
+    minimum_coverage_threshold: Optional[int] = Field(default=None, alias="minimumCoverageThreshold")
+    coverage_state: Optional[str] = Field(default=None, alias="coverageState")
+    usable: Optional[bool] = None
+    blocking_reasons: List[str] = Field(default_factory=list, alias="blockingReasons")
+    downstream_impact: Dict[str, Any] = Field(default_factory=dict, alias="downstreamImpact")
+    last_successful_activation: Optional[str] = Field(default=None, alias="lastSuccessfulActivation")
+    last_rejected_import_reason: Optional[str] = Field(default=None, alias="lastRejectedImportReason")
     last_updated_at: Optional[str] = Field(default=None, alias="lastUpdatedAt")
     universe_size: int = Field(default=0, alias="universeSize")
     affected_product_surfaces: List[str] = Field(default_factory=list, alias="affectedProductSurfaces")

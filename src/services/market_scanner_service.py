@@ -61,6 +61,7 @@ from src.services.scanner_universe_readiness import (
     build_scanner_universe_readiness_from_cache,
     build_scanner_universe_readiness_from_coverage,
 )
+from src.services.scanner_universe_lifecycle import build_scanner_universe_lifecycle_readiness
 from src.services.provider_capability_matrix import get_provider_capability_support_contract
 from src.services.research_readiness_contract import build_research_readiness_v1
 from src.services.us_ohlcv_coverage_readiness import starter_us_ohlcv_coverage_symbols
@@ -2991,6 +2992,46 @@ class MarketScannerService:
                 ),
             }
         )
+        lifecycle_readiness = build_scanner_universe_lifecycle_readiness(market=market)
+        if lifecycle_readiness.get("usable") and isinstance(cache_universe_readiness, dict):
+            cache_universe_readiness = {
+                **cache_universe_readiness,
+                "status": "available",
+                "universeSize": int(lifecycle_readiness.get("symbolCount") or 0),
+                "lastUpdatedAt": lifecycle_readiness.get("generatedAt"),
+                "freshnessState": str(lifecycle_readiness.get("freshnessState") or "fresh"),
+                "sourceMetadata": {
+                    **(
+                        cache_universe_readiness.get("sourceMetadata")
+                        if isinstance(cache_universe_readiness.get("sourceMetadata"), dict)
+                        else {}
+                    ),
+                    "sourceClass": lifecycle_readiness.get("sourceClass"),
+                    "sourcePath": lifecycle_readiness.get("sourcePath"),
+                    "symbols": list(lifecycle_readiness.get("symbols") or []),
+                    "generatedFrom": "scanner_universe_lifecycle",
+                    "lifecycleReadiness": lifecycle_readiness,
+                    "noExternalCalls": True,
+                    "providerCallsEnabled": False,
+                    "readOnly": True,
+                    "activationState": "active",
+                },
+            }
+        else:
+            existing_metadata = (
+                cache_universe_readiness.get("sourceMetadata")
+                if isinstance(cache_universe_readiness, dict)
+                and isinstance(cache_universe_readiness.get("sourceMetadata"), dict)
+                else {}
+            )
+            if isinstance(cache_universe_readiness, dict):
+                cache_universe_readiness = {
+                    **cache_universe_readiness,
+                    "sourceMetadata": {
+                        **existing_metadata,
+                        "lifecycleReadiness": lifecycle_readiness,
+                    },
+                }
         cache_universe_status = str(cache_universe_readiness.get("status") or "unavailable")
         if cache_universe_status in {"available", "insufficient_coverage", "local_universe_available", "local_universe_seeded"}:
             cached_universe_size = self._readiness_int(cache_universe_readiness.get("universeSize"))
@@ -3349,9 +3390,10 @@ class MarketScannerService:
         shortlist_size: int,
         summary: Optional[Mapping[str, Any]] = None,
         candidates: Optional[Sequence[Mapping[str, Any]]] = None,
+        consumer_safe: bool = True,
     ) -> Dict[str, Any]:
         payload = dict(diagnostics or {})
-        payload["dataReadiness"] = self._build_data_readiness(
+        readiness = self._build_data_readiness(
             market=market,
             profile=profile,
             status=status,
@@ -3363,6 +3405,33 @@ class MarketScannerService:
             summary=summary,
             candidates=candidates,
         )
+        payload["dataReadiness"] = (
+            self._consumer_safe_data_readiness(readiness) if consumer_safe else readiness
+        )
+        return payload
+
+    @staticmethod
+    def _consumer_safe_data_readiness(readiness: Mapping[str, Any]) -> Dict[str, Any]:
+        payload = dict(readiness or {})
+        scanner_readiness = payload.get("scannerUniverseReadiness")
+        if isinstance(scanner_readiness, Mapping):
+            blocked_products = list(scanner_readiness.get("blockedProductSurfaces") or [])
+            payload["scannerUniverseReadiness"] = {
+                key: value
+                for key, value in dict(scanner_readiness).items()
+                if key
+                not in {
+                    "providerCallsEnabled",
+                    "sourcePath",
+                    "generatedFrom",
+                    "operatorAction",
+                    "operatorNextAction",
+                    "nextOperatorAction",
+                    "downstreamImpact",
+                }
+            }
+            if blocked_products:
+                payload["scannerUniverseReadiness"]["blockedProductSurfaces"] = blocked_products
         return payload
 
     def _finalize_completed_scan(
