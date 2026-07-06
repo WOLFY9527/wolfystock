@@ -1257,6 +1257,45 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(committed["cash_inserted_count"], 1)
         self.assertIsNotNone(committed["broker_connection_id"])
 
+    def test_ibkr_import_preview_reports_contract_without_creating_connection(self) -> None:
+        account_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Preview", "broker": "IBKR", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(account_resp.status_code, 200)
+        account_id = account_resp.json()["id"]
+
+        before_connections = self.client.get(
+            "/api/v1/portfolio/broker-connections",
+            params={"portfolio_account_id": account_id},
+        )
+        self.assertEqual(before_connections.status_code, 200)
+        self.assertEqual(before_connections.json()["connections"], [])
+
+        preview_resp = self.client.post(
+            "/api/v1/portfolio/imports/commit",
+            data={"account_id": str(account_id), "broker": "ibkr", "dry_run": "true"},
+            files={"file": ("ibkr-flex.xml", self._ibkr_flex_xml_bytes(), "application/xml")},
+        )
+        self.assertEqual(preview_resp.status_code, 200)
+        preview = preview_resp.json()
+        self.assertTrue(preview["dry_run"])
+        self.assertTrue(preview["preview_only"])
+        self.assertTrue(preview["requires_confirmation"])
+        self.assertEqual(preview["accepted_count"], 2)
+        self.assertEqual(preview["rejected_count"], 0)
+        self.assertEqual(preview["account_mapping"]["status"], "will_create_on_confirm")
+        self.assertEqual(preview["account_mapping"]["account_id"], account_id)
+        self.assertEqual(preview["validation_checks"][0]["check"], "date_quantity_price")
+        self.assertIn("currency_review", {item["check"] for item in preview["validation_checks"]})
+
+        after_connections = self.client.get(
+            "/api/v1/portfolio/broker-connections",
+            params={"portfolio_account_id": account_id},
+        )
+        self.assertEqual(after_connections.status_code, 200)
+        self.assertEqual(after_connections.json()["connections"], [])
+
     @patch("api.v1.endpoints.portfolio.PortfolioIbkrSyncService.sync_read_only_account_state")
     def test_ibkr_sync_endpoint_contract(self, sync_mock: MagicMock) -> None:
         account_resp = self.client.post(

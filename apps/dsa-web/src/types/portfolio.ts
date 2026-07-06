@@ -772,6 +772,16 @@ export interface PortfolioImportCommitResponse {
   warnings: string[];
   metadata: Record<string, unknown>;
   errors: string[];
+  acceptedCount?: number;
+  rejectedCount?: number;
+  previewOnly?: boolean;
+  requiresConfirmation?: boolean;
+  duplicateCandidates?: Record<string, unknown>[];
+  unknownSymbols?: Record<string, unknown>[];
+  currencyIssues?: Record<string, unknown>[];
+  accountMapping?: Record<string, unknown>;
+  validationChecks?: Record<string, unknown>[];
+  recoveryActions?: string[];
 }
 
 export interface PortfolioImportBrokerItem {

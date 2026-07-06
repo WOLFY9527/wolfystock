@@ -187,7 +187,7 @@ class PortfolioImportService:
     ) -> Dict[str, Any]:
         broker_norm = self._normalize_broker(broker)
         if broker_norm != IBKR_BROKER:
-            self._require_import_account(account_id)
+            account = self._require_import_account(account_id)
             base = self.commit_trade_records(
                 account_id=account_id,
                 broker=broker_norm,
@@ -204,6 +204,13 @@ class PortfolioImportService:
             base.setdefault("broker_connection_id", broker_connection_id)
             base.setdefault("warnings", list(parsed_payload.get("warnings", [])))
             base.setdefault("metadata", dict(parsed_payload.get("metadata", {})))
+            self._attach_import_preview_contract(
+                base,
+                account=account,
+                broker=broker_norm,
+                parsed_payload=parsed_payload,
+                broker_connection_id=broker_connection_id,
+            )
             return base
         return self._commit_ibkr_import(
             account_id=account_id,
@@ -217,6 +224,124 @@ class PortfolioImportService:
         if account is None:
             raise ValueError(f"Account not found: {account_id}")
         return account
+
+    def _attach_import_preview_contract(
+        self,
+        result: Dict[str, Any],
+        *,
+        account: Dict[str, Any],
+        broker: str,
+        parsed_payload: Dict[str, Any],
+        broker_connection_id: Optional[int],
+    ) -> None:
+        trade_records = list(parsed_payload.get("records", []))
+        cash_entries = list(parsed_payload.get("cash_entries", []))
+        inserted = int(result.get("inserted_count", 0) or 0)
+        inserted += int(result.get("cash_inserted_count", 0) or 0)
+        inserted += int(result.get("corporate_action_inserted_count", 0) or 0)
+        rejected = int(result.get("failed_count", 0) or 0)
+        rejected += int(parsed_payload.get("skipped_count", 0) or 0)
+        rejected += int(parsed_payload.get("error_count", 0) or 0)
+        duplicate_count = int(result.get("duplicate_count", 0) or 0)
+        metadata = dict(parsed_payload.get("metadata", {}))
+        base_currency = str(account.get("base_currency") or "").upper()
+        connection_id = (
+            broker_connection_id
+            or result.get("broker_connection_id")
+            or metadata.get("existing_connection_id")
+        )
+        will_create_connection = (
+            broker == IBKR_BROKER
+            and not connection_id
+            and bool(str(metadata.get("broker_account_ref") or "").strip())
+        )
+
+        result["accepted_count"] = inserted
+        result["rejected_count"] = rejected
+        result["preview_only"] = bool(result.get("dry_run"))
+        result["requires_confirmation"] = bool(result.get("dry_run")) and inserted > 0
+        result["duplicate_candidates"] = (
+            [
+                {
+                    "count": duplicate_count,
+                    "reason": "existing_or_repeated_logical_record",
+                    "recovery_action": "Remove duplicate records or leave them to be skipped.",
+                }
+            ]
+            if duplicate_count
+            else []
+        )
+        result["unknown_symbols"] = [
+            {
+                "row": item.get("_source_line_number") or item.get("source_line_number"),
+                "symbol": item.get("symbol"),
+                "reason": "market_unresolved",
+                "recovery_action": "Confirm symbol market before import confirmation.",
+            }
+            for item in trade_records
+            if item.get("symbol") and not item.get("market")
+        ][:20]
+        result["currency_issues"] = [
+            *[
+                {
+                    "row": item.get("_source_line_number") or item.get("source_line_number"),
+                    "symbol": item.get("symbol"),
+                    "currency": item.get("currency"),
+                    "account_base_currency": base_currency,
+                    "reason": "currency_missing" if not item.get("currency") else "cross_currency_record",
+                    "recovery_action": "Confirm settlement currency and FX availability.",
+                }
+                for item in trade_records
+                if not item.get("currency")
+                or (base_currency and str(item.get("currency") or "").upper() != base_currency)
+            ],
+            *[
+                {
+                    "row": None,
+                    "currency": item.get("currency"),
+                    "account_base_currency": base_currency,
+                    "reason": "cash_currency_missing" if not item.get("currency") else "cross_currency_cash",
+                    "recovery_action": "Confirm cash currency and FX availability.",
+                }
+                for item in cash_entries
+                if not item.get("currency")
+                or (base_currency and str(item.get("currency") or "").upper() != base_currency)
+            ],
+        ][:20]
+        result["account_mapping"] = {
+            "account_id": account.get("id"),
+            "account_name": account.get("name"),
+            "account_base_currency": base_currency,
+            "broker": broker,
+            "broker_connection_id": connection_id,
+            "status": (
+                "existing_connection"
+                if connection_id
+                else "will_create_on_confirm"
+                if will_create_connection
+                else "selected_account"
+            ),
+        }
+        result["validation_checks"] = [
+            {
+                "check": "date_quantity_price",
+                "accepted_rows": len(trade_records),
+                "rejected_rows": rejected,
+            },
+            {"check": "account_mapping", "status": result["account_mapping"]["status"]},
+            {"check": "duplicate_detection", "duplicate_candidates": duplicate_count},
+            {"check": "currency_review", "issue_count": len(result["currency_issues"])},
+        ]
+        recovery_actions: List[str] = []
+        if rejected:
+            recovery_actions.append("Fix rejected rows and retry preview before confirming.")
+        if duplicate_count:
+            recovery_actions.append("Review duplicate candidates before confirming.")
+        if result["currency_issues"]:
+            recovery_actions.append("Review currency and FX availability before confirming.")
+        if result["unknown_symbols"]:
+            recovery_actions.append("Confirm symbol market mapping before confirming.")
+        result["recovery_actions"] = recovery_actions
 
     def parse_trade_csv(
         self,
@@ -369,12 +494,14 @@ class PortfolioImportService:
         corporate_actions = list(parsed_payload.get("corporate_actions", []))
         warnings = list(parsed_payload.get("warnings", []))
         metadata = dict(parsed_payload.get("metadata", {}))
+        account = self._require_import_account(account_id)
 
         connection = self._resolve_import_broker_connection(
             account_id=account_id,
             broker_connection_id=broker_connection_id,
             broker=IBKR_BROKER,
             parsed_payload=parsed_payload,
+            dry_run=dry_run,
         )
 
         fingerprint = str(metadata.get("file_fingerprint") or "").strip() or None
@@ -384,7 +511,7 @@ class PortfolioImportService:
             and fingerprint
             and str(connection.get("last_import_fingerprint") or "").strip() == fingerprint
         ):
-            return {
+            result = {
                 "account_id": account_id,
                 "record_count": len(trade_records),
                 "inserted_count": 0,
@@ -403,6 +530,14 @@ class PortfolioImportService:
                 "metadata": metadata,
                 "errors": [],
             }
+            self._attach_import_preview_contract(
+                result,
+                account=account,
+                broker=IBKR_BROKER,
+                parsed_payload=parsed_payload,
+                broker_connection_id=broker_connection_id,
+            )
+            return result
 
         self._maybe_upgrade_account_market_for_ibkr(
             account_id=account_id,
@@ -445,7 +580,7 @@ class PortfolioImportService:
             if updated is not None:
                 connection = updated
 
-        return {
+        result = {
             "account_id": account_id,
             "record_count": len(trade_records),
             "inserted_count": int(trade_result.get("inserted_count", 0)),
@@ -464,6 +599,14 @@ class PortfolioImportService:
             "metadata": metadata,
             "errors": combined_errors[:20],
         }
+        self._attach_import_preview_contract(
+            result,
+            account=account,
+            broker=IBKR_BROKER,
+            parsed_payload=parsed_payload,
+            broker_connection_id=broker_connection_id,
+        )
+        return result
 
     def _maybe_upgrade_account_market_for_ibkr(
         self,
@@ -496,6 +639,7 @@ class PortfolioImportService:
         broker_connection_id: Optional[int],
         broker: str,
         parsed_payload: Dict[str, Any],
+        dry_run: bool = False,
     ) -> Optional[Dict[str, Any]]:
         metadata = dict(parsed_payload.get("metadata", {}))
         broker_account_ref = str(metadata.get("broker_account_ref") or "").strip() or None
@@ -518,6 +662,8 @@ class PortfolioImportService:
                     "Detected broker_account_ref is already linked to a different portfolio account"
                 )
             return existing
+        if dry_run:
+            return None
         return self.portfolio_service.create_broker_connection(
             portfolio_account_id=account_id,
             broker_type=broker,

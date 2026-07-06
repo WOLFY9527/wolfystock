@@ -1328,6 +1328,12 @@ def _build_import_commit_response(result: dict) -> PortfolioImportCommitResponse
     payload["warnings"] = _sanitize_import_artifact_value(list(payload.get("warnings", [])))
     payload["metadata"] = _sanitize_import_artifact_value(dict(payload.get("metadata", {})))
     payload["errors"] = _sanitize_import_artifact_value(list(payload.get("errors", [])))
+    payload["duplicate_candidates"] = _sanitize_import_artifact_value(list(payload.get("duplicate_candidates", [])))
+    payload["unknown_symbols"] = _sanitize_import_artifact_value(list(payload.get("unknown_symbols", [])))
+    payload["currency_issues"] = _sanitize_import_artifact_value(list(payload.get("currency_issues", [])))
+    payload["account_mapping"] = _sanitize_import_artifact_value(dict(payload.get("account_mapping", {})))
+    payload["validation_checks"] = _sanitize_import_artifact_value(list(payload.get("validation_checks", [])))
+    payload["recovery_actions"] = _sanitize_import_artifact_value(list(payload.get("recovery_actions", [])))
     return PortfolioImportCommitResponse(**payload)
 
 
