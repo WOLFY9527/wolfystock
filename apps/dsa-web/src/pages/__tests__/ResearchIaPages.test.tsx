@@ -1177,12 +1177,14 @@ describe('research IA pages', () => {
     expect(selectedCandidate).toHaveTextContent('下一步研究检查');
     expect(within(selectedCandidate).getByTestId('research-radar-factor-bars')).toHaveTextContent('70');
     expect(within(selectedCandidate).getByRole('link', { name: '查看个股研究' })).toHaveAttribute('href', expect.stringContaining('/zh/stocks/ALFA/structure-decision'));
-    expect(within(selectedCandidate).getByRole('link', { name: '查看观察列表' })).toHaveAttribute('href', expect.stringContaining('/zh/watchlist?'));
-    expect(within(selectedCandidate).getByRole('link', { name: '查看观察列表' })).toHaveAttribute('href', expect.stringContaining('symbol=ALFA'));
-    expect(within(selectedCandidate).getByRole('link', { name: '查看观察列表' })).toHaveAttribute('href', expect.stringContaining('market=US'));
+    expect(within(selectedCandidate).getByRole('link', { name: '查看个股研究' })).toHaveAttribute('href', expect.stringContaining('source=scanner'));
+    expect(within(selectedCandidate).getByRole('link', { name: '打开观察列表视图' })).toHaveAttribute('href', expect.stringContaining('/zh/watchlist?'));
+    expect(within(selectedCandidate).getByRole('link', { name: '打开观察列表视图' })).toHaveAttribute('href', expect.stringContaining('symbol=ALFA'));
+    expect(within(selectedCandidate).getByRole('link', { name: '打开观察列表视图' })).toHaveAttribute('href', expect.stringContaining('market=US'));
+    expect(within(selectedCandidate).getByRole('link', { name: '打开观察列表视图' })).toHaveAttribute('href', expect.stringContaining('source=scanner'));
     const diagnostics = within(page).getByTestId('research-radar-diagnostics-disclosure');
     expect(diagnostics).not.toHaveAttribute('open');
-    expect(diagnostics).toHaveTextContent('查看详细证据与数据诊断');
+    expect(diagnostics).toHaveTextContent('查看详细证据与数据就绪');
     const secondaryFallback = within(diagnostics).getByTestId('research-radar-market-level-fallback');
     expect(secondaryFallback).toHaveTextContent('Market-level evidence is secondary when the candidate queue has rows.');
     const evidenceHub = await within(page).findByTestId('research-radar-evidence-hub');

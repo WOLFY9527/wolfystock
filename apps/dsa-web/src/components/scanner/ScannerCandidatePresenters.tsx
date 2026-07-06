@@ -398,7 +398,7 @@ export function ScannerCandidateDetailPanel({
       ) : null}
       <div className="md:col-span-4 flex flex-wrap items-center gap-2 border-t border-[color:var(--wolfy-divider)] py-2">
         <ActionButton
-          label={isAnalyzing ? (language === 'en' ? 'Analyzing...' : '分析中...') : (language === 'en' ? 'Analyze' : '分析')}
+          label={language === 'en' ? 'Open stock research' : '打开个股研究'}
           icon={<Play className="h-3.5 w-3.5" />}
           onClick={() => onAnalyze()}
           disabled={isAnalyzing}
@@ -732,7 +732,7 @@ export function ScannerCandidateDiagnosticRow({
       {isMoreOpen ? (
         <div data-testid={`scanner-candidate-row-more-${candidate.symbol}`} className="mt-1.5 flex flex-wrap gap-2 border-t border-[color:var(--wolfy-divider)] pt-2">
           <ActionButton
-            label={isAnalyzing ? (language === 'en' ? 'Analyzing...' : '分析中...') : (language === 'en' ? 'Analyze' : '分析')}
+            label={language === 'en' ? 'Open stock research' : '打开个股研究'}
             onClick={onAnalyze}
             disabled={isAnalyzing}
           />

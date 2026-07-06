@@ -54,7 +54,7 @@ export default function WatchlistResearchQueuePanel({
           <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
             {title}
           </p>
-          <p className="mt-1 text-xs leading-5 text-white/58">
+          <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
             {language === 'en'
               ? 'Compact follow-up list for saved symbols that need one more research check.'
               : '已保存标的的简要跟进清单，每项只保留一个待核对方向。'}
@@ -66,11 +66,11 @@ export default function WatchlistResearchQueuePanel({
       </div>
 
       {boundedQueue.length === 0 ? (
-        <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3 text-xs leading-5 text-white/58">
-          <p className="font-medium text-white/72">
+        <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+          <p className="font-medium text-[color:var(--wolfy-text-secondary)]">
             {language === 'en' ? 'No follow-up research queue right now' : '暂无需要跟进的研究队列'}
           </p>
-          <p className="mt-1 text-white/45">
+          <p className="mt-1 text-[color:var(--wolfy-text-muted)]">
             {language === 'en'
               ? 'Keep observing; this view does not create research jobs or change the watchlist.'
               : '继续保持观察，不会自动创建任务或更改观察列表。'}
@@ -94,8 +94,8 @@ export default function WatchlistResearchQueuePanel({
               >
                 <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="font-mono text-sm font-semibold text-white">{item.symbol}</p>
-                    <p className="mt-1 text-xs leading-5 text-white/68">{consumerCopy.priorityReason}</p>
+                    <p className="font-mono text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{item.symbol}</p>
+                    <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{consumerCopy.priorityReason}</p>
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
                     <TerminalChip variant={consumerCopy.priorityVariant} className="font-mono">
@@ -107,7 +107,7 @@ export default function WatchlistResearchQueuePanel({
                 <div className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5">
                   <TerminalChip variant="neutral">{consumerCopy.evidenceStateLabel}</TerminalChip>
                   {reviewedAt ? (
-                    <span className="font-mono text-[11px] text-white/42">
+                    <span className="font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">
                       {language === 'en' ? 'Reviewed ' : '复核 '}
                       {reviewedAt}
                     </span>
@@ -115,7 +115,7 @@ export default function WatchlistResearchQueuePanel({
                 </div>
 
                 {consumerCopy.missingEvidence.length ? (
-                  <p className="mt-3 text-xs leading-5 text-white/58">
+                  <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                     {language === 'en' ? 'Needs check: ' : '待核对：'}
                     {consumerCopy.missingEvidence.slice(0, 2).join(language === 'en' ? ', ' : '、')}
                   </p>
@@ -123,7 +123,7 @@ export default function WatchlistResearchQueuePanel({
 
                 {consumerCopy.suggestedResearchPath.length ? (
                   <div className="mt-3 space-y-2">
-                    <p className="text-[11px] font-medium text-white/45">
+                    <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">
                       {language === 'en' ? 'Next check' : '下一步核对'}
                     </p>
                     {item.suggestedResearchPath.map((path, index) => {
@@ -132,10 +132,10 @@ export default function WatchlistResearchQueuePanel({
                         <Link
                           key={`${item.symbol}:path:${path.route}:${path.label}`}
                           to={buildLocalizedPath(path.route, language)}
-                          className="block rounded-md border border-white/8 bg-black/20 px-2.5 py-2 text-xs leading-5 text-white/68 transition hover:border-white/18 hover:text-white"
+                          className="block rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)] transition hover:border-[color:var(--wolfy-accent)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]"
                         >
-                          <span className="font-medium text-white/78">{safePath?.label}</span>
-                          {safePath?.reason ? <span className="ml-2 text-white/45">{safePath.reason}</span> : null}
+                          <span className="font-medium text-[color:var(--wolfy-text-secondary)]">{safePath?.label}</span>
+                          {safePath?.reason ? <span className="ml-2 text-[color:var(--wolfy-text-muted)]">{safePath.reason}</span> : null}
                         </Link>
                       );
                     })}

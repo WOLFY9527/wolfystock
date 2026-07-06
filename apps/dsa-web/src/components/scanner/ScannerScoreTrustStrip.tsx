@@ -62,9 +62,9 @@ function localizeReason(reason: string | null, language: 'zh' | 'en') {
     public_proxy_not_score_grade: { zh: '仅观察', en: 'Observe only' },
     observation_only: { zh: '仅观察', en: 'Observe only' },
     cache_stale: { zh: '数据过期', en: 'Stale data' },
-    provider_timeout: { zh: '证据不足', en: 'Insufficient evidence' },
-    quote_unavailable: { zh: '证据不足', en: 'Insufficient evidence' },
-    history_insufficient: { zh: '证据不足', en: 'Insufficient evidence' },
+    provider_timeout: { zh: '当前证据不足', en: 'Current evidence insufficient' },
+    quote_unavailable: { zh: '报价数据不足', en: 'Quote data insufficient' },
+    history_insufficient: { zh: '历史样本不足', en: 'Historical sample insufficient' },
   };
   if (labels[normalized]) return labels[normalized][language];
   if (!normalized) return null;

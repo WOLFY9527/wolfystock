@@ -570,7 +570,7 @@ describe('WatchlistPage', () => {
     expect(board).toHaveTextContent('$190.3');
     expect(board).toHaveTextContent('-0.42%');
     expect(board).toHaveTextContent('研究包部分可用');
-    expect(board).toHaveTextContent('补基本面、事件、同业');
+    expect(board).toHaveTextContent('复核缺口：基本面、事件、同业');
     expect(board).toHaveTextContent('查看个股结构');
     expect(board).toHaveTextContent('SHOP');
     expect(board).toHaveTextContent('报价暂缺');
@@ -2420,6 +2420,12 @@ describe('WatchlistPage', () => {
     expect(row).toHaveTextContent('研究状态未知');
     expect(row).toHaveTextContent('查看个股结构');
     expect(row).not.toHaveTextContent(/数据更新中|稍后将自动刷新|评分已刷新|已更新|当前焦点|最新1|fake|placeholder/i);
+
+    const detailRail = screen.getByTestId('watchlist-detail-rail');
+    expect(detailRail).toHaveTextContent('研究状态待确认');
+    expect(detailRail).toHaveTextContent('时效未知');
+    expect(detailRail).toHaveTextContent('研究状态待确认，未推断刷新进度。');
+    expect(detailRail).not.toHaveTextContent(/数据更新中|稍后将自动刷新|自动刷新|刷新中/i);
 
     const panel = await screen.findByTestId('watchlist-research-workspace-flow');
     expect(within(panel).getByTestId('research-workspace-link-stock-structure')).toHaveAttribute(

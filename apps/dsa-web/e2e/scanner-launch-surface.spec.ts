@@ -742,11 +742,13 @@ async function assertScannerLaunchViewport(page: Page, viewport: { width: number
 }
 
 test.describe('scanner launch surface', () => {
-  test('candidate and evidence lead the zh scanner first fold', async ({ page }) => {
+  test('candidate and evidence lead the zh scanner first fold', async ({ page, consoleErrors }) => {
     await assertScannerLaunchViewport(page, { width: 1440, height: 1000 });
     await assertScannerLaunchViewport(page, { width: 1920, height: 1080 });
+    await assertScannerLaunchViewport(page, { width: 1024, height: 900 });
     await assertScannerLaunchViewport(page, { width: 768, height: 900 });
     await assertScannerLaunchViewport(page, { width: 390, height: 844 });
+    expect(consoleErrors).toEqual([]);
   });
 
   for (const matrixCase of scannerStateMatrixCases) {
@@ -1142,7 +1144,7 @@ test.describe('scanner launch surface', () => {
     await expect(nextSteps).toContainText('查看历史');
     await expect(nextSteps).toContainText('可选保存路径');
     await expect(nextSteps).not.toContainText(/功能预览|示例预览|此演示样例不是实时扫描结果/);
-    await expect(nextSteps.getByRole('link', { name: /打开 Watchlist/i })).toHaveAttribute('href', '/zh/watchlist');
+    await expect(nextSteps.getByRole('link', { name: /打开观察列表视图|Open Watchlist view/i })).toHaveAttribute('href', '/zh/watchlist');
     await expect(nextSteps.getByRole('link', { name: /打开 Market Overview/i })).toHaveAttribute('href', '/zh/market-overview');
 
     await nextSteps.getByLabel(/手动补充研究代码/).fill('TSLA');
@@ -1151,8 +1153,9 @@ test.describe('scanner launch surface', () => {
     await expect(nextSteps.getByRole('button', { name: /已在观察名单|Already in Watchlist/ })).toBeVisible();
 
     await nextSteps.getByLabel(/手动补充研究代码/).fill('TSLA');
-    await nextSteps.getByRole('button', { name: /研究 TSLA/ }).click();
-    await expect.poll(() => JSON.stringify(analysisRequest)).toContain('TSLA');
+    await nextSteps.getByRole('button', { name: /打开 TSLA|Open TSLA/ }).click();
+    await expect(page).toHaveURL(/\/zh\/stocks\/TSLA\/structure-decision\?symbol=TSLA&market=CN&source=scanner/);
+    expect(analysisRequest).toBeNull();
 
     const bodyText = await page.locator('body').innerText();
     expect(bodyText).not.toMatch(/provider|reasonCode|fallback_source|below_liquidity_threshold|raw diagnostics|payload_json/i);

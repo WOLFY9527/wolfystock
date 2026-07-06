@@ -982,6 +982,8 @@ function renderUserScannerPage(options: boolean | RenderUserScannerPageOptions =
           <Route path="/:locale/watchlist" element={<div>Watchlist Landing</div>} />
           <Route path="/market-overview" element={<div>Market Overview Landing</div>} />
           <Route path="/:locale/market-overview" element={<div>Market Overview Landing</div>} />
+          <Route path="/stocks/:symbol/structure-decision" element={<div>Stock Research Landing</div>} />
+          <Route path="/:locale/stocks/:symbol/structure-decision" element={<div>Stock Research Landing</div>} />
           <Route path="/backtest" element={<div>Backtest Landing</div>} />
           <Route path="/:locale/backtest" element={<div>Backtest Landing</div>} />
           <Route path="/backtest/results/:runId" element={<div>Backtest Result</div>} />
@@ -2225,7 +2227,7 @@ describe('UserScannerPage', () => {
     expect(nextSteps).not.toHaveTextContent('预览候选');
     expect(within(nextSteps).queryByTestId('scanner-empty-success-preview')).not.toBeInTheDocument();
     expect(within(nextSteps).queryByTestId('scanner-next-step-preview')).not.toBeInTheDocument();
-    expect(within(nextSteps).getByRole('link', { name: /打开 Watchlist/i })).toHaveAttribute('href', '/zh/watchlist');
+    expect(within(nextSteps).getByRole('link', { name: /打开观察列表视图|Open Watchlist view/i })).toHaveAttribute('href', '/zh/watchlist');
     expect(within(nextSteps).getByRole('link', { name: /打开 Market Overview/i })).toHaveAttribute('href', '/zh/market-overview');
     const runFacts = await screen.findByTestId('scanner-run-facts');
     expect(runFacts).toHaveTextContent('运行事实');
@@ -2327,15 +2329,10 @@ describe('UserScannerPage', () => {
     expect(await within(nextSteps).findByRole('button', { name: /已在观察名单|Already in Watchlist/ })).toBeInTheDocument();
 
     fireEvent.change(within(nextSteps).getByLabelText(/手动补充研究代码/), { target: { value: 'TSLA' } });
-    fireEvent.click(within(nextSteps).getByRole('button', { name: /研究 TSLA/ }));
+    fireEvent.click(within(nextSteps).getByRole('button', { name: /打开 TSLA|Open TSLA/ }));
 
-    await waitFor(() => {
-      expect(analyzeAsync).toHaveBeenCalledWith(expect.objectContaining({
-        stockCode: 'TSLA',
-        originalQuery: 'TSLA',
-        selectionSource: 'manual',
-      }));
-    });
+    expect(await screen.findByText('Stock Research Landing')).toBeInTheDocument();
+    expect(analyzeAsync).not.toHaveBeenCalled();
     expect(container).not.toHaveTextContent(/provider|reasonCode|fallback_source|below_liquidity_threshold|raw diagnostics|JSON/i);
   });
 
@@ -2497,7 +2494,7 @@ describe('UserScannerPage', () => {
     expect(getActionButton(row, /详情|Detail/i)).toHaveAttribute('data-terminal-primitive', 'button');
     fireEvent.click(getActionButton(row, /更多|More/i));
     const rankedRow = getRankedRow('NVDA');
-    expect(within(rankedRow).getByRole('button', { name: /分析|Analyze/i })).toHaveAttribute('data-terminal-primitive', 'button');
+    expect(within(rankedRow).getByRole('button', { name: /打开个股研究|Open stock research/i })).toHaveAttribute('data-terminal-primitive', 'button');
     expect(within(rankedRow).getByRole('button', { name: /追踪|Track/i })).toHaveAttribute('data-terminal-primitive', 'button');
 
     fireEvent.click(moreTrigger);
@@ -2962,10 +2959,10 @@ describe('UserScannerPage', () => {
 
     const row = await screen.findByTestId('scanner-result-row-NVDA');
     expect(getActionButton(row, /详情|Detail/i)).toBeInTheDocument();
-    expect(within(row).queryByRole('button', { name: /分析|Analyze/i })).not.toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: /打开个股研究|Open stock research/i })).not.toBeInTheDocument();
     fireEvent.click(getActionButton(row, /更多|More/i));
     const rankedRow = getRankedRow('NVDA');
-    expect(within(rankedRow).getByRole('button', { name: /分析|Analyze/i })).toBeInTheDocument();
+    expect(within(rankedRow).getByRole('button', { name: /打开个股研究|Open stock research/i })).toBeInTheDocument();
     expect(within(rankedRow).getByRole('button', { name: /追踪|Track/i })).toBeInTheDocument();
     expect(screen.getByTestId('scanner-ranked-list')).toBeInTheDocument();
   });
@@ -3012,22 +3009,16 @@ describe('UserScannerPage', () => {
     expect(exportText).toContain('1,NVDA');
   });
 
-  it('analyze action triggers existing async analysis and routes to the home analysis surface', async () => {
+  it('candidate research action opens the stock research route without mutating analysis state', async () => {
     renderUserScannerPage();
 
     const card = await screen.findByTestId('scanner-result-row-NVDA');
     fireEvent.click(getActionButton(card, /详情|Detail/i));
     const detail = await screen.findByTestId('scanner-result-detail-NVDA');
-    fireEvent.click(within(detail).getByRole('button', { name: /分析|Analyze/i }));
+    fireEvent.click(within(detail).getByRole('button', { name: /打开个股研究|Open stock research/i }));
 
-    await waitFor(() => {
-      expect(analyzeAsync).toHaveBeenCalledWith(expect.objectContaining({
-        stockCode: 'NVDA',
-        originalQuery: 'NVDA',
-        selectionSource: 'manual',
-      }));
-    });
-    expect(await screen.findByText('Home Landing')).toBeInTheDocument();
+    expect(await screen.findByText('Stock Research Landing')).toBeInTheDocument();
+    expect(analyzeAsync).not.toHaveBeenCalled();
   });
 
   it('enables backtest action for candidates with symbol', async () => {
@@ -3153,7 +3144,7 @@ describe('UserScannerPage', () => {
 
     const detail = await screen.findByTestId('scanner-result-detail-NVDA');
     expect(within(detail).getByText(/当前信号|Why now/)).toBeInTheDocument();
-    expect(within(detail).getByRole('button', { name: /分析|Analyze/i })).toBeInTheDocument();
+    expect(within(detail).getByRole('button', { name: /打开个股研究|Open stock research/i })).toBeInTheDocument();
     expect(within(detail).getByRole('button', { name: /复制代码|Copy symbol/i })).toBeInTheDocument();
     expect(within(detail).getByRole('button', { name: /导出|Export/i })).toBeInTheDocument();
     expect(within(detail).getByRole('button', { name: /回测|Backtest/i })).toBeEnabled();

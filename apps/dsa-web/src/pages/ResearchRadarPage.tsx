@@ -482,16 +482,16 @@ function ResearchRadarQueueOverview({
                     </section>
                     <div className="flex min-w-0 flex-wrap gap-2 pt-1">
                       <Link
-                        to={buildResearchWorkspacePath('stock-structure', linkLocale, { symbol: selectedSymbol, market })}
+                        to={buildResearchWorkspacePath('stock-structure', linkLocale, { symbol: selectedSymbol, market, source: 'scanner' })}
                         className="inline-flex min-h-9 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]"
                       >
                         {locale === 'en' ? 'Open stock research' : '查看个股研究'}
                       </Link>
                       <Link
-                        to={buildResearchWorkspacePath('watchlist', linkLocale, { symbol: selectedSymbol, market })}
+                        to={buildResearchWorkspacePath('watchlist', linkLocale, { symbol: selectedSymbol, market, source: 'scanner' })}
                         className="inline-flex min-h-9 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] px-3 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]"
                       >
-                        {locale === 'en' ? 'Open watchlist' : '查看观察列表'}
+                        {locale === 'en' ? 'Open Watchlist view' : '打开观察列表视图'}
                       </Link>
                     </div>
                   </div>
@@ -758,7 +758,7 @@ function ResearchEvidenceHubPanel({
             return (
               <section
                 key={String(item.key || item.label)}
-                className="min-w-0 rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 p-3"
+                className="min-w-0 rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-3"
               >
                 <div className="flex min-w-0 items-start justify-between gap-2">
                   <h3 className="min-w-0 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
@@ -817,7 +817,7 @@ function ResearchEvidenceHubPanel({
                 return (
                   <div
                     key={`${item.key || item.label}-${index}`}
-                    className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-black/10 px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]"
+                    className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-panel)] px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]"
                   >
                     <span className="font-semibold text-[color:var(--wolfy-text-primary)]">
                       {evidenceHubLabel(item, locale)}
@@ -884,7 +884,7 @@ function ResearchQueueHubPanel({
               <section
                 key={group.surface}
                 data-testid={`research-queue-source-${group.surface.replaceAll('_', '-')}`}
-                className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 p-3"
+                className="rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-3"
               >
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
@@ -989,7 +989,7 @@ function ResearchQueueHubPanel({
                                 <Link
                                   key={`${item.symbol}:path:${pathIndex}`}
                                   to={localize(route)}
-                                  className="block rounded-md border border-[color:var(--wolfy-border-subtle)] bg-black/10 px-3 py-2 text-xs leading-5 transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+                                  className="block rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs leading-5 transition-colors hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]"
                                 >
                                   {content}
                                 </Link>
@@ -1045,7 +1045,7 @@ function MarketLevelFallbackPanel({
     >
       <div data-testid="research-radar-market-level-fallback" className="space-y-4">
         <div className="grid gap-3 md:grid-cols-3">
-          <div className="rounded-lg border border-[color:var(--wolfy-divider)] bg-black/10 p-3">
+          <div className="rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-3">
             <div className="text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Scope' : '范围'}</div>
             <div className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">
               {consumerPresentationText(fallback.label, locale, locale === 'en' ? 'Market-level context' : '市场级上下文')}
@@ -1056,14 +1056,14 @@ function MarketLevelFallbackPanel({
                 : '候选研究不可用或尚未执行；这里不是个股候选排序。'}
             </div>
           </div>
-          <div className="rounded-lg border border-[color:var(--wolfy-divider)] bg-black/10 p-3">
+          <div className="rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-3">
             <div className="text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Regime' : '市场状态'}</div>
             <div className="mt-1 flex flex-wrap gap-2">
               <StatusBadge status={toneFor(fallback.regime?.status)} label={readModelLabel(fallback.regime?.label, locale)} size="sm" />
               <StatusBadge status={toneFor(fallback.readiness?.label)} label={readModelLabel(fallback.readiness?.label, locale)} size="sm" />
             </div>
           </div>
-          <div className="rounded-lg border border-[color:var(--wolfy-divider)] bg-black/10 p-3">
+          <div className="rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-3">
             <div className="text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Candidate state' : '候选状态'}</div>
             <div className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">
               {fallback.candidateGenerationExecuted
@@ -1080,7 +1080,7 @@ function MarketLevelFallbackPanel({
         </p>
         <div className="grid gap-3 md:grid-cols-3">
           {cards.map((card, index) => (
-            <div key={`${card.cardId || card.title || 'card'}-${index}`} className="rounded-lg border border-[color:var(--wolfy-divider)] bg-black/10 p-3">
+            <div key={`${card.cardId || card.title || 'card'}-${index}`} className="rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">
                   {consumerPresentationText(card.title, locale, locale === 'en' ? 'Evidence card' : '证据卡')}
@@ -1102,7 +1102,7 @@ function MarketLevelFallbackPanel({
             items={blockedSurfaces}
             emptyText={locale === 'en' ? 'No blocked product surface reported.' : '未报告阻塞的产品界面。'}
           />
-          <div className="rounded-lg border border-[color:var(--wolfy-divider)] bg-black/10 p-3">
+          <div className="rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-3">
             <div className="text-xs text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Next operator action' : '下一步操作'}</div>
             <div className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{action}</div>
           </div>
@@ -1244,11 +1244,11 @@ export default function ResearchRadarPage() {
                   ]}
                 />
               </RoughSectionCard>
-              <RoughSectionCard eyebrow={locale === 'en' ? 'Details' : '明细'} title={locale === 'en' ? 'Diagnostics are collapsed' : '诊断默认折叠'}>
+              <RoughSectionCard eyebrow={locale === 'en' ? 'Details' : '明细'} title={locale === 'en' ? 'Evidence details are collapsed' : '证据明细默认折叠'}>
                 <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
                   {locale === 'en'
-                    ? 'Open the details section for full evidence gaps, data health, and queue diagnostics.'
-                    : '完整证据缺口、数据健康与队列诊断已放入下方明细区。'}
+                    ? 'Open the details section for evidence gaps, data health, and queue readiness.'
+                    : '完整证据缺口、数据健康与队列就绪状态已放入下方明细区。'}
                 </p>
               </RoughSectionCard>
             </ConsoleContextRail>
@@ -1297,10 +1297,10 @@ export default function ResearchRadarPage() {
                 <div className="p-3">
                   <details
                     data-testid="research-radar-diagnostics-disclosure"
-                    className="rounded-[16px] border border-[color:var(--wolfy-border-subtle)] bg-black/5 p-3"
+                    className="rounded-[16px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3"
                   >
-                    <summary className="cursor-pointer text-sm font-medium text-[color:var(--wolfy-text-secondary)]">
-                      {locale === 'en' ? 'View detailed evidence and data diagnostics' : '查看详细证据与数据诊断'}
+                    <summary className="cursor-pointer text-sm font-medium text-[color:var(--wolfy-text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]">
+                      {locale === 'en' ? 'View detailed evidence and data readiness' : '查看详细证据与数据就绪'}
                     </summary>
                     <div className="mt-3 space-y-3">
                       <ConsumerDataHealthSummaryPanel
