@@ -23,6 +23,7 @@ except ModuleNotFoundError:
 
 import src.auth as auth
 from api.app import create_app
+from api.deps import CurrentUser, get_current_user
 from src.config import Config
 from src.services.portfolio_import_service import PortfolioImportService
 from src.services.portfolio_risk_service import PortfolioRiskService
@@ -38,6 +39,20 @@ def _reset_auth_globals() -> None:
     auth._rate_limit = {}
 
 
+def _make_pr2_consumer_user() -> CurrentUser:
+    return CurrentUser(
+        user_id="portfolio-pr2-consumer",
+        username="portfolio-pr2-consumer",
+        display_name="Portfolio PR2 Consumer",
+        role="user",
+        is_admin=False,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+        session_id="portfolio-pr2-session",
+    )
+
+
 class PortfolioPr2TestCase(unittest.TestCase):
     """End-to-end style tests for PR2 import, dedup, risk and fx behavior."""
 
@@ -47,6 +62,7 @@ class PortfolioPr2TestCase(unittest.TestCase):
         data_dir = Path(self.temp_dir.name)
         self.env_path = data_dir / ".env"
         self.db_path = data_dir / "portfolio_pr2_test.db"
+        self._previous_admin_auth_enabled = os.environ.get("ADMIN_AUTH_ENABLED")
         self.env_path.write_text(
             "\n".join(
                 [
@@ -67,22 +83,40 @@ class PortfolioPr2TestCase(unittest.TestCase):
 
         os.environ["ENV_FILE"] = str(self.env_path)
         os.environ["DATABASE_PATH"] = str(self.db_path)
+        os.environ["ADMIN_AUTH_ENABLED"] = "false"
         Config.reset_instance()
         DatabaseManager.reset_instance()
 
         self.db = DatabaseManager.get_instance()
-        self.service = PortfolioService()
+        self.db.create_or_update_app_user(
+            user_id="portfolio-pr2-consumer",
+            username="portfolio-pr2-consumer",
+            display_name="Portfolio PR2 Consumer",
+            role="user",
+            password_hash="pbkdf2:portfolio-pr2-consumer",
+            is_active=True,
+        )
+        self.service = PortfolioService(owner_id="portfolio-pr2-consumer")
         self.import_service = PortfolioImportService(portfolio_service=self.service)
         self.risk_service = PortfolioRiskService(portfolio_service=self.service)
         self._board_fetch_patcher = patch.object(PortfolioRiskService, "_fetch_belong_boards", return_value=[])
         self._board_fetch_patcher.start()
-        self.client = TestClient(create_app(static_dir=data_dir / "empty-static"))
+        self.app = create_app(static_dir=data_dir / "empty-static")
+        self.app.dependency_overrides[get_current_user] = _make_pr2_consumer_user
+        self.client = TestClient(self.app)
 
     def tearDown(self) -> None:
+        self.client.close()
+        self.app.dependency_overrides.clear()
         DatabaseManager.reset_instance()
         Config.reset_instance()
         os.environ.pop("ENV_FILE", None)
         os.environ.pop("DATABASE_PATH", None)
+        if self._previous_admin_auth_enabled is None:
+            os.environ.pop("ADMIN_AUTH_ENABLED", None)
+        else:
+            os.environ["ADMIN_AUTH_ENABLED"] = self._previous_admin_auth_enabled
+        _reset_auth_globals()
         self._board_fetch_patcher.stop()
         self.temp_dir.cleanup()
 

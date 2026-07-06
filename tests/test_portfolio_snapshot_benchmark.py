@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,7 +20,7 @@ class PortfolioSnapshotBenchmarkScriptTestCase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             output_path = Path(temp_dir) / "portfolio_snapshot_benchmark.json"
             cmd = [
-                "python3",
+                sys.executable,
                 str(SCRIPT_PATH),
                 "--account-counts",
                 "1,2",
