@@ -81,15 +81,135 @@ import type {
   PortfolioTradeUpdateRequest,
 } from '../types/portfolio';
 
-const PORTFOLIO_FIELD_LABEL_CLASS = '!mb-1 text-[11px] font-medium tracking-normal text-white/55';
+const PORTFOLIO_PAPER_SURFACE_STYLE = {
+  '--wolfy-canvas': '#F5F0EB',
+  '--wolfy-surface-console': 'rgba(251, 248, 243, 0.82)',
+  '--wolfy-surface-input': 'rgba(255, 255, 255, 0.56)',
+  '--wolfy-surface-rail': '#E9DFD3',
+  '--wolfy-border-subtle': 'rgba(54, 48, 40, 0.14)',
+  '--wolfy-divider': 'rgba(54, 48, 40, 0.24)',
+  '--wolfy-text-primary': '#25221D',
+  '--wolfy-text-secondary': 'rgba(61, 56, 49, 0.78)',
+  '--wolfy-text-muted': 'rgba(116, 107, 96, 0.72)',
+  '--wolfy-accent': '#365D3D',
+  '--wolfy-market-up': '#5D8663',
+  '--wolfy-market-down': '#A75E55',
+  '--theme-button-primary-bg': '#365D3D',
+  '--theme-button-primary-border': 'rgba(54, 93, 61, 0.72)',
+  '--theme-button-primary-text': '#FBF8F3',
+  '--state-warning-bg': '#EFE0C9',
+  '--state-warning-border': 'rgba(170, 122, 61, 0.36)',
+  '--state-warning-text': '#7B5424',
+} as React.CSSProperties;
+
+const PORTFOLIO_PAPER_SURFACE_CSS = `
+  [data-testid="portfolio-bento-page"][data-portfolio-paper-surface="true"] {
+    background:
+      radial-gradient(circle at 16% 8%, rgba(212, 165, 116, 0.18), transparent 28%),
+      linear-gradient(180deg, #F5F0EB 0%, #E9DFD3 100%);
+    color: var(--wolfy-text-secondary);
+  }
+
+  [data-testid="portfolio-bento-page"][data-portfolio-paper-surface="true"] :where(
+    [data-testid="portfolio-account-status-strip"],
+    [data-testid="portfolio-summary-market-value-card"],
+    [data-testid="portfolio-pnl-summary"],
+    [data-testid="portfolio-summary-cash-card"],
+    [data-testid="portfolio-summary-holdings-card"],
+    [data-testid="portfolio-summary-risk-card"],
+    [data-testid="portfolio-summary-status-card"],
+    [data-testid="portfolio-empty-workflow-column"],
+    [data-testid="portfolio-current-holdings-panel"],
+    [data-testid="portfolio-risk-card"],
+    [data-testid="portfolio-structure-review-panel"],
+    [data-testid="portfolio-valuation-panel"],
+    [data-testid="portfolio-next-action-panel"],
+    [data-testid="portfolio-exposure-card"],
+    [data-testid="portfolio-valuation-notes"],
+    [data-testid="portfolio-history-full"],
+    [data-testid="portfolio-trade-station-card"],
+    [data-testid="portfolio-consumer-setup-boundary"]
+  ) {
+    background: rgba(251, 248, 243, 0.82);
+    border-color: rgba(54, 48, 40, 0.14);
+    box-shadow: 0 18px 44px rgba(55, 44, 31, 0.09);
+  }
+
+  [data-testid="portfolio-bento-page"][data-portfolio-paper-surface="true"] :where(
+    [data-testid="portfolio-command-strip"] > div:last-child,
+    [data-testid="portfolio-empty-workflow-column"] [class*="rounded-2xl"],
+    [data-testid="portfolio-current-holdings-panel"] article,
+    [data-testid="portfolio-current-holdings-panel"] [data-terminal-primitive="dense-table"],
+    [data-testid="portfolio-risk-card"] [data-terminal-primitive="nested-block"],
+    [data-testid="portfolio-structure-review-panel"] [class*="rounded-xl"],
+    [data-testid="portfolio-valuation-panel"] [class*="rounded-xl"],
+    [data-testid="portfolio-next-action-panel"] [class*="rounded-xl"],
+    [data-testid="portfolio-data-notes"],
+    [data-testid="portfolio-data-notes"] [data-terminal-primitive="nested-block"],
+    [data-testid="portfolio-data-notes"] [data-terminal-primitive="panel"],
+    [data-testid="portfolio-trade-station-card"] [data-terminal-primitive="nested-block"],
+    [data-testid="portfolio-trade-station-card"] [data-testid="portfolio-manual-record-disclosure"],
+    [data-testid="portfolio-trade-station-card"] [data-testid="portfolio-import-workflow-panel"],
+    [data-testid="portfolio-consumer-setup-boundary"] [data-terminal-primitive="nested-block"],
+    .portfolio-paper-local-panel
+  ) {
+    background: rgba(255, 255, 255, 0.56);
+    border-color: rgba(54, 48, 40, 0.14);
+  }
+
+  [data-testid="portfolio-bento-page"][data-portfolio-paper-surface="true"] :where(
+    [data-testid="portfolio-total-assets-card"] h1,
+    [data-testid="portfolio-total-assets-value"],
+    [data-testid="portfolio-summary-market-value"],
+    [data-testid="portfolio-summary-cash-value"],
+    [data-testid="portfolio-current-holdings-panel"] tbody,
+    [data-testid="portfolio-structure-review-panel"] [class*="font-mono"],
+    [data-testid="portfolio-valuation-panel"] [class*="text-sm"],
+    [data-testid="portfolio-next-action-panel"] [class*="text-sm"],
+    [data-testid="portfolio-exposure-card"] [class*="font-medium"],
+    [data-testid="portfolio-exposure-card"] [class*="font-mono"]
+  ) {
+    color: var(--wolfy-text-primary);
+  }
+
+  [data-testid="portfolio-bento-page"][data-portfolio-paper-surface="true"] :where(
+    [data-testid="portfolio-total-assets-card"] p,
+    [data-testid="portfolio-command-strip"] > div:last-child,
+    [data-testid="portfolio-summary-strip"],
+    [data-testid="portfolio-empty-workflow-column"],
+    [data-testid="portfolio-current-holdings-panel"],
+    [data-testid="portfolio-risk-card"],
+    [data-testid="portfolio-structure-review-panel"],
+    [data-testid="portfolio-valuation-panel"],
+    [data-testid="portfolio-next-action-panel"],
+    [data-testid="portfolio-data-notes"],
+    [data-testid="portfolio-history-full"],
+    [data-testid="portfolio-trade-station-card"],
+    [data-testid="portfolio-consumer-setup-boundary"]
+  ) {
+    color: var(--wolfy-text-secondary);
+  }
+
+  [data-testid="portfolio-bento-page"][data-portfolio-paper-surface="true"] :where(
+    [data-testid="portfolio-total-assets-card"] h2,
+    [data-testid="portfolio-summary-strip"] [class*="uppercase"],
+    [data-testid="portfolio-current-holdings-panel"] thead,
+    [data-testid="portfolio-data-notes"] [class*="uppercase"],
+    [data-testid="portfolio-trade-station-card"] [class*="uppercase"]
+  ) {
+    color: var(--wolfy-text-muted);
+  }
+`;
+
+const PORTFOLIO_FIELD_LABEL_CLASS = '!mb-1 text-[11px] font-medium tracking-normal text-[color:var(--wolfy-text-muted)]';
 const PORTFOLIO_FIELD_WRAPPER_CLASS = 'flex flex-col gap-1.5';
 const PORTFOLIO_FORM_GRID_CLASS = 'mt-4 grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2';
-const PORTFOLIO_INPUT_CLASS = 'h-10 rounded-lg border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm text-white placeholder:text-white/20 outline-none focus:border-emerald-500/50';
+const PORTFOLIO_INPUT_CLASS = 'h-10 rounded-lg border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5 text-sm text-[color:var(--wolfy-text-primary)] placeholder:text-[color:var(--wolfy-text-muted)] outline-none focus:border-[color:var(--wolfy-accent)]';
 const PORTFOLIO_SELECT_CLASS = 'min-w-0';
 const PORTFOLIO_PRIMARY_BUTTON_CLASS = 'border border-[color:var(--wolfy-accent)] bg-[var(--wolfy-accent)] text-[#f7f8ff] font-medium px-5 py-2.5 rounded-md transition-colors hover:bg-[#6f79dc] disabled:opacity-50 disabled:cursor-not-allowed';
 const PORTFOLIO_SUBMIT_BUTTON_CLASS = 'mt-5 w-full border border-[color:var(--wolfy-accent)] bg-[var(--wolfy-accent)] text-[#f7f8ff] font-medium px-5 py-2.5 rounded-md transition-colors hover:bg-[#6f79dc] disabled:opacity-50 disabled:cursor-not-allowed';
 const PORTFOLIO_SECONDARY_BUTTON_CLASS = 'border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)] hover:border-[color:var(--wolfy-divider)] px-4 py-2.5 rounded-md transition-colors';
-const PORTFOLIO_TEXT_BUTTON_CLASS = 'border border-[color:var(--wolfy-border-subtle)] bg-transparent text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)] px-3 py-1.5 rounded-md text-xs transition-colors disabled:text-white/15 disabled:opacity-50';
+const PORTFOLIO_TEXT_BUTTON_CLASS = 'border border-[color:var(--wolfy-border-subtle)] bg-transparent text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)] px-3 py-1.5 rounded-md text-xs transition-colors disabled:text-[color:var(--wolfy-text-muted)] disabled:opacity-50';
 const PORTFOLIO_ICON_BUTTON_CLASS = 'size-9 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-0 text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)]';
 const PORTFOLIO_DANGER_GHOST_CLASS = 'size-8 rounded-md border border-[color:color-mix(in_srgb,var(--wolfy-market-down)_34%,transparent)] bg-transparent p-0 text-[color:var(--wolfy-market-down)] hover:bg-[color:color-mix(in_srgb,var(--wolfy-market-down)_10%,transparent)]';
 const CASH_CURRENCY_OPTIONS = ['CNY', 'HKD', 'USD'] as const;
@@ -3813,15 +3933,18 @@ const PortfolioPage: React.FC = () => {
 
   return (
     <>
+      <style>{PORTFOLIO_PAPER_SURFACE_CSS}</style>
       <div
         ref={surfaceRef}
         data-testid="portfolio-bento-page"
         data-bento-surface="true"
+        data-portfolio-paper-surface="true"
+        style={PORTFOLIO_PAPER_SURFACE_STYLE}
         aria-hidden={shouldGuardA11y && !isSafariReady ? true : undefined}
         aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
         className={getSafariReadySurfaceClassName(
           isSafariReady,
-          'w-full flex-1 flex flex-col min-h-0 min-w-0 bg-transparent text-white/72',
+          'w-full flex-1 flex flex-col min-h-0 min-w-0 bg-transparent text-[color:var(--wolfy-text-secondary)]',
         )}
       >
         <ConsumerWorkspaceScope className="flex-1">
@@ -4968,7 +5091,7 @@ const PortfolioPage: React.FC = () => {
                     </div>
                   ) : null}
                   {!brokerListUnavailable && selectedBroker === 'ibkr' ? (
-                    <SectionShell className="rounded-2xl border border-white/5 bg-white/[0.02] p-4" contentClassName="space-y-3">
+                    <SectionShell className="rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-4" contentClassName="space-y-3">
                       <PortfolioIbkrImportHeader copy={copy} />
                       {ibkrConnection ? <p className="text-sm text-foreground">{ibkrConnection.connectionName}</p> : null}
                       <Input label={language === 'zh' ? 'IBKR 连接端点' : 'IBKR connection endpoint'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrApiBasePlaceholder} value={ibkrApiBaseUrl} onChange={(e) => setIbkrApiBaseUrlDraft(e.target.value)} />
@@ -4981,12 +5104,13 @@ const PortfolioPage: React.FC = () => {
                       {ibkrSyncResult ? <PortfolioIbkrSyncResultCard copy={copy} result={ibkrSyncResult} /> : null}
                     </SectionShell>
                   ) : !brokerListUnavailable ? (
-                    <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 text-xs text-secondary-text">
+                    <div className="rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-4 text-xs text-secondary-text">
                       {copy.brokerImportHint}
                     </div>
                   ) : null}
                   {!brokerListUnavailable && selectedBroker ? (
-                    <SectionShell className="rounded-2xl border border-white/5 bg-white/[0.02] p-4" contentClassName="space-y-3">
+                    <div data-testid="portfolio-import-workflow-panel">
+                    <SectionShell className="rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-4" contentClassName="space-y-3">
                       <div className="min-w-0">
                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-text">{t('portfolio.importPreviewTitle')}</p>
                         <p className="mt-1 text-xs leading-5 text-secondary-text">{t('portfolio.importPreviewOnly')}</p>
@@ -5048,6 +5172,7 @@ const PortfolioPage: React.FC = () => {
                         />
                       ) : null}
                     </SectionShell>
+                    </div>
                   ) : null}
                 </div>
               ) : null}

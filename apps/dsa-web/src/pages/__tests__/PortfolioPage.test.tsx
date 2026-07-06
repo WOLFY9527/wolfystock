@@ -3543,6 +3543,9 @@ describe('PortfolioPage FX refresh', () => {
     expect(pageShell.className).toContain('flex');
     expect(pageShell.className).toContain('flex-col');
     expect(pageShell.className).toContain('bg-transparent');
+    expect(pageShell).toHaveAttribute('data-portfolio-paper-surface', 'true');
+    expect(pageShell).toHaveStyle({ '--wolfy-canvas': '#F5F0EB' });
+    expect(pageShell).toHaveStyle({ '--wolfy-accent': '#365D3D' });
     expect(pageShell).not.toHaveClass('h-full', 'overflow-y-auto', 'px-6', 'pt-6', 'pb-12');
 
     const scrollContainer = screen.getByTestId('portfolio-trade-station-scroll');
@@ -3553,7 +3556,6 @@ describe('PortfolioPage FX refresh', () => {
 
     const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
     expect(totalAssetsCard.className).toContain('min-w-0');
-    expect(screen.getByTestId('portfolio-account-status-strip').className).toContain('rounded-[14px]');
     expect(screen.getByTestId('portfolio-account-status-strip').className).toContain('bg-[var(--wolfy-surface-console)]');
 
     const summaryBlock = screen.getByTestId('portfolio-trade-station-summary');
