@@ -42,6 +42,11 @@ type CandidateDetailOutcomeItem = {
   value: string;
 };
 
+const scannerLabelTextClass = 'text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]';
+const scannerMutedTextClass = 'text-[color:var(--wolfy-text-muted)]';
+const scannerSecondaryTextClass = 'text-[color:var(--wolfy-text-secondary)]';
+const scannerPrimaryTextClass = 'text-[color:var(--wolfy-text-primary)]';
+
 type ScannerCandidateWithEvidence = ScannerCandidate & {
   candidateEvidenceFrame?: CandidateEvidenceFrame | null;
   candidateResearchReadiness?: ResearchReadinessV1 | null;
@@ -222,7 +227,7 @@ function InvestorSignalDetailSection({
         </div>
         {reasonLabels.length ? (
           <div className="space-y-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/36">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">
               {language === 'en' ? 'Why constrained' : '为什么受限'}
             </p>
             <NotesList notes={reasonLabels} empty="" />
@@ -230,7 +235,7 @@ function InvestorSignalDetailSection({
         ) : null}
         {contradictionLabels.length ? (
           <div className="space-y-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/36">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">
               {language === 'en' ? 'Counter cues' : '反向线索'}
             </p>
             <NotesList notes={contradictionLabels} empty="" />
@@ -238,10 +243,10 @@ function InvestorSignalDetailSection({
         ) : null}
         {explanation ? (
           <div className="space-y-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/36">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">
               {language === 'en' ? 'Explanation' : '说明'}
             </p>
-            <p className="text-xs leading-relaxed text-white/64">{explanation}</p>
+            <p className="text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">{explanation}</p>
           </div>
         ) : null}
       </div>
@@ -259,8 +264,8 @@ function BoardDetailSection({
   className?: string;
 }) {
   return (
-    <section className={`min-w-0 border-t border-white/8 py-2 ${className || ''}`.trim()}>
-      <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">{title}</h5>
+    <section className={`min-w-0 border-t border-[color:var(--wolfy-divider)] py-2 ${className || ''}`.trim()}>
+      <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">{title}</h5>
       {children}
     </section>
   );
@@ -336,10 +341,10 @@ export function ScannerCandidateDetailPanel({
   return (
     <div
       data-testid={`scanner-result-detail-${candidateIdentity}`}
-      className="mt-1 grid gap-x-3 gap-y-0 border-t border-white/10 bg-black/[0.14] px-2 py-1 md:grid-cols-4"
+      className="mt-1 grid gap-x-3 gap-y-0 rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-console)] px-2 py-1 text-[color:var(--wolfy-text-secondary)] md:grid-cols-4"
     >
       <BoardDetailSection title={language === 'en' ? 'Conclusion' : '结论'}>
-        <p className="text-xs leading-relaxed text-white/68">{selectionNotes[0] || candidate.reasonSummary || keyMetricItems[0]?.value || aiUnavailableText}</p>
+        <p className="text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">{selectionNotes[0] || candidate.reasonSummary || keyMetricItems[0]?.value || aiUnavailableText}</p>
       </BoardDetailSection>
       <BoardDetailSection title={language === 'en' ? 'Reason' : '理由'}>
         <NotesList notes={selectionNotes.slice(0, 2)} empty={language === 'en' ? 'No selection notes provided' : '未提供入选说明'} />
@@ -353,7 +358,7 @@ export function ScannerCandidateDetailPanel({
           {targetPrice ? <FieldChip label={language === 'en' ? 'Reference range' : '参考区间'} value={targetPrice} /> : null}
           {stopLoss ? <FieldChip label={language === 'en' ? 'Risk boundary' : '风险边界'} value={stopLoss} /> : null}
           {!entryRange && !targetPrice && !stopLoss ? (
-            <p className="text-xs text-white/36">{language === 'en' ? 'Review source evidence before treating this as evidence.' : '先复核来源证据，再作为证据。'}</p>
+            <p className="text-xs text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Review source evidence before treating this as evidence.' : '先复核来源证据，再作为证据。'}</p>
           ) : null}
         </div>
       </BoardDetailSection>
@@ -391,7 +396,7 @@ export function ScannerCandidateDetailPanel({
           </div>
         </BoardDetailSection>
       ) : null}
-      <div className="md:col-span-4 flex flex-wrap items-center gap-2 border-t border-white/8 py-2">
+      <div className="md:col-span-4 flex flex-wrap items-center gap-2 border-t border-[color:var(--wolfy-divider)] py-2">
         <ActionButton
           label={isAnalyzing ? (language === 'en' ? 'Analyzing...' : '分析中...') : (language === 'en' ? 'Analyze' : '分析')}
           icon={<Play className="h-3.5 w-3.5" />}
@@ -450,14 +455,14 @@ export function ScannerCandidateDetailPanel({
             ) : null}
             {aiAvailable ? (
               <BoardDetailSection title={language === 'en' ? 'AI interpretation' : 'AI 解读'}>
-                <div className="space-y-2 text-xs leading-relaxed text-white/64">
+                <div className="space-y-2 text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">
                   {aiLines.length ? aiLines.slice(0, 3).map((line) => <p key={line}>{line}</p>) : <p>{candidate.aiInterpretation?.status}</p>}
                 </div>
               </BoardDetailSection>
             ) : null}
             {providerNotes ? (
               <BoardDetailSection title={language === 'en' ? 'Source' : '来源'}>
-                <p className="text-xs leading-relaxed text-white/64">{providerNotes}</p>
+                <p className="text-xs leading-relaxed text-[color:var(--wolfy-text-secondary)]">{providerNotes}</p>
               </BoardDetailSection>
             ) : null}
           </div>
@@ -564,10 +569,10 @@ export function ScannerCandidateDiagnosticRow({
       data-selected={isSelectedCandidate ? 'true' : undefined}
       onClick={onSelect}
       onKeyDown={(event) => handleSelectableContainerKeyDown(event, onSelect)}
-      className={`cursor-pointer border-b border-white/7 px-3 py-2.5 text-sm transition-colors ${
+      className={`cursor-pointer border-b border-[color:var(--wolfy-divider)] px-3 py-2.5 text-sm text-[color:var(--wolfy-text-secondary)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--wolfy-accent)] ${
         isSelectedCandidate
-          ? 'bg-emerald-400/[0.045] shadow-[inset_2px_0_0_rgba(52,211,153,0.32)]'
-          : 'bg-transparent hover:bg-white/[0.028]'
+          ? 'bg-[color:color-mix(in_srgb,var(--wolfy-accent)_9%,transparent)] shadow-[inset_2px_0_0_var(--wolfy-accent)]'
+          : 'bg-transparent hover:bg-[var(--wolfy-surface-input)]'
       }`}
     >
       <div data-testid={`scanner-result-card-${candidate.symbol}`} className="contents">
@@ -575,38 +580,38 @@ export function ScannerCandidateDiagnosticRow({
           <div data-testid={`scanner-candidate-row-${candidate.symbol}`} className="contents">
           <div className="hidden min-w-0 items-center gap-3 md:grid md:grid-cols-[64px_minmax(180px,1fr)_92px_110px_minmax(220px,1.3fr)_minmax(150px,0.9fr)_minmax(190px,1fr)_auto]">
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Rank' : '排名'}</p>
-              <p className={`mt-1 font-mono text-sm font-semibold ${isSelectedCandidate ? 'text-emerald-50' : 'text-white/72'}`}>
+              <p className={scannerLabelTextClass}>{language === 'en' ? 'Rank' : '排名'}</p>
+              <p className={`mt-1 font-mono text-sm font-semibold ${scannerPrimaryTextClass}`}>
                 {candidate.rank ? `#${candidate.rank}` : '--'}
               </p>
             </div>
             <div className="min-w-0">
-              <p className={`truncate font-mono text-sm font-semibold ${isSelectedCandidate ? 'text-emerald-50' : 'text-white'}`}>
+              <p className={`truncate font-mono text-sm font-semibold ${scannerPrimaryTextClass}`}>
                 {candidate.symbol || '--'}
               </p>
-              <p className="truncate text-[11px] text-white/38">{displayName}</p>
-              {comparisonLabel ? <p className="mt-1 truncate text-[10px] text-cyan-100/70">{comparisonLabel}</p> : null}
+              <p className={`truncate text-[11px] ${scannerMutedTextClass}`}>{displayName}</p>
+              {comparisonLabel ? <p className="mt-1 truncate text-[10px] text-[color:var(--wolfy-accent)]">{comparisonLabel}</p> : null}
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Score' : '评分'}</p>
-              <p className={`mt-1 font-mono text-sm font-semibold ${isSelectedCandidate ? 'text-emerald-100' : 'text-white/78'}`}>{scoreLabel}</p>
-              {scoreDelta ? <p className="text-[10px] text-white/36">{scoreDelta}</p> : null}
+              <p className={scannerLabelTextClass}>{language === 'en' ? 'Score' : '评分'}</p>
+              <p className={`mt-1 font-mono text-sm font-semibold ${scannerPrimaryTextClass}`}>{scoreLabel}</p>
+              {scoreDelta ? <p className={`text-[10px] ${scannerMutedTextClass}`}>{scoreDelta}</p> : null}
               <ScannerScoreTrustStrip sources={resolvedTrustSources} language={language} className="mt-1.5" testId={`scanner-score-trust-${candidate.symbol}`} />
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Status' : '状态'}</p>
+              <p className={scannerLabelTextClass}>{language === 'en' ? 'Status' : '状态'}</p>
               <div className="mt-1 flex flex-wrap items-center gap-1.5">
                 <span className={`inline-flex max-w-full rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] ${previewBadgeClassName}`}>
                   <span className="truncate">{previewLabel}</span>
                 </span>
-                <span className="inline-flex rounded border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[10px] font-medium text-white/62">
+                <span className="inline-flex rounded border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--wolfy-text-secondary)]">
                   {statusLabel}
                 </span>
               </div>
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Key reason' : '关键原因'}</p>
-              <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-white/68" title={keyReason}>{keyReason}</p>
+              <p className={scannerLabelTextClass}>{language === 'en' ? 'Key reason' : '关键原因'}</p>
+              <p className={`mt-1 line-clamp-2 text-xs leading-relaxed ${scannerSecondaryTextClass}`} title={keyReason}>{keyReason}</p>
               {candidateResearchPacket ? (
                 <ScannerCandidateResearchPacket
                   packet={candidateResearchPacket}
@@ -624,8 +629,8 @@ export function ScannerCandidateDiagnosticRow({
               ) : null}
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Data quality' : '数据质量'}</p>
-              <p className="mt-1 truncate text-xs text-white/62" title={dataQualityLabel}>{dataQualityLabel}</p>
+              <p className={scannerLabelTextClass}>{language === 'en' ? 'Data quality' : '数据质量'}</p>
+              <p className={`mt-1 truncate text-xs ${scannerSecondaryTextClass}`} title={dataQualityLabel}>{dataQualityLabel}</p>
               {candidateEvidenceFrame || candidateResearchReadiness ? (
                 <ScannerCandidateEvidenceStrip
                   frame={candidateEvidenceFrame}
@@ -639,9 +644,9 @@ export function ScannerCandidateDiagnosticRow({
               {evidenceSummary ? <EvidenceChips summary={evidenceSummary} maxLabels={1} className="mt-1" /> : null}
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Watch / risk' : '观察 / 风险'}</p>
-              <p className="mt-1 truncate text-xs text-white/72" title={watchSummary}>{watchSummary}</p>
-              <p className="truncate text-[11px] text-white/38" title={rangeSummary}>{rangeSummary}</p>
+              <p className={scannerLabelTextClass}>{language === 'en' ? 'Watch / risk' : '观察 / 风险'}</p>
+              <p className={`mt-1 truncate text-xs ${scannerSecondaryTextClass}`} title={watchSummary}>{watchSummary}</p>
+              <p className={`truncate text-[11px] ${scannerMutedTextClass}`} title={rangeSummary}>{rangeSummary}</p>
             </div>
             <div className="flex min-w-0 flex-wrap justify-end gap-1.5">
               <ActionButton
@@ -661,21 +666,21 @@ export function ScannerCandidateDiagnosticRow({
             <div className="flex min-w-0 items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className={`font-mono text-sm font-semibold ${isSelectedCandidate ? 'text-emerald-50' : 'text-white'}`}>
+                  <span className={`font-mono text-sm font-semibold ${scannerPrimaryTextClass}`}>
                     {candidate.symbol || '--'}
                   </span>
                   <span className={`inline-flex max-w-full rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] ${previewBadgeClassName}`}>
                     <span className="truncate">{previewLabel}</span>
                   </span>
                 </div>
-                <p className="mt-1 truncate text-[11px] text-white/38">{displayName}</p>
+                <p className={`mt-1 truncate text-[11px] ${scannerMutedTextClass}`}>{displayName}</p>
               </div>
               <div className="shrink-0 text-right">
-                <p className="font-mono text-sm font-semibold text-white/78">{scoreLabel}</p>
-                <p className="text-[10px] text-white/36">{candidate.rank ? `#${candidate.rank}` : '--'}</p>
+                <p className={`font-mono text-sm font-semibold ${scannerPrimaryTextClass}`}>{scoreLabel}</p>
+                <p className={`text-[10px] ${scannerMutedTextClass}`}>{candidate.rank ? `#${candidate.rank}` : '--'}</p>
               </div>
             </div>
-            <div className="grid gap-1.5 text-xs text-white/66">
+            <div className={`grid gap-1.5 text-xs ${scannerSecondaryTextClass}`}>
               <p title={keyReason}>{keyReason}</p>
               {candidateResearchPacket ? (
                 <ScannerCandidateResearchPacket
@@ -704,7 +709,7 @@ export function ScannerCandidateDiagnosticRow({
                 />
               ) : null}
               <p title={watchSummary}>{watchSummary}</p>
-              <p className="text-[11px] text-white/38" title={rangeSummary}>{rangeSummary}</p>
+              <p className={`text-[11px] ${scannerMutedTextClass}`} title={rangeSummary}>{rangeSummary}</p>
               <ScannerScoreTrustStrip sources={resolvedTrustSources} language={language} className="pt-0.5" testId={`scanner-score-trust-mobile-${candidate.symbol}`} />
               {evidenceSummary ? <EvidenceChips summary={evidenceSummary} maxLabels={2} /> : null}
             </div>
@@ -725,7 +730,7 @@ export function ScannerCandidateDiagnosticRow({
         </div>
       </div>
       {isMoreOpen ? (
-        <div data-testid={`scanner-candidate-row-more-${candidate.symbol}`} className="mt-1.5 flex flex-wrap gap-2 border-t border-white/8 pt-2">
+        <div data-testid={`scanner-candidate-row-more-${candidate.symbol}`} className="mt-1.5 flex flex-wrap gap-2 border-t border-[color:var(--wolfy-divider)] pt-2">
           <ActionButton
             label={isAnalyzing ? (language === 'en' ? 'Analyzing...' : '分析中...') : (language === 'en' ? 'Analyze' : '分析')}
             onClick={onAnalyze}
@@ -754,7 +759,7 @@ export function ScannerCandidateDiagnosticRow({
         </div>
       ) : null}
       {isExpanded && detailPanel ? (
-        <div data-testid={`scanner-candidate-detail-${candidate.symbol}`} className="mt-3 border-t border-white/8 pt-3">
+        <div data-testid={`scanner-candidate-detail-${candidate.symbol}`} className="mt-3 border-t border-[color:var(--wolfy-divider)] pt-3">
           {detailPanel}
         </div>
       ) : null}
