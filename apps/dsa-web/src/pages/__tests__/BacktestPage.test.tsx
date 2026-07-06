@@ -1056,7 +1056,13 @@ describe('BacktestPage', () => {
     );
     expect(pageShell).not.toHaveClass('max-w-none', 'mx-0', 'px-0', 'xl:px-0', 'max-w-[1600px]');
     expect(pageShell).toHaveAttribute('data-terminal-primitive', 'page-shell');
-    expect(screen.getByTestId('backtest-subnav')).toHaveClass('w-full', 'rounded-[14px]', 'border', 'border-white/5', 'bg-white/[0.02]');
+    expect(screen.getByTestId('backtest-subnav')).toHaveClass(
+      'w-full',
+      'rounded-[14px]',
+      'border',
+      'border-[color:var(--wolfy-border-subtle)]',
+      'bg-[var(--wolfy-surface-input)]',
+    );
     expect(screen.getByTestId('backtest-v1-page')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'gap-6', 'bg-transparent');
     expect(screen.getByTestId('backtest-v1-page')).not.toHaveClass('pt-6');
     expect(screen.getByRole('tab', { name: bt('zh', 'page.ruleTab') })).toBeInTheDocument();
@@ -1184,7 +1190,7 @@ describe('BacktestPage', () => {
     renderBacktestRoutes(['/backtest?symbol=msft&market=US&source=scanner&scannerRunId=42&scannerRank=1&scannerProfile=us_preopen_v1']);
 
     expect(await screen.findByDisplayValue('MSFT')).toBeInTheDocument();
-    expect(screen.getByText(/来自扫描器|From scanner/i)).toBeInTheDocument();
+    expect(screen.getByText(/研究线索交接|Research handoff/i)).toBeInTheDocument();
     expect(screen.getAllByText(/MSFT/).length).toBeGreaterThan(0);
     expect(screen.getByText(/扫描批次 #42/)).toBeInTheDocument();
     expect(screen.getByText(/排名 #1/)).toBeInTheDocument();
@@ -1195,7 +1201,7 @@ describe('BacktestPage', () => {
 
     expect(await screen.findByTestId('backtest-v1-page')).toBeInTheDocument();
     expect(screen.getByLabelText('标的代码')).toHaveValue('');
-    expect(screen.queryByText(/来自扫描器|From scanner/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/研究线索交接|Research handoff/i)).not.toBeInTheDocument();
   });
 
   it('renders the deterministic professional workspace shell', async () => {
@@ -1793,15 +1799,16 @@ describe('BacktestPage', () => {
     expect(readiness).toHaveAttribute('data-readiness-state', 'data_insufficient');
     expect(readiness).toHaveAttribute('data-result-contract-available', 'false');
     expect(readiness).toHaveTextContent('历史数据不足');
-    expect(readiness).toHaveTextContent('历史 OHLCV 窗口不足，无法计算安全结果。');
+    expect(readiness).toHaveTextContent('历史价格数据窗口不足，无法计算安全结果。');
     expect(readiness).toHaveTextContent('缺少基准，基准相对指标不可用。');
     const historicalReadiness = await screen.findByTestId('normal-backtest-execution-readiness-historical-ohlcv');
     expect(historicalReadiness).toHaveAttribute('data-historical-ohlcv-status', 'insufficient_coverage');
     expect(historicalReadiness).toHaveTextContent('历史数据就绪度');
-    expect(historicalReadiness).toHaveTextContent('历史 OHLCV 覆盖不足');
+    expect(historicalReadiness).toHaveTextContent('历史价格数据覆盖不足');
     expect(historicalReadiness).toHaveTextContent('12/60');
-    expect(historicalReadiness).toHaveTextContent('日期覆盖 / 复权价格 / 基准 OHLCV');
-    expect(historicalReadiness).toHaveTextContent('下一步：Seed or refresh the local historical OHLCV cache for the requested symbol and date range.');
+    expect(historicalReadiness).toHaveTextContent('日期覆盖 / 复权价格 / 基准历史价格数据');
+    expect(historicalReadiness).toHaveTextContent('下一步：请刷新或补齐本次区间的历史价格数据后，再复核就绪度。');
+    expect(readiness).not.toHaveTextContent(/OHLCV/i);
     expect(screen.getByTestId('backtest-result-preview-panel')).toHaveTextContent('结果暂未就绪');
     expect(screen.getByTestId('backtest-data-limitation')).toHaveTextContent('当前限制：所选区间的历史行情覆盖不足。');
     expect(screen.getByTestId('backtest-data-limitation')).toHaveTextContent('下一步：调整区间');
@@ -2075,7 +2082,7 @@ describe('BacktestPage', () => {
     expect(readModel).toHaveTextContent('新鲜度：已过期');
     expect(readModel).toHaveTextContent('历史行情证据');
     expect(historicalReadiness).toHaveAttribute('data-historical-ohlcv-status', 'insufficient_coverage');
-    expect(historicalReadiness).toHaveTextContent('历史 OHLCV 覆盖不足');
+    expect(historicalReadiness).toHaveTextContent('历史价格数据覆盖不足');
     expect(readModel).not.toHaveTextContent(/可执行，证据降级|Sharpe|CAGR|alpha|beta|跑赢|实盘|交易指令|requestId|traceId|cacheKey|token|credential/i);
   });
 
@@ -2154,7 +2161,8 @@ describe('BacktestPage', () => {
     expect(readiness).toHaveAttribute('data-readiness-state', 'data_insufficient');
     expect(readiness).toHaveAttribute('data-result-contract-available', 'false');
     expect(readiness).toHaveTextContent('历史数据不足');
-    expect(readiness).toHaveTextContent('历史 OHLCV 窗口不足，无法计算安全结果。');
+    expect(readiness).toHaveTextContent('历史价格数据窗口不足，无法计算安全结果。');
+    expect(readiness).not.toHaveTextContent(/OHLCV/i);
     expect(readiness).toHaveTextContent('缺少基准，基准相对指标不可用。');
     expect(readiness).toHaveTextContent('本次运行被阻塞或尚未具备结果条件');
     expect(readiness).toHaveTextContent('仅供研究');

@@ -918,7 +918,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(commandStrip).queryByRole('button', { name: '同步数据' })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /持仓与组合暴露|Holdings and portfolio exposure/ })).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-account-status-strip')).toHaveTextContent(/总资产|Total Assets/);
-    expect(screen.getByTestId('portfolio-total-assets-value')).toHaveClass('text-white');
+    expect(screen.getByTestId('portfolio-total-assets-value')).toHaveClass('text-[color:var(--wolfy-text-primary)]');
     expect(screen.getByTestId('portfolio-command-strip')).toContainElement(screen.getByTestId('portfolio-display-currency-select'));
     expect(screen.queryByTestId('portfolio-row-macro')).not.toBeInTheDocument();
     expect(screen.queryByTestId('portfolio-summary-strip')).not.toBeInTheDocument();
@@ -969,9 +969,9 @@ describe('PortfolioPage FX refresh', () => {
     expect(submitTradeButton).toHaveAttribute('type', 'submit');
     expect(submitTradeButton).toHaveAttribute('data-variant', 'primary');
     expect(submitTradeButton).toHaveAttribute('data-size', 'md');
-    expect(submitTradeButton.className).toContain('border-[color:var(--wolfy-accent)]');
-    expect(submitTradeButton.className).toContain('bg-[var(--wolfy-accent)]');
-    expect(submitTradeButton.className).toContain('text-[#f7f8ff]');
+    expect(submitTradeButton.className).toContain('border-[color:var(--theme-button-primary-border)]');
+    expect(submitTradeButton.className).toContain('bg-[var(--theme-button-primary-bg)]');
+    expect(submitTradeButton.className).toContain('text-[color:var(--theme-button-primary-text)]');
     expect(submitTradeButton.className).toContain('font-medium');
     expect(submitTradeButton.className).toContain('py-2.5');
     expect(submitTradeButton.className).toContain('rounded-md');
@@ -981,7 +981,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(getLeftTabButton('同步')).toBeInTheDocument();
     expect(getLeftTabButton('汇率')).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-left-tab-switcher')).toHaveAttribute('data-terminal-primitive', 'nested-block');
-    expect(getLeftTabButton('记账').className).toContain('bg-white/10');
+    expect(getLeftTabButton('记账').className).toContain('bg-[var(--wolfy-surface-console)]');
     expect(getLeftTabButton('账户').className).not.toContain('border-white');
     expect(screen.queryByRole('heading', { name: /^Current Holdings(?: \(|$)/i })).not.toBeInTheDocument();
     expect(screen.getByTestId('portfolio-start-card')).toHaveAttribute('data-terminal-primitive', 'empty-state');
@@ -1100,7 +1100,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(recentActivity).getByText(/2026-03-18/)).toBeInTheDocument();
 
     const tradeStation = screen.getByTestId('portfolio-trade-station-card');
-    expect(within(tradeStation).getByRole('button', { name: '记账' }).className).toContain('bg-white/10');
+    expect(within(tradeStation).getByRole('button', { name: '记账' }).className).toContain('bg-[var(--wolfy-surface-console)]');
     expect(screen.getByLabelText(/记账账户|ledger account/i)).toHaveValue('1');
     expect(screen.getByTestId('portfolio-trade-station-card')).toHaveClass('gap-4', 'xl:min-h-0');
     expect(within(tradeStation).getByRole('button', { name: translate('zh', 'portfolio.submitTrade') })).not.toBeDisabled();
@@ -1487,10 +1487,9 @@ describe('PortfolioPage FX refresh', () => {
     expect(createCorporateAction).not.toHaveBeenCalled();
     expect(syncIbkrReadOnly).not.toHaveBeenCalled();
     expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('预估影响');
-    expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('不触发经纪商同步');
-    expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('不改动账务结果');
-    expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('不触发任何下单');
-    expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('模型结果不可作为仓位建议');
+    expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('仅做观察性推演，不改变当前组合状态。');
+    expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('模型结果仅供观察，不作为行动依据。');
+    expect(screen.getByTestId('portfolio-scenario-risk-panel')).not.toHaveTextContent(/不触发经纪商同步|不改动账务结果|不触发任何下单|模型结果不可作为仓位建议/);
   });
 
   it('retargets scenario projection to the current visible holdings after account scope changes', async () => {
@@ -2638,8 +2637,8 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-fx-rate-value')).toHaveTextContent('1 USD = 7.2450 CNY');
     const refreshFxButton = openFxPanel();
     expect(refreshFxButton).toHaveAttribute('data-variant', 'primary');
-    expect(refreshFxButton.className).toContain('border-[color:var(--wolfy-accent)]');
-    expect(refreshFxButton.className).toContain('bg-[var(--wolfy-accent)]');
+    expect(refreshFxButton.className).toContain('border-[color:var(--theme-button-primary-border)]');
+    expect(refreshFxButton.className).toContain('bg-[var(--theme-button-primary-bg)]');
     expect(refreshFxButton).toHaveTextContent(translate('zh', 'portfolio.refreshFx'));
     expect(screen.getByText('汇率已更新')).toBeInTheDocument();
   });
@@ -3543,9 +3542,8 @@ describe('PortfolioPage FX refresh', () => {
     expect(pageShell.className).toContain('flex');
     expect(pageShell.className).toContain('flex-col');
     expect(pageShell.className).toContain('bg-transparent');
-    expect(pageShell).toHaveAttribute('data-portfolio-paper-surface', 'true');
-    expect(pageShell).toHaveStyle({ '--wolfy-canvas': '#F5F0EB' });
-    expect(pageShell).toHaveStyle({ '--wolfy-accent': '#365D3D' });
+    expect(pageShell).not.toHaveAttribute('data-portfolio-paper-surface');
+    expect(pageShell.getAttribute('style') || '').not.toMatch(/--wolfy-canvas|--wolfy-accent/);
     expect(pageShell).not.toHaveClass('h-full', 'overflow-y-auto', 'px-6', 'pt-6', 'pb-12');
 
     const scrollContainer = screen.getByTestId('portfolio-trade-station-scroll');
@@ -3615,7 +3613,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByLabelText(p('note'))).toBeInTheDocument();
   });
 
-  it('uses mobile holding cards at 390px while keeping the desktop holdings table from md up', async () => {
+  it('uses compact holding rows below lg while keeping the desktop holdings table from lg up', async () => {
     Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
     getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true, fxStale: false }));
 
@@ -3627,17 +3625,18 @@ describe('PortfolioPage FX refresh', () => {
     const holdingsPanel = screen.getByTestId('portfolio-current-holdings-panel');
     const mobileList = within(holdingsPanel).getByTestId('portfolio-holdings-mobile-list');
     const mobileCard = within(mobileList).getByTestId('portfolio-holding-mobile-card-AAPL');
-    const desktopTable = within(holdingsPanel).getByRole('table');
+    const desktopTable = within(holdingsPanel).getByRole('table', { name: '持仓研究账本' });
     const desktopShell = desktopTable.closest('[data-terminal-primitive="dense-table"]');
 
     expect(primaryLane).toHaveClass('min-w-0');
-    expect(mobileList).toHaveClass('md:hidden');
+    expect(mobileList).toHaveClass('lg:hidden');
     expect(mobileCard).toHaveTextContent('AAPL');
     expect(mobileCard).toHaveTextContent('市值');
     expect(mobileCard).toHaveTextContent('手工记账');
     expect(within(mobileCard).getByTestId('portfolio-holding-mobile-trust-AAPL')).toHaveTextContent('价格快照');
     expect(desktopTable).toHaveClass('min-w-[760px]');
-    expect(desktopShell).toHaveClass('hidden', 'md:block');
+    expect(within(desktopTable).getByText('持仓研究账本')).toHaveClass('sr-only');
+    expect(desktopShell).toHaveClass('hidden', 'lg:block');
   });
 
   it('renders the full-width order history panel and shows event filters', async () => {

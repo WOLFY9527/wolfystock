@@ -1326,15 +1326,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
           >
             <div className="flex flex-col gap-3">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/38">WolfyStock</p>
-                <h2 className="mt-2 text-sm font-semibold text-white">{mobileDigest.title}</h2>
-                <p className="mt-2 text-xs leading-5 text-white/62">{mobileDigest.body}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[color:var(--wolfy-text-muted)]">WolfyStock</p>
+                <h2 className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{mobileDigest.title}</h2>
+                <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{mobileDigest.body}</p>
               </div>
               <div className="grid gap-2 xs:grid-cols-3">
                 {mobileDigest.items.map((item) => (
                   <div key={item.label} className="rounded-2xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2.5">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/38">{item.label}</p>
-                    <p className="mt-1 text-sm font-medium text-white">{item.value}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{item.label}</p>
+                    <p className="mt-1 text-sm font-medium text-[color:var(--wolfy-text-primary)]">{item.value}</p>
                   </div>
                 ))}
               </div>
@@ -1352,17 +1352,17 @@ const DeterministicBacktestResultPage: React.FC = () => {
               <div className="rounded-[16px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-4 py-3">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/35">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--wolfy-text-muted)]">
                       WolfyStock
                     </p>
-                    <p className="truncate text-sm text-white/78">{activeTabLabel}</p>
+                    <p className="truncate text-sm text-[color:var(--wolfy-text-secondary)]">{activeTabLabel}</p>
                   </div>
                   <span
                     className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--wolfy-accent)] animate-pulse"
                     aria-hidden="true"
                   />
                 </div>
-                <p className="mt-2 text-xs text-white/45">正在加载该分区的回测明细。</p>
+                <p className="mt-2 text-xs text-[color:var(--wolfy-text-muted)]">正在加载该分区的回测明细。</p>
               </div>
             </section>
           )}
@@ -1616,17 +1616,17 @@ const DeterministicBacktestResultPage: React.FC = () => {
                     <div className="rounded-[16px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-4 py-3">
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/35">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--wolfy-text-muted)]">
                             WolfyStock
                           </p>
-                          <p className="truncate text-sm text-white/78">{run.code}</p>
+                          <p className="truncate text-sm text-[color:var(--wolfy-text-secondary)]">{run.code}</p>
                         </div>
                         <span
                           className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--wolfy-accent)] animate-pulse"
                           aria-hidden="true"
                         />
                       </div>
-                      <p className="mt-2 text-xs text-white/45">正在加载完整回测报告。</p>
+                      <p className="mt-2 text-xs text-[color:var(--wolfy-text-muted)]">正在加载完整回测报告。</p>
                       <div className="sr-only">
                         <section data-testid="backtest-result-report" data-report-mode={resultMode}>
                           <div data-testid="backtest-report-summary" />
@@ -1682,7 +1682,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
   };
 
   return (
-    <main className="w-full overflow-x-hidden text-white">
+    <main className="w-full overflow-x-hidden text-[color:var(--wolfy-text-primary)]">
       <TerminalPageShell
         className="min-h-0"
         data-testid="deterministic-backtest-result-page"

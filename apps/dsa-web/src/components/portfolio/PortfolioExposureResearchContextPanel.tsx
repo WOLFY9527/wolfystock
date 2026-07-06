@@ -58,7 +58,13 @@ function stateLabel(value: string | null | undefined, language: 'zh' | 'en'): st
   if (token === 'elevated') {
     return language === 'zh' ? '集中度较高' : 'Elevated concentration';
   }
-  if (token === 'limited' || token === 'partial' || token === 'stale') {
+  if (token === 'partial') {
+    return language === 'zh' ? '证据不完整' : 'Evidence incomplete';
+  }
+  if (token === 'stale') {
+    return language === 'zh' ? '数据可能过期' : 'Data may be outdated';
+  }
+  if (token === 'limited') {
     return language === 'zh' ? '依据需复核' : 'Needs evidence review';
   }
   if (token === 'unavailable' || token === 'missing') {

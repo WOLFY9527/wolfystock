@@ -1198,7 +1198,7 @@ function ResearchQualityReviewBlock({
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className={LABEL_CLASS}>研究复核清单</p>
-          <h3 className="mt-1 text-sm font-semibold text-white">反过拟合门禁</h3>
+          <h2 className="mt-1 text-sm font-semibold text-white">反过拟合门禁</h2>
           <p className="mt-1 text-xs leading-5 text-white/48">仅汇总已返回证据；缺失项默认进入需验证状态，不作为选模证明。</p>
         </div>
         <div className="min-w-0 sm:text-right">

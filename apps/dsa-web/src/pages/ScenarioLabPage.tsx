@@ -1,3 +1,4 @@
+import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
@@ -10,7 +11,6 @@ import {
   WolfyCommandBar,
 } from '../components/linear/LinearPrimitives';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
-import { TerminalButton, TerminalChip, TerminalEmptyState } from '../components/terminal/TerminalPrimitives';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
 import {
   marketDecisionCockpitApi,
@@ -141,6 +141,17 @@ const FALLBACK_BASELINE_READINESS_SUMMARY = {
 } as const;
 
 const EVIDENCE_UNKNOWN = '待补证';
+const SCENARIO_WORKBENCH_BUTTON_CLASS = [
+  'inline-flex min-h-9 max-w-full items-center justify-center gap-2 whitespace-nowrap rounded-md border px-3 py-1.5 text-xs font-medium transition-colors',
+  'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)]',
+  'hover:border-[color:var(--wolfy-divider)] hover:text-[color:var(--wolfy-text-primary)]',
+  'disabled:cursor-not-allowed disabled:opacity-50',
+].join(' ');
+const SCENARIO_WORKBENCH_PRIMARY_BUTTON_CLASS = [
+  'inline-flex min-h-9 max-w-full items-center justify-center gap-2 whitespace-nowrap rounded-md border px-3 py-1.5 text-xs font-medium transition-colors',
+  'border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] text-[color:var(--theme-button-primary-text)]',
+  'hover:bg-[var(--sage-deep)] disabled:cursor-not-allowed disabled:opacity-50',
+].join(' ');
 const SCENARIO_EVIDENCE_PACK_SCHEMA_VERSION = 'scenario-evidence-pack' + '.v1';
 const EVIDENCE_SCHEMA_VERSION_KEY = `schema${'Version'}`;
 const FORBIDDEN_EVIDENCE_KEY_PATTERN = new RegExp([
@@ -244,6 +255,56 @@ function statusTone(value: string | null | undefined): 'success' | 'caution' | '
   if (['medium', 'mixed', 'partial', 'rangebound'].includes(normalized)) return 'caution';
   if (['low', 'unavailable', 'riskoff', 'downsideaccelerationrisk', 'lowconfidence'].includes(normalized)) return 'danger';
   return 'info';
+}
+
+function ScenarioWorkbenchButton({
+  primary = false,
+  className = '',
+  children,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { primary?: boolean }) {
+  return (
+    <button
+      type="button"
+      className={`${primary ? SCENARIO_WORKBENCH_PRIMARY_BUTTON_CLASS : SCENARIO_WORKBENCH_BUTTON_CLASS} ${className}`.trim()}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ScenarioResearchChip({
+  tone = 'neutral',
+  children,
+}: {
+  tone?: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
+  children: React.ReactNode;
+}) {
+  const toneClass = {
+    neutral: 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)]',
+    success: 'border-[color:color-mix(in_srgb,var(--wolfy-market-up)_32%,transparent)] bg-transparent text-[color:var(--wolfy-market-up)]',
+    caution: 'border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] text-[color:var(--state-warning-text)]',
+    danger: 'border-[color:color-mix(in_srgb,var(--wolfy-market-down)_32%,transparent)] bg-transparent text-[color:var(--wolfy-market-down)]',
+    info: 'border-[color:color-mix(in_srgb,var(--wolfy-accent)_32%,transparent)] bg-transparent text-[color:var(--wolfy-accent)]',
+  }[tone];
+
+  return (
+    <span className={`inline-flex max-w-full items-center gap-1 rounded-md border px-2.5 py-1 text-xs ${toneClass}`}>
+      {children}
+    </span>
+  );
+}
+
+function ScenarioResearchEmptyState({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="flex min-h-[72px] items-center rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-4 py-3 text-xs text-[color:var(--wolfy-text-muted)]">
+      <div className="min-w-0">
+        <p className="text-xs font-medium text-[color:var(--wolfy-text-secondary)]">{title}</p>
+        <div className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{children}</div>
+      </div>
+    </div>
+  );
 }
 
 function localizedRegime(value: string | null | undefined, locale: Locale): string {
@@ -705,18 +766,18 @@ export default function ScenarioLabPage() {
                   >
                     {locale === 'en' ? 'Research radar' : '研究雷达'}
                   </Link>
-                  <TerminalButton variant="compact" onClick={() => void loadContext()}>
+                  <ScenarioWorkbenchButton onClick={() => void loadContext()}>
                     {locale === 'en' ? 'Refresh context' : '刷新上下文'}
-                  </TerminalButton>
-                  <TerminalButton
-                    variant="secondary"
+                  </ScenarioWorkbenchButton>
+                  <ScenarioWorkbenchButton
+                    primary
                     onClick={() => void runScenarioEvaluation(selectedPreset)}
                     disabled={contextLoading || evaluatingScenario || !cockpit}
                   >
                     {evaluatingScenario
                       ? (locale === 'en' ? 'Evaluating...' : '评估中…')
                       : (locale === 'en' ? 'Evaluate scenario' : '评估情景')}
-                  </TerminalButton>
+                  </ScenarioWorkbenchButton>
                 </div>
               )}
             >
@@ -766,11 +827,11 @@ export default function ScenarioLabPage() {
             ) : null}
             {contextLoading && !scenarioResult ? (
               <div className="p-4 md:p-5">
-                <TerminalEmptyState title={locale === 'en' ? 'Loading market context' : '正在载入市场上下文'}>
+                <ScenarioResearchEmptyState title={locale === 'en' ? 'Loading market context' : '正在载入市场上下文'}>
                   {locale === 'en'
                     ? 'This passive read prepares the setup only. Scenario evaluation starts from the explicit action.'
                     : '此处只被动读取研究上下文；情景评估需要显式点击执行。'}
-                </TerminalEmptyState>
+                </ScenarioResearchEmptyState>
               </div>
             ) : null}
             {!contextLoading && !scenarioResult ? (
@@ -792,15 +853,15 @@ export default function ScenarioLabPage() {
                           : `当前情景：${selectedPreset.label.zh}。`}
                       </p>
                     </div>
-                    <TerminalButton
-                      variant="secondary"
+                    <ScenarioWorkbenchButton
+                      primary
                       onClick={() => void runScenarioEvaluation(selectedPreset)}
                       disabled={evaluatingScenario || !cockpit}
                     >
                       {evaluatingScenario
                         ? (locale === 'en' ? 'Evaluating...' : '评估中…')
                         : (locale === 'en' ? 'Evaluate scenario' : '评估情景')}
-                    </TerminalButton>
+                    </ScenarioWorkbenchButton>
                   </div>
                 </RoughSectionCard>
               </section>
@@ -809,8 +870,10 @@ export default function ScenarioLabPage() {
               <>
                 <section
                   aria-label={locale === 'en' ? 'Scenario summary' : '情景摘要'}
+                  aria-live="polite"
                   className="p-3"
                   data-testid="scenario-lab-first-read-summary"
+                  role="region"
                 >
                   <RoughSectionCard
                     eyebrow={locale === 'en' ? 'First read' : '首读'}
@@ -842,17 +905,17 @@ export default function ScenarioLabPage() {
                       <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2">
                         <div className="text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Evidence boundary' : '证据边界'}</div>
                         <div className="mt-1 flex flex-wrap gap-1">
-                          <TerminalChip variant={scenarioUnavailable ? 'caution' : 'info'}>
+                          <ScenarioResearchChip tone={scenarioUnavailable ? 'caution' : 'info'}>
                             {firstReadBoundaryText || (locale === 'en' ? 'Baseline pending' : '基准待确认')}
-                          </TerminalChip>
+                          </ScenarioResearchChip>
                           {readinessLabels.slice(0, 3).map((label) => (
-                            <TerminalChip key={label} variant={label === '基准可用' || label === '当前框架可用' ? 'success' : 'caution'}>
+                            <ScenarioResearchChip key={label} tone={label === '基准可用' || label === '当前框架可用' ? 'success' : 'caution'}>
                               {label}
-                            </TerminalChip>
+                            </ScenarioResearchChip>
                           ))}
-                          <TerminalChip variant="info">
+                          <ScenarioResearchChip tone="info">
                             {formatDelta(scenarioResult.confidenceDelta)}
-                          </TerminalChip>
+                          </ScenarioResearchChip>
                         </div>
                         <div className="mt-2 grid gap-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)] sm:grid-cols-2">
                           <div>{locale === 'en' ? 'Baseline snapshot' : '基线快照'}：{baselineReadinessSummary.baselineSnapshot}</div>
@@ -914,9 +977,9 @@ export default function ScenarioLabPage() {
                       {SCENARIO_PRESETS.map((preset) => {
                         const active = preset.key === selectedPreset.key;
                         return (
-                          <TerminalButton
+                          <ScenarioWorkbenchButton
                             key={preset.key}
-                            variant={active ? 'secondary' : 'compact'}
+                            className={active ? 'border-[color:var(--wolfy-accent)] text-[color:var(--wolfy-text-primary)]' : undefined}
                             onClick={() => {
                               if (!active) {
                                 setSelectedPreset(preset);
@@ -926,7 +989,7 @@ export default function ScenarioLabPage() {
                             aria-pressed={active}
                           >
                             {preset.label[locale]}
-                          </TerminalButton>
+                          </ScenarioWorkbenchButton>
                         );
                       })}
                     </div>
@@ -963,18 +1026,16 @@ export default function ScenarioLabPage() {
                     ? (locale === 'en' ? 'Scenario pending' : '情景待更新')
                     : (locale === 'en' ? 'Projected research frame' : '情景后的研究框架')}>
                     {scenarioUnavailable ? (
-                      <TerminalEmptyState
-                        title={scenarioUnavailableCopy.stateTitle}
-                        action={scenarioUnavailableActions}
-                        className="min-h-0 items-start"
-                        data-testid="scenario-lab-unavailable-state"
-                      >
-                        <div className="space-y-0.5">
-                          <p>{scenarioUnavailableCopy.stateBody}</p>
-                          <p>{scenarioUnavailableCopy.nextStep}</p>
-                          <p>{scenarioUnavailableCopy.boundaryNote}</p>
-                        </div>
-                      </TerminalEmptyState>
+                      <div data-testid="scenario-lab-unavailable-state">
+                        <ScenarioResearchEmptyState title={scenarioUnavailableCopy.stateTitle}>
+                          <div className="space-y-0.5">
+                            <p>{scenarioUnavailableCopy.stateBody}</p>
+                            <p>{scenarioUnavailableCopy.nextStep}</p>
+                            <p>{scenarioUnavailableCopy.boundaryNote}</p>
+                          </div>
+                          <div className="mt-3">{scenarioUnavailableActions}</div>
+                        </ScenarioResearchEmptyState>
+                      </div>
                     ) : (
                       <RoughKeyValueRows
                         emptyText={locale === 'en' ? 'No scenario output available yet.' : '暂无情景输出。'}
@@ -1045,18 +1106,18 @@ export default function ScenarioLabPage() {
                   </RoughSectionCard>
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Observation boundary' : '观察边界'} title={locale === 'en' ? 'Keep the observation boundary' : '保持观察边界'}>
                     <div className="flex flex-wrap gap-2">
-                      <TerminalChip variant="info">{locale === 'en' ? 'Observation only' : '仅观察'}</TerminalChip>
-                      <TerminalChip variant="info">{locale === 'en' ? 'No external action' : '不触发外部动作'}</TerminalChip>
+                      <ScenarioResearchChip tone="info">{locale === 'en' ? 'Observation only' : '仅观察'}</ScenarioResearchChip>
+                      <ScenarioResearchChip tone="info">{locale === 'en' ? 'No external action' : '不触发外部动作'}</ScenarioResearchChip>
                       {readinessLabels.slice(0, 5).map((label) => (
-                        <TerminalChip key={label} variant={label === '基准可用' || label === '当前框架可用' ? 'success' : 'caution'}>
+                        <ScenarioResearchChip key={label} tone={label === '基准可用' || label === '当前框架可用' ? 'success' : 'caution'}>
                           {label}
-                        </TerminalChip>
+                        </ScenarioResearchChip>
                       ))}
-                      <TerminalChip variant={statusTone(scenarioResult.scenarioRegime.status || scenarioResult.scenarioRegime.confidence)}>
+                      <ScenarioResearchChip tone={statusTone(scenarioResult.scenarioRegime.status || scenarioResult.scenarioRegime.confidence)}>
                         {scenarioResult.scenarioRegime.status
                           ? mapConsumerStatusText(scenarioResult.scenarioRegime.status, locale)
                           : localizedConfidence(scenarioResult.scenarioRegime.confidence, locale)}
-                      </TerminalChip>
+                      </ScenarioResearchChip>
                     </div>
                     <div className="mt-3 text-xs leading-6 text-[color:var(--wolfy-text-muted)]">
                       {locale === 'en'

@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Copy, Download, MoreHorizontal, PenSquare, RefreshCw, Trash2 } from 'lucide-react';
+import { ArrowRightLeft, Copy, Download, MoreHorizontal, PenSquare, RefreshCw, Trash2 } from 'lucide-react';
 import { portfolioApi, type PortfolioFxLineage, type PortfolioLineageStatusSummary, type PortfolioLineageSummary, type PortfolioPriceLineage, type PortfolioSnapshotWithLineage, type PortfolioValuationSnapshotLineage } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
@@ -81,133 +81,13 @@ import type {
   PortfolioTradeUpdateRequest,
 } from '../types/portfolio';
 
-const PORTFOLIO_PAPER_SURFACE_STYLE = {
-  '--wolfy-canvas': '#F5F0EB',
-  '--wolfy-surface-console': 'rgba(251, 248, 243, 0.82)',
-  '--wolfy-surface-input': 'rgba(255, 255, 255, 0.56)',
-  '--wolfy-surface-rail': '#E9DFD3',
-  '--wolfy-border-subtle': 'rgba(54, 48, 40, 0.14)',
-  '--wolfy-divider': 'rgba(54, 48, 40, 0.24)',
-  '--wolfy-text-primary': '#25221D',
-  '--wolfy-text-secondary': 'rgba(61, 56, 49, 0.78)',
-  '--wolfy-text-muted': 'rgba(116, 107, 96, 0.72)',
-  '--wolfy-accent': '#365D3D',
-  '--wolfy-market-up': '#5D8663',
-  '--wolfy-market-down': '#A75E55',
-  '--theme-button-primary-bg': '#365D3D',
-  '--theme-button-primary-border': 'rgba(54, 93, 61, 0.72)',
-  '--theme-button-primary-text': '#FBF8F3',
-  '--state-warning-bg': '#EFE0C9',
-  '--state-warning-border': 'rgba(170, 122, 61, 0.36)',
-  '--state-warning-text': '#7B5424',
-} as React.CSSProperties;
-
-const PORTFOLIO_PAPER_SURFACE_CSS = `
-  [data-testid="portfolio-bento-page"][data-portfolio-paper-surface="true"] {
-    background:
-      radial-gradient(circle at 16% 8%, rgba(212, 165, 116, 0.18), transparent 28%),
-      linear-gradient(180deg, #F5F0EB 0%, #E9DFD3 100%);
-    color: var(--wolfy-text-secondary);
-  }
-
-  [data-testid="portfolio-bento-page"][data-portfolio-paper-surface="true"] :where(
-    [data-testid="portfolio-account-status-strip"],
-    [data-testid="portfolio-summary-market-value-card"],
-    [data-testid="portfolio-pnl-summary"],
-    [data-testid="portfolio-summary-cash-card"],
-    [data-testid="portfolio-summary-holdings-card"],
-    [data-testid="portfolio-summary-risk-card"],
-    [data-testid="portfolio-summary-status-card"],
-    [data-testid="portfolio-empty-workflow-column"],
-    [data-testid="portfolio-current-holdings-panel"],
-    [data-testid="portfolio-risk-card"],
-    [data-testid="portfolio-structure-review-panel"],
-    [data-testid="portfolio-valuation-panel"],
-    [data-testid="portfolio-next-action-panel"],
-    [data-testid="portfolio-exposure-card"],
-    [data-testid="portfolio-valuation-notes"],
-    [data-testid="portfolio-history-full"],
-    [data-testid="portfolio-trade-station-card"],
-    [data-testid="portfolio-consumer-setup-boundary"]
-  ) {
-    background: rgba(251, 248, 243, 0.82);
-    border-color: rgba(54, 48, 40, 0.14);
-    box-shadow: 0 18px 44px rgba(55, 44, 31, 0.09);
-  }
-
-  [data-testid="portfolio-bento-page"][data-portfolio-paper-surface="true"] :where(
-    [data-testid="portfolio-command-strip"] > div:last-child,
-    [data-testid="portfolio-empty-workflow-column"] [class*="rounded-2xl"],
-    [data-testid="portfolio-current-holdings-panel"] article,
-    [data-testid="portfolio-current-holdings-panel"] [data-terminal-primitive="dense-table"],
-    [data-testid="portfolio-risk-card"] [data-terminal-primitive="nested-block"],
-    [data-testid="portfolio-structure-review-panel"] [class*="rounded-xl"],
-    [data-testid="portfolio-valuation-panel"] [class*="rounded-xl"],
-    [data-testid="portfolio-next-action-panel"] [class*="rounded-xl"],
-    [data-testid="portfolio-data-notes"],
-    [data-testid="portfolio-data-notes"] [data-terminal-primitive="nested-block"],
-    [data-testid="portfolio-data-notes"] [data-terminal-primitive="panel"],
-    [data-testid="portfolio-trade-station-card"] [data-terminal-primitive="nested-block"],
-    [data-testid="portfolio-trade-station-card"] [data-testid="portfolio-manual-record-disclosure"],
-    [data-testid="portfolio-trade-station-card"] [data-testid="portfolio-import-workflow-panel"],
-    [data-testid="portfolio-consumer-setup-boundary"] [data-terminal-primitive="nested-block"],
-    .portfolio-paper-local-panel
-  ) {
-    background: rgba(255, 255, 255, 0.56);
-    border-color: rgba(54, 48, 40, 0.14);
-  }
-
-  [data-testid="portfolio-bento-page"][data-portfolio-paper-surface="true"] :where(
-    [data-testid="portfolio-total-assets-card"] h1,
-    [data-testid="portfolio-total-assets-value"],
-    [data-testid="portfolio-summary-market-value"],
-    [data-testid="portfolio-summary-cash-value"],
-    [data-testid="portfolio-current-holdings-panel"] tbody,
-    [data-testid="portfolio-structure-review-panel"] [class*="font-mono"],
-    [data-testid="portfolio-valuation-panel"] [class*="text-sm"],
-    [data-testid="portfolio-next-action-panel"] [class*="text-sm"],
-    [data-testid="portfolio-exposure-card"] [class*="font-medium"],
-    [data-testid="portfolio-exposure-card"] [class*="font-mono"]
-  ) {
-    color: var(--wolfy-text-primary);
-  }
-
-  [data-testid="portfolio-bento-page"][data-portfolio-paper-surface="true"] :where(
-    [data-testid="portfolio-total-assets-card"] p,
-    [data-testid="portfolio-command-strip"] > div:last-child,
-    [data-testid="portfolio-summary-strip"],
-    [data-testid="portfolio-empty-workflow-column"],
-    [data-testid="portfolio-current-holdings-panel"],
-    [data-testid="portfolio-risk-card"],
-    [data-testid="portfolio-structure-review-panel"],
-    [data-testid="portfolio-valuation-panel"],
-    [data-testid="portfolio-next-action-panel"],
-    [data-testid="portfolio-data-notes"],
-    [data-testid="portfolio-history-full"],
-    [data-testid="portfolio-trade-station-card"],
-    [data-testid="portfolio-consumer-setup-boundary"]
-  ) {
-    color: var(--wolfy-text-secondary);
-  }
-
-  [data-testid="portfolio-bento-page"][data-portfolio-paper-surface="true"] :where(
-    [data-testid="portfolio-total-assets-card"] h2,
-    [data-testid="portfolio-summary-strip"] [class*="uppercase"],
-    [data-testid="portfolio-current-holdings-panel"] thead,
-    [data-testid="portfolio-data-notes"] [class*="uppercase"],
-    [data-testid="portfolio-trade-station-card"] [class*="uppercase"]
-  ) {
-    color: var(--wolfy-text-muted);
-  }
-`;
-
 const PORTFOLIO_FIELD_LABEL_CLASS = '!mb-1 text-[11px] font-medium tracking-normal text-[color:var(--wolfy-text-muted)]';
 const PORTFOLIO_FIELD_WRAPPER_CLASS = 'flex flex-col gap-1.5';
 const PORTFOLIO_FORM_GRID_CLASS = 'mt-4 grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2';
 const PORTFOLIO_INPUT_CLASS = 'h-10 rounded-lg border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5 text-sm text-[color:var(--wolfy-text-primary)] placeholder:text-[color:var(--wolfy-text-muted)] outline-none focus:border-[color:var(--wolfy-accent)]';
 const PORTFOLIO_SELECT_CLASS = 'min-w-0';
-const PORTFOLIO_PRIMARY_BUTTON_CLASS = 'border border-[color:var(--wolfy-accent)] bg-[var(--wolfy-accent)] text-[#f7f8ff] font-medium px-5 py-2.5 rounded-md transition-colors hover:bg-[#6f79dc] disabled:opacity-50 disabled:cursor-not-allowed';
-const PORTFOLIO_SUBMIT_BUTTON_CLASS = 'mt-5 w-full border border-[color:var(--wolfy-accent)] bg-[var(--wolfy-accent)] text-[#f7f8ff] font-medium px-5 py-2.5 rounded-md transition-colors hover:bg-[#6f79dc] disabled:opacity-50 disabled:cursor-not-allowed';
+const PORTFOLIO_PRIMARY_BUTTON_CLASS = 'border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] text-[color:var(--theme-button-primary-text)] font-medium px-5 py-2.5 rounded-md transition-colors hover:bg-[var(--sage-deep)] disabled:opacity-50 disabled:cursor-not-allowed';
+const PORTFOLIO_SUBMIT_BUTTON_CLASS = 'mt-5 w-full border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] text-[color:var(--theme-button-primary-text)] font-medium px-5 py-2.5 rounded-md transition-colors hover:bg-[var(--sage-deep)] disabled:opacity-50 disabled:cursor-not-allowed';
 const PORTFOLIO_SECONDARY_BUTTON_CLASS = 'border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)] hover:border-[color:var(--wolfy-divider)] px-4 py-2.5 rounded-md transition-colors';
 const PORTFOLIO_TEXT_BUTTON_CLASS = 'border border-[color:var(--wolfy-border-subtle)] bg-transparent text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)] px-3 py-1.5 rounded-md text-xs transition-colors disabled:text-[color:var(--wolfy-text-muted)] disabled:opacity-50';
 const PORTFOLIO_ICON_BUTTON_CLASS = 'size-9 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-0 text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)]';
@@ -952,10 +832,10 @@ function PortfolioSegmentedControl({
         options={options}
         onChange={onChange}
         className="space-y-0"
-        listClassName="ui-scroll-x-quiet w-full rounded-xl border-0 bg-white/[0.05] p-1"
+        listClassName="ui-scroll-x-quiet w-full rounded-xl border-0 bg-[var(--wolfy-surface-input)] p-1"
         buttonClassName={`rounded-lg border-0 text-center text-sm font-medium ${itemClassName}`}
-        activeButtonClassName="bg-white/10 text-white shadow-sm"
-        inactiveButtonClassName="bg-transparent text-white/40 hover:bg-transparent hover:text-white/70"
+        activeButtonClassName="bg-[var(--wolfy-surface-console)] text-[color:var(--wolfy-text-primary)] shadow-sm"
+        inactiveButtonClassName="bg-transparent text-[color:var(--wolfy-text-muted)] hover:bg-transparent hover:text-[color:var(--wolfy-text-secondary)]"
         size="sm"
       />
     </TerminalNestedBlock>
@@ -1449,9 +1329,9 @@ function PortfolioTradeActions({
         {isOpen ? (
           <TerminalNestedBlock
             data-testid={`${menuKey}-menu`}
-            className="absolute right-0 z-20 mt-2 flex min-w-[132px] flex-col gap-1 bg-[#0f1726] p-2 shadow-2xl"
+            className="absolute right-0 z-20 mt-2 flex min-w-[132px] flex-col gap-1 bg-[var(--wolfy-surface-console)] p-2 shadow-2xl"
           >
-            <Button type="button" variant="ghost" className="justify-start rounded-lg px-2 text-xs text-white/75" onClick={() => onEdit(item)}>
+            <Button type="button" variant="ghost" className="justify-start rounded-lg px-2 text-xs text-[color:var(--wolfy-text-secondary)]" onClick={() => onEdit(item)}>
               <PenSquare className="size-3.5" aria-hidden="true" />
               {editTradeActionLabel}
             </Button>
@@ -1544,7 +1424,7 @@ function ManualTradeForm({
           <Input label={copy.taxOptional} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.optional} value={tradeForm.tax} onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
           <Input label={copy.reference} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="text" placeholder={copy.optional} value={tradeForm.tradeUid} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeUid: e.target.value }))} />
         </div>
-        <div className="mt-3 rounded-lg bg-white/[0.025] px-3 py-2 text-xs leading-5 text-white/45">
+        <div className="mt-3 rounded-lg bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
           {tradeCurrencyHint}
           {tradeCurrencyWarning ? (
             <span className="mt-1 block text-amber-200">{tradeCurrencyWarning}</span>
@@ -1587,7 +1467,7 @@ function ManualCashForm({
   onSubmit: React.FormEventHandler<HTMLFormElement>;
 }) {
   return (
-    <SectionShell className="rounded-2xl border border-white/5 bg-white/[0.02] p-4" contentClassName="">
+    <SectionShell className="rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-4" contentClassName="">
       <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.manualCash}</p>
       <form onSubmit={onSubmit}>
         <div data-testid="portfolio-cash-amount-currency-grid" className={PORTFOLIO_FORM_GRID_CLASS}>
@@ -1626,7 +1506,7 @@ function ManualCorporateActionForm({
   onSubmit: React.FormEventHandler<HTMLFormElement>;
 }) {
   return (
-    <SectionShell className="rounded-2xl border border-white/5 bg-white/[0.02] p-4" contentClassName="">
+    <SectionShell className="rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-4" contentClassName="">
       <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.manualCorporate}</p>
       <form onSubmit={onSubmit}>
         <div className={PORTFOLIO_FORM_GRID_CLASS}>
@@ -1720,7 +1600,7 @@ function AccountManagementPanel({
         ))}
       </div>
       {(showCreateAccount || !hasAccounts) ? (
-        <form className="space-y-3 rounded-xl border border-white/5 bg-white/[0.02] p-3" onSubmit={onSubmit}>
+        <form className="space-y-3 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3" onSubmit={onSubmit}>
           <Input label={language === 'zh' ? '账户名称' : 'Account name'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.accountNamePlaceholder} value={accountForm.name} onChange={(e) => setAccountForm((prev) => ({ ...prev, name: e.target.value }))} />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input label={language === 'zh' ? '券商' : 'Broker'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.brokerPlaceholder} value={accountForm.broker} onChange={(e) => setAccountForm((prev) => ({ ...prev, broker: e.target.value }))} />
@@ -1798,32 +1678,32 @@ function PortfolioImportPreviewCard({
     <div data-testid="portfolio-import-preview-card" className="theme-panel-subtle rounded-[16px] px-4 py-3 text-xs text-secondary-text space-y-3">
       <div className="space-y-1">
         <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{title}</p>
-        <p className="leading-5 text-white/58">{boundary}</p>
+        <p className="leading-5 text-[color:var(--wolfy-text-secondary)]">{boundary}</p>
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         <TerminalNestedBlock className="px-3 py-2">
-          <div className="text-[11px] text-white/38">{acceptedLabel}</div>
-          <div className="mt-1 font-mono text-sm text-white">{accepted}</div>
+          <div className="text-[11px] text-[color:var(--wolfy-text-muted)]">{acceptedLabel}</div>
+          <div className="mt-1 font-mono text-sm text-[color:var(--wolfy-text-primary)]">{accepted}</div>
         </TerminalNestedBlock>
         <TerminalNestedBlock className="px-3 py-2">
-          <div className="text-[11px] text-white/38">{rejectedLabel}</div>
-          <div className="mt-1 font-mono text-sm text-white">{rejected}</div>
+          <div className="text-[11px] text-[color:var(--wolfy-text-muted)]">{rejectedLabel}</div>
+          <div className="mt-1 font-mono text-sm text-[color:var(--wolfy-text-primary)]">{rejected}</div>
         </TerminalNestedBlock>
         <TerminalNestedBlock className="px-3 py-2">
-          <div className="text-[11px] text-white/38">{duplicateLabel}</div>
-          <div className="mt-1 font-mono text-sm text-white">{duplicateCandidates || result.duplicateCount || 0}</div>
+          <div className="text-[11px] text-[color:var(--wolfy-text-muted)]">{duplicateLabel}</div>
+          <div className="mt-1 font-mono text-sm text-[color:var(--wolfy-text-primary)]">{duplicateCandidates || result.duplicateCount || 0}</div>
         </TerminalNestedBlock>
         <TerminalNestedBlock className="px-3 py-2">
-          <div className="text-[11px] text-white/38">{currencyLabel}</div>
-          <div className="mt-1 font-mono text-sm text-white">{currencyIssues}</div>
+          <div className="text-[11px] text-[color:var(--wolfy-text-muted)]">{currencyLabel}</div>
+          <div className="mt-1 font-mono text-sm text-[color:var(--wolfy-text-primary)]">{currencyIssues}</div>
         </TerminalNestedBlock>
         <TerminalNestedBlock className="px-3 py-2">
-          <div className="text-[11px] text-white/38">{unknownLabel}</div>
-          <div className="mt-1 font-mono text-sm text-white">{unknownSymbols}</div>
+          <div className="text-[11px] text-[color:var(--wolfy-text-muted)]">{unknownLabel}</div>
+          <div className="mt-1 font-mono text-sm text-[color:var(--wolfy-text-primary)]">{unknownSymbols}</div>
         </TerminalNestedBlock>
       </div>
       {parseResult ? (
-        <div className="text-[11px] leading-5 text-white/45">
+        <div className="text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
           {parseResult.broker.toUpperCase()} · records {parseResult.recordCount} · cash {parseResult.cashRecordCount} · actions {parseResult.corporateActionCount}
         </div>
       ) : null}
@@ -3004,7 +2884,7 @@ const PortfolioPage: React.FC = () => {
     : topPositionPercent >= 35
       ? 'text-amber-300'
       : topPositionPercent >= 20
-        ? 'text-cyan-300'
+        ? 'text-[color:var(--wolfy-accent)]'
         : 'text-emerald-300';
   const concentrationDescription = !hasHoldings || !topPosition
     ? (language === 'zh' ? '完成首笔持仓后，系统会按真实持仓自动生成集中度与暴露判断。' : 'After the first holding is saved, concentration and exposure are generated from real positions automatically.')
@@ -3635,11 +3515,11 @@ const PortfolioPage: React.FC = () => {
   const filteredSafeRiskWarningLabels = safeRiskWarningLabels.filter((warning) => warning !== riskWarningLabels.no_holdings);
   const holdingsTableStatusLabel = language === 'zh' ? '状态' : 'Status';
   const portfolioResearchStatePreview = (
-    <TerminalPanel as="section" data-testid="portfolio-research-state-preview" className="min-w-0 flex flex-col gap-4 border-white/[0.08] bg-white/[0.035]">
+    <TerminalPanel as="section" data-testid="portfolio-research-state-preview" className="min-w-0 flex flex-col gap-4 border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]">
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">{language === 'zh' ? '组合研究状态' : 'Portfolio research state'}</h2>
-          <p className="mt-2 max-w-[72ch] text-sm leading-6 text-white/58">
+          <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '组合研究状态' : 'Portfolio research state'}</h2>
+          <p className="mt-2 max-w-[72ch] text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
             {hasHoldings
               ? (language === 'zh' ? '当前可先评估持仓、估值、FX与风险暴露。' : 'Current positions, valuation, FX, and risk exposure are ready for first read.')
               : (language === 'zh' ? '首屏先说明可评估什么、缺什么，以及下一步。' : 'The first screen shows what can be evaluated, what is pending, and the next action.')}
@@ -3649,20 +3529,20 @@ const PortfolioPage: React.FC = () => {
       </div>
       <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-6">
         {researchStatePreviewItems.map((item) => (
-          <div key={item.key} className="min-w-0 rounded-xl border border-white/[0.05] bg-black/20 px-3 py-3">
+          <div key={item.key} className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
             <div className="flex min-w-0 items-center justify-between gap-2">
-              <div className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-white/38">{item.label}</div>
+              <div className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{item.label}</div>
               <TerminalChip variant={item.variant} className="shrink-0">{item.value}</TerminalChip>
             </div>
-            <p className="mt-2 text-xs leading-5 text-white/46">{item.detail}</p>
+            <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{item.detail}</p>
           </div>
         ))}
       </div>
-      <div data-testid="portfolio-research-next-evidence" className="rounded-xl border border-white/[0.04] bg-white/[0.025] px-3 py-2 text-xs leading-5 text-white/52">
+      <div data-testid="portfolio-research-next-evidence" className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
         {valuationNextEvidenceCopy}
       </div>
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.04] bg-white/[0.025] px-3 py-2.5">
-        <span className="text-xs font-medium text-white/62">{language === 'zh' ? '下一步' : 'Next action'}</span>
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5">
+        <span className="text-xs font-medium text-[color:var(--wolfy-text-secondary)]">{language === 'zh' ? '下一步' : 'Next action'}</span>
         {canManagePortfolioOperations ? (
         <div className="flex min-w-0 flex-wrap gap-2">
           <TerminalButton
@@ -3688,7 +3568,7 @@ const PortfolioPage: React.FC = () => {
           </TerminalButton>
         </div>
         ) : (
-          <span className="text-xs text-white/45">
+          <span className="text-xs text-[color:var(--wolfy-text-muted)]">
             {language === 'zh' ? '连接步骤将在具备操作权限后显示。' : 'Connection steps appear when operator access is available.'}
           </span>
         )}
@@ -3705,7 +3585,7 @@ const PortfolioPage: React.FC = () => {
 
   const historyPanelContent = (
     <div className="flex h-full min-h-0 flex-col bg-[var(--surface-1)] lg:bg-transparent">
-      <div className="flex items-center justify-between gap-3 border-b border-white/5 px-0 pb-4">
+      <div className="flex items-center justify-between gap-3 border-b border-[color:var(--wolfy-border-subtle)] px-0 pb-4">
         <div>
           <h2 className="text-xs text-muted-text uppercase tracking-widest">{historyDrawerTitle}</h2>
           <p className="mt-2 text-sm text-secondary-text">{copy.pageLabel} {eventPage}</p>
@@ -3757,7 +3637,7 @@ const PortfolioPage: React.FC = () => {
               </div>
             ) : (
               tradeEvents.map((item) => (
-                <div key={`trade-${item.id}`} className="border-b border-white/5 px-1 py-4 transition-colors hover:bg-white/[0.03]">
+                <div key={`trade-${item.id}`} className="border-b border-[color:var(--wolfy-border-subtle)] px-1 py-4 transition-colors hover:bg-[var(--wolfy-surface-input)]">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2 text-foreground">
@@ -3801,7 +3681,7 @@ const PortfolioPage: React.FC = () => {
               </div>
             ) : (
               cashEvents.map((item) => (
-                <div key={`cash-${item.id}`} className="border-b border-white/5 px-1 py-4 transition-colors hover:bg-white/[0.03]">
+                <div key={`cash-${item.id}`} className="border-b border-[color:var(--wolfy-border-subtle)] px-1 py-4 transition-colors hover:bg-[var(--wolfy-surface-input)]">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="text-foreground">{formatCashDirectionLabel(item.direction, language)} <span className="text-xs text-muted-text">{item.currency}</span></div>
@@ -3827,7 +3707,7 @@ const PortfolioPage: React.FC = () => {
               </div>
             ) : (
               corporateEvents.map((item) => (
-                <div key={`corporate-${item.id}`} className="border-b border-white/5 px-1 py-4 transition-colors hover:bg-white/[0.03]">
+                <div key={`corporate-${item.id}`} className="border-b border-[color:var(--wolfy-border-subtle)] px-1 py-4 transition-colors hover:bg-[var(--wolfy-surface-input)]">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="text-foreground">{item.symbol} <span className="text-xs text-muted-text">{formatCorporateActionLabel(item.actionType, language)}</span></div>
@@ -3875,19 +3755,19 @@ const PortfolioPage: React.FC = () => {
             {showEmptyFullHistory ? hideFullHistoryLabel : viewFullHistoryLabel}
           </Button>
         ) : hasHistory ? (
-          <span className="text-[10px] font-bold uppercase tracking-widest text-white/35">{viewFullHistoryLabel}</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{viewFullHistoryLabel}</span>
         ) : null}
       </div>
       {hasHistory ? (
         <div className="flex flex-col gap-2">
           {tradeEvents.slice(0, 5).map((item) => (
-            <div key={`recent-trade-${item.id}`} className="flex items-start justify-between gap-3 border-b border-white/5 px-1 py-2.5 last:border-b-0">
+            <div key={`recent-trade-${item.id}`} className="flex items-start justify-between gap-3 border-b border-[color:var(--wolfy-border-subtle)] px-1 py-2.5 last:border-b-0">
               <div className="min-w-0">
                 <div className="truncate text-sm text-foreground">{item.symbol} <span className="text-xs text-muted-text">{formatSideLabel(item.side, language)}</span></div>
                 <div className="mt-1 truncate text-xs text-muted-text">{item.tradeDate} · {item.quantity} @ {item.price}</div>
               </div>
               <div className="flex shrink-0 items-start gap-2">
-                <span className="font-mono text-xs text-white/45">{item.currency}</span>
+                <span className="font-mono text-xs text-[color:var(--wolfy-text-muted)]">{item.currency}</span>
                 {canManagePortfolioOperations ? (
                   <PortfolioTradeActions
                     item={item}
@@ -3907,21 +3787,21 @@ const PortfolioPage: React.FC = () => {
             </div>
           ))}
           {cashEvents.slice(0, Math.max(0, 5 - tradeEvents.length)).map((item) => (
-            <div key={`recent-cash-${item.id}`} className="flex items-start justify-between gap-3 border-b border-white/5 px-1 py-2.5 last:border-b-0">
+            <div key={`recent-cash-${item.id}`} className="flex items-start justify-between gap-3 border-b border-[color:var(--wolfy-border-subtle)] px-1 py-2.5 last:border-b-0">
               <div className="min-w-0">
                 <div className="truncate text-sm text-foreground">{formatCashDirectionLabel(item.direction, language)}</div>
                 <div className="mt-1 truncate text-xs text-muted-text">{item.eventDate} · {formatMoney(item.amount, item.currency)}</div>
               </div>
-              <span className="shrink-0 font-mono text-xs text-white/45">{item.currency}</span>
+              <span className="shrink-0 font-mono text-xs text-[color:var(--wolfy-text-muted)]">{item.currency}</span>
             </div>
           ))}
           {corporateEvents.slice(0, Math.max(0, 5 - tradeEvents.length - cashEvents.length)).map((item) => (
-            <div key={`recent-corporate-${item.id}`} className="flex items-start justify-between gap-3 border-b border-white/5 px-1 py-2.5 last:border-b-0">
+            <div key={`recent-corporate-${item.id}`} className="flex items-start justify-between gap-3 border-b border-[color:var(--wolfy-border-subtle)] px-1 py-2.5 last:border-b-0">
               <div className="min-w-0">
                 <div className="truncate text-sm text-foreground">{item.symbol} <span className="text-xs text-muted-text">{formatCorporateActionLabel(item.actionType, language)}</span></div>
                 <div className="mt-1 truncate text-xs text-muted-text">{item.effectiveDate}</div>
               </div>
-              <span className="shrink-0 font-mono text-xs text-white/45">ACT</span>
+              <span className="shrink-0 font-mono text-xs text-[color:var(--wolfy-text-muted)]">ACT</span>
             </div>
           ))}
         </div>
@@ -3933,13 +3813,10 @@ const PortfolioPage: React.FC = () => {
 
   return (
     <>
-      <style>{PORTFOLIO_PAPER_SURFACE_CSS}</style>
       <div
         ref={surfaceRef}
         data-testid="portfolio-bento-page"
         data-bento-surface="true"
-        data-portfolio-paper-surface="true"
-        style={PORTFOLIO_PAPER_SURFACE_STYLE}
         aria-hidden={shouldGuardA11y && !isSafariReady ? true : undefined}
         aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
         className={getSafariReadySurfaceClassName(
@@ -3975,23 +3852,23 @@ const PortfolioPage: React.FC = () => {
               >
                 <div data-testid="portfolio-total-assets-card" className="min-w-0">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <h1 className="text-[1.45rem] font-semibold leading-tight tracking-normal text-white md:text-[1.75rem]">
+                    <h1 className="text-[1.45rem] font-semibold leading-tight tracking-normal text-[color:var(--wolfy-text-primary)] md:text-[1.75rem]">
                       {language === 'zh' ? '持仓与组合暴露' : 'Holdings and portfolio exposure'}
                     </h1>
                     <TerminalChip variant="neutral">
                       {selectedAccount === 'all' ? copy.allAccounts : scopedAccount?.name || copy.allAccounts}
                     </TerminalChip>
                   </div>
-                  <h2 className="mt-3 text-[12px] font-medium uppercase tracking-[0.18em] text-white/38">
+                  <h2 className="mt-3 text-[12px] font-medium uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
                     {totalAssetsTitle}
                   </h2>
                   <div
                     data-testid="portfolio-total-assets-value"
-                    className="mt-2 font-mono text-[2.2rem] font-semibold leading-none text-white tabular-nums md:text-[2.75rem]"
+                    className="mt-2 font-mono text-[2.2rem] font-semibold leading-none text-[color:var(--wolfy-text-primary)] tabular-nums md:text-[2.75rem]"
                   >
                     {formatDisplayMoney(totalEquity, totalEquityDisplay, snapshotCurrency)}
                   </div>
-                  <p className="mt-3 max-w-[72ch] text-sm leading-6 text-white/62">
+                  <p className="mt-3 max-w-[72ch] text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
                     {heroConclusion}
                   </p>
                   <div className="mt-4 flex min-w-0 flex-wrap gap-2">
@@ -4034,15 +3911,15 @@ const PortfolioPage: React.FC = () => {
                     />
                   </div>
 
-                  <div className="rounded-[14px] border border-white/[0.05] bg-white/[0.03] px-4 py-3">
-                    <div className="grid grid-cols-2 gap-3 text-xs text-white/45">
+                  <div className="rounded-[14px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-4 py-3">
+                    <div className="grid grid-cols-2 gap-3 text-xs text-[color:var(--wolfy-text-muted)]">
                       <div>
-                        <div className="uppercase tracking-[0.18em] text-white/32">{language === 'zh' ? '账户范围' : 'Scope'}</div>
-                        <div className="mt-1 text-sm text-white/72">{accountStateSummary}</div>
+                        <div className="uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '账户范围' : 'Scope'}</div>
+                        <div className="mt-1 text-sm text-[color:var(--wolfy-text-secondary)]">{accountStateSummary}</div>
                       </div>
                       <div>
-                        <div className="uppercase tracking-[0.18em] text-white/32">{language === 'zh' ? '当前状态' : 'State'}</div>
-                        <div className="mt-1 text-sm text-white/72">{holdingsPrimaryValue}</div>
+                        <div className="uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '当前状态' : 'State'}</div>
+                        <div className="mt-1 text-sm text-[color:var(--wolfy-text-secondary)]">{holdingsPrimaryValue}</div>
                       </div>
                     </div>
                   </div>
@@ -4068,25 +3945,25 @@ const PortfolioPage: React.FC = () => {
               {hasHoldings ? (
                 <div data-testid="portfolio-summary-strip" className="flex min-w-0 flex-col gap-3">
                   <div data-testid="portfolio-summary-core-row" className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
-                    <TerminalPanel as="section" data-testid="portfolio-summary-market-value-card" className="min-w-0 border-white/[0.08] bg-white/[0.035]">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/38">{copy.totalMarketValue}</div>
+                    <TerminalPanel as="section" data-testid="portfolio-summary-market-value-card" className="min-w-0 border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{copy.totalMarketValue}</div>
                       <div
                         data-testid="portfolio-summary-market-value"
-                        className="mt-2 break-words font-mono text-[1.75rem] font-semibold leading-none text-white tabular-nums md:text-[2.1rem]"
+                        className="mt-2 break-words font-mono text-[1.75rem] font-semibold leading-none text-[color:var(--wolfy-text-primary)] tabular-nums md:text-[2.1rem]"
                       >
                         {formatDisplayMoney(totalMarketValue, totalMarketValueDisplay, snapshotCurrency)}
                       </div>
-                      <div className="mt-2 text-xs leading-5 text-white/44">{holdingsHeaderNote}</div>
+                      <div className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{holdingsHeaderNote}</div>
                     </TerminalPanel>
-                    <TerminalPanel as="section" data-testid="portfolio-pnl-summary" className="min-w-0 border-white/[0.08] bg-white/[0.035]">
-                      <div data-testid="portfolio-pnl-total" className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/38">{pnlLabels.total}</div>
+                    <TerminalPanel as="section" data-testid="portfolio-pnl-summary" className="min-w-0 border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]">
+                      <div data-testid="portfolio-pnl-total" className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{pnlLabels.total}</div>
                       <div
                         data-testid="portfolio-summary-pnl-value"
                         className={`mt-2 break-words font-mono text-[1.75rem] font-semibold leading-none tabular-nums md:text-[2.1rem] ${totalPnl >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}
                       >
                         {totalPnlDisplay ? formatSignedMoney(totalPnlDisplay.value, displayCurrency) : formatSignedMoney(totalPnl, pnlSourceCurrency)}
                       </div>
-                      <div className="mt-3 grid min-w-0 grid-cols-1 gap-1.5 text-xs text-white/44 sm:grid-cols-2">
+                      <div className="mt-3 grid min-w-0 grid-cols-1 gap-1.5 text-xs text-[color:var(--wolfy-text-muted)] sm:grid-cols-2">
                         <span data-testid="portfolio-pnl-realized" className="min-w-0 break-words">{pnlLabels.realized} {realizedPnlDisplay ? formatSignedMoney(realizedPnlDisplay.value, displayCurrency) : formatSignedMoney(realizedPnl, pnlSourceCurrency)}</span>
                         <span data-testid="portfolio-pnl-unrealized" className="min-w-0 break-words">{pnlLabels.unrealized} {unrealizedPnlDisplay ? formatSignedMoney(unrealizedPnlDisplay.value, displayCurrency) : formatSignedMoney(unrealizedPnl, pnlSourceCurrency)}</span>
                       </div>
@@ -4095,33 +3972,33 @@ const PortfolioPage: React.FC = () => {
 
                   <div data-testid="portfolio-summary-aux-row" className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
                     <TerminalPanel as="section" dense data-testid="portfolio-summary-cash-card" className="min-w-0">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">{copy.totalCash}</div>
-                      <div data-testid="portfolio-summary-cash-value" className="mt-1.5 break-words font-mono text-base font-medium text-white tabular-nums">{formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)}</div>
-                      <div className="mt-1 text-xs leading-5 text-white/38">{language === 'zh' ? '可用于继续配置或缓冲波动。' : 'Available for new allocation or downside buffer.'}</div>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{copy.totalCash}</div>
+                      <div data-testid="portfolio-summary-cash-value" className="mt-1.5 break-words font-mono text-base font-medium text-[color:var(--wolfy-text-primary)] tabular-nums">{formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)}</div>
+                      <div className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '可用于继续配置或缓冲波动。' : 'Available for new allocation or downside buffer.'}</div>
                     </TerminalPanel>
                     <TerminalPanel as="section" dense data-testid="portfolio-summary-holdings-card" className="min-w-0">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">{language === 'zh' ? '持仓' : 'Holdings'}</div>
-                      <div className="mt-1.5 break-words font-mono text-base font-medium text-white tabular-nums">{holdingsPrimaryValue}</div>
-                      <div className="mt-1 text-xs leading-5 text-white/38">{accountStateSummary}</div>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '持仓' : 'Holdings'}</div>
+                      <div className="mt-1.5 break-words font-mono text-base font-medium text-[color:var(--wolfy-text-primary)] tabular-nums">{holdingsPrimaryValue}</div>
+                      <div className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{accountStateSummary}</div>
                     </TerminalPanel>
                     <TerminalPanel as="section" dense data-testid="portfolio-summary-risk-card" className="min-w-0">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">{language === 'zh' ? '风险状态' : 'Risk state'}</div>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '风险状态' : 'Risk state'}</div>
                       <div className={`mt-1.5 break-words text-base font-semibold ${concentrationToneClass}`}>{concentrationLabel}</div>
-                      <div className="mt-1 text-xs leading-5 text-white/38">
+                      <div className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
                         {`${language === 'zh' ? '最大持仓' : 'Largest'} ${formatPercent(topPositionPercent)}`}
                       </div>
                     </TerminalPanel>
                     <TerminalPanel as="section" dense data-testid="portfolio-summary-status-card" className="min-w-0">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">{language === 'zh' ? '状态快照' : 'Status snapshot'}</div>
-                      <div className="mt-1.5 break-words text-sm font-medium text-white/72">{valuationSnapshotNote}</div>
-                      <div className="mt-1 text-xs leading-5 text-white/38">{heroStatusChips.map((item) => item.label).join(' · ')}</div>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '状态快照' : 'Status snapshot'}</div>
+                      <div className="mt-1.5 break-words text-sm font-medium text-[color:var(--wolfy-text-secondary)]">{valuationSnapshotNote}</div>
+                      <div className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{heroStatusChips.map((item) => item.label).join(' · ')}</div>
                     </TerminalPanel>
                   </div>
                   {portfolioResearchStatePreview}
                 </div>
               ) : (
                 <div data-testid="portfolio-empty-onboarding-row" className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
-                  <TerminalPanel as="section" data-testid="portfolio-empty-workflow-column" className="min-w-0 flex flex-col gap-4 border-white/[0.08] bg-white/[0.035]">
+                  <TerminalPanel as="section" data-testid="portfolio-empty-workflow-column" className="min-w-0 flex flex-col gap-4 border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]">
                     <ConsumerOnboardingCtaPanel
                       data-testid="portfolio-empty-onboarding-cta"
                       language={language}
@@ -4169,9 +4046,9 @@ const PortfolioPage: React.FC = () => {
                     />
                     <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">{language === 'zh' ? '首次配置路径' : 'First-use setup path'}</h2>
-                        <p className="mt-2 text-base font-medium text-white">{onboardingTitle}</p>
-                        <p className="mt-2 max-w-[68ch] text-sm leading-6 text-white/52">{onboardingBody}</p>
+                        <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '首次配置路径' : 'First-use setup path'}</h2>
+                        <p className="mt-2 text-base font-medium text-[color:var(--wolfy-text-primary)]">{onboardingTitle}</p>
+                        <p className="mt-2 max-w-[68ch] text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{onboardingBody}</p>
                       </div>
                       <TerminalChip variant="neutral">{language === 'zh' ? '真实数据接入前不生成示例收益' : 'No sample performance before real data is saved'}</TerminalChip>
                     </div>
@@ -4185,10 +4062,10 @@ const PortfolioPage: React.FC = () => {
                     </TerminalEmptyState>
                     <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3">
                       {onboardingSteps.map((step, index) => (
-                        <div key={step.key} className="min-w-0 rounded-2xl border border-white/[0.05] bg-black/20 px-4 py-3">
-                          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">{language === 'zh' ? `步骤 ${index + 1}` : `Step ${index + 1}`}</div>
-                          <div className="mt-2 text-sm font-medium text-white">{step.label}</div>
-                          <p className="mt-2 text-xs leading-5 text-white/45">{step.detail}</p>
+                        <div key={step.key} className="min-w-0 rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-4 py-3">
+                          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? `步骤 ${index + 1}` : `Step ${index + 1}`}</div>
+                          <div className="mt-2 text-sm font-medium text-[color:var(--wolfy-text-primary)]">{step.label}</div>
+                          <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{step.detail}</p>
                         </div>
                       ))}
                     </div>
@@ -4202,7 +4079,7 @@ const PortfolioPage: React.FC = () => {
                       </TerminalButton>
                     </div>
                     ) : null}
-                    <p data-testid="portfolio-empty-help" className="text-xs leading-5 text-white/45">
+                    <p data-testid="portfolio-empty-help" className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
                       {portfolioEmptyHelpText}
                     </p>
                     {!hasWritableAccounts ? (
@@ -4226,37 +4103,37 @@ const PortfolioPage: React.FC = () => {
                   data-testid="portfolio-current-holdings-panel"
                   className="min-w-0 flex flex-col overflow-hidden"
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/5 pb-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[color:var(--wolfy-border-subtle)] pb-4">
                     <div className="min-w-0">
                       <h2 className="min-w-0 text-xs uppercase tracking-widest text-muted-text">
                         {hasHoldings
                           ? (language === 'zh' ? `当前持仓（共 ${positionRows.length} 项）` : `Current Holdings (${positionRows.length})`)
                           : (language === 'zh' ? '当前持仓' : 'Current holdings')}
                       </h2>
-                      <p className="mt-2 text-sm text-white/45">{holdingsHeaderNote}</p>
+                      <p className="mt-2 text-sm text-[color:var(--wolfy-text-muted)]">{holdingsHeaderNote}</p>
                     </div>
-                    <div className="shrink-0 text-right text-xs text-white/38">
+                    <div className="shrink-0 text-right text-xs text-[color:var(--wolfy-text-muted)]">
                       <div>{language === 'zh' ? '价格快照' : 'Pricing snapshot'}</div>
-                      <div className="mt-1 text-white/60">{valuationSnapshotNote}</div>
+                      <div className="mt-1 text-[color:var(--wolfy-text-secondary)]">{valuationSnapshotNote}</div>
                     </div>
                   </div>
 
                   <div className="pt-3 lg:max-h-[560px] lg:min-h-0 lg:overflow-y-auto lg:no-scrollbar lg:[&::-webkit-scrollbar]:hidden lg:[-ms-overflow-style:none] lg:[scrollbar-width:none]">
                     {hasHoldings ? (
                         <>
-                          <div data-testid="portfolio-holdings-mobile-list" className="grid gap-2 md:hidden">
+                          <div data-testid="portfolio-holdings-mobile-list" className="grid gap-2 lg:hidden">
                             {positionRows.map((row) => {
                               const rowTrustItems = buildHoldingTrustItems(row);
                               return (
                                 <article
                                   key={`${row.accountId}-${row.symbol}-${row.market}-mobile`}
                                   data-testid={`portfolio-holding-mobile-card-${row.symbol}`}
-                                  className="min-w-0 rounded-xl border border-white/[0.06] bg-black/10 p-3"
+                                  className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3"
                                 >
                                   <div className="flex min-w-0 items-start justify-between gap-3">
                                     <div className="min-w-0">
-                                      <p className="font-mono text-base font-semibold text-white">{row.symbol}</p>
-                                      <p className="mt-1 text-xs leading-5 text-white/50">
+                                      <p className="font-mono text-base font-semibold text-[color:var(--wolfy-text-primary)]">{row.symbol}</p>
+                                      <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                                         {row.accountName}
                                         {' · '}
                                         {translate(language, 'portfolio.positionContext', {
@@ -4267,25 +4144,25 @@ const PortfolioPage: React.FC = () => {
                                     </div>
                                     <div className={`shrink-0 text-right font-mono text-sm ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                       {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
-                                      <div className="mt-1 text-xs text-white/50">{formatPercent(row.unrealizedPnlPct)}</div>
+                                      <div className="mt-1 text-xs text-[color:var(--wolfy-text-secondary)]">{formatPercent(row.unrealizedPnlPct)}</div>
                                     </div>
                                   </div>
                                   <div className="mt-3 grid min-w-0 grid-cols-2 gap-2">
-                                    <div className="min-w-0 rounded-lg border border-white/[0.05] bg-white/[0.025] px-2.5 py-2">
-                                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">{language === 'zh' ? '数量' : 'Qty'}</p>
-                                      <p className="mt-1 font-mono text-sm text-white/75">{Number(row.quantity || 0).toLocaleString(undefined, { maximumFractionDigits: 4 })}</p>
+                                    <div className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-2">
+                                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '数量' : 'Qty'}</p>
+                                      <p className="mt-1 font-mono text-sm text-[color:var(--wolfy-text-secondary)]">{Number(row.quantity || 0).toLocaleString(undefined, { maximumFractionDigits: 4 })}</p>
                                     </div>
-                                    <div className="min-w-0 rounded-lg border border-white/[0.05] bg-white/[0.025] px-2.5 py-2">
-                                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">{language === 'zh' ? '成本' : 'Cost'}</p>
-                                      <p className="mt-1 font-mono text-sm text-white/75">{formatMoney(row.totalCost, row.currency)}</p>
+                                    <div className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-2">
+                                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '成本' : 'Cost'}</p>
+                                      <p className="mt-1 font-mono text-sm text-[color:var(--wolfy-text-secondary)]">{formatMoney(row.totalCost, row.currency)}</p>
                                     </div>
-                                    <div className="col-span-2 min-w-0 rounded-lg border border-white/[0.05] bg-white/[0.025] px-2.5 py-2">
-                                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">{language === 'zh' ? '市值' : 'Market Value'}</p>
-                                      <p className="mt-1 break-words font-mono text-sm text-white/78">{formatMoney(row.marketValueBase, row.valuationCurrency)}</p>
+                                    <div className="col-span-2 min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-2">
+                                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '市值' : 'Market Value'}</p>
+                                      <p className="mt-1 break-words font-mono text-sm text-[color:var(--wolfy-text-secondary)]">{formatMoney(row.marketValueBase, row.valuationCurrency)}</p>
                                       {row.valuationCurrency !== displayCurrency ? (
-                                        <p className="mt-1 break-words text-xs leading-5 text-white/48">{formatConvertedDisplay(row.marketValueBase, row.valuationCurrency)}</p>
+                                        <p className="mt-1 break-words text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{formatConvertedDisplay(row.marketValueBase, row.valuationCurrency)}</p>
                                       ) : null}
-                                      <p className={`mt-1 text-xs leading-5 ${row.isPriceFallback ? 'text-amber-300' : 'text-white/50'}`}>
+                                      <p className={`mt-1 text-xs leading-5 ${row.isPriceFallback ? 'text-amber-300' : 'text-[color:var(--wolfy-text-secondary)]'}`}>
                                         {row.priceAsOf
                                           ? `${formatMoney(row.lastPrice, row.currency)} · ${language === 'zh' ? `截至 ${row.priceAsOf}` : `As of ${row.priceAsOf}`}`
                                           : `${formatMoney(row.lastPrice, row.currency)} · ${positionPriceFreshnessExplanation(row, language)}`}
@@ -4304,7 +4181,7 @@ const PortfolioPage: React.FC = () => {
                                     <Button
                                       type="button"
                                       variant="ghost"
-                                      className="mt-3 min-h-10 w-full rounded-md border border-[color:var(--wolfy-border-subtle)] bg-transparent px-3 py-2 text-sm text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] disabled:text-white/15 disabled:opacity-50"
+                                      className="mt-3 min-h-10 w-full rounded-md border border-[color:var(--wolfy-border-subtle)] bg-transparent px-3 py-2 text-sm text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] disabled:text-[color:var(--wolfy-text-primary)]/15 disabled:opacity-50"
                                       onClick={() => openManualLedger('trade', 'stock')}
                                     >
                                       {manualLedgerActionLabel}
@@ -4313,11 +4190,14 @@ const PortfolioPage: React.FC = () => {
                                 </article>
                               );
                             })}
-                          </div>
-                          <TerminalDenseTable className="hidden border-0 bg-transparent md:block">
-                            <table className="min-w-[760px] w-full text-left text-xs">
-                              <thead className="text-white/35">
-                                <tr className="border-b border-white/5">
+	                          </div>
+		                          <TerminalDenseTable className="hidden border-0 bg-transparent lg:block">
+	                            <table className="min-w-[760px] w-full text-left text-xs">
+	                              <caption className="sr-only">
+	                                {language === 'zh' ? '持仓研究账本' : 'Holdings research ledger'}
+	                              </caption>
+	                              <thead className="text-[color:var(--wolfy-text-muted)]">
+                                <tr className="border-b border-[color:var(--wolfy-border-subtle)]">
                               {[
                                 language === 'zh' ? '标的' : 'Symbol',
                                 language === 'zh' ? '数量' : 'Qty',
@@ -4335,10 +4215,10 @@ const PortfolioPage: React.FC = () => {
                             {positionRows.map((row) => {
                               const rowTrustItems = buildHoldingTrustItems(row);
                               return (
-                                <tr key={`${row.accountId}-${row.symbol}-${row.market}`} className="border-b border-white/5 text-white/62 transition-colors hover:bg-white/[0.03]">
+                                <tr key={`${row.accountId}-${row.symbol}-${row.market}`} className="border-b border-[color:var(--wolfy-border-subtle)] text-[color:var(--wolfy-text-secondary)] transition-colors hover:bg-[var(--wolfy-surface-input)]">
                                   <td className="px-3 py-2">
-                                    <div className="truncate font-mono text-sm text-white">{row.symbol}</div>
-                                    <div className="truncate text-[11px] text-white/35">
+                                    <div className="truncate font-mono text-sm text-[color:var(--wolfy-text-primary)]">{row.symbol}</div>
+                                    <div className="truncate text-[11px] text-[color:var(--wolfy-text-muted)]">
                                       {row.accountName}
                                       {' · '}
                                       {translate(language, 'portfolio.positionContext', {
@@ -4351,8 +4231,8 @@ const PortfolioPage: React.FC = () => {
                                   <td className="px-3 py-2 font-mono">{formatMoney(row.totalCost, row.currency)}</td>
                                   <td className="px-3 py-2 font-mono">
                                     {formatMoney(row.marketValueBase, row.valuationCurrency)}
-                                    {row.valuationCurrency !== displayCurrency ? <div className="mt-1 text-[11px] text-white/35">{formatConvertedDisplay(row.marketValueBase, row.valuationCurrency)}</div> : null}
-                                    <div className={`mt-1 text-[11px] ${row.isPriceFallback ? 'text-amber-300' : 'text-white/35'}`}>
+                                    {row.valuationCurrency !== displayCurrency ? <div className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">{formatConvertedDisplay(row.marketValueBase, row.valuationCurrency)}</div> : null}
+                                    <div className={`mt-1 text-[11px] ${row.isPriceFallback ? 'text-amber-300' : 'text-[color:var(--wolfy-text-muted)]'}`}>
                                       {row.priceAsOf
                                         ? `${formatMoney(row.lastPrice, row.currency)} · ${language === 'zh' ? `截至 ${row.priceAsOf}` : `As of ${row.priceAsOf}`}`
                                         : `${formatMoney(row.lastPrice, row.currency)} · ${positionPriceFreshnessExplanation(row, language)}`}
@@ -4360,7 +4240,7 @@ const PortfolioPage: React.FC = () => {
                                   </td>
                                   <td className={`px-3 py-2 font-mono ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                     {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
-                                    <div className="mt-1 text-[11px] text-white/40">{formatPercent(row.unrealizedPnlPct)}</div>
+                                    <div className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">{formatPercent(row.unrealizedPnlPct)}</div>
                                   </td>
                                   <td className="px-3 py-2">
                                     {rowTrustItems.length ? (
@@ -4371,7 +4251,7 @@ const PortfolioPage: React.FC = () => {
                                         data-testid={`portfolio-holding-trust-${row.symbol}`}
                                       />
                                     ) : (
-                                      <span className="text-white/35">--</span>
+                                      <span className="text-[color:var(--wolfy-text-muted)]">--</span>
                                     )}
                                   </td>
                                   {canManagePortfolioOperations ? (
@@ -4397,7 +4277,7 @@ const PortfolioPage: React.FC = () => {
                         >
                           {portfolioEmptyStateGuidance}
                         </TerminalEmptyState>
-                        <p data-testid="portfolio-empty-help" className="mt-2 text-xs leading-5 text-white/45">
+                        <p data-testid="portfolio-empty-help" className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
                           {language === 'zh'
                             ? '完成首笔持仓或导入后，这里会展示真实数量、估值、价格快照与数据状态。'
                             : 'After the first holding or import is saved, this area shows real quantity, valuation, pricing snapshot, and data state.'}
@@ -4412,8 +4292,8 @@ const PortfolioPage: React.FC = () => {
                 <TerminalPanel as="section" data-testid="portfolio-risk-card" className="min-w-0 flex flex-col gap-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">{riskTitle}</h2>
-                      <p className="mt-1 text-sm text-white/45">
+                      <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{riskTitle}</h2>
+                      <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">
                         {hasHoldings
                           ? (language === 'zh' ? '先看集中度，再看币种与市场暴露。' : 'Start with concentration, then review currency and market exposure.')
                           : (language === 'zh' ? '暂无持仓，风险画像将在持仓出现后自动生成。' : 'Risk profile appears automatically once holdings exist.')}
@@ -4422,7 +4302,7 @@ const PortfolioPage: React.FC = () => {
                     <span data-testid="portfolio-concentration-label">
                       <PillBadge
                         variant={topPositionPercent >= 50 ? 'danger' : topPositionPercent >= 20 ? 'warning' : hasHoldings ? 'success' : 'default'}
-                        className={hasHoldings ? concentrationToneClass : 'text-white/35'}
+                        className={hasHoldings ? concentrationToneClass : 'text-[color:var(--wolfy-text-muted)]'}
                       >
                         {concentrationLabel}
                       </PillBadge>
@@ -4431,35 +4311,35 @@ const PortfolioPage: React.FC = () => {
                   {hasHoldings ? (
                     <>
                       <div data-testid="portfolio-risk-overview" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                        <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
-                          <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '最大持仓' : 'Largest Position'}</div>
-                          <div className="mt-2 truncate text-sm text-white">{topPosition?.label || '--'}</div>
-                          <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topPosition?.percent)}</div>
+                        <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '最大持仓' : 'Largest Position'}</div>
+                          <div className="mt-2 truncate text-sm text-[color:var(--wolfy-text-primary)]">{topPosition?.label || '--'}</div>
+                          <div className="mt-1 font-mono text-xs text-[color:var(--wolfy-text-muted)]">{formatPercent(topPosition?.percent)}</div>
                         </div>
-                        <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
-                          <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '主币种' : 'Primary Currency'}</div>
-                          <div className="mt-2 truncate text-sm text-white">{topCurrency?.label || '--'}</div>
-                          <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topCurrency?.percent)}</div>
+                        <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '主币种' : 'Primary Currency'}</div>
+                          <div className="mt-2 truncate text-sm text-[color:var(--wolfy-text-primary)]">{topCurrency?.label || '--'}</div>
+                          <div className="mt-1 font-mono text-xs text-[color:var(--wolfy-text-muted)]">{formatPercent(topCurrency?.percent)}</div>
                         </div>
-                        <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
-                          <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '主市场' : 'Primary Market'}</div>
-                          <div className="mt-2 truncate text-sm text-white">{formatExposureMarketLabel(topMarket, language)}</div>
-                          <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topMarket?.percent)}</div>
+                        <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '主市场' : 'Primary Market'}</div>
+                          <div className="mt-2 truncate text-sm text-[color:var(--wolfy-text-primary)]">{formatExposureMarketLabel(topMarket, language)}</div>
+                          <div className="mt-1 font-mono text-xs text-[color:var(--wolfy-text-muted)]">{formatPercent(topMarket?.percent)}</div>
                         </div>
                       </div>
-                      <div data-testid="portfolio-concentration-drilldown" className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
+                      <div data-testid="portfolio-concentration-drilldown" className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
                         <div className="flex items-center justify-between gap-3">
-                          <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '持仓集中度' : 'Concentration'}</div>
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '持仓集中度' : 'Concentration'}</div>
                           <div className={`font-mono text-xs ${concentrationToneClass}`}>{formatPercent(topPosition?.percent)}</div>
                         </div>
-                        <p className="mt-2 text-xs leading-5 text-white/45">{concentrationDescription}</p>
+                        <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{concentrationDescription}</p>
                       </div>
                       <div data-testid="portfolio-risk-hints" className="flex flex-wrap gap-1.5">
                         {(riskHintTexts.length ? riskHintTexts : [language === 'zh' ? '暂无显著集中风险' : 'No notable concentration risk']).map((hint) => (
-                          <PillBadge key={hint} variant="default" className="text-white/55">{hint}</PillBadge>
+                          <PillBadge key={hint} variant="default" className="text-[color:var(--wolfy-text-secondary)]">{hint}</PillBadge>
                         ))}
                         {filteredSafeRiskWarningLabels.map((warning) => (
-                          <PillBadge key={warning} variant="warning" className="text-white/55">{warning}</PillBadge>
+                          <PillBadge key={warning} variant="warning" className="text-[color:var(--wolfy-text-secondary)]">{warning}</PillBadge>
                         ))}
                       </div>
                     </>
@@ -4467,20 +4347,20 @@ const PortfolioPage: React.FC = () => {
                     <>
                       <div data-testid="portfolio-risk-overview" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                         {emptyRiskPreviewItems.map((item) => (
-                          <div key={item.key} className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{item.label}</div>
-                            <div className="mt-2 text-sm font-medium text-white">{language === 'zh' ? '等待首笔持仓' : 'Awaiting first holding'}</div>
-                            <div className="mt-1 text-xs leading-5 text-white/45">{item.detail}</div>
+                          <div key={item.key} className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{item.label}</div>
+                            <div className="mt-2 text-sm font-medium text-[color:var(--wolfy-text-primary)]">{language === 'zh' ? '等待首笔持仓' : 'Awaiting first holding'}</div>
+                            <div className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{item.detail}</div>
                           </div>
                         ))}
                       </div>
-                      <div data-testid="portfolio-concentration-drilldown" className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '风险工作区说明' : 'Risk workspace note'}</div>
-                        <p className="mt-2 text-xs leading-5 text-white/45">{concentrationDescription}</p>
+                      <div data-testid="portfolio-concentration-drilldown" className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '风险工作区说明' : 'Risk workspace note'}</div>
+                        <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{concentrationDescription}</p>
                       </div>
                       <div data-testid="portfolio-risk-hints" className="flex flex-wrap gap-1.5">
-                        <PillBadge variant="default" className="text-white/55">{language === 'zh' ? '首笔持仓后自动生成' : 'Generated after the first holding'}</PillBadge>
-                        {hasHistory ? <PillBadge variant="warning" className="text-white/55">{noHoldingsHistoryNote}</PillBadge> : null}
+                        <PillBadge variant="default" className="text-[color:var(--wolfy-text-secondary)]">{language === 'zh' ? '首笔持仓后自动生成' : 'Generated after the first holding'}</PillBadge>
+                        {hasHistory ? <PillBadge variant="warning" className="text-[color:var(--wolfy-text-secondary)]">{noHoldingsHistoryNote}</PillBadge> : null}
                       </div>
                     </>
                   )}
@@ -4488,19 +4368,19 @@ const PortfolioPage: React.FC = () => {
                     title={exposureSummaryTitle}
                     summary={exposureSummaryDisclosureSummary}
                     data-testid="portfolio-risk-exposure-summary"
-                    className="border-white/[0.05] bg-white/[0.02]"
+                    className="border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]"
                   >
                     <div data-testid="portfolio-risk-exposure-summary-body" className="flex flex-col gap-3">
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         {exposureSummaryRows.map((item) => (
-                          <div key={item.key} className="min-w-0 rounded-xl border border-white/[0.03] bg-black/20 px-3 py-3">
-                            <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{item.label}</div>
-                            <div className="mt-2 truncate text-sm font-medium text-white">{item.value}</div>
-                            <div className="mt-1 font-mono text-xs text-white/45">{item.detail}</div>
+                          <div key={item.key} className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{item.label}</div>
+                            <div className="mt-2 truncate text-sm font-medium text-[color:var(--wolfy-text-primary)]">{item.value}</div>
+                            <div className="mt-1 font-mono text-xs text-[color:var(--wolfy-text-muted)]">{item.detail}</div>
                           </div>
                         ))}
                       </div>
-                      <p className="rounded-xl border border-white/[0.03] bg-black/20 px-3 py-2 text-xs leading-5 text-white/48">
+                      <p className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
                         {exposureSummaryBasisNote}
                       </p>
                       {exposureSummaryTrustItems.length ? (
@@ -4539,8 +4419,8 @@ const PortfolioPage: React.FC = () => {
                 <TerminalPanel as="section" data-testid="portfolio-structure-review-panel" className="min-w-0 flex flex-col gap-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">{language === 'zh' ? '组合结构审查' : 'Portfolio structure review'}</h2>
-                      <p className="mt-1 text-sm text-white/45">{structureReviewIntro}</p>
+                      <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '组合结构审查' : 'Portfolio structure review'}</h2>
+                      <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">{structureReviewIntro}</p>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {structureReview ? (
@@ -4556,21 +4436,21 @@ const PortfolioPage: React.FC = () => {
                   {structureReview ? (
                     <>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
-                          <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '主题 / 行业暴露' : 'Theme / sector exposure'}</div>
-                          <div className="mt-2 text-sm text-white">{structureReviewExposure?.label || '--'}</div>
-                          <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(structureReviewExposure?.percent)}</div>
+                        <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '主题 / 行业暴露' : 'Theme / sector exposure'}</div>
+                          <div className="mt-2 text-sm text-[color:var(--wolfy-text-primary)]">{structureReviewExposure?.label || '--'}</div>
+                          <div className="mt-1 font-mono text-xs text-[color:var(--wolfy-text-muted)]">{formatPercent(structureReviewExposure?.percent)}</div>
                         </div>
-                        <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
-                          <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '最大持仓线索' : 'Largest holding cue'}</div>
-                          <div className="mt-2 text-sm text-white">{structureReviewLargestHolding?.ticker || '--'}</div>
-                          <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(structureReviewLargestHolding?.percent)}</div>
+                        <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '最大持仓线索' : 'Largest holding cue'}</div>
+                          <div className="mt-2 text-sm text-[color:var(--wolfy-text-primary)]">{structureReviewLargestHolding?.ticker || '--'}</div>
+                          <div className="mt-1 font-mono text-xs text-[color:var(--wolfy-text-muted)]">{formatPercent(structureReviewLargestHolding?.percent)}</div>
                         </div>
                       </div>
 
                       {structureReviewStateEntries.length ? (
-                        <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
-                          <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '结构状态分布' : 'Structure states'}</div>
+                        <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '结构状态分布' : 'Structure states'}</div>
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {structureReviewStateEntries.map(([state, count]) => (
                               <TerminalChip key={`${state}-${count}`} variant={structureReviewChipVariant(state)}>
@@ -4595,16 +4475,16 @@ const PortfolioPage: React.FC = () => {
                             || '--';
 
                           return (
-                            <div key={`${holding.ticker}-${holding.structureState}`} className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
+                            <div key={`${holding.ticker}-${holding.structureState}`} className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
                               <div className="flex flex-wrap items-start justify-between gap-3">
                                 <div className="min-w-0">
-                                  <div className="font-mono text-sm text-white">{holding.ticker}</div>
-                                  <div className="mt-1 text-xs text-white/45">{holding.structureState} · {holding.confidence}</div>
+                                  <div className="font-mono text-sm text-[color:var(--wolfy-text-primary)]">{holding.ticker}</div>
+                                  <div className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">{holding.structureState} · {holding.confidence}</div>
                                 </div>
                                 {detailPath ? (
                                   <a
                                     href={detailPath}
-                                    className="text-xs text-cyan-200 transition-colors hover:text-cyan-100"
+                                    className="text-xs text-[color:var(--wolfy-accent)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
                                   >
                                     {structureReviewDetailLabel}
                                   </a>
@@ -4614,22 +4494,22 @@ const PortfolioPage: React.FC = () => {
                                 <TerminalChip variant={structureReviewChipVariant(holding.evidenceQuality.status)}>{structureReviewDataStatusLabel(holding.evidenceQuality.status, language)}</TerminalChip>
                                 <TerminalChip variant={structureReviewChipVariant(holding.structureState)}>{holding.structureState}</TerminalChip>
                               </div>
-                              <p className="mt-2 text-xs leading-5 text-white/48">{primaryGap}</p>
+                              <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{primaryGap}</p>
                             </div>
                           );
                         })}
                       </div>
 
-                      <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '证据缺口' : 'Evidence gaps'}</div>
+                      <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '证据缺口' : 'Evidence gaps'}</div>
                         {structureReviewGapMessages.length ? (
-                          <ul className="mt-2 space-y-1 text-xs leading-5 text-white/48">
+                          <ul className="mt-2 space-y-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
                             {structureReviewGapMessages.map((message) => (
                               <li key={message}>{message}</li>
                             ))}
                           </ul>
                         ) : (
-                          <p className="mt-2 text-xs leading-5 text-white/48">
+                          <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
                             {language === 'zh' ? '当前未返回额外证据缺口。' : 'No additional evidence gaps are returned right now.'}
                           </p>
                         )}
@@ -4648,24 +4528,24 @@ const PortfolioPage: React.FC = () => {
 
                 <TerminalPanel as="section" data-testid="portfolio-valuation-panel" className="min-w-0 flex flex-col gap-4">
                   <div>
-                    <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">{language === 'zh' ? '估值与新鲜度' : 'Valuation freshness'}</h2>
-                    <p className="mt-1 text-sm text-white/45">
+                    <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '估值与新鲜度' : 'Valuation freshness'}</h2>
+                    <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">
                       {hasFreshValuationState
                         ? (language === 'zh' ? '当前估值可直接用于观察组合表现。' : 'Current valuation is ready for portfolio observation.')
                         : consumerDataNotice || (language === 'zh' ? '部分估值信息仍在确认，请结合下方数据说明阅读。' : 'Some valuation details are still being confirmed. Review the notes below for context.')}
                     </p>
                   </div>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '价格快照' : 'Pricing snapshot'}</div>
-                      <div className="mt-2 text-sm text-white">{valuationSnapshotNote}</div>
+                    <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '价格快照' : 'Pricing snapshot'}</div>
+                      <div className="mt-2 text-sm text-[color:var(--wolfy-text-primary)]">{valuationSnapshotNote}</div>
                     </div>
-                    <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '汇率更新时间' : 'FX updated'}</div>
-                      <div className="mt-2 text-sm text-white">{hasFxUnavailable ? fxUnavailableLabel : fxLastUpdated}</div>
+                    <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '汇率更新时间' : 'FX updated'}</div>
+                      <div className="mt-2 text-sm text-[color:var(--wolfy-text-primary)]">{hasFxUnavailable ? fxUnavailableLabel : fxLastUpdated}</div>
                     </div>
                   </div>
-                  <div data-testid="portfolio-valuation-next-evidence" className="rounded-xl border border-white/[0.03] bg-black/20 px-3 py-2 text-xs leading-5 text-white/50">
+                  <div data-testid="portfolio-valuation-next-evidence" className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                     {valuationNextEvidenceCopy}
                   </div>
                   {valuationTrustItems.length ? (
@@ -4676,13 +4556,13 @@ const PortfolioPage: React.FC = () => {
                     />
                   ) : null}
                   {hasHoldings ? (
-                    <div data-testid="portfolio-valuation-evidence-pack" className="rounded-xl border border-white/[0.04] bg-black/20 p-3">
+                    <div data-testid="portfolio-valuation-evidence-pack" className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
                             {language === 'zh' ? '估值证据包' : 'Valuation evidence pack'}
                           </div>
-                          <p className="mt-2 text-xs leading-5 text-white/50">
+                          <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                             {portfolioValuationEvidencePack
                               ? (language === 'zh'
                                 ? 'JSON 仅包含当前页面已展示或可安全派生的估值、价格与汇率证据。'
@@ -4708,7 +4588,7 @@ const PortfolioPage: React.FC = () => {
                         )}
                       </div>
                       {valuationEvidenceFeedback ? (
-                        <div className="mt-2 text-xs leading-5 text-cyan-100/70">{valuationEvidenceFeedback}</div>
+                        <div className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{valuationEvidenceFeedback}</div>
                       ) : null}
                     </div>
                   ) : null}
@@ -4716,9 +4596,9 @@ const PortfolioPage: React.FC = () => {
 
                 <TerminalPanel as="section" data-testid="portfolio-next-action-panel" className="min-w-0 flex flex-col gap-4">
                   <div>
-                    <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">{language === 'zh' ? '下一步' : 'Next action'}</h2>
-                    <p className="mt-1 text-sm text-white">{nextActionHeadline}</p>
-                    <p className="mt-2 text-xs leading-5 text-white/45">{nextActionBody}</p>
+                    <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{language === 'zh' ? '下一步' : 'Next action'}</h2>
+                    <p className="mt-1 text-sm text-[color:var(--wolfy-text-primary)]">{nextActionHeadline}</p>
+                    <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{nextActionBody}</p>
                   </div>
                   {canManagePortfolioOperations ? (
                   <div className="flex flex-wrap gap-2">
@@ -4739,7 +4619,7 @@ const PortfolioPage: React.FC = () => {
                     </TerminalButton>
                   </div>
                   ) : null}
-                  <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3 text-xs text-white/45">
+                  <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-xs text-[color:var(--wolfy-text-muted)]">
                     {hasHistory
                       ? (language === 'zh' ? `近期已记录 ${totalHistoryRows} 条活动，可在下方时间线继续核对。` : `${totalHistoryRows} recent records are available in the timeline below.`)
                       : (language === 'zh' ? '近期活动会在保存持仓、现金或公司行为后出现在下方。' : 'Recent activity appears below after holdings, cash, or corporate records are saved.')}
@@ -4749,14 +4629,14 @@ const PortfolioPage: React.FC = () => {
             </div>
 
             <div data-testid="portfolio-row-notes" className="order-4 col-span-12 min-w-0">
-              <details data-testid="portfolio-data-notes" className="group rounded-[16px] border border-white/[0.05] bg-white/[0.02]">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm text-white/72 outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 [&::-webkit-details-marker]:hidden">
+              <details data-testid="portfolio-data-notes" className="group rounded-[16px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm text-[color:var(--wolfy-text-secondary)] outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)] [&::-webkit-details-marker]:hidden">
                   <span>{language === 'zh' ? '查看数据说明与配置细节' : 'View data notes and allocation detail'}</span>
-                  <span className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-1 text-[11px] font-semibold text-white/45 group-open:text-cyan-100">
+                  <span className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-1 text-[11px] font-semibold text-[color:var(--wolfy-text-muted)] group-open:text-[color:var(--wolfy-text-primary)]">
                     {language === 'zh' ? '展开' : 'Expand'}
                   </span>
                 </summary>
-                <div className="grid gap-4 border-t border-white/[0.04] px-4 pb-4 pt-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+                <div className="grid gap-4 border-t border-[color:var(--wolfy-border-subtle)] px-4 pb-4 pt-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
                   <TerminalPanel
                     as="section"
                     data-testid="portfolio-exposure-card"
@@ -4781,22 +4661,22 @@ const PortfolioPage: React.FC = () => {
                             <TerminalNestedBlock key={`${exposureTab}-${row.key}`} className="min-w-0 p-3">
                               <div className="flex min-w-0 items-center justify-between gap-3">
                                 <div className="min-w-0">
-                                  <div className="truncate text-sm font-medium text-white">{formatExposureRowLabel(row)}</div>
-                                  <div className="mt-1 text-xs text-white/40">
+                                  <div className="truncate text-sm font-medium text-[color:var(--wolfy-text-primary)]">{formatExposureRowLabel(row)}</div>
+                                  <div className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
                                     {formatPercent(row.percent)}
                                     {row.fxStatus === 'unavailable' ? ` · ${fxUnavailableLabel}` : ''}
                                   </div>
                                 </div>
                                 <div className="shrink-0 text-right">
-                                  <div className="font-mono text-sm text-white tabular-nums">{values.display}</div>
-                                  {values.native ? <div className="mt-1 font-mono text-[11px] text-white/35">{values.native}</div> : null}
+                                  <div className="font-mono text-sm text-[color:var(--wolfy-text-primary)] tabular-nums">{values.display}</div>
+                                  {values.native ? <div className="mt-1 font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">{values.native}</div> : null}
                                 </div>
                               </div>
-                              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.04]">
+                              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--wolfy-surface-rail)]">
                                 <div className="h-full rounded-full bg-emerald-400/70" style={{ width: `${Math.max(2, Math.min(100, row.percent || 0))}%` }} />
                               </div>
                               {exposureTab === 'symbol' && row.unrealizedPnl != null ? (
-                                <div className="mt-2 flex justify-between gap-3 text-xs text-white/40">
+                                <div className="mt-2 flex justify-between gap-3 text-xs text-[color:var(--wolfy-text-muted)]">
                                   <span>{copy.positionUnrealized}</span>
                                   <span className={Number(row.unrealizedPnl) >= 0 ? 'text-emerald-300' : 'text-rose-300'}>
                                     {formatSignedMoney(Number(row.unrealizedPnl), row.displayCurrency || snapshotCurrency)}
@@ -4822,22 +4702,22 @@ const PortfolioPage: React.FC = () => {
                           {consumerDataNotice}
                         </p>
                       ) : (
-                        <p className="mt-2 text-sm leading-6 text-white/45">
+                        <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-muted)]">
                           {language === 'zh' ? '这里保留估值来源、风险参考与折算状态的消费者可读说明。' : 'This section keeps consumer-readable notes about valuation lineage, risk references, and conversion state.'}
                         </p>
                       )}
                     </div>
                     <div className="grid grid-cols-1 gap-2">
-                      <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3 text-sm text-white/72">
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.snapshotBasisTitle}</div>
+                      <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-sm text-[color:var(--wolfy-text-secondary)]">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{copy.snapshotBasisTitle}</div>
                         <div className="mt-2">{valuationSnapshotNote}</div>
                       </div>
-                      <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3 text-sm text-white/72">
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.fxState}</div>
+                      <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-sm text-[color:var(--wolfy-text-secondary)]">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{copy.fxState}</div>
                         <div className="mt-2">{snapshot?.fxStale ? copy.fxStale : copy.fxFresh}</div>
                       </div>
-                      <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3 text-sm text-white/72">
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.costMethod}</div>
+                      <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-sm text-[color:var(--wolfy-text-secondary)]">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{copy.costMethod}</div>
                         <div className="mt-2">
                           {costMethod === 'fifo'
                             ? copy.costFifo
@@ -4890,24 +4770,24 @@ const PortfolioPage: React.FC = () => {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-sm text-muted-text uppercase tracking-widest">{language === 'zh' ? '手工记账台' : 'Manual Ledger'}</h2>
-                  <p className="mt-1 text-xs leading-5 text-white/45">{manualLedgerDisclosure}</p>
+                  <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{manualLedgerDisclosure}</p>
                 </div>
               </div>
               <details
                 data-testid="portfolio-manual-record-disclosure"
                 open={manualLedgerOpen}
                 onToggle={(event) => setManualLedgerOpen(event.currentTarget.open)}
-                className="group mt-4 rounded-[16px] border border-white/[0.05] bg-black/20 open:bg-white/[0.02]"
+                className="group mt-4 rounded-[16px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] open:bg-[var(--wolfy-surface-input)]"
               >
-                <summary className="flex min-h-[56px] cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 [&::-webkit-details-marker]:hidden">
+                <summary className="flex min-h-[56px] cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)] [&::-webkit-details-marker]:hidden">
                   <span className="min-w-0">
-                    <span className="block text-sm font-medium text-white">{language === 'zh' ? '手工记账' : 'Manual ledger'}</span>
+                    <span className="block text-sm font-medium text-[color:var(--wolfy-text-primary)]">{language === 'zh' ? '手工记账' : 'Manual ledger'}</span>
                   </span>
-                  <span className="shrink-0 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-1 text-[11px] font-semibold text-white/50 group-open:text-cyan-100">
+                  <span className="shrink-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-1 text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)] group-open:text-[color:var(--wolfy-text-primary)]">
                     {copy.submitTrade}
                   </span>
                 </summary>
-                <div className="border-t border-white/[0.04] px-4 pb-4 pt-4">
+                <div className="border-t border-[color:var(--wolfy-border-subtle)] px-4 pb-4 pt-4">
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 <Select
                   label={language === 'zh' ? '记账账户' : 'Ledger account'}
@@ -4945,7 +4825,7 @@ const PortfolioPage: React.FC = () => {
                   controlClassName="rounded-lg"
                 />
               </div>
-              <div data-testid="portfolio-trade-station-summary" className="mt-3 flex flex-col gap-1 border-y border-white/5 py-2">
+              <div data-testid="portfolio-trade-station-summary" className="mt-3 flex flex-col gap-1 border-y border-[color:var(--wolfy-border-subtle)] py-2">
                 <div className="flex justify-between gap-3 text-xs"><span className="text-muted-text">{copy.totalCash}</span><span className="font-mono text-foreground">{formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)}</span></div>
                 <div className="flex justify-between gap-3 text-xs"><span className="text-muted-text">{copy.totalMarketValue}</span><span className="font-mono text-foreground">{formatDisplayMoney(totalMarketValue, totalMarketValueDisplay, snapshotCurrency)}</span></div>
                 <div className="flex justify-between text-xs"><span className="text-muted-text">{copy.fxState}</span><span data-testid="portfolio-bento-hero-fx-value" className={snapshot?.fxStale ? 'text-amber-300' : 'text-emerald-400'}>{snapshot?.fxStale ? copy.fxStale : copy.fxFresh}</span></div>
@@ -4964,7 +4844,7 @@ const PortfolioPage: React.FC = () => {
               ) : null}
             </div>
 
-            <div className="shrink-0 border-b border-white/5 pt-4 pb-4">
+            <div className="shrink-0 border-b border-[color:var(--wolfy-border-subtle)] pt-4 pb-4">
               <PortfolioSegmentedControl
                 value={leftTab}
                 onChange={(value) => setLeftTab(value as 'trade' | 'account' | 'sync' | 'fx')}
@@ -5181,7 +5061,7 @@ const PortfolioPage: React.FC = () => {
                 <div data-testid="portfolio-fx-panel" className="space-y-4">
                   <div>
 	                    <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{language === 'zh' ? '汇率参考' : 'Exchange-rate reference'}</p>
-                    <p className="mt-1 text-[11px] text-white/35">
+                    <p className="mt-1 text-[11px] text-[color:var(--wolfy-text-muted)]">
                       {language === 'en' ? 'Last update' : '最后更新'} {selectedFxRate?.timestamp ? formatFxTimestamp(selectedFxRate.timestamp) : fxLastUpdated}
                       {selectedFxRate?.isStale ? ` · ${copy.fxStale}` : ''}
                     </p>
@@ -5195,7 +5075,9 @@ const PortfolioPage: React.FC = () => {
                       onChange={setFxBaseCurrency}
                       options={FX_CURRENCY_OPTIONS.map((currency) => ({ value: currency, label: currency }))}
                     />
-                    <span className="mb-2 flex h-10 w-8 items-center justify-center rounded-lg bg-white/[0.04] text-white/45" aria-hidden="true">⇄</span>
+                    <span className="mb-2 flex h-10 w-8 items-center justify-center rounded-lg bg-[var(--wolfy-surface-rail)] text-[color:var(--wolfy-text-muted)]" aria-hidden="true">
+                      <ArrowRightLeft className="size-4" />
+                    </span>
                     <Select
 	                      label={language === 'zh' ? '报价币种' : 'Quote Currency'}
                       labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
@@ -5206,17 +5088,17 @@ const PortfolioPage: React.FC = () => {
                     />
                   </div>
 		                  <TerminalNestedBlock className="px-4 py-5">
-		                    <div className="text-[11px] uppercase tracking-[0.16em] text-white/35">
+		                    <div className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
 		                      {fxBaseCurrency}/{fxQuoteCurrency}
 		                    </div>
 	                    <div data-testid="portfolio-fx-rate-value" className="mt-2 flex items-baseline gap-1.5 whitespace-nowrap">
-	                      <span className="text-sm text-white/60">1 {fxBaseCurrency} =</span>
+	                      <span className="text-sm text-[color:var(--wolfy-text-secondary)]">1 {fxBaseCurrency} =</span>
 	                      {' '}
-	                      <span className="font-mono text-xl text-indigo-400">{selectedFxRate ? formatFxRate(selectedFxRate.rate) : '--'}</span>
+		                    <span className="font-mono text-xl text-[color:var(--wolfy-accent)]">{selectedFxRate ? formatFxRate(selectedFxRate.rate) : '--'}</span>
 	                      {' '}
-		                      <span className="text-sm text-white/60">{fxQuoteCurrency}</span>
+		                      <span className="text-sm text-[color:var(--wolfy-text-secondary)]">{fxQuoteCurrency}</span>
 		                    </div>
-		                    <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
+		                    <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
 		                      <span>{selectedFxRate ? consumerFxLabel(selectedFxRate.isStale ? 'stale' : 'fresh', language) : consumerFxLabel('pending', language)}</span>
 		                    </div>
 		                  </TerminalNestedBlock>
@@ -5255,12 +5137,12 @@ const PortfolioPage: React.FC = () => {
                     <h2 className="text-sm uppercase tracking-widest text-muted-text">
                       {language === 'zh' ? '组合数据接入' : 'Portfolio data connection'}
                     </h2>
-                    <p className="text-sm leading-6 text-white/62">
+                    <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
                       {language === 'zh'
                         ? '当前视图仅展示已接入的组合、持仓与估值状态。连接、导入和同步步骤由具备操作权限的人员配置后开放。'
                         : 'This view only shows connected portfolio, holdings, and valuation status. Connection, import, and sync steps appear after an operator configures access.'}
                     </p>
-                    <TerminalNestedBlock className="px-3 py-3 text-xs leading-5 text-white/52">
+                    <TerminalNestedBlock className="px-3 py-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                       {language === 'zh'
                         ? '这里保留消费者可读状态，具体接入配置由具备操作权限的人员在受控入口完成。'
                         : 'This area keeps consumer-readable status while operational setup stays in the controlled operator surface.'}

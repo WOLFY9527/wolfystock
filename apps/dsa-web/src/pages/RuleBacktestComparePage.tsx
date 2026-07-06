@@ -1240,7 +1240,7 @@ function CompareCostSlippagePanel({
 
       {panelData.signals.length ? (
         <div className="space-y-2">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">已完成指标差异</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">已完成指标差异</p>
           <div className="flex flex-wrap gap-2">
             {panelData.signals.map((signal) => (
               <TerminalChip key={signal.metricKey} variant={getTerminalChipVariantFromState(signal.state)} className="whitespace-normal">
@@ -1399,7 +1399,7 @@ const RuleBacktestComparePage: React.FC = () => {
   };
 
   return (
-    <main className="w-full overflow-x-hidden text-white">
+    <main className="w-full overflow-x-hidden text-[color:var(--wolfy-text-primary)]">
       <TerminalPageShell data-testid="rule-backtest-compare-page">
         <WolfyCommandBar
           leading={(

@@ -353,6 +353,8 @@ test.describe('T179 Backtest and Scenario canonical workflow', () => {
 
     const firstRead = page.getByTestId('scenario-lab-first-read-summary');
     await expect(firstRead).toBeVisible({ timeout: 15_000 });
+    await expect(firstRead).toHaveAttribute('role', 'region');
+    await expect(firstRead).toHaveAttribute('aria-live', 'polite');
     await expect(firstRead).toContainText('情景摘要');
     await expect(firstRead).toContainText('证据边界');
     await expect(page.getByTestId('scenario-evidence-pack-registry')).toBeVisible();
