@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 import src.auth as auth
 from api.app import create_app
 from api.deps import CurrentUser, get_current_user
+from tests.api.route_table_helpers import iter_effective_api_routes
 from src.config import Config
 from src.storage import DatabaseManager
 
@@ -257,7 +258,7 @@ def test_route_registration_does_not_collide_with_existing_portfolio_paths() -> 
     with ScenarioRiskClient() as client:
         post_paths = [
             route.path
-            for route in client.app.routes
+            for route in iter_effective_api_routes(client.app.routes)
             if "POST" in getattr(route, "methods", set()) and route.path.startswith("/api/v1/portfolio")
         ]
 
