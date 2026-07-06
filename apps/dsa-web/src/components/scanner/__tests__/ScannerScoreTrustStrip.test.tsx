@@ -78,4 +78,36 @@ describe('ScannerScoreTrustStrip', () => {
     expect(strip).not.toHaveTextContent(/fallback_source|provider_timeout|fallback_snapshot|raw_provider_debug|sourceAuthorityAllowed|scoreContributionAllowed/i);
     expect(findConsumerRawLeakage(strip.textContent || '')).toEqual([]);
   });
+
+  it('keeps scanner limitation reasons distinct without exposing provider internals', () => {
+    const reasons = [
+      ['provider_timeout', '当前证据不足'],
+      ['quote_unavailable', '报价数据不足'],
+      ['history_insufficient', '历史样本不足'],
+    ] as const;
+
+    reasons.forEach(([reason, label]) => {
+      const candidate = candidateWithTrustDiagnostics();
+      candidate.diagnostics = {
+        scoreExplainability: {
+          scoreConfidence: 0.42,
+          degradationReason: reason,
+          scoreGradeAllowed: false,
+        },
+      };
+
+      const { unmount } = render(
+        <ScannerScoreTrustStrip
+          sources={[candidate]}
+          language="zh"
+          testId={`scanner-score-trust-${reason}`}
+        />,
+      );
+
+      const strip = screen.getByTestId(`scanner-score-trust-${reason}`);
+      expect(strip).toHaveTextContent(label);
+      expect(strip).not.toHaveTextContent(/provider_timeout|quote_unavailable|history_insufficient|provider|raw|diagnostic/i);
+      unmount();
+    });
+  });
 });

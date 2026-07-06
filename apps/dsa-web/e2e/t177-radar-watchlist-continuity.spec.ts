@@ -540,6 +540,7 @@ test.describe('T177 Radar and Watchlist research continuity', () => {
 
     for (const viewport of [
       { width: 1440, height: 1000 },
+      { width: 1024, height: 900 },
       { width: 390, height: 844 },
     ]) {
       await page.unrouteAll({ behavior: 'ignoreErrors' });
@@ -563,11 +564,11 @@ test.describe('T177 Radar and Watchlist research continuity', () => {
 
       const stockLink = page.getByRole('link', { name: '查看个股研究' });
       await expect(stockLink).toHaveAttribute('href', /\/zh\/stocks\/BETA\/structure-decision\?symbol=BETA&market=US/);
-      const watchlistLink = page.getByRole('link', { name: '查看观察列表' });
-      await expect(watchlistLink).toHaveAttribute('href', /\/zh\/watchlist\?symbol=BETA&market=US/);
+      const watchlistLink = page.getByRole('link', { name: '打开观察列表视图' });
+      await expect(watchlistLink).toHaveAttribute('href', /\/zh\/watchlist\?symbol=BETA&market=US&source=scanner/);
       await watchlistLink.focus();
       await page.keyboard.press('Enter');
-      await expect(page).toHaveURL(/\/zh\/watchlist\?symbol=BETA&market=US/);
+      await expect(page).toHaveURL(/\/zh\/watchlist\?symbol=BETA&market=US&source=scanner/);
 
       await expectNoPageOverflow(page);
       await expectNoAdviceOrRawDiagnostics(page);
@@ -620,27 +621,33 @@ test.describe('T177 Radar and Watchlist research continuity', () => {
     });
     page.on('pageerror', (error) => pageErrors.push(error.message));
 
-    await installT177Harness(page, { radarMode: 'candidate', watchlistMode: 'populated' });
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('/zh/watchlist?symbol=ALFA&market=US');
-    await page.waitForLoadState('domcontentloaded');
-    await expect(page).toHaveURL(/\/zh\/watchlist\?symbol=ALFA&market=US/);
-    await expect(page.getByTestId('watchlist-page')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('table', { name: '观察列表研究台账' })).toBeVisible();
-    await expect(page.getByTestId('watchlist-detail-rail')).toBeVisible();
-    await expect(page.getByTestId('watchlist-detail-rail')).toContainText('ALFA');
-    await expect(page.getByTestId('watchlist-detail-rail')).toContainText(/数据备注|Data notes|当前状态|Current state/);
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 1024, height: 900 },
+    ]) {
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+      await installT177Harness(page, { radarMode: 'candidate', watchlistMode: 'populated' });
+      await page.setViewportSize(viewport);
+      await page.goto('/zh/watchlist?symbol=ALFA&market=US');
+      await page.waitForLoadState('domcontentloaded');
+      await expect(page).toHaveURL(/\/zh\/watchlist\?symbol=ALFA&market=US/);
+      await expect(page.getByTestId('watchlist-page')).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByRole('table', { name: '观察列表研究台账' })).toBeVisible();
+      await expect(page.getByTestId('watchlist-detail-rail')).toBeVisible();
+      await expect(page.getByTestId('watchlist-detail-rail')).toContainText('ALFA');
+      await expect(page.getByTestId('watchlist-detail-rail')).toContainText(/数据备注|Data notes|当前状态|Current state/);
 
-    const ledgerOverflow = await page.getByTestId('watchlist-primary-work-region').evaluate((node) => {
-      const element = node as HTMLElement;
-      const table = element.querySelector('[data-testid="watchlist-candidate-list"]') as HTMLElement | null;
-      return {
-        bodyOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-        internalOverflow: Boolean(table && table.scrollWidth > element.clientWidth),
-      };
-    });
-    expect(ledgerOverflow.bodyOverflow).toBe(false);
-    expect(ledgerOverflow.internalOverflow).toBe(true);
+      const ledgerOverflow = await page.getByTestId('watchlist-primary-work-region').evaluate((node) => {
+        const element = node as HTMLElement;
+        const table = element.querySelector('[data-testid="watchlist-candidate-list"]') as HTMLElement | null;
+        return {
+          bodyOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+          internalOverflow: Boolean(table && table.scrollWidth > element.clientWidth),
+        };
+      });
+      expect(ledgerOverflow.bodyOverflow).toBe(false);
+      if (viewport.width === 390) expect(ledgerOverflow.internalOverflow).toBe(true);
+    }
 
     await page.goto('/zh/watchlist');
     await page.waitForLoadState('domcontentloaded');

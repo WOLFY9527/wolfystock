@@ -142,7 +142,7 @@ type BatchProgress = {
 
 type WatchlistMonitoringTone = 'success' | 'caution' | 'neutral';
 
-const ROW_SELECTION_BUTTON_CLASS = 'inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-lg border transition hover:border-white/30 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/35';
+const ROW_SELECTION_BUTTON_CLASS = 'inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-lg border transition hover:border-[color:var(--wolfy-accent)] hover:bg-[var(--wolfy-surface-input)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]';
 const WATCHLIST_ADVICE_OR_TRADE_WORDS = /建议(买入|卖出|加仓|减仓|持有)|买入|卖出|下单|交易建议|操作建议|投资建议|止损|止盈|目标价|仓位建议|\b(buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing|trade advice|investment advice)\b/i;
 
 function normalizeText(value?: string | null): string {
@@ -423,7 +423,7 @@ function formatScoreDisclosureFreshness(item: WatchlistItem, value: string | nul
   if (state === 'cached') return language === 'en' ? 'Saved score snapshot' : '已保存评分';
   if (state === 'blocked') return language === 'en' ? 'Observation only' : '仅作观察';
   if (state === 'stale' || state === 'limitedConfidence') return language === 'en' ? 'Recent available' : '最近可用';
-  if (state === 'unknown') return language === 'en' ? 'Updating' : '更新中';
+  if (state === 'unknown') return language === 'en' ? 'Freshness unknown' : '时效未知';
   return formatFreshness(value);
 }
 
@@ -434,14 +434,14 @@ function formatScoreDisclosureStatus(state: WatchlistScoreDisclosureState, langu
     if (state === 'blocked') return 'Observation only';
     if (state === 'stale' || state === 'limitedConfidence') return 'Limited confidence';
     if (state === 'failed') return 'Scan failed';
-    return 'Updating';
+    return 'Research status pending';
   }
   if (state === 'fresh') return '评分已刷新';
   if (state === 'cached') return '已保存评分';
   if (state === 'blocked') return '仅作观察';
   if (state === 'stale' || state === 'limitedConfidence') return '置信度较低';
   if (state === 'failed') return '扫描失败';
-  return '数据更新中';
+  return '研究状态待确认';
 }
 
 function scoreDisclosureChipVariant(state: WatchlistScoreDisclosureState): React.ComponentProps<typeof TerminalChip>['variant'] {
@@ -479,8 +479,8 @@ function formatScoreDisclosureNotice(item: WatchlistItem, state: WatchlistScoreD
   }
   if (state === 'unknown') {
     return language === 'en'
-      ? 'Data is updating and will refresh shortly.'
-      : '数据更新中，稍后将自动刷新。';
+      ? 'Research status is pending; no refresh progress is assumed.'
+      : '研究状态待确认，未推断刷新进度。';
   }
   return null;
 }
@@ -493,7 +493,7 @@ function formatScannerStatus(item: WatchlistItem): string {
   if (['data_failed', 'provider_down', 'provider_error', 'error', 'failed', 'critical'].includes(status)) return '扫描失败';
   if (scoreDisclosureState === 'blocked') return '仅作观察';
   if (scoreDisclosureState === 'stale' || scoreDisclosureState === 'limitedConfidence') return '置信度较低';
-  if (scoreDisclosureState === 'unknown') return hasScannerEvidence(item) ? '数据更新中' : '未扫描';
+  if (scoreDisclosureState === 'unknown') return hasScannerEvidence(item) ? '研究状态待确认' : '未扫描';
   if (['selected', 'verified', 'ready', 'fresh'].includes(status)) return '已验证';
   if (['preview', 'candidate', 'passed'].includes(status)) return '通过筛选';
   if (['rejected', 'not_selected', 'failed_filter'].includes(status)) return '未通过';
@@ -1367,7 +1367,7 @@ function WatchlistConsumerObservationBoard({
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
               {language === 'en' ? 'Watchlist' : '观察列表'}
             </p>
-            <p className="mt-1 text-sm text-white/72">
+            <p className="mt-1 text-sm text-[color:var(--wolfy-text-secondary)]">
               {language === 'en'
                 ? `Tracking ${items.length} symbols`
                 : `正在观察 ${items.length} 个标的`}
@@ -1392,36 +1392,36 @@ function WatchlistConsumerObservationBoard({
               <div key={item.id} className="grid min-w-0 gap-2 py-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-center">
                 <div className="min-w-0">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <span className="font-semibold text-white">{item.symbol}</span>
+                    <span className="font-semibold text-[color:var(--wolfy-text-primary)]">{item.symbol}</span>
                     <TerminalChip variant="neutral">{formatMarket(item.market)}</TerminalChip>
                   </div>
-                  <p className="mt-1 truncate text-xs text-white/55">{buildWatchlistIdentityLabel(item, language)}</p>
+                  <p className="mt-1 break-words text-xs text-[color:var(--wolfy-text-muted)] md:truncate">{buildWatchlistIdentityLabel(item, language)}</p>
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-white/82">
+                  <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">
                     {price}
                     {change ? <span className={change.startsWith('-') ? 'ml-2 text-rose-300' : 'ml-2 text-emerald-300'}>{change}</span> : null}
                   </p>
-                  <p className="mt-1 text-xs text-white/58">{researchLabel}</p>
-                  <p className="mt-1 truncate text-xs text-white/45">
-                    {gaps.length ? (language === 'en' ? `Add ${gaps.join(', ')}` : `补${gaps.join('、')}`) : nextAction}
+                  <p className="mt-1 text-xs text-[color:var(--wolfy-text-secondary)]">{researchLabel}</p>
+                  <p className="mt-1 break-words text-xs text-[color:var(--wolfy-text-muted)] md:truncate">
+                    {gaps.length ? (language === 'en' ? `Review gaps: ${gaps.join(', ')}` : `复核缺口：${gaps.join('、')}`) : nextAction}
                   </p>
                   {!item.rowResearchPacket ? (
-                    <p className="mt-1 text-xs leading-5 text-white/50">{nextAction}</p>
+                    <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{nextAction}</p>
                   ) : null}
                 </div>
                 <div className="flex min-w-0 flex-wrap justify-start gap-1.5 md:justify-end">
                   <button
                     type="button"
                     aria-pressed={isActive}
-                    className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-2.5 py-1.5 text-xs text-white/78 hover:border-[color:var(--wolfy-accent)] hover:text-white"
+                    className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-2.5 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-accent)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]"
                     onClick={() => onSelect(item)}
                   >
                     {language === 'en' ? `View ${item.symbol} details` : `查看 ${item.symbol} 详情`}
                   </button>
                   <button
                     type="button"
-                    className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-2.5 py-1.5 text-xs text-white/78 hover:border-[color:var(--wolfy-accent)] hover:text-white"
+                    className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-2.5 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-accent)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]"
                     onClick={() => navigate(buildStockStructurePath(item, language))}
                   >
                     {language === 'en' ? 'View stock structure' : '查看个股结构'}
@@ -1429,10 +1429,10 @@ function WatchlistConsumerObservationBoard({
                   {!item.rowResearchPacket ? (
                     <button
                       type="button"
-                      className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-2.5 py-1.5 text-xs text-white/78 hover:border-[color:var(--wolfy-accent)] hover:text-white"
+                      className="rounded-md border border-[color:var(--wolfy-border-subtle)] px-2.5 py-1.5 text-xs text-[color:var(--wolfy-text-secondary)] hover:border-[color:var(--wolfy-accent)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]"
                       onClick={() => navigate(buildLocalizedPath('/research/radar', language))}
                     >
-                      {language === 'en' ? 'Open Research Radar' : '打开研究雷达'}
+                      {language === 'en' ? 'Open Research Radar view' : '打开研究雷达视图'}
                     </button>
                   ) : null}
                 </div>
@@ -1446,10 +1446,10 @@ function WatchlistConsumerObservationBoard({
           data-testid="watchlist-consumer-detail-panel"
           className="min-w-0 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3"
         >
-          <p className="text-[11px] text-white/40">{language === 'en' ? 'Selected symbol' : '当前标的'}</p>
-          <h2 className="mt-1 text-lg font-semibold text-white">{selected.symbol}</h2>
-          <p className="mt-1 truncate text-sm text-white/62">{selectedName} · {selectedMarket}</p>
-          <div className="mt-3 space-y-2 text-sm leading-6 text-white/75">
+          <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Selected symbol' : '当前标的'}</p>
+          <h2 className="mt-1 text-lg font-semibold text-[color:var(--wolfy-text-primary)]">{selected.symbol}</h2>
+          <p className="mt-1 break-words text-sm text-[color:var(--wolfy-text-secondary)] md:truncate">{selectedName} · {selectedMarket}</p>
+          <div className="mt-3 space-y-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
             <p>{language === 'en' ? 'Latest quote' : '最新报价'} {selectedPrice}</p>
             <p>
               {selectedGaps.length
@@ -1696,7 +1696,7 @@ function getCopy(language: 'zh' | 'en') {
       enabled: 'Enabled',
       stale: 'Stale',
       fresh: 'Fresh',
-      sourceUnknownNeedsRefresh: 'Data is updating and will refresh shortly.',
+      sourceUnknownNeedsRefresh: 'Research status is pending; no refresh progress is assumed.',
       added: 'Added',
       actions: 'Actions',
       analyze: 'Analyze',
@@ -1809,7 +1809,7 @@ function getCopy(language: 'zh' | 'en') {
     enabled: '已启用',
     stale: '过期',
     fresh: '最新',
-    sourceUnknownNeedsRefresh: '数据更新中，稍后将自动刷新。',
+    sourceUnknownNeedsRefresh: '研究状态待确认，未推断刷新进度。',
     added: '加入时间',
     actions: '操作',
     analyze: '分析',
@@ -1879,18 +1879,18 @@ function WatchlistConclusionBand({
             {language === 'en' ? 'Tracked' : '观察标的'} {trackedCount}
           </TerminalChip>
         </div>
-        <p className="mt-2 text-sm leading-6 text-white/72">
+        <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
           {model.detail}
         </p>
       </div>
       <div className="grid min-w-[180px] grid-cols-2 gap-2 text-xs md:w-[220px]">
         <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
           <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Fresh' : '最新'}</p>
-          <p className="mt-1 font-mono text-base font-semibold text-white">{model.freshCount}</p>
+          <p className="mt-1 font-mono text-base font-semibold text-[color:var(--wolfy-text-primary)]">{model.freshCount}</p>
         </div>
         <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
           <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Attention' : '需留意'}</p>
-          <p className="mt-1 font-mono text-base font-semibold text-white">
+          <p className="mt-1 font-mono text-base font-semibold text-[color:var(--wolfy-text-primary)]">
             {model.staleCount + model.unknownCount + model.limitedConfidenceCount}
           </p>
         </div>
@@ -2866,7 +2866,7 @@ const WatchlistPage: React.FC = () => {
                                 aria-hidden="true"
                                 className={`h-3 w-3 rounded-sm border transition ${
                                   selectedIds.has(item.id)
-                                    ? 'border-cyan-100 bg-cyan-100 shadow-[0_0_8px_rgba(103,232,249,0.35)]'
+                                    ? 'border-[color:var(--wolfy-accent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_42%,var(--wolfy-surface-input))]'
                                     : 'border-white/20 bg-transparent'
                                 }`}
                               />

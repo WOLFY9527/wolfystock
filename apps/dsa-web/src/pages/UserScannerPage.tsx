@@ -13,7 +13,6 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { analysisApi, DuplicateTaskError } from '../api/analysis';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import {
   buildConsumerResearchReadinessView,
@@ -106,6 +105,7 @@ import type {
 import type { ResearchReadinessV1 } from '../types/researchReadiness';
 import type { WatchlistItem } from '../types/watchlist';
 import { buildLocalizedPath } from '../utils/localeRouting';
+import { buildResearchWorkspacePath } from '../utils/researchWorkspaceRoute';
 import { normalizeScannerEvidence } from '../utils/evidenceDisplay';
 import type { TrustDisclosureBucket } from '../utils/trustDisclosure';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
@@ -2594,7 +2594,6 @@ const UserScannerPage: React.FC = () => {
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [inspectorSymbol, setInspectorSymbol] = useState<string | null>(null);
-  const [pendingAnalyzeSymbol, setPendingAnalyzeSymbol] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [candidateFilter, setCandidateFilter] = useState<CandidateFilter>('selected');
   const [simulationLookbackDays, setSimulationLookbackDays] = useState(90);
@@ -3302,31 +3301,21 @@ const UserScannerPage: React.FC = () => {
     [manualRecoverySymbol],
   );
   const handleAnalyzeCandidate = useCallback(async (candidate: ScannerCandidate) => {
-    setPendingAnalyzeSymbol(candidate.symbol);
-    setActionNotice(null);
-    try {
-      await analysisApi.analyzeAsync({
-        stockCode: candidate.symbol,
-        reportType: 'detailed',
-        stockName: candidate.name,
-        originalQuery: candidate.symbol,
-        selectionSource: 'manual',
-      });
-      navigate(buildLocalizedPath('/', language));
-    } catch (error) {
-      if (error instanceof DuplicateTaskError) {
-        navigate(buildLocalizedPath('/', language));
-        return;
-      }
-      const parsedError = getParsedApiError(error);
+    const symbol = normalizeCandidateSymbol(candidate.symbol);
+    if (!symbol) {
       setActionNotice({
-        tone: 'danger',
-        message: parsedError.message,
+        tone: 'warning',
+        message: language === 'en' ? 'Candidate symbol is unavailable.' : '候选代码暂不可用。',
       });
-    } finally {
-      setPendingAnalyzeSymbol((current) => (current === candidate.symbol ? null : current));
+      return;
     }
-  }, [language, navigate]);
+    setActionNotice(null);
+    navigate(buildResearchWorkspacePath('stock-structure', language, {
+      symbol,
+      market: normalizeScannerMarket(runDetail?.market || market),
+      source: 'scanner',
+    }));
+  }, [language, market, navigate, runDetail?.market]);
 
   const handleAnalyzeManualRecoverySymbol = useCallback(async () => {
     const symbol = manualRecoveryParsedSymbol;
@@ -3337,31 +3326,13 @@ const UserScannerPage: React.FC = () => {
       });
       return;
     }
-    setPendingAnalyzeSymbol(symbol);
     setActionNotice(null);
-    try {
-      await analysisApi.analyzeAsync({
-        stockCode: symbol,
-        reportType: 'detailed',
-        stockName: symbol,
-        originalQuery: symbol,
-        selectionSource: 'manual',
-      });
-      navigate(buildLocalizedPath('/', language));
-    } catch (error) {
-      if (error instanceof DuplicateTaskError) {
-        navigate(buildLocalizedPath('/', language));
-        return;
-      }
-      const parsedError = getParsedApiError(error);
-      setActionNotice({
-        tone: 'danger',
-        message: parsedError.message,
-      });
-    } finally {
-      setPendingAnalyzeSymbol((current) => (current === symbol ? null : current));
-    }
-  }, [language, manualRecoveryParsedSymbol, navigate]);
+    navigate(buildResearchWorkspacePath('stock-structure', language, {
+      symbol,
+      market: normalizeScannerMarket(runDetail?.market || market) || market,
+      source: 'scanner',
+    }));
+  }, [language, manualRecoveryParsedSymbol, market, navigate, runDetail?.market]);
 
   const handleCopyText = useCallback(async (text: string, nextCopiedKey: string) => {
     try {
@@ -3712,10 +3683,9 @@ const UserScannerPage: React.FC = () => {
 
         <div className="flex flex-wrap items-center gap-1.5">
           <ActionButton
-            label={pendingAnalyzeSymbol === candidate.symbol ? (language === 'en' ? 'Analyzing...' : '分析中...') : (language === 'en' ? 'Analyze' : '分析')}
+            label={language === 'en' ? 'Open stock research' : '打开个股研究'}
             icon={<Play className="h-3.5 w-3.5" />}
             onClick={() => void handleAnalyzeCandidate(candidate)}
-            disabled={pendingAnalyzeSymbol === candidate.symbol}
             variant="compact"
           />
           <ActionButton
@@ -3786,7 +3756,7 @@ const UserScannerPage: React.FC = () => {
               )}
               onTrack={() => void handleTrackCandidate(candidate)}
               onBacktest={() => void handleBacktestCandidate(candidate)}
-              isAnalyzing={pendingAnalyzeSymbol === candidate.symbol}
+              isAnalyzing={false}
               isCopied={copiedKey === `candidate:${candidate.symbol}`}
               isTracked={isTracked}
               isTrackPending={isTrackPending}
@@ -3811,7 +3781,6 @@ const UserScannerPage: React.FC = () => {
     handleExportRows,
     handleTrackCandidate,
     language,
-    pendingAnalyzeSymbol,
     runDetail,
     watchlistAuthBlocked,
   ]);
@@ -3888,7 +3857,6 @@ const UserScannerPage: React.FC = () => {
   const manualRecoveryIdentity = getWatchlistIdentity(manualRecoveryMarket, manualRecoveryParsedSymbol);
   const manualRecoveryAlreadyTracked = Boolean(manualRecoveryIdentity && trackedWatchlistIdentitySet.has(manualRecoveryIdentity));
   const isManualRecoveryWatchlistPending = Boolean(manualRecoveryIdentity && pendingWatchlistIdentity === manualRecoveryIdentity);
-  const isManualRecoveryAnalyzePending = Boolean(manualRecoveryParsedSymbol && pendingAnalyzeSymbol === manualRecoveryParsedSymbol);
   const scannerStatusItems = [
     {
       label: language === 'en' ? 'Top ranked row (observation)' : '排序首位（观察）',
@@ -4219,7 +4187,7 @@ const UserScannerPage: React.FC = () => {
                     href={scannerOperatorReadinessHref}
                     className="inline-flex min-h-9 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 text-xs font-semibold text-[color:var(--wolfy-text-secondary)] transition hover:border-[color:var(--wolfy-accent)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--wolfy-accent)]"
                   >
-                    {language === 'en' ? 'Open data readiness' : '打开数据就绪'}
+                    {language === 'en' ? 'View data readiness' : '查看数据就绪'}
                   </a>
                 </div>
               ) : null}
@@ -4312,11 +4280,11 @@ const UserScannerPage: React.FC = () => {
                             variant="primary"
                             data-testid="scanner-manual-recovery-research"
                             className="h-9 px-3 text-xs"
-                            disabled={!manualRecoveryParsedSymbol || isManualRecoveryAnalyzePending}
+                            disabled={!manualRecoveryParsedSymbol}
                             onClick={() => void handleAnalyzeManualRecoverySymbol()}
                           >
                             <Play className="h-3.5 w-3.5" aria-hidden="true" />
-                            <span>{manualRecoveryParsedSymbol ? (language === 'en' ? `Research ${manualRecoveryParsedSymbol}` : `研究 ${manualRecoveryParsedSymbol}`) : (language === 'en' ? 'Research' : '研究')}</span>
+                            <span>{manualRecoveryParsedSymbol ? (language === 'en' ? `Open ${manualRecoveryParsedSymbol}` : `打开 ${manualRecoveryParsedSymbol}`) : (language === 'en' ? 'Open research' : '打开研究')}</span>
                           </TerminalButton>
                         </div>
                         <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
@@ -4373,13 +4341,13 @@ const UserScannerPage: React.FC = () => {
                             </TerminalButton>
                           ))}
                           <span data-testid="scanner-secondary-route-copy" className="text-[11px] text-[color:var(--wolfy-text-muted)] sm:ml-auto">
-                            {language === 'en' ? 'Secondary routes:' : '辅助入口：'}
+                            {language === 'en' ? 'Research routes:' : '研究入口：'}
                           </span>
                           <a
                             href={buildLocalizedPath('/watchlist', language)}
                             className="inline-flex h-8 items-center rounded-md px-2 text-xs font-medium text-[color:var(--wolfy-text-secondary)] underline decoration-[color:var(--wolfy-divider)] underline-offset-4 hover:text-[color:var(--wolfy-text-primary)]"
                           >
-                            {language === 'en' ? 'Open Watchlist' : '打开 Watchlist'}
+                            {language === 'en' ? 'Open Watchlist view' : '打开观察列表视图'}
                           </a>
                           <a
                             href={buildLocalizedPath('/market-overview', language)}
@@ -4865,7 +4833,7 @@ const UserScannerPage: React.FC = () => {
                                         isTracked={isTracked}
                                         isTrackPending={isTrackPending}
                                         isWatchlistAuthBlocked={watchlistAuthBlocked}
-                                        isAnalyzing={pendingAnalyzeSymbol === sourceCandidate.symbol}
+                                        isAnalyzing={false}
                                         backtestLabel={getBacktestActionLabel(backtestItem)}
                                         backtestTitle={!normalizeCandidateSymbol(sourceCandidate.symbol) ? backtestUnavailableLabel : undefined}
                                         backtestItem={backtestItem}
