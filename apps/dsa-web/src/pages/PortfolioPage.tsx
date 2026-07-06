@@ -70,6 +70,8 @@ import type {
   PortfolioExposureItem,
   PortfolioFxRateItem,
   PortfolioImportBrokerItem,
+  PortfolioImportCommitResponse,
+  PortfolioImportParseResponse,
   PortfolioIbkrSyncResponse,
   PortfolioLiveFxRateResponse,
   PortfolioPositionItem,
@@ -1642,6 +1644,81 @@ function PortfolioIbkrSyncResultCard({
   );
 }
 
+function PortfolioImportPreviewCard({
+  title,
+  boundary,
+  acceptedLabel,
+  rejectedLabel,
+  duplicateLabel,
+  currencyLabel,
+  unknownLabel,
+  recoveryLabel,
+  parseResult,
+  result,
+}: {
+  title: string;
+  boundary: string;
+  acceptedLabel: string;
+  rejectedLabel: string;
+  duplicateLabel: string;
+  currencyLabel: string;
+  unknownLabel: string;
+  recoveryLabel: string;
+  parseResult: PortfolioImportParseResponse | null;
+  result: PortfolioImportCommitResponse;
+}) {
+  const accepted = result.acceptedCount ?? result.insertedCount ?? 0;
+  const rejected = result.rejectedCount ?? result.failedCount ?? 0;
+  const duplicateCandidates = result.duplicateCandidates?.length ?? (result.duplicateCount > 0 ? 1 : 0);
+  const currencyIssues = result.currencyIssues?.length ?? 0;
+  const unknownSymbols = result.unknownSymbols?.length ?? 0;
+  const recoveryActions = result.recoveryActions ?? [];
+
+  return (
+    <div data-testid="portfolio-import-preview-card" className="theme-panel-subtle rounded-[16px] px-4 py-3 text-xs text-secondary-text space-y-3">
+      <div className="space-y-1">
+        <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{title}</p>
+        <p className="leading-5 text-white/58">{boundary}</p>
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <TerminalNestedBlock className="px-3 py-2">
+          <div className="text-[11px] text-white/38">{acceptedLabel}</div>
+          <div className="mt-1 font-mono text-sm text-white">{accepted}</div>
+        </TerminalNestedBlock>
+        <TerminalNestedBlock className="px-3 py-2">
+          <div className="text-[11px] text-white/38">{rejectedLabel}</div>
+          <div className="mt-1 font-mono text-sm text-white">{rejected}</div>
+        </TerminalNestedBlock>
+        <TerminalNestedBlock className="px-3 py-2">
+          <div className="text-[11px] text-white/38">{duplicateLabel}</div>
+          <div className="mt-1 font-mono text-sm text-white">{duplicateCandidates || result.duplicateCount || 0}</div>
+        </TerminalNestedBlock>
+        <TerminalNestedBlock className="px-3 py-2">
+          <div className="text-[11px] text-white/38">{currencyLabel}</div>
+          <div className="mt-1 font-mono text-sm text-white">{currencyIssues}</div>
+        </TerminalNestedBlock>
+        <TerminalNestedBlock className="px-3 py-2">
+          <div className="text-[11px] text-white/38">{unknownLabel}</div>
+          <div className="mt-1 font-mono text-sm text-white">{unknownSymbols}</div>
+        </TerminalNestedBlock>
+      </div>
+      {parseResult ? (
+        <div className="text-[11px] leading-5 text-white/45">
+          {parseResult.broker.toUpperCase()} · records {parseResult.recordCount} · cash {parseResult.cashRecordCount} · actions {parseResult.corporateActionCount}
+        </div>
+      ) : null}
+      {recoveryActions.length > 0 ? (
+        <div className="rounded-xl border border-amber-300/15 bg-amber-300/[0.05] px-3 py-2 text-amber-100/80">
+          <p className="font-medium">{recoveryLabel}</p>
+          <ul className="mt-1 list-disc space-y-1 pl-4">
+            {recoveryActions.map((action) => <li key={action}>{action}</li>)}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function sortExposureRowsByPercent(rows: PortfolioExposureItem[] | undefined): PortfolioExposureItem[] {
   const sorted = [...(rows || [])];
   sorted.sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0));
@@ -1700,6 +1777,12 @@ const PortfolioPage: React.FC = () => {
   const [ibkrBrokerAccountRefDraft, setIbkrBrokerAccountRefDraft] = useState<string | null>(null);
   const [ibkrSyncing, setIbkrSyncing] = useState(false);
   const [ibkrSyncResult, setIbkrSyncResult] = useState<PortfolioIbkrSyncResponse | null>(null);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importParsing, setImportParsing] = useState(false);
+  const [importCommitting, setImportCommitting] = useState(false);
+  const [importParseResult, setImportParseResult] = useState<PortfolioImportParseResponse | null>(null);
+  const [importPreview, setImportPreview] = useState<PortfolioImportCommitResponse | null>(null);
+  const [importCommitResult, setImportCommitResult] = useState<PortfolioImportCommitResponse | null>(null);
 
   const [leftTab, setLeftTab] = useState<'trade' | 'account' | 'sync' | 'fx'>('trade');
   const [exposureTab, setExposureTab] = useState<ExposureTab>('account');
@@ -1855,6 +1938,12 @@ const PortfolioPage: React.FC = () => {
     setIbkrApiBaseUrlDraft(null);
     setIbkrVerifySslDraft(null);
     setIbkrBrokerAccountRefDraft(null);
+  };
+
+  const resetImportPreviewState = () => {
+    setImportParseResult(null);
+    setImportPreview(null);
+    setImportCommitResult(null);
   };
 
   const invalidateFxRefreshScope = (
@@ -2241,6 +2330,69 @@ const PortfolioPage: React.FC = () => {
       setError(getParsedApiError(err));
     } finally {
       setIbkrSyncing(false);
+    }
+  };
+
+  const handleImportFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setImportFile(event.target.files?.[0] ?? null);
+    resetImportPreviewState();
+  };
+
+  const handlePreviewImport = async () => {
+    if (!canManagePortfolioOperations) {
+      return;
+    }
+    if (!writableAccountId) {
+      setWriteWarning(copy.writeRequiresAccount);
+      return;
+    }
+    if (!importFile) {
+      setWriteWarning(t('portfolio.importFileRequired'));
+      return;
+    }
+    if (!selectedBroker) {
+      setWriteWarning(copy.brokerFallbackUnavailable);
+      return;
+    }
+    try {
+      setImportParsing(true);
+      setWriteWarning(null);
+      setImportCommitResult(null);
+      const parsed = await portfolioApi.parseCsvImport(selectedBroker, importFile);
+      const preview = await portfolioApi.commitCsvImport(writableAccountId, selectedBroker, importFile, true);
+      setImportParseResult(parsed);
+      setImportPreview(preview);
+    } catch (err) {
+      setError(getParsedApiError(err));
+    } finally {
+      setImportParsing(false);
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    if (!canManagePortfolioOperations) {
+      return;
+    }
+    if (!writableAccountId) {
+      setWriteWarning(copy.writeRequiresAccount);
+      return;
+    }
+    if (!importFile || !importPreview) {
+      setWriteWarning(t('portfolio.importPreviewRequired'));
+      return;
+    }
+    try {
+      setImportCommitting(true);
+      setWriteWarning(null);
+      const committed = await portfolioApi.commitCsvImport(writableAccountId, selectedBroker, importFile, false);
+      setImportCommitResult(committed);
+      setImportPreview(null);
+      await loadBrokerConnections(writableAccountId);
+      await refreshPortfolioData();
+    } catch (err) {
+      setError(getParsedApiError(err));
+    } finally {
+      setImportCommitting(false);
     }
   };
 
@@ -4803,6 +4955,8 @@ const PortfolioPage: React.FC = () => {
                   <Select label={language === 'zh' ? '导入来源' : 'Broker'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={selectedBroker} onChange={(value) => {
                     setSelectedBroker(value);
                     setIbkrSyncResult(null);
+                    setImportFile(null);
+                    resetImportPreviewState();
                     resetIbkrConnectionDrafts();
                     if (value !== 'ibkr') {
                       setIbkrSessionToken('');
@@ -4830,6 +4984,70 @@ const PortfolioPage: React.FC = () => {
                     <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 text-xs text-secondary-text">
                       {copy.brokerImportHint}
                     </div>
+                  ) : null}
+                  {!brokerListUnavailable && selectedBroker ? (
+                    <SectionShell className="rounded-2xl border border-white/5 bg-white/[0.02] p-4" contentClassName="space-y-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-text">{t('portfolio.importPreviewTitle')}</p>
+                        <p className="mt-1 text-xs leading-5 text-secondary-text">{t('portfolio.importPreviewOnly')}</p>
+                      </div>
+                      <Input
+                        type="file"
+                        label={t('portfolio.importChooseFile')}
+                        labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
+                        className={PORTFOLIO_INPUT_CLASS}
+                        accept={selectedBroker === 'ibkr' ? '.xml,text/xml,application/xml' : '.csv,text/csv'}
+                        onChange={handleImportFileChange}
+                      />
+                      <div className="flex min-w-0 flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className={PORTFOLIO_SECONDARY_BUTTON_CLASS}
+                          onClick={() => void handlePreviewImport()}
+                          disabled={!writableAccountId || !importFile || importParsing || importCommitting}
+                        >
+                          {importParsing ? copy.parsing : t('portfolio.previewImport')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="primary"
+                          className={PORTFOLIO_PRIMARY_BUTTON_CLASS}
+                          onClick={() => void handleConfirmImport()}
+                          disabled={!writableAccountId || !importPreview || importParsing || importCommitting || Number(importPreview.acceptedCount ?? importPreview.insertedCount ?? 0) <= 0}
+                        >
+                          {importCommitting ? copy.committing : t('portfolio.confirmImport')}
+                        </Button>
+                      </div>
+                      {importPreview ? (
+                        <PortfolioImportPreviewCard
+                          title={t('portfolio.importPreviewTitle')}
+                          boundary={t('portfolio.importConfirmBoundary')}
+                          acceptedLabel={t('portfolio.acceptedRows')}
+                          rejectedLabel={t('portfolio.rejectedRows')}
+                          duplicateLabel={t('portfolio.duplicateCandidates')}
+                          currencyLabel={t('portfolio.currencyIssues')}
+                          unknownLabel={t('portfolio.unknownSymbols')}
+                          recoveryLabel={t('portfolio.recoveryActions')}
+                          parseResult={importParseResult}
+                          result={importPreview}
+                        />
+                      ) : null}
+                      {importCommitResult ? (
+                        <PortfolioImportPreviewCard
+                          title={copy.commitResult}
+                          boundary={importCommitResult.duplicateImport ? copy.duplicateFingerprintHint : t('portfolio.importConfirmBoundary')}
+                          acceptedLabel={t('portfolio.acceptedRows')}
+                          rejectedLabel={t('portfolio.rejectedRows')}
+                          duplicateLabel={t('portfolio.duplicateCandidates')}
+                          currencyLabel={t('portfolio.currencyIssues')}
+                          unknownLabel={t('portfolio.unknownSymbols')}
+                          recoveryLabel={t('portfolio.recoveryActions')}
+                          parseResult={null}
+                          result={importCommitResult}
+                        />
+                      ) : null}
+                    </SectionShell>
                   ) : null}
                 </div>
               ) : null}

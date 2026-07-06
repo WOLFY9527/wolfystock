@@ -2758,6 +2758,184 @@ describe('PortfolioPage FX refresh', () => {
     }
   });
 
+  it('previews broker import with dry-run commit and does not persist before confirmation', async () => {
+    const importFile = new File([
+      'symbol,market,trade_date,side,quantity,price,currency\nAAPL,us,2026-03-18,buy,2,101,USD\n',
+    ], 'portfolio.csv', { type: 'text/csv' });
+
+    parseCsvImport.mockResolvedValueOnce({
+      broker: 'huatai',
+      recordCount: 2,
+      skippedCount: 1,
+      errorCount: 1,
+      records: [],
+      cashRecordCount: 0,
+      cashEntries: [],
+      corporateActionCount: 0,
+      corporateActions: [],
+      warnings: [{ row: 3, reason: 'possible duplicate', recoveryAction: '确认是否已导入同一笔交易' }],
+      metadata: {},
+      errors: [{ row: 4, reason: 'missing price', recoveryAction: '补充成交价格后重新预览' }],
+    });
+    commitCsvImport.mockResolvedValueOnce({
+      accountId: 1,
+      recordCount: 2,
+      insertedCount: 0,
+      duplicateCount: 1,
+      failedCount: 1,
+      cashRecordCount: 0,
+      cashInsertedCount: 0,
+      cashFailedCount: 0,
+      corporateActionCount: 0,
+      corporateActionInsertedCount: 0,
+      corporateActionFailedCount: 0,
+      dryRun: true,
+      duplicateImport: false,
+      acceptedCount: 1,
+      rejectedCount: 1,
+      previewOnly: true,
+      requiresConfirmation: true,
+      duplicateCandidates: [{ row: 3, symbol: 'AAPL', tradeDate: '2026-03-18' }],
+      unknownSymbols: [{ row: 4, symbol: 'UNKNOWN' }],
+      currencyIssues: [{ row: 5, currency: 'EUR', reason: 'cross_currency' }],
+      accountMapping: { accountId: 1, status: 'matched', accountName: 'Main' },
+      validationChecks: {
+        date_quantity_price: { ok: false, failedRows: [4] },
+        duplicate_detection: { ok: true, duplicateCandidates: 1 },
+      },
+      recoveryActions: ['补充成交价格后重新预览'],
+      warnings: [{ row: 3, reason: 'possible duplicate', recoveryAction: '确认是否已导入同一笔交易' }],
+      metadata: {},
+      errors: [{ row: 4, reason: 'missing price', recoveryAction: '补充成交价格后重新预览' }],
+    });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+    fireEvent.click(getLeftTabButton('同步'));
+    fireEvent.change(screen.getByLabelText(translate('zh', 'portfolio.importChooseFile')), {
+      target: { files: [importFile] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.previewImport') }));
+
+    await waitFor(() => expect(parseCsvImport).toHaveBeenCalledWith('huatai', importFile));
+    await waitFor(() => expect(commitCsvImport).toHaveBeenCalledWith(1, 'huatai', importFile, true));
+    expect(commitCsvImport).toHaveBeenCalledTimes(1);
+    expect(commitCsvImport.mock.calls.some((call) => call[3] === false)).toBe(false);
+
+    const previewCard = await screen.findByTestId('portfolio-import-preview-card');
+    expect(previewCard).toHaveTextContent(translate('zh', 'portfolio.importConfirmBoundary'));
+    expect(previewCard).toHaveTextContent(translate('zh', 'portfolio.acceptedRows'));
+    expect(previewCard).toHaveTextContent(translate('zh', 'portfolio.rejectedRows'));
+    expect(previewCard).toHaveTextContent(translate('zh', 'portfolio.duplicateCandidates'));
+    expect(previewCard).toHaveTextContent(translate('zh', 'portfolio.currencyIssues'));
+    expect(previewCard).toHaveTextContent(translate('zh', 'portfolio.unknownSymbols'));
+    expect(previewCard).toHaveTextContent('补充成交价格后重新预览');
+  });
+
+  it('commits broker import only after an accepted preview is explicitly confirmed', async () => {
+    const importFile = new File([
+      'symbol,market,trade_date,side,quantity,price,currency\nAAPL,us,2026-03-18,buy,2,101,USD\n',
+    ], 'portfolio.csv', { type: 'text/csv' });
+
+    parseCsvImport.mockResolvedValueOnce({
+      broker: 'huatai',
+      recordCount: 1,
+      skippedCount: 0,
+      errorCount: 0,
+      records: [],
+      cashRecordCount: 0,
+      cashEntries: [],
+      corporateActionCount: 0,
+      corporateActions: [],
+      warnings: [],
+      metadata: {},
+      errors: [],
+    });
+    commitCsvImport
+      .mockResolvedValueOnce({
+        accountId: 1,
+        recordCount: 1,
+        insertedCount: 0,
+        duplicateCount: 0,
+        failedCount: 0,
+        cashRecordCount: 0,
+        cashInsertedCount: 0,
+        cashFailedCount: 0,
+        corporateActionCount: 0,
+        corporateActionInsertedCount: 0,
+        corporateActionFailedCount: 0,
+        dryRun: true,
+        duplicateImport: false,
+        acceptedCount: 1,
+        rejectedCount: 0,
+        previewOnly: true,
+        requiresConfirmation: true,
+        duplicateCandidates: [],
+        unknownSymbols: [],
+        currencyIssues: [],
+        accountMapping: { accountId: 1, status: 'matched', accountName: 'Main' },
+        validationChecks: {
+          date_quantity_price: { ok: true },
+          duplicate_detection: { ok: true, duplicateCandidates: 0 },
+        },
+        recoveryActions: [],
+        warnings: [],
+        metadata: {},
+        errors: [],
+      })
+      .mockResolvedValueOnce({
+        accountId: 1,
+        recordCount: 1,
+        insertedCount: 1,
+        duplicateCount: 0,
+        failedCount: 0,
+        cashRecordCount: 0,
+        cashInsertedCount: 0,
+        cashFailedCount: 0,
+        corporateActionCount: 0,
+        corporateActionInsertedCount: 0,
+        corporateActionFailedCount: 0,
+        dryRun: false,
+        duplicateImport: false,
+        acceptedCount: 1,
+        rejectedCount: 0,
+        previewOnly: false,
+        requiresConfirmation: false,
+        duplicateCandidates: [],
+        unknownSymbols: [],
+        currencyIssues: [],
+        accountMapping: { accountId: 1, status: 'matched', accountName: 'Main' },
+        validationChecks: {
+          date_quantity_price: { ok: true },
+          duplicate_detection: { ok: true, duplicateCandidates: 0 },
+        },
+        recoveryActions: [],
+        warnings: [],
+        metadata: {},
+        errors: [],
+      });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+    fireEvent.click(getLeftTabButton('同步'));
+    fireEvent.change(screen.getByLabelText(translate('zh', 'portfolio.importChooseFile')), {
+      target: { files: [importFile] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.previewImport') }));
+
+    await waitFor(() => expect(commitCsvImport).toHaveBeenCalledWith(1, 'huatai', importFile, true));
+    const confirmButton = await screen.findByRole('button', { name: translate('zh', 'portfolio.confirmImport') });
+    expect(confirmButton).not.toBeDisabled();
+
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => expect(commitCsvImport).toHaveBeenCalledWith(1, 'huatai', importFile, false));
+    expect(commitCsvImport.mock.calls.map((call) => call[3])).toEqual([true, false]);
+    expect(await screen.findByText(translate('zh', 'portfolio.commitResult'))).toBeInTheDocument();
+  });
+
   it('triggers read-only IBKR sync from the existing data sync surface', async () => {
     listImportBrokers.mockResolvedValueOnce({
       brokers: [

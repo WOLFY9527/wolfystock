@@ -688,6 +688,16 @@ class PortfolioImportCommitResponse(BaseModel):
     warnings: List[str] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
     errors: List[str] = Field(default_factory=list)
+    accepted_count: int = 0
+    rejected_count: int = 0
+    preview_only: bool = False
+    requires_confirmation: bool = False
+    duplicate_candidates: List[Dict[str, Any]] = Field(default_factory=list)
+    unknown_symbols: List[Dict[str, Any]] = Field(default_factory=list)
+    currency_issues: List[Dict[str, Any]] = Field(default_factory=list)
+    account_mapping: Dict[str, Any] = Field(default_factory=dict)
+    validation_checks: List[Dict[str, Any]] = Field(default_factory=list)
+    recovery_actions: List[str] = Field(default_factory=list)
 
 
 class PortfolioImportBrokerItem(BaseModel):
