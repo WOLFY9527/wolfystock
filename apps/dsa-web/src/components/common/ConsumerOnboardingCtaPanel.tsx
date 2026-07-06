@@ -181,7 +181,7 @@ export function ConsumerOnboardingCtaPanel({
               key={action.route}
               href={buildLocalizedPath(action.route, language)}
               aria-label={actionLabels.get(action.route)}
-              className="group flex min-h-[84px] min-w-0 flex-col justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2.5 text-left transition-colors hover:border-[color:var(--wolfy-accent)] hover:bg-white/[0.05]"
+              className="group flex min-h-[84px] min-w-0 flex-col justify-between rounded-lg border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2.5 text-left transition-colors hover:border-[color:var(--wolfy-accent)] hover:bg-[color:var(--surface-2)]"
             >
               <span className="flex min-w-0 items-center justify-between gap-2 text-sm font-medium text-[color:var(--wolfy-text-primary)]">
                 <span className="min-w-0 break-words">{actionLabels.get(action.route)}</span>
@@ -197,24 +197,24 @@ export function ConsumerOnboardingCtaPanel({
       {workflow.length || checklist.length || conditions.length ? (
         <div className="mt-3 grid min-w-0 gap-2 md:grid-cols-3">
           {workflow.length ? (
-            <div className="min-w-0 rounded-lg border border-white/8 bg-black/15 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/38">{language === 'en' ? 'Starter flow' : '起步流程'}</p>
+            <div className="min-w-0 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Starter flow' : '起步流程'}</p>
               <ul className="mt-2 space-y-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                 {workflow.slice(0, 4).map((item) => <li key={item}>{item}</li>)}
               </ul>
             </div>
           ) : null}
           {checklist.length ? (
-            <div className="min-w-0 rounded-lg border border-white/8 bg-black/15 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/38">{language === 'en' ? 'Checklist' : '检查清单'}</p>
+            <div className="min-w-0 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Checklist' : '检查清单'}</p>
               <ul className="mt-2 space-y-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                 {checklist.slice(0, 4).map((item) => <li key={item}>{item}</li>)}
               </ul>
             </div>
           ) : null}
           {conditions.length ? (
-            <div className="min-w-0 rounded-lg border border-white/8 bg-black/15 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/38">{language === 'en' ? 'Detected state' : '当前状态'}</p>
+            <div className="min-w-0 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Detected state' : '当前状态'}</p>
               <ul className="mt-2 space-y-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
                 {conditions.slice(0, 4).map((item) => <li key={item}>{item}</li>)}
               </ul>

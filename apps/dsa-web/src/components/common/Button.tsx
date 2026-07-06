@@ -1,7 +1,6 @@
 /**
- * SpaceX live refactor: preserves the shared button API and loading behavior
- * while normalizing controls around restrained ghost surfaces, tighter sizing,
- * and typography that inherits the active theme instead of hard-coding a boxy style.
+ * Shared research-workbench button: preserves the existing API and loading
+ * behavior while letting DESIGN.md tokens own the visual hierarchy.
  */
 import React from 'react';
 import { useI18n } from '../../contexts/UiLanguageContext';
@@ -26,11 +25,11 @@ const BUTTON_SIZE_STYLES = {
 const BUTTON_VARIANT_STYLES = {
   primary: '',
   secondary: '',
-  'settings-primary': 'rounded-lg border border-white/10 bg-white/5 px-6 py-2.5 text-sm font-medium text-white transition-all hover:border-blue-500/40 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)] !rounded-lg !border !border-white/10 !bg-white/5 !px-6 !py-2.5 !text-sm !font-medium !text-white !shadow-none hover:!border-blue-500/40 hover:!bg-white/10 hover:!shadow-[0_0_15px_rgba(59,130,246,0.15)]',
-  'settings-secondary': 'bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:text-white rounded-lg px-5 py-2.5 text-sm font-medium transition-all !rounded-lg !border !border-white/10 !bg-white/5 !px-5 !py-2.5 !text-sm !font-medium !text-white/70 hover:!bg-white/10 hover:!text-white',
+  'settings-primary': '!rounded-[var(--theme-button-radius)] !border !border-[color:var(--theme-button-primary-border)] !bg-[var(--theme-button-primary-bg)] !px-6 !py-2.5 !text-sm !font-medium !text-[color:var(--theme-button-primary-text)] !shadow-none hover:!bg-[var(--sage-deep)]',
+  'settings-secondary': '!rounded-[var(--theme-button-radius)] !border !border-[color:var(--theme-button-secondary-border)] !bg-[var(--theme-button-secondary-bg)] !px-5 !py-2.5 !text-sm !font-medium !text-[color:var(--theme-button-secondary-text)] !shadow-none hover:!border-[color:var(--line-strong)] hover:!bg-[var(--surface-3)]',
   outline: '',
   ghost: '',
-  gradient: 'rounded-lg border border-white/10 bg-white/5 px-6 py-2.5 text-sm font-medium text-white transition-all hover:border-blue-500/40 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)]',
+  gradient: 'rounded-[var(--theme-button-radius)] border border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] px-6 py-2.5 text-sm font-medium text-[color:var(--state-warning-text)] transition-all hover:bg-[var(--state-warning-bg-strong)]',
   danger: '',
   'danger-subtle': '',
   'home-action-ai': '',

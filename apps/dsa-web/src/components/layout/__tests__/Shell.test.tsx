@@ -136,16 +136,16 @@ describe('Shell', () => {
     expect(screen.queryByTestId('chat-completion-badge')).not.toBeInTheDocument();
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
     const themeButton = within(actionIsland).getByRole('button', { name: '切换主题' });
-    expect(themeButton).toHaveAttribute('aria-pressed', 'false');
-    expect(themeButton).toHaveAttribute('data-theme-mode', 'dark');
-    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
-    expect(document.documentElement).toHaveAttribute('data-theme-style', 'spacex');
-    fireEvent.click(themeButton);
-    await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme', 'light'));
     expect(themeButton).toHaveAttribute('aria-pressed', 'true');
     expect(themeButton).toHaveAttribute('data-theme-mode', 'light');
-    expect(window.localStorage.getItem('dsa-theme-style')).toBe('spacex');
-    expect(window.localStorage.getItem('dsa-theme-mode')).toBe('light');
+    expect(document.documentElement).toHaveAttribute('data-theme', 'light');
+    expect(document.documentElement).toHaveAttribute('data-theme-style', 'paper');
+    fireEvent.click(themeButton);
+    await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme', 'dark'));
+    expect(themeButton).toHaveAttribute('aria-pressed', 'false');
+    expect(themeButton).toHaveAttribute('data-theme-mode', 'dark');
+    expect(window.localStorage.getItem('dsa-theme-style')).toBe('paper');
+    expect(window.localStorage.getItem('dsa-theme-mode')).toBe('dark');
     expect(await within(actionIsland).findByTestId('shell-account-center-entry')).toBeInTheDocument();
     expect(within(actionIsland).getByRole('button', { name: '账户中心' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
@@ -570,19 +570,19 @@ describe('Shell', () => {
 
     const mobileStrip = screen.getByTestId('shell-mobile-strip');
     const headerThemeButton = within(mobileStrip).getByRole('button', { name: '切换主题' });
-    expect(headerThemeButton).toHaveAttribute('aria-pressed', 'false');
-    expect(headerThemeButton).toHaveAttribute('data-theme-mode', 'dark');
-    fireEvent.click(headerThemeButton);
-    await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme', 'light'));
     expect(headerThemeButton).toHaveAttribute('aria-pressed', 'true');
     expect(headerThemeButton).toHaveAttribute('data-theme-mode', 'light');
+    fireEvent.click(headerThemeButton);
+    await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme', 'dark'));
+    expect(headerThemeButton).toHaveAttribute('aria-pressed', 'false');
+    expect(headerThemeButton).toHaveAttribute('data-theme-mode', 'dark');
     expect(screen.queryByRole('button', { name: '切换语言' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '打开导航菜单' }));
 
     const drawer = await screen.findByRole('dialog', { name: '导航菜单' });
     const themeButton = within(drawer).getByRole('button', { name: '切换主题' });
-    expect(themeButton).toHaveAttribute('aria-pressed', 'true');
+    expect(themeButton).toHaveAttribute('aria-pressed', 'false');
     expect(await screen.findByRole('button', { name: '切换语言' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
   });

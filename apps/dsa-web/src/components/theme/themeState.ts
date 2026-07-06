@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react';
 
-export type ThemeStylePreset = 'spacex';
+export type ThemeStylePreset = 'paper';
 export type ThemeColorMode = 'light' | 'dark';
 
 export type ThemeStyleContextValue = {
@@ -12,11 +12,14 @@ export type ThemeStyleContextValue = {
 
 export const THEME_STYLE_STORAGE_KEY = 'dsa-theme-style';
 export const THEME_MODE_STORAGE_KEY = 'dsa-theme-mode';
-export const DEFAULT_THEME_STYLE: ThemeStylePreset = 'spacex';
-export const DEFAULT_THEME_MODE: ThemeColorMode = 'dark';
+export const DEFAULT_THEME_STYLE: ThemeStylePreset = 'paper';
+export const DEFAULT_THEME_MODE: ThemeColorMode = 'light';
 
 export function normalizeThemeStyle(value?: string | null): ThemeStylePreset {
-  return value === 'spacex' ? value : DEFAULT_THEME_STYLE;
+  if (value === 'paper' || value === 'spacex') {
+    return DEFAULT_THEME_STYLE;
+  }
+  return DEFAULT_THEME_STYLE;
 }
 
 export function normalizeThemeMode(value?: string | null): ThemeColorMode {

@@ -168,7 +168,7 @@ vi.mock('../../hooks/useSystemConfig', async () => {
 
 vi.mock('../../components/theme/ThemeProvider', () => ({
   useThemeStyle: () => ({
-    themeStyle: 'spacex',
+    themeStyle: 'paper',
     setThemeStyle,
   }),
 }));

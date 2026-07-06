@@ -443,13 +443,13 @@ function useSidebarNavView({
           </span>
           <DrawerUtilityLabel
             label={t('theme.label')}
-            value={!isGuest ? (colorMode === 'light' ? t('theme.terminal') : t('theme.spacex')) : undefined}
+            value={!isGuest ? (colorMode === 'light' ? t('theme.paper') : t('theme.cyber')) : undefined}
           />
         </>
       ) : (
         <span className="inline-flex items-center gap-1.5">
           <ThemeIcon className="size-3.5" aria-hidden="true" />
-          {!isGuest ? <span>{colorMode === 'light' ? t('theme.terminal') : t('theme.spacex')}</span> : null}
+          {!isGuest ? <span>{colorMode === 'light' ? t('theme.paper') : t('theme.cyber')}</span> : null}
         </span>
       )}
     </button>

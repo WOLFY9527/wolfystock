@@ -144,7 +144,7 @@ export function TerminalMetric({
 type TerminalButtonVariant = 'primary' | 'secondary' | 'compact' | 'danger';
 
 const TERMINAL_BUTTON_CLASSES: Record<TerminalButtonVariant, string> = {
-  primary: 'border border-[color:var(--wolfy-accent)] bg-[var(--wolfy-accent)] text-[#f7f8ff] font-medium px-5 py-2.5 rounded-md transition-colors hover:bg-[#6f79dc] disabled:opacity-50 disabled:cursor-not-allowed',
+  primary: 'border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] text-[color:var(--theme-button-primary-text)] font-medium px-5 py-2.5 rounded-md transition-colors hover:bg-[var(--sage-deep)] disabled:opacity-50 disabled:cursor-not-allowed',
   secondary: 'border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)] hover:border-[color:var(--wolfy-divider)] px-4 py-2.5 rounded-md transition-colors',
   compact: 'border border-[color:var(--wolfy-border-subtle)] bg-transparent text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)] px-3 py-1.5 rounded-md text-xs transition-colors',
   danger: 'border border-[color:color-mix(in_srgb,var(--wolfy-market-down)_34%,transparent)] bg-transparent text-[color:var(--wolfy-market-down)] hover:bg-[color:color-mix(in_srgb,var(--wolfy-market-down)_10%,transparent)] px-3 py-1.5 rounded-md text-xs transition-colors',
@@ -177,7 +177,7 @@ type TerminalChipVariant = 'neutral' | 'success' | 'caution' | 'danger' | 'info'
 const TERMINAL_CHIP_CLASSES: Record<TerminalChipVariant, string> = {
   neutral: 'bg-[var(--wolfy-surface-input)] border border-[color:var(--wolfy-border-subtle)] text-[color:var(--wolfy-text-muted)] text-xs font-mono px-2.5 py-1 rounded-md',
   success: 'bg-transparent border border-[color:color-mix(in_srgb,var(--wolfy-market-up)_32%,transparent)] text-[color:var(--wolfy-market-up)] text-xs px-2.5 py-1 rounded-md',
-  caution: 'bg-transparent border border-amber-300/25 text-amber-200 text-xs px-2.5 py-1 rounded-md',
+  caution: 'bg-[var(--state-warning-bg)] border border-[color:var(--state-warning-border)] text-[color:var(--state-warning-text)] text-xs px-2.5 py-1 rounded-md',
   danger: 'bg-transparent border border-[color:color-mix(in_srgb,var(--wolfy-market-down)_32%,transparent)] text-[color:var(--wolfy-market-down)] text-xs px-2.5 py-1 rounded-md',
   info: 'bg-transparent border border-[color:color-mix(in_srgb,var(--wolfy-accent)_36%,transparent)] text-[color:var(--wolfy-accent)] text-xs px-2.5 py-1 rounded-md',
 };
@@ -227,7 +227,7 @@ type NoticeVariant = 'neutral' | 'info' | 'caution' | 'danger';
 const NOTICE_CLASSES: Record<NoticeVariant, string> = {
   neutral: 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)]',
   info: 'border-[color:color-mix(in_srgb,var(--wolfy-accent)_34%,transparent)] bg-transparent text-[color:var(--wolfy-accent)]',
-  caution: 'border-amber-300/20 bg-amber-300/5 text-amber-100/80',
+  caution: 'border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] text-[color:var(--state-warning-text)]',
   danger: 'border-[color:color-mix(in_srgb,var(--wolfy-market-down)_34%,transparent)] bg-transparent text-[color:var(--wolfy-market-down)]',
 };
 

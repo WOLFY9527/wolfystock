@@ -148,15 +148,15 @@ export const Select: React.FC<SelectProps> = ({
         <div
           aria-hidden="true"
           className={cn(
-            'select-field__overlay pointer-events-none flex h-10 w-full min-w-0 items-center rounded-lg border bg-white/[0.02] px-3 py-2.5 text-sm text-white transition-all duration-200',
+            'select-field__overlay pointer-events-none flex h-10 w-full min-w-0 items-center rounded-lg border bg-[var(--input-surface-bg)] px-3 py-2.5 text-sm text-[color:var(--wolfy-text-primary)] transition-all duration-200',
             invalid
-              ? 'border-rose-500/50 text-rose-100'
-              : 'border-white/10 group-focus-within:border-emerald-500/50',
+              ? 'border-[color:var(--state-danger-border)] text-[color:var(--state-danger-text)]'
+              : 'border-[color:var(--input-surface-border)] group-focus-within:border-[color:var(--input-surface-border-focus)]',
             disabled ? 'opacity-50' : '',
           )}
         >
           <span className="select-field__value min-w-0 flex-1 truncate">{selectedLabel}</span>
-          <ChevronDown className="select-field__icon ui-control-icon ml-2 size-4 shrink-0 text-white/40" />
+          <ChevronDown className="select-field__icon ui-control-icon ml-2 size-4 shrink-0 text-[color:var(--wolfy-text-muted)]" />
         </div>
       </div>
     </div>

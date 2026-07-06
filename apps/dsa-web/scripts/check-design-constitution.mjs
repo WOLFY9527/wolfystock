@@ -25,7 +25,7 @@ const RULES = [
   {
     id: 'no-solid-gray-bg',
     severity: 'blocking',
-    hint: 'Use WolfyStock ghost tokens such as bg-white/[0.02], bg-black/20, bg-[#050505], or bg-black.',
+    hint: 'Use DESIGN.md paper tokens and shared research primitives such as Linear/Terminal surfaces, not page-local gray slabs.',
   },
   {
     id: 'raw-debug-copy',
@@ -40,7 +40,7 @@ const RULES = [
   {
     id: 'native-ui',
     severity: 'warning',
-    hint: 'Use no-scrollbar on visible scroll containers and WolfyStock ghost styles on native form controls.',
+    hint: 'Use no-scrollbar on visible scroll containers and shared paper-token form controls.',
   },
 ];
 
@@ -459,6 +459,33 @@ function parseCliArgs(argv) {
   return result;
 }
 
+function isMissingPythonCommand(result) {
+  const output = `${result.stdout || ''}\n${result.stderr || ''}`;
+  return result.error?.code === 'ENOENT'
+    || result.status === 9009
+    || output.includes('Python was not found');
+}
+
+function runPythonGuard(pythonArgs) {
+  const commands = ['python3', 'python'];
+  let lastResult = null;
+
+  for (const command of commands) {
+    const result = spawnSync(command, pythonArgs, {
+      cwd: path.resolve(ROOT_DIR, '..', '..'),
+      encoding: 'utf8',
+      stdio: 'pipe',
+    });
+    lastResult = result;
+    if (isMissingPythonCommand(result)) {
+      continue;
+    }
+    return result;
+  }
+
+  return lastResult;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   let cli;
   try {
@@ -487,11 +514,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
         ...limitedFiles.map((file) => path.join('apps/dsa-web', path.relative(ROOT_DIR, file)).split(path.sep).join('/')),
       );
     }
-    const pythonResult = spawnSync('python3', pythonArgs, {
-      cwd: path.resolve(ROOT_DIR, '..', '..'),
-      encoding: 'utf8',
-      stdio: 'pipe',
-    });
+    const pythonResult = runPythonGuard(pythonArgs);
     if (pythonResult.stdout) {
       process.stdout.write(`\n${pythonResult.stdout}`);
     }

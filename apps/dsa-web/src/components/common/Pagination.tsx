@@ -1,7 +1,6 @@
 /**
- * SpaceX live refactor: preserves page-range behavior while reducing pagination
- * controls to compact spectral chips with quieter inactive states and clearer
- * uppercase labeling consistent with the rest of the shell.
+ * Paper workbench pagination: preserves page-range behavior while keeping
+ * compact controls aligned with shared action and border tokens.
  */
 import type React from 'react';
 import { cn } from '../../utils/cn';

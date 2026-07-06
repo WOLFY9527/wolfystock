@@ -13,27 +13,27 @@ const SIZE_CLASS: Record<NonNullable<StatusBadgeProps['size']>, string> = {
 };
 
 const SOFT_TONE_CLASS: Record<StatusBadgeTone, string> = {
-  success: 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200',
-  danger: 'border-rose-400/30 bg-rose-500/10 text-rose-200',
-  warning: 'border-amber-300/30 bg-amber-400/12 text-amber-100',
-  info: 'border-sky-400/25 bg-sky-500/10 text-sky-200',
-  default: 'border-white/10 bg-white/[0.05] text-white/68',
+  success: 'border-[color:var(--state-success-border)] bg-[var(--state-success-bg)] text-[color:var(--state-success-text)]',
+  danger: 'border-[color:var(--state-danger-border)] bg-[var(--state-danger-bg)] text-[color:var(--state-danger-text)]',
+  warning: 'border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] text-[color:var(--state-warning-text)]',
+  info: 'border-[color:var(--state-info-border)] bg-[var(--state-info-bg)] text-[color:var(--state-info-text)]',
+  default: 'border-[color:var(--line)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)]',
 };
 
 const SOLID_TONE_CLASS: Record<StatusBadgeTone, string> = {
-  success: 'border-emerald-400/55 bg-emerald-500 text-emerald-950',
-  danger: 'border-rose-400/55 bg-rose-500 text-rose-50',
-  warning: 'border-amber-300/55 bg-amber-400 text-amber-950',
-  info: 'border-sky-400/55 bg-sky-500 text-sky-950',
-  default: 'border-white/18 bg-white/12 text-white',
+  success: 'border-[color:var(--state-success-border)] bg-[var(--state-success-text)] text-white',
+  danger: 'border-[color:var(--state-danger-border)] bg-[var(--state-danger-text)] text-white',
+  warning: 'border-[color:var(--state-warning-border)] bg-[var(--state-warning-text)] text-white',
+  info: 'border-[color:var(--state-info-border)] bg-[var(--state-info-text)] text-white',
+  default: 'border-[color:var(--line-strong)] bg-[var(--ink-soft)] text-white',
 };
 
 const OUTLINE_TONE_CLASS: Record<StatusBadgeTone, string> = {
-  success: 'border-emerald-400/35 bg-transparent text-emerald-200',
-  danger: 'border-rose-400/35 bg-transparent text-rose-200',
-  warning: 'border-amber-300/35 bg-transparent text-amber-100',
-  info: 'border-sky-400/35 bg-transparent text-sky-200',
-  default: 'border-white/12 bg-transparent text-white/72',
+  success: 'border-[color:var(--state-success-border)] bg-transparent text-[color:var(--state-success-text)]',
+  danger: 'border-[color:var(--state-danger-border)] bg-transparent text-[color:var(--state-danger-text)]',
+  warning: 'border-[color:var(--state-warning-border)] bg-transparent text-[color:var(--state-warning-text)]',
+  info: 'border-[color:var(--state-info-border)] bg-transparent text-[color:var(--state-info-text)]',
+  default: 'border-[color:var(--line)] bg-transparent text-[color:var(--wolfy-text-muted)]',
 };
 
 export function StatusBadge({

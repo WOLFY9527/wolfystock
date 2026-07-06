@@ -35,7 +35,7 @@ describe('Select', () => {
     expect(label).toHaveClass('min-w-0', 'flex-1', 'truncate');
 
     const icon = overlay?.querySelector('.select-field__icon');
-    expect(icon).toHaveClass('ml-2', 'shrink-0', 'text-white/40');
+    expect(icon).toHaveClass('ml-2', 'shrink-0', 'text-[color:var(--wolfy-text-muted)]');
   });
 
   it('keeps native select behavior and updates the visible label when controlled value changes', () => {
