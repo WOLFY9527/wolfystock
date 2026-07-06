@@ -7,6 +7,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Archive,
   Activity,
+  ArrowRight,
   BellRing,
   BriefcaseBusiness,
   BarChart3,
@@ -19,25 +20,33 @@ import {
   Globe,
   LogIn,
   LogOut,
+  MoreHorizontal,
   Moon,
   Radar,
+  Search,
   ListChecks,
   Settings2,
   ShieldCheck,
   Sun,
   UsersRound,
 } from 'lucide-react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { buildLoginPath, useProductSurface } from '../../hooks/useProductSurface';
 import { cn } from '../../utils/cn';
 import { isAdminMissionControlPrototypeEnabled } from '../../utils/adminCapabilities';
 import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '../../utils/localeRouting';
+import { validateStockCode } from '../../utils/validation';
 import { BrandLogo, BRAND_WORDMARK_CLASSNAME } from '../common/BrandLogo';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { useThemeStyle } from '../theme/themeState';
-import { PRIMARY_CONSUMER_ROUTES } from './coreProductRoutes';
+import {
+  PRIMARY_CONSUMER_ROUTES,
+  SECONDARY_CONSUMER_ROUTES,
+  type CoreProductRoute,
+  type CoreProductRouteKey,
+} from './coreProductRoutes';
 
 type SidebarNavProps = {
   layout?: 'header' | 'drawer';
@@ -47,7 +56,7 @@ type SidebarNavProps = {
 };
 
 type NavItem = {
-  key: string;
+  key: CoreProductRouteKey;
   labelKey?: string;
   label?: string;
   to: string;
@@ -102,25 +111,46 @@ const BrandWordmark: React.FC<{
   </NavLink>
 );
 
-const NAV_ITEMS: NavItem[] = [
-  ...PRIMARY_CONSUMER_ROUTES.map((route) => ({
+const ROUTE_ICON_BY_KEY: Record<CoreProductRouteKey, React.ComponentType<{ className?: string }>> = {
+  home: Activity,
+  'decision-cockpit': Gauge,
+  'market-overview': Activity,
+  'research-radar': Radar,
+  'stock-structure': BarChart3,
+  scanner: Radar,
+  watchlist: ListChecks,
+  portfolio: BriefcaseBusiness,
+  backtest: FileCheck2,
+  'scenario-lab': FlaskConical,
+  'options-lab': FlaskConical,
+};
+
+const SECONDARY_NAV_ORDER: CoreProductRouteKey[] = [
+  'scanner',
+  'backtest',
+  'scenario-lab',
+  'portfolio',
+  'decision-cockpit',
+  'options-lab',
+];
+
+function routeToNavItem(route: CoreProductRoute): NavItem {
+  return {
     key: route.key,
     labelKey: route.labelKey,
     to: route.path,
-    icon: route.key === 'decision-cockpit' ? Gauge
-      : route.key === 'market-overview' ? Activity
-      : route.key === 'research-radar' ? Radar
-      : route.key === 'stock-structure' ? BarChart3
-      : route.key === 'scanner' ? Radar
-      : route.key === 'watchlist' ? ListChecks
-      : route.key === 'portfolio' ? BriefcaseBusiness
-      : route.key === 'backtest' ? FileCheck2
-      : FlaskConical,
-  })),
-];
+    icon: ROUTE_ICON_BY_KEY[route.key],
+  };
+}
 
-const HEADER_UTILITY_TEXT_CLASS = 'px-2.5 py-1 text-[11px] font-medium text-white/42 transition-colors hover:text-white/78';
-const HEADER_UTILITY_DANGER_TEXT_CLASS = 'px-2.5 py-1 text-[11px] font-medium text-white/38 transition-colors hover:text-red-300/90';
+const NAV_ITEMS: NavItem[] = PRIMARY_CONSUMER_ROUTES.map(routeToNavItem);
+const MORE_NAV_ITEMS: NavItem[] = [...SECONDARY_CONSUMER_ROUTES]
+  .filter((route) => route.key !== 'home')
+  .sort((left, right) => SECONDARY_NAV_ORDER.indexOf(left.key) - SECONDARY_NAV_ORDER.indexOf(right.key))
+  .map(routeToNavItem);
+
+const HEADER_UTILITY_TEXT_CLASS = 'shell-header-action px-2.5 py-1 text-[11px] font-medium text-[color:var(--wolfy-text-muted)] transition-colors hover:text-[color:var(--wolfy-text-primary)]';
+const HEADER_UTILITY_DANGER_TEXT_CLASS = 'shell-header-action px-2.5 py-1 text-[11px] font-medium text-[color:var(--state-danger-text)] transition-colors hover:text-[color:var(--wolfy-text-primary)]';
 const ADMIN_NAV_GROUP_ORDER: AdminNavGroupKey[] = ['trust', 'evidence', 'dataOps', 'support'];
 
 function isAdminOpsRoute(pathname: string): boolean {
@@ -189,6 +219,39 @@ function groupAdminNavItems(items: AdminNavItem[], language: 'zh' | 'en'): Admin
     .filter((group) => group.items.length > 0);
 }
 
+function normalizeRoutePath(pathname: string): string {
+  return stripLocalePrefix(String(pathname || '/').split(/[?#]/, 1)[0] || '/');
+}
+
+function isNavRouteActive(pathname: string, key: CoreProductRouteKey, target: string): boolean {
+  const normalizedPathname = normalizeRoutePath(pathname);
+  if (target === '/') {
+    return normalizedPathname === '/' || normalizedPathname === '';
+  }
+  if (key === 'stock-structure') {
+    return normalizedPathname === target
+      || /^\/stocks\/[^/]+\/structure-decision(?:\/)?$/i.test(normalizedPathname);
+  }
+  if (key === 'decision-cockpit') {
+    return normalizedPathname === '/cockpit'
+      || normalizedPathname === '/decision-cockpit'
+      || normalizedPathname === target
+      || normalizedPathname.startsWith(`${target}/`);
+  }
+  return normalizedPathname === target || normalizedPathname.startsWith(`${target}/`);
+}
+
+function inferSymbolMarketContext(symbol: string, language: 'zh' | 'en'): string {
+  const normalized = symbol.trim().toUpperCase();
+  if (/^(SH|SZ|BJ)\d{6}$/.test(normalized) || /^\d{6}\.(SH|SZ|SS|BJ)$/.test(normalized) || /^\d{6}$/.test(normalized)) {
+    return language === 'en' ? 'CN market context' : 'A 股语境';
+  }
+  if (/^HK\d{1,5}$/.test(normalized) || /^\d{1,5}\.HK$/.test(normalized) || /^\d{5}$/.test(normalized)) {
+    return language === 'en' ? 'HK market context' : '港股语境';
+  }
+  return language === 'en' ? 'US ticker context' : '美股 ticker 语境';
+}
+
 function NavLabel({ label }: { label: string }) {
   return (
     <span className="relative inline-flex min-w-0 items-center gap-2">
@@ -219,6 +282,7 @@ function useSidebarNavView({
   hasArchive = false,
 }: SidebarNavProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const { authEnabled, logout } = useAuth();
   const {
     isGuest,
@@ -233,11 +297,19 @@ function useSidebarNavView({
   const { colorMode, setColorMode } = useThemeStyle();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showAdminMenu, setShowAdminMenu] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [stockSearchQuery, setStockSearchQuery] = useState('');
+  const [stockSearchError, setStockSearchError] = useState('');
+  const [stockSearchFocused, setStockSearchFocused] = useState(false);
   const adminMenuRef = useRef<HTMLDivElement | null>(null);
+  const moreMenuRef = useRef<HTMLDivElement | null>(null);
+  const stockSearchRef = useRef<HTMLInputElement | null>(null);
   const routeLocale = parseLocaleFromPathname(location.pathname);
   const adminNavCopy = resolveAdminNavCopy(language);
   const isAdminRoute = isAdminOpsRoute(location.pathname);
   const isDrawer = layout === 'drawer';
+  const moreMenuId = isDrawer ? 'shell-more-drawer-menu' : 'shell-more-header-menu';
+  const stockSearchId = isDrawer ? 'shell-stock-search-drawer' : 'shell-stock-search-header';
   const signInLabel = t('nav.signIn');
   const consoleLabel = t('nav.independentConsole');
   const signInPath = buildLoginPath(location.pathname + location.search);
@@ -283,6 +355,30 @@ function useSidebarNavView({
 
   const handleAdminNavigate = () => {
     setShowAdminMenu(false);
+    setShowMoreMenu(false);
+    onNavigate?.();
+  };
+
+  const handleConsumerNavigate = () => {
+    setShowMoreMenu(false);
+    setStockSearchFocused(false);
+    onNavigate?.();
+  };
+
+  const submitStockSearch = () => {
+    const validation = validateStockCode(stockSearchQuery);
+    if (!validation.valid) {
+      setStockSearchError(language === 'en' ? 'No matching stock route for that symbol format.' : '未找到可打开的标的路由，请检查代码格式。');
+      setStockSearchFocused(true);
+      return;
+    }
+    const target = routeLocale
+      ? buildLocalizedPath(`/stocks/${encodeURIComponent(validation.normalized)}/structure-decision`, routeLocale)
+      : `/stocks/${encodeURIComponent(validation.normalized)}/structure-decision`;
+    setStockSearchError('');
+    setStockSearchQuery('');
+    setStockSearchFocused(false);
+    navigate(target);
     onNavigate?.();
   };
 
@@ -312,24 +408,65 @@ function useSidebarNavView({
     };
   }, [showAdminMenu]);
 
+  useEffect(() => {
+    if (!showMoreMenu) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (moreMenuRef.current?.contains(event.target as Node)) {
+        return;
+      }
+      setShowMoreMenu(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowMoreMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showMoreMenu]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        stockSearchRef.current?.focus();
+        setStockSearchFocused(true);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const navLinks = NAV_ITEMS.map(({ key, labelKey, label: fixedLabel, to, icon: Icon }) => {
     const label = fixedLabel ?? t(labelKey || key);
     const linkTarget = routeLocale ? buildLocalizedPath(to, routeLocale) : to;
+    const routeActive = isNavRouteActive(location.pathname, key, to);
     return (
       <NavLink
         key={key}
         to={linkTarget}
         end={to === '/'}
-        onClick={onNavigate}
+        onClick={handleConsumerNavigate}
         aria-label={label}
+        aria-current={routeActive ? 'page' : undefined}
         className={({ isActive }) => cn(
           isDrawer
             ? 'shell-drawer-link'
             : 'shell-header-link text-sm transition-colors',
-          !isDrawer && (isActive
-            ? 'font-bold text-white'
-            : 'font-medium text-white/50 hover:text-white'),
-          isActive ? 'is-active' : '',
+          !isDrawer && ((isActive || routeActive)
+            ? 'font-bold'
+            : 'font-medium'),
+          (isActive || routeActive) ? 'is-active' : '',
         )}
       >
         {isDrawer ? (
@@ -339,6 +476,36 @@ function useSidebarNavView({
         ) : null}
         <span className={isDrawer ? 'shell-nav-item__label' : 'shell-header-link__label'}>
           <NavLabel label={label} />
+        </span>
+      </NavLink>
+    );
+  });
+
+  const secondaryRouteActive = MORE_NAV_ITEMS.some((item) => isNavRouteActive(location.pathname, item.key, item.to));
+  const moreNavLinks = MORE_NAV_ITEMS.map(({ key, labelKey, label: fixedLabel, to, icon: Icon }) => {
+    const label = fixedLabel ?? t(labelKey || key);
+    const linkTarget = routeLocale ? buildLocalizedPath(to, routeLocale) : to;
+    const routeActive = isNavRouteActive(location.pathname, key, to);
+    return (
+      <NavLink
+        key={key}
+        to={linkTarget}
+        end={to === '/'}
+        onClick={handleConsumerNavigate}
+        aria-label={label}
+        aria-current={routeActive ? 'page' : undefined}
+        className={({ isActive }) => cn(
+          isDrawer
+            ? 'shell-drawer-action'
+            : 'flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-[color:var(--wolfy-text-secondary)] transition-colors hover:bg-[var(--overlay-hover)] hover:text-[color:var(--wolfy-text-primary)]',
+          (isActive || routeActive) ? 'is-active text-[color:var(--wolfy-text-primary)]' : '',
+        )}
+      >
+        <span className={isDrawer ? 'shell-nav-item__icon' : 'inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]'} aria-hidden="true">
+          <Icon className="size-4" />
+        </span>
+        <span className={isDrawer ? 'shell-nav-item__copy' : 'min-w-0 truncate'}>
+          <span className={isDrawer ? 'shell-nav-item__label' : 'truncate'}>{label}</span>
         </span>
       </NavLink>
     );
@@ -356,8 +523,8 @@ function useSidebarNavView({
           ? 'shell-drawer-link'
           : 'shell-header-link text-sm transition-colors',
         !isDrawer && (isActive
-          ? 'font-bold text-white'
-          : 'font-medium text-white/50 hover:text-white'),
+          ? 'font-bold'
+          : 'font-medium'),
         isActive ? 'is-active' : '',
       )}
     >
@@ -374,6 +541,149 @@ function useSidebarNavView({
   const primaryNavLinks = showAdminPrimaryNav ? adminNavLinks : navLinks;
   const primaryNavLabel = showAdminPrimaryNav ? adminNavCopy.menuLabel : t('shell.drawerTitle');
   const primaryNavTestId = showAdminPrimaryNav ? 'shell-admin-primary-nav' : 'shell-consumer-primary-nav';
+  const moreLabel = t('nav.more');
+  const moreAction = !showAdminPrimaryNav ? (
+    isDrawer ? (
+      <div className="space-y-2" ref={moreMenuRef}>
+        <button
+          type="button"
+          className={cn('shell-nav-item shell-nav-item--utility w-full', secondaryRouteActive ? 'is-active' : '')}
+          onClick={() => setShowMoreMenu((open) => !open)}
+          aria-expanded={showMoreMenu}
+          aria-controls={moreMenuId}
+          aria-label={moreLabel}
+        >
+          <span className="shell-nav-item__icon" aria-hidden="true">
+            <MoreHorizontal className="size-4" />
+          </span>
+          <DrawerUtilityLabel label={moreLabel} />
+          <ChevronDown className={cn('ml-auto size-4 text-[color:var(--wolfy-text-muted)] transition-transform', showMoreMenu ? 'rotate-180' : '')} />
+        </button>
+        {showMoreMenu ? (
+          <div
+            id={moreMenuId}
+            data-testid="shell-more-menu"
+            className="space-y-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-2"
+          >
+            {moreNavLinks}
+          </div>
+        ) : null}
+      </div>
+    ) : (
+      <div ref={moreMenuRef} className="relative">
+        <button
+          type="button"
+          className={cn(
+            'shell-header-link text-sm font-medium transition-colors',
+            (showMoreMenu || secondaryRouteActive) ? 'is-active font-bold' : '',
+          )}
+          onClick={() => setShowMoreMenu((open) => !open)}
+          aria-haspopup="menu"
+          aria-expanded={showMoreMenu}
+          aria-controls={moreMenuId}
+          aria-label={moreLabel}
+        >
+          <span className="shell-header-link__label inline-flex items-center gap-1.5">
+            <span>{moreLabel}</span>
+            <ChevronDown className={cn('size-3.5 transition-transform', showMoreMenu ? 'rotate-180' : '')} />
+          </span>
+        </button>
+        {showMoreMenu ? (
+          <div
+            id={moreMenuId}
+            role="menu"
+            data-testid="shell-more-menu"
+            className="absolute right-0 top-full z-20 mt-2 flex min-w-[17rem] max-w-[min(24rem,calc(100vw-2rem))] flex-col gap-1 rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--theme-floating-bg)] p-2 shadow-[var(--shadow-tight)]"
+          >
+            {moreNavLinks}
+          </div>
+        ) : null}
+      </div>
+    )
+  ) : null;
+
+  const trimmedStockSearchQuery = stockSearchQuery.trim();
+  const stockSearchValidation = trimmedStockSearchQuery ? validateStockCode(trimmedStockSearchQuery) : null;
+  const stockSearchHasResult = Boolean(stockSearchValidation?.valid);
+  const stockSearchStatusText = !trimmedStockSearchQuery
+    ? (language === 'en' ? 'Type a known symbol.' : '输入已知股票代码。')
+    : stockSearchHasResult
+      ? (language === 'en'
+        ? `Open ${stockSearchValidation?.normalized} in Stock Research.`
+        : `打开 ${stockSearchValidation?.normalized} 的个股研究。`)
+      : stockSearchError || (language === 'en' ? 'No route-ready result for this symbol.' : '没有可打开的标的结果。');
+  const stockSearchControl = (
+    <form
+      role="search"
+      aria-label={language === 'en' ? 'Open stock research by symbol' : '按股票代码打开个股研究'}
+      className={cn('shell-stock-search', isDrawer ? 'shell-stock-search--drawer' : 'shell-stock-search--header')}
+      data-search-state={!trimmedStockSearchQuery ? 'idle' : stockSearchHasResult ? 'ready' : 'no-results'}
+      onSubmit={(event) => {
+        event.preventDefault();
+        submitStockSearch();
+      }}
+      noValidate
+    >
+      <label htmlFor={stockSearchId} className="shell-stock-search__label">
+        {language === 'en' ? 'Stock' : '个股'}
+      </label>
+      <div className="shell-stock-search__field">
+        <Search className="shell-stock-search__icon" aria-hidden="true" />
+        <input
+          ref={stockSearchRef}
+          id={stockSearchId}
+          value={stockSearchQuery}
+          className="shell-stock-search__input"
+          onChange={(event) => {
+            setStockSearchQuery(event.target.value);
+            if (stockSearchError) setStockSearchError('');
+            setStockSearchFocused(true);
+          }}
+          onFocus={() => setStockSearchFocused(true)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              setStockSearchFocused(false);
+              setStockSearchError('');
+              stockSearchRef.current?.blur();
+            }
+          }}
+          placeholder={language === 'en' ? 'AAPL / 600519 / 0700.HK' : 'AAPL / 600519 / 0700.HK'}
+          aria-describedby={`${stockSearchId}-status`}
+          aria-invalid={Boolean(trimmedStockSearchQuery && !stockSearchHasResult)}
+        />
+      </div>
+      <div id={`${stockSearchId}-status`} className="sr-only" aria-live="polite">
+        {stockSearchStatusText}
+      </div>
+      {stockSearchFocused && trimmedStockSearchQuery ? (
+        <div className="shell-stock-search__popover" data-testid="shell-stock-search-popover">
+          {stockSearchHasResult && stockSearchValidation ? (
+            <button
+              type="button"
+              className="shell-stock-search__result"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={submitStockSearch}
+            >
+              <span className="min-w-0">
+                <span className="block truncate font-semibold">
+                  {language === 'en' ? `Open ${stockSearchValidation.normalized}` : `打开 ${stockSearchValidation.normalized}`}
+                </span>
+                <span className="block truncate text-[11px] text-[color:var(--wolfy-text-muted)]">
+                  {inferSymbolMarketContext(stockSearchValidation.normalized, language)}
+                </span>
+              </span>
+              <ArrowRight className="size-4 shrink-0" aria-hidden="true" />
+            </button>
+          ) : (
+            <p className="shell-stock-search__empty" role="status">
+              {stockSearchStatusText}
+            </p>
+          )}
+        </div>
+      ) : null}
+    </form>
+  );
 
   const archiveAction = !isGuest && hasArchive ? (
     <button
@@ -461,7 +771,7 @@ function useSidebarNavView({
       onClick={onNavigate}
       className={({ isActive }) => cn(
         isDrawer ? 'shell-drawer-action' : HEADER_UTILITY_TEXT_CLASS,
-        !isDrawer && isActive ? 'text-white' : '',
+        !isDrawer && isActive ? 'is-active' : '',
         isDrawer && isActive ? 'is-active' : '',
       )}
       aria-label={t('nav.settings')}
@@ -493,7 +803,7 @@ function useSidebarNavView({
             <ShieldCheck className="size-4" />
           </span>
           <DrawerUtilityLabel label={consoleLabel} />
-          <ChevronDown className={cn('ml-auto size-4 text-white/48 transition-transform', showAdminMenu ? 'rotate-180' : '')} />
+          <ChevronDown className={cn('ml-auto size-4 text-[color:var(--wolfy-text-muted)] transition-transform', showAdminMenu ? 'rotate-180' : '')} />
         </button>
         {showAdminMenu ? (
           <div
@@ -503,7 +813,7 @@ function useSidebarNavView({
           >
             {adminNavGroups.map((group) => (
               <div key={group.key} data-testid={`shell-admin-utility-group-${group.key}`} className="space-y-1">
-                <p className="px-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">{group.label}</p>
+                <p className="px-2 text-[10px] font-semibold uppercase tracking-normal text-[color:var(--wolfy-text-muted)]">{group.label}</p>
                 {group.items.map(({ key, label, to, icon: Icon }) => (
                   <NavLink
                     key={key}
@@ -527,7 +837,7 @@ function useSidebarNavView({
       <div ref={adminMenuRef} className="relative">
         <button
           type="button"
-          className={cn(HEADER_UTILITY_TEXT_CLASS, showAdminMenu ? 'text-white' : '')}
+          className={cn(HEADER_UTILITY_TEXT_CLASS, showAdminMenu ? 'is-active' : '')}
           onClick={() => setShowAdminMenu((open) => !open)}
           aria-expanded={showAdminMenu}
           aria-controls="shell-admin-utility-menu"
@@ -543,23 +853,23 @@ function useSidebarNavView({
             id="shell-admin-utility-menu"
             role="menu"
             data-testid="shell-admin-utility-menu"
-            className="absolute right-0 top-full z-20 mt-2 flex min-w-[17rem] max-w-[min(24rem,calc(100vw-2rem))] flex-col gap-2 rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-2 shadow-[0_20px_48px_rgba(0,0,0,0.28)]"
+            className="absolute right-0 top-full z-20 mt-2 flex min-w-[17rem] max-w-[min(24rem,calc(100vw-2rem))] flex-col gap-2 rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--theme-floating-bg)] p-2 shadow-[var(--shadow-tight)]"
           >
             {adminNavGroups.map((group) => (
               <div key={group.key} data-testid={`shell-admin-utility-group-${group.key}`} className="space-y-1">
-                <p className="px-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">{group.label}</p>
+                <p className="px-2 text-[10px] font-semibold uppercase tracking-normal text-[color:var(--wolfy-text-muted)]">{group.label}</p>
                 {group.items.map(({ key, label, to, icon: Icon }) => (
                   <NavLink
                     key={key}
                     to={to}
                     onClick={handleAdminNavigate}
                     className={({ isActive }) => cn(
-                      'flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-white/72 transition-colors hover:bg-white/[0.04] hover:text-white',
-                      isActive ? 'bg-white/[0.05] text-white' : '',
+                      'flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-[color:var(--wolfy-text-secondary)] transition-colors hover:bg-[var(--overlay-hover)] hover:text-[color:var(--wolfy-text-primary)]',
+                      isActive ? 'bg-[var(--overlay-selected)] text-[color:var(--wolfy-text-primary)]' : '',
                     )}
                     aria-label={label}
                   >
-                    <Icon className="size-4 shrink-0 text-white/56" />
+                    <Icon className="size-4 shrink-0 text-[color:var(--wolfy-text-muted)]" />
                     <span className="truncate">{label}</span>
                   </NavLink>
                 ))}
@@ -577,7 +887,7 @@ function useSidebarNavView({
       onClick={onNavigate}
       className={({ isActive }) => cn(
         isDrawer ? 'shell-drawer-action shell-drawer-action--primary' : HEADER_UTILITY_TEXT_CLASS,
-        !isDrawer && isActive ? 'text-white' : '',
+        !isDrawer && isActive ? 'is-active' : '',
         isDrawer && isActive ? 'is-active' : '',
       )}
       aria-label={signInLabel}
@@ -623,8 +933,10 @@ function useSidebarNavView({
       </div>
       <nav className="shell-drawer-links" aria-label={primaryNavLabel} data-testid={primaryNavTestId}>
         {primaryNavLinks}
+        {moreAction}
       </nav>
       <div className="shell-drawer-footer">
+        {stockSearchControl}
         {archiveAction}
         {languageAction}
         {themeAction}
@@ -641,6 +953,7 @@ function useSidebarNavView({
       </div>
       <nav className="shell-header-links" aria-label={primaryNavLabel} data-testid={primaryNavTestId}>
         {primaryNavLinks}
+        {moreAction}
       </nav>
       <div className="shell-header-utilities">
         {archiveAction}
@@ -648,6 +961,7 @@ function useSidebarNavView({
           data-testid="shell-header-utility-island"
           className="flex items-center gap-0.5 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-1.5 py-1"
         >
+          {stockSearchControl}
           {languageAction}
           {themeAction}
           {(settingsAction || adminMenuAction || signInAction || logoutAction) ? (

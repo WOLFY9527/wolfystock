@@ -13,6 +13,7 @@ const {
   getQuoteMock,
   getHistoryMock,
   getTechnicalIndicatorsMock,
+  getStockEvidenceMock,
   getStructureDecisionMock,
   getResearchPacketMock,
   getOptionsStructureMock,
@@ -24,6 +25,7 @@ const {
   getQuoteMock: vi.fn(),
   getHistoryMock: vi.fn(),
   getTechnicalIndicatorsMock: vi.fn(),
+  getStockEvidenceMock: vi.fn(),
   getStructureDecisionMock: vi.fn(),
   getResearchPacketMock: vi.fn(),
   getOptionsStructureMock: vi.fn(),
@@ -59,6 +61,12 @@ vi.mock('../../api/stocks', () => ({
 vi.mock('../../api/optionsLab', () => ({
   optionsLabApi: {
     getOptionsStructure: (...args: unknown[]) => getOptionsStructureMock(...args),
+  },
+}));
+
+vi.mock('../../api/stockEvidence', () => ({
+  stockEvidenceApi: {
+    getStockEvidence: (...args: unknown[]) => getStockEvidenceMock(...args),
   },
 }));
 
@@ -417,6 +425,53 @@ const completeResearchPacket = () => ({
   nextDataAction: 'Review the next data refresh.',
 });
 
+const stockEvidenceResponse = () => ({
+  symbols: ['AAPL'],
+  items: [
+    {
+      symbol: 'AAPL',
+      market: 'US',
+      productReadModel: {
+        state: 'partial',
+        ready: false,
+        freshness: { state: 'stale', asOf: '2026-05-28T09:30:00Z' },
+      },
+      quote: { state: 'available' },
+      technical: { state: 'available' },
+      fundamental: { state: 'partial' },
+      news: null,
+      secFilingEvidence: null,
+      stockEvidencePacket: {
+        fundamentalsSummary: {
+          marketCap: 3300000000000,
+          peTtm: 31.2,
+          period: '2026-Q1',
+          freshness: 'stale',
+          missingFields: ['revenueTtm', 'netIncomeTtm'],
+          notInvestmentAdvice: true,
+          observationOnly: true,
+          scoreContributionAllowed: false,
+          sourceAuthorityAllowed: false,
+        },
+      },
+      symbolEvidenceReadiness: {
+        symbolEvidenceReadiness: true,
+        symbol: 'AAPL',
+        readinessTier: 'partial',
+        evidenceUsed: ['quote', 'technical'],
+        evidenceMissing: ['fundamentals', 'events'],
+        staleInputs: ['fundamentals'],
+        conflictingEvidence: [],
+        dataQualityNotes: ['Fundamental packet is partial.'],
+        suggestedResearchPath: ['Refresh evidence packet.'],
+        observationOnly: true,
+        noAdviceDisclosure: 'Research observation only.',
+      },
+    },
+  ],
+  meta: { generatedAt: '2026-05-28T09:31:00Z', source: 'stock_evidence' },
+});
+
 const optionsStructureNotAvailable = () => ({
   contractVersion: 'options-structure-summary-v1',
   symbol: 'AAPL',
@@ -576,6 +631,7 @@ describe('StockStructureDecisionPage', () => {
     });
     getHistoryMock.mockImplementation((symbol: string) => Promise.resolve(baseHistory(symbol, 60)));
     getTechnicalIndicatorsMock.mockResolvedValue(technicalIndicatorsAvailable());
+    getStockEvidenceMock.mockResolvedValue(stockEvidenceResponse());
     getOptionsStructureMock.mockResolvedValue(optionsStructureNotAvailable());
   });
 
@@ -585,17 +641,17 @@ describe('StockStructureDecisionPage', () => {
     const page = screen.getByTestId('stock-structure-entry-page');
     expect(page).toHaveTextContent('直接输入标的');
     expect(screen.getByLabelText('股票代码')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '查看结构' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '打开研究' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
     expect(screen.getByRole('link', { name: '观察列表上下文' })).toHaveAttribute('href', '/zh/watchlist');
-    expect(page).toHaveTextContent('可以直接输入标的，也可以从 Scanner、观察列表或研究雷达选择标的后进入。');
+    expect(page).toHaveTextContent('直接输入已知股票代码，或从市场总览、研究雷达、观察列表与二级验证工具继续进入。');
     expect(textContentWithoutObservationBoundary(page)).not.toMatch(/买入|卖出|持有|目标价|止损|仓位|buy|sell|hold|target price|stop loss|position sizing/i);
   });
 
   it('shows a validation error for empty direct symbol submit', () => {
     renderStockStructureEntryRoute();
 
-    fireEvent.click(screen.getByRole('button', { name: '查看结构' }));
+    fireEvent.click(screen.getByRole('button', { name: '打开研究' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent('请输入股票代码。');
     expect(screen.queryByTestId('stock-structure-detail-route')).not.toBeInTheDocument();
@@ -605,9 +661,9 @@ describe('StockStructureDecisionPage', () => {
     renderStockStructureEntryRoute();
 
     fireEvent.change(screen.getByLabelText('股票代码'), { target: { value: 'AAPL<script>' } });
-    fireEvent.click(screen.getByRole('button', { name: '查看结构' }));
+    fireEvent.click(screen.getByRole('button', { name: '打开研究' }));
 
-    expect(screen.getByRole('alert')).toHaveTextContent('仅支持字母、数字、点号或短横线组成的股票代码。');
+    expect(screen.getByRole('alert')).toHaveTextContent('股票代码格式不正确');
     expect(screen.getByRole('alert').textContent || '').not.toMatch(/provider|requestId|traceId|cache|raw|debug|apiKey|token/i);
     expect(screen.queryByTestId('stock-structure-detail-route')).not.toBeInTheDocument();
   });
@@ -616,7 +672,7 @@ describe('StockStructureDecisionPage', () => {
     renderStockStructureEntryRoute();
 
     fireEvent.change(screen.getByLabelText('股票代码'), { target: { value: ' aapl ' } });
-    fireEvent.click(screen.getByRole('button', { name: '查看结构' }));
+    fireEvent.click(screen.getByRole('button', { name: '打开研究' }));
 
     expect(screen.getByTestId('stock-structure-detail-route')).toHaveTextContent('AAPL');
   });
@@ -626,7 +682,7 @@ describe('StockStructureDecisionPage', () => {
 
     expect(screen.getByLabelText('股票代码')).toHaveValue('0700.HK');
 
-    fireEvent.click(screen.getByRole('button', { name: '查看结构' }));
+    fireEvent.click(screen.getByRole('button', { name: '打开研究' }));
 
     expect(screen.getByTestId('stock-structure-detail-route')).toHaveTextContent('0700.HK');
   });
@@ -657,6 +713,7 @@ describe('StockStructureDecisionPage', () => {
     expect(getQuoteMock).toHaveBeenCalledWith('AAPL');
     expect(getHistoryMock).toHaveBeenCalledWith('AAPL', { period: 'daily', days: 180 });
     expect(getResearchPacketMock).toHaveBeenCalledWith('AAPL');
+    expect(getStockEvidenceMock).toHaveBeenCalledWith('AAPL');
     expect(workflow).toHaveTextContent('Beta 研究旅程');
     expect(workflow).toHaveTextContent('AAPL');
     expect(within(workflow).getByTestId('research-workspace-link-stock-structure')).toHaveAttribute('href', expect.stringContaining('/zh/stocks/AAPL/structure-decision?'));
@@ -688,10 +745,12 @@ describe('StockStructureDecisionPage', () => {
     expect(summary).toHaveTextContent('置信度：中');
     expect(summary).toHaveTextContent('置信度为中：报价、历史与结构证据可用，但基本面、事件或同业证据仍限制结论强度。');
     expect(summary).toHaveTextContent('AAPL 当前呈现突破观察，报价最新可用，历史 K 线可用于查看走势。');
+    expect(summary).toHaveTextContent('Analyst Memo');
     expect(summary).toHaveTextContent('当前观察');
-    expect(summary).toHaveTextContent('关键证据');
-    expect(summary).toHaveTextContent('关键限制');
-    expect(summary).toHaveTextContent('下一步检查');
+    expect(summary).toHaveTextContent('为什么');
+    expect(summary).toHaveTextContent('数据是否足够可靠');
+    expect(summary).toHaveTextContent('下一步检查什么');
+    expect(summary).toHaveTextContent('limitations / evidence gaps');
     expect(summary).toHaveTextContent('研究观察，不构成投资建议。');
     expect(summary).toHaveTextContent('查看研究雷达');
     expect(summary).toHaveTextContent('打开回测');
@@ -708,6 +767,16 @@ describe('StockStructureDecisionPage', () => {
     expect(trustRow).toHaveTextContent('指标可用');
     expect(trustRow).toHaveTextContent('证据');
     expect(trustRow).toHaveTextContent('可用');
+    const ledger = within(page).getByTestId('stock-evidence-ledger');
+    expect(ledger).toHaveTextContent('证据、新鲜度与限制');
+    expect(ledger).toHaveTextContent('报价');
+    expect(ledger).toHaveTextContent('价格历史');
+    expect(ledger).toHaveTextContent('技术指标');
+    expect(ledger).toHaveTextContent('结构观察');
+    expect(ledger).toHaveTextContent('研究包');
+    expect(ledger).toHaveTextContent('证据就绪度');
+    expect(ledger).toHaveTextContent('部分可用');
+    expect(ledger).toHaveTextContent('缺失字段');
     const stockCoreChart = within(page).getByTestId('stock-history-core-chart');
     expect(within(page).getByTestId('stock-price-history-visual-block')).toContainElement(stockCoreChart);
     expect(stockCoreChart.compareDocumentPosition(within(page).getByTestId('stock-cockpit-stage-quote')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -847,7 +916,7 @@ describe('StockStructureDecisionPage', () => {
     expect(getStructureDecisionMock).toHaveBeenCalledWith('ORCL');
     expect(getResearchPacketMock).toHaveBeenCalledWith('ORCL');
     expect(getHistoryMock).toHaveBeenCalledWith('ORCL', { period: 'daily', days: 180 });
-    expect(page).toHaveTextContent('ORCL 结构工作区');
+    expect(page).toHaveTextContent('ORCL 研究工作区');
     expect(historyPanel).toHaveTextContent('ORCL 历史数据就绪度');
     expect(historyPanel).toHaveTextContent('可用 K 线');
     expect(historyPanel).toHaveTextContent('120');
@@ -1018,7 +1087,7 @@ describe('StockStructureDecisionPage', () => {
     const historyPanel = await within(page).findByTestId('stock-history-readiness-panel');
 
     expect(getHistoryMock).toHaveBeenCalledWith('600519', { period: 'daily', days: 180 });
-    expect(page).toHaveTextContent('600519 结构工作区');
+    expect(page).toHaveTextContent('600519 研究工作区');
     expect(historyPanel).toHaveTextContent('600519 历史数据就绪度');
     expect(historyPanel).toHaveTextContent('历史来源未启用');
     expect(historyPanel).toHaveTextContent('结构样本不足');

@@ -426,7 +426,7 @@ const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ child
   } else if (routePathname.startsWith('/research/radar')) {
     moduleName = language === 'en' ? 'Research Radar' : '研究雷达';
   } else if (isStockStructureDecisionDetailPath(routePathname)) {
-    moduleName = language === 'en' ? 'Stock Structure Panel' : '个股结构面板';
+    moduleName = language === 'en' ? 'Stock Research' : '个股研究';
   } else if (routePathname.startsWith('/scenario-lab')) {
     moduleName = language === 'en' ? 'Scenario Lab' : '情景实验室';
   } else if (routePathname.startsWith('/watchlist')) {

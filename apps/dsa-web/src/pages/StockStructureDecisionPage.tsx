@@ -31,7 +31,9 @@ import {
   type StockSymbolCompareEvidencePacket,
   type StockSymbolCompareFreshness,
 } from '../api/stocks';
+import { stockEvidenceApi } from '../api/stockEvidence';
 import { optionsLabApi, type OptionsStructureSummary, type OptionContractStructureRow } from '../api/optionsLab';
+import type { StockEvidenceItem, StockEvidenceResponse } from '../types/stockEvidence';
 import { EvidenceGapExplanationList } from '../components/research/EvidenceGapExplanation';
 import ResearchWorkspaceFlowPanel from '../components/research/ResearchWorkspaceFlowPanel';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -42,7 +44,10 @@ import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRout
 import {
   productReadClassificationDisplayState,
   productReadFreshnessLabel,
+  productReadModelTone,
+  productReadProvenanceLine,
   productReadStrongConclusionAllowed,
+  productReadStateLabel,
 } from '../utils/productReadModelView';
 import {
   RoughBulletList,
@@ -904,6 +909,18 @@ type EvidenceStackRow = {
   bucket: EvidenceStackBucket;
 };
 
+type StockEvidenceLedgerRow = {
+  key: string;
+  identity: string;
+  state: string;
+  status: string;
+  freshness: string;
+  asOf: string;
+  scope: string;
+  limitation: string;
+  provenance: string;
+};
+
 type SingleStockEvidencePackEntry = {
   packKey: string;
   label: string;
@@ -1169,6 +1186,235 @@ function evidenceAuthorityLabels(packet: SymbolResearchPacket, language: 'zh' | 
     ];
   }
   return [language === 'en' ? 'Authoritative' : '权威证据可用'];
+}
+
+function formatLedgerFallback(language: 'zh' | 'en'): string {
+  return language === 'en' ? 'Not available' : '暂不可用';
+}
+
+function stockEvidenceItemForSymbol(
+  response: StockEvidenceResponse | null,
+  symbol: string,
+): StockEvidenceItem | null {
+  const normalized = symbol.trim().toUpperCase();
+  return response?.items.find((item) => item.symbol.trim().toUpperCase() === normalized)
+    || response?.items[0]
+    || null;
+}
+
+function readinessTierLabel(value: string | null | undefined, language: 'zh' | 'en'): string {
+  const token = normalizeStockConsumerToken(value);
+  if (token === 'sufficient') return language === 'en' ? 'Sufficient' : '足够';
+  if (token === 'partial') return language === 'en' ? 'Partial' : '部分可用';
+  if (token === 'insufficient') return language === 'en' ? 'Insufficient' : '证据不足';
+  return formatLedgerFallback(language);
+}
+
+function readinessTierStatus(value: string | null | undefined): string {
+  const token = normalizeStockConsumerToken(value);
+  if (token === 'sufficient') return 'success';
+  if (token === 'partial') return 'warning';
+  if (token === 'insufficient') return 'error';
+  return 'unknown';
+}
+
+function objectPresenceLabel(value: Record<string, unknown> | null | undefined, language: 'zh' | 'en'): string {
+  if (value && Object.keys(value).length > 0) {
+    return language === 'en' ? 'Returned' : '已返回';
+  }
+  if (value === null) {
+    return language === 'en' ? 'Unavailable' : '不可用';
+  }
+  return formatLedgerFallback(language);
+}
+
+function objectPresenceStatus(value: Record<string, unknown> | null | undefined): string {
+  if (value && Object.keys(value).length > 0) return 'success';
+  if (value === null) return 'error';
+  return 'warning';
+}
+
+function firstSafeLedgerText(values: Array<string | null | undefined>, language: 'zh' | 'en', fallback: string): string {
+  return safeConsumerList(values, language)[0] || fallback;
+}
+
+function buildStockEvidenceLedgerRows({
+  data,
+  quote,
+  quoteFailed,
+  history,
+  historyFailed,
+  technicalIndicators,
+  technicalFailed,
+  researchPacket,
+  researchPacketFailed,
+  stockEvidence,
+  stockEvidenceFailed,
+  language,
+}: {
+  data: StockStructureDecisionResponse;
+  quote: StockQuote | null;
+  quoteFailed: boolean;
+  history: StockHistoryResponse | null;
+  historyFailed: boolean;
+  technicalIndicators: StockTechnicalIndicatorsResponse | null;
+  technicalFailed: boolean;
+  researchPacket: SymbolResearchPacket | null;
+  researchPacketFailed: boolean;
+  stockEvidence: StockEvidenceResponse | null;
+  stockEvidenceFailed: boolean;
+  language: 'zh' | 'en';
+}): StockEvidenceLedgerRow[] {
+  const fallback = formatLedgerFallback(language);
+  const evidenceItem = stockEvidenceItemForSymbol(stockEvidence, data.ticker);
+  const evidenceReadiness = evidenceItem?.symbolEvidenceReadiness;
+  const quoteFreshness = quote ? quoteBoundaryFreshnessLabel(quote, language) : null;
+  const quoteState = quote ? quoteBoundaryStateLabel(quote, language) : null;
+  const quoteTimestamp = formatQuoteTimestamp(
+    quote?.sourceConfidence?.asOf || quote?.marketTimestamp || quote?.observedAt || quote?.updateTime || researchPacket?.quote.asOf || null,
+    language,
+  );
+  const historyState = stockHistoryReadinessState({ history, failed: historyFailed, data, language });
+  const technicalState = technicalIndicators
+    ? technicalStatusLabel(technicalIndicators.status, language)
+    : {
+      label: technicalFailed ? (language === 'en' ? 'Indicators unavailable' : '指标暂不可用') : (language === 'en' ? 'Indicators pending' : '指标待确认'),
+      status: technicalFailed ? 'error' : 'warning',
+    };
+  const structureReadModel = data.productReadModel || researchPacket?.productReadModel || null;
+  const structureReadyState = productReadStateLabel(structureReadModel?.state || data.dataQuality.status, language);
+  const structureProvenance = productReadProvenanceLine(structureReadModel, language) || (language === 'en' ? 'Structure read model' : '结构读模型');
+  const structureWithheld = !productReadStrongConclusionAllowed(structureReadModel);
+  const researchState = researchPacket
+    ? statusLabel(researchPacket.researchStatus, language)
+    : researchPacketFailed ? (language === 'en' ? 'Research packet unavailable' : '研究包暂不可用') : fallback;
+  const researchStatus = researchPacket
+    ? toneFor(researchPacket.researchStatus)
+    : researchPacketFailed ? 'error' : 'warning';
+  const evidenceState = evidenceReadiness
+    ? readinessTierLabel(evidenceReadiness.readinessTier, language)
+    : stockEvidenceFailed ? (language === 'en' ? 'Evidence API unavailable' : '证据接口暂不可用') : fallback;
+  const evidenceStatus = evidenceReadiness
+    ? readinessTierStatus(evidenceReadiness.readinessTier)
+    : stockEvidenceFailed ? 'error' : 'warning';
+  const historyAsOf = latestHistoryDate(history) || history?.sourceConfidence?.asOf || '';
+  const technicalAsOf = technicalIndicators ? technicalAsOfLabel(technicalIndicators, language) : null;
+  const packetFreshness = productReadFreshnessLabel(researchPacket?.productReadModel || null, language);
+  const stockEvidenceAsOf = stockEvidence?.meta?.generatedAt ? formatQuoteTimestamp(stockEvidence.meta.generatedAt, language) : '';
+
+  const rows: StockEvidenceLedgerRow[] = [
+    {
+      key: 'quote',
+      identity: language === 'en' ? 'Quote' : '报价',
+      state: quoteState?.label || (quoteFailed ? (language === 'en' ? 'Quote unavailable' : '报价暂不可用') : fallback),
+      status: quote ? toneFor(quote.sourceConfidence?.freshness || quote.freshness || 'available') : (quoteFailed ? 'error' : 'warning'),
+      freshness: quoteFreshness?.label || fallback,
+      asOf: quoteTimestamp || fallback,
+      scope: language === 'en' ? 'Latest available price' : '最新可用价格',
+      limitation: quoteState?.label || (quoteFailed ? (language === 'en' ? 'Quote request failed.' : '报价请求失败。') : fallback),
+      provenance: language === 'en' ? 'Quote read boundary' : '报价读取边界',
+    },
+    {
+      key: 'history',
+      identity: language === 'en' ? 'Price history' : '价格历史',
+      state: historyState.label,
+      status: historyToneStatus(historyState.tone),
+      freshness: stockHistoryFreshnessLabel(history, historyFailed, language),
+      asOf: historyAsOf || fallback,
+      scope: language === 'en' ? 'Daily bars for chart and structure context' : '用于图表与结构语境的日线 K 线',
+      limitation: historyState.detail,
+      provenance: language === 'en' ? 'History read model' : '历史读模型',
+    },
+    {
+      key: 'technical',
+      identity: language === 'en' ? 'Technical indicators' : '技术指标',
+      state: technicalState.label,
+      status: technicalState.status,
+      freshness: technicalIndicators ? technicalFreshnessLabel(technicalIndicators, language) : fallback,
+      asOf: technicalAsOf || fallback,
+      scope: language === 'en' ? 'Indicators derived from returned price history' : '基于已返回历史行情计算的指标',
+      limitation: technicalIndicators
+        ? firstSafeLedgerText([technicalIndicators.noAdviceDisclosure, technicalIndicators.dataQuality.status], language, language === 'en' ? 'No additional limitation listed.' : '未列出额外限制。')
+        : (technicalFailed ? (language === 'en' ? 'Indicator request failed.' : '指标请求失败。') : fallback),
+      provenance: language === 'en' ? 'Technical read model' : '技术读模型',
+    },
+    {
+      key: 'structure',
+      identity: language === 'en' ? 'Structure observation' : '结构观察',
+      state: structureReadyState,
+      status: productReadModelTone(structureReadModel?.state || data.dataQuality.status),
+      freshness: productReadFreshnessLabel(structureReadModel, language) || fallback,
+      asOf: structureReadModel?.freshness?.asOf || structureReadModel?.provenance?.asOf || fallback,
+      scope: language === 'en' ? 'Consumer-visible structure state' : '消费者可见结构状态',
+      limitation: structureWithheld
+        ? (language === 'en' ? 'Strong conclusion withheld by the product read model.' : '产品读模型要求暂不形成强结论。')
+        : firstSafeLedgerText(data.confidenceState?.reasons ?? [], language, language === 'en' ? 'Observation remains research-only.' : '当前仍为研究观察。'),
+      provenance: structureProvenance,
+    },
+    {
+      key: 'research-packet',
+      identity: language === 'en' ? 'Research packet' : '研究包',
+      state: researchState,
+      status: researchStatus,
+      freshness: packetFreshness || fallback,
+      asOf: researchPacket?.quote.asOf || researchPacket?.productReadModel?.freshness?.asOf || fallback,
+      scope: language === 'en' ? 'Identity, quote, history, fundamentals, events, and peer context' : '标识、报价、历史、基本面、事件与同业语境',
+      limitation: researchPacket
+        ? (buildEvidenceGapLabels(researchPacket, language)[0] || firstSafeLedgerText([researchPacket.nextDataAction, researchPacket.noAdviceDisclosure], language, language === 'en' ? 'Observation only.' : '仅观察。'))
+        : (researchPacketFailed ? (language === 'en' ? 'Research packet request failed.' : '研究包请求失败。') : fallback),
+      provenance: language === 'en' ? 'Product read model' : '产品读模型',
+    },
+    {
+      key: 'stock-evidence',
+      identity: language === 'en' ? 'Evidence readiness' : '证据就绪度',
+      state: evidenceState,
+      status: evidenceStatus,
+      freshness: evidenceReadiness?.staleInputs.length
+        ? (language === 'en' ? 'Some inputs may be stale' : '部分输入可能延迟')
+        : stockEvidenceAsOf || fallback,
+      asOf: stockEvidenceAsOf || fallback,
+      scope: language === 'en' ? 'Stock Evidence consumer packet' : 'Stock Evidence 消费者证据包',
+      limitation: evidenceReadiness
+        ? firstSafeLedgerText([
+          ...evidenceReadiness.evidenceMissing,
+          ...evidenceReadiness.staleInputs,
+          ...evidenceReadiness.dataQualityNotes,
+          evidenceReadiness.noAdviceDisclosure,
+        ], language, language === 'en' ? 'No evidence blocker listed.' : '未列出证据阻塞。')
+        : (stockEvidenceFailed ? (language === 'en' ? 'Evidence packet request failed.' : '证据包请求失败。') : fallback),
+      provenance: language === 'en' ? 'Stock Evidence read model' : 'Stock Evidence 读模型',
+    },
+    {
+      key: 'fundamentals',
+      identity: language === 'en' ? 'Fundamentals' : '基本面',
+      state: researchPacket ? fundamentalsEvidenceLabel(researchPacket.fundamentals.state, language) : objectPresenceLabel(evidenceItem?.fundamental, language),
+      status: researchPacket ? toneFor(researchPacket.fundamentals.state) : objectPresenceStatus(evidenceItem?.fundamental),
+      freshness: evidenceItem?.stockEvidencePacket?.fundamentalsSummary?.freshness || fallback,
+      asOf: evidenceItem?.stockEvidencePacket?.fundamentalsSummary?.period || fallback,
+      scope: language === 'en' ? 'Financial and valuation fields where available' : '可用时展示财务与估值字段',
+      limitation: evidenceItem?.stockEvidencePacket?.fundamentalsSummary?.missingFields?.length
+        ? (language === 'en'
+          ? `Missing fields: ${evidenceItem.stockEvidencePacket.fundamentalsSummary.missingFields.slice(0, 3).join(', ')}`
+          : `缺失字段：${evidenceItem.stockEvidencePacket.fundamentalsSummary.missingFields.slice(0, 3).join('、')}`)
+        : (researchPacket ? (buildEvidenceGapLabels(researchPacket, language).find((item) => /fundamental|基本面/i.test(item)) || fallback) : fallback),
+      provenance: language === 'en' ? 'Fundamentals summary' : '基本面摘要',
+    },
+    {
+      key: 'events',
+      identity: language === 'en' ? 'Events / catalysts' : '事件 / 催化',
+      state: researchPacket ? newsEvidenceLabel(researchPacket.events.state, researchPacket.events.latest.length > 0, language) : objectPresenceLabel(evidenceItem?.news, language),
+      status: researchPacket ? toneFor(researchPacket.events.state) : objectPresenceStatus(evidenceItem?.news),
+      freshness: typeof researchPacket?.events.latest[0]?.date === 'string' ? researchPacket.events.latest[0].date : fallback,
+      asOf: typeof researchPacket?.events.latest[0]?.date === 'string' ? researchPacket.events.latest[0].date : fallback,
+      scope: language === 'en' ? 'Earnings and catalyst leads' : '财报与催化线索',
+      limitation: researchPacket?.events.latest.length
+        ? firstSafeLedgerText(researchPacket.events.latest.map((item) => (typeof item.title === 'string' ? item.title : null)), language, fallback)
+        : (researchPacket ? (buildEvidenceGapLabels(researchPacket, language).find((item) => /news|catalyst|事件|催化/i.test(item)) || fallback) : fallback),
+      provenance: language === 'en' ? 'Event evidence boundary' : '事件证据边界',
+    },
+  ];
+
+  return rows.filter((row) => row.identity && row.state);
 }
 
 function fundamentalsCategoryLabel(value: string, language: 'zh' | 'en'): string {
@@ -1452,24 +1698,24 @@ function SingleStockEvidencePackControls({
   return (
     <section
       data-testid="single-stock-evidence-pack-registry"
-      className="rounded-lg border border-white/5 bg-white/[0.02] p-3"
+      className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3"
     >
       <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h4 className="text-sm font-semibold text-white/88">{entry.label}</h4>
+            <h4 className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{entry.label}</h4>
             <TerminalChip variant={canExport ? 'success' : 'caution'}>
               {canExport ? (language === 'en' ? 'Available' : '可用') : (language === 'en' ? 'Pending evidence' : '待补证')}
             </TerminalChip>
           </div>
-          <p className="mt-1 text-xs leading-5 text-white/58">{entry.description}</p>
+          <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{entry.description}</p>
           <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
             {entry.contents.map((item) => (
               <TerminalChip key={item} variant="neutral">{item}</TerminalChip>
             ))}
           </div>
           {status ? (
-            <p className="mt-2 text-[11px] leading-5 text-white/52">{status}</p>
+            <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{status}</p>
           ) : null}
         </div>
         <div className="flex min-w-0 flex-wrap gap-2">
@@ -1657,6 +1903,143 @@ function evidencePackTrustLabel(entry: SingleStockEvidencePackEntry | null, lang
   return language === 'en' ? 'Not ready yet' : '暂不可用';
 }
 
+function StockAnalystMemo({
+  language,
+  observation,
+  why,
+  reliability,
+  nextCheck,
+  limitations,
+}: {
+  language: 'zh' | 'en';
+  observation: string;
+  why: string;
+  reliability: string;
+  nextCheck: string;
+  limitations: string[];
+}) {
+  const items = [
+    {
+      key: 'observation',
+      label: language === 'en' ? 'Current observation' : '当前观察',
+      value: observation,
+    },
+    {
+      key: 'why',
+      label: language === 'en' ? 'Why' : '为什么',
+      value: why,
+    },
+    {
+      key: 'reliability',
+      label: language === 'en' ? 'Is the data reliable enough?' : '数据是否足够可靠',
+      value: reliability,
+    },
+    {
+      key: 'next',
+      label: language === 'en' ? 'Next research check' : '下一步检查什么',
+      value: nextCheck,
+    },
+  ];
+
+  return (
+    <section className="stock-analyst-memo" data-testid="stock-analyst-memo" aria-labelledby="stock-analyst-memo-title">
+      <div className="stock-analyst-memo__header">
+        <p className="stock-analyst-memo__eyebrow">{language === 'en' ? 'Analyst Memo' : 'Analyst Memo'}</p>
+        <h3 id="stock-analyst-memo-title" className="stock-analyst-memo__title">
+          {language === 'en' ? 'Observation brief' : '研究简报'}
+        </h3>
+      </div>
+      <dl className="stock-analyst-memo__list">
+        {items.map((item) => (
+          <div key={item.key} className="stock-analyst-memo__item">
+            <dt>{item.label}</dt>
+            <dd>{item.value}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="stock-analyst-memo__limitations">
+        <p>{language === 'en' ? 'Limitations / evidence gaps' : 'limitations / evidence gaps'}</p>
+        {limitations.length ? (
+          <ul>
+            {limitations.slice(0, 4).map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        ) : (
+          <span>{language === 'en' ? 'No additional evidence gap is listed.' : '当前未列出额外证据缺口。'}</span>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function StockEvidenceLedger({
+  rows,
+  language,
+}: {
+  rows: StockEvidenceLedgerRow[];
+  language: 'zh' | 'en';
+}) {
+  return (
+    <section className="stock-evidence-ledger" data-testid="stock-evidence-ledger" aria-labelledby="stock-evidence-ledger-title">
+      <div className="stock-evidence-ledger__header">
+        <div>
+          <p className="stock-evidence-ledger__eyebrow">{language === 'en' ? 'Evidence Ledger' : 'Evidence Ledger'}</p>
+          <h3 id="stock-evidence-ledger-title" className="stock-evidence-ledger__title">
+            {language === 'en' ? 'Evidence, freshness, and limitations' : '证据、新鲜度与限制'}
+          </h3>
+        </div>
+        <p className="stock-evidence-ledger__note">
+          {language === 'en'
+            ? 'Rows remain separate when timestamps or evidence families differ.'
+            : '不同证据族与时间戳保持分行展示。'}
+        </p>
+      </div>
+      {rows.length ? (
+        <div className="stock-evidence-ledger__scroll overflow-x-auto no-scrollbar">
+          <table className="stock-evidence-ledger__table product-table">
+            <caption className="sr-only">
+              {language === 'en' ? 'Stock research evidence ledger' : '个股研究证据账本'}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{language === 'en' ? 'Evidence' : '证据'}</th>
+                <th scope="col">{language === 'en' ? 'State' : '状态'}</th>
+                <th scope="col">{language === 'en' ? 'Freshness' : '新鲜度'}</th>
+                <th scope="col">{language === 'en' ? 'As of' : '截至'}</th>
+                <th scope="col">{language === 'en' ? 'Scope' : '范围'}</th>
+                <th scope="col">{language === 'en' ? 'Limitation' : '限制'}</th>
+                <th scope="col">{language === 'en' ? 'Provenance' : '来源边界'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.key}>
+                  <th scope="row">{row.identity}</th>
+                  <td>
+                    <StatusBadge status={row.status} label={row.state} size="sm" />
+                  </td>
+                  <td>{row.freshness}</td>
+                  <td className="stock-evidence-ledger__mono">{row.asOf}</td>
+                  <td>{row.scope}</td>
+                  <td>{row.limitation}</td>
+                  <td>{row.provenance}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <TerminalEmptyState title={language === 'en' ? 'Evidence ledger pending' : '证据账本待生成'}>
+          {language === 'en'
+            ? 'No meaningful evidence row is available for this symbol yet.'
+            : '当前标的暂无可呈现的证据行。'}
+        </TerminalEmptyState>
+      )}
+    </section>
+  );
+}
+
 function StockConsumerResearchSummary({
   data,
   quote,
@@ -1727,6 +2110,35 @@ function StockConsumerResearchSummary({
   const nextCheck = safeConsumerList(data.researchNotes.watchNext ?? [], language)[0]
     || safeConsumerList(data.researchNotes.needsMoreEvidence ?? [], language)[0]
     || (language === 'en' ? 'Recheck after the next data refresh.' : '下一次数据刷新后复核。');
+  const whyText = safeOptionalConsumerText(data.explanation.whyThisStructure, language)
+    || keyEvidence[0]
+    || (language === 'en' ? 'The page only has enough evidence for a bounded observation.' : '当前页面只足以形成有边界的观察。');
+  const reliabilityText = productReadStrongConclusionAllowed(data.productReadModel || researchPacket?.productReadModel || null)
+    ? confidenceText
+    : (language === 'en'
+      ? `${confidenceText} Strong conclusion is withheld by the product read model.`
+      : `${confidenceText} 产品读模型要求暂不形成强结论。`);
+  const limitationItems = compactUnique([
+    limitation,
+    ...buildEvidenceGapLabels(researchPacket ?? {
+      symbol: data.ticker,
+      market: '',
+      identity: {},
+      quote: { state: 'unknown' },
+      history: { state: 'unknown' },
+      structure: { state: 'unknown' },
+      fundamentals: { state: 'unknown', fieldsAvailable: [] },
+      events: { state: 'unknown', latest: [] },
+      peer: { state: 'unknown' },
+      missingData: [],
+      researchStatus: 'unknown',
+      nextDataAction: '',
+      observationOnly: true,
+      decisionGrade: false,
+      noAdviceDisclosure: '',
+    }, language),
+    ...safeConsumerList(data.researchNotes.needsMoreEvidence ?? [], language),
+  ]).slice(0, 5);
   const disclosure = language === 'en'
     ? 'Research observation, not investment advice.'
     : '研究观察，不构成投资建议。';
@@ -1737,10 +2149,10 @@ function StockConsumerResearchSummary({
   };
 
   return (
-    <section className="border-t border-[color:var(--wolfy-divider)] p-3 md:p-4" data-testid="stock-consumer-research-summary">
+    <section className="stock-research-hero border-t border-[color:var(--wolfy-divider)] p-3 md:p-4" data-testid="stock-consumer-research-summary">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(360px,0.85fr)]">
         <div className="min-w-0 space-y-3">
-          <div className="rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-muted)] p-4">
+          <div className="stock-research-identity-header rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-muted)] p-4" data-testid="stock-research-identity-header">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <h2 className="text-2xl font-semibold text-[color:var(--wolfy-text-primary)]">{data.ticker}</h2>
               {name ? <span className="text-sm text-[color:var(--wolfy-text-secondary)]">{name}</span> : null}
@@ -1763,7 +2175,7 @@ function StockConsumerResearchSummary({
             />
           </div>
         </div>
-        <aside className="min-w-0 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] p-4" data-testid="stock-first-viewport-summary-panel">
+        <aside className="stock-research-memo-panel min-w-0 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface-input)] p-4" data-testid="stock-first-viewport-summary-panel">
           <div className="flex flex-wrap gap-2">
             <StatusBadge status={toneFor(confidenceValue)} label={`${language === 'en' ? 'Research state' : '研究状态'}：${confidence}`} size="sm" />
             <StatusBadge status={historyToneStatus(historyState.tone)} label={historyState.label} size="sm" />
@@ -1775,26 +2187,14 @@ function StockConsumerResearchSummary({
             testId="stock-structure-product-read-model"
             className="mt-3"
           />
-          <div className="mt-4 space-y-4">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-normal text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Current observation' : '当前观察'}</p>
-              <p className="mt-1 text-sm leading-6 text-[color:var(--wolfy-text-primary)]">{summary}</p>
-            </div>
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-normal text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Key evidence' : '关键证据'}</p>
-              <p className="mt-1 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-                {keyEvidence.length ? keyEvidence.slice(0, 2).join(language === 'en' ? '; ' : '；') : (language === 'en' ? 'No headline evidence is ready yet.' : '暂无可放入首屏的关键证据。')}
-              </p>
-            </div>
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-normal text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Key limitation' : '关键限制'}</p>
-              <p className="mt-1 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{limitation}</p>
-            </div>
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-normal text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Next check' : '下一步检查'}</p>
-              <p className="mt-1 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{nextCheck}</p>
-            </div>
-          </div>
+          <StockAnalystMemo
+            language={language}
+            observation={summary}
+            why={whyText}
+            reliability={reliabilityText}
+            nextCheck={nextCheck}
+            limitations={limitationItems}
+          />
           <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1" data-testid="stock-data-trust-row">
             {[
               { key: 'quote', label: language === 'en' ? 'Quote' : '报价', value: quoteTrust },
@@ -3016,7 +3416,7 @@ function SymbolCompareEvidencePacketPanel({
             {missingSymbols.map((symbol) => {
             const gaps = packet.missingEvidenceBySymbol[symbol] ?? [];
             return (
-              <div key={`missing-${symbol}`} className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 px-3 py-2.5">
+              <div key={`missing-${symbol}`} className="rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2.5">
                 <div className="mb-2 font-mono text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{symbol}</div>
                 <p className="mb-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
                   {gaps.map((gap) => missingEvidenceCopy(symbol, gap, language)).join(language === 'en' ? ' ' : '')}
@@ -3086,6 +3486,8 @@ export default function StockStructureDecisionPage() {
   const [quoteFailed, setQuoteFailed] = useState(false);
   const [technicalIndicators, setTechnicalIndicators] = useState<StockTechnicalIndicatorsResponse | null>(null);
   const [technicalIndicatorsFailed, setTechnicalIndicatorsFailed] = useState(false);
+  const [stockEvidence, setStockEvidence] = useState<StockEvidenceResponse | null>(null);
+  const [stockEvidenceFailed, setStockEvidenceFailed] = useState(false);
   const [optionsStructure, setOptionsStructure] = useState<OptionsStructureSummary | null>(null);
   const [optionsStructureFailed, setOptionsStructureFailed] = useState(false);
   const [comparePacket, setComparePacket] = useState<StockSymbolCompareEvidencePacket | null>(null);
@@ -3105,6 +3507,8 @@ export default function StockStructureDecisionPage() {
     setQuoteFailed(false);
     setTechnicalIndicators(null);
     setTechnicalIndicatorsFailed(false);
+    setStockEvidence(null);
+    setStockEvidenceFailed(false);
     setOptionsStructure(null);
     setOptionsStructureFailed(false);
     try {
@@ -3145,19 +3549,22 @@ export default function StockStructureDecisionPage() {
           setHistoryFailed(false);
           setTechnicalIndicators(null);
           setTechnicalIndicatorsFailed(false);
+          setStockEvidence(null);
+          setStockEvidenceFailed(false);
           setComparePacket(null);
           setSymbolNotFound({
             symbol: validation.normalizedSymbol || validation.stockCode || primarySymbol,
           });
           return;
         }
-        const [quoteResult, packetResult, responseResult, optionsResult, historyResult, technicalResult] = await Promise.allSettled([
+        const [quoteResult, packetResult, responseResult, optionsResult, historyResult, technicalResult, stockEvidenceResult] = await Promise.allSettled([
           stocksApi.getQuote(primarySymbol),
           stocksApi.getResearchPacket(primarySymbol),
           stocksApi.getStructureDecision(primarySymbol),
           optionsLabApi.getOptionsStructure(primarySymbol),
           stocksApi.getHistory(primarySymbol, { period: 'daily', days: 180 }),
           stocksApi.getTechnicalIndicators(primarySymbol),
+          stockEvidenceApi.getStockEvidence(primarySymbol),
         ]);
         if (quoteResult.status === 'fulfilled') {
           setQuote(quoteResult.value);
@@ -3188,6 +3595,12 @@ export default function StockStructureDecisionPage() {
         } else {
           setTechnicalIndicatorsFailed(true);
         }
+        if (stockEvidenceResult.status === 'fulfilled') {
+          setStockEvidence(stockEvidenceResult.value);
+          setStockEvidenceFailed(false);
+        } else {
+          setStockEvidenceFailed(true);
+        }
         if (responseResult.status === 'rejected') {
           throw responseResult.reason;
         }
@@ -3199,8 +3612,8 @@ export default function StockStructureDecisionPage() {
       setComparePacket(null);
       setSymbolNotFound(null);
       setError(getParsedApiError(err) || createParsedApiError({
-        title: locale === 'en' ? 'Structure panel pending' : '结构面板暂不可用',
-        message: locale === 'en' ? 'Please retry after the stock structure API responds again.' : '请在个股结构接口恢复后重试。',
+        title: locale === 'en' ? 'Stock research pending' : '个股研究暂不可用',
+        message: locale === 'en' ? 'Please retry after the stock research API responds again.' : '请在个股研究接口恢复后重试。',
       }));
     } finally {
       setLoading(false);
@@ -3312,13 +3725,43 @@ export default function StockStructureDecisionPage() {
     }) : null),
     [data, locale, packetFacts, quote, quoteFailed, researchPacket],
   );
+  const stockEvidenceLedgerRows = useMemo(
+    () => (data ? buildStockEvidenceLedgerRows({
+      data,
+      quote,
+      quoteFailed,
+      history,
+      historyFailed,
+      technicalIndicators,
+      technicalFailed: technicalIndicatorsFailed,
+      researchPacket,
+      researchPacketFailed,
+      stockEvidence,
+      stockEvidenceFailed,
+      language: locale,
+    }) : []),
+    [
+      data,
+      history,
+      historyFailed,
+      locale,
+      quote,
+      quoteFailed,
+      researchPacket,
+      researchPacketFailed,
+      stockEvidence,
+      stockEvidenceFailed,
+      technicalIndicators,
+      technicalIndicatorsFailed,
+    ],
+  );
   const compareWithPeerPath = data && comparablePeerSymbol && !isCompareRequest
     ? localize(buildComparePath([data.ticker || primarySymbol, comparablePeerSymbol]))
     : null;
   const showAdminReadinessCue = Boolean(isAdmin || isAdminAccount);
   const introTitle = symbolNotFound
     ? (locale === 'en' ? 'Symbol not found' : '标的未找到')
-    : (locale === 'en' ? `${titleSymbol} structure workspace` : `${titleSymbol} 结构工作区`);
+    : (locale === 'en' ? `${titleSymbol} research workspace` : `${titleSymbol} 研究工作区`);
   const introDescription = symbolNotFound
     ? (locale === 'en'
       ? 'Check the code or return to a research entrypoint.'
@@ -3375,7 +3818,7 @@ export default function StockStructureDecisionPage() {
         >
           <ConsoleBoard className="min-h-0" data-testid="stock-structure-decision-page">
             <RoughSurfaceIntro
-              eyebrow={locale === 'en' ? 'Stock structure panel' : '个股结构面板'}
+              eyebrow={locale === 'en' ? 'Stock research' : '个股研究'}
               title={introTitle}
               description={introDescription}
             />
@@ -3386,8 +3829,8 @@ export default function StockStructureDecisionPage() {
             ) : null}
             {loading && !data ? (
               <div className="p-4 md:p-5">
-                <TerminalEmptyState title={locale === 'en' ? 'Loading structure panel' : '正在整理结构面板'}>
-                  {locale === 'en' ? 'Loading structure panel.' : '正在载入结构面板。'}
+                <TerminalEmptyState title={locale === 'en' ? 'Loading stock research' : '正在整理个股研究'}>
+                  {locale === 'en' ? 'Loading stock research.' : '正在载入个股研究。'}
                 </TerminalEmptyState>
               </div>
             ) : null}
@@ -3429,6 +3872,9 @@ export default function StockStructureDecisionPage() {
                   language={locale}
                   localize={localize}
                 />
+                <div className="p-3 md:p-4">
+                  <StockEvidenceLedger rows={stockEvidenceLedgerRows} language={locale} />
+                </div>
                 <CollapsedStockDetailSection
                   title={locale === 'en' ? 'Detailed evidence and data boundary' : '详细证据与数据边界'}
                   summary={locale === 'en' ? 'Collapsed by default' : '默认收起'}

@@ -15,9 +15,8 @@ import {
   consumerPresentationText,
 } from '../utils/consumerPresentationBoundary';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
+import { validateStockCode } from '../utils/validation';
 import { RoughBulletList, RoughSectionCard, RoughSurfaceIntro } from './roughShellShared';
-
-const DIRECT_SYMBOL_PATTERN = /^[A-Z0-9][A-Z0-9.-]{0,15}$/;
 
 function parseStockStructureSymbols(value: string | null | undefined): string[] {
   return [...new Set(String(value || '')
@@ -51,14 +50,15 @@ export default function StockStructureDecisionEntryPage() {
       setSymbolError(locale === 'en' ? 'Enter a stock symbol.' : '请输入股票代码。');
       return;
     }
-    if (!DIRECT_SYMBOL_PATTERN.test(normalized)) {
+    const validation = validateStockCode(normalized);
+    if (!validation.valid) {
       setSymbolError(locale === 'en'
-        ? 'Use only letters, numbers, dots, or hyphens in the symbol.'
-        : '仅支持字母、数字、点号或短横线组成的股票代码。');
+        ? 'Use an existing app symbol format such as AAPL, 600519, or 0700.HK.'
+        : validation.message || '股票代码格式不正确。');
       return;
     }
     setSymbolError('');
-    navigate(localize(`/stocks/${encodeURIComponent(normalized)}/structure-decision`));
+    navigate(localize(`/stocks/${encodeURIComponent(validation.normalized)}/structure-decision`));
   };
 
   return (
@@ -121,18 +121,18 @@ export default function StockStructureDecisionEntryPage() {
         >
           <ConsoleBoard className="min-h-0" data-testid="stock-structure-entry-page">
             <RoughSurfaceIntro
-              eyebrow={locale === 'en' ? 'Stock Structure Decision' : '个股结构决策'}
-              title={locale === 'en' ? 'Open structure analysis by symbol' : '输入标的进入结构视图'}
+              eyebrow={locale === 'en' ? 'Stock Research' : '个股研究'}
+              title={locale === 'en' ? 'Open stock research by symbol' : '输入标的进入个股研究'}
               description={locale === 'en'
-                ? 'Enter a ticker directly or continue from Scanner, Watchlist, or Research Radar.'
-                : '直接输入股票代码，或从 Scanner、观察列表、研究雷达继续进入。'}
+                ? 'Enter a known symbol directly or continue from Market Overview, Research Radar, Watchlist, or secondary validation tools.'
+                : '直接输入已知股票代码，或从市场总览、研究雷达、观察列表与二级验证工具继续进入。'}
             />
             <MetricStrip
               items={[
                 { key: 'state', label: locale === 'en' ? 'Current state' : '当前状态', value: locale === 'en' ? 'Waiting for ticker' : '等待选择标的' },
                 {
                   key: 'data-connection',
-                  label: consumerPresentationText(locale === 'en' ? 'API call' : '接口' + '调用', locale),
+                  label: locale === 'en' ? 'Data read' : '数据读取',
                   value: locale === 'en' ? 'No request until a ticker is selected' : '选择标的后再读取数据',
                 },
                 { key: 'boundary', label: locale === 'en' ? 'Boundary' : '边界', value: locale === 'en' ? 'Research observation' : '研究观察' },
@@ -149,6 +149,7 @@ export default function StockStructureDecisionEntryPage() {
                       <input
                         id="stock-structure-direct-symbol"
                         value={symbolInput}
+                        className="min-h-11 flex-1 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface)] px-3 py-2 font-mono text-sm uppercase text-[color:var(--wolfy-text-primary)] outline-none transition-colors placeholder:normal-case placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--wolfy-accent)]"
                         onChange={(event) => {
                           setSymbolInput(event.target.value);
                           if (symbolError) setSymbolError('');
@@ -156,17 +157,16 @@ export default function StockStructureDecisionEntryPage() {
                         placeholder={locale === 'en' ? 'AAPL, 600519, 0700.HK' : 'AAPL、600519、0700.HK'}
                         aria-invalid={Boolean(symbolError)}
                         aria-describedby={symbolError ? 'stock-structure-direct-symbol-error' : 'stock-structure-direct-symbol-help'}
-                        className="min-h-11 flex-1 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:var(--wolfy-surface)] px-3 py-2 font-mono text-sm uppercase text-[color:var(--wolfy-text-primary)] outline-none transition-colors placeholder:normal-case placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--wolfy-accent)]"
                       />
                       <button
                         type="submit"
-                        className="inline-flex min-h-11 items-center justify-center rounded-md border border-[color:var(--wolfy-accent)] bg-[var(--wolfy-accent)] px-4 py-2 text-sm font-semibold text-[#f7f8ff] transition-colors hover:bg-[#6f79dc] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--wolfy-accent)]"
+                        className="inline-flex min-h-11 items-center justify-center rounded-md border border-[color:var(--wolfy-accent)] bg-[var(--wolfy-accent)] px-4 py-2 text-sm font-semibold text-[color:var(--theme-button-primary-text)] transition-colors hover:border-[color:var(--wolfy-border-focus)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--wolfy-accent)]"
                       >
-                        {locale === 'en' ? 'View structure' : '查看结构'}
+                        {locale === 'en' ? 'Open research' : '打开研究'}
                       </button>
                     </div>
                     {symbolError ? (
-                      <p id="stock-structure-direct-symbol-error" role="alert" className="text-xs leading-5 text-red-300">
+                      <p id="stock-structure-direct-symbol-error" role="alert" className="text-xs leading-5 text-[color:var(--state-danger-text)]">
                         {symbolError}
                       </p>
                     ) : (
