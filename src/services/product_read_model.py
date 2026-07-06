@@ -220,6 +220,7 @@ def build_structure_decision_product_read_model(payload: Mapping[str, Any]) -> d
     data_quality = _mapping(payload.get("dataQuality"))
     readiness = _mapping(payload.get("historicalOhlcvReadiness"))
     confidence_state = _mapping(payload.get("confidenceState"))
+    near_live_coverage = _mapping(payload.get("nearLiveCoverage"))
     missing_evidence = _sequence(payload.get("missingEvidence"))
     raw_readiness_state = readiness.get("overallState")
     readiness_state = normalize_product_state(raw_readiness_state)
@@ -228,7 +229,9 @@ def build_structure_decision_product_read_model(payload: Mapping[str, Any]) -> d
     data_quality_state = normalize_product_state(data_quality.get("status"))
     if data_quality_state == "available" and _safe_int(data_quality.get("usableBars")) <= 0:
         data_quality_state = "no_evidence"
-    critical_missing = bool(missing_evidence) or readiness_state in _CRITICAL_BLOCKING_STATES
+    near_live_state = _near_live_product_state(near_live_coverage)
+    near_live_blocking = bool(near_live_coverage) and near_live_state in _CRITICAL_BLOCKING_STATES
+    critical_missing = bool(missing_evidence) or readiness_state in _CRITICAL_BLOCKING_STATES or near_live_blocking
     confidence_label = _safe_text(confidence_state.get("label") or payload.get("confidence") or "low").lower()
     source_limited = bool(confidence_state.get("sourceQualityLimited")) or data_quality_state in {"degraded", "stale", "partial"}
     thesis_blocked = bool(confidence_state.get("thesisBlocked")) or critical_missing
@@ -249,9 +252,16 @@ def build_structure_decision_product_read_model(payload: Mapping[str, Any]) -> d
             {"name": "historical_coverage", "state": readiness_state, "critical": True},
             {"name": "data_quality", "state": data_quality_state, "critical": True},
             {"name": "confidence", "state": "available" if confidence_label in {"high", "medium"} else "insufficient", "critical": True},
+            *(
+                [{"name": "near_live_market_data", "state": near_live_state, "critical": True}]
+                if near_live_coverage
+                else []
+            ),
         ],
     )
     state = "no_evidence" if critical_missing and data_quality_state in {"no_evidence", "unavailable"} else aggregate["state"]
+    if near_live_blocking:
+        state = near_live_state
     return {
         "contractVersion": PRODUCT_READ_MODEL_CONTRACT_VERSION,
         "surface": "Structure Decision",
@@ -273,6 +283,7 @@ def build_structure_decision_product_read_model(payload: Mapping[str, Any]) -> d
             "readinessState": readiness_state,
             "dataQualityState": data_quality_state,
         },
+        **({"nearLiveCoverage": _bounded_near_live_coverage(near_live_coverage)} if near_live_coverage else {}),
         "observationOnly": bool(payload.get("observationOnly", True)),
         "decisionGrade": bool(payload.get("decisionGrade", False)),
         "blockingChildren": aggregate["blockingChildren"],
@@ -286,6 +297,7 @@ def build_stock_evidence_product_read_model(item: Mapping[str, Any]) -> dict[str
     technical = _mapping(item.get("technical"))
     fundamental = _mapping(item.get("fundamental"))
     news = _mapping(item.get("news"))
+    near_live_coverage = _mapping(item.get("nearLiveCoverage"))
     families = {
         "quote": quote,
         "technical": technical,
@@ -314,11 +326,17 @@ def build_stock_evidence_product_read_model(item: Mapping[str, Any]) -> dict[str
         state = freshness_state
     elif state == "available" and freshness_state != "available":
         state = freshness_state
+    near_live_state = _near_live_product_state(near_live_coverage)
+    if near_live_coverage and near_live_state != "available":
+        state = near_live_state
     blockers = [
         name
         for name, state_value in child_states.items()
         if state_value in _CRITICAL_BLOCKING_STATES
     ]
+    if near_live_coverage and near_live_state in _CRITICAL_BLOCKING_STATES and "near_live_market_data" not in blockers:
+        blockers.append("near_live_market_data")
+    near_live_freshness = _mapping(near_live_coverage.get("freshness"))
     bounded_provenance = {
         "sourceClass": "stock_evidence",
         "asOf": freshness_as_of,
@@ -332,8 +350,8 @@ def build_stock_evidence_product_read_model(item: Mapping[str, Any]) -> dict[str
         "ready": state == "available" and not blockers,
         "criticalChildStates": child_states,
         "freshness": {
-            "state": freshness_state,
-            "asOf": freshness_as_of,
+            "state": _clean_public_text(near_live_freshness.get("state")) if near_live_coverage else freshness_state,
+            "asOf": _clean_public_text(near_live_freshness.get("asOf")) if near_live_coverage else freshness_as_of,
         },
         "provenance": bounded_provenance,
         "evidence": {
@@ -343,6 +361,7 @@ def build_stock_evidence_product_read_model(item: Mapping[str, Any]) -> dict[str
         },
         "observationOnly": True,
         "decisionGrade": False,
+        **({"nearLiveCoverage": _bounded_near_live_coverage(near_live_coverage)} if near_live_coverage else {}),
         "blockingChildren": blockers,
     }
 
@@ -518,6 +537,55 @@ def _stock_evidence_quality_state(states: Sequence[str]) -> str:
     if any(state in _DEGRADED_STATES for state in states):
         return "partial"
     return "available"
+
+
+def _near_live_product_state(coverage: Mapping[str, Any]) -> str:
+    if not coverage:
+        return "available"
+    coverage_state = _safe_text(coverage.get("coverageState")).lower()
+    usable_state = _safe_text(coverage.get("usableState")).lower()
+    ready = bool(coverage.get("ready"))
+    if ready and coverage_state == "available" and usable_state == "usable":
+        return "available"
+    if coverage_state == "rejected":
+        return "rejected"
+    if coverage_state in {"missing", "unavailable"} or usable_state == "blocked":
+        return "no_evidence"
+    if coverage_state == "stale" or usable_state == "readable_stale":
+        return "stale"
+    if coverage_state == "partial":
+        return "partial"
+    return normalize_product_state(coverage_state or usable_state)
+
+
+def _bounded_near_live_coverage(coverage: Mapping[str, Any]) -> dict[str, Any]:
+    freshness = _mapping(coverage.get("freshness"))
+    return {
+        "contractVersion": _clean_public_text(coverage.get("contractVersion")),
+        "surface": _clean_public_text(coverage.get("surface")),
+        "coverageState": _clean_public_text(coverage.get("coverageState")),
+        "usableState": _clean_public_text(coverage.get("usableState")),
+        "ready": bool(coverage.get("ready")),
+        "freshness": {
+            "state": _clean_public_text(freshness.get("state")),
+            "asOf": _clean_public_text(freshness.get("asOf")),
+        },
+        "blockingReasons": [
+            value
+            for value in (_clean_public_text(item) for item in _sequence(coverage.get("blockingReasons")))
+            if value
+        ],
+        "requiredEvidenceFamilies": [
+            value
+            for value in (_clean_public_text(item) for item in _sequence(coverage.get("requiredEvidenceFamilies")))
+            if value
+        ],
+        "availableEvidenceFamilies": [
+            value
+            for value in (_clean_public_text(item) for item in _sequence(coverage.get("availableEvidenceFamilies")))
+            if value
+        ],
+    }
 
 
 def _mapping(value: Any) -> dict[str, Any]:
