@@ -77,15 +77,17 @@ type ProBacktestWorkspaceProps = Omit<FlowProps, 'panelMode'> & {
   runFeedback?: BacktestRunFeedback | null;
 };
 
-const ghostCardClass = 'bg-white/[0.02] border border-white/5 rounded-xl backdrop-blur-md transition-all hover:border-white/10';
-const fieldClass = 'w-full min-w-0 min-h-[42px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-white outline-none transition-all focus:border-blue-500/50 focus:bg-white/[0.05]';
-const checkboxClass = 'size-4 shrink-0 rounded border border-white/15 bg-white/[0.03] text-blue-300 accent-blue-400 disabled:opacity-45';
+const ghostCardClass = 'rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] transition-colors hover:border-[color:var(--wolfy-border-default)]';
+const paperPanelClass = 'rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)]';
+const paperRowClass = 'flex min-w-0 items-center justify-between gap-3 rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2';
+const fieldClass = 'w-full min-w-0 min-h-[42px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-white outline-none transition-all focus:border-[color:var(--wolfy-accent-focus)] focus:bg-white/[0.05]';
+const checkboxClass = 'size-4 shrink-0 rounded border border-white/15 bg-white/[0.03] text-[color:var(--wolfy-accent)] accent-[var(--wolfy-accent)] disabled:opacity-45';
 const labelClass = 'text-[10px] font-bold uppercase tracking-widest text-white/40';
-const primaryButtonClass = 'inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] transition-all hover:from-blue-500 hover:to-purple-500 disabled:cursor-not-allowed disabled:opacity-45';
+const primaryButtonClass = 'inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] px-4 py-2 text-sm font-semibold text-[color:var(--theme-button-primary-text)] transition-colors hover:bg-[var(--sage-deep)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] disabled:cursor-not-allowed disabled:opacity-45';
 const secondaryButtonClass = 'inline-flex min-h-[38px] items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white/70 transition-all hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-45';
 const chipButtonClass = 'inline-flex min-h-[34px] shrink-0 items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/70 transition-all hover:bg-white/10 hover:text-white';
-const activeChipButtonClass = 'inline-flex min-h-[34px] shrink-0 items-center gap-2 rounded-lg border border-blue-400/35 bg-blue-500/10 px-3 py-1.5 text-xs font-semibold text-blue-100 shadow-[0_0_18px_rgba(59,130,246,0.12)]';
-const plannedCardClass = 'rounded-lg border border-dashed border-white/10 bg-black/20 p-3';
+const activeChipButtonClass = 'inline-flex min-h-[34px] shrink-0 items-center gap-2 rounded-lg border border-[color:var(--wolfy-accent-focus)] bg-[var(--wolfy-accent-soft)] px-3 py-1.5 text-xs font-semibold text-[color:var(--wolfy-text-primary)]';
+const plannedCardClass = 'rounded-lg border border-dashed border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-3';
 const monteCarloSimulationDefault = 12;
 const monteCarloSimulationMin = 1;
 const monteCarloSimulationMax = 64;
@@ -617,12 +619,12 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           </span>
         </div>
         <div data-testid="pro-parsed-summary" className="grid min-w-0 gap-3">
-          <div className="rounded-lg border border-white/5 bg-black/20 p-3">
+          <div className={`${paperPanelClass} p-3`}>
             <p className={labelClass}>{language === 'en' ? 'STRATEGY' : '策略'}</p>
             <p className="mt-2 truncate text-sm text-white/72">{rulePreviewStrategy}</p>
             <p className="mt-1 text-xs text-white/38">{rulePreviewSetupSource}</p>
           </div>
-          <div className="rounded-lg border border-white/5 bg-black/20 p-3">
+          <div className={`${paperPanelClass} p-3`}>
             <p className={labelClass}>{language === 'en' ? 'Executable spec' : '实际执行内容'}</p>
             <div className="mt-2 flex flex-wrap gap-2">
               <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-white/62">{language === 'en' ? 'Every trading day' : '每个交易日'}</span>
@@ -630,22 +632,22 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             </div>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-lg border border-white/5 bg-black/20 p-3">
+            <div className={`${paperPanelClass} p-3`}>
               <p className={labelClass}>{language === 'en' ? 'Positive signal rules' : '正向信号规则'}</p>
               <p className="mt-2 text-sm text-white/72">{rulePreviewEntry}</p>
             </div>
-            <div className="rounded-lg border border-white/5 bg-black/20 p-3">
+            <div className={`${paperPanelClass} p-3`}>
               <p className={labelClass}>{language === 'en' ? 'Observation release rules' : '观察解除规则'}</p>
               <p className="mt-2 text-sm text-white/72">{rulePreviewExit}</p>
             </div>
           </div>
-          <div className="rounded-lg border border-white/5 bg-black/20 p-3">
+          <div className={`${paperPanelClass} p-3`}>
             <p className={labelClass}>{language === 'en' ? 'Filters' : '过滤条件'}</p>
             <p className="mt-2 truncate text-sm text-white/58">{String(getStrategySpecValue(strategySpec, ['filter']) || getStrategySpecValue(strategySpec, ['filters']) || (language === 'en' ? 'None' : '无'))}</p>
           </div>
         </div>
         {assumptionItems.length > 0 ? (
-          <div data-testid="pro-assumption-summary" className="rounded-lg border border-white/5 bg-black/20 p-3">
+          <div data-testid="pro-assumption-summary" className={`${paperPanelClass} p-3`}>
             <p className={labelClass}>{language === 'en' ? 'Assumptions' : '默认补全与提醒'}</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {assumptionItems.map((item, index) => (
@@ -750,7 +752,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             <summary className="cursor-pointer text-sm font-semibold text-white/72">{language === 'en' ? 'Advanced engine settings' : '高级引擎设置'}</summary>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               {['Signal confirmation period', 'Cooldown', 'Max signal frequency', 'Conflict handling'].map((label) => (
-                <div key={label} className="rounded-lg border border-white/5 bg-black/20 p-3 text-sm text-white/58">
+                <div key={label} className={`${paperPanelClass} p-3 text-sm text-white/58`}>
                   {language === 'en' ? label : {
                     'Signal confirmation period': '信号确认周期',
                     Cooldown: '冷却期',
@@ -832,7 +834,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             />
           </div>
         )}
-        <div data-testid="pro-risk-controls-summary" className="mt-4 rounded-lg border border-white/5 bg-black/20 p-3">
+        <div data-testid="pro-risk-controls-summary" className={`mt-4 ${paperPanelClass} p-3`}>
           <p className={labelClass}>{language === 'en' ? 'PARSED RISK' : '风险解析'}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {riskRows.length > 0 ? riskRows.map((row) => (
@@ -988,7 +990,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                           data-testid="pro-robustness-simulation-count-input"
                         />
                       )} />
-                      <div className="rounded-lg border border-white/5 bg-black/20 p-3 text-sm text-white/58">
+                      <div className={`${paperPanelClass} p-3 text-sm text-white/58`}>
                         <p className="font-semibold text-white/74">
                           {language === 'en' ? 'Diagnostic scope' : '诊断范围'}
                         </p>
@@ -1035,7 +1037,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                   </label>
                   {walkForwardPresetEnabled ? (
                     <div className="grid gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
-                      <div className="rounded-lg border border-white/5 bg-black/20 p-3 text-sm text-white/58">
+                      <div className={`${paperPanelClass} p-3 text-sm text-white/58`}>
                         <p className="font-semibold text-white/74">
                           {language === 'en' ? 'Fixed preset' : '固定预设'}
                         </p>
@@ -1046,7 +1048,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                             : '固定训练窗 / 测试窗 / 步长 / 最大窗口'}
                         </p>
                       </div>
-                      <div className="rounded-lg border border-white/5 bg-black/20 p-3 text-sm text-white/58">
+                      <div className={`${paperPanelClass} p-3 text-sm text-white/58`}>
                         <p className="font-semibold text-white/74">
                           {language === 'en' ? 'Diagnostic scope' : '诊断范围'}
                         </p>
@@ -1095,7 +1097,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             [language === 'en' ? 'DATE RANGE' : '日期区间', `${startDate || '--'} -> ${endDate || '--'}`],
             [language === 'en' ? 'CAPITAL' : '初始资金', initialCapital || '--'],
           ].map(([label, value]) => (
-            <div key={label} className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-white/5 bg-black/20 px-3 py-2">
+            <div key={label} className={paperRowClass}>
               <span className="shrink-0 text-white/35">{label}</span>
               <span className="min-w-0 truncate font-mono text-white/72">{value}</span>
             </div>
@@ -1105,15 +1107,15 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
       <div>
         <p className={labelClass}>{language === 'en' ? 'STRATEGY' : '策略'}</p>
         <div className="mt-3 grid gap-2 text-xs">
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-black/20 px-3 py-2">
+          <div className={paperRowClass}>
             <span className="text-white/35">{language === 'en' ? 'PARSE' : '解析'}</span>
             <span className="truncate text-white/72">{parseStale ? (language === 'en' ? 'stale' : '需要重新解析') : parsedStrategy ? (language === 'en' ? 'synced' : '已同步') : (language === 'en' ? 'pending' : '待解析')}</span>
           </div>
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-black/20 px-3 py-2">
+          <div className={paperRowClass}>
             <span className="text-white/35">{language === 'en' ? 'ENGINE' : '引擎'}</span>
             <span className="truncate text-white/72">{String(getStrategySpecValue(strategySpec, ['strategy_type']) || parsedStrategy?.parsedStrategy.strategyKind || 'deterministic')}</span>
           </div>
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-black/20 px-3 py-2">
+          <div className={paperRowClass}>
             <span className="text-white/35">{language === 'en' ? 'CONFIRM' : '确认'}</span>
             <span className="truncate text-white/72">{confirmed ? (language === 'en' ? 'confirmed' : '已确认') : (language === 'en' ? 'pending' : '待确认')}</span>
           </div>
@@ -1128,7 +1130,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             [language === 'en' ? 'LOCAL OVERRIDES' : '本地覆盖', language === 'en' ? 'planned' : '计划中'],
             [language === 'en' ? 'ROUTING CONTROLS' : '路由控件', language === 'en' ? 'not wired' : '未接线'],
           ].map(([label, value]) => (
-            <div key={label} className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-white/5 bg-black/20 px-3 py-2">
+            <div key={label} className={paperRowClass}>
               <span className="text-white/35">{label}</span>
               <span className="truncate text-white/72">{value}</span>
             </div>
@@ -1187,7 +1189,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
       {latestHistory ? (
         <div className="border-t border-white/5 pt-4">
           <p className={labelClass}>{language === 'en' ? 'LAST RUN' : '最近运行'}</p>
-          <div className="mt-3 rounded-lg border border-white/5 bg-black/20 p-3">
+          <div className={`mt-3 ${paperPanelClass} p-3`}>
             <div className="flex min-w-0 items-center justify-between gap-2">
               <span className="truncate font-mono text-sm text-white">{latestHistory.code || '--'}</span>
               <span className="truncate text-xs text-white/45">{latestHistory.status || '--'}</span>
@@ -1290,7 +1292,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         {historyItems.length > 0 ? (
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {historyItems.slice(0, 6).map((item) => (
-              <article key={item.id} className={`rounded-lg border bg-black/20 p-3 ${selectedRunId === item.id ? 'border-blue-400/35' : 'border-white/5'}`}>
+              <article key={item.id} className={`rounded-lg border bg-[var(--wolfy-surface-input)] p-3 ${selectedRunId === item.id ? 'border-[color:var(--wolfy-accent-focus)]' : 'border-[color:var(--wolfy-divider)]'}`}>
                 <div className="flex min-w-0 items-center justify-between gap-2">
                   <span className="truncate font-mono text-sm text-white">{item.code || '--'}</span>
                   <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-white/45">#{item.id}</span>
@@ -1347,7 +1349,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             {latestHistory ? (
               <div className="mt-auto border-t border-white/5 pt-3">
                 <p className={labelClass}>{language === 'en' ? 'LAST RUN' : '最近运行'}</p>
-                <button type="button" aria-label={language === 'en' ? 'Open' : '查看'} className="mt-2 flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-white/5 bg-black/20 px-3 py-2 text-left" onClick={() => onOpenHistoryRun(latestHistory)}>
+                <button type="button" aria-label={language === 'en' ? 'Open' : '查看'} className={`mt-2 flex w-full text-left ${paperRowClass}`} onClick={() => onOpenHistoryRun(latestHistory)}>
                   <span className="min-w-0">
                     <span className="block truncate font-mono text-sm text-white">{latestHistory.code || '--'}</span>
                     <span className="block truncate text-[11px] text-white/35">{latestHistory.runAt?.slice(0, 10) || '--'}</span>
@@ -1375,7 +1377,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
 
         {resultsDrawer}
 
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-black/90 px-4 py-3 backdrop-blur-xl lg:hidden">
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-3 lg:hidden">
           <button
             type="button"
             className={`${primaryButtonClass} w-full`}

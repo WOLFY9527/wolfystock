@@ -52,9 +52,9 @@ type NormalBacktestWorkspaceProps = {
   runFeedback?: BacktestRunFeedback | null;
 };
 
-const FIELD_CLASS = 'w-full min-w-0 min-h-[44px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm leading-6 text-white outline-none transition-all focus:border-emerald-500/50 focus:bg-white/[0.05]';
+const FIELD_CLASS = 'w-full min-w-0 min-h-[44px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm leading-6 text-white outline-none transition-all focus:border-[color:var(--wolfy-accent-focus)] focus:bg-white/[0.05]';
 const LABEL_CLASS = 'mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40';
-const PRIMARY_CTA_CLASS = 'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-5 py-2 text-sm font-medium text-emerald-400 transition-all hover:border-emerald-500/50 hover:bg-emerald-500/20 hover:shadow-[0_0_15px_rgba(16,185,129,0.2)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-70';
+const PRIMARY_CTA_CLASS = 'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] px-5 py-2 text-sm font-medium text-[color:var(--theme-button-primary-text)] transition-colors hover:bg-[var(--sage-deep)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] disabled:cursor-not-allowed disabled:opacity-70';
 
 const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
   language,
@@ -291,7 +291,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
                       aria-busy="true"
                       className="grid min-w-0 gap-4"
                     >
-                      <div className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-5">
+                      <div className="min-w-0 rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-5">
                         <p className={LABEL_CLASS}>{language === 'en' ? 'Loading template insights' : '正在加载模板信息'}</p>
                         <div className="mt-4 h-5 w-40 rounded-full bg-white/10" aria-hidden="true" />
                         <div className="mt-3 space-y-2" aria-hidden="true">
@@ -325,7 +325,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
                 isLoading={isLaunching}
                 testId="normal-backtest-execution-readiness"
               />
-              <section data-testid="backtest-result-preview-panel" className="rounded-xl border border-white/10 bg-black/20 p-4">
+              <section data-testid="backtest-result-preview-panel" className="rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-4">
                 <div className="flex min-w-0 items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className={LABEL_CLASS}>{language === 'en' ? 'Result preview' : '结果预览'}</p>

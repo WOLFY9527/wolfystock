@@ -1109,7 +1109,28 @@ describe('BacktestPage', () => {
     expect(screen.getByText('研究快速模式会先把模板整理为固定规则回测流程，再跳转到独立结果页。')).toBeInTheDocument();
     expect(screen.queryByText('编译预览')).not.toBeInTheDocument();
     expect(screen.queryByText('确定性规则链路')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '执行回测任务' })).toHaveClass('bg-emerald-500/10', 'text-emerald-400', 'rounded-lg');
+    expect(screen.getByRole('button', { name: '执行回测任务' })).toHaveClass(
+      'bg-[var(--theme-button-primary-bg)]',
+      'text-[color:var(--theme-button-primary-text)]',
+      'rounded-lg',
+    );
+  });
+
+  it('keeps page load passive and requires explicit actions for execution or mutation', async () => {
+    renderBacktestRoutes();
+
+    await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
+
+    expect(getOverallPerformance).toHaveBeenCalled();
+    expect(getHistory).toHaveBeenCalled();
+    expect(getRuleBacktestRuns).toHaveBeenCalled();
+    expect(runBacktest).not.toHaveBeenCalled();
+    expect(prepareSamples).not.toHaveBeenCalled();
+    expect(clearSamples).not.toHaveBeenCalled();
+    expect(clearResults).not.toHaveBeenCalled();
+    expect(parseRuleStrategy).not.toHaveBeenCalled();
+    expect(runRuleBacktest).not.toHaveBeenCalled();
+    expect(runRuleParameterSweep).not.toHaveBeenCalled();
   });
 
   it('renders exactly one compact semantic backtest page heading without internal terms', async () => {
@@ -2135,7 +2156,7 @@ describe('BacktestPage', () => {
     expect(readiness).toHaveTextContent('历史数据不足');
     expect(readiness).toHaveTextContent('历史 OHLCV 窗口不足，无法计算安全结果。');
     expect(readiness).toHaveTextContent('缺少基准，基准相对指标不可用。');
-    expect(readiness).toHaveTextContent('只读就绪度未达到可执行状态');
+    expect(readiness).toHaveTextContent('本次运行被阻塞或尚未具备结果条件');
     expect(readiness).toHaveTextContent('仅供研究');
     expect(readiness).not.toHaveTextContent(/Sharpe|CAGR|alpha|beta|跑赢|实盘|交易指令/i);
   });
@@ -2345,6 +2366,10 @@ describe('BacktestPage', () => {
     expect(screen.getByRole('tab', { name: bt('en', 'page.historicalTab') })).toBeInTheDocument();
     expect(screen.getByRole('tablist', { name: bt('en', 'page.controlModeLabel') })).toBeInTheDocument();
     expect(screen.getByLabelText('Strategy template')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Execute backtest task' })).toHaveClass('bg-emerald-500/10', 'text-emerald-400', 'rounded-lg');
+    expect(screen.getByRole('button', { name: 'Execute backtest task' })).toHaveClass(
+      'bg-[var(--theme-button-primary-bg)]',
+      'text-[color:var(--theme-button-primary-text)]',
+      'rounded-lg',
+    );
   });
 });

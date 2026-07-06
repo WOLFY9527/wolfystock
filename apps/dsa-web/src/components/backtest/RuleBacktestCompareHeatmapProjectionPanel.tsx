@@ -243,7 +243,7 @@ export default function RuleBacktestCompareHeatmapProjectionPanel({
                 return (
                   <div
                     key={`compare-heatmap-cell-${createHeatmapCellKey(xValue, yValue)}`}
-                    className="rounded-xl border border-white/[0.06] bg-black/20 p-3"
+                    className="rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-3"
                     data-state={state || 'missing_cell'}
                     data-testid={`compare-heatmap-cell-${yIndex}-${xIndex}`}
                   >

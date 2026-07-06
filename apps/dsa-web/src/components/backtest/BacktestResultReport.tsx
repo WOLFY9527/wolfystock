@@ -92,13 +92,14 @@ type ResearchReviewItem = {
   tone: MetricItem['tone'];
 };
 
-const GHOST_SECTION_CLASS = 'rounded-xl border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md transition-all hover:border-white/10 sm:p-5';
-const LABEL_CLASS = 'text-[10px] font-bold uppercase tracking-widest text-white/40';
-const VALUE_CLASS = 'font-mono text-sm text-white';
-const POSITIVE_CLASS = 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]';
-const NEGATIVE_CLASS = 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]';
+const GHOST_SECTION_CLASS = 'rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-4 transition-colors hover:border-[color:var(--wolfy-border-default)] sm:p-5';
+const LABEL_CLASS = 'text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]';
+const VALUE_CLASS = 'font-mono text-sm text-[color:var(--wolfy-text-primary)]';
+const PAPER_PANEL_CLASS = 'border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)]';
+const POSITIVE_CLASS = 'text-[color:var(--state-success-text)]';
+const NEGATIVE_CLASS = 'text-[color:var(--state-danger-text)]';
 const SECONDARY_BUTTON_CLASS = 'inline-flex min-h-[36px] items-center justify-center rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/70 transition-all hover:bg-white/10 md:min-h-[32px]';
-const PRIMARY_BUTTON_CLASS = 'inline-flex min-h-[36px] items-center justify-center rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.18)] transition-all hover:border-emerald-400/45 hover:bg-emerald-500/15 md:min-h-[32px]';
+const PRIMARY_BUTTON_CLASS = 'inline-flex min-h-[36px] items-center justify-center rounded-lg border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] px-3 py-2 text-xs font-semibold text-[color:var(--theme-button-primary-text)] transition-colors hover:bg-[var(--sage-deep)] md:min-h-[32px]';
 const TRADE_ROW_LIMIT = 20;
 const LEDGER_ROW_LIMIT = 30;
 const EVENT_ROW_LIMIT = 12;
@@ -1001,7 +1002,7 @@ function drawdownPeriod(rows: DeterministicBacktestNormalizedRow[]): { start: st
 
 function AttributionList({ rows, testId, formatKey = compactToken }: { rows: AttributionRow[]; testId: string; formatKey?: (key: string) => string }) {
   return (
-    <div data-testid={testId} className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-3">
+    <div data-testid={testId} className={`min-w-0 rounded-xl p-3 ${PAPER_PANEL_CLASS}`}>
       <div className="space-y-2">
         {rows.length ? rows.map((row) => {
           const contribution = row.netPnl != null ? signedNumber(row.netPnl) : signedPct(row.returnPct);
@@ -1020,7 +1021,7 @@ function AttributionList({ rows, testId, formatKey = compactToken }: { rows: Att
 
 function MetricCard({ item }: { item: MetricItem }) {
   return (
-    <div className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-3">
+    <div className={`min-w-0 rounded-xl p-3 ${PAPER_PANEL_CLASS}`}>
       <p className={LABEL_CLASS}>{item.label}</p>
       <p className="mt-2 truncate"><MetricValue value={item.value} tone={item.tone} /></p>
     </div>
@@ -1029,7 +1030,7 @@ function MetricCard({ item }: { item: MetricItem }) {
 
 function DiagnosisCard({ item }: { item: DiagnosisItem }) {
   return (
-    <div className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-3" data-testid={`backtest-diagnosis-${item.key}`}>
+    <div className={`min-w-0 rounded-xl p-3 ${PAPER_PANEL_CLASS}`} data-testid={`backtest-diagnosis-${item.key}`}>
       <div className="flex min-w-0 items-center justify-between gap-2">
         <p className={LABEL_CLASS}>{item.title}</p>
         <span className={`max-w-[60%] truncate rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] ${valueToneClass(item.tone)}`}>
@@ -1146,7 +1147,7 @@ function getConsumerReliabilityItems({
 
 function ConsumerReliabilityCard({ item }: { item: ConsumerReliabilityItem }) {
   return (
-    <div className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-3" data-testid={`backtest-consumer-reliability-${item.key}`}>
+    <div className={`min-w-0 rounded-xl p-3 ${PAPER_PANEL_CLASS}`} data-testid={`backtest-consumer-reliability-${item.key}`}>
       <div className="flex min-w-0 items-center justify-between gap-2">
         <p className={LABEL_CLASS}>{item.label}</p>
         <span className={`max-w-[58%] truncate rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] ${valueToneClass(item.tone)}`}>
@@ -1404,7 +1405,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             <div className="font-mono text-xs text-white/38">{formatDateTime(run.completedAt || run.runAt)}</div>
           </div>
           <div
-            className="mt-4 rounded-xl border border-white/5 bg-black/15 p-3 sm:p-4"
+            className={`mt-4 rounded-xl p-3 sm:p-4 ${PAPER_PANEL_CLASS}`}
             data-testid="backtest-research-readiness-panel"
           >
             <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -1441,7 +1442,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             <MetricCard item={{ key: 'summary-win-rate', label: '胜率', value: signedPct(normalized.metrics.winRatePct), tone: toneFor(normalized.metrics.winRatePct) }} />
             <MetricCard item={{ key: 'summary-trades', label: '交易次数', value: `${normalized.metrics.tradeCount ?? 0} 次`, tone: 'neutral' }} />
             <MetricCard item={{ key: 'summary-data', label: '诊断材料', value: dataQuality.length ? `${dataQuality.length} 项` : '待补充', tone: 'neutral' }} />
-            <div className="col-span-2 rounded-xl border border-white/5 bg-black/20 p-3 text-xs leading-5 text-white/50 lg:col-span-4">
+            <div className={`col-span-2 rounded-xl p-3 text-xs leading-5 text-white/50 lg:col-span-4 ${PAPER_PANEL_CLASS}`}>
               <span className={LABEL_CLASS}>研究结论</span>
               <span className="ml-2">先读总收益、最大回撤、胜率、交易次数与诊断材料；曲线和风险解释只用于观察复盘，复查材料默认折叠。</span>
             </div>
@@ -1509,7 +1510,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           </aside>
         </div>
 
-        <div data-testid="backtest-report-detail-tabs" role="tablist" aria-label="Backtest report details" className="no-scrollbar flex min-w-0 gap-2 overflow-x-auto rounded-xl border border-white/5 bg-white/[0.02] p-1 [scrollbar-width:none]">
+        <div data-testid="backtest-report-detail-tabs" role="tablist" aria-label="Backtest report details" className="no-scrollbar flex min-w-0 gap-2 overflow-x-auto rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-1 [scrollbar-width:none]">
           {detailTabs.map((tab) => (
             <button
               key={tab.key}
@@ -1597,7 +1598,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           </div>
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {tradeEvents.length ? tradeEvents.map((event, index) => (
-              <div key={`${event.date}-${event.type}-${index}`} className="grid min-w-0 grid-cols-[auto_1fr] gap-3 rounded-xl border border-white/5 bg-black/20 p-3">
+              <div key={`${event.date}-${event.type}-${index}`} className={`grid min-w-0 grid-cols-[auto_1fr] gap-3 rounded-xl p-3 ${PAPER_PANEL_CLASS}`}>
                 <div className={`font-mono text-[10px] font-bold ${valueToneClass(event.tone)}`}>{event.type === 'ENTRY' ? '模拟正向信号事件' : '模拟反向信号事件'}</div>
                 <div className="min-w-0">
                   <p className="truncate font-mono text-xs text-white/72">{event.date}</p>
@@ -1627,7 +1628,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             <MetricCard item={{ key: 'worst-trade', label: '最差交易', value: signedPct(getTradeReturn(worstTrade || {} as RuleBacktestTradeItem)), tone: toneFor(getTradeReturn(worstTrade || {} as RuleBacktestTradeItem)) }} />
             <MetricCard item={{ key: 'wins', label: '连续盈利', value: String(consecutiveWins), tone: consecutiveWins > 0 ? 'positive' : 'neutral' }} />
           </div>
-          <div className="mt-3 rounded-xl border border-white/5 bg-black/20 p-3">
+          <div className={`mt-3 rounded-xl p-3 ${PAPER_PANEL_CLASS}`}>
             <p className={LABEL_CLASS}>最大回撤区间</p>
             <p className="mt-2 truncate font-mono text-xs text-white/70">
               {(drawdown.start || '--')} {'->'} {(drawdown.trough || '--')} · {signedPct(drawdown.value)}
@@ -1647,9 +1648,9 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
               导出交易CSV
             </button>
           </div>
-          <div className="no-scrollbar mt-3 overflow-x-auto rounded-xl border border-white/5 [scrollbar-width:none]">
+          <div className="no-scrollbar mt-3 overflow-x-auto rounded-xl border border-[color:var(--wolfy-divider)] [scrollbar-width:none]">
             <table className="min-w-[1220px] w-full text-left text-xs">
-              <thead className="sticky top-0 bg-black/70 text-white/42">
+              <thead className="sticky top-0 bg-[var(--wolfy-surface-panel)] text-[color:var(--wolfy-text-muted)]">
                 <tr>
                   {['入场日期', '退出日期', '标的', '数量', '入场价', '退出价', '毛盈亏', '净盈亏', '收益率', '费用', '滑点', '持有', '退出原因', '信号原因'].map((label) => (
                     <th key={label} className="px-3 py-2 font-semibold">{label}</th>
@@ -1704,7 +1705,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             dataQuality.length ? (
               <div data-testid="backtest-data-quality-grid" className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {dataQuality.map(([key, value]) => (
-                  <div key={key} className="min-w-0 rounded-lg border border-white/5 bg-black/20 px-3 py-2">
+                  <div key={key} className={`min-w-0 rounded-lg px-3 py-2 ${PAPER_PANEL_CLASS}`}>
                     <p className={LABEL_CLASS}>{key}</p>
                     <p className="mt-1 truncate font-mono text-xs text-white/70">{value}</p>
                   </div>
@@ -1742,7 +1743,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
               {assumptions.length ? (
                 <div data-testid="backtest-execution-assumptions-grid" className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {assumptions.map(([key, value]) => (
-                    <div key={key} className="min-w-0 rounded-lg border border-white/5 bg-black/20 px-3 py-2">
+                    <div key={key} className={`min-w-0 rounded-lg px-3 py-2 ${PAPER_PANEL_CLASS}`}>
                       <p className={LABEL_CLASS}>{key}</p>
                       <p className="mt-1 truncate font-mono text-xs text-white/70">{value}</p>
                     </div>
@@ -1775,7 +1776,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             <span className="text-xs text-white/45">{advancedOpen ? '收起' : '展开'}</span>
           </button>
           <div className="mt-4 flex min-w-0 flex-col gap-3">
-            <div data-testid="backtest-report-ledger-summary" className="rounded-xl border border-white/5 bg-black/20 p-3 text-xs text-white/58">
+            <div data-testid="backtest-report-ledger-summary" className={`rounded-xl p-3 text-xs text-white/58 ${PAPER_PANEL_CLASS}`}>
               每日账本 {normalized.rows.length} 行 · {normalized.viewerMeta.firstDate || '--'} {'->'} {normalized.viewerMeta.lastDate || '--'} · 复查材料按需展开
             </div>
             {advancedOpen ? (
@@ -1794,15 +1795,15 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
                     导出执行明细 JSON
                   </button>
                 </div>
-                <div className="rounded-xl border border-white/5 bg-black/20 p-3 text-xs text-white/48">
+                <div className={`rounded-xl p-3 text-xs text-white/48 ${PAPER_PANEL_CLASS}`}>
                   扩展指标在上方折叠区展示；执行明细仅提供导出，不默认渲染全部存储行。
                 </div>
               </>
             ) : null}
               {ledgerOpen ? (
-                <div data-testid="backtest-report-ledger-table" data-visible-rows={visibleLedgerRows.length} data-total-rows={normalized.rows.length} className="no-scrollbar max-h-[420px] overflow-auto rounded-xl border border-white/5 [scrollbar-width:none]">
+                <div data-testid="backtest-report-ledger-table" data-visible-rows={visibleLedgerRows.length} data-total-rows={normalized.rows.length} className="no-scrollbar max-h-[420px] overflow-auto rounded-xl border border-[color:var(--wolfy-divider)] [scrollbar-width:none]">
                   <table className="min-w-[1100px] w-full text-left text-xs">
-                    <thead className="sticky top-0 bg-black/85 text-white/42">
+                    <thead className="sticky top-0 bg-[var(--wolfy-surface-panel)] text-[color:var(--wolfy-text-muted)]">
                       <tr>
                         {['日期', '动作', '收盘', '基准', '成交价', '股数', '现金', '权益', '日盈亏', '日收益', '策略收益'].map((label) => (
                           <th key={label} className="px-3 py-2 font-semibold">{label}</th>

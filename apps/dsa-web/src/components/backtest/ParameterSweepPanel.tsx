@@ -36,10 +36,10 @@ type PanelState = {
   requestSnapshot: SweepEvidenceRequestSnapshot | null;
 };
 
-const containerClass = 'rounded-xl border border-white/5 bg-black/20 p-4';
-const fieldClass = 'w-full min-w-0 min-h-[42px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-white outline-none transition-all focus:border-blue-500/50 focus:bg-white/[0.05]';
+const containerClass = 'rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-4';
+const fieldClass = 'w-full min-w-0 min-h-[42px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-white outline-none transition-all focus:border-[color:var(--wolfy-accent-focus)] focus:bg-white/[0.05]';
 const labelClass = 'text-[10px] font-bold uppercase tracking-widest text-white/40';
-const primaryButtonClass = 'inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] transition-all hover:from-blue-500 hover:to-purple-500 disabled:cursor-not-allowed disabled:opacity-45';
+const primaryButtonClass = 'inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] px-4 py-2 text-sm font-semibold text-[color:var(--theme-button-primary-text)] transition-colors hover:bg-[var(--sage-deep)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] disabled:cursor-not-allowed disabled:opacity-45';
 const UNKNOWN_ZH = '待补证';
 const UNKNOWN_EN = 'unknown';
 
@@ -847,7 +847,7 @@ const ParameterSweepPanel: React.FC<ParameterSweepPanelProps> = ({
         ) : null}
       </div>
 
-      <div className="rounded-xl border border-white/5 bg-black/20 p-4">
+      <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-4">
         <p className={labelClass}>{language === 'en' ? 'Request scope' : '请求范围'}</p>
         <div className="mt-3 flex min-w-0 flex-wrap gap-2">
           {renderSummaryChip(language === 'en' ? 'code' : '代码', code || '--')}
