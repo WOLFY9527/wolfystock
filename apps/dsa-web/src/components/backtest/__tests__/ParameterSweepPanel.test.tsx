@@ -338,10 +338,12 @@ describe('ParameterSweepPanel', () => {
 
     const initialRegistry = screen.getByTestId('pro-parameter-sweep-artifact-registry');
     expect(initialRegistry).toHaveTextContent('研究证据包');
-    expect(initialRegistry).toHaveTextContent('backtest-sweep-evidence-pack.v1');
     expect(initialRegistry).toHaveTextContent('Backtest Sweep');
     expect(initialRegistry).toHaveTextContent('待补证');
     expect(initialRegistry).toHaveTextContent('已输入条件、有界参数、谱系、告警与紧凑结果计数');
+    expect(initialRegistry).not.toHaveTextContent('backtest-sweep-evidence-pack.v1');
+    expect(initialRegistry).not.toHaveTextContent('Artifact key');
+    expect(initialRegistry).not.toHaveTextContent('Schema version');
 
     expect(screen.queryByTestId('pro-parameter-sweep-evidence-copy')).not.toBeInTheDocument();
     expect(screen.queryByTestId('pro-parameter-sweep-evidence-download')).not.toBeInTheDocument();
@@ -360,7 +362,6 @@ describe('ParameterSweepPanel', () => {
 
     const registry = await screen.findByTestId('pro-parameter-sweep-artifact-registry');
     expect(registry).toHaveTextContent('可用');
-    expect(registry).toHaveTextContent('证据包版本');
     expect(registry).toHaveTextContent('来源页面');
     expect(registry).not.toHaveTextContent('Artifact key');
     expect(registry).not.toHaveTextContent('Schema version');
@@ -474,7 +475,7 @@ describe('ParameterSweepPanel', () => {
     await screen.findByTestId('pro-parameter-sweep-blocked');
     const registry = screen.getByTestId('pro-parameter-sweep-artifact-registry');
     expect(registry).toHaveTextContent('阻断');
-    expect(registry).toHaveTextContent('backtest-sweep-evidence-pack');
+    expect(registry).not.toHaveTextContent('backtest-sweep-evidence-pack');
     expect(screen.getByTestId('pro-parameter-sweep-registry-copy-blocked')).toBeDisabled();
     expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
     expect(screen.queryByTestId('pro-parameter-sweep-evidence-copy')).not.toBeInTheDocument();

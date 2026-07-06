@@ -511,21 +511,53 @@ export default function ScenarioLabPage() {
   const [selectedPreset, setSelectedPreset] = useState<ScenarioPreset>(initialPreset);
   const [cockpit, setCockpit] = useState<MarketDecisionCockpitResponse | null>(null);
   const [scenarioResult, setScenarioResult] = useState<ScenarioLabResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [contextLoading, setContextLoading] = useState(true);
+  const [evaluatingScenario, setEvaluatingScenario] = useState(false);
   const [error, setError] = useState<ParsedApiError | null>(null);
 
   useEffect(() => {
     setSelectedPreset(initialPreset);
+    setScenarioResult(null);
   }, [initialPreset]);
 
-  const load = useCallback(async (preset: ScenarioPreset) => {
-    setLoading(true);
+  const loadContext = useCallback(async () => {
+    setContextLoading(true);
     setError(null);
     try {
       const cockpitPayload = await marketDecisionCockpitApi.getDecisionCockpit();
       setCockpit(cockpitPayload);
+    } catch (err) {
+      setError(getParsedApiError(err) || createParsedApiError({
+        title: locale === 'en' ? 'Scenario context pending' : '情景上下文待更新',
+        message: locale === 'en'
+          ? 'Please retry after the market context service responds again.'
+          : '请在市场上下文服务恢复后重试。',
+      }));
+    } finally {
+      setContextLoading(false);
+    }
+  }, [locale]);
+
+  useEffect(() => {
+    void loadContext();
+  }, [loadContext]);
+
+  const runScenarioEvaluation = useCallback(async (preset: ScenarioPreset) => {
+    if (!cockpit) {
+      setError(createParsedApiError({
+        title: locale === 'en' ? 'Market context not ready' : '市场上下文未就绪',
+        message: locale === 'en'
+          ? 'Load the market context before evaluating a bounded scenario.'
+          : '请先载入市场上下文，再执行有边界的情景评估。',
+      }));
+      return;
+    }
+
+    setEvaluatingScenario(true);
+    setError(null);
+    try {
       const scenarioPayload = await scenarioLabApi.runScenarioLab({
-        baseRegime: buildScenarioBaseRegime(cockpitPayload),
+        baseRegime: buildScenarioBaseRegime(cockpit),
         scenarioName: preset.scenarioName,
       });
       setScenarioResult(scenarioPayload);
@@ -533,17 +565,13 @@ export default function ScenarioLabPage() {
       setError(getParsedApiError(err) || createParsedApiError({
         title: locale === 'en' ? 'Scenario lab pending' : '情景实验室待更新',
         message: locale === 'en'
-          ? 'Please retry after the market context and scenario service respond again.'
-          : '请在市场上下文与情景服务恢复后重试。',
+          ? 'Please retry after the scenario service responds again.'
+          : '请在情景服务恢复后重试。',
       }));
     } finally {
-      setLoading(false);
+      setEvaluatingScenario(false);
     }
-  }, [locale]);
-
-  useEffect(() => {
-    void load(selectedPreset);
-  }, [load, selectedPreset]);
+  }, [cockpit, locale]);
 
   const changedDriverRows = useMemo(
     () => Object.entries(scenarioResult?.driverDeltas ?? {})
@@ -677,8 +705,17 @@ export default function ScenarioLabPage() {
                   >
                     {locale === 'en' ? 'Research radar' : '研究雷达'}
                   </Link>
-                  <TerminalButton variant="compact" onClick={() => void load(selectedPreset)}>
-                    {locale === 'en' ? 'Refresh' : '刷新'}
+                  <TerminalButton variant="compact" onClick={() => void loadContext()}>
+                    {locale === 'en' ? 'Refresh context' : '刷新上下文'}
+                  </TerminalButton>
+                  <TerminalButton
+                    variant="secondary"
+                    onClick={() => void runScenarioEvaluation(selectedPreset)}
+                    disabled={contextLoading || evaluatingScenario || !cockpit}
+                  >
+                    {evaluatingScenario
+                      ? (locale === 'en' ? 'Evaluating...' : '评估中…')
+                      : (locale === 'en' ? 'Evaluate scenario' : '评估情景')}
                   </TerminalButton>
                 </div>
               )}
@@ -724,17 +761,49 @@ export default function ScenarioLabPage() {
             />
             {error ? (
               <div className="p-4 md:p-5">
-                <ApiErrorAlert error={error} actionLabel={locale === 'en' ? 'Retry' : '重试'} onAction={() => void load(selectedPreset)} />
+                <ApiErrorAlert error={error} actionLabel={locale === 'en' ? 'Retry' : '重试'} onAction={() => void loadContext()} />
               </div>
             ) : null}
-            {loading && !scenarioResult ? (
+            {contextLoading && !scenarioResult ? (
               <div className="p-4 md:p-5">
-                <TerminalEmptyState title={locale === 'en' ? 'Loading scenario workbench' : '正在载入情景工作台'}>
+                <TerminalEmptyState title={locale === 'en' ? 'Loading market context' : '正在载入市场上下文'}>
                   {locale === 'en'
-                    ? 'Loading scenario output.'
-                    : '正在载入情景输出。'}
+                    ? 'This passive read prepares the setup only. Scenario evaluation starts from the explicit action.'
+                    : '此处只被动读取研究上下文；情景评估需要显式点击执行。'}
                 </TerminalEmptyState>
               </div>
+            ) : null}
+            {!contextLoading && !scenarioResult ? (
+              <section className="p-3" data-testid="scenario-lab-setup-idle">
+                <RoughSectionCard
+                  eyebrow={locale === 'en' ? 'Experiment setup' : '实验设置'}
+                  title={locale === 'en' ? 'Ready for explicit scenario evaluation' : '等待显式执行情景评估'}
+                >
+                  <div className="grid gap-3 text-sm md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                    <div className="min-w-0 space-y-2 text-[color:var(--wolfy-text-secondary)]">
+                      <p>
+                        {locale === 'en'
+                          ? 'Page load has read the current market context only. It has not run a scenario evaluation.'
+                          : '页面加载只读取当前市场上下文，尚未执行情景评估。'}
+                      </p>
+                      <p>
+                        {locale === 'en'
+                          ? `Selected frame: ${selectedPreset.label.en}.`
+                          : `当前情景：${selectedPreset.label.zh}。`}
+                      </p>
+                    </div>
+                    <TerminalButton
+                      variant="secondary"
+                      onClick={() => void runScenarioEvaluation(selectedPreset)}
+                      disabled={evaluatingScenario || !cockpit}
+                    >
+                      {evaluatingScenario
+                        ? (locale === 'en' ? 'Evaluating...' : '评估中…')
+                        : (locale === 'en' ? 'Evaluate scenario' : '评估情景')}
+                    </TerminalButton>
+                  </div>
+                </RoughSectionCard>
+              </section>
             ) : null}
             {scenarioResult ? (
               <>
@@ -748,7 +817,7 @@ export default function ScenarioLabPage() {
                     title={locale === 'en' ? 'Scenario summary' : '情景摘要'}
                   >
                     <div className="grid gap-2 text-xs md:grid-cols-5">
-                      <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 px-3 py-2">
+                      <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2">
                         <div className="text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Current frame' : '当前框架'}</div>
                         <div className="mt-1 font-semibold text-[color:var(--wolfy-text-primary)]">
                           {localizedRegime(scenarioResult.baseRegime.regime, locale)}
@@ -757,20 +826,20 @@ export default function ScenarioLabPage() {
                           {localizedConfidence(scenarioResult.baseRegime.confidence, locale)}
                         </div>
                       </div>
-                      <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 px-3 py-2">
+                      <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2">
                         <div className="text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Scenario' : '情景摘要'}</div>
                         <div className="mt-1 font-semibold text-[color:var(--wolfy-text-primary)]">{selectedLabel}</div>
                         <div className="mt-0.5 text-[color:var(--wolfy-text-muted)]">
                           {scenarioUnavailable ? scenarioUnavailableCopy.summaryFallback : localizedRegime(scenarioResult.scenarioRegime.regime, locale)}
                         </div>
                       </div>
-                      <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 px-3 py-2">
+                      <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2">
                         <div className="text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Driver shifts' : '驱动变化'}</div>
                         <div className="mt-1 font-semibold text-[color:var(--wolfy-text-primary)]">
                           {firstReadDriverText || (locale === 'en' ? 'Scenario pending' : '情景待更新')}
                         </div>
                       </div>
-                      <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 px-3 py-2">
+                      <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2">
                         <div className="text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Evidence boundary' : '证据边界'}</div>
                         <div className="mt-1 flex flex-wrap gap-1">
                           <TerminalChip variant={scenarioUnavailable ? 'caution' : 'info'}>
@@ -792,7 +861,7 @@ export default function ScenarioLabPage() {
                           <div>{locale === 'en' ? 'Boundary' : '边界'}：{baselineReadinessSummary.boundary}</div>
                         </div>
                       </div>
-                      <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-black/10 px-3 py-2">
+                      <div className="rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2">
                         <div className="text-[color:var(--wolfy-text-muted)]">{locale === 'en' ? 'Next evidence' : '待补证据'}</div>
                         <div className="mt-1 font-semibold text-[color:var(--wolfy-text-primary)]">{firstReadNextEvidence}</div>
                       </div>
@@ -848,7 +917,12 @@ export default function ScenarioLabPage() {
                           <TerminalButton
                             key={preset.key}
                             variant={active ? 'secondary' : 'compact'}
-                            onClick={() => setSelectedPreset(preset)}
+                            onClick={() => {
+                              if (!active) {
+                                setSelectedPreset(preset);
+                                setScenarioResult(null);
+                              }
+                            }}
                             aria-pressed={active}
                           >
                             {preset.label[locale]}

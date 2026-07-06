@@ -183,10 +183,10 @@ function ChartWorkspaceLoadingPlaceholder() {
       aria-busy="true"
     >
       <div className="backtest-void-workspace__body">
-        <div className="backtest-void-workspace__chart-card min-h-[340px] items-center justify-center border-white/10 bg-white/[0.02] px-5 py-8 backdrop-blur-md">
+        <div className="backtest-void-workspace__chart-card min-h-[340px] items-center justify-center border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-5 py-8">
           <div className="flex flex-col items-center gap-3 text-center">
             <div className="h-2 w-28 overflow-hidden rounded-full bg-white/[0.06]">
-              <div className="h-full w-1/2 rounded-full bg-cyan-300/70 shadow-[0_0_18px_rgba(103,232,249,0.28)]" />
+              <div className="h-full w-1/2 rounded-full bg-[var(--wolfy-accent)]" />
             </div>
             <p className="text-xs font-medium text-white/70">图表加载中</p>
           </div>

@@ -44,6 +44,12 @@ function renderRoute(ui: React.ReactElement, path = '/zh/scenario-lab') {
   );
 }
 
+async function evaluateScenarioFromIdle(expectedCalls = 0) {
+  const setup = await screen.findByTestId('scenario-lab-setup-idle');
+  expect(runScenarioLabMock).toHaveBeenCalledTimes(expectedCalls);
+  fireEvent.click(within(setup).getByRole('button', { name: '评估情景' }));
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -284,6 +290,7 @@ describe('ScenarioLabPage', () => {
     });
 
     renderRoute(<ScenarioLabPage />);
+    await evaluateScenarioFromIdle();
 
     const page = await screen.findByTestId('scenario-lab-page');
     const firstRead = await screen.findByTestId('scenario-lab-first-read-summary');
@@ -339,9 +346,49 @@ describe('ScenarioLabPage', () => {
     renderRoute(<ScenarioLabPage />);
 
     expect(screen.queryByTestId('scenario-evidence-pack-copy')).not.toBeInTheDocument();
+    await evaluateScenarioFromIdle();
     expect(await screen.findByTestId('scenario-evidence-pack-registry')).toBeInTheDocument();
     expect(screen.getByTestId('scenario-evidence-pack-copy')).toHaveTextContent('复制情景记录');
     expect(screen.getByTestId('scenario-evidence-pack-download')).toHaveTextContent('保存情景记录');
+  });
+
+  it('clears stale scenario output when a different preset is selected before explicit reevaluation', async () => {
+    mockDecisionCockpit();
+    runScenarioLabMock
+      .mockResolvedValueOnce(makeAvailableScenarioResult())
+      .mockResolvedValueOnce(makeAvailableScenarioResult({
+        selectedScenario: {
+          presetId: 'liquidityStress',
+          name: 'liquidityStress',
+          label: 'Liquidity stress observation',
+          category: 'Liquidity stress',
+          description: 'Stress liquidity and cross-asset inputs to compare research-context sensitivity.',
+          inputAssumptions: ['Uses market context supplied with the request.'],
+          expectedDriverImpacts: [
+            { driver: 'Liquidity and credit', direction: 'pressure', magnitude: 'medium' },
+          ],
+          evidenceLimits: ['Liquidity stress remains observation-only without fresh confirmation.'],
+          observationOnly: true,
+          decisionGrade: false,
+        },
+        scenarioSummary: ['Liquidity stress keeps the frame observation-only.'],
+      }));
+
+    renderRoute(<ScenarioLabPage />);
+    await evaluateScenarioFromIdle();
+    expect(await screen.findByTestId('scenario-lab-first-read-summary')).toHaveTextContent('波动冲击');
+
+    fireEvent.click(screen.getByRole('button', { name: '流动性压力' }));
+
+    const setup = await screen.findByTestId('scenario-lab-setup-idle');
+    expect(setup).toHaveTextContent('当前情景：流动性压力。');
+    expect(screen.queryByTestId('scenario-lab-first-read-summary')).not.toBeInTheDocument();
+
+    await evaluateScenarioFromIdle(1);
+    await waitFor(() => expect(runScenarioLabMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      scenarioName: 'liquidityStress',
+    })));
+    expect(await screen.findByTestId('scenario-lab-first-read-summary')).toHaveTextContent('流动性压力');
   });
 
   it('copies deterministic scenario evidence pack JSON without advice or internal fields', async () => {
@@ -354,6 +401,7 @@ describe('ScenarioLabPage', () => {
     }));
 
     renderRoute(<ScenarioLabPage />);
+    await evaluateScenarioFromIdle();
 
     fireEvent.click(await screen.findByTestId('scenario-evidence-pack-copy'));
 
@@ -424,6 +472,7 @@ describe('ScenarioLabPage', () => {
     runScenarioLabMock.mockResolvedValue(makeAvailableScenarioResult());
 
     renderRoute(<ScenarioLabPage />);
+    await evaluateScenarioFromIdle();
 
     fireEvent.click(await screen.findByTestId('scenario-evidence-pack-download'));
 
@@ -451,6 +500,7 @@ describe('ScenarioLabPage', () => {
     }));
 
     renderRoute(<ScenarioLabPage />);
+    await evaluateScenarioFromIdle();
 
     fireEvent.click(await screen.findByTestId('scenario-evidence-pack-copy'));
 
@@ -518,6 +568,7 @@ describe('ScenarioLabPage', () => {
     });
 
     renderRoute(<ScenarioLabPage />, '/zh/scenario-lab?scenario=gammaUnavailable');
+    await evaluateScenarioFromIdle();
 
     const page = await screen.findByTestId('scenario-lab-page');
     const firstRead = await screen.findByTestId('scenario-lab-first-read-summary');
@@ -641,6 +692,7 @@ describe('ScenarioLabPage', () => {
     });
 
     renderRoute(<ScenarioLabPage />);
+    await evaluateScenarioFromIdle();
 
     const firstRead = await screen.findByTestId('scenario-lab-first-read-summary');
 
@@ -752,6 +804,7 @@ describe('ScenarioLabPage', () => {
     });
 
     renderRoute(<ScenarioLabPage />);
+    await evaluateScenarioFromIdle();
 
     const firstRead = await screen.findByTestId('scenario-lab-first-read-summary');
 

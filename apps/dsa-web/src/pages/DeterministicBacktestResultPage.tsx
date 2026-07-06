@@ -1320,7 +1320,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
       <div className="backtest-result-page__mobile-containment min-w-0">
         {mobileDigest ? (
           <section
-            className="mb-4 rounded-[20px] border border-white/8 bg-white/[0.03] p-4 backdrop-blur-sm md:hidden"
+            className="mb-4 rounded-[20px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-4 md:hidden"
             data-testid="deterministic-result-mobile-digest"
             data-digest-tab={activeTab}
           >
@@ -1332,7 +1332,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
               </div>
               <div className="grid gap-2 xs:grid-cols-3">
                 {mobileDigest.items.map((item) => (
-                  <div key={item.label} className="rounded-2xl border border-white/8 bg-black/15 px-3 py-2.5">
+                  <div key={item.label} className="rounded-2xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2.5">
                     <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/38">{item.label}</p>
                     <p className="mt-1 text-sm font-medium text-white">{item.value}</p>
                   </div>
@@ -1349,7 +1349,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
               role="status"
               aria-live="polite"
             >
-              <div className="rounded-[16px] border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-md">
+              <div className="rounded-[16px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-4 py-3">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/35">
@@ -1358,7 +1358,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
                     <p className="truncate text-sm text-white/78">{activeTabLabel}</p>
                   </div>
                   <span
-                    className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-300/70 shadow-[0_0_12px_rgba(103,232,249,0.42)] animate-pulse"
+                    className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--wolfy-accent)] animate-pulse"
                     aria-hidden="true"
                   />
                 </div>
@@ -1613,7 +1613,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
                     role="status"
                     aria-live="polite"
                   >
-                    <div className="rounded-[16px] border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-md">
+                    <div className="rounded-[16px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-4 py-3">
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/35">
@@ -1622,7 +1622,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
                           <p className="truncate text-sm text-white/78">{run.code}</p>
                         </div>
                         <span
-                          className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-300/70 shadow-[0_0_12px_rgba(103,232,249,0.42)] animate-pulse"
+                          className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--wolfy-accent)] animate-pulse"
                           aria-hidden="true"
                         />
                       </div>
