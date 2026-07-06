@@ -402,6 +402,7 @@ describe('BacktestResultReport', () => {
     const checklist = screen.getByTestId('backtest-report-research-quality-review');
     expect(checklist).toHaveTextContent('研究复核清单');
     expect(checklist).toHaveTextContent('反过拟合门禁');
+    expect(within(checklist).getByRole('heading', { level: 2, name: '反过拟合门禁' })).toBeInTheDocument();
     expect(within(checklist).getByTestId('backtest-research-review-row-readiness')).toHaveTextContent('仅供观察');
     expect(within(checklist).getByTestId('backtest-research-review-row-data-quality')).toHaveTextContent('数据质量');
     expect(within(checklist).getByTestId('backtest-research-review-row-assumptions')).toHaveTextContent('简化成本 / 滑点 2bp / 1bp');

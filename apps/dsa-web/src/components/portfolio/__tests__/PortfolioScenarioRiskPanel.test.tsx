@@ -181,7 +181,7 @@ describe('PortfolioScenarioRiskPanel', () => {
     expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('情景风险仅供观察');
     expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('风险读数受限');
     expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('部分输入缺失');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('数据更新中 / 数据不足');
+    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('证据不足，需补充输入');
     expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('数据不足 / 需补充映射');
     expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('BABA');
     expect(screen.getByTestId('portfolio-scenario-risk-result')).not.toHaveTextContent('portfolio_scenario_risk_advisory_v1');
@@ -192,9 +192,67 @@ describe('PortfolioScenarioRiskPanel', () => {
     expect(screen.getByTestId('portfolio-scenario-risk-result')).not.toHaveTextContent('scenario_coverage_incomplete');
     expect(screen.getByTestId('portfolio-scenario-risk-result')).not.toHaveTextContent('backend_debug_warning_token');
     expect(screen.getByTestId('portfolio-scenario-risk-result').textContent).not.toMatch(/\b[a-z]+(?:_[a-z0-9]+)+\b/);
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('不触发经纪商同步');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('不改动账务结果');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('不触发任何下单');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('模型结果不可作为仓位建议');
+    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('仅做观察性推演，不改变当前组合状态。');
+    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('模型结果仅供观察，不作为行动依据。');
+    expect(screen.getByTestId('portfolio-scenario-risk-result')).not.toHaveTextContent(/不触发经纪商同步|不改动账务结果|不触发任何下单|模型结果不可作为仓位建议/);
+  });
+
+  it('preserves distinct stale, unavailable, insufficient, updating, empty, and sample scenario states without raw enums', async () => {
+    const runScenario = vi.fn().mockResolvedValue({
+      readModelType: 'portfolio_scenario_risk_advisory_v1',
+      advisoryOnly: true,
+      executionReadiness: 'advisory_only_not_trade_execution',
+      asOf: '2026-03-19T00:00:00Z',
+      coverage: {
+        totalPositions: 2,
+        positionsWithUsableWeight: 2,
+        positionsWithMarketValue: 2,
+        effectiveWeightSum: 1,
+        totalMarketValue: 2000,
+        explicitExposureRows: 0,
+        labelsWithExplicitCoverage: [],
+      },
+      scenarios: [
+        {
+          name: 'symbol_aapl_down_-5',
+          portfolioImpactPct: -2.5,
+          portfolioImpactAmount: -50,
+          coveredWeight: 1,
+          coveredMarketValue: 2000,
+          warnings: ['stale', 'unavailable', 'insufficient', 'updating', 'empty', 'sample'],
+          missingCoverage: [],
+          positionContributions: [],
+          bucketContributions: [],
+        },
+      ],
+      insufficientDataReasons: ['delayed', 'data_unavailable', 'no_usable_scenario_shocks'],
+      missingDataWarnings: ['initializing', 'no_positions'],
+      metadata: {
+        sideEffectFree: true,
+        noBrokerSync: true,
+        noAccountingMutation: true,
+        noOrderPlacement: true,
+        notInvestmentAdvice: true,
+      },
+    });
+
+    renderPanel(runScenario);
+
+    const disclosure = screen.getByTestId('portfolio-scenario-risk-disclosure');
+    fireEvent.click(within(disclosure).getByRole('button', { name: '展开 查看压力情景' }));
+    fireEvent.change(screen.getByLabelText('冲击幅度（%）'), { target: { value: '-5' } });
+    fireEvent.click(screen.getByRole('button', { name: '运行压力情景' }));
+
+    await waitFor(() => expect(runScenario).toHaveBeenCalledTimes(1));
+
+    const result = screen.getByTestId('portfolio-scenario-risk-result');
+    expect(result).toHaveTextContent('数据正在准备');
+    expect(result).toHaveTextContent('数据可能延迟但仍可观察');
+    expect(result).toHaveTextContent('证据不足，需补充输入');
+    expect(result).toHaveTextContent('数据暂不可用');
+    expect(result).toHaveTextContent('暂无可推演结果');
+    expect(result).toHaveTextContent('仅样例结构，不能形成观察');
+    expect(result).toHaveTextContent('模型结果仅供观察，不作为行动依据。');
+    expect(result).not.toHaveTextContent(/数据更新中 \/ 数据不足|stale|unavailable|insufficient|updating|empty|sample|不触发经纪商同步|不改动账务结果|不触发任何下单|模型结果不可作为仓位建议/);
   });
 });

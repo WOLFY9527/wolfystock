@@ -103,8 +103,8 @@ describe('BacktestPage lazy normal workspace', () => {
     );
 
     expect(await screen.findByTestId('backtest-workspace-loading')).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '普通' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: '专业' })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('tab', { name: '研究快速' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: '研究诊断' })).toHaveAttribute('aria-selected', 'false');
     expect(screen.getByTestId('backtest-page-heading')).toBeInTheDocument();
   });
 });

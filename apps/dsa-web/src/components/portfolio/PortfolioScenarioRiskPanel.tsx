@@ -66,12 +66,36 @@ const SCENARIO_RISK_PARTIAL_INPUT: LocalizedCopy = {
   en: 'Some inputs missing',
 };
 const SCENARIO_RISK_NOT_POSITION_ADVICE: LocalizedCopy = {
-  zh: '模型结果不可作为仓位建议',
-  en: 'Model output is not position advice',
+  zh: '模型结果仅供观察，不作为行动依据。',
+  en: 'Model output is for observation only and is not an action basis.',
 };
-const SCENARIO_RISK_DATA_PENDING: LocalizedCopy = {
-  zh: '数据更新中 / 数据不足',
-  en: 'Data updating / insufficient',
+const SCENARIO_RISK_UPDATING: LocalizedCopy = {
+  zh: '数据正在准备',
+  en: 'Data is being prepared',
+};
+const SCENARIO_RISK_STALE: LocalizedCopy = {
+  zh: '数据可能延迟但仍可观察',
+  en: 'Data may be delayed but remains readable',
+};
+const SCENARIO_RISK_INSUFFICIENT: LocalizedCopy = {
+  zh: '证据不足，需补充输入',
+  en: 'Insufficient evidence; more input is needed',
+};
+const SCENARIO_RISK_UNAVAILABLE: LocalizedCopy = {
+  zh: '数据暂不可用',
+  en: 'Data unavailable',
+};
+const SCENARIO_RISK_EMPTY: LocalizedCopy = {
+  zh: '暂无可推演结果',
+  en: 'No scenario result yet',
+};
+const SCENARIO_RISK_SAMPLE_ONLY: LocalizedCopy = {
+  zh: '仅样例结构，不能形成观察',
+  en: 'Sample structure only; no observation is formed',
+};
+const SCENARIO_RISK_OBSERVATION_BOUNDARY: LocalizedCopy = {
+  zh: '仅做观察性推演，不改变当前组合状态。',
+  en: 'Observation-only projection; current portfolio state is unchanged.',
 };
 
 const SCENARIO_RISK_WARNING_LABELS: Record<string, LocalizedCopy> = {
@@ -79,8 +103,18 @@ const SCENARIO_RISK_WARNING_LABELS: Record<string, LocalizedCopy> = {
   missing_scenario_coverage: SCENARIO_RISK_PARTIAL_INPUT,
   scenario_coverage_incomplete: SCENARIO_RISK_PARTIAL_INPUT,
   theme_mapping_pending: SCENARIO_RISK_PARTIAL_INPUT,
-  no_positions: SCENARIO_RISK_DATA_PENDING,
-  no_usable_scenario_shocks: SCENARIO_RISK_DATA_PENDING,
+  no_positions: SCENARIO_RISK_EMPTY,
+  no_usable_scenario_shocks: SCENARIO_RISK_INSUFFICIENT,
+  insufficient: SCENARIO_RISK_INSUFFICIENT,
+  insufficient_data: SCENARIO_RISK_INSUFFICIENT,
+  unavailable: SCENARIO_RISK_UNAVAILABLE,
+  data_unavailable: SCENARIO_RISK_UNAVAILABLE,
+  updating: SCENARIO_RISK_UPDATING,
+  initializing: SCENARIO_RISK_UPDATING,
+  stale: SCENARIO_RISK_STALE,
+  delayed: SCENARIO_RISK_STALE,
+  empty: SCENARIO_RISK_EMPTY,
+  sample: SCENARIO_RISK_SAMPLE_ONLY,
 };
 
 function localizedCopy(copy: LocalizedCopy, isEnglish: boolean): string {
@@ -109,11 +143,26 @@ function classifyScenarioRiskWarning(value: string, isEnglish: boolean): string 
   if (/(advisory|not_trade|investment|order|broker|accounting|mutation|execution)/.test(token)) {
     return localizedCopy(SCENARIO_RISK_NOT_POSITION_ADVICE, isEnglish);
   }
+  if (/(updating|initializing|preparing|refreshing)/.test(token)) {
+    return localizedCopy(SCENARIO_RISK_UPDATING, isEnglish);
+  }
+  if (/(stale|delayed|expired)/.test(token)) {
+    return localizedCopy(SCENARIO_RISK_STALE, isEnglish);
+  }
+  if (/(unavailable|disabled|not_configured)/.test(token)) {
+    return localizedCopy(SCENARIO_RISK_UNAVAILABLE, isEnglish);
+  }
+  if (/(empty|no_positions|no_result)/.test(token)) {
+    return localizedCopy(SCENARIO_RISK_EMPTY, isEnglish);
+  }
+  if (/(sample|example|demo)/.test(token)) {
+    return localizedCopy(SCENARIO_RISK_SAMPLE_ONLY, isEnglish);
+  }
+  if (/(insufficient|no_usable|too_few|coverage_gap)/.test(token)) {
+    return localizedCopy(SCENARIO_RISK_INSUFFICIENT, isEnglish);
+  }
   if (/(missing|incomplete|pending|mapping|input)/.test(token)) {
     return localizedCopy(SCENARIO_RISK_PARTIAL_INPUT, isEnglish);
-  }
-  if (/(insufficient|unavailable|updating|stale|delayed|empty|sample|^no_)/.test(token)) {
-    return localizedCopy(SCENARIO_RISK_DATA_PENDING, isEnglish);
   }
   return localizedCopy(SCENARIO_RISK_LIMITED, isEnglish);
 }
@@ -199,9 +248,12 @@ export function PortfolioScenarioRiskPanel({
   ];
   const consumerWarningRows = buildConsumerWarningRows(warningRows, isEnglish);
   const metadataRows = [
-    result?.metadata?.noBrokerSync ? (isEnglish ? 'No broker sync' : '不触发经纪商同步') : null,
-    result?.metadata?.noAccountingMutation ? (isEnglish ? 'No accounting mutation' : '不改动账务结果') : null,
-    result?.metadata?.noOrderPlacement ? (isEnglish ? 'No order placement' : '不触发任何下单') : null,
+    result?.metadata?.sideEffectFree
+      || result?.metadata?.noBrokerSync
+      || result?.metadata?.noAccountingMutation
+      || result?.metadata?.noOrderPlacement
+      ? localizedCopy(SCENARIO_RISK_OBSERVATION_BOUNDARY, isEnglish)
+      : null,
     result?.metadata?.notInvestmentAdvice ? localizedCopy(SCENARIO_RISK_NOT_POSITION_ADVICE, isEnglish) : null,
   ].filter(Boolean) as string[];
 
@@ -277,8 +329,8 @@ export function PortfolioScenarioRiskPanel({
       <div data-testid="portfolio-scenario-risk-panel" className="flex flex-col gap-4">
         <TerminalNotice variant="neutral">
           {isEnglish
-            ? 'Advisory-only projection. It reads current visible holdings and does not refresh providers, broker state, or accounting.'
-            : '仅做观察性推演：读取当前页面可见持仓，不刷新外部数据，不触发经纪商或账务动作。'}
+            ? 'Observation-only projection based on current visible holdings; current portfolio state is unchanged.'
+            : '仅做观察性推演，基于当前页面可见持仓，不改变当前组合状态。'}
         </TerminalNotice>
 
         {!hasPositions ? (

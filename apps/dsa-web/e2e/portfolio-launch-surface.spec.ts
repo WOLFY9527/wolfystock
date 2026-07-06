@@ -17,6 +17,64 @@ async function expectNoHorizontalOverflow(page: import('@playwright/test').Page)
   expect(overflow).toBeLessThanOrEqual(1);
 }
 
+async function classifyWideVisibleElements(page: import('@playwright/test').Page) {
+  return page.evaluate(() => {
+    const viewportWidth = document.documentElement.clientWidth;
+    const isVisible = (element: Element) => {
+      const style = window.getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== 'none'
+        && style.visibility !== 'hidden'
+        && Number.parseFloat(style.opacity || '1') > 0
+        && rect.width > 0
+        && rect.height > 0;
+    };
+    const hasScrollableAncestor = (element: Element) => {
+      let current: Element | null = element;
+      while (current && current !== document.body) {
+        const style = window.getComputedStyle(current);
+        if (/(auto|scroll)/.test(style.overflowX) && current.scrollWidth > current.clientWidth + 1) {
+          return true;
+        }
+        current = current.parentElement;
+      }
+      return false;
+    };
+    return Array.from(document.querySelectorAll('body *'))
+      .filter(isVisible)
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        const scrollDelta = Math.max(0, (element as HTMLElement).scrollWidth - (element as HTMLElement).clientWidth);
+        const isWideBox = rect.width > viewportWidth + 1;
+        const isInternalScrollable = scrollDelta > 1;
+        if (!isWideBox && !isInternalScrollable) return null;
+        const testId = element.getAttribute('data-testid') || element.closest('[data-testid]')?.getAttribute('data-testid') || '';
+        const primitive = element.getAttribute('data-terminal-primitive') || element.closest('[data-terminal-primitive]')?.getAttribute('data-terminal-primitive') || '';
+        const tag = element.tagName.toLowerCase();
+        const className = typeof (element as HTMLElement).className === 'string' ? (element as HTMLElement).className : '';
+        const classification = primitive === 'dense-table' || element.closest('[data-terminal-primitive="dense-table"]')
+          ? 'INTENTIONAL_INTERNAL_SCROLL'
+          : className.includes('inset-[-40px]') && className.includes('linear-gradient')
+            ? 'FALSE_POSITIVE'
+          : tag === 'canvas' || tag === 'svg' || element.closest('[data-chart-surface="true"]')
+            ? 'SAFE_CHART_CANVAS'
+            : isWideBox && !hasScrollableAncestor(element)
+              ? 'ACTUAL_LAYOUT_ESCAPE'
+              : 'FALSE_POSITIVE';
+        return {
+          tag,
+          testId,
+          primitive,
+          className,
+          width: Math.round(rect.width),
+          scrollDelta: Math.round(scrollDelta),
+          classification,
+        };
+      })
+      .filter(Boolean);
+  });
+}
+
 async function expectVisibleTextAbsent(page: import('@playwright/test').Page, labels: string[]) {
   const bodyText = await page.locator('body').innerText();
   const visibleLines = bodyText.split(/\s+/).map((line) => line.trim()).filter(Boolean);
@@ -104,8 +162,7 @@ test.describe('portfolio launch surface', () => {
       await expect(setupBoundary).toContainText('组合数据接入');
       await expect(setupBoundary).not.toContainText(/IBKR|token|API|同步控件|request|trace|cache|payload/i);
       await expect(activityPanel).toContainText('历史记录');
-      await expect(page.getByTestId('portfolio-bento-page')).toHaveAttribute('data-portfolio-paper-surface', 'true');
-      await expect(page.getByTestId('portfolio-bento-page')).toHaveCSS('color', 'rgba(61, 56, 49, 0.78)');
+      await expect(page.getByTestId('portfolio-bento-page')).not.toHaveAttribute('data-portfolio-paper-surface');
 
       const heroBox = await accountHero.boundingBox();
       const summaryCoreBox = await summaryCoreRow.boundingBox();
@@ -146,6 +203,12 @@ test.describe('portfolio launch surface', () => {
       expect(titleTypeScale.pageTitleFontSize).toBeGreaterThan(titleTypeScale.maxSectionHeadingFontSize);
 
       if (viewport.name === 'desktop') {
+        const holdingsTable = page.getByRole('table', { name: '持仓研究账本' });
+        const holdingsTableShell = holdingsTable.locator('xpath=ancestor::*[@data-terminal-primitive="dense-table"][1]');
+        await expect(holdingsTable).toBeVisible();
+        await expect(holdingsTable.getByText('持仓研究账本')).toHaveClass(/sr-only/);
+        await expect(holdingsTableShell).toBeVisible();
+        await expect(holdingsTableShell).toHaveCSS('overflow-x', 'auto');
         expect(primaryBox).not.toBeNull();
         expect(secondaryBox).not.toBeNull();
         expect(activityBox).not.toBeNull();
@@ -162,10 +225,13 @@ test.describe('portfolio launch surface', () => {
         const riskBox = await riskPanel.boundingBox();
         const activityPanelBox = await activityPanel.boundingBox();
         const manualBox = await setupBoundary.boundingBox();
+        const wideElements = await classifyWideVisibleElements(page);
+        const actualEscapes = wideElements.filter((entry) => entry?.classification === 'ACTUAL_LAYOUT_ESCAPE');
 
         expect(holdingsBox?.y ?? Infinity).toBeLessThan(riskBox?.y ?? 0);
         expect(riskBox?.y ?? Infinity).toBeLessThan(activityPanelBox?.y ?? 0);
         expect(activityPanelBox?.y ?? Infinity).toBeLessThan(manualBox?.y ?? 0);
+        expect(actualEscapes).toEqual([]);
       }
 
       await expectVisibleTextPresent(page, requiredLedgerLabels);
@@ -181,6 +247,42 @@ test.describe('portfolio launch surface', () => {
       await page.unrouteAll({ behavior: 'ignoreErrors' });
     });
   }
+
+  test('keeps holdings ledger contained across the 768px breakpoint seam', async ({ page }) => {
+    const breakpoints = [
+      { width: 390, height: 844, denseTable: false },
+      { width: 767, height: 900, denseTable: false },
+      { width: 768, height: 900, denseTable: false },
+      { width: 769, height: 900, denseTable: false },
+      { width: 1024, height: 900, denseTable: true },
+    ];
+
+    for (const viewport of breakpoints) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await installPortfolioSmokeHarness(page);
+      await page.goto('/zh/portfolio', { waitUntil: 'domcontentloaded' });
+      await waitForPortfolioSurface(page);
+
+      const holdingsPanel = page.getByTestId('portfolio-current-holdings-panel');
+      await expect(holdingsPanel).toBeVisible({ timeout: 15_000 });
+
+      const mobileLedger = page.getByTestId('portfolio-holdings-mobile-list');
+      const holdingsTable = page.getByRole('table', { name: '持仓研究账本' });
+      if (viewport.denseTable) {
+        await expect(mobileLedger).toBeHidden();
+        await expect(holdingsTable).toBeVisible();
+        await expect(holdingsTable.locator('xpath=ancestor::*[@data-terminal-primitive="dense-table"][1]')).toHaveCSS('overflow-x', 'auto');
+      } else {
+        await expect(mobileLedger).toBeVisible();
+        await expect(holdingsTable).toBeHidden();
+      }
+
+      const wideElements = await classifyWideVisibleElements(page);
+      expect(wideElements.filter((entry) => entry?.classification === 'ACTUAL_LAYOUT_ESCAPE')).toEqual([]);
+      await expectNoHorizontalOverflow(page);
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+    }
+  });
 
   test('runs bounded portfolio scenario risk smoke inside the risk rail', async ({ page }) => {
     const consoleErrors: string[] = [];
@@ -231,10 +333,9 @@ test.describe('portfolio launch surface', () => {
     await expect(resultPanel).not.toContainText('theme_mapping_pending');
     await expect(resultPanel).not.toContainText('scenario_coverage_incomplete');
     expect(await resultPanel.innerText()).not.toMatch(forbiddenSnakeCaseTokenPattern);
-    await expect(resultPanel).toContainText('不触发经纪商同步');
-    await expect(resultPanel).toContainText('不改动账务结果');
-    await expect(resultPanel).toContainText('不触发任何下单');
-    await expect(resultPanel).toContainText('模型结果不可作为仓位建议');
+    await expect(resultPanel).toContainText('仅做观察性推演，不改变当前组合状态。');
+    await expect(resultPanel).toContainText('模型结果仅供观察，不作为行动依据。');
+    await expect(resultPanel).not.toContainText(/不触发经纪商同步|不改动账务结果|不触发任何下单|模型结果不可作为仓位建议/);
 
     expect(harness.requests.count('POST', '/api/v1/portfolio/scenario-risk')).toBe(1);
     expect(harness.scenarioRiskPayloads).toHaveLength(1);

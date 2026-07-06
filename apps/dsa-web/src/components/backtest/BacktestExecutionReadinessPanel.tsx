@@ -26,6 +26,8 @@ const STATE_LABELS: Record<string, { zh: string; en: string; tone: ReadinessTone
   data_disabled: { zh: '数据访问不可用', en: 'Data access unavailable', tone: 'blocked' },
   no_samples: { zh: '暂无可用样本', en: 'No usable samples', tone: 'blocked' },
   data_insufficient: { zh: '历史数据不足', en: 'Insufficient history', tone: 'blocked' },
+  initializing: { zh: '正在准备历史样本', en: 'Preparing historical samples', tone: 'neutral' },
+  samples_initializing: { zh: '正在准备历史样本', en: 'Preparing historical samples', tone: 'neutral' },
   degraded: { zh: '可执行，证据降级', en: 'Executable with degraded evidence', tone: 'warning' },
   executable: { zh: '可执行', en: 'Executable', tone: 'ready' },
   calculation_unavailable: { zh: '等待执行回执', en: 'Waiting for execution receipt', tone: 'neutral' },
@@ -40,34 +42,35 @@ const REASON_LABELS: Record<string, { zh: string; en: string }> = {
   no_samples: { zh: '缺少已准备的分析样本。', en: 'Prepared analysis samples are missing.' },
   no_analysis_history: { zh: '没有可用于评估的历史分析记录。', en: 'No historical analysis records are available for evaluation.' },
   no_samples_prepared: { zh: '尚未准备历史评估样本。', en: 'Historical evaluation samples have not been prepared.' },
-  insufficient_history: { zh: '历史 OHLCV 窗口不足，无法计算安全结果。', en: 'The OHLCV window is too short to calculate a safe result.' },
+  samples_initializing: { zh: '历史样本正在准备，尚不能确认结果可用。', en: 'Historical samples are being prepared; result availability is not confirmed yet.' },
+  insufficient_history: { zh: '历史价格数据窗口不足，无法计算安全结果。', en: 'The historical price window is too short to calculate a safe result.' },
   insufficient_data: { zh: '可用数据不足，未生成收益、回撤、胜率或基准相对指标。', en: 'Usable data is insufficient, so return, drawdown, win-rate, and benchmark-relative metrics are not ready.' },
   missing_benchmark: { zh: '缺少基准，基准相对指标不可用。', en: 'Benchmark is missing, so benchmark-relative metrics are unavailable.' },
   missing_adjustments: { zh: '复权/公司行动证据不足，结果只能观察。', en: 'Adjustment or corporate-action evidence is incomplete; result is observation-only.' },
   stale_data: { zh: '数据可能过期，结果只能观察。', en: 'Data may be stale; result is observation-only.' },
   missing_factor_inputs: { zh: '因子输入缺失，相关诊断不可用。', en: 'Factor inputs are missing; related diagnostics are unavailable.' },
-  historical_ohlcv_not_configured: { zh: '历史 OHLCV 运行时未配置。', en: 'Historical OHLCV runtime is not configured.' },
-  historical_ohlcv_stale: { zh: '历史 OHLCV 覆盖已过期。', en: 'Historical OHLCV coverage is stale.' },
-  historical_ohlcv_insufficient_coverage: { zh: '请求区间的历史 OHLCV 覆盖不足。', en: 'Historical OHLCV coverage is insufficient for the requested range.' },
-  historical_ohlcv_missing: { zh: '缺少必需的历史 OHLCV 输入。', en: 'Required historical OHLCV inputs are missing.' },
-  historical_ohlcv_unavailable: { zh: '历史 OHLCV 运行时不可用。', en: 'Historical OHLCV runtime is unavailable.' },
+  historical_ohlcv_not_configured: { zh: '历史价格数据运行时未配置。', en: 'Historical price data runtime is not configured.' },
+  historical_ohlcv_stale: { zh: '历史价格数据覆盖可能过期。', en: 'Historical price data coverage may be stale.' },
+  historical_ohlcv_insufficient_coverage: { zh: '请求区间的历史价格数据覆盖不足。', en: 'Historical price data coverage is insufficient for the requested range.' },
+  historical_ohlcv_missing: { zh: '缺少必需的历史价格数据输入。', en: 'Required historical price data inputs are missing.' },
+  historical_ohlcv_unavailable: { zh: '历史价格数据运行时不可用。', en: 'Historical price data runtime is unavailable.' },
 };
 
 const OHLCV_STATUS_LABELS: Record<string, { zh: string; en: string }> = {
-  available: { zh: '历史 OHLCV 可执行', en: 'Historical data ready' },
-  missing: { zh: '历史 OHLCV 输入缺失', en: 'Historical OHLCV inputs missing' },
-  stale: { zh: '历史 OHLCV 过期', en: 'Historical OHLCV stale' },
-  not_configured: { zh: '历史 OHLCV 未配置', en: 'Historical OHLCV not configured' },
-  insufficient_coverage: { zh: '历史 OHLCV 覆盖不足', en: 'Historical OHLCV insufficient coverage' },
-  unavailable: { zh: '历史 OHLCV 不可用', en: 'Historical OHLCV unavailable' },
+  available: { zh: '历史价格数据可执行', en: 'Historical price data ready' },
+  missing: { zh: '历史价格数据输入缺失', en: 'Historical price data inputs missing' },
+  stale: { zh: '历史价格数据可能过期', en: 'Historical price data may be stale' },
+  not_configured: { zh: '历史价格数据未配置', en: 'Historical price data not configured' },
+  insufficient_coverage: { zh: '历史价格数据覆盖不足', en: 'Historical price data coverage insufficient' },
+  unavailable: { zh: '历史价格数据不可用', en: 'Historical price data unavailable' },
 };
 
 const DATA_CLASS_LABELS: Record<string, { zh: string; en: string }> = {
-  historical_ohlcv: { zh: '历史 OHLCV', en: 'Historical OHLCV' },
+  historical_ohlcv: { zh: '历史价格数据', en: 'Historical price data' },
   date_coverage: { zh: '日期覆盖', en: 'Date coverage' },
   freshness: { zh: '新鲜度', en: 'Freshness' },
   adjusted_prices: { zh: '复权价格', en: 'Adjusted prices' },
-  benchmark_ohlcv: { zh: '基准 OHLCV', en: 'Benchmark OHLCV' },
+  benchmark_ohlcv: { zh: '基准历史价格数据', en: 'Benchmark historical price data' },
 };
 
 function normalizeToken(value?: string | null): string {
@@ -135,6 +138,24 @@ function getHistoricalDataClassLabels(readiness: BacktestHistoricalOhlcvReadines
   return labels.length ? labels.join(' / ') : (language === 'en' ? 'None reported' : '未返回缺口');
 }
 
+function productReadModelShowsSampleInitialization(productReadModel?: ProductReadModel | null): boolean {
+  const missingClasses = productReadModel?.quality?.missingDataClasses || [];
+  const evidence = (productReadModel?.evidence || {}) as Record<string, unknown>;
+  return missingClasses.some((value) => normalizeToken(value) === 'samples_initializing')
+    || normalizeToken(String(evidence.transition || '')) === 'initializing';
+}
+
+function sanitizeHistoricalReadinessText(value: string | null | undefined, language: BacktestLanguage): string | null {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  if (/ohlcv|cache|seed|runtime/i.test(text)) {
+    return language === 'en'
+      ? 'Refresh or complete historical price data for this date range, then review readiness again.'
+      : '请刷新或补齐本次区间的历史价格数据后，再复核就绪度。';
+  }
+  return text.replace(/OHLCV/g, language === 'en' ? 'historical price data' : '历史价格数据');
+}
+
 const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelProps> = ({
   language,
   readiness,
@@ -145,8 +166,14 @@ const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelP
   className = '',
   testId = 'backtest-execution-readiness-panel',
 }) => {
-  const productBlocked = productReadModelIsBlocking(productReadModel);
-  const stateInfo = productBlocked && productReadModel?.state
+  const readinessState = normalizeToken(readiness?.state);
+  const samplesInitializing = readinessState === 'initializing'
+    || readinessState === 'samples_initializing'
+    || productReadModelShowsSampleInitialization(productReadModel);
+  const productBlocked = productReadModelIsBlocking(productReadModel) && !samplesInitializing;
+  const stateInfo = samplesInitializing
+    ? STATE_LABELS.samples_initializing
+    : productBlocked && productReadModel?.state
     ? {
       zh: productReadStateLabel(productReadModel.state, 'zh'),
       en: productReadStateLabel(productReadModel.state, 'en'),
@@ -172,6 +199,10 @@ const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelP
     : stateInfo[language];
   const body = isLoading
     ? (language === 'en' ? 'Checking data and result conditions...' : '正在检查数据与结果条件…')
+    : samplesInitializing
+      ? (language === 'en'
+        ? 'Historical samples are still being prepared. This does not guarantee a successful result.'
+        : '历史样本仍在准备中；这不代表结果一定可用。')
     : productBlocked
       ? (language === 'en'
         ? 'Read-only readiness is not execution-ready because coverage, freshness, or quality evidence is blocking.'
@@ -191,7 +222,7 @@ const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelP
   return (
     <section
       data-testid={testId}
-      data-readiness-state={productReadModel?.state || normalizeToken(readiness?.state) || 'unknown'}
+      data-readiness-state={samplesInitializing ? 'samples_initializing' : productReadModel?.state || normalizeToken(readiness?.state) || 'unknown'}
       data-result-contract-available={String(!productBlocked && resultAvailable)}
       data-product-read-ready={String(productReadModel?.ready === true)}
       className={`rounded-xl border p-4 ${toneClasses(stateInfo.tone)} ${className}`}
@@ -220,7 +251,13 @@ const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelP
           <div className="mt-3 grid gap-2 text-xs md:grid-cols-3">
             <div className="rounded-lg border border-current/10 bg-black/10 px-3 py-2">
               <p className="opacity-55">{language === 'en' ? 'Result view' : '结果结构'}</p>
-              <p className="mt-1 font-semibold">{resultAvailable ? (language === 'en' ? 'Ready' : '可用') : (language === 'en' ? 'Not ready' : '不可用')}</p>
+              <p className="mt-1 font-semibold">
+                {resultAvailable
+                  ? (language === 'en' ? 'Ready' : '可用')
+                  : samplesInitializing
+                    ? (language === 'en' ? 'Preparing' : '准备中')
+                    : (language === 'en' ? 'Not ready' : '不可用')}
+              </p>
             </div>
             <div className="rounded-lg border border-current/10 bg-black/10 px-3 py-2">
               <p className="opacity-55">{language === 'en' ? 'Benchmark-relative metrics' : '基准相对指标'}</p>
@@ -268,13 +305,13 @@ const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelP
                 </p>
               </div>
               <p className="mt-3 leading-5 opacity-80">
-                {historicalOhlcvReadiness?.consumerSafeMessage || (historicalExecutable
-                  ? (language === 'en' ? 'Historical OHLCV coverage is available for this request.' : '当前请求具备历史 OHLCV 覆盖。')
-                  : (language === 'en' ? 'Historical OHLCV readiness blocks execution.' : '历史 OHLCV 就绪度阻止执行。'))}
+                {sanitizeHistoricalReadinessText(historicalOhlcvReadiness?.consumerSafeMessage, language) || (historicalExecutable
+                  ? (language === 'en' ? 'Historical price data coverage is available for this request.' : '当前请求具备历史价格数据覆盖。')
+                  : (language === 'en' ? 'Historical price data readiness blocks execution.' : '历史价格数据就绪度阻止执行。'))}
               </p>
               {historicalOhlcvReadiness?.operatorNextAction ? (
                 <p className="mt-2 leading-5 opacity-70">
-                  {language === 'en' ? 'Next action: ' : '下一步：'}{historicalOhlcvReadiness.operatorNextAction}
+                  {language === 'en' ? 'Next action: ' : '下一步：'}{sanitizeHistoricalReadinessText(historicalOhlcvReadiness.operatorNextAction, language)}
                 </p>
               ) : null}
             </div>

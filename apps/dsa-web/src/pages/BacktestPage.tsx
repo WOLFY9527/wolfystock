@@ -1562,14 +1562,14 @@ const BacktestPage: React.FC = () => {
             data-testid="backtest-page-heading"
             title={language === 'en' ? 'Backtest Lab' : '回测实验室'}
           />
-          <p data-testid="backtest-consumer-status-sentence" className="max-w-4xl text-sm leading-6 text-white/58">
+          <p data-testid="backtest-consumer-status-sentence" className="max-w-4xl text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
             {language === 'en'
               ? 'Configure a strategy, check data readiness, then inspect the result preview or latest saved run before opening a full report.'
               : '先配置策略与区间，再核对数据就绪度；运行前可预览将展示的结果结构或最近保存记录。'}
           </p>
           <div
             data-testid="backtest-subnav"
-            className={`w-full ${configPanelRadiusClass} border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-sm`}
+            className={`w-full ${configPanelRadiusClass} border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-4 py-3`}
           >
             <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
               <nav
@@ -1598,14 +1598,14 @@ const BacktestPage: React.FC = () => {
             className="w-full flex-1 min-w-0 flex flex-col gap-6 bg-transparent"
           >
             {scannerHandoff ? (
-              <section className={`${configPanelRadiusClass} border border-sky-400/15 bg-sky-400/10 px-4 py-3 text-sm text-sky-50`}>
+              <section className={`${configPanelRadiusClass} border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-4 py-3 text-sm text-[color:var(--wolfy-text-secondary)]`}>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold">{language === 'en' ? 'From scanner' : '来自扫描器'}</span>
+                  <span className="font-semibold text-[color:var(--wolfy-text-primary)]">{language === 'en' ? 'Research handoff' : '研究线索交接'}</span>
                   <span>{scannerHandoff.symbol}</span>
-                  {scannerHandoff.market ? <span className="text-sky-100/75">· {scannerHandoff.market}</span> : null}
-                  {scannerHandoff.scannerRunId ? <span className="text-sky-100/75">· {bt(language, 'scannerRunMeta', { runId: scannerHandoff.scannerRunId })}</span> : null}
-                  {scannerHandoff.scannerRank ? <span className="text-sky-100/75">· {bt(language, 'scannerRankMeta', { rank: scannerHandoff.scannerRank })}</span> : null}
-                  {scannerHandoff.scannerProfile ? <span className="text-sky-100/75">· {scannerHandoff.scannerProfile}</span> : null}
+                  {scannerHandoff.market ? <span className="text-[color:var(--wolfy-text-muted)]">· {scannerHandoff.market}</span> : null}
+                  {scannerHandoff.scannerRunId ? <span className="text-[color:var(--wolfy-text-muted)]">· {bt(language, 'scannerRunMeta', { runId: scannerHandoff.scannerRunId })}</span> : null}
+                  {scannerHandoff.scannerRank ? <span className="text-[color:var(--wolfy-text-muted)]">· {bt(language, 'scannerRankMeta', { rank: scannerHandoff.scannerRank })}</span> : null}
+                  {scannerHandoff.scannerProfile ? <span className="text-[color:var(--wolfy-text-muted)]">· {scannerHandoff.scannerProfile}</span> : null}
                 </div>
               </section>
             ) : null}
@@ -1628,13 +1628,13 @@ const BacktestPage: React.FC = () => {
                   <section
                     data-testid="backtest-workspace-loading"
                     aria-busy="true"
-                    className="workspace-loading-panel border border-white/10 bg-white/[0.02] backdrop-blur-md"
+                    className="workspace-loading-panel border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]"
                   >
                     <div className="workspace-loading-panel__header">
                       <span className="workspace-loading-panel__status">
                         {language === 'en' ? 'Loading workspace' : '加载工作区'}
                       </span>
-                      <span className="text-xs text-white/45">
+                      <span className="text-xs text-[color:var(--wolfy-text-muted)]">
                         {language === 'en' ? 'Preparing backtest surface' : '正在准备回测界面'}
                       </span>
                     </div>
