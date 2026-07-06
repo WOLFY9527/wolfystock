@@ -1,4 +1,4 @@
-import { expect as baseExpect, type Page, type Route } from '@playwright/test';
+import { expect as baseExpect, type BrowserContext, type Page, type Route } from '@playwright/test';
 import { expect, test } from './fixtures/appSmoke';
 import { createMockAdminUser, createMockAuthStatus } from '../src/test-utils/adminAuthHarness';
 
@@ -14,6 +14,11 @@ type RouteIdentity = {
   readyTestId: string;
   heading?: RegExp;
   extra?: (page: Page) => Promise<void>;
+};
+
+type AuthSessionHarness = {
+  requests: string[];
+  getLoginState: () => boolean;
 };
 
 const protectedRoutes: RouteIdentity[] = [
@@ -35,6 +40,18 @@ const protectedRoutes: RouteIdentity[] = [
     expectedUrl: /\/zh\/scanner$/,
     readyTestId: 'user-scanner-workspace',
     heading: /扫描器/,
+  },
+  {
+    label: '/stocks/structure-decision',
+    path: '/zh/stocks/structure-decision',
+    expectedUrl: /\/zh\/stocks\/structure-decision$/,
+    readyTestId: 'stock-structure-entry-page',
+  },
+  {
+    label: '/stocks/AAPL/structure-decision',
+    path: '/zh/stocks/AAPL/structure-decision',
+    expectedUrl: /\/zh\/stocks\/AAPL\/structure-decision$/,
+    readyTestId: 'stock-structure-decision-page',
   },
   {
     label: '/watchlist',
@@ -79,6 +96,13 @@ const protectedRoutes: RouteIdentity[] = [
     heading: /回测/,
   },
   {
+    label: '/scenario-lab',
+    path: '/zh/scenario-lab',
+    expectedUrl: /\/zh\/scenario-lab$/,
+    readyTestId: 'scenario-lab-page',
+    heading: /情景实验室/,
+  },
+  {
     label: '/admin/market-providers',
     path: '/zh/admin/market-providers',
     expectedUrl: /\/zh\/admin\/market-providers$/,
@@ -99,25 +123,35 @@ async function fulfillJson(route: Route, payload: unknown, status = 200) {
   });
 }
 
-async function installAdminLoginSession(page: Page) {
+async function installAdminLoginSession(page: Page): Promise<AuthSessionHarness> {
   let isLoggedIn = false;
+  const requests: string[] = [];
 
   await page.route('**/api/v1/auth/status**', async (route) => {
+    requests.push('GET /api/v1/auth/status');
     await fulfillJson(route, createMockAuthStatus(isLoggedIn ? adminUser : null));
   });
   await page.route('**/api/v1/auth/me**', async (route) => {
+    requests.push('GET /api/v1/auth/me');
     await (isLoggedIn
       ? fulfillJson(route, adminUser)
       : fulfillJson(route, { error: 'not_authenticated' }, 401));
   });
   await page.route('**/api/v1/auth/login**', async (route) => {
+    requests.push('POST /api/v1/auth/login');
     isLoggedIn = true;
     await fulfillJson(route, { ok: true, currentUser: adminUser });
   });
   await page.route('**/api/v1/auth/logout**', async (route) => {
+    requests.push('POST /api/v1/auth/logout');
     isLoggedIn = false;
     await fulfillJson(route, { ok: true });
   });
+
+  return {
+    requests,
+    getLoginState: () => isLoggedIn,
+  };
 }
 
 async function loginAsAdmin(page: Page) {
@@ -230,6 +264,89 @@ async function installRouteIdentityMocks(page: Page) {
         is_synthetic: false,
         is_unavailable: false,
       },
+    });
+  });
+  await page.route('**/api/v1/stocks/*/technical-indicators', async (route) => {
+    const symbol = decodeURIComponent(new URL(route.request().url()).pathname.split('/')[4] || 'ORCL');
+    await fulfillJson(route, {
+      contract_version: 'stock_technical_indicators_v1',
+      symbol,
+      status: 'available',
+      timeframe: 'daily',
+      as_of: '2026-06-07T09:45:00-04:00',
+      freshness: 'fixture',
+      source_label: 'Route identity fixture',
+      data_quality: {
+        status: 'available',
+        required_bars: 200,
+        observed_bars: 240,
+        usable_bars: 240,
+        missing_bars: 0,
+        freshness: 'fixture',
+      },
+      indicators: {
+        sma20: { value: 211.12 },
+        sma50: { value: 207.34 },
+        sma200: { value: 190.56 },
+        ema12: { value: 212.45 },
+        ema26: { value: 207.89 },
+        rsi14: { value: 58.42 },
+        macd: { value: 1.234 },
+        macd_signal: { value: 0.987 },
+        macd_histogram: { value: 0.247 },
+        bollinger_upper: { value: 221.45 },
+        bollinger_middle: { value: 210.12 },
+        bollinger_lower: { value: 198.79 },
+      },
+      no_advice_disclosure: 'Research-only technical indicator context.',
+    });
+  });
+  await page.route('**/api/v1/options/underlyings/*/structure', async (route) => {
+    const symbol = decodeURIComponent(new URL(route.request().url()).pathname.split('/')[5] || 'ORCL');
+    await fulfillJson(route, {
+      contract_version: 'options-structure-summary-v1',
+      symbol,
+      status: 'not_available',
+      calculation_state: 'not_available',
+      observation_only: true,
+      decision_grade: false,
+      provider_configured: false,
+      spot_price: null,
+      as_of: null,
+      freshness: 'unknown',
+      snapshot: {
+        contract_version: 'option-chain-snapshot-v1',
+        symbol,
+        spot_price: null,
+        as_of: null,
+        freshness: 'unknown',
+        contracts: [],
+        missing_inputs: ['authorized_options_structure_source'],
+      },
+      strike_summaries: [],
+      expiration_summaries: [],
+      nearest_expirations: [],
+      zero_dte: {
+        state: 'not_available',
+        expiration: null,
+        dte: null,
+        contract_count: 0,
+        call_open_interest: 0,
+        put_open_interest: 0,
+        call_volume: 0,
+        put_volume: 0,
+        open_interest_share: null,
+        volume_share: null,
+      },
+      gamma_flip_level: {
+        state: 'not_available',
+        level: null,
+        reason: 'authorized_structure_source_needed',
+      },
+      total_dealer_gamma_exposure: null,
+      blocking_reasons: ['options_structure_unavailable'],
+      warnings: [],
+      next_evidence_needed: ['authorized_structure_source_needed'],
     });
   });
   await page.route('**/api/v1/stocks/*/evidence**', async (route) => {
@@ -371,6 +488,140 @@ async function installRouteIdentityMocks(page: Page) {
         missing_data_families: [],
         blocked_product_surfaces: [],
       },
+    });
+  });
+  await page.route('**/api/v1/market/decision-cockpit', async (route) => {
+    await fulfillJson(route, {
+      schema_version: 'market_decision_cockpit.v1',
+      generated_at: '2026-06-07T09:45:00-04:00',
+      market_regime_decision: {
+        regime: 'riskOn',
+        confidence: 'medium',
+        confidence_score: 0.62,
+        driver_scores: {
+          breadth_participation: {
+            score: 62,
+            evidence_state: 'partial',
+            reasons: ['Fixture keeps route identity checks bounded.'],
+          },
+        },
+        explanation: {
+          why_this_regime: ['Breadth is stable in the route fixture.'],
+          what_confirms_it: ['Cross-asset fixture evidence is present.'],
+          what_invalidates_it: ['Fixture evidence becomes unavailable.'],
+        },
+        invalidation_conditions: ['Fixture evidence becomes unavailable.'],
+        research_priorities: {
+          watch_today: ['Confirm route identity remains stable.'],
+          needs_more_evidence: [],
+          investigate_next: [],
+        },
+      },
+      research_queue_preview: {
+        top_candidates: [],
+        queue_quality: 'mixed',
+        evidence_gaps: [],
+        preview_only: true,
+      },
+      options_structure_status: {
+        gamma_evidence_status: 'unavailable',
+        observation_only: true,
+        decision_grade: false,
+        missing_evidence: [],
+        blocked_reason_codes: [],
+      },
+      cockpit_summary: {
+        what_changed: ['Route fixture loaded.'],
+        why_it_matters: ['Scenario Lab can render without provider access.'],
+        what_to_watch: ['Navigation and auth state.'],
+        confidence_limits: ['Fixture data only.'],
+      },
+      no_advice_disclosure: 'Research context only.',
+      data_quality: {
+        status: 'partial',
+        reason: 'route_identity_fixture',
+        reason_codes: [],
+        freshness: 'fixture',
+        as_of: '2026-06-07T09:45:00-04:00',
+        blocking_modules: [],
+        operator_action: 'Run data UAT separately.',
+        consumer_safe_message: 'Route identity fixture is available.',
+      },
+    });
+  });
+  await page.route('**/api/v1/market/scenario-lab', async (route) => {
+    await fulfillJson(route, {
+      schema_version: 'market_scenario_lab_engine.v1',
+      selected_scenario: {
+        preset_id: 'volatilitySpike',
+        name: 'volatilitySpike',
+        label: 'Volatility spike',
+      },
+      base_market_context: {
+        label: 'Fixture context',
+        message: 'Route identity fixture keeps scenario data bounded.',
+        evidence_state: 'partial',
+        scoring_driver_count: 1,
+      },
+      base_regime: {
+        regime: 'riskOn',
+        confidence: 'medium',
+        confidence_score: 0.62,
+        status: 'partial',
+      },
+      scenario_regime: {
+        regime: 'mixed',
+        confidence: 'low',
+        confidence_score: 0.42,
+        status: 'partial',
+      },
+      baseline_readiness: {
+        status: 'partial',
+        baseline_snapshot: {
+          state: 'partial',
+          available: false,
+          last_updated: '2026-06-07T09:45:00-04:00',
+          affected_components: ['baselineSnapshot'],
+        },
+        market_frame: {
+          state: 'available',
+          available: true,
+          last_updated: '2026-06-07T09:45:00-04:00',
+          affected_components: [],
+        },
+        driver_inputs: {
+          state: 'partial',
+          available_driver_keys: ['breadthParticipation'],
+          partial_driver_keys: ['breadthParticipation'],
+          missing_driver_keys: [],
+          affected_driver_keys: ['breadthParticipation'],
+        },
+        evidence_completeness: {
+          state: 'partial',
+          gaps: ['fixtureEvidence'],
+        },
+        data_state: 'request_supplied',
+        sample_state: 'none',
+        score_authority: 'observation_only',
+        source_authority_allowed: false,
+        authoritative: false,
+        observation_only: true,
+        ready: false,
+        partial: true,
+        blocked: false,
+        affected_baseline_components: ['baselineSnapshot'],
+        affected_driver_keys: ['breadthParticipation'],
+        evidence_gaps: ['fixtureEvidence'],
+        last_updated: '2026-06-07T09:45:00-04:00',
+      },
+      confidence_delta: -0.2,
+      driver_deltas: { breadthParticipation: -12 },
+      changed_drivers: ['breadthParticipation'],
+      scenario_summary: ['Fixture scenario result loaded.'],
+      what_would_confirm: ['Route identity remains stable.'],
+      what_would_invalidate: ['Auth state changes unexpectedly.'],
+      evidence_limits: ['Fixture data only.'],
+      no_advice_disclosure: 'Research planning only.',
     });
   });
   await page.route('**/api/v1/scanner/status**', async (route) => {
@@ -687,6 +938,12 @@ async function expectProtectedRouteIdentity(page: Page, route: RouteIdentity) {
   if (route.extra) {
     await route.extra(page);
   }
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page).toHaveURL(route.expectedUrl);
+  await expectAuthenticatedAdminSession(page);
+  await expect(page.getByTestId(route.readyTestId), `${route.label} after refresh`).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('auth-guard-overlay')).toHaveCount(0);
 }
 
 async function expectAuthenticatedRouteState(
@@ -700,6 +957,23 @@ async function expectAuthenticatedRouteState(
   await expect(page.getByTestId('auth-guard-overlay')).toHaveCount(0);
   await expect(page).not.toHaveURL(/\/login(?:$|[?#/])/);
   await expect(page).not.toHaveURL(/\/guest(?:$|[?#/])/);
+}
+
+async function expectGuestProtectedGate(page: Page, expectedUrl: RegExp) {
+  await expect(page).toHaveURL(expectedUrl);
+  await expect(page.getByTestId('auth-guard-overlay')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('auth-guard-overlay')).toContainText(/需要登录|Sign in/i);
+  await baseExpect.poll(async () => page.locator('#root').evaluate((root) => root.textContent?.trim().length ?? 0)).toBeGreaterThan(0);
+  await expect(page).not.toHaveURL(/about:blank/);
+}
+
+async function installFreshGuestContextMocks(context: BrowserContext) {
+  await context.route('**/api/v1/auth/status**', async (route) => {
+    await fulfillJson(route, createMockAuthStatus(null));
+  });
+  await context.route('**/api/v1/auth/me**', async (route) => {
+    await fulfillJson(route, { error: 'not_authenticated' }, 401);
+  });
 }
 
 async function clickPrimaryNav(page: Page, name: string | RegExp) {
@@ -778,5 +1052,99 @@ test.describe('UAT route identity auth-session gate', () => {
       /\/zh\/watchlist$/,
       page.getByTestId('watchlist-page'),
     );
+  });
+
+  test('distinguishes navigation methods inside one authenticated browser context', async ({ page }) => {
+    await installAdminLoginSession(page);
+    await installRouteIdentityMocks(page);
+
+    await loginAsAdmin(page);
+    await expectAuthenticatedRouteState(
+      page,
+      /\/zh\/market-overview$/,
+      page.getByTestId('market-overview-shell'),
+    );
+
+    await clickPrimaryNav(page, '扫描器');
+    await expectAuthenticatedRouteState(
+      page,
+      /\/zh\/scanner$/,
+      page.getByTestId('user-scanner-workspace'),
+    );
+
+    await page.goto('/zh/portfolio');
+    await expectAuthenticatedRouteState(
+      page,
+      /\/zh\/portfolio$/,
+      page.getByTestId('portfolio-bento-page'),
+    );
+
+    await page.evaluate(() => {
+      window.location.assign('/zh/scenario-lab');
+    });
+    await expectAuthenticatedRouteState(
+      page,
+      /\/zh\/scenario-lab$/,
+      page.getByTestId('scenario-lab-page'),
+    );
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expectAuthenticatedRouteState(
+      page,
+      /\/zh\/scenario-lab$/,
+      page.getByTestId('scenario-lab-page'),
+    );
+
+    await page.goBack();
+    await expectAuthenticatedRouteState(
+      page,
+      /\/zh\/portfolio$/,
+      page.getByTestId('portfolio-bento-page'),
+    );
+
+    await page.goForward();
+    await expectAuthenticatedRouteState(
+      page,
+      /\/zh\/scenario-lab$/,
+      page.getByTestId('scenario-lab-page'),
+    );
+
+    await expect(page).not.toHaveURL(/\/settings\/system|about:blank|\/login|\/guest/);
+  });
+
+  test('treats a fresh browser context without cookies as guest, not session loss', async ({ browser }) => {
+    const context = await browser.newContext();
+    await installFreshGuestContextMocks(context);
+    const page = await context.newPage();
+
+    try {
+      await page.goto('/zh/portfolio');
+      await expectGuestProtectedGate(page, /\/zh\/portfolio$/);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('logs out through the visible shell UI and blocks protected access afterward', async ({ page }) => {
+    const session = await installAdminLoginSession(page);
+    await installRouteIdentityMocks(page);
+
+    await loginAsAdmin(page);
+    await expectAuthenticatedRouteState(
+      page,
+      /\/zh\/market-overview$/,
+      page.getByTestId('market-overview-shell'),
+    );
+
+    await page.getByTestId('shell-account-center-entry').getByRole('button', { name: '账户中心' }).click();
+    await page.getByTestId('shell-account-center-menu').getByRole('menuitem', { name: '退出登录' }).click();
+    await page.getByRole('button', { name: '确认退出' }).click();
+
+    await expect(page).toHaveURL(/\/zh\/guest$/);
+    expect(session.getLoginState()).toBe(false);
+    expect(session.requests).toContain('POST /api/v1/auth/logout');
+
+    await page.goto('/zh/portfolio');
+    await expectGuestProtectedGate(page, /\/zh\/portfolio$/);
   });
 });

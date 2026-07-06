@@ -86,6 +86,38 @@ describe('apiClient auth redirect handling', () => {
     expect(assignSpy).toHaveBeenCalledWith('/login?redirect=%2Fportfolio%3Fview%3Dholdings');
   });
 
+  it('preserves the active locale when redirecting protected API failures to login', async () => {
+    const assignSpy = vi.fn();
+    window.history.replaceState({}, '', '/zh/scenario-lab?shock=down');
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        ...window.location,
+        assign: assignSpy,
+      },
+    });
+
+    await expect(apiClient.get('/api/v1/protected', {
+      adapter: async (config) => Promise.reject({
+        config,
+        response: {
+          config,
+          data: {
+            detail: {
+              error: 'unauthorized',
+              message: 'Login required',
+            },
+          },
+          headers: {},
+          status: 401,
+          statusText: 'Unauthorized',
+        },
+      }),
+    })).rejects.toBeTruthy();
+
+    expect(assignSpy).toHaveBeenCalledWith('/zh/login?redirect=%2Fzh%2Fscenario-lab%3Fshock%3Ddown');
+  });
+
   it.each(['/api/v1/auth/status', '/api/v1/auth/me'])(
     'lets auth ownership handle 401 responses from %s without a full-page redirect',
     async (path) => {

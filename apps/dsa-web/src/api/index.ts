@@ -6,6 +6,7 @@ import axios, {
 import { API_BASE_URL } from '../utils/constants';
 import { getStoredUiLanguage } from '../i18n/core';
 import { attachParsedApiError } from './error';
+import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 
 export type ApiTimeoutTier = 'quick' | 'standard' | 'analysis';
 
@@ -251,7 +252,11 @@ function shouldRedirectToLogin(error: unknown): boolean {
     return false;
   }
   const path = window.location.pathname + window.location.search;
-  return !path.startsWith('/login') && !path.startsWith('/register');
+  const routeLocale = parseLocaleFromPathname(window.location.pathname);
+  const authEntryPrefixes = routeLocale
+    ? [buildLocalizedPath('/login', routeLocale), buildLocalizedPath('/register', routeLocale)]
+    : ['/login', '/register'];
+  return !authEntryPrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}?`) || path.startsWith(`${prefix}/`));
 }
 
 apiClient.interceptors.response.use(
@@ -260,7 +265,11 @@ apiClient.interceptors.response.use(
     if (shouldRedirectToLogin(error)) {
       const path = window.location.pathname + window.location.search;
       const redirect = encodeURIComponent(path);
-      window.location.assign(`/login?redirect=${redirect}`);
+      const routeLocale = parseLocaleFromPathname(window.location.pathname);
+      const loginPath = routeLocale
+        ? buildLocalizedPath(`/login?redirect=${redirect}`, routeLocale)
+        : `/login?redirect=${redirect}`;
+      window.location.assign(loginPath);
     }
     attachParsedApiError(error);
     return Promise.reject(error);
