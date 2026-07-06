@@ -268,6 +268,111 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(list_resp.status_code, 200)
         self.assertEqual(list_resp.json()["items"], [])
 
+    def test_watchlist_item_projects_canonical_identity_and_six_state_readiness(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+
+        def fake_packet(stock_code: str, *, market: str | None = None) -> dict:
+            self.assertEqual(stock_code, "AAPL")
+            self.assertEqual(market, "us")
+            return {
+                "symbol": "AAPL",
+                "market": "us",
+                "identity": {
+                    "name": "Apple Inc.",
+                    "exchange": "NASDAQ",
+                    "sector": "Technology",
+                    "industry": "Consumer Electronics",
+                },
+                "quote": {"state": "stale", "price": 190.25, "changePercent": -0.42, "asOf": "2026-05-01T11:00:00Z"},
+                "missingData": ["fundamentals", "filing_event_catalyst"],
+                "researchStatus": "partial",
+                "nextDataAction": "Add fundamentals and event evidence before marking the packet ready.",
+                "observationOnly": True,
+                "decisionGrade": False,
+                "noAdviceDisclosure": "Observation-only research packet; no personalized action instruction.",
+            }
+
+        self.addCleanup(
+            setattr,
+            watchlist_service_module,
+            "build_symbol_research_packet",
+            watchlist_service_module.build_symbol_research_packet,
+        )
+        watchlist_service_module.build_symbol_research_packet = fake_packet
+
+        add_resp = self.client.post(
+            "/api/v1/watchlist/items",
+            json={
+                "symbol": "aapl",
+                "market": "us",
+                "name": "Apple Inc.",
+                "source": "scanner",
+                "scanner_score": 88,
+                "score_status": "partial",
+            },
+        )
+
+        self.assertEqual(add_resp.status_code, 200, add_resp.text)
+        payload = add_resp.json()
+        self.assertEqual(
+            payload["identity"],
+            {
+                "canonical_symbol": "AAPL",
+                "display_symbol": "AAPL",
+                "market": "us",
+                "exchange": "NASDAQ",
+                "display_name": "Apple Inc.",
+                "identity_state": "resolved",
+            },
+        )
+        self.assertEqual(payload["research_readiness"]["state"], "partial")
+        self.assertEqual(payload["research_readiness"]["freshness_state"], "stale")
+        self.assertEqual(payload["research_readiness"]["identity_state"], "resolved")
+        self.assertEqual(payload["research_readiness"]["contract_version"], "product_read_model_v1")
+        self.assertEqual(payload["rowResearchPacket"]["identity"]["canonicalSymbol"], "AAPL")
+        self.assertEqual(payload["rowResearchPacket"]["identity"]["displaySymbol"], "AAPL")
+        self.assertEqual(payload["rowResearchPacket"]["identity"]["identityState"], "resolved")
+
+    def test_watchlist_add_rejects_unsupported_market_identity_without_provider_lookup(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+
+        resp = self.client.post(
+            "/api/v1/watchlist/items",
+            json={"symbol": "600519", "market": "us", "source": "scanner"},
+        )
+
+        self.assertEqual(resp.status_code, 400)
+        body = resp.json()
+        self.assertEqual(body["error"], "validation_error")
+        self.assertIn("unsupported", body["message"].lower())
+        self.assertIn("market", body["message"].lower())
+
+    def test_watchlist_duplicate_add_reports_existing_identity_without_creating_ambiguous_rows(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+
+        first_resp = self.client.post(
+            "/api/v1/watchlist/items",
+            json={"symbol": "AAPL", "market": "us", "source": "scanner", "notes": "first"},
+        )
+        self.assertEqual(first_resp.status_code, 200, first_resp.text)
+        first_payload = first_resp.json()
+        self.assertTrue(first_payload["created_new"])
+        self.assertIsNone(first_payload["duplicate_of_id"])
+
+        second_resp = self.client.post(
+            "/api/v1/watchlist/items",
+            json={"symbol": "aapl", "market": "us", "source": "scanner", "notes": "second"},
+        )
+        self.assertEqual(second_resp.status_code, 200, second_resp.text)
+        second_payload = second_resp.json()
+        self.assertEqual(second_payload["id"], first_payload["id"])
+        self.assertFalse(second_payload["created_new"])
+        self.assertEqual(second_payload["duplicate_of_id"], first_payload["id"])
+
+        list_resp = self.client.get("/api/v1/watchlist/items")
+        self.assertEqual(list_resp.status_code, 200)
+        self.assertEqual([item["id"] for item in list_resp.json()["items"]], [first_payload["id"]])
+
     def test_watchlist_create_from_scanner_candidate_preserves_research_queue_evidence(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
 
@@ -683,7 +788,13 @@ class WatchlistApiTestCase(unittest.TestCase):
         packet = item["rowResearchPacket"]
         self.assertEqual(packet["symbol"], "600519")
         self.assertEqual(packet["market"], "cn")
-        self.assertEqual(packet["identity"], {"name": None, "exchange": None, "sector": None, "industry": None})
+        self.assertEqual(
+            {key: packet["identity"].get(key) for key in ("name", "exchange", "sector", "industry")},
+            {"name": None, "exchange": None, "sector": None, "industry": None},
+        )
+        self.assertEqual(packet["identity"]["canonicalSymbol"], "600519")
+        self.assertEqual(packet["identity"]["displaySymbol"], "600519")
+        self.assertEqual(packet["identity"]["identityState"], "unresolved")
         self.assertEqual(packet["savedItemSource"], "scanner")
         self.assertEqual(packet["quote"]["state"], "missing")
         self.assertEqual(packet["researchStatus"], "blocked")
@@ -798,6 +909,28 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(item["theme_id"], "crypto_miners")
         self.assertEqual(item["universe_type"], "theme")
         self.assertTrue(item["last_scored_at"])
+
+    def test_watchlist_refresh_without_stored_score_does_not_invent_freshness_timestamp(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+
+        add_resp = self.client.post(
+            "/api/v1/watchlist/items",
+            json={"symbol": "MSFT", "market": "us", "source": "scanner"},
+        )
+        self.assertEqual(add_resp.status_code, 200, add_resp.text)
+        self.assertIsNone(add_resp.json()["last_scored_at"])
+
+        refresh_resp = self.client.post("/api/v1/watchlist/refresh-scores", json={"market": "us"})
+
+        self.assertEqual(refresh_resp.status_code, 200, refresh_resp.text)
+        result = refresh_resp.json()["results"][0]
+        self.assertEqual(result["status"], "unavailable")
+        list_resp = self.client.get("/api/v1/watchlist/items")
+        self.assertEqual(list_resp.status_code, 200)
+        item = list_resp.json()["items"][0]
+        self.assertIsNone(item["last_scored_at"])
+        self.assertEqual(item["score_status"], "unavailable")
+        self.assertEqual(item["research_readiness"]["state"], "unavailable")
 
     def test_watchlist_row_research_packet_includes_scanner_lineage_without_raw_diagnostics(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")

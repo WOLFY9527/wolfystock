@@ -14,6 +14,7 @@ from sqlalchemy import and_, desc, select
 from src.multi_user import OWNERSHIP_SCOPE_USER
 from src.repositories.scanner_repo import ScannerRepository
 from src.services.catalyst_event_exposure import build_catalyst_event_exposures
+from src.services.product_read_model import PRODUCT_READ_MODEL_CONTRACT_VERSION, normalize_product_state
 from src.services.reason_code_vocabulary import classify_reason_code
 from src.services.scanner_evidence_packet import build_scanner_investor_signal
 from src.services.symbol_research_packet_service import build_symbol_research_packet_from_parts as build_symbol_research_packet
@@ -131,11 +132,13 @@ class WatchlistService:
             "notes": str(row.notes) if row.notes else None,
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            "created_new": False,
+            "duplicate_of_id": None,
         }
         payload["intelligence"] = WatchlistService._build_intelligence_payload(payload)
         payload.update(WatchlistService._build_research_context_payload(payload))
         payload["rowResearchPacket"] = WatchlistService._build_row_research_packet(payload)
-        return payload
+        return WatchlistService._sync_identity_and_readiness(payload)
 
     @classmethod
     def _sanitize_score_error(cls, value: Any) -> Optional[str]:
@@ -259,6 +262,138 @@ class WatchlistService:
         return None
 
     @classmethod
+    def _identity_state(cls, *, symbol: Any, market: Any, display_name: Any = None, exchange: Any = None) -> str:
+        precheck = validate_consumer_symbol_precheck(
+            cls._optional_str(symbol),
+            market=cls._optional_str(market),
+        )
+        if precheck.status == "unsupported_market":
+            return "unsupported"
+        if precheck.status in {"invalid_format", "ambiguous", "not_found"}:
+            return "unknown"
+        if precheck.status == "unavailable":
+            return "unavailable"
+        if cls._optional_str(display_name) or cls._optional_str(exchange):
+            return "resolved"
+        return "unresolved"
+
+    @classmethod
+    def _build_symbol_identity_payload(cls, item: Dict[str, Any], packet_identity: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        packet_identity = packet_identity if isinstance(packet_identity, dict) else {}
+        canonical_symbol = cls._optional_str(item.get("symbol")) or cls._optional_str(packet_identity.get("canonicalSymbol")) or ""
+        display_symbol = (
+            cls._optional_str(packet_identity.get("displaySymbol"))
+            or cls._optional_str(item.get("symbol"))
+            or canonical_symbol
+        )
+        market = cls._optional_str(item.get("market")) or cls._optional_str(packet_identity.get("market")) or "unknown"
+        display_name = (
+            cls._optional_str(item.get("name"))
+            or cls._optional_str(packet_identity.get("displayName"))
+            or cls._optional_str(packet_identity.get("name"))
+        )
+        exchange = cls._optional_str(packet_identity.get("exchange"))
+        identity_state = cls._identity_state(
+            symbol=canonical_symbol,
+            market=market,
+            display_name=display_name,
+            exchange=exchange,
+        )
+        return {
+            "canonical_symbol": canonical_symbol,
+            "display_symbol": display_symbol or canonical_symbol,
+            "market": market,
+            "exchange": exchange,
+            "display_name": display_name,
+            "identity_state": identity_state,
+        }
+
+    @staticmethod
+    def _watchlist_readiness_state_from_quality(value: Any) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized == "ready":
+            return "available"
+        if normalized == "stale_or_cached":
+            return "stale"
+        if normalized == "no_evidence":
+            return "unknown"
+        if normalized in {"symbol_unknown", "unsupported_market"}:
+            return "unknown"
+        state = normalize_product_state(normalized)
+        if state in {"available", "partial", "stale", "unavailable", "pending"}:
+            return state
+        return "unknown"
+
+    @classmethod
+    def _build_research_readiness_payload(
+        cls,
+        item: Dict[str, Any],
+        *,
+        identity_state: str,
+    ) -> Dict[str, Any]:
+        data_quality = cls._watchlist_readiness_state_from_quality(item.get("data_quality"))
+        research_state = cls._watchlist_readiness_state_from_quality(item.get("research_status"))
+        evidence_state = cls._watchlist_readiness_state_from_quality(item.get("evidence_status"))
+        freshness_state = cls._watchlist_readiness_state_from_quality(item.get("data_quality"))
+        state = research_state
+        if identity_state in {"unsupported", "unavailable"}:
+            state = "unavailable"
+            freshness_state = "unavailable"
+        elif identity_state == "unknown":
+            state = "unknown"
+        elif "unavailable" in {data_quality, research_state, evidence_state}:
+            state = "unavailable"
+            freshness_state = "unavailable"
+        elif "stale" in {data_quality, research_state, evidence_state}:
+            state = "stale" if research_state == "stale" else "partial"
+            freshness_state = "stale"
+        elif "partial" in {data_quality, research_state, evidence_state}:
+            state = "partial"
+        elif "available" in {data_quality, research_state, evidence_state}:
+            state = "available"
+        else:
+            state = "unknown"
+            freshness_state = "unknown"
+
+        context = item.get("score_status_context") if isinstance(item.get("score_status_context"), dict) else {}
+        return {
+            "contract_version": PRODUCT_READ_MODEL_CONTRACT_VERSION,
+            "state": state,
+            "freshness_state": freshness_state,
+            "identity_state": identity_state,
+            "last_reviewed_at": cls._optional_str(item.get("last_reviewed_at")),
+            "score_freshness_implied": bool(context.get("source_freshness_implied")),
+            "source_authority_implied": bool(context.get("source_authority_implied")),
+        }
+
+    @classmethod
+    def _sync_identity_and_readiness(cls, item: Dict[str, Any]) -> Dict[str, Any]:
+        packet = item.get("rowResearchPacket") if isinstance(item.get("rowResearchPacket"), dict) else {}
+        packet_identity = packet.get("identity") if isinstance(packet.get("identity"), dict) else {}
+        identity = cls._build_symbol_identity_payload(item, packet_identity)
+        readiness = cls._build_research_readiness_payload(item, identity_state=identity["identity_state"])
+        packet_status = str(packet.get("researchStatus") or "").strip().lower()
+        packet_quote = packet.get("quote") if isinstance(packet.get("quote"), dict) else {}
+        quote_state = str(packet_quote.get("state") or "").strip().lower()
+        if packet_status == "partial":
+            readiness["state"] = "partial"
+        elif packet_status == "blocked" and readiness["state"] not in {"unavailable", "unknown"}:
+            readiness["state"] = "partial"
+        elif packet_status == "unknown" and readiness["state"] == "available":
+            readiness["state"] = "unknown"
+        if quote_state == "stale":
+            readiness["freshness_state"] = "stale"
+            if readiness["state"] == "available":
+                readiness["state"] = "partial"
+        elif quote_state in {"missing", "unknown"} and readiness["freshness_state"] == "available":
+            readiness["freshness_state"] = "unknown"
+        item["identity"] = identity
+        item["research_readiness"] = readiness
+        if isinstance(packet, dict):
+            packet["researchReadiness"] = readiness
+        return item
+
+    @classmethod
     def _nested_dict(cls, payload: Any, *keys: str) -> Dict[str, Any]:
         current = payload
         for key in keys:
@@ -379,11 +514,25 @@ class WatchlistService:
         else:
             research_status = data_quality
 
+        identity = cls._build_symbol_identity_payload(item)
+        readiness = cls._build_research_readiness_payload(
+            {
+                **item,
+                "symbol_status": symbol_status,
+                "research_status": research_status,
+                "data_quality": data_quality,
+                "evidence_status": data_quality,
+                "last_reviewed_at": cls._last_reviewed_at(item),
+            },
+            identity_state=identity["identity_state"],
+        )
         return {
+            "identity": identity,
             "symbol_status": symbol_status,
             "research_status": research_status,
             "data_quality": data_quality,
-            "last_reviewed_at": cls._last_reviewed_at(item),
+            "last_reviewed_at": readiness["last_reviewed_at"],
+            "research_readiness": readiness,
             "evidence_status": data_quality,
             "notes_available": cls._optional_str(item.get("notes")) is not None,
             "user_note_present": cls._optional_str(item.get("notes")) is not None,
@@ -409,11 +558,16 @@ class WatchlistService:
                 "noAdviceDisclosure": "Observation-only research packet; no personalized action instruction.",
             }
         identity = packet.get("identity") if isinstance(packet.get("identity"), dict) else {}
+        symbol_identity = cls._build_symbol_identity_payload(item, identity)
         safe_identity = {
             "name": cls._optional_str(item.get("name")) or cls._optional_str(identity.get("name")),
             "exchange": cls._optional_str(identity.get("exchange")),
             "sector": cls._optional_str(identity.get("sector")),
             "industry": cls._optional_str(identity.get("industry")),
+            "canonicalSymbol": symbol_identity["canonical_symbol"],
+            "displaySymbol": symbol_identity["display_symbol"],
+            "displayName": symbol_identity["display_name"],
+            "identityState": symbol_identity["identity_state"],
         }
         run_id = cls._safe_int(item.get("scanner_run_id"))
         rank = cls._safe_int(item.get("scanner_rank"))
@@ -422,6 +576,7 @@ class WatchlistService:
         score_status = cls._optional_str(item.get("score_status")) if any(
             value is not None for value in (run_id, rank, score, last_scored_at)
         ) else None
+        readiness = cls._build_research_readiness_payload(item, identity_state=symbol_identity["identity_state"])
         return {
             "symbol": str(packet.get("symbol") or symbol),
             "market": str(packet.get("market") or market or "unknown"),
@@ -436,6 +591,7 @@ class WatchlistService:
                 "lastScoredAt": last_scored_at,
             },
             "researchStatus": str(packet.get("researchStatus") or "unknown"),
+            "researchReadiness": readiness,
             "missingData": list(packet.get("missingData") or []),
             "nextDataAction": str(packet.get("nextDataAction") or "Review missing data before interpreting this packet."),
             "observationOnly": True,
@@ -1158,6 +1314,7 @@ class WatchlistService:
             )
             item.update(self._build_research_context_payload(item))
             item["rowResearchPacket"] = self._build_row_research_packet(item)
+            self._sync_identity_and_readiness(item)
         return items
 
     def list_items(self, owner_id: str) -> List[Dict[str, Any]]:
@@ -1229,6 +1386,11 @@ class WatchlistService:
         resolved_owner_id = self.db.require_user_id(owner_id)
         normalized_symbol = self._normalize_symbol(symbol)
         normalized_market = self._normalize_market(market)
+        precheck = validate_consumer_symbol_precheck(normalized_symbol, market=normalized_market)
+        if precheck.status == "unsupported_market":
+            raise ValueError(f"unsupported market identity: {precheck.message}")
+        if precheck.status == "invalid_format":
+            raise ValueError(precheck.message)
         normalized_source = str(source or "").strip().lower() or "scanner"
         if normalized_source != "scanner":
             raise ValueError("source must be scanner")
@@ -1253,6 +1415,7 @@ class WatchlistService:
             ).scalar_one_or_none()
 
             if row is None:
+                created_new = True
                 row = UserWatchlistItem(
                     owner_id=resolved_owner_id,
                     symbol=normalized_symbol,
@@ -1261,6 +1424,7 @@ class WatchlistService:
                 )
                 session.add(row)
             else:
+                created_new = False
                 row.source = normalized_source
 
             if normalized_name is not None:
@@ -1290,7 +1454,10 @@ class WatchlistService:
             row.updated_at = datetime.now()
             session.commit()
             session.refresh(row)
-            return self._row_to_dict(row)
+            payload = self._row_to_dict(row)
+            payload["created_new"] = created_new
+            payload["duplicate_of_id"] = None if created_new else int(row.id)
+            return payload
 
     @classmethod
     def _scanner_candidate_score_status(cls, diagnostics: Dict[str, Any], candidate: MarketScannerCandidate) -> str:
@@ -1428,14 +1595,13 @@ class WatchlistService:
                     latest = latest_by_pair.get((str(row.market), str(row.symbol)))
 
                     if latest is None:
-                        row.score_status = "stale"
+                        row.score_status = "unavailable"
                         row.score_error = "No scanner candidate score is available for this symbol."
-                        row.last_scored_at = started_at
                         skipped_count += 1
                         results.append({
                             "symbol": row.symbol,
                             "market": row.market,
-                            "status": "stale",
+                            "status": "unavailable",
                             "message": row.score_error,
                         })
                         continue

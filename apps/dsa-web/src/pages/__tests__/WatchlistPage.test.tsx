@@ -727,12 +727,12 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     const band = await screen.findByTestId('watchlist-conclusion-band');
-    expect(band).toHaveTextContent('数据更新中');
+    expect(band).toHaveTextContent('证据待确认');
     expect(band).toHaveTextContent('需要留意');
     expect(band).toHaveTextContent('观察标的 2');
     expect(band).toHaveTextContent('最新0');
     expect(band).toHaveTextContent('需留意3');
-    expect(band).toHaveTextContent('部分项目需要刷新后再参考。');
+    expect(band).toHaveTextContent('部分项目时效未知，先复核已保存研究上下文。');
   });
 
   it('renders the intelligence command bar, coverage summary, and selected scope controls', async () => {
@@ -2318,6 +2318,135 @@ describe('WatchlistPage', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('source=scanner');
     expect(screen.getByTestId('location')).toHaveTextContent('market=US');
     expect(screen.getByTestId('location')).not.toHaveTextContent(/origin|watchlistItemId|scannerRunId|scannerRank|themeId|universeType|provider|cache|runtime|debug/i);
+  });
+
+  it('keeps page load read-only and shows unknown freshness honestly with canonical handoff context', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [
+        makeItem({
+          id: 51,
+          symbol: 'AAPL',
+          market: 'us',
+          name: 'Apple Inc.',
+          source: 'manual',
+          scannerRunId: null,
+          scannerRank: null,
+          scannerScore: null,
+          lastScoredAt: null,
+          scoreSource: null,
+          scoreStatus: null,
+          intelligence: undefined,
+          rowResearchPacket: {
+            symbol: 'AAPL',
+            market: 'us',
+            identity: {
+              name: 'Apple Inc.',
+              exchange: 'NASDAQ',
+              sector: 'Technology',
+              industry: 'Consumer Electronics',
+              canonicalSymbol: 'AAPL',
+              displaySymbol: 'AAPL',
+              displayName: 'Apple Inc.',
+              identityState: 'resolved',
+            },
+            savedItemSource: 'manual',
+            quote: {
+              state: 'unknown',
+              price: null,
+              changePercent: null,
+              asOf: null,
+            },
+            scannerLineage: {
+              runId: null,
+              rank: null,
+              score: null,
+              status: null,
+              lastScoredAt: null,
+            },
+            researchStatus: 'unknown',
+            researchReadiness: {
+              state: 'unknown',
+              freshnessState: 'unknown',
+              identityState: 'resolved',
+            },
+            missingData: ['quote', 'price_history', 'scanner_score_evidence'],
+            nextDataAction: 'Review stock research context before relying on this saved row.',
+            observationOnly: true,
+            noAdviceDisclosure: 'Observation-only research packet; no personalized action instruction.',
+          } as WatchlistItem['rowResearchPacket'] & {
+            researchReadiness: { state: string; freshnessState: string; identityState: string };
+          },
+          createdAt: '2026-05-01T08:00:00Z',
+          updatedAt: '2026-05-01T08:00:00Z',
+        }),
+      ],
+    });
+    getResearchOverlay.mockResolvedValue({
+      schemaVersion: 'watchlist_research_overlay_v1',
+      overlayState: 'degraded',
+      researchSummary: 'Watchlist entries need evidence review.',
+      researchPriorityQueue: [
+        {
+          symbol: 'AAPL',
+          priorityTier: 'attention',
+          priorityReasonSafeLabel: 'Research context needs attention.',
+          evidenceAge: { state: 'unknown', lastReviewedAt: null },
+          missingEvidence: ['Research context', 'Price-history evidence'],
+          suggestedResearchPath: [
+            {
+              label: 'Stock Structure',
+              route: '/stocks/AAPL/structure-decision?symbol=AAPL&market=US&source=watchlist',
+              section: 'watchlistResearchOverlay',
+              reason: 'Open saved symbol research context.',
+            },
+          ],
+          observationOnly: true,
+        },
+      ],
+      observationOnly: true,
+      decisionGrade: false,
+    });
+
+    renderWatchlist('/watchlist?symbol=aapl&market=us&source=watchlist');
+
+    const row = await screen.findByTestId('watchlist-row-AAPL');
+    expect(row).toHaveTextContent('AAPL');
+    expect(row).toHaveTextContent('Apple Inc.');
+    expect(row).toHaveTextContent('身份已确认');
+    expect(row).toHaveTextContent('时效未知');
+    expect(row).toHaveTextContent('研究状态未知');
+    expect(row).toHaveTextContent('查看个股结构');
+    expect(row).not.toHaveTextContent(/数据更新中|稍后将自动刷新|评分已刷新|已更新|当前焦点|最新1|fake|placeholder/i);
+
+    const panel = await screen.findByTestId('watchlist-research-workspace-flow');
+    expect(within(panel).getByTestId('research-workspace-link-stock-structure')).toHaveAttribute(
+      'href',
+      expect.stringContaining('/stocks/AAPL/structure-decision?'),
+    );
+    expect(within(panel).getByTestId('research-workspace-link-stock-structure')).toHaveAttribute(
+      'href',
+      expect.stringContaining('symbol=AAPL'),
+    );
+    expect(within(panel).getByTestId('research-workspace-link-stock-structure')).toHaveAttribute(
+      'href',
+      expect.stringContaining('market=US'),
+    );
+    expect(within(panel).getByTestId('research-workspace-link-backtest')).toHaveAttribute(
+      'href',
+      expect.stringContaining('/backtest?'),
+    );
+
+    fireEvent.click(within(row).getByRole('button', { name: '查看个股结构 AAPL' }));
+    expect(screen.getByText('stock structure')).toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent('/zh/stocks/AAPL/structure-decision?symbol=AAPL&market=US&source=watchlist');
+
+    expect(listWatchlistItems).toHaveBeenCalledTimes(1);
+    expect(getResearchOverlay).toHaveBeenCalledTimes(1);
+    expect(addWatchlistItem).not.toHaveBeenCalled();
+    expect(refreshScores).not.toHaveBeenCalled();
+    expect(removeWatchlistItem).not.toHaveBeenCalled();
+    expect(runRuleBacktest).not.toHaveBeenCalled();
+    expect(analyzeAsync).not.toHaveBeenCalled();
   });
 
   it('removes a candidate through the delete API and drops the row', async () => {

@@ -957,10 +957,10 @@ function buildWatchlistConclusion(items: WatchlistItem[], language: 'zh' | 'en')
   }
   if (!topItem) {
     return {
-      title: language === 'en' ? 'Data updating' : '数据更新中',
+      title: language === 'en' ? 'Evidence unavailable' : '证据待确认',
       detail: language === 'en'
-        ? 'Some items need a refresh before reference.'
-        : '部分项目需要刷新后再参考。',
+        ? 'Freshness is unknown for some items; review the saved research context before relying on them.'
+        : '部分项目时效未知，先复核已保存研究上下文。',
       freshCount,
       staleCount,
       unknownCount,
@@ -980,8 +980,8 @@ function buildWatchlistConclusion(items: WatchlistItem[], language: 'zh' | 'en')
         : '部分自选股数据暂不可用，已使用最近一次历史观察，不代表实时信号。')
       : unknownCount > 0
         ? (language === 'en'
-          ? 'Data is updating and will refresh shortly.'
-          : '数据更新中，稍后将自动刷新。')
+          ? 'Freshness is unknown; no refresh timestamp is assumed.'
+          : '时效未知，未推断刷新时间。')
         : (language === 'en'
           ? `Review ${symbol}'s refreshed score state and observation summary.`
           : `查看 ${symbol} 的评分刷新状态与观察摘要。`);
@@ -1068,8 +1068,8 @@ function buildWatchRiskNote(item: WatchlistItem, language: 'zh' | 'en'): string 
   }
   if (!hasScannerEvidence(item) && !hasBacktestEvidence(item)) {
     return language === 'en'
-      ? 'Data is updating and will refresh shortly.'
-      : '数据更新中，稍后将自动刷新。';
+      ? 'Freshness is unknown; review saved research context first.'
+      : '时效未知，先复核已保存研究上下文。';
   }
   if (normalizeText(item.intelligence?.strategySimulation?.status).toLowerCase() === 'insufficient_history') {
     return language === 'en'
@@ -1585,7 +1585,11 @@ function buildScannerPath(item: WatchlistItem, language: 'zh' | 'en'): string {
 }
 
 function buildStockStructurePath(item: WatchlistItem, language: 'zh' | 'en'): string {
-  return buildLocalizedPath(`/stocks/${encodeURIComponent(item.symbol)}/structure-decision`, language);
+  return buildResearchWorkspacePath('stock-structure', language, {
+    symbol: item.symbol,
+    market: normalizeMarket(item.market),
+    source: 'watchlist',
+  });
 }
 
 function extractAcceptedTaskId(response: Awaited<ReturnType<typeof analysisApi.analyzeAsync>>): string | null {
@@ -2928,6 +2932,12 @@ const WatchlistPage: React.FC = () => {
                               <span className="text-[11px] text-white/38">{language === 'zh' ? '研究流程' : 'Workflow'}</span>
                               {rowPacketView ? (
                                 <>
+                                  {rowPacketView.identityStateLabel ? (
+                                    <TerminalChip variant={rowPacketView.identityStateVariant}>{rowPacketView.identityStateLabel}</TerminalChip>
+                                  ) : null}
+                                  {rowPacketView.freshnessStateLabel ? (
+                                    <TerminalChip variant={rowPacketView.freshnessStateVariant}>{rowPacketView.freshnessStateLabel}</TerminalChip>
+                                  ) : null}
                                   <TerminalChip variant={rowPacketView.quoteStateVariant}>{rowPacketView.quoteStateLabel}</TerminalChip>
                                   <TerminalChip variant={rowPacketView.researchStatusVariant}>{rowPacketView.researchStatusLabel}</TerminalChip>
                                   <TerminalChip variant={rowPacketView.scannerLineageVariant}>{rowPacketView.scannerLineageLabel}</TerminalChip>
@@ -2947,6 +2957,12 @@ const WatchlistPage: React.FC = () => {
                             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                               {rowPacketView ? (
                                 <>
+                                  {rowPacketView.identityStateLabel ? (
+                                    <TerminalChip variant={rowPacketView.identityStateVariant}>{rowPacketView.identityStateLabel}</TerminalChip>
+                                  ) : null}
+                                  {rowPacketView.freshnessStateLabel ? (
+                                    <TerminalChip variant={rowPacketView.freshnessStateVariant}>{rowPacketView.freshnessStateLabel}</TerminalChip>
+                                  ) : null}
                                   <TerminalChip variant={rowPacketView.researchStatusVariant}>{rowPacketView.researchStatusLabel}</TerminalChip>
                                   <TerminalChip variant={rowPacketView.scannerLineageVariant}>{rowPacketView.scannerLineageLabel}</TerminalChip>
                                   {rowPacketView.noAdviceLabel ? (
