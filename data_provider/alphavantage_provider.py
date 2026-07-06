@@ -3,6 +3,7 @@ import time
 from threading import Lock
 
 import requests
+from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
 
 API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
 BASE_URL = "https://www.alphavantage.co/query"
@@ -18,6 +19,11 @@ def _request(params: dict) -> dict:
     if not API_KEY:
         raise ValueError("ALPHA_VANTAGE_API_KEY 未配置")
 
+    require_uat_provider_dispatch_allowed(
+        provider="alpha_vantage",
+        capability=str(params.get("function") or "market_data"),
+        route="alphavantage_provider._request",
+    )
     params = {**params, "apikey": API_KEY}
     resp = requests.get(BASE_URL, params=params, timeout=15)
     resp.raise_for_status()

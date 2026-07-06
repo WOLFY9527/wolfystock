@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -304,6 +305,8 @@ def test_run_harness_writes_machine_readable_evidence_and_stops_owned_runtime(mo
     assert evidence["contaminationAwareness"]["unrelatedActivityMayContaminateCausalAttribution"] is False
     assert evidence["workbuddyHandoff"]["runId"] == evidence["run"]["runId"]
     assert evidence["workbuddyHandoff"]["runtimeLogWindow"]["path"] == evidence["runtimeLog"]["path"]
+    assert evidence["workbuddyHandoff"]["runtimeLogWindow"]["activityScope"] == "run_scoped_child_stdout_stderr"
+    assert evidence["workbuddyHandoff"]["runtimeLogWindow"]["causalAttribution"]["automatic"] is False
     assert evidence["workbuddyHandoff"]["browserRequirements"]["freshContextSession"] is True
     written = json.loads(Path(evidence["evidencePath"]).read_text(encoding="utf-8"))
     assert written["contract"] == "wolfystock_uat_runtime_harness_v1"
@@ -452,9 +455,16 @@ def test_preflight_cli_returns_machine_readable_failure_for_missing_evidence(
 def test_safe_stop_rejects_wrong_pid_cwd_identity(monkeypatch, tmp_path: Path) -> None:
     evidence_path = tmp_path / "evidence.json"
     evidence_path.write_text(
-        json.dumps({"run": {"pid": 43210, "cwd": str(tmp_path.resolve()), "runId": "uat-run"}}),
+        json.dumps(
+            {
+                "run": {"pid": 43210, "cwd": str(tmp_path.resolve()), "runId": "uat-run"},
+                "runtime": {"ownedByHarness": True, "processStartTime": "Sun Jul  5 00:00:00 2026"},
+            }
+        ),
         encoding="utf-8",
     )
+    monkeypatch.setattr(harness, "pid_is_alive", lambda _pid: True)
+    monkeypatch.setattr(harness, "process_start_time", lambda _pid: "Sun Jul  5 00:00:00 2026")
     monkeypatch.setattr(harness, "process_cwd", lambda _pid: "/tmp/other")
     monkeypatch.setattr(harness.os, "kill", lambda *_args, **_kwargs: pytest.fail("wrong cwd process must not be killed"))
 
@@ -468,7 +478,12 @@ def test_safe_stop_rejects_wrong_pid_cwd_identity(monkeypatch, tmp_path: Path) -
 def test_safe_stop_records_already_absent_without_killing(monkeypatch, tmp_path: Path) -> None:
     evidence_path = tmp_path / "evidence.json"
     evidence_path.write_text(
-        json.dumps({"run": {"pid": 43210, "cwd": str(tmp_path.resolve()), "runId": "uat-run"}}),
+        json.dumps(
+            {
+                "run": {"pid": 43210, "cwd": str(tmp_path.resolve()), "runId": "uat-run"},
+                "runtime": {"ownedByHarness": True, "processStartTime": "Sun Jul  5 00:00:00 2026"},
+            }
+        ),
         encoding="utf-8",
     )
     monkeypatch.setattr(harness, "pid_is_alive", lambda _pid: False)
@@ -480,6 +495,108 @@ def test_safe_stop_records_already_absent_without_killing(monkeypatch, tmp_path:
     assert result["reasonCode"] == "runtime_already_absent"
 
 
+def test_safe_stop_rejects_not_harness_owned_without_killing(monkeypatch, tmp_path: Path) -> None:
+    evidence_path = tmp_path / "evidence.json"
+    evidence_path.write_text(
+        json.dumps(
+            {
+                "run": {"pid": 43210, "cwd": str(tmp_path.resolve()), "runId": "uat-run"},
+                "runtime": {"ownedByHarness": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(harness.os, "kill", lambda *_args, **_kwargs: pytest.fail("unowned process must not be killed"))
+
+    result = harness.stop_runtime_from_evidence(evidence_path)
+
+    assert result["status"] == "rejected"
+    assert result["reasonCode"] == "not_harness_owned"
+
+
+def test_safe_stop_rejects_reused_pid_without_killing(monkeypatch, tmp_path: Path) -> None:
+    evidence_path = tmp_path / "evidence.json"
+    evidence_path.write_text(
+        json.dumps(
+            {
+                "run": {"pid": 43210, "cwd": str(tmp_path.resolve()), "runId": "uat-run"},
+                "runtime": {
+                    "ownedByHarness": True,
+                    "processStartTime": "Sun Jul  5 00:00:00 2026",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(harness, "pid_is_alive", lambda _pid: True)
+    monkeypatch.setattr(harness, "process_start_time", lambda _pid: "Sun Jul  5 00:01:00 2026")
+    monkeypatch.setattr(harness.os, "kill", lambda *_args, **_kwargs: pytest.fail("reused pid must not be killed"))
+
+    result = harness.stop_runtime_from_evidence(evidence_path)
+
+    assert result["status"] == "rejected"
+    assert result["reasonCode"] == "pid_reused"
+
+
+def test_safe_stop_rejects_wrong_port_owner_without_killing(monkeypatch, tmp_path: Path) -> None:
+    evidence_path = tmp_path / "evidence.json"
+    evidence_path.write_text(
+        json.dumps(
+            {
+                "run": {"pid": 43210, "cwd": str(tmp_path.resolve()), "runId": "uat-run", "port": 8123},
+                "runtime": {
+                    "ownedByHarness": True,
+                    "processStartTime": "Sun Jul  5 00:00:00 2026",
+                    "listener": {"host": "127.0.0.1", "port": 8123},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(harness, "pid_is_alive", lambda _pid: True)
+    monkeypatch.setattr(harness, "process_start_time", lambda _pid: "Sun Jul  5 00:00:00 2026")
+    monkeypatch.setattr(harness, "process_cwd", lambda _pid: str(tmp_path.resolve()))
+    monkeypatch.setattr(
+        harness,
+        "find_port_owner",
+        lambda _host, _port: harness.PortOwner(pid=99999, cwd="/tmp/other", command="python other.py"),
+    )
+    monkeypatch.setattr(harness.os, "kill", lambda *_args, **_kwargs: pytest.fail("wrong port owner must not be killed"))
+
+    result = harness.stop_runtime_from_evidence(evidence_path)
+
+    assert result["status"] == "rejected"
+    assert result["reasonCode"] == "pid_port_owner_mismatch"
+    assert result["observedPortOwner"]["pid"] == 99999
+
+
+def test_safe_stop_rejects_missing_port_owner_without_killing(monkeypatch, tmp_path: Path) -> None:
+    evidence_path = tmp_path / "evidence.json"
+    evidence_path.write_text(
+        json.dumps(
+            {
+                "run": {"pid": 43210, "cwd": str(tmp_path.resolve()), "runId": "uat-run", "port": 8124},
+                "runtime": {
+                    "ownedByHarness": True,
+                    "processStartTime": "Sun Jul  5 00:00:00 2026",
+                    "listener": {"host": "127.0.0.1", "port": 8124},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(harness, "pid_is_alive", lambda _pid: True)
+    monkeypatch.setattr(harness, "process_start_time", lambda _pid: "Sun Jul  5 00:00:00 2026")
+    monkeypatch.setattr(harness, "process_cwd", lambda _pid: str(tmp_path.resolve()))
+    monkeypatch.setattr(harness, "find_port_owner", lambda _host, _port: None)
+    monkeypatch.setattr(harness.os, "kill", lambda *_args, **_kwargs: pytest.fail("missing port owner must not be killed"))
+
+    result = harness.stop_runtime_from_evidence(evidence_path)
+
+    assert result["status"] == "rejected"
+    assert result["reasonCode"] == "pid_not_port_owner"
+
+
 def test_stop_owned_runtime_reports_already_absent() -> None:
     process = _AlreadyAbsentProcess()
 
@@ -488,6 +605,114 @@ def test_stop_owned_runtime_reports_already_absent() -> None:
     assert result["status"] == "absent"
     assert process.terminated is False
     assert process.killed is False
+
+
+def test_start_runtime_captures_child_stdout_and_stderr_in_run_scoped_log(tmp_path: Path) -> None:
+    main_py = tmp_path / "main.py"
+    main_py.write_text(
+        "import sys\n"
+        "print('child stdout current run')\n"
+        "print('child stderr current run', file=sys.stderr)\n",
+        encoding="utf-8",
+    )
+    context = harness.create_run_context(tmp_path / "evidence")
+    harness.build_runtime_log(context)
+
+    process = harness.start_runtime(
+        tmp_path,
+        host="127.0.0.1",
+        port=8125,
+        python_bin=sys.executable,
+        run_log_path=context.run_log_path,
+    )
+    process.wait(timeout=10)
+    harness.stop_owned_runtime(process)
+    runtime_log = harness.build_runtime_log(context, process)
+
+    text = context.run_log_path.read_text(encoding="utf-8")
+    assert f"runId={context.run_id}" in text
+    assert f"pid={process.pid}" in text
+    assert "child stdout current run" in text
+    assert "child stderr current run" in text
+    assert runtime_log["activityScope"] == "child_stdout_stderr_for_run"
+
+
+def test_run_log_file_is_current_child_stream_only(tmp_path: Path) -> None:
+    first_repo = tmp_path / "first"
+    second_repo = tmp_path / "second"
+    first_repo.mkdir()
+    second_repo.mkdir()
+    (first_repo / "main.py").write_text("print('first child stream')\n", encoding="utf-8")
+    (second_repo / "main.py").write_text("print('second child stream')\n", encoding="utf-8")
+    evidence_dir = tmp_path / "evidence"
+    first_context = harness.create_run_context(evidence_dir)
+    second_context = harness.create_run_context(evidence_dir)
+
+    first_process = harness.start_runtime(
+        first_repo,
+        host="127.0.0.1",
+        port=8126,
+        python_bin=sys.executable,
+        run_log_path=first_context.run_log_path,
+    )
+    second_process = harness.start_runtime(
+        second_repo,
+        host="127.0.0.1",
+        port=8127,
+        python_bin=sys.executable,
+        run_log_path=second_context.run_log_path,
+    )
+    first_process.wait(timeout=10)
+    second_process.wait(timeout=10)
+    harness.stop_owned_runtime(first_process)
+    harness.stop_owned_runtime(second_process)
+
+    first_text = first_context.run_log_path.read_text(encoding="utf-8")
+    second_text = second_context.run_log_path.read_text(encoding="utf-8")
+    assert "first child stream" in first_text
+    assert "second child stream" not in first_text
+    assert "second child stream" in second_text
+    assert "first child stream" not in second_text
+
+
+def test_preflight_cli_missing_evidence_does_not_import_heavy_runtime_modules(tmp_path: Path) -> None:
+    missing = tmp_path / "missing-evidence.json"
+    code = _import_guard_script(
+        ["scripts/uat_runtime_harness.py", "--preflight", "--evidence-path", str(missing), "--json"]
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=Path(__file__).resolve().parents[2],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 1
+    assert "blocked import" not in result.stderr
+    assert "evidence_unreadable" in result.stdout
+
+
+def test_stop_from_evidence_cli_missing_evidence_does_not_import_heavy_runtime_modules(tmp_path: Path) -> None:
+    missing = tmp_path / "missing-evidence.json"
+    code = _import_guard_script(
+        ["scripts/uat_runtime_harness.py", "--stop-from-evidence", "--evidence-path", str(missing), "--json"]
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=Path(__file__).resolve().parents[2],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 1
+    assert "blocked import" not in result.stderr
+    assert "evidence_unreadable" in result.stdout
 
 
 def test_direct_script_help_entrypoint_runs_from_repo_root() -> None:
@@ -502,3 +727,28 @@ def test_direct_script_help_entrypoint_runs_from_repo_root() -> None:
 
     assert result.returncode == 0
     assert "deterministic local UAT runtime" in result.stdout
+
+
+def _import_guard_script(argv: list[str]) -> str:
+    return (
+        "import builtins, json, runpy, sys\n"
+        f"sys.argv = {argv!r}\n"
+        "blocked = (\n"
+        "    'pandas',\n"
+        "    'src.storage',\n"
+        "    'src.repositories.auth_repo',\n"
+        "    'scripts.seed_uat_consumer_test_accounts',\n"
+        "    'scripts.uat_fresh_build_verifier',\n"
+        "    'scripts.uat_runtime_smoke_pack',\n"
+        ")\n"
+        "orig_import = builtins.__import__\n"
+        "def guarded_import(name, *args, **kwargs):\n"
+        "    if any(name == item or name.startswith(item + '.') for item in blocked):\n"
+        "        raise AssertionError('blocked import: ' + name)\n"
+        "    return orig_import(name, *args, **kwargs)\n"
+        "builtins.__import__ = guarded_import\n"
+        "try:\n"
+        "    runpy.run_path(sys.argv[0], run_name='__main__')\n"
+        "except SystemExit as exc:\n"
+        "    raise SystemExit(exc.code)\n"
+    )

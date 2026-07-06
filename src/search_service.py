@@ -38,6 +38,10 @@ from src.config import (
     normalize_news_strategy_profile,
     resolve_news_window_days,
 )
+from src.services.uat_provider_isolation import (
+    check_uat_provider_dispatch,
+    require_uat_provider_dispatch_allowed,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +62,12 @@ _SEARCH_TRANSIENT_EXCEPTIONS = (
 )
 def _post_with_retry(url: str, *, headers: Dict[str, str], json: Dict[str, Any], timeout: int) -> requests.Response:
     """POST with retry on transient SSL/network errors."""
+    provider = _provider_from_url(url)
+    require_uat_provider_dispatch_allowed(
+        provider=provider,
+        capability="search",
+        route="search_service._post_with_retry",
+    )
     return requests.post(url, headers=headers, json=json, timeout=timeout)
 
 
@@ -72,7 +82,34 @@ def _get_with_retry(
     url: str, *, headers: Dict[str, str], params: Dict[str, Any], timeout: int
 ) -> requests.Response:
     """GET with retry on transient SSL/network errors."""
+    provider = _provider_from_url(url)
+    require_uat_provider_dispatch_allowed(
+        provider=provider,
+        capability="search",
+        route="search_service._get_with_retry",
+    )
     return requests.get(url, headers=headers, params=params, timeout=timeout)
+
+
+def _provider_from_url(url: str) -> str:
+    lowered = str(url or "").lower()
+    if "finnhub.io" in lowered:
+        return "finnhub"
+    if "gnews.io" in lowered:
+        return "gnews"
+    if "searx" in lowered:
+        return "searxng"
+    if "tavily" in lowered:
+        return "tavily"
+    if "brave.com" in lowered:
+        return "brave"
+    if "serpapi" in lowered:
+        return "serpapi"
+    if "bocha" in lowered:
+        return "bocha"
+    if "minimax" in lowered:
+        return "minimax"
+    return "external_search"
 
 
 _URL_CONTENT_CACHE_TTL_SECONDS = 600
@@ -159,6 +196,14 @@ def fetch_url_content(url: str, timeout: int = 5) -> str:
     """
     normalized_url = str(url or "").strip()
     if not normalized_url:
+        return ""
+
+    dispatch = check_uat_provider_dispatch(
+        provider="url_content",
+        capability="search_content_fetch",
+        route="search_service.fetch_url_content",
+    )
+    if not dispatch.allowed:
         return ""
 
     cache_key = _normalize_url_content_cache_key(normalized_url)
@@ -311,6 +356,22 @@ class BaseSearchProvider(ABC):
         Returns:
             SearchResponse 对象
         """
+        dispatch = check_uat_provider_dispatch(
+            provider=self._name,
+            capability="search",
+            route=f"{self.__class__.__name__}.search",
+        )
+        if not dispatch.allowed:
+            return SearchResponse(
+                query=query,
+                results=[],
+                provider=self._name,
+                success=False,
+                error_message=dispatch.reason_code,
+                attempts=[dispatch.to_trace()],
+                diagnostics={"attempted_providers": 0, "blocked_by_uat": 1},
+            )
+
         api_key = self._get_next_key()
         if not api_key:
             return SearchResponse(
@@ -462,6 +523,22 @@ class TavilySearchProvider(BaseSearchProvider):
         """执行 Tavily 搜索，可按调用方选择是否启用新闻 topic。"""
         if topic is None:
             return super().search(query, max_results=max_results, days=days)
+
+        dispatch = check_uat_provider_dispatch(
+            provider=self._name,
+            capability="search",
+            route=f"{self.__class__.__name__}.search",
+        )
+        if not dispatch.allowed:
+            return SearchResponse(
+                query=query,
+                results=[],
+                provider=self._name,
+                success=False,
+                error_message=dispatch.reason_code,
+                attempts=[dispatch.to_trace()],
+                diagnostics={"attempted_providers": 0, "blocked_by_uat": 1},
+            )
 
         api_key = self._get_next_key()
         if not api_key:
@@ -1378,7 +1455,7 @@ class BraveSearchProvider(BaseSearchProvider):
             }
 
             # 执行搜索（GET 请求）
-            response = requests.get(
+            response = _get_with_retry(
                 self.API_ENDPOINT,
                 headers=headers,
                 params=params,
@@ -1646,6 +1723,11 @@ class SearXNGSearchProvider(BaseSearchProvider):
                     return stale_urls
 
             try:
+                require_uat_provider_dispatch_allowed(
+                    provider="searxng",
+                    capability="search_public_instance_discovery",
+                    route="SearXNGSearchProvider._get_public_instances",
+                )
                 response = requests.get(
                     cls.PUBLIC_INSTANCES_URL,
                     timeout=cls.PUBLIC_INSTANCES_TIMEOUT_SECONDS,
@@ -1721,6 +1803,11 @@ class SearXNGSearchProvider(BaseSearchProvider):
                 "pageno": 1,
             }
 
+            require_uat_provider_dispatch_allowed(
+                provider="searxng",
+                capability="search",
+                route="SearXNGSearchProvider._do_search",
+            )
             request_get = _get_with_retry if retry_enabled else requests.get
             response = request_get(search_url, headers=headers, params=params, timeout=timeout)
 
@@ -1835,6 +1922,23 @@ class SearXNGSearchProvider(BaseSearchProvider):
     def search(self, query: str, max_results: int = 5, days: int = 7) -> SearchResponse:
         """Execute SearXNG search with instance rotation and per-request failover."""
         start_time = time.time()
+        dispatch = check_uat_provider_dispatch(
+            provider=self.name,
+            capability="search",
+            route="SearXNGSearchProvider.search",
+        )
+        if not dispatch.allowed:
+            return SearchResponse(
+                query=query,
+                results=[],
+                provider=self.name,
+                success=False,
+                error_message=dispatch.reason_code,
+                search_time=time.time() - start_time,
+                attempts=[dispatch.to_trace()],
+                diagnostics={"attempted_providers": 0, "blocked_by_uat": 1},
+            )
+
         if self._base_urls:
             candidates = self._rotate_candidates(
                 self._base_urls,
@@ -2124,6 +2228,8 @@ class SearchService:
         text = str(reason or "").strip().lower()
         if not text:
             return None
+        if "uat_no_live_providers" in text or "no-live-provider" in text:
+            return "uat_no_live_providers"
         if "timeout" in text or "timed out" in text:
             return "provider_timeout"
         if "invalid" in text or "parse" in text or "json" in text:
@@ -2601,12 +2707,17 @@ class SearchService:
             return filtered_empty
         
         # 所有引擎都失败
+        aggregate_error = (
+            "uat_no_live_providers"
+            if any(item.get("reason") == "uat_no_live_providers" for item in attempt_trace)
+            else "所有搜索引擎都不可用或搜索失败"
+        )
         return SearchResponse(
             query=query,
             results=[],
             provider="None",
             success=False,
-            error_message="所有搜索引擎都不可用或搜索失败",
+            error_message=aggregate_error,
             attempts=attempt_trace,
             diagnostics=diagnostics,
         )

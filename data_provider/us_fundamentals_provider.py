@@ -13,6 +13,7 @@ import pandas as pd
 import requests
 
 from src.config import get_config
+from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,17 @@ def _first_key(*config_attrs: str) -> Optional[str]:
 
 
 def _request_json(url: str, *, params: Dict[str, Any], headers: Optional[Dict[str, str]] = None, timeout: int = 15) -> Any:
+    provider = "external_fundamentals"
+    lowered = str(url or "").lower()
+    if "finnhub.io" in lowered:
+        provider = "finnhub"
+    elif "financialmodelingprep.com" in lowered:
+        provider = "fmp"
+    require_uat_provider_dispatch_allowed(
+        provider=provider,
+        capability="fundamentals_or_quote",
+        route="us_fundamentals_provider._request_json",
+    )
     response = requests.get(url, params=params, headers=headers or {}, timeout=timeout)
     response.raise_for_status()
     payload = response.json()
@@ -188,6 +200,11 @@ def get_yfinance_fundamentals(symbol: str) -> Dict[str, Any]:
     symbol = (symbol or "").strip().upper()
     if not symbol:
         return {}
+    require_uat_provider_dispatch_allowed(
+        provider="yfinance",
+        capability="fundamentals",
+        route="us_fundamentals_provider.get_yfinance_fundamentals",
+    )
 
     cache_key = f"yf:fundamentals:{symbol}"
     cached = _cache_get(cache_key, _FUNDAMENTALS_TTL_SECONDS)
@@ -280,6 +297,11 @@ def get_yfinance_fundamentals(symbol: str) -> Dict[str, Any]:
 
 
 def get_yfinance_quarterly_financials(symbol: str, max_quarters: int = 6) -> List[Dict[str, Any]]:
+    require_uat_provider_dispatch_allowed(
+        provider="yfinance",
+        capability="fundamentals",
+        route="us_fundamentals_provider.get_yfinance_quarterly_financials",
+    )
     symbol = (symbol or "").strip().upper()
     if not symbol:
         return []

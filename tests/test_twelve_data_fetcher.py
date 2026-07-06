@@ -3,11 +3,13 @@
 
 from __future__ import annotations
 
+import os
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from data_provider.realtime_types import RealtimeSource
 from data_provider.twelve_data_fetcher import TwelveDataFetcher
+from src.services.uat_provider_isolation import UatProviderIsolationError
 
 
 class _MockResponse:
@@ -24,6 +26,16 @@ class _MockResponse:
 
 
 class TwelveDataFetcherTestCase(unittest.TestCase):
+    def test_uat_no_live_providers_blocks_direct_quote_before_http(self) -> None:
+        session = Mock()
+        fetcher = TwelveDataFetcher(api_key="td-key", session=session)
+
+        with patch.dict(os.environ, {"WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS": "true"}, clear=False):
+            with self.assertRaises(UatProviderIsolationError):
+                fetcher.get_realtime_quote("HK00700")
+
+        session.get.assert_not_called()
+
     def test_get_realtime_quote_builds_hk_quote(self) -> None:
         session = Mock()
         session.get.return_value = _MockResponse(

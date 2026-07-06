@@ -57,6 +57,7 @@ from src.services.llm_instrumentation import (
     emit_llm_event,
     provider_from_model,
 )
+from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -886,6 +887,11 @@ class GeminiAnalyzer:
         attempt_trace: List[Dict[str, Any]] = []
         effective_system_prompt = system_prompt or self.SYSTEM_PROMPT
         for index, model in enumerate(models_to_try):
+            require_uat_provider_dispatch_allowed(
+                provider=provider_from_model(model),
+                capability="llm",
+                route="GeminiAnalyzer._call_litellm",
+            )
             attempt_started = time.perf_counter()
             event_labels = {
                 "call_type": call_type,

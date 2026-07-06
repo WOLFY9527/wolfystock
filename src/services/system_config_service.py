@@ -30,6 +30,8 @@ from src.config import (
     resolve_llm_channel_protocol,
     setup_env,
 )
+from src.services.llm_instrumentation import provider_from_model
+from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
 from src.core.config_manager import ConfigManager
 from src.core.config_registry import (
     build_schema_response,
@@ -560,6 +562,11 @@ class SystemConfigService:
             configure_litellm_cost_map_for_runtime()
             import litellm
 
+            require_uat_provider_dispatch_allowed(
+                provider=provider_from_model(resolved_model),
+                capability="llm",
+                route="SystemConfigService.test_llm_connection",
+            )
             started_at = time.perf_counter()
             response = litellm.completion(**call_kwargs)
             latency_ms = int((time.perf_counter() - started_at) * 1000)

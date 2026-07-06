@@ -12,6 +12,7 @@ import requests
 
 from data_provider.alpaca_fetcher import AlpacaFetcher
 from data_provider.realtime_types import RealtimeSource
+from src.services.uat_provider_isolation import UatProviderIsolationError
 
 
 class _MockResponse:
@@ -28,6 +29,20 @@ class _MockResponse:
 
 
 class AlpacaFetcherTestCase(unittest.TestCase):
+    def test_uat_no_live_providers_blocks_direct_snapshot_before_http(self) -> None:
+        session = Mock()
+        fetcher = AlpacaFetcher(
+            api_key_id="alpaca-id",
+            secret_key="alpaca-secret",
+            session=session,
+        )
+
+        with patch.dict(os.environ, {"WOLFYSTOCK_UAT_NO_LIVE_PROVIDERS": "true"}, clear=False):
+            with self.assertRaises(UatProviderIsolationError):
+                fetcher.get_realtime_quote("AAPL")
+
+        session.get.assert_not_called()
+
     def test_get_realtime_quote_builds_quote_from_snapshot(self) -> None:
         session = Mock()
         session.get.return_value = _MockResponse(

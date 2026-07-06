@@ -24,6 +24,8 @@ from tenacity import (
     before_sleep_log,
 )
 
+from src.services.uat_provider_isolation import require_uat_provider_dispatch_allowed
+
 logger = logging.getLogger(__name__)
 
 _TRANSIENT_EXCEPTIONS = (
@@ -46,6 +48,11 @@ _REQUEST_TIMEOUT = 8  # seconds
 def _get_with_retry(url: str, *, headers: Dict[str, str], params: Optional[Dict[str, Any]] = None,
                     timeout: int = _REQUEST_TIMEOUT) -> requests.Response:
     """GET with retry on transient network errors."""
+    require_uat_provider_dispatch_allowed(
+        provider="adanos_social_sentiment",
+        capability="social_sentiment",
+        route="social_sentiment_service._get_with_retry",
+    )
     return requests.get(url, headers=headers, params=params or {}, timeout=timeout)
 
 
