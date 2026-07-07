@@ -142,12 +142,20 @@ export function TerminalMetric({
 }
 
 type TerminalButtonVariant = 'primary' | 'secondary' | 'compact' | 'danger';
+type TerminalButtonIntent = 'write' | 'passive';
 
 const TERMINAL_BUTTON_CLASSES: Record<TerminalButtonVariant, string> = {
   primary: 'border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] text-[color:var(--theme-button-primary-text)] font-medium px-5 py-2.5 rounded-md transition-colors hover:bg-[var(--sage-deep)] disabled:opacity-50 disabled:cursor-not-allowed',
   secondary: 'border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)] hover:border-[color:var(--wolfy-divider)] px-4 py-2.5 rounded-md transition-colors',
   compact: 'border border-[color:var(--wolfy-border-subtle)] bg-transparent text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)] px-3 py-1.5 rounded-md text-xs transition-colors',
   danger: 'border border-[color:color-mix(in_srgb,var(--wolfy-market-down)_34%,transparent)] bg-transparent text-[color:var(--wolfy-market-down)] hover:bg-[color:color-mix(in_srgb,var(--wolfy-market-down)_10%,transparent)] px-3 py-1.5 rounded-md text-xs transition-colors',
+};
+
+const TERMINAL_BUTTON_INTENT: Record<TerminalButtonVariant, TerminalButtonIntent> = {
+  primary: 'write',
+  secondary: 'passive',
+  compact: 'passive',
+  danger: 'write',
 };
 
 export const TerminalButton = /* @__PURE__ */ ({
@@ -165,7 +173,13 @@ export const TerminalButton = /* @__PURE__ */ ({
     ref={ref}
     type={type}
     data-terminal-primitive="button"
-    className={cn('inline-flex max-w-full items-center justify-center gap-2 whitespace-nowrap', TERMINAL_BUTTON_CLASSES[variant], className)}
+    data-action-intent={TERMINAL_BUTTON_INTENT[variant]}
+    data-control-state={props.disabled ? 'disabled' : 'ready'}
+    className={cn(
+      'inline-flex max-w-full items-center justify-center gap-2 whitespace-nowrap active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] disabled:pointer-events-none',
+      TERMINAL_BUTTON_CLASSES[variant],
+      className,
+    )}
     {...props}
   >
     {children}

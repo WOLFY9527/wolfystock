@@ -1,7 +1,33 @@
 import { getConsumerStatusLabel, mapConsumerStatusText, normalizeConsumerStatusToken } from './consumerStatusLabels';
+import { createConsumerDataQualityViewModel, type ConsumerDataQualityInput } from './consumerDataQualityViewModel';
 import { sanitizeUserFacingDataIssue } from './userFacingDataIssues';
 
 export type ConsumerPresentationLocale = 'zh' | 'en';
+export type ConsumerPresentationDataState =
+  | 'available'
+  | 'partial'
+  | 'stale'
+  | 'unavailable'
+  | 'insufficient'
+  | 'blocked'
+  | 'initializing'
+  | 'error';
+
+export type ConsumerPresentationStateTone =
+  | 'positive'
+  | 'neutral'
+  | 'warning'
+  | 'danger'
+  | 'muted';
+
+export type ConsumerPresentationStateView = {
+  state: ConsumerPresentationDataState;
+  label: string;
+  tone: ConsumerPresentationStateTone;
+  message: string;
+  asOf?: string;
+  updatedAt?: string;
+};
 
 type PresentationCopy = {
   zh: string;
@@ -11,6 +37,41 @@ type PresentationCopy = {
 const FALLBACK_COPY: Record<ConsumerPresentationLocale, string> = {
   zh: '数据不足，结论仅供观察',
   en: 'Data insufficient; observe only',
+};
+
+const DATA_STATE_COPY: Record<ConsumerPresentationDataState, Record<ConsumerPresentationLocale, { label: string; message: string; tone: ConsumerPresentationStateTone }>> = {
+  available: {
+    zh: { label: '可用', message: '当前证据可用于研究观察。', tone: 'positive' },
+    en: { label: 'Available', message: 'Current evidence is available for research observation.', tone: 'positive' },
+  },
+  partial: {
+    zh: { label: '部分可用', message: '部分证据可用，结论范围需要收窄。', tone: 'warning' },
+    en: { label: 'Partial', message: 'Some evidence is available; keep the conclusion narrow.', tone: 'warning' },
+  },
+  stale: {
+    zh: { label: '已延迟', message: '证据时效受限，先按观察处理。', tone: 'warning' },
+    en: { label: 'Stale', message: 'Freshness is limited; treat this as observation.', tone: 'warning' },
+  },
+  unavailable: {
+    zh: { label: '不可用', message: '当前证据暂不可用。', tone: 'muted' },
+    en: { label: 'Unavailable', message: 'Current evidence is unavailable.', tone: 'muted' },
+  },
+  insufficient: {
+    zh: { label: '证据不足', message: '当前证据不足，暂不扩大结论。', tone: 'warning' },
+    en: { label: 'Insufficient', message: 'Evidence is insufficient; do not widen the conclusion.', tone: 'warning' },
+  },
+  blocked: {
+    zh: { label: '已阻断', message: '研究边界已阻断，暂不形成结论。', tone: 'danger' },
+    en: { label: 'Blocked', message: 'The research boundary is blocked; no conclusion is formed.', tone: 'danger' },
+  },
+  initializing: {
+    zh: { label: '初始化中', message: '数据正在初始化，等待当前更新完成。', tone: 'neutral' },
+    en: { label: 'Initializing', message: 'Data is initializing; wait for the current update to finish.', tone: 'neutral' },
+  },
+  error: {
+    zh: { label: '读取异常', message: '数据读取异常，请稍后重试。', tone: 'danger' },
+    en: { label: 'Error', message: 'Data read failed; try again later.', tone: 'danger' },
+  },
 };
 
 const INTERNAL_COPY_BY_KEY: Record<string, PresentationCopy> = {
@@ -260,4 +321,67 @@ export function consumerPresentationRouteHint(locale: ConsumerPresentationLocale
 
 export function consumerPresentationArtifactVersionLabel(locale: ConsumerPresentationLocale): string {
   return INTERNAL_COPY_BY_KEY.scenario_evidence_pack_v1[locale];
+}
+
+function collectPresentationSignals(value: unknown, output: string[] = []): string[] {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized) output.push(normalized);
+    return output;
+  }
+  if (typeof value === 'boolean' || typeof value === 'number') {
+    return output;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectPresentationSignals(item, output));
+    return output;
+  }
+  if (value && typeof value === 'object') {
+    for (const [key, nested] of Object.entries(value)) {
+      output.push(key.toLowerCase());
+      collectPresentationSignals(nested, output);
+    }
+  }
+  return output;
+}
+
+function hasPresentationSignal(signals: readonly string[], markers: readonly string[]): boolean {
+  return signals.some((signal) => markers.some((marker) => signal.includes(marker)));
+}
+
+export function consumerPresentationDataState(
+  input: ConsumerDataQualityInput | null | undefined,
+  locale: ConsumerPresentationLocale,
+): ConsumerPresentationStateView {
+  const qualityView = createConsumerDataQualityViewModel(input ?? {});
+  const signals = collectPresentationSignals(input ?? {});
+  let state: ConsumerPresentationDataState;
+
+  if (hasPresentationSignal(signals, ['error', 'failed', 'exception'])) {
+    state = 'error';
+  } else if (qualityView.status === 'UPDATING' || hasPresentationSignal(signals, ['initializing', 'loading', 'pending', 'refreshing'])) {
+    state = 'initializing';
+  } else if (qualityView.status === 'PAUSED' || hasPresentationSignal(signals, ['blocked', 'deny', 'denied', 'gate_blocked'])) {
+    state = 'blocked';
+  } else if (qualityView.status === 'INSUFFICIENT' || hasPresentationSignal(signals, ['insufficient'])) {
+    state = 'insufficient';
+  } else if (qualityView.status === 'UNAVAILABLE' || hasPresentationSignal(signals, ['unavailable', 'missing', 'empty'])) {
+    state = 'unavailable';
+  } else if (qualityView.status === 'PARTIAL' || qualityView.status === 'OBSERVATION_ONLY' || hasPresentationSignal(signals, ['partial', 'limited'])) {
+    state = 'partial';
+  } else if (qualityView.status === 'DELAYED' || qualityView.freshnessCategory === 'STALE' || qualityView.freshnessCategory === 'DELAYED') {
+    state = 'stale';
+  } else {
+    state = 'available';
+  }
+
+  const copy = DATA_STATE_COPY[state][locale];
+  return {
+    state,
+    label: copy.label,
+    tone: copy.tone,
+    message: copy.message,
+    ...(qualityView.asOf ? { asOf: qualityView.asOf } : {}),
+    ...(qualityView.updatedAt ? { updatedAt: qualityView.updatedAt } : {}),
+  };
 }

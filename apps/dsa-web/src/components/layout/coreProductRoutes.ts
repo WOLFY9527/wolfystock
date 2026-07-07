@@ -127,3 +127,56 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
 
 export const PRIMARY_CONSUMER_ROUTES = CORE_PRODUCT_ROUTES.filter((route) => route.primaryNav);
 export const SECONDARY_CONSUMER_ROUTES = CORE_PRODUCT_ROUTES.filter((route) => !route.primaryNav);
+
+export function normalizeConsumerRoutePath(pathname: string): string {
+  const withoutQuery = String(pathname || '/').split(/[?#]/, 1)[0] || '/';
+  const normalized = withoutQuery.replace(/\/+$/, '') || '/';
+  return normalized === '/' ? normalized : normalized.toLowerCase();
+}
+
+function stripConsumerLocale(pathname: string): string {
+  const normalized = normalizeConsumerRoutePath(pathname);
+  const match = normalized.match(/^\/(zh|en)(?:\/(.*))?$/);
+  if (!match) return normalized;
+  return match[2] ? `/${match[2]}` : '/';
+}
+
+export function consumerRouteMatches(pathname: string, route: CoreProductRoute): boolean {
+  const normalizedPathname = stripConsumerLocale(pathname);
+  const target = normalizeConsumerRoutePath(route.path);
+
+  if (target === '/') {
+    return normalizedPathname === '/';
+  }
+  if (route.key === 'stock-structure') {
+    return normalizedPathname === target
+      || /^\/stocks\/[^/]+\/structure-decision$/i.test(normalizedPathname);
+  }
+  if (route.key === 'decision-cockpit') {
+    return normalizedPathname === '/cockpit'
+      || normalizedPathname === '/decision-cockpit'
+      || normalizedPathname === target
+      || normalizedPathname.startsWith(`${target}/`);
+  }
+  if (route.key === 'research-radar') {
+    return normalizedPathname === '/radar'
+      || normalizedPathname === '/research-radar'
+      || normalizedPathname === target
+      || normalizedPathname.startsWith(`${target}/`);
+  }
+  if (route.key === 'portfolio') {
+    return normalizedPathname === '/holdings'
+      || normalizedPathname === target
+      || normalizedPathname.startsWith(`${target}/`);
+  }
+
+  return normalizedPathname === target || normalizedPathname.startsWith(`${target}/`);
+}
+
+export function resolveCurrentConsumerRoute(pathname: string): CoreProductRoute | null {
+  return CORE_PRODUCT_ROUTES.find((route) => consumerRouteMatches(pathname, route)) ?? null;
+}
+
+export function resolveCurrentConsumerRouteKey(pathname: string): CoreProductRouteKey | null {
+  return resolveCurrentConsumerRoute(pathname)?.key ?? null;
+}

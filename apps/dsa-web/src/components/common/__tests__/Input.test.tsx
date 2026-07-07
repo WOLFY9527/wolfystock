@@ -9,6 +9,7 @@ describe('Input', () => {
     const input = screen.getByLabelText('API Key');
     expect(input).toHaveAttribute('id', 'api_key');
     expect(input).toHaveAttribute('aria-describedby', 'api_key-hint');
+    expect(input).toHaveAttribute('data-control-state', 'ready');
     expect(screen.getByText('Stored locally')).toBeInTheDocument();
   });
 
@@ -18,6 +19,7 @@ describe('Input', () => {
     const input = screen.getByLabelText('Code');
     expect(input).toHaveAttribute('aria-invalid', 'true');
     expect(input).toHaveAttribute('aria-describedby', 'stock_code-error');
+    expect(input).toHaveAttribute('data-control-state', 'error');
     expect(screen.getByRole('alert')).toHaveTextContent('Required');
   });
 
@@ -76,5 +78,11 @@ describe('Input', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '隐藏内容' }));
     expect(onPasswordVisibleChange).toHaveBeenCalledWith(false);
+  });
+
+  it('marks disabled inputs with a shared control state', () => {
+    render(<Input label="Disabled" disabled />);
+
+    expect(screen.getByLabelText('Disabled')).toHaveAttribute('data-control-state', 'disabled');
   });
 });

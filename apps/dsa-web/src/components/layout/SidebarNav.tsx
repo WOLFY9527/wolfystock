@@ -30,7 +30,7 @@ import {
   Sun,
   UsersRound,
 } from 'lucide-react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { buildLoginPath, useProductSurface } from '../../hooks/useProductSurface';
@@ -44,6 +44,7 @@ import { useThemeStyle } from '../theme/themeState';
 import {
   PRIMARY_CONSUMER_ROUTES,
   SECONDARY_CONSUMER_ROUTES,
+  resolveCurrentConsumerRoute,
   type CoreProductRoute,
   type CoreProductRouteKey,
 } from './coreProductRoutes';
@@ -219,28 +220,6 @@ function groupAdminNavItems(items: AdminNavItem[], language: 'zh' | 'en'): Admin
     .filter((group) => group.items.length > 0);
 }
 
-function normalizeRoutePath(pathname: string): string {
-  return stripLocalePrefix(String(pathname || '/').split(/[?#]/, 1)[0] || '/');
-}
-
-function isNavRouteActive(pathname: string, key: CoreProductRouteKey, target: string): boolean {
-  const normalizedPathname = normalizeRoutePath(pathname);
-  if (target === '/') {
-    return normalizedPathname === '/' || normalizedPathname === '';
-  }
-  if (key === 'stock-structure') {
-    return normalizedPathname === target
-      || /^\/stocks\/[^/]+\/structure-decision(?:\/)?$/i.test(normalizedPathname);
-  }
-  if (key === 'decision-cockpit') {
-    return normalizedPathname === '/cockpit'
-      || normalizedPathname === '/decision-cockpit'
-      || normalizedPathname === target
-      || normalizedPathname.startsWith(`${target}/`);
-  }
-  return normalizedPathname === target || normalizedPathname.startsWith(`${target}/`);
-}
-
 function inferSymbolMarketContext(symbol: string, language: 'zh' | 'en'): string {
   const normalized = symbol.trim().toUpperCase();
   if (/^(SH|SZ|BJ)\d{6}$/.test(normalized) || /^\d{6}\.(SH|SZ|SS|BJ)$/.test(normalized) || /^\d{6}$/.test(normalized)) {
@@ -303,8 +282,12 @@ function useSidebarNavView({
   const [stockSearchFocused, setStockSearchFocused] = useState(false);
   const adminMenuRef = useRef<HTMLDivElement | null>(null);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
+  const moreButtonRef = useRef<HTMLButtonElement | null>(null);
+  const moreMenuItemRefs = useRef<Array<HTMLAnchorElement | null>>([]);
+  const moreMenuFocusIndexRef = useRef<number | null>(null);
   const stockSearchRef = useRef<HTMLInputElement | null>(null);
   const routeLocale = parseLocaleFromPathname(location.pathname);
+  const currentConsumerRoute = resolveCurrentConsumerRoute(location.pathname);
   const adminNavCopy = resolveAdminNavCopy(language);
   const isAdminRoute = isAdminOpsRoute(location.pathname);
   const isDrawer = layout === 'drawer';
@@ -360,9 +343,77 @@ function useSidebarNavView({
   };
 
   const handleConsumerNavigate = () => {
+    moreMenuFocusIndexRef.current = null;
     setShowMoreMenu(false);
     setStockSearchFocused(false);
     onNavigate?.();
+  };
+
+  const closeMoreMenu = (options?: { returnFocus?: boolean }) => {
+    moreMenuFocusIndexRef.current = null;
+    setShowMoreMenu(false);
+    if (options?.returnFocus) {
+      window.setTimeout(() => {
+        moreButtonRef.current?.focus();
+      }, 0);
+    }
+  };
+
+  const openMoreMenu = (focusIndex: number | null = null) => {
+    moreMenuFocusIndexRef.current = focusIndex;
+    setShowMoreMenu(true);
+  };
+
+  const toggleMoreMenu = () => {
+    if (showMoreMenu) {
+      closeMoreMenu({ returnFocus: true });
+      return;
+    }
+    openMoreMenu(null);
+  };
+
+  const handleMoreButtonKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown') {
+      event.preventDefault();
+      openMoreMenu(0);
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      openMoreMenu(Math.max(MORE_NAV_ITEMS.length - 1, 0));
+    }
+  };
+
+  const handleMoreMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const items = moreMenuItemRefs.current.filter(Boolean) as HTMLAnchorElement[];
+    if (!items.length) return;
+
+    const activeIndex = items.findIndex((item) => item === document.activeElement);
+    const resolvedIndex = activeIndex >= 0 ? activeIndex : 0;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      items[(resolvedIndex + 1) % items.length]?.focus();
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      items[(resolvedIndex - 1 + items.length) % items.length]?.focus();
+      return;
+    }
+    if (event.key === 'Home') {
+      event.preventDefault();
+      items[0]?.focus();
+      return;
+    }
+    if (event.key === 'End') {
+      event.preventDefault();
+      items[items.length - 1]?.focus();
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeMoreMenu({ returnFocus: true });
+    }
   };
 
   const submitStockSearch = () => {
@@ -417,12 +468,12 @@ function useSidebarNavView({
       if (moreMenuRef.current?.contains(event.target as Node)) {
         return;
       }
-      setShowMoreMenu(false);
+      closeMoreMenu({ returnFocus: true });
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setShowMoreMenu(false);
+        closeMoreMenu({ returnFocus: true });
       }
     };
 
@@ -432,6 +483,20 @@ function useSidebarNavView({
       document.removeEventListener('mousedown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
+  }, [showMoreMenu]);
+
+  useEffect(() => {
+    if (!showMoreMenu || moreMenuFocusIndexRef.current === null) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      const focusIndex = moreMenuFocusIndexRef.current;
+      if (focusIndex === null) return;
+      moreMenuItemRefs.current[focusIndex]?.focus();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [showMoreMenu]);
 
   useEffect(() => {
@@ -450,23 +515,22 @@ function useSidebarNavView({
   const navLinks = NAV_ITEMS.map(({ key, labelKey, label: fixedLabel, to, icon: Icon }) => {
     const label = fixedLabel ?? t(labelKey || key);
     const linkTarget = routeLocale ? buildLocalizedPath(to, routeLocale) : to;
-    const routeActive = isNavRouteActive(location.pathname, key, to);
+    const routeActive = currentConsumerRoute?.key === key;
     return (
-      <NavLink
+      <Link
         key={key}
         to={linkTarget}
-        end={to === '/'}
         onClick={handleConsumerNavigate}
         aria-label={label}
         aria-current={routeActive ? 'page' : undefined}
-        className={({ isActive }) => cn(
+        className={cn(
           isDrawer
             ? 'shell-drawer-link'
             : 'shell-header-link text-sm transition-colors',
-          !isDrawer && ((isActive || routeActive)
+          !isDrawer && (routeActive
             ? 'font-bold'
             : 'font-medium'),
-          (isActive || routeActive) ? 'is-active' : '',
+          routeActive ? 'is-active' : '',
         )}
       >
         {isDrawer ? (
@@ -477,28 +541,32 @@ function useSidebarNavView({
         <span className={isDrawer ? 'shell-nav-item__label' : 'shell-header-link__label'}>
           <NavLabel label={label} />
         </span>
-      </NavLink>
+      </Link>
     );
   });
 
-  const secondaryRouteActive = MORE_NAV_ITEMS.some((item) => isNavRouteActive(location.pathname, item.key, item.to));
+  const secondaryRouteActive = MORE_NAV_ITEMS.some((item) => currentConsumerRoute?.key === item.key);
   const moreNavLinks = MORE_NAV_ITEMS.map(({ key, labelKey, label: fixedLabel, to, icon: Icon }) => {
     const label = fixedLabel ?? t(labelKey || key);
     const linkTarget = routeLocale ? buildLocalizedPath(to, routeLocale) : to;
-    const routeActive = isNavRouteActive(location.pathname, key, to);
+    const routeActive = currentConsumerRoute?.key === key;
     return (
-      <NavLink
+      <Link
         key={key}
         to={linkTarget}
-        end={to === '/'}
+        ref={(node) => {
+          const index = MORE_NAV_ITEMS.findIndex((item) => item.key === key);
+          moreMenuItemRefs.current[index] = node;
+        }}
+        tabIndex={showMoreMenu ? 0 : -1}
         onClick={handleConsumerNavigate}
         aria-label={label}
-        aria-current={routeActive ? 'page' : undefined}
-        className={({ isActive }) => cn(
+        data-current-child={routeActive ? 'true' : undefined}
+        className={cn(
           isDrawer
             ? 'shell-drawer-action'
             : 'flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-[color:var(--wolfy-text-secondary)] transition-colors hover:bg-[var(--overlay-hover)] hover:text-[color:var(--wolfy-text-primary)]',
-          (isActive || routeActive) ? 'is-active text-[color:var(--wolfy-text-primary)]' : '',
+          routeActive ? 'is-active text-[color:var(--wolfy-text-primary)]' : '',
         )}
       >
         <span className={isDrawer ? 'shell-nav-item__icon' : 'inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]'} aria-hidden="true">
@@ -507,7 +575,7 @@ function useSidebarNavView({
         <span className={isDrawer ? 'shell-nav-item__copy' : 'min-w-0 truncate'}>
           <span className={isDrawer ? 'shell-nav-item__label' : 'truncate'}>{label}</span>
         </span>
-      </NavLink>
+      </Link>
     );
   });
 
@@ -546,12 +614,15 @@ function useSidebarNavView({
     isDrawer ? (
       <div className="space-y-2" ref={moreMenuRef}>
         <button
+          ref={moreButtonRef}
           type="button"
           className={cn('shell-nav-item shell-nav-item--utility w-full', secondaryRouteActive ? 'is-active' : '')}
-          onClick={() => setShowMoreMenu((open) => !open)}
+          onClick={toggleMoreMenu}
+          onKeyDown={handleMoreButtonKeyDown}
           aria-expanded={showMoreMenu}
           aria-controls={moreMenuId}
           aria-label={moreLabel}
+          aria-current={secondaryRouteActive ? 'page' : undefined}
         >
           <span className="shell-nav-item__icon" aria-hidden="true">
             <MoreHorizontal className="size-4" />
@@ -564,6 +635,7 @@ function useSidebarNavView({
             id={moreMenuId}
             data-testid="shell-more-menu"
             className="space-y-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-2"
+            onKeyDown={handleMoreMenuKeyDown}
           >
             {moreNavLinks}
           </div>
@@ -572,16 +644,19 @@ function useSidebarNavView({
     ) : (
       <div ref={moreMenuRef} className="relative">
         <button
+          ref={moreButtonRef}
           type="button"
           className={cn(
             'shell-header-link text-sm font-medium transition-colors',
             (showMoreMenu || secondaryRouteActive) ? 'is-active font-bold' : '',
           )}
-          onClick={() => setShowMoreMenu((open) => !open)}
+          onClick={toggleMoreMenu}
+          onKeyDown={handleMoreButtonKeyDown}
           aria-haspopup="menu"
           aria-expanded={showMoreMenu}
           aria-controls={moreMenuId}
           aria-label={moreLabel}
+          aria-current={secondaryRouteActive ? 'page' : undefined}
         >
           <span className="shell-header-link__label inline-flex items-center gap-1.5">
             <span>{moreLabel}</span>
@@ -594,6 +669,7 @@ function useSidebarNavView({
             role="menu"
             data-testid="shell-more-menu"
             className="absolute right-0 top-full z-20 mt-2 flex min-w-[17rem] max-w-[min(24rem,calc(100vw-2rem))] flex-col gap-1 rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--theme-floating-bg)] p-2 shadow-[var(--shadow-tight)]"
+            onKeyDown={handleMoreMenuKeyDown}
           >
             {moreNavLinks}
           </div>

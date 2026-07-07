@@ -314,13 +314,6 @@ html[data-theme] {
   --secondary-text: var(--text-secondary-hsl);
   --muted-text: var(--text-dim-hsl);
 
-  /* TEMPORARY_MIGRATION_BRIDGE: legacy cyan/purple aliases resolve to canonical sage/gold until T189 removes consumers. */
-  --color-cyan: var(--sage);
-  --color-cyan-dim: color-mix(in srgb, var(--sage) 82%, var(--surface));
-  --color-cyan-glow: rgb(107 143 113 / 0.24);
-  --color-purple: var(--gold);
-  --color-purple-dim: color-mix(in srgb, var(--gold) 82%, var(--surface));
-  --color-purple-glow: rgb(212 165 116 / 0.22);
   --color-success: var(--accent-positive-hsl);
   --color-warning: var(--accent-warning-hsl);
   --color-danger: var(--accent-danger-hsl);
@@ -538,7 +531,6 @@ html[data-theme] {
   --settings-secondary-bg: hsl(var(--bg-card-hsl) / 0.72);
   --settings-secondary-border-hover: hsl(var(--border-strong-hsl) / 0.74);
   --settings-secondary-bg-hover: hsl(var(--bg-card-elevated-hsl) / 0.9);
-  --settings-glow-hover: hsl(var(--accent-primary-hsl) / 0.38);
   --settings-skeleton-strong: hsl(var(--bg-card-elevated-hsl) / 0.86);
   --settings-skeleton-soft: hsl(var(--bg-card-elevated-hsl) / 0.64);
 
@@ -999,10 +991,6 @@ html[data-theme] :where(
   color: var(--accent-primary);
 }
 
-.theme-accent-glow {
-  box-shadow: var(--glow-soft);
-}
-
 .theme-checkbox {
   height: 0.875rem;
   width: 0.875rem;
@@ -1388,12 +1376,6 @@ html[data-theme] :where(
   border-color: var(--theme-badge-history-border);
   background: var(--theme-badge-history-bg);
   color: var(--theme-badge-history-text);
-}
-
-.theme-badge[data-glow="true"] {
-  box-shadow:
-    inset 0 0 0 1px hsl(0 0% 100% / 0.04),
-    var(--glow-soft);
 }
 
 .theme-stat-score {
@@ -2915,10 +2897,6 @@ button[data-variant="home-action-report"]:hover {
   color: var(--text-primary);
 }
 
-.settings-glow-accent-hover:hover {
-  box-shadow: 0 0 30px var(--settings-glow-hover);
-}
-
 .settings-accent-text {
   color: hsl(var(--primary));
 }
@@ -3007,7 +2985,6 @@ button[data-variant="home-action-report"]:hover {
   --cohere-near-black: var(--ink);
   --cohere-deep-dark: var(--ink-soft);
   --cohere-blue: var(--sage-deep);
-  --cohere-purple: var(--gold);
   --cohere-white: var(--surface);
   --cohere-snow: var(--surface);
   --cohere-border-light: var(--line);
@@ -3601,10 +3578,7 @@ html[data-theme] .settings-accent-badge-soft {
 }
 
 html[data-theme] .settings-shadow-accent,
-html[data-theme] .settings-glow-accent-hover:hover,
-html[data-theme] .theme-accent-glow,
-html[data-theme] .home-panel-card,
-html[data-theme] .theme-badge[data-glow="true"] {
+html[data-theme] .home-panel-card {
   box-shadow: none;
 }
 
@@ -5437,7 +5411,6 @@ html[data-theme] {
   --cohere-near-black: var(--ink);
   --cohere-deep-dark: var(--ink-soft);
   --cohere-blue: var(--sage-deep);
-  --cohere-purple: var(--gold);
   --cohere-white: var(--surface);
   --cohere-snow: var(--surface);
   --cohere-border-light: var(--line);
@@ -8704,10 +8677,6 @@ html[data-theme] .theme-badge {
   border-color: var(--theme-panel-subtle-border);
 }
 
-html[data-theme] .theme-badge[data-glow='true'] {
-  box-shadow: none;
-}
-
 html[data-theme] .theme-nav-item {
   background: var(--theme-nav-item-bg);
   border-color: var(--theme-nav-item-border);
@@ -9019,7 +8988,6 @@ html[data-theme-style='paper'] {
   --cohere-near-black: var(--ink);
   --cohere-deep-dark: var(--ink-soft);
   --cohere-blue: var(--sage-deep);
-  --cohere-purple: var(--gold);
   --cohere-white: var(--surface);
   --cohere-snow: var(--surface);
   --cohere-border-light: var(--line);

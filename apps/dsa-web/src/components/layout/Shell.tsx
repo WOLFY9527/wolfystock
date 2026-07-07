@@ -23,6 +23,7 @@ import { cn } from '../../utils/cn';
 import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '../../utils/localeRouting';
 import { useIsDesktopViewport } from './useIsDesktopViewport';
 import { useThemeStyle } from '../theme/themeState';
+import { resolveCurrentConsumerRoute } from './coreProductRoutes';
 
 type ShellProps = {
   children?: React.ReactNode;
@@ -87,23 +88,9 @@ function resolveAdminOpsRouteLabel(pathname: string, language: string): string |
 }
 
 function resolveMobileRouteLabel(pathname: string, t: (key: string) => string, language: string): string {
-  if (pathname === '/' || pathname === '') {
-    return t('nav.home');
-  }
-  if (pathname === '/cockpit' || pathname === '/decision-cockpit' || pathname.startsWith('/market/decision-cockpit')) {
-    return language === 'en' ? 'Market Decision Cockpit' : '市场决策驾驶舱';
-  }
-  if (pathname === '/stocks/structure-decision') {
-    return language === 'en' ? 'Stock Research Entry' : '个股研究入口';
-  }
-  if (/^\/stocks\/[^/]+\/structure-decision(?:\/)?$/i.test(pathname)) {
-    return language === 'en' ? 'Stock Research' : '个股研究';
-  }
-  if (pathname === '/radar' || pathname === '/research-radar' || pathname.startsWith('/research/radar')) {
-    return language === 'en' ? 'Research Radar' : '研究雷达';
-  }
-  if (pathname.startsWith('/scenario-lab')) {
-    return language === 'en' ? 'Scenario Lab' : '情景实验室';
+  const currentConsumerRoute = resolveCurrentConsumerRoute(pathname);
+  if (currentConsumerRoute) {
+    return t(currentConsumerRoute.labelKey);
   }
   const adminRouteLabel = resolveAdminOpsRouteLabel(pathname, language);
   if (adminRouteLabel) {
@@ -112,29 +99,11 @@ function resolveMobileRouteLabel(pathname: string, t: (key: string) => string, l
   if (pathname.startsWith('/settings') && !pathname.startsWith('/settings/system')) {
     return language === 'en' ? 'Account Center' : '账户中心';
   }
-  if (pathname.startsWith('/scanner')) {
-    return t('nav.scanner');
-  }
-  if (pathname === '/holdings' || pathname.startsWith('/portfolio')) {
-    return t('nav.portfolio');
-  }
-  if (pathname.startsWith('/market-overview')) {
-    return t('nav.marketOverview');
-  }
   if (pathname.startsWith('/market/liquidity-monitor')) {
     return t('nav.liquidityMonitor');
   }
   if (pathname.startsWith('/market/rotation-radar')) {
     return t('nav.rotationRadar');
-  }
-  if (pathname.startsWith('/watchlist')) {
-    return t('nav.watchlist');
-  }
-  if (pathname.startsWith('/backtest')) {
-    return t('nav.backtest');
-  }
-  if (pathname.startsWith('/options-lab')) {
-    return t('nav.optionsLab');
   }
   if (pathname.startsWith('/settings')) {
     return t('nav.settings');
@@ -350,38 +319,18 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const { pathname } = useLocation();
   const routeLocale = parseLocaleFromPathname(pathname);
   const surfacePathname = stripLocalePrefix(pathname);
-  const isHomeRoute = surfacePathname === '/' || surfacePathname === '';
-  const isBacktestRoute = surfacePathname.startsWith('/backtest');
-  const isMarketOverviewRoute = surfacePathname.startsWith('/market-overview');
-  const isMarketDecisionCockpitRoute = surfacePathname === '/cockpit'
-    || surfacePathname === '/decision-cockpit'
-    || surfacePathname.startsWith('/market/decision-cockpit');
+  const currentConsumerRoute = resolveCurrentConsumerRoute(surfacePathname);
+  const isCurrentConsumerRoute = (key: string) => currentConsumerRoute?.key === key;
+  const isHomeRoute = isCurrentConsumerRoute('home');
+  const isBacktestRoute = isCurrentConsumerRoute('backtest');
+  const isMarketOverviewRoute = isCurrentConsumerRoute('market-overview');
   const isLiquidityMonitorRoute = surfacePathname.startsWith('/market/liquidity-monitor');
   const isRotationRadarRoute = surfacePathname.startsWith('/market/rotation-radar');
-  const isStockStructureDecisionRoute = surfacePathname === '/stocks/structure-decision'
-    || /^\/stocks\/[^/]+\/structure-decision(?:\/)?$/i.test(surfacePathname);
-  const isScannerRoute = surfacePathname.startsWith('/scanner');
-  const isResearchRadarRoute = surfacePathname === '/radar'
-    || surfacePathname === '/research-radar'
-    || surfacePathname.startsWith('/research/radar');
-  const isWatchlistRoute = surfacePathname.startsWith('/watchlist');
-  const isPortfolioRoute = surfacePathname === '/holdings' || surfacePathname.startsWith('/portfolio');
-  const isOptionsLabRoute = surfacePathname.startsWith('/options-lab');
-  const isScenarioLabRoute = surfacePathname.startsWith('/scenario-lab');
+  const isScannerRoute = isCurrentConsumerRoute('scanner');
   const isSystemControlRoute = isAdminOpsRoute(surfacePathname);
-  const isConsumerShellRoute = isHomeRoute
-    || isBacktestRoute
-    || isMarketOverviewRoute
-    || isMarketDecisionCockpitRoute
+  const isConsumerShellRoute = Boolean(currentConsumerRoute)
     || isLiquidityMonitorRoute
-    || isRotationRadarRoute
-    || isStockStructureDecisionRoute
-    || isScannerRoute
-    || isResearchRadarRoute
-    || isWatchlistRoute
-    || isPortfolioRoute
-    || isOptionsLabRoute
-    || isScenarioLabRoute;
+    || isRotationRadarRoute;
   const isPageScrollRoute = isConsumerShellRoute;
   const shellViewportClass = isPageScrollRoute ? 'min-h-screen' : 'h-full min-h-0';
   const shellFrameOverflowClass = '';
