@@ -8,7 +8,7 @@ import json
 import os
 import tempfile
 import unittest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -288,6 +288,16 @@ class RuleBacktestTestCase(unittest.TestCase):
         assert payload.get("engineReexecuted") is False
         assert payload.get("attributionEngineAvailable") is False
         assert payload.get("pnlCausalityAvailable") is False
+
+    @staticmethod
+    def _completed_compare_row(run_id: int) -> SimpleNamespace:
+        return SimpleNamespace(
+            id=run_id,
+            status="completed",
+            run_at=datetime(2024, 1, 1, 0, 0, 0),
+            completed_at=datetime(2024, 1, 1, 0, 5, 0),
+            summary_json='{"status_history": [{"status": "completed", "at": "2024-01-01T00:05:00"}]}',
+        )
 
     @staticmethod
     def _compare_run_payload(
@@ -5031,7 +5041,11 @@ class RuleBacktestTestCase(unittest.TestCase):
         third_payload["total_return_pct"] = 9.1
         third_payload["max_drawdown_pct"] = 7.4
 
-        rows = [SimpleNamespace(id=101), SimpleNamespace(id=202), SimpleNamespace(id=303)]
+        rows = [
+            self._completed_compare_row(101),
+            self._completed_compare_row(202),
+            self._completed_compare_row(303),
+        ]
         with patch.object(service.repo, "get_runs_by_ids", return_value=rows), patch.object(
             service,
             "_run_row_to_dict",
@@ -5146,7 +5160,7 @@ class RuleBacktestTestCase(unittest.TestCase):
             },
         )
 
-        rows = [SimpleNamespace(id=101), SimpleNamespace(id=202)]
+        rows = [self._completed_compare_row(101), self._completed_compare_row(202)]
         with patch.object(service.repo, "get_runs_by_ids", return_value=rows), patch.object(
             service,
             "_run_row_to_dict",
@@ -5278,7 +5292,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         service = RuleBacktestService(self.db)
         first_payload = self._compare_run_payload(run_id=101, code="600519")
         second_payload = self._compare_run_payload(run_id=202, code="SH600519")
-        rows = [SimpleNamespace(id=101), SimpleNamespace(id=202)]
+        rows = [self._completed_compare_row(101), self._completed_compare_row(202)]
 
         with patch.object(service.repo, "get_runs_by_ids", return_value=rows), patch.object(
             service,
@@ -5336,7 +5350,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         service = RuleBacktestService(self.db)
         first_payload = self._compare_run_payload(run_id=101, code="600519")
         second_payload = self._compare_run_payload(run_id=202, code="000001")
-        rows = [SimpleNamespace(id=101), SimpleNamespace(id=202)]
+        rows = [self._completed_compare_row(101), self._completed_compare_row(202)]
 
         with patch.object(service.repo, "get_runs_by_ids", return_value=rows), patch.object(
             service,
@@ -5361,7 +5375,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         service = RuleBacktestService(self.db)
         first_payload = self._compare_run_payload(run_id=101, code="600519")
         second_payload = self._compare_run_payload(run_id=202, code="AAPL")
-        rows = [SimpleNamespace(id=101), SimpleNamespace(id=202)]
+        rows = [self._completed_compare_row(101), self._completed_compare_row(202)]
 
         with patch.object(service.repo, "get_runs_by_ids", return_value=rows), patch.object(
             service,
@@ -5387,7 +5401,11 @@ class RuleBacktestTestCase(unittest.TestCase):
         first_payload = self._compare_run_payload(run_id=101, code="600519")
         partial_payload = self._compare_run_payload(run_id=202, code="UNKNOWN-CODE")
         unavailable_payload = self._compare_run_payload(run_id=303, code="")
-        rows = [SimpleNamespace(id=101), SimpleNamespace(id=202), SimpleNamespace(id=303)]
+        rows = [
+            self._completed_compare_row(101),
+            self._completed_compare_row(202),
+            self._completed_compare_row(303),
+        ]
 
         with patch.object(service.repo, "get_runs_by_ids", return_value=rows), patch.object(
             service,
@@ -7798,6 +7816,129 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertIn("benchmark_curve", detail)
         self.assertIn("benchmark_summary", detail)
         self.assertIn("audit_rows", detail)
+
+    def test_duplicate_active_submit_reuses_existing_nonterminal_run(self) -> None:
+        service = RuleBacktestService(self.db)
+        strategy_text = "Buy when Close > MA3. Sell when Close < MA3."
+
+        first = service.submit_backtest(
+            code="600519",
+            strategy_text=strategy_text,
+            start_date="2024-01-08",
+            end_date="2024-01-18",
+            lookback_bars=20,
+            confirmed=True,
+        )
+        second = service.submit_backtest(
+            code="600519",
+            strategy_text=strategy_text,
+            start_date="2024-01-08",
+            end_date="2024-01-18",
+            lookback_bars=20,
+            confirmed=True,
+        )
+
+        history = service.list_runs(code="600519", page=1, limit=10)
+
+        self.assertEqual(second["id"], first["id"])
+        self.assertEqual(history["total"], 1)
+        self.assertEqual(history["items"][0]["id"], first["id"])
+
+    def test_duplicate_worker_dispatch_does_not_reexecute_completed_run(self) -> None:
+        service = RuleBacktestService(self.db)
+        strategy_text = "Buy when Close > MA3. Sell when Close < MA3."
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            submitted = service.submit_backtest(
+                code="600519",
+                strategy_text=strategy_text,
+                start_date="2024-01-08",
+                end_date="2024-01-18",
+                lookback_bars=20,
+                confirmed=True,
+            )
+            with patch.object(service, "_execute_rule_backtest", wraps=service._execute_rule_backtest) as execute_mock:
+                service.process_submitted_run(submitted["id"])
+                service.process_submitted_run(submitted["id"])
+
+        detail = service.get_run(submitted["id"])
+        self.assertIsNotNone(detail)
+        assert detail is not None
+        self.assertEqual(detail["status"], "completed")
+        self.assertEqual(execute_mock.call_count, 1)
+
+    def test_cancel_racing_summary_completion_preserves_cancelled_terminal_state(self) -> None:
+        service = RuleBacktestService(self.db)
+        strategy_text = "Buy when Close > MA3. Sell when Close < MA3."
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            submitted = service.submit_backtest(
+                code="600519",
+                strategy_text=strategy_text,
+                start_date="2024-01-08",
+                end_date="2024-01-18",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+            def _cancel_then_summarize(parsed, result):
+                service.cancel_run(submitted["id"])
+                return "cancelled while summary was being built"
+
+            with patch.object(service, "_build_ai_summary", side_effect=_cancel_then_summarize):
+                service.process_submitted_run(submitted["id"])
+
+        status = service.get_run_status(submitted["id"])
+        detail = service.get_run(submitted["id"])
+
+        self.assertIsNotNone(status)
+        self.assertIsNotNone(detail)
+        assert status is not None
+        assert detail is not None
+        self.assertEqual(status["status"], "cancelled")
+        self.assertEqual(status["run_diagnostics"]["terminal_status"], "cancelled")
+        self.assertEqual(detail["status"], "cancelled")
+        self.assertEqual(detail["trade_count"], 0)
+        self.assertEqual(detail["trades"], [])
+
+    def test_stale_nonterminal_run_is_classified_failed_without_execution(self) -> None:
+        service = RuleBacktestService(self.db)
+        strategy_text = "Buy when Close > MA3. Sell when Close < MA3."
+        stale_at = datetime(2024, 1, 1, 12, 0, 0)
+
+        submitted = service.submit_backtest(
+            code="600519",
+            strategy_text=strategy_text,
+            start_date="2024-01-08",
+            end_date="2024-01-18",
+            lookback_bars=20,
+            confirmed=True,
+        )
+        row = service.repo.get_run(submitted["id"], **service._owner_kwargs())
+        assert row is not None
+        summary = service._load_summary_payload(row.summary_json)
+        for item in summary.get("status_history", []):
+            item["at"] = stale_at.isoformat()
+        service.repo.update_run(
+            submitted["id"],
+            **service._owner_kwargs(),
+            run_at=stale_at,
+            summary_json=service._serialize_json(summary),
+        )
+
+        with patch.object(
+            service,
+            "_execute_rule_backtest",
+            side_effect=AssertionError("stale read recovery must not execute backtest"),
+        ):
+            status = service.get_run_status(submitted["id"])
+
+        self.assertIsNotNone(status)
+        assert status is not None
+        self.assertEqual(status["status"], "failed")
+        self.assertEqual(status["no_result_reason"], "interrupted_runtime")
+        self.assertEqual(status["run_diagnostics"]["terminal_status"], "failed")
+        self.assertEqual(status["run_diagnostics"]["last_non_terminal_status"], "parsing")
 
     def test_submitted_backtest_can_remain_nonterminal_when_background_task_is_lost(self) -> None:
         service = RuleBacktestService(self.db)

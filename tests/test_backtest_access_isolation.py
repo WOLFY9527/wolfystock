@@ -752,6 +752,40 @@ class BacktestAccessIsolationTestCase(unittest.TestCase):
         self._assert_not_found(response, hidden_code="MSFT")
         self.assertEqual(self._rule_run_status(other_run_id), "queued")
 
+    def test_rule_backtest_admin_routes_remain_owner_scoped(self) -> None:
+        admin_run_id = self._seed_rule_backtest_run(
+            owner_id=BOOTSTRAP_ADMIN_USER_ID,
+            code="600519",
+            total_return_pct=4.0,
+        )
+        other_run_id = self._seed_rule_backtest_run(
+            owner_id=self.other_user_id,
+            code="MSFT",
+            status="queued",
+            total_return_pct=6.0,
+        )
+
+        run_list = self.admin_client.get("/api/v1/backtest/rule/runs", params={"limit": 100})
+        self.assertEqual(run_list.status_code, 200, run_list.text)
+        run_list_payload = run_list.json()
+        self.assertEqual(run_list_payload["total"], 1)
+        self.assertEqual([item["id"] for item in run_list_payload["items"]], [admin_run_id])
+        self.assertNotIn("MSFT", run_list.text)
+
+        admin_read = self.admin_client.get(f"/api/v1/backtest/rule/runs/{admin_run_id}")
+        self.assertEqual(admin_read.status_code, 200, admin_read.text)
+        self.assertEqual(admin_read.json()["id"], admin_run_id)
+
+        self._assert_not_found(
+            self.admin_client.get(f"/api/v1/backtest/rule/runs/{other_run_id}"),
+            hidden_code="MSFT",
+        )
+        self._assert_not_found(
+            self.admin_client.post(f"/api/v1/backtest/rule/runs/{other_run_id}/cancel"),
+            hidden_code="MSFT",
+        )
+        self.assertEqual(self._rule_run_status(other_run_id), "queued")
+
     def test_rule_backtest_universe_job_readback_routes_deny_cross_owner(self) -> None:
         own_job_id = self._seed_universe_job(owner_id=self.user_id, label="owner-a", symbol="AAPL")
         other_job_id = self._seed_universe_job(owner_id=self.other_user_id, label="owner-b", symbol="MSFT")
