@@ -4867,6 +4867,7 @@ describe('MarketOverviewPage', () => {
           <DataFreshnessBadge key={status} status={status} />
         ))}
         <DataFreshnessBadge freshness="delayed" />
+        <DataFreshnessBadge freshness="proxy" />
       </div>,
     );
 
@@ -4876,11 +4877,13 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByText('替代快照')).toBeInTheDocument();
     expect(screen.getByText('可能延迟')).toBeInTheDocument();
     expect(screen.getByText('部分可用')).toBeInTheDocument();
+    expect(screen.getByText('代理数据')).toBeInTheDocument();
     expect(screen.getByText('暂不可用')).toBeInTheDocument();
     expect(screen.getByText('读取异常')).toBeInTheDocument();
     expect(screen.getByText('更新中')).toBeInTheDocument();
     expect(screen.getByTestId('data-freshness-badge-error')).not.toHaveTextContent('暂不可用');
     expect(screen.getByTestId('data-freshness-badge-fallback')).not.toHaveTextContent('实时');
+    expect(screen.getByTestId('data-freshness-badge-proxy')).not.toHaveTextContent('实时');
   });
 
   it('summarizes mixed market footer timestamps as an evidence window', () => {

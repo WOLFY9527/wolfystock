@@ -3,7 +3,20 @@ import { toCamelCase } from './utils';
 
 export type MarketRiskDirection = 'increasing' | 'decreasing' | 'neutral';
 export type MarketPanelStatus = 'success' | 'partial' | 'unavailable' | 'failure';
-export type MarketDataFreshness = 'live' | 'delayed' | 'cached' | 'stale' | 'fallback' | 'mock' | 'error' | 'unavailable';
+export type MarketDataFreshness =
+  | 'live'
+  | 'fresh'
+  | 'delayed'
+  | 'cached'
+  | 'stale'
+  | 'partial'
+  | 'fallback'
+  | 'mock'
+  | 'synthetic'
+  | 'error'
+  | 'unavailable'
+  | 'unknown'
+  | 'proxy';
 export type MarketProviderHealthStatus = 'live' | 'cache' | 'stale' | 'fallback' | 'partial' | 'unavailable' | 'error' | 'refreshing';
 
 export interface MarketProviderHealth {
@@ -20,14 +33,40 @@ export interface MarketProviderHealth {
   card?: string;
 }
 
+export interface MarketProviderFreshness {
+  state: MarketDataFreshness;
+  label?: string | null;
+  available?: boolean;
+  sourceConfidence?: string | null;
+  isProxy?: boolean;
+  isStale?: boolean;
+  isUnavailable?: boolean;
+  asOf?: string | null;
+  sourceLabel?: string | null;
+  dataSource?: string | null;
+  degradationReason?: string | null;
+  proxyFor?: string | null;
+  proxySymbol?: string | null;
+  proxyLabel?: string | null;
+}
+
+export interface MarketConsumerDataQuality {
+  state: 'ready' | 'delayed' | 'cached' | 'partial' | 'no_evidence' | 'unavailable' | string;
+  label: string;
+  available: boolean;
+}
+
 export interface MarketDataMeta {
   source: string;
   sourceLabel?: string;
   sourceType?: string;
   providerHealth?: MarketProviderHealth;
+  providerFreshness?: MarketProviderFreshness | null;
+  dataQuality?: MarketConsumerDataQuality | null;
   updatedAt: string;
   asOf?: string;
   freshness: MarketDataFreshness;
+  isProxy?: boolean;
   isFallback?: boolean;
   isStale?: boolean;
   isPartial?: boolean;
@@ -40,6 +79,7 @@ export interface MarketDataMeta {
   delayMinutes?: number;
   sourceTier?: string;
   trustLevel?: string;
+  sourceConfidence?: string | null;
   observationOnly?: boolean;
   sourceAuthorityAllowed?: boolean;
   scoreContributionAllowed?: boolean;
@@ -53,6 +93,9 @@ export interface MarketDataMeta {
   missingMetrics?: string[];
   metricCoverageRatio?: number | null;
   broadMarketClaimAllowed?: boolean;
+  proxyFor?: string | null;
+  proxySymbol?: string | null;
+  proxyLabel?: string | null;
   officialSeriesId?: string | null;
   officialObservationDate?: string | null;
   officialAsOf?: string | null;
@@ -95,9 +138,12 @@ function normalizePanel(payload: Record<string, unknown>): MarketOverviewPanel {
     sourceLabel: normalized.sourceLabel,
     sourceType: normalized.sourceType,
     providerHealth: normalized.providerHealth,
+    providerFreshness: normalized.providerFreshness,
+    dataQuality: normalized.dataQuality,
     updatedAt: normalized.updatedAt || normalized.lastRefreshAt,
     asOf: normalized.asOf,
     freshness: normalized.freshness,
+    isProxy: normalized.isProxy,
     isFallback: normalized.isFallback,
     isStale: normalized.isStale,
     isPartial: normalized.isPartial,
@@ -110,6 +156,7 @@ function normalizePanel(payload: Record<string, unknown>): MarketOverviewPanel {
     delayMinutes: normalized.delayMinutes,
     sourceTier: normalized.sourceTier,
     trustLevel: normalized.trustLevel,
+    sourceConfidence: normalized.sourceConfidence,
     observationOnly: normalized.observationOnly,
     sourceAuthorityAllowed: normalized.sourceAuthorityAllowed,
     scoreContributionAllowed: normalized.scoreContributionAllowed,
@@ -119,6 +166,9 @@ function normalizePanel(payload: Record<string, unknown>): MarketOverviewPanel {
     officialSeriesId: normalized.officialSeriesId,
     officialObservationDate: normalized.officialObservationDate,
     officialAsOf: normalized.officialAsOf,
+    proxyFor: normalized.proxyFor,
+    proxySymbol: normalized.proxySymbol,
+    proxyLabel: normalized.proxyLabel,
     degradationReason: normalized.degradationReason,
     degradationReasons: normalized.degradationReasons,
     warning: normalized.warning,

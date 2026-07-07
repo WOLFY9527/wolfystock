@@ -148,4 +148,110 @@ describe('marketOverviewApi', () => {
     expect(panel.providerHealth?.status).toBe('partial');
     expect(panel.items[0]?.value).toBe(35);
   });
+
+  it('preserves backend providerFreshness proxy truth and consumer dataQuality', async () => {
+    const { marketOverviewApi } = await import('../marketOverview');
+
+    get.mockResolvedValueOnce({
+      data: {
+        panel_name: 'IndexTrendsCard',
+        last_refresh_at: '2026-06-07T09:00:00Z',
+        status: 'partial',
+        source: 'yfinance_proxy',
+        source_label: 'Yahoo Finance',
+        source_type: 'unofficial_proxy',
+        updated_at: '2026-06-07T09:01:00Z',
+        as_of: '2026-06-07T09:00:00Z',
+        freshness: 'proxy',
+        is_proxy: true,
+        source_confidence: 'proxy',
+        provider_freshness: {
+          state: 'proxy',
+          label: '代理',
+          available: true,
+          source_confidence: 'proxy',
+          is_proxy: true,
+          is_stale: false,
+          is_unavailable: false,
+          as_of: '2026-06-07T09:00:00Z',
+          source_label: 'Yahoo Finance',
+          data_source: 'yfinance_proxy',
+          degradation_reason: 'etf_proxy_for_index',
+          proxy_for: 'SPX',
+          proxy_symbol: 'SPY',
+          proxy_label: 'S&P 500',
+        },
+        data_quality: {
+          state: 'partial',
+          label: '部分可用',
+          available: false,
+        },
+        items: [
+          {
+            symbol: 'SPX',
+            label: 'S&P 500 proxy (SPY ETF)',
+            value: 520,
+            source: 'yfinance_proxy',
+            source_label: 'Yahoo Finance',
+            source_type: 'unofficial_proxy',
+            freshness: 'proxy',
+            is_proxy: true,
+            source_confidence: 'proxy',
+            source_authority_allowed: false,
+            score_contribution_allowed: false,
+            proxy_for: 'SPX',
+            proxy_symbol: 'SPY',
+            proxy_label: 'S&P 500',
+            provider_freshness: {
+              state: 'proxy',
+              is_proxy: true,
+              proxy_for: 'SPX',
+              proxy_symbol: 'SPY',
+            },
+            data_quality: {
+              state: 'partial',
+              label: '部分可用',
+              available: false,
+            },
+          },
+        ],
+      },
+    });
+
+    const panel = await marketOverviewApi.getIndices();
+    const item = panel.items[0];
+
+    expect(panel.freshness).toBe('proxy');
+    expect(panel.isProxy).toBe(true);
+    expect(panel.sourceConfidence).toBe('proxy');
+    expect(panel.providerFreshness).toMatchObject({
+      state: 'proxy',
+      isProxy: true,
+      proxyFor: 'SPX',
+      proxySymbol: 'SPY',
+    });
+    expect(panel.dataQuality).toEqual({
+      state: 'partial',
+      label: '部分可用',
+      available: false,
+    });
+    expect(item).toMatchObject({
+      freshness: 'proxy',
+      isProxy: true,
+      sourceConfidence: 'proxy',
+      sourceAuthorityAllowed: false,
+      scoreContributionAllowed: false,
+      proxyFor: 'SPX',
+      proxySymbol: 'SPY',
+      providerFreshness: {
+        state: 'proxy',
+        isProxy: true,
+      },
+      dataQuality: {
+        state: 'partial',
+        label: '部分可用',
+        available: false,
+      },
+    });
+  });
 });
