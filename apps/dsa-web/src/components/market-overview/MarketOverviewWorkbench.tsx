@@ -3329,31 +3329,41 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     <div
       data-testid="market-overview-workbench"
       data-bento-surface="true"
-      className="bento-surface-root flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6 overflow-y-auto overflow-x-hidden no-scrollbar text-[color:var(--wolfy-text-primary)]"
+      className="bento-surface-root flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden no-scrollbar text-[color:var(--wolfy-text-primary)]"
     >
-      <MarketOverviewWorkbenchTopSurface
-        heading={heading}
-        directionalSummary={directionalSummaryView}
-        regimeSynthesis={regimeSynthesisView}
-        regimeSummary={regimeSummaryView}
-        decisionText={marketDecision.text}
-        decisionChips={marketDecision.chips}
-        decisionReliable={decisionReliable}
-        decisionSemantics={decisionSemanticsView}
-        dataState={dataStateView}
-        temperatureSummary={temperatureSummary}
-        briefingSummary={briefingSummary}
-        officialMacroRecords={officialMacroRecords}
-        categoryTabs={categoryTabs}
-        activeCategory={activeCategory}
-        onCategoryChange={setActiveCategory}
-        exportLabel={exportLabel}
-        exportDisabled={exportDisabled}
-        onExportSummary={handleExportSummary}
-        heroAnchors={heroAnchorViews}
-        showAdminDiagnostics={showAdminDiagnostics}
-      />
-      <MarketOverviewCoreTrendChart view={marketTrendChartView} language={language} />
+      <section
+        data-testid="market-overview-first-workbench"
+        data-market-composition="observation-path"
+        className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] xl:items-stretch"
+      >
+        <div className="min-w-0" data-testid="market-overview-observation-brief">
+          <MarketOverviewWorkbenchTopSurface
+            heading={heading}
+            directionalSummary={directionalSummaryView}
+            regimeSynthesis={regimeSynthesisView}
+            regimeSummary={regimeSummaryView}
+            decisionText={marketDecision.text}
+            decisionChips={marketDecision.chips}
+            decisionReliable={decisionReliable}
+            decisionSemantics={decisionSemanticsView}
+            dataState={dataStateView}
+            temperatureSummary={temperatureSummary}
+            briefingSummary={briefingSummary}
+            officialMacroRecords={officialMacroRecords}
+            categoryTabs={categoryTabs}
+            activeCategory={activeCategory}
+            onCategoryChange={setActiveCategory}
+            exportLabel={exportLabel}
+            exportDisabled={exportDisabled}
+            onExportSummary={handleExportSummary}
+            heroAnchors={heroAnchorViews}
+            showAdminDiagnostics={showAdminDiagnostics}
+          />
+        </div>
+        <div className="min-w-0" data-testid="market-overview-dominant-path">
+          <MarketOverviewCoreTrendChart view={marketTrendChartView} language={language} />
+        </div>
+      </section>
       <Suspense fallback={<MarketOverviewWorkbenchGridFallback language={language} />}>
         <LazyMarketOverviewWorkbenchGrid
           heroRows={heroRows}
