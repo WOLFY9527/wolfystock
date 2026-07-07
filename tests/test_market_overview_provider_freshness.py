@@ -103,6 +103,7 @@ def test_freshness_helper_normalizes_core_states_without_silent_upgrade() -> Non
     assert stale["isStale"] is True
     assert unavailable["freshness"] == "unavailable"
     assert unavailable["isUnavailable"] is True
+    assert unavailable["isFallback"] is False
     assert proxy["freshness"] == "delayed"
     assert proxy["isProxy"] is True
 
@@ -216,3 +217,29 @@ def test_crypto_fallback_contains_no_static_prices_or_fake_changes() -> None:
         assert item["value"] is None
         assert item["price"] is None
         assert item["trend"] == []
+
+
+def test_cn_hk_flow_fallback_contains_no_static_flow_values_or_score_authority() -> None:
+    payload = MarketOverviewService()._fallback_cn_flows_snapshot()
+
+    assert payload["source"] == "unavailable"
+    assert payload["sourceClass"] == "disabled_live_stub"
+    assert payload["freshness"] == "unavailable"
+    assert payload["freshnessState"] == "unavailable"
+    assert payload["isUnavailable"] is True
+    assert payload["fallbackUsed"] is False
+    assert payload["sourceAuthorityAllowed"] is False
+    assert payload["sourceAuthorityState"] == "unavailable"
+    assert payload["scoreContributionAllowed"] is False
+    assert payload["scoreAuthorityEligible"] is False
+    for item in payload["items"]:
+        assert item["source"] == "unavailable"
+        assert item["sourceClass"] == "disabled_live_stub"
+        assert item["sourceFreshnessEvidence"]["freshness"] == "unavailable"
+        assert item["value"] is None
+        assert item["price"] is None
+        assert item["trend"] == []
+        assert item["change"] is None
+        assert item["changePercent"] is None
+        assert item["sourceAuthorityAllowed"] is False
+        assert item["scoreAuthorityEligible"] is False

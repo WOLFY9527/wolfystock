@@ -116,6 +116,22 @@ _ADVICE_RE = re.compile(
 _HIGH_CONFIDENCE_VALUES = {"high", "strong", "very high", "elevated"}
 _SAFE_LIST_FIELDS = ("missingInputs", "staleInputs", "evidenceGaps")
 _FIELD_REFERENCE_FALLBACK = "evidence"
+_MARKET_DATA_PLANE_METADATA_KEYS = frozenset(
+    {
+        "sourcetype",
+        "sourceclass",
+        "freshnessstate",
+        "isproxy",
+        "proxyidentity",
+        "sourceauthorityallowed",
+        "sourceauthoritystate",
+        "scorecontributionallowed",
+        "scoreauthorityeligible",
+        "authoritygrant",
+        "decisiongrade",
+        "unavailablereason",
+    }
+)
 
 
 def project_consumer_api_payload(payload: Any, *, surface: str | None = None) -> Any:
@@ -189,6 +205,11 @@ def _project_node(value: Any, *, surface: str | None = None) -> tuple[Any, dict[
 
 def _is_allowed_surface_value(surface: str | None, key: str, value: Any) -> bool:
     normalized_key = _normalize_key(key)
+    if _is_market_data_plane_surface(surface) and normalized_key in _MARKET_DATA_PLANE_METADATA_KEYS:
+        if isinstance(value, (str, bool, int, float)) or value is None:
+            return True
+        if normalized_key == "proxyidentity" and isinstance(value, Mapping):
+            return True
     if surface == "stock-evidence" and normalized_key in {
         "scorecontributionallowed",
         "sourceauthorityallowed",
@@ -201,6 +222,11 @@ def _is_allowed_surface_value(surface: str | None, key: str, value: Any) -> bool
     if surface == "options-chain":
         return normalized_key == "providername" and value == "synthetic_fixture"
     return False
+
+
+def _is_market_data_plane_surface(surface: str | None) -> bool:
+    surface_key = str(surface or "").strip().lower()
+    return bool(surface_key.startswith("market-overview") or surface_key.startswith("market-"))
 
 
 def _apply_context(output: dict[str, Any], context: dict[str, Any]) -> None:

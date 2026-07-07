@@ -520,17 +520,23 @@ def test_liquidity_monitor_route_preserves_evidence_input_authority_metadata() -
                             "source": "yfinance_proxy",
                             "sourceLabel": "Yahoo Finance proxy",
                             "sourceType": "unofficial_proxy",
+                            "sourceClass": "unofficial_proxy",
                             "sourceTier": "unofficial_public_api",
                             "trustLevel": "usable_with_caution",
                             "asOf": "2026-05-07T10:00:00+08:00",
                             "freshness": "delayed",
+                            "freshnessState": "delayed",
                             "isFallback": False,
                             "isStale": False,
                             "isPartial": False,
                             "isUnavailable": False,
+                            "isProxy": True,
+                            "proxyIdentity": {"proxyFor": "VIXCLS", "proxySymbol": "VIXY"},
                             "observationOnly": False,
                             "sourceAuthorityAllowed": False,
+                            "sourceAuthorityState": "blocked",
                             "scoreContributionAllowed": False,
+                            "scoreAuthorityEligible": False,
                             "sourceAuthorityReason": "proxy_only_missing_real_source",
                             "sourceAuthorityRouteRejected": True,
                             "routeRejectedReasonCodes": ["provider_forbidden_for_use_case"],
@@ -548,17 +554,22 @@ def test_liquidity_monitor_route_preserves_evidence_input_authority_metadata() -
                             "source": "fallback",
                             "sourceLabel": "Static fallback",
                             "sourceType": "fallback_static",
+                            "sourceClass": "fallback_static",
                             "sourceTier": "static_fallback",
                             "trustLevel": "unavailable",
                             "asOf": "2026-05-07T10:00:00+08:00",
                             "freshness": "fallback",
+                            "freshnessState": "fallback",
                             "isFallback": True,
                             "isStale": False,
                             "isPartial": False,
                             "isUnavailable": True,
+                            "isProxy": False,
                             "observationOnly": True,
                             "sourceAuthorityAllowed": False,
+                            "sourceAuthorityState": "blocked",
                             "scoreContributionAllowed": False,
+                            "scoreAuthorityEligible": False,
                             "sourceAuthorityReason": "fallback_not_score_grade",
                             "sourceAuthorityRouteRejected": False,
                             "routeRejectedReasonCodes": [],
@@ -649,8 +660,13 @@ def test_liquidity_monitor_route_preserves_evidence_input_authority_metadata() -
                 "sourceAuthorityAllowed",
                 "scoreContributionAllowed",
                 "sourceAuthorityReason",
+                "sourceAuthorityState",
                 "sourceAuthorityRouteRejected",
                 "routeRejectedReasonCodes",
+                "sourceClass",
+                "freshnessState",
+                "scoreAuthorityEligible",
+                "isProxy",
                 "officialSeriesId",
                 "officialObservationDate",
                 "officialAsOf",
@@ -667,16 +683,22 @@ def test_liquidity_monitor_route_preserves_evidence_input_authority_metadata() -
         ).issubset(evidence_input)
         assert evidence_input["sourceAuthorityAllowed"] is False
         assert evidence_input["scoreContributionAllowed"] is False
+        assert evidence_input["scoreAuthorityEligible"] is False
 
     assert proxy_input["sourceLabel"] == "Yahoo Finance proxy"
+    assert proxy_input["sourceClass"] == "unofficial_proxy"
     assert proxy_input["sourceTier"] == "unofficial_public_api"
     assert proxy_input["trustLevel"] == "usable_with_caution"
     assert proxy_input["freshness"] == "delayed"
+    assert proxy_input["freshnessState"] == "delayed"
     assert proxy_input["asOf"] == "2026-05-07T10:00:00+08:00"
     assert proxy_input["isFallback"] is False
     assert proxy_input["isUnavailable"] is False
     assert proxy_input["isPartial"] is False
+    assert proxy_input["isProxy"] is True
+    assert proxy_input["proxyIdentity"] == {"proxyFor": "VIXCLS", "proxySymbol": "VIXY"}
     assert proxy_input["observationOnly"] is False
+    assert proxy_input["sourceAuthorityState"] == "blocked"
     assert proxy_input["sourceAuthorityReason"] == "proxy_only_missing_real_source"
     assert proxy_input["sourceAuthorityRouteRejected"] is True
     assert proxy_input["routeRejectedReasonCodes"] == ["provider_forbidden_for_use_case"]
@@ -685,14 +707,18 @@ def test_liquidity_monitor_route_preserves_evidence_input_authority_metadata() -
     assert proxy_input["officialAsOf"] == "2026-05-07T09:00:00+08:00"
 
     assert fallback_input["sourceLabel"] == "Static fallback"
+    assert fallback_input["sourceClass"] == "fallback_static"
     assert fallback_input["sourceTier"] == "static_fallback"
     assert fallback_input["trustLevel"] == "unavailable"
     assert fallback_input["freshness"] == "fallback"
+    assert fallback_input["freshnessState"] == "fallback"
     assert fallback_input["asOf"] == "2026-05-07T10:00:00+08:00"
     assert fallback_input["isFallback"] is True
     assert fallback_input["isUnavailable"] is True
     assert fallback_input["isPartial"] is False
+    assert fallback_input["isProxy"] is False
     assert fallback_input["observationOnly"] is True
+    assert fallback_input["sourceAuthorityState"] == "blocked"
     assert fallback_input["sourceAuthorityReason"] == "fallback_not_score_grade"
     assert fallback_input["sourceAuthorityRouteRejected"] is False
     assert fallback_input["routeRejectedReasonCodes"] == []
