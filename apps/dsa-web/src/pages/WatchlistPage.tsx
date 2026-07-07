@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ComponentProps, type FocusEvent } from 'react';
 import {
   BarChart3,
   CheckSquare,
@@ -152,6 +152,22 @@ type WatchlistMonitoringTone = 'success' | 'caution' | 'neutral';
 
 const ROW_SELECTION_BUTTON_CLASS = 'inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-lg border transition hover:border-[color:var(--wolfy-accent)] hover:bg-[var(--wolfy-surface-input)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent)]';
 const WATCHLIST_ADVICE_OR_TRADE_WORDS = /建议(买入|卖出|加仓|减仓|持有)|买入|卖出|下单|交易建议|操作建议|投资建议|止损|止盈|目标价|仓位建议|\b(buy|sell|hold|recommend(?:ation)?|target price|stop loss|position sizing|trade advice|investment advice)\b/i;
+
+function scrollFocusedDescendantIntoHorizontalView(event: FocusEvent<HTMLElement>): void {
+  const scrollRegion = event.currentTarget;
+  const target = event.target;
+  if (!(target instanceof HTMLElement) || target === scrollRegion || !scrollRegion.contains(target)) return;
+
+  const regionRect = scrollRegion.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  const padding = 8;
+
+  if (targetRect.left < regionRect.left + padding) {
+    scrollRegion.scrollLeft -= regionRect.left + padding - targetRect.left;
+  } else if (targetRect.right > regionRect.right - padding) {
+    scrollRegion.scrollLeft += targetRect.right - (regionRect.right - padding);
+  }
+}
 
 function normalizeText(value?: string | null): string {
   return String(value || '').trim();
@@ -2776,7 +2792,14 @@ const WatchlistPage: React.FC = () => {
           className={isWatchlistEmptyWorkspace ? 'grid min-w-0' : 'grid min-w-0 lg:grid-cols-[minmax(0,1fr)_340px]'}
         >
           <div data-layout-zone="PrimaryWorkRegion" data-testid="watchlist-primary-work-region" className="min-w-0">
-            <ConsoleBoard className="overflow-x-auto rounded-none border-0 bg-transparent">
+            <ConsoleBoard
+              data-testid="watchlist-ledger-scroll-region"
+              role="region"
+              aria-label={language === 'en' ? 'Watchlist ledger horizontal scroll region' : '观察列表台账横向滚动区域'}
+              tabIndex={0}
+              onFocusCapture={scrollFocusedDescendantIntoHorizontalView}
+              className="overflow-x-auto overscroll-x-contain rounded-none border-0 bg-transparent px-1 pb-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--wolfy-accent-focus)]"
+            >
               {!isWatchlistEmptyWorkspace ? (
                 <div className="flex min-w-0 items-center justify-between gap-3 border-b border-[color:var(--wolfy-divider)] px-4 py-3">
                   <div className="min-w-0">
@@ -2809,7 +2832,7 @@ const WatchlistPage: React.FC = () => {
                   data-testid="watchlist-candidate-list"
                   role="table"
                   aria-label={language === 'en' ? 'Watchlist research ledger' : '观察列表研究台账'}
-                  className="min-w-[860px]"
+                  className="min-w-[860px] py-1"
                 >
                   {filteredItems.map((item) => {
                     const scanner = item.intelligence?.scanner;
@@ -2897,9 +2920,9 @@ const WatchlistPage: React.FC = () => {
                         key={item.id}
                         data-testid={`watchlist-row-${item.symbol}`}
                         role="row"
-                        className={`min-w-0 border-b border-[color:var(--wolfy-divider)] px-3 py-3 transition-colors md:px-4 ${isActive ? 'bg-[color:color-mix(in_srgb,var(--wolfy-accent)_7%,transparent)]' : 'bg-transparent hover:bg-[var(--wolfy-surface-input)]'}`}
+                        className={`min-w-0 border-b border-[color:var(--wolfy-divider)] px-3 py-4 transition-colors md:px-4 ${isActive ? 'bg-[color:color-mix(in_srgb,var(--wolfy-accent)_7%,transparent)]' : 'bg-transparent hover:bg-[var(--wolfy-surface-input)]'}`}
                       >
-                        <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1.15fr)_minmax(0,1.05fr)_auto] lg:items-start lg:gap-4">
+                        <div className="grid min-w-0 grid-cols-[minmax(0,1.35fr)_minmax(0,1.15fr)_minmax(0,1.05fr)_auto] items-start gap-4 py-0.5">
                           <div role="cell" className="flex min-w-0 gap-3">
                             <button
                               type="button"

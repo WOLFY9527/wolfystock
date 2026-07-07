@@ -415,6 +415,10 @@ describe('WatchlistPage', () => {
     expect(screen.getByRole('table', { name: '观察列表研究台账' })).toBe(screen.getByTestId('watchlist-candidate-list'));
     expect(screen.getByTestId('watchlist-candidate-list')).toHaveAttribute('data-linear-primitive', 'dense-rows');
     expect(screen.getByTestId('watchlist-candidate-list')).toHaveClass('min-w-[860px]');
+    const ledgerScrollRegion = screen.getByRole('region', { name: '观察列表台账横向滚动区域' });
+    expect(ledgerScrollRegion).toBe(screen.getByTestId('watchlist-ledger-scroll-region'));
+    expect(ledgerScrollRegion).toHaveAttribute('tabindex', '0');
+    expect(ledgerScrollRegion).toHaveClass('overflow-x-auto', 'overscroll-x-contain');
     expect(screen.getByTestId('watchlist-list-header')).toHaveAttribute('role', 'row');
     expect(screen.getByTestId('watchlist-primary-work-region')).toHaveAttribute('data-layout-zone', 'PrimaryWorkRegion');
     expect(screen.getByTestId('watchlist-detail-rail')).toHaveAttribute('data-linear-primitive', 'context-rail');

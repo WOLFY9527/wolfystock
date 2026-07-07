@@ -553,6 +553,7 @@ test.describe('T177 Radar and Watchlist research continuity', () => {
       await expect(page).toHaveURL(/\/zh\/research\/radar\?market=us&limit=5/);
       await expect(page.getByTestId('research-radar-page')).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('research-radar-candidate-ledger')).toBeVisible();
+      await expect(page.getByRole('region', { name: '研究雷达候选台账横向滚动区域' })).toBeVisible();
       await expect(page.getByTestId('research-radar-selected-candidate-detail')).toBeVisible();
       await expect(page.getByTestId('research-radar-factor-bars')).toContainText('70');
       await expect(page.getByTestId('research-radar-selected-candidate-detail')).toContainText(/数据时效|Data freshness/);
@@ -635,6 +636,7 @@ test.describe('T177 Radar and Watchlist research continuity', () => {
       await expect(page).toHaveURL(/\/zh\/watchlist\?symbol=ALFA&market=US/);
       await expect(page.getByTestId('watchlist-page')).toBeVisible({ timeout: 15_000 });
       await expect(page.getByRole('table', { name: '观察列表研究台账' })).toBeVisible();
+      await expect(page.getByRole('region', { name: '观察列表台账横向滚动区域' })).toBeVisible();
       await expect(page.getByTestId('watchlist-detail-rail')).toBeVisible();
       await expect(page.getByTestId('watchlist-detail-rail')).toContainText('ALFA');
       await expect(page.getByTestId('watchlist-detail-rail')).toContainText(/数据备注|Data notes|当前状态|Current state/);
