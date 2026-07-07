@@ -38,8 +38,13 @@ import type {
   PortfolioScenarioRiskShockValueInput,
   PortfolioSnapshotResponse,
   PortfolioStructureReviewDataQuality,
+  PortfolioStructureReviewDegradedLinkage,
+  PortfolioStructureReviewEvidenceLinkage,
   PortfolioStructureReviewHolding,
+  PortfolioStructureReviewHoldingDrilldown,
+  PortfolioStructureReviewLinkTarget,
   PortfolioStructureReviewMissingEvidenceItem,
+  PortfolioStructureReviewResearchLinkage,
   PortfolioStructureReviewResearchNotes,
   PortfolioStructureReviewResponse,
   PortfolioTradeCreateRequest,
@@ -576,6 +581,144 @@ function normalizeStructureReviewMissingEvidence(value: unknown): PortfolioStruc
   });
 }
 
+function normalizeStructureReviewLinkageStatus(value: unknown): 'available' | 'degraded' | 'unavailable' | undefined {
+  return value === 'available' || value === 'degraded' || value === 'unavailable' ? value : undefined;
+}
+
+function normalizeStructureReviewLinkTargets(value: unknown): PortfolioStructureReviewLinkTarget[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) {
+      return [];
+    }
+
+    const label = pickString(entry.label);
+    const route = pickString(entry.route);
+    const section = pickString(entry.section);
+    const reason = pickString(entry.reason);
+    if (!label || !route || !section || !reason) {
+      return [];
+    }
+
+    return [{ label, route, section, reason }];
+  });
+}
+
+function normalizeStructureReviewDegradedLinkage(value: unknown): PortfolioStructureReviewDegradedLinkage[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) {
+      return [];
+    }
+
+    const surface = pickString(entry.surface);
+    const status = normalizeStructureReviewLinkageStatus(entry.status);
+    const reason = pickString(entry.reason);
+    const message = pickString(entry.message);
+    if (!surface || !status || status === 'available' || !reason || !message) {
+      return [];
+    }
+
+    return [{ surface, status, reason, message }];
+  });
+}
+
+function normalizeStructureReviewEvidenceLinkage(value: unknown): PortfolioStructureReviewEvidenceLinkage | undefined {
+  const data = isRecord(value) ? value : {};
+  const status = normalizeStructureReviewLinkageStatus(data.status);
+  if (!status) {
+    return undefined;
+  }
+
+  return {
+    status,
+    availableHoldings: pickNumber(data.availableHoldings) ?? 0,
+    degradedHoldings: pickNumber(data.degradedHoldings) ?? 0,
+    unavailableHoldings: pickNumber(data.unavailableHoldings) ?? 0,
+  };
+}
+
+function normalizeStructureReviewHoldingDrilldowns(value: unknown): PortfolioStructureReviewHoldingDrilldown[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) {
+      return [];
+    }
+
+    const ticker = pickString(entry.ticker);
+    const evidenceLinkage = normalizeStructureReviewLinkageStatus(entry.evidenceLinkage);
+    if (!ticker || !evidenceLinkage) {
+      return [];
+    }
+
+    return [{
+      ticker,
+      structureLinks: normalizeStructureReviewLinkTargets(entry.structureLinks),
+      radarLinks: normalizeStructureReviewLinkTargets(entry.radarLinks),
+      watchlistLinks: normalizeStructureReviewLinkTargets(entry.watchlistLinks),
+      scenarioLinks: normalizeStructureReviewLinkTargets(entry.scenarioLinks),
+      evidenceLinkage,
+      degradedLinkage: normalizeStructureReviewDegradedLinkage(entry.degradedLinkage),
+    }];
+  });
+}
+
+function normalizeStructureReviewResearchLinkage(value: unknown): PortfolioStructureReviewResearchLinkage | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const status = normalizeStructureReviewLinkageStatus(value.status);
+  const evidenceLinkage = normalizeStructureReviewEvidenceLinkage(value.evidenceLinkage);
+  if (!status || !evidenceLinkage) {
+    return undefined;
+  }
+
+  return {
+    status,
+    holdingDrilldowns: normalizeStructureReviewHoldingDrilldowns(value.holdingDrilldowns),
+    structureLinks: normalizeStructureReviewLinkTargets(value.structureLinks),
+    radarLinks: normalizeStructureReviewLinkTargets(value.radarLinks),
+    watchlistLinks: normalizeStructureReviewLinkTargets(value.watchlistLinks),
+    scenarioLinks: normalizeStructureReviewLinkTargets(value.scenarioLinks),
+    evidenceLinkage,
+    degradedLinkage: normalizeStructureReviewDegradedLinkage(value.degradedLinkage),
+  };
+}
+
+function normalizeStructureReviewConsumerIssues(value: unknown): PortfolioStructureReviewResponse['consumerIssues'] {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const issues = value.flatMap((entry) => {
+    if (!isRecord(entry)) {
+      return [];
+    }
+
+    const label = pickString(entry.label);
+    const message = pickString(entry.message);
+    const severity = pickString(entry.severity);
+    const category = pickString(entry.category);
+    if (!label || !message || !severity || !category) {
+      return [];
+    }
+
+    return [{ label, message, severity, category }];
+  });
+
+  return issues.length ? issues : [];
+}
+
 function normalizeStructureReviewHolding(value: unknown): PortfolioStructureReviewHolding[] {
   if (!isRecord(value)) {
     return [];
@@ -964,7 +1107,17 @@ function normalizeStructureReviewResponse(data: unknown): PortfolioStructureRevi
       ? normalized.commonRiskFlags.filter(isRecord).map((entry) => stripStructureReviewUnsafeKeys(entry))
       : [],
     missingEvidence: normalizeStructureReviewMissingEvidence(normalized.missingEvidence),
+    researchLinkage: normalizeStructureReviewResearchLinkage(normalized.researchLinkage),
+    readOnly: pickBoolean(normalized.readOnly),
+    failClosed: pickBoolean(normalized.failClosed),
+    consumerState: normalized.consumerState === 'AVAILABLE' || normalized.consumerState === 'PARTIAL' || normalized.consumerState === 'UNAVAILABLE'
+      ? normalized.consumerState
+      : undefined,
+    consumerSummary: pickString(normalized.consumerSummary),
+    consumerMessage: pickString(normalized.consumerMessage),
+    drilldownSymbols: pickStringArray(normalized.drilldownSymbols),
     dataQuality: normalizeStructureReviewDataQuality(normalized.dataQuality),
+    consumerIssues: normalizeStructureReviewConsumerIssues(normalized.consumerIssues),
     noAdviceDisclosure: pickString(normalized.noAdviceDisclosure) ?? '',
   };
 }
@@ -978,8 +1131,8 @@ function normalizeScenarioRiskShockValue(value: unknown): number | PortfolioScen
   }
 
   const normalized: PortfolioScenarioRiskShockValueInput = {};
-  const shockPct = pickNumber(value.shockPct, value.shock_pct, value.shock, value.return);
-  const labelType = pickString(value.labelType, value.label_type, value.type);
+  const shockPct = pickNumber(value.shockPct);
+  const labelType = pickString(value.labelType);
 
   if (shockPct !== undefined) {
     normalized.shockPct = shockPct;
@@ -1022,12 +1175,11 @@ function normalizeScenarioRiskScenarioInputs(value: unknown): PortfolioScenarioR
 }
 
 function normalizeScenarioRiskRequest(payload: PortfolioScenarioRiskRequest): Record<string, unknown> {
-  const source = payload as unknown as Record<string, unknown>;
-  const rawPositions = Array.isArray(source.positions) ? source.positions : [];
-  const rawExposures = Array.isArray(source.exposures) ? source.exposures : [];
+  const rawPositions = Array.isArray(payload.positions) ? payload.positions : [];
+  const rawExposures = Array.isArray(payload.exposures) ? payload.exposures : [];
 
   return {
-    asOf: pickString(source.asOf, source.as_of) ?? '',
+    asOf: pickString(payload.asOf) ?? '',
     positions: rawPositions.flatMap((entry) => {
       if (!isRecord(entry)) {
         return [];
@@ -1036,11 +1188,11 @@ function normalizeScenarioRiskRequest(payload: PortfolioScenarioRiskRequest): Re
       const normalized = {
         symbol: pickString(entry.symbol),
         weight: pickNumber(entry.weight),
-        weightPct: pickNumber(entry.weightPct, entry.weight_pct),
-        marketValue: pickNumber(entry.marketValue, entry.market_value),
-        marketValueBase: pickNumber(entry.marketValueBase, entry.market_value_base),
+        weightPct: pickNumber(entry.weightPct),
+        marketValue: pickNumber(entry.marketValue),
+        marketValueBase: pickNumber(entry.marketValueBase),
         bucket: pickString(entry.bucket),
-        bucketLabel: pickString(entry.bucketLabel, entry.bucket_label),
+        bucketLabel: pickString(entry.bucketLabel),
         theme: pickString(entry.theme),
         currency: pickString(entry.currency),
         factor: pickString(entry.factor),
@@ -1058,7 +1210,7 @@ function normalizeScenarioRiskRequest(payload: PortfolioScenarioRiskRequest): Re
       const normalized = {
         symbol: pickString(entry.symbol),
         label: pickString(entry.label),
-        labelType: pickString(entry.labelType, entry.label_type),
+        labelType: pickString(entry.labelType),
         exposure: pickNumber(entry.exposure),
       };
 
@@ -1066,7 +1218,7 @@ function normalizeScenarioRiskRequest(payload: PortfolioScenarioRiskRequest): Re
         Object.entries(normalized).filter(([, value]) => value !== undefined),
       )];
     }),
-    scenarioShocks: normalizeScenarioRiskScenarioInputs(source.scenarioShocks ?? source.scenario_shocks),
+    scenarioShocks: normalizeScenarioRiskScenarioInputs(payload.scenarioShocks),
   };
 }
 
@@ -1260,7 +1412,10 @@ function normalizeScenarioRiskResponse(data: unknown): PortfolioScenarioRiskResp
   return {
     readModelType: pickString(normalized.readModelType) ?? '',
     advisoryOnly: pickBoolean(normalized.advisoryOnly) ?? false,
-    executionReadiness: pickString(normalized.executionReadiness) ?? '',
+    accountingMutation: pickBoolean(normalized.accountingMutation),
+    brokerIntegration: pickBoolean(normalized.brokerIntegration),
+    tradeExecution: pickBoolean(normalized.tradeExecution),
+    executionReadiness: pickString(normalized.executionReadiness),
     asOf: pickString(normalized.asOf),
     coverage: normalizeScenarioRiskCoverage(normalized.coverage),
     scenarios: normalizeScenarioRiskScenarios(normalized.scenarios),
