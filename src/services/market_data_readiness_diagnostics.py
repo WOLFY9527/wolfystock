@@ -29,6 +29,7 @@ from src.services.cross_asset_driver_readiness import (
 from src.services.provider_affected_surface_mapping import (
     canonical_product_affected_surfaces,
 )
+from src.services.vix_metadata import is_vix_symbol, normalize_vix_quote_metadata
 
 
 CONSUMER_EVIDENCE_READINESS_MATRIX_VERSION = "consumer_evidence_readiness_matrix_v1"
@@ -268,7 +269,12 @@ def build_official_risk_source_readiness(
 
 
 def _build_vix_readiness(rows: Optional[Sequence[Mapping[str, Any]]]) -> dict[str, Any]:
-    candidates = [row for row in rows or () if isinstance(row, Mapping) and _row_series_id(row) == _VIX_SERIES_ID]
+    candidates = [
+        row
+        for row in rows or ()
+        if isinstance(row, Mapping)
+        and (_row_series_id(row) == _VIX_SERIES_ID or is_vix_symbol(row.get("symbol") or row.get("key")))
+    ]
     if not candidates:
         return _family_readiness(
             state="blocked",
@@ -278,6 +284,22 @@ def _build_vix_readiness(rows: Optional[Sequence[Mapping[str, Any]]]) -> dict[st
         )
 
     row = _latest_row(candidates)
+    authority_snapshot = normalize_vix_quote_metadata(row).get("volatilityAuthoritySnapshot")
+    if isinstance(authority_snapshot, Mapping) and (
+        authority_snapshot.get("authorityState") == "blocked"
+        or authority_snapshot.get("coverageState") == "rejected"
+        or authority_snapshot.get("instrumentIdentity", {}).get("identityState") == "identity_mismatch"
+    ):
+        return _family_readiness(
+            state="blocked",
+            series=_VIX_SERIES_ID,
+            source="official_public",
+            latest_date=_row_latest_date(row),
+            as_of=_row_as_of(row),
+            freshness=_row_freshness(row),
+            blocker=str(authority_snapshot.get("scoreEligibility", {}).get("reason") or "identity_mismatch"),
+            volatility_authority_snapshot=authority_snapshot,
+        )
     freshness = _row_freshness(row)
     if _row_is_flagged(row, "isFallback") or freshness in {"fallback", "mock", "synthetic"}:
         return _family_readiness(
@@ -288,6 +310,7 @@ def _build_vix_readiness(rows: Optional[Sequence[Mapping[str, Any]]]) -> dict[st
             as_of=_row_as_of(row),
             freshness=freshness,
             blocker="non_official_vix_row",
+            volatility_authority_snapshot=authority_snapshot,
         )
     if _row_is_flagged(row, "isUnavailable") or freshness in {"unavailable", "error"}:
         return _family_readiness(
@@ -298,6 +321,7 @@ def _build_vix_readiness(rows: Optional[Sequence[Mapping[str, Any]]]) -> dict[st
             as_of=_row_as_of(row),
             freshness=freshness,
             blocker="unavailable_official_vix_row",
+            volatility_authority_snapshot=authority_snapshot,
         )
     if _row_is_flagged(row, "isStale") or freshness == "stale":
         return _family_readiness(
@@ -308,6 +332,7 @@ def _build_vix_readiness(rows: Optional[Sequence[Mapping[str, Any]]]) -> dict[st
             as_of=_row_as_of(row),
             freshness=freshness,
             blocker="stale_official_vix_row",
+            volatility_authority_snapshot=authority_snapshot,
         )
     if not _row_is_official_public(row) or not _row_numeric_value(row):
         return _family_readiness(
@@ -318,8 +343,9 @@ def _build_vix_readiness(rows: Optional[Sequence[Mapping[str, Any]]]) -> dict[st
             as_of=_row_as_of(row),
             freshness=freshness,
             blocker="invalid_official_vix_row",
+            volatility_authority_snapshot=authority_snapshot,
         )
-    if row.get("sourceAuthorityAllowed") is not True or row.get("scoreContributionAllowed") is not True:
+    if row.get("sourceAuthorityAllowed") is not True:
         return _family_readiness(
             state="blocked",
             series=_VIX_SERIES_ID,
@@ -328,6 +354,7 @@ def _build_vix_readiness(rows: Optional[Sequence[Mapping[str, Any]]]) -> dict[st
             as_of=_row_as_of(row),
             freshness=freshness,
             blocker="official_vix_authority_not_ready",
+            volatility_authority_snapshot=authority_snapshot,
         )
     if freshness not in _OFFICIAL_RISK_READY_FRESHNESS:
         return _family_readiness(
@@ -338,6 +365,7 @@ def _build_vix_readiness(rows: Optional[Sequence[Mapping[str, Any]]]) -> dict[st
             as_of=_row_as_of(row),
             freshness=freshness,
             blocker="official_vix_freshness_not_ready",
+            volatility_authority_snapshot=authority_snapshot,
         )
     return _family_readiness(
         state="ready",
@@ -347,6 +375,7 @@ def _build_vix_readiness(rows: Optional[Sequence[Mapping[str, Any]]]) -> dict[st
         as_of=_row_as_of(row),
         freshness=freshness,
         blocker=None,
+        volatility_authority_snapshot=authority_snapshot,
     )
 
 
@@ -983,6 +1012,7 @@ def _family_readiness(
     freshness: str = "unavailable",
     blocker: str | None = None,
     covered_series_count: int | None = None,
+    volatility_authority_snapshot: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "state": state,
@@ -995,6 +1025,8 @@ def _family_readiness(
     }
     if covered_series_count is not None:
         payload["coveredSeriesCount"] = covered_series_count
+    if volatility_authority_snapshot is not None:
+        payload["volatilityAuthoritySnapshot"] = dict(volatility_authority_snapshot)
     return payload
 
 

@@ -1427,12 +1427,23 @@ def test_persistent_raw_macro_snapshot_prefers_official_vix_without_proxy_fetch(
         indicator = service._vix_indicator(service._read_panel("volatility"), service._read_panel("macro"))
 
     mock_fetch.assert_not_called()
-    assert indicator["includedInScore"] is True
+    assert indicator["includedInScore"] is False
     assert indicator["freshness"] == "delayed"
     assert indicator["status"] == "partial"
     assert "FRED VIXCLS" in indicator["summary"]
     assert "official_public" in indicator["summary"]
     assert "Yahoo Finance" not in indicator["summary"]
+    assert indicator["coverageDiagnostics"]["realSourceAvailable"] is True
+    assert indicator["coverageDiagnostics"]["scoreContributionAllowed"] is False
+    assert indicator["coverageDiagnostics"]["scoreExclusionReason"] == "volatility_snapshot_score_default_closed"
+    assert indicator["evidence"]["inputs"][0]["officialSeriesId"] == "VIXCLS"
+    assert indicator["evidence"]["inputs"][0]["sourceAuthorityAllowed"] is True
+    assert indicator["evidence"]["inputs"][0]["consumerEligibility"]["liquidity"] is True
+    assert indicator["evidence"]["inputs"][0]["volatilityAuthoritySnapshot"]["authorityState"] == "official"
+    assert indicator["evidence"]["inputs"][0]["volatilityAuthoritySnapshot"]["scoreEligibility"] == {
+        "allowed": False,
+        "reason": "volatility_snapshot_score_default_closed",
+    }
 
 
 def test_persistent_raw_volatility_snapshot_prefers_official_vix_without_proxy_fetch(isolated_db: DatabaseManager) -> None:
@@ -1480,10 +1491,21 @@ def test_persistent_raw_volatility_snapshot_prefers_official_vix_without_proxy_f
         indicator = service._vix_indicator(service._read_panel("volatility"), service._read_panel("macro"))
 
     mock_fetch.assert_not_called()
-    assert indicator["includedInScore"] is True
+    assert indicator["includedInScore"] is False
     assert indicator["freshness"] == "delayed"
     assert "FRED VIXCLS" in indicator["summary"]
     assert "Yahoo Finance" not in indicator["summary"]
+    assert indicator["coverageDiagnostics"]["realSourceAvailable"] is True
+    assert indicator["coverageDiagnostics"]["scoreContributionAllowed"] is False
+    assert indicator["coverageDiagnostics"]["scoreExclusionReason"] == "volatility_snapshot_score_default_closed"
+    assert indicator["evidence"]["inputs"][0]["officialSeriesId"] == "VIXCLS"
+    assert indicator["evidence"]["inputs"][0]["sourceAuthorityAllowed"] is True
+    assert indicator["evidence"]["inputs"][0]["consumerEligibility"]["liquidity"] is True
+    assert indicator["evidence"]["inputs"][0]["volatilityAuthoritySnapshot"]["authorityState"] == "official"
+    assert indicator["evidence"]["inputs"][0]["volatilityAuthoritySnapshot"]["scoreEligibility"] == {
+        "allowed": False,
+        "reason": "volatility_snapshot_score_default_closed",
+    }
 
 
 def test_expired_proxy_volatility_cache_yields_to_newer_official_snapshot_without_proxy_refetch(
@@ -5065,17 +5087,26 @@ def test_vix_indicator_prefers_official_macro_cache_over_yfinance_proxy(isolated
     payload = service.get_liquidity_monitor()
     indicator = {item["key"]: item for item in payload["indicators"]}["vix_pressure"]
 
-    assert indicator["includedInScore"] is True
+    assert indicator["includedInScore"] is False
+    assert indicator["scoreContribution"] == 0
     assert indicator["status"] == "partial"
     assert indicator["freshness"] == "cached"
     assert "FRED VIXCLS" in str(indicator["summary"])
     assert "official_public" in str(indicator["summary"])
     assert "Yahoo Finance" not in str(indicator["summary"])
     assert indicator["coverageDiagnostics"]["realSourceAvailable"] is True
-    assert indicator["coverageDiagnostics"]["scoreContributionAllowed"] is True
+    assert indicator["coverageDiagnostics"]["scoreContributionAllowed"] is False
+    assert indicator["coverageDiagnostics"]["scoreExclusionReason"] == "volatility_snapshot_score_default_closed"
     assert indicator["evidence"]["inputs"][0]["officialSeriesId"] == "VIXCLS"
     assert indicator["evidence"]["inputs"][0]["sourceAuthorityAllowed"] is True
-    assert indicator["evidence"]["inputs"][0]["scoreContributionAllowed"] is True
+    assert indicator["evidence"]["inputs"][0]["scoreContributionAllowed"] is False
+    assert indicator["evidence"]["inputs"][0]["scoreAuthorityEligible"] is False
+    assert indicator["evidence"]["inputs"][0]["sourceAuthorityState"] == "official"
+    assert indicator["evidence"]["inputs"][0]["consumerEligibility"]["liquidity"] is True
+    assert indicator["evidence"]["inputs"][0]["volatilityAuthoritySnapshot"]["scoreEligibility"] == {
+        "allowed": False,
+        "reason": "volatility_snapshot_score_default_closed",
+    }
 
 
 def test_vix_indicator_requires_explicit_official_vix_authority_before_score_grade(

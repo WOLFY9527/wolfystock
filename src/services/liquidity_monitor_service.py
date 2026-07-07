@@ -252,6 +252,7 @@ EVIDENCE_INPUT_METADATA_FIELDS = (
     "sourceAuthorityState",
     "scoreContributionAllowed",
     "scoreAuthorityEligible",
+    "scoreExclusionReason",
     "sourceAuthorityReason",
     "sourceAuthorityRouteRejected",
     "routeRejectedReasonCodes",
@@ -259,6 +260,9 @@ EVIDENCE_INPUT_METADATA_FIELDS = (
     "officialSeriesId",
     "officialObservationDate",
     "officialAsOf",
+    "consumerEligibility",
+    "volatilityAuthoritySnapshot",
+    "volatilitySnapshotId",
     "unavailableReason",
 )
 
@@ -1370,15 +1374,27 @@ class LiquidityMonitorService:
             return item
 
         gated = dict(item)
-        gated["sourceAuthorityAllowed"] = False
         gated["scoreContributionAllowed"] = False
-        gated["sourceAuthorityReason"] = gated.get("sourceAuthorityReason") or block_reason
+        if block_reason == "volatility_snapshot_score_default_closed":
+            gated["sourceAuthorityAllowed"] = True
+            gated["scoreAuthorityEligible"] = False
+            gated["scoreExclusionReason"] = block_reason
+        else:
+            gated["sourceAuthorityAllowed"] = False
+            gated["sourceAuthorityReason"] = gated.get("sourceAuthorityReason") or block_reason
         return gated
 
     def _official_vix_score_block_reason(self, item: Dict[str, Any], panel: PanelState) -> str | None:
         if self._official_vix_series_id(item) != OFFICIAL_VIX_SERIES_ID:
             return OFFICIAL_VIX_AUTHORITY_BLOCK_REASON
-        if item.get("sourceAuthorityAllowed") is not True or item.get("scoreContributionAllowed") is not True:
+        if item.get("sourceAuthorityAllowed") is not True:
+            return OFFICIAL_VIX_AUTHORITY_BLOCK_REASON
+        snapshot = item.get("volatilityAuthoritySnapshot")
+        if isinstance(snapshot, dict):
+            score_eligibility = snapshot.get("scoreEligibility")
+            if isinstance(score_eligibility, dict) and score_eligibility.get("allowed") is not True:
+                return str(score_eligibility.get("reason") or "volatility_snapshot_score_default_closed")
+        if item.get("scoreContributionAllowed") is not True:
             return OFFICIAL_VIX_AUTHORITY_BLOCK_REASON
         if self._item_freshness(item, panel) not in RELIABLE_FRESHNESS:
             return OFFICIAL_VIX_FRESHNESS_BLOCK_REASON
@@ -4070,6 +4086,11 @@ class LiquidityMonitorService:
             if blocked_input_authority
             else None
         )
+        blocked_score_reason = (
+            self._first_blocked_input_score_exclusion_reason(evidence)
+            if blocked_input_authority
+            else None
+        )
         blocked_input_route_codes = (
             self._first_blocked_input_route_rejected_reason_codes(evidence)
             if blocked_input_authority
@@ -4081,7 +4102,7 @@ class LiquidityMonitorService:
         missing_provider_reason = None
         if required_provider_class and not real_source_available:
             missing_provider_reason = f"requires_{required_provider_class}"
-        if key == "vix_pressure" and blocked_input_authority:
+        if key == "vix_pressure" and blocked_input_authority and not proxy_only:
             missing_provider_reason = None
         if (
             key == "us_breadth_proxy"
@@ -4098,8 +4119,10 @@ class LiquidityMonitorService:
             score_exclusion_reason = "fed_liquidity_required_series_missing_or_stale"
         elif key == "us_rates_pressure" and not real_source_available:
             score_exclusion_reason = self._us_rates_unavailable_reason(evidence)
+        elif key == "vix_pressure" and proxy_only:
+            score_exclusion_reason = "proxy_only_missing_real_source"
         elif key == "vix_pressure" and required_real_source_for_score and blocked_input_authority:
-            score_exclusion_reason = blocked_input_reason or OFFICIAL_VIX_AUTHORITY_BLOCK_REASON
+            score_exclusion_reason = blocked_score_reason or blocked_input_reason or OFFICIAL_VIX_AUTHORITY_BLOCK_REASON
         elif required_real_source_for_score and missing_provider_reason and not proxy_score_allowlisted:
             score_exclusion_reason = "proxy_only_missing_real_source"
         elif required_real_source_for_score and blocked_input_authority:
@@ -4182,6 +4205,21 @@ class LiquidityMonitorService:
                 or item.get("capReason")
                 or ""
             ).strip()
+            if reason:
+                return reason
+        return None
+
+    @staticmethod
+    def _first_blocked_input_score_exclusion_reason(evidence: Dict[str, Any]) -> str | None:
+        inputs = evidence.get("inputs")
+        if not isinstance(inputs, list):
+            return None
+        for item in inputs:
+            if not isinstance(item, dict):
+                continue
+            if item.get("scoreContributionAllowed") is not False:
+                continue
+            reason = str(item.get("scoreExclusionReason") or "").strip()
             if reason:
                 return reason
         return None
@@ -4503,7 +4541,7 @@ class LiquidityMonitorService:
                 allowed_source_tiers={"official_public"},
             )
         if key == "vix_pressure":
-            return self._official_vix_evidence_has_score_authority(evidence)
+            return self._official_vix_evidence_has_consumer_authority(evidence)
         if key == "cn_hk_index_context":
             return (
                 str(trust.get("sourceTier") or "") == "official_public"
@@ -4514,6 +4552,27 @@ class LiquidityMonitorService:
     def _official_vix_evidence_has_score_authority(self, evidence: Dict[str, Any]) -> bool:
         inputs = [item for item in evidence.get("inputs", []) if isinstance(item, dict)]
         return any(self._official_vix_input_has_score_authority(item) for item in inputs)
+
+    def _official_vix_evidence_has_consumer_authority(self, evidence: Dict[str, Any]) -> bool:
+        inputs = [item for item in evidence.get("inputs", []) if isinstance(item, dict)]
+        return any(self._official_vix_input_has_consumer_authority(item) for item in inputs)
+
+    def _official_vix_input_has_consumer_authority(self, item: Dict[str, Any]) -> bool:
+        source_type = str(item.get("sourceType") or "").lower()
+        source_tier = str(item.get("sourceTier") or "").lower()
+        eligibility = item.get("consumerEligibility")
+        liquidity_eligible = bool(isinstance(eligibility, dict) and eligibility.get("liquidity"))
+        return bool(
+            self._indicator_input_key(item) == "VIX"
+            and (source_type == "official_public" or source_tier == "official_public")
+            and self._official_vix_series_id(item) == OFFICIAL_VIX_SERIES_ID
+            and item.get("sourceAuthorityAllowed") is True
+            and liquidity_eligible
+            and not item.get("isFallback")
+            and not item.get("isUnavailable")
+            and not item.get("isStale")
+            and str(item.get("freshness") or "") in RELIABLE_FRESHNESS
+        )
 
     def _official_vix_input_has_score_authority(self, item: Dict[str, Any]) -> bool:
         source_type = str(item.get("sourceType") or "").lower()

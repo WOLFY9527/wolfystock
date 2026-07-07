@@ -131,6 +131,104 @@ def test_partial_snapshot_keeps_degraded_categories_explicit() -> None:
     assert snapshot["comparisonReady"] is False
 
 
+def test_volatility_authority_snapshot_controls_scenario_baseline_eligibility() -> None:
+    service = ScenarioBaselineSnapshotService()
+
+    official_snapshot = service.create_snapshot(
+        {
+            "snapshotId": "baseline-vix-official",
+            "scope": {"type": "market", "value": "US"},
+            "createdAt": "2026-07-06T20:05:00Z",
+            "source": {
+                "dataState": "real_cached",
+                "freshness": "delayed",
+                "asOf": "2026-07-06T20:00:00Z",
+                "sourceAuthorityAllowed": True,
+                "volatilityAuthoritySnapshot": {
+                    "snapshotId": "volatility:VIX:fred:VIXCLS:2026-07-06T20:00:00Z",
+                    "authorityState": "official",
+                    "coverageState": "available",
+                    "proxyFallback": False,
+                    "consumerEligibility": {
+                        "marketOverview": True,
+                        "liquidity": True,
+                        "scenarioBaseline": True,
+                    },
+                    "scoreEligibility": {
+                        "allowed": False,
+                        "reason": "volatility_snapshot_score_default_closed",
+                    },
+                },
+            },
+            "categories": {
+                "price": {"state": "available"},
+                "marketRegime": {"state": "available"},
+                "volatility": {"state": "available"},
+                "flowPositioning": {"state": "available"},
+                "optionsGreeks": {"state": "available"},
+            },
+        }
+    )
+    proxy_snapshot = service.create_snapshot(
+        {
+            "snapshotId": "baseline-vix-proxy",
+            "scope": {"type": "market", "value": "US"},
+            "createdAt": "2026-07-06T20:05:00Z",
+            "source": {
+                "dataState": "real_cached",
+                "freshness": "delayed",
+                "asOf": "2026-07-06T20:00:00Z",
+                "sourceAuthorityAllowed": True,
+                "volatilityAuthoritySnapshot": {
+                    "snapshotId": "volatility:VIX:yfinance:^VIX:2026-07-06T20:00:00Z",
+                    "authorityState": "proxy",
+                    "coverageState": "available",
+                    "proxyFallback": True,
+                    "consumerEligibility": {
+                        "marketOverview": True,
+                        "liquidity": False,
+                        "scenarioBaseline": False,
+                    },
+                    "scoreEligibility": {
+                        "allowed": False,
+                        "reason": "unofficial_proxy_not_score_grade",
+                    },
+                },
+            },
+            "categories": {
+                "price": {"state": "available"},
+                "marketRegime": {"state": "available"},
+                "volatility": {"state": "available"},
+                "flowPositioning": {"state": "available"},
+                "optionsGreeks": {"state": "available"},
+            },
+        }
+    )
+
+    assert official_snapshot["status"] == "available"
+    assert official_snapshot["comparisonReady"] is True
+    assert official_snapshot["source"]["volatilityAuthoritySnapshot"] == {
+        "snapshotId": "volatility:VIX:fred:VIXCLS:2026-07-06T20:00:00Z",
+        "authorityState": "official",
+        "coverageState": "available",
+        "proxyFallback": False,
+        "consumerEligibility": {
+            "marketOverview": True,
+            "liquidity": True,
+            "scenarioBaseline": True,
+        },
+        "scoreEligibility": {
+            "allowed": False,
+            "reason": "volatility_snapshot_score_default_closed",
+        },
+    }
+    assert proxy_snapshot["status"] == "partial"
+    assert proxy_snapshot["reasonCode"] == "baseline_partial"
+    assert proxy_snapshot["source"]["observationOnly"] is True
+    assert proxy_snapshot["comparisonReady"] is False
+    assert proxy_snapshot["source"]["volatilityAuthoritySnapshot"]["authorityState"] == "proxy"
+
+
 def test_consumer_safe_response_redacts_internal_provider_and_runtime_markers() -> None:
     service = ScenarioBaselineSnapshotService()
 

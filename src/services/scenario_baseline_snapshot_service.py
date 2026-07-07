@@ -172,12 +172,44 @@ def _normalize_source(raw: Mapping[str, Any]) -> dict[str, Any]:
         or freshness in {"stale", "unavailable", "no_evidence"}
         or not source_authority_allowed
     )
-    return {
+    volatility_snapshot = _normalize_volatility_authority_snapshot(raw.get("volatilityAuthoritySnapshot"))
+    if volatility_snapshot and not volatility_snapshot["consumerEligibility"]["scenarioBaseline"]:
+        observation_only = True
+    source = {
         "dataState": data_state,
         "freshness": freshness,
         "asOf": _safe_timestamp(raw.get("asOf") or raw.get("as_of") or raw.get("lastUpdated")),
         "sourceAuthorityAllowed": source_authority_allowed,
         "observationOnly": observation_only,
+    }
+    if volatility_snapshot:
+        source["volatilityAuthoritySnapshot"] = volatility_snapshot
+    return source
+
+
+def _normalize_volatility_authority_snapshot(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    consumer = value.get("consumerEligibility")
+    score = value.get("scoreEligibility")
+    return {
+        "snapshotId": _safe_identifier(value.get("snapshotId")),
+        "authorityState": _normalize_token(value.get("authorityState")) or "missing",
+        "coverageState": _normalize_token(value.get("coverageState")) or "missing",
+        "proxyFallback": bool(value.get("proxyFallback")),
+        "consumerEligibility": {
+            "marketOverview": bool(isinstance(consumer, Mapping) and consumer.get("marketOverview")),
+            "liquidity": bool(isinstance(consumer, Mapping) and consumer.get("liquidity")),
+            "scenarioBaseline": bool(isinstance(consumer, Mapping) and consumer.get("scenarioBaseline")),
+        },
+        "scoreEligibility": {
+            "allowed": False,
+            "reason": _safe_text(
+                score.get("reason") if isinstance(score, Mapping) else None,
+                fallback="volatility_snapshot_score_default_closed",
+                max_length=80,
+            ),
+        },
     }
 
 
