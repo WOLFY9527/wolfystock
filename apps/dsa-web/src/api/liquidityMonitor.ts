@@ -4,9 +4,11 @@ import { toCamelCase } from './utils';
 import type { InvestorSignalAssetPressure, InvestorSignalContract } from '../types/scanner';
 
 export type LiquidityMonitorFreshness = 'live' | 'cached' | 'delayed' | 'partial' | 'stale' | 'fallback' | 'mock' | 'error' | 'unavailable';
+export type LiquidityEvidenceFreshness = LiquidityMonitorFreshness | 'fresh' | 'synthetic' | 'unknown';
 export type LiquidityMonitorRegime = 'abundant' | 'supportive' | 'neutral' | 'tight' | 'stress' | 'unavailable';
 export type LiquidityMonitorIndicatorStatus = 'live' | 'partial' | 'unavailable';
 export type OfficialRiskBundleStatus = 'available' | 'partial' | 'missing' | 'stale' | 'blocked' | string;
+export type LiquidityConsumerDataQualityState = 'ready' | 'delayed' | 'cached' | 'partial' | 'no_evidence' | 'unavailable' | string;
 
 export interface LiquidityMonitorScore {
   value: number;
@@ -15,6 +17,12 @@ export interface LiquidityMonitorScore {
   includedIndicatorCount: number;
   possibleIndicatorWeight: number;
   includedIndicatorWeight: number;
+}
+
+export interface LiquidityConsumerDataQuality {
+  state: LiquidityConsumerDataQualityState;
+  label: string;
+  available: boolean;
 }
 
 export interface LiquidityMonitorFreshnessSummary {
@@ -52,7 +60,7 @@ export interface LiquidityMonitorEvidenceInput {
   sourceTier?: string | null;
   trustLevel?: string | null;
   asOf?: string | null;
-  freshness: string;
+  freshness: LiquidityEvidenceFreshness;
   isFallback?: boolean;
   isStale?: boolean;
   isPartial?: boolean;
@@ -77,7 +85,7 @@ export interface LiquidityMonitorEvidenceSnapshot {
   source: string;
   sourceLabel?: string | null;
   asOf?: string | null;
-  freshness: string;
+  freshness: LiquidityEvidenceFreshness;
   isFallback?: boolean;
   isStale?: boolean;
   isPartial?: boolean;
@@ -163,7 +171,11 @@ export interface OfficialRiskBundleFamilyReadiness {
   label: string;
   required: boolean;
   status: OfficialRiskBundleStatus;
-  freshness: LiquidityMonitorFreshness;
+  sourceType?: string;
+  sourceAuthorityAllowed?: boolean;
+  scoreAuthorityEligible?: boolean;
+  observationOnly?: boolean;
+  freshness: LiquidityEvidenceFreshness;
   asOf?: string | null;
   freshnessWindow: string;
   requiredSeries: string[];
@@ -175,10 +187,14 @@ export interface OfficialRiskBundleFamilyReadiness {
 }
 
 export interface OfficialRiskBundleReadiness {
+  contractVersion?: string;
   status: OfficialRiskBundleStatus;
   scoreAuthority: 'eligible' | 'observation_only' | string;
+  scoreAuthorityEligible?: boolean;
+  observationOnly?: boolean;
+  sourceAuthorityState?: OfficialRiskBundleStatus;
   asOf?: string | null;
-  freshness: LiquidityMonitorFreshness;
+  freshness: LiquidityEvidenceFreshness;
   requiredFamilies: string[];
   availableFamilies: string[];
   partialFamilies: string[];
@@ -252,6 +268,7 @@ export interface LiquidityMonitorResponse {
   score: LiquidityMonitorScore;
   coverageContract?: LiquidityMonitorCoverageContract;
   freshness: LiquidityMonitorFreshnessSummary;
+  dataQuality?: LiquidityConsumerDataQuality;
   indicators: LiquidityMonitorIndicator[];
   officialRiskBundleReadiness?: OfficialRiskBundleReadiness;
   liquidityImpulseSynthesis?: LiquidityImpulseSynthesis;
@@ -352,6 +369,10 @@ function normalizeOfficialRiskBundleFamily(
     label: family.label || String(family.familyId),
     required: family.required === true,
     status: family.status || 'missing',
+    sourceType: family.sourceType || '',
+    sourceAuthorityAllowed: family.sourceAuthorityAllowed === true,
+    scoreAuthorityEligible: family.scoreAuthorityEligible === true,
+    observationOnly: family.observationOnly !== false,
     freshness: family.freshness || 'unavailable',
     asOf: family.asOf || null,
     freshnessWindow: family.freshnessWindow || '',
@@ -372,8 +393,12 @@ function normalizeOfficialRiskBundleReadiness(
   }
 
   return {
+    contractVersion: readiness.contractVersion,
     status: readiness.status || 'missing',
     scoreAuthority: readiness.scoreAuthority || 'observation_only',
+    scoreAuthorityEligible: readiness.scoreAuthorityEligible === true,
+    observationOnly: readiness.observationOnly !== false,
+    sourceAuthorityState: readiness.sourceAuthorityState,
     asOf: readiness.asOf || null,
     freshness: readiness.freshness || 'unavailable',
     requiredFamilies: Array.isArray(readiness.requiredFamilies) ? readiness.requiredFamilies.filter(Boolean) : [],
@@ -401,6 +426,7 @@ function normalizeLiquidityMonitor(payload: Record<string, unknown>): LiquidityM
     score: normalized.score,
     coverageContract: normalized.coverageContract,
     freshness: normalized.freshness,
+    dataQuality: normalized.dataQuality,
     indicators: Array.isArray(normalized.indicators) ? normalized.indicators : [],
     officialRiskBundleReadiness: normalizeOfficialRiskBundleReadiness(normalized.officialRiskBundleReadiness),
     liquidityImpulseSynthesis: normalizeLiquidityImpulseSynthesis(normalized.liquidityImpulseSynthesis),

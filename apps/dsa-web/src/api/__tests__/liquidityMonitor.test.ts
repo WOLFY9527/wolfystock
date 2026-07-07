@@ -67,6 +67,11 @@ describe('liquidityMonitorApi', () => {
           weakest_indicator_freshness: 'delayed',
           latest_as_of: '2026-05-07T10:00:00+08:00',
         },
+        data_quality: {
+          state: 'delayed',
+          label: '数据延迟',
+          available: false,
+        },
         indicators: [
           {
             key: 'vix_pressure',
@@ -339,6 +344,11 @@ describe('liquidityMonitorApi', () => {
       scoreWeightBudget: 49,
     });
     expect(payload.freshness.weakestIndicatorFreshness).toBe('delayed');
+    expect(payload.dataQuality).toEqual({
+      state: 'delayed',
+      label: '数据延迟',
+      available: false,
+    });
     expect(payload.indicators[0].includedInScore).toBe(true);
     expect(payload.indicators[0].evidence?.inputs[0]).toMatchObject({
       sourceAuthorityAllowed: true,
@@ -394,20 +404,24 @@ describe('liquidityMonitorApi', () => {
     expect(payload.capitalFlowSignal?.contradictionSignals).toEqual(['btc_not_confirming_growth_absorption']);
     expect(payload.sourceMetadata.externalProviderCalls).toBe(false);
     expect(payload.officialRiskBundleReadiness).toMatchObject({
+      contractVersion: 'official_risk_bundle_readiness_v1',
       status: 'partial',
       scoreAuthority: 'observation_only',
+      scoreAuthorityEligible: false,
+      observationOnly: true,
+      sourceAuthorityState: 'partial',
       requiredFamilies: ['vix', 'rates', 'fedLiquidity'],
       missingRequiredSeries: ['WALCL'],
     });
     expect(payload.officialRiskBundleReadiness?.families[0]).toMatchObject({
       familyId: 'vix',
+      sourceType: 'official_public',
+      sourceAuthorityAllowed: true,
+      scoreAuthorityEligible: true,
+      observationOnly: false,
       requiredSeries: ['VIXCLS'],
       fulfilledSeries: ['VIXCLS'],
     });
-    expect(payload.officialRiskBundleReadiness).not.toHaveProperty('sourceAuthorityState');
-    expect(payload.officialRiskBundleReadiness).not.toHaveProperty('scoreAuthorityEligible');
-    expect(payload.officialRiskBundleReadiness?.families[0]).not.toHaveProperty('sourceType');
-    expect(payload.officialRiskBundleReadiness?.families[0]).not.toHaveProperty('sourceAuthorityAllowed');
     expect(buildOfficialRiskBundleReadinessView(payload.officialRiskBundleReadiness)).toMatchObject({
       bundleLabel: '官方风险包部分待补',
       bundleVariant: 'info',

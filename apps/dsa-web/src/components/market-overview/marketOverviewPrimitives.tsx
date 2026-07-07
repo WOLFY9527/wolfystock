@@ -14,16 +14,21 @@ import { resolveMarketOverviewDisplayLabel } from './marketOverviewLabels';
 
 const FRESHNESS_LABELS: Record<MarketDataFreshness, string> = {
   live: '实时',
+  fresh: '实时',
   delayed: '延迟可读',
   cached: '保存快照',
   stale: '可能延迟',
+  partial: '部分可用',
   fallback: '替代快照',
   mock: '示例观察',
+  synthetic: '示例观察',
   error: '读取异常',
   unavailable: '暂不可用',
+  unknown: '待确认',
+  proxy: '代理数据',
 };
 
-type MarketFreshnessBadgeKey = MarketProviderHealthStatus | 'delayed' | 'mock';
+type MarketFreshnessBadgeKey = MarketProviderHealthStatus | 'delayed' | 'mock' | 'proxy';
 
 const STATUS_LABELS: Record<MarketFreshnessBadgeKey, string> = {
   live: '实时',
@@ -32,6 +37,7 @@ const STATUS_LABELS: Record<MarketFreshnessBadgeKey, string> = {
   stale: '可能延迟',
   fallback: '替代快照',
   mock: '示例观察',
+  proxy: '代理数据',
   partial: '部分可用',
   unavailable: '暂不可用',
   error: '读取异常',
@@ -45,6 +51,7 @@ const FRESHNESS_CLASSES: Record<MarketFreshnessBadgeKey, string> = {
   stale: 'border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] text-[color:var(--state-warning-text)]',
   fallback: 'border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] text-[color:var(--state-warning-text)]',
   mock: 'border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] text-[color:var(--state-warning-text)]',
+  proxy: 'border-[color:var(--state-info-border)] bg-[var(--state-info-bg)] text-[color:var(--state-info-text)]',
   partial: 'border-[color:var(--state-info-border)] bg-[var(--state-info-bg)] text-[color:var(--state-info-text)]',
   unavailable: 'border-[color:var(--line)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)]',
   error: 'border-[color:var(--state-danger-border)] bg-[var(--state-danger-bg)] text-[color:var(--state-danger-text)]',
@@ -137,29 +144,35 @@ function resolveFreshness(meta?: Partial<MarketDataMeta>): MarketProviderHealthS
 }
 
 function legacyFreshnessToStatus(freshness?: MarketDataFreshness): MarketProviderHealthStatus {
-  if (freshness === 'live') {
+  if (freshness === 'live' || freshness === 'fresh') {
     return 'live';
   }
   if (freshness === 'stale') {
     return 'stale';
   }
-  if (freshness === 'fallback' || freshness === 'mock') {
+  if (freshness === 'fallback' || freshness === 'mock' || freshness === 'synthetic') {
     return 'fallback';
   }
-  if (freshness === 'unavailable') {
+  if (freshness === 'unavailable' || freshness === 'unknown') {
     return 'unavailable';
   }
   if (freshness === 'error') {
     return 'error';
   }
+  if (freshness === 'partial') {
+    return 'partial';
+  }
   return 'cache';
 }
 
 function resolveFreshnessBadgeKey(freshness?: MarketDataFreshness, status?: MarketProviderHealthStatus): MarketFreshnessBadgeKey {
+  if (freshness === 'proxy') {
+    return 'proxy';
+  }
   if (status === 'cache' && freshness === 'delayed') {
     return 'delayed';
   }
-  if (status === 'fallback' && freshness === 'mock') {
+  if (status === 'fallback' && (freshness === 'mock' || freshness === 'synthetic')) {
     return 'mock';
   }
   if (status) {
