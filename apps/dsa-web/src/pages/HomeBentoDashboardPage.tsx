@@ -5,7 +5,10 @@ import { History, Lock, MoreHorizontal, Search, Star, Upload } from 'lucide-reac
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import {
   dashboardOverviewApi,
+  type DashboardMetric,
   type DashboardMarketIntelligenceOverview,
+  type DashboardOverviewStatus,
+  type DashboardPublicState,
 } from '../api/dashboardOverview';
 import ProductReadModelStatusStrip from '../components/common/ProductReadModelStatusStrip';
 import type { ProductReadModel } from '../types/productReadModel';
@@ -148,14 +151,43 @@ type MemberMarketBriefView = {
   evidence: Array<{ key: string; label: string; value: string; detail: string }>;
   actions: Array<{ key: string; label: string; href: string; primary?: boolean }>;
   safety: string;
-  betaWorkflow: string[];
-  betaLimits: string[];
-  feedback: {
-    label: string;
-    href: string;
-    detail: string;
-  };
   productReadModel?: ProductReadModel | null;
+};
+
+type HomeResearchQueueItemView = {
+  title: string;
+  summary: string;
+  action: string;
+  priority: string;
+};
+
+type HomeDailyMetricView = {
+  key: string;
+  label: string;
+  value: string;
+  change?: string;
+  statusLabel?: string;
+};
+
+type HomeDailyChangeView = {
+  key: string;
+  label: string;
+  value: string;
+  detail?: string;
+};
+
+type HomeDailyResearchView = {
+  observation: string;
+  why: string;
+  reliabilityLabel: string;
+  reliabilityDetail: string;
+  nextCheck: string;
+  queue: HomeResearchQueueItemView[];
+  queueEmptyTitle: string;
+  queueEmptyDetail: string;
+  watchChanges: HomeDailyChangeView[];
+  indexPath: HomeDailyMetricView[];
+  dataLedger: HomeDailyChangeView[];
 };
 
 const HOME_LOCAL_SURFACE_PANEL_CLASS = 'min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)]';
@@ -4978,30 +5010,142 @@ function buildMemberMarketBriefView(
       { key: 'stock-search', label: isEnglish ? 'Search Symbol' : '搜索个股', href: buildHref('/stocks/structure-decision') },
     ],
     safety: isEnglish ? 'Research observation, not investment advice.' : '研究观察，不构成投资建议。',
-    betaWorkflow: isEnglish
-      ? ['Discover', 'Investigate', 'Compare evidence', 'Track', 'Continue research']
-      : ['发现', '研究', '对比证据', '跟踪', '继续研究'],
-    betaLimits: isEnglish
-      ? [
-        'Coverage can be partial across markets and evidence categories.',
-        'Freshness or quote history may be delayed or incomplete.',
-        'WolfyStock withholds stronger conclusions when evidence is insufficient.',
-        'Research observation only; no personalized trading instruction.',
-      ]
-      : [
-        '不同市场和证据类别的覆盖可能不完整。',
-        '报价、历史或新鲜度可能延迟或待补。',
-        '证据不足时，WolfyStock 会保留更强结论。',
-        '仅用于研究观察：不输出个性化交易指令或仓位执行方案。',
-      ],
-    feedback: {
-      label: isEnglish ? 'Send Beta feedback' : '提交 Beta 反馈',
-      href: 'https://github.com/ZhuLinsen/daily_stock_analysis/discussions',
-      detail: isEnglish
-        ? 'Existing supported channel: GitHub Discussions. No structured in-app feedback backend is exposed here.'
-        : '现有支持通道：GitHub Discussions。当前未发现结构化站内反馈后端。',
-    },
     productReadModel,
+  };
+}
+
+function hasMeaningfulHomeText(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function normalizeHomeDailyText(value: unknown): string {
+  return hasMeaningfulHomeText(value) ? value.trim() : '';
+}
+
+function homeDailyStatusLabel(status: DashboardPublicState | DashboardOverviewStatus | undefined, locale: DashboardLocale): string {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (locale === 'en') {
+    if (normalized === 'ready') return 'ready';
+    if (normalized === 'delayed') return 'delayed';
+    if (normalized === 'cached') return 'cached';
+    if (normalized === 'partial') return 'partial';
+    if (normalized === 'no_evidence') return 'no evidence';
+    if (normalized === 'unavailable') return 'unavailable';
+    return 'limited';
+  }
+  if (normalized === 'ready') return '可用';
+  if (normalized === 'delayed') return '延迟';
+  if (normalized === 'cached') return '缓存';
+  if (normalized === 'partial') return '部分可用';
+  if (normalized === 'no_evidence') return '证据不足';
+  if (normalized === 'unavailable') return '暂不可用';
+  return '受限';
+}
+
+function buildHomeMetricView(key: string, metric: DashboardMetric | undefined, locale: DashboardLocale): HomeDailyMetricView | null {
+  const label = normalizeHomeDailyText(metric?.label).replace(/Russell\s*2000/i, 'R2000');
+  const value = normalizeHomeDailyText(metric?.value);
+  const change = normalizeHomeDailyText(metric?.change);
+  if (!label || !value) {
+    return null;
+  }
+  return {
+    key,
+    label,
+    value,
+    change: change || undefined,
+    statusLabel: homeDailyStatusLabel(metric?.status, locale),
+  };
+}
+
+function homeDailyLedgerSectionLabel(index: number, locale: DashboardLocale): string {
+  return locale === 'en'
+    ? `Evidence domain ${index + 1}`
+    : `证据域 ${index + 1}`;
+}
+
+function buildHomeDailyResearchView(
+  locale: DashboardLocale,
+  brief: MemberMarketBriefView,
+  overview: DashboardMarketIntelligenceOverview | null,
+): HomeDailyResearchView {
+  const isEnglish = locale === 'en';
+  const marketPulse = overview?.marketPulse;
+  const queue = (overview?.researchQueue.items || [])
+    .map((item) => ({
+      title: normalizeHomeDailyText(item.title),
+      summary: normalizeHomeDailyText(item.summary),
+      action: normalizeHomeDailyText(item.action),
+      priority: normalizeHomeDailyText(item.priority),
+    }))
+    .filter((item) => item.title || item.summary || item.action)
+    .slice(0, 4);
+  const indexPath = [
+    buildHomeMetricView('sp500', marketPulse?.sp500, locale),
+    buildHomeMetricView('nasdaq', marketPulse?.nasdaq, locale),
+    buildHomeMetricView('russell2000', marketPulse?.russell2000, locale),
+    buildHomeMetricView('vix', marketPulse?.vix, locale),
+    buildHomeMetricView('ten-year-yield', marketPulse?.tenYearYield, locale),
+    buildHomeMetricView('dollar-index', marketPulse?.dollarIndex, locale),
+  ].filter((metric): metric is HomeDailyMetricView => Boolean(metric));
+  const watchChanges: HomeDailyChangeView[] = [
+    {
+      key: 'money-flow',
+      label: isEnglish ? 'Flow / style' : '资金 / 风格',
+      value: normalizeHomeDailyText(overview?.moneyFlow.styleBias),
+      detail: [
+        normalizeHomeDailyText(overview?.moneyFlow.offensiveDefensiveBias),
+        overview?.moneyFlow.topInflows?.filter(Boolean).slice(0, 2).join(' / ') || '',
+      ].filter(Boolean).join(' · '),
+    },
+    {
+      key: 'sector-rotation',
+      label: isEnglish ? 'Theme rotation' : '主题轮动',
+      value: normalizeHomeDailyText(overview?.sectorThemeRotation.summary || overview?.sectorThemeRotation.diffusion),
+      detail: overview?.sectorThemeRotation.leadingThemes?.filter(Boolean).slice(0, 2).join(' / ') || '',
+    },
+    {
+      key: 'liquidity-risk',
+      label: isEnglish ? 'Risk / liquidity' : '风险 / 流动性',
+      value: normalizeHomeDailyText(overview?.liquidityRisk.summary || overview?.liquidityRisk.volatilityTone),
+      detail: [
+        normalizeHomeDailyText(overview?.liquidityRisk.fundingStress),
+        normalizeHomeDailyText(overview?.liquidityRisk.dollarRatePressure),
+      ].filter(Boolean).join(' · '),
+    },
+  ].filter((item) => item.value || item.detail);
+  const ledgerSections = Object.entries(overview?.dataQuality.sections || {})
+    .map(([label, status], index) => ({
+      key: label,
+      label: homeDailyLedgerSectionLabel(index, locale),
+      value: homeDailyStatusLabel(status, locale),
+    }))
+    .slice(0, 4);
+  const dataLedger = ledgerSections.length > 0
+    ? ledgerSections
+    : [
+        {
+          key: 'dashboard-data-quality',
+          label: normalizeHomeDailyText(overview?.dataQuality.label) || (isEnglish ? 'Data ledger' : '数据账本'),
+          value: homeDailyStatusLabel(overview?.dataQuality.state, locale),
+          detail: normalizeHomeDailyText(overview?.dataQuality.summary || brief.reliabilityDetail),
+        },
+      ];
+
+  return {
+    observation: normalizeHomeDailyText(overview?.marketBrief.headline) || brief.regimeDetail,
+    why: normalizeHomeDailyText(overview?.marketBrief.summary) || brief.summary,
+    reliabilityLabel: normalizeHomeDailyText(overview?.dataQuality.label) || brief.reliabilityLabel,
+    reliabilityDetail: normalizeHomeDailyText(overview?.dataQuality.summary) || brief.reliabilityDetail,
+    nextCheck: queue[0]?.action || (isEnglish ? 'Start with the market path, then open Research Radar if a candidate appears.' : '先复核市场路径；若出现真实候选，再进入研究雷达继续检查。'),
+    queue,
+    queueEmptyTitle: isEnglish ? 'No real research candidates yet' : '当前没有真实研究候选',
+    queueEmptyDetail: overview?.researchQueue.status === 'ready'
+      ? (isEnglish ? 'The queue returned empty, so this surface stays bounded and points to the market path instead.' : '研究队列已返回但没有候选；本页呈现有界空状态，并先指向市场路径复核。')
+      : (isEnglish ? 'The queue is not usable yet; use the market path and data ledger before opening symbol research.' : '研究队列暂不可用；先查看市场路径与数据账本，再进入个股研究。'),
+    watchChanges,
+    indexPath,
+    dataLedger,
   };
 }
 
@@ -7217,6 +7361,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         dashboardOverview,
       )
     : null;
+  const homeDailyResearch = memberMarketBrief
+    ? buildHomeDailyResearchView(locale, memberMarketBrief, dashboardOverview)
+    : null;
   const guestCommandConsoleCopy = locale === 'en'
     ? {
         eyebrow: 'Guest Research Console',
@@ -7342,95 +7489,238 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         </div>
       ) : null}
       <main className="w-full flex-1 flex flex-col min-h-0 min-w-0" data-testid="home-bento-main">
-        {showNeutralHomeStart && memberMarketBrief ? (
+        {showNeutralHomeStart && memberMarketBrief && homeDailyResearch ? (
           <section
             className="mx-auto flex w-full max-w-[1880px] flex-1 min-w-0 flex-col px-3 py-3 sm:px-4 xl:px-6 2xl:px-8"
             data-testid="member-home-market-brief"
           >
-            <div className="flex w-full min-w-0 flex-col gap-4" data-testid="member-home-market-brief-stack">
+            <div className="flex w-full min-w-0 flex-col gap-4" data-testid="member-home-daily-research-stack">
               {omnibarModule}
               <section
-                className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-4 sm:px-5 sm:py-5')}
-                data-testid="member-home-market-brief-hero"
+                className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'overflow-hidden px-4 py-4 sm:px-5 sm:py-5')}
+                data-testid="member-home-morning-decision-note"
               >
-                <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-                  <div className="min-w-0 max-w-3xl">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">
-                      {memberMarketBrief.eyebrow}
+                <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.55fr)]">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
+                      {locale === 'en' ? 'Morning Decision Note' : '晨间研究判断'}
                     </p>
-                    <h1 className="mt-2 text-[28px] font-semibold tracking-[0] text-white sm:text-[32px]">
-                      {memberMarketBrief.title}
+                    <h1 className="mt-2 max-w-4xl text-[30px] font-semibold leading-[1.04] tracking-[0] text-[color:var(--wolfy-text-primary)] sm:text-[38px]">
+                      {homeDailyResearch.observation}
                     </h1>
                     <div
-                      className="mt-3 inline-flex min-h-9 max-w-full items-center rounded-full border border-cyan-200/18 bg-cyan-300/[0.07] px-3.5 py-1.5 text-sm font-semibold text-cyan-50"
+                      className="mt-4 inline-flex min-h-9 max-w-full items-center rounded-full border border-[color:var(--wolfy-border-focus)] bg-[var(--wolfy-surface-input)] px-3.5 py-1.5 text-sm font-semibold text-[color:var(--wolfy-text-primary)]"
                       data-testid="member-home-market-regime"
                     >
                       <span className="truncate">
                         {locale === 'en' ? 'Current state' : '当前状态'}：{memberMarketBrief.regimeLabel}
                       </span>
                     </div>
-                    <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-white/78 sm:text-[15px]">
-                      {memberMarketBrief.regimeDetail}
+                    <p className="mt-4 max-w-3xl text-sm font-semibold leading-6 text-[color:var(--wolfy-text-primary)] sm:text-[15px]">
+                      {homeDailyResearch.why}
                     </p>
-                    <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60 sm:text-[15px]">
-                      {memberMarketBrief.summary}
+                    <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--wolfy-text-secondary)] sm:text-[15px]">
+                      {homeDailyResearch.nextCheck}
                     </p>
                   </div>
-	                  <aside
-	                    className={cn(HOME_LOCAL_INSET_PANEL_CLASS, 'max-w-xl px-4 py-4')}
-	                    data-testid="member-home-market-reliability"
-	                  >
-                    <p className="text-[11px] font-medium text-white/40">
-                      {locale === 'en' ? 'Data reliability' : '数据可靠性'}
+                  <aside
+                    className={cn(HOME_LOCAL_INSET_PANEL_CLASS, 'max-w-xl px-4 py-4')}
+                    data-testid="member-home-market-reliability"
+                  >
+                    <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">
+                      {locale === 'en' ? 'Reliability / freshness' : '可靠性 / 新鲜度'}
                     </p>
-                    <h2 className="mt-2 text-sm font-semibold text-white/88">{memberMarketBrief.reliabilityLabel}</h2>
-	                    <p className="mt-2 text-sm leading-6 text-white/62">
-	                      {memberMarketBrief.reliabilityDetail}
-	                    </p>
-	                    <ProductReadModelStatusStrip
-	                      model={memberMarketBrief.productReadModel}
-	                      language={locale}
-	                      title={locale === 'en' ? 'Dashboard readiness' : 'Dashboard 就绪度'}
-	                      testId="member-home-dashboard-product-read-model"
-	                      className="mt-3"
-	                    />
-	                  </aside>
+                    <h2 className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
+                      {homeDailyResearch.reliabilityLabel}
+                    </h2>
+                    <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+                      {homeDailyResearch.reliabilityDetail}
+                    </p>
+                    <ProductReadModelStatusStrip
+                      model={memberMarketBrief.productReadModel}
+                      language={locale}
+                      title={locale === 'en' ? 'Dashboard readiness' : 'Dashboard 就绪度'}
+                      testId="member-home-dashboard-product-read-model"
+                      className="mt-3"
+                    />
+                  </aside>
                 </div>
               </section>
 
               <section
-                className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]"
-                data-testid="member-home-market-brief-guides"
+                className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.02fr)_minmax(0,0.98fr)]"
+                data-testid="member-home-research-sequence"
               >
-                <div
-                  className="grid min-w-0 gap-4 md:grid-cols-3"
-                  data-testid="member-home-market-evidence"
-                >
-                  {memberMarketBrief.evidence.map((card) => (
-                    <article
-                      key={card.key}
-                      className={cn(
-                        HOME_LOCAL_SURFACE_PANEL_CLASS,
-                        'flex min-h-[148px] min-w-0 flex-col justify-between px-4 py-4 sm:px-5',
-                      )}
-                      data-testid={`member-home-market-evidence-${card.key}`}
-                    >
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-medium text-white/42">{card.label}</p>
-                        <h2 className="mt-2 text-sm font-semibold leading-5 text-white/88">{card.value}</h2>
-                      </div>
-                      <p className="mt-3 text-[11px] leading-5 text-white/46">{card.detail}</p>
-                    </article>
-                  ))}
-                </div>
-
-                <aside
+                <section
                   className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-4 sm:px-5')}
-                  data-testid="member-home-market-actions"
+                  data-testid="member-home-research-queue"
                 >
-                  <p className="text-[11px] font-medium text-white/40">{locale === 'en' ? 'Next action' : '下一步'}</p>
-                  <div className="mt-3 grid min-w-0 gap-2">
-                    {memberMarketBrief.actions.map((action) => (
+                  <div className="flex min-w-0 items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
+                        {locale === 'en' ? 'Research Queue' : '研究队列'}
+                      </p>
+                      <h2 className="mt-2 text-lg font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)]">
+                        {locale === 'en' ? 'What deserves attention' : '值得研究的线索'}
+                      </h2>
+                    </div>
+                    <span className="shrink-0 rounded-full border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)]">
+                      {homeDailyResearch.queue.length || 0}
+                    </span>
+                  </div>
+                  {homeDailyResearch.queue.length > 0 ? (
+                    <div className="mt-4 grid min-w-0 gap-3">
+                      {homeDailyResearch.queue.map((item, index) => (
+                        <article
+                          key={`${item.title}-${index}`}
+                          className="min-w-0 rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3.5 py-3"
+                          data-testid={`member-home-research-queue-item-${index}`}
+                        >
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <span className="rounded-full border border-[color:var(--wolfy-divider)] px-2 py-0.5 text-[10px] font-semibold text-[color:var(--wolfy-text-muted)]">
+                              {item.priority || (locale === 'en' ? 'queued' : '待研究')}
+                            </span>
+                            {item.action ? (
+                              <span className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{item.action}</span>
+                            ) : null}
+                          </div>
+                          {item.title ? (
+                            <h3 className="mt-2 text-sm font-semibold leading-5 text-[color:var(--wolfy-text-primary)]">{item.title}</h3>
+                          ) : null}
+                          {item.summary ? (
+                            <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{item.summary}</p>
+                          ) : null}
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <div
+                      className="mt-4 min-w-0 rounded-[10px] border border-dashed border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3.5 py-4"
+                      data-testid="member-home-research-queue-empty"
+                    >
+                      <h3 className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{homeDailyResearch.queueEmptyTitle}</h3>
+                      <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{homeDailyResearch.queueEmptyDetail}</p>
+                    </div>
+                  )}
+                  <Link
+                    to={memberMarketBrief.actions[1]?.href || memberMarketBrief.actions[0]?.href || '#'}
+                    className="mt-4 inline-flex min-h-10 w-full items-center justify-center rounded-lg border border-[color:var(--wolfy-border-focus)] bg-[var(--wolfy-accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#8178e7] sm:w-auto"
+                    data-testid="member-home-research-queue-action"
+                  >
+                    {memberMarketBrief.actions[1]?.label || (locale === 'en' ? 'Open Research Radar' : '打开研究雷达')}
+                  </Link>
+                </section>
+
+                <section
+                  className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-4 sm:px-5')}
+                  data-testid="member-home-watch-changes"
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
+                    {locale === 'en' ? 'Watch Changes' : '观察变化'}
+                  </p>
+                  <h2 className="mt-2 text-lg font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)]">
+                    {locale === 'en' ? 'What changed' : '发生了什么变化'}
+                  </h2>
+                  {homeDailyResearch.watchChanges.length > 0 ? (
+                    <div className="mt-4 grid min-w-0 gap-2.5">
+                      {homeDailyResearch.watchChanges.map((item) => (
+                        <article key={item.key} className="min-w-0 rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+                          <p className="text-[11px] font-semibold text-[color:var(--wolfy-text-muted)]">{item.label}</p>
+                          <h3 className="mt-1 text-sm font-semibold leading-5 text-[color:var(--wolfy-text-primary)]">{item.value}</h3>
+                          {item.detail ? (
+                            <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{item.detail}</p>
+                          ) : null}
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-4 rounded-[10px] border border-dashed border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+                      {locale === 'en' ? 'No meaningful watch change returned yet.' : '暂未返回有意义的变化线索。'}
+                    </p>
+                  )}
+                </section>
+              </section>
+
+              <section
+                className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+                data-testid="member-home-evidence-limits"
+              >
+                <section
+                  className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-4 sm:px-5')}
+                  data-testid="member-home-index-path"
+                >
+                  <div className="flex min-w-0 items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
+                        {locale === 'en' ? 'Market / Index Path' : '市场 / 指数路径'}
+                      </p>
+                      <h2 className="mt-2 text-lg font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)]">
+                        {locale === 'en' ? 'What the tape says first' : '先看市场路径'}
+                      </h2>
+                    </div>
+                    <Link
+                      to={memberMarketBrief.actions[0]?.href || '#'}
+                      className="shrink-0 rounded-lg border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs font-semibold text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)]"
+                      data-testid="member-home-index-path-action"
+                    >
+                      {memberMarketBrief.actions[0]?.label || (locale === 'en' ? 'Open Market Research' : '查看市场研究')}
+                    </Link>
+                  </div>
+                  {homeDailyResearch.indexPath.length > 0 ? (
+                    <div className="mt-4 grid min-w-0 gap-2 sm:grid-cols-2">
+                      {homeDailyResearch.indexPath.map((metric) => (
+                        <div
+                          key={metric.key}
+                          className="min-w-0 rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-3"
+                          data-testid={`member-home-index-path-${metric.key}`}
+                        >
+                          <div className="flex min-w-0 items-center justify-between gap-2">
+                            <p className="truncate text-[11px] font-semibold text-[color:var(--wolfy-text-muted)]">{metric.label}</p>
+                            {metric.statusLabel ? (
+                              <span className="shrink-0 text-[10px] font-medium text-[color:var(--wolfy-text-muted)]">{metric.statusLabel}</span>
+                            ) : null}
+                          </div>
+                          <div className="mt-2 flex min-w-0 items-end justify-between gap-3">
+                            <strong className="truncate text-lg font-semibold text-[color:var(--wolfy-text-primary)]">{metric.value}</strong>
+                            {metric.change ? (
+                              <span className="shrink-0 text-xs font-semibold text-[color:var(--wolfy-text-secondary)]">{metric.change}</span>
+                            ) : null}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-4 rounded-[10px] border border-dashed border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+                      {locale === 'en' ? 'No usable index path returned yet.' : '暂未返回可用指数路径。'}
+                    </p>
+                  )}
+                </section>
+
+                <section
+                  className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-4 sm:px-5')}
+                  data-testid="member-home-data-ledger"
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
+                    {locale === 'en' ? 'Data Ledger' : '数据账本'}
+                  </p>
+                  <h2 className="mt-2 text-lg font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)]">
+                    {locale === 'en' ? 'Evidence and limitations' : '证据与限制'}
+                  </h2>
+                  <div className="mt-4 grid min-w-0 gap-2.5">
+                    {homeDailyResearch.dataLedger.map((item) => (
+                      <div key={item.key} className="min-w-0 rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+                        <div className="flex min-w-0 items-center justify-between gap-3">
+                          <p className="truncate text-[11px] font-semibold text-[color:var(--wolfy-text-muted)]">{item.label}</p>
+                          <span className="shrink-0 text-xs font-semibold text-[color:var(--wolfy-text-primary)]">{item.value}</span>
+                        </div>
+                        {item.detail ? (
+                          <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{item.detail}</p>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 grid min-w-0 gap-2 sm:grid-cols-3" data-testid="member-home-market-actions">
+                    {memberMarketBrief.actions.slice(0, 3).map((action) => (
                       <Link
                         key={action.key}
                         to={action.href}
@@ -7438,7 +7728,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                           'inline-flex min-h-10 min-w-0 items-center justify-center rounded-lg border px-4 text-sm font-semibold transition-colors',
                           action.primary
                             ? 'border-[color:var(--wolfy-border-focus)] bg-[var(--wolfy-accent)] text-white hover:bg-[#8178e7]'
-                            : 'border-white/[0.08] bg-white/[0.035] text-white/72 hover:border-white/[0.12] hover:bg-white/[0.06] hover:text-white/88',
+                            : 'border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)]',
                         )}
                         data-testid={`member-home-market-action-${action.key}`}
                       >
@@ -7446,58 +7736,10 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                       </Link>
                     ))}
                   </div>
-                  <p data-testid="member-home-market-safety" className="mt-4 text-[11px] leading-5 text-white/38">
+                  <p data-testid="member-home-market-safety" className="mt-4 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                     {memberMarketBrief.safety}
                   </p>
-                </aside>
-              </section>
-
-              <section
-                className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-4 sm:px-5')}
-                data-testid="member-home-beta-entry"
-                aria-label={locale === 'en' ? 'Limited Private Beta research journey' : 'Limited Private Beta 研究旅程'}
-              >
-                <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">Limited Private Beta</p>
-                    <h2 className="mt-2 text-xl font-semibold tracking-[0] text-white sm:text-2xl">
-                      {locale === 'en' ? 'Follow one research journey across existing workspaces.' : '沿着一条研究旅程使用现有工作台。'}
-                    </h2>
-                    <p className="mt-2 max-w-4xl text-sm leading-6 text-white/62">
-                      {locale === 'en'
-                        ? 'Start with Market Overview or Scanner, investigate one symbol in Stock Structure, compare evidence in Research Radar and validation workspaces, keep monitored names in Watchlist, then return when evidence changes.'
-                        : '先从市场总览或扫描器发现线索，在个股结构面板研究单个标的，再到研究雷达和验证工作台对比证据，把需要持续观察的标的留在观察列表，证据变化后再回来继续研究。'}
-                    </p>
-                    <div className="mt-4 grid min-w-0 grid-cols-2 overflow-hidden rounded-[10px] border border-white/[0.06] text-[11px] md:grid-cols-5">
-                      {memberMarketBrief.betaWorkflow.map((item, index) => (
-                        <div key={item} className="min-w-0 border-b border-r border-white/[0.06] px-3 py-2.5 last:border-r-0 even:border-r-0 md:border-b-0 md:even:border-r md:last:border-r-0">
-                          <span className="block font-mono text-[10px] text-white/26">{String(index + 1).padStart(2, '0')}</span>
-                          <span className="mt-1 block truncate font-semibold text-white/72">{item}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <aside className={cn(HOME_LOCAL_INSET_PANEL_CLASS, 'px-4 py-4')} data-testid="member-home-beta-boundary">
-                    <p className="text-[11px] font-medium text-white/40">{locale === 'en' ? 'Capability boundary' : '能力边界'}</p>
-                    <ul className="mt-3 space-y-2 text-xs leading-5 text-white/58">
-                      {memberMarketBrief.betaLimits.map((item) => (
-                        <li key={item} className="break-words">{item}</li>
-                      ))}
-                    </ul>
-                    <a
-                      href={memberMarketBrief.feedback.href}
-                      target="_blank"
-                      rel="noreferrer"
-                      data-testid="member-home-beta-feedback-link"
-                      className="mt-4 inline-flex min-h-10 w-full items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.035] px-4 text-sm font-semibold text-white/72 transition-colors hover:border-white/[0.12] hover:bg-white/[0.06] hover:text-white/88"
-                    >
-                      {memberMarketBrief.feedback.label}
-                    </a>
-                    <p className="mt-3 text-[11px] leading-5 text-white/38" data-testid="member-home-beta-feedback-note">
-                      {memberMarketBrief.feedback.detail}
-                    </p>
-                  </aside>
-                </div>
+                </section>
               </section>
             </div>
           </section>

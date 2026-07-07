@@ -2347,7 +2347,7 @@ describe('MarketOverviewPage', () => {
 
     const surface = await screen.findByTestId('market-regime-read-model-surface');
     expect(surface).toHaveTextContent('risk_on_confirming');
-    expect(surface).toHaveTextContent('product_ready');
+    expect(surface).toHaveTextContent('产品可用');
     expect(surface).toHaveTextContent('Risk-on confirming evidence is currently present');
     expect(within(surface).getByTestId('market-regime-evidence-card-benchmark_trend')).toHaveTextContent('Benchmark Trend');
     expect(within(surface).getByTestId('market-regime-evidence-card-growth_risk_proxy')).toHaveTextContent('Growth Risk Context');
@@ -2355,9 +2355,9 @@ describe('MarketOverviewPage', () => {
     expect(within(surface).getByTestId('market-regime-evidence-card-volatility')).toHaveTextContent('Volatility');
     expect(within(surface).getByTestId('market-regime-evidence-card-quote_snapshot')).toHaveTextContent('Quote Snapshot');
     expect(within(surface).getByTestId('market-regime-evidence-card-data_quality')).toHaveTextContent('Data Quality');
-    expect(surface).toHaveTextContent('adjusted: available');
-    expect(surface).toHaveTextContent('OHLCV: available');
-    expect(surface).toHaveTextContent('quote snapshot: available');
+    expect(surface).toHaveTextContent('复权序列: 可用');
+    expect(surface).toHaveTextContent('价格走势: 可用');
+    expect(surface).toHaveTextContent('报价状态: 可用');
     expect(surface.textContent || '').not.toMatch(/buy|sell|hold|recommendation|target price|enter|exit|long|short|加仓|减仓|买入|卖出|持有|目标价|推荐/i);
   });
 
@@ -2394,13 +2394,15 @@ describe('MarketOverviewPage', () => {
     expandMarketOverviewDataDiagnostics();
 
     const surface = await screen.findByTestId('market-regime-read-model-surface');
-    expect(surface).toHaveTextContent('insufficient_data');
-    expect(surface).toHaveTextContent('blocked');
-    expect(surface).toHaveTextContent('adjusted_prices, quote_snapshot');
+    await waitFor(() => expect(surface).toHaveTextContent('数据不足'));
+    expect(surface).toHaveTextContent('数据不足');
+    expect(surface).toHaveTextContent('已阻断');
+    expect(surface).toHaveTextContent('adjusted_prices、quote_snapshot');
     expect(surface).toHaveTextContent('Market Overview');
-    expect(surface).toHaveTextContent('adjusted: missing');
-    expect(surface).toHaveTextContent('OHLCV: partial');
-    expect(surface).toHaveTextContent('quote snapshot: partial');
+    expect(surface).toHaveTextContent('复权序列: 待补');
+    expect(surface).toHaveTextContent('价格走势: 部分可用');
+    expect(surface).toHaveTextContent('报价状态: 部分可用');
+    expect(surface).not.toHaveTextContent('insufficient_data');
   });
 
   it('renders market overview evidence boundary states from readiness matrix without raw internals', async () => {
@@ -2731,8 +2733,9 @@ describe('MarketOverviewPage', () => {
     expect(strip).toBeInTheDocument();
     expect(strip).toHaveTextContent('核心图表证据');
     expect(screen.getByTestId('market-overview-visual-card-core-trends-points')).toBeInTheDocument();
-    expect(screen.getByTestId('market-overview-visual-card-rifixture-token-redacted-for-secret-scan')).toHaveTextContent('风险压力图形证据缺失，当前保持观察。');
+    expect(screen.getByTestId('market-overview-visual-card-risk-pressure-unavailable')).toHaveTextContent('风险压力图形证据缺失，当前保持观察。');
     expect(screen.getByTestId('market-overview-visual-card-flow-rotation-unavailable')).toHaveTextContent('资金与轮动图形证据缺失，当前保持观察。');
+    expect(screen.queryByTestId('market-overview-visual-card-rifixture-token-redacted-for-secret-scan')).not.toBeInTheDocument();
     expect(strip.textContent || '').not.toMatch(/raw|debug|provider|cache|router|env|trace|credential|broker|trade|order|sourceAuthority|contractVersion/i);
   });
 
@@ -2805,6 +2808,9 @@ describe('MarketOverviewPage', () => {
     expect(diagnostics).toHaveTextContent('查看数据诊断');
     expect(diagnostics).not.toHaveAttribute('open');
     const firstViewport = screen.getByTestId('market-overview-workbench');
+    expect(screen.getByTestId('market-overview-first-workbench')).toHaveAttribute('data-market-composition', 'observation-path');
+    expect(screen.getByTestId('market-overview-observation-brief')).toContainElement(screen.getByTestId('market-decision-semantics-strip'));
+    expect(screen.getByTestId('market-overview-dominant-path')).toContainElement(screen.getByTestId('market-overview-core-trend-chart'));
     expect(firstViewport).toHaveTextContent(/市场叙事|市场状态|发生了什么/);
     expect(firstViewport.textContent || '').not.toMatch(
       /available|missing|not configured|provider_missing|blockedProductSurfaces|missingDataFamilies|sourceClass|sourcePath|contractVersion|inputSource|local_bounded_us_parquet_universe|noExternalCalls|providerCallsEnabled|not_requested/i,
@@ -2819,7 +2825,7 @@ describe('MarketOverviewPage', () => {
     renderMarketOverviewWithLanguage('zh');
 
     const decisionReadiness = await screen.findByTestId('market-overview-decision-readiness');
-    expect(decisionReadiness).toHaveTextContent(/偏强观察|中性观察|偏弱观察|数据不足/);
+    expect(decisionReadiness).toHaveTextContent(/偏强观察|中性观察|偏弱观察|数据不足|证据待补/);
     expect(screen.queryByTestId('market-overview-research-readiness-strip')).not.toBeInTheDocument();
   });
 
@@ -3079,7 +3085,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-quick-actions')).toHaveTextContent('研究雷达');
     expect(screen.getByTestId('market-overview-quick-actions')).toHaveTextContent('扫描器');
     expect(screen.getByTestId('market-overview-quick-actions')).toHaveTextContent('搜索个股');
-    expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/偏强观察|中性观察|偏弱观察|数据不足/);
+    expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/偏强观察|中性观察|偏弱观察|数据不足|证据待补/);
     const details = expandMarketDecisionDetails();
     expect(within(details).queryByTestId('market-regime-synthesis-header')).not.toBeInTheDocument();
     expect(within(details).getByTestId('market-temperature-strip')).toBeInTheDocument();
@@ -3114,7 +3120,7 @@ describe('MarketOverviewPage', () => {
       'min-h-0',
       'min-w-0',
       'flex-col',
-      'gap-6',
+      'gap-4',
       'overflow-y-auto',
       'overflow-x-hidden',
       'no-scrollbar',
@@ -3370,6 +3376,8 @@ describe('MarketOverviewPage', () => {
     expect(topStack.querySelectorAll('[data-market-research-flow="decision-semantics"]')).toHaveLength(1);
     expect(screen.getByTestId('market-overview-main-grid').compareDocumentPosition(screen.getByTestId('market-decision-semantics-strip'))).toBe(Node.DOCUMENT_POSITION_PRECEDING);
     expect(screen.queryByTestId('market-overview-research-readiness-strip')).not.toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-first-workbench')).toContainElement(screen.getByTestId('market-overview-observation-brief'));
+    expect(screen.getByTestId('market-overview-first-workbench')).toContainElement(screen.getByTestId('market-overview-dominant-path'));
     expect(decisionReadiness.compareDocumentPosition(screen.getByTestId('market-overview-main-grid'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(screen.getByTestId('market-overview-main-grid').compareDocumentPosition(screen.getByTestId('market-overview-visual-evidence-strip'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
@@ -4300,7 +4308,7 @@ describe('MarketOverviewPage', () => {
       },
     });
 
-    expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/数据不足|偏强观察|中性观察|偏弱观察/);
+    expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/数据不足|偏强观察|中性观察|偏弱观察|证据待补/);
     expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent(/正在更新|更新中/);
     const details = expandMarketDecisionDetails();
     expect(within(details).getByTestId('market-overview-cache-status')).toHaveTextContent(/刷新中/i);
