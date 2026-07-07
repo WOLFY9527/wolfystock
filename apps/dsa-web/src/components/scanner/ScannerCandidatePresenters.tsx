@@ -585,7 +585,7 @@ export function ScannerCandidateDiagnosticRow({
       <div data-testid={`scanner-result-card-${candidate.symbol}`} className="contents">
         <div data-testid={`scanner-result-row-${candidate.symbol}`} className="contents">
           <div data-testid={`scanner-candidate-row-${candidate.symbol}`} className="contents">
-          <div className="hidden min-w-0 items-center gap-3 md:grid md:grid-cols-[64px_minmax(180px,1fr)_92px_110px_minmax(220px,1.3fr)_minmax(150px,0.9fr)_minmax(190px,1fr)_auto]">
+          <div className="hidden min-w-0 items-center gap-3 md:grid md:grid-cols-[64px_minmax(180px,1fr)_minmax(120px,auto)_92px_110px_minmax(220px,1.3fr)_minmax(150px,0.9fr)_minmax(190px,1fr)]">
             <div className="min-w-0">
               <p className={scannerLabelTextClass}>{language === 'en' ? 'Rank' : '排名'}</p>
               <p className={`mt-1 font-mono text-sm font-semibold ${scannerPrimaryTextClass}`}>
@@ -598,6 +598,18 @@ export function ScannerCandidateDiagnosticRow({
               </p>
               <p className={`truncate text-[11px] ${scannerMutedTextClass}`}>{displayName}</p>
               {comparisonLabel ? <p className="mt-1 truncate text-[10px] text-[color:var(--wolfy-accent)]">{comparisonLabel}</p> : null}
+            </div>
+            <div className="flex min-w-[7.5rem] flex-wrap justify-end gap-1.5">
+              <ActionButton
+                label={language === 'en' ? 'Detail' : '详情'}
+                onClick={onSelect}
+                variant="compact"
+              />
+              <ActionButton
+                label={language === 'en' ? 'More' : '更多'}
+                onClick={onToggleMore}
+                variant="compact"
+              />
             </div>
             <div className="min-w-0">
               <p className={scannerLabelTextClass}>{language === 'en' ? 'Score' : '评分'}</p>
@@ -654,18 +666,6 @@ export function ScannerCandidateDiagnosticRow({
               <p className={scannerLabelTextClass}>{language === 'en' ? 'Watch / risk' : '观察 / 风险'}</p>
               <p className={`mt-1 truncate text-xs ${scannerSecondaryTextClass}`} title={watchSummary}>{watchSummary}</p>
               <p className={`truncate text-[11px] ${scannerMutedTextClass}`} title={rangeSummary}>{rangeSummary}</p>
-            </div>
-            <div className="flex min-w-0 flex-wrap justify-end gap-1.5">
-              <ActionButton
-                label={language === 'en' ? 'Detail' : '详情'}
-                onClick={onSelect}
-                variant="compact"
-              />
-              <ActionButton
-                label={language === 'en' ? 'More' : '更多'}
-                onClick={onToggleMore}
-                variant="compact"
-              />
             </div>
           </div>
 

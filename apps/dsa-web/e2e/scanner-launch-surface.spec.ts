@@ -423,6 +423,72 @@ async function assertNoBodyOverflow(page: Page) {
   await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 }
 
+type ScannerOverflowMeasurement = {
+  documentOverflow: number;
+  rankedRightViewportDelta: number;
+  rankedRightOwnerDelta: number;
+  rankedClientWidth: number;
+  rankedScrollWidth: number;
+  rankedLocalScrollDelta: number;
+  ownerClientWidth: number;
+  nestedHorizontalScrollOwnerCount: number;
+  horizontalScrollOwners: string[];
+  detailReachableAtStart: boolean;
+  moreReachableAtStart: boolean;
+};
+
+async function measureScannerOverflow(page: Page): Promise<ScannerOverflowMeasurement> {
+  return page.evaluate(() => {
+    const byTestId = (testId: string) => document.querySelector<HTMLElement>(`[data-testid="${testId}"]`);
+    const ranked = byTestId('scanner-ranked-list');
+    const owner = byTestId('scanner-primary-work-region') || byTestId('scanner-results-panel');
+    const firstRow = byTestId('scanner-result-row-NVDA');
+    const buttons = Array.from(firstRow?.querySelectorAll<HTMLButtonElement>('button') || []);
+    const isVisibleButton = (button: HTMLButtonElement) => {
+      const style = window.getComputedStyle(button);
+      return style.display !== 'none' && style.visibility !== 'hidden' && button.getClientRects().length > 0;
+    };
+    const detailButton = buttons.find((button) => isVisibleButton(button) && /详情|Detail/i.test(button.textContent || '')) || null;
+    const moreButton = buttons.find((button) => isVisibleButton(button) && /更多|More/i.test(button.textContent || '')) || null;
+    const rankedRect = ranked?.getBoundingClientRect();
+    const ownerRect = owner?.getBoundingClientRect();
+    const detailRect = detailButton?.getBoundingClientRect();
+    const moreRect = moreButton?.getBoundingClientRect();
+    const allHorizontalScrollOwners = Array.from(document.querySelectorAll<HTMLElement>('body *'))
+      .filter((element) => {
+        const style = window.getComputedStyle(element);
+        return element.scrollWidth > element.clientWidth + 1 && (style.overflowX === 'auto' || style.overflowX === 'scroll');
+      });
+    const nestedHorizontalScrollOwners = ranked
+      ? allHorizontalScrollOwners.filter((element) => element === ranked || element.contains(ranked) || ranked.contains(element))
+      : [];
+
+    return {
+      documentOverflow: Math.max(0, Math.round(document.documentElement.scrollWidth - document.documentElement.clientWidth)),
+      rankedRightViewportDelta: rankedRect ? Math.max(0, Math.round(rankedRect.right - window.innerWidth)) : -1,
+      rankedRightOwnerDelta: rankedRect && ownerRect ? Math.max(0, Math.round(rankedRect.right - ownerRect.right)) : -1,
+      rankedClientWidth: ranked ? Math.round(ranked.clientWidth) : -1,
+      rankedScrollWidth: ranked ? Math.round(ranked.scrollWidth) : -1,
+      rankedLocalScrollDelta: ranked ? Math.max(0, Math.round(ranked.scrollWidth - ranked.clientWidth)) : -1,
+      ownerClientWidth: owner ? Math.round(owner.clientWidth) : -1,
+      nestedHorizontalScrollOwnerCount: nestedHorizontalScrollOwners.length,
+      horizontalScrollOwners: allHorizontalScrollOwners
+        .map((element) => element.getAttribute('data-testid') || element.tagName.toLowerCase())
+        .slice(0, 12),
+      detailReachableAtStart: Boolean(
+        detailRect && rankedRect
+          && detailRect.left >= rankedRect.left - 1
+          && detailRect.right <= rankedRect.right + 1,
+      ),
+      moreReachableAtStart: Boolean(
+        moreRect && rankedRect
+          && moreRect.left >= rankedRect.left - 1
+          && moreRect.right <= rankedRect.right + 1,
+      ),
+    };
+  });
+}
+
 async function assertNoConsumerLeakage(page: Page) {
   const bodyText = await page.locator('body').innerText();
   expect(bodyText).not.toMatch(forbiddenTradingAction);
@@ -742,6 +808,50 @@ async function assertScannerLaunchViewport(page: Page, viewport: { width: number
 }
 
 test.describe('scanner launch surface', () => {
+  test('keeps the T238 scanner ranked list bounded at responsive qualification widths', async ({ page, consoleErrors }) => {
+    await installScannerStateRoutes(page, {
+      id: 't238-responsive-overflow',
+      route: '/zh/scanner',
+      viewport: { width: 1280, height: 800 },
+      statusPayload: scannerStatusPayload(),
+      runsPayload: scannerRunsPayload(scannerRunSummary()),
+      runDetailPayload: controlledCandidateRun(),
+      expectedText: /当前候选|Current candidate/,
+    });
+
+    const cases = [
+      { route: '/zh/scanner', viewport: { width: 1280, height: 800 } },
+      { route: '/zh/scanner', viewport: { width: 768, height: 1024 } },
+      { route: '/zh/scanner', viewport: { width: 390, height: 844 } },
+      { route: '/zh/scanner', viewport: { width: 320, height: 800 } },
+      { route: '/en/scanner', viewport: { width: 1280, height: 800 } },
+      { route: '/en/scanner', viewport: { width: 768, height: 1024 } },
+      { route: '/en/scanner', viewport: { width: 390, height: 844 } },
+      { route: '/en/scanner', viewport: { width: 320, height: 800 } },
+    ];
+
+    for (const { route, viewport } of cases) {
+      await page.setViewportSize(viewport);
+      await page.goto(route);
+      await page.waitForLoadState('domcontentloaded');
+      await expect(page.getByTestId('user-scanner-workspace')).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('scanner-ranked-list')).toBeVisible();
+      await expect(page.getByTestId('scanner-candidate-filters')).toBeVisible();
+
+      const measurement = await measureScannerOverflow(page);
+      console.info(`T238 ${route} ${viewport.width}x${viewport.height} ${JSON.stringify(measurement)}`);
+      expect(measurement.documentOverflow).toBeLessThanOrEqual(1);
+      expect(measurement.rankedRightViewportDelta).toBeLessThanOrEqual(1);
+      expect(measurement.rankedRightOwnerDelta).toBeLessThanOrEqual(1);
+      expect(measurement.rankedClientWidth).toBeLessThanOrEqual(measurement.ownerClientWidth + 1);
+      expect(measurement.nestedHorizontalScrollOwnerCount).toBeLessThanOrEqual(1);
+      expect(measurement.detailReachableAtStart).toBe(true);
+      expect(measurement.moreReachableAtStart).toBe(true);
+    }
+
+    expect(consoleErrors).toEqual([]);
+  });
+
   test('candidate and evidence lead the zh scanner first fold', async ({ page, consoleErrors }) => {
     await assertScannerLaunchViewport(page, { width: 1440, height: 1000 });
     await assertScannerLaunchViewport(page, { width: 1920, height: 1080 });
