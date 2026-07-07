@@ -154,8 +154,40 @@ function buildMismatchedReportFixture(): AnalysisReport {
   return report;
 }
 
+function buildMaliciousIdentityReportFixture(): AnalysisReport {
+  const report = JSON.parse(JSON.stringify(buildUnsafeReportFixture())) as AnalysisReport;
+  const maliciousName = '腾讯控股](javascript:alert(1)) | </title><script>alert(1)</script> <img src=x onerror=alert(1)>\n## Injected';
+  report.meta.stockCode = 'BRK.B-A';
+  report.meta.stockName = maliciousName;
+  report.meta.companyName = maliciousName;
+  if (report.details?.standardReport?.summaryPanel) {
+    report.details.standardReport.summaryPanel.stock = maliciousName;
+    report.details.standardReport.summaryPanel.ticker = 'BRK.B-A';
+  }
+  if (report.decisionTrace) {
+    report.decisionTrace.symbol = 'BRK.B-A';
+  }
+  return report;
+}
+
+function maliciousDashboardFixture() {
+  return {
+    ticker: 'BRK.B-A',
+    decision: {
+      company: '腾讯控股',
+      heroValue: '74',
+      confidenceValue: '中',
+      signalLabel: '继续跟踪',
+      scoreValue: '情景参考',
+      summary: '价格仍需继续跟踪。',
+      reasonBody: '证据仍需补齐。',
+    },
+  };
+}
+
 describe('FullDecisionReportDrawer no-advice guard', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -319,16 +351,67 @@ describe('FullDecisionReportDrawer no-advice guard', () => {
     expect(markdown).not.toMatch(/raw evidence|raw payload|provider|debug|cache|buy|sell|target|stop|position[- ]?sizing/i);
   });
 
+  it('keeps copy and download markdown equivalent when report identity contains markdown syntax', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    let exportedBlob: Blob | undefined;
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn((blob: Blob) => {
+        exportedBlob = blob;
+        return 'blob:malicious-identity-markdown';
+      }),
+      revokeObjectURL: vi.fn(),
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+
+    render(
+      <FullDecisionReportDrawer
+        dashboard={maliciousDashboardFixture()}
+        isOpen
+        onClose={() => undefined}
+        report={buildMaliciousIdentityReportFixture()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '复制报告' }));
+    fireEvent.click(screen.getByRole('button', { name: '导出 Markdown' }));
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledTimes(1);
+    });
+    const copiedMarkdown = String(writeText.mock.calls[0]?.[0]);
+    const downloadedMarkdown = await exportedBlob?.text();
+
+    expect(downloadedMarkdown).toBe(copiedMarkdown);
+    expect(copiedMarkdown).toContain('腾讯控股');
+    expect(copiedMarkdown).toContain('(BRK.B-A)');
+    expect(copiedMarkdown).toContain('\\]');
+    expect(copiedMarkdown).toContain('\\|');
+    expect(copiedMarkdown).not.toMatch(/\]\(javascript:/i);
+    expect(copiedMarkdown).not.toMatch(/^## Injected/im);
+    expect(copiedMarkdown).not.toMatch(/<img|<script|<\/title>/i);
+  });
+
   it('prints consumer-safe markdown for PDF export', async () => {
     const print = vi.fn();
     const close = vi.fn();
     const focus = vi.fn();
+    const open = vi.fn();
     const write = vi.fn();
+    const preNode = { textContent: '' };
     const originalOpen = window.open;
     vi.spyOn(window, 'open').mockImplementation(() => ({
+      opener: { retained: true },
       document: {
+        open,
         write,
         close,
+        title: '',
+        getElementById: vi.fn(() => preNode),
       },
       focus,
       print,
@@ -357,8 +440,60 @@ describe('FullDecisionReportDrawer no-advice guard', () => {
     fireEvent.click(screen.getByRole('button', { name: '导出 PDF' }));
 
     expect(window.open).not.toBe(originalOpen);
+    expect(open).toHaveBeenCalledTimes(1);
     expect(write).toHaveBeenCalledTimes(1);
-    expect(String(write.mock.calls[0]?.[0])).toContain('研究包完整度');
-    expect(String(write.mock.calls[0]?.[0])).not.toMatch(forbiddenConsumerReportPattern);
+    expect(String(write.mock.calls[0]?.[0])).toContain('<pre id="wolfystock-print-report"></pre>');
+    expect(preNode.textContent).toContain('研究包完整度');
+    expect(preNode.textContent).not.toMatch(forbiddenConsumerReportPattern);
+  });
+
+  it('keeps malicious report identity out of print HTML sinks and removes popup opener access', () => {
+    vi.useFakeTimers();
+    const print = vi.fn();
+    const close = vi.fn();
+    const focus = vi.fn();
+    const write = vi.fn();
+    const open = vi.fn();
+    const preNode = { textContent: '' };
+    const popup = {
+      opener: { retained: true },
+      document: {
+        open,
+        write,
+        close,
+        title: '',
+        getElementById: vi.fn(() => preNode),
+      },
+      focus,
+      print,
+    };
+    vi.spyOn(window, 'open').mockImplementation(() => popup as unknown as Window);
+
+    render(
+      <FullDecisionReportDrawer
+        dashboard={maliciousDashboardFixture()}
+        isOpen
+        onClose={() => undefined}
+        report={buildMaliciousIdentityReportFixture()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '导出 PDF' }));
+
+    expect(popup.opener).toBeNull();
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(write).toHaveBeenCalledTimes(1);
+    const printHtml = String(write.mock.calls[0]?.[0]);
+    expect(printHtml).toContain('<title></title>');
+    expect(printHtml).not.toContain('</title><script>');
+    expect(printHtml).not.toMatch(/<img|<script|javascript:/i);
+    expect(popup.document.title).toContain('腾讯控股](javascript:alert(1)) | </title><script>alert(1)</script>');
+    expect(preNode.textContent).toContain('腾讯控股');
+    expect(preNode.textContent).not.toMatch(/<img|<script|<\/title>|\]\(javascript:/i);
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(focus).toHaveBeenCalledTimes(1);
+    expect(print).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(80);
+    expect(print).toHaveBeenCalledTimes(1);
   });
 });

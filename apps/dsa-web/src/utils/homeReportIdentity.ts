@@ -226,6 +226,33 @@ export function getCompanyWithTicker(result: unknown): string {
   return `${company} (${ticker})`;
 }
 
+function markdownInlineText(value: unknown): string {
+  return String(value ?? '')
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\\/g, '\\\\')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/`/g, '\\`')
+    .replace(/\*/g, '\\*')
+    .replace(/_/g, '\\_')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+    .replace(/\|/g, '\\|');
+}
+
+function markdownCompanyWithTicker(companyName: string, ticker: string): string {
+  const safeCompany = markdownInlineText(companyName);
+  const safeTicker = markdownInlineText(ticker);
+  if (!safeTicker || safeCompany.toUpperCase() === safeTicker) {
+    return safeTicker || safeCompany || EMPTY_FIELD_VALUE;
+  }
+  return `${safeCompany} (${safeTicker})`;
+}
+
 function uniqueText(values: Array<unknown>): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -446,7 +473,7 @@ export function buildInstitutionalReportMarkdown(
 ): string {
   const ticker = override?.ticker || getSymbolDisplay(report);
   const companyName = override?.companyName || getCompanyDisplayName(report);
-  const companyWithTicker = companyName.toUpperCase() === ticker ? ticker : `${companyName} (${ticker})`;
+  const companyWithTicker = markdownCompanyWithTicker(companyName, ticker);
   const standardReport = report?.details?.standardReport;
   const summaryPanel = standardReport?.summaryPanel;
   const decisionPanel = standardReport?.decisionPanel;

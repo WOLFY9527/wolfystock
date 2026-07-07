@@ -166,4 +166,36 @@ describe('buildInstitutionalReportMarkdown no-advice guard', () => {
     expect(markdown).toContain('133.50');
     expect(markdown).not.toMatch(forbiddenConsumerReportPattern);
   });
+
+  it('bounds malicious report identity as markdown text while preserving normal names and tickers', () => {
+    const maliciousReport = buildUnsafeReportFixture();
+    maliciousReport.meta.companyName = '腾讯控股](javascript:alert(1)) | <img src=x onerror=alert(1)>\n## Injected';
+    maliciousReport.meta.stockName = maliciousReport.meta.companyName;
+    maliciousReport.meta.stockCode = 'BRK.B-A';
+    if (maliciousReport.decisionTrace) {
+      maliciousReport.decisionTrace.symbol = 'BRK.B-A';
+    }
+    if (maliciousReport.details?.standardReport?.summaryPanel) {
+      maliciousReport.details.standardReport.summaryPanel.stock = maliciousReport.meta.companyName;
+      maliciousReport.details.standardReport.summaryPanel.ticker = 'BRK.B-A';
+    }
+
+    const markdown = buildInstitutionalReportMarkdown(maliciousReport);
+    const titleLine = markdown.split('\n')[0] || '';
+
+    expect(titleLine).toContain('腾讯控股');
+    expect(titleLine).toContain('(BRK.B-A)');
+    expect(titleLine).toContain('\\]');
+    expect(titleLine).toContain('\\|');
+    expect(titleLine).toContain('&lt;img src=x onerror=alert\\(1\\)&gt;');
+    expect(markdown).not.toMatch(/\]\(javascript:/i);
+    expect(markdown).not.toMatch(/^## Injected/im);
+    expect(markdown).not.toMatch(/<img|<script|<\/title>/i);
+
+    const normalMarkdown = buildInstitutionalReportMarkdown(maliciousReport, {
+      companyName: '腾讯控股',
+      ticker: 'BRK.B-A',
+    });
+    expect(normalMarkdown.split('\n')[0]).toContain('腾讯控股 (BRK.B-A)');
+  });
 });
