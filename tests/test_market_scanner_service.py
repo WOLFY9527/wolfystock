@@ -35,6 +35,10 @@ from src.services.quote_snapshot_readiness import (
     QuoteSnapshotReadinessRequest,
 )
 from src.services.scanner_evidence_packet import SCANNER_EVIDENCE_VERSION, build_scanner_evidence_packet
+from src.services.scanner_universe_lifecycle import (
+    ScannerUniverseLifecycleStore,
+    activate_scanner_universe_from_source,
+)
 from src.storage import DatabaseManager, MarketScannerRun
 
 
@@ -2928,11 +2932,17 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(result["profile"], "us_preopen_v1")
         self.assertTrue(result["headline"].startswith("今日美股盘前优先观察："))
         self.assertEqual(result["diagnostics"]["benchmark_context"]["benchmark_code"], "SPY")
-        self.assertGreaterEqual(result["diagnostics"]["history_stats"]["local_hits"], 4)
-        self.assertGreaterEqual(result["diagnostics"]["live_quote_stats"]["available_candidates"], 1)
-        self.assertEqual(result["diagnostics"]["universe_filter_stats"]["coverage_strategy"], "seed_supplemented")
-        self.assertGreater(result["diagnostics"]["universe_filter_stats"]["supplemented_seed_count"], 0)
-        self.assertIn("curated_us_liquid_seed", result["source_summary"])
+        self.assertGreaterEqual(result["diagnostics"]["history_stats"]["local_hits"], 2)
+        self.assertEqual(result["diagnostics"]["live_quote_stats"]["available_candidates"], 0)
+        self.assertEqual(result["diagnostics"]["live_quote_stats"]["unavailable_candidates"], 2)
+        self.assertEqual(result["diagnostics"]["universe_filter_stats"]["coverage_strategy"], "bounded_starter_local_only")
+        self.assertEqual(result["diagnostics"]["universe_filter_stats"]["supplemented_seed_count"], 0)
+        self.assertEqual(result["dataReadiness"]["universeSource"], "bounded_starter_market_data_spine")
+        self.assertTrue(result["dataReadiness"]["noExternalCalls"])
+        self.assertFalse(result["dataReadiness"]["providerCallsEnabled"])
+        self.assertEqual(result["dataReadiness"]["candidateGenerationState"], "degraded")
+        self.assertEqual(result["dataReadiness"]["candidateGenerationLimitations"], ["quote_unavailable_or_stale"])
+        self.assertNotIn("curated_us_liquid_seed", result["source_summary"])
 
         shortlist_symbols = [item["symbol"] for item in result["shortlist"]]
         self.assertEqual(len(shortlist_symbols), 2)
@@ -3327,7 +3337,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(detail["market"], "hk")
         self.assertEqual(detail["profile_label"], "港股盘前扫描 v1")
 
-    def test_resolve_us_stock_universe_supplements_thin_local_coverage(self) -> None:
+    def test_resolve_us_stock_universe_uses_bounded_local_starter_without_seed_supplement(self) -> None:
         profile = get_scanner_profile(market="us", profile="us_preopen_v1")
         service = MarketScannerService(
             self.db,
@@ -3343,15 +3353,15 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                 result = service._resolve_us_stock_universe(profile=profile, target_symbol_count=50)
 
         self.assertTrue(result["success"])
-        self.assertEqual(result["coverage_strategy"], "seed_supplemented")
-        self.assertEqual(result["local_symbol_count"], 3)
-        self.assertGreater(result["supplemented_seed_count"], 0)
-        self.assertGreaterEqual(result["final_symbol_count"], 40)
-        self.assertGreaterEqual(result["target_symbol_count"], 50)
-        self.assertTrue(result["source"].startswith("local_us_parquet_dir"))
-        self.assertIn("curated_us_liquid_seed", result["source"])
-        self.assertIn("NVDA", result["data"])
-        self.assertIn("PLTR", result["data"])
+        self.assertEqual(result["coverage_strategy"], "bounded_starter_local_only")
+        self.assertEqual(result["local_symbol_count"], 2)
+        self.assertEqual(result["supplemented_seed_count"], 0)
+        self.assertEqual(result["final_symbol_count"], 2)
+        self.assertEqual(result["target_symbol_count"], len(result["boundedStarterUniverse"]))
+        self.assertEqual(result["source"], "local_us_parquet_dir")
+        self.assertEqual(result["universeSource"], "bounded_starter_market_data_spine")
+        self.assertEqual(result["data"], ["AAPL", "NVDA"])
+        self.assertNotIn("PLTR", result["data"])
 
     def test_resolve_us_stock_universe_falls_back_when_parquet_root_is_inaccessible(self) -> None:
         with patch("src.services.market_scanner_service.Path.exists", side_effect=PermissionError("permission denied")):
@@ -4017,6 +4027,73 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             self.assertNotIn(non_starter, lineage["symbolsEvaluated"])
             self.assertNotIn(non_starter, skipped_by_symbol)
         self.assertEqual(detail["dataReadiness"]["scannerLineage"], lineage)
+
+    def test_default_us_scan_consumes_active_lifecycle_universe_and_metadata(self) -> None:
+        seed_us_local_history(self.stock_repo)
+        lifecycle_root = Path(self._cache_temp_dir.name) / "scanner-universe-lifecycle"
+        source_path = Path(self._cache_temp_dir.name) / "active-us-source.json"
+        source_path.write_text(
+            json.dumps(
+                {
+                    "market": "us",
+                    "sourceId": "operator/us-research-universe",
+                    "sourceClass": "operator_supplied_membership_json",
+                    "sourceAsOf": "2026-07-05",
+                    "retrievedAt": "2026-07-05T01:02:03+00:00",
+                    "sourceArtifactIdentity": "operator/us-research-universe@2026-07-05",
+                    "sourcePolicyState": "operator_supplied",
+                    "symbols": ["NVDA", "AAPL"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        activated = activate_scanner_universe_from_source(
+            source_path=source_path,
+            store=ScannerUniverseLifecycleStore(root=lifecycle_root),
+            market="us",
+            minimum_coverage_threshold=2,
+        )
+        data_manager = FakeUsScannerDataManager()
+        service = MarketScannerService(
+            self.db,
+            data_manager=data_manager,
+            quote_snapshot_provider=FakeQuoteSnapshotProvider(_quote_snapshots(("NVDA", "AAPL"))),
+        )
+
+        with patch.dict(
+            os.environ,
+            {
+                "SCANNER_UNIVERSE_LIFECYCLE_ROOT": str(lifecycle_root),
+                "LOCAL_US_PARQUET_DIR": "",
+                "US_STOCK_PARQUET_DIR": "",
+                "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "",
+                "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "",
+            },
+            clear=False,
+        ):
+            detail = service.run_scan(
+                market="us",
+                profile="us_preopen_v1",
+                shortlist_size=2,
+                universe_limit=50,
+                detail_limit=10,
+            )
+
+        self.assertEqual(detail["status"], "completed")
+        lineage = detail["scannerLineage"]
+        self.assertEqual(lineage["source"], "scanner_universe_lifecycle")
+        self.assertEqual(lineage["universeMode"], "scanner_universe_lifecycle_active")
+        self.assertEqual(lineage["universeSymbols"], ["NVDA", "AAPL"])
+        self.assertEqual(lineage["universeVersion"], activated["universeVersion"])
+        self.assertEqual(lineage["sourceClass"], "operator_supplied_membership_json")
+        self.assertEqual(lineage["sourceArtifactIdentity"], "operator/us-research-universe@2026-07-05")
+        readiness = detail["dataReadiness"]["scannerUniverseReadiness"]
+        self.assertEqual(readiness["universeVersion"], activated["universeVersion"])
+        self.assertEqual(readiness["symbols"], ["NVDA", "AAPL"])
+        self.assertEqual(readiness["sourceClass"], "operator_supplied_membership_json")
+        self.assertEqual(readiness["freshnessState"], "fresh")
+        self.assertEqual(readiness["asOf"], "2026-07-05")
+        self.assertEqual(data_manager.realtime_quote_calls, ["NVDA", "AAPL"])
 
     def test_not_run_status_activates_bounded_us_local_parquet_universe(self) -> None:
         cache_dir = Path(self._cache_temp_dir.name) / "us-parquet-cache"
@@ -5066,8 +5143,10 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             with patch.object(self.service, "_load_local_us_universe_from_db", return_value=["PLTR"]):
                 universe = self.service._resolve_us_stock_universe(profile=profile, target_symbol_count=50)
 
-        self.assertTrue(universe["source"].startswith("local_us_parquet_dir"))
-        self.assertIn("curated_us_liquid_seed", universe["source"])
+        self.assertEqual(universe["source"], "local_us_parquet_dir")
+        self.assertEqual(universe["coverage_strategy"], "bounded_starter_local_only")
+        self.assertEqual(universe["universeSource"], "bounded_starter_market_data_spine")
+        self.assertNotIn("curated_us_liquid_seed", universe["source"])
         self.assertEqual(resolve_source_type("local_us_parquet_dir"), "cache_snapshot")
         self.assertEqual(resolve_source_label("local_us_parquet_dir"), "本地 Parquet 历史")
         self.assertEqual(resolve_source_type("curated_us_liquid_seed"), "fallback_static")
