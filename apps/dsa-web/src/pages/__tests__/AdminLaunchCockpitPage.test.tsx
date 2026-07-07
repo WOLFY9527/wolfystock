@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminLaunchCockpitPage from '../AdminLaunchCockpitPage';
-import type { AdminOpsStatusResponse } from '../../api/adminOpsStatus';
+import type { AdminOpsStatusResponse, AdminOpsStatusSection } from '../../api/adminOpsStatus';
 
 const { getStatus, getScannerUniverseReadiness, requestScannerUniverseRefresh } = vi.hoisted(() => ({
   getStatus: vi.fn(),
@@ -20,6 +20,38 @@ vi.mock('../../api/adminOpsStatus', () => ({
 
 const forbiddenVisibleCopy =
   /raw-owner-user-id|raw-session-id|provider_payload|raw_payload|request_body|response_body|access-token|authorization|bearer|cookie|api_key|secret|credential|traceback|https:\/\/|\?token=|reserve_quota|consume_reservation|release_reservation/i;
+
+function statusSection(
+  service: string,
+  status: string,
+  message: string,
+  overrides: Partial<AdminOpsStatusSection> = {},
+): AdminOpsStatusSection {
+  return {
+    available: status !== 'unavailable',
+    status,
+    service,
+    configured: status !== 'unavailable',
+    lastCheckedAt: status === 'unavailable' ? null : '2026-06-11T08:00:00',
+    message,
+    label: 'bounded_admin_diagnostic',
+    reasonCode: null,
+    readOnly: true,
+    noExternalCalls: true,
+    advisoryOnly: true,
+    liveEnforcement: false,
+    enforcementEnabled: false,
+    runtimeBehaviorChanged: false,
+    consumerVisible: false,
+    providerBehaviorChanged: false,
+    marketCacheBehaviorChanged: false,
+    deleteAllowed: false,
+    dataSources: [],
+    summary: {},
+    limitations: [],
+    ...overrides,
+  };
+}
 
 function statusFixture(): AdminOpsStatusResponse {
   return {
@@ -39,8 +71,48 @@ function statusFixture(): AdminOpsStatusResponse {
       runtimeBehaviorChanged: false,
       consumerVisible: false,
     },
+    providerStatusSummary: statusSection('provider_reliability', 'degraded', 'Provider reliability requires operator evidence review'),
+    quotaCostAdvisoryStatusSummary: statusSection('quota_cost', 'blocked', 'Quota controls remain advisory and approval-gated'),
+    storageReadinessSummary: statusSection('storage', 'ok', 'Storage readiness evidence is available'),
+    taskQueueStatusSummary: statusSection('task_queue', 'ok', 'Task queue accepts bounded local work'),
+    adminLogEvidenceSummary: statusSection('admin_logs', 'ok', 'Admin log evidence is available'),
+    runtimeLogSinkSummary: statusSection('runtime_log_sink', 'degraded', 'Runtime log sink requires retention review'),
+    retentionPolicyStatus: statusSection('retention_policy', 'blocked', 'Retention policy requires operator review'),
+    executionLogRetentionRisk: statusSection('execution_log_retention', 'unavailable', 'Execution log retention evidence unavailable'),
+    dbSizeRisk: statusSection('db_size', 'ok', 'Database size within bounded threshold'),
+    adminRoleAssignmentStatus: statusSection('admin_role_assignment', 'degraded', 'Admin role assignment needs staged evidence'),
+    durableTaskBacklogStatus: statusSection('durable_task_backlog', 'ok', 'Durable task backlog within threshold'),
+    recommendedMaintenanceActions: ['Review sanitized admin launch evidence'],
+    buildProvenance: {
+      contract: 'admin_build_provenance_v1',
+      readOnly: true,
+      noExternalCalls: true,
+      runtimeBehaviorChanged: false,
+      consumerVisible: false,
+      backendGitSha: '69068d1',
+      backendBranch: 'codex/t227-adminops-contract-alignment',
+      backendCommitTimestamp: null,
+      backendRuntimeStartedAt: null,
+      frontendMainAssetFilename: null,
+      frontendMainAssetHash: null,
+      frontendAssetManifestHash: null,
+      frontendAssetManifestSource: null,
+      frontendStaticBuildTimestamp: null,
+      staticAssetMode: 'unknown',
+      staticAssetRootProvenance: 'unknown',
+      staticAssetRootLabel: null,
+      staticAssetRootExists: false,
+      staticIndexPresent: false,
+      freshnessStatus: 'unknown',
+      comparisonBasis: null,
+      stale: null,
+      reasonCodes: ['frontend_build_not_checked'],
+    },
     launchCockpit: {
       contract: 'admin_ops_launch_cockpit_v1',
+      status: 'blocked',
+      lastCheckedAt: '2026-06-11T08:00:00',
+      message: 'Public launch remains blocked pending operator evidence',
       readOnly: true,
       advisoryOnly: true,
       noExternalCalls: true,
@@ -191,7 +263,24 @@ function scannerReadinessFixture(market: 'us' | 'cn', status = 'stale') {
     scannerUniverseStatus: status,
     market,
     profile: market === 'us' ? 'us_premarket_v1' : 'cn_preopen_v1',
+    universeVersion: market === 'us' ? 'scanner-universe-us-20260620' : 'scanner-universe-cn-20260620',
+    generatedAt: '2026-06-20T00:01:00+00:00',
+    asOf: '2026-06-20',
+    sourceClass: market === 'us' ? 'local_bounded_us_parquet_universe' : 'scanner_universe_lifecycle_active',
+    symbolCount: market === 'us' ? 4 : 300,
     freshnessState: market === 'us' ? 'stale' : 'universe_modified:2026-06-20',
+    age: { days: 17 },
+    minimumCoverageThreshold: market === 'us' ? 100 : 300,
+    coverageState: status === 'available' ? 'sufficient' : 'below_threshold',
+    usable: status === 'available',
+    blockingReasons: ['scanner_universe_stale'],
+    downstreamImpact: {
+      scanner: 'blocked',
+      researchRadar: 'blocked',
+      backtest: 'degraded',
+    },
+    lastSuccessfulActivation: 'scanner-universe-20260601',
+    lastRejectedImportReason: null,
     lastUpdatedAt: '2026-06-20T00:00:00+00:00',
     universeSize: market === 'us' ? 4 : 300,
     affectedProductSurfaces: ['Scanner', 'Research Radar', 'Backtest'],

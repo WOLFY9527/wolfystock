@@ -4,8 +4,12 @@ import { toCamelCase } from './utils';
 export interface AdminOpsStatusSection {
   available: boolean;
   status: string;
+  service: string;
+  configured: boolean;
+  lastCheckedAt: string | null;
+  message: string;
   label: string;
-  reasonCode?: string | null;
+  reasonCode: string | null;
   readOnly: boolean;
   noExternalCalls: boolean;
   advisoryOnly: boolean;
@@ -99,6 +103,9 @@ export interface AdminOpsCockpitMaintenanceQueueItem {
 
 export interface AdminOpsLaunchCockpit {
   contract: string;
+  status: string;
+  lastCheckedAt: string | null;
+  message: string;
   readOnly: boolean;
   advisoryOnly: boolean;
   noExternalCalls: boolean;
@@ -117,6 +124,32 @@ export interface AdminOpsLaunchCockpit {
   prioritySummary: Record<string, number>;
 }
 
+export interface AdminBuildProvenance {
+  contract: string;
+  readOnly: boolean;
+  noExternalCalls: boolean;
+  runtimeBehaviorChanged: boolean;
+  consumerVisible: boolean;
+  backendGitSha: string | null;
+  backendBranch: string | null;
+  backendCommitTimestamp: string | null;
+  backendRuntimeStartedAt: string | null;
+  frontendMainAssetFilename: string | null;
+  frontendMainAssetHash: string | null;
+  frontendAssetManifestHash: string | null;
+  frontendAssetManifestSource: string | null;
+  frontendStaticBuildTimestamp: string | null;
+  staticAssetMode: string;
+  staticAssetRootProvenance: string;
+  staticAssetRootLabel: string | null;
+  staticAssetRootExists: boolean;
+  staticIndexPresent: boolean;
+  freshnessStatus: string;
+  comparisonBasis: string | null;
+  stale: boolean | null;
+  reasonCodes: string[];
+}
+
 export interface AdminOpsStatusResponse {
   generatedAt: string;
   readOnly: boolean;
@@ -125,23 +158,44 @@ export interface AdminOpsStatusResponse {
   runtimeBehaviorChanged: boolean;
   consumerVisible: boolean;
   advisoryVsEnforcement: AdminOpsAdvisoryVsEnforcement;
-  providerStatusSummary?: AdminOpsStatusSection;
-  quotaCostAdvisoryStatusSummary?: AdminOpsStatusSection;
-  storageReadinessSummary?: AdminOpsStatusSection;
-  taskQueueStatusSummary?: AdminOpsStatusSection;
-  adminLogEvidenceSummary?: AdminOpsStatusSection;
+  providerStatusSummary: AdminOpsStatusSection;
+  quotaCostAdvisoryStatusSummary: AdminOpsStatusSection;
+  storageReadinessSummary: AdminOpsStatusSection;
+  taskQueueStatusSummary: AdminOpsStatusSection;
+  adminLogEvidenceSummary: AdminOpsStatusSection;
+  runtimeLogSinkSummary: AdminOpsStatusSection;
+  retentionPolicyStatus: AdminOpsStatusSection;
+  executionLogRetentionRisk: AdminOpsStatusSection;
+  dbSizeRisk: AdminOpsStatusSection;
+  adminRoleAssignmentStatus: AdminOpsStatusSection;
+  durableTaskBacklogStatus: AdminOpsStatusSection;
+  recommendedMaintenanceActions: string[];
+  buildProvenance: AdminBuildProvenance;
   launchCockpit: AdminOpsLaunchCockpit;
-  metadata?: Record<string, unknown>;
+  metadata: Record<string, unknown>;
 }
 
 export interface AdminScannerUniverseReadinessResponse {
   contractVersion: string;
   status: string;
-  scannerUniverseStatus?: string | null;
+  scannerUniverseStatus: string | null;
   market: string;
   profile: string;
+  universeVersion: string | null;
+  generatedAt: string | null;
+  asOf: string | null;
+  sourceClass: string | null;
+  symbolCount: number;
   freshnessState: string;
-  lastUpdatedAt?: string | null;
+  age: Record<string, unknown> | null;
+  minimumCoverageThreshold: number | null;
+  coverageState: string | null;
+  usable: boolean | null;
+  blockingReasons: string[];
+  downstreamImpact: Record<string, unknown>;
+  lastSuccessfulActivation: string | null;
+  lastRejectedImportReason: string | null;
+  lastUpdatedAt: string | null;
   universeSize: number;
   affectedProductSurfaces: string[];
   nextOperatorAction: string;
@@ -178,6 +232,12 @@ function arrayOfStrings(value: unknown): string[] {
       return text ? [text] : [];
     })
     : [];
+}
+
+function recordFromUnknown(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 function normalizeProposal(payload: Record<string, unknown>): AdminOpsCockpitFollowUpProposal {
@@ -224,7 +284,7 @@ function normalizeDomain(payload: Record<string, unknown>): AdminOpsCockpitDomai
     ownerSurface: String(normalized.ownerSurface || 'admin_maintenance'),
     remediationSurface: String(normalized.remediationSurface || normalized.detailRoute || '/admin'),
     followUpProposals: Array.isArray(normalized.followUpProposals)
-      ? normalized.followUpProposals.map((item) => normalizeProposal(item as unknown as Record<string, unknown>))
+      ? normalized.followUpProposals.map((item) => normalizeProposal(recordFromUnknown(item)))
       : [],
   };
 }
@@ -263,6 +323,9 @@ function normalizeLaunchCockpit(payload: Record<string, unknown> | undefined): A
   const normalized = toCamelCase<AdminOpsLaunchCockpit>(payload || {});
   return {
     contract: String(normalized.contract || 'admin_ops_launch_cockpit_v1'),
+    status: String(normalized.status || 'unavailable'),
+    lastCheckedAt: normalized.lastCheckedAt ? String(normalized.lastCheckedAt) : null,
+    message: String(normalized.message || ''),
     readOnly: normalized.readOnly !== false,
     advisoryOnly: normalized.advisoryOnly !== false,
     noExternalCalls: normalized.noExternalCalls !== false,
@@ -278,13 +341,13 @@ function normalizeLaunchCockpit(payload: Record<string, unknown> | undefined): A
       ? Object.fromEntries(Object.entries(normalized.unsafeActionStates).map(([key, value]) => [key, Boolean(value)]))
       : {},
     domains: Array.isArray(normalized.domains)
-      ? normalized.domains.map((item) => normalizeDomain(item as unknown as Record<string, unknown>))
+      ? normalized.domains.map((item) => normalizeDomain(recordFromUnknown(item)))
       : [],
     recommendedMaintenanceQueue: Array.isArray(normalized.recommendedMaintenanceQueue)
-      ? normalized.recommendedMaintenanceQueue.map((item) => normalizeQueueItem(item as unknown as Record<string, unknown>))
+      ? normalized.recommendedMaintenanceQueue.map((item) => normalizeQueueItem(recordFromUnknown(item)))
       : [],
     blockers: Array.isArray(normalized.blockers)
-      ? normalized.blockers.map((item) => normalizeBlocker(item as unknown as Record<string, unknown>))
+      ? normalized.blockers.map((item) => normalizeBlocker(recordFromUnknown(item)))
       : [],
     safeNextActions: arrayOfStrings(normalized.safeNextActions),
     limitations: arrayOfStrings(normalized.limitations),
@@ -304,14 +367,29 @@ function normalizeScannerUniverseReadiness(
     scannerUniverseStatus: normalized.scannerUniverseStatus ? String(normalized.scannerUniverseStatus) : null,
     market: String(normalized.market || ''),
     profile: String(normalized.profile || ''),
+    universeVersion: normalized.universeVersion ? String(normalized.universeVersion) : null,
+    generatedAt: normalized.generatedAt ? String(normalized.generatedAt) : null,
+    asOf: normalized.asOf ? String(normalized.asOf) : null,
+    sourceClass: normalized.sourceClass ? String(normalized.sourceClass) : null,
+    symbolCount: Number(normalized.symbolCount || 0),
     freshnessState: String(normalized.freshnessState || 'unknown'),
+    age: normalized.age && typeof normalized.age === 'object' && !Array.isArray(normalized.age)
+      ? recordFromUnknown(normalized.age)
+      : null,
+    minimumCoverageThreshold: normalized.minimumCoverageThreshold == null
+      ? null
+      : Number(normalized.minimumCoverageThreshold),
+    coverageState: normalized.coverageState ? String(normalized.coverageState) : null,
+    usable: typeof normalized.usable === 'boolean' ? normalized.usable : null,
+    blockingReasons: arrayOfStrings(normalized.blockingReasons),
+    downstreamImpact: recordFromUnknown(normalized.downstreamImpact),
+    lastSuccessfulActivation: normalized.lastSuccessfulActivation ? String(normalized.lastSuccessfulActivation) : null,
+    lastRejectedImportReason: normalized.lastRejectedImportReason ? String(normalized.lastRejectedImportReason) : null,
     lastUpdatedAt: normalized.lastUpdatedAt ? String(normalized.lastUpdatedAt) : null,
     universeSize: Number(normalized.universeSize || 0),
     affectedProductSurfaces: arrayOfStrings(normalized.affectedProductSurfaces),
     nextOperatorAction: String(normalized.nextOperatorAction || ''),
-    scannerUniverseReadiness: normalized.scannerUniverseReadiness && typeof normalized.scannerUniverseReadiness === 'object'
-      ? normalized.scannerUniverseReadiness as Record<string, unknown>
-      : {},
+    scannerUniverseReadiness: recordFromUnknown(normalized.scannerUniverseReadiness),
     candidateGenerationState: normalized.candidateGenerationState ? String(normalized.candidateGenerationState) : null,
     candidateGenerationBlockers: arrayOfStrings(normalized.candidateGenerationBlockers),
     readOnly: normalized.readOnly !== false,
@@ -338,12 +416,8 @@ function normalizeScannerUniverseRefresh(
     providerCallsEnabled: Boolean(normalized.providerCallsEnabled),
     runtimeBehaviorChanged: Boolean(normalized.runtimeBehaviorChanged),
     nextOperatorAction: String(normalized.nextOperatorAction || ''),
-    before: normalized.before && typeof normalized.before === 'object'
-      ? normalized.before as Record<string, unknown>
-      : {},
-    after: normalized.after && typeof normalized.after === 'object'
-      ? normalized.after as Record<string, unknown>
-      : {},
+    before: recordFromUnknown(normalized.before),
+    after: recordFromUnknown(normalized.after),
   };
 }
 
@@ -358,7 +432,7 @@ export const adminOpsStatusApi = {
       liveEnforcement: Boolean(normalized.liveEnforcement),
       runtimeBehaviorChanged: Boolean(normalized.runtimeBehaviorChanged),
       consumerVisible: Boolean(normalized.consumerVisible),
-      launchCockpit: normalizeLaunchCockpit(normalized.launchCockpit as unknown as Record<string, unknown>),
+      launchCockpit: normalizeLaunchCockpit(recordFromUnknown(normalized.launchCockpit)),
     };
   },
   async getScannerUniverseReadiness(market: 'us' | 'cn'): Promise<AdminScannerUniverseReadinessResponse> {
