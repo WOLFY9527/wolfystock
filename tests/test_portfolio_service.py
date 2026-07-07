@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import json
 import sqlite3
 import tempfile
 import threading
@@ -2239,6 +2240,82 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self.assertEqual(snapshot_row_after.updated_at, snapshot_updated_at_before)
         self.assertEqual(position_ids_after, position_ids_before)
         self.assertEqual(lot_ids_after, lot_ids_before)
+
+    def test_valuation_lineage_sidecar_persists_and_reloads_from_snapshot_cache(self) -> None:
+        account = self.service.create_account(name="Lineage", broker="Demo", market="cn", base_currency="CNY")
+        aid = account["id"]
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=10000,
+            currency="CNY",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 1, 2),
+            side="buy",
+            quantity=10,
+            price=100,
+            market="us",
+            currency="USD",
+        )
+        self._save_close("AAPL", date(2026, 1, 2), 125.0)
+        self.service.repo.save_fx_rate(
+            from_currency="USD",
+            to_currency="CNY",
+            rate_date=date(2026, 1, 1),
+            rate=7.1,
+            source="manual",
+            is_stale=True,
+        )
+
+        first = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
+        account_lineage = first["accounts"][0]["valuation_lineage"]
+        self.assertEqual(account_lineage["read_model_type"], "portfolio_valuation_lineage_sidecar_v1")
+        self.assertEqual(account_lineage["accounting_truth"]["authority"], "portfolio_ledger")
+        self.assertTrue(account_lineage["accounting_truth"]["not_recalculated"])
+        self.assertEqual(account_lineage["valuation_snapshot"]["account_id"], aid)
+        self.assertEqual(account_lineage["valuation_snapshot"]["owner_id"], first["accounts"][0]["owner_id"])
+        self.assertEqual(account_lineage["valuation_snapshot"]["as_of"], "2026-01-02")
+        self.assertEqual(account_lineage["price_evidence"]["refs"][0]["symbol"], "AAPL")
+        self.assertEqual(account_lineage["price_evidence"]["refs"][0]["source"], "daily_close_quote")
+        self.assertEqual(account_lineage["fx_evidence"]["refs"][0]["pair"], "USD/CNY")
+        self.assertTrue(account_lineage["fx_evidence"]["refs"][0]["is_stale"])
+        self.assertEqual(account_lineage["readiness"]["state"], "partial")
+        self.assertIn("fx_stale", account_lineage["readiness"]["missing_evidence"])
+
+        with self.db.get_session() as session:
+            snapshot_row = session.execute(
+                select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == aid)
+            ).scalar_one()
+            persisted_payload = json.loads(snapshot_row.payload)
+            snapshot_updated_at_before = snapshot_row.updated_at
+
+        self.assertEqual(
+            persisted_payload["valuation_lineage"]["valuation_snapshot"]["snapshot_id"],
+            account_lineage["valuation_snapshot"]["snapshot_id"],
+        )
+        self.assertEqual(persisted_payload["valuation_lineage"]["fx_evidence"]["refs"][0]["pair"], "USD/CNY")
+
+        with patch.object(
+            self.service,
+            "_build_account_snapshot",
+            side_effect=AssertionError("warm snapshot read should reuse cached valuation lineage"),
+        ):
+            second = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
+
+        self.assertEqual(
+            second["accounts"][0]["valuation_lineage"]["valuation_snapshot"]["snapshot_id"],
+            account_lineage["valuation_snapshot"]["snapshot_id"],
+        )
+        self.assertEqual(second["valuation_lineage"]["readiness"]["state"], "partial")
+        with self.db.get_session() as session:
+            snapshot_row_after = session.execute(
+                select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == aid)
+            ).scalar_one()
+        self.assertEqual(snapshot_row_after.updated_at, snapshot_updated_at_before)
 
     def test_historical_cached_snapshot_does_not_reuse_newer_position_cache(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")

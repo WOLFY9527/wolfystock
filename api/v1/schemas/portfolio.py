@@ -304,6 +304,7 @@ class PortfolioAccountSnapshot(BaseModel):
     ] = None
     calculation_status: Optional[Literal["ready", "calculation_unavailable"]] = None
     availability: Optional[Dict[str, Any]] = None
+    valuation_lineage: Optional[Dict[str, Any]] = None
     positions: List[PortfolioPositionItem] = Field(default_factory=list)
 
 
@@ -486,6 +487,7 @@ class PortfolioSnapshotResponse(BaseModel):
     price_lineage: Optional[Dict[str, Any]] = None
     fx_lineage: Optional[Dict[str, Any]] = None
     valuation_snapshot_lineage: Optional[Dict[str, Any]] = None
+    valuation_lineage: Optional[Dict[str, Any]] = None
     analytics_readiness: Optional[Dict[str, Any]] = None
     holdingsLineageState: Optional[str] = None
     cashLedgerCompletenessState: Optional[str] = None
@@ -508,6 +510,7 @@ class PortfolioHistorySnapshotItem(BaseModel):
     fee_total: float
     tax_total: float
     fx_stale: bool
+    valuation_lineage: Optional[Dict[str, Any]] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 

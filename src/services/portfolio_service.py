@@ -56,6 +56,7 @@ PORTFOLIO_PRICE_FALLBACK_REASON_CURRENT_QUOTE_UNAVAILABLE = "current_quote_unava
 PORTFOLIO_PRICE_CONFIDENCE_LIVE = 1.0
 PORTFOLIO_PRICE_CONFIDENCE_SYNC = 0.85
 PORTFOLIO_PRICE_CONFIDENCE_FALLBACK = 0.25
+PORTFOLIO_VALUATION_LINEAGE_SIDECAR_VERSION = "portfolio_valuation_lineage_sidecar_v1"
 
 
 class PortfolioConflictError(Exception):
@@ -2458,6 +2459,11 @@ class PortfolioService:
         market_breakdown: Dict[str, Dict[str, float]] = {}
 
         for account in account_rows:
+            account_fx_rates = self._build_fx_rate_snapshot(
+                account_rows=[account],
+                aggregate_currency=account.base_currency,
+                as_of_date=as_of_date,
+            )
             account_snapshot = self._load_cached_account_snapshot(
                 account=account,
                 as_of_date=as_of_date,
@@ -2470,6 +2476,15 @@ class PortfolioService:
                     as_of_date=as_of_date,
                     cost_method=method,
                 )
+                account_lineage = self._build_account_valuation_lineage_sidecar(
+                    account_payload=account_snapshot["public"],
+                    fx_rates=account_fx_rates,
+                )
+                account_snapshot["public"]["valuation_lineage"] = account_lineage
+                account_snapshot["payload"]["valuation_lineage"] = account_lineage
+                self._attach_account_availability(account_snapshot["public"], loaded_from_cache=False)
+                for key in ("data_status", "calculation_status", "availability"):
+                    account_snapshot["payload"][key] = account_snapshot["public"].get(key)
 
                 self.repo.replace_positions_lots_and_snapshot(
                     account_id=account.id,
@@ -2495,6 +2510,11 @@ class PortfolioService:
                 display_currency=account.base_currency,
             )
             self._attach_account_availability(public_snapshot, loaded_from_cache=loaded_from_cache)
+            if not isinstance(public_snapshot.get("valuation_lineage"), dict):
+                public_snapshot["valuation_lineage"] = self._build_account_valuation_lineage_sidecar(
+                    account_payload=public_snapshot,
+                    fx_rates=account_fx_rates,
+                )
             accounts_payload.append(public_snapshot)
             self._accumulate_market_breakdown(
                 market_breakdown=market_breakdown,
@@ -2610,9 +2630,20 @@ class PortfolioService:
             )
         )
         snapshot_payload.update(self._build_portfolio_lineage_summary(snapshot=snapshot_payload))
+        snapshot_payload["valuation_lineage"] = self._build_portfolio_valuation_lineage_sidecar(
+            snapshot=snapshot_payload
+        )
         return snapshot_payload
 
     def _attach_account_availability(self, account_payload: Dict[str, Any], *, loaded_from_cache: bool) -> None:
+        if (
+            loaded_from_cache
+            and account_payload.get("data_status")
+            and account_payload.get("calculation_status")
+            and isinstance(account_payload.get("availability"), dict)
+        ):
+            return
+
         position_count = len(account_payload.get("positions") or [])
         if position_count == 0:
             data_status = PORTFOLIO_DATA_STATUS_NO_POSITIONS
@@ -2694,6 +2725,388 @@ class PortfolioService:
             "valuation_snapshot_lineage": valuation_snapshot_lineage,
             "analytics_readiness": analytics_readiness,
         }
+
+    def _build_account_valuation_lineage_sidecar(
+        self,
+        *,
+        account_payload: Dict[str, Any],
+        fx_rates: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        positions = [dict(item) for item in list(account_payload.get("positions") or []) if isinstance(item, dict)]
+        as_of_value = str(account_payload.get("as_of") or "").strip()
+        cost_method = str(account_payload.get("cost_method") or "").strip()
+        account_id = int(account_payload.get("account_id") or 0)
+        owner_id = str(account_payload.get("owner_id") or "").strip()
+        base_currency = self._normalize_currency(account_payload.get("base_currency") or "CNY")
+        snapshot_id = self._valuation_snapshot_id(
+            owner_id=owner_id,
+            account_id=account_id,
+            as_of=as_of_value,
+            cost_method=cost_method,
+        )
+
+        price_refs: List[Dict[str, Any]] = []
+        missing_evidence: List[str] = []
+        degraded_evidence: List[str] = []
+        confidence_values: List[float] = []
+        for position in positions:
+            symbol = str(position.get("symbol") or "").strip().upper()
+            market = str(position.get("market") or "").strip().lower()
+            currency = self._normalize_currency(position.get("currency") or base_currency)
+            price_source = str(position.get("price_source") or "missing").strip() or "missing"
+            price_as_of = str(position.get("price_as_of") or "").strip() or None
+            is_fallback = bool(position.get("is_price_fallback")) or price_source == PORTFOLIO_PRICE_SOURCE_AVG_COST_FALLBACK
+            freshness = "fresh"
+            if is_fallback or price_source == "missing":
+                freshness = "missing"
+                self._append_lineage_evidence(missing_evidence, "price_missing")
+                self._append_lineage_evidence(degraded_evidence, f"price_fallback:{symbol}" if symbol else "price_fallback")
+            elif price_as_of and as_of_value and price_as_of < as_of_value:
+                freshness = "stale"
+                self._append_lineage_evidence(missing_evidence, "price_stale")
+                self._append_lineage_evidence(degraded_evidence, f"price_stale:{symbol}" if symbol else "price_stale")
+            elif price_source == PORTFOLIO_PRICE_SOURCE_BROKER_SYNC_SNAPSHOT:
+                freshness = "delayed"
+                self._append_lineage_evidence(degraded_evidence, f"price_delayed:{symbol}" if symbol else "price_delayed")
+            confidence = position.get("valuation_confidence")
+            try:
+                if confidence is not None:
+                    confidence_values.append(float(confidence))
+            except (TypeError, ValueError):
+                pass
+            price_refs.append(
+                {
+                    "ref_id": f"price:{symbol or 'UNKNOWN'}:{market or 'unknown'}:{price_as_of or 'missing'}:{price_source}",
+                    "symbol": symbol or None,
+                    "market": market or None,
+                    "currency": currency,
+                    "source": price_source,
+                    "as_of": price_as_of,
+                    "freshness": freshness,
+                    "is_fallback": is_fallback,
+                    "fallback_reason": position.get("price_fallback_reason"),
+                    "valuation_confidence": position.get("valuation_confidence"),
+                }
+            )
+
+        fx_refs: List[Dict[str, Any]] = []
+        for position in positions:
+            currency = self._normalize_currency(position.get("currency") or base_currency)
+            if currency == base_currency:
+                pair = f"{currency}/{base_currency}"
+                fx_refs.append(
+                    {
+                        "ref_id": f"fx:{pair}:identity",
+                        "pair": pair,
+                        "from_currency": currency,
+                        "to_currency": base_currency,
+                        "rate_date": as_of_value or None,
+                        "source": "identity",
+                        "source_direction": "identity",
+                        "freshness": "fresh",
+                        "is_stale": False,
+                        "rate_available": True,
+                    }
+                )
+
+        for row in fx_rates:
+            from_currency = self._normalize_currency(row.get("from_currency") or "")
+            to_currency = self._normalize_currency(row.get("to_currency") or "")
+            pair = f"{from_currency}/{to_currency}"
+            source = str(row.get("source") or "missing").strip() or "missing"
+            source_direction = str(row.get("source_direction") or "missing").strip() or "missing"
+            rate_available = row.get("rate") not in (None, "") and source != "missing" and source_direction != "missing"
+            if not rate_available:
+                freshness = "missing"
+                self._append_lineage_evidence(missing_evidence, "fx_missing")
+                self._append_lineage_evidence(degraded_evidence, f"fx_missing:{pair}")
+            elif bool(row.get("is_stale")):
+                freshness = "stale"
+                self._append_lineage_evidence(missing_evidence, "fx_stale")
+                self._append_lineage_evidence(degraded_evidence, f"fx_stale:{pair}")
+            else:
+                freshness = "fresh"
+            fx_refs.append(
+                {
+                    "ref_id": f"fx:{pair}:{row.get('rate_date') or 'missing'}:{source_direction}",
+                    "pair": pair,
+                    "from_currency": from_currency,
+                    "to_currency": to_currency,
+                    "rate_date": row.get("rate_date"),
+                    "source": source,
+                    "source_direction": source_direction,
+                    "freshness": freshness,
+                    "is_stale": bool(row.get("is_stale")),
+                    "rate_available": rate_available,
+                }
+            )
+
+        if not positions:
+            state = "blocked"
+            self._append_lineage_evidence(missing_evidence, "positions_missing")
+        elif any(item["freshness"] == "missing" for item in price_refs + fx_refs):
+            state = "partial"
+        elif any(item["freshness"] in {"stale", "delayed"} for item in price_refs + fx_refs):
+            state = "partial"
+        else:
+            state = "complete"
+
+        freshness = self._lineage_sidecar_freshness(price_refs=price_refs, fx_refs=fx_refs)
+        confidence = round(min(confidence_values), 2) if confidence_values else (0.0 if positions else None)
+        return {
+            "read_model_type": PORTFOLIO_VALUATION_LINEAGE_SIDECAR_VERSION,
+            "accounting_truth": {
+                "authority": "portfolio_ledger",
+                "scope": "account",
+                "owner_id": owner_id or None,
+                "account_id": account_id,
+                "cost_method": cost_method,
+                "not_recalculated": True,
+                "protected_fields": [
+                    "holdings",
+                    "cash",
+                    "transactions",
+                    "cost_basis",
+                    "realized_pnl",
+                    "unrealized_pnl",
+                    "fx_conversion",
+                ],
+            },
+            "valuation_snapshot": {
+                "snapshot_id": snapshot_id,
+                "owner_id": owner_id or None,
+                "account_id": account_id,
+                "as_of": as_of_value or None,
+                "cost_method": cost_method,
+                "base_currency": base_currency,
+                "valuation_currency": base_currency,
+            },
+            "price_evidence": {
+                "status": self._lineage_ref_status(price_refs),
+                "refs": price_refs,
+            },
+            "fx_evidence": {
+                "status": self._lineage_ref_status(fx_refs),
+                "refs": fx_refs,
+            },
+            "benchmark_lineage": {
+                "status": "unmapped",
+                "refs": [],
+                "missing_evidence": ["benchmark_mapping"],
+            },
+            "factor_risk_lineage": {
+                "status": "unmapped",
+                "refs": [],
+                "missing_evidence": ["factor_mapping"],
+            },
+            "readiness": {
+                "state": state,
+                "freshness": freshness,
+                "confidence": confidence,
+                "confidence_source": "position_valuation_confidence_min",
+                "missing_evidence": missing_evidence,
+                "degraded_evidence": degraded_evidence,
+                "partial": state == "partial",
+                "degraded": bool(degraded_evidence),
+            },
+        }
+
+    def _build_portfolio_valuation_lineage_sidecar(self, *, snapshot: Dict[str, Any]) -> Dict[str, Any]:
+        account_lineages = [
+            dict(account.get("valuation_lineage") or {})
+            for account in list(snapshot.get("accounts") or [])
+            if isinstance(account, dict) and isinstance(account.get("valuation_lineage"), dict)
+        ]
+        price_refs: List[Dict[str, Any]] = []
+        fx_refs: List[Dict[str, Any]] = []
+        missing_evidence: List[str] = []
+        degraded_evidence: List[str] = []
+        owner_ids: Set[str] = set()
+        account_ids: Set[int] = set()
+        for lineage in account_lineages:
+            valuation_snapshot = lineage.get("valuation_snapshot") if isinstance(lineage.get("valuation_snapshot"), dict) else {}
+            owner_id = str(valuation_snapshot.get("owner_id") or "").strip()
+            if owner_id:
+                owner_ids.add(owner_id)
+            try:
+                account_ids.add(int(valuation_snapshot.get("account_id")))
+            except (TypeError, ValueError):
+                pass
+            price_section = lineage.get("price_evidence") if isinstance(lineage.get("price_evidence"), dict) else {}
+            fx_section = lineage.get("fx_evidence") if isinstance(lineage.get("fx_evidence"), dict) else {}
+            price_refs.extend([dict(item) for item in list(price_section.get("refs") or []) if isinstance(item, dict)])
+            fx_refs.extend([dict(item) for item in list(fx_section.get("refs") or []) if isinstance(item, dict)])
+            readiness = lineage.get("readiness") if isinstance(lineage.get("readiness"), dict) else {}
+            for item in list(readiness.get("missing_evidence") or []):
+                self._append_lineage_evidence(missing_evidence, str(item))
+            for item in list(readiness.get("degraded_evidence") or []):
+                self._append_lineage_evidence(degraded_evidence, str(item))
+
+        aggregate_fx_refs = self._aggregate_fx_lineage_refs(snapshot=snapshot)
+        existing_fx_ref_ids = {str(item.get("ref_id") or "") for item in fx_refs}
+        for ref in aggregate_fx_refs:
+            ref_id = str(ref.get("ref_id") or "")
+            if ref_id and ref_id not in existing_fx_ref_ids:
+                fx_refs.append(ref)
+                existing_fx_ref_ids.add(ref_id)
+            freshness = str(ref.get("freshness") or "").strip().lower()
+            pair = str(ref.get("pair") or "unknown").strip()
+            if freshness == "missing":
+                self._append_lineage_evidence(missing_evidence, "fx_missing")
+                self._append_lineage_evidence(degraded_evidence, f"fx_missing:{pair}")
+            elif freshness == "stale":
+                self._append_lineage_evidence(missing_evidence, "fx_stale")
+                self._append_lineage_evidence(degraded_evidence, f"fx_stale:{pair}")
+
+        benchmark_state = str(snapshot.get("benchmarkMappingState") or "unmapped")
+        factor_state = str(snapshot.get("factorMappingState") or "unmapped")
+        valuation_state = str(dict(snapshot.get("valuation_snapshot_lineage") or {}).get("status") or "blocked")
+        return {
+            "read_model_type": PORTFOLIO_VALUATION_LINEAGE_SIDECAR_VERSION,
+            "accounting_truth": {
+                "authority": "portfolio_ledger",
+                "scope": "portfolio",
+                "owner_ids": sorted(owner_ids),
+                "account_ids": sorted(account_ids),
+                "not_recalculated": True,
+            },
+            "valuation_snapshot": {
+                "snapshot_id": self._valuation_snapshot_id(
+                    owner_id=",".join(sorted(owner_ids)) or "unknown",
+                    account_id=0,
+                    as_of=str(snapshot.get("as_of") or ""),
+                    cost_method=str(snapshot.get("cost_method") or ""),
+                ),
+                "owner_ids": sorted(owner_ids),
+                "account_ids": sorted(account_ids),
+                "as_of": snapshot.get("as_of"),
+                "cost_method": snapshot.get("cost_method"),
+                "valuation_currency": snapshot.get("currency"),
+            },
+            "price_evidence": {
+                "status": str(dict(snapshot.get("price_lineage") or {}).get("status") or self._lineage_ref_status(price_refs)),
+                "refs": price_refs,
+            },
+            "fx_evidence": {
+                "status": str(dict(snapshot.get("fx_lineage") or {}).get("status") or self._lineage_ref_status(fx_refs)),
+                "refs": fx_refs,
+            },
+            "benchmark_lineage": {
+                "status": benchmark_state,
+                "refs": [],
+                "missing_evidence": ["benchmark_mapping"] if benchmark_state in {"unmapped", "not_configured"} else [],
+            },
+            "factor_risk_lineage": {
+                "status": factor_state,
+                "refs": self._portfolio_risk_source_refs(snapshot=snapshot),
+                "missing_evidence": ["factor_mapping"] if factor_state in {"unmapped", "not_configured"} else [],
+            },
+            "readiness": {
+                "state": valuation_state,
+                "freshness": self._lineage_sidecar_freshness(price_refs=price_refs, fx_refs=fx_refs),
+                "missing_evidence": missing_evidence,
+                "degraded_evidence": degraded_evidence,
+                "partial": valuation_state == "partial",
+                "degraded": bool(degraded_evidence),
+            },
+        }
+
+    @staticmethod
+    def _aggregate_fx_lineage_refs(*, snapshot: Dict[str, Any]) -> List[Dict[str, Any]]:
+        refs: List[Dict[str, Any]] = []
+        for row in list(snapshot.get("fx_rates") or []):
+            if not isinstance(row, dict):
+                continue
+            from_currency = str(row.get("from_currency") or "").strip().upper()
+            to_currency = str(row.get("to_currency") or "").strip().upper()
+            if not from_currency or not to_currency:
+                continue
+            pair = f"{from_currency}/{to_currency}"
+            source = str(row.get("source") or "missing").strip() or "missing"
+            source_direction = str(row.get("source_direction") or "missing").strip() or "missing"
+            rate_available = row.get("rate") not in (None, "") and source != "missing" and source_direction != "missing"
+            if not rate_available:
+                freshness = "missing"
+            elif bool(row.get("is_stale")):
+                freshness = "stale"
+            else:
+                freshness = "fresh"
+            refs.append(
+                {
+                    "ref_id": f"fx:{pair}:{row.get('rate_date') or 'missing'}:{source_direction}",
+                    "pair": pair,
+                    "from_currency": from_currency,
+                    "to_currency": to_currency,
+                    "rate_date": row.get("rate_date"),
+                    "source": source,
+                    "source_direction": source_direction,
+                    "freshness": freshness,
+                    "is_stale": bool(row.get("is_stale")),
+                    "rate_available": rate_available,
+                    "scope": "portfolio_aggregate",
+                }
+            )
+        return refs
+
+    @staticmethod
+    def _valuation_snapshot_id(*, owner_id: str, account_id: int, as_of: str, cost_method: str) -> str:
+        owner_part = str(owner_id or "unknown").strip() or "unknown"
+        as_of_part = str(as_of or "unknown").strip() or "unknown"
+        method_part = str(cost_method or "unknown").strip() or "unknown"
+        return f"portfolio_valuation:{owner_part}:{int(account_id)}:{as_of_part}:{method_part}"
+
+    @staticmethod
+    def _append_lineage_evidence(target: List[str], value: str) -> None:
+        text = str(value or "").strip()
+        if text and text not in target:
+            target.append(text)
+
+    @staticmethod
+    def _lineage_ref_status(refs: List[Dict[str, Any]]) -> str:
+        if not refs:
+            return "missing"
+        freshness_values = {str(item.get("freshness") or "").strip().lower() for item in refs}
+        if freshness_values == {"missing"}:
+            return "missing"
+        if "missing" in freshness_values:
+            return "partial"
+        if freshness_values & {"stale", "delayed"}:
+            return "stale"
+        return "available"
+
+    @staticmethod
+    def _lineage_sidecar_freshness(*, price_refs: List[Dict[str, Any]], fx_refs: List[Dict[str, Any]]) -> str:
+        freshness_values = {
+            str(item.get("freshness") or "").strip().lower()
+            for item in list(price_refs or []) + list(fx_refs or [])
+            if isinstance(item, dict)
+        }
+        if not freshness_values:
+            return "missing"
+        if "missing" in freshness_values:
+            return "missing"
+        if "stale" in freshness_values:
+            return "stale"
+        if "delayed" in freshness_values:
+            return "delayed"
+        return "fresh"
+
+    @staticmethod
+    def _portfolio_risk_source_refs(*, snapshot: Dict[str, Any]) -> List[Dict[str, Any]]:
+        evidence = snapshot.get("portfolioRiskEvidence") if isinstance(snapshot.get("portfolioRiskEvidence"), dict) else {}
+        refs: List[Dict[str, Any]] = []
+        for item in list(evidence.get("source_refs") or []):
+            if not isinstance(item, dict):
+                continue
+            refs.append(
+                {
+                    "ref_id": item.get("source_ref_id"),
+                    "provider": item.get("provider"),
+                    "source_class": item.get("source_class"),
+                    "raw_payload_stored": bool(item.get("raw_payload_stored")),
+                }
+            )
+        return refs
 
     def _build_price_lineage(self, *, snapshot: Dict[str, Any]) -> Dict[str, Any]:
         positions = self._snapshot_positions(snapshot)
