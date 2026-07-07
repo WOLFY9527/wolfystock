@@ -178,6 +178,32 @@ class WatchlistResearchOverlayServiceTestCase(unittest.TestCase):
             event_count = session.query(UserAlertEvent).count()
         return int(rule_count), int(event_count)
 
+    def test_overlay_success_with_zero_items_is_legitimate_empty_state(self) -> None:
+        mutation_statements: list[str] = []
+
+        def guard_mutation(_conn, _cursor, statement, _parameters, _context, _executemany) -> None:
+            verb = statement.lstrip().split(None, 1)[0].upper() if statement.strip() else ""
+            if verb in {"INSERT", "UPDATE", "DELETE", "REPLACE", "ALTER", "DROP", "CREATE"}:
+                mutation_statements.append(statement)
+
+        event.listen(self.db._engine, "before_cursor_execute", guard_mutation)
+        try:
+            payload = WatchlistResearchOverlayService(
+                watchlist_service=self.watchlist_service
+            ).build_overlay(owner_id="user-1")
+        finally:
+            event.remove(self.db._engine, "before_cursor_execute", guard_mutation)
+
+        self.assertEqual(mutation_statements, [])
+        self.assertEqual(payload["items"], [])
+        self.assertEqual(payload["researchPriorityQueue"], [])
+        self.assertEqual(payload["overlayState"], "available")
+        self.assertEqual(payload["dataQuality"]["state"], "no_evidence")
+        self.assertEqual(payload["dataQuality"]["itemCount"], 0)
+        self.assertTrue(payload["observationOnly"])
+        self.assertFalse(payload["decisionGrade"])
+        self.assertNotIn("unavailable", payload["researchSummary"].lower())
+
     def test_overlay_projects_research_attention_without_mutating_or_alerting(self) -> None:
         run_id = self._save_scanner_candidate(symbol="NVDA")
         self.watchlist_service.add_item(

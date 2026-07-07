@@ -194,6 +194,27 @@ class WatchlistResearchOverlayEndpointTestCase(unittest.TestCase):
         self.assertEqual(other_response.status_code, 200)
         self.assertEqual(other_response.json()["items"], [])
 
+    def test_research_overlay_endpoint_returns_legitimate_empty_state_for_empty_watchlist(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+        before_alerts = self._alert_counts()
+        items_before = self.client.get("/api/v1/watchlist/items").json()
+
+        response = self.client.get("/api/v1/watchlist/research-overlay")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["schemaVersion"], "watchlist_research_overlay_v1")
+        self.assertEqual(payload["items"], [])
+        self.assertEqual(payload["researchPriorityQueue"], [])
+        self.assertEqual(payload["overlayState"], "available")
+        self.assertEqual(payload["dataQuality"]["state"], "no_evidence")
+        self.assertEqual(payload["dataQuality"]["itemCount"], 0)
+        self.assertTrue(payload["observationOnly"])
+        self.assertFalse(payload["decisionGrade"])
+        self.assertNotIn("unavailable", payload["researchSummary"].lower())
+        self.assertEqual(self._alert_counts(), before_alerts)
+        self.assertEqual(self.client.get("/api/v1/watchlist/items").json(), items_before)
+
 
 if __name__ == "__main__":
     unittest.main()

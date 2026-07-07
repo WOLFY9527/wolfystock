@@ -337,4 +337,26 @@ describe('watchlistApi investor signal normalization', () => {
     expect(payload.researchPriorityQueue[0].evidenceAge).not.toHaveProperty('rawProviderState');
     expect(payload.researchPriorityQueue[0].suggestedResearchPath[0]).not.toHaveProperty('providerRoute');
   });
+
+  it('marks malformed successful overlay payloads unavailable instead of a legitimate empty queue', async () => {
+    const { watchlistApi } = await import('../watchlist');
+    get.mockResolvedValueOnce({
+      data: {
+        research_priority_queue: [],
+        observation_only: true,
+        decision_grade: false,
+      },
+    });
+
+    const payload = await watchlistApi.getResearchOverlay();
+
+    expect(payload).toEqual({
+      schemaVersion: 'watchlist_research_overlay_v1',
+      overlayState: 'unavailable',
+      researchSummary: 'Watchlist research follow-up is temporarily unavailable.',
+      researchPriorityQueue: [],
+      observationOnly: true,
+      decisionGrade: false,
+    });
+  });
 });
