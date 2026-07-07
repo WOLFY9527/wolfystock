@@ -1363,7 +1363,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
       data-testid="market-decision-semantics-strip"
       data-market-research-flow="decision-semantics"
       className={cn(
-        'relative overflow-hidden border-t border-[color:var(--wolfy-divider)] bg-white/[0.018] p-3 md:px-4',
+        'relative overflow-visible border-t border-[color:var(--wolfy-divider)] bg-white/[0.018] p-3 md:px-4',
         view?.insufficient ? 'opacity-85' : '',
       )}
     >
@@ -1447,20 +1447,20 @@ const MarketOverviewCategoryControls: React.FC<{
       data-testid="market-overview-category-tabs"
       data-selector-position="static-safe"
       data-mobile-order="controls"
-      className="flex w-full min-w-0 flex-col gap-2 overflow-hidden rounded-xl border border-white/8 bg-white/[0.02] p-2 backdrop-blur-md md:flex-row md:items-center md:justify-between"
+      className="flex w-full min-w-0 flex-col gap-2 overflow-visible rounded-xl border border-white/8 bg-white/[0.02] p-2 backdrop-blur-md md:flex-row md:items-center md:justify-between"
     >
-      <div className="flex w-full min-w-0 items-center gap-2 overflow-hidden md:w-auto">
+      <div className="flex w-full min-w-0 items-center gap-2 overflow-visible md:w-auto">
         <span className="shrink-0 rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1 text-[10px] font-semibold text-white/42">
           筛选
         </span>
-        <div className="ui-scroll-x-quiet min-w-0 max-w-full overflow-x-auto overscroll-x-contain">
+        <div className="ui-scroll-x-quiet min-w-0 max-w-full overflow-x-auto overscroll-x-contain p-1 scroll-px-1">
           <div className="flex w-max gap-2">
             {categoryTabs.map((tab) => (
               <button
                 key={tab.key}
                 type="button"
                 aria-pressed={activeCategory === tab.key}
-                className={`ui-truncate shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold transition ${
+                className={`ui-truncate scroll-m-3 shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] ${
                   activeCategory === tab.key
                     ? 'bg-white/10 text-white shadow-sm'
                     : 'bg-transparent text-white/45 hover:text-white/75'
@@ -1479,7 +1479,7 @@ const MarketOverviewCategoryControls: React.FC<{
         aria-label={exportLabel}
         aria-live="polite"
         disabled={exportDisabled}
-        className="w-fit rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/62 transition hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:border-white/[0.05] disabled:bg-white/[0.015] disabled:text-white/34 disabled:hover:bg-white/[0.015] disabled:hover:text-white/34"
+        className="scroll-m-3 w-fit rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/62 transition hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] disabled:cursor-not-allowed disabled:border-white/[0.05] disabled:bg-white/[0.015] disabled:text-white/34 disabled:hover:bg-white/[0.015] disabled:hover:text-white/34"
         onClick={onExportSummary}
       >
         {exportLabel}

@@ -99,8 +99,9 @@ const VALUE_CLASS = 'font-mono text-sm text-[color:var(--wolfy-text-primary)]';
 const PAPER_PANEL_CLASS = 'border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)]';
 const POSITIVE_CLASS = 'text-[color:var(--state-success-text)]';
 const NEGATIVE_CLASS = 'text-[color:var(--state-danger-text)]';
-const SECONDARY_BUTTON_CLASS = 'inline-flex min-h-[36px] items-center justify-center rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-all hover:bg-[var(--wolfy-surface-rail)] md:min-h-[32px]';
-const PRIMARY_BUTTON_CLASS = 'inline-flex min-h-[36px] items-center justify-center rounded-lg border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] px-3 py-2 text-xs font-semibold text-[color:var(--theme-button-primary-text)] transition-colors hover:bg-[var(--sage-deep)] md:min-h-[32px]';
+const SECONDARY_BUTTON_CLASS = 'inline-flex min-h-[36px] scroll-m-3 items-center justify-center rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-all hover:bg-[var(--wolfy-surface-rail)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] md:min-h-[32px]';
+const PRIMARY_BUTTON_CLASS = 'inline-flex min-h-[36px] scroll-m-3 items-center justify-center rounded-lg border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] px-3 py-2 text-xs font-semibold text-[color:var(--theme-button-primary-text)] transition-colors hover:bg-[var(--sage-deep)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] md:min-h-[32px]';
+const DETAIL_TOGGLE_BUTTON_CLASS = 'flex min-h-[36px] w-full scroll-m-3 items-center justify-between gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]';
 const TRADE_ROW_LIMIT = 20;
 const LEDGER_ROW_LIMIT = 30;
 const EVENT_ROW_LIMIT = 12;
@@ -1234,6 +1235,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [activeDetailTab, setActiveDetailTab] = useState<'trades' | 'risk' | 'params' | 'diagnostics'>('trades');
+  const isEnglish = language === 'en';
   const normalized = providedNormalized ?? normalizeDeterministicBacktestResult(run, language);
   const trades = Array.isArray(run.trades) ? run.trades : [];
   const tradeSummary = getTradeSummary(run, trades);
@@ -1354,11 +1356,20 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
       ]),
     );
   };
+  const detailToggleStateLabel = (open: boolean) => (open ? (isEnglish ? 'Collapse' : '收起') : (isEnglish ? 'Expand' : '展开'));
+  const reportSectionLinks = [
+    { id: '概览', label: isEnglish ? 'Overview' : '概览' },
+    { id: '曲线', label: isEnglish ? 'Curve' : '曲线' },
+    { id: '交易', label: isEnglish ? 'Trades' : '交易' },
+    { id: '归因', label: isEnglish ? 'Attribution' : '归因' },
+    { id: '风险', label: isEnglish ? 'Risk' : '风险' },
+    { id: '证据', label: isEnglish ? 'Review' : '复查' },
+  ];
   const detailTabs = [
-    { key: 'trades' as const, label: '交易明细' },
-    { key: 'risk' as const, label: '风险分析' },
-    { key: 'params' as const, label: '参数' },
-    { key: 'diagnostics' as const, label: '可靠性' },
+    { key: 'trades' as const, label: isEnglish ? 'Trade Details' : '交易明细' },
+    { key: 'risk' as const, label: isEnglish ? 'Risk Analysis' : '风险分析' },
+    { key: 'params' as const, label: isEnglish ? 'Parameters' : '参数' },
+    { key: 'diagnostics' as const, label: isEnglish ? 'Reliability' : '可靠性' },
   ];
 
   return (
@@ -1368,16 +1379,9 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
       data-report-mode={mode}
     >
       <div className="flex min-w-0 flex-col gap-4 text-sm text-[color:var(--wolfy-text-secondary)]">
-        <nav className="no-scrollbar flex min-w-0 gap-2 overflow-x-auto pb-1 [scrollbar-width:none]" aria-label="Backtest result sections">
-          {[
-            { id: '概览', label: '概览' },
-            { id: '曲线', label: '曲线' },
-            { id: '交易', label: '交易' },
-            { id: '归因', label: '归因' },
-            { id: '风险', label: '风险' },
-            { id: '证据', label: '复查' },
-          ].map((item) => (
-            <a key={item.id} href={`#backtest-report-${item.id}`} className="inline-flex min-h-[36px] shrink-0 items-center rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs text-[color:var(--wolfy-text-secondary)] hover:bg-[var(--wolfy-surface-rail)] md:min-h-[32px] md:py-1.5">
+        <nav className="no-scrollbar flex min-w-0 gap-2 overflow-x-auto p-1 scroll-px-1 [scrollbar-width:none]" aria-label="Backtest result sections">
+          {reportSectionLinks.map((item) => (
+            <a key={item.id} href={`#backtest-report-${item.id}`} className="inline-flex min-h-[36px] scroll-m-3 shrink-0 items-center rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs text-[color:var(--wolfy-text-secondary)] hover:bg-[var(--wolfy-surface-rail)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] md:min-h-[32px] md:py-1.5">
               {item.label}
             </a>
           ))}
@@ -1536,7 +1540,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
               type="button"
               role="tab"
               aria-selected={activeDetailTab === tab.key}
-              className={`min-h-[34px] shrink-0 rounded-lg px-3 text-xs transition-all ${activeDetailTab === tab.key ? 'bg-[var(--wolfy-surface-rail)] text-[color:var(--wolfy-text-primary)]' : 'bg-transparent text-[color:var(--wolfy-text-muted)] hover:bg-[var(--wolfy-surface-input)] hover:text-[color:var(--wolfy-text-secondary)]'}`}
+              className={`min-h-[34px] scroll-m-3 shrink-0 rounded-lg px-3 text-xs transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] ${activeDetailTab === tab.key ? 'bg-[var(--wolfy-surface-rail)] text-[color:var(--wolfy-text-primary)]' : 'bg-transparent text-[color:var(--wolfy-text-muted)] hover:bg-[var(--wolfy-surface-input)] hover:text-[color:var(--wolfy-text-secondary)]'}`}
               onClick={() => setActiveDetailTab(tab.key)}
             >
               {tab.label}
@@ -1548,7 +1552,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">核心指标</h3>
             <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setMoreMetricsOpen((value) => !value)}>
-              {moreMetricsOpen ? '收起扩展指标' : '展开扩展指标'}
+              {moreMetricsOpen ? (isEnglish ? 'Collapse extended metrics' : '收起扩展指标') : (isEnglish ? 'Expand extended metrics' : '展开扩展指标')}
             </button>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -1664,7 +1668,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
               <p className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">默认显示 {TRADE_ROW_LIMIT} 行 · 共 {trades.length} 行</p>
             </div>
             <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={exportTrades} disabled={!trades.length}>
-              导出交易CSV
+              {isEnglish ? 'Export trade CSV' : '导出交易CSV'}
             </button>
           </div>
           <div className="no-scrollbar mt-3 overflow-x-auto rounded-xl border border-[color:var(--wolfy-divider)] [scrollbar-width:none]">
@@ -1717,9 +1721,9 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
         </details>
 
         <div id="backtest-report-数据质量" data-testid="backtest-report-data-quality" className={GHOST_SECTION_CLASS}>
-          <button type="button" className="flex min-h-[36px] w-full items-center justify-between gap-3 text-left" onClick={() => setDataQualityOpen((value) => !value)}>
-            <span><span className={LABEL_CLASS}>数据质量</span></span>
-            <span className="text-xs text-[color:var(--wolfy-text-muted)]">{dataQualityOpen ? '收起' : '展开'}</span>
+          <button type="button" className={DETAIL_TOGGLE_BUTTON_CLASS} onClick={() => setDataQualityOpen((value) => !value)}>
+            <span><span className={LABEL_CLASS}>{isEnglish ? 'Data Quality' : '数据质量'}</span></span>
+            <span className="text-xs text-[color:var(--wolfy-text-muted)]">{detailToggleStateLabel(dataQualityOpen)}</span>
           </button>
           {dataQualityOpen ? (
             dataQuality.length ? (
@@ -1751,9 +1755,9 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
         </div>
 
         <div id="backtest-report-执行假设" data-testid="backtest-report-execution-assumptions" className={GHOST_SECTION_CLASS}>
-          <button type="button" className="flex min-h-[36px] w-full items-center justify-between gap-3 text-left" onClick={() => setAssumptionsOpen((value) => !value)}>
-            <span><span className={LABEL_CLASS}>执行假设</span></span>
-            <span className="text-xs text-[color:var(--wolfy-text-muted)]">{assumptionsOpen ? '收起' : '展开'}</span>
+          <button type="button" className={DETAIL_TOGGLE_BUTTON_CLASS} onClick={() => setAssumptionsOpen((value) => !value)}>
+            <span><span className={LABEL_CLASS}>{isEnglish ? 'Execution Assumptions' : '执行假设'}</span></span>
+            <span className="text-xs text-[color:var(--wolfy-text-muted)]">{detailToggleStateLabel(assumptionsOpen)}</span>
           </button>
           {assumptionsOpen ? (
             <>
@@ -1788,12 +1792,12 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
         </div>
 
         <div id="backtest-report-账本" data-testid="backtest-report-advanced-details" className={GHOST_SECTION_CLASS}>
-          <button type="button" className="flex min-h-[36px] w-full items-center justify-between gap-3 text-left" onClick={() => setAdvancedOpen((value) => !value)}>
+          <button type="button" className={DETAIL_TOGGLE_BUTTON_CLASS} onClick={() => setAdvancedOpen((value) => !value)}>
             <span>
-              <span className={LABEL_CLASS}>账本与导出</span>
-              <span className="ml-2 text-xs text-[color:var(--wolfy-text-muted)]">完整指标 · 每日账本 · 复查导出</span>
+              <span className={LABEL_CLASS}>{isEnglish ? 'Ledger and Export' : '账本与导出'}</span>
+              <span className="ml-2 text-xs text-[color:var(--wolfy-text-muted)]">{isEnglish ? 'Full metrics · daily ledger · review exports' : '完整指标 · 每日账本 · 复查导出'}</span>
             </span>
-            <span className="text-xs text-[color:var(--wolfy-text-muted)]">{advancedOpen ? '收起' : '展开'}</span>
+            <span className="text-xs text-[color:var(--wolfy-text-muted)]">{detailToggleStateLabel(advancedOpen)}</span>
           </button>
           <div className="mt-4 flex min-w-0 flex-col gap-3">
             <div data-testid="backtest-report-ledger-summary" className={`rounded-xl p-3 text-xs text-[color:var(--wolfy-text-secondary)] ${PAPER_PANEL_CLASS}`}>
@@ -1803,16 +1807,16 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
               <>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setLedgerOpen((value) => !value)}>
-                    {ledgerOpen ? '收起每日账本' : '展开每日账本'}
+                    {ledgerOpen ? (isEnglish ? 'Collapse daily ledger' : '收起每日账本') : (isEnglish ? 'Expand daily ledger' : '展开每日账本')}
                   </button>
                   <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={exportLedger} disabled={!normalized.rows.length}>
-                    导出账本CSV
+                    {isEnglish ? 'Export ledger CSV' : '导出账本CSV'}
                   </button>
                   <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => downloadExecutionTraceCsv(run)} disabled={!hasTraceRows}>
-                    导出执行明细 CSV
+                    {isEnglish ? 'Export execution details CSV' : '导出执行明细 CSV'}
                   </button>
                   <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => downloadExecutionTraceJson(run)} disabled={!hasTraceRows}>
-                    导出执行明细 JSON
+                    {isEnglish ? 'Export execution details JSON' : '导出执行明细 JSON'}
                   </button>
                 </div>
                 <div className={`rounded-xl p-3 text-xs text-[color:var(--wolfy-text-muted)] ${PAPER_PANEL_CLASS}`}>

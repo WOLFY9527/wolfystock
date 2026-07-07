@@ -98,7 +98,7 @@ export const MarketOverviewCardFrame: React.FC<{
     data-rail-card={railKey}
     className={cn(
       MARKET_OVERVIEW_CARD_SIZE_CLASS[size],
-      'flex min-w-0 flex-col overflow-hidden',
+      'flex min-w-0 flex-col overflow-visible',
       className,
     )}
   >
@@ -109,7 +109,7 @@ export const MarketOverviewCardFrame: React.FC<{
         {subtitle ? <p className="mt-1 truncate text-[11px] leading-4 text-[color:var(--wolfy-text-muted)]">{subtitle}</p> : null}
       </div>
     ) : null}
-    <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</div>
+    <div className="min-h-0 min-w-0 flex-1 overflow-visible p-0.5">{children}</div>
     {footer ? <div className="mt-3 shrink-0 border-t border-[color:var(--line)] pt-2 text-[10px] leading-4 text-[color:var(--wolfy-text-muted)]">{footer}</div> : null}
   </TerminalPanel>
 );
@@ -309,7 +309,7 @@ export const MarketOverviewRefreshButton: React.FC<{
     aria-label={label}
     onClick={onRefresh}
     disabled={refreshing}
-    className="inline-flex h-[36px] w-[36px] items-center justify-center rounded-lg border border-[color:var(--line)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)] transition-all hover:bg-[var(--surface-3)] hover:text-[color:var(--wolfy-text-primary)] cursor-pointer disabled:cursor-wait disabled:text-[color:var(--wolfy-text-muted)] sm:h-[32px] sm:w-[32px]"
+    className="inline-flex h-[36px] w-[36px] scroll-m-3 items-center justify-center rounded-lg border border-[color:var(--line)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)] transition-all hover:bg-[var(--surface-3)] hover:text-[color:var(--wolfy-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] cursor-pointer disabled:cursor-wait disabled:text-[color:var(--wolfy-text-muted)] sm:h-[32px] sm:w-[32px]"
   >
     <RefreshCcw className={cn('size-4', refreshing ? 'animate-spin' : '')} aria-hidden="true" />
   </button>
