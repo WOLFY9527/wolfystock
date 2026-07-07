@@ -128,6 +128,14 @@ const MATRIX_SUMMARY_DEFAULTS = {
 };
 const ADMIN_SECTION_HEADING_CLASSNAME =
   '[&_[data-terminal-primitive=section-header]_p]:text-[12px] [&_[data-terminal-primitive=section-header]_p]:font-medium [&_[data-terminal-primitive=section-header]_h2]:text-lg [&_[data-terminal-primitive=section-header]_h2]:font-semibold md:[&_[data-terminal-primitive=section-header]_h2]:text-xl';
+const ADMIN_PROVIDER_OPERATIONS_PAGE_CLASSNAME =
+  'market-provider-operations-page flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-x-clip overflow-y-auto no-scrollbar text-white [&_a]:[overflow-wrap:anywhere] [&_dd]:min-w-0 [&_dd]:[overflow-wrap:anywhere] [&_p]:min-w-0 [&_p]:[overflow-wrap:anywhere] [&_[data-terminal-primitive=chip]]:min-w-0 [&_[data-terminal-primitive=chip]]:whitespace-normal [&_[data-terminal-primitive=chip]]:[overflow-wrap:anywhere] [&_[data-terminal-primitive=disclosure]]:min-w-0 [&_[data-terminal-primitive=disclosure]]:max-w-full [&_[data-terminal-primitive=disclosure]_h3]:whitespace-normal [&_[data-terminal-primitive=disclosure]_h3]:overflow-visible [&_[data-terminal-primitive=disclosure]_h3]:[overflow-wrap:anywhere] [&_[data-terminal-primitive=disclosure]_p]:whitespace-normal [&_[data-terminal-primitive=disclosure]_p]:overflow-visible [&_[data-terminal-primitive=disclosure]_p]:[overflow-wrap:anywhere] [&_[data-terminal-primitive=nested-block]]:min-w-0 [&_[data-terminal-primitive=panel]]:min-w-0';
+const ADMIN_TABLE_SCROLL_REGION_CLASSNAME =
+  'min-w-0 max-w-full overflow-x-auto overscroll-x-contain [contain:inline-size] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] [-webkit-overflow-scrolling:touch]';
+const ADMIN_TABLE_IDENTITY_CLASSNAME = 'min-w-0 whitespace-normal [overflow-wrap:anywhere]';
+const ADMIN_TABLE_MONO_IDENTITY_CLASSNAME = 'min-w-0 whitespace-normal break-all font-mono';
+const ADMIN_PROVIDER_ACTION_COLUMN_CLASSNAME =
+  'sticky right-0 z-10 bg-[var(--wolfy-surface-console)] shadow-[-12px_0_18px_rgba(0,0,0,0.24)]';
 const DATA_ACQUISITION_ACTION_PACK_SCHEMA_VERSION = 'data_acquisition_action_pack_v1';
 const DATA_ACQUISITION_ACTION_PACK_SOURCE_SURFACE = '数据源运维 / 数据接入优先队列';
 const ACTION_PACK_UNKNOWN = 'unknown/待补证';
@@ -382,9 +390,9 @@ const ConsumerEvidenceImpactMatrix: React.FC<{
                     <TerminalChip variant={consumerEvidenceReadinessVariant(item.readinessState)}>
                       {consumerEvidenceReadinessLabel(item.readinessState)}
                     </TerminalChip>
-                    <p className="min-w-0 truncate text-xs font-semibold text-white/84">{surfaceLabel(item.surface)}</p>
+                    <p className={cn('text-xs font-semibold text-white/84', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{surfaceLabel(item.surface)}</p>
                   </div>
-                  <p className="mt-1 font-mono text-[11px] text-white/48">{sanitizeCodeLabel(item.evidenceFamily)}</p>
+                  <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'mt-1 text-[11px] text-white/48')}>{sanitizeCodeLabel(item.evidenceFamily)}</p>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   <TerminalChip variant="caution">缺失 {formatNumber(item.missingInputs.length, 0)}</TerminalChip>
@@ -2075,25 +2083,25 @@ const ProviderActivationVerifierPanel: React.FC<{
               <TerminalNestedBlock key={item.capabilityId} className="px-3 py-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/36">
+                    <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'text-[10px] font-semibold uppercase tracking-[0.14em] text-white/36')}>
                       {sanitizeCodeLabel(item.capabilityId)}
                     </p>
-                    <p className="mt-1 text-sm font-semibold text-white">{sanitizeOperatorText(item.provider, 'Unknown provider')}</p>
-                    <p className="mt-1 text-[11px] leading-5 text-white/54">{sanitizeOperatorText(item.dataClass, 'Unknown data class')}</p>
+                    <p className={cn('mt-1 text-sm font-semibold text-white', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{sanitizeOperatorText(item.provider, 'Unknown provider')}</p>
+                    <p className={cn('mt-1 text-[11px] leading-5 text-white/54', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{sanitizeOperatorText(item.dataClass, 'Unknown data class')}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <TerminalChip variant={activationStatusVariant(item.status)}>{activationStatusLabel(item.status)}</TerminalChip>
                     <TerminalChip variant="neutral">{sanitizeCodeLabel(item.freshnessCacheStatus?.state || 'unknown')}</TerminalChip>
                   </div>
                 </div>
-                <p className="mt-2 text-[11px] leading-5 text-white/58">{sanitizeOperatorText(item.userFacingImpact)}</p>
-                <p className="mt-1 text-[11px] leading-5 text-white/70">Next action: {sanitizeOperatorText(item.adminNextAction)}</p>
+                <p className={cn('mt-2 text-[11px] leading-5 text-white/58', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{sanitizeOperatorText(item.userFacingImpact)}</p>
+                <p className={cn('mt-1 text-[11px] leading-5 text-white/70', ADMIN_TABLE_IDENTITY_CLASSNAME)}>Next action: {sanitizeOperatorText(item.adminNextAction)}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {item.blockedProductSurfaces.map((surface) => (
                     <TerminalChip key={`${item.capabilityId}-${surface}`} variant="neutral">{sanitizeOperatorText(surface)}</TerminalChip>
                   ))}
                 </div>
-                <p className="mt-2 text-[10px] leading-4 text-white/38">Check: {sanitizeOperatorText(item.minimumValidationCheck)}</p>
+                <p className={cn('mt-2 text-[10px] leading-4 text-white/38', ADMIN_TABLE_IDENTITY_CLASSNAME)}>Check: {sanitizeOperatorText(item.minimumValidationCheck)}</p>
               </TerminalNestedBlock>
             ))}
           </TerminalDenseList>
@@ -2219,7 +2227,7 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">{historicalMarketLabel(item.market)}</p>
-                    <p className="mt-1 text-sm font-semibold text-white/84">{sanitizeOperatorText(item.currentStatusSummary)}</p>
+                    <p className={cn('mt-1 text-sm font-semibold text-white/84', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{sanitizeOperatorText(item.currentStatusSummary)}</p>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     <TerminalChip variant={historicalStateVariant(item.state)}>{sanitizeCodeLabel(item.state)}</TerminalChip>
@@ -2231,7 +2239,7 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
                     </TerminalChip>
                   </div>
                 </div>
-                <p className="mt-2 text-[11px] leading-5 text-white/56">{sanitizeOperatorText(item.nextStepSummary)}</p>
+                <p className={cn('mt-2 text-[11px] leading-5 text-white/56', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{sanitizeOperatorText(item.nextStepSummary)}</p>
                 <div className="mt-3 grid gap-2 xl:grid-cols-2">
                   <div className="min-w-0">
                     <p className="text-[10px] font-semibold uppercase tracking-widest text-white/32">Required runtime flags</p>
@@ -2273,7 +2281,7 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
                     <p className="text-[10px] font-semibold uppercase tracking-widest text-white/32">Available seed actions</p>
                     <div className="mt-2 space-y-1.5 text-[11px] leading-5 text-white/60">
                       {item.availableSeedActions.map((action) => (
-                        <p key={action}>{sanitizeOperatorText(action)}</p>
+                        <p key={action} className={ADMIN_TABLE_IDENTITY_CLASSNAME}>{sanitizeOperatorText(action)}</p>
                       ))}
                     </div>
                   </div>
@@ -2298,8 +2306,13 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
                   <TerminalChip variant={market.dependencyAvailable ? 'success' : 'caution'}>{historicalDependencyLabel(market.dependencyAvailable)}</TerminalChip>
                 </div>
               </div>
-              <TerminalDenseTable className="mt-3 -mx-3 overflow-x-auto px-3 sm:mx-0 sm:px-0">
-                <table className="min-w-[48rem] table-fixed">
+              <TerminalDenseTable
+                role="region"
+                aria-label="历史 OHLCV 样本表格横向滚动区域"
+                tabIndex={0}
+                className={cn('mt-3', ADMIN_TABLE_SCROLL_REGION_CLASSNAME)}
+              >
+                <table className="w-full min-w-[48rem] table-fixed">
                   <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
                     <tr className="border-b border-white/5 text-left">
                       <th className="px-3 py-3 font-medium">Symbol</th>
@@ -2315,7 +2328,7 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
                       <tr key={`${market.market}-${symbol.symbol}`} className="border-b border-white/[0.04] align-top">
                         <td className="px-3 py-3">
                           <div className="min-w-0">
-                            <p className="font-mono text-sm font-semibold text-white/86">{sanitizeCodeLabel(symbol.symbol)}</p>
+                            <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'text-sm font-semibold text-white/86')}>{sanitizeCodeLabel(symbol.symbol)}</p>
                             <p className="mt-1 text-[11px] text-white/38">{historicalDataStateLabel(symbol.dataState)}</p>
                           </div>
                         </td>
@@ -2341,7 +2354,7 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
                               {sanitizeCodeLabel(symbol.nextAction?.state || symbol.dataState)}
                             </TerminalChip>
                           </div>
-                          <p className="mt-2">{historicalNextActionText(symbol)}</p>
+                          <p className={cn('mt-2', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{historicalNextActionText(symbol)}</p>
                         </td>
                       </tr>
                     ))}
@@ -2403,7 +2416,7 @@ const ProviderOpsTopSummary: React.FC<{
               <p className="text-[11px] font-medium text-white/50">{item.label}</p>
               <TerminalChip variant={item.variant}>{item.value}</TerminalChip>
             </div>
-            <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/72">{item.detail}</p>
+            <p className={cn('mt-2 text-xs leading-5 text-white/72', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{item.detail}</p>
           </div>
         ))}
       </div>
@@ -2437,10 +2450,10 @@ const ProviderOpsActionQueue: React.FC<{
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-1.5">
               <TerminalChip variant={disclosureSeverityVariant(item.severity)}>{disclosureSeverityLabel(item.severity)}</TerminalChip>
-              <p className="min-w-0 truncate text-xs font-semibold text-white/82">{item.title}</p>
+              <p className={cn('text-xs font-semibold text-white/82', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{item.title}</p>
             </div>
           </div>
-          <p className="min-w-0 truncate text-[11px] leading-5 text-white/52">影响：{item.scope}</p>
+          <p className={cn('text-[11px] leading-5 text-white/52', ADMIN_TABLE_IDENTITY_CLASSNAME)}>影响：{item.scope}</p>
           <p className="min-w-0 text-[11px] leading-5 text-white/62">下一步：{item.action}</p>
         </div>
       ))}
@@ -2497,8 +2510,13 @@ const AdminDataRoadmapPanel: React.FC<{
                 <TerminalChip variant={rows.length ? 'neutral' : 'caution'}>{formatNumber(rows.length, 0)} rows</TerminalChip>
               </div>
               {rows.length ? (
-                <TerminalDenseTable className="mt-3 -mx-3 overflow-x-auto overscroll-x-contain px-3 [-webkit-overflow-scrolling:touch]">
-                  <table className="min-w-[58rem] table-fixed">
+                <TerminalDenseTable
+                  role="region"
+                  aria-label={`${surface.label} 专业数据路线图表格横向滚动区域`}
+                  tabIndex={0}
+                  className={cn('mt-3', ADMIN_TABLE_SCROLL_REGION_CLASSNAME)}
+                >
+                  <table className="w-full min-w-[58rem] table-fixed">
                     <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
                       <tr className="border-b border-white/5 text-left">
                         <th className="w-[18%] px-3 py-3 font-medium">Capability</th>
@@ -2512,14 +2530,14 @@ const AdminDataRoadmapPanel: React.FC<{
                     <tbody>
                       {rows.map((row) => (
                         <tr key={row.key} className="border-b border-white/[0.04] align-top">
-                          <td className="px-3 py-3 text-xs font-semibold leading-5 text-white/82">{row.capabilityLabel}</td>
+                          <td className={cn('px-3 py-3 text-xs font-semibold leading-5 text-white/82', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{row.capabilityLabel}</td>
                           <td className="px-3 py-3">
                             <TerminalChip variant={row.statusVariant}>{row.status}</TerminalChip>
                           </td>
-                          <td className="px-3 py-3 text-[11px] leading-5 text-white/54">{row.providerClass}</td>
-                          <td className="px-3 py-3 text-[11px] leading-5 text-white/54">{row.freshnessState}</td>
-                          <td className="px-3 py-3 text-[11px] leading-5 text-white/62">{row.operatorAction}</td>
-                          <td className="px-3 py-3 text-[11px] leading-5 text-white/54">{row.surfaceUnlocked}</td>
+                          <td className={cn('px-3 py-3 text-[11px] leading-5 text-white/54', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{row.providerClass}</td>
+                          <td className={cn('px-3 py-3 text-[11px] leading-5 text-white/54', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{row.freshnessState}</td>
+                          <td className={cn('px-3 py-3 text-[11px] leading-5 text-white/62', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{row.operatorAction}</td>
+                          <td className={cn('px-3 py-3 text-[11px] leading-5 text-white/54', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{row.surfaceUnlocked}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -2545,7 +2563,7 @@ const SourceGapBoard: React.FC<{ rows: ProviderOperationsMatrixRow[] }> = ({ row
           <div className="flex min-w-0 items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">优先级路线图</p>
-              <p className="mt-1 truncate text-sm font-semibold text-white/82">{capability.title}</p>
+              <p className={cn('mt-1 text-sm font-semibold text-white/82', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{capability.title}</p>
             </div>
             <TerminalChip variant={gapRows.length ? 'caution' : 'success'}>
               {gapRows.length ? `${gapRows.length} 项待补齐` : '已清空'}
@@ -2556,7 +2574,7 @@ const SourceGapBoard: React.FC<{ rows: ProviderOperationsMatrixRow[] }> = ({ row
               const badges = sourceGapBadges(row);
               return (
                 <div key={`${capability.id}-${row.providerId}`} className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2">
-                  <p className="truncate text-xs font-semibold text-white/78">{sourceGapName(row)}</p>
+                  <p className={cn('text-xs font-semibold text-white/78', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{sourceGapName(row)}</p>
                   {badges.length ? (
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {badges.map((badge) => (
@@ -2602,8 +2620,8 @@ const SourceGapDisclosure: React.FC<{ rows: ProviderOperationsMatrixRow[] }> = (
     >
       <div className="flex min-w-0 items-center justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="truncate text-xs font-medium text-[color:var(--wolfy-text-secondary)]">L2 来源缺口：影响产品面 / 解锁能力 / 下一步</h3>
-          <p className="mt-0.5 truncate text-[11px] text-[color:var(--wolfy-text-muted)]">
+          <h3 className={cn('text-xs font-medium text-[color:var(--wolfy-text-secondary)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>L2 来源缺口：影响产品面 / 解锁能力 / 下一步</h3>
+          <p className={cn('mt-0.5 text-[11px] text-[color:var(--wolfy-text-muted)]', ADMIN_TABLE_IDENTITY_CLASSNAME)}>
             默认折叠 · {formatNumber(gapCount, 0)} 个缺口线索 · 仅显示已脱敏原因与工作说明
           </p>
         </div>
@@ -2677,7 +2695,7 @@ const ProviderSetupChecklistPanel: React.FC<{
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-1.5">
                 <TerminalChip variant={disclosureSeverityVariant(item.severity)}>{disclosureSeverityLabel(item.severity)}</TerminalChip>
-                <p className="min-w-0 truncate text-xs font-semibold text-white/84">{item.title}</p>
+                <p className={cn('text-xs font-semibold text-white/84', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{item.title}</p>
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {item.badges.map((badge) => (
@@ -2830,9 +2848,12 @@ const ProviderOperationsMatrixPanel: React.FC<{
             </div>
             <TerminalDenseTable
               data-testid="market-provider-matrix-table-shell"
-              className="-mx-4 overflow-x-auto overscroll-x-contain px-4 [-webkit-overflow-scrolling:touch] sm:mx-0 sm:px-0"
+              role="region"
+              aria-label="完整数据源矩阵表格横向滚动区域"
+              tabIndex={0}
+              className={ADMIN_TABLE_SCROLL_REGION_CLASSNAME}
             >
-              <table className="min-w-[52rem] table-fixed">
+              <table className="w-full min-w-[52rem] table-fixed">
                 <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
                   <tr className="border-b border-white/5 text-left">
                     <th className="px-3 py-3 font-medium">数据源</th>
@@ -2849,8 +2870,8 @@ const ProviderOperationsMatrixPanel: React.FC<{
                       <tr key={row.providerId} className="border-b border-white/[0.04] align-top">
                         <td className="px-3 py-3">
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-white">{row.providerName || row.providerId}</p>
-                            <p className="mt-1 truncate font-mono text-[11px] text-white/42">{row.providerId}</p>
+                            <p className={cn(ADMIN_TABLE_IDENTITY_CLASSNAME, 'text-sm font-semibold text-white')}>{row.providerName || row.providerId}</p>
+                            <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'mt-1 text-[11px] text-white/42')}>{row.providerId}</p>
                           </div>
                         </td>
                         <td className="px-3 py-3">
@@ -3670,8 +3691,13 @@ const ProviderOperationsTable: React.FC<{
       {items.length === 0 ? (
         <TerminalEmptyState title="暂无数据源运维条目">缺失快照时只显示只读边界，不推断 provider 运行状态。</TerminalEmptyState>
       ) : (
-        <TerminalDenseTable>
-          <table className="min-w-[44rem] table-fixed">
+        <TerminalDenseTable
+          role="region"
+          aria-label="数据源运维表格横向滚动区域"
+          tabIndex={0}
+          className={ADMIN_TABLE_SCROLL_REGION_CLASSNAME}
+        >
+          <table className="w-full min-w-[44rem] table-fixed">
             <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
               <tr className="border-b border-white/5 text-left">
                 <th className="px-3 py-3 font-medium">数据源</th>
@@ -3679,7 +3705,7 @@ const ProviderOperationsTable: React.FC<{
                 <th className="px-3 py-3 font-medium">新鲜度</th>
                 <th className="px-3 py-3 font-medium">熔断</th>
                 <th className="px-3 py-3 font-medium">最近异常</th>
-                <th className="px-3 py-3 font-medium">操作</th>
+                <th className={cn('px-3 py-3 font-medium', ADMIN_PROVIDER_ACTION_COLUMN_CLASSNAME)}>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -3691,8 +3717,8 @@ const ProviderOperationsTable: React.FC<{
                   <tr key={key} className={cn('border-b border-white/[0.04] align-top', selected ? 'bg-white/[0.03]' : 'bg-transparent')}>
                     <td className="px-3 py-3">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-white">{providerLabel(item)}</p>
-                        <p className="mt-1 truncate font-mono text-[11px] text-white/42">{item.provider} · {item.domain}</p>
+                        <p className={cn(ADMIN_TABLE_IDENTITY_CLASSNAME, 'text-sm font-semibold text-white')}>{providerLabel(item)}</p>
+                        <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'mt-1 text-[11px] text-white/42')}>{item.provider} · {item.domain}</p>
                       </div>
                     </td>
                     <td className="px-3 py-3">
@@ -3711,9 +3737,9 @@ const ProviderOperationsTable: React.FC<{
                       <TerminalChip variant={circuitVariant(item)}>{circuitLabel(item)}</TerminalChip>
                     </td>
                     <td className="px-3 py-3">
-                      <p className="line-clamp-2 text-[11px] leading-5 text-white/60">{lastFailureLabel(item)}</p>
+                      <p className={cn('line-clamp-2 text-[11px] leading-5 text-white/60', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{lastFailureLabel(item)}</p>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className={cn('px-3 py-3', ADMIN_PROVIDER_ACTION_COLUMN_CLASSNAME)}>
                       <TerminalButton
                         variant={selected ? 'secondary' : 'compact'}
                         className="w-full sm:w-auto"
@@ -3743,9 +3769,9 @@ const ProviderDetailsPanel: React.FC<{ item: MarketProviderOperationItem | null 
         </p>
         <div className="mt-4 grid grid-cols-2 gap-3">
           <TerminalMetric label="状态" value={<DataFreshnessBadge status={normalizeStatus(item.status) as MarketProviderHealthStatus} />} valueClassName="text-sm font-sans" />
-          <TerminalMetric label="缓存" value={item.cacheKey || '待统计'} valueClassName="truncate text-xs font-semibold" />
+          <TerminalMetric label="缓存" value={item.cacheKey || '待统计'} valueClassName={cn('text-xs font-semibold', ADMIN_TABLE_IDENTITY_CLASSNAME)} />
           <TerminalMetric label="最近成功" value={formatAgeMinutes(item.lastKnownGoodAgeMinutes)} valueClassName="text-sm" />
-          <TerminalMetric label="最近异常" value={lastFailureLabel(item)} valueClassName="truncate text-xs font-semibold" />
+          <TerminalMetric label="最近异常" value={lastFailureLabel(item)} valueClassName={cn('text-xs font-semibold', ADMIN_TABLE_IDENTITY_CLASSNAME)} />
         </div>
         <TerminalNotice variant={item.errorSummary ? 'danger' : item.isFallback || item.fallbackUsed || item.isStale ? 'caution' : 'info'} className="mt-4">
           {providerRiskLabel(item)}
@@ -3790,7 +3816,7 @@ const CacheStatesPanel: React.FC<{ cacheStates: MarketProviderCacheState[] }> = 
               <TerminalNestedBlock key={state.cacheKey}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate font-mono text-[11px] text-white/72">{state.cacheKey}</p>
+                    <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'text-[11px] text-white/72')}>{state.cacheKey}</p>
                     <p className="mt-1 text-[11px] text-white/42">
                       TTL {formatCountLabel(state.ttlSeconds, '待统计')}s · 读取 {formatDisplayDate(state.fetchedAt, '待统计')}
                     </p>
@@ -3824,7 +3850,7 @@ const EventRollupsPanel: React.FC<{ eventRollups: MarketProviderEventRollup[] }>
               <TerminalNestedBlock key={`${rollup.provider}-${rollup.endpoint || rollup.card || rollup.latestLogEventId}`}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-white">{rollup.provider}</p>
+                    <p className={cn('text-sm font-semibold text-white', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{rollup.provider}</p>
                     <p className="mt-1 text-[11px] text-white/42">{rollup.card || rollup.category || '市场数据源'}</p>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
@@ -3874,7 +3900,7 @@ const DiagnosticsPanel: React.FC<{
         <TerminalMetric label="可能需付费" value={formatNumber(paidRows, 0)} valueClassName="text-sm" />
         <TerminalMetric label="失败 / 降级" value={formatNumber(response.summary.failureCount + response.summary.fallbackCount + response.summary.staleCount, 0)} valueClassName="text-sm" />
         <TerminalMetric label="限制代码" value={formatNumber(response.limitations.length, 0)} valueClassName="text-sm" />
-        <TerminalMetric label="追踪标识" value={selectedItem ? providerLabel(selectedItem) : 'Admin Logs'} valueClassName="truncate text-sm" />
+        <TerminalMetric label="追踪标识" value={selectedItem ? providerLabel(selectedItem) : 'Admin Logs'} valueClassName={cn('text-sm', ADMIN_TABLE_IDENTITY_CLASSNAME)} />
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
         <DrillLink drill={response.adminLogDrillThrough} />
@@ -3981,10 +4007,10 @@ const ProfessionalCapabilityAdminSummaryPanel: React.FC<{
                   {category.items.slice(0, 3).map((item) => (
                     <div key={item.capabilityId} className="rounded-md border border-white/[0.05] bg-white/[0.025] px-3 py-2">
                       <div className="flex min-w-0 items-start justify-between gap-2">
-                        <p className="min-w-0 truncate text-xs font-semibold text-white/78">{item.label}</p>
+                        <p className={cn('text-xs font-semibold text-white/78', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{item.label}</p>
                         <TerminalChip variant={item.status.variant}>{item.status.label}</TerminalChip>
                       </div>
-                      <p className="mt-1 text-[11px] leading-5 text-white/46">{item.sourceLabel}</p>
+                      <p className={cn('mt-1 text-[11px] leading-5 text-white/46', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{item.sourceLabel}</p>
                     </div>
                   ))}
                 </div>
@@ -4125,13 +4151,13 @@ const MarketDataReadinessPanel: React.FC<{
                         className="mt-2 bg-black/10"
                       >
                         <div className="space-y-2 text-[11px] leading-5 text-white/50">
-                          <p><span className="text-white/34">诊断 ID：</span><span className="font-mono">{sanitizeCodeLabel(check.id)}</span></p>
+                          <p><span className="text-white/34">诊断 ID：</span><span className={ADMIN_TABLE_MONO_IDENTITY_CLASSNAME}>{sanitizeCodeLabel(check.id)}</span></p>
                           <div className="flex flex-wrap gap-1.5">
                             {check.affectsSurfaces.map((surface) => (
                               <TerminalChip key={`${check.id}-${surface}`} variant="neutral">{surfaceLabel(surface)}</TerminalChip>
                             ))}
                           </div>
-                          {facts.length ? <p className="font-mono text-white/42">{facts.join(' · ')}</p> : null}
+                          {facts.length ? <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'text-white/42')}>{facts.join(' · ')}</p> : null}
                         </div>
                       </TerminalDisclosure>
                     </TerminalNestedBlock>
@@ -4418,9 +4444,9 @@ const MarketProviderOperationsPage: React.FC = () => {
       : '保持只读观察，按需切换影响面。';
 
   return (
-    <div data-testid="market-provider-operations-page" className="market-provider-operations-page flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-auto no-scrollbar text-white">
-      <TerminalPageShell className="min-w-0 overflow-x-hidden py-5 md:py-6">
-        <TerminalPanel as="section" className="relative overflow-hidden">
+    <div data-testid="market-provider-operations-page" className={ADMIN_PROVIDER_OPERATIONS_PAGE_CLASSNAME}>
+      <TerminalPageShell className="min-w-0 py-5 md:py-6">
+        <TerminalPanel as="section" className="relative">
           <TerminalPageHeading
             eyebrow="数据源维护"
             title="数据源维护路线图"

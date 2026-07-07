@@ -1314,27 +1314,31 @@ describe('MarketProviderOperationsPage', () => {
     expect(bodyText).not.toMatch(/SECRET_CACHE_KEY|TRACE-SECRET|apiKey|cacheKey|traceId|requestId|rawPayload|stack trace|token=/i);
   });
 
-  it('keeps page-level overflow hidden while exposing a contained mobile matrix scroll affordance', async () => {
+  it('keeps wide admin matrices in bounded focusable scroll regions without page-level overflow masking', async () => {
     getOperations.mockResolvedValue(populatedPayload);
 
     render(<MarketProviderOperationsPage />);
 
     const pageRoot = await screen.findByTestId('market-provider-operations-page');
-    expect(pageRoot).toHaveClass('min-w-0', 'overflow-x-hidden');
+    expect(pageRoot).toHaveClass('min-w-0');
+    expect(pageRoot).toHaveClass('overflow-x-clip');
+    expect(pageRoot).not.toHaveClass('overflow-x-hidden');
 
     const matrixDisclosure = screen.getByTestId('market-provider-matrix-disclosure');
     fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 L4 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）' }));
 
     expect(within(matrixDisclosure).getByText('左右滑动查看完整矩阵列')).toBeInTheDocument();
     expect(within(matrixDisclosure).getByText('滚动仅限表格区域')).toBeInTheDocument();
-    expect(screen.getByTestId('market-provider-matrix-table-shell')).toHaveClass(
-      '-mx-4',
-      'px-4',
-      'overflow-x-auto',
-      'overscroll-x-contain',
-      'sm:mx-0',
-      'sm:px-0',
-    );
+    const matrixTableShell = screen.getByTestId('market-provider-matrix-table-shell');
+    expect(matrixTableShell).toHaveAttribute('role', 'region');
+    expect(matrixTableShell).toHaveAttribute('aria-label', '完整数据源矩阵表格横向滚动区域');
+    expect(matrixTableShell).toHaveAttribute('tabindex', '0');
+    expect(matrixTableShell).toHaveClass('min-w-0', 'max-w-full', 'overflow-x-auto', 'overscroll-x-contain', '[contain:inline-size]');
+    expect(matrixTableShell).not.toHaveClass('-mx-4', 'px-4');
+
+    const providerTableRegion = screen.getByRole('region', { name: '数据源运维表格横向滚动区域' });
+    expect(providerTableRegion).toHaveClass('min-w-0', 'max-w-full', 'overflow-x-auto', '[contain:inline-size]');
+    expect(within(providerTableRegion).getByRole('columnheader', { name: '操作' })).toHaveClass('sticky', 'right-0');
   });
 
   it('renders Chinese-first operator hierarchy and keeps diagnostics available without exposing raw secrets or backend credential names', async () => {
