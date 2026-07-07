@@ -2,6 +2,8 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures/appSmoke';
 import { captureShellVisualEvidence } from './fixtures/shellVisualEvidence';
 
+const marketOverviewRequestPathPattern = /^\/api\/v1\/(?:market-overview\/|market\/(?:temperature|briefing|futures|cn-short-sentiment|professional-data-capabilities|regime-read-model|decision-cockpit))/;
+
 async function expectMinTapHeight(locator: Locator, minHeight: number) {
   const box = await locator.boundingBox();
   expect(box).not.toBeNull();
@@ -16,7 +18,7 @@ async function signIn(page: Page, redirectPath: string) {
     page.waitForResponse((response) => response.url().includes('/api/v1/auth/login') && response.status() === 200),
     page.getByRole('button', { name: /sign in|登录继续|授权进入工作台|完成设置并登录/i }).click(),
   ]);
-  await page.waitForURL(/\/$/);
+  await page.waitForURL((url) => url.pathname === '/' || url.pathname === redirectPath);
   await page.goto(redirectPath);
 }
 
@@ -295,6 +297,65 @@ test.describe('scanner smoke', () => {
 });
 
 test.describe('market overview smoke', () => {
+  test('market overview request fan-out stays bounded across initial load, idle, and reload', async ({ page }) => {
+    const apiRequests: string[] = [];
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+      if (url.pathname.startsWith('/api/v1/')) {
+        apiRequests.push(`${request.method()} ${url.pathname}`);
+      }
+    });
+
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await signIn(page, '/zh/market-overview');
+    apiRequests.length = 0;
+
+    await page.goto('/zh/market-overview');
+    await expect(page.getByTestId('market-overview-shell')).toBeVisible();
+    await expect(page.getByTestId('market-overview-card-indices')).toBeVisible();
+    await expect(page.getByTestId('market-overview-decision-readiness')).toBeVisible();
+    await expect.poll(() => apiRequests.filter((entry) => (
+      entry === 'GET /api/v1/market-overview/macro'
+      || entry === 'GET /api/v1/market/futures'
+      || entry === 'GET /api/v1/market/cn-short-sentiment'
+    )).length).toBeGreaterThanOrEqual(3);
+
+    const initialMarketRequests = apiRequests.filter((entry) => {
+      const [, path] = entry.split(' ');
+      return entry.startsWith('GET ') && marketOverviewRequestPathPattern.test(path);
+    });
+    expect(initialMarketRequests.length).toBeGreaterThanOrEqual(8);
+    expect(initialMarketRequests.length).toBeLessThanOrEqual(16);
+    expect(initialMarketRequests).toEqual(expect.arrayContaining([
+      'GET /api/v1/market-overview/indices',
+      'GET /api/v1/market-overview/volatility',
+      'GET /api/v1/market-overview/funds-flow',
+      'GET /api/v1/market/temperature',
+      'GET /api/v1/market/regime-read-model',
+      'GET /api/v1/market-overview/macro',
+      'GET /api/v1/market/futures',
+      'GET /api/v1/market/cn-short-sentiment',
+    ]));
+
+    const afterInitialCount = apiRequests.length;
+    await page.waitForTimeout(1200);
+    const idleMarketRequests = apiRequests.slice(afterInitialCount).filter((entry) => {
+      const [, path] = entry.split(' ');
+      return entry.startsWith('GET ') && marketOverviewRequestPathPattern.test(path);
+    });
+    expect(idleMarketRequests).toEqual([]);
+
+    apiRequests.length = 0;
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('market-overview-shell')).toBeVisible();
+    await expect(page.getByTestId('market-overview-card-indices')).toBeVisible();
+    const reloadMarketRequests = apiRequests.filter((entry) => {
+      const [, path] = entry.split(' ');
+      return entry.startsWith('GET ') && marketOverviewRequestPathPattern.test(path);
+    });
+    expect(reloadMarketRequests.length).toBeLessThanOrEqual(initialMarketRequests.length + 2);
+  });
+
   test('market overview keeps top metrics visible with no ghost vertical overflow', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await signIn(page, '/zh/market-overview');

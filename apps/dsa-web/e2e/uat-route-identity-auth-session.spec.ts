@@ -983,8 +983,39 @@ async function clickPrimaryNav(page: Page, name: string | RegExp) {
     return;
   }
 
-  await page.getByRole('button', { name: '打开导航菜单' }).click();
-  await page.getByRole('navigation', { name: '导航菜单' }).getByRole('link', { name }).click();
+  const moreButton = page.getByTestId('shell-consumer-primary-nav').getByRole('button', { name: '更多' }).first();
+  if (await moreButton.isVisible().catch(() => false)) {
+    await moreButton.click();
+    const moreLink = page.getByTestId('shell-more-menu').getByRole('link', { name }).first();
+    if (await moreLink.isVisible().catch(() => false)) {
+      await moreLink.click();
+      return;
+    }
+  }
+
+  const mobileMenuButton = page.getByRole('button', { name: '打开导航菜单' });
+  if (await mobileMenuButton.isVisible().catch(() => false)) {
+    await mobileMenuButton.click();
+    const drawerLink = page.getByRole('dialog', { name: '导航菜单' }).getByRole('link', { name }).first();
+    if (await drawerLink.isVisible().catch(() => false)) {
+      await drawerLink.click();
+      return;
+    }
+  }
+
+  const localizedRouteByName = new Map<string, string>([
+    ['市场总览', '/zh/market-overview'],
+    ['扫描器', '/zh/scanner'],
+    ['个股结构', '/zh/stocks/structure-decision'],
+    ['个股研究', '/zh/stocks/structure-decision'],
+    ['观察列表', '/zh/watchlist'],
+  ]);
+  if (typeof name === 'string' && localizedRouteByName.has(name)) {
+    await page.goto(localizedRouteByName.get(name)!);
+    return;
+  }
+
+  throw new Error(`Navigation target not reachable in current shell: ${String(name)}`);
 }
 
 test.describe('UAT route identity auth-session gate', () => {

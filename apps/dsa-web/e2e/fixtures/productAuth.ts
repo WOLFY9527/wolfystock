@@ -181,6 +181,74 @@ function strategyComparison(symbol: string) {
   };
 }
 
+function optionsStructure(symbol: string) {
+  return {
+    contract_version: 'options-structure-summary-v1',
+    symbol,
+    status: 'not_available',
+    calculation_state: 'not_available',
+    observation_only: true,
+    decision_grade: false,
+    provider_configured: false,
+    spot_price: null,
+    as_of: null,
+    freshness: 'unknown',
+    snapshot: {
+      contract_version: 'option-chain-snapshot-v1',
+      symbol,
+      spot_price: null,
+      as_of: null,
+      freshness: 'unknown',
+      contracts: [],
+      missing_inputs: ['authorized_options_structure_source'],
+    },
+    strike_summaries: [],
+    expiration_summaries: [],
+    nearest_expirations: [],
+    zero_dte: {
+      state: 'not_available',
+      expiration: null,
+      dte: null,
+      contract_count: 0,
+      call_open_interest: 0,
+      put_open_interest: 0,
+      call_volume: 0,
+      put_volume: 0,
+      open_interest_share: null,
+      volume_share: null,
+    },
+    gamma_flip_level: {
+      state: 'not_available',
+      level: null,
+      reason: 'authorized_structure_source_needed',
+    },
+    total_dealer_gamma_exposure: null,
+    blocking_reasons: ['options_structure_unavailable'],
+    warnings: [],
+    next_evidence_needed: ['authorized_structure_source_needed'],
+  };
+}
+
+function strategyAnalysis(symbol: string) {
+  return {
+    symbol,
+    underlying: underlying(),
+    scenario: {
+      target_price: 65,
+      target_date: '2026-08-21',
+      direction: 'bullish',
+      risk_budget: 1000,
+    },
+    analysis: {
+      status: 'observation_only',
+      summary: 'Fixture scenario analysis is bounded to read-only product route verification.',
+      key_risks: ['provider_validation_required'],
+      next_evidence: ['authorized_options_structure_source'],
+    },
+    metadata: metadata(),
+  };
+}
+
 function decision(symbol: string) {
   return {
     symbol,
@@ -317,9 +385,16 @@ async function installProductRoute(page: Page, currentUser: CurrentUser | null):
     if (method === 'GET' && path.match(/^\/api\/v1\/options\/underlyings\/[^/]+\/chain$/)) {
       return fulfillJson(route, optionsChain(symbolFromPath(path)));
     }
+    if (method === 'GET' && path.match(/^\/api\/v1\/options\/underlyings\/[^/]+\/structure$/)) {
+      return fulfillJson(route, optionsStructure(symbolFromPath(path)));
+    }
     if (method === 'POST' && path === '/api/v1/options/strategies/compare') {
       const payload = request.postDataJSON() as { symbol?: string } | null;
       return fulfillJson(route, strategyComparison((payload?.symbol || 'TEM').toUpperCase()));
+    }
+    if (method === 'POST' && path === '/api/v1/options/strategies/analyze') {
+      const payload = request.postDataJSON() as { symbol?: string } | null;
+      return fulfillJson(route, strategyAnalysis((payload?.symbol || 'TEM').toUpperCase()));
     }
     if (method === 'POST' && path === '/api/v1/options/decision/evaluate') {
       const payload = request.postDataJSON() as { symbol?: string } | null;

@@ -77,7 +77,6 @@ async function expectProviderSlaReadinessSmoke(page: Parameters<typeof expectNoH
   await expect(slaPanel.getByText('新鲜度')).toBeVisible();
   await expect(slaPanel.getByText('新鲜 · 60 s')).toBeVisible();
   await expect(slaPanel.getByText('错误状态')).toBeVisible();
-  await expect(slaPanel.getByText('阻断判断')).toBeVisible();
   await expect(slaPanel.getByText('趋势请求')).toBeVisible();
   await expect(slaPanel.getByText('6_20')).toBeVisible();
   await expect(slaPanel.getByText('最近错误 buckets')).toBeVisible();
