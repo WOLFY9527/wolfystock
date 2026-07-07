@@ -201,6 +201,79 @@ describe('Shell', () => {
     expect(within(moreMenu).getByRole('link', { name: translate('zh', 'nav.marketDecisionCockpit') })).toHaveAttribute('href', '/market/decision-cockpit');
   });
 
+  it('uses More as the single current-page owner for secondary child routes', async () => {
+    render(
+      <MemoryRouter initialEntries={['/zh/scenario-lab/stress-map']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const primaryNav = screen.getByRole('navigation', { name: translate('zh', 'shell.drawerTitle') });
+    const moreButton = within(primaryNav).getByRole('button', { name: translate('zh', 'nav.more') });
+
+    expect(moreButton).toHaveClass('is-active');
+    expect(moreButton).toHaveAttribute('aria-current', 'page');
+    expect(primaryNav.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+
+    fireEvent.keyDown(moreButton, { key: 'ArrowDown' });
+    const moreMenu = await screen.findByTestId('shell-more-menu');
+    const scannerLink = within(moreMenu).getByRole('link', { name: translate('zh', 'nav.scanner') });
+    const backtestLink = within(moreMenu).getByRole('link', { name: translate('zh', 'nav.backtest') });
+    const scenarioLink = within(moreMenu).getByRole('link', { name: translate('zh', 'nav.scenarioLab') });
+
+    await waitFor(() => expect(scannerLink).toHaveFocus());
+    fireEvent.keyDown(moreMenu, { key: 'ArrowDown' });
+    await waitFor(() => expect(backtestLink).toHaveFocus());
+    expect(scenarioLink).toHaveClass('is-active');
+    expect(scenarioLink).not.toHaveAttribute('aria-current');
+    expect(primaryNav.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+
+    fireEvent.keyDown(moreMenu, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByTestId('shell-more-menu')).not.toBeInTheDocument());
+    await waitFor(() => expect(moreButton).toHaveFocus());
+
+    fireEvent.click(moreButton);
+    expect(await screen.findByTestId('shell-more-menu')).toBeInTheDocument();
+    fireEvent.mouseDown(document.body);
+    await waitFor(() => expect(screen.queryByTestId('shell-more-menu')).not.toBeInTheDocument());
+    await waitFor(() => expect(moreButton).toHaveFocus());
+  });
+
+  it('keeps mobile navigation active semantics aligned with More child routes', async () => {
+    window.innerWidth = 390;
+    languageState.value = 'en';
+
+    render(
+      <MemoryRouter initialEntries={['/en/backtest/runs/42']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('shell-mobile-active-route')).toHaveTextContent(translate('en', 'nav.backtest'));
+    fireEvent.click(screen.getByRole('button', { name: translate('en', 'shell.openMenu') }));
+
+    const drawerNav = await screen.findByRole('navigation', { name: translate('en', 'shell.drawerTitle') });
+    const moreButton = within(drawerNav).getByRole('button', { name: translate('en', 'nav.more') });
+
+    expect(moreButton).toHaveClass('is-active');
+    expect(moreButton).toHaveAttribute('aria-current', 'page');
+    expect(drawerNav.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+
+    fireEvent.click(moreButton);
+    const moreMenu = await screen.findByTestId('shell-more-menu');
+    const backtestLink = within(moreMenu).getByRole('link', { name: translate('en', 'nav.backtest') });
+    expect(backtestLink).toHaveClass('is-active');
+    expect(backtestLink).not.toHaveAttribute('aria-current');
+  });
+
   it('focuses shell stock search with Ctrl+K and hands off to the canonical stock route', async () => {
     render(
       <MemoryRouter initialEntries={['/market-overview']}>

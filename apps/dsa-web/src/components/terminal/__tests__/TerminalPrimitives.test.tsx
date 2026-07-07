@@ -34,10 +34,13 @@ describe('TerminalPrimitives', () => {
     );
 
     expect(screen.getByRole('button', { name: 'Run' })).toHaveClass('bg-[var(--theme-button-primary-bg)]', 'rounded-md');
+    expect(screen.getByRole('button', { name: 'Run' })).toHaveAttribute('data-action-intent', 'write');
     expect(screen.getByRole('button', { name: 'Run' }).className).not.toContain('gradient');
     expect(screen.getByRole('button', { name: 'Cancel' })).toHaveClass('bg-[var(--wolfy-surface-input)]', 'border-[color:var(--wolfy-border-subtle)]');
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveAttribute('data-action-intent', 'passive');
     expect(screen.getByRole('button', { name: 'More' })).toHaveClass('bg-transparent', 'text-xs');
     expect(screen.getByRole('button', { name: 'Delete' })).toHaveClass('text-[color:var(--wolfy-market-down)]');
+    expect(screen.getByRole('button', { name: 'Delete' })).toHaveAttribute('data-action-intent', 'write');
   });
 
   it('renders chip variants with quiet paper research materials', () => {

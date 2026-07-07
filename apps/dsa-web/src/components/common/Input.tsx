@@ -73,6 +73,11 @@ export const Input = ({
       ['--input-surface-focus-ring' as string]: '0 0 0 2px hsla(var(--destructive), 0.12)',
     }
     : props.style;
+  const controlState = props.disabled
+    ? 'disabled'
+    : error
+      ? 'error'
+      : 'ready';
 
   const defaultTrailingAction = isPasswordInput && allowTogglePassword ? (
     <button
@@ -113,6 +118,7 @@ export const Input = ({
           id={inputId}
           aria-describedby={describedBy}
           aria-invalid={ariaInvalid}
+          data-control-state={controlState}
           style={inputStyle}
           className={cn(
             'input-surface input-focus-glow h-10 w-full min-w-0 max-w-full rounded-xl border px-4 text-sm text-foreground transition-all placeholder:text-muted-text',

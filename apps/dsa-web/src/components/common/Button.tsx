@@ -9,8 +9,10 @@ import { cn } from '../../utils/cn';
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'gradient' | 'danger' | 'danger-subtle' | 'settings-primary' | 'settings-secondary' | 'home-action-ai' | 'home-action-report';
   size?: 'sm' | 'md' | 'lg' | 'xl';
+  actionIntent?: 'write' | 'navigate' | 'passive';
   isLoading?: boolean;
   loadingText?: string;
+  /** Deprecated compatibility prop; shared glow styling was removed in T189. */
   glow?: boolean;
   ref?: React.Ref<HTMLButtonElement>;
 }
@@ -36,13 +38,28 @@ const BUTTON_VARIANT_STYLES = {
   'home-action-report': '',
 } as const;
 
+const BUTTON_INTENT_BY_VARIANT: Record<NonNullable<ButtonProps['variant']>, NonNullable<ButtonProps['actionIntent']>> = {
+  primary: 'write',
+  secondary: 'passive',
+  'settings-primary': 'write',
+  'settings-secondary': 'passive',
+  outline: 'navigate',
+  ghost: 'passive',
+  gradient: 'write',
+  danger: 'write',
+  'danger-subtle': 'write',
+  'home-action-ai': 'write',
+  'home-action-report': 'navigate',
+};
+
 export const Button = ({
   children,
   variant = 'primary',
   size = 'md',
+  actionIntent,
   isLoading = false,
   loadingText,
-  glow = false,
+  glow: _glow,
   className = '',
   disabled,
   type = 'button',
@@ -50,8 +67,10 @@ export const Button = ({
   ...props
 }: ButtonProps) => {
   const { t } = useI18n();
-  const glowStyles = glow ? 'theme-accent-glow settings-glow-accent-hover' : '';
+  void _glow;
   const resolvedLoadingText = loadingText || (isLoading ? t('common.processing') : '');
+  const resolvedActionIntent = actionIntent ?? BUTTON_INTENT_BY_VARIANT[variant];
+  const isDisabled = disabled || isLoading;
 
   return (
     <button
@@ -60,13 +79,15 @@ export const Button = ({
       aria-busy={isLoading || undefined}
       data-variant={variant}
       data-size={size}
+      data-action-intent={resolvedActionIntent}
+      data-control-state={isLoading ? 'loading' : isDisabled ? 'disabled' : 'ready'}
       className={cn(
         'pointer-events-auto inline-flex w-auto max-w-full cursor-pointer items-center justify-center gap-2 rounded-[var(--theme-button-radius)] border border-transparent bg-transparent font-normal whitespace-nowrap transition-[color,background-color,border-color,opacity,transform] duration-200 [backface-visibility:hidden] [transform:translateZ(0)]',
         'theme-focus-ring focus-visible:ring-offset-0 focus-visible:outline-none',
         'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 disabled:transform-none',
+        'active:translate-y-px',
         BUTTON_SIZE_STYLES[size],
         BUTTON_VARIANT_STYLES[variant],
-        glowStyles,
         className,
       )}
       style={{
@@ -75,7 +96,7 @@ export const Button = ({
         letterSpacing: 'var(--theme-button-letter-spacing)',
         textTransform: 'var(--theme-button-text-transform)',
       }}
-      disabled={disabled || isLoading}
+      disabled={isDisabled}
       {...props}
     >
       {isLoading ? (
