@@ -87,17 +87,23 @@ class LiquidityMonitorEvidenceInput(BaseModel):
     source: str
     sourceLabel: Optional[str] = None
     sourceType: Optional[str] = None
+    sourceClass: Optional[str] = None
     sourceTier: Optional[str] = None
     trustLevel: Optional[str] = None
     asOf: Optional[str] = None
     freshness: EvidenceFreshnessLabel
+    freshnessState: Optional[EvidenceFreshnessLabel] = None
     isFallback: bool = False
     isStale: bool = False
     isPartial: bool = False
     isUnavailable: bool = False
+    isProxy: bool = False
+    proxyIdentity: Optional[dict[str, Any]] = None
     observationOnly: Optional[bool] = None
     sourceAuthorityAllowed: Optional[bool] = None
+    sourceAuthorityState: Optional[str] = None
     scoreContributionAllowed: Optional[bool] = None
+    scoreAuthorityEligible: bool = False
     sourceAuthorityReason: Optional[str] = None
     sourceAuthorityRouteRejected: Optional[bool] = None
     routeRejectedReasonCodes: Optional[list[str]] = None
@@ -107,6 +113,7 @@ class LiquidityMonitorEvidenceInput(BaseModel):
     coverage: Optional[float] = Field(default=None, ge=0, le=1)
     confidenceWeight: float = Field(ge=0, le=1)
     degradationReason: Optional[str] = None
+    unavailableReason: Optional[str] = None
     capReason: Optional[str] = None
 
 
@@ -114,15 +121,22 @@ class LiquidityMonitorEvidenceSnapshot(BaseModel):
     contractVersion: str
     source: str
     sourceLabel: Optional[str] = None
+    sourceClass: Optional[str] = None
     asOf: Optional[str] = None
     freshness: EvidenceFreshnessLabel
+    freshnessState: Optional[EvidenceFreshnessLabel] = None
     isFallback: bool = False
     isStale: bool = False
     isPartial: bool = False
     isUnavailable: bool = False
+    isProxy: bool = False
+    proxyIdentity: Optional[dict[str, Any]] = None
+    sourceAuthorityState: Optional[str] = None
+    scoreAuthorityEligible: bool = False
     coverage: Optional[float] = Field(default=None, ge=0, le=1)
     confidenceWeight: float = Field(ge=0, le=1)
     degradationReason: Optional[str] = None
+    unavailableReason: Optional[str] = None
     capReason: Optional[str] = None
     inputs: list[LiquidityMonitorEvidenceInput] = Field(default_factory=list)
 

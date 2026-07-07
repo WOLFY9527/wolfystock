@@ -47,28 +47,60 @@ class MarketCnFlowsApiTestCase(unittest.TestCase):
         _clear_cn_flow_caches()
         payload = market.get_cn_flows()
 
-        self.assertTrue(payload["source"])
+        self.assertEqual(payload["source"], "unavailable")
+        self.assertEqual(payload["sourceType"], "missing")
+        self.assertEqual(payload["sourceClass"], "disabled_live_stub")
+        self.assertEqual(payload["freshness"], "unavailable")
+        self.assertEqual(payload["freshnessState"], "unavailable")
+        self.assertTrue(payload["isUnavailable"])
+        self.assertFalse(payload["isFallback"])
+        self.assertFalse(payload["fallbackUsed"])
+        self.assertFalse(payload["sourceAuthorityAllowed"])
+        self.assertEqual(payload["sourceAuthorityState"], "unavailable")
+        self.assertFalse(payload["scoreContributionAllowed"])
+        self.assertFalse(payload["scoreAuthorityEligible"])
+        self.assertFalse(payload["authorityGrant"])
+        self.assertFalse(payload["decisionGrade"])
+        self.assertEqual(payload["unavailableReason"], "provider_not_selected")
         self.assertTrue(payload["updatedAt"])
         self.assertTrue(payload["items"])
         symbols = {item["symbol"] for item in payload["items"]}
         self.assertIn("NORTHBOUND", symbols)
         self.assertIn("SOUTHBOUND", symbols)
         for item in payload["items"]:
-            self.assertIsInstance(item["value"], (int, float))
+            self.assertIsNone(item["value"])
+            self.assertIsNone(item["price"])
+            self.assertIsNone(item["change"])
+            self.assertIsNone(item["changePercent"])
+            self.assertEqual(item["sparkline"], [])
+            self.assertEqual(item["trend"], [])
             self.assertIn("changePercent", item)
+            self.assertEqual(item["source"], "unavailable")
+            self.assertEqual(item["sourceClass"], "disabled_live_stub")
+            self.assertEqual(item["freshnessState"], "unavailable")
+            self.assertTrue(item["isUnavailable"])
+            self.assertFalse(item["isFallback"])
+            self.assertFalse(item["sourceAuthorityAllowed"])
+            self.assertEqual(item["sourceAuthorityState"], "unavailable")
+            self.assertFalse(item["scoreContributionAllowed"])
+            self.assertFalse(item["scoreAuthorityEligible"])
 
-    def test_cn_flows_fallback_is_not_empty_when_provider_fails(self) -> None:
+    def test_cn_flows_unavailable_contract_is_not_empty_when_provider_fails(self) -> None:
         _clear_cn_flow_caches()
         service = MarketOverviewService()
 
         with patch.object(service, "_fetch_cn_flows_snapshot", side_effect=RuntimeError("provider down")):
             payload = service.get_cn_flows()
 
-        self.assertEqual(payload["source"], "fallback")
-        self.assertTrue(payload["fallbackUsed"])
+        self.assertEqual(payload["source"], "unavailable")
+        self.assertFalse(payload["fallbackUsed"])
+        self.assertTrue(payload["isUnavailable"])
+        self.assertFalse(payload["sourceAuthorityAllowed"])
+        self.assertFalse(payload["scoreAuthorityEligible"])
         self.assertTrue(payload["items"])
+        self.assertTrue(all(item["value"] is None for item in payload["items"]))
 
-    def test_cn_flows_remain_fallback_and_do_not_reuse_tickflow_breadth(self) -> None:
+    def test_cn_flows_remain_unavailable_and_do_not_reuse_tickflow_breadth(self) -> None:
         _clear_cn_flow_caches()
         service = MarketOverviewService()
         service._market_cache.clear()
@@ -80,31 +112,32 @@ class MarketCnFlowsApiTestCase(unittest.TestCase):
         ):
             payload = service.get_cn_flows()
 
-        self.assertEqual(payload["source"], "fallback")
-        self.assertEqual(payload["sourceLabel"], "备用数据")
-        self.assertTrue(payload["fallbackUsed"])
-        self.assertEqual(payload["freshness"], "fallback")
-        self.assertTrue(all(item["source"] == "fallback" for item in payload["items"]))
-        self.assertTrue(all(item["isFallback"] for item in payload["items"]))
-        self.assertTrue(all(item["freshness"] == "fallback" for item in payload["items"]))
+        self.assertEqual(payload["source"], "unavailable")
+        self.assertEqual(payload["sourceLabel"], "未接入")
+        self.assertFalse(payload["fallbackUsed"])
+        self.assertEqual(payload["freshness"], "unavailable")
+        self.assertTrue(all(item["source"] == "unavailable" for item in payload["items"]))
+        self.assertTrue(all(item["isUnavailable"] for item in payload["items"]))
+        self.assertTrue(all(item["freshness"] == "unavailable" for item in payload["items"]))
         self.assertNotIn("tickflow", str(payload).lower())
         self.assertNotIn("TickFlow", str(payload))
 
-    def test_cn_flows_fallback_snapshot_stays_explicitly_non_live(self) -> None:
+    def test_cn_flows_unavailable_snapshot_stays_explicitly_non_live(self) -> None:
         _clear_cn_flow_caches()
         payload = MarketOverviewService().get_cn_flows()
 
-        self.assertEqual(payload["source"], "fallback")
-        self.assertEqual(payload["freshness"], "fallback")
-        self.assertTrue(payload["isFallback"])
-        self.assertTrue(payload["fallbackUsed"])
-        self.assertEqual(payload["providerHealth"]["status"], "fallback")
-        self.assertTrue(all(item["source"] == "fallback" for item in payload["items"]))
-        self.assertTrue(all(item["freshness"] == "fallback" for item in payload["items"]))
-        self.assertTrue(all(item["isFallback"] is True for item in payload["items"]))
+        self.assertEqual(payload["source"], "unavailable")
+        self.assertEqual(payload["freshness"], "unavailable")
+        self.assertFalse(payload["isFallback"])
+        self.assertFalse(payload["fallbackUsed"])
+        self.assertEqual(payload["providerHealth"]["status"], "unavailable")
+        self.assertTrue(all(item["source"] == "unavailable" for item in payload["items"]))
+        self.assertTrue(all(item["freshness"] == "unavailable" for item in payload["items"]))
+        self.assertTrue(all(item["isUnavailable"] is True for item in payload["items"]))
+        self.assertTrue(all(item["sourceAuthorityAllowed"] is False for item in payload["items"]))
         self.assertFalse(any(item["freshness"] == "live" for item in payload["items"]))
 
-    def test_cn_hk_flows_project_to_fallback_static_not_official_or_live(self) -> None:
+    def test_cn_hk_flows_project_to_unavailable_not_official_or_live(self) -> None:
         _clear_cn_flow_caches()
         payload = MarketOverviewService().get_cn_flows()
         provenance = project_source_provenance(
@@ -116,8 +149,8 @@ class MarketCnFlowsApiTestCase(unittest.TestCase):
             is_stale=bool(payload.get("isStale")),
         )
 
-        self.assertEqual(provenance["sourceType"], "fallback_static")
-        self.assertEqual(provenance["sourceLabel"], "备用数据")
+        self.assertEqual(provenance["sourceType"], "missing")
+        self.assertEqual(provenance["sourceLabel"], "未接入")
         self.assertNotEqual(provenance["freshnessLabel"], "实时")
         for item in payload["items"]:
             item_provenance = project_source_provenance(
@@ -128,7 +161,7 @@ class MarketCnFlowsApiTestCase(unittest.TestCase):
                 is_fallback=bool(item.get("isFallback") or item.get("fallbackUsed")),
                 is_stale=bool(item.get("isStale")),
             )
-            self.assertEqual(item_provenance["sourceType"], "fallback_static")
+            self.assertEqual(item_provenance["sourceType"], "missing")
 
     def test_authorized_cn_hk_flow_provider_result_surfaces_diagnostic_metadata(self) -> None:
         _clear_cn_flow_caches()
@@ -143,26 +176,36 @@ class MarketCnFlowsApiTestCase(unittest.TestCase):
         self.assertEqual(payload["source"], AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID)
         self.assertEqual(payload["sourceType"], "authorized_licensed_feed")
         self.assertEqual(payload["sourceTier"], "authorized_licensed_feed")
+        self.assertEqual(payload["sourceClass"], "authorized_licensed_feed")
         self.assertEqual(payload["freshness"], "delayed")
+        self.assertEqual(payload["freshnessState"], "delayed")
         self.assertFalse(payload["fallbackUsed"])
         self.assertFalse(payload["isFallback"])
         self.assertTrue(payload["cacheOnly"])
         self.assertTrue(payload["observationOnly"])
         self.assertTrue(payload["sourceAuthorityAllowed"])
+        self.assertEqual(payload["sourceAuthorityState"], "available")
         self.assertFalse(payload["scoreContributionAllowed"])
+        self.assertFalse(payload["scoreAuthorityEligible"])
+        self.assertFalse(payload["authorityGrant"])
+        self.assertFalse(payload["decisionGrade"])
         self.assertEqual(payload["fulfilledMetrics"], ["NORTHBOUND", "SOUTHBOUND", "CN_ETF"])
         self.assertEqual(payload["missingMetrics"], ["MAINLAND_MAIN", "MARGIN_BALANCE"])
         self.assertEqual(payload["coverageRatio"], 0.6)
+        self.assertEqual(payload["sourceConfidence"], "limited")
         self.assertIn("sourceFreshnessEvidence", payload)
         self.assertEqual(payload["providerHealth"]["provider"], AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID)
         self.assertIn(payload["providerHealth"]["status"], {"cache", "partial"})
         northbound = next(item for item in payload["items"] if item["symbol"] == "NORTHBOUND")
         self.assertEqual(northbound["source"], AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID)
         self.assertEqual(northbound["sourceType"], "authorized_licensed_feed")
+        self.assertEqual(northbound["sourceClass"], "authorized_licensed_feed")
+        self.assertEqual(northbound["freshnessState"], "delayed")
         self.assertTrue(northbound["observationOnly"])
         self.assertFalse(northbound["scoreContributionAllowed"])
+        self.assertFalse(northbound["scoreAuthorityEligible"])
 
-    def test_authorized_cn_hk_flow_provider_failures_fall_back_without_raw_payload(self) -> None:
+    def test_authorized_cn_hk_flow_provider_failures_fail_closed_without_raw_payload(self) -> None:
         for provider_payload in (
             {"observations": []},
             {"errorCode": "permission_denied", "message": "403 SECRET"},
@@ -179,8 +222,14 @@ class MarketCnFlowsApiTestCase(unittest.TestCase):
 
             payload = service.get_cn_flows()
 
-            self.assertEqual(payload["source"], "fallback")
-            self.assertTrue(payload["fallbackUsed"])
+            self.assertEqual(payload["source"], "unavailable")
+            self.assertFalse(payload["fallbackUsed"])
+            self.assertTrue(payload["isUnavailable"])
+            self.assertFalse(payload["sourceAuthorityAllowed"])
+            self.assertEqual(payload["sourceAuthorityState"], "unavailable")
+            self.assertFalse(payload["scoreContributionAllowed"])
+            self.assertFalse(payload["scoreAuthorityEligible"])
+            self.assertTrue(all(item["value"] is None for item in payload["items"]))
             provenance = project_source_provenance(
                 source=payload.get("source"),
                 source_type=payload.get("sourceType"),
@@ -189,7 +238,7 @@ class MarketCnFlowsApiTestCase(unittest.TestCase):
                 is_fallback=bool(payload.get("isFallback") or payload.get("fallbackUsed")),
                 is_stale=bool(payload.get("isStale")),
             )
-            self.assertEqual(provenance["sourceType"], "fallback_static")
+            self.assertEqual(provenance["sourceType"], "missing")
             self.assertNotIn("SECRET", str(payload))
             self.assertNotIn("providerPayload", str(payload))
 

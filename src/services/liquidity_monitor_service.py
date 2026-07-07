@@ -241,17 +241,24 @@ LIQUIDITY_INPUT_ALIASES = {
     "VIXCLS": "VIX",
 }
 EVIDENCE_INPUT_METADATA_FIELDS = (
+    "sourceClass",
     "sourceTier",
     "trustLevel",
+    "freshnessState",
+    "isProxy",
+    "proxyIdentity",
     "observationOnly",
     "sourceAuthorityAllowed",
+    "sourceAuthorityState",
     "scoreContributionAllowed",
+    "scoreAuthorityEligible",
     "sourceAuthorityReason",
     "sourceAuthorityRouteRejected",
     "routeRejectedReasonCodes",
     "officialSeriesId",
     "officialObservationDate",
     "officialAsOf",
+    "unavailableReason",
 )
 
 LIQUIDITY_INDICATOR_ACTIVATION_HINTS = {
@@ -3213,19 +3220,47 @@ class LiquidityMonitorService:
                 "degradationReason": self._indicator_degradation_reason(status, normalized_inputs),
             }
         ).to_dict()
+        source_classes = list(dict.fromkeys(str(item.get("sourceClass") or item.get("sourceType") or "") for item in normalized_inputs if str(item.get("sourceClass") or item.get("sourceType") or "")))
+        proxy_inputs = [
+            item
+            for item in normalized_inputs
+            if bool(item.get("isProxy")) or self._observation_snapshot_input_is_proxy(item)
+        ]
+        proxy_identity = next(
+            (
+                copy.deepcopy(item.get("proxyIdentity"))
+                for item in normalized_inputs
+                if isinstance(item.get("proxyIdentity"), dict)
+            ),
+            None,
+        )
+        score_authority_eligible = bool(
+            normalized_inputs
+            and all(self._liquidity_score_authority_eligible(item) for item in normalized_inputs)
+        )
         return {
             "contractVersion": SOURCE_CONFIDENCE_CONTRACT_VERSION,
             "source": contract["source"],
             "sourceLabel": contract["sourceLabel"],
+            "sourceClass": source_classes[0] if len(source_classes) == 1 else ("mixed" if source_classes else None),
             "asOf": contract["asOf"],
             "freshness": contract["freshness"],
+            "freshnessState": contract["freshness"],
             "isFallback": contract["isFallback"],
             "isStale": contract["isStale"],
             "isPartial": contract["isPartial"],
             "isUnavailable": contract["isUnavailable"],
+            "isProxy": bool(proxy_inputs),
+            "proxyIdentity": proxy_identity,
+            "sourceAuthorityState": self._liquidity_snapshot_source_authority_state(
+                normalized_inputs,
+                contract,
+            ),
+            "scoreAuthorityEligible": score_authority_eligible,
             "coverage": contract["coverage"],
             "confidenceWeight": contract["confidenceWeight"],
             "degradationReason": contract["degradationReason"],
+            "unavailableReason": contract["degradationReason"] if contract["isUnavailable"] else None,
             "capReason": contract["capReason"],
             "inputs": normalized_inputs,
         }
@@ -3362,22 +3397,92 @@ class LiquidityMonitorService:
             "source": contract["source"],
             "sourceLabel": contract["sourceLabel"],
             "sourceType": resolved_source_type,
+            "sourceClass": (metadata or {}).get("sourceClass") or resolved_source_type,
             "asOf": contract["asOf"],
             "freshness": contract["freshness"],
+            "freshnessState": (metadata or {}).get("freshnessState") or contract["freshness"],
             "isFallback": contract["isFallback"],
             "isStale": contract["isStale"],
             "isPartial": contract["isPartial"],
             "isUnavailable": contract["isUnavailable"],
+            "isProxy": bool(
+                (metadata or {}).get("isProxy")
+                or self._observation_snapshot_input_is_proxy(
+                    {
+                        "source": contract["source"],
+                        "sourceType": resolved_source_type,
+                    }
+                )
+            ),
+            "proxyIdentity": copy.deepcopy((metadata or {}).get("proxyIdentity")),
             "coverage": contract["coverage"],
             "confidenceWeight": contract["confidenceWeight"],
             "degradationReason": contract["degradationReason"],
+            "unavailableReason": (metadata or {}).get("unavailableReason")
+            or (contract["degradationReason"] if contract["isUnavailable"] else None),
             "capReason": contract["capReason"],
         }
         if metadata:
             for field in EVIDENCE_INPUT_METADATA_FIELDS:
                 if field in metadata:
                     result[field] = copy.deepcopy(metadata.get(field))
+        result["sourceAuthorityState"] = self._liquidity_input_source_authority_state(result)
+        result["scoreAuthorityEligible"] = self._liquidity_score_authority_eligible(result)
         return result
+
+    @staticmethod
+    def _liquidity_input_source_authority_state(item: Mapping[str, Any]) -> str:
+        explicit = str(item.get("sourceAuthorityState") or "").strip()
+        if explicit:
+            return explicit
+        freshness = str(item.get("freshness") or item.get("freshnessState") or "").strip().lower()
+        if bool(item.get("isUnavailable")) or freshness == "unavailable":
+            return "unavailable"
+        if bool(item.get("isProxy")) or str(item.get("sourceType") or "").strip().lower() in PROXY_SOURCE_TYPES:
+            return "proxy"
+        if bool(item.get("isStale")) or freshness == "stale":
+            return "stale"
+        if bool(item.get("isPartial")) or freshness == "partial":
+            return "partial"
+        if item.get("sourceAuthorityAllowed") is True:
+            return "available"
+        if item.get("sourceAuthorityAllowed") is False:
+            return "blocked"
+        return "unknown"
+
+    @staticmethod
+    def _liquidity_score_authority_eligible(item: Mapping[str, Any]) -> bool:
+        freshness = str(item.get("freshness") or item.get("freshnessState") or "").strip().lower()
+        explicit = item.get("scoreAuthorityEligible")
+        explicit_gate = True if explicit is None else explicit is True
+        return bool(
+            explicit_gate
+            and item.get("sourceAuthorityAllowed") is True
+            and item.get("scoreContributionAllowed") is True
+            and not bool(item.get("observationOnly"))
+            and not bool(item.get("isFallback"))
+            and not bool(item.get("isStale"))
+            and not bool(item.get("isPartial"))
+            and not bool(item.get("isUnavailable"))
+            and not bool(item.get("isProxy"))
+            and freshness in {"live", "fresh", "cached", "delayed"}
+        )
+
+    @classmethod
+    def _liquidity_snapshot_source_authority_state(
+        cls,
+        inputs: list[Dict[str, Any]],
+        contract: Mapping[str, Any],
+    ) -> str:
+        if not inputs:
+            return "unavailable" if contract.get("isUnavailable") else "unknown"
+        states = [cls._liquidity_input_source_authority_state(item) for item in inputs]
+        if states and all(state == "available" for state in states):
+            return "available"
+        for state in ("unavailable", "blocked", "stale", "partial", "proxy"):
+            if state in states:
+                return state
+        return "unknown"
 
     def _indicator_coverage_diagnostics(
         self,

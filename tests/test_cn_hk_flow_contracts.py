@@ -167,17 +167,26 @@ def test_authorized_cn_hk_connect_flow_snapshot_projects_diagnostic_contract() -
     assert snapshot["source"] == AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID
     assert snapshot["sourceType"] == "authorized_licensed_feed"
     assert snapshot["sourceTier"] == "authorized_licensed_feed"
+    assert snapshot["sourceClass"] == "authorized_licensed_feed"
     assert snapshot["cacheOnly"] is True
     assert snapshot["externalProviderCalls"] is False
+    assert snapshot["freshnessState"] == "delayed"
     assert snapshot["observationOnly"] is True
     assert snapshot["sourceAuthorityAllowed"] is True
+    assert snapshot["sourceAuthorityState"] == "available"
     assert snapshot["scoreContributionAllowed"] is False
+    assert snapshot["scoreAuthorityEligible"] is False
+    assert snapshot["authorityGrant"] is False
+    assert snapshot["decisionGrade"] is False
+    assert snapshot["isProxy"] is False
+    assert snapshot["proxyIdentity"] is None
     assert snapshot["fulfilledMetrics"] == ["NORTHBOUND", "SOUTHBOUND"]
     assert snapshot["missingMetrics"] == ["MAINLAND_MAIN", "CN_ETF", "MARGIN_BALANCE"]
     assert snapshot["coverageRatio"] == 0.4
     assert snapshot["tradingDate"] == "2026-05-23"
     assert snapshot["session"] == "morning"
     assert snapshot["freshness"] == "delayed"
+    assert snapshot["sourceConfidence"] == "limited"
     assert snapshot["sourceFreshnessEvidence"]["delayMinutes"] == 5
     assert snapshot["reasonCodes"] == ["authorized_cn_hk_connect_flow_diagnostic_only"]
 
@@ -186,8 +195,15 @@ def test_authorized_cn_hk_connect_flow_snapshot_projects_diagnostic_contract() -
     assert northbound["unit"] == "亿 CNY"
     assert northbound["currency"] == "CNY"
     assert northbound["sourceAuthorityAllowed"] is True
+    assert northbound["sourceAuthorityState"] == "available"
     assert northbound["scoreContributionAllowed"] is False
+    assert northbound["scoreAuthorityEligible"] is False
     assert northbound["observationOnly"] is True
+    assert northbound["sourceClass"] == "authorized_licensed_feed"
+    assert northbound["freshnessState"] == "delayed"
+    assert northbound["isProxy"] is False
+    assert northbound["proxyIdentity"] is None
+    assert northbound["sourceConfidence"] == "limited"
 
 
 @pytest.mark.parametrize(
@@ -233,6 +249,15 @@ def test_authorized_cn_hk_connect_flow_snapshot_fails_closed_with_sanitized_reas
         build_authorized_cn_hk_connect_flow_snapshot(payload, now=now)
 
     assert expected_reason in exc.value.reason_codes
+    unavailable = exc.value.to_dict()
+    assert unavailable["sourceAuthorityAllowed"] is False
+    assert unavailable["scoreContributionAllowed"] is False
+    assert unavailable["scoreAuthorityEligible"] is False
+    assert unavailable["sourceAuthorityState"] == "unavailable"
+    assert unavailable["sourceClass"] == "disabled_live_stub"
+    assert unavailable["freshnessState"] == "unavailable"
+    assert unavailable["isProxy"] is False
+    assert unavailable["proxyIdentity"] is None
     serialized = json.dumps(exc.value.to_dict(), ensure_ascii=False, sort_keys=True)
     assert "SECRET" not in serialized
     assert "https://api.tickflow.test/raw" not in serialized

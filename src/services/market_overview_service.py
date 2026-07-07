@@ -24,6 +24,7 @@ from src.services.cn_hk_connect_flow_provider import AuthorizedCnHkConnectFlowCa
 from src.services.cn_hk_flow_contracts import (
     CnHkFlowProviderUnavailable,
     build_authorized_cn_hk_connect_flow_snapshot,
+    list_cn_hk_flow_contracts,
 )
 from src.services.cn_provider_health_service import CNProviderHealthService
 from src.services.data_source_router import CapabilityResolver, DataSourceRouteRequest, DataSourceRouter
@@ -910,13 +911,22 @@ def get_freshness_status(
             "delayMinutes": 0,
             "warning": "模拟数据，不代表当前行情",
         }
-    if is_fallback or source_key in {"fallback", "synthetic", "unavailable"}:
-        unavailable = source_key == "unavailable"
+    if source_key == "unavailable":
         return {
-            "freshness": "unavailable" if unavailable else "fallback",
+            "freshness": "unavailable",
+            "isFallback": False,
+            "isStale": False,
+            "isUnavailable": True,
+            "isProxy": False,
+            "delayMinutes": 0,
+            "warning": "数据源暂不可用",
+        }
+    if is_fallback or source_key in {"fallback", "synthetic"}:
+        return {
+            "freshness": "fallback",
             "isFallback": True,
             "isStale": False,
-            "isUnavailable": unavailable,
+            "isUnavailable": False,
             "isProxy": False,
             "delayMinutes": 0,
             "warning": FALLBACK_WARNING,
@@ -4875,6 +4885,11 @@ class MarketOverviewService:
             or str(evidence.get("sourceType") or "").strip()
             or _infer_source_type(source)
         )
+        source_class = (
+            str(value.get("sourceClass") or "").strip()
+            or str(evidence.get("sourceClass") or "").strip()
+            or source_type
+        )
         is_fallback = bool(
             value.get("isFallback")
             or value.get("fallbackUsed")
@@ -4896,13 +4911,23 @@ class MarketOverviewService:
             or freshness in {"synthetic", "mock"}
             or source_type == "synthetic_fixture"
         )
+        is_proxy = self._is_proxy_source(
+            source=source,
+            source_type=source_type,
+            value=value,
+        )
 
         normalized_item = {
             **dict(value),
             "source": source,
             "freshness": freshness,
             "sourceType": source_type,
+            "sourceClass": source_class,
             "isFallback": is_fallback,
+            "isStale": is_stale,
+            "isPartial": is_partial,
+            "isUnavailable": is_unavailable,
+            "isProxy": bool(is_proxy),
         }
         confidence_weight = self._clean_number(value.get("confidenceWeight"))
         if confidence_weight is None and default_confidence is not None:
@@ -4920,7 +4945,9 @@ class MarketOverviewService:
             "source": source,
             "sourceLabel": source_label,
             "sourceType": source_type,
+            "sourceClass": source_class,
             "freshness": freshness,
+            "freshnessState": str(value.get("freshnessState") or evidence.get("freshnessState") or freshness),
             "asOf": value.get("asOf") or evidence.get("asOf"),
             "confidenceWeight": max(0.0, min(1.0, float(confidence_weight or 0.0))),
             "coverage": max(0.0, min(1.0, float(coverage or 0.0))),
@@ -4929,7 +4956,23 @@ class MarketOverviewService:
             "isPartial": is_partial,
             "isSynthetic": is_synthetic,
             "isUnavailable": is_unavailable,
+            "isProxy": bool(is_proxy),
+            "proxyIdentity": value.get("proxyIdentity") or evidence.get("proxyIdentity") or self._proxy_identity(value),
+            "sourceAuthorityAllowed": bool(value.get("sourceAuthorityAllowed") is True),
+            "scoreContributionAllowed": bool(value.get("scoreContributionAllowed") is True),
         }
+        payload["sourceAuthorityState"] = (
+            str(value.get("sourceAuthorityState") or evidence.get("sourceAuthorityState") or "").strip()
+            or self._source_authority_state(payload, is_proxy)
+        )
+        payload["scoreAuthorityEligible"] = bool(
+            value.get("scoreAuthorityEligible") is True
+            and self._score_authority_eligible(payload, is_proxy)
+        )
+        payload["authorityGrant"] = bool(payload["scoreAuthorityEligible"])
+        payload["decisionGrade"] = bool(payload["scoreAuthorityEligible"])
+        if value.get("unavailableReason") or evidence.get("unavailableReason"):
+            payload["unavailableReason"] = value.get("unavailableReason") or evidence.get("unavailableReason")
         return payload
 
     @staticmethod
@@ -5654,6 +5697,27 @@ class MarketOverviewService:
             "isFromSnapshot": bool(payload.get("isFromSnapshot")),
             "lastSuccessfulAt": payload.get("lastSuccessfulAt"),
         }
+        normalized_payload["sourceClass"] = normalized_payload.get("sourceClass") or normalized_payload.get("sourceType")
+        normalized_payload["freshnessState"] = normalized_payload.get("freshnessState") or normalized_payload.get("freshness")
+        normalized_payload["proxyIdentity"] = normalized_payload.get("proxyIdentity") or self._proxy_identity(normalized_payload)
+        if normalized_payload.get("sourceAuthorityState") is None:
+            normalized_payload["sourceAuthorityState"] = self._source_authority_state(normalized_payload, proxy_source)
+        if normalized_payload.get("scoreAuthorityEligible") is None:
+            normalized_payload["scoreAuthorityEligible"] = self._score_authority_eligible(normalized_payload, proxy_source)
+        else:
+            normalized_payload["scoreAuthorityEligible"] = bool(
+                normalized_payload.get("scoreAuthorityEligible")
+                and self._score_authority_eligible(normalized_payload, proxy_source)
+            )
+        if normalized_payload.get("authorityGrant") is None:
+            normalized_payload["authorityGrant"] = bool(normalized_payload.get("scoreAuthorityEligible"))
+        if normalized_payload.get("decisionGrade") is None:
+            normalized_payload["decisionGrade"] = bool(normalized_payload.get("scoreAuthorityEligible"))
+        if normalized_payload.get("unavailableReason") is None and bool(normalized_payload.get("isUnavailable")):
+            normalized_payload["unavailableReason"] = self._source_degradation_reason(
+                normalized_payload,
+                str(normalized_payload.get("freshness") or ""),
+            )
         degradation_reason = self._degradation_reason_for_freshness(
             normalized_payload,
             normalized_freshness,
@@ -5711,6 +5775,54 @@ class MarketOverviewService:
             degradation_reason=degradation_reason,
         )
         return normalized_payload
+
+    @staticmethod
+    def _proxy_identity(payload: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+        proxy_for = payload.get("proxyFor")
+        proxy_symbol = payload.get("proxySymbol")
+        proxy_label = payload.get("proxyLabel")
+        if not any(value not in (None, "") for value in (proxy_for, proxy_symbol, proxy_label)):
+            return None
+        identity: Dict[str, Any] = {}
+        if proxy_for not in (None, ""):
+            identity["proxyFor"] = proxy_for
+        if proxy_symbol not in (None, ""):
+            identity["proxySymbol"] = proxy_symbol
+        if proxy_label not in (None, ""):
+            identity["proxyLabel"] = proxy_label
+        return identity
+
+    @staticmethod
+    def _source_authority_state(payload: Mapping[str, Any], is_proxy: bool) -> str:
+        freshness = str(payload.get("freshness") or payload.get("freshnessState") or "").strip().lower()
+        if bool(payload.get("isUnavailable")) or freshness in {"unavailable", "error"}:
+            return "unavailable"
+        if is_proxy or bool(payload.get("isProxy")) or freshness == "proxy":
+            return "proxy"
+        if bool(payload.get("isStale")) or freshness == "stale":
+            return "stale"
+        if bool(payload.get("isPartial")) or freshness == "partial":
+            return "partial"
+        if payload.get("sourceAuthorityAllowed") is True:
+            return "available"
+        if payload.get("sourceAuthorityAllowed") is False:
+            return "blocked"
+        return "unknown"
+
+    @staticmethod
+    def _score_authority_eligible(payload: Mapping[str, Any], is_proxy: bool) -> bool:
+        freshness = str(payload.get("freshness") or payload.get("freshnessState") or "").strip().lower()
+        return bool(
+            payload.get("sourceAuthorityAllowed") is True
+            and payload.get("scoreContributionAllowed") is True
+            and not bool(payload.get("observationOnly"))
+            and not bool(payload.get("isFallback") or payload.get("fallbackUsed"))
+            and not bool(payload.get("isStale"))
+            and not bool(payload.get("isPartial"))
+            and not bool(payload.get("isUnavailable"))
+            and not bool(is_proxy or payload.get("isProxy"))
+            and freshness in {"live", "fresh", "delayed", "cached"}
+        )
 
     def _source_degradation_reason(self, payload: Dict[str, Any], freshness: str) -> Optional[str]:
         explicit = payload.get("degradationReason") or payload.get("fallbackReason")
@@ -6017,6 +6129,27 @@ class MarketOverviewService:
             "warning": item.get("warning") or freshness["warning"],
             "isFromSnapshot": bool(item.get("isFromSnapshot") or panel.get("isFromSnapshot")),
         }
+        normalized["sourceClass"] = normalized.get("sourceClass") or normalized.get("sourceType")
+        normalized["freshnessState"] = normalized.get("freshnessState") or normalized.get("freshness")
+        normalized["proxyIdentity"] = normalized.get("proxyIdentity") or self._proxy_identity(normalized)
+        if normalized.get("sourceAuthorityState") is None:
+            normalized["sourceAuthorityState"] = self._source_authority_state(normalized, proxy_source)
+        if normalized.get("scoreAuthorityEligible") is None:
+            normalized["scoreAuthorityEligible"] = self._score_authority_eligible(normalized, proxy_source)
+        else:
+            normalized["scoreAuthorityEligible"] = bool(
+                normalized.get("scoreAuthorityEligible")
+                and self._score_authority_eligible(normalized, proxy_source)
+            )
+        if normalized.get("authorityGrant") is None:
+            normalized["authorityGrant"] = bool(normalized.get("scoreAuthorityEligible"))
+        if normalized.get("decisionGrade") is None:
+            normalized["decisionGrade"] = bool(normalized.get("scoreAuthorityEligible"))
+        if normalized.get("unavailableReason") is None and bool(normalized.get("isUnavailable")):
+            normalized["unavailableReason"] = self._source_degradation_reason(
+                normalized,
+                str(normalized.get("freshness") or ""),
+            )
         degradation_reason = self._degradation_reason_for_freshness(
             normalized,
             normalized_freshness,
@@ -9009,14 +9142,92 @@ class MarketOverviewService:
         return self._with_breadth_readiness(payload, "US")
 
     def _fallback_cn_flows_snapshot(self) -> Dict[str, Any]:
-        items = [
-            self._metric_item("北向资金", "NORTHBOUND", 42.6, 18.2, 74.59, "亿 CNY", [12, 18, 24, 42.6], detail="5日 +118.4 亿"),
-            self._metric_item("南向资金", "SOUTHBOUND", 28.4, 7.6, 36.54, "亿 HKD", [8, 14, 20, 28.4], detail="5日 +86.1 亿"),
-            self._metric_item("主力资金", "MAINLAND_MAIN", -63.5, 22.0, 25.73, "亿 CNY", [-116, -98, -82, -63.5], detail="5日 -286.0 亿"),
-            self._metric_item("ETF 净申购", "CN_ETF", 15.8, 4.2, 36.21, "亿 CNY", [4, 8, 12, 15.8], detail="5日 +52.7 亿"),
-            self._metric_item("融资余额变化", "MARGIN_BALANCE", 31.2, 9.1, 41.18, "亿 CNY", [8, 17, 24, 31.2], detail="5日 +104.3 亿"),
-        ]
-        return self._card_snapshot(items)
+        updated_at = _now_iso()
+        reason = "provider_not_selected"
+        source_meta = {
+            "source": "unavailable",
+            "sourceLabel": "未接入",
+            "sourceType": "missing",
+            "sourceTier": "disabled_live_stub",
+            "sourceClass": "disabled_live_stub",
+            "trustLevel": "unavailable",
+            "freshness": "unavailable",
+            "freshnessState": "unavailable",
+            "isFallback": False,
+            "fallbackUsed": False,
+            "isStale": False,
+            "isPartial": False,
+            "isUnavailable": True,
+            "isProxy": False,
+            "proxyIdentity": None,
+            "observationOnly": True,
+            "sourceAuthorityAllowed": False,
+            "sourceAuthorityState": "unavailable",
+            "scoreContributionAllowed": False,
+            "scoreAuthorityEligible": False,
+            "authorityGrant": False,
+            "decisionGrade": False,
+            "degradationReason": reason,
+            "unavailableReason": reason,
+            "sourceConfidence": "unavailable",
+        }
+        source_freshness_evidence = {
+            **source_meta,
+            "asOf": updated_at,
+            "updatedAt": updated_at,
+            "cacheOnly": True,
+            "externalProviderCalls": False,
+            "reasonCodes": [reason],
+        }
+        items = []
+        for contract in list_cn_hk_flow_contracts():
+            items.append(
+                {
+                    "name": contract.display_name,
+                    "label": contract.display_name,
+                    "symbol": contract.symbol,
+                    "value": None,
+                    "price": None,
+                    "change": None,
+                    "changePercent": None,
+                    "change_text": None,
+                    "sparkline": [],
+                    "trend": [],
+                    "unit": contract.expected_unit,
+                    "currency": (
+                        "CNY"
+                        if "CNY" in contract.expected_unit.upper()
+                        else "HKD" if "HKD" in contract.expected_unit.upper() else None
+                    ),
+                    "asOf": updated_at,
+                    "updatedAt": updated_at,
+                    "reasonCodes": [reason],
+                    "sourceFreshnessEvidence": dict(source_freshness_evidence),
+                    "hover_details": ["CN/HK flow provider not selected; no fallback values emitted."],
+                    **source_meta,
+                }
+            )
+        payload = {
+            "items": items,
+            "last_update": updated_at,
+            "updatedAt": updated_at,
+            "asOf": updated_at,
+            "fulfilledMetrics": [],
+            "missingMetrics": [contract.symbol for contract in list_cn_hk_flow_contracts()],
+            "coverageRatio": 0.0,
+            "coverage": 0.0,
+            "reasonCodes": [reason],
+            "sourceFreshnessEvidence": source_freshness_evidence,
+            "warning": "CN/HK flow provider unavailable; no fallback values emitted.",
+            **source_meta,
+        }
+        payload["providerFreshness"] = self._consumer_provider_freshness(
+            payload,
+            freshness="unavailable",
+            is_proxy=False,
+            degradation_reason=reason,
+        )
+        return payload
 
     def _fallback_sector_rotation_snapshot(self) -> Dict[str, Any]:
         rows = [

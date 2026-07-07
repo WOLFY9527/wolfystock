@@ -54,6 +54,9 @@ _AUTHORIZED_REQUIRED_SYMBOLS = frozenset(AUTHORIZED_CN_HK_CONNECT_FLOW_REQUIRED_
 _AUTHORIZED_ALL_SYMBOLS = frozenset(CN_HK_FLOW_SYMBOLS)
 _AUTHORIZED_MIN_COVERAGE_RATIO = len(_AUTHORIZED_REQUIRED_SYMBOLS) / len(_AUTHORIZED_ALL_SYMBOLS)
 _CN_TZ = timezone(timedelta(hours=8))
+_SOURCE_AUTHORITY_STATE_AVAILABLE = "available"
+_SOURCE_AUTHORITY_STATE_UNAVAILABLE = "unavailable"
+_SCORE_CONTRIBUTION_DISABLED_REASON = "score_contribution_disabled"
 _AUTHORIZED_UNAVAILABLE_REASON_BUCKET_RULES = (
     (
         "disabled_provider",
@@ -132,12 +135,35 @@ class CnHkFlowProviderUnavailable(RuntimeError):
         )
 
     def to_dict(self) -> dict[str, Any]:
+        reason = self.reason_codes[0] if self.reason_codes else "malformed_payload"
         return {
             "providerId": AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID,
+            "providerName": AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_NAME,
+            "source": "unavailable",
+            "sourceLabel": "未接入",
+            "sourceType": "missing",
+            "sourceTier": _SOURCE_CLASS_DISABLED,
+            "sourceClass": _SOURCE_CLASS_DISABLED,
+            "trustLevel": "unavailable",
             "available": False,
             "reasonCodes": list(self.reason_codes),
+            "freshness": "unavailable",
+            "freshnessState": "unavailable",
+            "isFallback": False,
+            "fallbackUsed": False,
+            "isUnavailable": True,
+            "isProxy": False,
+            "proxyIdentity": None,
             "observationOnly": True,
+            "sourceAuthorityAllowed": False,
+            "sourceAuthorityState": _SOURCE_AUTHORITY_STATE_UNAVAILABLE,
             "scoreContributionAllowed": False,
+            "scoreAuthorityEligible": False,
+            "authorityGrant": False,
+            "decisionGrade": False,
+            "degradationReason": reason,
+            "unavailableReason": reason,
+            "sourceConfidence": "unavailable",
         }
 
 
@@ -324,7 +350,10 @@ def build_authorized_cn_hk_connect_flow_snapshot(
     source_freshness_evidence = {
         "providerId": AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID,
         "source": AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID,
+        "sourceType": AUTHORIZED_CN_HK_CONNECT_FLOW_SOURCE_TYPE,
+        "sourceClass": AUTHORIZED_CN_HK_CONNECT_FLOW_SOURCE_TYPE,
         "freshness": freshness,
+        "freshnessState": freshness,
         "asOf": as_of_text,
         "tradingDate": trading_date or None,
         "session": session or None,
@@ -335,6 +364,10 @@ def build_authorized_cn_hk_connect_flow_snapshot(
         "isStale": False,
         "isPartial": coverage_ratio < 1.0,
         "isUnavailable": False,
+        "isProxy": False,
+        "proxyIdentity": None,
+        "sourceAuthorityState": _SOURCE_AUTHORITY_STATE_AVAILABLE,
+        "scoreAuthorityEligible": False,
     }
     items = [
         _authorized_metric_item(
@@ -353,6 +386,7 @@ def build_authorized_cn_hk_connect_flow_snapshot(
         "sourceLabel": f"{AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_NAME} diagnostic cache",
         "sourceType": AUTHORIZED_CN_HK_CONNECT_FLOW_SOURCE_TYPE,
         "sourceTier": AUTHORIZED_CN_HK_CONNECT_FLOW_SOURCE_TIER,
+        "sourceClass": AUTHORIZED_CN_HK_CONNECT_FLOW_SOURCE_TYPE,
         "retrievalMode": AUTHORIZED_CN_HK_CONNECT_FLOW_CACHE_ONLY_MODE,
         "cacheOnly": True,
         "externalProviderCalls": False,
@@ -361,6 +395,7 @@ def build_authorized_cn_hk_connect_flow_snapshot(
         "tradingDate": trading_date or None,
         "session": session or None,
         "freshness": freshness,
+        "freshnessState": freshness,
         "sourceFreshnessEvidence": source_freshness_evidence,
         "items": items,
         "fulfilledMetrics": fulfilled_metrics,
@@ -371,9 +406,19 @@ def build_authorized_cn_hk_connect_flow_snapshot(
         "fallbackUsed": False,
         "isFallback": False,
         "isUnavailable": False,
+        "isProxy": False,
+        "proxyIdentity": None,
         "observationOnly": True,
         "sourceAuthorityAllowed": True,
+        "sourceAuthorityState": _SOURCE_AUTHORITY_STATE_AVAILABLE,
         "scoreContributionAllowed": False,
+        "scoreAuthorityEligible": False,
+        "authorityGrant": False,
+        "decisionGrade": False,
+        "degradationReason": _SCORE_CONTRIBUTION_DISABLED_REASON,
+        "capReason": _SCORE_CONTRIBUTION_DISABLED_REASON,
+        "unavailableReason": None,
+        "sourceConfidence": "limited",
         "reasonCodes": [_AUTHORIZED_SUCCESS_REASON_CODE],
         "warning": "Authorized CN/HK connect-flow diagnostic cache; scoring remains disabled.",
     }
@@ -468,6 +513,7 @@ def _authorized_metric_item(
         "sourceLabel": f"{AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_NAME} diagnostic cache",
         "sourceType": AUTHORIZED_CN_HK_CONNECT_FLOW_SOURCE_TYPE,
         "sourceTier": AUTHORIZED_CN_HK_CONNECT_FLOW_SOURCE_TIER,
+        "sourceClass": AUTHORIZED_CN_HK_CONNECT_FLOW_SOURCE_TYPE,
         "providerId": AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID,
         "providerClass": AUTHORIZED_CN_HK_CONNECT_FLOW_PROVIDER_ID,
         "activationHint": "authorized_cn_hk_connect_flow_cache_diagnostic",
@@ -476,12 +522,23 @@ def _authorized_metric_item(
         "tradingDate": trading_date or None,
         "session": session or None,
         "freshness": freshness,
+        "freshnessState": freshness,
         "isFallback": False,
         "fallbackUsed": False,
         "isUnavailable": False,
+        "isProxy": False,
+        "proxyIdentity": None,
         "observationOnly": True,
         "sourceAuthorityAllowed": True,
+        "sourceAuthorityState": _SOURCE_AUTHORITY_STATE_AVAILABLE,
         "scoreContributionAllowed": False,
+        "scoreAuthorityEligible": False,
+        "authorityGrant": False,
+        "decisionGrade": False,
+        "degradationReason": _SCORE_CONTRIBUTION_DISABLED_REASON,
+        "capReason": _SCORE_CONTRIBUTION_DISABLED_REASON,
+        "unavailableReason": None,
+        "sourceConfidence": "limited",
         "reasonCodes": [_AUTHORIZED_SUCCESS_REASON_CODE],
         "sourceFreshnessEvidence": dict(source_freshness_evidence),
         "risk_direction": "neutral",
