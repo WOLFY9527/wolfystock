@@ -1360,7 +1360,7 @@ describe('research IA pages', () => {
     expect(onboardingPanel).toHaveTextContent('先看市场概览');
     expect(onboardingPanel).toHaveTextContent('运行 Scanner');
     expect(onboardingPanel).toHaveTextContent('选择观察标的');
-    expect(onboardingPanel).toHaveTextContent('回到研究雷达');
+    expect(onboardingPanel).toHaveTextContent('查看研究雷达');
     expect(onboardingPanel).toHaveTextContent('Market context reviewed.');
     expect(onboardingPanel).toHaveTextContent('部分外部数据暂不可用');
     expect(onboardingPanel).toHaveTextContent('部分来源细节已折叠。');
@@ -1370,7 +1370,7 @@ describe('research IA pages', () => {
     expect(within(onboardingPanel).getByRole('link', { name: '先看市场概览' })).toHaveAttribute('href', '/zh/market-overview');
     expect(within(onboardingPanel).getByRole('link', { name: '运行 Scanner' })).toHaveAttribute('href', '/zh/scanner');
     expect(within(onboardingPanel).getByRole('link', { name: '选择观察标的' })).toHaveAttribute('href', '/zh/watchlist');
-    expect(within(onboardingPanel).getByRole('link', { name: '回到研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
+    expect(within(onboardingPanel).getByRole('link', { name: '查看研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
     expect(queueEmptyState).toHaveTextContent('暂无研究队列');
     expect(queueEmptyState).toHaveTextContent('还没有进入队列的研究对象，先从上游研究入口整理线索。');
     expect(queueEmptyState).toHaveTextContent('下一步研究：从市场概览、扫描器或观察列表开始。');

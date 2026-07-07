@@ -1,10 +1,11 @@
 import type React from 'react';
 import { BarChart3, BookmarkCheck, BriefcaseBusiness, FileSearch, FlaskConical, Search } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import type { UiLanguage } from '../../i18n/core';
+import { translate, type UiLanguage } from '../../i18n/core';
 import { cn } from '../../utils/cn';
 import {
   buildResearchWorkspacePath,
+  getResearchWorkspaceRoute,
   normalizeResearchWorkspaceMarket,
   normalizeResearchWorkspaceSource,
   normalizeResearchWorkspaceSymbol,
@@ -33,16 +34,14 @@ type ResearchWorkspaceFlowPanelProps = {
 
 const WORKFLOW_STEPS: Array<{
   key: ResearchWorkspaceSurface;
-  zh: string;
-  en: string;
   icon: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }>;
 }> = [
-  { key: 'scanner', zh: '扫描发现', en: 'Scanner', icon: Search },
-  { key: 'stock-structure', zh: '个股结构', en: 'Stock Structure', icon: FileSearch },
-  { key: 'watchlist', zh: '观察列表', en: 'Watchlist', icon: BookmarkCheck },
-  { key: 'portfolio', zh: '组合暴露', en: 'Portfolio', icon: BriefcaseBusiness },
-  { key: 'backtest', zh: '回测验证', en: 'Backtest', icon: BarChart3 },
-  { key: 'options', zh: '期权情景', en: 'Options', icon: FlaskConical },
+  { key: 'scanner', icon: Search },
+  { key: 'stock-structure', icon: FileSearch },
+  { key: 'watchlist', icon: BookmarkCheck },
+  { key: 'portfolio', icon: BriefcaseBusiness },
+  { key: 'backtest', icon: BarChart3 },
+  { key: 'options', icon: FlaskConical },
 ];
 
 const SAFE_COPY = {
@@ -186,7 +185,7 @@ export default function ResearchWorkspaceFlowPanel({
             {WORKFLOW_STEPS.map((step) => {
               const Icon = step.icon;
               const isCurrent = step.key === current;
-              const label = language === 'en' ? step.en : step.zh;
+              const label = translate(language, getResearchWorkspaceRoute(step.key).labelKey);
               return (
                 <Link
                   key={step.key}

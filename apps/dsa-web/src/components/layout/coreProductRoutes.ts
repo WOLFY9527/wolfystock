@@ -21,6 +21,8 @@ export type CoreProductRoute = {
   requiresAuth: boolean;
   primaryNav: boolean;
   pageIdentity: Record<UiLanguage, string>;
+  ctaLabel?: Record<UiLanguage, string>;
+  ctaDescription?: Record<UiLanguage, string>;
 };
 
 export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
@@ -50,6 +52,11 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     requiresAuth: false,
     primaryNav: true,
     pageIdentity: { zh: '市场总览', en: 'Market State Overview' },
+    ctaLabel: { zh: '先看市场概览', en: 'Start with Market Overview' },
+    ctaDescription: {
+      zh: '先阅读市场背景，再决定是否继续进入标的研究。',
+      en: 'Read broad market context before choosing symbols.',
+    },
   },
   {
     key: 'research-radar',
@@ -59,6 +66,11 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     requiresAuth: true,
     primaryNav: true,
     pageIdentity: { zh: '今日观察队列', en: 'Today’s observation queue' },
+    ctaLabel: { zh: '查看研究雷达', en: 'Review Research Radar' },
+    ctaDescription: {
+      zh: '在扫描或观察列表有活动后，再回来看研究队列。',
+      en: 'Review the queue after scanner or watchlist activity.',
+    },
   },
   {
     key: 'stock-structure',
@@ -77,6 +89,11 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     requiresAuth: true,
     primaryNav: false,
     pageIdentity: { zh: '扫描工作台', en: 'Scanner workspace' },
+    ctaLabel: { zh: '运行 Scanner', en: 'Run Scanner' },
+    ctaDescription: {
+      zh: '由你手动运行扫描，形成可复核候选。',
+      en: 'Run a user-triggered scan to create candidates.',
+    },
   },
   {
     key: 'watchlist',
@@ -86,6 +103,11 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     requiresAuth: true,
     primaryNav: true,
     pageIdentity: { zh: '观察监控板', en: 'Watchlist monitoring board' },
+    ctaLabel: { zh: '选择观察标的', en: 'Add Watchlist Symbol' },
+    ctaDescription: {
+      zh: '只在你想持续观察某个代码时再保存。',
+      en: 'Choose a symbol only when you want to keep observing it.',
+    },
   },
   {
     key: 'portfolio',
@@ -95,6 +117,11 @@ export const CORE_PRODUCT_ROUTES: CoreProductRoute[] = [
     requiresAuth: true,
     primaryNav: false,
     pageIdentity: { zh: '持仓管理', en: 'Holdings and portfolio exposure' },
+    ctaLabel: { zh: '创建组合账户', en: 'Create portfolio account' },
+    ctaDescription: {
+      zh: '只有你明确想跟踪组合时才创建账户。',
+      en: 'Create an account only when you want portfolio tracking.',
+    },
   },
   {
     key: 'backtest',
@@ -179,4 +206,17 @@ export function resolveCurrentConsumerRoute(pathname: string): CoreProductRoute 
 
 export function resolveCurrentConsumerRouteKey(pathname: string): CoreProductRouteKey | null {
   return resolveCurrentConsumerRoute(pathname)?.key ?? null;
+}
+
+export function getCoreProductRouteByKey(key: CoreProductRouteKey): CoreProductRoute {
+  const route = CORE_PRODUCT_ROUTES.find((item) => item.key === key);
+  if (!route) {
+    throw new Error(`Unknown core product route: ${key}`);
+  }
+  return route;
+}
+
+export function resolveCoreProductRouteByCanonicalPath(pathname: string): CoreProductRoute | null {
+  const normalizedPathname = stripConsumerLocale(pathname);
+  return CORE_PRODUCT_ROUTES.find((route) => normalizeConsumerRoutePath(route.path) === normalizedPathname) ?? null;
 }

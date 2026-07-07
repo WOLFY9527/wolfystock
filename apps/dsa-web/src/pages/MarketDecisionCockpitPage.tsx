@@ -1018,7 +1018,6 @@ function DailyIntelligenceBriefingSection({
               starterResearchWorkflow={briefing.starterResearchWorkflow}
               firstRunChecklist={briefing.firstRunChecklist}
               suggestedResearchEntrypoints={briefing.suggestedResearchEntrypoints}
-              radarLabel={locale === 'en' ? 'Review Research Radar' : '查看研究雷达'}
             />
             <div className="grid gap-3 xl:grid-cols-2">
               <BriefingBlock

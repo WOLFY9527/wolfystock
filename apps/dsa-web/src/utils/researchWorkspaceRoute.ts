@@ -1,5 +1,10 @@
 import type { UiLanguage } from '../i18n/core';
 import { buildLocalizedPath } from './localeRouting';
+import {
+  getCoreProductRouteByKey,
+  type CoreProductRoute,
+  type CoreProductRouteKey,
+} from '../components/layout/coreProductRoutes';
 
 export type ResearchWorkspaceSurface = 'scanner' | 'stock-structure' | 'watchlist' | 'portfolio' | 'backtest' | 'options';
 export type ResearchWorkspaceSource = ResearchWorkspaceSurface | 'manual';
@@ -20,14 +25,18 @@ const SOURCE_VALUES = new Set<ResearchWorkspaceSource>([
   'manual',
 ]);
 
-const SURFACE_PATHS: Record<ResearchWorkspaceSurface, string> = {
-  scanner: '/scanner',
-  'stock-structure': '/stocks/structure-decision',
-  watchlist: '/watchlist',
-  portfolio: '/portfolio',
-  backtest: '/backtest',
-  options: '/options-lab',
+const SURFACE_ROUTE_KEYS: Record<ResearchWorkspaceSurface, CoreProductRouteKey> = {
+  scanner: 'scanner',
+  'stock-structure': 'stock-structure',
+  watchlist: 'watchlist',
+  portfolio: 'portfolio',
+  backtest: 'backtest',
+  options: 'options-lab',
 };
+
+export function getResearchWorkspaceRoute(surface: ResearchWorkspaceSurface): CoreProductRoute {
+  return getCoreProductRouteByKey(SURFACE_ROUTE_KEYS[surface]);
+}
 
 export function normalizeResearchWorkspaceSymbol(value: unknown): string | null {
   const symbol = String(value || '').trim().toUpperCase();
@@ -71,7 +80,7 @@ export function buildResearchWorkspacePath(
 
   const basePath = surface === 'stock-structure' && symbol
     ? `/stocks/${encodeURIComponent(symbol)}/structure-decision`
-    : SURFACE_PATHS[surface];
+    : getResearchWorkspaceRoute(surface).path;
   const query = params.toString();
   const path = query ? `${basePath}?${query}` : basePath;
   return buildLocalizedPath(path, language);

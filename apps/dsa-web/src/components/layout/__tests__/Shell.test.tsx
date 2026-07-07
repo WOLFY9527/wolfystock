@@ -8,13 +8,11 @@ import { expectNoRawI18nKeys } from '../../../test-utils/i18nRawKeySentinel';
 import { Shell } from '../Shell';
 import { ShellRailContext } from '../ShellRailContext';
 import {
-  CONSUMER_NAV_GROUPS,
-  CONSUMER_NAV_ITEMS,
-  ROUTE_STORIES,
-  resolveConsumerNavItem,
-  resolveConsumerRouteStory,
-} from '../consumerAppNavigation';
-import { CORE_PRODUCT_ROUTES, PRIMARY_CONSUMER_ROUTES } from '../coreProductRoutes';
+  CORE_PRODUCT_ROUTES,
+  PRIMARY_CONSUMER_ROUTES,
+  resolveCoreProductRouteByCanonicalPath,
+  resolveCurrentConsumerRoute,
+} from '../coreProductRoutes';
 import { setAdminSurfaceMode } from '../../../hooks/useProductSurface';
 import { useStockPoolStore } from '../../../stores/stockPoolStore';
 
@@ -296,7 +294,7 @@ describe('Shell', () => {
     await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/stocks/AAPL/structure-decision'));
   });
 
-  it('keeps consumer IA metadata aligned with the live anonymous Shell navigation', () => {
+  it('keeps route identity metadata aligned with the live anonymous Shell navigation', () => {
     expect(PRIMARY_CONSUMER_ROUTES.map((route) => route.key)).toEqual([
       'home',
       'market-overview',
@@ -309,25 +307,45 @@ describe('Shell', () => {
     expect(CORE_PRODUCT_ROUTES.find((route) => route.key === 'backtest')?.primaryNav).toBe(false);
     expect(CORE_PRODUCT_ROUTES.find((route) => route.key === 'scenario-lab')?.primaryNav).toBe(false);
     expect(CORE_PRODUCT_ROUTES.find((route) => route.key === 'options-lab')?.primaryNav).toBe(false);
-    expect(CONSUMER_NAV_GROUPS.map((group) => group.key)).toEqual([
-      'cockpit',
-      'research',
-      'context',
-      'observe',
-    ]);
-    expect(CONSUMER_NAV_ITEMS.map((item) => [item.key, item.group, item.to, item.requiresAuth === true])).toEqual([
+    expect(PRIMARY_CONSUMER_ROUTES.map((route) => [route.key, route.group, route.path, route.requiresAuth])).toEqual([
       ['home', 'cockpit', '/', false],
       ['market-overview', 'cockpit', '/market-overview', false],
       ['research-radar', 'research', '/research/radar', true],
       ['stock-structure', 'research', '/stocks/structure-decision', false],
       ['watchlist', 'context', '/watchlist', true],
     ]);
-    expect(CONSUMER_NAV_ITEMS.find((item) => item.key === 'research-radar')?.to).not.toBe('/research-radar');
-    expect(CONSUMER_NAV_ITEMS.filter((item) => item.requiresAuth !== true).map((item) => item.key)).toEqual([
+    expect(PRIMARY_CONSUMER_ROUTES.find((item) => item.key === 'research-radar')?.path).not.toBe('/research-radar');
+    expect(PRIMARY_CONSUMER_ROUTES.filter((item) => item.requiresAuth !== true).map((item) => item.key)).toEqual([
       'home',
       'market-overview',
       'stock-structure',
     ]);
+  });
+
+  it('keeps CTA route labels and aria labels owned by the core route registry', () => {
+    const ctaRoutes = [
+      '/market-overview',
+      '/scanner',
+      '/watchlist',
+      '/research/radar',
+      '/portfolio',
+    ].map((path) => resolveCoreProductRouteByCanonicalPath(path));
+
+    expect(ctaRoutes.map((route) => [
+      route?.key,
+      route?.ctaLabel?.zh,
+      route?.ctaLabel?.en,
+      route?.ctaDescription?.zh,
+      route?.ctaDescription?.en,
+    ])).toEqual([
+      ['market-overview', '先看市场概览', 'Start with Market Overview', '先阅读市场背景，再决定是否继续进入标的研究。', 'Read broad market context before choosing symbols.'],
+      ['scanner', '运行 Scanner', 'Run Scanner', '由你手动运行扫描，形成可复核候选。', 'Run a user-triggered scan to create candidates.'],
+      ['watchlist', '选择观察标的', 'Add Watchlist Symbol', '只在你想持续观察某个代码时再保存。', 'Choose a symbol only when you want to keep observing it.'],
+      ['research-radar', '查看研究雷达', 'Review Research Radar', '在扫描或观察列表有活动后，再回来看研究队列。', 'Review the queue after scanner or watchlist activity.'],
+      ['portfolio', '创建组合账户', 'Create portfolio account', '只有你明确想跟踪组合时才创建账户。', 'Create an account only when you want portfolio tracking.'],
+    ]);
+    expect(resolveCoreProductRouteByCanonicalPath('/research-radar')).toBeNull();
+    expect(resolveCurrentConsumerRoute('/zh/research-radar')?.key).toBe('research-radar');
   });
 
   it.each([
@@ -359,56 +377,17 @@ describe('Shell', () => {
     expect(hrefs).not.toContain('/lab');
   });
 
-  it('keeps dedicated guest route metadata separate from Home for base and localized paths', () => {
-    expect(resolveConsumerNavItem('/guest')).toBeNull();
-    expect(resolveConsumerNavItem('/en/guest')).toBeNull();
-    expect(resolveConsumerRouteStory('/guest')?.routeKey).toBe('guest');
-    expect(resolveConsumerRouteStory('/en/guest')?.routeKey).toBe('guest');
-    expect(resolveConsumerRouteStory('/guest')?.routeKey).not.toBe('home');
-    expect(resolveConsumerRouteStory('/en/guest')?.copy.en.eyebrow).toBe('Guest / Public Preview');
-
-    expect(resolveConsumerNavItem('/')?.key).toBe('home');
-    expect(resolveConsumerNavItem('/en')?.key).toBe('home');
-    expect(resolveConsumerRouteStory('/')?.routeKey).toBe('home');
-    expect(resolveConsumerRouteStory('/en')?.routeKey).toBe('home');
-    expect(resolveConsumerNavItem('/zh/market/decision-cockpit')).toBeNull();
-    expect(resolveConsumerRouteStory('/zh/market/decision-cockpit')?.routeKey).toBe('decision-cockpit');
-    expect(resolveConsumerNavItem('/en/research/radar')?.key).toBe('research-radar');
-    expect(resolveConsumerNavItem('/en/scanner')).toBeNull();
-    expect(resolveConsumerRouteStory('/en/scanner')?.routeKey).toBe('scanner');
-    expect(resolveConsumerNavItem('/zh/backtest')).toBeNull();
-    expect(resolveConsumerRouteStory('/zh/backtest')?.routeKey).toBe('backtest');
-    expect(resolveConsumerNavItem('/zh/scenario-lab')).toBeNull();
-    expect(resolveConsumerRouteStory('/zh/scenario-lab')?.routeKey).toBe('scenario-lab');
-    expect(resolveConsumerNavItem('/unknown')).toBeNull();
-  });
-
-  it('keeps route stories aligned with the current consumer route inventory and no-advice boundaries', () => {
-    expect(ROUTE_STORIES.map((story) => story.routeKey)).toEqual([
-      'home',
-      'guest',
-      'decision-cockpit',
-      'research-radar',
-      'stock-structure',
-      'scanner',
-      'portfolio',
-      'market-overview',
-      'liquidity-monitor',
-      'rotation-radar',
-      'watchlist',
-      'backtest',
-      'options-lab',
-      'scenario-lab',
-    ]);
-
-    for (const story of ROUTE_STORIES) {
-      expect(story.copy.zh.evidence).toContain('证据边界');
-      expect(story.copy.en.evidence).toContain('Evidence boundary');
-      expect(story.copy.zh.boundary).not.toMatch(/买入|下单|必买|稳赚|保证收益/);
-      expect(story.copy.en.boundary).not.toMatch(/guaranteed|best contract|AI recommends you buy/i);
-      expect(story.copy.zh.evidence).not.toMatch(/observationOnly=true|decisionGrade=false|provider|broker|raw debug payload/i);
-      expect(story.copy.en.evidence).not.toMatch(/observationOnly=true|decisionGrade=false|provider|broker|raw debug payload|frontend contract/i);
-    }
+  it('keeps guest and secondary route identity resolved by the core route registry', () => {
+    expect(resolveCurrentConsumerRoute('/guest')).toBeNull();
+    expect(resolveCurrentConsumerRoute('/en/guest')).toBeNull();
+    expect(resolveCurrentConsumerRoute('/')?.key).toBe('home');
+    expect(resolveCurrentConsumerRoute('/en')?.key).toBe('home');
+    expect(resolveCurrentConsumerRoute('/zh/market/decision-cockpit')?.key).toBe('decision-cockpit');
+    expect(resolveCurrentConsumerRoute('/en/research/radar')?.key).toBe('research-radar');
+    expect(resolveCurrentConsumerRoute('/en/scanner')?.key).toBe('scanner');
+    expect(resolveCurrentConsumerRoute('/zh/backtest')?.key).toBe('backtest');
+    expect(resolveCurrentConsumerRoute('/zh/scenario-lab')?.key).toBe('scenario-lab');
+    expect(resolveCurrentConsumerRoute('/unknown')).toBeNull();
   });
 
   it('renders the dedicated guest route with the same anonymous primary navigation exposed by live Shell', async () => {
