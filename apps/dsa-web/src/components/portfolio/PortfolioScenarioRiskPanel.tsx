@@ -247,8 +247,12 @@ export function PortfolioScenarioRiskPanel({
     ...(scenarioResult?.warnings ?? []),
   ];
   const consumerWarningRows = buildConsumerWarningRows(warningRows, isEnglish);
+  const explicitObservationBoundary = result?.accountingMutation === false
+    || result?.brokerIntegration === false
+    || result?.tradeExecution === false;
   const metadataRows = [
-    result?.metadata?.sideEffectFree
+    explicitObservationBoundary
+      || result?.metadata?.sideEffectFree
       || result?.metadata?.noBrokerSync
       || result?.metadata?.noAccountingMutation
       || result?.metadata?.noOrderPlacement

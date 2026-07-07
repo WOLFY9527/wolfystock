@@ -50,6 +50,9 @@ describe('PortfolioScenarioRiskPanel', () => {
     const runScenario = vi.fn().mockResolvedValue({
       readModelType: 'portfolio_scenario_risk_advisory_v1',
       advisoryOnly: true,
+      accountingMutation: false,
+      brokerIntegration: false,
+      tradeExecution: false,
       executionReadiness: 'advisory_only_not_trade_execution',
       asOf: '2026-03-19T00:00:00Z',
       coverage: {
@@ -197,10 +200,64 @@ describe('PortfolioScenarioRiskPanel', () => {
     expect(screen.getByTestId('portfolio-scenario-risk-result')).not.toHaveTextContent(/不触发经纪商同步|不改动账务结果|不触发任何下单|模型结果不可作为仓位建议/);
   });
 
+  it('uses explicit protected scenario flags instead of inferring observation boundaries from metadata', async () => {
+    const runScenario = vi.fn().mockResolvedValue({
+      readModelType: 'portfolio_scenario_risk_advisory_v1',
+      advisoryOnly: true,
+      accountingMutation: false,
+      brokerIntegration: false,
+      tradeExecution: false,
+      executionReadiness: 'advisory_only_not_trade_execution',
+      asOf: '2026-03-19T00:00:00Z',
+      coverage: {
+        totalPositions: 2,
+        positionsWithUsableWeight: 2,
+        positionsWithMarketValue: 2,
+        effectiveWeightSum: 1,
+        totalMarketValue: 2000,
+        explicitExposureRows: 0,
+        labelsWithExplicitCoverage: [],
+      },
+      scenarios: [
+        {
+          name: 'symbol_aapl_down_-4',
+          portfolioImpactPct: -4,
+          portfolioImpactAmount: -80,
+          coveredWeight: 1,
+          coveredMarketValue: 2000,
+          warnings: [],
+          missingCoverage: [],
+          positionContributions: [],
+          bucketContributions: [],
+        },
+      ],
+      insufficientDataReasons: [],
+      missingDataWarnings: [],
+      metadata: {},
+    });
+
+    renderPanel(runScenario);
+
+    const disclosure = screen.getByTestId('portfolio-scenario-risk-disclosure');
+    fireEvent.click(within(disclosure).getByRole('button', { name: '展开 查看压力情景' }));
+    fireEvent.change(screen.getByLabelText('冲击幅度（%）'), { target: { value: '-4' } });
+    fireEvent.click(screen.getByRole('button', { name: '运行压力情景' }));
+
+    await waitFor(() => expect(runScenario).toHaveBeenCalledTimes(1));
+
+    const result = screen.getByTestId('portfolio-scenario-risk-result');
+    expect(result).toHaveTextContent('仅做观察性推演，不改变当前组合状态。');
+    expect(result).not.toHaveTextContent('advisory_only_not_trade_execution');
+    expect(result.textContent || '').not.toMatch(/accountingMutation|brokerIntegration|tradeExecution|noAccountingMutation|noBrokerSync|noOrderPlacement/);
+  });
+
   it('preserves distinct stale, unavailable, insufficient, updating, empty, and sample scenario states without raw enums', async () => {
     const runScenario = vi.fn().mockResolvedValue({
       readModelType: 'portfolio_scenario_risk_advisory_v1',
       advisoryOnly: true,
+      accountingMutation: false,
+      brokerIntegration: false,
+      tradeExecution: false,
       executionReadiness: 'advisory_only_not_trade_execution',
       asOf: '2026-03-19T00:00:00Z',
       coverage: {

@@ -843,6 +843,55 @@ export interface PortfolioStructureReviewMissingEvidenceItem {
   message: string;
 }
 
+export interface PortfolioStructureReviewLinkTarget {
+  label: string;
+  route: string;
+  section: string;
+  reason: string;
+}
+
+export interface PortfolioStructureReviewDegradedLinkage {
+  surface: string;
+  status: 'degraded' | 'unavailable';
+  reason: string;
+  message: string;
+}
+
+export interface PortfolioStructureReviewHoldingDrilldown {
+  ticker: string;
+  structureLinks: PortfolioStructureReviewLinkTarget[];
+  radarLinks: PortfolioStructureReviewLinkTarget[];
+  watchlistLinks: PortfolioStructureReviewLinkTarget[];
+  scenarioLinks: PortfolioStructureReviewLinkTarget[];
+  evidenceLinkage: 'available' | 'degraded' | 'unavailable';
+  degradedLinkage: PortfolioStructureReviewDegradedLinkage[];
+}
+
+export interface PortfolioStructureReviewEvidenceLinkage {
+  status: 'available' | 'degraded' | 'unavailable';
+  availableHoldings: number;
+  degradedHoldings: number;
+  unavailableHoldings: number;
+}
+
+export interface PortfolioStructureReviewResearchLinkage {
+  status: 'available' | 'degraded' | 'unavailable';
+  holdingDrilldowns: PortfolioStructureReviewHoldingDrilldown[];
+  structureLinks: PortfolioStructureReviewLinkTarget[];
+  radarLinks: PortfolioStructureReviewLinkTarget[];
+  watchlistLinks: PortfolioStructureReviewLinkTarget[];
+  scenarioLinks: PortfolioStructureReviewLinkTarget[];
+  evidenceLinkage: PortfolioStructureReviewEvidenceLinkage;
+  degradedLinkage: PortfolioStructureReviewDegradedLinkage[];
+}
+
+export interface PortfolioStructureReviewConsumerIssue {
+  label: string;
+  message: string;
+  severity: string;
+  category: string;
+}
+
 export interface PortfolioStructureReviewHolding {
   ticker: string;
   structureState: string;
@@ -894,7 +943,15 @@ export interface PortfolioStructureReviewResponse {
   weakestEvidence: PortfolioStructureReviewWeakestEvidenceItem[];
   commonRiskFlags: PortfolioStructureReviewCommonRiskFlagItem[];
   missingEvidence: PortfolioStructureReviewMissingEvidenceItem[];
+  researchLinkage: PortfolioStructureReviewResearchLinkage | undefined;
+  readOnly: boolean | undefined;
+  failClosed: boolean | undefined;
+  consumerState: 'AVAILABLE' | 'PARTIAL' | 'UNAVAILABLE' | undefined;
+  consumerSummary: string | undefined;
+  consumerMessage: string | undefined;
+  drilldownSymbols: string[] | undefined;
   dataQuality: PortfolioStructureReviewDataQuality;
+  consumerIssues: PortfolioStructureReviewConsumerIssue[] | undefined;
   noAdviceDisclosure: string;
 }
 
@@ -1003,7 +1060,10 @@ export interface PortfolioScenarioRiskMetadata {
 export interface PortfolioScenarioRiskResponse {
   readModelType: string;
   advisoryOnly: boolean;
-  executionReadiness: string;
+  accountingMutation: boolean | undefined;
+  brokerIntegration: boolean | undefined;
+  tradeExecution: boolean | undefined;
+  executionReadiness: string | undefined;
   asOf?: string | null;
   coverage: PortfolioScenarioRiskCoverage;
   scenarios: PortfolioScenarioRiskScenarioResult[];

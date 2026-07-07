@@ -1190,11 +1190,6 @@ function structureReviewEvidenceStatusLabel(value: string | null | undefined, la
   return language === 'zh' ? '证据待确认' : 'Evidence pending';
 }
 
-function hasStructureReviewTicker(value: string | null | undefined): boolean {
-  const token = String(value || '').trim().toUpperCase();
-  return Boolean(token) && token !== 'UNKNOWN' && token !== '--' && token !== 'N/A';
-}
-
 function sanitizeStructureReviewMessage(value: string | null | undefined, language: PortfolioLanguage): string | null {
   const trimmed = String(value || '').trim();
   if (!trimmed) {
@@ -1219,6 +1214,22 @@ function sanitizeStructureReviewMessage(value: string | null | undefined, langua
   }
 
   return trimmed.replace(/\bcached\s+/gi, '');
+}
+
+function structureReviewDetailRoute(
+  review: PortfolioStructureReviewResponse | null,
+  ticker: string | null | undefined,
+): string | null {
+  const token = String(ticker || '').trim();
+  const researchLinkage = review?.researchLinkage;
+  if (!token || !researchLinkage || researchLinkage.status === 'unavailable') {
+    return null;
+  }
+  const drilldown = researchLinkage.holdingDrilldowns.find(
+    (entry) => entry.ticker === token && entry.evidenceLinkage !== 'unavailable',
+  );
+  const route = drilldown?.structureLinks[0]?.route;
+  return route?.startsWith('/') ? route : null;
 }
 
 function getFxRateForDisplay(
@@ -4508,9 +4519,8 @@ const PortfolioPage: React.FC = () => {
 
                       <div className="space-y-2">
                         {structureReviewHoldings.slice(0, 4).map((holding) => {
-                          const detailPath = hasStructureReviewTicker(holding.ticker)
-                            ? localize(`/stocks/${encodeURIComponent(holding.ticker)}/structure-decision`)
-                            : null;
+                          const detailRoute = structureReviewDetailRoute(structureReview, holding.ticker);
+                          const detailPath = detailRoute ? localize(detailRoute) : null;
                           const primaryGap = sanitizeStructureReviewMessage(
                             holding.researchNotes.needsMoreEvidence[0]
                               || holding.missingEvidence[0]?.message

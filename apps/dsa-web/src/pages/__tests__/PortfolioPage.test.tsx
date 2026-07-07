@@ -542,6 +542,7 @@ function makeStructureReview(options: {
   holdingState?: string;
   includeSymbolLink?: boolean;
 } = {}) {
+  const linkAvailable = options.includeSymbolLink !== false;
   return {
     schemaVersion: 'portfolio_structure_review_v1',
     aggregateSummary: {
@@ -579,7 +580,6 @@ function makeStructureReview(options: {
         missingEvidence: [
           { kind: 'daily_ohlcv', message: 'Daily structure evidence needs more bars.' },
         ],
-        ...(options.includeSymbolLink === false ? {} : { structureDecisionRoute: '/stocks/AAPL/structure-decision' }),
       },
       {
         ticker: 'UNKNOWN',
@@ -609,6 +609,89 @@ function makeStructureReview(options: {
     missingEvidence: [
       { kind: 'cached_portfolio_holdings', message: 'Cached holdings are partially available for structure review.' },
     ],
+    researchLinkage: {
+      status: linkAvailable ? 'degraded' : 'unavailable',
+      holdingDrilldowns: linkAvailable
+        ? [
+          {
+            ticker: 'AAPL',
+            structureLinks: [
+              {
+                label: 'Stock Structure',
+                route: '/stocks/AAPL/structure-decision',
+                section: 'portfolioStructureReview',
+                reason: 'Open symbol structure detail.',
+              },
+            ],
+            radarLinks: [],
+            watchlistLinks: [],
+            scenarioLinks: [],
+            evidenceLinkage: 'available',
+            degradedLinkage: [],
+          },
+          {
+            ticker: 'UNKNOWN',
+            structureLinks: [],
+            radarLinks: [],
+            watchlistLinks: [],
+            scenarioLinks: [],
+            evidenceLinkage: 'unavailable',
+            degradedLinkage: [
+              {
+                surface: 'stockStructure',
+                status: 'unavailable',
+                reason: 'Structure evidence unavailable.',
+                message: 'Structure evidence is unavailable for this cached holding.',
+              },
+            ],
+          },
+        ]
+        : [],
+      structureLinks: linkAvailable
+        ? [
+          {
+            label: 'Stock Structure',
+            route: '/stocks/AAPL/structure-decision',
+            section: 'portfolioStructureReview',
+            reason: 'Open symbol structure detail.',
+          },
+        ]
+        : [],
+      radarLinks: [],
+      watchlistLinks: [],
+      scenarioLinks: [],
+      evidenceLinkage: {
+        status: linkAvailable ? 'degraded' : 'unavailable',
+        availableHoldings: linkAvailable ? 1 : 0,
+        degradedHoldings: 0,
+        unavailableHoldings: linkAvailable ? 1 : 0,
+      },
+      degradedLinkage: linkAvailable
+        ? [
+          {
+            surface: 'stockStructure',
+            status: 'unavailable',
+            reason: 'Structure evidence unavailable.',
+            message: 'Structure evidence is unavailable for at least one holding.',
+          },
+        ]
+        : [
+          {
+            surface: 'portfolioStructureReview',
+            status: 'unavailable',
+            reason: 'Portfolio holdings unavailable.',
+            message: 'Cached holdings are unavailable, so linkage stays bounded.',
+          },
+        ],
+    },
+    readOnly: true,
+    failClosed: options.status === 'unavailable',
+    consumerState: options.status === 'unavailable' ? 'UNAVAILABLE' : 'PARTIAL',
+    consumerSummary: options.status === 'unavailable' ? 'Structure review unavailable' : 'Structure review partially available',
+    consumerMessage: options.status === 'unavailable'
+      ? 'Cached holdings or structure evidence are unavailable, so this panel remains fail-closed.'
+      : 'Some holdings are missing metadata or structure evidence, so this review remains partial and read-only.',
+    drilldownSymbols: linkAvailable ? ['AAPL'] : [],
     dataQuality: {
       status: options.status ?? 'partial',
       holdingMetadataStatus: 'partial',
@@ -616,6 +699,14 @@ function makeStructureReview(options: {
       readOnly: true,
       failClosed: options.status === 'unavailable',
     },
+    consumerIssues: [
+      {
+        label: 'Evidence needs review',
+        message: 'Some quality checks are not fully cleared yet.',
+        severity: 'info',
+        category: 'evidence',
+      },
+    ],
     noAdviceDisclosure: 'Observation-only research context; not personalized financial advice and not an instruction.',
   };
 }
@@ -725,6 +816,9 @@ describe('PortfolioPage FX refresh', () => {
     projectScenarioRisk.mockResolvedValue({
       readModelType: 'portfolio_scenario_risk_advisory_v1',
       advisoryOnly: true,
+      accountingMutation: false,
+      brokerIntegration: false,
+      tradeExecution: false,
       executionReadiness: 'advisory_only_not_trade_execution',
       asOf: '2026-03-19T00:00:00Z',
       coverage: {
@@ -1424,6 +1518,30 @@ describe('PortfolioPage FX refresh', () => {
 
     expect(section.textContent || '').not.toMatch(/schemaVersion|readOnly|failClosed|provider|debug|raw|trace|structureDecisionRoute/i);
     expect(section.textContent || '').not.toMatch(/买入|卖出|下单|交易建议|投资建议|buy|sell|target price|stop loss|position sizing/i);
+  });
+
+  it('does not infer structure detail links when backend research linkage is unavailable', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true, fxStale: false }));
+    getStructureReview.mockResolvedValue(makeStructureReview({
+      status: 'unavailable',
+      holdingState: 'mixed',
+      includeSymbolLink: false,
+    }));
+
+    render(
+      <UiLanguageProvider>
+        <PortfolioPage />
+      </UiLanguageProvider>,
+    );
+
+    await waitForInitialLoad();
+    await waitFor(() => expect(getStructureReview).toHaveBeenCalledTimes(1));
+
+    const section = screen.getByTestId('portfolio-structure-review-panel');
+    expect(section).toHaveTextContent('组合结构审查');
+    expect(section).toHaveTextContent('只读研究上下文');
+    expect(within(section).queryByRole('link', { name: '查看结构详情' })).not.toBeInTheDocument();
+    expect(section.textContent || '').not.toMatch(/structureDecisionRoute|researchLinkage|failClosed|readOnly/i);
   });
 
   it('replaces internal-looking account labels with a consumer-safe fallback while preserving portfolio rendering', async () => {

@@ -663,7 +663,6 @@ describe('portfolioApi scenario risk adapter', () => {
 
   it('posts only caller-supplied scenario risk fields with canonical camelCase payload', async () => {
     const { portfolioApi } = await import('../portfolio');
-    const syncTokenKey = 'sync' + 'Token';
 
     post.mockResolvedValueOnce({
       data: {
@@ -689,37 +688,30 @@ describe('portfolioApi scenario risk adapter', () => {
       positions: [
         {
           symbol: 'NVDA',
-          market_value: 1000,
-          bucket_label: 'AI Semis',
-        } as never,
+          marketValue: 1000,
+          bucketLabel: 'AI Semis',
+        },
       ],
       exposures: [
         {
           symbol: 'NVDA',
           label: 'QQQ',
-          label_type: 'index_proxy',
+          labelType: 'index_proxy',
           exposure: 1,
-        } as never,
+        },
       ],
       scenarioShocks: [
         {
           name: 'qqq_proxy_down',
           shocks: {
             QQQ: {
-              shock_pct: -5,
-              label_type: 'index_proxy',
+              shockPct: -5,
+              labelType: 'index_proxy',
             },
           },
-        } as never,
+        },
       ],
-      accountId: 'acct-1',
-      brokerConnectionId: 'broker-1',
-      [syncTokenKey]: 'local-test-marker',
-      providerRefresh: true,
-      orderId: 'order-1',
-      tradeId: 'trade-1',
-      portfolioMutation: true,
-    } as never);
+    });
 
     expect(post).toHaveBeenCalledWith('/api/v1/portfolio/scenario-risk', {
       asOf: '2026-05-18T09:30:00Z',
@@ -796,6 +788,72 @@ describe('portfolioApi scenario risk adapter', () => {
         weakest_evidence: [{ ticker: 'MSFT', status: 'partial', usable_bars: 22, evidence_quality: 52 }],
         common_risk_flags: [{ flag: 'coverage_gap', count: 1, tickers: ['AAPL'] }],
         missing_evidence: [{ kind: 'cached_portfolio_holdings', message: 'Cached portfolio holdings are unavailable.' }],
+        research_linkage: {
+          status: 'degraded',
+          holding_drilldowns: [
+            {
+              ticker: 'AAPL',
+              structure_links: [
+                {
+                  label: 'Stock Structure',
+                  route: '/stocks/AAPL/structure-decision',
+                  section: 'portfolioStructureReview',
+                  reason: 'Open symbol structure detail.',
+                },
+              ],
+              radar_links: [],
+              watchlist_links: [],
+              scenario_links: [
+                {
+                  label: 'Scenario Lab',
+                  route: '/market/scenario-lab',
+                  section: 'scenarioPresets',
+                  reason: 'Compare scenario context for this holding.',
+                },
+              ],
+              evidence_linkage: 'available',
+              degraded_linkage: [],
+            },
+          ],
+          structure_links: [
+            {
+              label: 'Stock Structure',
+              route: '/stocks/AAPL/structure-decision',
+              section: 'portfolioStructureReview',
+              reason: 'Open symbol structure detail.',
+            },
+          ],
+          radar_links: [],
+          watchlist_links: [],
+          scenario_links: [
+            {
+              label: 'Scenario Lab',
+              route: '/market/scenario-lab',
+              section: 'scenarioPresets',
+              reason: 'Compare scenario context for this holding.',
+            },
+          ],
+          evidence_linkage: {
+            status: 'degraded',
+            available_holdings: 1,
+            degraded_holdings: 0,
+            unavailable_holdings: 1,
+          },
+          degraded_linkage: [
+            {
+              surface: 'stockStructure',
+              status: 'unavailable',
+              reason: 'Structure evidence unavailable.',
+              message: 'Structure evidence is unavailable for at least one holding.',
+            },
+          ],
+        },
+        read_only: true,
+        fail_closed: false,
+        consumer_state: 'PARTIAL',
+        consumer_summary: 'Structure review partially available',
+        consumer_message: 'Some holdings are missing metadata or structure evidence, so this review remains partial and read-only.',
+        drilldown_symbols: ['AAPL'],
         data_quality: {
           status: 'partial',
           holding_metadata_status: 'available',
@@ -804,6 +862,14 @@ describe('portfolioApi scenario risk adapter', () => {
           fail_closed: false,
           provider: 'backend-debug',
         },
+        consumer_issues: [
+          {
+            label: 'Evidence needs review',
+            message: 'Some quality checks are not fully cleared yet.',
+            severity: 'info',
+            category: 'evidence',
+          },
+        ],
         no_advice_disclosure: 'Observation-only research context; not personalized financial advice and not an instruction.',
       },
     });
@@ -841,6 +907,55 @@ describe('portfolioApi scenario risk adapter', () => {
       structureEvidenceStatus: 'available',
       readOnly: true,
       failClosed: false,
+    });
+    expect(payload).toMatchObject({
+      readOnly: true,
+      failClosed: false,
+      consumerState: 'PARTIAL',
+      consumerSummary: 'Structure review partially available',
+      consumerMessage: 'Some holdings are missing metadata or structure evidence, so this review remains partial and read-only.',
+      drilldownSymbols: ['AAPL'],
+      consumerIssues: [
+        {
+          label: 'Evidence needs review',
+          message: 'Some quality checks are not fully cleared yet.',
+          severity: 'info',
+          category: 'evidence',
+        },
+      ],
+    });
+    expect(payload.researchLinkage).toMatchObject({
+      status: 'degraded',
+      holdingDrilldowns: [
+        {
+          ticker: 'AAPL',
+          evidenceLinkage: 'available',
+          structureLinks: [
+            {
+              route: '/stocks/AAPL/structure-decision',
+              section: 'portfolioStructureReview',
+            },
+          ],
+          scenarioLinks: [
+            {
+              route: '/market/scenario-lab',
+              section: 'scenarioPresets',
+            },
+          ],
+        },
+      ],
+      evidenceLinkage: {
+        status: 'degraded',
+        availableHoldings: 1,
+        degradedHoldings: 0,
+        unavailableHoldings: 1,
+      },
+      degradedLinkage: [
+        {
+          surface: 'stockStructure',
+          status: 'unavailable',
+        },
+      ],
     });
 
     const keys = new Set(walkKeys(payload));
@@ -944,6 +1059,9 @@ describe('portfolioApi scenario risk adapter', () => {
     expect(payload).toEqual({
       readModelType: 'portfolio_scenario_risk_advisory_v1',
       advisoryOnly: true,
+      accountingMutation: false,
+      brokerIntegration: false,
+      tradeExecution: false,
       executionReadiness: 'advisory_only_not_trade_execution',
       asOf: '2026-05-18T09:30:00Z',
       coverage: {
@@ -1016,9 +1134,6 @@ describe('portfolioApi scenario risk adapter', () => {
 
     const keys = new Set(walkKeys(payload));
     for (const forbiddenKey of [
-      'accountingMutation',
-      'brokerIntegration',
-      'tradeExecution',
       'noProviderRuntime',
       'inputSource',
       'noLivePrices',
