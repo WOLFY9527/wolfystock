@@ -3054,6 +3054,7 @@ class MarketScannerService:
             str(market or "").strip().lower() == "us"
             and universe_type == "default"
         )
+        uses_default_universe = universe_type == "default"
         cache_universe_readiness = (
             build_scanner_universe_readiness_from_cache(
                 market=market,
@@ -3071,7 +3072,7 @@ class MarketScannerService:
             }
         )
         lifecycle_readiness = build_scanner_universe_lifecycle_readiness(market=market)
-        if lifecycle_readiness.get("usable") and isinstance(cache_universe_readiness, dict):
+        if uses_default_universe and lifecycle_readiness.get("usable") and isinstance(cache_universe_readiness, dict):
             cache_universe_readiness = {
                 **cache_universe_readiness,
                 "status": "available",
@@ -3095,7 +3096,7 @@ class MarketScannerService:
                     "activationState": "active",
                 },
             }
-        else:
+        elif uses_default_universe:
             existing_metadata = (
                 cache_universe_readiness.get("sourceMetadata")
                 if isinstance(cache_universe_readiness, dict)
@@ -3504,7 +3505,6 @@ class MarketScannerService:
                     "generatedFrom",
                     "operatorAction",
                     "operatorNextAction",
-                    "nextOperatorAction",
                     "downstreamImpact",
                 }
             }
@@ -3942,8 +3942,23 @@ class MarketScannerService:
             benchmark_context=benchmark_context,
             profile_config=profile_config,
         )
-        if (
+        history_requirements = {
+            str(requirement or "").strip().lower()
+            for item in (history_cache.get("candidate_diagnostics") or {}).values()
+            if isinstance(item, Mapping)
+            for requirement in (
+                (item.get("historicalOhlcvReadiness") or {}).get("missingRequirements") or []
+                if isinstance(item.get("historicalOhlcvReadiness"), Mapping)
+                else []
+            )
+            if str(requirement or "").strip()
+        }
+        quote_unavailable_fail_closed = (
             profile_config.market != "us"
+            or "missing_adjustments" in history_requirements
+        )
+        if (
+            quote_unavailable_fail_closed
             and not use_history_only_quote_context
             and self._readiness_int(quote_diag_rollup.get("attempted_candidates")) > 0
             and self._readiness_int(quote_diag_rollup.get("available_candidates")) <= 0
@@ -4844,7 +4859,7 @@ class MarketScannerService:
         ).head(universe_limit).reset_index(drop=True)
 
         universe_notes = [
-            "起始池采用 local-first 的 US history universe：优先读取 LOCAL_US_PARQUET_DIR/US_STOCK_PARQUET_DIR，再回退到本地 stock_daily；当本地覆盖过窄时，会补入一小组受控 liquid seed symbols。",
+            "起始池采用 bounded starter local-only 的 US history universe：优先读取 LOCAL_US_PARQUET_DIR/US_STOCK_PARQUET_DIR，再回退到本地 stock_daily；缺少本地历史覆盖的 starter symbols 会显式跳过，不再补入静态 seed symbols。",
             "默认先过滤低价、20 日平均成交额不足、20 日平均成交量不足或历史样本过短的标的。",
             f"本版默认保留流动性与趋势条件更好的 {universe_limit} 只美股候选进入详细评估。",
             "若实时 quote 不可用，US profile 仍会给出纯历史视角的 shortlist，并显式提示盘前上下文置信度较低。",
