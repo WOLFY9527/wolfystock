@@ -14,8 +14,8 @@ import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '
 import { isPreviewRoutePath } from './utils/appRouteGuards';
 import { canAccessAdminPath, isAdminMissionControlPath, isAdminMissionControlPrototypeEnabled } from './utils/adminCapabilities';
 
-const APP_BOOT_SPLASH_MIN_MS = 950;
-const APP_BOOT_SPLASH_FADE_MS = 380;
+const APP_BOOT_SPLASH_MIN_MS = 320;
+const APP_BOOT_SPLASH_FADE_MS = 180;
 
 const AccessGatePage = lazy(() => import('./components/access/AccessGatePage').then((module) => ({
   default: module.AccessGatePage,
@@ -72,6 +72,55 @@ type AuthBootstrapSurfaceCopy = {
   title: string;
   description: string;
   actionLabel: string;
+};
+
+const ROUTE_LOADING_COPY: Record<UiLanguage, {
+  ariaLabel: string;
+  title: string;
+  description: string;
+}> = {
+  zh: {
+    ariaLabel: '正在打开研究页面',
+    title: '正在打开研究页面',
+    description: '导航和账户状态会保持不变。',
+  },
+  en: {
+    ariaLabel: 'Opening research page',
+    title: 'Opening research page',
+    description: 'Navigation and account state stay in place.',
+  },
+};
+
+export const RouteLoadingFallback: React.FC<{ language: UiLanguage }> = ({ language }) => {
+  const copy = ROUTE_LOADING_COPY[language];
+
+  return (
+    <section
+      role="status"
+      aria-live="polite"
+      aria-label={copy.ariaLabel}
+      data-testid="route-loading-fallback"
+      className="flex min-h-[min(420px,calc(100vh-9rem))] w-full min-w-0 items-center justify-center px-4 py-8"
+    >
+      <div className="theme-panel-glass w-full max-w-xl rounded-[14px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] p-5 shadow-none">
+        <div className="flex min-w-0 items-start gap-4">
+          <span
+            className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--sage)] motion-safe:animate-pulse"
+            aria-hidden="true"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{copy.title}</p>
+            <p className="mt-1 text-sm leading-6 text-[color:var(--wolfy-text-muted)]">{copy.description}</p>
+            <div className="mt-4 grid gap-2" aria-hidden="true">
+              <span className="h-2.5 w-11/12 rounded-full bg-[color:var(--wolfy-divider)]" />
+              <span className="h-2.5 w-8/12 rounded-full bg-[color:var(--wolfy-divider)]" />
+              <span className="h-2.5 w-5/12 rounded-full bg-[color:var(--wolfy-divider)]" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
 };
 
 function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: boolean): GateCopy {
@@ -502,6 +551,18 @@ const StockStructureDecisionLegacyRedirect: React.FC = () => {
   return <Navigate to={to} replace />;
 };
 
+const AppShellRoute: React.FC = () => {
+  const { language } = useI18n();
+
+  return (
+    <Shell>
+      <Suspense fallback={<RouteLoadingFallback language={language} />}>
+        <Outlet />
+      </Suspense>
+    </Shell>
+  );
+};
+
 export const AppContent: React.FC = () => {
   const location = useLocation();
   const { authEnabled, loggedIn, isLoading, loadError, refreshStatus, setupState } = useAuth();
@@ -557,7 +618,7 @@ export const AppContent: React.FC = () => {
   }, [isLoading]);
 
   const routeTree = (
-    <Suspense fallback={<BrandedLoadingScreen text={t('app.loadingBrand')} subtext={t('app.loading')} />}>
+    <Suspense fallback={<RouteLoadingFallback language={language} />}>
       <Routes>
         <Route path="/guest/scanner" element={<Navigate to="/scanner" replace />} />
         <Route path="/user/scanner" element={<Navigate to="/scanner" replace />} />
@@ -567,7 +628,7 @@ export const AppContent: React.FC = () => {
         <Route path="/stock/:stockCode/structure-decision" element={<StockStructureDecisionLegacyRedirect />} />
         <Route path="/:locale/stock/:stockCode" element={<StockStructureDecisionLegacyRedirect />} />
         <Route path="/:locale/stock/:stockCode/structure-decision" element={<StockStructureDecisionLegacyRedirect />} />
-        <Route element={<Shell />}>
+        <Route element={<AppShellRoute />}>
           <Route path="/market" element={<Navigate to="/market-overview" replace />} />
           {/* /settings/system is the canonical admin system settings surface; /admin aliases remain intentional deep links. */}
           <Route path="/admin" element={<Navigate to="/settings/system" replace />} />
@@ -720,7 +781,7 @@ export const AppContent: React.FC = () => {
         content = <Navigate to={localizedHomePath} replace />;
       } else {
         content = (
-          <Suspense fallback={<BrandedLoadingScreen text={t('app.loadingBrand')} subtext={t('app.loading')} />}>
+          <Suspense fallback={<RouteLoadingFallback language={language} />}>
             <LoginPage />
           </Suspense>
         );
@@ -730,7 +791,7 @@ export const AppContent: React.FC = () => {
         content = <Navigate to={localizedHomePath} replace />;
       } else {
         content = (
-          <Suspense fallback={<BrandedLoadingScreen text={t('app.loadingBrand')} subtext={t('app.loading')} />}>
+          <Suspense fallback={<RouteLoadingFallback language={language} />}>
             <ResetPasswordPage />
           </Suspense>
         );
@@ -756,7 +817,7 @@ export const AppContent: React.FC = () => {
 
 const PreviewRoutes: React.FC = () => {
   const location = useLocation();
-  const { setLanguage, t } = useI18n();
+  const { setLanguage } = useI18n();
   const routeLocale = parseLocaleFromPathname(location.pathname);
 
   useEffect(() => {
@@ -767,7 +828,7 @@ const PreviewRoutes: React.FC = () => {
 
   return (
     <PreviewShell>
-      <Suspense fallback={<BrandedLoadingScreen text={t('app.loadingBrand')} subtext={t('app.loading')} />}>
+      <Suspense fallback={<RouteLoadingFallback language={routeLocale || 'zh'} />}>
         <Routes>
           <Route path="/__preview/report" element={<PreviewReportPage />} />
           <Route path="/__preview/full-report" element={<PreviewFullReportDrawerPage />} />
@@ -782,13 +843,20 @@ const PreviewRoutes: React.FC = () => {
 
 const LocalizedShellRoute: React.FC = () => {
   const location = useLocation();
+  const { language } = useI18n();
   const routeLocale = parseLocaleFromPathname(location.pathname);
 
   if (!routeLocale) {
     return <NotFoundPage />;
   }
 
-  return <Shell><Outlet /></Shell>;
+  return (
+    <Shell>
+      <Suspense fallback={<RouteLoadingFallback language={language} />}>
+        <Outlet />
+      </Suspense>
+    </Shell>
+  );
 };
 
 const AppBody: React.FC = () => {
