@@ -442,6 +442,17 @@ def test_cn_provider_probe_contract_metadata_stays_in_lockstep(
     assert "exchange_authorized" not in {item.source_tier for item in contracts}
 
 
+def test_unsupported_capability_is_distinct_from_provider_activation_or_credentials() -> None:
+    assert get_provider_capability_support_contract("baostock", "options_chain") is None
+
+    supported = get_provider_capability_support_contract("baostock", "cn_history_daily")
+
+    assert supported is not None
+    assert supported.capability == "cn_history_daily"
+    assert supported.key_required is False
+    assert supported.missing_provider_reason == "baostock_not_installed"
+
+
 def test_provider_capability_support_contracts_use_known_onboarding_vocabulary() -> None:
     contracts = list_provider_capability_support_contracts()
 

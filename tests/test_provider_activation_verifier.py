@@ -8,6 +8,7 @@ import subprocess
 import sys
 from datetime import date, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -179,6 +180,33 @@ def test_activation_verifier_classifies_permission_sample_and_stale_states(tmp_p
     assert "FMP_SECRET_VALUE" not in _json_text(payload)
 
 
+def test_activation_verifier_keeps_provider_failures_isolated(tmp_path: Path) -> None:
+    class _Spec:
+        pass
+
+    def _spec_finder(name: str):
+        if name == "akshare":
+            raise RuntimeError("akshare import failed with SECRET_TOKEN")
+        if name in {"baostock", "yfinance"}:
+            return _Spec()
+        return None
+
+    service = ProviderActivationVerifierService(
+        env={
+            "SCANNER_LOCAL_UNIVERSE_PATH": str(tmp_path / "missing-universe.csv"),
+        },
+        spec_finder=_spec_finder,
+        today=date(2026, 6, 27),
+    )
+
+    payload = service.verify()
+
+    assert _row(payload, "akshare.cn_hk_market_data")["status"] == "unavailable"
+    assert _row(payload, "baostock.cn_ohlcv")["status"] == "available"
+    assert _row(payload, "yfinance.market_data")["status"] == "available"
+    assert "SECRET_TOKEN" not in _json_text(payload)
+
+
 def test_admin_activation_endpoint_requires_provider_read_capability() -> None:
     user_client = _client_for(_regular_user)
     user_response = user_client.get("/api/v1/admin/provider-activation-verifier")
@@ -199,6 +227,26 @@ def test_admin_activation_endpoint_requires_provider_read_capability() -> None:
     assert payload["capabilities"]
     for marker in FORBIDDEN_TEXT_MARKERS:
         assert marker.lower() not in admin_response.text.lower()
+
+
+def test_admin_activation_endpoint_uses_canonical_verifier_path() -> None:
+    admin_client = _client_for(_admin_user)
+    expected_payload = {
+        "contractVersion": "provider_activation_verifier_v1",
+        "metadata": {"readOnly": True},
+        "capabilities": [],
+    }
+
+    with patch.object(
+        ProviderActivationVerifierService,
+        "verify",
+        return_value=expected_payload,
+    ) as verify:
+        response = admin_client.get("/api/v1/admin/provider-activation-verifier")
+
+    assert response.status_code == 200
+    assert response.json() == expected_payload
+    assert verify.call_count == 1
 
 
 def test_provider_activation_verifier_cli_outputs_safe_json() -> None:
