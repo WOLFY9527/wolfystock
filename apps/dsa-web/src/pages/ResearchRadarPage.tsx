@@ -350,7 +350,10 @@ function ResearchRadarQueueOverview({
             <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(24rem,0.9fr)]">
               <div
                 data-testid="research-radar-candidate-ledger"
-                className="min-w-0 overflow-x-auto rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-panel)]"
+                role="region"
+                aria-label={locale === 'en' ? 'Research Radar candidate ledger horizontal scroll region' : '研究雷达候选台账横向滚动区域'}
+                tabIndex={0}
+                className="min-w-0 overflow-x-auto overscroll-x-contain rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-panel)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--wolfy-accent-focus)]"
               >
                 <table className="min-w-[760px] w-full border-collapse text-left text-sm">
                   <caption className="sr-only">
