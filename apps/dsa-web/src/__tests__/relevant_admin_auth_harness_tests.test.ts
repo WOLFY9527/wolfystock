@@ -4,7 +4,7 @@ import {
   createMockAuthStatus,
   fullAdminCapabilities,
 } from '../test-utils/adminAuthHarness';
-import { resolveAdminCapabilityFlags } from '../utils/adminCapabilities';
+import { canAccessAdminPath, resolveAdminCapabilityFlags } from '../utils/adminCapabilities';
 
 describe('admin auth browser harness payloads', () => {
   it('creates fake admin auth/status payloads with selected capability fields', () => {
@@ -41,5 +41,29 @@ describe('admin auth browser harness payloads', () => {
 
     expect(serialized).toContain('playwright-admin');
     expect(serialized).not.toMatch(/cookie|session_id|token|password|secret|api[_-]?key|webhook/i);
+  });
+
+  it('does not classify the reserved admin users activity segment as a user activity route', () => {
+    const userReadOnly = {
+      canReadUsers: true,
+      canReadUserActivity: false,
+      canReadUserPortfolio: false,
+      canWriteUserSecurity: false,
+      canReadCostObservability: false,
+      canReadOpsLogs: false,
+      canReadProviders: false,
+      canReadNotifications: false,
+      canReadSystemConfig: false,
+    };
+    const activityReadOnly = {
+      ...userReadOnly,
+      canReadUsers: false,
+      canReadUserActivity: true,
+    };
+
+    expect(canAccessAdminPath('/admin/users/activity', activityReadOnly)).toBe(false);
+    expect(canAccessAdminPath('/admin/users/activity', userReadOnly)).toBe(true);
+    expect(canAccessAdminPath('/admin/users/user-1/activity', activityReadOnly)).toBe(true);
+    expect(canAccessAdminPath('/admin/users/user-1', userReadOnly)).toBe(true);
   });
 });

@@ -944,7 +944,10 @@ def test_frontend_route_inventory_matches_admin_capability_map_and_wrapper_bound
         expected_flag = entry["capability_flag"]
         route_prefix = entry["path"].replace("/:userId", "").replace("/:runId", "")
         if entry["route_id"] == "admin.user_activity":
-            assert "pathname.endsWith('/activity') ? capabilityFlags.canReadUserActivity : capabilityFlags.canReadUsers" in capability_source
+            assert "const userRouteSuffix = pathname.slice('/admin/users'.length).replace(/^\\/+|\\/+$/g, '');" in capability_source
+            assert "segments.length >= 2 && segments[segments.length - 1] === 'activity'" in capability_source
+            assert "capabilityFlags.canReadUserActivity" in capability_source
+            assert "capabilityFlags.canReadUsers" in capability_source
         elif route_prefix in ADMIN_CAPABILITY_CASES:
             assert ADMIN_CAPABILITY_CASES[route_prefix] == expected_flag
             assert route_prefix in capability_source

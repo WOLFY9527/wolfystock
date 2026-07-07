@@ -100,7 +100,14 @@ export function canAccessAdminPath(pathname: string, flags: AdminCapabilityFlags
     return capabilityFlags.canReadCostObservability;
   }
   if (pathname === '/admin/users' || pathname.startsWith('/admin/users/')) {
-    return pathname.endsWith('/activity') ? capabilityFlags.canReadUserActivity : capabilityFlags.canReadUsers;
+    const userRouteSuffix = pathname.slice('/admin/users'.length).replace(/^\/+|\/+$/g, '');
+    if (!userRouteSuffix) {
+      return capabilityFlags.canReadUsers;
+    }
+    const segments = userRouteSuffix.split('/');
+    return segments.length >= 2 && segments[segments.length - 1] === 'activity'
+      ? capabilityFlags.canReadUserActivity
+      : capabilityFlags.canReadUsers;
   }
   return false;
 }

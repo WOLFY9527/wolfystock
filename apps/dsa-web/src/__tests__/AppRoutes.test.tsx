@@ -1630,6 +1630,40 @@ describe('AppContent route flows', () => {
     },
   );
 
+  it.each(['/admin/users/activity', '/zh/admin/users/activity', '/en/admin/users/activity'])(
+    'does not admit reserved admin users activity segment through the activity capability at %s',
+    async (path) => {
+      mockSignedInAdminWithCapabilities({ ...noCapabilities, canReadUserActivity: true });
+
+      renderAt(path);
+
+      expect(await screen.findByRole('heading', { name: /这个管理页面需要对应管理员能力|This admin surface requires an additional capability/ })).toBeInTheDocument();
+      expect(screen.queryByText('admin-users-page')).not.toBeInTheDocument();
+    },
+  );
+
+  it.each(['/admin/users/user-1/activity', '/zh/admin/users/user-1/activity', '/en/admin/users/user-1/activity'])(
+    'keeps concrete admin user activity routes admitted by the activity capability at %s',
+    async (path) => {
+      mockSignedInAdminWithCapabilities({ ...noCapabilities, canReadUserActivity: true });
+
+      renderAt(path);
+
+      await waitFor(() => expect(screen.getByText('admin-users-page')).toBeInTheDocument());
+    },
+  );
+
+  it.each(['/admin/users/activity', '/zh/admin/users/activity', '/en/admin/users/activity'])(
+    'treats reserved admin users activity segment as user governance with user-read capability at %s',
+    async (path) => {
+      mockSignedInAdminWithCapabilities({ ...noCapabilities, canReadUsers: true });
+
+      renderAt(path);
+
+      await waitFor(() => expect(screen.getByText('admin-users-page')).toBeInTheDocument());
+    },
+  );
+
   it('keeps scanner reachable for signed-in users', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
