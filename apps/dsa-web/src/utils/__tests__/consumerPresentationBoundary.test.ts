@@ -20,7 +20,7 @@ describe('consumerPresentationDataState', () => {
       {
         input: { status: 'available', freshness: 'stale', isStale: true, sourceAuthorityAllowed: true, scoreContributionAllowed: true },
         state: 'stale',
-        label: '已延迟',
+        label: '已过期',
       },
       {
         input: { status: 'missing', freshness: 'unavailable', providerDiagnostics: { raw_code: 'provider_timeout' } },

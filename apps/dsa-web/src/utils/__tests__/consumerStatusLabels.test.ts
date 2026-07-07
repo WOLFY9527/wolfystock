@@ -24,7 +24,7 @@ describe('consumerStatusLabels', () => {
     expect(getConsumerStatusLabel('failed', 'zh')).toBe('数据读取异常');
     expect(getConsumerStatusLabel('proxy', 'zh')).toBe('间接参考');
     expect(getConsumerStatusLabel('proxy-only', 'zh')).toBe('仅有间接参考，证据强度受限');
-    expect(getConsumerStatusLabel('mixed', 'zh')).toBe('状态不一致');
+    expect(getConsumerStatusLabel('mixed', 'zh')).toBe('部分证据可用');
     expect(getConsumerStatusLabel('lowConfidence', 'zh')).toBe('置信度较低');
     expect(getConsumerStatusLabel('low_confidence', 'zh')).toBe('置信度较低');
     expect(getConsumerStatusLabel('score-grade', 'zh')).toBe('评分等级');
@@ -32,9 +32,17 @@ describe('consumerStatusLabels', () => {
     expect(getConsumerStatusLabel('freshness=unavailable', 'zh')).toBe('数据新鲜度暂不可用');
     expect(getConsumerStatusLabel('freshness unavailable', 'zh')).toBe('数据新鲜度暂不可用');
     expect(getConsumerStatusLabel('insufficient_evidence', 'zh')).toBe('证据不足');
-    expect(getConsumerStatusLabel('no_data', 'zh')).toBe('暂无可用数据');
-    expect(getConsumerStatusLabel('empty', 'zh')).toBe('暂无可用数据');
+    expect(getConsumerStatusLabel('no_data', 'zh')).toBe('证据待补');
+    expect(getConsumerStatusLabel('empty', 'zh')).toBe('证据待补');
     expect(getConsumerStatusLabel('unknown', 'zh')).toBe('状态暂不明确');
+  });
+
+  it('routes state-token labels through the canonical zh/en vocabulary owner', () => {
+    expect(getConsumerStatusLabel('available', 'en')).toBe('Data available');
+    expect(getConsumerStatusLabel('partial', 'en')).toBe('Partial evidence available');
+    expect(getConsumerStatusLabel('blocked', 'en')).toBe('Analysis currently unavailable');
+    expect(getConsumerStatusLabel('refreshing', 'en')).toBe('Refreshing');
+    expect(getConsumerStatusLabel('score-grade', 'en')).toBe('Scoring tier');
   });
 
   it('normalizes camelCase, snake_case, and key=value tokens consistently', () => {
