@@ -585,6 +585,11 @@ function useSidebarNavView({
       to={to}
       end={key === 'system'}
       onClick={handleAdminNavigate}
+      onFocus={(event) => {
+        if (!isDrawer) {
+          event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'center' });
+        }
+      }}
       aria-label={label}
       className={({ isActive }) => cn(
         isDrawer
@@ -1027,7 +1032,12 @@ function useSidebarNavView({
       <div className="shell-header-brand">
         <BrandWordmark />
       </div>
-      <nav className="shell-header-links" aria-label={primaryNavLabel} data-testid={primaryNavTestId}>
+      <nav
+        className="shell-header-links"
+        aria-label={primaryNavLabel}
+        data-testid={primaryNavTestId}
+        tabIndex={showAdminPrimaryNav ? 0 : undefined}
+      >
         {primaryNavLinks}
         {moreAction}
       </nav>

@@ -8551,6 +8551,9 @@ html[data-theme-style='paper'] .shell-header-links {
   gap: 0.2rem;
   overflow-x: auto;
   overscroll-behavior-x: contain;
+  scroll-padding-inline: 0.75rem;
+  padding: 4px 0.75rem;
+  margin: -4px -0.75rem;
   scrollbar-width: none;
 }
 
