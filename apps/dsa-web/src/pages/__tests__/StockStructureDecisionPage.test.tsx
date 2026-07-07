@@ -93,22 +93,17 @@ const renderStockStructureEntryRoute = (path = '/zh/stock-structure') => render(
   </MemoryRouter>,
 );
 
-const cockpitStageIds = [
+const legacyStockPresentationIds = [
   'stock-cockpit-stage-quote',
   'stock-cockpit-stage-history-technical',
   'stock-cockpit-stage-earnings',
   'stock-cockpit-stage-options',
   'stock-cockpit-stage-evidence',
   'stock-cockpit-stage-next-steps',
+  'stock-detail-collapsed-evidence-boundary',
+  'stock-detail-collapsed-history-technical',
+  'stock-detail-collapsed-secondary-details',
 ] as const;
-
-function expectCockpitStageOrder(page: HTMLElement) {
-  const stages = cockpitStageIds.map((id) => within(page).getByTestId(id));
-  expect(stages.map((stage) => stage.getAttribute('data-cockpit-order'))).toEqual(['1', '2', '3', '4', '5', '6']);
-  for (let index = 0; index < stages.length - 1; index += 1) {
-    expect(stages[index].compareDocumentPosition(stages[index + 1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  }
-}
 
 const baseStructureDecision = () => ({
   schemaVersion: 'stock_structure_decision_api_v1',
@@ -697,17 +692,30 @@ describe('StockStructureDecisionPage', () => {
     );
 
     const page = await screen.findByTestId('stock-structure-decision-page');
-    expectCockpitStageOrder(page);
+    const productFlow = within(page).getByTestId('stock-workspace-product-flow');
+    expect(productFlow).toHaveAttribute(
+      'data-product-flow',
+      'symbol-current-observation-known-facts-price-path-evidence-quality-evidence-package-structure-risks-next-checks',
+    );
     expect(within(page).queryByTestId('observation-only-boundary')).not.toBeInTheDocument();
-    for (const stageId of cockpitStageIds) {
-      expect(within(page).getByTestId(stageId).className).toContain('min-w-0');
+    for (const legacyId of legacyStockPresentationIds) {
+      expect(within(page).queryByTestId(legacyId)).not.toBeInTheDocument();
     }
+    const knownFacts = await within(page).findByTestId('stock-known-facts-panel');
+    const evidenceWorkspace = await within(page).findByTestId('stock-evidence-workspace');
+    const evidencePackage = await within(page).findByTestId('stock-evidence-package-workspace');
+    const structureWorkspace = await within(page).findByTestId('stock-structure-interpretation-workspace');
+    const historyWorkspace = await within(page).findByTestId('stock-history-technical-workspace');
+    const catalystOptionsWorkspace = await within(page).findByTestId('stock-catalyst-options-workspace');
+    const structureEvidenceWorkspace = await within(page).findByTestId('stock-structure-evidence-workspace');
+    const nextChecksWorkspace = await within(page).findByTestId('stock-next-research-checks');
     const panel = await within(page).findByTestId('stock-research-packet-panel');
     const quotePanel = await within(page).findByTestId('stock-quote-boundary-panel');
     const historyPanel = await within(page).findByTestId('stock-history-readiness-panel');
     const catalystPanel = await within(page).findByTestId('stock-earnings-catalyst-readiness-panel');
-    const optionsStage = await within(page).findByTestId('stock-cockpit-stage-options');
+    const optionsSurface = await within(page).findByTestId('stock-options-structure-surface');
     const nextStepsPanel = await within(page).findByTestId('stock-missing-data-next-steps-panel');
+    const workflowSection = await within(page).findByTestId('stock-workflow-continuity');
     const workflow = await within(page).findByTestId('stock-research-workspace-flow');
 
     expect(getQuoteMock).toHaveBeenCalledWith('AAPL');
@@ -721,12 +729,15 @@ describe('StockStructureDecisionPage', () => {
     expect(within(workflow).getByTestId('research-workspace-link-backtest')).toHaveAttribute('href', expect.stringContaining('/zh/backtest?'));
     expect(workflow).toHaveTextContent('只有需要持续观察时，再加入观察列表。');
     expect(workflow).not.toHaveTextContent(/provider|cache|runtime|debug|scannerRunId|watchlistItemId|立即买入|立即卖出|下单|保证收益/i);
-    expect(within(page).getByTestId('stock-cockpit-stage-quote')).toHaveTextContent('安全基线');
-    expect(within(page).getByTestId('stock-cockpit-stage-history-technical')).toHaveTextContent('历史与指标就绪度');
-    expect(within(page).getByTestId('stock-cockpit-stage-earnings')).toHaveTextContent('先看就绪度');
-    expect(optionsStage).toHaveTextContent('期权就绪度');
-    expect(within(page).getByTestId('stock-cockpit-stage-evidence')).toHaveTextContent('研究证据就绪度');
-    expect(within(page).getByTestId('stock-cockpit-stage-next-steps')).toHaveTextContent('下一步缺什么');
+    expect(knownFacts).toHaveTextContent('标的身份与数据边界');
+    expect(knownFacts).toHaveTextContent('基础研究包');
+    expect(evidencePackage).toHaveTextContent('可复制的研究证据');
+    expect(workflowSection).toHaveTextContent('研究流转');
+    expect(historyWorkspace).toHaveTextContent('市场路径与技术证据');
+    expect(catalystOptionsWorkspace).toHaveTextContent('先看就绪度');
+    expect(optionsSurface).toHaveTextContent('专业结构指标');
+    expect(structureEvidenceWorkspace).toHaveTextContent('已知、未知与相互制约的证据');
+    expect(nextChecksWorkspace).toHaveTextContent('什么会改变当前解释');
     expect(quotePanel).toHaveTextContent('报价来源与新鲜度');
     expect(quotePanel).toHaveTextContent('报价可用');
     expect(quotePanel).toHaveTextContent('来源已确认');
@@ -783,10 +794,10 @@ describe('StockStructureDecisionPage', () => {
     expect(within(ledger).getByRole('columnheader', { name: '来源边界' })).toBeInTheDocument();
     const stockCoreChart = within(page).getByTestId('stock-history-core-chart');
     expect(within(page).getByTestId('stock-price-history-visual-block')).toContainElement(stockCoreChart);
-    expect(stockCoreChart.compareDocumentPosition(within(page).getByTestId('stock-cockpit-stage-quote')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(page).getByTestId('stock-detail-collapsed-evidence-boundary')).not.toHaveAttribute('open');
-    expect(within(page).getByTestId('stock-detail-collapsed-history-technical')).not.toHaveAttribute('open');
-    expect(within(page).getByTestId('stock-detail-collapsed-secondary-details')).not.toHaveAttribute('open');
+    expect(stockCoreChart.compareDocumentPosition(knownFacts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(knownFacts.compareDocumentPosition(evidencePackage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(evidenceWorkspace.compareDocumentPosition(workflowSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(workflowSection.compareDocumentPosition(structureWorkspace) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(stockCoreChart).toHaveAttribute('data-chart-kind', 'stock-history');
     expect(stockCoreChart).toHaveTextContent('价格趋势');
     expect(stockCoreChart).toHaveTextContent('成交量');
@@ -892,10 +903,9 @@ describe('StockStructureDecisionPage', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getByRole('heading', { level: 1, name: 'AAPL 研究工作区' })).toBeInTheDocument();
 
-    const detailBoundary = await within(page).findByTestId('stock-detail-collapsed-evidence-boundary');
-    fireEvent.click(within(detailBoundary).getByText('详细证据与数据边界'));
-
+    expect(within(page).queryByTestId('stock-detail-collapsed-evidence-boundary')).not.toBeInTheDocument();
     const registry = await within(page).findByTestId('single-stock-evidence-pack-registry');
+    expect(within(page).getByTestId('stock-evidence-package-workspace')).toContainElement(registry);
     const evidencePackHeading = within(registry).getByRole('heading', { level: 3, name: '个股证据包' });
     expect(evidencePackHeading.tagName).toBe('H3');
     expect(evidencePackHeading).toHaveClass('text-sm', 'font-semibold', 'text-[color:var(--wolfy-text-primary)]');
