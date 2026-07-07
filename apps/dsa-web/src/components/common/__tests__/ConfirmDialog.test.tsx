@@ -68,6 +68,60 @@ describe('ConfirmDialog', () => {
     expect(screen.queryByText('Delete position')).not.toBeInTheDocument();
   });
 
+  it('exposes modal dialog semantics and keeps keyboard focus inside', () => {
+    const opener = document.createElement('button');
+    opener.textContent = 'Open confirm dialog';
+    document.body.appendChild(opener);
+    opener.focus();
+
+    render(
+      <ConfirmDialog
+        isOpen
+        title="Delete position"
+        message="This cannot be undone."
+        confirmText="Delete"
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+
+    const dialog = screen.getByRole('dialog', { name: 'Delete position' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog).toHaveAccessibleDescription('This cannot be undone.');
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+
+    screen.getByRole('button', { name: 'Delete' }).focus();
+    act(() => {
+      fireEvent.keyDown(document, { key: 'Tab' });
+    });
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+
+    act(() => {
+      fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    });
+    expect(screen.getByRole('button', { name: 'Delete' })).toHaveFocus();
+
+    opener.remove();
+  });
+
+  it('focuses the typed confirmation field first when a confirmation phrase is required', () => {
+    render(
+      <ConfirmDialog
+        isOpen
+        title="Factory reset"
+        message="Type the phrase to continue."
+        confirmationPhrase="RESET"
+        confirmationValue=""
+        onConfirmationValueChange={vi.fn()}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+
+    expect(screen.getByLabelText('Confirm')).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeDisabled();
+  });
+
   it('uses the latest cancel handler for the Escape listener', () => {
     const initialCancel = vi.fn();
     const latestCancel = vi.fn();
@@ -97,5 +151,41 @@ describe('ConfirmDialog', () => {
 
     expect(initialCancel).not.toHaveBeenCalled();
     expect(latestCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns focus to the previous element when the dialog closes', () => {
+    const opener = document.createElement('button');
+    opener.textContent = 'Open confirm dialog';
+    document.body.appendChild(opener);
+    opener.focus();
+
+    const { rerender } = render(
+      <ConfirmDialog
+        isOpen
+        title="Delete position"
+        message="This cannot be undone."
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+
+    rerender(
+      <ConfirmDialog
+        isOpen={false}
+        title="Delete position"
+        message="This cannot be undone."
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(180);
+    });
+
+    expect(opener).toHaveFocus();
+    opener.remove();
   });
 });

@@ -14,6 +14,14 @@ const DRAWER_READY_DELAY_MS = 80;
 const DRAWER_WARMUP_INTERVAL_MS = 100;
 const DRAWER_WARMUP_WINDOW_MS = 500;
 const DRAWER_CLOSE_DELAY_MS = 190;
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
 
 interface DrawerProps {
   isOpen: boolean;
@@ -104,6 +112,17 @@ function forceDrawerReflow(
   void closeButton?.offsetHeight;
 }
 
+function getFocusableElements(container: HTMLElement | null): HTMLElement[] {
+  if (!container) {
+    return [];
+  }
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((element) => (
+    element.tabIndex >= 0
+    && element.getAttribute('aria-disabled') !== 'true'
+    && !element.closest('[aria-hidden="true"]')
+  ));
+}
+
 function incrementActiveDrawerCount() {
   activeDrawerCount += 1;
   return activeDrawerCount;
@@ -137,8 +156,11 @@ export const Drawer: React.FC<DrawerProps> = ({
   const closeTimerRef = useRef<number | null>(null);
   const panelRef = useRef<HTMLDialogElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const hasAppliedInitialFocusRef = useRef(false);
   const handleEscapeKey = useEffectEvent((event: KeyboardEvent) => {
     if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
       onClose();
     }
   });
@@ -149,6 +171,7 @@ export const Drawer: React.FC<DrawerProps> = ({
     clearTimeoutRef(closeTimerRef);
 
     if (!isOpen) {
+      hasAppliedInitialFocusRef.current = false;
       backdropGuardRef.current = false;
       clearTimeoutRef(backdropGuardTimerRef);
       clearAnimationFrameRef(openMountFrameRef);
@@ -239,20 +262,77 @@ export const Drawer: React.FC<DrawerProps> = ({
 
     const onKeyDown = (event: KeyboardEvent) => {
       handleEscapeKey(event);
+      if (event.key !== 'Tab') {
+        return;
+      }
+
+      const panel = panelRef.current;
+      const focusableElements = getFocusableElements(panel);
+      const fallbackFocusTarget = closeButtonRef.current ?? panel;
+      if (!panel || !fallbackFocusTarget) {
+        return;
+      }
+
+      if (focusableElements.length === 0) {
+        event.preventDefault();
+        fallbackFocusTarget.focus({ preventScroll: true });
+        return;
+      }
+
+      const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      if (activeElement && !panel.contains(activeElement)) {
+        const activeModal = activeElement.closest<HTMLElement>('[aria-modal="true"]');
+        if (activeModal && activeModal !== panel) {
+          return;
+        }
+        event.preventDefault();
+        focusableElements[0]?.focus({ preventScroll: true });
+        return;
+      }
+
+      const activeIndex = activeElement ? focusableElements.findIndex((element) => element === activeElement) : -1;
+      if (event.shiftKey) {
+        if (activeIndex <= 0) {
+          event.preventDefault();
+          focusableElements[focusableElements.length - 1]?.focus({ preventScroll: true });
+        }
+        return;
+      }
+
+      if (activeIndex === -1 || activeIndex >= focusableElements.length - 1) {
+        event.preventDefault();
+        focusableElements[0]?.focus({ preventScroll: true });
+      }
     };
 
-    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keydown', onKeyDown, true);
     if (incrementActiveDrawerCount() === 1) {
       document.body.style.overflow = 'hidden';
     }
 
     return () => {
-      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('keydown', onKeyDown, true);
       if (decrementActiveDrawerCount() === 0) {
         document.body.style.overflow = '';
       }
     };
   }, [state.isMounted]);
+
+  useEffect(() => {
+    if (!isOpen || !state.isInteractionReady || hasAppliedInitialFocusRef.current) {
+      return;
+    }
+
+    hasAppliedInitialFocusRef.current = true;
+    const panel = panelRef.current;
+    const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (panel && activeElement && panel.contains(activeElement)) {
+      return;
+    }
+
+    const focusTarget = closeButtonRef.current ?? getFocusableElements(panel)[0] ?? panel;
+    focusTarget?.focus({ preventScroll: true });
+  }, [isOpen, state.isInteractionReady]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -322,8 +402,10 @@ export const Drawer: React.FC<DrawerProps> = ({
           ref={panelRef}
           open
           aria-labelledby={titleId}
+          aria-modal="true"
           aria-hidden={shouldGuardA11y && !state.isInteractionReady ? true : undefined}
           aria-live={shouldGuardA11y ? (state.isInteractionReady ? 'polite' : 'off') : undefined}
+          tabIndex={-1}
           className={cn(
             'drawer__panel relative m-0 flex h-full max-h-none w-full max-w-none flex-col border-0 bg-[color:var(--surface)] p-0 transition-all duration-200 ease-out',
             borderClass,

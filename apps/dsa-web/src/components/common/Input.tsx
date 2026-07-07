@@ -83,7 +83,7 @@ export const Input = ({
     <button
       type="button"
       className={cn(
-        'input-surface__toggle inline-flex size-7 items-center justify-center rounded-full border border-transparent bg-transparent transition-all duration-200 focus:outline-none focus:ring-2',
+        'input-surface__toggle pointer-events-auto inline-flex size-7 items-center justify-center rounded-full border border-transparent bg-transparent transition-all duration-200 focus:outline-none focus:ring-2',
         visible
           ? 'text-foreground'
           : 'text-muted-text focus:ring-[var(--focus-ring)]'
@@ -95,8 +95,8 @@ export const Input = ({
         }
         onPasswordVisibleChange?.(nextVisible);
       }}
+      onMouseDown={(event) => event.preventDefault()}
       aria-label={visible ? t('common.hideContent') : t('common.showContent')}
-      tabIndex={-1}
       title={visible ? t('common.hide') : t('common.show')}
     >
       <EyeToggleIcon visible={visible} />

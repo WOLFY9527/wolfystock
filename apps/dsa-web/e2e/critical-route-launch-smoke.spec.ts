@@ -285,9 +285,25 @@ appTest.describe('public launch route smoke', () => {
 
     const drawer = page.getByRole('dialog', { name: '导航菜单' });
     await appExpect(drawer).toBeVisible();
+    await appExpect(drawer).toHaveAttribute('aria-modal', 'true');
     const activeLink = drawer.getByRole('link', { name: '市场总览' });
     await activeLink.focus();
     await appExpect(activeLink).toBeFocused();
+
+    const focusableInDrawer = drawer.locator(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    await focusableInDrawer.last().focus();
+    await page.keyboard.press('Tab');
+    await appExpect.poll(async () => (
+      await drawer.evaluate((element) => element.contains(document.activeElement))
+    )).toBe(true);
+
+    await focusableInDrawer.first().focus();
+    await page.keyboard.press('Shift+Tab');
+    await appExpect.poll(async () => (
+      await drawer.evaluate((element) => element.contains(document.activeElement))
+    )).toBe(true);
 
     await page.waitForTimeout(500);
     await page.getByTestId('drawer-backdrop').dispatchEvent('pointerdown');
