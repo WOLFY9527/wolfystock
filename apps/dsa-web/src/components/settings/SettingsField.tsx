@@ -227,7 +227,7 @@ export const SettingsField: React.FC<SettingsFieldProps> = ({
   const schema = item.schema;
   const isMultiValue = isMultiValueField(item);
   const title = getFieldTitle(language, item.key, item.key);
-  const description = getFieldDescription(language, item.key, schema?.description);
+  const description = getFieldDescription(language, item.key, schema?.description ?? undefined);
   const hasError = issues.some((issue) => issue.severity === 'error');
   const [isPasswordEditable, setIsPasswordEditable] = useState(false);
   const controlId = `setting-${item.key}`;

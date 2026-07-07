@@ -34,21 +34,21 @@ export interface SystemConfigOption {
 
 export interface SystemConfigFieldSchema {
   key: string;
-  title?: string;
-  description?: string;
+  title: string | null;
+  description: string | null;
   category: SystemConfigCategory;
   dataType: SystemConfigDataType;
   uiControl: SystemConfigUIControl;
   isSensitive: boolean;
   isRequired: boolean;
   isEditable: boolean;
-  defaultValue?: string | null;
+  defaultValue: string | null;
   options: Array<string | SystemConfigOption>;
   validation: Record<string, unknown>;
   displayOrder: number;
-  rawEditable?: boolean;
-  uiVisibility?: 'raw' | 'curated' | 'hidden' | 'advanced';
-  managedBy?: string | null;
+  rawEditable: boolean;
+  uiVisibility: 'raw' | 'curated' | 'hidden' | 'advanced';
+  managedBy: string | null;
 }
 
 export interface SystemConfigCategorySchema {
@@ -69,17 +69,17 @@ export interface SystemConfigItem {
   value: string;
   rawValueExists: boolean;
   isMasked: boolean;
-  rawEditable?: boolean;
-  uiVisibility?: 'raw' | 'curated' | 'hidden' | 'advanced';
-  managedBy?: string | null;
-  schema?: SystemConfigFieldSchema;
+  rawEditable: boolean;
+  uiVisibility: 'raw' | 'curated' | 'hidden' | 'advanced';
+  managedBy: string | null;
+  schema: SystemConfigFieldSchema | null;
 }
 
 export interface SystemConfigResponse {
   configVersion: string;
   maskToken: string;
   items: SystemConfigItem[];
-  updatedAt?: string;
+  updatedAt?: string | null;
 }
 
 export interface SystemConfigUpdateItem {

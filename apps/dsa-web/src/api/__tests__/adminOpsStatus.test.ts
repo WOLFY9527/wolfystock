@@ -1,4 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
+import type {
+  AdminBuildProvenance,
+  AdminOpsLaunchCockpit,
+  AdminOpsStatusResponse,
+  AdminOpsStatusSection,
+  AdminScannerUniverseReadinessResponse,
+} from '../adminOpsStatus';
 
 const { get, post } = vi.hoisted(() => ({
   get: vi.fn(),
@@ -25,8 +32,155 @@ describe('adminOpsStatusApi', () => {
         read_only: true,
         no_external_calls: true,
         live_enforcement: false,
+        runtime_log_sink_summary: {
+          available: true,
+          status: 'degraded',
+          service: 'runtime_log_sink',
+          configured: true,
+          last_checked_at: '2026-06-11T08:00:00',
+          message: 'File sink active with retention review pending',
+          label: 'bounded_admin_diagnostic',
+          read_only: true,
+          no_external_calls: true,
+          advisory_only: true,
+          live_enforcement: false,
+          enforcement_enabled: false,
+          runtime_behavior_changed: false,
+          consumer_visible: false,
+          provider_behavior_changed: false,
+          market_cache_behavior_changed: false,
+          delete_allowed: false,
+          data_sources: [],
+          summary: {},
+          limitations: ['retention_review_pending'],
+        },
+        retention_policy_status: {
+          available: true,
+          status: 'blocked',
+          service: 'retention_policy',
+          configured: false,
+          last_checked_at: null,
+          message: 'Retention policy requires operator review',
+          label: 'bounded_admin_diagnostic',
+          read_only: true,
+          no_external_calls: true,
+          advisory_only: true,
+          live_enforcement: false,
+          enforcement_enabled: false,
+          runtime_behavior_changed: false,
+          consumer_visible: false,
+          provider_behavior_changed: false,
+          market_cache_behavior_changed: false,
+          delete_allowed: false,
+          data_sources: [],
+          summary: {},
+          limitations: ['manual_review_required'],
+        },
+        execution_log_retention_risk: {
+          available: false,
+          status: 'unavailable',
+          service: 'execution_log_retention',
+          configured: false,
+          last_checked_at: null,
+          message: 'Execution log retention evidence unavailable',
+          label: 'bounded_admin_diagnostic',
+          read_only: true,
+          no_external_calls: true,
+          advisory_only: true,
+          live_enforcement: false,
+          enforcement_enabled: false,
+          runtime_behavior_changed: false,
+          consumer_visible: false,
+          provider_behavior_changed: false,
+          market_cache_behavior_changed: false,
+          delete_allowed: false,
+          data_sources: [],
+          summary: {},
+          limitations: ['missing_evidence'],
+        },
+        db_size_risk: {
+          available: true,
+          status: 'ok',
+          service: 'db_size',
+          configured: true,
+          last_checked_at: '2026-06-11T08:00:00',
+          message: 'Database size within bounded operator threshold',
+          label: 'bounded_admin_diagnostic',
+          read_only: true,
+          no_external_calls: true,
+          advisory_only: true,
+          live_enforcement: false,
+          enforcement_enabled: false,
+          runtime_behavior_changed: false,
+          consumer_visible: false,
+          provider_behavior_changed: false,
+          market_cache_behavior_changed: false,
+          delete_allowed: false,
+          data_sources: [],
+          summary: {},
+          limitations: [],
+        },
+        admin_role_assignment_status: {
+          available: true,
+          status: 'degraded',
+          service: 'admin_role_assignment',
+          configured: true,
+          last_checked_at: '2026-06-11T08:00:00',
+          message: 'Admin role assignment needs staged evidence review',
+          label: 'bounded_admin_diagnostic',
+          read_only: true,
+          no_external_calls: true,
+          advisory_only: true,
+          live_enforcement: false,
+          enforcement_enabled: false,
+          runtime_behavior_changed: false,
+          consumer_visible: false,
+          provider_behavior_changed: false,
+          market_cache_behavior_changed: false,
+          delete_allowed: false,
+          data_sources: [],
+          summary: {},
+          limitations: ['staged_evidence_pending'],
+        },
+        durable_task_backlog_status: {
+          available: true,
+          status: 'ok',
+          service: 'durable_task_backlog',
+          configured: true,
+          last_checked_at: '2026-06-11T08:00:00',
+          message: 'Durable task backlog within operator threshold',
+          label: 'bounded_admin_diagnostic',
+          read_only: true,
+          no_external_calls: true,
+          advisory_only: true,
+          live_enforcement: false,
+          enforcement_enabled: false,
+          runtime_behavior_changed: false,
+          consumer_visible: false,
+          provider_behavior_changed: false,
+          market_cache_behavior_changed: false,
+          delete_allowed: false,
+          data_sources: [],
+          summary: {},
+          limitations: [],
+        },
+        recommended_maintenance_actions: ['Review retention policy evidence'],
+        build_provenance: {
+          contract: 'admin_build_provenance_v1',
+          read_only: true,
+          no_external_calls: true,
+          runtime_behavior_changed: false,
+          consumer_visible: false,
+          backend_git_sha: '69068d1',
+          backend_branch: 'codex/t227-adminops-contract-alignment',
+          freshness_status: 'unknown',
+          reason_codes: ['frontend_build_not_checked'],
+        },
         launch_cockpit: {
           contract: 'admin_ops_launch_cockpit_v1',
+          status: 'blocked',
+          last_checked_at: '2026-06-11T08:00:00',
+          message: 'Public launch remains blocked pending operator evidence',
           read_only: true,
           advisory_only: true,
           no_external_calls: true,
@@ -115,6 +269,17 @@ describe('adminOpsStatusApi', () => {
     const result = await adminOpsStatusApi.getStatus();
 
     expect(get).toHaveBeenCalledWith('/api/v1/admin/ops/status');
+    expectTypeOf<AdminOpsStatusResponse['providerStatusSummary']>().toEqualTypeOf<AdminOpsStatusSection>();
+    expectTypeOf<AdminOpsStatusResponse['runtimeLogSinkSummary']>().toEqualTypeOf<AdminOpsStatusSection>();
+    expectTypeOf<AdminOpsStatusResponse['buildProvenance']>().toEqualTypeOf<AdminBuildProvenance>();
+    expectTypeOf<AdminOpsLaunchCockpit['status']>().toEqualTypeOf<string>();
+    expect(result.runtimeLogSinkSummary.status).toBe('degraded');
+    expect(result.retentionPolicyStatus.status).toBe('blocked');
+    expect(result.executionLogRetentionRisk.status).toBe('unavailable');
+    expect(result.recommendedMaintenanceActions).toEqual(['Review retention policy evidence']);
+    expect(result.buildProvenance.freshnessStatus).toBe('unknown');
+    expect(result.launchCockpit.status).toBe('blocked');
+    expect(result.launchCockpit.message).toBe('Public launch remains blocked pending operator evidence');
     expect(result.launchCockpit.publicLaunchApproved).toBe(false);
     expect(result.launchCockpit.publicLaunchNoGo).toBe(true);
     expect(result.launchCockpit.summaryCounts.domainCount).toBe(1);
@@ -152,7 +317,24 @@ describe('adminOpsStatusApi', () => {
         scanner_universe_status: 'stale',
         market: 'us',
         profile: 'us_premarket_v1',
+        universe_version: 'scanner-universe-us-20260620',
+        generated_at: '2026-06-20T00:01:00+00:00',
+        as_of: '2026-06-20',
+        source_class: 'local_bounded_us_parquet_universe',
+        symbol_count: 4,
         freshness_state: 'stale',
+        age: { days: 17 },
+        minimum_coverage_threshold: 100,
+        coverage_state: 'below_threshold',
+        usable: false,
+        blocking_reasons: ['scanner_universe_stale', 'below_minimum_coverage'],
+        downstream_impact: {
+          scanner: 'blocked',
+          research_radar: 'blocked',
+          backtest: 'degraded',
+        },
+        last_successful_activation: 'scanner-universe-us-20260601',
+        last_rejected_import_reason: 'below_minimum_coverage',
         universe_size: 4,
         affected_product_surfaces: ['Scanner', 'Research Radar', 'Backtest'],
         next_operator_action: 'Refresh the configured scanner universe through the approved operator workflow.',
@@ -192,7 +374,21 @@ describe('adminOpsStatusApi', () => {
     expect(post).toHaveBeenCalledWith('/api/v1/admin/ops/scanner-universe-refresh?market=us');
     expect(get).not.toHaveBeenCalledWith(expect.stringContaining('/api/v1/admin/scanner/universe-readiness'));
     expect(post).not.toHaveBeenCalledWith(expect.stringContaining('/api/v1/admin/scanner/universe-refresh'));
+    expectTypeOf<AdminScannerUniverseReadinessResponse['sourceClass']>().toEqualTypeOf<string | null>();
+    expectTypeOf<AdminScannerUniverseReadinessResponse['blockingReasons']>().toEqualTypeOf<string[]>();
     expect(readiness.market).toBe('us');
+    expect(readiness.generatedAt).toBe('2026-06-20T00:01:00+00:00');
+    expect(readiness.asOf).toBe('2026-06-20');
+    expect(readiness.sourceClass).toBe('local_bounded_us_parquet_universe');
+    expect(readiness.symbolCount).toBe(4);
+    expect(readiness.coverageState).toBe('below_threshold');
+    expect(readiness.blockingReasons).toEqual(['scanner_universe_stale', 'below_minimum_coverage']);
+    expect(readiness.downstreamImpact).toEqual({
+      scanner: 'blocked',
+      researchRadar: 'blocked',
+      backtest: 'degraded',
+    });
+    expect(readiness.lastRejectedImportReason).toBe('below_minimum_coverage');
     expect(readiness.affectedProductSurfaces).toEqual(['Scanner', 'Research Radar', 'Backtest']);
     expect(readiness.scannerUniverseReadiness.missingDataFamilies).toEqual(['historical_ohlcv', 'quote_snapshot']);
     expect(readiness.providerCallsEnabled).toBe(false);

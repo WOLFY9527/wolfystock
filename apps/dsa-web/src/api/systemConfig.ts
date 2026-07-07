@@ -131,6 +131,16 @@ function toSnakeFactoryResetPayload(payload: FactoryResetSystemRequest): Record<
   };
 }
 
+function backendDetailPayload(payload: unknown): unknown {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return payload;
+  }
+  const record = payload as { detail?: unknown };
+  return record.detail && typeof record.detail === 'object'
+    ? record.detail
+    : payload;
+}
+
 export const systemConfigApi = {
   async getConfig(includeSchema = true): Promise<SystemConfigResponse> {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/system/config', {
@@ -205,7 +215,7 @@ export const systemConfigApi = {
         const payloadData = (error as { response?: { data?: unknown } }).response?.data;
 
         if (status === 400) {
-          const validationError = toCamelCase<SystemConfigValidationErrorResponse>(payloadData ?? {});
+          const validationError = toCamelCase<SystemConfigValidationErrorResponse>(backendDetailPayload(payloadData) ?? {});
           throw new SystemConfigValidationError(
             parsed.message || validationError.message || '配置校验失败',
             validationError.issues || [],
@@ -214,7 +224,7 @@ export const systemConfigApi = {
         }
 
         if (status === 409) {
-          const conflict = toCamelCase<SystemConfigConflictResponse>(payloadData ?? {});
+          const conflict = toCamelCase<SystemConfigConflictResponse>(backendDetailPayload(payloadData) ?? {});
           throw new SystemConfigConflictError(
             parsed.message || conflict.message || '配置版本冲突',
             conflict.currentConfigVersion,
