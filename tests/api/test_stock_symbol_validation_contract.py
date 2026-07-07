@@ -151,3 +151,36 @@ def test_stock_validate_endpoint_sanitizes_lookup_dependency_failure(monkeypatch
     assert payload["stock_name"] is None
     assert service.calls == ["AAPL"]
     _assert_consumer_safe(payload)
+
+
+def test_stock_parse_import_json_success_path_remains_unchanged() -> None:
+    response = _client().post(
+        "/api/v1/stocks/parse-import",
+        json={"text": "600519 贵州茅台\n000001 平安银行"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["codes"] == ["600519", "000001"]
+    assert payload["items"][0] == {
+        "code": "600519",
+        "name": "贵州茅台",
+        "confidence": "medium",
+    }
+
+
+def test_stock_parse_import_malformed_json_returns_bounded_invalid_input_detail() -> None:
+    response = _client().post(
+        "/api/v1/stocks/parse-import",
+        data='{"text": "600519"',
+        headers={"content-type": "application/json"},
+    )
+
+    assert response.status_code == 400
+    payload = response.json()
+    detail = payload.get("detail", payload)
+    assert detail["error"] == "invalid_json"
+    assert detail["message"] == "JSON 解析失败"
+    serialized = json.dumps(payload, ensure_ascii=False)
+    for marker in ("Expecting", "line", "column", "char", "JSONDecodeError"):
+        assert marker not in serialized

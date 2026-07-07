@@ -16,6 +16,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Query, Depends, Body
 
 from api.deps import CurrentUser, get_current_user, get_database_manager
+from api.v1.errors import safe_api_error
 from api.v1.schemas.history import (
     HistoryListResponse,
     HistoryItem,
@@ -46,6 +47,7 @@ from src.utils.data_processing import normalize_model_used, extract_fundamental_
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+_HISTORY_INTERNAL_ERROR_MESSAGE = "History data is temporarily unavailable. Please retry later."
 _NUMBER_TOKEN_RE = re.compile(r"-?\d+(?:\.\d+)?")
 _HISTORY_DETAIL_SENSITIVE_KEY_MARKERS = (
     "rawresult",
@@ -141,6 +143,16 @@ def _resolve_owner_id(current_user: object | None) -> str | None:
 
 def _build_history_service(db_manager: DatabaseManager, current_user: CurrentUser | object | None) -> HistoryService:
     return HistoryService(db_manager, owner_id=_resolve_owner_id(current_user))
+
+
+def _history_internal_error(context: str, exc: Exception, *, error: str = "internal_error") -> HTTPException:
+    logger.error("%s: %s", context, exc, exc_info=True)
+    return safe_api_error(
+        status_code=500,
+        error=error,
+        message=_HISTORY_INTERNAL_ERROR_MESSAGE,
+        retryable=True,
+    )
 
 
 def _extract_number(value: Optional[object]) -> Optional[float]:
@@ -241,14 +253,7 @@ def get_history_list(
         )
         
     except Exception as e:
-        logger.error(f"查询历史列表失败: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "internal_error",
-                "message": f"查询历史列表失败: {str(e)}"
-            }
-        )
+        raise _history_internal_error("查询历史列表失败", e)
 
 
 @router.delete(
@@ -287,14 +292,7 @@ def delete_history_records(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"删除历史记录失败: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "internal_error",
-                "message": f"删除历史记录失败: {str(e)}"
-            }
-        )
+        raise _history_internal_error("删除历史记录失败", e)
 
 
 @router.get(
@@ -479,14 +477,7 @@ def get_history_detail(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"查询历史详情失败: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "internal_error",
-                "message": f"查询历史详情失败: {str(e)}"
-            }
-        )
+        raise _history_internal_error("查询历史详情失败", e)
 
 
 @router.get(
@@ -538,14 +529,7 @@ def get_history_news(
         )
 
     except Exception as e:
-        logger.error(f"查询新闻情报失败: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "internal_error",
-                "message": f"查询新闻情报失败: {str(e)}"
-            }
-        )
+        raise _history_internal_error("查询新闻情报失败", e)
 
 
 @router.get(
@@ -585,23 +569,13 @@ def get_history_markdown(
     try:
         markdown_content = service.get_markdown_report(record_id)
     except MarkdownReportGenerationError as e:
-        logger.error(f"Markdown report generation failed for {record_id}: {e.message}")
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "generation_failed",
-                "message": f"生成 Markdown 报告失败: {e.message}"
-            }
+        raise _history_internal_error(
+            f"Markdown report generation failed for {record_id}",
+            e,
+            error="generation_failed",
         )
     except Exception as e:
-        logger.error(f"获取 Markdown 报告失败: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "internal_error",
-                "message": f"获取 Markdown 报告失败: {str(e)}"
-            }
-        )
+        raise _history_internal_error("获取 Markdown 报告失败", e)
 
     if markdown_content is None:
         raise HTTPException(

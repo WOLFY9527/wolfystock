@@ -212,9 +212,11 @@ async def parse_import(request: Request) -> ExtractFromImageResponse:
             body = await request.json()
         except Exception as e:
             logger.warning("[parse_import] JSON parse failed: %s", e)
-            raise HTTPException(
+            raise safe_api_error(
                 status_code=400,
-                detail={"error": "invalid_json", "message": f"JSON 解析失败: {e}"},
+                error="invalid_json",
+                message="JSON 解析失败",
+                retryable=False,
             )
         text = body.get("text") if isinstance(body, dict) else None
         if not text or not isinstance(text, str):

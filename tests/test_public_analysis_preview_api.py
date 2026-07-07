@@ -108,6 +108,9 @@ class PublicAnalysisPreviewApiTestCase(unittest.TestCase):
             }
 
         with patch(
+            "api.v1.endpoints.analysis._raise_if_llm_model_unavailable",
+            return_value=None,
+        ), patch(
             "src.services.analysis_service.AnalysisService.analyze_stock",
             side_effect=_mock_analyze_stock,
         ) as analyze_stock:
@@ -134,9 +137,9 @@ class PublicAnalysisPreviewApiTestCase(unittest.TestCase):
         self.assertEqual(payload["stock_name"], "Apple")
         self.assertEqual(
             payload["report"]["summary"]["analysis_summary"],
-            "Observation only while evidence and risk boundaries are reviewed.",
+            "研究摘要：公开预览仅保留观察性信息，完整研究需登录后查看。",
         )
-        self.assertIsNone(payload["report"]["details"])
+        self.assertNotIn("details", payload["report"])
         self.assertEqual(payload["query_id"], captured_query_ids[0])
         public_values = "\n".join(
             str(value)
@@ -213,6 +216,9 @@ class PublicAnalysisPreviewApiTestCase(unittest.TestCase):
         other_client = TestClient(self.app)
         try:
             with patch(
+                "api.v1.endpoints.analysis._raise_if_llm_model_unavailable",
+                return_value=None,
+            ), patch(
                 "src.services.analysis_service.AnalysisService.analyze_stock",
                 side_effect=_mock_analyze_stock,
             ):
@@ -268,7 +274,19 @@ class PublicAnalysisPreviewApiTestCase(unittest.TestCase):
         payload = response.json()
         detail = payload.get("detail", payload)
         self.assertEqual(detail["error"], "llm_model_unavailable")
-        self.assertIn("配置的模型不可用", detail["message"])
+        self.assertEqual(detail["message"], "公开分析预览暂时不可用，请稍后重试。")
+        serialized = json.dumps(payload, ensure_ascii=False)
+        for forbidden in (
+            "openai/gpt-5-ghost",
+            "openai/gpt-4.1-free",
+            "openai/gpt-4o-free",
+            "configured_model",
+            "available_models",
+            "LITELLM_MODEL",
+            "LLM_CHANNELS",
+            "LITELLM_CONFIG",
+        ):
+            self.assertNotIn(forbidden, serialized)
 
 
 if __name__ == "__main__":

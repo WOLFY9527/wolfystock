@@ -32,6 +32,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from api.deps import CurrentUser, get_config_dep, get_current_user, get_current_user_id, get_system_config_service
+from api.v1.errors import safe_api_error
 from api.v1.schemas.analysis import (
     AnalyzeRequest,
     AnalysisPreviewRequest,
@@ -159,10 +160,28 @@ def _build_llm_model_unavailable_detail(config: Config) -> Optional[Dict[str, An
     }
 
 
-def _raise_if_llm_model_unavailable(config: Config) -> None:
+_ANALYSIS_UNAVAILABLE_MESSAGE = "AI analysis is temporarily unavailable. Please retry later."
+_PUBLIC_PREVIEW_UNAVAILABLE_MESSAGE = "公开分析预览暂时不可用，请稍后重试。"
+
+
+def _raise_if_llm_model_unavailable(
+    config: Config,
+    *,
+    public_message: str = _ANALYSIS_UNAVAILABLE_MESSAGE,
+) -> None:
     detail = _build_llm_model_unavailable_detail(config)
     if detail:
-        raise HTTPException(status_code=500, detail=detail)
+        logger.warning(
+            "LLM model unavailable: configured_model=%s available_models=%s",
+            detail.get("configured_model"),
+            detail.get("available_models"),
+        )
+        raise safe_api_error(
+            status_code=500,
+            error="llm_model_unavailable",
+            message=public_message,
+            retryable=True,
+        )
 
 
 def _is_obviously_invalid_analysis_input(text: str) -> bool:
@@ -508,7 +527,7 @@ def preview_analysis(
         http_request: Request,
         config: Config = Depends(get_config_dep),
 ) -> AnalysisPreviewResponse:
-    _raise_if_llm_model_unavailable(config)
+    _raise_if_llm_model_unavailable(config, public_message=_PUBLIC_PREVIEW_UNAVAILABLE_MESSAGE)
     stock_code = _resolve_and_normalize_input(request.stock_code)
     guest_session_id, is_new_guest_session = _resolve_guest_session_id(http_request)
     query_id = f"guest:{guest_session_id}:{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
@@ -612,7 +631,7 @@ def preview_analysis(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("生成公开分析预览失败: %s", e, exc_info=True)
+        logger.error("生成公开分析预览失败: %s", sanitize_message(str(e)), exc_info=True)
         execution_logs.add_execution_step(
             execution_id=execution_id,
             name="ai_analysis",
@@ -628,12 +647,11 @@ def preview_analysis(
             query_id=query_id,
             metadata={"preview_scope": "guest"},
         )
-        raise HTTPException(
+        raise safe_api_error(
             status_code=500,
-            detail={
-                "error": "internal_error",
-                "message": f"分析过程发生错误: {str(e)}",
-            },
+            error="internal_error",
+            message=_PUBLIC_PREVIEW_UNAVAILABLE_MESSAGE,
+            retryable=True,
         ) from e
 
 
