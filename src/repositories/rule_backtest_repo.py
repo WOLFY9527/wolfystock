@@ -4,9 +4,9 @@
 from __future__ import annotations
 
 import json
-from typing import Any, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
-from sqlalchemy import and_, delete, desc, func, select
+from sqlalchemy import and_, delete, desc, func, select, update
 
 from src.storage import (
     DatabaseManager,
@@ -29,6 +29,32 @@ class RuleBacktestRepository:
             session.add(run)
             session.commit()
             session.refresh(run)
+        if getattr(run, "id", None) is not None:
+            self.db.sync_phase_e_rule_backtest_shadow(int(run.id))
+        return run
+
+    def save_run_with_trades(
+        self,
+        run: RuleBacktestRun,
+        *,
+        trade_factory: Callable[[int], List[RuleBacktestTrade]],
+        summary_factory: Optional[Callable[[RuleBacktestRun], str]] = None,
+    ) -> RuleBacktestRun:
+        run.owner_id = self.db.require_user_id(getattr(run, "owner_id", None))
+        with self.db.get_session() as session:
+            try:
+                session.add(run)
+                session.flush()
+                if summary_factory is not None:
+                    run.summary_json = summary_factory(run)
+                trades = trade_factory(int(run.id))
+                if trades:
+                    session.add_all(trades)
+                session.commit()
+                session.refresh(run)
+            except Exception:
+                session.rollback()
+                raise
         if getattr(run, "id", None) is not None:
             self.db.sync_phase_e_rule_backtest_shadow(int(run.id))
         return run
@@ -56,6 +82,135 @@ class RuleBacktestRepository:
             session.refresh(row)
         self.db.sync_phase_e_rule_backtest_shadow(int(run_id))
         return row
+
+    def update_run_if_status(
+        self,
+        run_id: int,
+        *,
+        allowed_statuses: set[str] | frozenset[str],
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+        **fields: Any,
+    ) -> Optional[RuleBacktestRun]:
+        normalized_statuses = {
+            str(status or "").strip().lower()
+            for status in allowed_statuses
+            if str(status or "").strip()
+        }
+        if not normalized_statuses:
+            return None
+        with self.db.get_session() as session:
+            conditions = [
+                RuleBacktestRun.id == int(run_id),
+                RuleBacktestRun.status.in_(sorted(normalized_statuses)),
+            ]
+            if not include_all_owners:
+                conditions.append(RuleBacktestRun.owner_id == self.db.require_user_id(owner_id))
+            try:
+                result = session.execute(
+                    update(RuleBacktestRun)
+                    .where(and_(*conditions))
+                    .values(**fields)
+                    .execution_options(synchronize_session=False)
+                )
+                if int(result.rowcount or 0) != 1:
+                    session.rollback()
+                    return None
+                session.commit()
+                row = session.execute(
+                    select(RuleBacktestRun)
+                    .where(RuleBacktestRun.id == int(run_id))
+                    .limit(1)
+                ).scalar_one_or_none()
+            except Exception:
+                session.rollback()
+                raise
+        self.db.sync_phase_e_rule_backtest_shadow(int(run_id))
+        return row
+
+    def replace_run_result_with_trades(
+        self,
+        run_id: int,
+        *,
+        allowed_statuses: set[str] | frozenset[str],
+        trade_factory: Callable[[int], List[RuleBacktestTrade]],
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+        **fields: Any,
+    ) -> Optional[RuleBacktestRun]:
+        normalized_statuses = {
+            str(status or "").strip().lower()
+            for status in allowed_statuses
+            if str(status or "").strip()
+        }
+        if not normalized_statuses:
+            return None
+        with self.db.get_session() as session:
+            conditions = [
+                RuleBacktestRun.id == int(run_id),
+                RuleBacktestRun.status.in_(sorted(normalized_statuses)),
+            ]
+            if not include_all_owners:
+                conditions.append(RuleBacktestRun.owner_id == self.db.require_user_id(owner_id))
+            try:
+                result = session.execute(
+                    update(RuleBacktestRun)
+                    .where(and_(*conditions))
+                    .values(**fields)
+                    .execution_options(synchronize_session=False)
+                )
+                if int(result.rowcount or 0) != 1:
+                    session.rollback()
+                    return None
+                session.execute(
+                    delete(RuleBacktestTrade)
+                    .where(RuleBacktestTrade.run_id == int(run_id))
+                )
+                trades = trade_factory(int(run_id))
+                if trades:
+                    session.add_all(trades)
+                session.commit()
+                row = session.execute(
+                    select(RuleBacktestRun)
+                    .where(RuleBacktestRun.id == int(run_id))
+                    .limit(1)
+                ).scalar_one_or_none()
+            except Exception:
+                session.rollback()
+                raise
+        self.db.sync_phase_e_rule_backtest_shadow(int(run_id))
+        return row
+
+    def find_active_runs(
+        self,
+        *,
+        code: str,
+        strategy_hash: str,
+        statuses: set[str] | frozenset[str],
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> List[RuleBacktestRun]:
+        normalized_statuses = {
+            str(status or "").strip().lower()
+            for status in statuses
+            if str(status or "").strip()
+        }
+        if not normalized_statuses:
+            return []
+        with self.db.get_session() as session:
+            conditions = [
+                RuleBacktestRun.code == str(code or "").strip(),
+                RuleBacktestRun.strategy_hash == str(strategy_hash or "").strip(),
+                RuleBacktestRun.status.in_(sorted(normalized_statuses)),
+            ]
+            if not include_all_owners:
+                conditions.append(RuleBacktestRun.owner_id == self.db.require_user_id(owner_id))
+            rows = session.execute(
+                select(RuleBacktestRun)
+                .where(and_(*conditions))
+                .order_by(desc(RuleBacktestRun.run_at))
+            ).scalars().all()
+            return list(rows)
 
     def save_trades(self, trades: List[RuleBacktestTrade]) -> int:
         if not trades:

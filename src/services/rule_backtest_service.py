@@ -9,6 +9,7 @@ import json
 import logging
 import random
 import re
+import threading
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -66,6 +67,8 @@ _UNSET = object()
 _CONFIRMATION_REQUIRED_ERROR = "请先确认解析结果后再运行规则回测。"
 TERMINAL_RULE_RUN_STATUSES = frozenset({"completed", "failed", "cancelled"})
 CANCELLABLE_RULE_RUN_STATUSES = frozenset({"queued", "parsing", "running", "summarizing"})
+SUBMITTED_RULE_RUN_CLAIM_STATUSES = frozenset({"queued", "parsing"})
+RULE_BACKTEST_STUCK_AFTER_SECONDS = 6 * 60 * 60
 DEFAULT_RULE_BACKTEST_UNIVERSE_MAX_SYMBOLS = 500
 
 BENCHMARK_MODE_AUTO = "auto"
@@ -580,6 +583,8 @@ class _IndicatorStrategySpecPayload:
 class RuleBacktestService:
     """Orchestrate parsing, deterministic execution, persistence, and async submissions."""
 
+    _submission_lock = threading.Lock()
+
     def __init__(
         self,
         db_manager: Optional[DatabaseManager] = None,
@@ -728,89 +733,88 @@ class RuleBacktestService:
         submitted_at = datetime.now()
         initial_status = "queued" if parsed is not None else "parsing"
         initial_status_message = "策略已提交，等待开始执行。" if parsed is not None else "正在解析策略文本。"
+        execution_model_payload = self._build_execution_model_payload(
+            timeframe=(parsed.timeframe if parsed is not None else "daily"),
+            fee_bps=fee_bps,
+            slippage_bps=slippage_bps,
+            parsed_strategy=parsed,
+        )
+        request_payload = self._build_request_payload(
+            start_date=normalized_start_date,
+            end_date=normalized_end_date,
+            lookback_bars=lookback_bars,
+            initial_capital=initial_capital,
+            fee_bps=fee_bps,
+            slippage_bps=slippage_bps,
+            benchmark_mode=benchmark_mode,
+            benchmark_code=benchmark_code,
+            confirmed=confirmed,
+            execution_model=execution_model_payload,
+            robustness_config=normalized_robustness_config,
+        )
+        strategy_hash = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
         summary = self._update_summary_payload(
             {},
-            request_payload=self._build_request_payload(
-                start_date=normalized_start_date,
-                end_date=normalized_end_date,
-                lookback_bars=lookback_bars,
-                initial_capital=initial_capital,
-                fee_bps=fee_bps,
-                slippage_bps=slippage_bps,
-                benchmark_mode=benchmark_mode,
-                benchmark_code=benchmark_code,
-                confirmed=confirmed,
-                execution_model=self._build_execution_model_payload(
-                    timeframe=(parsed.timeframe if parsed is not None else "daily"),
-                    fee_bps=fee_bps,
-                    slippage_bps=slippage_bps,
-                    parsed_strategy=parsed,
-                ),
-                robustness_config=normalized_robustness_config,
-            ),
+            request_payload=request_payload,
             execution_assumptions=self._build_execution_assumptions_payload(
-                execution_model=self._build_execution_model_payload(
-                    timeframe=(parsed.timeframe if parsed is not None else "daily"),
-                    fee_bps=fee_bps,
-                    slippage_bps=slippage_bps,
-                    parsed_strategy=parsed,
-                ),
+                execution_model=execution_model_payload,
             ),
-            execution_model=self._build_execution_model_payload(
-                timeframe=(parsed.timeframe if parsed is not None else "daily"),
-                fee_bps=fee_bps,
-                slippage_bps=slippage_bps,
-                parsed_strategy=parsed,
-            ),
+            execution_model=execution_model_payload,
             parsed_strategy=parsed if parsed is not None else _UNSET,
             status=initial_status,
             status_message=initial_status_message,
             at=submitted_at,
         )
 
-        run = RuleBacktestRun(
-            owner_id=self.db.require_user_id(self.owner_id),
-            code=normalized_code,
-            strategy_text=raw_text,
-            parsed_strategy_json=self._serialize_json(parsed.to_dict() if parsed is not None else {}),
-            strategy_hash=hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
-            timeframe=parsed.timeframe if parsed is not None else "daily",
-            lookback_bars=int(lookback_bars),
-            initial_capital=float(initial_capital),
-            fee_bps=float(fee_bps),
-            parsed_confidence=(parsed.confidence if parsed is not None else None),
-            needs_confirmation=bool(parsed.needs_confirmation) if parsed is not None else False,
-            warnings_json=self._serialize_json(parsed.ambiguities if parsed is not None else []),
-            run_at=submitted_at,
-            completed_at=None,
-            status=initial_status,
-            no_result_reason=None,
-            no_result_message=None,
-            trade_count=0,
-            win_count=0,
-            loss_count=0,
-            total_return_pct=None,
-            win_rate_pct=None,
-            avg_trade_return_pct=None,
-            max_drawdown_pct=None,
-            avg_holding_days=None,
-            final_equity=None,
-            summary_json=self._serialize_json(summary),
-            ai_summary=None,
-            equity_curve_json=self._serialize_json([]),
-        )
-        run = self.repo.save_run(run)
+        with self._submission_lock:
+            duplicate = self._find_active_duplicate_submission(
+                code=normalized_code,
+                strategy_hash=strategy_hash,
+                request_payload=request_payload,
+            )
+            if duplicate is not None:
+                return self._run_row_to_dict(duplicate, include_trades=False)
+
+            run = RuleBacktestRun(
+                owner_id=self.db.require_user_id(self.owner_id),
+                code=normalized_code,
+                strategy_text=raw_text,
+                parsed_strategy_json=self._serialize_json(parsed.to_dict() if parsed is not None else {}),
+                strategy_hash=strategy_hash,
+                timeframe=parsed.timeframe if parsed is not None else "daily",
+                lookback_bars=int(lookback_bars),
+                initial_capital=float(initial_capital),
+                fee_bps=float(fee_bps),
+                parsed_confidence=(parsed.confidence if parsed is not None else None),
+                needs_confirmation=bool(parsed.needs_confirmation) if parsed is not None else False,
+                warnings_json=self._serialize_json(parsed.ambiguities if parsed is not None else []),
+                run_at=submitted_at,
+                completed_at=None,
+                status=initial_status,
+                no_result_reason=None,
+                no_result_message=None,
+                trade_count=0,
+                win_count=0,
+                loss_count=0,
+                total_return_pct=None,
+                win_rate_pct=None,
+                avg_trade_return_pct=None,
+                max_drawdown_pct=None,
+                avg_holding_days=None,
+                final_equity=None,
+                summary_json=self._serialize_json(summary),
+                ai_summary=None,
+                equity_curve_json=self._serialize_json([]),
+            )
+            run = self.repo.save_run(run)
         return self._run_row_to_dict(run, include_trades=False)
 
     def process_submitted_run(self, run_id: int) -> None:
         """Continue a submitted run in the background."""
 
-        row = self.repo.get_run(run_id, **self._owner_kwargs())
+        row = self._claim_submitted_run_for_processing(run_id)
         if row is None:
-            logger.warning("Rule backtest submission %s no longer exists.", run_id)
-            return
-        if self._is_run_cancelled_status(row.status):
-            logger.info("Rule backtest submission %s was cancelled before processing started.", run_id)
+            logger.info("Rule backtest submission %s is not claimable for processing.", run_id)
             return
 
         request_payload = self._extract_request_payload(row.summary_json)
@@ -830,7 +834,6 @@ class RuleBacktestService:
             raw_text = str(row.strategy_text or "").strip()
             parsed_strategy = self._load_parsed_strategy(row.parsed_strategy_json, raw_text)
             if parsed_strategy is None:
-                self._update_run_state(run_id, status="parsing", status_message="正在解析策略文本。")
                 if self._should_stop_run_processing(run_id):
                     logger.info("Rule backtest submission %s was cancelled during parsing stage.", run_id)
                     return
@@ -841,9 +844,9 @@ class RuleBacktestService:
                     return
                 self._update_run_state(
                     run_id,
-                    status="queued",
+                    status="running",
                     parsed_strategy=parsed_strategy,
-                    status_message="策略解析完成，等待开始执行。",
+                    status_message="策略解析完成，正在执行规则回测。",
                 )
 
             if parsed_strategy.needs_confirmation and not request_payload["confirmed"]:
@@ -857,7 +860,8 @@ class RuleBacktestService:
             if self._should_stop_run_processing(run_id):
                 logger.info("Rule backtest submission %s was cancelled before execution.", run_id)
                 return
-            self._update_run_state(run_id, status="running", parsed_strategy=parsed_strategy, status_message="正在执行规则回测。")
+            if self._latest_persisted_status_history_status(run_id) != "running":
+                self._update_run_state(run_id, status="running", parsed_strategy=parsed_strategy, status_message="正在执行规则回测。")
             result = self._execute_rule_backtest(
                 code=row.code,
                 parsed=parsed_strategy,
@@ -913,6 +917,91 @@ class RuleBacktestService:
                 no_result_message=f"规则回测执行失败：{exc}",
             )
 
+    @staticmethod
+    def _canonical_submission_request(payload: Dict[str, Any]) -> str:
+        return json.dumps(payload or {}, ensure_ascii=False, sort_keys=True, default=str)
+
+    def _find_active_duplicate_submission(
+        self,
+        *,
+        code: str,
+        strategy_hash: str,
+        request_payload: Dict[str, Any],
+    ) -> Optional[RuleBacktestRun]:
+        requested_identity = self._canonical_submission_request(request_payload)
+        candidates = self.repo.find_active_runs(
+            code=code,
+            strategy_hash=strategy_hash,
+            statuses=CANCELLABLE_RULE_RUN_STATUSES,
+            **self._owner_kwargs(),
+        )
+        for row in candidates:
+            summary = self._load_summary_payload(row.summary_json)
+            existing_request = summary.get("request") if isinstance(summary.get("request"), dict) else {}
+            if self._canonical_submission_request(existing_request) == requested_identity:
+                return row
+        return None
+
+    def _claim_submitted_run_for_processing(self, run_id: int) -> Optional[RuleBacktestRun]:
+        row = self.repo.get_run(run_id, **self._owner_kwargs())
+        if row is None:
+            return None
+        normalized_status = self._normalize_run_status(row.status)
+        if normalized_status not in SUBMITTED_RULE_RUN_CLAIM_STATUSES:
+            return None
+        return self.repo.update_run_if_status(
+            run_id,
+            allowed_statuses=SUBMITTED_RULE_RUN_CLAIM_STATUSES,
+            status="running",
+            **self._owner_kwargs(),
+        )
+
+    def _latest_persisted_status_history_status(self, run_id: int) -> Optional[str]:
+        row = self.repo.get_run(run_id, **self._owner_kwargs())
+        if row is None:
+            return None
+        summary = self._load_summary_payload(row.summary_json)
+        history = list(summary.get("status_history") or [])
+        if not history:
+            return None
+        return self._normalize_run_status((history[-1] or {}).get("status"))
+
+    def _classify_stuck_run_if_needed(self, row: RuleBacktestRun) -> RuleBacktestRun:
+        normalized_status = self._normalize_run_status(row.status)
+        if normalized_status in TERMINAL_RULE_RUN_STATUSES:
+            return row
+        summary = self._load_summary_payload(row.summary_json)
+        transition_at = self._latest_run_transition_at(row=row, summary=summary)
+        if transition_at is None:
+            return row
+        age_seconds = (datetime.now() - transition_at).total_seconds()
+        if age_seconds < RULE_BACKTEST_STUCK_AFTER_SECONDS:
+            return row
+        self._mark_run_failed(
+            int(row.id),
+            no_result_reason="interrupted_runtime",
+            no_result_message="规则回测运行时已中断，未发现可安全恢复的执行所有者。",
+        )
+        return self.repo.get_run(int(row.id), **self._owner_kwargs()) or row
+
+    @classmethod
+    def _latest_run_transition_at(
+        cls,
+        *,
+        row: RuleBacktestRun,
+        summary: Dict[str, Any],
+    ) -> Optional[datetime]:
+        latest: Optional[datetime] = None
+        for item in list(summary.get("status_history") or []):
+            if not isinstance(item, dict):
+                continue
+            item_at = cls._parse_status_history_timestamp(item.get("at"))
+            if item_at is not None and (latest is None or item_at > latest):
+                latest = item_at
+        if latest is not None:
+            return latest
+        return row.run_at
+
     def list_runs(self, *, code: Optional[str] = None, page: int = 1, limit: int = 20) -> Dict[str, Any]:
         offset = max(page - 1, 0) * limit
         rows, total = self.repo.get_runs_paginated(
@@ -921,6 +1010,7 @@ class RuleBacktestService:
             limit=limit,
             **self._owner_kwargs(),
         )
+        rows = [self._classify_stuck_run_if_needed(row) for row in rows]
         trade_run_ids = self.repo.get_trade_run_ids([int(row.id) for row in rows if getattr(row, "id", None) is not None])
         return {
             "total": total,
@@ -940,6 +1030,7 @@ class RuleBacktestService:
         row = self.repo.get_run(run_id, **self._owner_kwargs())
         if row is None:
             return None
+        row = self._classify_stuck_run_if_needed(row)
         return self._run_row_to_dict(row, include_trades=True)
 
     def compare_runs(self, run_ids: List[int]) -> Dict[str, Any]:
@@ -959,6 +1050,7 @@ class RuleBacktestService:
                 missing_run_ids.append(int(run_id))
                 continue
 
+            row = self._classify_stuck_run_if_needed(row)
             resolved_run_ids.append(int(run_id))
             run_payload = self._run_row_to_dict(row, include_trades=False)
             normalized_status = self._normalize_run_status(run_payload.get("status"))
@@ -1036,6 +1128,7 @@ class RuleBacktestService:
         row = self.repo.get_run(run_id, **self._owner_kwargs())
         if row is None:
             return None
+        row = self._classify_stuck_run_if_needed(row)
         summary = self._load_summary_payload(row.summary_json)
         trade_run_ids = self.repo.get_trade_run_ids([int(row.id)])
         artifact_availability = self._resolve_artifact_availability_payload(
@@ -4222,6 +4315,70 @@ class RuleBacktestService:
             warnings=parsed.ambiguities,
         )
 
+    def _build_rule_backtest_trade_rows(self, *, run_id: int, code: str, result: Any) -> List[RuleBacktestTrade]:
+        return [
+            RuleBacktestTrade(
+                run_id=run_id,
+                trade_index=index,
+                code=code,
+                entry_date=trade.entry_date,
+                exit_date=trade.exit_date,
+                entry_price=trade.entry_price,
+                exit_price=trade.exit_price,
+                entry_signal=trade.entry_signal,
+                exit_signal=trade.exit_signal,
+                return_pct=trade.return_pct,
+                holding_days=trade.holding_bars,
+                entry_rule_json=self._serialize_json(
+                    {
+                        "rule": trade.entry_rule_json,
+                        "signal_date": trade.entry_signal_date.isoformat(),
+                        "trigger": trade.entry_trigger,
+                        "indicators": trade.entry_indicators,
+                        "signal_price_basis": trade.signal_price_basis,
+                        "fill_basis": trade.entry_fill_basis,
+                        "reason": trade.to_dict().get("entry_reason"),
+                    }
+                ),
+                exit_rule_json=self._serialize_json(
+                    {
+                        "rule": trade.exit_rule_json,
+                        "signal_date": trade.exit_signal_date.isoformat(),
+                        "trigger": trade.exit_trigger,
+                        "indicators": trade.exit_indicators,
+                        "signal_price_basis": trade.signal_price_basis,
+                        "fill_basis": trade.exit_fill_basis,
+                        "reason": trade.to_dict().get("exit_reason"),
+                    }
+                ),
+                notes=self._serialize_json(
+                    {
+                        "entry_fill_basis": trade.entry_fill_basis,
+                        "exit_fill_basis": trade.exit_fill_basis,
+                        "signal_price_basis": trade.signal_price_basis,
+                        "price_basis": trade.price_basis,
+                        "fee_bps": trade.fee_bps,
+                        "slippage_bps": trade.slippage_bps,
+                        "entry_fee_amount": trade.entry_fee_amount,
+                        "exit_fee_amount": trade.exit_fee_amount,
+                        "entry_slippage_amount": trade.entry_slippage_amount,
+                        "exit_slippage_amount": trade.exit_slippage_amount,
+                        "side": trade.side,
+                        "quantity": trade.to_dict().get("quantity"),
+                        "gross_pnl": trade.to_dict().get("gross_pnl"),
+                        "net_pnl": trade.to_dict().get("net_pnl"),
+                        "fees": trade.to_dict().get("fees"),
+                        "slippage": trade.to_dict().get("slippage"),
+                        "signal_reason": trade.to_dict().get("signal_reason"),
+                        "holding_bars": trade.holding_bars,
+                        "holding_calendar_days": trade.holding_calendar_days,
+                        "notes": trade.notes,
+                    }
+                ),
+            )
+            for index, trade in enumerate(result.trades)
+        ]
+
     def _store_result(
         self,
         result,
@@ -4334,6 +4491,34 @@ class RuleBacktestService:
             at=run_at,
         )
 
+        def _with_research_artifact(
+            final_summary: Dict[str, Any],
+            *,
+            run_id: int,
+            completed_at: Optional[Any],
+        ) -> Dict[str, Any]:
+            resolved_summary = dict(final_summary or {})
+            research_artifact, research_artifact_availability = self._build_backtest_research_artifact_payload(
+                run_id=run_id,
+                code=code,
+                strategy_hash=strategy_hash,
+                parsed_strategy=result.parsed_strategy.to_dict(),
+                status=stored_status,
+                no_result_reason=result.no_result_reason,
+                no_result_message=result.no_result_message,
+                request_payload=resolved_summary.get("request") if isinstance(resolved_summary, dict) else {},
+                metrics=dict(result.metrics or {}),
+                data_quality=data_quality_payload,
+                data_sufficiency=data_sufficiency_payload,
+                benchmark_summary=dict(comparison_payload.get("benchmark_summary") or {}),
+                execution_model=execution_model_payload,
+                execution_assumptions=execution_assumptions_payload,
+                completed_at=completed_at,
+            )
+            resolved_summary["research_artifact"] = research_artifact
+            resolved_summary["research_artifact_availability"] = research_artifact_availability
+            return resolved_summary
+
         if existing_run_id is None:
             run = RuleBacktestRun(
                 owner_id=self.db.require_user_id(self.owner_id),
@@ -4366,11 +4551,28 @@ class RuleBacktestService:
                 ai_summary=ai_summary,
                 equity_curve_json=self._serialize_json(equity_payload),
             )
-            run = self.repo.save_run(run)
+            run = self.repo.save_run_with_trades(
+                run,
+                trade_factory=lambda run_id: self._build_rule_backtest_trade_rows(
+                    run_id=run_id,
+                    code=code,
+                    result=result,
+                ),
+                summary_factory=lambda persisted_run: self._serialize_json(
+                    _with_research_artifact(
+                        summary_patch,
+                        run_id=int(persisted_run.id),
+                        completed_at=persisted_run.completed_at,
+                    )
+                ),
+            )
+            final_summary = self._load_summary_payload(run.summary_json)
         else:
             existing = self.repo.get_run(existing_run_id, **self._owner_kwargs())
+            if existing is None:
+                raise ValueError(f"Run {existing_run_id} not found.")
             merged_summary = self._update_summary_payload(
-                self._load_summary_payload(existing.summary_json if existing is not None else None),
+                self._load_summary_payload(existing.summary_json),
                 request_payload=summary_patch.get("request"),
                 metrics=result.metrics,
                 parsed_strategy=result.parsed_strategy,
@@ -4391,8 +4593,19 @@ class RuleBacktestService:
                 status_message=status_message,
                 at=run_at,
             )
-            run = self.repo.update_run(
+            final_summary = _with_research_artifact(
+                merged_summary,
+                run_id=int(existing_run_id),
+                completed_at=run_at,
+            )
+            run = self.repo.replace_run_result_with_trades(
                 existing_run_id,
+                allowed_statuses=frozenset({"running", "summarizing"}),
+                trade_factory=lambda run_id: self._build_rule_backtest_trade_rows(
+                    run_id=run_id,
+                    code=code,
+                    result=result,
+                ),
                 **self._owner_kwargs(),
                 parsed_strategy_json=self._serialize_json(result.parsed_strategy.to_dict()),
                 strategy_hash=strategy_hash,
@@ -4416,106 +4629,15 @@ class RuleBacktestService:
                 max_drawdown_pct=result.metrics.get("max_drawdown_pct"),
                 avg_holding_days=self._resolve_avg_holding_days(result.metrics),
                 final_equity=result.metrics.get("final_equity"),
-                summary_json=self._serialize_json(merged_summary),
+                summary_json=self._serialize_json(final_summary),
                 ai_summary=ai_summary,
                 equity_curve_json=self._serialize_json(equity_payload),
             )
             if run is None:
-                raise ValueError(f"Run {existing_run_id} not found.")
-            self.repo.delete_trades_by_run_ids([run.id])
-
-        final_summary = summary_patch if existing_run_id is None else self._load_summary_payload(run.summary_json)
-        research_artifact, research_artifact_availability = self._build_backtest_research_artifact_payload(
-            run_id=run.id,
-            code=code,
-            strategy_hash=strategy_hash,
-            parsed_strategy=result.parsed_strategy.to_dict(),
-            status=stored_status,
-            no_result_reason=result.no_result_reason,
-            no_result_message=result.no_result_message,
-            request_payload=final_summary.get("request") if isinstance(final_summary, dict) else {},
-            metrics=dict(result.metrics or {}),
-            data_quality=data_quality_payload,
-            data_sufficiency=data_sufficiency_payload,
-            benchmark_summary=dict(comparison_payload.get("benchmark_summary") or {}),
-            execution_model=execution_model_payload,
-            execution_assumptions=execution_assumptions_payload,
-            completed_at=getattr(run, "completed_at", None),
-        )
-        final_summary["research_artifact"] = research_artifact
-        final_summary["research_artifact_availability"] = research_artifact_availability
-        updated_run = self.repo.update_run(
-            int(run.id),
-            **self._owner_kwargs(),
-            summary_json=self._serialize_json(final_summary),
-        )
-        if updated_run is not None:
-            run = updated_run
-
-        trade_rows = [
-            RuleBacktestTrade(
-                run_id=run.id,
-                trade_index=index,
-                code=code,
-                entry_date=trade.entry_date,
-                exit_date=trade.exit_date,
-                entry_price=trade.entry_price,
-                exit_price=trade.exit_price,
-                entry_signal=trade.entry_signal,
-                exit_signal=trade.exit_signal,
-                return_pct=trade.return_pct,
-                holding_days=trade.holding_bars,
-                entry_rule_json=self._serialize_json(
-                    {
-                        "rule": trade.entry_rule_json,
-                        "signal_date": trade.entry_signal_date.isoformat(),
-                        "trigger": trade.entry_trigger,
-                        "indicators": trade.entry_indicators,
-                        "signal_price_basis": trade.signal_price_basis,
-                        "fill_basis": trade.entry_fill_basis,
-                        "reason": trade.to_dict().get("entry_reason"),
-                    }
-                ),
-                exit_rule_json=self._serialize_json(
-                    {
-                        "rule": trade.exit_rule_json,
-                        "signal_date": trade.exit_signal_date.isoformat(),
-                        "trigger": trade.exit_trigger,
-                        "indicators": trade.exit_indicators,
-                        "signal_price_basis": trade.signal_price_basis,
-                        "fill_basis": trade.exit_fill_basis,
-                        "reason": trade.to_dict().get("exit_reason"),
-                    }
-                ),
-                notes=self._serialize_json(
-                    {
-                        "entry_fill_basis": trade.entry_fill_basis,
-                        "exit_fill_basis": trade.exit_fill_basis,
-                        "signal_price_basis": trade.signal_price_basis,
-                        "price_basis": trade.price_basis,
-                        "fee_bps": trade.fee_bps,
-                        "slippage_bps": trade.slippage_bps,
-                        "entry_fee_amount": trade.entry_fee_amount,
-                        "exit_fee_amount": trade.exit_fee_amount,
-                        "entry_slippage_amount": trade.entry_slippage_amount,
-                        "exit_slippage_amount": trade.exit_slippage_amount,
-                        "side": trade.side,
-                        "quantity": trade.to_dict().get("quantity"),
-                        "gross_pnl": trade.to_dict().get("gross_pnl"),
-                        "net_pnl": trade.to_dict().get("net_pnl"),
-                        "fees": trade.to_dict().get("fees"),
-                        "slippage": trade.to_dict().get("slippage"),
-                        "signal_reason": trade.to_dict().get("signal_reason"),
-                        "holding_bars": trade.holding_bars,
-                        "holding_calendar_days": trade.holding_calendar_days,
-                        "notes": trade.notes,
-                    }
-                ),
-            )
-            for index, trade in enumerate(result.trades)
-        ]
-        if trade_rows:
-            self.repo.save_trades(trade_rows)
+                current = self.repo.get_run(existing_run_id, **self._owner_kwargs())
+                if current is not None and self._is_run_cancelled_status(current.status):
+                    return self._run_row_to_dict(current, include_trades=False)
+                raise ValueError(f"Run {existing_run_id} not available for terminal commit.")
 
         return self._run_row_to_dict(
             run,
@@ -4572,8 +4694,9 @@ class RuleBacktestService:
             status=status,
             status_message=status_message,
         )
-        self.repo.update_run(
+        self.repo.update_run_if_status(
             run_id,
+            allowed_statuses=CANCELLABLE_RULE_RUN_STATUSES,
             **self._owner_kwargs(),
             status=status,
             parsed_strategy_json=(
@@ -4598,21 +4721,43 @@ class RuleBacktestService:
             summary_json=self._serialize_json(summary),
         )
 
+    @staticmethod
+    def _drop_uncommitted_result_summary_fields(summary: Dict[str, Any]) -> Dict[str, Any]:
+        payload = dict(summary or {})
+        for key in (
+            "metrics",
+            "data_quality",
+            "data_sufficiency",
+            "visualization",
+            "execution_trace",
+            "robustness_analysis",
+            "drawdown_regime_attribution",
+            "research_artifact",
+            "research_artifact_availability",
+            "readback_integrity",
+            "ai_summary",
+        ):
+            payload.pop(key, None)
+        return payload
+
     def _mark_run_failed(self, run_id: int, *, no_result_reason: str, no_result_message: str) -> None:
         row = self.repo.get_run(run_id, **self._owner_kwargs())
         if row is None:
             return
+        if self._normalize_run_status(row.status) in TERMINAL_RULE_RUN_STATUSES:
+            return
         failed_at = datetime.now()
         summary = self._update_summary_payload(
-            self._load_summary_payload(row.summary_json),
+            self._drop_uncommitted_result_summary_fields(self._load_summary_payload(row.summary_json)),
             no_result_reason=no_result_reason,
             no_result_message=no_result_message,
             status="failed",
             status_message=no_result_message,
             at=failed_at,
         )
-        self.repo.update_run(
+        self.repo.update_run_if_status(
             run_id,
+            allowed_statuses=CANCELLABLE_RULE_RUN_STATUSES,
             **self._owner_kwargs(),
             status="failed",
             completed_at=failed_at,
@@ -4627,18 +4772,21 @@ class RuleBacktestService:
             return
         if self._is_run_cancelled_status(row.status):
             return
+        if self._normalize_run_status(row.status) in TERMINAL_RULE_RUN_STATUSES:
+            return
         cancelled_at = row.completed_at or datetime.now()
 
         summary = self._update_summary_payload(
-            self._load_summary_payload(row.summary_json),
+            self._drop_uncommitted_result_summary_fields(self._load_summary_payload(row.summary_json)),
             no_result_reason="cancelled",
             no_result_message=no_result_message,
             status="cancelled",
             status_message=no_result_message,
             at=cancelled_at,
         )
-        self.repo.update_run(
+        self.repo.update_run_if_status(
             run_id,
+            allowed_statuses=CANCELLABLE_RULE_RUN_STATUSES,
             **self._owner_kwargs(),
             status="cancelled",
             completed_at=cancelled_at,
