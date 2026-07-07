@@ -2351,14 +2351,14 @@ const SettingsPage: React.FC = () => {
         >
           <div
             data-testid="settings-main-panel"
-            className="min-w-0 flex-1 overflow-y-auto no-scrollbar pb-12 pr-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="min-w-0 flex-1 overflow-y-auto no-scrollbar p-1 pb-12 pr-2 scroll-p-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             <div
               data-testid="settings-main-content"
               className={isSystemSettingsSurface ? 'w-full max-w-none space-y-5' : 'mx-auto w-full max-w-5xl space-y-4'}
             >
-              <div className="mb-4 flex items-center justify-end gap-4">
-                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              <div className="mb-4 flex min-w-0 flex-wrap items-center justify-end gap-2 md:gap-4">
+                <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
                   <button
                     type="button"
                     className={CONTROL_GHOST_BUTTON_CLASS}

@@ -114,7 +114,7 @@ export function TerminalPageHeading({
         {eyebrow ? <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{eyebrow}</p> : null}
         <h1 className="mt-1 truncate text-xl font-semibold text-[color:var(--wolfy-text-primary)] md:text-2xl">{title}</h1>
       </div>
-      {action ? <div className="shrink-0">{action}</div> : null}
+      {action ? <div className="min-w-0 max-w-full flex-shrink basis-full sm:basis-auto">{action}</div> : null}
     </div>
   );
 }

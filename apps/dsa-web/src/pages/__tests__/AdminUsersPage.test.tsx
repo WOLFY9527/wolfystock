@@ -448,7 +448,7 @@ describe('AdminUsersPage', () => {
 
     renderAt('/zh/admin/users/user-123?tab=portfolio');
 
-    expect(screen.getByTestId('admin-users-page-shell')).toHaveClass('overflow-x-hidden');
+    expect(screen.getByTestId('admin-users-page-shell')).toHaveClass('overflow-visible');
     expect(await screen.findByText('组合只读总览')).toBeInTheDocument();
     const holdingsPanel = screen.getByText('持仓明细').closest('[data-terminal-primitive="panel"]') as HTMLElement;
     const mobileList = within(holdingsPanel).getByTestId('admin-users-holdings-mobile-list');

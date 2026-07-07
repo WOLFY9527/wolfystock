@@ -130,7 +130,7 @@ const ENTITY_TYPE_OPTIONS = [
   { value: 'provider_operation', label: '数据源运维' },
 ];
 
-const TERMINAL_LINK_ACTION_CLASSNAME = 'inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/70 transition-all duration-300 hover:border-white/20 hover:bg-white/10 hover:text-white';
+const TERMINAL_LINK_ACTION_CLASSNAME = 'inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/70 transition-all duration-300 hover:border-white/20 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]';
 const TERMINAL_DISABLED_TAB_CLASSNAME = 'inline-flex min-h-9 shrink-0 items-center rounded-lg border border-white/8 bg-white/[0.02] px-3 py-1.5 text-xs font-medium text-white/25';
 const TERMINAL_IDLE_TAB_CLASSNAME = 'border-white/10 bg-white/[0.03] text-white/60 hover:border-white/20 hover:bg-white/[0.07] hover:text-white';
 const TERMINAL_ACTIVE_TAB_CLASSNAME = 'border-cyan-300/20 bg-cyan-400/5 text-cyan-100 shadow-[0_0_0_1px_rgba(34,211,238,0.04)]';
@@ -526,7 +526,11 @@ const DetailTabs: React.FC<{
     { key: 'audit', label: '管理审计', href: '#audit', disabled: true },
   ];
   return (
-    <nav className="flex gap-2 overflow-x-auto no-scrollbar" aria-label="用户详情标签">
+    <nav
+      className="flex gap-2 overflow-x-auto no-scrollbar p-1 scroll-p-2"
+      aria-label="用户详情标签"
+      tabIndex={0}
+    >
       {items.map((item) => item.disabled ? (
         <span key={item.key} className={TERMINAL_DISABLED_TAB_CLASSNAME}>
           {item.label} · 后续
@@ -536,7 +540,7 @@ const DetailTabs: React.FC<{
           key={item.key}
           to={item.href}
           className={cn(
-            'inline-flex min-h-9 shrink-0 items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-all duration-300',
+            'inline-flex min-h-9 shrink-0 items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]',
             (active === 'activity' && item.key === 'activity') || (active === 'detail' && activeDetailTab === item.key)
               ? TERMINAL_ACTIVE_TAB_CLASSNAME
               : TERMINAL_IDLE_TAB_CLASSNAME,
@@ -1398,8 +1402,8 @@ const AdminUsersPage: React.FC = () => {
 
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto no-scrollbar">
-      <TerminalPageShell data-testid="admin-users-page-shell" className="min-h-0 flex-1 overflow-x-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <TerminalPageShell data-testid="admin-users-page-shell" className="min-h-0 flex-1 overflow-visible">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-1 pt-1">
           {userId ? (
             <TerminalButton type="button" variant="secondary" className="px-3 text-xs" onClick={() => navigate(directoryPath)}>
               返回用户目录
