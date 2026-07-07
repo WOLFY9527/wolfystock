@@ -4,8 +4,11 @@ import type { WatchlistResearchPriorityQueueItem } from '../../types/watchlist';
 import { buildLocalizedPath } from '../../utils/localeRouting';
 import { getResearchQueueConsumerCopy } from '../../utils/researchQueueConsumerCopy';
 
+export type WatchlistResearchQueueState = 'loading' | 'available' | 'unavailable';
+
 type WatchlistResearchQueuePanelProps = {
   queue: WatchlistResearchPriorityQueueItem[];
+  state?: WatchlistResearchQueueState;
   language: 'zh' | 'en';
 };
 
@@ -33,13 +36,19 @@ function formatReviewedAt(value: string | null | undefined, language: 'zh' | 'en
 
 export default function WatchlistResearchQueuePanel({
   queue,
+  state = 'available',
   language,
 }: WatchlistResearchQueuePanelProps) {
   const boundedQueue = queue.slice(0, 5);
   const title = language === 'en' ? 'Research follow-up' : '后续研究';
-  const countLabel = language === 'en'
-    ? `${boundedQueue.length} saved symbols`
-    : `${boundedQueue.length} 个已保存标的`;
+  const countLabel = state === 'loading'
+    ? (language === 'en' ? 'Loading' : '读取中')
+    : state === 'unavailable'
+      ? (language === 'en' ? 'Unavailable' : '暂不可用')
+      : language === 'en'
+        ? `${boundedQueue.length} saved symbols`
+        : `${boundedQueue.length} 个已保存标的`;
+  const countVariant = state === 'unavailable' ? 'caution' : 'neutral';
 
   return (
     <TerminalPanel
@@ -60,12 +69,34 @@ export default function WatchlistResearchQueuePanel({
               : '已保存标的的简要跟进清单，每项只保留一个待核对方向。'}
           </p>
         </div>
-        <TerminalChip variant="neutral" className="font-mono">
+        <TerminalChip variant={countVariant} className="font-mono">
           {countLabel}
         </TerminalChip>
       </div>
 
-      {boundedQueue.length === 0 ? (
+      {state === 'loading' ? (
+        <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]" role="status">
+          <p className="font-medium text-[color:var(--wolfy-text-secondary)]">
+            {language === 'en' ? 'Reading follow-up research' : '正在读取后续研究'}
+          </p>
+          <p className="mt-1 text-[color:var(--wolfy-text-muted)]">
+            {language === 'en'
+              ? 'Watchlist rows remain available while this panel loads.'
+              : '观察列表仍可使用，此面板会单独完成读取。'}
+          </p>
+        </div>
+      ) : state === 'unavailable' ? (
+        <div className="rounded-lg border border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] px-3 py-3 text-xs leading-5 text-[color:var(--state-warning-text)]" role="status">
+          <p className="font-medium text-[color:var(--state-warning-text)]">
+            {language === 'en' ? 'Follow-up research is temporarily unavailable' : '后续研究暂时无法读取'}
+          </p>
+          <p className="mt-1 text-[color:var(--wolfy-text-secondary)]">
+            {language === 'en'
+              ? 'Watchlist rows remain usable; retry the research follow-up view later.'
+              : '观察列表仍可使用；稍后重试研究跟进视图。'}
+          </p>
+        </div>
+      ) : boundedQueue.length === 0 ? (
         <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
           <p className="font-medium text-[color:var(--wolfy-text-secondary)]">
             {language === 'en' ? 'No follow-up research queue right now' : '暂无需要跟进的研究队列'}

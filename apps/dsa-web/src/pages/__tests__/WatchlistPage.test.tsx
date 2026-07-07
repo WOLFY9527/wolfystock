@@ -697,6 +697,113 @@ describe('WatchlistPage', () => {
     expect(queue).not.toHaveTextContent(/error|failed|错误|失败|买入|卖出|交易|下单|recommend/i);
   });
 
+  it('shows overlay-specific unavailable state without hiding valid watchlist rows when overlay request fails', async () => {
+    const overlayFailure = Object.assign(new Error('GET /api/v1/watchlist/research-overlay provider runtime requestId=req-1 stack trace'), {
+      status: 503,
+      parsedError: {
+        title: 'backend error',
+        message: 'GET /api/v1/watchlist/research-overlay provider runtime requestId=req-1 stack trace',
+        rawMessage: 'provider runtime requestId=req-1 stack trace',
+        status: 503,
+        category: 'upstream_unavailable',
+        isAuthError: false,
+      },
+    });
+    getResearchOverlay.mockRejectedValue(overlayFailure);
+
+    renderWatchlist();
+
+    expect(await screen.findByTestId('watchlist-row-NVDA')).toBeInTheDocument();
+    expect(screen.getByTestId('watchlist-row-TSM')).toBeInTheDocument();
+    const queue = await screen.findByTestId('watchlist-research-queue');
+    expect(queue).toHaveTextContent('后续研究暂时无法读取');
+    expect(queue).toHaveTextContent('观察列表仍可使用；稍后重试研究跟进视图。');
+    expect(queue).not.toHaveTextContent('暂无需要跟进的研究队列');
+    expect(queue).not.toHaveTextContent(/GET \/api\/v1|provider|runtime|requestId|stack|backend error|rawMessage|503|买入|卖出|交易|下单|recommend/i);
+    expect(listWatchlistItems).toHaveBeenCalledTimes(1);
+    expect(getResearchOverlay).toHaveBeenCalledTimes(1);
+    expect(addWatchlistItem).not.toHaveBeenCalled();
+    expect(removeWatchlistItem).not.toHaveBeenCalled();
+    expect(refreshScores).not.toHaveBeenCalled();
+    expect(runRuleBacktest).not.toHaveBeenCalled();
+    expect(analyzeAsync).not.toHaveBeenCalled();
+  });
+
+  it('keeps manual overlay refresh failure separate from a legitimate empty queue', async () => {
+    const overlayFailure = Object.assign(new Error('research overlay unavailable requestId=req-2'), {
+      status: 503,
+      parsedError: {
+        title: 'backend error',
+        message: 'research overlay unavailable requestId=req-2',
+        rawMessage: 'research overlay unavailable requestId=req-2',
+        status: 503,
+        category: 'upstream_unavailable',
+        isAuthError: false,
+      },
+    });
+    getResearchOverlay
+      .mockResolvedValueOnce({
+        schemaVersion: 'watchlist_research_overlay_v1',
+        overlayState: 'ready',
+        researchSummary: 'Saved symbols are ready for observation.',
+        researchPriorityQueue: [
+          {
+            symbol: 'NVDA',
+            priorityTier: 'attention',
+            priorityReasonSafeLabel: 'Research context needs attention.',
+            evidenceAge: { state: 'unknown', lastReviewedAt: null },
+            missingEvidence: ['Research context'],
+            suggestedResearchPath: [],
+            observationOnly: true,
+          },
+        ],
+        observationOnly: true,
+        decisionGrade: false,
+      })
+      .mockRejectedValueOnce(overlayFailure);
+
+    renderWatchlist();
+
+    expect(await screen.findByTestId('watchlist-row-NVDA')).toBeInTheDocument();
+    const queue = await screen.findByTestId('watchlist-research-queue');
+    expect(queue).toHaveTextContent('NVDA');
+
+    fireEvent.click(screen.getByRole('button', { name: '刷新观察依据' }));
+
+    await waitFor(() => expect(queue).toHaveTextContent('后续研究暂时无法读取'));
+    expect(queue).not.toHaveTextContent('暂无需要跟进的研究队列');
+    expect(screen.getByTestId('watchlist-row-NVDA')).toBeInTheDocument();
+    expect(listWatchlistItems).toHaveBeenCalledTimes(2);
+    expect(getResearchOverlay).toHaveBeenCalledTimes(2);
+    expect(refreshScores).not.toHaveBeenCalled();
+    expect(addWatchlistItem).not.toHaveBeenCalled();
+    expect(removeWatchlistItem).not.toHaveBeenCalled();
+    expect(queue).not.toHaveTextContent(/requestId|backend error|503|provider|runtime|stack|买入|卖出|交易|recommend/i);
+  });
+
+  it('keeps authentication failure handling when the overlay request returns auth required', async () => {
+    const unauthorized = Object.assign(new Error('provider runtime requestId=req-1 token=bearer-secret unauthorized'), {
+      status: 401,
+      parsedError: {
+        title: '登录已失效，请重新登录。',
+        message: '登录已失效，请重新登录。',
+        rawMessage: 'provider runtime requestId=req-1 token=bearer-secret unauthorized',
+        status: 401,
+        category: 'auth_required',
+        isAuthError: true,
+      },
+    });
+    getResearchOverlay.mockRejectedValue(unauthorized);
+
+    renderWatchlist();
+
+    expect(await screen.findByText('auth-guard:观察列表')).toBeInTheDocument();
+    expect(document.body.textContent || '').not.toMatch(/provider runtime|requestId|bearer-secret|rawMessage|traceId|debug|stack/i);
+    expect(addWatchlistItem).not.toHaveBeenCalled();
+    expect(removeWatchlistItem).not.toHaveBeenCalled();
+    expect(refreshScores).not.toHaveBeenCalled();
+  });
+
   it('renders a watchlist conclusion band needs-refresh state when no fresh item is available', async () => {
     listWatchlistItems.mockResolvedValue({
       items: [
