@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { translate, UI_LANGUAGE_STORAGE_KEY } from '../../i18n/core';
+import { expectNoRawI18nKeys } from '../../test-utils/i18nRawKeySentinel';
 import type {
+  BacktestResultItem,
   BacktestRunHistoryItem,
   BacktestRunResponse,
   PrepareBacktestSamplesResponse,
@@ -248,6 +250,31 @@ function makeHistoryItem(): BacktestRunHistoryItem {
       noAdviceDisclosure: 'Research diagnostic only; not personalized financial advice and not an executable instruction.',
     },
     noAdviceDisclosure: 'Research diagnostic only; not personalized financial advice and not an executable instruction.',
+  };
+}
+
+function makeHistoricalResultItem(overrides: Partial<BacktestResultItem> = {}): BacktestResultItem {
+  return {
+    analysisHistoryId: 901,
+    code: 'ORCL',
+    analysisDate: '2026-03-10',
+    evalWindowDays: 10,
+    evaluationWindowTradingBars: 10,
+    engineVersion: 'historical-analysis-v1',
+    evalStatus: 'completed',
+    evaluatedAt: '2026-04-07T08:00:00Z',
+    operationAdvice: '买入',
+    positionRecommendation: 'long',
+    stockReturnPct: 6,
+    directionExpected: 'up',
+    directionCorrect: true,
+    simulatedReturnPct: 8.5,
+    marketDataSources: ['LocalParquet'],
+    executionAssumptions: {
+      moduleType: 'historical_analysis_evaluation',
+      priceBasis: 'close',
+    },
+    ...overrides,
   };
 }
 
@@ -659,6 +686,7 @@ describe('BacktestPage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.useRealTimers();
+    window.history.replaceState(window.history.state, '', '/backtest');
     window.localStorage.removeItem(UI_LANGUAGE_STORAGE_KEY);
 
     getResults.mockResolvedValue({
@@ -1196,12 +1224,72 @@ describe('BacktestPage', () => {
     expect(screen.getByText(/排名 #1/)).toBeInTheDocument();
   });
 
+  it('renders scanner handoff metadata in English without zh fallback or raw keys', async () => {
+    window.history.replaceState(window.history.state, '', '/en/backtest?symbol=msft&market=US&source=scanner&scannerRunId=42&scannerRank=1&scannerProfile=us_preopen_v1');
+    renderBacktestRoutes(['/en/backtest?symbol=msft&market=US&source=scanner&scannerRunId=42&scannerRank=1&scannerProfile=us_preopen_v1']);
+
+    expect(await screen.findByDisplayValue('MSFT')).toBeInTheDocument();
+    const pageShell = screen.getByTestId('backtest-page-shell');
+
+    expect(screen.getByText('Research handoff')).toBeInTheDocument();
+    expect(screen.getByText(/Run #42/)).toBeInTheDocument();
+    expect(screen.getByText(/Rank #1/)).toBeInTheDocument();
+    expect(pageShell).not.toHaveTextContent(/研究线索交接|扫描批次|排名 #1/);
+    expectNoRawI18nKeys(pageShell, { patterns: [/\bbacktest\.[A-Za-z0-9_.]+/] });
+  });
+
   it('ignores invalid scanner query params without crashing', async () => {
     renderBacktestRoutes(['/backtest?symbol=%20%20&market=%3F%3F&source=scanner&scannerRank=abc']);
 
     expect(await screen.findByTestId('backtest-v1-page')).toBeInTheDocument();
     expect(screen.getByLabelText('标的代码')).toHaveValue('');
     expect(screen.queryByText(/研究线索交接|Research handoff/i)).not.toBeInTheDocument();
+  });
+
+  it('renders zh historical operation facts without advice framing or raw i18n keys', async () => {
+    getResults.mockResolvedValueOnce({
+      total: 1,
+      page: 1,
+      limit: 20,
+      items: [makeHistoricalResultItem({ operationAdvice: '买入', positionRecommendation: 'long' })],
+    });
+
+    window.history.replaceState(window.history.state, '', '/zh/backtest');
+    renderBacktestRoutes(['/zh/backtest']);
+    fireEvent.click(await screen.findByRole('tab', { name: bt('zh', 'page.historicalTab') }));
+
+    const resultDate = await screen.findByText('2026-03-10');
+    const resultTable = resultDate.closest('table');
+    expect(resultTable).not.toBeNull();
+    const table = resultTable as HTMLTableElement;
+
+    expect(within(table).getByRole('columnheader', { name: '历史信号' })).toBeInTheDocument();
+    expect(within(table).getByText('历史入场信号')).toBeInTheDocument();
+    expect(table).not.toHaveTextContent(/建议|买入|卖出|持有|目标价|止损|仓位建议|推荐/i);
+    expectNoRawI18nKeys(screen.getByTestId('backtest-page-shell'), { patterns: [/\bbacktest\.[A-Za-z0-9_.]+/] });
+  });
+
+  it('renders en historical operation facts without advice or recommendation framing', async () => {
+    getResults.mockResolvedValueOnce({
+      total: 1,
+      page: 1,
+      limit: 20,
+      items: [makeHistoricalResultItem({ operationAdvice: 'sell', positionRecommendation: 'cash' })],
+    });
+
+    window.history.replaceState(window.history.state, '', '/en/backtest');
+    renderBacktestRoutes(['/en/backtest']);
+    fireEvent.click(await screen.findByRole('tab', { name: bt('en', 'page.historicalTab') }));
+
+    const resultDate = await screen.findByText('2026-03-10');
+    const resultTable = resultDate.closest('table');
+    expect(resultTable).not.toBeNull();
+    const table = resultTable as HTMLTableElement;
+
+    expect(within(table).getByRole('columnheader', { name: 'Historical signal' })).toBeInTheDocument();
+    expect(within(table).getByText('Historical exit signal')).toBeInTheDocument();
+    expect(table).not.toHaveTextContent(/\b(advice|recommendation|buy|sell|hold|target price|stop-loss|position sizing)\b/i);
+    expectNoRawI18nKeys(screen.getByTestId('backtest-page-shell'), { patterns: [/\bbacktest\.[A-Za-z0-9_.]+/] });
   });
 
   it('renders the deterministic professional workspace shell', async () => {
@@ -2357,7 +2445,7 @@ describe('BacktestPage', () => {
     await switchToProfessionalMode();
     fireEvent.click(within(screen.getByTestId('pro-results-history-drawer')).getByRole('button', { name: /历史记录|History/i }));
     expect(await screen.findByTestId('backtest-setup-presets')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    fireEvent.click(screen.getByRole('button', { name: '应用' }));
 
     expect(screen.getByDisplayValue('ORCL')).toBeInTheDocument();
     expect(screen.getByDisplayValue('150000')).toBeInTheDocument();
