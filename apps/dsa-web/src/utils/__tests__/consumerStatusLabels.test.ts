@@ -7,13 +7,21 @@ import {
 
 describe('consumerStatusLabels', () => {
   it('maps required raw status tokens into consumer-safe Chinese labels', () => {
+    expect(getConsumerStatusLabel('available', 'zh')).toBe('数据可用');
+    expect(getConsumerStatusLabel('ready', 'zh')).toBe('数据可用');
     expect(getConsumerStatusLabel('unavailable', 'zh')).toBe('数据暂不可用');
     expect(getConsumerStatusLabel('stale', 'zh')).toBe('数据可能已过期');
     expect(getConsumerStatusLabel('degraded', 'zh')).toBe('数据质量受限');
     expect(getConsumerStatusLabel('partial', 'zh')).toBe('部分证据可用');
     expect(getConsumerStatusLabel('pending', 'zh')).toBe('正在等待数据确认');
+    expect(getConsumerStatusLabel('initializing', 'zh')).toBe('初始化中');
+    expect(getConsumerStatusLabel('refreshing', 'zh')).toBe('更新中');
     expect(getConsumerStatusLabel('pending-heavy', 'zh')).toBe('多项数据仍待确认');
     expect(getConsumerStatusLabel('blocked', 'zh')).toBe('当前无法分析');
+    expect(getConsumerStatusLabel('insufficient', 'zh')).toBe('证据不足');
+    expect(getConsumerStatusLabel('insufficient_history', 'zh')).toBe('历史样本不足');
+    expect(getConsumerStatusLabel('error', 'zh')).toBe('数据读取异常');
+    expect(getConsumerStatusLabel('failed', 'zh')).toBe('数据读取异常');
     expect(getConsumerStatusLabel('proxy', 'zh')).toBe('间接参考');
     expect(getConsumerStatusLabel('proxy-only', 'zh')).toBe('仅有间接参考，证据强度受限');
     expect(getConsumerStatusLabel('mixed', 'zh')).toBe('状态不一致');

@@ -1,13 +1,23 @@
 export type ConsumerStatusLocale = 'zh' | 'en';
 
 const TOKEN_LABELS: Record<string, Record<ConsumerStatusLocale, string>> = {
+  available: { zh: '数据可用', en: 'Data available' },
+  ready: { zh: '数据可用', en: 'Data available' },
   unavailable: { zh: '数据暂不可用', en: 'Data temporarily unavailable' },
   stale: { zh: '数据可能已过期', en: 'Data may be stale' },
   degraded: { zh: '数据质量受限', en: 'Data quality limited' },
   partial: { zh: '部分证据可用', en: 'Partial evidence available' },
   pending: { zh: '正在等待数据确认', en: 'Waiting for data confirmation' },
+  initializing: { zh: '初始化中', en: 'Initializing' },
+  refreshing: { zh: '更新中', en: 'Refreshing' },
   pending_heavy: { zh: '多项数据仍待确认', en: 'Several data points still await confirmation' },
   blocked: { zh: '当前无法分析', en: 'Analysis currently unavailable' },
+  insufficient: { zh: '证据不足', en: 'Evidence insufficient' },
+  insufficient_history: { zh: '历史样本不足', en: 'History insufficient' },
+  error: { zh: '数据读取异常', en: 'Data read error' },
+  failed: { zh: '数据读取异常', en: 'Data read error' },
+  failed_closed: { zh: '已安全关闭', en: 'Safely closed' },
+  maintenance: { zh: '维护中', en: 'Maintenance in progress' },
   proxy: { zh: '间接参考', en: 'Proxy reference' },
   proxy_only: { zh: '仅有间接参考，证据强度受限', en: 'Proxy-only evidence with limited strength' },
   mixed: { zh: '状态不一致', en: 'State not aligned' },
