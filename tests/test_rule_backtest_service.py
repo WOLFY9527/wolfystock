@@ -290,6 +290,16 @@ class RuleBacktestTestCase(unittest.TestCase):
         assert payload.get("pnlCausalityAvailable") is False
 
     @staticmethod
+    def _completed_compare_row(run_id: int) -> SimpleNamespace:
+        return SimpleNamespace(
+            id=run_id,
+            status="completed",
+            run_at=datetime(2024, 1, 1, 0, 0, 0),
+            completed_at=datetime(2024, 1, 1, 0, 5, 0),
+            summary_json='{"status_history": [{"status": "completed", "at": "2024-01-01T00:05:00"}]}',
+        )
+
+    @staticmethod
     def _compare_run_payload(
         *,
         run_id: int,
@@ -5031,7 +5041,11 @@ class RuleBacktestTestCase(unittest.TestCase):
         third_payload["total_return_pct"] = 9.1
         third_payload["max_drawdown_pct"] = 7.4
 
-        rows = [SimpleNamespace(id=101), SimpleNamespace(id=202), SimpleNamespace(id=303)]
+        rows = [
+            self._completed_compare_row(101),
+            self._completed_compare_row(202),
+            self._completed_compare_row(303),
+        ]
         with patch.object(service.repo, "get_runs_by_ids", return_value=rows), patch.object(
             service,
             "_run_row_to_dict",
@@ -5146,7 +5160,7 @@ class RuleBacktestTestCase(unittest.TestCase):
             },
         )
 
-        rows = [SimpleNamespace(id=101), SimpleNamespace(id=202)]
+        rows = [self._completed_compare_row(101), self._completed_compare_row(202)]
         with patch.object(service.repo, "get_runs_by_ids", return_value=rows), patch.object(
             service,
             "_run_row_to_dict",
@@ -5278,7 +5292,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         service = RuleBacktestService(self.db)
         first_payload = self._compare_run_payload(run_id=101, code="600519")
         second_payload = self._compare_run_payload(run_id=202, code="SH600519")
-        rows = [SimpleNamespace(id=101), SimpleNamespace(id=202)]
+        rows = [self._completed_compare_row(101), self._completed_compare_row(202)]
 
         with patch.object(service.repo, "get_runs_by_ids", return_value=rows), patch.object(
             service,
@@ -5336,7 +5350,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         service = RuleBacktestService(self.db)
         first_payload = self._compare_run_payload(run_id=101, code="600519")
         second_payload = self._compare_run_payload(run_id=202, code="000001")
-        rows = [SimpleNamespace(id=101), SimpleNamespace(id=202)]
+        rows = [self._completed_compare_row(101), self._completed_compare_row(202)]
 
         with patch.object(service.repo, "get_runs_by_ids", return_value=rows), patch.object(
             service,
@@ -5361,7 +5375,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         service = RuleBacktestService(self.db)
         first_payload = self._compare_run_payload(run_id=101, code="600519")
         second_payload = self._compare_run_payload(run_id=202, code="AAPL")
-        rows = [SimpleNamespace(id=101), SimpleNamespace(id=202)]
+        rows = [self._completed_compare_row(101), self._completed_compare_row(202)]
 
         with patch.object(service.repo, "get_runs_by_ids", return_value=rows), patch.object(
             service,
@@ -5387,7 +5401,11 @@ class RuleBacktestTestCase(unittest.TestCase):
         first_payload = self._compare_run_payload(run_id=101, code="600519")
         partial_payload = self._compare_run_payload(run_id=202, code="UNKNOWN-CODE")
         unavailable_payload = self._compare_run_payload(run_id=303, code="")
-        rows = [SimpleNamespace(id=101), SimpleNamespace(id=202), SimpleNamespace(id=303)]
+        rows = [
+            self._completed_compare_row(101),
+            self._completed_compare_row(202),
+            self._completed_compare_row(303),
+        ]
 
         with patch.object(service.repo, "get_runs_by_ids", return_value=rows), patch.object(
             service,
