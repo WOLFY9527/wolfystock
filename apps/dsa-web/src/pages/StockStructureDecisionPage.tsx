@@ -1990,7 +1990,13 @@ function StockEvidenceLedger({
         </p>
       </div>
       {rows.length ? (
-        <div className="stock-evidence-ledger__scroll overflow-x-auto no-scrollbar">
+        <div
+          className="stock-evidence-ledger__scroll overflow-x-auto overscroll-x-contain no-scrollbar focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]"
+          data-testid="stock-evidence-ledger-scroll"
+          role="region"
+          tabIndex={0}
+          aria-label={language === 'en' ? 'Scrollable stock evidence ledger' : '可横向滚动的个股证据账本'}
+        >
           <table className="stock-evidence-ledger__table product-table">
             <caption className="sr-only">
               {language === 'en' ? 'Stock research evidence ledger' : '个股研究证据账本'}
