@@ -8977,6 +8977,8 @@ html[data-theme-style='paper'] .stock-price-change--down {
 html[data-theme-style='paper'] .stock-research-identity-header,
 html[data-theme-style='paper'] .stock-research-memo-panel,
 html[data-theme-style='paper'] .stock-evidence-ledger {
+  min-width: 0;
+  max-width: 100%;
   border-color: var(--line);
   background: rgb(251 248 243 / 0.76);
   box-shadow: var(--shadow-tight);
@@ -9090,6 +9092,12 @@ html[data-theme-style='paper'] .stock-evidence-ledger__note {
 
 html[data-theme-style='paper'] .stock-evidence-ledger__scroll {
   margin-top: 0.95rem;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 html[data-theme-style='paper'] .stock-evidence-ledger__table {

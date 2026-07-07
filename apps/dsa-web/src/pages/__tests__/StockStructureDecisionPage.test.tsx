@@ -887,9 +887,12 @@ describe('StockStructureDecisionPage', () => {
     expect(ledger).toHaveTextContent('证据就绪度');
     expect(ledger).toHaveTextContent('部分可用');
     expect(ledger).toHaveTextContent('缺失字段');
-    const ledgerScroll = ledger.querySelector('.stock-evidence-ledger__scroll');
-    expect(ledgerScroll).toHaveClass('overflow-x-auto');
-    expect(ledgerScroll?.querySelector('table')).toHaveClass('stock-evidence-ledger__table', 'product-table');
+    const ledgerScroll = within(ledger).getByTestId('stock-evidence-ledger-scroll');
+    expect(ledgerScroll).toHaveClass('overflow-x-auto', 'overscroll-x-contain');
+    expect(ledgerScroll).toHaveAttribute('role', 'region');
+    expect(ledgerScroll).toHaveAttribute('tabIndex', '0');
+    expect(ledgerScroll).toHaveAttribute('aria-label', '可横向滚动的个股证据账本');
+    expect(ledgerScroll.querySelector('table')).toHaveClass('stock-evidence-ledger__table', 'product-table');
     expect(within(ledger).getByRole('columnheader', { name: '来源边界' })).toBeInTheDocument();
     const stockCoreChart = within(page).getByTestId('stock-history-core-chart');
     expect(within(page).getByTestId('stock-price-history-visual-block')).toContainElement(stockCoreChart);
