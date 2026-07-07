@@ -47,6 +47,8 @@ const SAFE_RESEARCH_PRIORITY_TIERS = new Set<WatchlistResearchPriorityTier>([
   'monitor',
 ]);
 
+const WATCHLIST_RESEARCH_OVERLAY_SCHEMA_VERSION = 'watchlist_research_overlay_v1';
+const WATCHLIST_RESEARCH_OVERLAY_UNAVAILABLE_SUMMARY = 'Watchlist research follow-up is temporarily unavailable.';
 const SAFE_ROW_RESEARCH_QUOTE_STATES = new Set(['available', 'missing', 'stale', 'unknown']);
 const SAFE_ROW_RESEARCH_STATUS = new Set(['ready', 'partial', 'blocked', 'unknown']);
 
@@ -299,6 +301,22 @@ function normalizeResearchPriorityQueueItem(value: unknown): WatchlistResearchPr
 
 function normalizeResearchOverlay(payload: unknown): WatchlistResearchOverlayResponse {
   const normalized = toCamelCase<WatchlistResearchOverlayResponse>(payload);
+  const schemaVersion = normalizeOptionalText(normalized.schemaVersion);
+  const overlayState = normalizeOptionalText(normalized.overlayState);
+  const isValidContract = schemaVersion === WATCHLIST_RESEARCH_OVERLAY_SCHEMA_VERSION
+    && overlayState !== null
+    && normalized.observationOnly === true
+    && normalized.decisionGrade === false;
+  if (!isValidContract) {
+    return {
+      schemaVersion: WATCHLIST_RESEARCH_OVERLAY_SCHEMA_VERSION,
+      overlayState: 'unavailable',
+      researchSummary: WATCHLIST_RESEARCH_OVERLAY_UNAVAILABLE_SUMMARY,
+      researchPriorityQueue: [],
+      observationOnly: true,
+      decisionGrade: false,
+    };
+  }
   const queue = Array.isArray(normalized.researchPriorityQueue)
     ? normalized.researchPriorityQueue
       .map((item) => normalizeResearchPriorityQueueItem(item))
@@ -307,8 +325,8 @@ function normalizeResearchOverlay(payload: unknown): WatchlistResearchOverlayRes
     : [];
 
   return {
-    schemaVersion: normalizeOptionalText(normalized.schemaVersion) ?? 'watchlist_research_overlay_v1',
-    overlayState: normalizeOptionalText(normalized.overlayState) ?? 'unknown',
+    schemaVersion,
+    overlayState,
     researchSummary: normalizeOptionalText(normalized.researchSummary) ?? '',
     researchPriorityQueue: queue,
     observationOnly: true,

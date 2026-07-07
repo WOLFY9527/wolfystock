@@ -531,7 +531,7 @@ class WatchlistResearchOverlayService:
     @classmethod
     def _overlay_state(cls, *, has_items: bool, data_quality_state: str) -> str:
         if not has_items:
-            return "unavailable"
+            return "available"
         if data_quality_state == "ready":
             return "available"
         if data_quality_state == "unavailable":
@@ -548,6 +548,8 @@ class WatchlistResearchOverlayService:
     ) -> str:
         if overlay_state == "unavailable":
             return "Watchlist research data is unavailable, so this overlay stays read-only."
+        if item_count == 0:
+            return "No saved watchlist symbols need follow-up research yet."
         if overlay_state == "degraded":
             if missing_evidence:
                 return f"{item_count} watchlist entries remain observation-only because supporting evidence is incomplete."

@@ -329,6 +329,7 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(payload["research_readiness"]["freshness_state"], "stale")
         self.assertEqual(payload["research_readiness"]["identity_state"], "resolved")
         self.assertEqual(payload["research_readiness"]["contract_version"], "product_read_model_v1")
+        self.assertEqual(payload["rowResearchPacket"]["researchReadiness"], payload["research_readiness"])
         self.assertEqual(payload["rowResearchPacket"]["identity"]["canonicalSymbol"], "AAPL")
         self.assertEqual(payload["rowResearchPacket"]["identity"]["displaySymbol"], "AAPL")
         self.assertEqual(payload["rowResearchPacket"]["identity"]["identityState"], "resolved")
@@ -803,6 +804,7 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(packet["nextDataAction"], "Add quote and daily price history evidence before marking the packet ready.")
         self.assertTrue(packet["observationOnly"])
         self.assertEqual(packet["noAdviceDisclosure"], "Observation-only research packet; no personalized action instruction.")
+        self.assertEqual(packet["researchReadiness"], item["research_readiness"])
         self.assertEqual(
             packet["scannerLineage"],
             {
