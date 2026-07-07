@@ -199,6 +199,25 @@ describe('Shell', () => {
     expect(within(moreMenu).getByRole('link', { name: translate('zh', 'nav.marketDecisionCockpit') })).toHaveAttribute('href', '/market/decision-cockpit');
   });
 
+  it('uses the primary Home nav item as the only current-page owner on home', () => {
+    render(
+      <MemoryRouter initialEntries={['/zh']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    const primaryNav = screen.getByRole('navigation', { name: translate('zh', 'shell.drawerTitle') });
+    const homeLink = within(primaryNav).getByRole('link', { name: translate('zh', 'nav.home') });
+
+    expect(screen.getByRole('link', { name: 'WolfyStock' })).not.toHaveAttribute('aria-current');
+    expect(homeLink).toHaveAttribute('aria-current', 'page');
+    expect(document.body.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+  });
+
   it('uses More as the single current-page owner for secondary child routes', async () => {
     render(
       <MemoryRouter initialEntries={['/zh/scenario-lab/stress-map']}>
@@ -1203,6 +1222,62 @@ describe('Shell', () => {
     expect(within(adminNav).queryByRole('link', { name: translate('zh', 'nav.backtest') })).not.toBeInTheDocument();
     expect(screen.queryByTestId('shell-consumer-primary-nav')).not.toBeInTheDocument();
     expect(screen.queryByTestId('shell-admin-utility-menu')).not.toBeInTheDocument();
+  });
+
+  it('marks nested admin user activity under the User Governance nav owner', async () => {
+    languageState.value = 'en';
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      currentUser: fullCapabilityAdminUser,
+      logout: mockLogout,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/en/admin/users/user-123/activity']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    const adminNav = await screen.findByTestId('shell-admin-primary-nav');
+    const usersLink = within(adminNav).getByRole('link', { name: 'User Governance' });
+
+    expect(usersLink).toHaveClass('is-active');
+    expect(usersLink).toHaveAttribute('aria-current', 'page');
+    expect(adminNav.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+  });
+
+  it('keeps system settings current ownership on admin nav, not the personal settings utility', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      currentUser: fullCapabilityAdminUser,
+      logout: mockLogout,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/zh/settings/system']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    const adminNav = await screen.findByTestId('shell-admin-primary-nav');
+    const systemLink = within(adminNav).getByRole('link', { name: '运维总览/系统设置' });
+    const actionIsland = await screen.findByTestId('shell-header-utility-island');
+    const personalSettingsLink = within(actionIsland).getByRole('link', { name: translate('zh', 'nav.settings') });
+
+    expect(systemLink).toHaveAttribute('aria-current', 'page');
+    expect(personalSettingsLink).toHaveAttribute('href', '/zh/settings');
+    expect(personalSettingsLink).not.toHaveAttribute('aria-current');
+    expect(document.body.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
   });
 
   it('routes the main Backtest navigation entry to the preserved /backtest path', async () => {

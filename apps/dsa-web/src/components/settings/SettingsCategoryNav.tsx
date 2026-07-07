@@ -1,4 +1,5 @@
 import type React from 'react';
+import { useEffect, useRef } from 'react';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { getCategoryTitle } from '../../utils/systemConfigI18n';
 import type { SystemConfigCategorySchema, SystemConfigItem } from '../../types/systemConfig';
@@ -22,6 +23,12 @@ export const SettingsCategoryNav: React.FC<SettingsCategoryNavProps> = ({
   hideHeader = false,
 }) => {
   const { language, t } = useI18n();
+  const activeButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    activeButtonRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [activeCategory]);
+
   return (
     <div className="flex h-full flex-col gap-1">
       {!hideHeader ? (
@@ -39,9 +46,11 @@ export const SettingsCategoryNav: React.FC<SettingsCategoryNavProps> = ({
           return (
             <button
               key={category.category}
+              ref={isActive ? activeButtonRef : undefined}
               type="button"
+              aria-current={isActive ? 'true' : undefined}
               className={cn(
-                'flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors',
+                'scroll-m-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)]',
                 isActive
                   ? 'bg-white/[0.05] text-white'
                   : 'text-white/60 hover:bg-white/[0.02] hover:text-white',
