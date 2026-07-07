@@ -41,11 +41,11 @@ import {
 import ResearchWorkspaceFlowPanel from '../components/research/ResearchWorkspaceFlowPanel';
 import UserAlertsRailPanel from '../components/user-alerts/UserAlertsRailPanel';
 import LeveragedEtfMapper from '../components/watchlist/LeveragedEtfMapper';
-import WatchlistResearchQueuePanel from '../components/watchlist/WatchlistResearchQueuePanel';
+import WatchlistResearchQueuePanel, { type WatchlistResearchQueueState } from '../components/watchlist/WatchlistResearchQueuePanel';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 import type { InvestorSignalContract } from '../types/scanner';
-import type { WatchlistCatalystExposure, WatchlistItem, WatchlistResearchPriorityQueueItem, WatchlistScannerLineageV1 } from '../types/watchlist';
+import type { WatchlistCatalystExposure, WatchlistItem, WatchlistResearchOverlayResponse, WatchlistResearchPriorityQueueItem, WatchlistScannerLineageV1 } from '../types/watchlist';
 import type { RuleBacktestRunResponse } from '../types/backtest';
 import { describeBooleanEnabled, describeDisplayStatus, type DisplayStatusTone } from '../utils/displayStatus';
 import { buildLocalizedPath } from '../utils/localeRouting';
@@ -130,6 +130,14 @@ type WatchlistConclusionModel = {
   limitedConfidenceCount: number;
   tone: 'success' | 'caution' | 'neutral';
 };
+type WatchlistResearchOverlayViewState = WatchlistResearchQueueState;
+
+function deriveResearchOverlayViewState(response: WatchlistResearchOverlayResponse): WatchlistResearchOverlayViewState {
+  const overlayState = normalizeText(response.overlayState).toLowerCase();
+  return overlayState === 'unavailable' || overlayState === 'error' || overlayState === 'failed'
+    ? 'unavailable'
+    : 'available';
+}
 type BatchProgress = {
   kind: 'scan' | 'backtest';
   total: number;
@@ -1908,6 +1916,7 @@ const WatchlistPage: React.FC = () => {
   const routeContext = useMemo(() => parseResearchWorkspaceSearch(routeSearch), [routeSearch]);
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [researchPriorityQueue, setResearchPriorityQueue] = useState<WatchlistResearchPriorityQueueItem[]>([]);
+  const [researchOverlayState, setResearchOverlayState] = useState<WatchlistResearchOverlayViewState>('loading');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
@@ -1935,6 +1944,21 @@ const WatchlistPage: React.FC = () => {
   const [activeItemId, setActiveItemId] = useState<number | null>(null);
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
+
+  const applyResearchOverlayResponse = useCallback((response: WatchlistResearchOverlayResponse) => {
+    const nextState = deriveResearchOverlayViewState(response);
+    setResearchOverlayState(nextState);
+    setResearchPriorityQueue(nextState === 'unavailable' ? [] : response.researchPriorityQueue);
+  }, []);
+
+  const applyResearchOverlayFailure = useCallback((err: unknown) => {
+    const parsedError = getParsedApiError(err);
+    if (parsedError.isAuthError || parsedError.status === 401 || parsedError.category === 'auth_required') {
+      setAuthRequired(true);
+    }
+    setResearchOverlayState('unavailable');
+    setResearchPriorityQueue([]);
+  }, []);
 
   useEffect(() => {
     document.title = language === 'en' ? 'Watchlist - WolfyStock' : '观察列表 - WolfyStock';
@@ -1986,23 +2010,20 @@ const WatchlistPage: React.FC = () => {
   useEffect(() => {
     if (isGuest) return;
     let isMounted = true;
+    setResearchOverlayState('loading');
     watchlistApi.getResearchOverlay()
       .then((response) => {
         if (!isMounted) return;
-        setResearchPriorityQueue(response.researchPriorityQueue || []);
+        applyResearchOverlayResponse(response);
       })
       .catch((err) => {
         if (!isMounted) return;
-        const parsedError = getParsedApiError(err);
-        if (parsedError.isAuthError || parsedError.status === 401 || parsedError.category === 'auth_required') {
-          setAuthRequired(true);
-        }
-        setResearchPriorityQueue([]);
+        applyResearchOverlayFailure(err);
       });
     return () => {
       isMounted = false;
     };
-  }, [isGuest]);
+  }, [applyResearchOverlayFailure, applyResearchOverlayResponse, isGuest]);
 
   useEffect(() => {
     if (isGuest) return;
@@ -2261,19 +2282,43 @@ const WatchlistPage: React.FC = () => {
 
   const handleRefreshIntelligence = useCallback(async () => {
     setNotice(null);
+    setResearchOverlayState('loading');
     try {
-      const [listResponse, statusResponse, overlayResponse] = await Promise.all([
-        watchlistApi.listWatchlistItems(),
-        watchlistApi.getRefreshStatus().catch(() => null),
-        watchlistApi.getResearchOverlay().catch(() => null),
+      const [listResult, statusResult, overlayResult] = await Promise.all([
+        watchlistApi.listWatchlistItems()
+          .then((response) => ({ status: 'fulfilled' as const, response }))
+          .catch((error: unknown) => ({ status: 'rejected' as const, error })),
+        watchlistApi.getRefreshStatus()
+          .then((response) => ({ status: 'fulfilled' as const, response }))
+          .catch((error: unknown) => ({ status: 'rejected' as const, error })),
+        watchlistApi.getResearchOverlay()
+          .then((response) => ({ status: 'fulfilled' as const, response }))
+          .catch((error: unknown) => ({ status: 'rejected' as const, error })),
       ]);
-      setItems(listResponse.items || []);
-      setRefreshStatus(statusResponse);
-      setResearchPriorityQueue(overlayResponse?.researchPriorityQueue || []);
+      if (listResult.status === 'fulfilled') {
+        setItems(listResult.response.items || []);
+      }
+      if (statusResult.status === 'fulfilled') {
+        setRefreshStatus(statusResult.response);
+      } else {
+        const parsedError = getParsedApiError(statusResult.error);
+        if (parsedError.isAuthError || parsedError.status === 401 || parsedError.category === 'auth_required') {
+          setAuthRequired(true);
+        }
+        setRefreshStatus(null);
+      }
+      if (overlayResult.status === 'fulfilled') {
+        applyResearchOverlayResponse(overlayResult.response);
+      } else {
+        applyResearchOverlayFailure(overlayResult.error);
+      }
+      if (listResult.status === 'rejected') {
+        throw listResult.error;
+      }
     } catch (err) {
       setNotice({ tone: 'danger', message: getParsedApiError(err).message });
     }
-  }, []);
+  }, [applyResearchOverlayFailure, applyResearchOverlayResponse]);
 
   const handleRefreshScores = useCallback(async (targetItems?: WatchlistItem[]) => {
     const targets = targetItems || items;
@@ -2296,9 +2341,11 @@ const WatchlistPage: React.FC = () => {
         force: true,
         symbols: targets.flatMap((item) => (item.symbol ? [item.symbol] : [])),
       } : { force: true });
-      const [listResponse, overlayResponse] = await Promise.all([
+      const [listResponse, overlayResult] = await Promise.all([
         watchlistApi.listWatchlistItems(),
-        watchlistApi.getResearchOverlay().catch(() => null),
+        watchlistApi.getResearchOverlay()
+          .then((response) => ({ status: 'fulfilled' as const, response }))
+          .catch((error: unknown) => ({ status: 'rejected' as const, error })),
       ]);
       const failures = Object.fromEntries(
         (response.results || [])
@@ -2309,7 +2356,11 @@ const WatchlistPage: React.FC = () => {
           )),
       );
       setItems(listResponse.items || []);
-      setResearchPriorityQueue(overlayResponse?.researchPriorityQueue || []);
+      if (overlayResult.status === 'fulfilled') {
+        applyResearchOverlayResponse(overlayResult.response);
+      } else {
+        applyResearchOverlayFailure(overlayResult.error);
+      }
       setBatchFailures(failures);
       setBatchProgress({
         kind: 'scan',
@@ -2342,7 +2393,7 @@ const WatchlistPage: React.FC = () => {
       setRefreshingScores(false);
       setIsBatchScanning(false);
     }
-  }, [copy.scanComplete, copy.scoreRefreshComplete, isBatchScanning, items]);
+  }, [applyResearchOverlayFailure, applyResearchOverlayResponse, copy.scanComplete, copy.scoreRefreshComplete, isBatchScanning, items]);
 
   const handleBatchBacktestCurrentFilter = useCallback(async () => {
     if (isBatchBacktesting) return;
@@ -3639,6 +3690,7 @@ const WatchlistPage: React.FC = () => {
           <div className="border-t border-[color:var(--wolfy-divider)]">
             <WatchlistResearchQueuePanel
               queue={researchPriorityQueue}
+              state={researchOverlayState}
               language={language}
             />
           </div>
