@@ -1871,7 +1871,7 @@ function WatchlistConclusionBand({
           {language === 'en' ? 'Monitoring state' : '监控状态'}
         </p>
         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
-          <h2 className="truncate text-xl font-semibold text-white md:text-2xl">{model.title}</h2>
+          <h2 className="truncate text-xl font-semibold text-[color:var(--wolfy-text-primary)] md:text-2xl">{model.title}</h2>
           <TerminalChip variant={toneVariant} className="shrink-0">
             {monitoringStateLabel}
           </TerminalChip>
@@ -2462,10 +2462,10 @@ const WatchlistPage: React.FC = () => {
   }
 
   const noticeClassName = notice?.tone === 'danger'
-    ? 'border-rose-400/20 bg-rose-500/5 text-rose-100/80'
+    ? 'border-[color:var(--wolfy-market-down)] bg-[color:color-mix(in_srgb,var(--wolfy-market-down)_9%,var(--wolfy-surface-input))] text-[color:var(--wolfy-text-primary)]'
     : notice?.tone === 'warning'
-      ? 'border-amber-300/20 bg-amber-300/5 text-amber-100/80'
-      : 'border-emerald-400/20 bg-emerald-400/5 text-emerald-100/80';
+      ? 'border-[color:var(--wolfy-market-warn)] bg-[color:color-mix(in_srgb,var(--wolfy-market-warn)_9%,var(--wolfy-surface-input))] text-[color:var(--wolfy-text-primary)]'
+      : 'border-[color:var(--wolfy-accent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_9%,var(--wolfy-surface-input))] text-[color:var(--wolfy-text-primary)]';
   const autoRefreshStatus = describeBooleanEnabled(refreshStatus?.enabled, { language });
   const isWatchlistEmptyWorkspace = !isLoading && !error && !authRequired && items.length === 0;
   const attentionCount = watchlistConclusion.staleCount + watchlistConclusion.unknownCount + watchlistConclusion.limitedConfidenceCount;
@@ -2643,7 +2643,7 @@ const WatchlistPage: React.FC = () => {
                     onChange={(event) => setQuery(event.target.value)}
                     placeholder={copy.searchPlaceholder}
                     containerClassName="min-w-0"
-                    trailingAction={<Search className="h-4 w-4 text-white/35" />}
+                    trailingAction={<Search className="h-4 w-4 text-[color:var(--wolfy-text-muted)]" />}
                   />
                 </div>
                 <div className="min-w-0 md:flex-[0_0_9rem]">
@@ -2750,7 +2750,7 @@ const WatchlistPage: React.FC = () => {
                 </div>
               ) : null}
               {isLoading ? (
-                <TerminalPanel as="section" dense className="py-8 text-center text-sm text-white/45" role="status">
+                <TerminalPanel as="section" dense className="py-8 text-center text-sm text-[color:var(--wolfy-text-muted)]" role="status">
                   {copy.loading}
                 </TerminalPanel>
               ) : filteredItems.length > 0 ? (
@@ -2846,7 +2846,7 @@ const WatchlistPage: React.FC = () => {
                         key={item.id}
                         data-testid={`watchlist-row-${item.symbol}`}
                         role="row"
-                        className={`min-w-0 border-b border-[color:var(--wolfy-divider)] px-3 py-3 transition-colors md:px-4 ${isActive ? 'bg-white/[0.045]' : 'bg-transparent hover:bg-white/[0.02]'}`}
+                        className={`min-w-0 border-b border-[color:var(--wolfy-divider)] px-3 py-3 transition-colors md:px-4 ${isActive ? 'bg-[color:color-mix(in_srgb,var(--wolfy-accent)_7%,transparent)]' : 'bg-transparent hover:bg-[var(--wolfy-surface-input)]'}`}
                       >
                         <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1.15fr)_minmax(0,1.05fr)_auto] lg:items-start lg:gap-4">
                           <div role="cell" className="flex min-w-0 gap-3">
@@ -2854,8 +2854,8 @@ const WatchlistPage: React.FC = () => {
                               type="button"
                               className={`${ROW_SELECTION_BUTTON_CLASS} ${
                                 selectedIds.has(item.id)
-                                  ? 'border-cyan-300 bg-cyan-300/30 shadow-[0_0_10px_rgba(103,232,249,0.25)]'
-                                  : 'border-white/15 bg-white/[0.03] hover:border-white/30'
+                                  ? 'border-[color:var(--wolfy-accent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_18%,var(--wolfy-surface-input))] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--wolfy-accent)_20%,transparent)]'
+                                  : 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] hover:border-[color:var(--wolfy-accent)]'
                               }`}
                               role="checkbox"
                               aria-checked={selectedIds.has(item.id)}
@@ -2867,7 +2867,7 @@ const WatchlistPage: React.FC = () => {
                                 className={`h-3 w-3 rounded-sm border transition ${
                                   selectedIds.has(item.id)
                                     ? 'border-[color:var(--wolfy-accent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_42%,var(--wolfy-surface-input))]'
-                                    : 'border-white/20 bg-transparent'
+                                    : 'border-[color:var(--wolfy-border-subtle)] bg-transparent'
                                 }`}
                               />
                             </button>
@@ -2878,7 +2878,7 @@ const WatchlistPage: React.FC = () => {
                               className={`flex min-w-0 flex-1 flex-col items-start gap-1 rounded-lg border px-3 py-2 text-left transition ${
                                 isActive
                                   ? 'border-[color:var(--wolfy-accent)] bg-[var(--wolfy-surface-input)]'
-                                  : 'border-transparent bg-transparent hover:border-[color:var(--wolfy-border-subtle)] hover:bg-white/[0.02]'
+                                  : 'border-transparent bg-transparent hover:border-[color:var(--wolfy-border-subtle)] hover:bg-[var(--wolfy-surface-input)]'
                               }`}
                               onClick={() => setActiveItemId(item.id)}
                             >
@@ -3012,7 +3012,7 @@ const WatchlistPage: React.FC = () => {
                                 {rowNotes}
                               </p>
                             ) : scannerFailure && scannerStatusLabel === '扫描失败' ? (
-                              <p className="text-xs leading-5 text-rose-100/75">{scannerFailure.label}</p>
+                              <p className="text-xs leading-5 text-[color:var(--wolfy-market-down)]">{scannerFailure.label}</p>
                             ) : null}
                           </div>
 
@@ -3067,7 +3067,7 @@ const WatchlistPage: React.FC = () => {
                               aria-label={`${copy.copySymbol} ${item.symbol}`}
                               title={copiedId === item.id ? copy.copied : copy.copySymbol}
                               variant="compact"
-                              className="h-[34px] min-h-[34px] w-[34px] px-0 text-white/55"
+                              className="h-[34px] min-h-[34px] w-[34px] px-0 text-[color:var(--wolfy-text-muted)]"
                               onClick={() => void handleCopy(item)}
                             >
                               <Copy className="h-3.5 w-3.5" />
@@ -3101,8 +3101,8 @@ const WatchlistPage: React.FC = () => {
                   <div className="grid w-full min-w-0 gap-4">
                     <div className="space-y-1">
                     <p>{copy.emptyBody}</p>
-                    <p className="text-[11px] text-white/45">{copy.emptyHelp}</p>
-                    <p className="text-[11px] text-white/45">{copy.emptyScannerHelp}</p>
+                    <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.emptyHelp}</p>
+                    <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.emptyScannerHelp}</p>
                     </div>
 
                     {isWatchlistEmptyWorkspace ? (
@@ -3549,7 +3549,7 @@ const WatchlistPage: React.FC = () => {
             summary={<span data-testid="watchlist-action-scope">{copy.runtimeStatus} · {actionScopeLabel}</span>}
             notice={actionItems.length === 0 ? <TerminalChip variant="caution">{copy.noMatchedSymbols}</TerminalChip> : null}
             progress={batchProgress ? (
-              <p data-testid="watchlist-batch-progress" className="text-xs text-white/55">
+              <p data-testid="watchlist-batch-progress" className="text-xs text-[color:var(--wolfy-text-secondary)]">
                 {batchProgress.completed} / {batchProgress.total}
                 {batchProgress.currentSymbol ? ` · ${batchProgress.currentSymbol}` : ''}
                 {' · '}
@@ -3625,7 +3625,7 @@ const WatchlistPage: React.FC = () => {
               <TerminalChip variant={terminalChipVariant(autoRefreshStatus.tone)} className="font-mono">
                 {refreshStatus ? autoRefreshStatus.label : '--'}
               </TerminalChip>
-              <span className="truncate font-mono text-[11px] text-white/45">
+              <span className="truncate font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">
                 US {refreshStatus?.usTime || '08:45'} / CN {refreshStatus?.cnTime || '09:00'} / HK {refreshStatus?.hkTime || '09:00'}
               </span>
             </div>

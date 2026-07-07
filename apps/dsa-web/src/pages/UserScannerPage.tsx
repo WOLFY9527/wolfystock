@@ -1788,7 +1788,7 @@ function buildCoverageSegments(
       key: 'missing',
       label: language === 'en' ? 'Missing' : '待补',
       count: coverage.missingCount ?? 0,
-      toneClassName: 'bg-white/30',
+      toneClassName: 'bg-[color:var(--wolfy-text-muted)]',
     },
   ]);
 }
@@ -1815,7 +1815,7 @@ function buildMarketCoverageSegments(
       key: 'missing',
       label: language === 'en' ? 'Missing' : '待补',
       count: coverage.missingCount ?? 0,
-      toneClassName: 'bg-white/30',
+      toneClassName: 'bg-[color:var(--wolfy-text-muted)]',
     },
   ]);
 }
@@ -1911,13 +1911,13 @@ function buildScannerVisualEvidenceSummary(
         key: 'watch',
         label: language === 'en' ? '40-59' : '40-59',
         count: scoreBands.watch,
-        toneClassName: 'bg-violet-300/85',
+        toneClassName: 'bg-[color:var(--wolfy-market-warn)]',
       },
       {
         key: 'limited',
         label: language === 'en' ? '<40 / n.a.' : '<40 / 无',
         count: scoreBands.limited,
-        toneClassName: 'bg-white/30',
+        toneClassName: 'bg-[color:var(--wolfy-text-muted)]',
       },
     ]),
     candidateCoverageSegments: buildCoverageSegments(candidateCoverage, language),
@@ -1956,9 +1956,9 @@ function previewDecisionLabel(
 }
 
 function previewDecisionClass(candidate: ScannerCandidateDiagnostic, threshold: number): string {
-  if (isOfficialSelected(candidate)) return 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100';
-  if (isDataUnavailable(candidate)) return 'border-rose-400/25 bg-rose-400/10 text-rose-100';
-  if (isPreviewSelected(candidate, threshold)) return 'border-blue-400/25 bg-blue-400/10 text-blue-100 shadow-[0_0_14px_rgba(59,130,246,0.12)]';
+  if (isOfficialSelected(candidate)) return 'border-[color:var(--wolfy-accent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_10%,var(--wolfy-surface-input))] text-[color:var(--wolfy-text-primary)]';
+  if (isDataUnavailable(candidate)) return 'border-[color:var(--wolfy-market-down)] bg-[color:color-mix(in_srgb,var(--wolfy-market-down)_10%,var(--wolfy-surface-input))] text-[color:var(--wolfy-text-primary)]';
+  if (isPreviewSelected(candidate, threshold)) return 'border-[color:var(--blue)] bg-[color:color-mix(in_srgb,var(--blue)_10%,var(--wolfy-surface-input))] text-[color:var(--wolfy-text-primary)]';
   return 'border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-muted)]';
 }
 
@@ -4505,7 +4505,7 @@ const UserScannerPage: React.FC = () => {
                             ) : null}
                             <div className="mt-2 flex flex-col gap-2 border-t border-[color:var(--wolfy-divider)] pt-2" data-testid="scanner-ai-theme-builder">
                               <div className="flex items-center gap-2 text-[11px] font-medium text-[color:var(--wolfy-text-secondary)]">
-                                <Sparkles className="h-3.5 w-3.5 text-indigo-200/80" aria-hidden="true" />
+                                <Sparkles className="h-3.5 w-3.5 text-[color:var(--wolfy-accent)]" aria-hidden="true" />
                                 <span>{language === 'en' ? 'AI custom theme' : 'AI 自定义主题'}</span>
                               </div>
                               <input
@@ -4775,20 +4775,21 @@ const UserScannerPage: React.FC = () => {
                               data-testid="scanner-ranked-list"
                               className="overflow-x-auto overscroll-x-contain rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] [-webkit-overflow-scrolling:touch]"
                               aria-label={language === 'en' ? 'Ranked scanner results' : '扫描排名结果'}
+                              role="table"
                               tabIndex={0}
                             >
                               <div data-testid="scanner-result-table" className="contents md:block md:min-w-[1220px]">
-                                <div className="hidden items-center gap-3 border-b border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)] md:grid md:grid-cols-[64px_minmax(180px,1fr)_92px_110px_minmax(220px,1.3fr)_minmax(150px,0.9fr)_minmax(190px,1fr)_auto]">
-                                  <span>{language === 'en' ? 'Rank' : '排名'}</span>
-                                  <span>{language === 'en' ? 'Symbol / name' : '代码 / 名称'}</span>
-                                  <span>{language === 'en' ? 'Score' : '评分'}</span>
-                                  <span>{language === 'en' ? 'Status' : '状态'}</span>
-                                  <span>{language === 'en' ? 'Why now' : '当前信号'}</span>
-                                  <span>{language === 'en' ? 'Data quality' : '数据质量'}</span>
-                                  <span>{language === 'en' ? 'Next / risk' : '下一步 / 风险'}</span>
-                                  <span className="text-right">{language === 'en' ? 'Actions' : '操作'}</span>
+                                <div role="row" className="hidden items-center gap-3 border-b border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)] md:grid md:grid-cols-[64px_minmax(180px,1fr)_92px_110px_minmax(220px,1.3fr)_minmax(150px,0.9fr)_minmax(190px,1fr)_auto]">
+                                  <span role="columnheader">{language === 'en' ? 'Rank' : '排名'}</span>
+                                  <span role="columnheader">{language === 'en' ? 'Symbol / name' : '代码 / 名称'}</span>
+                                  <span role="columnheader">{language === 'en' ? 'Score' : '评分'}</span>
+                                  <span role="columnheader">{language === 'en' ? 'Status' : '状态'}</span>
+                                  <span role="columnheader">{language === 'en' ? 'Why now' : '当前信号'}</span>
+                                  <span role="columnheader">{language === 'en' ? 'Data quality' : '数据质量'}</span>
+                                  <span role="columnheader">{language === 'en' ? 'Next / risk' : '下一步 / 风险'}</span>
+                                  <span role="columnheader" className="text-right">{language === 'en' ? 'Actions' : '操作'}</span>
                                 </div>
-                                <div data-testid="scanner-candidate-scroll-region" className="min-w-0 max-h-[min(52vh,34rem)] overflow-y-auto overscroll-y-contain no-scrollbar ui-scroll-y-quiet [-webkit-overflow-scrolling:touch]">
+                                <div data-testid="scanner-candidate-scroll-region" role="rowgroup" className="min-w-0 max-h-[min(52vh,34rem)] overflow-y-auto overscroll-y-contain no-scrollbar ui-scroll-y-quiet [-webkit-overflow-scrolling:touch]">
                                   {workbenchDiagnostics.map((candidate) => {
                                     const activeRunDetail = runDetail;
                                     if (!activeRunDetail) return null;

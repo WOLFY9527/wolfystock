@@ -541,6 +541,7 @@ test.describe('T177 Radar and Watchlist research continuity', () => {
     for (const viewport of [
       { width: 1440, height: 1000 },
       { width: 1024, height: 900 },
+      { width: 768, height: 900 },
       { width: 390, height: 844 },
     ]) {
       await page.unrouteAll({ behavior: 'ignoreErrors' });
@@ -623,6 +624,7 @@ test.describe('T177 Radar and Watchlist research continuity', () => {
 
     for (const viewport of [
       { width: 390, height: 844 },
+      { width: 768, height: 900 },
       { width: 1024, height: 900 },
     ]) {
       await page.unrouteAll({ behavior: 'ignoreErrors' });
