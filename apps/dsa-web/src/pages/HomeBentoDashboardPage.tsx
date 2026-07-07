@@ -2,7 +2,7 @@ import type React from 'react';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { History, Lock, MoreHorizontal, Search, Star, Upload } from 'lucide-react';
-import { getParsedApiError, type ParsedApiError } from '../api/error';
+import { getParsedApiError } from '../api/error';
 import {
   dashboardOverviewApi,
   type DashboardMetric,
@@ -33,7 +33,6 @@ import {
 import { normalizeReportQuality } from '../api/reportNormalizer';
 import { stockEvidenceApi } from '../api/stockEvidence';
 import { stocksApi, type StockPeerCorrelationSnapshot } from '../api/stocks';
-import { withFallback } from '../api/withFallback';
 import { DeepReportDrawer } from '../components/home-bento/DeepReportDrawer';
 import type { SignalTone } from '../components/home-bento/theme';
 import type { HomeCandlestickChartContext } from '../components/home-bento/HomeCandlestickChart';
@@ -89,7 +88,6 @@ import {
 } from '../utils/homeReportIdentity';
 import { cn } from '../utils/cn';
 import { getToneColor } from '../utils/marketColors';
-import { createPublicAnalysisFallbackPreview } from '../utils/publicAnalysisFallback';
 import { createConsumerDataHealthSummary } from '../utils/consumerDataQualityViewModel';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
@@ -6081,7 +6079,6 @@ function buildGuestPriceObservationMetrics(locale: DashboardLocale): DashboardFi
 function buildGuestDashboardFromPreview(
   locale: DashboardLocale,
   preview: PublicAnalysisPreviewResponse,
-  mode: 'live' | 'snapshot' = 'live',
 ): DashboardPayload {
   const stockCode = normalizeTickerQuery(preview.report.meta.stockCode || preview.stockCode || 'AAPL');
   const seed = buildInPlacePlaceholderDashboard(locale, stockCode);
@@ -6122,9 +6119,7 @@ function buildGuestDashboardFromPreview(
       signalLabel: actionText,
       signalTone: sentimentTone,
       scoreValue: trendText,
-      badge: mode === 'snapshot'
-        ? (locale === 'en' ? 'Guest preview · local research snapshot' : '游客预览 · 本地研究快照')
-        : (locale === 'en' ? 'Guest preview · research preview' : '游客预览 · 研究预览'),
+      badge: locale === 'en' ? 'Guest preview · research preview' : '游客预览 · 研究预览',
       chartLabel: locale === 'en' ? 'Preview generated' : '预览已生成',
       summary: summaryText,
       reasonTitle: locale === 'en' ? 'Preview context' : '预览说明',
@@ -6491,6 +6486,27 @@ function HomeAnalysisSoftTimeoutNotice({
   );
 }
 
+function GuestPreviewUnavailableState({ locale }: { locale: DashboardLocale }) {
+  const isEnglish = locale === 'en';
+  return (
+    <section
+      className="mt-3 min-w-0 rounded-[10px] border border-amber-300/22 bg-amber-300/[0.075] px-4 py-3 text-amber-50/88"
+      data-testid="guest-preview-unavailable-state"
+      role="status"
+      aria-live="polite"
+    >
+      <p className="text-sm font-semibold">
+        {isEnglish ? 'Public preview is temporarily unavailable' : '公开预览暂时不可用'}
+      </p>
+      <p className="mt-1 text-xs leading-5 text-amber-50/68">
+        {isEnglish
+          ? 'No public research preview is available right now. Try again later, or sign in to continue with saved research workflows.'
+          : '当前没有可用的公开研究预览。可以稍后再试，或登录后继续使用已保存的研究流程。'}
+      </p>
+    </section>
+  );
+}
+
 function GuestPaywallOverlay({ locale, registrationPath }: { locale: DashboardLocale; registrationPath: string }) {
   return (
     <div
@@ -6562,7 +6578,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [isDashboardLoading, setDashboardLoading] = useState(false);
   const [statusToast, setStatusToast] = useState<{ message: string; tone: 'error' | 'warning' } | null>(null);
   const [guestPreview, setGuestPreview] = useState<PublicAnalysisPreviewResponse | null>(null);
-  const [guestPreviewMode, setGuestPreviewMode] = useState<'live' | 'snapshot'>('live');
+  const [isGuestPreviewUnavailable, setGuestPreviewUnavailable] = useState(false);
   const [guestMarketBriefing, setGuestMarketBriefing] = useState<MarketBriefingResponse | null>(null);
   const [isGuestMarketBriefingLoading, setGuestMarketBriefingLoading] = useState(false);
   const [isGuestMarketBriefingUnavailable, setGuestMarketBriefingUnavailable] = useState(false);
@@ -6570,8 +6586,6 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [isMemberMarketBriefingLoading, setMemberMarketBriefingLoading] = useState(false);
   const [isMemberMarketBriefingUnavailable, setMemberMarketBriefingUnavailable] = useState(false);
   const [dashboardOverview, setDashboardOverview] = useState<DashboardMarketIntelligenceOverview | null>(null);
-  const [guestError, setGuestError] = useState<ParsedApiError | null>(null);
-  const [guestFallbackNotice, setGuestFallbackNotice] = useState<string | null>(null);
   const [pendingHistoryDelete, setPendingHistoryDelete] = useState<PendingHistoryDelete | null>(null);
   const [hydratedRouteTaskId, setHydratedRouteTaskId] = useState<string | null>(null);
   const [isTraceDrawerOpen, setTraceDrawerOpen] = useState(false);
@@ -6671,7 +6685,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
 
     if (isGuest) {
       return guestPreview
-        ? buildGuestDashboardFromPreview(locale, guestPreview, guestPreviewMode)
+        ? buildGuestDashboardFromPreview(locale, guestPreview)
         : buildInPlacePlaceholderDashboard(locale, activeTicker);
     }
 
@@ -6680,7 +6694,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     }
 
     return buildInPlacePlaceholderDashboard(locale, dashboardSelection.effectiveTicker);
-  }, [activeTicker, dashboardSelection.dashboardReport, dashboardSelection.effectiveTicker, guestPreview, guestPreviewMode, isGuest, locale, traceFixtureReport]);
+  }, [activeTicker, dashboardSelection.dashboardReport, dashboardSelection.effectiveTicker, guestPreview, isGuest, locale, traceFixtureReport]);
   const activeTraceReport: AnalysisReport | null = (() => {
     if (traceFixtureReport) {
       return traceFixtureReport;
@@ -7163,30 +7177,20 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     setSearchQuery('');
 
     if (isGuest) {
-      setGuestError(null);
-      setGuestFallbackNotice(null);
-      setGuestPreviewMode('live');
+      setGuestPreviewUnavailable(false);
+      setGuestPreview(null);
       try {
-        const response = await withFallback(
-          () => withGuestPreviewTimeout(publicAnalysisApi.preview({
-            stockCode: normalizedTicker,
-            stockName: undefined,
-            reportType: 'brief',
-          })),
-          {
-            fallback: () => createPublicAnalysisFallbackPreview(normalizedTicker, language),
-          },
-        );
-        setGuestPreview(response.data);
-        setGuestPreviewMode(response.fallback ? 'snapshot' : 'live');
+        const response = await withGuestPreviewTimeout(publicAnalysisApi.preview({
+          stockCode: normalizedTicker,
+          stockName: undefined,
+          reportType: 'brief',
+        }));
+        setGuestPreview(response);
+        setGuestPreviewUnavailable(false);
         setPendingAnalysisTicker(null);
-        if (response.fallback) {
-          setGuestFallbackNotice(language === 'en'
-            ? 'Live preview is unavailable right now. Loaded a local research snapshot instead.'
-            : '实时预览当前不可用，已切换到本地研究快照。');
-        }
-      } catch (err) {
-        setGuestError(getParsedApiError(err));
+      } catch {
+        setGuestPreview(null);
+        setGuestPreviewUnavailable(true);
         setPendingAnalysisTicker(null);
       } finally {
         setDashboardLoading(false);
@@ -7458,11 +7462,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           </div>
         </CompactFilterBar>
       </form>
-      {guestFallbackNotice ? (
-        <p className="mt-3 text-xs text-white/50">{guestFallbackNotice}</p>
-      ) : null}
-      {guestError ? (
-        <p className="mt-3 text-xs font-medium text-rose-200">{guestError.message}</p>
+      {isGuest && isGuestPreviewUnavailable ? (
+        <GuestPreviewUnavailableState locale={locale} />
       ) : null}
     </div>
   );

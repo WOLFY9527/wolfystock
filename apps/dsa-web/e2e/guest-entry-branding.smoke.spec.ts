@@ -3,9 +3,6 @@ import { expect as appExpect, test as appTest } from './fixtures/appSmoke';
 import { expectNoConsumerRawLeakage } from './fixtures/consumerRawLeakageGuard';
 import { captureShellVisualEvidence } from './fixtures/shellVisualEvidence';
 
-const GUEST_PRICE_ZONE_FORBIDDEN_COPY_PATTERN =
-  /理想买入|入场|止损|止盈|目标价|买入|卖出|加仓|建仓|target price|entry|stop loss|take profit/i;
-
 appTest('guest entry routes use research branding instead of AI persona copy', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
 
@@ -92,7 +89,7 @@ appTest('guest first fold stays honest when the public market snapshot is unavai
   await expectNoConsumerRawLeakage(page.locator('body'), { label: '/en/guest unavailable snapshot' });
 });
 
-appTest('guest search falls back to a bounded research snapshot when preview stalls', async ({ page }) => {
+appTest('guest search shows preview-unavailable state when preview stalls', async ({ page }) => {
   await page.route('**/api/v1/analysis/preview', async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 5_000));
     await route.fulfill({
@@ -128,17 +125,14 @@ appTest('guest search falls back to a bounded research snapshot when preview sta
   await page.getByTestId('home-bento-omnibar-input').fill('TSLA');
   await page.getByRole('button', { name: '分析' }).click();
 
-  await appExpect(page.getByText('实时预览当前不可用，已切换到本地研究快照。')).toBeVisible({ timeout: 8_000 });
-  await appExpect(page.getByTestId('home-research-console')).toBeVisible();
-  await appExpect(page.getByTestId('home-research-score-strip')).toContainText('6.3');
-  await appExpect(page.getByTestId('home-research-key-levels')).toContainText('价格观察');
-  await appExpect(page.getByTestId('home-research-key-levels')).toContainText('风险边界');
-  await appExpect(page.getByTestId('home-research-key-levels')).toContainText('上行情景');
-  await appExpect(page.getByTestId('home-research-key-levels')).toContainText('需要确认');
-  await appExpect(page.locator('body')).not.toContainText(/实时诱饵|WOLFY AI|唤醒 AI/i);
-  await appExpect(page.getByTestId('home-bento-dashboard')).not.toContainText(GUEST_PRICE_ZONE_FORBIDDEN_COPY_PATTERN);
+  await appExpect(page.getByTestId('guest-preview-unavailable-state')).toBeVisible({ timeout: 8_000 });
+  await appExpect(page.getByTestId('guest-preview-unavailable-state')).toContainText('公开预览暂时不可用');
+  await appExpect(page.getByTestId('guest-home-clean-search')).toBeVisible();
+  await appExpect(page.getByTestId('home-research-console')).toHaveCount(0);
+  await appExpect(page.getByTestId('home-research-score-strip')).toHaveCount(0);
+  await appExpect(page.locator('body')).not.toContainText(/实时诱饵|WOLFY AI|唤醒 AI|本地研究快照|本地快照|Tesla, Inc\.|NVIDIA Corporation|目标价|止损|买入|卖出|持有|仓位建议/i);
   await baseExpect
     .poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
     .toBe(true);
-  await expectNoConsumerRawLeakage(page.locator('body'), { label: '/zh/guest fallback snapshot' });
+  await expectNoConsumerRawLeakage(page.locator('body'), { label: '/zh/guest preview unavailable' });
 });

@@ -1,6 +1,6 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { UiPreferencesProvider } from '../../contexts/UiPreferencesContext';
 import GuestHomePage from '../GuestHomePage';
 
@@ -42,6 +42,9 @@ vi.mock('../../hooks/useTaskStream', () => ({
     disconnect: vi.fn(),
   })),
 }));
+
+const GUEST_PREVIEW_FAILURE_FORBIDDEN_COPY_PATTERN =
+  /\b(buy|sell|hold|target price|stop loss|position sizing|recommendation|action grade|local research snapshot|local snapshot|leadership trend|momentum still driving|high-volatility|trend up|constructive consolidation|conviction|score)\b|买入|卖出|持有|目标价|止损|仓位建议|推荐|本地研究快照|本地快照|趋势上行|偏强震荡|高波动震荡|置信度|评分/i;
 
 const renderGuest = (initialEntries = ['/guest']) => render(
   <MemoryRouter initialEntries={initialEntries}>
@@ -85,6 +88,10 @@ describe('GuestHomePage', () => {
       isLoading: false,
     });
     window.history.replaceState(window.history.state, '', '/zh');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('renders a compact guest research console before search and reveals the paywalled preview after submit', async () => {
@@ -133,7 +140,7 @@ describe('GuestHomePage', () => {
     expect(marketPreviewStrip).toHaveTextContent('当前市场观察');
     expect(marketPreviewStrip).toHaveTextContent('公开市场观察已准备');
     expect(marketPreviewStrip).toHaveTextContent('市场广度改善');
-    expect(marketPreviewStrip).toHaveTextContent('只用于市场观察，不构成买卖建议');
+    expect(marketPreviewStrip).toHaveTextContent('研究观察，不构成投资建议。');
     expect(screen.getByTestId('guest-home-registration-link')).toHaveAttribute('href', '/zh/register?redirect=%2Fzh');
     expect(trustStrip).toHaveTextContent('安全下一步');
     expect(trustStrip).toHaveTextContent('先查看单个代码的研究入口');
@@ -166,6 +173,8 @@ describe('GuestHomePage', () => {
     expect(screen.getAllByText('解锁完整研究框架、价格观察与技术形态解读')).toHaveLength(2);
     expect(screen.getAllByRole('link', { name: '免费创建账户' })).toHaveLength(2);
     expect(screen.getByTestId('home-research-context-rail')).toContainElement(screen.getAllByTestId('guest-home-frosted-lock')[1]);
+    expect(screen.queryByTestId('guest-preview-unavailable-state')).not.toBeInTheDocument();
+    expect(screen.queryByText(/local research snapshot|本地研究快照/i)).not.toBeInTheDocument();
   });
 
   it('renders the English clean search funnel copy', async () => {
@@ -198,7 +207,7 @@ describe('GuestHomePage', () => {
     expect(screen.getByTestId('home-bento-omnibar-input')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '分析' })).toBeEnabled();
     expect(screen.getByTestId('guest-home-registration-link')).toHaveAttribute('href', '/zh/register?redirect=%2Fzh');
-    expect(await screen.findByTestId('guest-home-market-preview-strip')).toHaveTextContent('只用于市场观察，不构成买卖建议');
+    expect(await screen.findByTestId('guest-home-market-preview-strip')).toHaveTextContent('研究观察，不构成投资建议。');
     expect(firstScreen.textContent?.trim().length).toBeGreaterThan(80);
     expect(firstScreen).not.toHaveTextContent(/^\s*$/);
   });
@@ -242,7 +251,7 @@ describe('GuestHomePage', () => {
     expect(marketPreviewStrip).not.toHaveTextContent(/\bNVDA\b|NVIDIA|TSLA|Tesla|AAPL|Apple/i);
   });
 
-  it('falls back to a local snapshot when the live preview API rate-limits', async () => {
+  it('shows bounded preview-unavailable copy when the live preview API rate-limits', async () => {
     languageState.value = 'en';
     window.history.replaceState(window.history.state, '', '/en');
     previewMock.mockRejectedValueOnce(new Error('429 RateLimitError: upstream overloaded'));
@@ -252,15 +261,18 @@ describe('GuestHomePage', () => {
     fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'NVDA' } });
     fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
 
-    expect(await screen.findByText('Live preview is unavailable right now. Loaded a local research snapshot instead.')).toBeInTheDocument();
-    expect(await screen.findByText('NVIDIA Corporation')).toBeInTheDocument();
-    expect(screen.getAllByText('The local snapshot keeps the leadership trend intact, with momentum still driving the short-term structure.').length).toBeGreaterThan(0);
-    expect(screen.getByTestId('home-research-score-strip')).toHaveTextContent('8.4');
-    expect(screen.queryByTestId('home-bento-decision-score-value')).not.toBeInTheDocument();
-    expect(within(screen.getByTestId('home-research-context-rail')).getByTestId('guest-home-frosted-lock')).toBeInTheDocument();
+    const unavailable = await screen.findByTestId('guest-preview-unavailable-state');
+    expect(unavailable).toHaveTextContent('Public preview is temporarily unavailable');
+    expect(unavailable).toHaveTextContent('No public research preview is available right now. Try again later, or sign in to continue with saved research workflows.');
+    expect(screen.getByTestId('guest-home-clean-search')).toBeInTheDocument();
+    expect(screen.queryByTestId('home-research-console')).not.toBeInTheDocument();
+    expect(screen.queryByText('NVIDIA Corporation')).not.toBeInTheDocument();
+    expect(screen.queryByText('The local snapshot keeps the leadership trend intact, with momentum still driving the short-term structure.')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-research-score-strip')).not.toBeInTheDocument();
+    expect((screen.getByTestId('guest-home-clean-search').textContent || '')).not.toMatch(GUEST_PREVIEW_FAILURE_FORBIDDEN_COPY_PATTERN);
   });
 
-  it('resolves guest search to a bounded local snapshot when the preview request never settles', async () => {
+  it('keeps the guest shell in a preview-unavailable state when the preview request never settles', async () => {
     languageState.value = 'en';
     window.history.replaceState(window.history.state, '', '/en');
     previewMock.mockImplementation(() => new Promise(() => {}));
@@ -274,12 +286,16 @@ describe('GuestHomePage', () => {
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(4_100);
+        await Promise.resolve();
       });
 
-      expect(screen.getByText('Live preview is unavailable right now. Loaded a local research snapshot instead.')).toBeInTheDocument();
-      expect(screen.getByTestId('home-research-console')).toBeInTheDocument();
-      expect(screen.getByText('Tesla, Inc.')).toBeInTheDocument();
-      expect(screen.getByTestId('home-research-score-strip')).toHaveTextContent('6.3');
+      const unavailable = screen.getByTestId('guest-preview-unavailable-state');
+      expect(unavailable).toHaveTextContent('Public preview is temporarily unavailable');
+      expect(screen.getByTestId('guest-home-clean-search')).toBeInTheDocument();
+      expect(screen.queryByTestId('home-research-console')).not.toBeInTheDocument();
+      expect(screen.queryByText('Tesla, Inc.')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('home-research-score-strip')).not.toBeInTheDocument();
+      expect((screen.getByTestId('guest-home-clean-search').textContent || '')).not.toMatch(GUEST_PREVIEW_FAILURE_FORBIDDEN_COPY_PATTERN);
       expect(screen.queryByText(/Guest preview · live hook/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/WOLFY AI/i)).not.toBeInTheDocument();
     } finally {
