@@ -137,6 +137,7 @@ def test_export_ordering_is_stable_and_json_compatible() -> None:
         "data_window",
         "symbols",
         "universe",
+        "dataset_lineage",
         "execution_cost_assumptions",
         "execution_cost_assumptions_fingerprint",
         "walk_forward_config_fingerprint",
@@ -150,6 +151,44 @@ def test_export_ordering_is_stable_and_json_compatible() -> None:
     assert list(payload["engine_contract_flags"]) == ["a_flag", "z_flag"]
     assert payload["warnings"] == ["a-warning", "z-warning"]
     assert json.loads(manifest.to_json()) == payload
+
+
+def test_dataset_lineage_missing_fails_closed_without_identity() -> None:
+    manifest = _manifest(dataset_lineage=None).to_dict()
+
+    assert manifest["dataset_lineage"] == {
+        "state": "unknown",
+        "fail_closed": True,
+        "reason_codes": ["dataset_lineage_missing"],
+    }
+
+
+def test_dataset_lineage_represents_no_pit_membership_without_pretending_availability() -> None:
+    manifest = _manifest(
+        dataset_lineage={
+            "manifest_version": "backtest_dataset_reproducibility_manifest.v1",
+            "dataset_id": "rule_backtest:database_cache:AAPL",
+            "content_identity": "fixture-content-v1",
+            "source_lineage": {"source": "database_cache", "authority_status": "allowed"},
+            "adjusted_basis": {"state": "unknown"},
+            "calendar_identity": {"state": "unknown", "timezone": "Asia/Shanghai"},
+            "universe_membership_mode": "single_symbol_request",
+            "pit_membership_available": False,
+            "missing_bar_policy": {"policy": "fail_closed_for_professional_claims"},
+            "date_range": {"requested_start": "2024-01-01", "requested_end": "2024-01-31"},
+            "symbol_coverage": {"requested_symbols": ["AAPL"], "covered_symbols": ["AAPL"]},
+            "freshness_as_of": "2024-01-31",
+            "reason_codes": ["adjusted_basis_unknown", "calendar_identity_unknown"],
+        },
+    ).to_dict()
+
+    lineage = manifest["dataset_lineage"]
+    assert lineage["dataset_id"] == "rule_backtest:database_cache:AAPL"
+    assert lineage["state"] == "partial_no_pit_membership"
+    assert lineage["pit_membership_available"] is False
+    assert lineage["fail_closed"] is True
+    assert lineage["missing_fields"] == []
+    assert manifest["content_hash"]
 
 
 def test_sensitive_payloads_prompts_and_runtime_dumps_are_stripped() -> None:

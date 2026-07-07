@@ -1869,6 +1869,14 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(data_quality["authority_status"], "degraded_fill_only")
         self.assertEqual(data_quality["authority_source_type"], "missing")
         self.assertEqual(data_quality["authority_reason_codes"], ["source_authority_unknown"])
+        manifest = unknown_response["dataset_reproducibility_manifest"]
+        lineage = manifest["dataset_lineage"]
+        self.assertEqual(lineage["dataset_id"], "unknown")
+        self.assertEqual(lineage["content_identity"], "unknown")
+        self.assertTrue(lineage["fail_closed"])
+        self.assertFalse(lineage["pit_membership_available"])
+        self.assertIn("source_lineage_unknown", lineage["reason_codes"])
+        self.assertIn("dataset_identity_unknown", lineage["reason_codes"])
         self.assertTrue(any(warning["code"] == "backtest_authority_degraded" for warning in data_quality["warnings"]))
         self.assertEqual(unknown_response["professionalReadiness"]["reproducibility_state"], "degraded_source_authority")
         self.assertIn(
@@ -3110,6 +3118,16 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(payload["run_timing"], response["run_timing"])
         self.assertEqual(payload["artifact_availability"], response["artifact_availability"])
         self.assertEqual(payload["readback_integrity"], response["readback_integrity"])
+        self.assertEqual(payload["dataset_manifest_identity"], response["dataset_manifest_identity"])
+        self.assertEqual(
+            payload["dataset_reproducibility_manifest"]["manifest_id"],
+            response["dataset_manifest_identity"]["manifest_id"],
+        )
+        self.assertFalse(payload["dataset_reproducibility_manifest"]["dataset_lineage"]["pit_membership_available"])
+        self.assertEqual(
+            payload["dataset_reproducibility_manifest"]["dataset_lineage"]["universe_membership_mode"],
+            "single_symbol_request",
+        )
         self.assertEqual(
             payload["execution_assumptions_fingerprint"]["source"],
             response["execution_assumptions_snapshot"]["source"],
@@ -7337,6 +7355,11 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(payload["readback_integrity"]["integrity_level"], "drift_repaired")
         self.assertEqual(payload["result_authority"]["domains"]["trade_rows"]["source"], "unavailable")
         self.assertTrue(payload["execution_assumptions_fingerprint"]["hash_sha256"])
+        self.assertEqual(payload["dataset_manifest_identity"], response["dataset_manifest_identity"])
+        self.assertEqual(
+            payload["dataset_reproducibility_manifest"]["manifest_id"],
+            response["dataset_manifest_identity"]["manifest_id"],
+        )
 
     def test_support_export_index_truthfully_marks_missing_trace_exports_unavailable(self) -> None:
         service = RuleBacktestService(self.db)
