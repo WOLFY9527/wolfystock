@@ -166,7 +166,7 @@ function handleSelectableContainerKeyDown(
   if (event.target !== event.currentTarget) {
     return;
   }
-  if (event.key === 'Enter' || event.key === ' ') {
+  if (event.key === 'Enter') {
     event.preventDefault();
     onSelect();
   }
@@ -563,10 +563,17 @@ export function ScannerCandidateDiagnosticRow({
   onToggleMore: () => void;
 }) {
   const resolvedTrustSources = trustSources?.length ? trustSources : [candidate];
+  const rowLabel = language === 'en'
+    ? `Scanner result row ${candidate.symbol || 'unknown'} ${displayName}. Press Enter for details.`
+    : `扫描结果行 ${candidate.symbol || 'unknown'} ${displayName}。按 Enter 查看详情。`;
   return (
     <article
       data-testid={`scanner-ranked-row-${candidate.symbol}`}
       data-selected={isSelectedCandidate ? 'true' : undefined}
+      role="row"
+      tabIndex={0}
+      aria-selected={isSelectedCandidate}
+      aria-label={rowLabel}
       onClick={onSelect}
       onKeyDown={(event) => handleSelectableContainerKeyDown(event, onSelect)}
       className={`cursor-pointer border-b border-[color:var(--wolfy-divider)] px-3 py-2.5 text-sm text-[color:var(--wolfy-text-secondary)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--wolfy-accent)] ${
