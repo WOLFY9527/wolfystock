@@ -108,8 +108,22 @@ const legacyStockPresentationIds = [
 const baseStructureDecision = () => ({
   schemaVersion: 'stock_structure_decision_api_v1',
   ticker: 'AAPL',
+  symbol: 'AAPL',
   structureState: 'breakout',
   confidence: 'medium',
+  confidenceCap: {
+    value: 60,
+    label: 'medium',
+    reasons: ['Need broader peer evidence.'],
+  },
+  confidenceState: {
+    status: 'evidence incomplete',
+    label: 'medium',
+    reasons: ['Need broader peer evidence.'],
+    freshnessConstrained: false,
+    sourceQualityLimited: false,
+    thesisBlocked: false,
+  },
   componentScores: {
     trend: 78,
     relativeStrength: 71,
@@ -137,7 +151,92 @@ const baseStructureDecision = () => ({
   missingEvidence: [
     { kind: 'peer_evidence_missing', message: 'Need broader peer evidence.' },
   ],
+  keyLevels: [],
+  evidenceNotes: ['Volume remained constructive.'],
+  riskObservations: ['Closes fall back into the prior range.'],
+  evidenceGaps: ['Need broader peer evidence.'],
+  historicalOhlcvReadiness: {
+    contractVersion: 'historical_ohlcv_readiness_v1',
+    symbol: 'AAPL',
+    market: 'unknown',
+    timeframe: '1d',
+    requestedRange: { start: null, end: null },
+    lookbackBars: 90,
+    requiredBars: 90,
+    usableBars: 60,
+    missingBars: 30,
+    freshnessState: 'unknown',
+    adjustmentState: 'not_required',
+    benchmarkState: 'not_requested',
+    providerState: 'available',
+    overallState: 'degraded',
+    missingRequirements: ['insufficient_history'],
+    consumerSafe: true,
+  },
+  productReadModel: {
+    contractVersion: 'product_read_model_v1',
+    surface: 'Structure Decision',
+    state: 'partial',
+    ready: false,
+    classification: {
+      observedState: 'breakout',
+      displayState: 'breakout',
+      strongConclusionAllowed: true,
+    },
+    confidence: {
+      label: 'medium',
+      state: 'evidence incomplete',
+      strongConclusionAllowed: true,
+      reasons: ['Need broader peer evidence.'],
+    },
+    evidence: {
+      missingEvidenceCount: 1,
+      readinessState: 'partial',
+      dataQualityState: 'available',
+    },
+    observationOnly: true,
+    decisionGrade: false,
+  },
+  structureComputation: {
+    status: 'degraded',
+    stateReason: 'insufficient_history',
+    message: 'Structure computation is constrained by available history.',
+  },
+  degradedInputs: [
+    {
+      section: 'peerEvidence',
+      status: 'degraded',
+      reason: 'peer_evidence_missing',
+    },
+  ],
+  peerCorrelationSnapshot: {
+    symbol: 'AAPL',
+    peerGroup: {
+      status: 'unavailable',
+      label: null,
+      symbols: [],
+    },
+    correlationState: 'insufficient_evidence',
+    peerEvidence: [],
+    divergenceEvidence: [],
+    staleInputs: [],
+    missingInputs: ['同业对比信息待确认。'],
+    confidenceCap: 'low',
+    observationBoundary: 'Observation-only peer movement context; no personalized action instruction.',
+    researchNextSteps: ['补齐本地同业分组后再复核同业走势。'],
+  },
+  consumerIssues: [
+    {
+      label: 'Evidence gap',
+      message: 'Need broader peer evidence.',
+      severity: 'warning',
+      category: 'evidence',
+    },
+  ],
   noAdviceDisclosure: 'Observation-only research context.',
+  observationOnly: true,
+  decisionGrade: false,
+  drilldownLinks: [],
 });
 
 const baseQuote = () => ({
@@ -1097,6 +1196,22 @@ describe('StockStructureDecisionPage', () => {
       missingEvidence: [
         { kind: 'daily_ohlcv', message: 'OHLCV 证据缺失时，不形成结构结论。' },
       ],
+      productReadModel: {
+        ...baseStructureDecision().productReadModel,
+        state: 'no_evidence',
+        ready: false,
+        classification: {
+          observedState: 'low_confidence',
+          displayState: 'withheld',
+          strongConclusionAllowed: false,
+        },
+        confidence: {
+          label: 'low',
+          state: 'evidence incomplete',
+          strongConclusionAllowed: false,
+          reasons: ['Need local historical bars.'],
+        },
+      },
     });
     getHistoryMock.mockResolvedValue({
       ...baseHistory('600519', 0),
@@ -1434,6 +1549,47 @@ describe('StockStructureDecisionPage', () => {
       coverage: '待补证',
     });
     expect(pack.dataReadiness.quoteState).toBe('报价待补');
+  });
+
+  it('does not mark quote evidence exportable when current price is absent', async () => {
+    getQuoteMock.mockResolvedValue({
+      ...baseQuote(),
+      currentPrice: null,
+      freshness: 'live',
+      sourceConfidence: {
+        ...baseQuote().sourceConfidence,
+        freshness: 'live',
+        isUnavailable: false,
+      },
+    });
+    getResearchPacketMock.mockResolvedValue({
+      ...partialResearchPacket(),
+      quote: {
+        state: 'available',
+        price: null,
+        changePercent: null,
+        asOf: '2026-05-28T09:30:00Z',
+      },
+    });
+    getStructureDecisionMock.mockResolvedValue(baseStructureDecision());
+
+    renderRoutePattern(
+      <StockStructureDecisionPage />,
+      '/zh/stocks/AAPL/structure-decision',
+      '/zh/stocks/:stockCode/structure-decision',
+    );
+
+    const page = await screen.findByTestId('stock-structure-decision-page');
+    const quotePanel = await within(page).findByTestId('stock-quote-boundary-panel');
+    const registry = await within(page).findByTestId('single-stock-evidence-pack-registry');
+
+    expect(quotePanel).toHaveTextContent('报价待补');
+    expect(quotePanel).not.toHaveTextContent('报价可用');
+    expect(registry).toHaveTextContent('待补证');
+    expect(within(registry).getByTestId('single-stock-evidence-pack-copy-blocked')).toBeDisabled();
+    expect(within(registry).queryByTestId('single-stock-evidence-pack-copy')).not.toBeInTheDocument();
+    expect(within(registry).queryByTestId('single-stock-evidence-pack-download')).not.toBeInTheDocument();
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
   });
 
   it('does not export fake evidence when quote evidence is unavailable', async () => {

@@ -301,6 +301,65 @@ export type StockStructureDecisionMissingEvidence = {
   message?: string | null;
 };
 
+export type StockStructureDecisionDataQuality = {
+  status: string;
+  source: string;
+  period: string;
+  requestedDays: number;
+  observedBars: number;
+  usableBars: number;
+  reason: string;
+};
+
+export type StockStructureHistoricalOhlcvReadiness = {
+  contractVersion: string;
+  symbol: string;
+  market: string;
+  timeframe: string;
+  requestedRange: {
+    start?: string | null;
+    end?: string | null;
+  };
+  lookbackBars?: number | null;
+  requiredBars: number;
+  usableBars: number;
+  missingBars: number;
+  freshnessState: string;
+  adjustmentState: string;
+  benchmarkState: string;
+  providerState: string;
+  overallState: string;
+  missingRequirements: string[];
+  consumerSafe: true;
+};
+
+export type StockStructureComputationState = {
+  status: string;
+  stateReason: string;
+  message: string;
+};
+
+export type StockStructureDecisionDegradedInput = {
+  section: string;
+  status: 'degraded' | 'unavailable' | string;
+  reason: string;
+};
+
+export type StockStructureDecisionConsumerIssue = {
+  label: string;
+  message: string;
+  severity: string;
+  category: string;
+};
+
+export type StockStructureDecisionSourceContext = {
+  source: string;
+  label: string;
+  route: string;
+  section: string;
+  reason: string;
+};
+
 export type StockStructureConfidenceCap = {
   value?: number | null;
   label?: string | null;
@@ -319,6 +378,7 @@ export type StockStructureConfidenceState = {
 export type StockStructureDecisionResponse = {
   schemaVersion: string;
   ticker: string;
+  symbol: string;
   structureState: string;
   confidence: string;
   confidenceCap?: StockStructureConfidenceCap | null;
@@ -335,19 +395,23 @@ export type StockStructureDecisionResponse = {
     needsMoreEvidence?: string[];
     riskFlags?: string[];
   };
-  dataQuality: {
-    status?: string | null;
-    source?: string | null;
-    period?: string | null;
-    requestedDays?: number | null;
-    observedBars?: number | null;
-    usableBars?: number | null;
-    reason?: string | null;
-  };
+  keyLevels: StockStructureDecisionKeyLevel[];
+  evidenceNotes: string[];
+  riskObservations: string[];
+  evidenceGaps: string[];
+  dataQuality: StockStructureDecisionDataQuality;
+  historicalOhlcvReadiness: StockStructureHistoricalOhlcvReadiness;
+  structureComputation?: StockStructureComputationState | null;
   missingEvidence: StockStructureDecisionMissingEvidence[];
+  degradedInputs: StockStructureDecisionDegradedInput[];
   productReadModel?: ProductReadModel | null;
   peerCorrelationSnapshot?: StockPeerCorrelationSnapshot;
+  consumerIssues: StockStructureDecisionConsumerIssue[];
   noAdviceDisclosure: string;
+  observationOnly: true;
+  decisionGrade: false;
+  sourceContext?: StockStructureDecisionSourceContext | null;
+  drilldownLinks: StockStructureDecisionSourceContext[];
 };
 
 export type StockStructureDecisionBatchRequest = {
@@ -422,10 +486,15 @@ export type StockQuoteSourceConfidence = {
   capReason?: string | null;
 };
 
+export type StockQuoteReadiness = {
+  consumerSafe?: boolean | null;
+  sourceFamilies?: string[] | null;
+};
+
 export type StockQuote = {
   stockCode: string;
   stockName?: string | null;
-  currentPrice: number;
+  currentPrice: number | null;
   change?: number | null;
   changePercent?: number | null;
   open?: number | null;
@@ -445,6 +514,12 @@ export type StockQuote = {
   isStale?: boolean;
   isPartial?: boolean;
   isSynthetic?: boolean;
+  isUnavailable?: boolean;
+  availabilityState?: string | null;
+  providerState?: string | null;
+  missingRequirements: string[];
+  unavailableReason?: string | null;
+  quoteReadiness?: StockQuoteReadiness | null;
   sourceConfidence?: StockQuoteSourceConfidence | null;
 };
 
@@ -456,7 +531,9 @@ function normalizeStockQuoteResponse(payload: unknown): StockQuote {
   return {
     stockCode: normalized.stockCode,
     stockName: normalized.stockName ?? null,
-    currentPrice: normalized.currentPrice,
+    currentPrice: typeof normalized.currentPrice === 'number' && Number.isFinite(normalized.currentPrice)
+      ? normalized.currentPrice
+      : null,
     change: normalized.change ?? null,
     changePercent: normalized.changePercent ?? null,
     open: normalized.open ?? null,
@@ -476,6 +553,12 @@ function normalizeStockQuoteResponse(payload: unknown): StockQuote {
     isStale: normalized.isStale,
     isPartial: normalized.isPartial,
     isSynthetic: normalized.isSynthetic,
+    isUnavailable: normalized.isUnavailable,
+    availabilityState: normalized.availabilityState ?? null,
+    providerState: normalized.providerState ?? null,
+    missingRequirements: normalizeStringArray(normalized.missingRequirements),
+    unavailableReason: normalized.unavailableReason ?? null,
+    quoteReadiness: normalized.quoteReadiness ?? null,
     sourceConfidence: normalized.sourceConfidence ?? null,
   };
 }
@@ -800,6 +883,7 @@ function normalizeStockStructureDecisionResponse(payload: unknown): StockStructu
   return {
     schemaVersion: normalized.schemaVersion,
     ticker: normalized.ticker,
+    symbol: normalized.symbol,
     structureState: normalized.structureState,
     confidence: normalized.confidence,
     confidenceCap: normalizeStockStructureConfidenceCap(normalized.confidenceCap),
@@ -816,19 +900,23 @@ function normalizeStockStructureDecisionResponse(payload: unknown): StockStructu
       needsMoreEvidence: normalized.researchNotes?.needsMoreEvidence ?? [],
       riskFlags: normalized.researchNotes?.riskFlags ?? [],
     },
-    dataQuality: {
-      status: normalized.dataQuality?.status ?? null,
-      source: normalized.dataQuality?.source ?? null,
-      period: normalized.dataQuality?.period ?? null,
-      requestedDays: normalized.dataQuality?.requestedDays ?? null,
-      observedBars: normalized.dataQuality?.observedBars ?? null,
-      usableBars: normalized.dataQuality?.usableBars ?? null,
-      reason: normalized.dataQuality?.reason ?? null,
-    },
-    missingEvidence: normalized.missingEvidence ?? [],
+    keyLevels: normalized.keyLevels,
+    evidenceNotes: normalized.evidenceNotes,
+    riskObservations: normalized.riskObservations,
+    evidenceGaps: normalized.evidenceGaps,
+    dataQuality: normalized.dataQuality,
+    historicalOhlcvReadiness: normalized.historicalOhlcvReadiness,
+    structureComputation: normalized.structureComputation ?? null,
+    missingEvidence: normalized.missingEvidence,
+    degradedInputs: normalized.degradedInputs,
     productReadModel: normalized.productReadModel ?? null,
     peerCorrelationSnapshot: normalizePeerCorrelationSnapshot(normalized.peerCorrelationSnapshot),
+    consumerIssues: normalized.consumerIssues,
     noAdviceDisclosure: normalized.noAdviceDisclosure,
+    observationOnly: normalized.observationOnly,
+    decisionGrade: normalized.decisionGrade,
+    sourceContext: normalized.sourceContext ?? null,
+    drilldownLinks: normalized.drilldownLinks,
   };
 }
 

@@ -613,12 +613,16 @@ function normalizeQuoteBoundaryToken(value: string | null | undefined): string {
   return String(value || '').trim().toLowerCase().replace(/[-\s]+/g, '_');
 }
 
+function hasQuoteCurrentPrice(quote: StockQuote | null | undefined): boolean {
+  return typeof quote?.currentPrice === 'number' && Number.isFinite(quote.currentPrice);
+}
+
 function quoteBoundaryStateLabel(quote: StockQuote, language: 'zh' | 'en'): { label: string; variant: QuoteBoundaryChipVariant } {
   const sourceConfidence = quote.sourceConfidence;
   const freshness = normalizeQuoteBoundaryToken(sourceConfidence?.freshness || quote.freshness);
   const synthetic = Boolean(sourceConfidence?.isSynthetic || quote.isSynthetic || freshness === 'synthetic');
   const stale = Boolean(sourceConfidence?.isStale || quote.isStale || freshness === 'stale' || freshness === 'delayed');
-  const unavailable = Boolean(sourceConfidence?.isUnavailable || freshness === 'unavailable');
+  const unavailable = Boolean(sourceConfidence?.isUnavailable || quote.isUnavailable || freshness === 'unavailable' || !hasQuoteCurrentPrice(quote));
   const partial = Boolean(sourceConfidence?.isPartial || quote.isPartial);
 
   if (synthetic) {
@@ -639,7 +643,7 @@ function quoteBoundaryStateLabel(quote: StockQuote, language: 'zh' | 'en'): { la
       variant: 'caution',
     };
   }
-  if (normalizeQuoteBoundaryToken(quote.freshness) || quote.currentPrice != null) {
+  if (normalizeQuoteBoundaryToken(quote.freshness) || hasQuoteCurrentPrice(quote)) {
     return {
       label: language === 'en' ? 'Quote ready' : '报价可用',
       variant: 'success',
@@ -694,7 +698,7 @@ function quoteBoundaryFreshnessLabel(quote: StockQuote, language: 'zh' | 'en'): 
       variant: 'info',
     };
   }
-  if (sourceConfidence?.isUnavailable || freshness === 'unavailable') {
+  if (sourceConfidence?.isUnavailable || quote.isUnavailable || freshness === 'unavailable' || !hasQuoteCurrentPrice(quote)) {
     return {
       label: language === 'en' ? 'Unavailable' : '暂不可用',
       variant: 'danger',
@@ -1492,9 +1496,11 @@ function isQuoteExportable(quote: StockQuote | null): quote is StockQuote {
   if (!quote) return false;
   const freshness = normalizeQuoteBoundaryToken(quote.sourceConfidence?.freshness || quote.freshness);
   return !(
-    quote.sourceConfidence?.isUnavailable
+    !hasQuoteCurrentPrice(quote)
+    || quote.sourceConfidence?.isUnavailable
     || quote.sourceConfidence?.isSynthetic
     || quote.isSynthetic
+    || quote.isUnavailable
     || freshness === 'unavailable'
     || freshness === 'synthetic'
   );

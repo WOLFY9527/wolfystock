@@ -82,6 +82,48 @@ describe('stocksApi', () => {
     expect(quote.update_time).not.toBe(quote.marketTimestamp);
   });
 
+  it('preserves missing quote price as unavailable instead of fabricating zero', async () => {
+    const { stocksApi } = await import('../stocks');
+
+    get.mockResolvedValueOnce({
+      data: {
+        stock_code: 'AAPL',
+        stock_name: 'Apple',
+        source: 'Quote unavailable',
+        freshness: 'unavailable',
+        is_unavailable: true,
+        availability_state: 'missing',
+        provider_state: 'provider_missing',
+        missing_requirements: ['quote_snapshot_missing'],
+        unavailable_reason: 'quote_snapshot_missing',
+        quote_readiness: {
+          consumer_safe: true,
+          source_families: [],
+        },
+        source_confidence: {
+          source: 'unavailable',
+          source_label: 'Quote unavailable',
+          as_of: null,
+          freshness: 'unavailable',
+          is_unavailable: true,
+          confidence_weight: 0,
+        },
+      },
+    });
+
+    const quote = await stocksApi.getQuote('AAPL');
+
+    expect(quote.currentPrice).toBeNull();
+    expect(quote.currentPrice).not.toBe(0);
+    expect(quote.isUnavailable).toBe(true);
+    expect(quote.availabilityState).toBe('missing');
+    expect(quote.providerState).toBe('provider_missing');
+    expect(quote.missingRequirements).toEqual(['quote_snapshot_missing']);
+    expect(quote.unavailableReason).toBe('quote_snapshot_missing');
+    expect(quote.quoteReadiness?.consumerSafe).toBe(true);
+    expect(quote.sourceConfidence?.isUnavailable).toBe(true);
+  });
+
   it('calls the history endpoint and normalizes readiness diagnostics', async () => {
     const { stocksApi } = await import('../stocks');
 
@@ -309,6 +351,7 @@ describe('stocksApi', () => {
       data: {
         schema_version: 'stock_structure_decision_api_v1',
         ticker: 'AAPL',
+        symbol: 'AAPL',
         structure_state: 'breakout',
         confidence: 'medium',
         confidence_cap: {
@@ -360,6 +403,46 @@ describe('stocksApi', () => {
             message: 'Need benchmark context.',
           },
         ],
+        key_levels: [
+          {
+            kind: 'recent_range_high',
+            value: 131.2,
+            description: 'Upper observation from recent highs.',
+          },
+        ],
+        evidence_notes: ['Volume remained constructive.'],
+        risk_observations: ['Closes fall back into the prior range.'],
+        evidence_gaps: ['Need benchmark context.'],
+        historical_ohlcv_readiness: {
+          contract_version: 'historical_ohlcv_readiness_v1',
+          symbol: 'AAPL',
+          market: 'unknown',
+          timeframe: '1d',
+          requested_range: { start: null, end: null },
+          lookback_bars: 90,
+          required_bars: 90,
+          usable_bars: 55,
+          missing_bars: 35,
+          freshness_state: 'unknown',
+          adjustment_state: 'not_required',
+          benchmark_state: 'not_requested',
+          provider_state: 'available',
+          overall_state: 'degraded',
+          missing_requirements: ['insufficient_history'],
+          consumer_safe: true,
+        },
+        structure_computation: {
+          status: 'degraded',
+          state_reason: 'insufficient_history',
+          message: 'Structure computation is constrained by available history.',
+        },
+        degraded_inputs: [
+          {
+            section: 'structureEvidence',
+            status: 'degraded',
+            reason: 'insufficient_history',
+          },
+        ],
         peer_correlation_snapshot: {
           symbol: 'AAPL',
           peer_group: {
@@ -390,13 +473,40 @@ describe('stocksApi', () => {
           research_next_steps: ['Review whether peer alignment persists after the next close.'],
           raw_payload: 'must-not-emit-snapshot',
         },
+        consumer_issues: [
+          {
+            label: 'Evidence gap',
+            message: 'Need benchmark context.',
+            severity: 'warning',
+            category: 'evidence',
+          },
+        ],
         no_advice_disclosure: 'Observation-only research context.',
+        observation_only: true,
+        decision_grade: false,
+        source_context: {
+          source: 'watchlist',
+          label: 'Watchlist',
+          route: '/watchlist',
+          section: 'row',
+          reason: 'handoff',
+        },
+        drilldown_links: [
+          {
+            source: 'watchlist',
+            label: 'Watchlist',
+            route: '/watchlist',
+            section: 'row',
+            reason: 'handoff',
+          },
+        ],
       },
     });
 
     const payload = await stocksApi.getStructureDecision('AAPL');
 
     expect(get).toHaveBeenCalledWith('/api/v1/stocks/AAPL/structure-decision');
+    expect(payload.symbol).toBe('AAPL');
     expect(payload.ticker).toBe('AAPL');
     expect(payload.structureState).toBe('breakout');
     expect(payload.confidence).toBe('medium');
@@ -419,6 +529,18 @@ describe('stocksApi', () => {
     expect(payload.researchNotes.watchNext).toEqual(['Observe follow-through on the next close.']);
     expect(payload.dataQuality.usableBars).toBe(55);
     expect(payload.missingEvidence[0]?.kind).toBe('benchmark_context');
+    expect(payload.keyLevels[0]?.kind).toBe('recent_range_high');
+    expect(payload.evidenceNotes).toEqual(['Volume remained constructive.']);
+    expect(payload.riskObservations).toEqual(['Closes fall back into the prior range.']);
+    expect(payload.evidenceGaps).toEqual(['Need benchmark context.']);
+    expect(payload.historicalOhlcvReadiness?.missingBars).toBe(35);
+    expect(payload.structureComputation?.status).toBe('degraded');
+    expect(payload.degradedInputs[0]?.section).toBe('structureEvidence');
+    expect(payload.consumerIssues[0]?.message).toBe('Need benchmark context.');
+    expect(payload.observationOnly).toBe(true);
+    expect(payload.decisionGrade).toBe(false);
+    expect(payload.sourceContext?.source).toBe('watchlist');
+    expect(payload.drilldownLinks[0]?.route).toBe('/watchlist');
     expect(payload.peerCorrelationSnapshot?.correlationState).toBe('aligned');
     expect(payload.peerCorrelationSnapshot?.peerGroup.symbols).toEqual(['MSFT', 'NVDA']);
     expect(payload.peerCorrelationSnapshot?.peerEvidence[0]).toMatchObject({
