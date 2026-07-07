@@ -121,23 +121,24 @@ class AuthStatusSetupStateTestCase(unittest.TestCase):
         )
 
         with patch("api.v1.endpoints.auth.is_auth_enabled") as mock_endpoint_enabled:
-            with patch("src.auth.is_auth_enabled") as mock_src_enabled:
-                mock_src_enabled.return_value = False
-                mock_endpoint_enabled.return_value = False
+            with patch("api.deps.is_auth_enabled", return_value=False):
+                with patch("src.auth.is_auth_enabled") as mock_src_enabled:
+                    mock_src_enabled.return_value = False
+                    mock_endpoint_enabled.return_value = False
 
-                with patch("api.v1.endpoints.auth._apply_auth_enabled", return_value=True):
-                    with patch("api.v1.endpoints.auth.rotate_session_secret", return_value=True):
-                        with patch("api.v1.endpoints.auth.create_session", return_value="mock.session.sig"):
-                            with patch("api.v1.endpoints.auth._get_auth_status_dict") as mock_status_dict:
-                                mock_status_dict.return_value = {
-                                    "authEnabled": True,
-                                    "loggedIn": True,
-                                    "passwordSet": True,
-                                    "passwordChangeable": True,
-                                    "setupState": "enabled",
-                                }
+                    with patch("api.v1.endpoints.auth._apply_auth_enabled", return_value=True):
+                        with patch("api.v1.endpoints.auth.rotate_session_secret", return_value=True):
+                            with patch("api.v1.endpoints.auth.create_session", return_value="mock.session.sig"):
+                                with patch("api.v1.endpoints.auth._get_auth_status_dict") as mock_status_dict:
+                                    mock_status_dict.return_value = {
+                                        "authEnabled": True,
+                                        "loggedIn": True,
+                                        "passwordSet": True,
+                                        "passwordChangeable": True,
+                                        "setupState": "enabled",
+                                    }
 
-                                response = asyncio.run(auth_update_settings(request, body))
+                                    response = asyncio.run(auth_update_settings(request, body))
 
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.body)

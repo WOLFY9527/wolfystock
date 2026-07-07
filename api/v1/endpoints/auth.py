@@ -14,7 +14,13 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
-from api.deps import get_system_config_service, require_recent_admin_reauth, resolve_current_user
+from api.deps import (
+    get_system_config_service,
+    require_admin_capability,
+    require_admin_unlock_or_recent_reauth,
+    require_recent_admin_reauth,
+    resolve_current_user,
+)
 from src.admin_rbac import expand_admin_capabilities
 from src.auth import (
     ADMIN_UNLOCK_MAX_AGE_MINUTES_DEFAULT,
@@ -1427,6 +1433,15 @@ async def auth_update_settings(request: Request, body: AuthSettingsRequest):
     current_user, error_response = _require_admin_current_user(request)
     if error_response is not None:
         return error_response
+    if current_user.is_authenticated:
+        try:
+            current_user = require_admin_capability("ops:system_config:write")(current_user)
+            require_admin_unlock_or_recent_reauth(
+                current_user,
+                admin_unlock_token=request.headers.get("X-Admin-Unlock-Token"),
+            )
+        except HTTPException as exc:
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
     target_enabled = body.auth_enabled
     current_enabled = is_auth_enabled()
@@ -1944,6 +1959,8 @@ async def auth_change_password(request: Request, body: ChangePasswordRequest):
                 status_code=400,
                 content={"error": "invalid_password", "message": err},
             )
+        if current_user.session_id:
+            AuthRepository().revoke_all_app_user_sessions(current_user.user_id)
     else:
         repo = AuthRepository()
         user_row = repo.get_app_user(current_user.user_id)
