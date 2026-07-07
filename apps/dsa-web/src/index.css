@@ -8561,6 +8561,12 @@ html[data-theme-style='paper'] .shell-header-links::-webkit-scrollbar {
   display: none;
 }
 
+html[data-theme-style='paper'] :where(.shell-drawer-link, .shell-drawer-action, .shell-nav-item):focus-visible {
+  outline: 2px solid var(--wolfy-accent-focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--wolfy-accent-focus) 18%, transparent);
+}
+
 html[data-theme-style='paper'] .consumer-page-shell {
   max-width: 1880px;
   padding: 14px 18px 38px;

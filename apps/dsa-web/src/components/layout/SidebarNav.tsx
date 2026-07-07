@@ -98,18 +98,17 @@ const BrandWordmark: React.FC<{
   onNavigate?: () => void;
   className?: string;
 }> = ({ onNavigate, className }) => (
-  <NavLink
+  <Link
     to="/"
-    end
     onClick={onNavigate}
     aria-label="WolfyStock"
-    className={({ isActive }) => cn('shell-brand-link', className || '', isActive ? 'is-active' : '')}
+    className={cn('shell-brand-link', className || '')}
   >
     <span className="inline-flex min-w-0 items-center gap-3">
       <BrandLogo className="size-8" />
       <span className={`shell-wordmark ${BRAND_WORDMARK_CLASSNAME}`}>WolfyStock</span>
     </span>
-  </NavLink>
+  </Link>
 );
 
 const ROUTE_ICON_BY_KEY: Record<CoreProductRouteKey, React.ComponentType<{ className?: string }>> = {
@@ -166,6 +165,17 @@ function isAdminOpsRoute(pathname: string): boolean {
     || routePathname.startsWith('/admin/provider-circuits')
     || routePathname.startsWith('/admin/users')
     || routePathname.startsWith('/admin/cost-observability');
+}
+
+function adminNavItemMatchesPath(pathname: string, item: AdminNavItem): boolean {
+  const routePathname = stripLocalePrefix(pathname);
+  const targetPathname = stripLocalePrefix(item.to);
+
+  if (item.key === 'system') {
+    return routePathname === targetPathname || routePathname.startsWith(`${targetPathname}/`);
+  }
+
+  return routePathname === targetPathname || routePathname.startsWith(`${targetPathname}/`);
 }
 
 function resolveAdminNavCopy(language: string): AdminNavCopy {
@@ -579,38 +589,43 @@ function useSidebarNavView({
     );
   });
 
-  const adminNavLinks = adminNavItems.map(({ key, label, to, icon: Icon }) => (
-    <NavLink
-      key={key}
-      to={to}
-      end={key === 'system'}
-      onClick={handleAdminNavigate}
-      onFocus={(event) => {
-        if (!isDrawer) {
-          event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'center' });
-        }
-      }}
-      aria-label={label}
-      className={({ isActive }) => cn(
-        isDrawer
-          ? 'shell-drawer-link'
-          : 'shell-header-link text-sm transition-colors',
-        !isDrawer && (isActive
-          ? 'font-bold'
-          : 'font-medium'),
-        isActive ? 'is-active' : '',
-      )}
-    >
-      {isDrawer ? (
-        <span className="shell-nav-item__icon" aria-hidden="true">
-          <Icon className="size-4" />
+  const adminNavLinks = adminNavItems.map((item) => {
+    const { key, label, to, icon: Icon } = item;
+    const routeActive = adminNavItemMatchesPath(location.pathname, item);
+
+    return (
+      <NavLink
+        key={key}
+        to={to}
+        onClick={handleAdminNavigate}
+        onFocus={(event) => {
+          if (!isDrawer) {
+            event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'center' });
+          }
+        }}
+        aria-label={label}
+        aria-current={routeActive ? 'page' : undefined}
+        className={({ isActive }) => cn(
+          isDrawer
+            ? 'shell-drawer-link'
+            : 'shell-header-link text-sm transition-colors',
+          !isDrawer && ((isActive || routeActive)
+            ? 'font-bold'
+            : 'font-medium'),
+          (isActive || routeActive) ? 'is-active' : '',
+        )}
+      >
+        {isDrawer ? (
+          <span className="shell-nav-item__icon" aria-hidden="true">
+            <Icon className="size-4" />
+          </span>
+        ) : null}
+        <span className={isDrawer ? 'shell-nav-item__label' : 'shell-header-link__label'}>
+          <NavLabel label={label} />
         </span>
-      ) : null}
-      <span className={isDrawer ? 'shell-nav-item__label' : 'shell-header-link__label'}>
-        <NavLabel label={label} />
-      </span>
-    </NavLink>
-  ));
+      </NavLink>
+    );
+  });
   const primaryNavLinks = showAdminPrimaryNav ? adminNavLinks : navLinks;
   const primaryNavLabel = showAdminPrimaryNav ? adminNavCopy.menuLabel : t('shell.drawerTitle');
   const primaryNavTestId = showAdminPrimaryNav ? 'shell-admin-primary-nav' : 'shell-consumer-primary-nav';
@@ -846,16 +861,19 @@ function useSidebarNavView({
     </button>
   );
 
+  const settingsPath = routeLocale ? buildLocalizedPath('/settings', routeLocale) : '/settings';
+  const personalSettingsActive = stripLocalePrefix(location.pathname) === '/settings';
   const settingsAction = !isGuest ? (
-    <NavLink
-      to="/settings"
+    <Link
+      to={settingsPath}
       onClick={onNavigate}
-      className={({ isActive }) => cn(
+      className={cn(
         isDrawer ? 'shell-drawer-action' : HEADER_UTILITY_TEXT_CLASS,
-        !isDrawer && isActive ? 'is-active' : '',
-        isDrawer && isActive ? 'is-active' : '',
+        !isDrawer && personalSettingsActive ? 'is-active' : '',
+        isDrawer && personalSettingsActive ? 'is-active' : '',
       )}
       aria-label={t('nav.settings')}
+      aria-current={personalSettingsActive ? 'page' : undefined}
     >
       {isDrawer ? (
         <>
@@ -867,7 +885,7 @@ function useSidebarNavView({
       ) : (
         <span>{t('nav.settings')}</span>
       )}
-    </NavLink>
+    </Link>
   ) : null;
 
   const adminMenuAction = hasAdminMenu && !showAdminPrimaryNav ? (
@@ -895,20 +913,25 @@ function useSidebarNavView({
             {adminNavGroups.map((group) => (
               <div key={group.key} data-testid={`shell-admin-utility-group-${group.key}`} className="space-y-1">
                 <p className="px-2 text-[10px] font-semibold uppercase tracking-normal text-[color:var(--wolfy-text-muted)]">{group.label}</p>
-                {group.items.map(({ key, label, to, icon: Icon }) => (
-                  <NavLink
-                    key={key}
-                    to={to}
-                    onClick={handleAdminNavigate}
-                    className={({ isActive }) => cn('shell-drawer-action', isActive ? 'is-active' : '')}
-                    aria-label={label}
-                  >
-                    <span className="shell-nav-item__icon" aria-hidden="true">
-                      <Icon className="size-4" />
-                    </span>
-                    <DrawerUtilityLabel label={label} />
-                  </NavLink>
-                ))}
+                {group.items.map((item) => {
+                  const { key, label, to, icon: Icon } = item;
+                  const routeActive = adminNavItemMatchesPath(location.pathname, item);
+                  return (
+                    <NavLink
+                      key={key}
+                      to={to}
+                      onClick={handleAdminNavigate}
+                      className={({ isActive }) => cn('shell-drawer-action', (isActive || routeActive) ? 'is-active' : '')}
+                      aria-label={label}
+                      aria-current={routeActive ? 'page' : undefined}
+                    >
+                      <span className="shell-nav-item__icon" aria-hidden="true">
+                        <Icon className="size-4" />
+                      </span>
+                      <DrawerUtilityLabel label={label} />
+                    </NavLink>
+                  );
+                })}
               </div>
             ))}
           </div>
@@ -939,21 +962,26 @@ function useSidebarNavView({
             {adminNavGroups.map((group) => (
               <div key={group.key} data-testid={`shell-admin-utility-group-${group.key}`} className="space-y-1">
                 <p className="px-2 text-[10px] font-semibold uppercase tracking-normal text-[color:var(--wolfy-text-muted)]">{group.label}</p>
-                {group.items.map(({ key, label, to, icon: Icon }) => (
-                  <NavLink
-                    key={key}
-                    to={to}
-                    onClick={handleAdminNavigate}
-                    className={({ isActive }) => cn(
-                      'flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-[color:var(--wolfy-text-secondary)] transition-colors hover:bg-[var(--overlay-hover)] hover:text-[color:var(--wolfy-text-primary)]',
-                      isActive ? 'bg-[var(--overlay-selected)] text-[color:var(--wolfy-text-primary)]' : '',
-                    )}
-                    aria-label={label}
-                  >
-                    <Icon className="size-4 shrink-0 text-[color:var(--wolfy-text-muted)]" />
-                    <span className="truncate">{label}</span>
-                  </NavLink>
-                ))}
+                {group.items.map((item) => {
+                  const { key, label, to, icon: Icon } = item;
+                  const routeActive = adminNavItemMatchesPath(location.pathname, item);
+                  return (
+                    <NavLink
+                      key={key}
+                      to={to}
+                      onClick={handleAdminNavigate}
+                      className={({ isActive }) => cn(
+                        'flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-[color:var(--wolfy-text-secondary)] transition-colors hover:bg-[var(--overlay-hover)] hover:text-[color:var(--wolfy-text-primary)]',
+                        (isActive || routeActive) ? 'bg-[var(--overlay-selected)] text-[color:var(--wolfy-text-primary)]' : '',
+                      )}
+                      aria-label={label}
+                      aria-current={routeActive ? 'page' : undefined}
+                    >
+                      <Icon className="size-4 shrink-0 text-[color:var(--wolfy-text-muted)]" />
+                      <span className="truncate">{label}</span>
+                    </NavLink>
+                  );
+                })}
               </div>
             ))}
           </div>

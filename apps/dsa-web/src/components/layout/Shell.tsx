@@ -646,12 +646,12 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
               />
             ) : (
               <div className="shell-mobile-strip" data-testid="shell-mobile-strip">
-                <NavLink to="/" end className="shell-mobile-brand shell-brand-link" aria-label="WolfyStock">
+                <Link to="/" className="shell-mobile-brand shell-brand-link" aria-label="WolfyStock">
                   <span className="inline-flex min-w-0 items-center gap-3">
                     <BrandLogo className="size-8" />
                     <span className={`shell-wordmark ${BRAND_WORDMARK_CLASSNAME}`}>WolfyStock</span>
                   </span>
-                </NavLink>
+                </Link>
                 <span className="shell-mobile-active-route" data-testid="shell-mobile-active-route">
                   {mobileRouteLabel}
                 </span>
