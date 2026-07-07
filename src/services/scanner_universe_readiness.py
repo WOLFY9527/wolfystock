@@ -377,6 +377,37 @@ def build_scanner_universe_readiness_from_coverage(
         for item in (lifecycle_readiness or {}).get("blockingReasons", [])
         if str(item or "").strip()
     }
+    lifecycle_activation_state = str(metadata.get("activationState") or "").strip().lower()
+    lifecycle_generated_from = str(metadata.get("generatedFrom") or "").strip().lower()
+    lifecycle_has_snapshot_identity = bool(
+        (lifecycle_readiness or {}).get("universeVersion")
+        or (lifecycle_readiness or {}).get("sourceArtifactIdentity")
+        or (lifecycle_readiness or {}).get("sourcePath")
+    )
+    lifecycle_is_authoritative = bool(
+        lifecycle_readiness
+        and (
+            lifecycle_activation_state == "active"
+            or lifecycle_generated_from == "scanner_universe_lifecycle"
+            or (lifecycle_readiness or {}).get("usable") is True
+            or lifecycle_has_snapshot_identity
+        )
+    )
+    runtime_universe_exists = bool(
+        int(universe_size or 0) > 0
+        and (
+            normalized_universe_status
+            in {
+                "available",
+                "local_universe_available",
+                "local_universe_seeded",
+                "quote_snapshot_stale",
+                "provider_not_configured",
+            }
+            or "universe" in available_classes
+        )
+    )
+    lifecycle_may_override_runtime_universe = lifecycle_is_authoritative or not runtime_universe_exists
     lifecycle_invalid_reasons = {
         "metadata_malformed",
         "normalization_rejected",
@@ -393,13 +424,13 @@ def build_scanner_universe_readiness_from_coverage(
         status = normalized_universe_status
     elif normalized_universe_status in {"missing", "stale", "not_configured"}:
         status = normalized_universe_status
-    elif lifecycle_reasons.intersection(lifecycle_invalid_reasons):
+    elif lifecycle_may_override_runtime_universe and lifecycle_reasons.intersection(lifecycle_invalid_reasons):
         status = "invalid"
-    elif lifecycle_reasons.intersection({"source_missing"}):
+    elif lifecycle_may_override_runtime_universe and lifecycle_reasons.intersection({"source_missing"}):
         status = "missing"
-    elif lifecycle_reasons.intersection({"stale_source", "stale_universe"}):
+    elif lifecycle_may_override_runtime_universe and lifecycle_reasons.intersection({"stale_source", "stale_universe"}):
         status = "stale"
-    elif lifecycle_reasons.intersection(lifecycle_blocked_reasons):
+    elif lifecycle_may_override_runtime_universe and lifecycle_reasons.intersection(lifecycle_blocked_reasons):
         status = "blocked"
     elif normalized_universe_status == "unavailable":
         status = normalized_universe_status
@@ -410,7 +441,7 @@ def build_scanner_universe_readiness_from_coverage(
     elif "stale_data" in requirements:
         status = "stale"
     elif blocked or set(available_classes) != set(SCANNER_UNIVERSE_REQUIRED_DATA_CLASSES):
-        status = "blocked" if lifecycle_readiness else "insufficient_coverage"
+        status = "blocked" if lifecycle_is_authoritative else "insufficient_coverage"
     else:
         status = "available"
 

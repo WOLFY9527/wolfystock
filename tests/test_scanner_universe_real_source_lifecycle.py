@@ -349,6 +349,49 @@ def test_readiness_contract_distinguishes_invalid_missing_stale_and_blocked() ->
     assert blocked["universeVersion"] == "scanner-universe-us-test"
 
 
+def test_readiness_contract_preserves_runtime_universe_when_lifecycle_source_missing() -> None:
+    runtime_universe = build_scanner_universe_readiness_from_coverage(
+        market="cn",
+        universe_status="available",
+        universe_size=6,
+        last_updated_at="2026-07-05T00:00:00+00:00",
+        freshness_state="fresh",
+        quote_coverage="missing",
+        history_coverage="unknown",
+        blocked=True,
+        source_metadata={
+            "lifecycleReadiness": {
+                "usable": False,
+                "symbolCount": 0,
+                "blockingReasons": ["source_missing"],
+            }
+        },
+    )
+    truly_missing = build_scanner_universe_readiness_from_coverage(
+        market="cn",
+        universe_status="missing",
+        universe_size=0,
+        last_updated_at=None,
+        freshness_state="missing_universe",
+        quote_coverage="unknown",
+        history_coverage="unknown",
+        blocked=True,
+        source_metadata={
+            "lifecycleReadiness": {
+                "usable": False,
+                "symbolCount": 0,
+                "blockingReasons": ["source_missing"],
+            }
+        },
+    )
+
+    assert runtime_universe["status"] == "insufficient_coverage"
+    assert runtime_universe["availableDataClasses"] == ["universe"]
+    assert "quote_snapshot" in runtime_universe["missingDataClasses"]
+    assert "historical_ohlcv" in runtime_universe["missingDataClasses"]
+    assert truly_missing["status"] == "missing"
+
+
 def test_cn_us_hk_normalization_qualification_for_supported_forms(tmp_path: Path) -> None:
     cn = read_scanner_universe_source_file(
         _write_json(tmp_path / "cn.json", _source(market="cn", symbols=["SH600001", "600001.SS", "SZ300123"])),
