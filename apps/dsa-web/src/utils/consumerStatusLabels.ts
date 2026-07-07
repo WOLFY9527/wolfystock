@@ -1,35 +1,17 @@
-export type ConsumerStatusLocale = 'zh' | 'en';
+import {
+  getConsumerDataStateLabel,
+  isConsumerDataStateToken,
+  normalizeConsumerStateToken,
+  type ConsumerStateLocale,
+} from './consumerDataStateVocabulary';
 
-const TOKEN_LABELS: Record<string, Record<ConsumerStatusLocale, string>> = {
-  available: { zh: '数据可用', en: 'Data available' },
-  ready: { zh: '数据可用', en: 'Data available' },
-  unavailable: { zh: '数据暂不可用', en: 'Data temporarily unavailable' },
-  stale: { zh: '数据可能已过期', en: 'Data may be stale' },
-  degraded: { zh: '数据质量受限', en: 'Data quality limited' },
-  partial: { zh: '部分证据可用', en: 'Partial evidence available' },
-  pending: { zh: '正在等待数据确认', en: 'Waiting for data confirmation' },
-  initializing: { zh: '初始化中', en: 'Initializing' },
-  refreshing: { zh: '更新中', en: 'Refreshing' },
-  pending_heavy: { zh: '多项数据仍待确认', en: 'Several data points still await confirmation' },
-  blocked: { zh: '当前无法分析', en: 'Analysis currently unavailable' },
-  insufficient: { zh: '证据不足', en: 'Evidence insufficient' },
-  insufficient_history: { zh: '历史样本不足', en: 'History insufficient' },
-  error: { zh: '数据读取异常', en: 'Data read error' },
-  failed: { zh: '数据读取异常', en: 'Data read error' },
-  failed_closed: { zh: '已安全关闭', en: 'Safely closed' },
-  maintenance: { zh: '维护中', en: 'Maintenance in progress' },
+export type ConsumerStatusLocale = ConsumerStateLocale;
+
+const CONTEXT_TOKEN_LABELS: Record<string, Record<ConsumerStatusLocale, string>> = {
   proxy: { zh: '间接参考', en: 'Proxy reference' },
   proxy_only: { zh: '仅有间接参考，证据强度受限', en: 'Proxy-only evidence with limited strength' },
-  mixed: { zh: '状态不一致', en: 'State not aligned' },
   low_confidence: { zh: '置信度较低', en: 'Confidence limited' },
   score_grade: { zh: '评分等级', en: 'Scoring tier' },
-  freshness_unavailable: { zh: '数据新鲜度暂不可用', en: 'Freshness currently unavailable' },
-  insufficient_evidence: { zh: '证据不足', en: 'Evidence insufficient' },
-  no_data: { zh: '暂无可用数据', en: 'No usable data available' },
-  empty: { zh: '暂无可用数据', en: 'No usable data available' },
-  unknown: { zh: '状态暂不明确', en: 'State not yet clear' },
-  evidence_partial: { zh: '部分证据可用', en: 'Partial evidence available' },
-  thin: { zh: '部分证据可用', en: 'Partial evidence available' },
   high: { zh: '高优先', en: 'High priority' },
   medium: { zh: '中优先', en: 'Medium priority' },
   low: { zh: '低优先', en: 'Low priority' },
@@ -68,13 +50,7 @@ function normalizePhraseKey(value: string): string {
 }
 
 export function normalizeConsumerStatusToken(value: string | null | undefined): string {
-  return String(value || '')
-    .trim()
-    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .toLowerCase()
-    .replace(/[:=./\\\s-]+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '');
+  return normalizeConsumerStateToken(value);
 }
 
 export function getConsumerStatusLabel(
@@ -85,7 +61,10 @@ export function getConsumerStatusLabel(
   if (!token) {
     return null;
   }
-  return TOKEN_LABELS[token]?.[locale] ?? null;
+  if (isConsumerDataStateToken(token)) {
+    return getConsumerDataStateLabel(token, locale);
+  }
+  return CONTEXT_TOKEN_LABELS[token]?.[locale] ?? null;
 }
 
 export function mapConsumerStatusText(

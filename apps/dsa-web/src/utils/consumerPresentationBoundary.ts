@@ -1,9 +1,14 @@
 import { getConsumerStatusLabel, mapConsumerStatusText, normalizeConsumerStatusToken } from './consumerStatusLabels';
 import { createConsumerDataQualityViewModel, type ConsumerDataQualityInput } from './consumerDataQualityViewModel';
+import {
+  getConsumerDataStateEntry,
+  type ConsumerDataState,
+  type ConsumerDataStateTone,
+} from './consumerDataStateVocabulary';
 import { sanitizeUserFacingDataIssue } from './userFacingDataIssues';
 
 export type ConsumerPresentationLocale = 'zh' | 'en';
-export type ConsumerPresentationDataState =
+export type ConsumerPresentationDataState = Extract<ConsumerDataState,
   | 'available'
   | 'partial'
   | 'stale'
@@ -11,14 +16,9 @@ export type ConsumerPresentationDataState =
   | 'insufficient'
   | 'blocked'
   | 'initializing'
-  | 'error';
+  | 'error'>;
 
-export type ConsumerPresentationStateTone =
-  | 'positive'
-  | 'neutral'
-  | 'warning'
-  | 'danger'
-  | 'muted';
+export type ConsumerPresentationStateTone = ConsumerDataStateTone;
 
 export type ConsumerPresentationStateView = {
   state: ConsumerPresentationDataState;
@@ -37,41 +37,6 @@ type PresentationCopy = {
 const FALLBACK_COPY: Record<ConsumerPresentationLocale, string> = {
   zh: '数据不足，结论仅供观察',
   en: 'Data insufficient; observe only',
-};
-
-const DATA_STATE_COPY: Record<ConsumerPresentationDataState, Record<ConsumerPresentationLocale, { label: string; message: string; tone: ConsumerPresentationStateTone }>> = {
-  available: {
-    zh: { label: '可用', message: '当前证据可用于研究观察。', tone: 'positive' },
-    en: { label: 'Available', message: 'Current evidence is available for research observation.', tone: 'positive' },
-  },
-  partial: {
-    zh: { label: '部分可用', message: '部分证据可用，结论范围需要收窄。', tone: 'warning' },
-    en: { label: 'Partial', message: 'Some evidence is available; keep the conclusion narrow.', tone: 'warning' },
-  },
-  stale: {
-    zh: { label: '已延迟', message: '证据时效受限，先按观察处理。', tone: 'warning' },
-    en: { label: 'Stale', message: 'Freshness is limited; treat this as observation.', tone: 'warning' },
-  },
-  unavailable: {
-    zh: { label: '不可用', message: '当前证据暂不可用。', tone: 'muted' },
-    en: { label: 'Unavailable', message: 'Current evidence is unavailable.', tone: 'muted' },
-  },
-  insufficient: {
-    zh: { label: '证据不足', message: '当前证据不足，暂不扩大结论。', tone: 'warning' },
-    en: { label: 'Insufficient', message: 'Evidence is insufficient; do not widen the conclusion.', tone: 'warning' },
-  },
-  blocked: {
-    zh: { label: '已阻断', message: '研究边界已阻断，暂不形成结论。', tone: 'danger' },
-    en: { label: 'Blocked', message: 'The research boundary is blocked; no conclusion is formed.', tone: 'danger' },
-  },
-  initializing: {
-    zh: { label: '初始化中', message: '数据正在初始化，等待当前更新完成。', tone: 'neutral' },
-    en: { label: 'Initializing', message: 'Data is initializing; wait for the current update to finish.', tone: 'neutral' },
-  },
-  error: {
-    zh: { label: '读取异常', message: '数据读取异常，请稍后重试。', tone: 'danger' },
-    en: { label: 'Error', message: 'Data read failed; try again later.', tone: 'danger' },
-  },
 };
 
 const INTERNAL_COPY_BY_KEY: Record<string, PresentationCopy> = {
@@ -375,12 +340,12 @@ export function consumerPresentationDataState(
     state = 'available';
   }
 
-  const copy = DATA_STATE_COPY[state][locale];
+  const copy = getConsumerDataStateEntry(state, locale);
   return {
     state,
-    label: copy.label,
+    label: copy.shortLabel,
     tone: copy.tone,
-    message: copy.message,
+    message: copy.explanation,
     ...(qualityView.asOf ? { asOf: qualityView.asOf } : {}),
     ...(qualityView.updatedAt ? { updatedAt: qualityView.updatedAt } : {}),
   };

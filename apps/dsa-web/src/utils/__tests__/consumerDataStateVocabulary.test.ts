@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   consumerSafeOperatorAction,
   getConsumerDataStateEntry,
+  getConsumerDataStateLabel,
   isRawConsumerDataStateText,
+  normalizeConsumerStateToken,
   sanitizeConsumerDataStateText,
 } from '../consumerDataStateVocabulary';
 
@@ -13,11 +15,11 @@ describe('consumerDataStateVocabulary', () => {
   it('defines the unified consumer data-state vocabulary with Chinese labels and next steps', () => {
     const cases = [
       ['ready', '数据可用', '继续观察关键证据是否保持一致。'],
-      ['partial', '部分可用', '先查看已返回的模块，再等待缺口补齐。'],
-      ['stale', '最近可用', '等待下一次数据刷新后再扩大解读。'],
+      ['partial', '部分证据可用', '先查看已返回的模块，再等待缺口补齐。'],
+      ['stale', '数据可能已过期', '等待下一次数据刷新后再扩大解读。'],
       ['missing', '证据待补', '等待数据补齐，或先查看已有历史记录。'],
       ['disabled', '暂未启用', '查看其他已启用模块，或等待功能开放。'],
-      ['unavailable', '暂不可用', '稍后刷新，或查看其他仍可用的观察模块。'],
+      ['unavailable', '数据暂不可用', '稍后刷新，或查看其他仍可用的观察模块。'],
       ['failed_closed', '已安全关闭', '等待证据恢复后再重新查看。'],
       ['maintenance', '维护中', '等待下一次数据刷新。'],
     ] as const;
@@ -31,9 +33,24 @@ describe('consumerDataStateVocabulary', () => {
     }
   });
 
+  it('is the zh/en owner for page-facing state labels', () => {
+    expect(normalizeConsumerStateToken('freshness=unavailable')).toBe('freshness_unavailable');
+    expect(getConsumerDataStateLabel('available', 'zh')).toBe('数据可用');
+    expect(getConsumerDataStateLabel('available', 'en')).toBe('Data available');
+    expect(getConsumerDataStateLabel('available', 'zh', 'short')).toBe('可用');
+    expect(getConsumerDataStateLabel('available', 'en', 'short')).toBe('Available');
+    expect(getConsumerDataStateEntry('ready', 'en')).toMatchObject({
+      state: 'available',
+      label: 'Data available',
+      shortLabel: 'Available',
+      severity: 'success',
+      tone: 'positive',
+    });
+  });
+
   it('maps T146 readiness and operator text into consumer-safe Chinese copy', () => {
     expect(getConsumerDataStateEntry('failed-closed').label).toBe('已安全关闭');
-    expect(getConsumerDataStateEntry('insufficient_coverage').label).toBe('部分可用');
+    expect(getConsumerDataStateEntry('insufficient_coverage').label).toBe('部分证据可用');
     expect(getConsumerDataStateEntry('not_configured').label).toBe('证据待补');
     expect(isRawConsumerDataStateText('historical ohlcv provider debug pipeline')).toBe(true);
     expect(isRawConsumerDataStateText('research packet handoff evidence families')).toBe(true);
@@ -52,29 +69,40 @@ describe('consumerDataStateVocabulary', () => {
     const initializing = getConsumerDataStateEntry('initializing');
     const refreshing = getConsumerDataStateEntry('refreshing');
     const pending = getConsumerDataStateEntry('pending');
+    const pendingHeavy = getConsumerDataStateEntry('pending-heavy');
+    const unknown = getConsumerDataStateEntry('unknown');
     const error = getConsumerDataStateEntry('error');
     const failed = getConsumerDataStateEntry('failed');
 
-    expect(available.state).toBe('ready');
+    expect(available.state).toBe('available');
     expect(available.label).toBe('数据可用');
 
     expect(insufficient.state).toBe('insufficient');
     expect(insufficient.label).toBe('证据不足');
     expect(`${insufficient.label} ${insufficient.explanation} ${insufficient.nextStep}`).not.toMatch(RAW_PATTERN);
 
-    expect(insufficientHistory.state).toBe('insufficient');
-    expect(insufficientHistory.label).toBe('证据不足');
+    expect(insufficientHistory.state).toBe('insufficient_history');
+    expect(insufficientHistory.label).toBe('历史样本不足');
 
     expect(blocked.state).toBe('blocked');
-    expect(blocked.label).toBe('已阻断');
+    expect(blocked.label).toBe('当前无法分析');
+    expect(blocked.shortLabel).toBe('已阻断');
 
     expect(initializing.state).toBe('initializing');
     expect(initializing.label).toBe('初始化中');
-    expect(refreshing.state).toBe('initializing');
-    expect(pending.state).toBe('initializing');
+    expect(refreshing.state).toBe('refreshing');
+    expect(refreshing.label).toBe('更新中');
+    expect(pending.state).toBe('pending');
+    expect(pending.label).toBe('正在等待数据确认');
+    expect(pendingHeavy.state).toBe('pending_heavy');
+    expect(pendingHeavy.label).toBe('多项数据仍待确认');
+    expect(unknown.state).toBe('unknown');
+    expect(unknown.label).toBe('状态暂不明确');
 
     expect(error.state).toBe('error');
-    expect(error.label).toBe('读取异常');
-    expect(failed.state).toBe('error');
+    expect(error.label).toBe('数据读取异常');
+    expect(error.shortLabel).toBe('读取异常');
+    expect(failed.state).toBe('failed');
+    expect(failed.label).toBe('数据读取异常');
   });
 });

@@ -1,12 +1,15 @@
 import type { ProductReadModel, ProductReadModelState } from '../types/productReadModel';
+import {
+  getConsumerDataStateEntry,
+  getConsumerDataStateLabel,
+  isConsumerDataStateToken,
+  normalizeConsumerStateToken,
+} from './consumerDataStateVocabulary';
 
 export type ProductReadModelTone = 'success' | 'warning' | 'error' | 'info' | 'disabled';
 
 export function normalizeProductReadState(value?: string | null): ProductReadModelState {
-  const normalized = String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[-\s]+/g, '_');
+  const normalized = normalizeConsumerStateToken(value);
   if (!normalized) return 'no_evidence';
   if (normalized === 'ready') return 'available';
   if (['initializing', 'refreshing', 'loading'].includes(normalized)) return 'initializing';
@@ -16,45 +19,20 @@ export function normalizeProductReadState(value?: string | null): ProductReadMod
 
 export function productReadModelTone(state?: string | null): ProductReadModelTone {
   const normalized = normalizeProductReadState(state);
-  if (normalized === 'available') return 'success';
-  if (normalized === 'partial' || normalized === 'stale' || normalized === 'degraded') {
-    return 'warning';
-  }
-  if (normalized === 'pending' || normalized === 'initializing') {
-    return 'info';
-  }
-  if (
-    normalized === 'blocked'
-    || normalized === 'unavailable'
-    || normalized === 'insufficient'
-    || normalized === 'no_evidence'
-    || normalized === 'rejected'
-    || normalized === 'error'
-    || normalized === 'failed_closed'
-  ) {
-    return 'error';
-  }
-  return 'disabled';
+  if (!isConsumerDataStateToken(normalized)) return 'disabled';
+  const severity = getConsumerDataStateEntry(normalized).severity;
+  if (severity === 'success') return 'success';
+  if (severity === 'warning') return 'warning';
+  if (severity === 'info') return 'info';
+  return 'error';
 }
 
 export function productReadStateLabel(state: string | null | undefined, language: 'zh' | 'en'): string {
   const normalized = normalizeProductReadState(state);
-  const labels: Record<string, { zh: string; en: string }> = {
-    available: { zh: '可用', en: 'Available' },
-    partial: { zh: '部分可用', en: 'Partial' },
-    stale: { zh: '已过期', en: 'Stale' },
-    unavailable: { zh: '不可用', en: 'Unavailable' },
-    insufficient: { zh: '证据不足', en: 'Insufficient' },
-    no_evidence: { zh: '暂无证据', en: 'No evidence' },
-    degraded: { zh: '降级可读', en: 'Degraded' },
-    rejected: { zh: '已拒绝', en: 'Rejected' },
-    pending: { zh: '待确认', en: 'Pending' },
-    initializing: { zh: '初始化中', en: 'Initializing' },
-    blocked: { zh: '已阻断', en: 'Blocked' },
-    error: { zh: '读取异常', en: 'Read error' },
-    failed_closed: { zh: '已安全关闭', en: 'Safely closed' },
-  };
-  return labels[normalized]?.[language] || (language === 'en' ? 'Not ready' : '暂未就绪');
+  if (isConsumerDataStateToken(normalized)) {
+    return getConsumerDataStateLabel(normalized, language, 'short');
+  }
+  return language === 'en' ? 'Not ready' : '暂未就绪';
 }
 
 export function productReadModelIsBlocking(model?: ProductReadModel | null): boolean {
@@ -77,7 +55,7 @@ export function productReadModelIsBlocking(model?: ProductReadModel | null): boo
 }
 
 function productReadEvidenceLabel(value: string, language: 'zh' | 'en'): string {
-  const normalized = String(value || '').trim().toLowerCase().replace(/[-\s]+/g, '_');
+  const normalized = normalizeConsumerStateToken(value);
   const labels: Record<string, { zh: string; en: string }> = {
     coverage: { zh: '覆盖证据', en: 'Coverage evidence' },
     data_quality: { zh: '数据质量证据', en: 'Data quality evidence' },
