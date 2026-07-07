@@ -12,6 +12,8 @@ import math
 from typing import Any, Mapping, Sequence
 
 
+OFFICIAL_MACRO_LIQUIDITY_SNAPSHOT_CONTRACT_VERSION = "official_macro_liquidity_snapshot_v1"
+OFFICIAL_MACRO_DEFAULT_LINEAGE_REFERENCE = "market_overview:macro"
 OFFICIAL_FED_LIQUIDITY_PROVIDER_ID = "official_public.fed_liquidity"
 OFFICIAL_FED_LIQUIDITY_PROVIDER_NAME = "Official Fed Liquidity"
 OFFICIAL_FED_LIQUIDITY_SOURCE_TYPE = "official_public"
@@ -224,6 +226,24 @@ def build_official_fed_liquidity_cache_bundle(
         degradation_reason = "budget_exhausted"
     elif malformed:
         degradation_reason = "malformed_official_value"
+    stale_reason = _snapshot_stale_reason(
+        reason_prefix="official_fed_liquidity",
+        stale=stale,
+        degradation_reason=degradation_reason,
+    )
+    snapshot_read_model = build_official_macro_snapshot_read_model(
+        provider_id=OFFICIAL_FED_LIQUIDITY_PROVIDER_ID,
+        required_series=OFFICIAL_FED_LIQUIDITY_REQUIRED_SERIES,
+        rows_by_series=rows_by_series,
+        series_resolver=official_fed_liquidity_series_id,
+        freshness_policies=OFFICIAL_FED_LIQUIDITY_FRESHNESS_POLICIES,
+        fulfilled_series=fulfilled,
+        missing_series=missing,
+        stale_series=stale,
+        freshness_state=freshness,
+        authority_allowed=score_allowed,
+        stale_reason=stale_reason,
+    )
 
     evidence = {
         "aggregateSupported": True,
@@ -296,6 +316,7 @@ def build_official_fed_liquidity_cache_bundle(
         "cacheSafeOfficialEvidenceAllowed": score_allowed,
         "reasonCodes": reason_codes,
         "degradationReason": degradation_reason,
+        "snapshotReadModel": snapshot_read_model,
         "sourceFreshnessEvidence": evidence,
     }
 
@@ -754,6 +775,24 @@ def _build_official_macro_readiness_bundle(
         degradation_reason = "fallback_or_proxy_source"
     elif unavailable:
         degradation_reason = f"unavailable_{reason_prefix}_evidence"
+    stale_reason = _snapshot_stale_reason(
+        reason_prefix=reason_prefix,
+        stale=stale,
+        degradation_reason=degradation_reason,
+    )
+    snapshot_read_model = build_official_macro_snapshot_read_model(
+        provider_id=provider_id,
+        required_series=required_series,
+        rows_by_series=rows_by_series,
+        series_resolver=series_resolver,
+        freshness_policies=freshness_policies,
+        fulfilled_series=fulfilled_required,
+        missing_series=missing,
+        stale_series=stale,
+        freshness_state=freshness,
+        authority_allowed=readiness_eligible,
+        stale_reason=stale_reason,
+    )
 
     eligible_series = [*fulfilled_required, *fulfilled_context]
     evidence = {
@@ -839,8 +878,169 @@ def _build_official_macro_readiness_bundle(
         "cacheSafeOfficialEvidenceAllowed": readiness_eligible,
         "reasonCodes": reason_codes,
         "degradationReason": degradation_reason,
+        "snapshotReadModel": snapshot_read_model,
         "sourceFreshnessEvidence": evidence,
     }
+
+
+def build_official_macro_snapshot_read_model(
+    *,
+    provider_id: str,
+    required_series: Sequence[str],
+    rows_by_series: Mapping[str, Mapping[str, Any]],
+    series_resolver: Any,
+    freshness_policies: Mapping[str, str],
+    fulfilled_series: Sequence[str],
+    missing_series: Sequence[str],
+    stale_series: Sequence[str],
+    freshness_state: str,
+    authority_allowed: bool,
+    stale_reason: str | None,
+    lineage_reference: str = OFFICIAL_MACRO_DEFAULT_LINEAGE_REFERENCE,
+) -> dict[str, Any]:
+    """Build a cache-only durable read-model projection for official macro rows."""
+
+    required = [str(series_id) for series_id in required_series]
+    fulfilled = [str(series_id) for series_id in fulfilled_series]
+    stale = [str(series_id) for series_id in stale_series]
+    missing = [
+        str(series_id)
+        for series_id in missing_series
+        if str(series_id) not in stale
+    ]
+    required_count = len(required)
+    fulfilled_count = len(fulfilled)
+    coverage_ratio = round(fulfilled_count / required_count, 3) if required_count else 0.0
+    completeness = (
+        "complete"
+        if required_count and fulfilled_count == required_count and not missing and not stale
+        else ("missing" if not fulfilled_count else "partial")
+    )
+    retrieval_timestamp = _bundle_retrieval_timestamp(rows_by_series.values())
+    snapshot_id = _snapshot_id(
+        provider_id=provider_id,
+        required_series=required,
+        retrieval_timestamp=retrieval_timestamp,
+    )
+    authority_state = "score_grade_allowed" if authority_allowed else "blocked"
+    series_rows = [
+        _snapshot_series_entry(
+            series_id=series_id,
+            row=rows_by_series.get(series_id),
+            series_resolver=series_resolver,
+            expected_cadence=freshness_policies.get(series_id),
+            authority_state=authority_state if series_id in fulfilled else "blocked",
+        )
+        for series_id in required
+    ]
+    return {
+        "contractVersion": OFFICIAL_MACRO_LIQUIDITY_SNAPSHOT_CONTRACT_VERSION,
+        "snapshotId": snapshot_id,
+        "lineageReference": lineage_reference,
+        "retrievalMode": "cache_only",
+        "externalProviderCalls": False,
+        "authorityState": authority_state,
+        "freshnessState": freshness_state,
+        "coverage": {
+            "requiredCount": required_count,
+            "fulfilledCount": fulfilled_count,
+            "coverageRatio": coverage_ratio,
+            "completeness": completeness,
+        },
+        "missingSeries": missing,
+        "staleSeries": stale,
+        "staleReason": stale_reason,
+        "series": series_rows,
+    }
+
+
+def _snapshot_series_entry(
+    *,
+    series_id: str,
+    row: Mapping[str, Any] | None,
+    series_resolver: Any,
+    expected_cadence: str | None,
+    authority_state: str,
+) -> dict[str, Any]:
+    if not isinstance(row, Mapping):
+        return {
+            "seriesId": series_id,
+            "sourceId": None,
+            "observationTimestamp": None,
+            "retrievalTimestamp": None,
+            "sourceType": OFFICIAL_FED_LIQUIDITY_SOURCE_TYPE,
+            "authorityState": "blocked",
+            "freshnessState": "missing",
+            "expectedCadence": expected_cadence,
+        }
+    resolved_series_id = series_resolver(row) or series_id
+    freshness_state = _row_freshness(row)
+    return {
+        "seriesId": resolved_series_id,
+        "sourceId": _text(row.get("sourceId") or row.get("source_id")) or None,
+        "observationTimestamp": _row_observation_timestamp(row),
+        "retrievalTimestamp": _row_retrieval_timestamp(row),
+        "sourceType": _text(row.get("sourceType") or row.get("source_type")) or OFFICIAL_FED_LIQUIDITY_SOURCE_TYPE,
+        "authorityState": authority_state,
+        "freshnessState": freshness_state,
+        "expectedCadence": expected_cadence,
+    }
+
+
+def _snapshot_id(
+    *,
+    provider_id: str,
+    required_series: Sequence[str],
+    retrieval_timestamp: str | None,
+) -> str:
+    return f"{provider_id}:{','.join(required_series)}:{retrieval_timestamp or 'missing'}"
+
+
+def _bundle_retrieval_timestamp(rows: Sequence[Mapping[str, Any]]) -> str | None:
+    timestamps = [_row_retrieval_timestamp(row) for row in rows if isinstance(row, Mapping)]
+    timestamps = [timestamp for timestamp in timestamps if timestamp]
+    return max(timestamps) if timestamps else None
+
+
+def _row_observation_timestamp(row: Mapping[str, Any]) -> str | None:
+    return (
+        _text(
+            row.get("officialObservationDate")
+            or row.get("official_observation_date")
+            or row.get("officialAsOf")
+            or row.get("official_as_of")
+            or row.get("date")
+            or row.get("asOf")
+            or row.get("as_of")
+        )
+        or None
+    )
+
+
+def _row_retrieval_timestamp(row: Mapping[str, Any]) -> str | None:
+    return (
+        _text(
+            row.get("retrievalTimestamp")
+            or row.get("retrieval_timestamp")
+            or row.get("updatedAt")
+            or row.get("updated_at")
+            or row.get("last_refresh_at")
+            or row.get("asOf")
+            or row.get("as_of")
+        )
+        or None
+    )
+
+
+def _snapshot_stale_reason(
+    *,
+    reason_prefix: str,
+    stale: Sequence[str],
+    degradation_reason: str | None,
+) -> str | None:
+    if stale:
+        return f"stale_{reason_prefix}_evidence"
+    return degradation_reason if degradation_reason and "stale" in degradation_reason else None
 
 
 def _append_classification_reason(

@@ -6604,6 +6604,144 @@ def test_fed_liquidity_indicator_fails_closed_for_stale_official_bundle(
     assert bundle["externalProviderCalls"] is False
 
 
+def test_t253_fed_liquidity_cache_bundle_exposes_durable_snapshot_contract(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    base_as_of = "2026-05-20T16:15:00+08:00"
+    items = [
+        _fed_liquidity_macro_item("FED_ASSETS", value=7485000.0, change_percent=0.13),
+        _fed_liquidity_macro_item("FED_RRP", value=432.2, change_percent=-5.01),
+        _fed_liquidity_macro_item("TGA", value=812000.0, change_percent=-1.69),
+        _fed_liquidity_macro_item("RESERVES", value=3260000.0, change_percent=0.62),
+    ]
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=items,
+            updated_at=base_as_of,
+            as_of=base_as_of,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(payload)["fed_liquidity"]
+    bundle = indicator["evidence"]["cacheBundleDiagnostics"]
+    snapshot = bundle["snapshotReadModel"]
+
+    assert snapshot["contractVersion"] == "official_macro_liquidity_snapshot_v1"
+    assert snapshot["snapshotId"] == "official_public.fed_liquidity:WALCL,RRPONTSYD,WTREGEN,WRESBAL:2026-05-20T16:15:00+08:00"
+    assert snapshot["lineageReference"] == "market_overview:macro"
+    assert snapshot["retrievalMode"] == "cache_only"
+    assert snapshot["externalProviderCalls"] is False
+    assert snapshot["coverage"]["requiredCount"] == 4
+    assert snapshot["coverage"]["fulfilledCount"] == 4
+    assert snapshot["coverage"]["completeness"] == "complete"
+    assert snapshot["missingSeries"] == []
+    assert snapshot["authorityState"] == "score_grade_allowed"
+    assert snapshot["freshnessState"] == "cached"
+    assert snapshot["staleReason"] is None
+    series = {row["seriesId"]: row for row in snapshot["series"]}
+    assert set(series) == {"WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"}
+    assert series["WALCL"]["sourceId"] == "fred:WALCL"
+    assert series["WALCL"]["sourceType"] == "official_public"
+    assert series["WALCL"]["observationTimestamp"] == "2026-05-20"
+    assert series["WALCL"]["retrievalTimestamp"] == base_as_of
+    assert series["WALCL"]["expectedCadence"] == "official_weekly_fed_liquidity_t_plus_7"
+    assert series["WALCL"]["authorityState"] == "score_grade_allowed"
+    assert series["WALCL"]["freshnessState"] == "cached"
+
+
+def test_t253_persistent_official_macro_snapshot_passive_read_does_not_network_or_mutate_cache(
+    isolated_db: DatabaseManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = _make_service()
+    base_as_of = "2026-05-20T16:15:00+08:00"
+    payload = _cache_entry(
+        source="mixed",
+        freshness="cached",
+        items=[
+            _fed_liquidity_macro_item("FED_ASSETS", value=7485000.0, change_percent=0.13),
+            _fed_liquidity_macro_item("FED_RRP", value=432.2, change_percent=-5.01),
+            _fed_liquidity_macro_item("TGA", value=812000.0, change_percent=-1.69),
+            _fed_liquidity_macro_item("RESERVES", value=3260000.0, change_percent=0.62),
+        ],
+        updated_at=base_as_of,
+        as_of=base_as_of,
+    )
+    _save_market_overview_snapshot(isolated_db, key="macro", payload=payload)
+    writes: list[str] = []
+    monkeypatch.setattr(
+        service.cache,
+        "set",
+        lambda *args, **kwargs: writes.append("set"),
+    )
+    monkeypatch.setattr(
+        service.cache,
+        "get_or_refresh",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("passive read must not prewarm or refresh")),
+    )
+    monkeypatch.setattr(
+        "src.services.official_macro_transport.urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("passive read must not call official macro network")),
+    )
+
+    result = service.get_liquidity_monitor()
+    indicator = _indicators_by_key(result)["fed_liquidity"]
+    snapshot = indicator["evidence"]["cacheBundleDiagnostics"]["snapshotReadModel"]
+
+    assert writes == []
+    assert indicator["includedInScore"] is True
+    assert snapshot["lineageReference"] == "market_overview:macro"
+    assert snapshot["retrievalMode"] == "cache_only"
+    assert snapshot["externalProviderCalls"] is False
+    assert snapshot["coverage"]["completeness"] == "complete"
+
+
+def test_t253_fed_liquidity_snapshot_reports_missing_and_stale_semantics(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    base_as_of = "2026-05-20T16:15:00+08:00"
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="mixed",
+            freshness="stale",
+            items=[
+                _fed_liquidity_macro_item(
+                    "FED_ASSETS",
+                    value=7485000.0,
+                    change_percent=0.13,
+                    freshness="stale",
+                    is_stale=True,
+                ),
+                _fed_liquidity_macro_item("FED_RRP", value=432.2, change_percent=-5.01),
+            ],
+            updated_at=base_as_of,
+            as_of=base_as_of,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    bundle = _indicators_by_key(payload)["fed_liquidity"]["evidence"]["cacheBundleDiagnostics"]
+    snapshot = bundle["snapshotReadModel"]
+
+    assert snapshot["coverage"]["requiredCount"] == 4
+    assert snapshot["coverage"]["fulfilledCount"] == 1
+    assert snapshot["coverage"]["completeness"] == "partial"
+    assert snapshot["missingSeries"] == ["WTREGEN", "WRESBAL"]
+    assert snapshot["staleSeries"] == ["WALCL"]
+    assert snapshot["freshnessState"] == "stale"
+    assert snapshot["authorityState"] == "blocked"
+    assert snapshot["staleReason"] == "stale_official_fed_liquidity_evidence"
+
+
 def test_fed_liquidity_indicator_fails_closed_for_fallback_proxy_bundle(
     isolated_db: DatabaseManager,
 ) -> None:

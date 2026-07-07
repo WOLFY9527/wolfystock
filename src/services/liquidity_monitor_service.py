@@ -255,6 +255,7 @@ EVIDENCE_INPUT_METADATA_FIELDS = (
     "sourceAuthorityReason",
     "sourceAuthorityRouteRejected",
     "routeRejectedReasonCodes",
+    "sourceId",
     "officialSeriesId",
     "officialObservationDate",
     "officialAsOf",
@@ -2679,6 +2680,7 @@ class LiquidityMonitorService:
 
     def _component_projection_meta(self, item: Dict[str, Any], panel: PanelState) -> Dict[str, Any]:
         freshness = self._item_freshness(item, panel)
+        is_official_public = self._item_source_type(item, panel) == "official_public"
         metadata = {
             "source": item.get("source") or panel.source,
             "sourceLabel": item.get("sourceLabel") or panel.payload.get("sourceLabel"),
@@ -2686,7 +2688,7 @@ class LiquidityMonitorService:
             "asOf": item.get("asOf") or item.get("updatedAt") or panel.as_of or panel.updated_at,
             "freshness": freshness,
             "isFallback": bool(item.get("isFallback") or item.get("fallbackUsed") or panel.is_fallback),
-            "isStale": bool(item.get("isStale") or freshness == "stale" or panel.is_stale),
+            "isStale": bool(item.get("isStale") or freshness == "stale" or (panel.is_stale and not is_official_public)),
             "isPartial": bool(item.get("isPartial")),
             "isUnavailable": bool(item.get("isUnavailable")),
         }
@@ -2997,6 +2999,13 @@ class LiquidityMonitorService:
         explicit = str(item.get("freshness") or "").lower()
         source = str(item.get("source") or panel.source or "").lower()
         source_type = self._item_source_type(item, panel)
+        if (
+            source_type == "official_public"
+            and explicit in FRESHNESS_ORDER
+            and not bool(item.get("isFallback") or item.get("fallbackUsed"))
+            and source not in {"fallback", "mock", "unavailable"}
+        ):
+            return self._weakest_freshness([explicit, "stale"]) if item.get("isStale") else explicit
         is_fallback = bool(item.get("isFallback") or item.get("fallbackUsed") or panel.is_fallback or source in {"fallback", "mock", "unavailable"})
         is_stale = bool(item.get("isStale") or panel.is_stale)
         source_type_floor = self._source_type_freshness_floor(source_type)

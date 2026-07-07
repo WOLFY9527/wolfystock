@@ -4469,35 +4469,50 @@ class MarketOverviewService:
             or str(payload.get("source") or "").lower() in {"fallback", "mock"}
             or str(row.get("source") or "").lower() in {"fallback", "mock"}
         )
+        official_snapshot = cache_key in {"macro", "rates", "volatility"} and self._snapshot_has_non_fallback_official_rows(payload)
         payload["isFromSnapshot"] = True
-        payload["isStale"] = True
+        payload["isStale"] = False if official_snapshot else True
         payload["lastSuccessfulAt"] = last_successful_at
         payload["updatedAt"] = payload.get("updatedAt") or row.get("updated_at") or _now_iso()
         payload["asOf"] = payload.get("asOf") or last_successful_at
         payload["sourceLabel"] = payload.get("sourceLabel") or "Snapshot"
         payload["source"] = payload.get("source") or "cached"
-        payload["freshness"] = "fallback" if snapshot_was_fallback else "stale"
+        if not official_snapshot:
+            payload["freshness"] = "fallback" if snapshot_was_fallback else "stale"
+        else:
+            payload["freshness"] = payload.get("freshness") or str(row.get("freshness") or "cached")
         payload["isFallback"] = snapshot_was_fallback
         payload["fallbackUsed"] = bool(payload.get("fallbackUsed") or snapshot_was_fallback)
         payload["warning"] = "数据源刷新失败，当前显示最近成功快照"
         items = payload.get("items")
         if isinstance(items, list):
             payload["items"] = [
-                {
-                    **item,
-                    "isFromSnapshot": True,
-                    "isStale": True,
-                    "freshness": "fallback" if (
-                        item.get("isFallback")
-                        or item.get("fallbackUsed")
-                        or str(item.get("source") or "").lower() in {"fallback", "mock"}
-                    ) else "stale",
-                }
+                self._mark_persistent_snapshot_item(item, official_snapshot=official_snapshot)
                 if isinstance(item, dict)
                 else item
                 for item in items
             ]
         return payload
+
+    def _mark_persistent_snapshot_item(self, item: Dict[str, Any], *, official_snapshot: bool) -> Dict[str, Any]:
+        if official_snapshot and self._is_non_fallback_official_row(item, {"source": "mixed"}):
+            return {
+                **item,
+                "isFromSnapshot": True,
+                "isStale": bool(item.get("isStale")),
+                "freshness": item.get("freshness") or "cached",
+            }
+        is_fallback = bool(
+            item.get("isFallback")
+            or item.get("fallbackUsed")
+            or str(item.get("source") or "").lower() in {"fallback", "mock"}
+        )
+        return {
+            **item,
+            "isFromSnapshot": True,
+            "isStale": True,
+            "freshness": "fallback" if is_fallback else "stale",
+        }
 
     def _fallback_market_snapshot(self, cache_key: str, source: str) -> Dict[str, Any]:
         cached = self._market_data_cache.get(cache_key)
