@@ -1365,6 +1365,34 @@ def test_structure_decision_batch_endpoint_returns_comparative_contract(monkeypa
     assert "best" not in serialized
 
 
+def test_structure_decision_batch_post_is_pure_read_projection(monkeypatch) -> None:
+    fake_service = _FakeStructureDecisionService(_payload())
+    monkeypatch.setattr(
+        stocks_endpoint,
+        "StockStructureDecisionService",
+        lambda: fake_service,
+        raising=False,
+    )
+
+    response = _client().post(
+        "/api/v1/stocks/structure-decisions/batch",
+        json={"stockCodes": ["msft", "aapl"], "benchmark": "spy", "maxItems": 2},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert fake_service.batch_calls == [
+        {"tickers": ["msft", "aapl"], "benchmark": "spy", "max_items": 2}
+    ]
+    assert payload["symbolCompareEvidencePacket"]["observationBoundary"] == {
+        "observationOnly": True,
+        "decisionGrade": False,
+        "rankingAllowed": False,
+        "adviceAllowed": False,
+    }
+    assert payload["symbolCompareEvidencePacket"]["confidenceCap"]["value"] == 100
+
+
 def test_structure_decision_batch_endpoint_rejects_empty_stock_codes(monkeypatch) -> None:
     fake_service = _FakeStructureDecisionService(_payload())
     monkeypatch.setattr(

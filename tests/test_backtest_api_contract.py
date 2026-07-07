@@ -2881,6 +2881,30 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "summary.visualization.comparison",
         )
 
+    def test_compare_rule_backtest_post_is_read_with_local_stored_projection(self) -> None:
+        service = MagicMock()
+        service.compare_runs.return_value = {
+            "comparison_source": "stored_rule_backtest_runs",
+            "read_mode": "stored_first",
+            "requested_run_ids": [101, 202],
+            "resolved_run_ids": [101, 202],
+            "comparable_run_ids": [101, 202],
+            "missing_run_ids": [],
+            "unavailable_runs": [],
+            "field_groups": ["metadata", "metrics"],
+            "items": [],
+        }
+
+        with patch("api.v1.endpoints.backtest._build_rule_backtest_service", return_value=service):
+            request = RuleBacktestCompareRequest(run_ids=[101, 202])
+            response = compare_rule_backtest_runs(request, db_manager=MagicMock())
+
+        payload = response.model_dump()
+        service.compare_runs.assert_called_once_with([101, 202])
+        self.assertEqual(payload["comparison_source"], "stored_rule_backtest_runs")
+        self.assertEqual(payload["read_mode"], "stored_first")
+        self.assertEqual(payload["requested_run_ids"], [101, 202])
+
     def test_compare_rule_backtest_runs_returns_validation_error_for_incomplete_compare_set(self) -> None:
         request = RuleBacktestCompareRequest(run_ids=[101, 202])
         service = MagicMock()

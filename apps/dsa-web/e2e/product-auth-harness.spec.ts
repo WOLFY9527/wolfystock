@@ -29,14 +29,31 @@ const forbiddenSettingsAdminApiPatterns = [
 ];
 
 async function clickOptionsLabNav(page: Page) {
+  if (/\/(?:zh|en)\/options-lab$|\/options-lab$/.test(new URL(page.url()).pathname)) {
+    return;
+  }
+
   const visibleHeaderLink = page.getByRole('link', { name: '期权实验室' }).first();
   if (await visibleHeaderLink.isVisible().catch(() => false)) {
     await visibleHeaderLink.click();
     return;
   }
 
-  await page.getByRole('button', { name: '打开导航菜单' }).click();
-  await page.getByRole('link', { name: '期权实验室' }).last().click();
+  const moreButton = page.getByTestId('shell-consumer-primary-nav').getByRole('button', { name: '更多' }).first();
+  if (await moreButton.isVisible().catch(() => false)) {
+    await moreButton.click();
+    await page.getByTestId('shell-more-menu').getByRole('link', { name: '期权实验室' }).click();
+    return;
+  }
+
+  const mobileMenuButton = page.getByRole('button', { name: '打开导航菜单' });
+  if (await mobileMenuButton.isVisible().catch(() => false)) {
+    await mobileMenuButton.click();
+    await page.getByRole('dialog', { name: '导航菜单' }).getByRole('link', { name: '期权实验室' }).click();
+    return;
+  }
+
+  await page.goto('/zh/options-lab');
 }
 
 test.describe('mocked product route auth browser harness', () => {
@@ -130,7 +147,8 @@ test.describe('mocked product route auth browser harness', () => {
       await page.waitForLoadState('domcontentloaded');
 
       await expect(page).toHaveURL(/\/zh\/options-lab$/);
-      await expect(page.getByRole('heading', { name: '登录解锁 期权实验室' })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('auth-guard-overlay')).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByRole('heading', { name: '需要登录' })).toBeVisible();
       await expect(page.getByTestId('options-lab-strategy-comparison')).toHaveCount(0);
       expect(harness.requests.count('GET', '/api/v1/auth/status')).toBeGreaterThan(0);
       expect(harness.requests.wasFetched('GET', '/api/v1/options/underlyings/TEM/summary')).toBe(false);

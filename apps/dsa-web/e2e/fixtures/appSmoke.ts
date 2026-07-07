@@ -1329,6 +1329,70 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
       });
     }
 
+    if (method === 'GET' && path === '/api/v1/market/data-readiness') {
+      return fulfillJson(route, {
+        readiness_status: 'ready',
+        diagnostic_only: true,
+        provider_runtime_called: false,
+        network_calls_enabled: false,
+        representative_symbols: ['SPY', 'QQQ'],
+        checks: [],
+      });
+    }
+
+    if (method === 'GET' && path === '/api/v1/market/professional-data-capabilities') {
+      return fulfillJson(route, {
+        contract_version: 'app_smoke_professional_data_capability_registry_v1',
+        consumer_safe: true,
+        summary: {
+          total_capabilities: 0,
+          live_count: 0,
+          degraded_count: 0,
+          entitlement_required_count: 0,
+          configured_missing_count: 0,
+          unavailable_count: 0,
+          readiness_label: 'Fixture coverage only',
+          operator_next_action: 'Use targeted data UAT outside appSmoke route coverage.',
+        },
+        categories: [],
+        capabilities: [],
+        generated_at: timestamp,
+      });
+    }
+
+    if (method === 'GET' && path === '/api/v1/market/regime-read-model') {
+      return fulfillJson(route, {
+        contract_version: 'app_smoke_market_regime_read_model_v1',
+        status: 'partial',
+        symbols: ['SPY', 'QQQ'],
+        regime: {
+          label: 'fixture_observation',
+          status: 'partial',
+          source: 'app_smoke_fixture',
+        },
+        product_summary: 'App smoke fixture keeps market overview readiness bounded.',
+        evidence_cards: [],
+        symbol_context: [],
+        surface_hints: [],
+        missing_data_families: [],
+        blocked_product_surfaces: [],
+        readiness: {
+          label: 'fixture_only',
+          status: 'partial',
+          missing_data_families: [],
+          blocked_product_surfaces: [],
+          next_operator_action: 'Run data UAT separately.',
+        },
+        data_quality: {
+          adjusted_coverage_state: 'partial',
+          ohlcv_coverage: { state: 'partial', required_bars: 60, available_symbols: ['SPY'], missing_symbols: [] },
+          quote_snapshot_coverage: { state: 'partial', availability_state: 'partial', freshness_state: 'fixture', available_symbols: ['SPY'], missing_symbols: [], stale_symbols: [] },
+          missing_data_families: [],
+          blocked_product_surfaces: [],
+        },
+      });
+    }
+
     if (method === 'GET' && path === '/api/v1/market/crypto') {
       return fulfillJson(route, marketSnapshot('CryptoCard', [
         { symbol: 'BTC', label: 'Bitcoin', value: 98210, changePercent: 1.1 },
