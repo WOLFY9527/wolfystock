@@ -3049,7 +3049,7 @@ export class OptionsLabErrorBoundary extends React.Component<{ children: React.R
     }
 
     return (
-      <main className="w-full overflow-x-hidden text-white">
+      <main className="w-full overflow-x-hidden text-[color:var(--wolfy-text-primary)]">
         <ConsumerWorkspaceScope className="min-h-0 flex-1">
           <ConsumerWorkspacePageShell>
             <section className="mx-auto flex w-full max-w-[920px] flex-col gap-4 rounded-lg border border-[color:color-mix(in_srgb,var(--wolfy-market-down)_34%,transparent)] bg-[var(--wolfy-surface-console)] p-5 md:p-6">
@@ -3468,7 +3468,7 @@ const OptionsLabPageContent: React.FC = () => {
   );
 
   return (
-    <main className="w-full overflow-x-hidden text-white">
+    <main className="w-full overflow-x-hidden text-[color:var(--wolfy-text-primary)]">
       <ConsumerWorkspaceScope className="min-h-0 flex-1">
         <ConsumerWorkspacePageShell data-testid="options-lab-page-root">
           <TerminalPageHeading
@@ -3578,7 +3578,7 @@ const OptionsLabPageContent: React.FC = () => {
                   <ScenarioEvidencePanel frame={scenarioEvidenceFrame} className="xl:col-start-1 xl:row-start-4" />
                 ) : null}
 
-                <WolfyShellSurface variant="console" padding="sm" className="overflow-hidden xl:col-start-1 xl:row-start-5">
+                <DataWorkbenchFrame className="overflow-hidden xl:col-start-1 xl:row-start-5">
                   <SectionHeader eyebrow="链表工作区" title="Call / Put 链" icon={BarChart3} />
                   {state.loading ? (
                     <TerminalNotice variant="info" className="mt-4">正在加载期权链快照...</TerminalNotice>
@@ -3599,7 +3599,7 @@ const OptionsLabPageContent: React.FC = () => {
                       </TerminalEmptyState>
                     </div>
                   ) : null}
-                </WolfyShellSurface>
+                </DataWorkbenchFrame>
 
                 <MethodologyDisclosure
                   state={state}

@@ -139,6 +139,11 @@ const ROTATION_ENGLISH_COPY_REPLACEMENTS: Array<[RegExp, string]> = [
   [/\bProxy Candidate\b/g, '观察候选'],
   [/\bReal Flow\b/g, '确认信号'],
 ];
+const ROTATION_PAPER_PANEL_CLASS = 'rounded-xl border border-[color:var(--wolfy-divider)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-input)_84%,transparent)]';
+const ROTATION_PAPER_SOFT_PANEL_CLASS = 'rounded-xl border border-[color:var(--wolfy-divider)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-input)_70%,transparent)]';
+const ROTATION_PAPER_TEXT_PRIMARY_CLASS = 'text-[color:var(--wolfy-text-primary)]';
+const ROTATION_PAPER_TEXT_SECONDARY_CLASS = 'text-[color:var(--wolfy-text-secondary)]';
+const ROTATION_PAPER_TEXT_MUTED_CLASS = 'text-[color:var(--wolfy-text-muted)]';
 
 type CapitalRotationSummaryCard = {
   key: string;
@@ -1380,12 +1385,12 @@ const RotationVisualPanel: React.FC<{
       <TerminalPanel data-testid="rotation-radar-visual-unavailable" className="overflow-hidden">
         <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[10px] font-medium tracking-[0.22em] text-white/38">相对强弱矩阵</p>
-            <h3 className="mt-2 text-lg font-semibold text-white/88">矩阵暂不可用</h3>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-white/58">{unavailableReason}</p>
-            <p className="mt-2 text-[11px] leading-5 text-white/48">{unavailableDetail}</p>
+            <p className={cn('text-[10px] font-medium tracking-[0.22em]', ROTATION_PAPER_TEXT_MUTED_CLASS)}>相对强弱矩阵</p>
+            <h3 className={cn('mt-2 text-lg font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>矩阵暂不可用</h3>
+            <p className={cn('mt-2 max-w-3xl text-sm leading-6', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>{unavailableReason}</p>
+            <p className={cn('mt-2 text-[11px] leading-5', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{unavailableDetail}</p>
           </div>
-          <span className="shrink-0 rounded-md border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/52">信号待确认</span>
+          <span className="shrink-0 rounded-md border border-[color:var(--wolfy-divider)] px-2.5 py-1 text-[11px] text-[color:var(--wolfy-text-muted)]">信号待确认</span>
         </div>
       </TerminalPanel>
     );
@@ -1398,28 +1403,28 @@ const RotationVisualPanel: React.FC<{
     <TerminalPanel data-testid="rotation-radar-visual-matrix" className="overflow-hidden">
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-medium tracking-[0.22em] text-white/38">相对强弱矩阵</p>
-          <h3 className="mt-2 text-lg font-semibold text-white/88">主题排行与阶段分布</h3>
-          <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">
+          <p className={cn('text-[10px] font-medium tracking-[0.22em]', ROTATION_PAPER_TEXT_MUTED_CLASS)}>相对强弱矩阵</p>
+          <h3 className={cn('mt-2 text-lg font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>主题排行与阶段分布</h3>
+          <p className={cn('mt-2 max-w-4xl text-sm leading-6', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>
             {modeDetail}
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          <span className="rounded-md border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/52">{modeLabel}</span>
-          <span className="rounded-md border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/52">{marketLabelText}</span>
+          <span className="rounded-md border border-[color:var(--wolfy-divider)] px-2.5 py-1 text-[11px] text-[color:var(--wolfy-text-muted)]">{modeLabel}</span>
+          <span className="rounded-md border border-[color:var(--wolfy-divider)] px-2.5 py-1 text-[11px] text-[color:var(--wolfy-text-muted)]">{marketLabelText}</span>
         </div>
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(22rem,0.9fr)]">
-        <div className="min-w-0 rounded-xl border border-white/[0.06] bg-black/10 p-3">
+        <div className={cn('min-w-0 p-3', ROTATION_PAPER_PANEL_CLASS)}>
           <div className="flex min-w-0 items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[11px] font-medium text-white/48">矩阵视图</p>
-              <p className="mt-1 text-[11px] leading-5 text-white/58">
+              <p className={cn('text-[11px] font-medium', ROTATION_PAPER_TEXT_MUTED_CLASS)}>矩阵视图</p>
+              <p className={cn('mt-1 text-[11px] leading-5', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>
                 横轴按主题相对基准的强弱变化，纵轴按当前阶段分层。
               </p>
             </div>
-            <span className="shrink-0 text-[10px] text-white/40">
+            <span className={cn('shrink-0 text-[10px]', ROTATION_PAPER_TEXT_MUTED_CLASS)}>
               {formatRelativeStrengthValue(domain.min)} - {formatRelativeStrengthValue(domain.max)}
             </span>
           </div>
@@ -1428,18 +1433,18 @@ const RotationVisualPanel: React.FC<{
               {ROTATION_MATRIX_STAGE_ORDER.map((stageMeta) => {
                 const stageThemes = visualThemes.filter((theme) => theme.stage === stageMeta.key);
                 return (
-                  <div key={stageMeta.key} className="grid grid-cols-[3.75rem_minmax(0,1fr)] items-stretch gap-2 border-t border-white/[0.05] py-2 first:border-t-0 first:pt-0 last:pb-0 sm:grid-cols-[4.5rem_minmax(0,1fr)] sm:gap-3">
-                    <div className="flex items-center text-[11px] font-medium text-white/48">{stageMeta.label}</div>
-                    <div className="relative h-12 rounded-lg border border-white/[0.05] bg-white/[0.02]">
-                      <div className="absolute inset-y-2 left-1/2 w-px bg-white/[0.08]" aria-hidden="true" />
+                  <div key={stageMeta.key} className="grid grid-cols-[3.75rem_minmax(0,1fr)] items-stretch gap-2 border-t border-[color:var(--wolfy-divider)] py-2 first:border-t-0 first:pt-0 last:pb-0 sm:grid-cols-[4.5rem_minmax(0,1fr)] sm:gap-3">
+                    <div className={cn('flex items-center text-[11px] font-medium', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{stageMeta.label}</div>
+                    <div className="relative h-12 rounded-lg border border-[color:var(--wolfy-divider)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-rail)_70%,transparent)]">
+                      <div className="absolute inset-y-2 left-1/2 w-px bg-[color:var(--wolfy-divider)]" aria-hidden="true" />
                       {stageThemes.map((theme) => {
                         const strength = themeRelativeStrengthValue(theme) ?? 0;
                         const directionCue = observationDirectionCue(theme);
                         const range = domain.max - domain.min || 1;
                         const left = `${((strength - domain.min) / range) * 100}%`;
                         const bubbleVariant = selectedThemeId === theme.id
-                          ? 'border-white/24 bg-white/[0.12] text-white'
-                          : 'border-white/[0.08] bg-white/[0.08] text-white/82 hover:bg-white/[0.12]';
+                          ? 'border-[color:color-mix(in_srgb,var(--wolfy-accent)_36%,transparent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_12%,transparent)] text-[color:var(--wolfy-text-primary)]'
+                          : 'border-[color:var(--wolfy-divider)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-console)_78%,transparent)] text-[color:var(--wolfy-text-secondary)] hover:bg-[color:color-mix(in_srgb,var(--wolfy-surface-console)_94%,transparent)]';
                         return (
                           <button
                             key={theme.id}
@@ -1454,7 +1459,7 @@ const RotationVisualPanel: React.FC<{
                             aria-label={`${theme.name} ${observationThemeSummary(theme) || formatThemeStage(theme.stage)} ${directionCue?.changeText || formatRelativeStrengthValue(strength)}`}
                           >
                             <span className="max-w-[5rem] truncate sm:max-w-[6.5rem]">{theme.name}</span>
-                            <span className="text-white/55">
+                            <span className={ROTATION_PAPER_TEXT_MUTED_CLASS}>
                               {directionCue ? `${directionCue.indicator} ${formatRelativeStrengthValue(strength)}` : formatRelativeStrengthValue(strength)}
                             </span>
                           </button>
@@ -1464,7 +1469,7 @@ const RotationVisualPanel: React.FC<{
                   </div>
                 );
               })}
-              <div className="mt-3 flex items-center justify-between px-[3.75rem] text-[10px] text-white/40 sm:px-[4.5rem]">
+              <div className={cn('mt-3 flex items-center justify-between px-[3.75rem] text-[10px] sm:px-[4.5rem]', ROTATION_PAPER_TEXT_MUTED_CLASS)}>
                 <span>偏弱</span>
                 <span>基准</span>
                 <span>偏强</span>
@@ -1473,11 +1478,11 @@ const RotationVisualPanel: React.FC<{
           </div>
         </div>
 
-        <div className="min-w-0 rounded-xl border border-white/[0.06] bg-black/10 p-3">
+        <div className={cn('min-w-0 p-3', ROTATION_PAPER_PANEL_CLASS)}>
           <div className="flex min-w-0 items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[11px] font-medium text-white/48">主题排行</p>
-              <p className="mt-1 text-[11px] leading-5 text-white/58">
+              <p className={cn('text-[11px] font-medium', ROTATION_PAPER_TEXT_MUTED_CLASS)}>主题排行</p>
+              <p className={cn('mt-1 text-[11px] leading-5', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>
                 沿用现有排序字段，仅把头部主题转换为条带视图。
               </p>
             </div>
@@ -1494,33 +1499,33 @@ const RotationVisualPanel: React.FC<{
                   type="button"
                   data-testid={`rotation-radar-ranking-bar-${theme.id}`}
                   className={cn(
-                    'block w-full rounded-lg border border-white/[0.05] bg-white/[0.02] p-2 text-left transition-colors',
-                    selected ? 'bg-white/[0.075]' : 'hover:bg-white/[0.04]',
+                    'block w-full rounded-lg border border-[color:var(--wolfy-divider)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-console)_82%,transparent)] p-2 text-left transition-colors',
+                    selected ? 'bg-[color:color-mix(in_srgb,var(--wolfy-accent)_12%,transparent)]' : 'hover:bg-[color:color-mix(in_srgb,var(--wolfy-surface-console)_96%,transparent)]',
                   )}
                   onClick={() => onSelectTheme(theme.id)}
                 >
                   <div className="flex min-w-0 items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex min-w-0 items-center gap-2">
-                        <span className="text-[10px] font-medium text-white/40">{String(index + 1).padStart(2, '0')}</span>
-                        <span className="truncate text-sm font-semibold text-white/84">{theme.name}</span>
+                        <span className={cn('text-[10px] font-medium', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{String(index + 1).padStart(2, '0')}</span>
+                        <span className={cn('truncate text-sm font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>{theme.name}</span>
                       </div>
-                      <p className="mt-1 truncate text-[10px] text-white/42">
+                      <p className={cn('mt-1 truncate text-[10px]', ROTATION_PAPER_TEXT_MUTED_CLASS)}>
                         {observationSummary
                           ? `${observationSummary} · ${themeConfidenceSummary(theme)}`
                           : `${formatThemeStage(theme.stage)} · ${themeConfidenceSummary(theme)}`}
                       </p>
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className="text-[11px] font-semibold text-white/72">{theme.rotationScore.toFixed(0)}</p>
-                      <p className="text-[10px] text-white/40">{formatRelativeStrengthValue(themeRelativeStrengthValue(theme))}</p>
+                      <p className={cn('text-[11px] font-semibold', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>{theme.rotationScore.toFixed(0)}</p>
+                      <p className={cn('text-[10px]', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{formatRelativeStrengthValue(themeRelativeStrengthValue(theme))}</p>
                     </div>
                   </div>
-                  <div className="mt-2 h-2 rounded-full bg-white/[0.06]">
+                  <div className="mt-2 h-2 rounded-full bg-[color:var(--wolfy-divider)]">
                     <div
                       className={cn(
                         'h-full rounded-full',
-                        selected ? 'bg-white/70' : 'bg-white/55',
+                        selected ? 'bg-[color:var(--wolfy-accent)]' : 'bg-[color:color-mix(in_srgb,var(--wolfy-text-secondary)_78%,transparent)]',
                       )}
                       style={{ width: scoreWidth }}
                     />
@@ -1827,29 +1832,29 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
       data-testid="rotation-radar-guidance"
       className="relative overflow-hidden"
     >
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-white/0 via-white/16 to-white/0" aria-hidden="true" />
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[color:var(--wolfy-divider)] to-transparent" aria-hidden="true" />
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-medium tracking-[0.24em] text-white/38">状态摘要</p>
+          <p className={cn('text-[10px] font-medium tracking-[0.24em]', ROTATION_PAPER_TEXT_MUTED_CLASS)}>状态摘要</p>
           <h2
             data-testid="rotation-radar-hero-title"
-            className="mt-2 break-words text-base font-semibold leading-6 text-white md:text-lg"
+            className={cn('mt-2 break-words text-base font-semibold leading-6 md:text-lg', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}
           >
             板块强弱：{heroTitle}
           </h2>
-          <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">{heroSummary}</p>
+          <p className={cn('mt-2 max-w-4xl text-sm leading-6', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>{heroSummary}</p>
         </div>
-        <span className="shrink-0 rounded-md border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/52">
+        <span className="shrink-0 rounded-md border border-[color:var(--wolfy-divider)] px-2.5 py-1 text-[11px] text-[color:var(--wolfy-text-muted)]">
           轮动方向：{surfaceState}
         </span>
       </div>
 
       <div data-testid="rotation-radar-summary-band" data-terminal-primitive="panel" className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-3">
         {heroCards.map((card) => (
-          <div key={card.key} className="rounded-lg border border-white/[0.06] bg-black/10 p-3">
-            <p className="text-[11px] font-medium text-white/48">{card.label}</p>
-            <p className="mt-2 break-words text-sm font-semibold leading-5 text-white/84">{card.value}</p>
-            <p className="mt-2 text-[11px] leading-5 text-white/58">{card.detail}</p>
+          <div key={card.key} className={cn('p-3', ROTATION_PAPER_SOFT_PANEL_CLASS)}>
+            <p className={cn('text-[11px] font-medium', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{card.label}</p>
+            <p className={cn('mt-2 break-words text-sm font-semibold leading-5', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>{card.value}</p>
+            <p className={cn('mt-2 text-[11px] leading-5', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>{card.detail}</p>
           </div>
         ))}
       </div>
@@ -1858,13 +1863,13 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
 
       <div
         data-testid="rotation-alpaca-quote-readiness"
-        className="mt-3 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2.5"
+        className={cn('mt-3 px-3 py-2.5', ROTATION_PAPER_SOFT_PANEL_CLASS)}
       >
         <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium text-white/48">ETF 引用状态</p>
-            <p className="mt-1 text-sm font-semibold text-white/84">{alpacaReadiness.label}</p>
-            <p className="mt-1 text-[11px] leading-5 text-white/52">{alpacaReadiness.detail}</p>
+            <p className={cn('text-[11px] font-medium', ROTATION_PAPER_TEXT_MUTED_CLASS)}>ETF 引用状态</p>
+            <p className={cn('mt-1 text-sm font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>{alpacaReadiness.label}</p>
+            <p className={cn('mt-1 text-[11px] leading-5', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{alpacaReadiness.detail}</p>
           </div>
           <div className="flex min-w-0 flex-wrap gap-1.5 md:justify-end">
             {alpacaReadiness.chips.map((chip) => (
@@ -1873,9 +1878,9 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
           </div>
         </div>
         {alpacaReadiness.summaryItems.length ? (
-          <div className="mt-3 flex min-w-0 flex-wrap gap-1.5 text-[11px] leading-5 text-white/52">
+          <div className={cn('mt-3 flex min-w-0 flex-wrap gap-1.5 text-[11px] leading-5', ROTATION_PAPER_TEXT_MUTED_CLASS)}>
             {alpacaReadiness.summaryItems.map((item) => (
-              <span key={item} className="rounded-md border border-white/[0.06] bg-black/10 px-2 py-0.5">
+              <span key={item} className="rounded-md border border-[color:var(--wolfy-divider)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-console)_78%,transparent)] px-2 py-0.5">
                 {item}
               </span>
             ))}
@@ -1884,13 +1889,13 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
         {alpacaReadiness.familyRows.length ? (
           <div className="mt-3 grid gap-2 lg:grid-cols-3">
             {alpacaReadiness.familyRows.map((family) => (
-              <div key={family.key} className="min-w-0 rounded-md border border-white/[0.06] bg-black/10 p-2">
+              <div key={family.key} className={cn('min-w-0 p-2', ROTATION_PAPER_PANEL_CLASS)}>
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-                  <p className="text-[11px] font-medium text-white/60">{family.label}</p>
+                  <p className={cn('text-[11px] font-medium', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>{family.label}</p>
                   <TerminalChip variant={family.variant}>{family.statusLabel}</TerminalChip>
                 </div>
-                <p className="mt-1 text-[11px] leading-5 text-white/52">{family.countsLabel}</p>
-                <p className="text-[11px] leading-5 text-white/48">{family.scoringLabel}</p>
+                <p className={cn('mt-1 text-[11px] leading-5', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{family.countsLabel}</p>
+                <p className={cn('text-[11px] leading-5', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{family.scoringLabel}</p>
               </div>
             ))}
           </div>
@@ -1900,19 +1905,19 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
       {familyViews.length ? (
         <div
           data-testid="rotation-family-flow-rollup"
-          className="mt-4 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3"
+          className={cn('mt-4 px-3 py-3', ROTATION_PAPER_PANEL_CLASS)}
         >
           <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[11px] font-medium text-white/48">家族流向观察</p>
+              <p className={cn('text-[11px] font-medium', ROTATION_PAPER_TEXT_MUTED_CLASS)}>家族流向观察</p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <span className="rounded-md border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/48">摘要优先</span>
-              <span className="rounded-md border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/48">
+              <span className="rounded-md border border-[color:var(--wolfy-divider)] px-2.5 py-1 text-[11px] text-[color:var(--wolfy-text-muted)]">摘要优先</span>
+              <span className="rounded-md border border-[color:var(--wolfy-divider)] px-2.5 py-1 text-[11px] text-[color:var(--wolfy-text-muted)]">
                 {spotlightFamilies.length} 个优先观察
               </span>
               {collapsedFamilies.length ? (
-                <span className="rounded-md border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/48">
+                <span className="rounded-md border border-[color:var(--wolfy-divider)] px-2.5 py-1 text-[11px] text-[color:var(--wolfy-text-muted)]">
                   {collapsedFamilies.length} 个默认折叠
                 </span>
               ) : null}
@@ -1927,7 +1932,7 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
               </DenseRows>
             </div>
           ) : (
-            <div className="mt-3 rounded-lg border border-dashed border-white/[0.08] px-3 py-3 text-[11px] leading-5 text-white/52">
+            <div className={cn('mt-3 rounded-lg border border-dashed border-[color:var(--wolfy-divider)] px-3 py-3 text-[11px] leading-5', ROTATION_PAPER_TEXT_MUTED_CLASS)}>
               暂无优先展开家族
             </div>
           )}
@@ -2203,9 +2208,9 @@ const ThemeDetailPanel: React.FC<{
       <div className="min-w-0 px-1 py-3">
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase text-white/35">当前主题</p>
-            <h2 className="mt-1 truncate text-lg font-semibold text-white">{theme.name}</h2>
-            <p className="mt-1 truncate text-[11px] text-white/38">{consumerThemeSubtitle(theme)}</p>
+            <p className={cn('text-[10px] font-bold uppercase', ROTATION_PAPER_TEXT_MUTED_CLASS)}>当前主题</p>
+            <h2 className={cn('mt-1 truncate text-lg font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>{theme.name}</h2>
+            <p className={cn('mt-1 truncate text-[11px]', ROTATION_PAPER_TEXT_MUTED_CLASS)}>{consumerThemeSubtitle(theme)}</p>
           </div>
         </div>
 
@@ -2219,31 +2224,31 @@ const ThemeDetailPanel: React.FC<{
       </div>
 
       <div className="min-w-0 px-1 py-3">
-        <p className="text-[10px] font-bold uppercase text-white/35">轮动方向</p>
-        <TerminalNotice variant={taxonomyOnly ? 'info' : dataWarning ? 'caution' : 'neutral'} className="mt-2 text-[12px] leading-5 text-white/58">
+        <p className={cn('text-[10px] font-bold uppercase', ROTATION_PAPER_TEXT_MUTED_CLASS)}>轮动方向</p>
+        <TerminalNotice variant={taxonomyOnly ? 'info' : dataWarning ? 'caution' : 'neutral'} className={cn('mt-2 text-[12px] leading-5', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>
           {shortReason}
         </TerminalNotice>
         {directionCue ? (
-          <p className="mt-2 text-[11px] leading-5 text-white/48">
+          <p className={cn('mt-2 text-[11px] leading-5', ROTATION_PAPER_TEXT_MUTED_CLASS)}>
             方向线索：{directionCue.changeText}
           </p>
         ) : null}
       </div>
 
       <div className="min-w-0 px-1 py-3">
-        <p className="text-[10px] font-bold uppercase text-white/35">走势分化</p>
-        <div className="mt-2 grid gap-1 text-[11px] leading-5 text-white/58">
+        <p className={cn('text-[10px] font-bold uppercase', ROTATION_PAPER_TEXT_MUTED_CLASS)}>走势分化</p>
+        <div className={cn('mt-2 grid gap-1 text-[11px] leading-5', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>
           {weaknessNotes.map((item) => <p key={item}>· {item}</p>)}
         </div>
       </div>
 
       <div className="min-w-0 px-1 py-3">
-        <p className="text-[10px] font-bold uppercase text-white/35">观察重点</p>
-        <p className="mt-2 text-[11px] leading-5 text-white/58">{nextStep}</p>
+        <p className={cn('text-[10px] font-bold uppercase', ROTATION_PAPER_TEXT_MUTED_CLASS)}>观察重点</p>
+        <p className={cn('mt-2 text-[11px] leading-5', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>{nextStep}</p>
       </div>
 
       <div className="min-w-0 px-1 py-3">
-        <p className="text-[10px] font-bold uppercase text-white/35">观察标的</p>
+        <p className={cn('text-[10px] font-bold uppercase', ROTATION_PAPER_TEXT_MUTED_CLASS)}>观察标的</p>
         <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
           {representativeItems.length
             ? representativeItems.map((item) => <TerminalChip key={item}>{item}</TerminalChip>)
@@ -2258,7 +2263,7 @@ const ThemeDetailPanel: React.FC<{
             title="查看主题流向观察"
             summary="家族摘要优先，主题级说明默认折叠"
           >
-            <div className="grid gap-3 text-[11px] leading-5 text-white/56">
+            <div className={cn('grid gap-3 text-[11px] leading-5', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>
               <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                 <TerminalChip variant={themeFlowChipVariant(theme.themeFlowSignal.themeFlowState)}>
                   {formatThemeFlowState(theme.themeFlowSignal.themeFlowState)}
@@ -2266,7 +2271,7 @@ const ThemeDetailPanel: React.FC<{
                 <TerminalChip variant="neutral">信号 {formatThemeFlowConfidence(theme.themeFlowSignal)}</TerminalChip>
               </div>
               <div>
-                <p className="font-semibold text-white/74">解释</p>
+                <p className={cn('font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>解释</p>
                 <p className="mt-1">
                   {sanitizeRotationText(
                     theme.themeFlowSignal.explanation,
@@ -2275,7 +2280,7 @@ const ThemeDetailPanel: React.FC<{
                 </p>
               </div>
               <div>
-                <p className="font-semibold text-white/74">支持证据</p>
+                <p className={cn('font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>支持证据</p>
                 <div className="mt-1 grid gap-1">
                   {themeFlowEvidenceLines(theme.themeFlowSignal).map((line, lineIndex) => (
                     <p key={`${theme.id}-theme-flow-evidence-${lineIndex}`}>· {line}</p>
@@ -2307,15 +2312,15 @@ const ThemeDetailPanel: React.FC<{
           title="查看数据说明"
           summary="支持证据与方法默认折叠"
         >
-          <div className="grid gap-3 text-[11px] leading-5 text-white/56">
+          <div className={cn('grid gap-3 text-[11px] leading-5', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>
             <div>
-              <p className="font-semibold text-white/74">支持证据</p>
+              <p className={cn('font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>支持证据</p>
               <div className="mt-1 grid gap-1">
                 {supportNotes.map((item) => <p key={item}>· {item}</p>)}
               </div>
             </div>
             <div>
-              <p className="font-semibold text-white/74">方法口径</p>
+              <p className={cn('font-semibold', ROTATION_PAPER_TEXT_PRIMARY_CLASS)}>方法口径</p>
               <p className="mt-1">
                 {taxonomyOnly
                   ? '当前页面先保留分类、观察范围与后续跟踪方向，等待更多行情覆盖后再确认强弱。'
@@ -2331,14 +2336,14 @@ const ThemeDetailPanel: React.FC<{
 
 const LoadingPanel: React.FC<{ showFallback: boolean; onRefresh: () => void }> = ({ showFallback, onRefresh }) => (
   <TerminalPanel as="section" role="status" aria-label="正在读取主题轮动 / 相对强弱雷达">
-    <div className="flex items-center gap-3 text-white/60">
+    <div className={cn('flex items-center gap-3', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>
       <RefreshCcw className="size-4 animate-spin" aria-hidden="true" />
       <span className="text-sm">正在读取主题轮动 / 相对强弱雷达...</span>
     </div>
-    <div className="mt-4 grid gap-3 text-sm text-white/62">
+    <div className={cn('mt-4 grid gap-3 text-sm', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>
       <p className="leading-6">正在整理主题强弱、轮动线索与最近更新时间。</p>
       <p className="leading-6">准备好后会自动显示当前市场、头部主题和观察重点。</p>
-      <TerminalNotice variant="info" className="text-[12px] leading-5 text-white/58">
+      <TerminalNotice variant="info" className={cn('text-[12px] leading-5', ROTATION_PAPER_TEXT_SECONDARY_CLASS)}>
         结果出来前不会补写临时轮动方向。
       </TerminalNotice>
     </div>
@@ -2546,7 +2551,7 @@ const MarketRotationRadarPage: React.FC = () => {
     <div
       data-testid="market-rotation-radar-page"
       data-bento-surface="true"
-      className="bento-surface-root flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6 overflow-y-auto overflow-x-hidden no-scrollbar text-white"
+      className="bento-surface-root flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6 overflow-y-auto overflow-x-hidden no-scrollbar text-[color:var(--wolfy-text-primary)]"
     >
       <ConsumerWorkspaceScope className="min-h-0 flex-1">
       <ConsumerWorkspacePageShell className="flex min-h-0 flex-1">
@@ -2597,7 +2602,7 @@ const MarketRotationRadarPage: React.FC = () => {
             <TerminalGrid className="gap-4" data-workbench-split="8:4">
               <section className="min-w-0 xl:col-span-8" aria-label={libraryMode ? '分类浏览与观察线索' : primaryTierLabel}>
                 <DataWorkbenchFrame data-testid="rotation-radar-leader-list">
-                  <div className="border-b border-white/[0.05] p-3">
+                  <div className="border-b border-[color:var(--wolfy-divider)] p-3">
                     <TerminalSectionHeader
                       eyebrow={primaryTierLabel}
                       title={primaryThemes.length
@@ -2625,15 +2630,15 @@ const MarketRotationRadarPage: React.FC = () => {
                     <div className="p-3">
                       <TerminalEmptyState
                         data-testid="rotation-radar-insufficient-empty"
-                        className="min-h-[104px] items-start justify-start p-3 text-left text-sm text-white/52"
+                        className="min-h-[104px] items-start justify-start p-3 text-left text-sm text-[color:var(--wolfy-text-muted)]"
                       >
-                        <span className="block font-semibold text-white/82">
+                        <span className="block font-semibold text-[color:var(--wolfy-text-primary)]">
                           {rotationConclusion?.title || '轮动方向待确认'}
                         </span>
                         <span className="mt-2 block leading-5">
                           {rotationConclusion?.detail || '轮动数据待确认'}
                         </span>
-                        <span className="mt-3 block leading-5 text-white/60">
+                        <span className="mt-3 block leading-5 text-[color:var(--wolfy-text-secondary)]">
                           {rotationConclusion?.nextStep || '切换市场对比或等待数据更新'}
                         </span>
                       </TerminalEmptyState>
@@ -2652,7 +2657,7 @@ const MarketRotationRadarPage: React.FC = () => {
             </TerminalGrid>
 
             <DataWorkbenchFrame data-testid="rotation-radar-universe-list">
-              <div className="border-b border-white/[0.05] p-3">
+              <div className="border-b border-[color:var(--wolfy-divider)] p-3">
                 <TerminalSectionHeader
                   eyebrow="主题 / 分类"
                   title={libraryMode ? `${filteredThemes.length}/${state.payload.themes.length} 个分类条目` : `${filteredThemes.length}/${state.payload.themes.length} 个条目，先看主题再看信号。`}
@@ -2673,7 +2678,7 @@ const MarketRotationRadarPage: React.FC = () => {
                   </DenseRows>
                 ) : (
                   <div className="p-3">
-                    <TerminalEmptyState className="min-h-[72px] justify-start text-sm text-white/42">没有匹配主题。</TerminalEmptyState>
+                    <TerminalEmptyState className="min-h-[72px] justify-start text-sm text-[color:var(--wolfy-text-muted)]">没有匹配主题。</TerminalEmptyState>
                   </div>
                 )}
               </div>
