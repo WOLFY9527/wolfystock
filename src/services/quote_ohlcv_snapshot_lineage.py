@@ -101,7 +101,7 @@ class QuoteOhlcvSnapshotSpine:
         self.repository = repository
 
     def persist_snapshot(self, snapshot: QuoteOhlcvSnapshotRecord) -> QuoteOhlcvSnapshotPersistenceResult:
-        _validate_snapshot(snapshot)
+        validate_snapshot_lineage(snapshot)
         return self.repository.upsert_snapshot(snapshot)
 
     def get_snapshot(self, snapshot_id: str) -> QuoteOhlcvSnapshotRecord | None:
@@ -219,7 +219,7 @@ def snapshot_from_storage_payload(payload: Mapping[str, Any]) -> QuoteOhlcvSnaps
         instrument_identity=dict(payload.get("instrumentIdentity") or {}),
         quote_as_of=_parse_datetime(payload.get("quoteAsOf")),
         bar_trade_date_time=_optional_text(payload.get("barTradeDateTime")),
-        retrieval_time=_parse_datetime(payload.get("retrievalTime")) or datetime.fromtimestamp(0, timezone.utc),
+        retrieval_time=_require_datetime(payload.get("retrievalTime"), "retrievalTime"),
         source_id=_text(payload.get("sourceId")),
         source_type=_text(payload.get("sourceType")),
         authority_state=_text(payload.get("authorityState")),
@@ -234,10 +234,11 @@ def snapshot_from_storage_payload(payload: Mapping[str, Any]) -> QuoteOhlcvSnaps
     )
 
 
-def _validate_snapshot(snapshot: QuoteOhlcvSnapshotRecord) -> None:
+def validate_snapshot_lineage(snapshot: QuoteOhlcvSnapshotRecord) -> None:
     missing = []
     for field_name in (
         "snapshot_id",
+        "snapshot_kind",
         "symbol",
         "market",
         "source_id",
@@ -257,6 +258,13 @@ def _validate_snapshot(snapshot: QuoteOhlcvSnapshotRecord) -> None:
         missing.append("bar_trade_date_time")
     if missing:
         raise SnapshotLineageError("quote/OHLCV snapshot missing provenance: " + ", ".join(missing))
+    identity = dict(snapshot.instrument_identity or {})
+    if (
+        _text(identity.get("canonicalSymbol")) != snapshot.symbol
+        or _text(identity.get("market")) != snapshot.market
+        or not _text(identity.get("venue"))
+    ):
+        raise SnapshotLineageError("quote/OHLCV snapshot malformed instrument identity")
 
 
 def _with_snapshot_id(record: QuoteOhlcvSnapshotRecord) -> QuoteOhlcvSnapshotRecord:
@@ -324,7 +332,7 @@ def _validate_snapshot_fields_before_id(record: QuoteOhlcvSnapshotRecord) -> Non
         values=dict(record.values),
         contract_version=record.contract_version,
     )
-    _validate_snapshot(probe)
+    validate_snapshot_lineage(probe)
 
 
 def _instrument_identity(*, symbol: str, market: str) -> dict[str, str]:
@@ -411,6 +419,13 @@ def _parse_datetime(value: Any) -> datetime | None:
     return _utc_datetime(parsed)
 
 
+def _require_datetime(value: Any, field_name: str) -> datetime:
+    parsed = _parse_datetime(value)
+    if parsed is None:
+        raise SnapshotLineageError(f"quote/OHLCV snapshot missing provenance: {field_name}")
+    return parsed
+
+
 def _iso_datetime(value: datetime | None) -> str | None:
     if value is None:
         return None
@@ -426,4 +441,5 @@ __all__ = [
     "build_ohlcv_snapshot_from_bar",
     "build_quote_snapshot_from_readiness",
     "snapshot_from_storage_payload",
+    "validate_snapshot_lineage",
 ]
