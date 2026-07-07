@@ -188,13 +188,17 @@ class BacktestJobContractsTestCase(unittest.TestCase):
             second_detail = service.get_run(int(submitted["id"]))
             status = service.get_run_status(int(submitted["id"]))
             history = service.list_runs(code="600519", page=1, limit=10)
+            service.process_submitted_run(int(submitted["id"]))
+            after_retry_detail = service.get_run(int(submitted["id"]))
 
         self.assertIsNotNone(first_detail)
         self.assertIsNotNone(second_detail)
         self.assertIsNotNone(status)
+        self.assertIsNotNone(after_retry_detail)
         assert first_detail is not None
         assert second_detail is not None
         assert status is not None
+        assert after_retry_detail is not None
         self.assertEqual(first_detail["id"], submitted["id"])
         self.assertEqual(second_detail["id"], submitted["id"])
         self.assertEqual(status["id"], submitted["id"])
@@ -202,6 +206,27 @@ class BacktestJobContractsTestCase(unittest.TestCase):
         self.assertEqual(second_detail["status"], "completed")
         self.assertEqual(status["status"], "completed")
         self.assertEqual(first_detail["summary"]["request"], second_detail["summary"]["request"])
+        self.assertTrue(first_detail["dataset_manifest_identity"]["manifest_id"])
+        self.assertEqual(
+            first_detail["dataset_manifest_identity"],
+            second_detail["dataset_manifest_identity"],
+        )
+        self.assertEqual(
+            after_retry_detail["dataset_manifest_identity"],
+            first_detail["dataset_manifest_identity"],
+        )
+        self.assertEqual(
+            status["dataset_manifest_identity"],
+            first_detail["dataset_manifest_identity"],
+        )
+        self.assertEqual(
+            history["items"][0]["dataset_manifest_identity"],
+            first_detail["dataset_manifest_identity"],
+        )
+        self.assertEqual(
+            first_detail["summary"]["dataset_reproducibility_manifest"]["manifest_id"],
+            first_detail["dataset_manifest_identity"]["manifest_id"],
+        )
         self.assertEqual(status["id"], submitted["id"])
         self.assertEqual(status["status_history"], first_detail["status_history"])
         self.assertEqual(history["items"][0]["id"], submitted["id"])

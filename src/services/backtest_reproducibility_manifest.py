@@ -65,6 +65,7 @@ class BacktestReproducibilityManifest:
         data_window: Mapping[str, Any] | None = None,
         symbols: Sequence[Any] | None = None,
         universe: Mapping[str, Any] | str | None = None,
+        dataset_lineage: Mapping[str, Any] | None = None,
         execution_cost_assumptions: Mapping[str, Any] | None = None,
         strategy: Any | None = None,
         strategy_fingerprint: Any | None = None,
@@ -79,6 +80,7 @@ class BacktestReproducibilityManifest:
             explicit_fingerprint=strategy_fingerprint,
         )
         execution_assumptions = _normalize_mapping(execution_cost_assumptions)
+        lineage_payload = _normalize_dataset_lineage(dataset_lineage)
         base_payload: dict[str, Any] = {
             "schema_version": BACKTEST_REPRODUCIBILITY_MANIFEST_SCHEMA_VERSION,
             "generated_at": _normalize_generated_at(generated_at),
@@ -87,6 +89,7 @@ class BacktestReproducibilityManifest:
             "data_window": _normalize_mapping(data_window),
             "symbols": _normalize_symbols(symbols),
             "universe": _normalize_universe(universe),
+            "dataset_lineage": lineage_payload,
             "execution_cost_assumptions": execution_assumptions,
             "execution_cost_assumptions_fingerprint": _fingerprint_section(
                 execution_assumptions,
@@ -113,6 +116,7 @@ class BacktestReproducibilityManifest:
             "data_window": base_payload["data_window"],
             "symbols": base_payload["symbols"],
             "universe": base_payload["universe"],
+            "dataset_lineage": base_payload["dataset_lineage"],
             "execution_cost_assumptions": base_payload["execution_cost_assumptions"],
             "execution_cost_assumptions_fingerprint": base_payload["execution_cost_assumptions_fingerprint"],
             "walk_forward_config_fingerprint": base_payload["walk_forward_config_fingerprint"],
@@ -142,6 +146,7 @@ def build_backtest_reproducibility_manifest(
     data_window: Mapping[str, Any] | None = None,
     symbols: Sequence[Any] | None = None,
     universe: Mapping[str, Any] | str | None = None,
+    dataset_lineage: Mapping[str, Any] | None = None,
     execution_cost_assumptions: Mapping[str, Any] | None = None,
     strategy: Any | None = None,
     strategy_fingerprint: Any | None = None,
@@ -157,6 +162,7 @@ def build_backtest_reproducibility_manifest(
         data_window=data_window,
         symbols=symbols,
         universe=universe,
+        dataset_lineage=dataset_lineage,
         execution_cost_assumptions=execution_cost_assumptions,
         strategy=strategy,
         strategy_fingerprint=strategy_fingerprint,
@@ -242,6 +248,72 @@ def _normalize_universe(value: Mapping[str, Any] | str | None) -> dict[str, Any]
     if isinstance(value, str):
         return {"universe_id": _sanitize_string(value)}
     return _normalize_mapping(value)
+
+
+def _normalize_dataset_lineage(value: Mapping[str, Any] | None) -> dict[str, Any]:
+    payload = _normalize_mapping(value)
+    if not payload:
+        return {
+            "state": "unknown",
+            "fail_closed": True,
+            "reason_codes": ["dataset_lineage_missing"],
+        }
+
+    required_fields = [
+        "dataset_id",
+        "content_identity",
+        "source_lineage",
+        "adjusted_basis",
+        "calendar_identity",
+        "universe_membership_mode",
+        "pit_membership_available",
+        "missing_bar_policy",
+        "date_range",
+        "symbol_coverage",
+        "freshness_as_of",
+        "manifest_version",
+    ]
+    missing_fields = [
+        field
+        for field in required_fields
+        if payload.get(field) in (None, "", {}, [])
+    ]
+    if missing_fields:
+        reason_codes = _dedupe_strings(payload.get("reason_codes"))
+        reason_codes.extend(f"{field}_missing" for field in missing_fields)
+        payload["reason_codes"] = sorted(set(reason_codes))
+        payload["state"] = "blocked_unknown_lineage"
+        payload["fail_closed"] = True
+        payload["missing_fields"] = missing_fields
+        return payload
+
+    payload["pit_membership_available"] = bool(payload.get("pit_membership_available"))
+    if payload["pit_membership_available"]:
+        payload["state"] = "available"
+    else:
+        payload["state"] = str(payload.get("state") or "partial_no_pit_membership")
+    payload["fail_closed"] = bool(payload.get("fail_closed", not payload["pit_membership_available"]))
+    payload["reason_codes"] = _dedupe_strings(payload.get("reason_codes"))
+    payload["missing_fields"] = []
+    return payload
+
+
+def _dedupe_strings(value: Any) -> list[str]:
+    if isinstance(value, str):
+        candidates = [value]
+    elif isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray)):
+        candidates = list(value)
+    else:
+        candidates = []
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in candidates:
+        text = str(item or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
 
 
 def _normalize_symbols(symbols: Sequence[Any] | None) -> list[str]:

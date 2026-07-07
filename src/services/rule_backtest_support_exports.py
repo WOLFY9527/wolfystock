@@ -111,6 +111,13 @@ _SUPPORT_READBACK_INTEGRITY_KEYS = {
     "missing_summary_fields",
     "integrity_level",
 }
+_SUPPORT_DATASET_MANIFEST_IDENTITY_KEYS = {
+    "manifest_id",
+    "content_hash",
+    "schema_version",
+    "state",
+    "fail_closed",
+}
 _SUPPORT_RESULT_AUTHORITY_DOMAIN_NAMES = {
     "summary",
     "parsed_strategy",
@@ -510,6 +517,7 @@ def build_dataset_lineage_manifest(run: Mapping[str, Any]) -> dict[str, Any] | N
 def build_support_bundle_manifest(run: Mapping[str, Any]) -> dict[str, Any]:
     execution_trace = dict(run.get("execution_trace") or {})
     result_authority = dict(run.get("result_authority") or {})
+    dataset_manifest = _mapping_payload(run.get("dataset_reproducibility_manifest"))
     manifest = {
         "manifest_version": "v1",
         "manifest_kind": "rule_backtest_support_bundle",
@@ -550,6 +558,10 @@ def build_support_bundle_manifest(run: Mapping[str, Any]) -> dict[str, Any]:
             list_keys={"drift_domains", "missing_summary_fields"},
         ),
         "result_authority": _safe_result_authority_payload(result_authority, include_missing=True),
+        "dataset_manifest_identity": _safe_export_mapping(
+            run.get("dataset_manifest_identity"),
+            _SUPPORT_DATASET_MANIFEST_IDENTITY_KEYS,
+        ),
         "artifact_counts": {
             "status_history_count": len(list(run.get("status_history") or [])),
             "warning_count": len(list(run.get("warnings") or [])),
@@ -564,6 +576,8 @@ def build_support_bundle_manifest(run: Mapping[str, Any]) -> dict[str, Any]:
     dataset_lineage = build_dataset_lineage_manifest(run)
     if dataset_lineage is not None:
         manifest["dataset_lineage"] = dataset_lineage
+    if dataset_manifest:
+        manifest["dataset_reproducibility_manifest"] = dataset_manifest
     return manifest
 
 
@@ -571,6 +585,7 @@ def build_support_bundle_reproducibility_manifest(run: Mapping[str, Any]) -> dic
     result_authority = dict(run.get("result_authority") or {})
     execution_assumptions_snapshot = dict(run.get("execution_assumptions_snapshot") or {})
     execution_assumptions = dict(run.get("execution_assumptions") or {})
+    dataset_manifest = _mapping_payload(run.get("dataset_reproducibility_manifest"))
     manifest = {
         "manifest_version": "v1",
         "manifest_kind": "rule_backtest_reproducibility_manifest",
@@ -607,10 +622,16 @@ def build_support_bundle_reproducibility_manifest(run: Mapping[str, Any]) -> dic
             execution_assumptions=execution_assumptions,
         ),
         "result_authority": build_reproducibility_authority_summary(result_authority),
+        "dataset_manifest_identity": _safe_export_mapping(
+            run.get("dataset_manifest_identity"),
+            _SUPPORT_DATASET_MANIFEST_IDENTITY_KEYS,
+        ),
     }
     dataset_lineage = build_dataset_lineage_manifest(run)
     if dataset_lineage is not None:
         manifest["dataset_lineage"] = dataset_lineage
+    if dataset_manifest:
+        manifest["dataset_reproducibility_manifest"] = dataset_manifest
     return manifest
 
 

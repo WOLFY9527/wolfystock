@@ -33,6 +33,7 @@ from src.services.backtest_parameter_stability import (
     build_parameter_stability_plan,
 )
 from src.services.backtest_professional_readiness import build_backtest_professional_readiness
+from src.services.backtest_reproducibility_manifest import build_backtest_reproducibility_manifest
 from src.services.rule_backtest_execution_model_registry import (
     RuleBacktestExecutionModelUnsupportedError,
     resolve_rule_backtest_execution_model_request,
@@ -4424,6 +4425,19 @@ class RuleBacktestService:
             execution_model=execution_model_payload,
         )
         data_quality_payload = dict(getattr(result, "data_quality", {}) or {})
+        request_payload = self._build_request_payload(
+            start_date=normalized_start_date,
+            end_date=normalized_end_date,
+            lookback_bars=lookback_bars,
+            initial_capital=initial_capital,
+            fee_bps=fee_bps,
+            slippage_bps=slippage_bps,
+            benchmark_mode=benchmark_mode,
+            benchmark_code=benchmark_code,
+            confirmed=confirmed,
+            execution_model=execution_model_payload,
+            robustness_config=robustness_config,
+        )
         data_sufficiency_payload = assess_backtest_data_sufficiency(
             {
                 "status": stored_status,
@@ -4456,26 +4470,26 @@ class RuleBacktestService:
             audit_rows=audit_rows,
             source="summary.drawdown_regime_attribution",
         )
+        dataset_reproducibility_manifest = self._build_dataset_reproducibility_manifest_payload(
+            generated_at=run_at,
+            code=code,
+            strategy_hash=strategy_hash,
+            parsed_strategy=result.parsed_strategy.to_dict(),
+            request_payload=request_payload,
+            metrics=dict(result.metrics or {}),
+            data_quality=data_quality_payload,
+            execution_assumptions=execution_assumptions_payload,
+            execution_model=execution_model_payload,
+        )
         summary_patch = self._update_summary_payload(
             {},
-            request_payload=self._build_request_payload(
-                start_date=normalized_start_date,
-                end_date=normalized_end_date,
-                lookback_bars=lookback_bars,
-                initial_capital=initial_capital,
-                fee_bps=fee_bps,
-                slippage_bps=slippage_bps,
-                benchmark_mode=benchmark_mode,
-                benchmark_code=benchmark_code,
-                confirmed=confirmed,
-                execution_model=execution_model_payload,
-                robustness_config=robustness_config,
-            ),
+            request_payload=request_payload,
             metrics=result.metrics,
             parsed_strategy=result.parsed_strategy,
             execution_model=execution_model_payload,
             execution_assumptions=execution_assumptions_payload,
             data_quality=data_quality_payload,
+            dataset_reproducibility_manifest=dataset_reproducibility_manifest,
             data_sufficiency=data_sufficiency_payload,
             visualization=visualization_payload,
             execution_trace=execution_trace_payload,
@@ -4579,6 +4593,7 @@ class RuleBacktestService:
                 execution_model=summary_patch.get("execution_model"),
                 execution_assumptions=summary_patch.get("execution_assumptions"),
                 data_quality=summary_patch.get("data_quality"),
+                dataset_reproducibility_manifest=summary_patch.get("dataset_reproducibility_manifest"),
                 data_sufficiency=summary_patch.get("data_sufficiency"),
                 visualization=summary_patch.get("visualization"),
                 execution_trace=summary_patch.get("execution_trace"),
@@ -6315,6 +6330,7 @@ class RuleBacktestService:
             **RuleBacktestService._build_single_symbol_readiness_fields(readiness_payload),
             "data_sufficiency": data_sufficiency,
             "historicalOhlcvReadiness": dict(data_sufficiency.get("ohlcv_readiness") or {}),
+            "dataset_manifest_identity": RuleBacktestService._dataset_manifest_identity_from_summary(summary),
             "artifact_availability": dict(artifact_availability or {}),
             "readback_integrity": dict(readback_integrity or {}),
         }
@@ -8540,6 +8556,7 @@ class RuleBacktestService:
         execution_model: Any = _UNSET,
         execution_assumptions: Any = _UNSET,
         data_quality: Any = _UNSET,
+        dataset_reproducibility_manifest: Any = _UNSET,
         data_sufficiency: Any = _UNSET,
         visualization: Any = _UNSET,
         execution_trace: Any = _UNSET,
@@ -8575,6 +8592,8 @@ class RuleBacktestService:
             )
         if data_quality is not _UNSET:
             payload["data_quality"] = dict(data_quality or {})
+        if dataset_reproducibility_manifest is not _UNSET:
+            payload["dataset_reproducibility_manifest"] = dict(dataset_reproducibility_manifest or {})
         if data_sufficiency is not _UNSET:
             payload["data_sufficiency"] = dict(data_sufficiency or {})
         if visualization is not _UNSET:
@@ -8670,6 +8689,192 @@ class RuleBacktestService:
             },
         )
         return payload
+
+    @staticmethod
+    def _normalize_manifest_text(value: Any, *, unknown: str = "unknown") -> str:
+        text = str(value or "").strip()
+        return text or unknown
+
+    @classmethod
+    def _build_dataset_lineage_for_reproducibility_manifest(
+        cls,
+        *,
+        code: str,
+        request_payload: Dict[str, Any],
+        metrics: Dict[str, Any],
+        data_quality: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        source = cls._normalize_manifest_text(data_quality.get("source"))
+        provider = cls._normalize_manifest_text(data_quality.get("provider"))
+        requested_start = data_quality.get("requested_start") or request_payload.get("start_date")
+        requested_end = data_quality.get("requested_end") or request_payload.get("end_date")
+        actual_start = data_quality.get("actual_start") or metrics.get("period_start")
+        actual_end = data_quality.get("actual_end") or metrics.get("period_end")
+        authority_status = cls._normalize_manifest_text(data_quality.get("authority_status"))
+        reason_codes = [
+            str(item or "").strip()
+            for item in list(data_quality.get("authority_reason_codes") or [])
+            if str(item or "").strip()
+        ]
+        adjustment_mode = cls._normalize_manifest_text(data_quality.get("adjustment_mode"))
+        if adjustment_mode == "unknown":
+            reason_codes.append("adjusted_basis_unknown")
+        if cls._normalize_manifest_text(data_quality.get("calendar_identity")) == "unknown":
+            reason_codes.append("calendar_identity_unknown")
+        if authority_status != "allowed":
+            reason_codes.append("source_lineage_not_authoritative")
+
+        manifest_version = "backtest_dataset_reproducibility_manifest.v1"
+        dataset_id = "unknown"
+        content_identity = "unknown"
+        source_is_unknown = source.strip().lower() == "unknown"
+        if not source_is_unknown and requested_start and requested_end:
+            dataset_id = f"rule_backtest:{source}:{cls._normalize_manifest_text(code).upper()}"
+            content_identity = "|".join(
+                [
+                    dataset_id,
+                    str(requested_start),
+                    str(requested_end),
+                    cls._normalize_manifest_text(data_quality.get("bar_count")),
+                    cls._normalize_manifest_text(data_quality.get("expected_bar_count")),
+                    cls._normalize_manifest_text(data_quality.get("actual_start")),
+                    cls._normalize_manifest_text(data_quality.get("actual_end")),
+                ]
+            )
+        else:
+            reason_codes.append("dataset_identity_unknown")
+            if source_is_unknown:
+                reason_codes.append("source_lineage_unknown")
+
+        reason_codes = sorted(set(reason_codes))
+        return {
+            "manifest_version": manifest_version,
+            "dataset_id": dataset_id,
+            "content_identity": content_identity,
+            "source_lineage": {
+                "source": source,
+                "provider": provider,
+                "authority_status": authority_status,
+                "authority_source_type": cls._normalize_manifest_text(data_quality.get("authority_source_type")),
+                "authority_reason_codes": [
+                    str(item or "").strip()
+                    for item in list(data_quality.get("authority_reason_codes") or [])
+                    if str(item or "").strip()
+                ],
+            },
+            "adjusted_basis": {
+                "state": adjustment_mode,
+                "return_basis": cls._normalize_manifest_text(data_quality.get("return_basis")),
+                "dividends_handled": cls._normalize_manifest_text(data_quality.get("dividends_handled")),
+                "splits_handled": cls._normalize_manifest_text(data_quality.get("splits_handled")),
+            },
+            "calendar_identity": {
+                "state": "unknown",
+                "calendar": cls._normalize_manifest_text(data_quality.get("trading_calendar")),
+                "timezone": cls._normalize_manifest_text(data_quality.get("timezone")),
+            },
+            "universe_membership_mode": "single_symbol_request",
+            "pit_membership_available": False,
+            "missing_bar_policy": {
+                "policy": "fail_closed_for_professional_claims",
+                "missing_bar_count": data_quality.get("missing_bar_count"),
+                "expected_bar_count": data_quality.get("expected_bar_count"),
+                "bar_count": data_quality.get("bar_count"),
+            },
+            "date_range": {
+                "requested_start": requested_start,
+                "requested_end": requested_end,
+                "actual_start": actual_start,
+                "actual_end": actual_end,
+            },
+            "symbol_coverage": {
+                "requested_symbols": [cls._normalize_manifest_text(code).upper()],
+                "covered_symbols": [cls._normalize_manifest_text(code).upper()] if data_quality.get("bar_count") else [],
+                "bar_count": data_quality.get("bar_count"),
+                "missing_bar_count": data_quality.get("missing_bar_count"),
+            },
+            "freshness_as_of": actual_end,
+            "fail_closed": True,
+            "reason_codes": reason_codes + ["pit_membership_not_available"],
+        }
+
+    @classmethod
+    def _build_dataset_reproducibility_manifest_payload(
+        cls,
+        *,
+        generated_at: Any,
+        code: str,
+        strategy_hash: str,
+        parsed_strategy: Dict[str, Any],
+        request_payload: Dict[str, Any],
+        metrics: Dict[str, Any],
+        data_quality: Dict[str, Any],
+        execution_assumptions: Dict[str, Any],
+        execution_model: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        lineage = cls._build_dataset_lineage_for_reproducibility_manifest(
+            code=code,
+            request_payload=request_payload,
+            metrics=metrics,
+            data_quality=data_quality,
+        )
+        manifest = build_backtest_reproducibility_manifest(
+            generated_at=generated_at,
+            strategy_type=str(
+                parsed_strategy.get("strategy_kind")
+                or (parsed_strategy.get("strategy_spec") or {}).get("strategy_type")
+                or "unknown"
+            ),
+            strategy_fingerprint=strategy_hash,
+            data_window={
+                "start": lineage["date_range"]["actual_start"],
+                "end": lineage["date_range"]["actual_end"],
+                "requested_start": lineage["date_range"]["requested_start"],
+                "requested_end": lineage["date_range"]["requested_end"],
+                "bar_count": data_quality.get("bar_count"),
+                "missing_bar_count": data_quality.get("missing_bar_count"),
+            },
+            symbols=[code],
+            universe={
+                "mode": lineage["universe_membership_mode"],
+                "pit_membership_available": False,
+            },
+            dataset_lineage=lineage,
+            execution_cost_assumptions={
+                "execution_model": execution_model,
+                "execution_assumptions": execution_assumptions,
+            },
+            engine_contract_flags={
+                "provider_calls_executed": False,
+                "engine_math_changed": False,
+                "fills_changed": False,
+                "costs_changed": False,
+                "metrics_changed": False,
+                "passive_readback_regenerates_history": False,
+                "pit_membership_asserted": False,
+            },
+            warnings=list(data_quality.get("warnings") or []),
+        ).to_dict()
+        return manifest
+
+    @staticmethod
+    def _resolve_dataset_reproducibility_manifest_payload(summary: Dict[str, Any]) -> Dict[str, Any]:
+        payload = summary.get("dataset_reproducibility_manifest")
+        return dict(payload or {}) if isinstance(payload, dict) else {}
+
+    @classmethod
+    def _dataset_manifest_identity_from_summary(cls, summary: Dict[str, Any]) -> Dict[str, Any]:
+        manifest = cls._resolve_dataset_reproducibility_manifest_payload(summary)
+        if not manifest:
+            return {}
+        lineage = manifest.get("dataset_lineage") if isinstance(manifest.get("dataset_lineage"), dict) else {}
+        return {
+            "manifest_id": manifest.get("manifest_id"),
+            "content_hash": manifest.get("content_hash"),
+            "schema_version": manifest.get("schema_version"),
+            "state": lineage.get("state"),
+            "fail_closed": lineage.get("fail_closed"),
+        }
 
     @staticmethod
     def _resolve_avg_holding_days(metrics: Dict[str, Any]) -> Optional[float]:
@@ -11700,6 +11905,10 @@ class RuleBacktestService:
         )
         summary["research_artifact"] = research_artifact
         summary["research_artifact_availability"] = dict(research_artifact_availability)
+        dataset_reproducibility_manifest = self._resolve_dataset_reproducibility_manifest_payload(summary)
+        if dataset_reproducibility_manifest:
+            summary["dataset_reproducibility_manifest"] = dict(dataset_reproducibility_manifest)
+        dataset_manifest_identity = self._dataset_manifest_identity_from_summary(summary)
         payload = {
             "id": row.id,
             "code": row.code,
@@ -11749,6 +11958,8 @@ class RuleBacktestService:
             **self._build_single_symbol_readiness_fields(professional_readiness),
             "summary": summary,
             "data_quality": data_quality,
+            "dataset_reproducibility_manifest": dataset_reproducibility_manifest,
+            "dataset_manifest_identity": dataset_manifest_identity,
             "data_sufficiency": data_sufficiency,
             "historicalOhlcvReadiness": dict(data_sufficiency.get("ohlcv_readiness") or {}),
             "robustness_analysis": dict(summary.get("robustness_analysis") or {}),
