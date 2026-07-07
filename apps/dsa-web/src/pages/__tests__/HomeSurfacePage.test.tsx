@@ -4977,7 +4977,7 @@ describe('HomeSurfacePage', () => {
 
   it('keeps the watchlist running state mounted when task progress omits modules', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
-    vi.mocked(analysisApi.getTasks).mockResolvedValue({
+    vi.mocked(analysisApi.getTasks).mockResolvedValueOnce({
       total: 1,
       pending: 0,
       processing: 1,
@@ -5008,6 +5008,24 @@ describe('HomeSurfacePage', () => {
     expect(await screen.findByTestId('home-bento-inplace-loading-decision')).toHaveTextContent('WULF');
     expect(screen.getByTestId('home-bento-inplace-loading-decision')).toHaveTextContent('Running AI analysis');
     expect(screen.queryByText('Oracle Corporation')).not.toBeInTheDocument();
+  });
+
+  it('uses the focused task progress owner once for a routed watchlist task', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(analysisApi.getTaskProgress).mockResolvedValue({
+      taskId: 'task-wulf',
+      stockCode: 'WULF',
+      stockName: 'WULF',
+      status: 'processing',
+      progress: 42,
+      message: 'Running AI analysis',
+      modules: [],
+    } as unknown as Awaited<ReturnType<typeof analysisApi.getTaskProgress>>);
+
+    renderSurface('/?symbol=WULF&task_id=task-wulf&source=watchlist&market=US');
+
+    expect(await screen.findByTestId('home-bento-inplace-loading-decision')).toHaveTextContent('WULF');
+    await waitFor(() => expect(analysisApi.getTaskProgress).toHaveBeenCalledTimes(1));
   });
 
   it('loads the completed watchlist task report for the routed task id', async () => {

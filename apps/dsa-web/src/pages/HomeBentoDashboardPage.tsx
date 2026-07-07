@@ -7018,11 +7018,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       originalQuery: routeSymbol,
       selectionSource: 'manual',
     });
-    void refreshTaskProgress(routeTaskId);
-  }, [hydratedRouteTaskId, isGuest, locale, refreshTaskProgress, routeSource, routeSymbol, routeTaskId, syncTaskCreated]);
+  }, [hydratedRouteTaskId, isGuest, locale, routeSource, routeSymbol, routeTaskId, syncTaskCreated]);
 
   const focusedTaskId = focusedTask?.taskId;
-  const focusedTaskStatus = focusedTask?.status;
 
   useEffect(() => {
     if (isGuest || !focusedTaskId || !isFocusedTaskRunning || isFocusedTaskSoftTimedOut) {
@@ -7049,7 +7047,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   }, [focusedTaskId, isFocusedTaskRunning, softTimedOutTaskId]);
 
   useEffect(() => {
-    if (!focusedTaskId || focusedTaskStatus === 'completed' || focusedTaskStatus === 'failed') {
+    if (!focusedTaskId || !isFocusedTaskRunning) {
       return undefined;
     }
 
@@ -7064,7 +7062,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     return () => {
       window.clearInterval(timer);
     };
-  }, [focusedTaskId, focusedTaskStatus, refreshTaskProgress]);
+  }, [focusedTaskId, isFocusedTaskRunning, refreshTaskProgress]);
 
   useEffect(() => {
     if (hasHydratedInitialTicker) {

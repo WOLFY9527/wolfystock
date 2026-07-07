@@ -63,7 +63,7 @@ describe('useDashboardLifecycle', () => {
     expect(hydrateRecentTasks).toHaveBeenCalledTimes(2);
   });
 
-  it('refreshes history when a task completes and forwards task updates', () => {
+  it('forwards task completion without taking over Home history refresh ownership', () => {
     const refreshHistory = vi.fn().mockResolvedValue(undefined);
     const hydrateRecentTasks = vi.fn().mockResolvedValue(undefined);
     const syncTaskUpdated = vi.fn();
@@ -87,7 +87,42 @@ describe('useDashboardLifecycle', () => {
     });
 
     expect(syncTaskUpdated).toHaveBeenCalledWith(createTask());
-    expect(hydrateRecentTasks).toHaveBeenCalled();
-    expect(refreshHistory).toHaveBeenCalledWith(true);
+    expect(hydrateRecentTasks).toHaveBeenCalledTimes(1);
+    expect(refreshHistory).not.toHaveBeenCalled();
+  });
+
+  it('uses SSE task events as the current-task owner without immediate hydration refreshes', () => {
+    const refreshHistory = vi.fn().mockResolvedValue(undefined);
+    const hydrateRecentTasks = vi.fn().mockResolvedValue(undefined);
+    const syncTaskCreated = vi.fn();
+    const syncTaskUpdated = vi.fn();
+    const syncTaskFailed = vi.fn();
+
+    renderHook(() =>
+      useDashboardLifecycle({
+        loadInitialHistory: vi.fn().mockResolvedValue(undefined),
+        refreshHistory,
+        hydrateRecentTasks,
+        syncTaskCreated,
+        syncTaskUpdated,
+        syncTaskFailed,
+      }),
+    );
+
+    const taskStreamOptions = vi.mocked(useTaskStream).mock.calls[0]?.[0];
+    expect(taskStreamOptions).toBeDefined();
+
+    act(() => {
+      taskStreamOptions?.onTaskCreated?.({ ...createTask(), status: 'pending', progress: 0 });
+      taskStreamOptions?.onTaskStarted?.({ ...createTask(), status: 'processing', progress: 12 });
+      taskStreamOptions?.onTaskCompleted?.(createTask());
+      taskStreamOptions?.onTaskFailed?.({ ...createTask(), status: 'failed', progress: 100 });
+    });
+
+    expect(syncTaskCreated).toHaveBeenCalledTimes(1);
+    expect(syncTaskUpdated).toHaveBeenCalledTimes(2);
+    expect(syncTaskFailed).toHaveBeenCalledTimes(1);
+    expect(hydrateRecentTasks).toHaveBeenCalledTimes(1);
+    expect(refreshHistory).not.toHaveBeenCalled();
   });
 });

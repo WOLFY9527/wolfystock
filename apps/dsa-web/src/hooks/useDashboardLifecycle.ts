@@ -75,23 +75,18 @@ export function useDashboardLifecycle({
   useTaskStream({
     onTaskCreated: (task) => {
       syncTaskCreated(task);
-      void hydrateRecentTasks();
     },
     onTaskStarted: (task) => {
       syncTaskUpdated(task);
-      void hydrateRecentTasks();
     },
     onTaskUpdated: (task) => {
       syncTaskUpdated(task);
     },
     onTaskCompleted: (task) => {
       syncTaskUpdated(task);
-      void hydrateRecentTasks();
-      void refreshHistory(true);
     },
     onTaskFailed: (task) => {
       syncTaskFailed(task);
-      void hydrateRecentTasks();
     },
     onError: () => undefined,
     enabled,

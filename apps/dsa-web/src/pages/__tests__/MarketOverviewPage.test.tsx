@@ -3215,6 +3215,40 @@ describe('MarketOverviewPage', () => {
     expect(JSON.stringify(saved)).not.toContain('request timed out');
   });
 
+  it('persists one route-entry local snapshot after staggered panel settlement', async () => {
+    vi.useFakeTimers();
+    const setItemSpy = vi.spyOn(window.localStorage.__proto__, 'setItem');
+    const indicesRequest = createDeferredPromise<ReturnType<typeof panel>>();
+    const volatilityRequest = createDeferredPromise<ReturnType<typeof panel>>();
+    const cryptoRequest = createDeferredPromise<ReturnType<typeof cryptoPanel>>();
+    vi.mocked(marketOverviewApi.getIndices).mockReturnValueOnce(indicesRequest.promise);
+    vi.mocked(marketOverviewApi.getVolatility).mockReturnValueOnce(volatilityRequest.promise);
+    vi.mocked(marketApi.getCrypto).mockReturnValueOnce(cryptoRequest.promise);
+
+    render(createElement(MarketOverviewPage));
+
+    await drainStagedMarketPanelRequests();
+    await flushMarketOverviewMicrotasks(4);
+
+    await runMarketOverviewAsyncStep(() => {
+      indicesRequest.resolve(panel('IndexTrendsCard', 'SPX'));
+    });
+    await flushMarketOverviewMicrotasks(2);
+    await runMarketOverviewAsyncStep(() => {
+      volatilityRequest.resolve(panel('VolatilityCard', 'VIX'));
+    });
+    await flushMarketOverviewMicrotasks(2);
+    await runMarketOverviewAsyncStep(() => {
+      cryptoRequest.resolve(cryptoPanel());
+    });
+    await flushMarketOverviewMicrotasks(4);
+
+    const saved = JSON.parse(window.localStorage.getItem(MARKET_OVERVIEW_LKG_STORAGE_KEY) || '{}');
+    expect(Object.keys(saved.payload || {}).length).toBeGreaterThanOrEqual(17);
+    const lkgWrites = setItemSpy.mock.calls.filter(([key]) => key === MARKET_OVERVIEW_LKG_STORAGE_KEY);
+    expect(lkgWrites).toHaveLength(1);
+  });
+
   it('keeps local snapshot visible when backend refresh fails and keeps errors compact', async () => {
     window.localStorage.setItem(MARKET_OVERVIEW_LKG_STORAGE_KEY, JSON.stringify(localSnapshotPayload()));
     vi.mocked(marketOverviewApi.getIndices).mockRejectedValueOnce(new Error('indices request timed out'));
@@ -3292,6 +3326,24 @@ describe('MarketOverviewPage', () => {
     expect(countMarketPanelRequests()).toBe(17);
     expectMarketPanelRequestsCalledOnce(allMarketPanelRequests);
     expect(MockEventSource.instances).toHaveLength(1);
+  });
+
+  it('keeps route-entry panel ownership until the canonical request settles', async () => {
+    const indicesRequest = createDeferredPromise<ReturnType<typeof panel>>();
+    vi.mocked(marketOverviewApi.getIndices).mockReturnValue(indicesRequest.promise);
+
+    const firstView = render(createElement(MarketOverviewPage));
+    await flushMarketOverviewMicrotasks(2);
+    firstView.unmount();
+
+    render(createElement(MarketOverviewPage));
+    await flushMarketOverviewMicrotasks(2);
+
+    expect(marketOverviewApi.getIndices).toHaveBeenCalledTimes(1);
+
+    await runMarketOverviewAsyncStep(() => {
+      indicesRequest.resolve(panel('IndexTrendsCard', 'SPX'));
+    });
   });
 
   it('renders a stable MarketMonitor skeleton with grouped deep panels and collapsed diagnostics', async () => {
