@@ -945,6 +945,71 @@ class MarketScannerService:
             "universe_notes": list(payload.get("universe_notes") or []),
         }
 
+    def _active_lifecycle_universe_resolution(self, *, market: str) -> Optional[Dict[str, Any]]:
+        normalized_market = str(market or "").strip().lower()
+        readiness = build_scanner_universe_lifecycle_readiness(market=normalized_market)
+        if readiness.get("usable") is not True:
+            return None
+
+        symbols: List[str] = []
+        seen = set()
+        for raw_symbol in readiness.get("symbols") or []:
+            normalized = self._normalize_scanner_symbol(str(raw_symbol or ""), market=normalized_market)
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            symbols.append(normalized)
+        if not symbols:
+            return None
+
+        if normalized_market == "cn":
+            data: Any = pd.DataFrame([{"code": symbol, "name": symbol} for symbol in symbols])
+        else:
+            data = list(symbols)
+
+        source_identity = (
+            readiness.get("sourceArtifactIdentity")
+            or readiness.get("sourceId")
+            or readiness.get("sourcePath")
+            or "scanner_universe_lifecycle"
+        )
+        return {
+            "success": True,
+            "source": "scanner_universe_lifecycle",
+            "universeSource": "scanner_universe_lifecycle",
+            "data": data,
+            "attempts": [
+                {
+                    "fetcher": "scanner_universe_lifecycle_active",
+                    "status": "success",
+                    "rows": int(len(symbols)),
+                    "universeVersion": readiness.get("universeVersion"),
+                    "sourceArtifactIdentity": source_identity,
+                }
+            ],
+            "local_symbol_count": int(len(symbols)),
+            "supplemented_seed_count": 0,
+            "final_symbol_count": int(len(symbols)),
+            "target_symbol_count": int(len(symbols)),
+            "coverage_strategy": "scanner_universe_lifecycle_active",
+            "resolvedStarterSymbols": list(symbols),
+            "activeUniverseVersion": readiness.get("universeVersion"),
+            "universeVersion": readiness.get("universeVersion"),
+            "sourceId": readiness.get("sourceId"),
+            "sourceClass": readiness.get("sourceClass"),
+            "sourceArtifactIdentity": source_identity,
+            "sourceAsOf": readiness.get("asOf") or readiness.get("sourceAsOf"),
+            "asOf": readiness.get("asOf") or readiness.get("sourceAsOf"),
+            "retrievedAt": readiness.get("retrievedAt"),
+            "generatedAt": readiness.get("generatedAt"),
+            "freshnessState": readiness.get("freshnessState"),
+            "lifecycleReadiness": readiness,
+            "noExternalCalls": True,
+            "providerCallsEnabled": False,
+            "readOnly": True,
+            "activationState": "active",
+        }
+
     def _merge_universe_notes(
         self,
         notes: Sequence[str],
@@ -1018,7 +1083,13 @@ class MarketScannerService:
             raise ValueError(f"当前阶段暂不支持市场: {profile_config.market}")
 
         recent_analysis_owner_id = self.owner_id if owner_id is None else owner_id
-        universe_resolution = self._resolve_cn_stock_universe(owner_id=recent_analysis_owner_id)
+        universe_resolution = (
+            self._active_lifecycle_universe_resolution(market=profile_config.market)
+            if universe_selection["universe_type"] == "default"
+            else None
+        )
+        if universe_resolution is None:
+            universe_resolution = self._resolve_cn_stock_universe(owner_id=recent_analysis_owner_id)
         snapshot_resolution = self._resolve_cn_snapshot(
             profile=profile_config,
             stock_list=universe_resolution.get("data"),
@@ -2783,6 +2854,7 @@ class MarketScannerService:
             for symbol in (
                 diagnostics.get("boundedStarterUniverse")
                 or universe_resolution.get("boundedStarterUniverse")
+                or universe_resolution.get("resolvedStarterSymbols")
                 or universe_resolution.get("data")
                 or []
             )
@@ -2815,6 +2887,12 @@ class MarketScannerService:
             "symbolsEvaluated": symbols_evaluated[:50],
             "symbolsWithSufficientData": symbols_with_sufficient_data[:50],
             "symbolsSkipped": symbols_skipped[:50],
+            "universeVersion": universe_resolution.get("universeVersion")
+            or universe_resolution.get("activeUniverseVersion"),
+            "sourceClass": universe_resolution.get("sourceClass"),
+            "sourceArtifactIdentity": universe_resolution.get("sourceArtifactIdentity"),
+            "asOf": universe_resolution.get("asOf") or universe_resolution.get("sourceAsOf"),
+            "freshnessState": universe_resolution.get("freshnessState"),
         }
 
     def _build_data_readiness(
@@ -3637,10 +3715,12 @@ class MarketScannerService:
             market=profile_config.market,
         )
         if universe_selection["universe_type"] == "default":
-            universe_resolution = market_options["resolve_universe"](
-                profile=profile_config,
-                target_symbol_count=resolved_universe_limit,
-            )
+            universe_resolution = self._active_lifecycle_universe_resolution(market=profile_config.market)
+            if universe_resolution is None:
+                universe_resolution = market_options["resolve_universe"](
+                    profile=profile_config,
+                    target_symbol_count=resolved_universe_limit,
+                )
         else:
             universe_resolution = {
                 "success": True,

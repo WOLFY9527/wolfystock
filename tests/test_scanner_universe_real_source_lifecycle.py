@@ -21,6 +21,7 @@ from src.services.scanner_universe_lifecycle import (
     dry_run_scanner_universe_source,
     read_scanner_universe_source_file,
 )
+from src.services.scanner_universe_readiness import build_scanner_universe_readiness_from_coverage
 
 
 def _write_json(path: Path, payload: dict) -> Path:
@@ -202,6 +203,54 @@ def test_suspicious_shrink_is_blocked_but_bounded_diff_is_accepted(tmp_path: Pat
     assert readiness["symbols"] == ["AAPL", "MSFT", "NVDA", "TSLA", "AMD"]
 
 
+def test_duplicate_activation_and_rejected_restart_preserve_active_snapshot(tmp_path: Path) -> None:
+    store_root = tmp_path / "store"
+    store = ScannerUniverseLifecycleStore(root=store_root)
+    source_path = _write_json(tmp_path / "source.json", _source(symbols=["AAPL", "MSFT", "NVDA"]))
+
+    first = activate_scanner_universe_from_source(
+        source_path=source_path,
+        store=store,
+        market="us",
+        minimum_coverage_threshold=3,
+        activated_at=datetime(2026, 7, 5, tzinfo=timezone.utc),
+    )
+    duplicate = activate_scanner_universe_from_source(
+        source_path=source_path,
+        store=store,
+        market="us",
+        minimum_coverage_threshold=3,
+        activated_at=datetime(2026, 7, 6, tzinfo=timezone.utc),
+    )
+    invalid = _write_json(
+        tmp_path / "invalid.json",
+        _source(symbols=[], source_id="operator/us-empty"),
+    )
+    rejected = activate_scanner_universe_from_source(
+        source_path=invalid,
+        store=store,
+        market="us",
+        minimum_coverage_threshold=1,
+        activated_at=datetime(2026, 7, 7, tzinfo=timezone.utc),
+    )
+    restarted = build_scanner_universe_lifecycle_readiness(
+        store=ScannerUniverseLifecycleStore(root=store_root),
+        market="us",
+        now=datetime(2026, 7, 8, tzinfo=timezone.utc),
+    )
+
+    assert first["status"] == "activated"
+    assert duplicate["status"] == "activated"
+    assert duplicate["universeVersion"] == first["universeVersion"]
+    assert duplicate["previousUniverseVersion"] == first["universeVersion"]
+    assert rejected["status"] == "rejected"
+    assert "empty_universe" in rejected["rejectedReasons"]
+    assert restarted["universeVersion"] == first["universeVersion"]
+    assert restarted["symbols"] == ["AAPL", "MSFT", "NVDA"]
+    assert restarted["lastRejectedImportReason"] == "empty_universe"
+    assert store.load_rejected("us")["previousUniverseVersion"] == first["universeVersion"]
+
+
 def test_malformed_empty_duplicate_and_freshness_fail_closed(tmp_path: Path) -> None:
     store = ScannerUniverseLifecycleStore(root=tmp_path / "store")
     malformed = _write_json(tmp_path / "malformed.json", {"market": "us", "sourcePolicyState": "approved", "symbols": "AAPL"})
@@ -233,6 +282,71 @@ def test_malformed_empty_duplicate_and_freshness_fail_closed(tmp_path: Path) -> 
     assert duplicate_result["symbolCount"] == 2
     assert duplicate_result["diff"]["normalizedChangeCount"] == 1
     assert "stale_source" in stale_result["rejectedReasons"]
+
+
+def test_readiness_contract_distinguishes_invalid_missing_stale_and_blocked() -> None:
+    invalid = build_scanner_universe_readiness_from_coverage(
+        market="us",
+        universe_status="unavailable",
+        universe_size=0,
+        last_updated_at=None,
+        freshness_state="invalid",
+        quote_coverage="unknown",
+        history_coverage="unknown",
+        blocked=True,
+        source_metadata={
+            "lifecycleReadiness": {
+                "usable": False,
+                "symbolCount": 0,
+                "blockingReasons": ["metadata_malformed"],
+            }
+        },
+    )
+    missing = build_scanner_universe_readiness_from_coverage(
+        market="us",
+        universe_status="missing",
+        universe_size=0,
+        last_updated_at=None,
+        freshness_state="missing_universe",
+        quote_coverage="unknown",
+        history_coverage="unknown",
+        blocked=True,
+    )
+    stale = build_scanner_universe_readiness_from_coverage(
+        market="us",
+        universe_status="stale",
+        universe_size=2,
+        last_updated_at="2026-07-01T00:00:00+00:00",
+        freshness_state="stale",
+        quote_coverage="unknown",
+        history_coverage="unknown",
+        blocked=True,
+    )
+    blocked = build_scanner_universe_readiness_from_coverage(
+        market="us",
+        universe_status="available",
+        universe_size=2,
+        last_updated_at="2026-07-05T00:00:00+00:00",
+        freshness_state="fresh",
+        quote_coverage="missing",
+        history_coverage="available",
+        blocked=True,
+        source_metadata={
+            "lifecycleReadiness": {
+                "usable": True,
+                "symbolCount": 2,
+                "blockingReasons": [],
+                "universeVersion": "scanner-universe-us-test",
+            }
+        },
+    )
+
+    assert invalid["status"] == "invalid"
+    assert "metadata_malformed" in invalid["blockingReasons"]
+    assert missing["status"] == "missing"
+    assert stale["status"] == "stale"
+    assert blocked["status"] == "blocked"
+    assert blocked["universeVersion"] == "scanner-universe-us-test"
 
 
 def test_cn_us_hk_normalization_qualification_for_supported_forms(tmp_path: Path) -> None:

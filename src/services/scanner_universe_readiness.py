@@ -27,6 +27,8 @@ SCANNER_UNIVERSE_SUPPORTED_STATUSES = (
     "ready",
     "missing",
     "stale",
+    "invalid",
+    "blocked",
     "not_configured",
     "insufficient_coverage",
     "unavailable",
@@ -187,6 +189,10 @@ def build_scanner_universe_readiness_contract(
             blocking_reasons.append("source_missing")
         elif normalized_status == "stale":
             blocking_reasons.append("stale_universe")
+        elif normalized_status == "invalid":
+            blocking_reasons.append("metadata_malformed")
+        elif normalized_status == "blocked" and lifecycle.get("usable") is not True:
+            blocking_reasons.append("candidate_generation_blocked")
         elif normalized_status == "unavailable":
             blocking_reasons.append("metadata_malformed")
         elif normalized_status == "insufficient_coverage" and not has_lifecycle_contract:
@@ -360,9 +366,42 @@ def build_scanner_universe_readiness_from_coverage(
 
     requirements = {str(item or "").strip().lower() for item in historical_requirements or []}
     local_universe_statuses = {"local_universe_available", "local_universe_seeded"}
+    metadata = dict(source_metadata or {})
+    lifecycle_readiness = (
+        dict(metadata.get("lifecycleReadiness"))
+        if isinstance(metadata.get("lifecycleReadiness"), dict)
+        else None
+    )
+    lifecycle_reasons = {
+        str(item or "").strip().lower()
+        for item in (lifecycle_readiness or {}).get("blockingReasons", [])
+        if str(item or "").strip()
+    }
+    lifecycle_invalid_reasons = {
+        "metadata_malformed",
+        "normalization_rejected",
+        "empty_universe",
+        "source_as_of_missing",
+    }
+    lifecycle_blocked_reasons = {
+        "source_policy_unknown",
+        "suspicious_universe_shrink",
+        "market_data_readiness_not_evaluated",
+        "scanner_candidates_unavailable",
+    }
     if normalized_universe_status in local_universe_statuses:
         status = normalized_universe_status
-    elif normalized_universe_status in {"missing", "stale", "not_configured", "unavailable"}:
+    elif normalized_universe_status in {"missing", "stale", "not_configured"}:
+        status = normalized_universe_status
+    elif lifecycle_reasons.intersection(lifecycle_invalid_reasons):
+        status = "invalid"
+    elif lifecycle_reasons.intersection({"source_missing"}):
+        status = "missing"
+    elif lifecycle_reasons.intersection({"stale_source", "stale_universe"}):
+        status = "stale"
+    elif lifecycle_reasons.intersection(lifecycle_blocked_reasons):
+        status = "blocked"
+    elif normalized_universe_status == "unavailable":
         status = normalized_universe_status
     elif "provider_missing" in requirements:
         status = "not_configured"
@@ -371,16 +410,10 @@ def build_scanner_universe_readiness_from_coverage(
     elif "stale_data" in requirements:
         status = "stale"
     elif blocked or set(available_classes) != set(SCANNER_UNIVERSE_REQUIRED_DATA_CLASSES):
-        status = "insufficient_coverage"
+        status = "blocked" if lifecycle_readiness else "insufficient_coverage"
     else:
         status = "available"
 
-    metadata = dict(source_metadata or {})
-    lifecycle_readiness = (
-        dict(metadata.get("lifecycleReadiness"))
-        if isinstance(metadata.get("lifecycleReadiness"), dict)
-        else None
-    )
     return build_scanner_universe_readiness_contract(
         market=market,
         status=status,
@@ -427,6 +460,10 @@ def _operator_next_action(status: str) -> str:
         return "Refresh the scanner local universe and rerun scanner readiness checks."
     if status == "quote_snapshot_stale":
         return "Refresh quote snapshot coverage before candidate generation."
+    if status == "invalid":
+        return "Inspect the rejected scanner universe import and repair the configured source before activation."
+    if status == "blocked":
+        return "Resolve scanner universe blocking reasons before candidate generation."
     if status == "insufficient_coverage":
         return "Refresh or seed historical OHLCV and quote coverage for the current universe."
     if status in {"available", "local_universe_available", "local_universe_seeded"}:
@@ -451,6 +488,10 @@ def _consumer_safe_message(status: str) -> str:
         return "扫描标的池已过期，需要更新后再扫描。"
     if status == "quote_snapshot_stale":
         return "行情快照已过期，需要刷新后再生成候选。"
+    if status == "invalid":
+        return "扫描标的池导入无效，需要修复来源后再激活。"
+    if status == "blocked":
+        return "扫描标的池尚有阻塞项，暂不生成候选。"
     if status == "insufficient_coverage":
         return "标的池可用，但行情或历史覆盖不足，暂不生成候选。"
     if status in {"available", "local_universe_available", "local_universe_seeded"}:

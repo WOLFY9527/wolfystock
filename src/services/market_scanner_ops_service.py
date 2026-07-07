@@ -249,7 +249,7 @@ class MarketScannerOperationsService:
             "provider_not_configured",
         }:
             return raw_status
-        if raw_status in {"missing", "stale", "not_configured", "unavailable"}:
+        if raw_status in {"missing", "stale", "invalid", "blocked", "not_configured", "unavailable"}:
             return raw_status
         if raw_status in {"deferred", "manual_action_required"}:
             return raw_status
@@ -266,7 +266,7 @@ class MarketScannerOperationsService:
         return surfaces
 
     def _operator_next_action(self, scanner_readiness: Dict[str, Any], *, operator_status: str) -> str:
-        if operator_status in {"ready", "missing", "stale", "not_configured", "unavailable"}:
+        if operator_status in {"ready", "missing", "stale", "invalid", "blocked", "not_configured", "unavailable"}:
             action = str(
                 scanner_readiness.get("nextOperatorAction")
                 or scanner_readiness.get("operatorNextAction")

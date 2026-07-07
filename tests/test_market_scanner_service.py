@@ -35,6 +35,10 @@ from src.services.quote_snapshot_readiness import (
     QuoteSnapshotReadinessRequest,
 )
 from src.services.scanner_evidence_packet import SCANNER_EVIDENCE_VERSION, build_scanner_evidence_packet
+from src.services.scanner_universe_lifecycle import (
+    ScannerUniverseLifecycleStore,
+    activate_scanner_universe_from_source,
+)
 from src.storage import DatabaseManager, MarketScannerRun
 
 
@@ -4017,6 +4021,73 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             self.assertNotIn(non_starter, lineage["symbolsEvaluated"])
             self.assertNotIn(non_starter, skipped_by_symbol)
         self.assertEqual(detail["dataReadiness"]["scannerLineage"], lineage)
+
+    def test_default_us_scan_consumes_active_lifecycle_universe_and_metadata(self) -> None:
+        seed_us_local_history(self.stock_repo)
+        lifecycle_root = Path(self._cache_temp_dir.name) / "scanner-universe-lifecycle"
+        source_path = Path(self._cache_temp_dir.name) / "active-us-source.json"
+        source_path.write_text(
+            json.dumps(
+                {
+                    "market": "us",
+                    "sourceId": "operator/us-research-universe",
+                    "sourceClass": "operator_supplied_membership_json",
+                    "sourceAsOf": "2026-07-05",
+                    "retrievedAt": "2026-07-05T01:02:03+00:00",
+                    "sourceArtifactIdentity": "operator/us-research-universe@2026-07-05",
+                    "sourcePolicyState": "operator_supplied",
+                    "symbols": ["NVDA", "AAPL"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        activated = activate_scanner_universe_from_source(
+            source_path=source_path,
+            store=ScannerUniverseLifecycleStore(root=lifecycle_root),
+            market="us",
+            minimum_coverage_threshold=2,
+        )
+        data_manager = FakeUsScannerDataManager()
+        service = MarketScannerService(
+            self.db,
+            data_manager=data_manager,
+            quote_snapshot_provider=FakeQuoteSnapshotProvider(_quote_snapshots(("NVDA", "AAPL"))),
+        )
+
+        with patch.dict(
+            os.environ,
+            {
+                "SCANNER_UNIVERSE_LIFECYCLE_ROOT": str(lifecycle_root),
+                "LOCAL_US_PARQUET_DIR": "",
+                "US_STOCK_PARQUET_DIR": "",
+                "WOLFYSTOCK_HISTORICAL_OHLCV_RUNTIME_ENABLED": "",
+                "WOLFYSTOCK_YFINANCE_US_OHLCV_CACHE_ENABLED": "",
+            },
+            clear=False,
+        ):
+            detail = service.run_scan(
+                market="us",
+                profile="us_preopen_v1",
+                shortlist_size=2,
+                universe_limit=50,
+                detail_limit=10,
+            )
+
+        self.assertEqual(detail["status"], "completed")
+        lineage = detail["scannerLineage"]
+        self.assertEqual(lineage["source"], "scanner_universe_lifecycle")
+        self.assertEqual(lineage["universeMode"], "scanner_universe_lifecycle_active")
+        self.assertEqual(lineage["universeSymbols"], ["NVDA", "AAPL"])
+        self.assertEqual(lineage["universeVersion"], activated["universeVersion"])
+        self.assertEqual(lineage["sourceClass"], "operator_supplied_membership_json")
+        self.assertEqual(lineage["sourceArtifactIdentity"], "operator/us-research-universe@2026-07-05")
+        readiness = detail["dataReadiness"]["scannerUniverseReadiness"]
+        self.assertEqual(readiness["universeVersion"], activated["universeVersion"])
+        self.assertEqual(readiness["symbols"], ["NVDA", "AAPL"])
+        self.assertEqual(readiness["sourceClass"], "operator_supplied_membership_json")
+        self.assertEqual(readiness["freshnessState"], "fresh")
+        self.assertEqual(readiness["asOf"], "2026-07-05")
+        self.assertEqual(data_manager.realtime_quote_calls, ["NVDA", "AAPL"])
 
     def test_not_run_status_activates_bounded_us_local_parquet_universe(self) -> None:
         cache_dir = Path(self._cache_temp_dir.name) / "us-parquet-cache"

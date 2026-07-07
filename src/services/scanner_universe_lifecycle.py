@@ -2173,7 +2173,7 @@ def _relative_path(path: Path | None, root: Path) -> str:
     if path is None:
         return ""
     try:
-        return str(path.resolve().relative_to(root.resolve()))
+        return path.resolve().relative_to(root.resolve()).as_posix()
     except Exception:
         return _source_path_label(path)
 
