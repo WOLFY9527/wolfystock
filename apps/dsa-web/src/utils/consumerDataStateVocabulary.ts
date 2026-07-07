@@ -3,8 +3,12 @@ export type ConsumerDataState =
   | 'partial'
   | 'stale'
   | 'missing'
+  | 'insufficient'
   | 'disabled'
   | 'unavailable'
+  | 'blocked'
+  | 'initializing'
+  | 'error'
   | 'failed_closed'
   | 'maintenance';
 
@@ -47,6 +51,13 @@ const CONSUMER_DATA_STATE_VOCABULARY: Record<ConsumerDataState, ConsumerDataStat
     severity: 'critical',
     nextStep: '等待数据补齐，或先查看已有历史记录。',
   },
+  insufficient: {
+    state: 'insufficient',
+    label: '证据不足',
+    explanation: '当前证据不足，暂不扩大结论。',
+    severity: 'warning',
+    nextStep: '先补充关键证据，再继续观察。',
+  },
   disabled: {
     state: 'disabled',
     label: '暂未启用',
@@ -58,6 +69,27 @@ const CONSUMER_DATA_STATE_VOCABULARY: Record<ConsumerDataState, ConsumerDataStat
     state: 'unavailable',
     label: '暂不可用',
     explanation: '该模块暂时无法提供可读数据，页面不会补造结果。',
+    severity: 'critical',
+    nextStep: '稍后刷新，或查看其他仍可用的观察模块。',
+  },
+  blocked: {
+    state: 'blocked',
+    label: '已阻断',
+    explanation: '关键证据门槛未满足，当前保持观察边界。',
+    severity: 'critical',
+    nextStep: '等待阻断条件解除后再复核。',
+  },
+  initializing: {
+    state: 'initializing',
+    label: '初始化中',
+    explanation: '当前数据仍在准备或刷新，暂不形成新结论。',
+    severity: 'info',
+    nextStep: '等待当前更新完成后再复核。',
+  },
+  error: {
+    state: 'error',
+    label: '读取异常',
+    explanation: '当前数据读取异常，页面不会补造结果。',
     severity: 'critical',
     nextStep: '稍后刷新，或查看其他仍可用的观察模块。',
   },
@@ -96,11 +128,15 @@ export function resolveConsumerDataState(value: string | null | undefined): Cons
   if (['ready', 'ok', 'available', 'healthy', 'complete', 'product_ready'].includes(token)) return 'ready';
   if (['partial', 'mixed', 'thin', 'degraded', 'limited', 'insufficient_coverage'].includes(token)) return 'partial';
   if (['stale', 'delayed', 'expired', 'old', 'cached'].includes(token) || token.includes('stale')) return 'stale';
-  if (['missing', 'empty', 'not_configured', 'no_data', 'no_evidence', 'insufficient', 'insufficient_history'].includes(token)) return 'missing';
+  if (['missing', 'empty', 'not_configured', 'no_data', 'no_evidence'].includes(token)) return 'missing';
+  if (['insufficient', 'insufficient_history'].includes(token)) return 'insufficient';
   if (['disabled', 'not_enabled', 'entitlement_required', 'not_implemented'].includes(token)) return 'disabled';
-  if (['maintenance', 'refreshing', 'updating', 'pending'].includes(token)) return 'maintenance';
-  if (['failed_closed', 'fail_closed', 'blocked'].includes(token)) return 'failed_closed';
-  if (['unavailable', 'error', 'failed', 'timeout', 'critical'].includes(token) || token.includes('unavailable')) return 'unavailable';
+  if (token === 'maintenance') return 'maintenance';
+  if (['refreshing', 'updating', 'pending', 'initializing', 'loading'].includes(token)) return 'initializing';
+  if (['failed_closed', 'fail_closed'].includes(token)) return 'failed_closed';
+  if (token === 'blocked') return 'blocked';
+  if (token === 'unavailable' || token.includes('unavailable')) return 'unavailable';
+  if (['error', 'failed', 'timeout', 'critical'].includes(token)) return 'error';
   return 'partial';
 }
 

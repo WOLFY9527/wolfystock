@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { consumerPresentationDataState } from '../consumerPresentationBoundary';
+import { consumerPresentationDataState, consumerPresentationText } from '../consumerPresentationBoundary';
 
 const INTERNAL_LEAK_PATTERN = /provider|runtime|debug|raw|payload|cache|fallback|sourceAuthorityAllowed|scoreContributionAllowed|reasonCodes|routeRejectedReasonCodes|Polygon|Tushare/i;
 
@@ -62,5 +62,12 @@ describe('consumerPresentationDataState', () => {
       label: 'Blocked',
       tone: 'danger',
     });
+  });
+
+  it('reuses status-label mappings so raw state tokens stay bounded at the consumer boundary', () => {
+    expect(consumerPresentationText('available', 'zh')).toBe('数据可用');
+    expect(consumerPresentationText('insufficient', 'zh')).toBe('证据不足');
+    expect(consumerPresentationText('initializing', 'zh')).toBe('初始化中');
+    expect(consumerPresentationText('error', 'zh')).toBe('数据读取异常');
   });
 });

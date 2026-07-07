@@ -43,4 +43,38 @@ describe('consumerDataStateVocabulary', () => {
     expect(consumerSafeOperatorAction('Load recent local daily OHLCV before handoff', 'missing')).toBe('等待数据刷新后再查看。');
     expect(consumerSafeOperatorAction('pipeline repair required', 'maintenance')).toBe('数据管道维护中。');
   });
+
+  it('keeps insufficient, blocked, initializing, and error semantics distinct when consumer behavior differs', () => {
+    const available = getConsumerDataStateEntry('available');
+    const insufficient = getConsumerDataStateEntry('insufficient');
+    const insufficientHistory = getConsumerDataStateEntry('insufficient_history');
+    const blocked = getConsumerDataStateEntry('blocked');
+    const initializing = getConsumerDataStateEntry('initializing');
+    const refreshing = getConsumerDataStateEntry('refreshing');
+    const pending = getConsumerDataStateEntry('pending');
+    const error = getConsumerDataStateEntry('error');
+    const failed = getConsumerDataStateEntry('failed');
+
+    expect(available.state).toBe('ready');
+    expect(available.label).toBe('数据可用');
+
+    expect(insufficient.state).toBe('insufficient');
+    expect(insufficient.label).toBe('证据不足');
+    expect(`${insufficient.label} ${insufficient.explanation} ${insufficient.nextStep}`).not.toMatch(RAW_PATTERN);
+
+    expect(insufficientHistory.state).toBe('insufficient');
+    expect(insufficientHistory.label).toBe('证据不足');
+
+    expect(blocked.state).toBe('blocked');
+    expect(blocked.label).toBe('已阻断');
+
+    expect(initializing.state).toBe('initializing');
+    expect(initializing.label).toBe('初始化中');
+    expect(refreshing.state).toBe('initializing');
+    expect(pending.state).toBe('initializing');
+
+    expect(error.state).toBe('error');
+    expect(error.label).toBe('读取异常');
+    expect(failed.state).toBe('error');
+  });
 });

@@ -8,16 +8,30 @@ export function normalizeProductReadState(value?: string | null): ProductReadMod
     .toLowerCase()
     .replace(/[-\s]+/g, '_');
   if (!normalized) return 'no_evidence';
+  if (normalized === 'ready') return 'available';
+  if (['initializing', 'refreshing', 'loading'].includes(normalized)) return 'initializing';
+  if (['fail_closed', 'failed_closed'].includes(normalized)) return 'failed_closed';
   return normalized;
 }
 
 export function productReadModelTone(state?: string | null): ProductReadModelTone {
   const normalized = normalizeProductReadState(state);
   if (normalized === 'available') return 'success';
-  if (normalized === 'partial' || normalized === 'stale' || normalized === 'degraded' || normalized === 'pending') {
+  if (normalized === 'partial' || normalized === 'stale' || normalized === 'degraded') {
     return 'warning';
   }
-  if (normalized === 'unavailable' || normalized === 'insufficient' || normalized === 'no_evidence' || normalized === 'rejected') {
+  if (normalized === 'pending' || normalized === 'initializing') {
+    return 'info';
+  }
+  if (
+    normalized === 'blocked'
+    || normalized === 'unavailable'
+    || normalized === 'insufficient'
+    || normalized === 'no_evidence'
+    || normalized === 'rejected'
+    || normalized === 'error'
+    || normalized === 'failed_closed'
+  ) {
     return 'error';
   }
   return 'disabled';
@@ -35,6 +49,10 @@ export function productReadStateLabel(state: string | null | undefined, language
     degraded: { zh: '降级可读', en: 'Degraded' },
     rejected: { zh: '已拒绝', en: 'Rejected' },
     pending: { zh: '待确认', en: 'Pending' },
+    initializing: { zh: '初始化中', en: 'Initializing' },
+    blocked: { zh: '已阻断', en: 'Blocked' },
+    error: { zh: '读取异常', en: 'Read error' },
+    failed_closed: { zh: '已安全关闭', en: 'Safely closed' },
   };
   return labels[normalized]?.[language] || (language === 'en' ? 'Not ready' : '暂未就绪');
 }
@@ -42,12 +60,20 @@ export function productReadStateLabel(state: string | null | undefined, language
 export function productReadModelIsBlocking(model?: ProductReadModel | null): boolean {
   if (!model) return false;
   const state = normalizeProductReadState(model?.state);
-  return model?.ready === false
+  if (Boolean(model?.blockingChildren?.length)) return true;
+  if (
+    state === 'blocked'
     || state === 'unavailable'
     || state === 'insufficient'
     || state === 'no_evidence'
     || state === 'rejected'
-    || Boolean(model?.blockingChildren?.length);
+    || state === 'error'
+    || state === 'failed_closed'
+  ) {
+    return true;
+  }
+  if (state === 'pending' || state === 'initializing') return false;
+  return model?.ready === false;
 }
 
 function productReadEvidenceLabel(value: string, language: 'zh' | 'en'): string {
@@ -71,11 +97,29 @@ function productReadEvidenceLabel(value: string, language: 'zh' | 'en'): string 
 
 export function productReadBlockingSummary(model: ProductReadModel | null | undefined, language: 'zh' | 'en'): string | null {
   const blockers = (model?.blockingChildren || []).filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
-  if (!blockers.length) return null;
-  const label = blockers.slice(0, 3).map((item) => productReadEvidenceLabel(item, language)).join(' / ');
-  return language === 'en'
-    ? `Critical evidence blocked: ${label}`
-    : `关键证据阻塞：${label}`;
+  if (blockers.length) {
+    const label = blockers.slice(0, 3).map((item) => productReadEvidenceLabel(item, language)).join(' / ');
+    return language === 'en'
+      ? `Critical evidence blocked: ${label}`
+      : `关键证据阻塞：${label}`;
+  }
+
+  const state = normalizeProductReadState(model?.state);
+  const stateCopy: Record<string, { zh: string; en: string }> = {
+    blocked: {
+      zh: '关键证据已阻断，暂不形成结论。',
+      en: 'Key evidence is blocked, so no conclusion is formed.',
+    },
+    error: {
+      zh: '关键证据读取异常，暂不形成结论。',
+      en: 'Key evidence failed to load, so no conclusion is formed.',
+    },
+    failed_closed: {
+      zh: '关键证据未满足门槛，系统保持关闭。',
+      en: 'Key evidence did not meet the threshold, so the view stays fail-closed.',
+    },
+  };
+  return stateCopy[state]?.[language] ?? null;
 }
 
 export function productReadFreshnessLabel(model: ProductReadModel | null | undefined, language: 'zh' | 'en'): string | null {
