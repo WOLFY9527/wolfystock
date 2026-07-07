@@ -656,14 +656,22 @@ def test_official_risk_source_readiness_reports_ready_bundle_from_fresh_official
     assert payload["externalProviderCalls"] is False
     assert payload["mutationEnabled"] is False
     assert payload["bundleState"] == "ready"
-    assert payload["vix"] == {
-        "state": "ready",
-        "series": "VIXCLS",
-        "source": "official_public",
-        "latestDate": "2026-06-19",
-        "asOf": "2026-06-20T08:00:00+08:00",
-        "freshness": "delayed",
-        "blocker": None,
+    assert payload["vix"]["state"] == "ready"
+    assert payload["vix"]["series"] == "VIXCLS"
+    assert payload["vix"]["source"] == "official_public"
+    assert payload["vix"]["latestDate"] == "2026-06-19"
+    assert payload["vix"]["asOf"] == "2026-06-20T08:00:00+08:00"
+    assert payload["vix"]["freshness"] == "delayed"
+    assert payload["vix"]["blocker"] is None
+    assert payload["vix"]["volatilityAuthoritySnapshot"]["authorityState"] == "official"
+    assert payload["vix"]["volatilityAuthoritySnapshot"]["consumerEligibility"] == {
+        "marketOverview": True,
+        "liquidity": True,
+        "scenarioBaseline": True,
+    }
+    assert payload["vix"]["volatilityAuthoritySnapshot"]["scoreEligibility"] == {
+        "allowed": False,
+        "reason": "volatility_snapshot_score_default_closed",
     }
     assert payload["rates"]["state"] == "ready"
     assert payload["rates"]["coveredSeriesCount"] == 3
@@ -697,12 +705,43 @@ def test_official_risk_source_readiness_fails_closed_when_vix_is_missing_or_stal
     assert stale["vix"]["state"] == "blocked"
     assert stale["vix"]["freshness"] == "stale"
     assert stale["vix"]["blocker"] == "stale_official_vix_row"
+    assert stale["vix"]["volatilityAuthoritySnapshot"]["scoreEligibility"] == {
+        "allowed": False,
+        "reason": "volatility_snapshot_freshness_not_ready",
+    }
 
     all_missing = build_official_risk_source_readiness()
     assert all_missing["bundleState"] == "blocked"
     assert all_missing["vix"]["state"] == "blocked"
     assert all_missing["rates"]["state"] == "blocked"
     assert all_missing["fedLiquidity"]["state"] == "blocked"
+
+
+def test_official_risk_source_readiness_rejects_vix_identity_substitution() -> None:
+    payload = build_official_risk_source_readiness(
+        vix_rows=[
+            {
+                **_official_row("VIXCLS", symbol="VIX", source_id="fred:VXNCLS"),
+                "officialSeriesId": "VXNCLS",
+            }
+        ],
+        rates_rows=_rates_rows(),
+        fed_liquidity_rows=_fed_liquidity_rows(),
+    )
+
+    snapshot = payload["vix"]["volatilityAuthoritySnapshot"]
+
+    assert payload["bundleState"] == "partial"
+    assert payload["vix"]["state"] == "blocked"
+    assert payload["vix"]["blocker"] == "identity_mismatch"
+    assert snapshot["instrumentIdentity"]["officialSeriesId"] == "VXNCLS"
+    assert snapshot["instrumentIdentity"]["identityState"] == "identity_mismatch"
+    assert snapshot["consumerEligibility"] == {
+        "marketOverview": False,
+        "liquidity": False,
+        "scenarioBaseline": False,
+    }
+    assert snapshot["scoreEligibility"] == {"allowed": False, "reason": "identity_mismatch"}
 
 
 def test_official_risk_source_readiness_reports_partial_rates_and_unavailable_fed_liquidity() -> None:
