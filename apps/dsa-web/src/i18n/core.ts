@@ -990,8 +990,15 @@ const RESOURCES = {
         run: '运行',
         noEntrySignal: '回测窗口内没有触发任何入场信号。',
       },
+      scannerHandoffTitle: '研究线索交接',
       scannerRunMeta: '扫描批次 #{runId}',
       scannerRankMeta: '排名 #{rank}',
+      historicalSignal: {
+        entry: '历史入场信号',
+        exit: '历史离场信号',
+        neutral: '历史观察状态',
+        recorded: '历史信号已记录',
+      },
       tables: {
         noHistoricalResults: '暂无历史分析评估结果。先准备样本或运行一次评估。',
         noHistoricalRuns: '暂无历史分析评估运行记录。',
@@ -999,7 +1006,7 @@ const RESOURCES = {
         noRuleRuns: '暂无确定性规则回测历史。',
         date: '日期',
         code: '代码',
-        advice: '建议',
+        historicalSignal: '历史信号',
         direction: '方向',
         simulatedReturn: '模拟收益',
         instrumentReturn: '标的收益',
@@ -3832,6 +3839,15 @@ This memo is for research discussion and does not constitute investment advice.`
       },
     },
     backtest: {
+      scannerHandoffTitle: 'Research handoff',
+      scannerRunMeta: 'Run #{runId}',
+      scannerRankMeta: 'Rank #{rank}',
+      historicalSignal: {
+        entry: 'Historical entry signal',
+        exit: 'Historical exit signal',
+        neutral: 'Historical observation state',
+        recorded: 'Historical signal recorded',
+      },
       common: {
         yes: 'Yes',
         no: 'No',
@@ -3882,8 +3898,6 @@ This memo is for research discussion and does not constitute investment advice.`
           pricingFallbackUsedDetail: ' (fallback source used)',
           pricingFallbackNotUsedDetail: ' (no fallback source used)',
         },
-        scannerRunMeta: 'Run #{runId}',
-        scannerRankMeta: 'Rank #{rank}',
         performanceNotice: {
           noAggregateSummary: 'No aggregate historical evaluation summary is available yet.',
           noInstrumentSummary: 'No historical single-instrument evaluation summary is available for {code}.',
@@ -4028,7 +4042,7 @@ This memo is for research discussion and does not constitute investment advice.`
         noRuleRuns: 'No deterministic rule-backtest history yet.',
         date: 'Date',
         code: 'Code',
-        advice: 'Advice',
+        historicalSignal: 'Historical signal',
         direction: 'Direction',
         simulatedReturn: 'Simulated return',
         instrumentReturn: 'Instrument return',

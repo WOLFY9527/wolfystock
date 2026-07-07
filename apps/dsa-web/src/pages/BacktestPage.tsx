@@ -1616,7 +1616,7 @@ const BacktestPage: React.FC = () => {
             {scannerHandoff ? (
               <section className={`${configPanelRadiusClass} border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-4 py-3 text-sm text-[color:var(--wolfy-text-secondary)]`}>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold text-[color:var(--wolfy-text-primary)]">{language === 'en' ? 'Research handoff' : '研究线索交接'}</span>
+                  <span className="font-semibold text-[color:var(--wolfy-text-primary)]">{bt(language, 'scannerHandoffTitle')}</span>
                   <span>{scannerHandoff.symbol}</span>
                   {scannerHandoff.market ? <span className="text-[color:var(--wolfy-text-muted)]">· {scannerHandoff.market}</span> : null}
                   {scannerHandoff.scannerRunId ? <span className="text-[color:var(--wolfy-text-muted)]">· {bt(language, 'scannerRunMeta', { runId: scannerHandoff.scannerRunId })}</span> : null}

@@ -47,6 +47,21 @@ function getHistoricalStatusText(status?: string, language: BacktestLanguage = '
   return label === `backtest.historicalStatus.${normalized}` ? normalized : label;
 }
 
+function getHistoricalSignalText(operationAdvice?: string | null, language: BacktestLanguage = 'zh'): string {
+  const normalized = String(operationAdvice || '').trim().toLowerCase();
+  if (!normalized) return '--';
+  if (/^(buy|long|rule_simulation_up|买入)$/.test(normalized)) {
+    return bt(language, 'historicalSignal.entry');
+  }
+  if (/^(sell|cash|rule_simulation_down|卖出)$/.test(normalized)) {
+    return bt(language, 'historicalSignal.exit');
+  }
+  if (/^(hold|watch|observe|neutral|flat|rule_simulation_flat|持有|观望|仅供观察|继续跟踪)$/.test(normalized)) {
+    return bt(language, 'historicalSignal.neutral');
+  }
+  return bt(language, 'historicalSignal.recorded');
+}
+
 export { Disclosure };
 
 export function pct(value?: number | null): string {
@@ -578,7 +593,7 @@ export const HistoricalResultsTable: React.FC<{ rows: BacktestResultItem[] }> = 
           <tr>
             <th>{bt(language, 'tables.date')}</th>
             <th>{bt(language, 'tables.code')}</th>
-            <th>{bt(language, 'tables.advice')}</th>
+            <th>{bt(language, 'tables.historicalSignal')}</th>
             <th>{bt(language, 'tables.direction')}</th>
             <th className="product-table__align-right">{bt(language, 'tables.simulatedReturn')}</th>
             <th className="product-table__align-right">{bt(language, 'tables.instrumentReturn')}</th>
@@ -591,7 +606,7 @@ export const HistoricalResultsTable: React.FC<{ rows: BacktestResultItem[] }> = 
             <tr key={row.analysisHistoryId}>
               <td>{row.analysisDate || '--'}</td>
               <td className="product-table__mono">{row.code}</td>
-              <td>{row.operationAdvice || '--'}</td>
+              <td>{getHistoricalSignalText(row.operationAdvice, language)}</td>
               <td><DirectionBadge correct={row.directionCorrect} expected={row.directionExpected} language={language} /></td>
               <td className="product-table__align-right">{pct(row.simulatedReturnPct)}</td>
               <td className="product-table__align-right">{pct(row.stockReturnPct)}</td>
