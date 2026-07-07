@@ -57,8 +57,35 @@ describe('Input', () => {
     const input = screen.getByLabelText('密码');
     expect(input).toHaveAttribute('type', 'password');
 
-    fireEvent.click(screen.getByRole('button', { name: '显示内容' }));
+    const toggle = screen.getByRole('button', { name: '显示内容' });
+    expect(toggle).toHaveAttribute('type', 'button');
+    expect(toggle).not.toHaveAttribute('tabindex');
+
+    fireEvent.click(toggle);
     expect(input).toHaveAttribute('type', 'text');
+    expect(screen.getByRole('button', { name: '隐藏内容' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '隐藏内容' }));
+    expect(input).toHaveAttribute('type', 'password');
+    expect(screen.getByRole('button', { name: '显示内容' })).toBeInTheDocument();
+  });
+
+  it('preserves input focus on pointer activation of the password toggle', () => {
+    render(<Input label="密码" type="password" allowTogglePassword />);
+
+    const input = screen.getByLabelText('密码');
+    const toggle = screen.getByRole('button', { name: '显示内容' });
+    input.focus();
+    expect(input).toHaveFocus();
+
+    const mouseDown = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    toggle.dispatchEvent(mouseDown);
+    expect(mouseDown.defaultPrevented).toBe(true);
+
+    fireEvent.click(toggle);
+    expect(input).toHaveFocus();
+    expect(input).toHaveAttribute('type', 'text');
+    expect(toggle).toHaveClass('pointer-events-auto');
   });
 
   it('supports controlled password visibility', () => {

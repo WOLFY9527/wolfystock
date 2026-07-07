@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Drawer } from '../Drawer';
 
@@ -18,6 +18,32 @@ describe('Drawer', () => {
 
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('owns modal focus entry and keyboard containment while open', async () => {
+    render(
+      <Drawer isOpen onClose={vi.fn()} title="Navigation">
+        <button type="button">First action</button>
+        <button type="button">Last action</button>
+      </Drawer>,
+    );
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
+    });
+
+    const drawer = screen.getByRole('dialog', { name: 'Navigation' });
+    expect(drawer).toHaveAttribute('aria-modal', 'true');
+    const closeButton = drawer.querySelector<HTMLButtonElement>('.drawer__close');
+    expect(closeButton).not.toBeNull();
+    expect(closeButton).toHaveFocus();
+
+    within(drawer).getByRole('button', { name: 'Last action' }).focus();
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(closeButton).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(within(drawer).getByRole('button', { name: 'Last action' })).toHaveFocus();
   });
 
   it('ignores the opening gesture on the backdrop before allowing outside-close interactions', async () => {

@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useReducer } from 'react';
+import { useReducer, useRef } from 'react';
 import { getApiErrorMessage } from '../../api/error';
 import { stocksApi, type ExtractItem } from '../../api/stocks';
 import { SystemConfigConflictError } from '../../api/systemConfig';
@@ -186,6 +186,8 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
   disabled,
 }) => {
   const [state, dispatch] = useReducer(importReducer, INITIAL_IMPORT_STATE);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const dataInputRef = useRef<HTMLInputElement | null>(null);
   const {
     items,
     isLoading,
@@ -342,18 +344,40 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
         } ${disabled || isLoading ? 'cursor-not-allowed opacity-60' : ''}`}
       >
         <div className="flex flex-wrap items-center gap-2">
-          <label className="cursor-pointer">
-            <Button type="button" variant="settings-secondary" disabled={disabled || isLoading}>
-              选择图片
-            </Button>
-            <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif" className="hidden" onChange={onImageInput} disabled={disabled || isLoading} aria-label="选择图片" />
-          </label>
-          <label className="cursor-pointer">
-            <Button type="button" variant="settings-secondary" disabled={disabled || isLoading}>
-              选择文件
-            </Button>
-            <input type="file" accept=".csv,.xlsx,.txt" className="hidden" onChange={onDataFileInput} disabled={disabled || isLoading} aria-label="选择文件" />
-          </label>
+          <Button
+            type="button"
+            variant="settings-secondary"
+            disabled={disabled || isLoading}
+            onClick={() => imageInputRef.current?.click()}
+          >
+            选择图片
+          </Button>
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept=".jpg,.jpeg,.png,.webp,.gif"
+            className="hidden"
+            onChange={onImageInput}
+            disabled={disabled || isLoading}
+            aria-label="选择图片"
+          />
+          <Button
+            type="button"
+            variant="settings-secondary"
+            disabled={disabled || isLoading}
+            onClick={() => dataInputRef.current?.click()}
+          >
+            选择文件
+          </Button>
+          <input
+            ref={dataInputRef}
+            type="file"
+            accept=".csv,.xlsx,.txt"
+            className="hidden"
+            onChange={onDataFileInput}
+            disabled={disabled || isLoading}
+            aria-label="选择文件"
+          />
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
           <textarea

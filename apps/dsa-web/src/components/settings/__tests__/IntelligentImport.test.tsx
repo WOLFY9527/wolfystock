@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { IntelligentImport } from '../IntelligentImport';
 import { SystemConfigConflictError } from '../../../api/systemConfig';
 
-const { parseImport, onMergeStockList } = vi.hoisted(() => ({
+const { extractFromImage, parseImport, onMergeStockList } = vi.hoisted(() => ({
+  extractFromImage: vi.fn(),
   parseImport: vi.fn(),
   onMergeStockList: vi.fn(),
 }));
@@ -11,13 +12,86 @@ const { parseImport, onMergeStockList } = vi.hoisted(() => ({
 vi.mock('../../../api/stocks', () => ({
   stocksApi: {
     parseImport,
-    extractFromImage: vi.fn(),
+    extractFromImage,
   },
 }));
 
 describe('IntelligentImport', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('uses visible buttons as the only file-picker activation owners', () => {
+    const inputClick = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => undefined);
+    const { container } = render(
+      <IntelligentImport
+        stockListValue=""
+        onMergeStockList={onMergeStockList}
+      />,
+    );
+
+    expect(container.querySelector('label')).toBeNull();
+
+    const imageInput = screen.getByLabelText('选择图片');
+    const dataInput = screen.getByLabelText('选择文件');
+    expect(imageInput).toHaveAttribute('accept', '.jpg,.jpeg,.png,.webp,.gif');
+    expect(dataInput).toHaveAttribute('accept', '.csv,.xlsx,.txt');
+
+    fireEvent.click(screen.getByRole('button', { name: '选择图片' }));
+    expect(inputClick).toHaveBeenLastCalledWith();
+    expect(inputClick.mock.instances.at(-1)).toBe(imageInput);
+
+    fireEvent.click(screen.getByRole('button', { name: '选择文件' }));
+    expect(inputClick.mock.instances.at(-1)).toBe(dataInput);
+
+    inputClick.mockRestore();
+  });
+
+  it('keeps file inputs disabled with their visible picker buttons', () => {
+    render(
+      <IntelligentImport
+        stockListValue=""
+        onMergeStockList={onMergeStockList}
+        disabled
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: '选择图片' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '选择文件' })).toBeDisabled();
+    expect(screen.getByLabelText('选择图片')).toBeDisabled();
+    expect(screen.getByLabelText('选择文件')).toBeDisabled();
+  });
+
+  it('preserves the image and data file change handlers', async () => {
+    extractFromImage.mockResolvedValue({
+      items: [{ code: 'SH600519', name: 'Kweichow Moutai', confidence: 'high' }],
+      codes: [],
+    });
+    parseImport.mockResolvedValue({
+      items: [{ code: 'SZ000001', name: 'Ping An Bank', confidence: 'high' }],
+      codes: [],
+    });
+
+    render(
+      <IntelligentImport
+        stockListValue=""
+        onMergeStockList={onMergeStockList}
+      />,
+    );
+
+    const imageFile = new File(['png'], 'watchlist.png', { type: 'image/png' });
+    fireEvent.change(screen.getByLabelText('选择图片'), {
+      target: { files: [imageFile] },
+    });
+    await screen.findByText('SH600519');
+    expect(extractFromImage).toHaveBeenCalledWith(imageFile);
+
+    const dataFile = new File(['code\n000001'], 'watchlist.csv', { type: 'text/csv' });
+    fireEvent.change(screen.getByLabelText('选择文件'), {
+      target: { files: [dataFile] },
+    });
+    await screen.findByText('SZ000001');
+    expect(parseImport).toHaveBeenCalledWith(dataFile);
   });
 
   it('refreshes config state after a config version conflict', async () => {
