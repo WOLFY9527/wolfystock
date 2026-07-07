@@ -246,6 +246,17 @@ const LIQUIDITY_BLOCKING_REASON_LABELS: Record<string, string> = {
 };
 const LIQUIDITY_UNKNOWN_BLOCKING_REASON_LABEL = '关键来源仍待确认';
 const LIQUIDITY_UNKNOWN_EVIDENCE_REASON_LABEL = '数据边界待确认';
+const PAPER_PANEL_CLASS = 'rounded-xl border border-[color:var(--wolfy-divider)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-input)_88%,transparent)]';
+const PAPER_PANEL_SOFT_CLASS = 'rounded-xl border border-[color:var(--wolfy-divider)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-input)_72%,transparent)]';
+const PAPER_PANEL_RAIL_CLASS = 'rounded-xl border border-[color:var(--wolfy-divider)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-rail)_82%,transparent)]';
+const PAPER_SECTION_DIVIDER_CLASS = 'h-px flex-1 bg-[color:var(--wolfy-divider)]';
+const PAPER_SECTION_LABEL_CLASS = 'shrink-0 text-[11px] font-semibold text-[color:var(--wolfy-text-muted)]';
+const PAPER_TEXT_PRIMARY_CLASS = 'text-[color:var(--wolfy-text-primary)]';
+const PAPER_TEXT_SECONDARY_CLASS = 'text-[color:var(--wolfy-text-secondary)]';
+const PAPER_TEXT_MUTED_CLASS = 'text-[color:var(--wolfy-text-muted)]';
+const PAPER_OBSERVATION_TONE_CLASS = 'text-[color:var(--wolfy-accent)]';
+const PAPER_SUCCESS_TONE_CLASS = 'text-[color:var(--wolfy-market-up)]';
+const PAPER_CAUTION_TONE_CLASS = 'text-[color:var(--state-warning-text)]';
 
 type LiquidityCoverageReadinessSummary = {
   state: 'ready' | 'insufficient' | 'missing';
@@ -1966,9 +1977,9 @@ const DecisionReadinessBand: React.FC<{
   const bias = buildLiquidityBiasSummary(data, summary, synthesisView);
   const mainGapLine = buildLiquidityMainGapLine(summary, coverageSummary, missing);
   const evidenceColumns = [
-    { key: 'scoring', label: '哪些证据在计分', count: scoring.count, detail: scoring.namesLine, tone: 'text-emerald-200' },
-    { key: 'observation', label: '哪些只观察', count: observation.count, detail: observation.namesLine, tone: 'text-cyan-100' },
-    { key: 'missing', label: '阻塞/缺失证据', count: missing.count, detail: missing.namesLine, tone: 'text-amber-200' },
+    { key: 'scoring', label: '哪些证据在计分', count: scoring.count, detail: scoring.namesLine, tone: PAPER_SUCCESS_TONE_CLASS },
+    { key: 'observation', label: '哪些只观察', count: observation.count, detail: observation.namesLine, tone: PAPER_OBSERVATION_TONE_CLASS },
+    { key: 'missing', label: '阻塞/缺失证据', count: missing.count, detail: missing.namesLine, tone: PAPER_CAUTION_TONE_CLASS },
   ];
   const consumerView = buildConsumerLiquidityStatusView(data, coverageSummary, summary, synthesisView, indicators);
   const consumerEvidenceRows = buildConsumerEvidenceRows(indicators);
@@ -1979,24 +1990,24 @@ const DecisionReadinessBand: React.FC<{
     return (
       <section
         data-testid="liquidity-decision-readiness"
-        className="min-w-0 space-y-5 border-b border-white/[0.06] pb-5"
+        className="min-w-0 space-y-5 border-b border-[color:var(--wolfy-divider)] pb-5"
       >
         <div data-testid="liquidity-section-overview" className="min-w-0">
           <div className="mb-3 flex min-w-0 items-center gap-3">
-            <div className="h-px flex-1 bg-white/[0.08]" aria-hidden="true" />
-            <p className="shrink-0 text-[11px] font-semibold text-white/54">流动性格局</p>
-            <div className="h-px flex-1 bg-white/[0.08]" aria-hidden="true" />
+            <div className={PAPER_SECTION_DIVIDER_CLASS} aria-hidden="true" />
+            <p className={PAPER_SECTION_LABEL_CLASS}>流动性格局</p>
+            <div className={PAPER_SECTION_DIVIDER_CLASS} aria-hidden="true" />
           </div>
 
           <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.18fr)_minmax(300px,0.82fr)]">
-            <div className="min-w-0 rounded-xl border border-cyan-200/14 bg-[radial-gradient(circle_at_top_left,rgba(103,232,249,0.10),transparent_34%),rgba(255,255,255,0.035)] p-4 shadow-[0_18px_60px_rgba(3,7,18,0.22)] md:p-5">
+            <div className="min-w-0 rounded-[20px] border border-[color:var(--wolfy-border-subtle)] bg-[radial-gradient(circle_at_top_left,color-mix(in_srgb,var(--wolfy-accent)_14%,transparent),transparent_36%),linear-gradient(180deg,color-mix(in_srgb,var(--wolfy-surface-console)_94%,white_6%)_0%,color-mix(in_srgb,var(--wolfy-surface-input)_90%,transparent)_100%)] p-4 md:p-5">
               <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold text-cyan-100/70">当前观察 · 流动性格局</p>
-                  <h2 className="mt-2 text-[26px] font-semibold leading-tight text-white/94 md:text-3xl">
+                  <p className="text-[11px] font-semibold tracking-[0.14em] text-[color:var(--wolfy-text-muted)]">当前观察 · 流动性格局</p>
+                  <h2 className={cn('mt-2 text-[26px] font-semibold leading-tight md:text-3xl', PAPER_TEXT_PRIMARY_CLASS)}>
                     {consumerView.heroTitle}
                   </h2>
-                  <p className="mt-3 max-w-3xl text-sm leading-6 text-white/68">{consumerView.headline}</p>
+                  <p className={cn('mt-3 max-w-3xl text-sm leading-6', PAPER_TEXT_SECONDARY_CLASS)}>{consumerView.headline}</p>
                 </div>
                 <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
                   <TerminalChip variant={consumerView.availabilityVariant}>{consumerView.availabilityLabel}</TerminalChip>
@@ -2011,11 +2022,11 @@ const DecisionReadinessBand: React.FC<{
               className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1"
             >
               {consumerSummaryFacts.map((fact) => (
-                <div key={fact.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
-                  <p className="text-[11px] font-medium text-white/48">{fact.label}</p>
-                  <p className="mt-2 break-words text-sm font-semibold text-white/84">{fact.value}</p>
+                <div key={fact.key} className={cn('min-w-0 p-3', PAPER_PANEL_SOFT_CLASS)}>
+                  <p className={cn('text-[11px] font-medium', PAPER_TEXT_MUTED_CLASS)}>{fact.label}</p>
+                  <p className={cn('mt-2 break-words text-sm font-semibold', PAPER_TEXT_PRIMARY_CLASS)}>{fact.value}</p>
                   {fact.detail ? (
-                    <p className="mt-1 text-[11px] leading-5 text-white/56">{fact.detail}</p>
+                    <p className={cn('mt-1 text-[11px] leading-5', PAPER_TEXT_MUTED_CLASS)}>{fact.detail}</p>
                   ) : null}
                 </div>
               ))}
@@ -2023,11 +2034,11 @@ const DecisionReadinessBand: React.FC<{
           </div>
         </div>
 
-        <div data-testid="liquidity-section-metrics" className="min-w-0 rounded-xl border border-white/[0.055] bg-black/10 p-3 md:p-4">
-          <div className="flex min-w-0 flex-col gap-2 border-b border-white/[0.06] pb-3 md:flex-row md:items-end md:justify-between">
+        <div data-testid="liquidity-section-metrics" className={cn('min-w-0 p-3 md:p-4', PAPER_PANEL_CLASS)}>
+          <div className="flex min-w-0 flex-col gap-2 border-b border-[color:var(--wolfy-divider)] pb-3 md:flex-row md:items-end md:justify-between">
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold text-white/54">关键指标</p>
-              <p className="mt-1 text-sm leading-6 text-white/62">先看已返回的资金面线索、更新时间和仍在变化的压力维度，再判断当前状态。</p>
+              <p className={cn('text-[11px] font-semibold', PAPER_TEXT_MUTED_CLASS)}>关键指标</p>
+              <p className={cn('mt-1 text-sm leading-6', PAPER_TEXT_SECONDARY_CLASS)}>先看已返回的资金面线索、更新时间和仍在变化的压力维度，再判断当前状态。</p>
             </div>
             <TerminalChip variant={coverageSummary.stateChipVariant}>{coverageSummary.directionLabel}</TerminalChip>
           </div>
@@ -2035,28 +2046,28 @@ const DecisionReadinessBand: React.FC<{
           {consumerEvidenceRows.length ? (
             <div
               data-testid="liquidity-consumer-evidence"
-              className="mt-4 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3"
+              className={cn('mt-4 p-3', PAPER_PANEL_SOFT_CLASS)}
             >
               <div className="flex min-w-0 items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-medium text-white/48">仍可观察的线索</p>
-                  <p className="mt-1 text-[11px] leading-5 text-white/56">优先看已返回的资金面线索、最近更新时间，以及哪些维度还在持续更新。</p>
+                  <p className={cn('text-[11px] font-medium', PAPER_TEXT_MUTED_CLASS)}>仍可观察的线索</p>
+                  <p className={cn('mt-1 text-[11px] leading-5', PAPER_TEXT_MUTED_CLASS)}>优先看已返回的资金面线索、最近更新时间，以及哪些维度还在持续更新。</p>
                 </div>
               </div>
               <div className="mt-3 grid gap-2">
                 {consumerEvidenceRows.map((row) => (
-                  <div key={row.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
+                  <div key={row.key} className={cn('min-w-0 p-3', PAPER_PANEL_CLASS)}>
                     <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0">
-                        <p className="break-words text-sm font-semibold text-white/84">{row.label}</p>
-                        <p className="mt-1 text-[11px] leading-5 text-white/60">{row.note}</p>
+                        <p className={cn('break-words text-sm font-semibold', PAPER_TEXT_PRIMARY_CLASS)}>{row.label}</p>
+                        <p className={cn('mt-1 text-[11px] leading-5', PAPER_TEXT_SECONDARY_CLASS)}>{row.note}</p>
                       </div>
                       <div className="flex min-w-0 flex-wrap gap-1.5 lg:justify-end">
                         <TerminalChip variant={row.statusVariant}>{row.statusLabel}</TerminalChip>
                         <TerminalChip variant={row.scoreVariant}>{row.scoreLabel}</TerminalChip>
                       </div>
                     </div>
-                    <p className="mt-2 text-[11px] leading-5 text-white/48">{row.detail}</p>
+                    <p className={cn('mt-2 text-[11px] leading-5', PAPER_TEXT_MUTED_CLASS)}>{row.detail}</p>
                   </div>
                 ))}
               </div>
@@ -2074,9 +2085,9 @@ const DecisionReadinessBand: React.FC<{
 
         <div data-testid="liquidity-section-observation" className="min-w-0">
           <div className="mb-3 flex min-w-0 items-center gap-3">
-            <div className="h-px flex-1 bg-white/[0.08]" aria-hidden="true" />
-            <p className="shrink-0 text-[11px] font-semibold text-white/54">资金面与说明</p>
-            <div className="h-px flex-1 bg-white/[0.08]" aria-hidden="true" />
+            <div className={PAPER_SECTION_DIVIDER_CLASS} aria-hidden="true" />
+            <p className={PAPER_SECTION_LABEL_CLASS}>资金面与说明</p>
+            <div className={PAPER_SECTION_DIVIDER_CLASS} aria-hidden="true" />
           </div>
 
           <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.12fr)_minmax(300px,0.88fr)]">
@@ -2087,9 +2098,9 @@ const DecisionReadinessBand: React.FC<{
                 testId="liquidity-monitor-consumer-details"
                 title="数据状态说明"
                 summary="更新时间、观察边界与待补充指标默认折叠"
-                className="mt-4 bg-black/10"
+                className="mt-4 bg-[color:color-mix(in_srgb,var(--wolfy-surface-input)_72%,transparent)]"
               >
-                <div className="grid gap-2 text-[11px] leading-5 text-white/56">
+                <div className={cn('grid gap-2 text-[11px] leading-5', PAPER_TEXT_SECONDARY_CLASS)}>
                   <p>{consumerView.availabilityDetail}</p>
                   <p>{consumerView.scoringDetail}</p>
                   <p>{consumerView.freshnessDetail}</p>
@@ -2104,17 +2115,17 @@ const DecisionReadinessBand: React.FC<{
               data-testid="liquidity-context-rail"
               className="grid min-w-0 gap-3 self-start"
             >
-              <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
-                <p className="text-[11px] font-medium text-white/48">当前边界</p>
-                <p className="mt-2 text-sm leading-6 text-white/76">{consumerGapSummary}</p>
-                <p className="mt-2 text-[11px] leading-5 text-white/48">
+              <div className={cn('min-w-0 p-3', PAPER_PANEL_RAIL_CLASS)}>
+                <p className={cn('text-[11px] font-medium', PAPER_TEXT_MUTED_CLASS)}>当前边界</p>
+                <p className={cn('mt-2 text-sm leading-6', PAPER_TEXT_PRIMARY_CLASS)}>{consumerGapSummary}</p>
+                <p className={cn('mt-2 text-[11px] leading-5', PAPER_TEXT_MUTED_CLASS)}>
                   {missing.count > 0 ? `待补充指标：${missing.namesLine}` : '当前没有新增限制，继续观察后续变化。'}
                 </p>
               </div>
-              <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
-                <p className="text-[11px] font-medium text-white/48">下一步观察</p>
-                <p className="mt-2 text-sm leading-6 text-white/76">{nextWatch}</p>
-                <p className="mt-2 text-[11px] leading-5 text-white/48">
+              <div className={cn('min-w-0 p-3', PAPER_PANEL_RAIL_CLASS)}>
+                <p className={cn('text-[11px] font-medium', PAPER_TEXT_MUTED_CLASS)}>下一步观察</p>
+                <p className={cn('mt-2 text-sm leading-6', PAPER_TEXT_PRIMARY_CLASS)}>{nextWatch}</p>
+                <p className={cn('mt-2 text-[11px] leading-5', PAPER_TEXT_MUTED_CLASS)}>
                   {consumerView.freshnessSummary}；页面会在后续刷新中继续更新状态。
                 </p>
               </div>
@@ -2128,19 +2139,19 @@ const DecisionReadinessBand: React.FC<{
   return (
   <section
     data-testid="liquidity-decision-readiness"
-    className="min-w-0 border-b border-white/[0.06] pb-4"
+    className="min-w-0 border-b border-[color:var(--wolfy-divider)] pb-4"
   >
     <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1.15fr)]">
-      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-4">
+      <div className={cn('min-w-0 p-4', PAPER_PANEL_CLASS)}>
         <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold text-white/45">流动性判断摘要</p>
-            <h2 className="mt-1 text-lg font-semibold leading-7 text-white/92 md:text-xl">
+            <p className={cn('text-[11px] font-semibold', PAPER_TEXT_MUTED_CLASS)}>流动性判断摘要</p>
+            <h2 className={cn('mt-1 text-lg font-semibold leading-7 md:text-xl', PAPER_TEXT_PRIMARY_CLASS)}>
               能否判断：{summary.stateLabel}
             </h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">{summary.conclusion}</p>
+            <p className={cn('mt-2 max-w-3xl text-sm leading-6', PAPER_TEXT_SECONDARY_CLASS)}>{summary.conclusion}</p>
             <p
-              className="mt-2 text-xs leading-5 text-white/52"
+              className={cn('mt-2 text-xs leading-5', PAPER_TEXT_MUTED_CLASS)}
               data-testid="liquidity-monitor-coverage-summary"
             >
               {coverageSummary.summaryLine}
@@ -2154,42 +2165,42 @@ const DecisionReadinessBand: React.FC<{
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3">
-            <p className="text-[11px] font-medium text-white/48">当前方向</p>
+          <div className={cn('min-w-0 p-3', PAPER_PANEL_SOFT_CLASS)}>
+            <p className={cn('text-[11px] font-medium', PAPER_TEXT_MUTED_CLASS)}>当前方向</p>
             <p className={cn('mt-2 text-sm font-semibold', bias.toneClassName)}>{bias.label}</p>
-            <p className="mt-1 text-[11px] leading-5 text-white/56">{bias.detail}</p>
+            <p className={cn('mt-1 text-[11px] leading-5', PAPER_TEXT_MUTED_CLASS)}>{bias.detail}</p>
           </div>
-          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3">
-            <p className="text-[11px] font-medium text-white/48">主要缺口</p>
-            <p className="mt-2 text-[11px] leading-5 text-white/60">{mainGapLine}</p>
+          <div className={cn('min-w-0 p-3', PAPER_PANEL_SOFT_CLASS)}>
+            <p className={cn('text-[11px] font-medium', PAPER_TEXT_MUTED_CLASS)}>主要缺口</p>
+            <p className={cn('mt-2 text-[11px] leading-5', PAPER_TEXT_SECONDARY_CLASS)}>{mainGapLine}</p>
           </div>
-          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3">
-            <p className="text-[11px] font-medium text-white/48">下一步观察</p>
-            <p className="mt-2 text-[11px] leading-5 text-white/60">{nextWatch}</p>
+          <div className={cn('min-w-0 p-3', PAPER_PANEL_SOFT_CLASS)}>
+            <p className={cn('text-[11px] font-medium', PAPER_TEXT_MUTED_CLASS)}>下一步观察</p>
+            <p className={cn('mt-2 text-[11px] leading-5', PAPER_TEXT_SECONDARY_CLASS)}>{nextWatch}</p>
           </div>
         </div>
       </div>
 
-      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-4">
-        <div className="mb-3 min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
-          <p className="text-[11px] font-medium text-white/48">证据质量</p>
-          <p className="mt-1 text-[11px] leading-5 text-white/62">{summary.qualityLabel}</p>
+      <div className={cn('min-w-0 p-4', PAPER_PANEL_CLASS)}>
+        <div className={cn('mb-3 min-w-0 px-3 py-2.5', PAPER_PANEL_SOFT_CLASS)}>
+          <p className={cn('text-[11px] font-medium', PAPER_TEXT_MUTED_CLASS)}>证据质量</p>
+          <p className={cn('mt-1 text-[11px] leading-5', PAPER_TEXT_SECONDARY_CLASS)}>{summary.qualityLabel}</p>
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           {evidenceColumns.map((column) => (
-            <div key={column.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3">
-              <p className="text-[11px] font-medium text-white/48">{column.label}</p>
+            <div key={column.key} className={cn('min-w-0 p-3', PAPER_PANEL_SOFT_CLASS)}>
+              <p className={cn('text-[11px] font-medium', PAPER_TEXT_MUTED_CLASS)}>{column.label}</p>
               <p className={cn('mt-2 font-mono text-2xl font-semibold', column.tone)}>{column.count}</p>
-              <p className="mt-2 text-[11px] leading-5 text-white/58">{column.detail}</p>
+              <p className={cn('mt-2 text-[11px] leading-5', PAPER_TEXT_SECONDARY_CLASS)}>{column.detail}</p>
             </div>
           ))}
         </div>
 
-        <section data-testid="liquidity-regime-gauge" className="mt-3 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3">
+        <section data-testid="liquidity-regime-gauge" className={cn('mt-3 p-3', PAPER_PANEL_SOFT_CLASS)}>
           <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div className="min-w-0">
-              <p className="text-[11px] font-medium text-white/48">流动性刻度</p>
-              <p className="mt-1 text-sm font-semibold text-white/84">{regimeGauge.stateLabel}</p>
+              <p className={cn('text-[11px] font-medium', PAPER_TEXT_MUTED_CLASS)}>流动性刻度</p>
+              <p className={cn('mt-1 text-sm font-semibold', PAPER_TEXT_PRIMARY_CLASS)}>{regimeGauge.stateLabel}</p>
             </div>
             <div className="flex min-w-0 flex-wrap gap-1.5 md:justify-end">
               <TerminalChip variant={regimeGauge.stateVariant}>{regimeGauge.degreeLabel}</TerminalChip>
@@ -2208,16 +2219,16 @@ const DecisionReadinessBand: React.FC<{
     </div>
 
     <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2">
-      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
-        <p className="text-[11px] font-medium text-white/48">阻塞项</p>
+      <div className={cn('min-w-0 p-3', PAPER_PANEL_SOFT_CLASS)}>
+        <p className={cn('text-[11px] font-medium', PAPER_TEXT_MUTED_CLASS)}>阻塞项</p>
         <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
           {summary.blockers.map((item) => (
             <TerminalChip key={item} variant={summary.state === 'ready' ? 'neutral' : 'caution'}>{item}</TerminalChip>
           ))}
         </div>
       </div>
-      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
-        <p className="text-[11px] font-medium text-white/48">提升证据</p>
+      <div className={cn('min-w-0 p-3', PAPER_PANEL_SOFT_CLASS)}>
+        <p className={cn('text-[11px] font-medium', PAPER_TEXT_MUTED_CLASS)}>提升证据</p>
         <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
           {summary.nextEvidence.map((item) => (
             <TerminalChip key={item} variant="info">{item}</TerminalChip>
@@ -2263,7 +2274,7 @@ const LiquidityGuidancePanel: React.FC<{
 
   return (
     <TerminalPanel data-testid="liquidity-monitor-guidance-panel" className="relative overflow-hidden">
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-cyan-300/0 via-cyan-200/40 to-sky-300/0" aria-hidden="true" />
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[color:var(--wolfy-divider)] to-transparent" aria-hidden="true" />
       <DecisionReadinessBand
         summary={readinessSummary}
         coverageSummary={coverageSummary}
@@ -2545,7 +2556,7 @@ const LiquidityMonitorPage: React.FC = () => {
       {loading && !data ? (
         <TerminalPanel>
           <TerminalSectionHeader eyebrow="快照" title="读取中" />
-          <div data-testid="liquidity-decision-readiness" className="mt-3 text-sm text-white/58">
+          <div data-testid="liquidity-decision-readiness" className={cn('mt-3 text-sm', PAPER_TEXT_MUTED_CLASS)}>
             判断可用性：{decisionReadinessStateLabel('waiting')}
           </div>
         </TerminalPanel>

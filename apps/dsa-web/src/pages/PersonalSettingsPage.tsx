@@ -362,7 +362,7 @@ function PersonalSettingsProfileHeader({
     <WolfyShellSurface
       id="account-center"
       as="section"
-      variant="console"
+      variant="rail"
       padding="md"
       data-testid="personal-settings-profile-header"
       className="overflow-hidden"
@@ -757,6 +757,7 @@ const PersonalSettingsPage: React.FC = () => {
         <section className="flex min-h-0 min-w-0 flex-col gap-4">
           <TerminalPageHeading
             data-testid="settings-page-heading"
+            eyebrow={copy.consoleEyebrow}
             title={copy.pageTitle}
           />
 
@@ -932,7 +933,7 @@ const PersonalSettingsPage: React.FC = () => {
                     to={loginPath}
                     className={cn(
                       SETTINGS_LINK_CLASS,
-                      'border-[color:var(--wolfy-accent)] bg-[var(--wolfy-accent)] text-[#f7f8ff] hover:bg-[#6f79dc]',
+                      'border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] text-[color:var(--theme-button-primary-text)] hover:bg-[var(--sage-deep)]',
                     )}
                   >
                     {copy.railLinkPrimary}
