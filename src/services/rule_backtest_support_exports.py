@@ -65,6 +65,7 @@ _SUPPORT_EXPORT_FORBIDDEN_TEXT_MARKERS = _SUPPORT_EXPORT_RAW_MARKERS + (
     "http://",
     "https://",
 )
+_SPREADSHEET_FORMULA_PREFIXES = {"=", "+", "-", "@"}
 _SUPPORT_RUN_TIMING_KEYS = {
     "cancelled_at",
     "created_at",
@@ -213,6 +214,21 @@ def stringify_execution_trace_value(value: Any) -> str:
     if value is None:
         return ""
     return str(value)
+
+
+def _starts_with_spreadsheet_formula_prefix(value: str) -> bool:
+    for char in value:
+        codepoint = ord(char)
+        if codepoint <= 0x20 or 0x7F <= codepoint <= 0x9F:
+            continue
+        return char in _SPREADSHEET_FORMULA_PREFIXES
+    return False
+
+
+def _formula_safe_csv_cell_value(value: Any) -> Any:
+    if isinstance(value, str) and _starts_with_spreadsheet_formula_prefix(value):
+        return f"'{value}"
+    return value
 
 
 def _support_export_text_is_unsafe(value: Any) -> bool:
@@ -367,7 +383,8 @@ def build_execution_trace_export_rows(
             value = row.get(key)
             if key == "action_display":
                 value = value or action_formatter(str(row.get("event_type") or row.get("action") or "hold"))
-            export_row[label] = stringify_execution_trace_value(_safe_trace_row_value(value))
+            safe_value = _safe_trace_row_value(value)
+            export_row[label] = stringify_execution_trace_value(_formula_safe_csv_cell_value(safe_value))
         export_rows.append(export_row)
     return export_rows
 

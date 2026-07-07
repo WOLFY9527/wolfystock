@@ -4,6 +4,7 @@ import type {
   RuleBacktestRunResponse,
 } from '../../types/backtest';
 import { formatDeterministicActionLabel } from './normalizeDeterministicBacktestResult';
+import { serializeCsvCell } from '../../utils/csvExport';
 
 type TraceExportColumn = {
   key: keyof RuleBacktestExecutionTraceRowItem | 'actionDisplay';
@@ -43,6 +44,18 @@ function stringifyCell(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+function getTraceExportValue(row: RuleBacktestExecutionTraceRowItem, key: TraceExportColumn['key']): unknown {
+  return key === 'actionDisplay'
+    ? row.actionDisplay || formatDeterministicActionLabel(row.action)
+    : row[key];
+}
+
+function getTraceCsvCellValue(value: unknown): unknown {
+  if (value == null) return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
+  return stringifyCell(value);
 }
 
 function getFallbackAuditTraceRows(run: RuleBacktestRunResponse): RuleBacktestExecutionTraceRowItem[] {
@@ -115,10 +128,7 @@ function buildExecutionTraceExportRows(run: RuleBacktestRunResponse): Array<Reco
   return getExecutionTraceRows(run).map((row) => {
     const exportRow: Record<string, string> = {};
     TRACE_EXPORT_COLUMNS.forEach(({ key, label }) => {
-      const value = key === 'actionDisplay'
-        ? row.actionDisplay || formatDeterministicActionLabel(row.action)
-        : row[key];
-      exportRow[label] = stringifyCell(value);
+      exportRow[label] = stringifyCell(getTraceExportValue(row, key));
     });
     return exportRow;
   });
@@ -129,7 +139,12 @@ export function downloadExecutionTraceCsv(run: RuleBacktestRunResponse): void {
   if (rows.length === 0) return;
 
   const header = TRACE_EXPORT_COLUMNS.map((column) => column.label);
-  const content = [header, ...rows.map((row) => header.map((key) => `"${String(row[key] || '').replaceAll('"', '""')}"`))]
+  const content = [
+    header,
+    ...getExecutionTraceRows(run).map((row) => TRACE_EXPORT_COLUMNS.map(({ key }) => (
+      serializeCsvCell(getTraceCsvCellValue(getTraceExportValue(row, key)), { quote: 'always' })
+    ))),
+  ]
     .map((row) => row.join(','))
     .join('\n');
 

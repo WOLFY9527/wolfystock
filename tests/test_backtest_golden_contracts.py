@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 from datetime import datetime
 from pathlib import Path
@@ -1181,6 +1183,67 @@ def test_execution_trace_export_builders_drop_synthetic_raw_marker_fields() -> N
     assert trace_json["execution_assumptions"]["indicator_price_basis"] == "close"
     assert trace_json["fallback"]["provider_authority"] == "none"
     assert "open_missing_close_fallback" in trace_json["trace_rows"][0]["fallback"]
+
+
+def test_execution_trace_csv_export_escapes_spreadsheet_formula_prefixes() -> None:
+    run = _load_fixture("rule_backtest_result_summary_dto.json")
+    execution_trace = run["execution_trace"]
+    execution_trace["rows"] = [
+        {
+            "date": "=1+1",
+            "symbol_close": -12.5,
+            "signal_summary": "+1+1",
+            "action_display": "-1+1",
+            "cash": -250,
+            "daily_pnl": -35.5,
+            "notes": "@SUM(1,1)",
+            "assumptions_defaults": "  =1+1",
+            "fallback": "\x7f@SUM(1,1)",
+        },
+        {
+            "date": "2025-01-09",
+            "symbol_close": 102,
+            "signal_summary": "profit +1+1 later",
+            "action": "hold",
+            "cash": 100000,
+            "daily_pnl": 0,
+            "notes": '腾讯控股, quote "and"\nmultiline',
+            "assumptions_defaults": "\r-1+1",
+            "fallback": "\t+1+1",
+        },
+    ]
+    trace_columns = [
+        ("date", "date"),
+        ("symbol_close", "symbol_close"),
+        ("signal_summary", "signal"),
+        ("action_display", "action"),
+        ("cash", "cash"),
+        ("daily_pnl", "daily_pnl"),
+        ("notes", "notes"),
+        ("assumptions_defaults", "assumptions"),
+        ("fallback", "fallback"),
+    ]
+
+    trace_csv = build_execution_trace_export_csv_text(
+        run,
+        trace_columns,
+        action_formatter=lambda action: action,
+    )
+    rows = list(csv.DictReader(io.StringIO(trace_csv)))
+
+    assert rows[0]["date"] == "'=1+1"
+    assert rows[0]["symbol_close"] == "-12.5"
+    assert rows[0]["signal"] == "'+1+1"
+    assert rows[0]["action"] == "'-1+1"
+    assert rows[0]["cash"] == "-250"
+    assert rows[0]["daily_pnl"] == "-35.5"
+    assert rows[0]["notes"] == "'@SUM(1,1)"
+    assert rows[0]["assumptions"] == "'=1+1"
+    assert rows[0]["fallback"] == "'\x7f@SUM(1,1)"
+    assert rows[1]["signal"] == "profit +1+1 later"
+    assert rows[1]["notes"] == '腾讯控股, quote "and"\nmultiline'
+    assert rows[1]["assumptions"] == "'-1+1"
+    assert rows[1]["fallback"] == "'+1+1"
 
 
 def test_robustness_evidence_export_fixture_freezes_stored_payload_shape() -> None:

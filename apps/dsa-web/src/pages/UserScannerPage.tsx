@@ -106,6 +106,7 @@ import type { ResearchReadinessV1 } from '../types/researchReadiness';
 import type { WatchlistItem } from '../types/watchlist';
 import { buildLocalizedPath } from '../utils/localeRouting';
 import { buildResearchWorkspacePath } from '../utils/researchWorkspaceRoute';
+import { serializeCsvCell } from '../utils/csvExport';
 import { normalizeScannerEvidence } from '../utils/evidenceDisplay';
 import type { TrustDisclosureBucket } from '../utils/trustDisclosure';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
@@ -2475,12 +2476,6 @@ function marketVariant(market?: string | null): 'success' | 'info' | 'warning' |
   return 'history';
 }
 
-function csvEscape(value: string | number | null | undefined): string {
-  const normalized = value == null ? '' : String(value);
-  if (!/[",\n]/.test(normalized)) return normalized;
-  return `"${normalized.replace(/"/g, '""')}"`;
-}
-
 type ScannerExportRow = {
   rank: number;
   symbol: string;
@@ -2523,7 +2518,7 @@ function buildScannerCsv(rows: ScannerExportRow[]): string {
   const headers = ['rank', 'symbol', 'name', 'scannerScore', 'observationZone', 'referenceRange', 'riskBoundary', 'reason', 'risk', 'universeType', 'theme', 'generatedAt', 'runId'];
   return [
     headers.join(','),
-    ...rows.map((row) => headers.map((header) => csvEscape(row[header as keyof ScannerExportRow])).join(',')),
+    ...rows.map((row) => headers.map((header) => serializeCsvCell(row[header as keyof ScannerExportRow])).join(',')),
   ].join('\n');
 }
 
