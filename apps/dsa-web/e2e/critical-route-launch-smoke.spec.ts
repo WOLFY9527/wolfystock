@@ -272,6 +272,30 @@ appTest.describe('public launch route smoke', () => {
     }
   });
 
+  appTest('consumer mobile menu closes on outside interaction and restores trigger focus', async ({ page }) => {
+    await installAuthenticatedAppSmokeSession(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await page.goto('/zh/market-overview');
+    await page.waitForLoadState('domcontentloaded');
+    await appExpect(page.getByTestId('market-overview-shell')).toBeVisible({ timeout: 15_000 });
+
+    const menuTrigger = page.getByRole('button', { name: '打开导航菜单' });
+    await menuTrigger.click();
+
+    const drawer = page.getByRole('dialog', { name: '导航菜单' });
+    await appExpect(drawer).toBeVisible();
+    const activeLink = drawer.getByRole('link', { name: '市场总览' });
+    await activeLink.focus();
+    await appExpect(activeLink).toBeFocused();
+
+    await page.waitForTimeout(500);
+    await page.getByTestId('drawer-backdrop').dispatchEvent('pointerdown');
+
+    await appExpect(drawer).toHaveCount(0);
+    await appExpect(menuTrigger).toBeFocused();
+  });
+
   appTest('market rotation radar stays clean on desktop and mobile', async ({ page }) => {
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);

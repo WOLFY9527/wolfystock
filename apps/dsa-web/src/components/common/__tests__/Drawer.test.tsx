@@ -31,12 +31,33 @@ describe('Drawer', () => {
     const backdrop = screen.getByTestId('drawer-backdrop');
     expect(backdrop).toBeInTheDocument();
 
-    fireEvent.click(backdrop);
+    fireEvent.pointerDown(backdrop);
     expect(onClose).not.toHaveBeenCalled();
 
-    await new Promise((resolve) => window.setTimeout(resolve, 500));
-    fireEvent.click(backdrop);
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
+    });
+    fireEvent.pointerDown(backdrop);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not close when pointerdown starts inside the drawer panel', async () => {
+    const onClose = vi.fn();
+    render(
+      <Drawer isOpen onClose={onClose} title="Navigation">
+        <div>content</div>
+      </Drawer>,
+    );
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
+    });
+
+    const panel = screen.getByText('content').closest('dialog');
+    expect(panel).not.toBeNull();
+
+    fireEvent.pointerDown(panel!);
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('can disable backdrop-close for drawers that must stay open until explicitly dismissed', async () => {
@@ -50,9 +71,30 @@ describe('Drawer', () => {
     const backdrop = screen.getByTestId('drawer-backdrop');
     expect(backdrop).toBeInTheDocument();
 
-    await new Promise((resolve) => window.setTimeout(resolve, 500));
-    fireEvent.click(backdrop);
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
+    });
+    fireEvent.pointerDown(backdrop);
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('closes only once for a single outside interaction', async () => {
+    const onClose = vi.fn();
+    render(
+      <Drawer isOpen onClose={onClose} title="Navigation">
+        <div>content</div>
+      </Drawer>,
+    );
+
+    const backdrop = screen.getByTestId('drawer-backdrop');
+    expect(backdrop).toBeInTheDocument();
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
+    });
+    fireEvent.pointerDown(backdrop);
+    fireEvent.click(backdrop);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('cancels pending open animation work when unmounted before the drawer settles', () => {

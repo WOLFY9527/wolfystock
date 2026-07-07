@@ -926,6 +926,105 @@ describe('Shell', () => {
     expect(screen.getByRole('button', { name: '切换语言' })).toBeInTheDocument();
   });
 
+  it('closes the mobile navigation drawer when the user interacts outside it', async () => {
+    window.innerWidth = 390;
+
+    render(
+      <MemoryRouter initialEntries={['/market-overview']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '打开导航菜单' }));
+    expect(await screen.findByRole('heading', { name: '导航菜单' })).toBeInTheDocument();
+
+    await act(async () => {
+      await settleDrawerStability();
+    });
+
+    fireEvent.pointerDown(screen.getByTestId('drawer-backdrop'));
+
+    await act(async () => {
+      await settleDrawerMotion();
+    });
+
+    expect(screen.queryByRole('heading', { name: '导航菜单' })).not.toBeInTheDocument();
+  });
+
+  it('returns focus to the mobile menu trigger after a user-initiated close', async () => {
+    window.innerWidth = 390;
+
+    render(
+      <MemoryRouter initialEntries={['/market-overview']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const menuTrigger = screen.getByRole('button', { name: '打开导航菜单' });
+    fireEvent.click(menuTrigger);
+    expect(await screen.findByRole('heading', { name: '导航菜单' })).toBeInTheDocument();
+
+    await act(async () => {
+      await settleDrawerStability();
+    });
+
+    const drawerNav = screen.getByRole('navigation', { name: '导航菜单' });
+    const homeLink = within(drawerNav).getByRole('link', { name: '市场总览' });
+    homeLink.focus();
+    expect(homeLink).toHaveFocus();
+
+    fireEvent.pointerDown(screen.getByTestId('drawer-backdrop'));
+
+    await act(async () => {
+      await settleDrawerMotion();
+    });
+
+    expect(menuTrigger).toHaveFocus();
+  });
+
+  it('does not restore focus to the mobile menu trigger after route-driven drawer close', async () => {
+    window.innerWidth = 390;
+
+    render(
+      <MemoryRouter initialEntries={['/market-overview']}>
+        <ThemeProvider>
+          <Shell>
+            <>
+              <LocationProbe />
+              <div>page content</div>
+            </>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const menuTrigger = screen.getByRole('button', { name: '打开导航菜单' });
+    fireEvent.click(menuTrigger);
+    const drawerNav = await screen.findByRole('navigation', { name: '导航菜单' });
+
+    await act(async () => {
+      await settleDrawerStability();
+    });
+
+    fireEvent.click(within(drawerNav).getByRole('link', { name: '观察列表' }));
+
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/watchlist'));
+    await act(async () => {
+      await settleDrawerMotion();
+    });
+
+    expect(screen.queryByRole('heading', { name: '导航菜单' })).not.toBeInTheDocument();
+    expect(menuTrigger).not.toHaveFocus();
+  });
+
   it('adds dedicated shell modifiers for the scanner route', () => {
     render(
       <MemoryRouter initialEntries={['/scanner']}>
