@@ -743,7 +743,7 @@ describe('AppContent route flows', () => {
   it('keeps guest access on the stock structure route protected with a stock-specific gate', async () => {
     renderAtWithLocationProbe('/stocks/AAPL/structure-decision');
 
-    expect(await screen.findByText('auth-guard:Stock Structure Panel')).toBeInTheDocument();
+    expect(await screen.findByText('auth-guard:Stock Research')).toBeInTheDocument();
     expect(screen.getByTestId('location-path')).toHaveTextContent('/stocks/AAPL/structure-decision');
     expect(screen.queryByText('stock-structure-decision-page')).not.toBeInTheDocument();
     expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
@@ -760,7 +760,7 @@ describe('AppContent route flows', () => {
     renderAtWithLocationProbe(path);
 
     await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(expectedPath));
-    expect(await screen.findByText(path.startsWith('/zh/') ? 'auth-guard:个股结构面板' : 'auth-guard:Stock Structure Panel')).toBeInTheDocument();
+    expect(await screen.findByText(path.startsWith('/zh/') ? 'auth-guard:个股研究' : 'auth-guard:Stock Research')).toBeInTheDocument();
     expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
     expect(screen.queryByText('stock-structure-decision-page')).not.toBeInTheDocument();
   });
@@ -792,7 +792,7 @@ describe('AppContent route flows', () => {
       expect(window.location.search).toBe('?source=bookmark');
       expect(window.location.hash).toBe('#snapshot');
     });
-    expect(await screen.findByText('auth-guard:Stock Structure Panel')).toBeInTheDocument();
+    expect(await screen.findByText('auth-guard:Stock Research')).toBeInTheDocument();
     expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
     expect(screen.queryByText('stock-structure-decision-page')).not.toBeInTheDocument();
   });
@@ -802,14 +802,14 @@ describe('AppContent route flows', () => {
 
     expect(await screen.findByText('stock-structure-entry-page')).toBeInTheDocument();
     expect(screen.getByTestId('location-path')).toHaveTextContent('/stocks/structure-decision');
-    expect(screen.queryByText('auth-guard:Stock Structure Panel')).not.toBeInTheDocument();
+    expect(screen.queryByText('auth-guard:Stock Research')).not.toBeInTheDocument();
   });
 
   it.each([
     ['/zh/stocks/structure-decision', 'stock-structure-entry-page'],
     ['/en/stocks/structure-decision', 'stock-structure-entry-page'],
-    ['/zh/stocks/AAPL/structure-decision', 'auth-guard:个股结构面板'],
-    ['/en/stocks/AAPL/structure-decision', 'auth-guard:Stock Structure Panel'],
+    ['/zh/stocks/AAPL/structure-decision', 'auth-guard:个股研究'],
+    ['/en/stocks/AAPL/structure-decision', 'auth-guard:Stock Research'],
   ])('renders localized Stock Structure Decision route %s without exposing a legacy decision desk', async (path, expectedText) => {
     renderAtWithLocationProbe(path);
 

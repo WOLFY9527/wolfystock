@@ -4097,8 +4097,6 @@ const PortfolioPage: React.FC = () => {
                       firstRunChecklist={language === 'zh'
                         ? ['不会自动创建账户。', '不会生成示例持仓。', '不会改写持仓、现金或外部同步状态。']
                         : ['No account is created automatically.', 'No sample holdings are generated.', 'Holdings, cash, and external sync stay unchanged.']}
-                      radarLabel={language === 'zh' ? '查看研究雷达' : 'Review Research Radar'}
-                      portfolioLabel={language === 'zh' ? '进入账户创建区' : 'Open account setup'}
                     />
                     <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">

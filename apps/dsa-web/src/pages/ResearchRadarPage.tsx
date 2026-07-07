@@ -1319,7 +1319,6 @@ export default function ResearchRadarPage() {
                             starterResearchWorkflow={data.starterResearchWorkflow}
                             firstRunChecklist={data.firstRunChecklist}
                             suggestedResearchEntrypoints={data.suggestedResearchEntrypoints}
-                            radarLabel={locale === 'en' ? 'Return to Research Radar' : '回到研究雷达'}
                             className="md:col-span-2"
                           />
                         ) : null}

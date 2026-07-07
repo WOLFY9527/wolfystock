@@ -3,6 +3,10 @@ import { ArrowRight } from 'lucide-react';
 import { buildLocalizedPath } from '../../utils/localeRouting';
 import { cn } from '../../utils/cn';
 import { sanitizeUserFacingDataIssue } from '../../utils/userFacingDataIssues';
+import {
+  resolveCoreProductRouteByCanonicalPath,
+  type CoreProductRoute,
+} from '../layout/coreProductRoutes';
 import { TerminalChip } from '../terminal/TerminalPrimitives';
 
 type ConsumerOnboardingGuidance = {
@@ -31,63 +35,26 @@ type ConsumerOnboardingCtaPanelProps = {
   starterResearchWorkflow?: string[];
   firstRunChecklist?: string[];
   suggestedResearchEntrypoints?: ConsumerOnboardingEntrypoint[];
-  radarLabel?: string;
-  portfolioLabel?: string;
   children?: React.ReactNode;
   className?: string;
   'data-testid'?: string;
 };
 
-const CANONICAL_ROUTES = new Set([
-  '/market-overview',
-  '/scanner',
-  '/watchlist',
-  '/research/radar',
-  '/portfolio',
-]);
+type ConsumerCtaRoute = CoreProductRoute & {
+  ctaLabel: NonNullable<CoreProductRoute['ctaLabel']>;
+  ctaDescription: NonNullable<CoreProductRoute['ctaDescription']>;
+};
 
-function normalizeRoute(route?: string | null): string | null {
+function normalizeRoute(route?: string | null): ConsumerCtaRoute | null {
   const normalized = String(route || '').trim();
   if (!normalized || !normalized.startsWith('/')) {
     return null;
   }
-  return CANONICAL_ROUTES.has(normalized) ? normalized : null;
-}
-
-function localizedActionLabel(
-  route: string,
-  language: 'zh' | 'en',
-  options: Pick<ConsumerOnboardingCtaPanelProps, 'radarLabel' | 'portfolioLabel'>,
-): string {
-  if (language === 'en') {
-    if (route === '/market-overview') return 'Start with Market Overview';
-    if (route === '/scanner') return 'Run Scanner';
-    if (route === '/watchlist') return 'Add Watchlist Symbol';
-    if (route === '/research/radar') return options.radarLabel || 'Review Research Radar';
-    if (route === '/portfolio') return options.portfolioLabel || 'Create portfolio account';
+  const routeMetadata = resolveCoreProductRouteByCanonicalPath(normalized);
+  if (!routeMetadata?.ctaLabel || !routeMetadata.ctaDescription) {
+    return null;
   }
-  if (route === '/market-overview') return '先看市场概览';
-  if (route === '/scanner') return '运行 Scanner';
-  if (route === '/watchlist') return '选择观察标的';
-  if (route === '/research/radar') return options.radarLabel || '查看研究雷达';
-  if (route === '/portfolio') return options.portfolioLabel || '创建组合账户';
-  return route;
-}
-
-function fallbackActionDescription(route: string, language: 'zh' | 'en'): string {
-  if (language === 'en') {
-    if (route === '/market-overview') return 'Read broad market context before choosing symbols.';
-    if (route === '/scanner') return 'Run a user-triggered scan to create candidates.';
-    if (route === '/watchlist') return 'Choose a symbol only when you want to keep observing it.';
-    if (route === '/research/radar') return 'Review the queue after scanner or watchlist activity.';
-    if (route === '/portfolio') return 'Create an account only when you want portfolio tracking.';
-  }
-  if (route === '/market-overview') return '先阅读市场背景，再决定是否继续进入标的研究。';
-  if (route === '/scanner') return '由你手动运行扫描，形成可复核候选。';
-  if (route === '/watchlist') return '只在你想持续观察某个代码时再保存。';
-  if (route === '/research/radar') return '在扫描或观察列表有活动后，再回来看研究队列。';
-  if (route === '/portfolio') return '只有你明确想跟踪组合时才创建账户。';
-  return '';
+  return routeMetadata as ConsumerCtaRoute;
 }
 
 function hasRawConsumerLeakage(value: string): boolean {
@@ -112,17 +79,17 @@ function safeList(values: string[] | undefined, language: 'zh' | 'en'): string[]
 function buildActions(
   actions: ConsumerOnboardingAction[] | undefined,
   entrypoints: ConsumerOnboardingEntrypoint[] | undefined,
-): Array<{ route: string; description?: string | null }> {
+): Array<{ route: ConsumerCtaRoute; description?: string | null }> {
   const seen = new Set<string>();
   const candidates = [
     ...(actions ?? []).map((item) => ({ route: item.route, description: item.description })),
     ...(entrypoints ?? []).map((item) => ({ route: item.route, description: item.description })),
   ];
-  const result: Array<{ route: string; description?: string | null }> = [];
+  const result: Array<{ route: ConsumerCtaRoute; description?: string | null }> = [];
   for (const item of candidates) {
     const route = normalizeRoute(item.route);
-    if (!route || seen.has(route)) continue;
-    seen.add(route);
+    if (!route || seen.has(route.path)) continue;
+    seen.add(route.path);
     result.push({ route, description: item.description });
   }
   return result;
@@ -136,8 +103,6 @@ export function ConsumerOnboardingCtaPanel({
   starterResearchWorkflow,
   firstRunChecklist,
   suggestedResearchEntrypoints,
-  radarLabel,
-  portfolioLabel,
   children,
   className,
   'data-testid': dataTestId,
@@ -147,12 +112,6 @@ export function ConsumerOnboardingCtaPanel({
   const checklist = safeList(firstRunChecklist, language);
   const conditions = safeList(guidance?.conditionsDetected, language);
   const summary = safeText(guidance?.summary, language);
-  const actionLabels = new Map(
-    ctaActions.map((action) => [
-      action.route,
-      localizedActionLabel(action.route, language, { radarLabel, portfolioLabel }),
-    ]),
-  );
 
   if (!ctaActions.length && !workflow.length && !checklist.length && !summary && !children) {
     return null;
@@ -178,17 +137,17 @@ export function ConsumerOnboardingCtaPanel({
         <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {ctaActions.map((action) => (
             <a
-              key={action.route}
-              href={buildLocalizedPath(action.route, language)}
-              aria-label={actionLabels.get(action.route)}
+              key={action.route.path}
+              href={buildLocalizedPath(action.route.path, language)}
+              aria-label={action.route.ctaLabel[language]}
               className="group flex min-h-[84px] min-w-0 flex-col justify-between rounded-lg border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2.5 text-left transition-colors hover:border-[color:var(--wolfy-accent)] hover:bg-[color:var(--surface-2)]"
             >
               <span className="flex min-w-0 items-center justify-between gap-2 text-sm font-medium text-[color:var(--wolfy-text-primary)]">
-                <span className="min-w-0 break-words">{actionLabels.get(action.route)}</span>
+                <span className="min-w-0 break-words">{action.route.ctaLabel[language]}</span>
                 <ArrowRight className="size-3.5 shrink-0 text-[color:var(--wolfy-text-muted)] transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
               </span>
               <span className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
-                {safeText(action.description, language) || fallbackActionDescription(action.route, language)}
+                {safeText(action.description, language) || action.route.ctaDescription[language]}
               </span>
             </a>
           ))}

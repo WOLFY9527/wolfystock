@@ -1032,14 +1032,14 @@ describe('PortfolioPage FX refresh', () => {
     expect(onboardingCta).toHaveTextContent('运行 Scanner');
     expect(onboardingCta).toHaveTextContent('选择观察标的');
     expect(onboardingCta).toHaveTextContent('查看研究雷达');
-    expect(onboardingCta).toHaveTextContent('进入账户创建区');
+    expect(onboardingCta).toHaveTextContent('创建组合账户');
     expect(onboardingCta).toHaveTextContent('不会自动创建账户。');
     expect(onboardingCta).toHaveTextContent('不会改写持仓、现金或外部同步状态。');
     expect(within(onboardingCta).getByRole('link', { name: '先看市场概览' })).toHaveAttribute('href', '/zh/market-overview');
     expect(within(onboardingCta).getByRole('link', { name: '运行 Scanner' })).toHaveAttribute('href', '/zh/scanner');
     expect(within(onboardingCta).getByRole('link', { name: '选择观察标的' })).toHaveAttribute('href', '/zh/watchlist');
     expect(within(onboardingCta).getByRole('link', { name: '查看研究雷达' })).toHaveAttribute('href', '/zh/research/radar');
-    expect(within(onboardingCta).getByRole('link', { name: '进入账户创建区' })).toHaveAttribute('href', '/zh/portfolio');
+    expect(within(onboardingCta).getByRole('link', { name: '创建组合账户' })).toHaveAttribute('href', '/zh/portfolio');
     expect(researchStatePreview).toHaveTextContent('组合研究状态');
     expect(researchStatePreview).toHaveTextContent('账户已设置');
     expect(researchStatePreview).toHaveTextContent('持仓待接入');

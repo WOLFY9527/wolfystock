@@ -3193,7 +3193,6 @@ const WatchlistPage: React.FC = () => {
                         firstRunChecklist={language === 'en'
                           ? ['No symbol is saved automatically.', 'No seeded watchlist item is created.', 'Scanner and account actions stay user-triggered.']
                           : ['不会自动保存代码。', '不会创建预置观察标的。', '扫描和账户动作都保持用户触发。']}
-                        radarLabel={language === 'en' ? 'Review Research Radar' : '查看研究雷达'}
                       />
                     ) : null}
 
