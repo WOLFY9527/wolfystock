@@ -20,7 +20,12 @@ from api.v1.schemas.daily_intelligence import DailyIntelligenceBriefingResponse
 from api.v1.schemas.data_source_gap_registry import DataSourceGapRegistryResponse
 from api.v1.errors import safe_api_error
 from api.v1.schemas.market_briefing import MarketOverviewBriefingResponse
-from api.v1.schemas.market_scenario_lab import MarketScenarioLabRequest, MarketScenarioLabResponse
+from api.v1.schemas.market_scenario_lab import (
+    MarketScenarioLabBaselineSnapshotCreateRequest,
+    MarketScenarioLabBaselineSnapshotReadResponse,
+    MarketScenarioLabRequest,
+    MarketScenarioLabResponse,
+)
 from api.v1.schemas.market_rotation import MarketRotationRadarResponse
 from api.v1.schemas.market_temperature import MarketTemperatureConsumedSubsetResponse
 from api.v1.schemas.professional_data_capabilities import (
@@ -35,6 +40,7 @@ from src.services.crypto_realtime_service import get_crypto_realtime_service
 from src.services.consumer_issue_labels import sanitize_consumer_reason_payload
 from src.services.data_source_gap_registry_service import build_data_source_gap_registry
 from src.services.market_scenario_lab_engine import build_market_scenario_lab
+from src.services.scenario_baseline_snapshot_service import ScenarioBaselineSnapshotService
 from src.services.market_decision_cockpit_service import MarketDecisionCockpitService
 from src.services.market_data_readiness_diagnostics import build_market_data_readiness_diagnostics
 from src.services.market_overview_service import MarketOverviewService
@@ -62,6 +68,7 @@ from src.services.daily_intelligence_service import DailyIntelligenceService
 from src.services.us_history_helper import get_configured_us_stock_parquet_dir
 
 router = APIRouter()
+_DEFAULT_SCENARIO_BASELINE_SNAPSHOT_STORE_PATH = Path("output/scenario-baseline-snapshots.jsonl")
 _MAX_DATA_READINESS_SYMBOLS = 8
 _MAX_DATA_READINESS_SYMBOL_LENGTH = 24
 _MAX_REGIME_READ_MODEL_SYMBOLS = 8
@@ -122,6 +129,19 @@ def _actor(current_user: Optional[CurrentUser]) -> Optional[Dict[str, Any]]:
         "actor_type": "admin" if current_user.is_admin else "user",
         "session_id": current_user.session_id,
     }
+
+
+def _owner_id(current_user: Optional[CurrentUser]) -> str | None:
+    if current_user is None or not hasattr(current_user, "user_id"):
+        return None
+    return current_user.user_id
+
+
+def _scenario_baseline_snapshot_service(request: Request) -> ScenarioBaselineSnapshotService:
+    store_path = getattr(request.app.state, "scenario_baseline_snapshot_store_path", None)
+    return ScenarioBaselineSnapshotService(
+        store_path=store_path or _DEFAULT_SCENARIO_BASELINE_SNAPSHOT_STORE_PATH,
+    )
 
 
 def _parse_data_readiness_symbols(raw_symbols: Optional[str]) -> tuple[str, ...]:
@@ -645,6 +665,72 @@ def get_daily_intelligence(
         market=market,
         profile=profile,
     )
+
+
+@router.post(
+    "/scenario-lab/baseline-snapshots",
+    response_model=MarketScenarioLabBaselineSnapshotReadResponse,
+    response_model_exclude_none=True,
+    summary="Explicitly create a durable Scenario Lab baseline snapshot",
+)
+def create_scenario_lab_baseline_snapshot(
+    payload: MarketScenarioLabBaselineSnapshotCreateRequest,
+    request: Request,
+    current_user: Optional[CurrentUser] = Depends(get_optional_current_user),
+):
+    try:
+        return _scenario_baseline_snapshot_service(request).create_durable_snapshot(
+            payload.model_dump(mode="json"),
+            owner_id=_owner_id(current_user),
+        )
+    except ValueError as exc:
+        raise safe_api_error(
+            status_code=409,
+            error="scenario_baseline_snapshot_conflict",
+            message="Scenario baseline snapshot already exists with different immutable content.",
+        ) from exc
+
+
+@router.get(
+    "/scenario-lab/baseline-snapshots/latest",
+    response_model=MarketScenarioLabBaselineSnapshotReadResponse,
+    response_model_exclude_none=True,
+    summary="Read the latest durable Scenario Lab baseline snapshot without side effects",
+)
+def get_latest_scenario_lab_baseline_snapshot(
+    request: Request,
+    scope_type: str = Query(default="market", alias="scopeType"),
+    scope_value: str = Query(default="US", alias="scopeValue"),
+    current_user: Optional[CurrentUser] = Depends(get_optional_current_user),
+):
+    return _scenario_baseline_snapshot_service(request).get_latest_durable_snapshot(
+        scope={"type": scope_type, "value": scope_value},
+        owner_id=_owner_id(current_user),
+    )
+
+
+@router.get(
+    "/scenario-lab/baseline-snapshots/{snapshot_id}",
+    response_model=MarketScenarioLabBaselineSnapshotReadResponse,
+    response_model_exclude_none=True,
+    summary="Read a durable Scenario Lab baseline snapshot by id without side effects",
+)
+def get_scenario_lab_baseline_snapshot(
+    snapshot_id: str,
+    request: Request,
+    current_user: Optional[CurrentUser] = Depends(get_optional_current_user),
+):
+    snapshot = _scenario_baseline_snapshot_service(request).get_durable_snapshot(
+        snapshot_id,
+        owner_id=_owner_id(current_user),
+    )
+    if snapshot is None:
+        raise safe_api_error(
+            status_code=404,
+            error="scenario_baseline_snapshot_not_found",
+            message="Scenario baseline snapshot is not available.",
+        )
+    return snapshot
 
 
 @router.post(

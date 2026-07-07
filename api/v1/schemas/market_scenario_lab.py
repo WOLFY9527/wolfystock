@@ -153,17 +153,35 @@ class MarketScenarioLabBaselineSnapshot(_MarketScenarioLabModel):
     status: Literal["available", "partial", "not_available"]
     reasonCode: Literal["baseline_available", "baseline_partial", "baseline_missing"]
     snapshotId: str | None = None
+    ownerScope: Dict[str, str] | None = None
     scope: MarketScenarioLabBaselineSnapshotScope
     createdAt: str | None = None
+    asOf: str | None = None
     source: MarketScenarioLabBaselineSnapshotSource
     availableDataCategories: List[str] = Field(default_factory=list)
     missingDataCategories: List[str] = Field(default_factory=list)
     degradedDataCategories: List[str] = Field(default_factory=list)
     labels: List[str] = Field(default_factory=list)
     notes: str
+    inputSnapshotRefs: List[str] = Field(default_factory=list)
+    sourceAuthoritySummary: Dict[str, Any] | None = None
+    freshnessSummary: Dict[str, Any] | None = None
+    missingInputList: List[str] = Field(default_factory=list)
+    readinessState: str | None = None
+    targetEnvironmentEvidence: Dict[str, Any] | None = None
+    contentHash: str | None = None
+    contentVersionRef: str | None = None
     observationOnly: bool
     comparisonReady: bool
     noAdviceDisclosure: str
+
+
+class MarketScenarioLabBaselineSnapshotCreateRequest(_MarketScenarioLabModel):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+
+class MarketScenarioLabBaselineSnapshotReadResponse(MarketScenarioLabBaselineSnapshot):
+    pass
 
 
 class MarketScenarioLabScenarioOutput(_MarketScenarioLabModel):
@@ -249,6 +267,8 @@ def _scenario_name_from_input(scenario: Any) -> str | None:
 
 
 __all__ = [
+    "MarketScenarioLabBaselineSnapshotCreateRequest",
+    "MarketScenarioLabBaselineSnapshotReadResponse",
     "MarketScenarioLabRequest",
     "MarketScenarioLabResponse",
     "MarketScenarioLabScenarioName",

@@ -297,3 +297,142 @@ def test_service_module_does_not_import_network_or_provider_runtime_domains() ->
         for module in imported_modules
         if module == "socket" or any(module == prefix or module.startswith(f"{prefix}.") for prefix in forbidden_prefixes)
     ]
+
+
+def _durable_ready_payload(*, snapshot_id: str = "baseline-durable-us-open") -> dict[str, Any]:
+    return {
+        "snapshotId": snapshot_id,
+        "scope": {"type": "market", "value": "US"},
+        "createdAt": "2026-07-07T09:31:00Z",
+        "asOf": "2026-07-07T09:30:00Z",
+        "source": {
+            "dataState": "real_cached",
+            "freshness": "fresh",
+            "asOf": "2026-07-07T09:30:00Z",
+            "sourceAuthorityAllowed": True,
+        },
+        "categories": {
+            "price": {"state": "available"},
+            "marketRegime": {"state": "available"},
+            "volatility": {"state": "available"},
+            "flowPositioning": {"state": "available"},
+            "optionsGreeks": {"state": "available"},
+        },
+        "inputSnapshotRefs": ["market-overview:2026-07-07T09:30:00Z", "decision-cockpit:2026-07-07T09:30:00Z"],
+        "sourceAuthoritySummary": {
+            "state": "authoritative",
+            "allowed": True,
+            "reasonCodes": ["target_environment_evidence_present"],
+        },
+        "freshnessSummary": {
+            "state": "fresh",
+            "asOf": "2026-07-07T09:30:00Z",
+        },
+        "targetEnvironmentEvidence": {
+            "state": "present",
+            "evidenceRefs": ["uat-runtime:scenario-baseline"],
+        },
+    }
+
+
+def test_explicit_durable_snapshot_creation_records_reproducibility_contract(tmp_path: Path) -> None:
+    store_path = tmp_path / "scenario-baselines.jsonl"
+    service = ScenarioBaselineSnapshotService(store_path=store_path)
+
+    snapshot = service.create_durable_snapshot(_durable_ready_payload(), owner_id="user-a")
+
+    assert store_path.exists()
+    assert snapshot["snapshotId"] == "baseline-durable-us-open"
+    assert snapshot["ownerScope"] == {"type": "user", "value": "user-a"}
+    assert snapshot["createdAt"] == "2026-07-07T09:31:00Z"
+    assert snapshot["asOf"] == "2026-07-07T09:30:00Z"
+    assert snapshot["readinessState"] == "ready"
+    assert snapshot["status"] == "available"
+    assert snapshot["observationOnly"] is False
+    assert snapshot["comparisonReady"] is True
+    assert snapshot["inputSnapshotRefs"] == [
+        "market-overview:2026-07-07T09:30:00Z",
+        "decision-cockpit:2026-07-07T09:30:00Z",
+    ]
+    assert snapshot["sourceAuthoritySummary"] == {
+        "state": "authoritative",
+        "allowed": True,
+        "reasonCodes": ["target_environment_evidence_present"],
+    }
+    assert snapshot["freshnessSummary"] == {
+        "state": "fresh",
+        "asOf": "2026-07-07T09:30:00Z",
+    }
+    assert snapshot["missingInputList"] == []
+    assert snapshot["contentHash"].startswith("sha256:")
+    assert snapshot["contentVersionRef"] == f"scenario_baseline_snapshot.v2:{snapshot['contentHash']}"
+
+    reloaded = ScenarioBaselineSnapshotService(store_path=store_path)
+    assert reloaded.get_durable_snapshot(snapshot["snapshotId"], owner_id="user-a") == snapshot
+    assert reloaded.get_latest_durable_snapshot(scope={"type": "market", "value": "US"}, owner_id="user-a") == snapshot
+
+
+def test_durable_readback_is_side_effect_free_when_snapshot_is_missing(tmp_path: Path) -> None:
+    store_path = tmp_path / "scenario-baselines.jsonl"
+    service = ScenarioBaselineSnapshotService(store_path=store_path)
+
+    before_exists = store_path.exists()
+    missing = service.get_latest_durable_snapshot(scope={"type": "market", "value": "US"}, owner_id="user-a")
+
+    assert before_exists is False
+    assert store_path.exists() is False
+    assert missing["status"] == "not_available"
+    assert missing["reasonCode"] == "baseline_missing"
+    assert missing["readinessState"] == "not_available"
+    assert missing["ownerScope"] == {"type": "user", "value": "user-a"}
+    assert missing["contentHash"] is None
+    assert missing["inputSnapshotRefs"] == []
+
+
+def test_durable_snapshot_readback_is_owner_isolated(tmp_path: Path) -> None:
+    service = ScenarioBaselineSnapshotService(store_path=tmp_path / "scenario-baselines.jsonl")
+    snapshot = service.create_durable_snapshot(_durable_ready_payload(), owner_id="user-a")
+
+    assert service.get_durable_snapshot(snapshot["snapshotId"], owner_id="user-b") is None
+    missing_latest = service.get_latest_durable_snapshot(scope={"type": "market", "value": "US"}, owner_id="user-b")
+    assert missing_latest["status"] == "not_available"
+    assert missing_latest["ownerScope"] == {"type": "user", "value": "user-b"}
+
+
+def test_durable_snapshot_rejects_same_id_with_different_content(tmp_path: Path) -> None:
+    service = ScenarioBaselineSnapshotService(store_path=tmp_path / "scenario-baselines.jsonl")
+    service.create_durable_snapshot(_durable_ready_payload(), owner_id="user-a")
+    changed = _durable_ready_payload()
+    changed["asOf"] = "2026-07-07T09:45:00Z"
+    changed["source"]["asOf"] = "2026-07-07T09:45:00Z"
+
+    try:
+        service.create_durable_snapshot(changed, owner_id="user-a")
+    except ValueError as exc:
+        assert "immutable_snapshot_conflict" in str(exc)
+    else:  # pragma: no cover - defensive assertion for the contract test
+        raise AssertionError("expected immutable_snapshot_conflict")
+
+
+def test_request_supplied_static_sample_or_stale_durable_baselines_remain_observation_only(tmp_path: Path) -> None:
+    service = ScenarioBaselineSnapshotService(store_path=tmp_path / "scenario-baselines.jsonl")
+    payload = _durable_ready_payload(snapshot_id="baseline-request-supplied")
+    payload["source"] = {
+        "dataState": "request_supplied",
+        "freshness": "stale",
+        "asOf": "2026-07-06T09:30:00Z",
+        "sourceAuthorityAllowed": True,
+    }
+    payload["sourceAuthoritySummary"] = {"state": "observation_only", "allowed": False}
+    payload["freshnessSummary"] = {"state": "stale", "asOf": "2026-07-06T09:30:00Z"}
+
+    snapshot = service.create_durable_snapshot(payload, owner_id="user-a")
+
+    assert snapshot["status"] == "partial"
+    assert snapshot["readinessState"] == "observation_only"
+    assert snapshot["source"]["dataState"] == "request_supplied"
+    assert snapshot["source"]["freshness"] == "stale"
+    assert snapshot["sourceAuthoritySummary"]["state"] == "observation_only"
+    assert snapshot["freshnessSummary"]["state"] == "stale"
+    assert snapshot["observationOnly"] is True
+    assert snapshot["comparisonReady"] is False
