@@ -509,6 +509,32 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(payload["analytics_readiness"]["valuation"], "complete")
         self.assertEqual(payload["analytics_readiness"]["risk"], "available")
         self.assertEqual(payload["analytics_readiness"]["score_authority"], "authoritative")
+        self.assertEqual(payload["valuation_lineage"]["read_model_type"], "portfolio_valuation_lineage_sidecar_v1")
+        self.assertEqual(payload["valuation_lineage"]["accounting_truth"]["authority"], "portfolio_ledger")
+        self.assertTrue(payload["valuation_lineage"]["accounting_truth"]["not_recalculated"])
+        self.assertEqual(payload["valuation_lineage"]["readiness"]["state"], "complete")
+        self.assertEqual(payload["valuation_lineage"]["benchmark_lineage"]["status"], "unmapped")
+        self.assertEqual(payload["valuation_lineage"]["factor_risk_lineage"]["status"], "unmapped")
+        self.assertIn(
+            "USD/CNY",
+            {item["pair"] for item in payload["valuation_lineage"]["fx_evidence"]["refs"]},
+        )
+        account_lineage = payload["accounts"][0]["valuation_lineage"]
+        self.assertEqual(account_lineage["valuation_snapshot"]["account_id"], account_id)
+        self.assertEqual(account_lineage["price_evidence"]["refs"][0]["symbol"], "AAPL")
+        self.assertEqual(account_lineage["fx_evidence"]["refs"][0]["pair"], "USD/CNY")
+
+        history_resp = self.client.get(
+            "/api/v1/portfolio/history",
+            params={"account_id": account_id, "date_from": "2026-01-02", "date_to": "2026-01-02"},
+        )
+        self.assertEqual(history_resp.status_code, 200)
+        history_item = history_resp.json()["items"][0]
+        self.assertEqual(history_item["valuation_lineage"]["read_model_type"], "portfolio_valuation_lineage_sidecar_v1")
+        self.assertEqual(
+            history_item["valuation_lineage"]["valuation_snapshot"]["snapshot_id"],
+            account_lineage["valuation_snapshot"]["snapshot_id"],
+        )
 
     def test_snapshot_lineage_marks_missing_price_observation_only_without_hiding_fallback(self) -> None:
         create_resp = self.client.post(
@@ -549,6 +575,8 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(payload["valuation_snapshot_lineage"]["score_authority"], "observation_only")
         self.assertEqual(payload["analytics_readiness"]["valuation"], "partial")
         self.assertEqual(payload["analytics_readiness"]["score_authority"], "observation_only")
+        self.assertEqual(payload["valuation_lineage"]["readiness"]["state"], "partial")
+        self.assertIn("price_missing", payload["valuation_lineage"]["readiness"]["missing_evidence"])
 
     def test_snapshot_lineage_marks_missing_fx_partial_and_affected_currency(self) -> None:
         create_resp = self.client.post(
@@ -589,6 +617,8 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(payload["valuation_snapshot_lineage"]["status"], "partial")
         self.assertIn("USD/CNY", payload["valuation_snapshot_lineage"]["blocked_by"]["fx_pairs"])
         self.assertEqual(payload["analytics_readiness"]["risk"], "partial")
+        self.assertEqual(payload["valuation_lineage"]["readiness"]["state"], "partial")
+        self.assertIn("fx_missing", payload["valuation_lineage"]["readiness"]["missing_evidence"])
 
     def test_snapshot_lineage_marks_stale_fx_partial_without_price_downgrade(self) -> None:
         create_resp = self.client.post(
@@ -634,6 +664,8 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(payload["fx_lineage"]["affected_currencies"]["stale"], ["USD"])
         self.assertEqual(payload["valuation_snapshot_lineage"]["status"], "partial")
         self.assertEqual(payload["analytics_readiness"]["score_authority"], "observation_only")
+        self.assertEqual(payload["valuation_lineage"]["readiness"]["state"], "partial")
+        self.assertIn("fx_stale", payload["valuation_lineage"]["readiness"]["missing_evidence"])
 
     def test_snapshot_and_risk_contract_distinguishes_no_account(self) -> None:
         snapshot_resp = self.client.get(

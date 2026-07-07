@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import re
 from datetime import date
@@ -1358,6 +1359,7 @@ def _datetime_to_str(value: object) -> Optional[str]:
 
 
 def _serialize_history_item(row: object) -> PortfolioHistorySnapshotItem:
+    payload = _safe_dict(_parse_json_payload(getattr(row, "payload", None)))
     return PortfolioHistorySnapshotItem(
         account_id=int(getattr(row, "account_id")),
         snapshot_date=_date_to_str(getattr(row, "snapshot_date")),
@@ -1371,9 +1373,20 @@ def _serialize_history_item(row: object) -> PortfolioHistorySnapshotItem:
         fee_total=float(getattr(row, "fee_total")),
         tax_total=float(getattr(row, "tax_total")),
         fx_stale=bool(getattr(row, "fx_stale")),
+        valuation_lineage=_safe_dict(payload.get("valuation_lineage")) or None,
         created_at=_datetime_to_str(getattr(row, "created_at", None)),
         updated_at=_datetime_to_str(getattr(row, "updated_at", None)),
     )
+
+
+def _parse_json_payload(value: object) -> dict[str, Any]:
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(str(value))
+    except Exception:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
 
 
 def _build_history_coverage(
