@@ -39,7 +39,6 @@ import {
 import { translate } from '../i18n/core';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import ObservationOnlyBoundary from '../components/common/ObservationOnlyBoundary';
-import { TerminalPageHeading } from '../components/terminal/TerminalPrimitives';
 import { getConsumerSafeApiErrorCopy } from '../utils/consumerErrorCopy';
 
 const HISTORICAL_PAGE_SIZE = 20;
@@ -1558,10 +1557,27 @@ const BacktestPage: React.FC = () => {
           data-testid="backtest-page-shell"
           className="flex-1 min-w-0 min-h-0"
         >
-          <TerminalPageHeading
+          <header
             data-testid="backtest-page-heading"
-            title={language === 'en' ? 'Backtest Lab' : '回测实验室'}
-          />
+            className="flex min-w-0 flex-col gap-2 border-b border-[color:var(--line)] pb-3 lg:flex-row lg:items-end lg:justify-between"
+          >
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[color:var(--sage-deep)]">
+                {language === 'en' ? 'Experiment workspace' : '实验验证工作台'}
+              </p>
+              <h1 className="mt-1 text-xl font-semibold leading-tight text-[color:var(--wolfy-text-primary)] md:text-2xl">
+                {language === 'en' ? 'Backtest Lab' : '回测实验室'}
+              </h1>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs text-[color:var(--wolfy-text-muted)]">
+              <span className="rounded-full border border-[color:var(--line)] bg-[var(--wolfy-surface-input)] px-3 py-1">
+                {language === 'en' ? 'Readiness != execution' : '就绪度 ≠ 执行'}
+              </span>
+              <span className="rounded-full border border-[color:var(--line)] bg-[var(--wolfy-surface-input)] px-3 py-1">
+                {language === 'en' ? 'Execution != result' : '执行 ≠ 结果'}
+              </span>
+            </div>
+          </header>
           <p data-testid="backtest-consumer-status-sentence" className="max-w-4xl text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
             {language === 'en'
               ? 'Configure a strategy, check data readiness, then inspect the result preview or latest saved run before opening a full report.'

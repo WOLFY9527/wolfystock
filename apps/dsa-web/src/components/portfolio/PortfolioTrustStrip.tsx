@@ -30,9 +30,9 @@ export function PortfolioTrustStrip({
   return (
     <div
       data-testid={dataTestId}
-      className={cn('flex min-w-0 flex-col gap-1.5 rounded-lg border border-white/[0.04] bg-black/15 px-3 py-2', className)}
+      className={cn('flex min-w-0 flex-col gap-1.5 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2', className)}
     >
-      {title ? <div className="text-[10px] font-bold uppercase tracking-widest text-white/32">{title}</div> : null}
+      {title ? <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{title}</div> : null}
       {children}
       <div className={cn('flex min-w-0 flex-wrap items-center gap-1.5', chipsClassName)}>
         {items.map((item) => (

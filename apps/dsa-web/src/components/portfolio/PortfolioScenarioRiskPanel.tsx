@@ -31,8 +31,8 @@ interface PortfolioScenarioRiskPanelProps {
   onRunScenario: (payload: PortfolioScenarioRiskRequest) => Promise<PortfolioScenarioRiskResponse>;
 }
 
-const FIELD_LABEL_CLASS = '!mb-1 text-[11px] font-medium tracking-normal text-white/55';
-const INPUT_CLASS = 'h-10 rounded-lg border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm text-white placeholder:text-white/20 outline-none focus:border-emerald-500/50';
+const FIELD_LABEL_CLASS = '!mb-1 text-[11px] font-medium tracking-normal text-[color:var(--wolfy-text-secondary)]';
+const INPUT_CLASS = 'h-10 rounded-lg border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5 text-sm text-[color:var(--wolfy-text-primary)] placeholder:text-[color:var(--wolfy-text-muted)] outline-none focus:border-emerald-500/50';
 const SELECT_CLASS = 'min-w-0';
 const SIGNED_AMOUNT_FORMATTER = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 2,
@@ -324,7 +324,7 @@ export function PortfolioScenarioRiskPanel({
       title={isEnglish ? 'Scenario projection' : '查看压力情景'}
       summary={isEnglish ? 'Collapsed by default; uses current visible holdings only.' : '默认折叠，只使用当前页面可见持仓。'}
       data-testid="portfolio-scenario-risk-disclosure"
-      className="border-white/[0.05] bg-white/[0.02]"
+      className="border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]"
     >
       <div data-testid="portfolio-scenario-risk-panel" className="flex flex-col gap-4">
         <TerminalNotice variant="neutral">
@@ -438,58 +438,58 @@ export function PortfolioScenarioRiskPanel({
           <TerminalPanel
             as="section"
             data-testid="portfolio-scenario-risk-result"
-            className="min-w-0 flex flex-col gap-4 border-white/[0.05] bg-black/15"
+            className="min-w-0 flex flex-col gap-4 border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
+                <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
                   {isEnglish ? 'Estimated impact' : '预估影响'}
                 </h3>
-                <p className="mt-1 text-sm text-white/45">
+                <p className="mt-1 text-sm text-[color:var(--wolfy-text-muted)]">
                   {isEnglish
                     ? 'Coverage and missing mappings stay explicit. No hidden exposure is inferred.'
                     : '覆盖范围与缺口会显式展示，不会替你推断缺失暴露。'}
                 </p>
               </div>
               <div className="text-right">
-                <div className="font-mono text-xl text-white">{formatPercent(scenarioResult.portfolioImpactPct)}</div>
-                <div className="mt-1 text-xs text-white/45">{formatSignedAmount(scenarioResult.portfolioImpactAmount)}</div>
+                <div className="font-mono text-xl text-[color:var(--wolfy-text-primary)]">{formatPercent(scenarioResult.portfolioImpactPct)}</div>
+                <div className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">{formatSignedAmount(scenarioResult.portfolioImpactAmount)}</div>
               </div>
             </div>
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-xl border border-white/[0.03] bg-black/20 px-3 py-3">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{isEnglish ? 'Coverage' : '覆盖情况'}</div>
-                <div className="mt-2 text-sm text-white">{formatPercent(scenarioResult.coveredWeight != null ? scenarioResult.coveredWeight * 100 : null)}</div>
-                <div className="mt-1 text-xs text-white/45">
+              <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{isEnglish ? 'Coverage' : '覆盖情况'}</div>
+                <div className="mt-2 text-sm text-[color:var(--wolfy-text-primary)]">{formatPercent(scenarioResult.coveredWeight != null ? scenarioResult.coveredWeight * 100 : null)}</div>
+                <div className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
                   {isEnglish ? 'Covered market value' : '覆盖市值'} {formatDecimal(scenarioResult.coveredMarketValue)}
                 </div>
               </div>
-              <div className="rounded-xl border border-white/[0.03] bg-black/20 px-3 py-3">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{isEnglish ? 'Visible positions' : '可见持仓'}</div>
-                <div className="mt-2 text-sm text-white">{result.coverage.totalPositions ?? positions.length}</div>
-                <div className="mt-1 text-xs text-white/45">
+              <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{isEnglish ? 'Visible positions' : '可见持仓'}</div>
+                <div className="mt-2 text-sm text-[color:var(--wolfy-text-primary)]">{result.coverage.totalPositions ?? positions.length}</div>
+                <div className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
                   {isEnglish ? 'Usable weight rows' : '有效权重行'} {result.coverage.positionsWithUsableWeight ?? '--'}
                 </div>
               </div>
-              <div className="rounded-xl border border-white/[0.03] bg-black/20 px-3 py-3">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{isEnglish ? 'Explicit mappings' : '显式映射'}</div>
-                <div className="mt-2 text-sm text-white">{isEnglish ? `${result.coverage.explicitExposureRows ?? 0} rows` : `${result.coverage.explicitExposureRows ?? 0} 行`}</div>
-                <div className="mt-1 text-xs text-white/45">
+              <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{isEnglish ? 'Explicit mappings' : '显式映射'}</div>
+                <div className="mt-2 text-sm text-[color:var(--wolfy-text-primary)]">{isEnglish ? `${result.coverage.explicitExposureRows ?? 0} rows` : `${result.coverage.explicitExposureRows ?? 0} 行`}</div>
+                <div className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
                   {(result.coverage.labelsWithExplicitCoverage ?? []).join(', ') || (isEnglish ? 'Current run only' : '仅当前输入')}
                 </div>
               </div>
-              <div className="rounded-xl border border-white/[0.03] bg-black/20 px-3 py-3">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{isEnglish ? 'Scenario status' : '情景风险状态'}</div>
-                <div className="mt-2 text-sm text-white">{formatScenarioRiskReadModel(result.readModelType, isEnglish)}</div>
-                <div className="mt-1 text-xs text-white/45">{result.asOf || snapshotAsOf || '--'}</div>
+              <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{isEnglish ? 'Scenario status' : '情景风险状态'}</div>
+                <div className="mt-2 text-sm text-[color:var(--wolfy-text-primary)]">{formatScenarioRiskReadModel(result.readModelType, isEnglish)}</div>
+                <div className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">{result.asOf || snapshotAsOf || '--'}</div>
               </div>
             </div>
 
             {consumerWarningRows.length ? (
               <div className="flex flex-wrap gap-1.5">
                 {consumerWarningRows.map((warning) => (
-                  <PillBadge key={warning} variant="warning" className="normal-case tracking-normal text-white/70">
+                  <PillBadge key={warning} variant="warning" className="normal-case tracking-normal text-[color:var(--wolfy-text-secondary)]">
                     {warning}
                   </PillBadge>
                 ))}
@@ -515,37 +515,37 @@ export function PortfolioScenarioRiskPanel({
             ) : null}
 
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
-              <div className="rounded-xl border border-white/[0.03] bg-black/20 px-3 py-3">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+              <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
                   {isEnglish ? 'Contribution rows' : '贡献拆解'}
                 </div>
                 <div className="mt-2 flex flex-col gap-2">
                   {(scenarioResult.positionContributions ?? []).map((entry) => (
-                    <div key={`${scenarioResult.name}-${entry.symbol}`} className="flex items-start justify-between gap-3 rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2">
+                    <div key={`${scenarioResult.name}-${entry.symbol}`} className="flex items-start justify-between gap-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
                       <div className="min-w-0">
-                        <div className="font-medium text-white">{entry.symbol}</div>
-                        <div className="mt-1 text-xs text-white/45">
+                        <div className="font-medium text-[color:var(--wolfy-text-primary)]">{entry.symbol}</div>
+                        <div className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
                           {entry.bucket || '--'}
                           {' · '}
                           {formatPercent(entry.weight != null ? entry.weight * 100 : null)}
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="font-mono text-sm text-white">{formatPercent(entry.impactPct)}</div>
-                        <div className="mt-1 text-xs text-white/45">{formatSignedAmount(entry.impactAmount)}</div>
+                        <div className="font-mono text-sm text-[color:var(--wolfy-text-primary)]">{formatPercent(entry.impactPct)}</div>
+                        <div className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">{formatSignedAmount(entry.impactAmount)}</div>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="rounded-xl border border-white/[0.03] bg-black/20 px-3 py-3">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+              <div className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
                   {isEnglish ? 'Advisory boundaries' : '观察边界'}
                 </div>
-                <div className="mt-2 flex flex-col gap-2 text-sm text-white/72">
+                <div className="mt-2 flex flex-col gap-2 text-sm text-[color:var(--wolfy-text-secondary)]">
                   {metadataRows.map((row) => (
-                    <div key={row} className="rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2">
+                    <div key={row} className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
                       {row}
                     </div>
                   ))}

@@ -900,8 +900,8 @@ describe('PortfolioPage FX refresh', () => {
     expect(workspace.parentElement).toHaveClass('w-full', 'max-w-[var(--wolfy-consumer-shell-max,1880px)]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-5', 'flex-1', 'min-w-0', 'min-h-0');
     expect(workspace.parentElement).not.toHaveClass('max-w-[1600px]');
     expect(workspace.parentElement?.parentElement).toHaveAttribute('data-workspace-width', 'near-full');
-    expect(workspace).toHaveAttribute('data-terminal-primitive', 'grid');
-    expect(workspace).toHaveClass('grid', 'grid-cols-1', 'xl:grid-cols-12', 'gap-6', 'items-start');
+    expect(workspace).not.toHaveAttribute('data-terminal-primitive', 'grid');
+    expect(workspace).toHaveClass('grid', 'grid-cols-1', 'xl:grid-cols-12', 'gap-4', 'items-start');
     expect(screen.getByTestId('portfolio-bento-page')).toHaveAttribute('data-bento-surface', 'true');
     expect(screen.getByTestId('portfolio-bento-page')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'min-h-0');
     expect(screen.getByTestId('portfolio-bento-page')).not.toHaveClass('gap-5', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'overflow-y-auto', 'no-scrollbar');
@@ -953,6 +953,16 @@ describe('PortfolioPage FX refresh', () => {
     expect(researchStatePreview).toHaveTextContent('汇率缺失');
     expect(researchStatePreview).toHaveTextContent('风险视图待生成');
     expect(researchStatePreview).toHaveTextContent('补持仓或导入流水');
+    const productizationOrder = within(researchStatePreview).getByTestId('portfolio-productization-order');
+    expect(productizationOrder).toHaveTextContent('账户上下文');
+    expect(productizationOrder).toHaveTextContent('组合观察');
+    expect(productizationOrder).toHaveTextContent('集中度 / 暴露');
+    expect(productizationOrder).toHaveTextContent('持仓账本');
+    expect(productizationOrder).toHaveTextContent('新鲜度');
+    expect(productizationOrder).toHaveTextContent('限制');
+    expect(productizationOrder).toHaveTextContent('导入预览');
+    expect(productizationOrder).toHaveTextContent('显式确认');
+    expect(productizationOrder).toHaveTextContent('个股研究交接');
     expect(screen.getByTestId('portfolio-exposure-card')).toHaveTextContent('暂无持仓，保存持仓流水后生成盈亏与资产配置。');
     expect(screen.getByTestId('portfolio-risk-card')).toHaveTextContent('待生成');
     expect(screen.getByTestId('portfolio-risk-card')).toHaveTextContent('压力情景入口会在持仓出现后启用');
@@ -981,7 +991,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(getLeftTabButton('同步')).toBeInTheDocument();
     expect(getLeftTabButton('汇率')).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-left-tab-switcher')).toHaveAttribute('data-terminal-primitive', 'nested-block');
-    expect(getLeftTabButton('记账').className).toContain('bg-[var(--wolfy-surface-console)]');
+    expect(getLeftTabButton('记账').className).toContain('bg-[var(--wolfy-surface-input)]');
     expect(getLeftTabButton('账户').className).not.toContain('border-white');
     expect(screen.queryByRole('heading', { name: /^Current Holdings(?: \(|$)/i })).not.toBeInTheDocument();
     expect(screen.getByTestId('portfolio-start-card')).toHaveAttribute('data-terminal-primitive', 'empty-state');
@@ -1100,7 +1110,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(recentActivity).getByText(/2026-03-18/)).toBeInTheDocument();
 
     const tradeStation = screen.getByTestId('portfolio-trade-station-card');
-    expect(within(tradeStation).getByRole('button', { name: '记账' }).className).toContain('bg-[var(--wolfy-surface-console)]');
+    expect(within(tradeStation).getByRole('button', { name: '记账' }).className).toContain('bg-[var(--wolfy-surface-input)]');
     expect(screen.getByLabelText(/记账账户|ledger account/i)).toHaveValue('1');
     expect(screen.getByTestId('portfolio-trade-station-card')).toHaveClass('gap-4', 'xl:min-h-0');
     expect(within(tradeStation).getByRole('button', { name: translate('zh', 'portfolio.submitTrade') })).not.toBeDisabled();
@@ -1126,7 +1136,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(workspace.parentElement).toHaveClass('w-full', 'max-w-[var(--wolfy-consumer-shell-max,1880px)]', 'mx-auto', 'px-4', 'xl:px-8', 'flex-1', 'min-w-0', 'min-h-0');
     expect(workspace.parentElement).not.toHaveClass('max-w-[1600px]');
     expect(workspace.parentElement?.parentElement).toHaveAttribute('data-workspace-width', 'near-full');
-    expect(workspace).toHaveClass('grid', 'grid-cols-1', 'xl:grid-cols-12', 'gap-6', 'items-start');
+    expect(workspace).toHaveClass('grid', 'grid-cols-1', 'xl:grid-cols-12', 'gap-4', 'items-start');
     expect(screen.getByTestId('portfolio-bento-page').className).not.toMatch(/\bbg-(black|\[#050505\]|gray-|zinc-|slate-|neutral-)/);
     expect(screen.getByTestId('portfolio-account-status-strip')).toHaveClass('grid', 'xl:grid-cols-[minmax(0,1.6fr)_minmax(360px,1fr)]');
     const commandStrip = screen.getByTestId('portfolio-command-strip');
@@ -1153,6 +1163,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(researchStatePreview).toHaveTextContent('风险视图待生成');
     expect(researchStatePreview).toHaveTextContent('补持仓或导入流水');
     expect(researchStatePreview).toHaveTextContent('接入后评估市值、盈亏与暴露。');
+    expect(within(researchStatePreview).getByTestId('portfolio-productization-order')).toHaveTextContent('个股研究交接');
     expect(researchStatePreview.textContent || '').not.toMatch(/provider|runtime|credential|sourceAuthority|unavailable|missing|unknown|fallback|debug/i);
     expect(researchStatePreview.textContent || '').not.toMatch(/buy|sell|hold|target|stop|position[- ]?size|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
     expect(emptyWorkflowColumn).not.toHaveTextContent(/数据不足，禁止判断|买入|卖出|下单|券商|broker/i);
@@ -1215,6 +1226,11 @@ describe('PortfolioPage FX refresh', () => {
     expect(researchStatePreview).toHaveTextContent('估值部分可用');
     expect(researchStatePreview).toHaveTextContent('汇率待确认');
     expect(researchStatePreview).toHaveTextContent('仅观察');
+    expect(within(researchStatePreview).getByTestId('portfolio-productization-order')).toHaveTextContent('个股研究交接');
+    expect(within(researchStatePreview).getByTestId('portfolio-stock-research-handoff')).toHaveAttribute(
+      'href',
+      '/zh/stocks/AAPL/structure-decision?symbol=AAPL&market=US&source=portfolio',
+    );
     expect(researchStatePreview.textContent || '').not.toMatch(/provider|runtime|credential|sourceAuthority|unavailable|missing|unknown|fallback|debug/i);
     expect(researchStatePreview.textContent || '').not.toMatch(/buy|sell|hold|target|stop|position[- ]?size|position sizing|买入|卖出|持有|目标价|止损|仓位|建仓|加仓|减仓/i);
     const commandStrip = screen.getByTestId('portfolio-command-strip');

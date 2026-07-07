@@ -52,8 +52,8 @@ type NormalBacktestWorkspaceProps = {
   runFeedback?: BacktestRunFeedback | null;
 };
 
-const FIELD_CLASS = 'w-full min-w-0 min-h-[44px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm leading-6 text-white outline-none transition-all focus:border-[color:var(--wolfy-accent-focus)] focus:bg-white/[0.05]';
-const LABEL_CLASS = 'mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40';
+const FIELD_CLASS = 'w-full min-w-0 min-h-[44px] rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5 text-sm leading-6 text-[color:var(--wolfy-text-primary)] outline-none transition-all focus:border-[color:var(--wolfy-accent-focus)] focus:bg-[var(--surface)]';
+const LABEL_CLASS = 'mb-2 text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]';
 const PRIMARY_CTA_CLASS = 'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] px-5 py-2 text-sm font-medium text-[color:var(--theme-button-primary-text)] transition-colors hover:bg-[var(--sage-deep)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] disabled:cursor-not-allowed disabled:opacity-70';
 
 const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
@@ -126,25 +126,25 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
     >
       <GlassCard
         data-testid="normal-backtest-consolidated-card"
-        className="w-full min-w-0 rounded-[14px] border border-white/5 bg-white/[0.02] p-4 shadow-[0_30px_80px_rgba(0,0,0,0.28)] xl:p-5"
+        className="w-full min-w-0 rounded-[14px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-4 shadow-[var(--shadow-tight)] xl:p-5"
       >
         <div className="flex min-w-0 flex-col gap-6">
           <div className="flex min-w-0 flex-col gap-2">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--wolfy-text-muted)]">
               {language === 'en' ? 'Quick-start research lane' : '研究快速模式'}
             </p>
             <div className="flex min-w-0 flex-col gap-2 xl:flex-row xl:items-end xl:justify-between">
               <div className="min-w-0">
-                <h2 className="text-2xl font-semibold text-white">
+                <h2 className="text-2xl font-semibold text-[color:var(--wolfy-text-primary)]">
                   {language === 'en' ? 'Validation workspace' : '验证工作台'}
                 </h2>
-                <p className="mt-1 max-w-3xl text-sm leading-6 text-white/58">
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
                   {language === 'en'
                     ? 'Set what will be tested on the left; read data readiness and the result preview on the right before launching.'
                     : '左侧配置要验证的策略；右侧先看数据就绪度与结果预览，再决定是否运行。'}
                 </p>
               </div>
-              <div className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/50">
+              <div className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-1 text-xs text-[color:var(--wolfy-text-muted)]">
                 {templateName || '--'}
               </div>
             </div>
@@ -293,11 +293,11 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
                     >
                       <div className="min-w-0 rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-5">
                         <p className={LABEL_CLASS}>{language === 'en' ? 'Loading template insights' : '正在加载模板信息'}</p>
-                        <div className="mt-4 h-5 w-40 rounded-full bg-white/10" aria-hidden="true" />
+                        <div className="mt-4 h-5 w-40 rounded-full bg-[var(--wolfy-surface-rail)]" aria-hidden="true" />
                         <div className="mt-3 space-y-2" aria-hidden="true">
-                          <div className="h-4 rounded-full bg-white/10" />
-                          <div className="size-4/5 rounded-full bg-white/10" />
-                          <div className="h-4 w-3/5 rounded-full bg-white/10" />
+                          <div className="h-4 rounded-full bg-[var(--wolfy-surface-rail)]" />
+                          <div className="size-4/5 rounded-full bg-[var(--wolfy-surface-rail)]" />
+                          <div className="h-4 w-3/5 rounded-full bg-[var(--wolfy-surface-rail)]" />
                         </div>
                       </div>
                     </div>
@@ -329,15 +329,15 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
                 <div className="flex min-w-0 items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className={LABEL_CLASS}>{language === 'en' ? 'Result preview' : '结果预览'}</p>
-                    <h3 className="text-base font-semibold text-white">{resultPreviewTitle}</h3>
+                    <h3 className="text-base font-semibold text-[color:var(--wolfy-text-primary)]">{resultPreviewTitle}</h3>
                   </div>
-                  <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-white/52">
+                  <span className="shrink-0 rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-1 text-[11px] text-[color:var(--wolfy-text-muted)]">
                     {code || (language === 'en' ? 'No symbol' : '未选择标的')}
                   </span>
                 </div>
-                <p className="mt-3 text-sm leading-6 text-white/62">{resultPreviewBody}</p>
+                <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{resultPreviewBody}</p>
                 {dataLimitation ? (
-                  <p data-testid="backtest-data-limitation" className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-xs leading-5 text-amber-50/82">
+                  <p data-testid="backtest-data-limitation" className="mt-3 rounded-lg border border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] px-3 py-2 text-xs leading-5 text-[color:var(--state-warning-text)]">
                     {dataLimitation}
                     {' '}
                     {language === 'en' ? 'Next: change the range or rerun after data coverage is refreshed.' : '下一步：调整区间，或等待数据覆盖刷新后重试。'}
@@ -345,24 +345,24 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
                 ) : null}
                 <div data-testid="backtest-preview-output-list" className="mt-4 grid gap-2 text-xs sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
                   {[
-                    language === 'en' ? 'Return curve' : '收益曲线',
+                    language === 'en' ? 'Equity vs benchmark' : '收益曲线与基准',
                     language === 'en' ? 'Drawdown' : '回撤',
-                    language === 'en' ? 'Trade count' : '交易次数',
-                    language === 'en' ? 'Win rate' : '胜率',
-                    language === 'en' ? 'Sample range' : '样本区间',
+                    language === 'en' ? 'Core metrics' : '核心指标',
+                    language === 'en' ? 'Trades and events' : '交易与事件账本',
+                    language === 'en' ? 'Assumptions, costs, and limitations' : '假设、成本与限制',
                   ].map((item) => (
-                    <span key={item} className="rounded-lg border border-white/8 bg-white/[0.025] px-3 py-2 text-white/62">
+                    <span key={item} className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-[color:var(--wolfy-text-secondary)]">
                       {item}
                     </span>
                   ))}
                 </div>
               </section>
               <BacktestRunFeedbackBanner feedback={runFeedback} />
-              <details data-testid="backtest-diagnostics-disclosure" className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-sm text-white/62">
-                <summary className="cursor-pointer list-none font-semibold text-white/78">
+              <details data-testid="backtest-diagnostics-disclosure" className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-sm text-[color:var(--wolfy-text-secondary)]">
+                <summary className="cursor-pointer list-none font-semibold text-[color:var(--wolfy-text-primary)]">
                   {language === 'en' ? 'View backtest diagnostics' : '查看回测诊断'}
                 </summary>
-                <p className="mt-2 text-xs leading-5 text-white/48">
+                <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
                   {language === 'en'
                     ? 'Detailed readiness fields stay collapsed by default. Use this only when checking a blocked run.'
                     : '详细就绪度字段默认折叠；仅在复核阻塞运行时展开。'}
@@ -373,9 +373,9 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
 
           <div
             data-testid="normal-backtest-cta-row"
-            className="flex min-w-0 flex-col gap-4 border-t border-white/8 pt-5 xl:flex-row xl:items-center xl:justify-between"
+            className="flex min-w-0 flex-col gap-4 border-t border-[color:var(--wolfy-border-subtle)] pt-5 xl:flex-row xl:items-center xl:justify-between"
           >
-            <div className="min-w-0 text-sm text-white/46">
+            <div className="min-w-0 text-sm text-[color:var(--wolfy-text-muted)]">
               {language === 'en'
                 ? 'Quick-start mode first turns the selected template into a fixed-rule backtest flow, then opens the dedicated result page.'
                 : '研究快速模式会先把模板整理为固定规则回测流程，再跳转到独立结果页。'}

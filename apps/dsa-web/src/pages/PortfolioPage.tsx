@@ -32,7 +32,6 @@ import {
   TerminalDisclosure,
   TerminalChip,
   TerminalEmptyState,
-  TerminalGrid,
   TerminalNestedBlock,
   TerminalNotice,
   TerminalPanel,
@@ -48,6 +47,7 @@ import { translate } from '../i18n/core';
 import { normalizePortfolioRiskEvidence } from '../utils/evidenceDisplay';
 import { toDateInputValue } from '../utils/format';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
+import { buildResearchWorkspacePath } from '../utils/researchWorkspaceRoute';
 import {
   inferSettlementCurrency,
   LEGACY_PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY,
@@ -834,7 +834,7 @@ function PortfolioSegmentedControl({
         className="space-y-0"
         listClassName="ui-scroll-x-quiet w-full rounded-xl border-0 bg-[var(--wolfy-surface-input)] p-1"
         buttonClassName={`rounded-lg border-0 text-center text-sm font-medium ${itemClassName}`}
-        activeButtonClassName="bg-[var(--wolfy-surface-console)] text-[color:var(--wolfy-text-primary)] shadow-sm"
+        activeButtonClassName="bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-primary)] shadow-sm"
         inactiveButtonClassName="bg-transparent text-[color:var(--wolfy-text-muted)] hover:bg-transparent hover:text-[color:var(--wolfy-text-secondary)]"
         size="sm"
       />
@@ -1329,7 +1329,7 @@ function PortfolioTradeActions({
         {isOpen ? (
           <TerminalNestedBlock
             data-testid={`${menuKey}-menu`}
-            className="absolute right-0 z-20 mt-2 flex min-w-[132px] flex-col gap-1 bg-[var(--wolfy-surface-console)] p-2 shadow-2xl"
+            className="absolute right-0 z-20 mt-2 flex min-w-[132px] flex-col gap-1 bg-[var(--wolfy-surface-input)] p-2 shadow-[var(--shadow-tight)]"
           >
             <Button type="button" variant="ghost" className="justify-start rounded-lg px-2 text-xs text-[color:var(--wolfy-text-secondary)]" onClick={() => onEdit(item)}>
               <PenSquare className="size-3.5" aria-hidden="true" />
@@ -3392,6 +3392,17 @@ const PortfolioPage: React.FC = () => {
     : hasFxUnavailable || snapshot?.fxStale
       ? (language === 'zh' ? '确认FX与估值' : 'Confirm FX and valuation')
       : (language === 'zh' ? '查看风险暴露' : 'Review risk exposure');
+  const portfolioProductizationOrder = language === 'zh'
+    ? ['账户上下文', '组合观察', '集中度 / 暴露', '持仓账本', '新鲜度', '限制', '导入预览', '显式确认', '个股研究交接']
+    : ['Account context', 'Portfolio observation', 'Concentration / exposure', 'Holdings ledger', 'Freshness', 'Limitations', 'Import preview', 'Explicit confirm', 'Stock Research handoff'];
+  const primaryResearchHolding = positionRows.find((row) => row.symbol);
+  const stockResearchHandoffPath = primaryResearchHolding
+    ? buildResearchWorkspacePath('stock-structure', language, {
+      symbol: primaryResearchHolding.symbol,
+      market: primaryResearchHolding.market,
+      source: 'portfolio',
+    })
+    : null;
   const researchStatePreviewItems = [
     {
       key: 'account-readiness',
@@ -3538,6 +3549,17 @@ const PortfolioPage: React.FC = () => {
           </div>
         ))}
       </div>
+      <ol
+        data-testid="portfolio-productization-order"
+        className="grid min-w-0 grid-cols-1 gap-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)] sm:grid-cols-3"
+      >
+        {portfolioProductizationOrder.map((item, index) => (
+          <li key={item} className="min-w-0 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
+            <span className="mr-2 font-mono text-[10px] font-bold text-[color:var(--wolfy-text-muted)]">{String(index + 1).padStart(2, '0')}</span>
+            {item}
+          </li>
+        ))}
+      </ol>
       <div data-testid="portfolio-research-next-evidence" className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
         {valuationNextEvidenceCopy}
       </div>
@@ -3566,11 +3588,31 @@ const PortfolioPage: React.FC = () => {
           <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
             {importTradesActionLabel}
           </TerminalButton>
+          {stockResearchHandoffPath ? (
+            <a
+              data-testid="portfolio-stock-research-handoff"
+              href={stockResearchHandoffPath}
+              className="inline-flex min-h-9 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-divider)] hover:text-[color:var(--wolfy-text-primary)]"
+            >
+              {language === 'zh' ? '进入个股研究' : 'Open Stock Research'}
+            </a>
+          ) : null}
         </div>
         ) : (
-          <span className="text-xs text-[color:var(--wolfy-text-muted)]">
-            {language === 'zh' ? '连接步骤将在具备操作权限后显示。' : 'Connection steps appear when operator access is available.'}
-          </span>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className="text-xs text-[color:var(--wolfy-text-muted)]">
+              {language === 'zh' ? '连接步骤将在具备操作权限后显示。' : 'Connection steps appear when operator access is available.'}
+            </span>
+            {stockResearchHandoffPath ? (
+              <a
+                data-testid="portfolio-stock-research-handoff"
+                href={stockResearchHandoffPath}
+                className="inline-flex min-h-9 items-center rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-colors hover:border-[color:var(--wolfy-divider)] hover:text-[color:var(--wolfy-text-primary)]"
+              >
+                {language === 'zh' ? '进入个股研究' : 'Open Stock Research'}
+              </a>
+            ) : null}
+          </div>
         )}
       </div>
     </TerminalPanel>
@@ -3826,7 +3868,10 @@ const PortfolioPage: React.FC = () => {
       >
         <ConsumerWorkspaceScope className="flex-1">
         <ConsumerWorkspacePageShell className="flex-1 min-w-0 min-h-0">
-          <TerminalGrid data-testid="portfolio-workspace-grid">
+          <div
+            data-testid="portfolio-workspace-grid"
+            className="grid min-w-0 grid-cols-1 items-start gap-4 xl:grid-cols-12"
+          >
             {error || riskWarning || writeWarning ? (
               <div data-testid="portfolio-row-alerts" className="order-0 col-span-12 xl:col-span-12 min-w-0 flex flex-col gap-3">
                 {error ? <ApiErrorAlert error={error} onDismiss={() => setError(null)} /> : null}
@@ -4181,7 +4226,7 @@ const PortfolioPage: React.FC = () => {
                                     <Button
                                       type="button"
                                       variant="ghost"
-                                      className="mt-3 min-h-10 w-full rounded-md border border-[color:var(--wolfy-border-subtle)] bg-transparent px-3 py-2 text-sm text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] disabled:text-[color:var(--wolfy-text-primary)]/15 disabled:opacity-50"
+                                      className="mt-3 min-h-10 w-full rounded-md border border-[color:var(--wolfy-border-subtle)] bg-transparent px-3 py-2 text-sm text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] disabled:text-[color:var(--wolfy-text-muted)] disabled:opacity-50"
                                       onClick={() => openManualLedger('trade', 'stock')}
                                     >
                                       {manualLedgerActionLabel}
@@ -5151,7 +5196,7 @@ const PortfolioPage: React.FC = () => {
                 )}
               </div>
             </div>
-	          </TerminalGrid>
+	          </div>
       </ConsumerWorkspacePageShell>
       </ConsumerWorkspaceScope>
     </div>

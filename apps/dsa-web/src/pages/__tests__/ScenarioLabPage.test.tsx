@@ -290,6 +290,13 @@ describe('ScenarioLabPage', () => {
     });
 
     renderRoute(<ScenarioLabPage />);
+    const setupOrder = within(await screen.findByTestId('scenario-lab-setup-idle')).getByTestId('scenario-productization-order');
+    expect(setupOrder).toHaveTextContent('显式情景设置');
+    expect(setupOrder).toHaveTextContent('显式评估');
+    expect(setupOrder).toHaveTextContent('对比');
+    expect(setupOrder).toHaveTextContent('敏感度');
+    expect(setupOrder).toHaveTextContent('不确定性');
+    expect(setupOrder).toHaveTextContent('限制');
     await evaluateScenarioFromIdle();
 
     const page = await screen.findByTestId('scenario-lab-page');
@@ -313,6 +320,7 @@ describe('ScenarioLabPage', () => {
     expect(firstRead).toHaveTextContent('仅观察 / 非决策级');
     expect(screen.getByRole('button', { name: '波动冲击' })).toBeInTheDocument();
     expect(page).toHaveTextContent('情景后的研究框架');
+    expect(page).toHaveTextContent('最敏感的证据族');
     expect(page).toHaveTextContent('所选压力情景下，市场广度会较快转弱。');
     expect(page).toHaveTextContent('波动结构会转入偏防御状态。');
     const registry = screen.getByTestId('scenario-evidence-pack-registry');
