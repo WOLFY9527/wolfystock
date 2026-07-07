@@ -338,6 +338,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const isDesktop = useIsDesktopViewport();
   const previousPathnameRef = useRef(pathname);
   const didInitializeViewportRef = useRef(false);
+  const mobileMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const mobileNavShouldReturnFocusRef = useRef(false);
   const accountTriggerRef = useRef<HTMLButtonElement | null>(null);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const accountMenuItemRefs = useRef<Array<HTMLAnchorElement | HTMLButtonElement | null>>([]);
@@ -401,11 +403,13 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     { label: accountCopy.preferences, to: buildAccountPath(routeLocale, '/settings#preferences'), icon: SlidersHorizontal },
   ];
 
-  const closeMobileNav = () => {
+  const closeMobileNav = (options?: { returnFocus?: boolean }) => {
+    mobileNavShouldReturnFocusRef.current = Boolean(options?.returnFocus);
     dispatchOverlay({ type: 'close_mobile_nav' });
   };
 
   const openMobileNav = () => {
+    mobileNavShouldReturnFocusRef.current = false;
     dispatchOverlay({ type: 'open_mobile_nav' });
   };
 
@@ -454,6 +458,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
 
     previousPathnameRef.current = pathname;
     const timer = window.setTimeout(() => {
+      mobileNavShouldReturnFocusRef.current = false;
       accountMenuFocusIndexRef.current = null;
       dispatchOverlay({ type: 'close_all' });
     }, 0);
@@ -468,12 +473,26 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     }
 
     const timer = window.setTimeout(() => {
+      mobileNavShouldReturnFocusRef.current = false;
       accountMenuFocusIndexRef.current = null;
       dispatchOverlay({ type: 'close_all' });
     }, 0);
 
     return () => window.clearTimeout(timer);
   }, [isDesktop]);
+
+  useEffect(() => {
+    if (mobileNavOpen || !mobileNavShouldReturnFocusRef.current || isDesktop) {
+      return;
+    }
+
+    mobileNavShouldReturnFocusRef.current = false;
+    const timer = window.setTimeout(() => {
+      mobileMenuTriggerRef.current?.focus();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [isDesktop, mobileNavOpen]);
 
   useEffect(() => {
     if (!accountMenuOpen) {
@@ -655,6 +674,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                     <MobileThemeIcon className="size-4" aria-hidden="true" />
                   </button>
                   <button
+                    ref={mobileMenuTriggerRef}
                     type="button"
                     onClick={openMobileNav}
                     className="shell-mobile-button"
@@ -791,12 +811,11 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         {!isDesktop ? (
           <Drawer
             isOpen={isMobileNavVisible}
-            onClose={closeMobileNav}
+            onClose={() => closeMobileNav({ returnFocus: true })}
             title={t('shell.drawerTitle')}
             width="max-w-xs"
             zIndex={90}
             side="left"
-            closeOnBackdropClick={false}
           >
             {loggedIn ? (
               <section
@@ -819,7 +838,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                     <NavLink
                       key={label}
                       to={to}
-                      onClick={closeMobileNav}
+                      onClick={() => closeMobileNav()}
                       className={({ isActive }) => cn('shell-drawer-action', isActive ? 'is-active' : '')}
                       aria-label={label}
                     >

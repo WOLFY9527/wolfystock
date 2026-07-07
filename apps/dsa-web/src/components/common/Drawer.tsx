@@ -278,13 +278,14 @@ export const Drawer: React.FC<DrawerProps> = ({
     };
   }, [isOpen]);
 
-  const handleBackdropClick = () => {
+  const handleBackdropPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     if (!closeOnBackdropClick) {
       return;
     }
     if (backdropGuardRef.current) {
       return;
     }
+    event.preventDefault();
     onClose();
   };
 
@@ -313,7 +314,7 @@ export const Drawer: React.FC<DrawerProps> = ({
           'absolute inset-0 border-0 bg-[color:var(--theme-overlay-backdrop)] p-0 transition-opacity duration-200 ease-out',
           state.uiState === 'open' && state.isInteractionReady ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
         )}
-        onClick={handleBackdropClick}
+        onPointerDown={handleBackdropPointerDown}
       />
 
       <div className={cn('drawer__frame absolute inset-y-0 flex w-full', sidePositionClass, width)}>
