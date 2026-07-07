@@ -3009,6 +3009,51 @@ describe('UserScannerPage', () => {
     expect(exportText).toContain('1,NVDA');
   });
 
+  it('exports formula-safe scanner csv text without converting numeric fields to text', async () => {
+    getRun.mockResolvedValue(makeRunDetail({
+      universeType: '  =1+1',
+      themeLabel: '\t+1+1',
+      completedAt: '\r-1+1',
+      shortlist: [
+        makeCandidate({
+          symbol: 'SAFE1',
+          rank: 1,
+          score: -12.5,
+          companyName: '=1+1',
+          reasonSummary: '+1+1',
+          riskNotes: ['-1+1'],
+          keyMetrics: [
+            { label: 'Entry range', value: '  =1+1' },
+            { label: 'Target price', value: '\t+1+1' },
+            { label: 'Stop loss', value: '\r-1+1' },
+          ],
+        }),
+        makeCandidate({
+          symbol: 'SAFE2',
+          rank: 2,
+          score: 8,
+          companyName: '腾讯控股 profit +1+1 later, quote "and"\nmultiline',
+        }),
+      ],
+    }));
+
+    renderUserScannerPage();
+
+    const more = await openMoreActions();
+    fireEvent.click(within(more).getByRole('button', { name: /导出 CSV|Export CSV/i }));
+
+    await waitFor(() => {
+      expect(createObjectUrlMock).toHaveBeenCalledTimes(1);
+    });
+
+    const exportBlob = createObjectUrlMock.mock.calls[0]?.[0] as Blob;
+    const exportText = await exportBlob.text();
+    expect(exportText).toContain("1,SAFE1,'=1+1,-12.5,'=1+1,'+1+1,'-1+1");
+    expect(exportText).toContain("'+1+1,'-1+1");
+    expect(exportText).toContain("'  =1+1,'\t+1+1,\"'\r-1+1\"");
+    expect(exportText).toContain('2,SAFE2,"腾讯控股 profit +1+1 later, quote ""and""\nmultiline",8');
+  });
+
   it('candidate research action opens the stock research route without mutating analysis state', async () => {
     renderUserScannerPage();
 

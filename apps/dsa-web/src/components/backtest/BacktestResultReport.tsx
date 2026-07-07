@@ -9,6 +9,7 @@ import type {
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { EvidenceChips } from '../evidence/EvidenceChips';
 import { StatusBadge } from '../ui/StatusBadge';
+import { serializeCsvCell } from '../../utils/csvExport';
 import { normalizeBacktestReadiness, type NormalizedEvidenceSummary } from '../../utils/evidenceDisplay';
 import {
   downloadExecutionTraceCsv,
@@ -194,13 +195,13 @@ function getTradeSummary(run: RuleBacktestRunResponse, trades: RuleBacktestTrade
   };
 }
 
-function csvCell(value: unknown): string {
-  const text = value == null || value === '' ? '--' : String(value);
-  return `"${text.replaceAll('"', '""')}"`;
-}
-
 function downloadCsv(filename: string, headers: string[], rows: unknown[][]): void {
-  const content = [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\n');
+  const content = [headers, ...rows]
+    .map((row) => row.map((value) => {
+      const displayValue = value == null || value === '' ? '--' : value;
+      return serializeCsvCell(displayValue, { quote: 'always' });
+    }).join(','))
+    .join('\n');
   const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
