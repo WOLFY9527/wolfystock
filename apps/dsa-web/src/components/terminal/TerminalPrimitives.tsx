@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
 import { WolfyShellSurface } from '../linear/LinearPrimitives';
 
@@ -287,9 +288,13 @@ export function TerminalDisclosure({
   summary?: React.ReactNode;
   defaultOpen?: boolean;
 }) {
+  const { language } = useI18n();
   const [open, setOpen] = useState(defaultOpen);
   const titleText = typeof title === 'string' ? title : '';
-  const actionLabel = open ? `收起 ${titleText}` : `展开 ${titleText}`;
+  const collapseText = language === 'en' ? 'Collapse' : '收起';
+  const expandText = language === 'en' ? 'Expand' : '展开';
+  const actionText = open ? collapseText : expandText;
+  const actionLabel = titleText ? `${actionText} ${titleText}` : actionText;
   return (
     <details
       data-testid={dataTestId || 'terminal-disclosure'}
@@ -311,7 +316,7 @@ export function TerminalDisclosure({
           onClick={() => setOpen((current) => !current)}
         >
           {open ? <ChevronDown className="size-3.5" aria-hidden="true" /> : <ChevronRight className="size-3.5" aria-hidden="true" />}
-          <span>{open ? '收起' : '展开'}</span>
+          <span>{actionText}</span>
         </button>
       </div>
       {open ? <div className="mt-2">{children}</div> : null}
