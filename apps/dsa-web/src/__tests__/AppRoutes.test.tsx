@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import App, { AppContent } from '../App';
+import App, { AppContent, RouteLoadingFallback } from '../App';
 import { expectNoRawI18nKeys } from '../test-utils/i18nRawKeySentinel';
 import { isPreviewRoutePath } from '../utils/appRouteGuards';
 import type { AdminCapabilityFlags } from '../utils/adminCapabilities';
@@ -377,6 +377,16 @@ describe('AppContent route flows', () => {
       ...noCapabilities,
     });
     languageState.value = 'en';
+  });
+
+  it('uses a restrained accessible fallback for route chunk loading', () => {
+    render(<RouteLoadingFallback language="en" />);
+
+    const status = screen.getByRole('status', { name: 'Opening research page' });
+    expect(status).toHaveTextContent('Opening research page');
+    expect(status).toHaveTextContent('Navigation and account state stay in place.');
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(status.textContent || '').not.toMatch(/\d+\s*%|buy|sell|hold|recommend|target|stop|position size/i);
   });
 
   it('renders the Chinese guest preview on the root route for anonymous sessions', async () => {
