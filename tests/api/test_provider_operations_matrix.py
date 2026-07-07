@@ -894,6 +894,7 @@ def test_polygon_us_grouped_daily_projection_is_visible_without_secret_or_offici
     assert polygon["fullBreadthAuthority"] is False
     assert polygon["sourceAuthorityAllowed"] is True
     assert polygon["scoreContributionAllowed"] is True
+    assert polygon["scoreEligible"] is False
     assert polygon["fulfilledMetrics"] == [
         "ADVANCERS",
         "DECLINERS",
@@ -951,10 +952,44 @@ def test_score_authority_helper_keeps_fallback_rows_fail_closed() -> None:
     assert ProviderOperationsMatrixService._score_eligible(row, "fallback_static") is False
 
 
+def test_score_authority_helper_fails_closed_without_freshness_evidence() -> None:
+    row = SimpleNamespace(
+        source_tier="local_cache",
+        trust_level="reproducible_local_or_stored",
+        observation_only=False,
+        source_authority_allowed=True,
+        score_contribution_allowed=True,
+        source_freshness_evidence=None,
+    )
+
+    assert ProviderOperationsMatrixService._score_eligible(row, "cache_snapshot") is False
+
+
+def test_score_authority_helper_fails_closed_for_partial_freshness_evidence() -> None:
+    row = SimpleNamespace(
+        source_tier="official_or_authorized_licensed_feed",
+        trust_level="score_grade",
+        observation_only=False,
+        source_authority_allowed=True,
+        score_contribution_allowed=True,
+        source_freshness_evidence={
+            "freshness": "delayed",
+            "isFallback": False,
+            "isPartial": True,
+            "isUnavailable": False,
+        },
+    )
+
+    assert ProviderOperationsMatrixService._score_eligible(
+        row,
+        "authorized_licensed_feed",
+    ) is False
+
+
 def test_generic_runtime_capability_score_permission_fails_closed_without_explicit_gate() -> None:
     assert ProviderOperationsMatrixService._generic_runtime_score_contribution_allowed(
         "cache_snapshot"
-    ) is True
+    ) is False
     for source_type in (
         "public_proxy",
         "unofficial_proxy",
@@ -983,8 +1018,13 @@ def test_runtime_metadata_rows_do_not_claim_score_contribution_without_explicit_
     for provider_id in ("local_cache", "local_inference", "local_news_cache", "local_ohlcv"):
         row = _row_by_id(payload, provider_id)
         assert row["sourceType"] == "cache_snapshot"
-        assert row["scoreContributionAllowed"] is True
-        assert row["scoreEligible"] is True
+        assert row["runtimeState"] == "runtime_metadata"
+        assert row["sourceFreshnessEvidence"] is None
+        assert row["scoreContributionAllowed"] is False
+        assert row["scoreEligible"] is False
+        assert "capability_metadata_only" in row["reasonCodes"]
+        assert "activation_not_verified" in row["reasonCodes"]
+        assert "freshness_not_evaluated" in row["reasonCodes"]
 
 
 def test_secret_values_are_not_emitted_from_readiness_or_credentials(monkeypatch) -> None:

@@ -276,6 +276,12 @@ class ProviderOperationsMatrixService:
             row.score_contribution_allowed
             or self._generic_runtime_score_contribution_allowed(row.source_type)
         )
+        if row.runtime_state == "runtime_metadata" and not row.reason_codes:
+            row.reason_codes = [
+                "capability_metadata_only",
+                "activation_not_verified",
+                "freshness_not_evaluated",
+            ]
         row.supported_capabilities.update(domain.value for domain in capability.domains)
         row.affected_surfaces.update(
             surface
@@ -742,7 +748,7 @@ class ProviderOperationsMatrixService:
 
     @staticmethod
     def _generic_runtime_score_contribution_allowed(source_type: str | None) -> bool:
-        return source_type == "cache_snapshot"
+        return False
 
     @staticmethod
     def _trust_for_runtime(capability: ProviderCapability) -> str:
@@ -835,6 +841,10 @@ class ProviderOperationsMatrixService:
             if isinstance(row.source_freshness_evidence, Mapping)
             else {}
         )
+        if not _text(freshness_evidence.get("freshness")):
+            return False
+        if bool(freshness_evidence.get("isPartial")):
+            return False
         source_tier = row.source_tier or source_type
         source_authority_allowed = (
             row.source_authority_allowed
