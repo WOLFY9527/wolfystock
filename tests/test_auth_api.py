@@ -746,6 +746,27 @@ class AuthApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 202)
         self.assertIn(b'"ok":true', response.body)
 
+    def test_reset_password_request_logs_only_hashed_identifier_without_match_bit(self) -> None:
+        raw_identifier = "Sensitive.User+Reset@example.com"
+        expected_hash = auth.safe_identifier_hash(raw_identifier, prefix="acct")
+
+        with self.assertLogs("api.v1.endpoints.auth", level="INFO") as captured:
+            response = asyncio.run(
+                auth_endpoint.auth_request_password_reset(
+                    auth_endpoint.PasswordResetRequest(identifier=raw_identifier),
+                )
+            )
+
+        self.assertEqual(response.status_code, 202)
+        log_output = "\n".join(captured.output)
+        self.assertIn(str(expected_hash), log_output)
+        self.assertNotIn(raw_identifier, log_output)
+        self.assertNotIn(raw_identifier.lower(), log_output.lower())
+        self.assertNotRegex(log_output, r"\bmatched\s*=")
+        self.assertNotRegex(log_output, r"\bmatched_(?:user|account)\b")
+        self.assertNotIn("True", log_output)
+        self.assertNotIn("False", log_output)
+
     def test_serialize_user_notification_preferences_uses_auth_repository_boundary(self) -> None:
         repo = MagicMock()
         repo.get_user_notification_preferences.return_value = {

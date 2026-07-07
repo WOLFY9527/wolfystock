@@ -868,7 +868,14 @@ def _get_auth_status_dict(request: Request | None = None) -> dict:
     """Helper to build consistent auth status response body."""
     auth_enabled = is_auth_enabled()
     stored_password_exists = has_stored_password()
-    current_user_payload = _serialize_current_user(request) if request is not None else None
+    resolved_user_payload = _serialize_current_user(request) if request is not None else None
+    current_user_payload = resolved_user_payload
+    if current_user_payload and (
+        not auth_enabled
+        or not bool(current_user_payload.get("isAuthenticated"))
+        or bool(current_user_payload.get("transitional"))
+    ):
+        current_user_payload = None
     logged_in = bool(current_user_payload and current_user_payload.get("isAuthenticated"))
 
     # setupState determination:
@@ -1894,19 +1901,9 @@ async def auth_request_password_reset(body: PasswordResetRequest):
             content={"error": "identifier_required", "message": "请输入邮箱地址或用户名"},
         )
 
-    normalized_identifier = identifier.lower()
-    matched_user_id = ""
-    if normalized_identifier == BOOTSTRAP_ADMIN_USERNAME.lower():
-        matched_user_id = BOOTSTRAP_ADMIN_USER_ID
-    else:
-        user_row = AuthRepository().get_app_user_by_username(identifier)
-        if user_row is not None:
-            matched_user_id = str(getattr(user_row, "id", "") or "")
-
     logger.info(
-        "Password reset requested for identifier=%s matched=%s",
-        identifier,
-        bool(matched_user_id),
+        "Password reset requested identifier_hash=%s",
+        safe_identifier_hash(identifier, prefix="acct"),
     )
     return JSONResponse(
         status_code=202,

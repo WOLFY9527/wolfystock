@@ -200,7 +200,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
             "quick",
         )
 
-    def test_trigger_analysis_rejects_unusable_llm_model_with_actionable_detail(self) -> None:
+    def test_trigger_analysis_rejects_unusable_llm_model_with_safe_client_detail(self) -> None:
         if trigger_analysis is None or AnalyzeRequest is None:
             self.skipTest("analysis endpoint import unavailable")
 
@@ -231,8 +231,14 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         exc = ctx.exception
         self.assertEqual(getattr(exc, "status_code", None), 500)
         self.assertEqual(exc.detail["error"], "llm_model_unavailable")
-        self.assertIn("配置的模型不可用", exc.detail["message"])
-        self.assertEqual(exc.detail["available_models"], ["openai/gpt-4.1-free", "openai/gpt-4o-free"])
+        self.assertEqual(exc.detail["message"], "AI analysis is temporarily unavailable. Please retry later.")
+        self.assertTrue(exc.detail["retryable"])
+        serialized = json.dumps(exc.detail, ensure_ascii=False)
+        self.assertNotIn("openai/gpt-5-ghost", serialized)
+        self.assertNotIn("openai/gpt-4.1-free", serialized)
+        self.assertNotIn("openai/gpt-4o-free", serialized)
+        self.assertNotIn("available_models", serialized)
+        self.assertNotIn("configured_model", serialized)
 
     def test_model_unavailable_detail_is_sanitized_and_actionable(self) -> None:
         if _build_llm_model_unavailable_detail is None:

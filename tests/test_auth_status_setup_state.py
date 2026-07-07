@@ -12,6 +12,7 @@ from unittest.mock import patch
 from starlette.requests import Request
 
 import src.auth as auth
+from api.deps import CurrentUser
 from api.v1.endpoints.auth import AuthSettingsRequest, auth_status, auth_update_settings
 
 
@@ -110,6 +111,36 @@ class AuthStatusSetupStateTestCase(unittest.TestCase):
                 self.assertEqual(data["setupState"], "no_password")
                 self.assertTrue(data["authEnabled"])
                 self.assertFalse(data["passwordSet"])
+
+    def test_auth_disabled_status_does_not_expose_transitional_admin_capabilities(self) -> None:
+        """Auth-disabled status remains bootstrap-safe without leaking transitional admin detail."""
+        request = _make_request()
+        transitional_admin = CurrentUser(
+            user_id="bootstrap-admin",
+            username="admin",
+            display_name="Admin",
+            role="admin",
+            is_admin=True,
+            is_authenticated=False,
+            transitional=True,
+            auth_enabled=False,
+            session_id=None,
+            admin_capabilities=("users:security:write", "ops:logs:read"),
+        )
+
+        with patch("api.v1.endpoints.auth.is_auth_enabled", return_value=False):
+            with patch("src.auth.is_auth_enabled", return_value=False):
+                with patch("api.v1.endpoints.auth.resolve_current_user", return_value=transitional_admin):
+                    data = asyncio.run(auth_status(request))
+
+        self.assertFalse(data["authEnabled"])
+        self.assertFalse(data["loggedIn"])
+        self.assertEqual(data["setupState"], "no_password")
+        self.assertIsNone(data["currentUser"])
+        serialized = json.dumps(data, ensure_ascii=False)
+        self.assertNotIn("adminCapabilities", serialized)
+        self.assertNotIn("canWriteUserSecurity", serialized)
+        self.assertNotIn("ops:logs:read", serialized)
 
     def test_settings_update_returns_setup_state(self) -> None:
         """Verify that /auth/settings also returns setupState in response."""

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -176,6 +177,34 @@ def test_watchlist_internal_error_response_is_consumer_safe(client: TestClient, 
         error="internal_error",
         message="Watchlist data is temporarily unavailable. Please retry later.",
     )
+
+
+def test_history_internal_error_response_is_consumer_safe_and_logged(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    history_failure = "history service failure marker"
+
+    class FailingHistoryService:
+        def get_history_list(self, **kwargs):
+            raise RuntimeError(history_failure)
+
+    monkeypatch.setattr(
+        "api.v1.endpoints.history._build_history_service",
+        lambda db_manager, current_user: FailingHistoryService(),
+    )
+    caplog.set_level(logging.ERROR, logger="api.v1.endpoints.history")
+
+    response = client.get("/api/v1/history")
+
+    _assert_safe_error_payload(
+        response,
+        status_code=500,
+        error="internal_error",
+        message="History data is temporarily unavailable. Please retry later.",
+    )
+    assert history_failure in caplog.text
 
 
 def test_agent_chat_internal_error_response_is_consumer_safe(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
