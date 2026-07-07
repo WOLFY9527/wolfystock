@@ -467,15 +467,13 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
       window.print();
       return;
     }
-    const escapedMarkdown = markdown
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+    printWindow.opener = null;
+    printWindow.document.open();
     printWindow.document.write(`
       <!doctype html>
       <html>
         <head>
-          <title>${identity.companyWithTicker} - ${REPORT_BRAND}</title>
+          <title></title>
           <style>
             body { margin: 0; background: #fff; color: #111827; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
             main { max-width: 820px; margin: 0 auto; padding: 40px 34px; }
@@ -483,9 +481,14 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
             @media print { main { padding: 0; } }
           </style>
         </head>
-        <body><main><pre>${escapedMarkdown}</pre></main></body>
+        <body><main><pre id="wolfystock-print-report"></pre></main></body>
       </html>
     `);
+    printWindow.document.title = `${identity.companyWithTicker} - ${REPORT_BRAND}`;
+    const reportNode = printWindow.document.getElementById('wolfystock-print-report');
+    if (reportNode) {
+      reportNode.textContent = markdown;
+    }
     printWindow.document.close();
     printWindow.focus();
     window.setTimeout(() => printWindow.print(), 80);
