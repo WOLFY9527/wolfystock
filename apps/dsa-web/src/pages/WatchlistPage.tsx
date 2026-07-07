@@ -2811,18 +2811,6 @@ const WatchlistPage: React.FC = () => {
                   </TerminalChip>
                 </div>
               ) : null}
-              {!isWatchlistEmptyWorkspace ? (
-                <div
-                  data-testid="watchlist-list-header"
-                  role="row"
-                  className="hidden min-w-[860px] grid-cols-[minmax(0,1.35fr)_minmax(0,1.15fr)_minmax(0,1.05fr)_auto] gap-4 border-b border-[color:var(--wolfy-divider)] px-4 py-2 text-[11px] uppercase text-[color:var(--wolfy-text-muted)] lg:grid"
-                >
-                  <span role="columnheader">{language === 'en' ? 'Symbol' : '标的'}</span>
-                  <span role="columnheader">{language === 'en' ? 'Price / update' : '价格 / 更新'}</span>
-                  <span role="columnheader">{language === 'en' ? 'Research / next' : '研究 / 下一步'}</span>
-                  <span role="columnheader" className="text-right">{copy.actions}</span>
-                </div>
-              ) : null}
               {isLoading ? (
                 <TerminalPanel as="section" dense className="py-8 text-center text-sm text-[color:var(--wolfy-text-muted)]" role="status">
                   {copy.loading}
@@ -2832,9 +2820,22 @@ const WatchlistPage: React.FC = () => {
                   data-testid="watchlist-candidate-list"
                   role="table"
                   aria-label={language === 'en' ? 'Watchlist research ledger' : '观察列表研究台账'}
+                  aria-colcount={4}
+                  aria-rowcount={filteredItems.length + 1}
                   className="min-w-[860px] py-1"
                 >
-                  {filteredItems.map((item) => {
+                  <div
+                    data-testid="watchlist-list-header"
+                    role="row"
+                    aria-rowindex={1}
+                    className="hidden grid-cols-[minmax(0,1.35fr)_minmax(0,1.15fr)_minmax(0,1.05fr)_auto] gap-4 border-b border-[color:var(--wolfy-divider)] px-4 py-2 text-[11px] uppercase text-[color:var(--wolfy-text-muted)] lg:grid"
+                  >
+                    <span role="columnheader" aria-colindex={1}>{language === 'en' ? 'Symbol' : '标的'}</span>
+                    <span role="columnheader" aria-colindex={2}>{language === 'en' ? 'Price / update' : '价格 / 更新'}</span>
+                    <span role="columnheader" aria-colindex={3}>{language === 'en' ? 'Research / next' : '研究 / 下一步'}</span>
+                    <span role="columnheader" aria-colindex={4} className="text-right">{copy.actions}</span>
+                  </div>
+                  {filteredItems.map((item, index) => {
                     const scanner = item.intelligence?.scanner;
                     const strategySimulation = item.intelligence?.strategySimulation;
                     const backtest = item.intelligence?.backtest;
@@ -2920,10 +2921,11 @@ const WatchlistPage: React.FC = () => {
                         key={item.id}
                         data-testid={`watchlist-row-${item.symbol}`}
                         role="row"
+                        aria-rowindex={index + 2}
                         className={`min-w-0 border-b border-[color:var(--wolfy-divider)] px-3 py-4 transition-colors md:px-4 ${isActive ? 'bg-[color:color-mix(in_srgb,var(--wolfy-accent)_7%,transparent)]' : 'bg-transparent hover:bg-[var(--wolfy-surface-input)]'}`}
                       >
                         <div className="grid min-w-0 grid-cols-[minmax(0,1.35fr)_minmax(0,1.15fr)_minmax(0,1.05fr)_auto] items-start gap-4 py-0.5">
-                          <div role="cell" className="flex min-w-0 gap-3">
+                          <div role="cell" aria-colindex={1} className="flex min-w-0 gap-3">
                             <button
                               type="button"
                               className={`${ROW_SELECTION_BUTTON_CLASS} ${
@@ -2976,7 +2978,7 @@ const WatchlistPage: React.FC = () => {
                             </button>
                           </div>
 
-                          <div role="cell" className="min-w-0 space-y-2">
+                          <div role="cell" aria-colindex={2} className="min-w-0 space-y-2">
                             <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
                               {language === 'en' ? 'Price / update' : '价格 / 更新'}
                             </p>
@@ -3008,7 +3010,7 @@ const WatchlistPage: React.FC = () => {
                             </div>
                           </div>
 
-                          <div role="cell" className="min-w-0 space-y-2">
+                          <div role="cell" aria-colindex={3} className="min-w-0 space-y-2">
                             <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
                               {language === 'en' ? 'Research / next' : '研究 / 下一步'}
                             </p>
@@ -3090,7 +3092,7 @@ const WatchlistPage: React.FC = () => {
                             ) : null}
                           </div>
 
-                          <div role="cell" className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+                          <div role="cell" aria-colindex={4} className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
                             <TerminalButton
                               type="button"
                               variant="compact"

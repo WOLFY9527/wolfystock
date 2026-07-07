@@ -479,6 +479,7 @@ export function ScannerCandidateDiagnosticRow({
   candidate,
   trustSources,
   language,
+  rowIndex,
   isSelectedCandidate,
   isExpanded,
   isMoreOpen,
@@ -522,6 +523,7 @@ export function ScannerCandidateDiagnosticRow({
   candidate: ScannerCandidateDiagnostic;
   trustSources?: Array<ScannerCandidate | ScannerCandidateDiagnostic | null | undefined>;
   language: 'zh' | 'en';
+  rowIndex?: number;
   isSelectedCandidate: boolean;
   isExpanded: boolean;
   isMoreOpen: boolean;
@@ -571,6 +573,7 @@ export function ScannerCandidateDiagnosticRow({
       data-testid={`scanner-ranked-row-${candidate.symbol}`}
       data-selected={isSelectedCandidate ? 'true' : undefined}
       role="row"
+      aria-rowindex={rowIndex}
       tabIndex={0}
       aria-selected={isSelectedCandidate}
       aria-label={rowLabel}
@@ -582,24 +585,24 @@ export function ScannerCandidateDiagnosticRow({
           : 'bg-transparent hover:bg-[var(--wolfy-surface-input)]'
       }`}
     >
-      <div data-testid={`scanner-result-card-${candidate.symbol}`} className="contents">
-        <div data-testid={`scanner-result-row-${candidate.symbol}`} className="contents">
-          <div data-testid={`scanner-candidate-row-${candidate.symbol}`} className="contents">
-          <div className="hidden min-w-0 items-center gap-3 md:grid md:grid-cols-[64px_minmax(180px,1fr)_minmax(120px,auto)_92px_110px_minmax(220px,1.3fr)_minmax(150px,0.9fr)_minmax(190px,1fr)]">
-            <div className="min-w-0">
+      <div data-testid={`scanner-result-card-${candidate.symbol}`} role="presentation" className="contents">
+        <div data-testid={`scanner-result-row-${candidate.symbol}`} role="presentation" className="contents">
+          <div data-testid={`scanner-candidate-row-${candidate.symbol}`} role="presentation" className="contents">
+          <div role="presentation" className="hidden min-w-0 items-center gap-3 md:grid md:grid-cols-[64px_minmax(180px,1fr)_minmax(120px,auto)_92px_110px_minmax(220px,1.3fr)_minmax(150px,0.9fr)_minmax(190px,1fr)]">
+            <div role="cell" aria-colindex={1} className="min-w-0">
               <p className={scannerLabelTextClass}>{language === 'en' ? 'Rank' : '排名'}</p>
               <p className={`mt-1 font-mono text-sm font-semibold ${scannerPrimaryTextClass}`}>
                 {candidate.rank ? `#${candidate.rank}` : '--'}
               </p>
             </div>
-            <div className="min-w-0">
+            <div role="cell" aria-colindex={2} className="min-w-0">
               <p className={`truncate font-mono text-sm font-semibold ${scannerPrimaryTextClass}`}>
                 {candidate.symbol || '--'}
               </p>
               <p className={`truncate text-[11px] ${scannerMutedTextClass}`}>{displayName}</p>
               {comparisonLabel ? <p className="mt-1 truncate text-[10px] text-[color:var(--wolfy-accent)]">{comparisonLabel}</p> : null}
             </div>
-            <div className="flex min-w-[7.5rem] flex-wrap justify-end gap-1.5">
+            <div role="cell" aria-colindex={3} className="flex min-w-[7.5rem] flex-wrap justify-end gap-1.5">
               <ActionButton
                 label={language === 'en' ? 'Detail' : '详情'}
                 onClick={onSelect}
@@ -611,13 +614,13 @@ export function ScannerCandidateDiagnosticRow({
                 variant="compact"
               />
             </div>
-            <div className="min-w-0">
+            <div role="cell" aria-colindex={4} className="min-w-0">
               <p className={scannerLabelTextClass}>{language === 'en' ? 'Score' : '评分'}</p>
               <p className={`mt-1 font-mono text-sm font-semibold ${scannerPrimaryTextClass}`}>{scoreLabel}</p>
               {scoreDelta ? <p className={`text-[10px] ${scannerMutedTextClass}`}>{scoreDelta}</p> : null}
               <ScannerScoreTrustStrip sources={resolvedTrustSources} language={language} className="mt-1.5" testId={`scanner-score-trust-${candidate.symbol}`} />
             </div>
-            <div className="min-w-0">
+            <div role="cell" aria-colindex={5} className="min-w-0">
               <p className={scannerLabelTextClass}>{language === 'en' ? 'Status' : '状态'}</p>
               <div className="mt-1 flex flex-wrap items-center gap-1.5">
                 <span className={`inline-flex max-w-full rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] ${previewBadgeClassName}`}>
@@ -628,7 +631,7 @@ export function ScannerCandidateDiagnosticRow({
                 </span>
               </div>
             </div>
-            <div className="min-w-0">
+            <div role="cell" aria-colindex={6} className="min-w-0">
               <p className={scannerLabelTextClass}>{language === 'en' ? 'Key reason' : '关键原因'}</p>
               <p className={`mt-1 line-clamp-2 text-xs leading-relaxed ${scannerSecondaryTextClass}`} title={keyReason}>{keyReason}</p>
               {candidateResearchPacket ? (
@@ -647,7 +650,7 @@ export function ScannerCandidateDiagnosticRow({
                 />
               ) : null}
             </div>
-            <div className="min-w-0">
+            <div role="cell" aria-colindex={7} className="min-w-0">
               <p className={scannerLabelTextClass}>{language === 'en' ? 'Data quality' : '数据质量'}</p>
               <p className={`mt-1 truncate text-xs ${scannerSecondaryTextClass}`} title={dataQualityLabel}>{dataQualityLabel}</p>
               {candidateEvidenceFrame || candidateResearchReadiness ? (
@@ -662,14 +665,14 @@ export function ScannerCandidateDiagnosticRow({
               ) : null}
               {evidenceSummary ? <EvidenceChips summary={evidenceSummary} maxLabels={1} className="mt-1" /> : null}
             </div>
-            <div className="min-w-0">
+            <div role="cell" aria-colindex={8} className="min-w-0">
               <p className={scannerLabelTextClass}>{language === 'en' ? 'Watch / risk' : '观察 / 风险'}</p>
               <p className={`mt-1 truncate text-xs ${scannerSecondaryTextClass}`} title={watchSummary}>{watchSummary}</p>
               <p className={`truncate text-[11px] ${scannerMutedTextClass}`} title={rangeSummary}>{rangeSummary}</p>
             </div>
           </div>
 
-          <div className="grid gap-2 md:hidden">
+          <div role="cell" aria-colindex={1} aria-colspan={8} className="grid gap-2 md:hidden">
             <div className="flex min-w-0 items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
@@ -737,7 +740,7 @@ export function ScannerCandidateDiagnosticRow({
         </div>
       </div>
       {isMoreOpen ? (
-        <div data-testid={`scanner-candidate-row-more-${candidate.symbol}`} className="mt-1.5 flex flex-wrap gap-2 border-t border-[color:var(--wolfy-divider)] pt-2">
+        <div data-testid={`scanner-candidate-row-more-${candidate.symbol}`} role="cell" aria-colindex={1} aria-colspan={8} className="mt-1.5 flex flex-wrap gap-2 border-t border-[color:var(--wolfy-divider)] pt-2">
           <ActionButton
             label={language === 'en' ? 'Open stock research' : '打开个股研究'}
             onClick={onAnalyze}
@@ -766,7 +769,7 @@ export function ScannerCandidateDiagnosticRow({
         </div>
       ) : null}
       {isExpanded && detailPanel ? (
-        <div data-testid={`scanner-candidate-detail-${candidate.symbol}`} className="mt-3 border-t border-[color:var(--wolfy-divider)] pt-3">
+        <div data-testid={`scanner-candidate-detail-${candidate.symbol}`} role="cell" aria-colindex={1} aria-colspan={8} className="mt-3 border-t border-[color:var(--wolfy-divider)] pt-3">
           {detailPanel}
         </div>
       ) : null}

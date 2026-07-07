@@ -2313,25 +2313,26 @@ const HistoricalOhlcvCachePreflightPanel: React.FC<{
                 className={cn('mt-3', ADMIN_TABLE_SCROLL_REGION_CLASSNAME)}
               >
                 <table className="w-full min-w-[48rem] table-fixed">
+                  <caption className="sr-only">历史 OHLCV 样本缓存状态</caption>
                   <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
                     <tr className="border-b border-white/5 text-left">
-                      <th className="px-3 py-3 font-medium">Symbol</th>
-                      <th className="px-3 py-3 font-medium">缓存</th>
-                      <th className="px-3 py-3 font-medium">Bars</th>
-                      <th className="px-3 py-3 font-medium">最新日期 / 新鲜度</th>
-                      <th className="px-3 py-3 font-medium">复权</th>
-                      <th className="px-3 py-3 font-medium">下一步</th>
+                      <th scope="col" className="px-3 py-3 font-medium">Symbol</th>
+                      <th scope="col" className="px-3 py-3 font-medium">缓存</th>
+                      <th scope="col" className="px-3 py-3 font-medium">Bars</th>
+                      <th scope="col" className="px-3 py-3 font-medium">最新日期 / 新鲜度</th>
+                      <th scope="col" className="px-3 py-3 font-medium">复权</th>
+                      <th scope="col" className="px-3 py-3 font-medium">下一步</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(market.symbols || EMPTY_HISTORICAL_OHLCV_SYMBOLS).map((symbol) => (
                       <tr key={`${market.market}-${symbol.symbol}`} className="border-b border-white/[0.04] align-top">
-                        <td className="px-3 py-3">
+                        <th scope="row" className="px-3 py-3 text-left font-normal">
                           <div className="min-w-0">
                             <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'text-sm font-semibold text-white/86')}>{sanitizeCodeLabel(symbol.symbol)}</p>
                             <p className="mt-1 text-[11px] text-white/38">{historicalDataStateLabel(symbol.dataState)}</p>
                           </div>
-                        </td>
+                        </th>
                         <td className="px-3 py-3">
                           <div className="flex flex-wrap gap-1.5">
                             <TerminalChip variant={historicalStateVariant(symbol.cacheState)}>{historicalCacheLabel(symbol.cacheState)}</TerminalChip>
@@ -2517,20 +2518,21 @@ const AdminDataRoadmapPanel: React.FC<{
                   className={cn('mt-3', ADMIN_TABLE_SCROLL_REGION_CLASSNAME)}
                 >
                   <table className="w-full min-w-[58rem] table-fixed">
+                    <caption className="sr-only">{surface.label} 专业数据路线图</caption>
                     <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
                       <tr className="border-b border-white/5 text-left">
-                        <th className="w-[18%] px-3 py-3 font-medium">Capability</th>
-                        <th className="w-[14%] px-3 py-3 font-medium">Status</th>
-                        <th className="w-[18%] px-3 py-3 font-medium">Provider/data class</th>
-                        <th className="w-[16%] px-3 py-3 font-medium">Freshness/cache</th>
-                        <th className="w-[20%] px-3 py-3 font-medium">Next operator action</th>
-                        <th className="w-[14%] px-3 py-3 font-medium">Surface unlocked</th>
+                        <th scope="col" className="w-[18%] px-3 py-3 font-medium">Capability</th>
+                        <th scope="col" className="w-[14%] px-3 py-3 font-medium">Status</th>
+                        <th scope="col" className="w-[18%] px-3 py-3 font-medium">Provider/data class</th>
+                        <th scope="col" className="w-[16%] px-3 py-3 font-medium">Freshness/cache</th>
+                        <th scope="col" className="w-[20%] px-3 py-3 font-medium">Next operator action</th>
+                        <th scope="col" className="w-[14%] px-3 py-3 font-medium">Surface unlocked</th>
                       </tr>
                     </thead>
                     <tbody>
                       {rows.map((row) => (
                         <tr key={row.key} className="border-b border-white/[0.04] align-top">
-                          <td className={cn('px-3 py-3 text-xs font-semibold leading-5 text-white/82', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{row.capabilityLabel}</td>
+                          <th scope="row" className={cn('px-3 py-3 text-left text-xs font-semibold leading-5 text-white/82', ADMIN_TABLE_IDENTITY_CLASSNAME)}>{row.capabilityLabel}</th>
                           <td className="px-3 py-3">
                             <TerminalChip variant={row.statusVariant}>{row.status}</TerminalChip>
                           </td>
@@ -2854,13 +2856,14 @@ const ProviderOperationsMatrixPanel: React.FC<{
               className={ADMIN_TABLE_SCROLL_REGION_CLASSNAME}
             >
               <table className="w-full min-w-[52rem] table-fixed">
+                <caption className="sr-only">完整数据源矩阵</caption>
                 <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
                   <tr className="border-b border-white/5 text-left">
-                    <th className="px-3 py-3 font-medium">数据源</th>
-                    <th className="px-3 py-3 font-medium">来源</th>
-                    <th className="px-3 py-3 font-medium">就绪状态</th>
-                    <th className="px-3 py-3 font-medium">门槛</th>
-                    <th className="px-3 py-3 font-medium">原因代码</th>
+                    <th scope="col" className="px-3 py-3 font-medium">数据源</th>
+                    <th scope="col" className="px-3 py-3 font-medium">来源</th>
+                    <th scope="col" className="px-3 py-3 font-medium">就绪状态</th>
+                    <th scope="col" className="px-3 py-3 font-medium">门槛</th>
+                    <th scope="col" className="px-3 py-3 font-medium">原因代码</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2868,12 +2871,12 @@ const ProviderOperationsMatrixPanel: React.FC<{
                     const reasonCodes = matrixReasonCodes(row);
                     return (
                       <tr key={row.providerId} className="border-b border-white/[0.04] align-top">
-                        <td className="px-3 py-3">
+                        <th scope="row" className="px-3 py-3 text-left font-normal">
                           <div className="min-w-0">
                             <p className={cn(ADMIN_TABLE_IDENTITY_CLASSNAME, 'text-sm font-semibold text-white')}>{row.providerName || row.providerId}</p>
                             <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'mt-1 text-[11px] text-white/42')}>{row.providerId}</p>
                           </div>
-                        </td>
+                        </th>
                         <td className="px-3 py-3">
                           <div className="flex flex-wrap gap-1.5">
                             {row.sourceType ? <TerminalChip variant="neutral">{sanitizeCodeLabel(row.sourceType)}</TerminalChip> : null}
@@ -3698,14 +3701,15 @@ const ProviderOperationsTable: React.FC<{
           className={ADMIN_TABLE_SCROLL_REGION_CLASSNAME}
         >
           <table className="w-full min-w-[44rem] table-fixed">
+            <caption className="sr-only">数据源运维只读快照</caption>
             <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
               <tr className="border-b border-white/5 text-left">
-                <th className="px-3 py-3 font-medium">数据源</th>
-                <th className="px-3 py-3 font-medium">状态</th>
-                <th className="px-3 py-3 font-medium">新鲜度</th>
-                <th className="px-3 py-3 font-medium">熔断</th>
-                <th className="px-3 py-3 font-medium">最近异常</th>
-                <th className={cn('px-3 py-3 font-medium', ADMIN_PROVIDER_ACTION_COLUMN_CLASSNAME)}>操作</th>
+                <th scope="col" className="px-3 py-3 font-medium">数据源</th>
+                <th scope="col" className="px-3 py-3 font-medium">状态</th>
+                <th scope="col" className="px-3 py-3 font-medium">新鲜度</th>
+                <th scope="col" className="px-3 py-3 font-medium">熔断</th>
+                <th scope="col" className="px-3 py-3 font-medium">最近异常</th>
+                <th scope="col" className={cn('px-3 py-3 font-medium', ADMIN_PROVIDER_ACTION_COLUMN_CLASSNAME)}>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -3715,12 +3719,12 @@ const ProviderOperationsTable: React.FC<{
                 const status = normalizeStatus(item.status);
                 return (
                   <tr key={key} className={cn('border-b border-white/[0.04] align-top', selected ? 'bg-white/[0.03]' : 'bg-transparent')}>
-                    <td className="px-3 py-3">
+                    <th scope="row" className="px-3 py-3 text-left font-normal">
                       <div className="min-w-0">
                         <p className={cn(ADMIN_TABLE_IDENTITY_CLASSNAME, 'text-sm font-semibold text-white')}>{providerLabel(item)}</p>
                         <p className={cn(ADMIN_TABLE_MONO_IDENTITY_CLASSNAME, 'mt-1 text-[11px] text-white/42')}>{item.provider} · {item.domain}</p>
                       </div>
-                    </td>
+                    </th>
                     <td className="px-3 py-3">
                       <div className="flex flex-wrap gap-1.5">
                         <TerminalChip variant={statusChipVariant(status)}>{statusLabel(status)}</TerminalChip>

@@ -4771,21 +4771,23 @@ const UserScannerPage: React.FC = () => {
                               className="overflow-x-auto overscroll-x-contain rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] [-webkit-overflow-scrolling:touch]"
                               aria-label={language === 'en' ? 'Ranked scanner results' : '扫描排名结果'}
                               role="table"
+                              aria-colcount={8}
+                              aria-rowcount={workbenchDiagnostics.length + 1}
                               tabIndex={0}
                             >
                               <div data-testid="scanner-result-table" className="contents md:block md:min-w-[1220px]">
-                                <div role="row" className="hidden items-center gap-3 border-b border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)] md:grid md:grid-cols-[64px_minmax(180px,1fr)_minmax(120px,auto)_92px_110px_minmax(220px,1.3fr)_minmax(150px,0.9fr)_minmax(190px,1fr)]">
-                                  <span role="columnheader">{language === 'en' ? 'Rank' : '排名'}</span>
-                                  <span role="columnheader">{language === 'en' ? 'Symbol / name' : '代码 / 名称'}</span>
-                                  <span role="columnheader" className="text-right">{language === 'en' ? 'Actions' : '操作'}</span>
-                                  <span role="columnheader">{language === 'en' ? 'Score' : '评分'}</span>
-                                  <span role="columnheader">{language === 'en' ? 'Status' : '状态'}</span>
-                                  <span role="columnheader">{language === 'en' ? 'Why now' : '当前信号'}</span>
-                                  <span role="columnheader">{language === 'en' ? 'Data quality' : '数据质量'}</span>
-                                  <span role="columnheader">{language === 'en' ? 'Next / risk' : '下一步 / 风险'}</span>
+                                <div role="row" aria-rowindex={1} className="hidden items-center gap-3 border-b border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--wolfy-text-muted)] md:grid md:grid-cols-[64px_minmax(180px,1fr)_minmax(120px,auto)_92px_110px_minmax(220px,1.3fr)_minmax(150px,0.9fr)_minmax(190px,1fr)]">
+                                  <span role="columnheader" aria-colindex={1}>{language === 'en' ? 'Rank' : '排名'}</span>
+                                  <span role="columnheader" aria-colindex={2}>{language === 'en' ? 'Symbol / name' : '代码 / 名称'}</span>
+                                  <span role="columnheader" aria-colindex={3} className="text-right">{language === 'en' ? 'Actions' : '操作'}</span>
+                                  <span role="columnheader" aria-colindex={4}>{language === 'en' ? 'Score' : '评分'}</span>
+                                  <span role="columnheader" aria-colindex={5}>{language === 'en' ? 'Status' : '状态'}</span>
+                                  <span role="columnheader" aria-colindex={6}>{language === 'en' ? 'Why now' : '当前信号'}</span>
+                                  <span role="columnheader" aria-colindex={7}>{language === 'en' ? 'Data quality' : '数据质量'}</span>
+                                  <span role="columnheader" aria-colindex={8}>{language === 'en' ? 'Next / risk' : '下一步 / 风险'}</span>
                                 </div>
                                 <div data-testid="scanner-candidate-scroll-region" role="rowgroup" className="min-w-0 max-h-[min(52vh,34rem)] overflow-y-auto overscroll-y-contain no-scrollbar ui-scroll-y-quiet [-webkit-overflow-scrolling:touch]">
-                                  {workbenchDiagnostics.map((candidate) => {
+                                  {workbenchDiagnostics.map((candidate, index) => {
                                     const activeRunDetail = runDetail;
                                     if (!activeRunDetail) return null;
                                     const sourceCandidate = shortlistCandidateBySymbol.get(normalizeCandidateSymbol(candidate.symbol)) || diagnosticToCandidate(candidate);
@@ -4801,6 +4803,7 @@ const UserScannerPage: React.FC = () => {
                                         key={`ranked-${candidate.symbol}`}
                                         candidate={candidate}
                                         language={language}
+                                        rowIndex={index + 2}
                                         isSelectedCandidate={normalizeCandidateSymbol(activeDetailDiagnostic?.symbol) === normalizeCandidateSymbol(candidate.symbol)}
                                         isExpanded={false}
                                         isMoreOpen={rowMoreSymbol === candidate.symbol}
