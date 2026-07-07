@@ -98,7 +98,7 @@ const VALUE_CLASS = 'font-mono text-sm text-[color:var(--wolfy-text-primary)]';
 const PAPER_PANEL_CLASS = 'border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)]';
 const POSITIVE_CLASS = 'text-[color:var(--state-success-text)]';
 const NEGATIVE_CLASS = 'text-[color:var(--state-danger-text)]';
-const SECONDARY_BUTTON_CLASS = 'inline-flex min-h-[36px] items-center justify-center rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/70 transition-all hover:bg-white/10 md:min-h-[32px]';
+const SECONDARY_BUTTON_CLASS = 'inline-flex min-h-[36px] items-center justify-center rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs font-medium text-[color:var(--wolfy-text-secondary)] transition-all hover:bg-[var(--wolfy-surface-rail)] md:min-h-[32px]';
 const PRIMARY_BUTTON_CLASS = 'inline-flex min-h-[36px] items-center justify-center rounded-lg border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] px-3 py-2 text-xs font-semibold text-[color:var(--theme-button-primary-text)] transition-colors hover:bg-[var(--sage-deep)] md:min-h-[32px]';
 const TRADE_ROW_LIMIT = 20;
 const LEDGER_ROW_LIMIT = 30;
@@ -144,7 +144,7 @@ function displayDrawdown(value?: number | null): number | null {
 function valueToneClass(tone?: MetricItem['tone']): string {
   if (tone === 'positive') return POSITIVE_CLASS;
   if (tone === 'negative') return NEGATIVE_CLASS;
-  return 'text-white';
+  return 'text-[color:var(--wolfy-text-primary)]';
 }
 
 function MetricValue({ value, tone }: { value: string; tone?: MetricItem['tone'] }) {
@@ -1008,12 +1008,12 @@ function AttributionList({ rows, testId, formatKey = compactToken }: { rows: Att
           const contribution = row.netPnl != null ? signedNumber(row.netPnl) : signedPct(row.returnPct);
           return (
             <div key={row.key} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 text-xs">
-              <span className="truncate text-white/62">{formatKey(row.key)}</span>
+              <span className="truncate text-[color:var(--wolfy-text-secondary)]">{formatKey(row.key)}</span>
               <span className={`font-mono ${valueToneClass(toneFor(row.netPnl ?? row.returnPct))}`}>{contribution}</span>
-              <span className="font-mono text-white/42">{row.trades}x</span>
+              <span className="font-mono text-[color:var(--wolfy-text-muted)]">{row.trades}x</span>
             </div>
           );
-        }) : <p className="text-xs text-white/42">--</p>}
+        }) : <p className="text-xs text-[color:var(--wolfy-text-muted)]">--</p>}
       </div>
     </div>
   );
@@ -1033,12 +1033,12 @@ function DiagnosisCard({ item }: { item: DiagnosisItem }) {
     <div className={`min-w-0 rounded-xl p-3 ${PAPER_PANEL_CLASS}`} data-testid={`backtest-diagnosis-${item.key}`}>
       <div className="flex min-w-0 items-center justify-between gap-2">
         <p className={LABEL_CLASS}>{item.title}</p>
-        <span className={`max-w-[60%] truncate rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] ${valueToneClass(item.tone)}`}>
+        <span className={`max-w-[60%] truncate rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2 py-0.5 text-[10px] ${valueToneClass(item.tone)}`}>
           {item.label}
         </span>
       </div>
-      <p className="mt-2 truncate font-mono text-sm text-white">{item.value}</p>
-      <p className="mt-1 truncate text-xs text-white/42">{item.note}</p>
+      <p className="mt-2 truncate font-mono text-sm text-[color:var(--wolfy-text-primary)]">{item.value}</p>
+      <p className="mt-1 truncate text-xs text-[color:var(--wolfy-text-muted)]">{item.note}</p>
     </div>
   );
 }
@@ -1150,11 +1150,11 @@ function ConsumerReliabilityCard({ item }: { item: ConsumerReliabilityItem }) {
     <div className={`min-w-0 rounded-xl p-3 ${PAPER_PANEL_CLASS}`} data-testid={`backtest-consumer-reliability-${item.key}`}>
       <div className="flex min-w-0 items-center justify-between gap-2">
         <p className={LABEL_CLASS}>{item.label}</p>
-        <span className={`max-w-[58%] truncate rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] ${valueToneClass(item.tone)}`}>
+        <span className={`max-w-[58%] truncate rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2 py-0.5 text-[10px] ${valueToneClass(item.tone)}`}>
           {item.value}
         </span>
       </div>
-      <p className="mt-2 text-xs leading-5 text-white/58">{item.note}</p>
+      <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{item.note}</p>
     </div>
   );
 }
@@ -1163,17 +1163,17 @@ function ResearchReviewRow({ item }: { item: ResearchReviewItem }) {
   return (
     <div
       data-testid={`backtest-research-review-row-${item.key}`}
-      className="grid min-w-0 gap-2 border-t border-white/5 py-3 first:border-t-0 sm:grid-cols-[minmax(0,150px)_auto_minmax(0,1fr)] sm:items-start sm:gap-3"
+      className="grid min-w-0 gap-2 border-t border-[color:var(--wolfy-border-subtle)] py-3 first:border-t-0 sm:grid-cols-[minmax(0,150px)_auto_minmax(0,1fr)] sm:items-start sm:gap-3"
     >
-      <p className="min-w-0 text-xs font-semibold text-white/72">{item.label}</p>
-      <span className={`w-fit rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] font-semibold ${valueToneClass(item.tone)}`}>
+      <p className="min-w-0 text-xs font-semibold text-[color:var(--wolfy-text-secondary)]">{item.label}</p>
+      <span className={`w-fit rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2 py-0.5 text-[10px] font-semibold ${valueToneClass(item.tone)}`}>
         {item.statusLabel}
       </span>
       <div className="min-w-0">
-        <p className="text-xs leading-5 text-white/62">{item.summary}</p>
+        <p className="text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{item.summary}</p>
         {item.details.length ? (
-          <details className="mt-1 text-xs text-white/42">
-            <summary className="cursor-pointer list-none text-white/45">复核依据</summary>
+          <details className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
+            <summary className="cursor-pointer list-none text-[color:var(--wolfy-text-muted)]">复核依据</summary>
             <ul className="mt-1 space-y-1">
               {item.details.map((detail) => (
                 <li key={detail} className="leading-5">{detail}</li>
@@ -1198,20 +1198,20 @@ function ResearchQualityReviewBlock({
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className={LABEL_CLASS}>研究复核清单</p>
-          <h2 className="mt-1 text-sm font-semibold text-white">反过拟合门禁</h2>
-          <p className="mt-1 text-xs leading-5 text-white/48">仅汇总已返回证据；缺失项默认进入需验证状态，不作为选模证明。</p>
+          <h2 className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">反过拟合门禁</h2>
+          <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">仅汇总已返回证据；缺失项默认进入需验证状态，不作为选模证明。</p>
         </div>
         <div className="min-w-0 sm:text-right">
           <span
             data-testid="backtest-research-review-overall"
-            className={`inline-flex rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs font-semibold ${valueToneClass(overall.tone)}`}
+            className={`inline-flex rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-1 text-xs font-semibold ${valueToneClass(overall.tone)}`}
           >
             {overall.label}
           </span>
-          <p className="mt-1 text-xs leading-5 text-white/42">{overall.note}</p>
+          <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{overall.note}</p>
         </div>
       </div>
-      <div className="mt-3 divide-y divide-white/5">
+      <div className="mt-3 divide-y divide-[color:var(--wolfy-divider)]">
         {items.map((item) => <ResearchReviewRow key={item.key} item={item} />)}
       </div>
     </div>
@@ -1366,7 +1366,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
       data-testid="backtest-result-report"
       data-report-mode={mode}
     >
-      <div className="flex min-w-0 flex-col gap-4 text-sm text-white/70">
+      <div className="flex min-w-0 flex-col gap-4 text-sm text-[color:var(--wolfy-text-secondary)]">
         <nav className="no-scrollbar flex min-w-0 gap-2 overflow-x-auto pb-1 [scrollbar-width:none]" aria-label="Backtest result sections">
           {[
             { id: '概览', label: '概览' },
@@ -1376,33 +1376,51 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             { id: '风险', label: '风险' },
             { id: '证据', label: '复查' },
           ].map((item) => (
-            <a key={item.id} href={`#backtest-report-${item.id}`} className="inline-flex min-h-[36px] shrink-0 items-center rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/60 hover:bg-white/10 md:min-h-[32px] md:py-1.5">
+            <a key={item.id} href={`#backtest-report-${item.id}`} className="inline-flex min-h-[36px] shrink-0 items-center rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-xs text-[color:var(--wolfy-text-secondary)] hover:bg-[var(--wolfy-surface-rail)] md:min-h-[32px] md:py-1.5">
               {item.label}
             </a>
           ))}
         </nav>
+        <ol
+          data-testid="backtest-result-composition-order"
+          className="grid min-w-0 gap-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-xs text-[color:var(--wolfy-text-secondary)] md:grid-cols-3 xl:grid-cols-6"
+        >
+          {[
+            '收益曲线与基准',
+            '回撤',
+            '核心指标',
+            '交易与事件账本',
+            '假设与成本',
+            '限制',
+          ].map((label, index) => (
+            <li key={label} className="flex min-w-0 items-center gap-2">
+              <span className="font-mono text-[color:var(--sage-deep)]">{index + 1}</span>
+              <span className="truncate">{label}</span>
+            </li>
+          ))}
+        </ol>
 
         <div id="backtest-report-概览" data-testid="backtest-report-summary" className={`${GHOST_SECTION_CLASS} overflow-hidden`}>
           <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <div className="truncate text-base font-semibold text-white">{run.code || '--'} · {statusWord}</div>
+                <div className="truncate text-base font-semibold text-[color:var(--wolfy-text-primary)]">{run.code || '--'} · {statusWord}</div>
                 <StatusBadge status={run.status} label={statusLabel} size="sm" variant="soft" />
-                <span className="font-mono text-xs text-white/38">{dateRange}</span>
+                <span className="font-mono text-xs text-[color:var(--wolfy-text-muted)]">{dateRange}</span>
               </div>
-              <div className="mt-3 flex min-w-0 flex-wrap gap-x-4 gap-y-2 text-xs text-white/58">
+              <div className="mt-3 flex min-w-0 flex-wrap gap-x-4 gap-y-2 text-xs text-[color:var(--wolfy-text-secondary)]">
                 <span>总收益 <MetricValue value={signedPct(normalized.metrics.totalReturnPct)} tone={toneFor(normalized.metrics.totalReturnPct)} /></span>
                 <span>基准 <MetricValue value={signedPct(normalized.metrics.benchmarkReturnPct)} tone={toneFor(normalized.metrics.benchmarkReturnPct)} /></span>
                 <span>超额 <MetricValue value={signedPct(normalized.metrics.excessReturnVsBenchmarkPct)} tone={toneFor(normalized.metrics.excessReturnVsBenchmarkPct)} /></span>
               </div>
-              <div className="mt-2 flex min-w-0 flex-wrap gap-x-4 gap-y-2 text-xs text-white/50">
+              <div className="mt-2 flex min-w-0 flex-wrap gap-x-4 gap-y-2 text-xs text-[color:var(--wolfy-text-muted)]">
                 <span>最大回撤 <MetricValue value={signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct))} tone="negative" /></span>
                 <span>夏普 <MetricValue value={signedNumber(normalized.metrics.sharpeRatio)} tone={toneFor(normalized.metrics.sharpeRatio)} /></span>
                 <span>胜率 <MetricValue value={signedPct(normalized.metrics.winRatePct)} tone={toneFor(normalized.metrics.winRatePct)} /></span>
-                <span>交易次数 <span className="font-mono text-white">{normalized.metrics.tradeCount}</span></span>
+                <span>交易次数 <span className="font-mono text-[color:var(--wolfy-text-primary)]">{normalized.metrics.tradeCount}</span></span>
               </div>
             </div>
-            <div className="font-mono text-xs text-white/38">{formatDateTime(run.completedAt || run.runAt)}</div>
+            <div className="font-mono text-xs text-[color:var(--wolfy-text-muted)]">{formatDateTime(run.completedAt || run.runAt)}</div>
           </div>
           <div
             className={`mt-4 rounded-xl p-3 sm:p-4 ${PAPER_PANEL_CLASS}`}
@@ -1411,11 +1429,11 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <p className={LABEL_CLASS}>研究准备度 / 假设速览</p>
-                <p className="mt-1 text-xs leading-5 text-white/52">
+                <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
                   先核对样本窗口、成本口径与复现材料，再解释收益与回撤；结果仍仅供观察复盘。
                 </p>
               </div>
-              <span className="inline-flex w-fit rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[11px] font-semibold text-white/72">
+              <span className="inline-flex w-fit rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-1 text-[11px] font-semibold text-[color:var(--wolfy-text-secondary)]">
                 不构成投资建议
               </span>
             </div>
@@ -1432,7 +1450,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
                 />
               </div>
             ) : null}
-            <p className="mt-3 text-xs leading-5 text-white/42" data-testid="backtest-readiness-footnote">
+            <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]" data-testid="backtest-readiness-footnote">
               收益、回撤、夏普和交易次数只描述这次历史模拟；样本外、参数稳定性与复现材料需单独复核。
             </p>
           </div>
@@ -1442,7 +1460,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             <MetricCard item={{ key: 'summary-win-rate', label: '胜率', value: signedPct(normalized.metrics.winRatePct), tone: toneFor(normalized.metrics.winRatePct) }} />
             <MetricCard item={{ key: 'summary-trades', label: '交易次数', value: `${normalized.metrics.tradeCount ?? 0} 次`, tone: 'neutral' }} />
             <MetricCard item={{ key: 'summary-data', label: '诊断材料', value: dataQuality.length ? `${dataQuality.length} 项` : '待补充', tone: 'neutral' }} />
-            <div className={`col-span-2 rounded-xl p-3 text-xs leading-5 text-white/50 lg:col-span-4 ${PAPER_PANEL_CLASS}`}>
+            <div className={`col-span-2 rounded-xl p-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)] lg:col-span-4 ${PAPER_PANEL_CLASS}`}>
               <span className={LABEL_CLASS}>研究结论</span>
               <span className="ml-2">先读总收益、最大回撤、胜率、交易次数与诊断材料；曲线和风险解释只用于观察复盘，复查材料默认折叠。</span>
             </div>
@@ -1450,7 +1468,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           <div className="mt-4" data-testid="backtest-report-diagnosis">
             <div className="mb-2 flex min-w-0 flex-wrap items-center justify-between gap-2">
               <p className={LABEL_CLASS}>策略解读</p>
-              <span className="text-xs text-white/42">基于既有收益、风险、交易和数据完整度生成</span>
+              <span className="text-xs text-[color:var(--wolfy-text-muted)]">基于既有收益、风险、交易和数据完整度生成</span>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
               {diagnosisItems.map((item) => <DiagnosisCard key={item.key} item={item} />)}
@@ -1465,9 +1483,9 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-3">
               <div>
                 <p className={LABEL_CLASS}>收益 / 回撤图</p>
-                <h3 className="mt-1 text-sm font-semibold text-white">策略对比基准</h3>
+                <h3 className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">策略对比基准</h3>
               </div>
-              <div className="flex flex-wrap gap-2 text-[11px] text-white/45">
+              <div className="flex flex-wrap gap-2 text-[11px] text-[color:var(--wolfy-text-muted)]">
                 <span>策略</span>
                 <span>基准</span>
                 <span>每日盈亏</span>
@@ -1485,7 +1503,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
                 <MetricCard item={{ key: 'side-win-rate', label: '胜率', value: signedPct(normalized.metrics.winRatePct), tone: toneFor(normalized.metrics.winRatePct) }} />
                 <MetricCard item={{ key: 'side-trades', label: '交易次数', value: String(normalized.metrics.tradeCount ?? 0), tone: 'neutral' }} />
               </div>
-              <p className="mt-3 text-xs leading-5 text-white/45">回撤、波动和交易胜率只说明历史检验压力，不代表真实成交或未来表现。</p>
+              <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">回撤、波动和交易胜率只说明历史检验压力，不代表真实成交或未来表现。</p>
             </div>
 
             <div id="backtest-report-benchmark" data-testid="backtest-report-benchmark" className={GHOST_SECTION_CLASS}>
@@ -1495,15 +1513,15 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
                   <h3 className={`mt-1 text-sm font-semibold ${valueToneClass(benchmarkVerdict.tone)}`}>{benchmarkVerdict.label}</h3>
                 </div>
                 {benchmarkVerdict.label === '参照基准待补' ? (
-                  <span className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-white/50">仅展示策略自身历史曲线</span>
+                  <span className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2 py-1 text-xs text-[color:var(--wolfy-text-muted)]">仅展示策略自身历史曲线</span>
                 ) : null}
               </div>
-              <p className="mt-2 text-sm text-white/78">{getBenchmarkSentence(normalized)}</p>
+              <p className="mt-2 text-sm text-[color:var(--wolfy-text-primary)]">{getBenchmarkSentence(normalized)}</p>
             </div>
 
             <div className={GHOST_SECTION_CLASS}>
               <p className={LABEL_CLASS}>数据质量</p>
-              <p className="mt-2 text-xs leading-5 text-white/48">
+              <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
                 {dataQualityWarnings.length ? '回测数据质量有限，结果仅供观察复盘。' : '数据质量明细默认折叠，必要时展开复查。'}
               </p>
             </div>
@@ -1517,7 +1535,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
               type="button"
               role="tab"
               aria-selected={activeDetailTab === tab.key}
-              className={`min-h-[34px] shrink-0 rounded-lg px-3 text-xs transition-all ${activeDetailTab === tab.key ? 'bg-white/10 text-white' : 'bg-transparent text-white/45 hover:bg-white/[0.05] hover:text-white/70'}`}
+              className={`min-h-[34px] shrink-0 rounded-lg px-3 text-xs transition-all ${activeDetailTab === tab.key ? 'bg-[var(--wolfy-surface-rail)] text-[color:var(--wolfy-text-primary)]' : 'bg-transparent text-[color:var(--wolfy-text-muted)] hover:bg-[var(--wolfy-surface-input)] hover:text-[color:var(--wolfy-text-secondary)]'}`}
               onClick={() => setActiveDetailTab(tab.key)}
             >
               {tab.label}
@@ -1527,7 +1545,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
 
         <div id="backtest-report-key-metrics" data-testid="backtest-report-key-metrics" className={GHOST_SECTION_CLASS}>
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-white">核心指标</h3>
+            <h3 className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">核心指标</h3>
             <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setMoreMetricsOpen((value) => !value)}>
               {moreMetricsOpen ? '收起扩展指标' : '展开扩展指标'}
             </button>
@@ -1557,9 +1575,9 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
             <div>
               <p className={LABEL_CLASS}>交易归因</p>
-              <h3 className="mt-1 text-sm font-semibold text-white">盈亏贡献</h3>
+              <h3 className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">盈亏贡献</h3>
             </div>
-            <div className="font-mono text-xs text-white/38">{trades.length} 笔交易</div>
+            <div className="font-mono text-xs text-[color:var(--wolfy-text-muted)]">{trades.length} 笔交易</div>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div>
@@ -1591,21 +1609,21 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
             <div>
               <p className={LABEL_CLASS}>持仓时间线</p>
-              <h3 className="mt-1 text-sm font-semibold text-white">模拟正向信号事件 / 模拟反向信号事件</h3>
-              <p className="mt-1 text-xs leading-5 text-white/42">模拟事件仅用于回测复盘，不构成交易指令。</p>
+              <h3 className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">模拟正向信号事件 / 模拟反向信号事件</h3>
+              <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">模拟事件仅用于回测复盘，不构成交易指令。</p>
             </div>
-            <span className="font-mono text-xs text-white/38">前 {EVENT_ROW_LIMIT} 条</span>
+            <span className="font-mono text-xs text-[color:var(--wolfy-text-muted)]">前 {EVENT_ROW_LIMIT} 条</span>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {tradeEvents.length ? tradeEvents.map((event, index) => (
               <div key={`${event.date}-${event.type}-${index}`} className={`grid min-w-0 grid-cols-[auto_1fr] gap-3 rounded-xl p-3 ${PAPER_PANEL_CLASS}`}>
                 <div className={`font-mono text-[10px] font-bold ${valueToneClass(event.tone)}`}>{event.type === 'ENTRY' ? '模拟正向信号事件' : '模拟反向信号事件'}</div>
                 <div className="min-w-0">
-                  <p className="truncate font-mono text-xs text-white/72">{event.date}</p>
-                  <p className="mt-1 truncate text-xs text-white/42">{event.label}</p>
+                  <p className="truncate font-mono text-xs text-[color:var(--wolfy-text-secondary)]">{event.date}</p>
+                  <p className="mt-1 truncate text-xs text-[color:var(--wolfy-text-muted)]">{event.label}</p>
                 </div>
               </div>
-            )) : <p className="text-xs text-white/42">暂无交易事件</p>}
+            )) : <p className="text-xs text-[color:var(--wolfy-text-muted)]">暂无交易事件</p>}
           </div>
         </div>
 
@@ -1613,9 +1631,9 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
             <div>
               <p className={LABEL_CLASS}>风险解读</p>
-              <h3 className="mt-1 text-sm font-semibold text-white">回撤与压力解释</h3>
+              <h3 className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">回撤与压力解释</h3>
             </div>
-            <span className="text-xs text-white/42">仅使用已返回指标与日账本摘要</span>
+            <span className="text-xs text-[color:var(--wolfy-text-muted)]">仅使用已返回指标与日账本摘要</span>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
             <MetricCard item={{ key: 'max-drawdown', label: '最大回撤', value: signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct)), tone: 'negative' }} />
@@ -1630,11 +1648,11 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           </div>
           <div className={`mt-3 rounded-xl p-3 ${PAPER_PANEL_CLASS}`}>
             <p className={LABEL_CLASS}>最大回撤区间</p>
-            <p className="mt-2 truncate font-mono text-xs text-white/70">
+            <p className="mt-2 truncate font-mono text-xs text-[color:var(--wolfy-text-secondary)]">
               {(drawdown.start || '--')} {'->'} {(drawdown.trough || '--')} · {signedPct(drawdown.value)}
               {drawdown.recovery ? ` · 修复 ${drawdown.recovery}` : ''}
             </p>
-            <p className="mt-2 text-xs text-white/45">风险提示：回撤、波动和极端日只说明历史压力，不代表真实成交或未来表现。</p>
+            <p className="mt-2 text-xs text-[color:var(--wolfy-text-muted)]">风险提示：回撤、波动和极端日只说明历史压力，不代表真实成交或未来表现。</p>
           </div>
         </div>
 
@@ -1642,7 +1660,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
             <div>
               <p className={LABEL_CLASS}>交易明细</p>
-              <p className="mt-1 text-xs text-white/42">默认显示 {TRADE_ROW_LIMIT} 行 · 共 {trades.length} 行</p>
+              <p className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">默认显示 {TRADE_ROW_LIMIT} 行 · 共 {trades.length} 行</p>
             </div>
             <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={exportTrades} disabled={!trades.length}>
               导出交易CSV
@@ -1650,6 +1668,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           </div>
           <div className="no-scrollbar mt-3 overflow-x-auto rounded-xl border border-[color:var(--wolfy-divider)] [scrollbar-width:none]">
             <table className="min-w-[1220px] w-full text-left text-xs">
+              <caption className="sr-only">回测交易与成本账本</caption>
               <thead className="sticky top-0 bg-[var(--wolfy-surface-panel)] text-[color:var(--wolfy-text-muted)]">
                 <tr>
                   {['入场日期', '退出日期', '标的', '数量', '入场价', '退出价', '毛盈亏', '净盈亏', '收益率', '费用', '滑点', '持有', '退出原因', '信号原因'].map((label) => (
@@ -1659,7 +1678,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
               </thead>
               <tbody>
                 {visibleTrades.length ? visibleTrades.map((trade, index) => (
-                  <tr key={`${trade.tradeIndex ?? index}-${trade.entryDate ?? index}`} data-testid={`backtest-trade-row-${index}`} className="border-t border-white/5 text-white/62">
+                  <tr key={`${trade.tradeIndex ?? index}-${trade.entryDate ?? index}`} data-testid={`backtest-trade-row-${index}`} className="border-t border-[color:var(--wolfy-border-subtle)] text-[color:var(--wolfy-text-secondary)]">
                     <td className="px-3 py-2 font-mono">{trade.entryDate || '--'}</td>
                     <td className="px-3 py-2 font-mono">{trade.exitDate || '--'}</td>
                     <td className="px-3 py-2 font-mono">{trade.code || run.code || '--'}</td>
@@ -1676,7 +1695,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
                     <td className="max-w-[220px] truncate px-3 py-2">{safeTradeReasonToken(trade.signalReason || trade.entrySignal || trade.entryTrigger)}</td>
                   </tr>
                 )) : (
-                  <tr><td colSpan={14} className="px-3 py-6 text-center text-white/42">暂无交易记录</td></tr>
+                  <tr><td colSpan={14} className="px-3 py-6 text-center text-[color:var(--wolfy-text-muted)]">暂无交易记录</td></tr>
                 )}
               </tbody>
             </table>
@@ -1687,11 +1706,11 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-left">
             <span>
               <span className={LABEL_CLASS}>复查材料</span>
-              <span className="ml-2 text-xs text-white/42">数据质量 · 执行假设 · 每日账本</span>
+              <span className="ml-2 text-xs text-[color:var(--wolfy-text-muted)]">数据质量 · 执行假设 · 每日账本</span>
             </span>
-            <span className="text-xs text-white/45">展开</span>
+            <span className="text-xs text-[color:var(--wolfy-text-muted)]">展开</span>
           </summary>
-          <p className="mt-3 text-xs leading-5 text-white/50">
+          <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
             数据质量、执行假设和每日账本默认折叠，只在需要复查诊断材料时展开。
           </p>
         </details>
@@ -1699,7 +1718,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
         <div id="backtest-report-数据质量" data-testid="backtest-report-data-quality" className={GHOST_SECTION_CLASS}>
           <button type="button" className="flex min-h-[36px] w-full items-center justify-between gap-3 text-left" onClick={() => setDataQualityOpen((value) => !value)}>
             <span><span className={LABEL_CLASS}>数据质量</span></span>
-            <span className="text-xs text-white/45">{dataQualityOpen ? '收起' : '展开'}</span>
+            <span className="text-xs text-[color:var(--wolfy-text-muted)]">{dataQualityOpen ? '收起' : '展开'}</span>
           </button>
           {dataQualityOpen ? (
             dataQuality.length ? (
@@ -1707,12 +1726,12 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
                 {dataQuality.map(([key, value]) => (
                   <div key={key} className={`min-w-0 rounded-lg px-3 py-2 ${PAPER_PANEL_CLASS}`}>
                     <p className={LABEL_CLASS}>{key}</p>
-                    <p className="mt-1 truncate font-mono text-xs text-white/70">{value}</p>
+                    <p className="mt-1 truncate font-mono text-xs text-[color:var(--wolfy-text-secondary)]">{value}</p>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="mt-3 text-xs text-white/48">数据质量信息不足：当前结果未返回复权/分红/拆股元数据。</p>
+              <p className="mt-3 text-xs text-[color:var(--wolfy-text-muted)]">数据质量信息不足：当前结果未返回复权/分红/拆股元数据。</p>
             )
           ) : null}
           {dataQualityOpen ? dataQualityWarnings.length ? (
@@ -1721,7 +1740,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
                 <span
                   key={`${warning}-${index}`}
                   data-testid={`backtest-data-quality-warning-${index}`}
-                  className="max-w-full truncate rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-white/58"
+                  className="max-w-full truncate rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2 py-1 text-[11px] text-[color:var(--wolfy-text-secondary)]"
                 >
                   {warning}
                 </span>
@@ -1733,19 +1752,19 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
         <div id="backtest-report-执行假设" data-testid="backtest-report-execution-assumptions" className={GHOST_SECTION_CLASS}>
           <button type="button" className="flex min-h-[36px] w-full items-center justify-between gap-3 text-left" onClick={() => setAssumptionsOpen((value) => !value)}>
             <span><span className={LABEL_CLASS}>执行假设</span></span>
-            <span className="text-xs text-white/45">{assumptionsOpen ? '收起' : '展开'}</span>
+            <span className="text-xs text-[color:var(--wolfy-text-muted)]">{assumptionsOpen ? '收起' : '展开'}</span>
           </button>
           {assumptionsOpen ? (
             <>
               {!hasExplicitAssumptions ? (
-                <p className="mt-3 text-xs text-white/48">执行假设信息不足：当前结果未返回成交时点/撮合规则。</p>
+                <p className="mt-3 text-xs text-[color:var(--wolfy-text-muted)]">执行假设信息不足：当前结果未返回成交时点/撮合规则。</p>
               ) : null}
               {assumptions.length ? (
                 <div data-testid="backtest-execution-assumptions-grid" className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {assumptions.map(([key, value]) => (
                     <div key={key} className={`min-w-0 rounded-lg px-3 py-2 ${PAPER_PANEL_CLASS}`}>
                       <p className={LABEL_CLASS}>{key}</p>
-                      <p className="mt-1 truncate font-mono text-xs text-white/70">{value}</p>
+                      <p className="mt-1 truncate font-mono text-xs text-[color:var(--wolfy-text-secondary)]">{value}</p>
                     </div>
                   ))}
                 </div>
@@ -1756,7 +1775,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
                     <span
                       key={`${warning}-${index}`}
                       data-testid={`backtest-execution-warning-${index}`}
-                      className="max-w-full truncate rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-white/58"
+                      className="max-w-full truncate rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2 py-1 text-[11px] text-[color:var(--wolfy-text-secondary)]"
                     >
                       {warning}
                     </span>
@@ -1771,12 +1790,12 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           <button type="button" className="flex min-h-[36px] w-full items-center justify-between gap-3 text-left" onClick={() => setAdvancedOpen((value) => !value)}>
             <span>
               <span className={LABEL_CLASS}>账本与导出</span>
-              <span className="ml-2 text-xs text-white/42">完整指标 · 每日账本 · 复查导出</span>
+              <span className="ml-2 text-xs text-[color:var(--wolfy-text-muted)]">完整指标 · 每日账本 · 复查导出</span>
             </span>
-            <span className="text-xs text-white/45">{advancedOpen ? '收起' : '展开'}</span>
+            <span className="text-xs text-[color:var(--wolfy-text-muted)]">{advancedOpen ? '收起' : '展开'}</span>
           </button>
           <div className="mt-4 flex min-w-0 flex-col gap-3">
-            <div data-testid="backtest-report-ledger-summary" className={`rounded-xl p-3 text-xs text-white/58 ${PAPER_PANEL_CLASS}`}>
+            <div data-testid="backtest-report-ledger-summary" className={`rounded-xl p-3 text-xs text-[color:var(--wolfy-text-secondary)] ${PAPER_PANEL_CLASS}`}>
               每日账本 {normalized.rows.length} 行 · {normalized.viewerMeta.firstDate || '--'} {'->'} {normalized.viewerMeta.lastDate || '--'} · 复查材料按需展开
             </div>
             {advancedOpen ? (
@@ -1795,7 +1814,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
                     导出执行明细 JSON
                   </button>
                 </div>
-                <div className={`rounded-xl p-3 text-xs text-white/48 ${PAPER_PANEL_CLASS}`}>
+                <div className={`rounded-xl p-3 text-xs text-[color:var(--wolfy-text-muted)] ${PAPER_PANEL_CLASS}`}>
                   扩展指标在上方折叠区展示；执行明细仅提供导出，不默认渲染全部存储行。
                 </div>
               </>
@@ -1812,7 +1831,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
                     </thead>
                     <tbody>
                       {visibleLedgerRows.map((row: DeterministicBacktestNormalizedRow, index) => (
-                        <tr key={row.date} data-testid={`backtest-ledger-row-${index}`} className="border-t border-white/5 text-white/62">
+                        <tr key={row.date} data-testid={`backtest-ledger-row-${index}`} className="border-t border-[color:var(--wolfy-border-subtle)] text-[color:var(--wolfy-text-secondary)]">
                           <td className="px-3 py-2 font-mono">{row.date}</td>
                           <td className="px-3 py-2">{formatDeterministicActionLabel(row.action, language)}</td>
                           <td className="px-3 py-2 font-mono">{formatNumber(row.symbolClose)}</td>

@@ -10,9 +10,9 @@ import {
   TerminalChip,
   TerminalEmptyState,
   TerminalNestedBlock,
-  TerminalPageShell,
   TerminalSectionHeader,
 } from '../components/terminal/TerminalPrimitives';
+import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import {
   ConsoleBoard,
   ConsoleContextRail,
@@ -1400,7 +1400,8 @@ const RuleBacktestComparePage: React.FC = () => {
 
   return (
     <main className="w-full overflow-x-hidden text-[color:var(--wolfy-text-primary)]">
-      <TerminalPageShell data-testid="rule-backtest-compare-page">
+      <ConsumerWorkspaceScope>
+        <ConsumerWorkspacePageShell data-testid="rule-backtest-compare-page">
         <WolfyCommandBar
           leading={(
             <div className="min-w-0">
@@ -1765,7 +1766,8 @@ const RuleBacktestComparePage: React.FC = () => {
             </ConsoleBoard>
           </ResearchConsoleShell>
         ) : null}
-      </TerminalPageShell>
+        </ConsumerWorkspacePageShell>
+      </ConsumerWorkspaceScope>
     </main>
   );
 };

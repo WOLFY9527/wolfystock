@@ -72,7 +72,7 @@ import {
   ResearchConsoleShell,
   WolfyCommandBar,
 } from '../components/linear/LinearPrimitives';
-import { TerminalPageShell } from '../components/terminal/TerminalPrimitives';
+import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { StatusBadge } from '../components/ui/StatusBadge';
 
 const RULE_POLL_INTERVAL_MS = 1800;
@@ -1683,14 +1683,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
 
   return (
     <main className="w-full overflow-x-hidden text-[color:var(--wolfy-text-primary)]">
-      <TerminalPageShell
-        className="min-h-0"
-        data-testid="deterministic-backtest-result-page"
-        data-density={density.mode}
-        style={getDeterministicResultDensityCssVars(density)}
-      >
-        <style>{RESULT_PAGE_MOBILE_CONTAINMENT_STYLES}</style>
-        <div className="backtest-result-page flex min-h-0 min-w-0 flex-col">
+      <ConsumerWorkspaceScope>
+        <ConsumerWorkspacePageShell
+          className="min-h-0"
+          data-testid="deterministic-backtest-result-page"
+          data-density={density.mode}
+          style={getDeterministicResultDensityCssVars(density)}
+        >
+          <style>{RESULT_PAGE_MOBILE_CONTAINMENT_STYLES}</style>
+          <div className="backtest-result-page flex min-h-0 min-w-0 flex-col">
           {run?.status === 'completed' && normalized ? renderCompletedConsole() : (
             <section className="backtest-result-page__hero" data-testid="deterministic-result-page-hero">
               <div className="backtest-result-page__hero-copy">
@@ -1777,8 +1778,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
               {renderCompletedTabPanel()}
             </>
           ) : null}
-        </div>
-      </TerminalPageShell>
+          </div>
+        </ConsumerWorkspacePageShell>
+      </ConsumerWorkspaceScope>
     </main>
   );
 };

@@ -242,17 +242,17 @@ export function PortfolioRiskExposureReadinessPanel({
     <TerminalNestedBlock data-testid="portfolio-risk-exposure-readiness" className="p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+          <h3 className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
             {language === 'zh' ? '风险暴露就绪度' : 'Risk exposure readiness'}
           </h3>
-          <p className="mt-1 text-xs leading-5 text-white/52">{readinessSummary(readiness, language)}</p>
+          <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{readinessSummary(readiness, language)}</p>
         </div>
         <TerminalChip variant="info">{language === 'zh' ? '仅供观察' : 'Observation only'}</TerminalChip>
       </div>
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
         {rows.map(({ key, item }) => (
-          <div key={key} className="min-w-0 rounded-lg border border-white/[0.03] bg-black/20 p-3">
-            <div className="truncate text-[10px] font-bold uppercase tracking-widest text-white/35">
+          <div key={key} className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+            <div className="truncate text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
               {readinessCategoryLabel(key, language)}
             </div>
             <div className="mt-2">
@@ -314,10 +314,10 @@ export function PortfolioExposureResearchContextPanel({
     <TerminalNestedBlock data-testid="portfolio-exposure-research-context" className="p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+          <h3 className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
             {language === 'zh' ? '暴露研究背景' : 'Exposure research context'}
           </h3>
-          <p className="mt-1 text-xs leading-5 text-white/52">{summaryText}</p>
+          <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{summaryText}</p>
         </div>
         <TerminalChip variant="info">
           {language === 'zh' ? '仅供观察' : 'Observation only'}
@@ -327,59 +327,59 @@ export function PortfolioExposureResearchContextPanel({
       {lineageItems.length ? (
         <div data-testid="portfolio-exposure-lineage-summary" className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {lineageItems.map(({ key, item }) => (
-            <div key={key} className="min-w-0 rounded-lg border border-white/[0.03] bg-black/20 p-3">
+            <div key={key} className="min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
               <div className="flex min-w-0 items-center justify-between gap-2">
-                <div className="truncate text-[10px] font-bold uppercase tracking-widest text-white/35">{item.label}</div>
+                <div className="truncate text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">{item.label}</div>
                 <TerminalChip variant={item.variant}>{item.label}</TerminalChip>
               </div>
-              <div className="mt-2 truncate text-xs text-white/48">{statusDetail(item)}</div>
+              <div className="mt-2 truncate text-xs text-[color:var(--wolfy-text-muted)]">{statusDetail(item)}</div>
             </div>
           ))}
         </div>
       ) : null}
 
       <div data-testid="portfolio-exposure-research-context-grid" className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <div className="rounded-lg border border-white/[0.03] bg-black/20 p-3">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-white/35">
+        <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
             {language === 'zh' ? '主导暴露' : 'Dominant exposure'}
           </div>
-          <div className="mt-2 truncate text-sm text-white">{dominantLabel}</div>
-          <div className="mt-1 text-xs text-white/45">
+          <div className="mt-2 truncate text-sm text-[color:var(--wolfy-text-primary)]">{dominantLabel}</div>
+          <div className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
             {[dominantMeta, formatPercent(dominant.weightPct)].filter(Boolean).join(' · ')}
           </div>
         </div>
-        <div className="rounded-lg border border-white/[0.03] bg-black/20 p-3">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-white/35">
+        <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
             {language === 'zh' ? '集中度背景' : 'Concentration context'}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <TerminalChip variant={chipVariantForState(context.concentrationContext.state)}>{concentrationState}</TerminalChip>
           </div>
-          <div className="mt-2 text-xs text-white/45">
+          <div className="mt-2 text-xs text-[color:var(--wolfy-text-muted)]">
             {language === 'zh' ? '最高权重' : 'Top weight'} {formatPercent(context.concentrationContext.topWeightPct)}
           </div>
         </div>
-        <div className="rounded-lg border border-white/[0.03] bg-black/20 p-3">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-white/35">
+        <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
             {language === 'zh' ? '币种背景' : 'Currency context'}
           </div>
-          <div className="mt-2 text-sm text-white">
+          <div className="mt-2 text-sm text-[color:var(--wolfy-text-primary)]">
             {safeText(largestCurrency?.label || largestCurrency?.currency || context.currencyContext.baseCurrency, language === 'zh' ? '币种待确认' : 'Currency pending')}
           </div>
-          <div className="mt-1 text-xs text-white/45">
+          <div className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
             {fxStateLabel(context.currencyContext.fxFreshnessState, language)}
             {' · '}
             {currencyState}
           </div>
         </div>
-        <div className="rounded-lg border border-white/[0.03] bg-black/20 p-3">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-white/35">
+        <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
             {language === 'zh' ? '市场背景' : 'Market context'}
           </div>
-          <div className="mt-2 text-sm text-white">
+          <div className="mt-2 text-sm text-[color:var(--wolfy-text-primary)]">
             {marketLabel(largestMarket?.market, language) || safeText(largestMarket?.label, '') || (language === 'zh' ? '市场待确认' : 'Market pending')}
           </div>
-          <div className="mt-1 text-xs text-white/45">
+          <div className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
             {marketState}
             {' · '}
             {formatPercent(largestMarket?.weightPct)}
@@ -388,12 +388,12 @@ export function PortfolioExposureResearchContextPanel({
       </div>
 
       <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-3">
-        <div data-testid="portfolio-exposure-research-stale-inputs" className="rounded-lg border border-white/[0.03] bg-black/20 p-3">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-white/35">
+        <div data-testid="portfolio-exposure-research-stale-inputs" className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
             {language === 'zh' ? '输入新鲜度' : 'Input freshness'}
           </div>
           {staleInputs.length ? (
-            <ul className="mt-2 space-y-1 text-xs leading-5 text-white/48">
+            <ul className="mt-2 space-y-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
               {staleInputs.map((item) => (
                 <li key={`${item.input}-${item.status || 'pending'}`}>
                   {staleInputLabel(item.input, language)}
@@ -403,44 +403,44 @@ export function PortfolioExposureResearchContextPanel({
               ))}
             </ul>
           ) : (
-            <p className="mt-2 text-xs leading-5 text-white/48">
+            <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
               {language === 'zh' ? '当前未返回陈旧输入。' : 'No stale inputs returned.'}
             </p>
           )}
         </div>
-        <div data-testid="portfolio-exposure-research-evidence-gaps" className="rounded-lg border border-white/[0.03] bg-black/20 p-3">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-white/35">
+        <div data-testid="portfolio-exposure-research-evidence-gaps" className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
             {language === 'zh' ? '证据缺口' : 'Evidence gaps'}
           </div>
           {evidenceGaps.length ? (
-            <ul className="mt-2 space-y-1 text-xs leading-5 text-white/48">
+            <ul className="mt-2 space-y-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
               {evidenceGaps.map((item) => <li key={item}>{item}</li>)}
             </ul>
           ) : (
-            <p className="mt-2 text-xs leading-5 text-white/48">
+            <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
               {language === 'zh' ? '当前未返回额外证据缺口。' : 'No additional evidence gaps returned.'}
             </p>
           )}
         </div>
-        <div data-testid="portfolio-exposure-research-next-steps" className="rounded-lg border border-white/[0.03] bg-black/20 p-3">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-white/35">
+        <div data-testid="portfolio-exposure-research-next-steps" className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]">
             {language === 'zh' ? '研究后续' : 'Research next steps'}
           </div>
           {researchNextSteps.length ? (
-            <ul className="mt-2 space-y-1 text-xs leading-5 text-white/48">
+            <ul className="mt-2 space-y-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
               {researchNextSteps.map((item) => (
                 <li key={item.topic}>{nextStepLabel(item.topic, dominant.symbol, language)}</li>
               ))}
             </ul>
           ) : (
-            <p className="mt-2 text-xs leading-5 text-white/48">
+            <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
               {language === 'zh' ? '下一步研究线索待补充。' : 'Next research cues pending.'}
             </p>
           )}
         </div>
       </div>
 
-      <div data-testid="portfolio-exposure-research-boundary" className="mt-3 rounded-lg border border-cyan-300/15 bg-cyan-300/[0.03] p-3 text-xs leading-5 text-cyan-100/75">
+      <div data-testid="portfolio-exposure-research-boundary" className="mt-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
         {context.observationBoundary.observationOnly === false || context.observationBoundary.decisionGrade === true
           ? (language === 'zh' ? '观察边界待确认。' : 'Observation boundary pending.')
           : boundaryMessage}

@@ -2,6 +2,8 @@ import type { Locator, Page, Route } from '@playwright/test';
 import { expect, test } from './fixtures/appSmoke';
 
 const desktopViewport = { width: 1440, height: 1000 };
+const mediumViewport = { width: 1024, height: 900 };
+const tabletViewport = { width: 768, height: 900 };
 const narrowViewport = { width: 390, height: 844 };
 const timestamp = '2026-06-15T09:30:00Z';
 
@@ -249,7 +251,7 @@ async function installScenarioRoutes(page: Page, delayMs = 125) {
 
 test.describe('T179 Backtest and Scenario canonical workflow', () => {
   test('keeps Backtest setup passive and explicit across desktop and narrow states', async ({ page }) => {
-    for (const viewport of [desktopViewport, narrowViewport]) {
+    for (const viewport of [desktopViewport, mediumViewport, tabletViewport, narrowViewport]) {
       await page.setViewportSize(viewport);
       await installSignedInSessionRoutes(page);
       const mutationRequests = observeMutationRequests(page);
@@ -267,6 +269,11 @@ test.describe('T179 Backtest and Scenario canonical workflow', () => {
       await expect(readiness).toBeVisible();
       await expect(preview).toBeVisible();
       await expect(preview).toContainText(/结果预览|Result preview/);
+      await expect(preview).toContainText(/收益曲线与基准|Equity vs benchmark/);
+      await expect(preview).toContainText(/回撤|Drawdown/);
+      await expect(preview).toContainText(/核心指标|Core metrics/);
+      await expect(preview).toContainText(/交易与事件账本|Trades and events/);
+      await expect(preview).toContainText(/假设、成本与限制|Assumptions, costs, and limitations/);
       expect(mutationRequests).toEqual([]);
 
       const symbolInput = page.getByLabel(/标的代码|Ticker/i).first();
@@ -283,9 +290,7 @@ test.describe('T179 Backtest and Scenario canonical workflow', () => {
       await expect(runButton).toBeFocused();
 
       await expectConsumerSafeText(shell);
-      if (viewport.width <= 390) {
-        await expectNoHorizontalOverflow(page);
-      }
+      await expectNoHorizontalOverflow(page);
     }
   });
 
@@ -306,6 +311,7 @@ test.describe('T179 Backtest and Scenario canonical workflow', () => {
     const dataQuality = page.getByTestId('backtest-report-data-quality');
     const trades = page.getByTestId('backtest-report-trade-table');
     const evidence = page.getByTestId('backtest-report-evidence-details');
+    const compositionOrder = page.getByTestId('backtest-result-composition-order');
 
     await expect(resultPage).toBeVisible({ timeout: 15_000 });
     await expect(report).toBeVisible();
@@ -313,8 +319,18 @@ test.describe('T179 Backtest and Scenario canonical workflow', () => {
     await expect(summary).toContainText('非真实成交记录');
     await expect(chart).toBeVisible();
     await expect(chartWorkspace).toContainText(/权益曲线|回撤|日盈亏/);
+    const cumulativeReturnChart = page.getByLabel(/累计收益|Cumulative return/i);
+    await expect(cumulativeReturnChart).toHaveCount(1);
+    await expect(cumulativeReturnChart).toHaveAttribute('aria-label', /累计收益|Cumulative return/i);
     await expect(risk).toContainText(/最大回撤|回撤与压力解释/);
     await expect(trades).toBeVisible();
+    await expect(trades.getByText('回测交易与成本账本')).toHaveClass(/sr-only/);
+    await expect(compositionOrder).toContainText('收益曲线与基准');
+    await expect(compositionOrder).toContainText('回撤');
+    await expect(compositionOrder).toContainText('核心指标');
+    await expect(compositionOrder).toContainText('交易与事件账本');
+    await expect(compositionOrder).toContainText('假设与成本');
+    await expect(compositionOrder).toContainText('限制');
     await expect(dataQuality).toContainText(/数据质量|样本/);
     await expect(assumptions).toContainText(/执行假设|手续费|滑点|成本/);
     await expect(evidence).not.toHaveJSProperty('open', true);
@@ -343,6 +359,12 @@ test.describe('T179 Backtest and Scenario canonical workflow', () => {
     const scenarioPage = page.getByTestId('scenario-lab-page');
     await expect(scenarioPage).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('scenario-lab-setup-idle')).toContainText('尚未执行情景评估');
+    await expect(page.getByTestId('scenario-productization-order')).toContainText('显式情景设置');
+    await expect(page.getByTestId('scenario-productization-order')).toContainText('显式评估');
+    await expect(page.getByTestId('scenario-productization-order')).toContainText('对比');
+    await expect(page.getByTestId('scenario-productization-order')).toContainText('敏感度');
+    await expect(page.getByTestId('scenario-productization-order')).toContainText('不确定性');
+    await expect(page.getByTestId('scenario-productization-order')).toContainText('限制');
     expect(scenarioPosts).toHaveLength(0);
 
     const idleEvaluate = page.getByTestId('scenario-lab-setup-idle').getByRole('button', { name: '评估情景' });
@@ -357,6 +379,7 @@ test.describe('T179 Backtest and Scenario canonical workflow', () => {
     await expect(firstRead).toHaveAttribute('aria-live', 'polite');
     await expect(firstRead).toContainText('情景摘要');
     await expect(firstRead).toContainText('证据边界');
+    await expect(scenarioPage).toContainText('最敏感的证据族');
     await expect(page.getByTestId('scenario-evidence-pack-registry')).toBeVisible();
     expect(scenarioPosts).toHaveLength(1);
 

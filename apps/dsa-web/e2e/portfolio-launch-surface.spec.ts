@@ -142,8 +142,24 @@ test.describe('portfolio launch surface', () => {
       const riskPanel = page.getByTestId('portfolio-risk-card');
       const activityPanel = page.getByTestId('portfolio-history-full');
       const setupBoundary = page.getByTestId('portfolio-consumer-setup-boundary');
+      const researchState = page.getByTestId('portfolio-research-state-preview');
+      const productizationOrder = page.getByTestId('portfolio-productization-order');
 
       await expect(workspaceLanes).toBeVisible({ timeout: 15_000 });
+      await expect(researchState).toBeVisible({ timeout: 15_000 });
+      await expect(productizationOrder).toContainText('账户上下文');
+      await expect(productizationOrder).toContainText('组合观察');
+      await expect(productizationOrder).toContainText('集中度 / 暴露');
+      await expect(productizationOrder).toContainText('持仓账本');
+      await expect(productizationOrder).toContainText('新鲜度');
+      await expect(productizationOrder).toContainText('限制');
+      await expect(productizationOrder).toContainText('导入预览');
+      await expect(productizationOrder).toContainText('显式确认');
+      await expect(productizationOrder).toContainText('个股研究交接');
+      await expect(page.getByTestId('portfolio-stock-research-handoff')).toHaveAttribute(
+        'href',
+        /\/zh\/stocks\/AAPL\/structure-decision\?symbol=AAPL&market=US&source=portfolio/,
+      );
       await expect(summaryCoreRow).toBeVisible({ timeout: 15_000 });
       await expect(summaryAuxRow).toBeVisible({ timeout: 15_000 });
       await expect(summaryCoreRow).toContainText('总市值');

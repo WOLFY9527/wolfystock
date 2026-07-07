@@ -840,7 +840,7 @@ export default function ScenarioLabPage() {
                   eyebrow={locale === 'en' ? 'Experiment setup' : '实验设置'}
                   title={locale === 'en' ? 'Ready for explicit scenario evaluation' : '等待显式执行情景评估'}
                 >
-                  <div className="grid gap-3 text-sm md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                  <div className="grid gap-4 text-sm md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                     <div className="min-w-0 space-y-2 text-[color:var(--wolfy-text-secondary)]">
                       <p>
                         {locale === 'en'
@@ -852,6 +852,24 @@ export default function ScenarioLabPage() {
                           ? `Selected frame: ${selectedPreset.label.en}.`
                           : `当前情景：${selectedPreset.label.zh}。`}
                       </p>
+                      <ol
+                        data-testid="scenario-productization-order"
+                        className="grid gap-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-xs text-[color:var(--wolfy-text-secondary)] sm:grid-cols-2 lg:grid-cols-3"
+                      >
+                        {[
+                          locale === 'en' ? 'Explicit setup' : '显式情景设置',
+                          locale === 'en' ? 'Explicit evaluation' : '显式评估',
+                          locale === 'en' ? 'Comparison' : '对比',
+                          locale === 'en' ? 'Sensitivity' : '敏感度',
+                          locale === 'en' ? 'Uncertainty' : '不确定性',
+                          locale === 'en' ? 'Limitations' : '限制',
+                        ].map((item, index) => (
+                          <li key={item} className="flex min-w-0 items-center gap-2">
+                            <span className="font-mono text-[color:var(--sage-deep)]">{index + 1}</span>
+                            <span className="truncate">{item}</span>
+                          </li>
+                        ))}
+                      </ol>
                     </div>
                     <ScenarioWorkbenchButton
                       primary
@@ -1070,6 +1088,14 @@ export default function ScenarioLabPage() {
                         : '该情景当前没有可展示的驱动变化。'}
                     />
                   </RoughSectionCard>
+                  <RoughSectionCard eyebrow={locale === 'en' ? 'Sensitivity' : '敏感度'} title={locale === 'en' ? 'Most sensitive evidence families' : '最敏感的证据族'}>
+                    <RoughBulletList
+                      items={changedDriverRows.slice(0, 3).map((item) => `${item.label} ${item.value}`)}
+                      emptyText={locale === 'en'
+                        ? 'Sensitivity remains unknown until driver deltas are returned.'
+                        : '驱动变化返回前，敏感度保持未知。'}
+                    />
+                  </RoughSectionCard>
                   <RoughSectionCard eyebrow={locale === 'en' ? 'Scenario observations' : '情景观察'} title={locale === 'en' ? 'What to observe in this scenario' : '该情景下观察什么'}>
                     <RoughBulletList
                       items={scenarioUnavailable
@@ -1121,8 +1147,8 @@ export default function ScenarioLabPage() {
                     </div>
                     <div className="mt-3 text-xs leading-6 text-[color:var(--wolfy-text-muted)]">
                       {locale === 'en'
-                        ? 'Observation boundaries apply.'
-                        : '观察边界适用。'}
+                        ? 'Uncertainty and limitations remain visible. The page does not predict outcomes or provide allocation advice.'
+                        : '不确定性与限制保持可见；本页不预测结果，也不提供配置建议。'}
                     </div>
                   </RoughSectionCard>
                 </div>
