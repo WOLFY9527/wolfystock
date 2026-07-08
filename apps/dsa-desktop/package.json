@@ -13,7 +13,7 @@
   },
   "build": {
     "appId": "com.daily-stock-analysis.desktop",
-    "productName": "Daily Stock Analysis",
+    "productName": "WolfyStock",
     "directories": {
       "output": "dist"
     },

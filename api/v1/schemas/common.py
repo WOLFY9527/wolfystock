@@ -20,7 +20,7 @@ class RootResponse(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "message": "Daily Stock Analysis API is running",
+                "message": "WolfyStock API is running",
                 "version": "1.0.0",
             }
         }
@@ -29,7 +29,7 @@ class RootResponse(BaseModel):
     message: str = Field(
         ...,
         description="API 运行状态消息",
-        json_schema_extra={"example": "Daily Stock Analysis API is running"},
+        json_schema_extra={"example": "WolfyStock API is running"},
     )
     version: Optional[str] = Field(
         None,
