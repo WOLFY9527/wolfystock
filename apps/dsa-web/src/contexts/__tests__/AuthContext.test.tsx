@@ -68,6 +68,7 @@ const Probe = () => {
     <div>
       <span data-testid="status">{auth.loggedIn ? 'logged-in' : 'logged-out'}</span>
       <span data-testid="password-set">{auth.passwordSet ? 'set' : 'unset'}</span>
+      <span data-testid="current-user">{auth.currentUser?.username ?? 'none'}</span>
       <button
         type="button"
         onClick={() => void auth.login({ username: 'admin', password: PROBE_PASSWORD, passwordConfirm: PROBE_PASSWORD })}
@@ -333,6 +334,62 @@ describe('AuthContext', () => {
     await new Promise((resolve) => window.setTimeout(resolve, 120));
     expect(hardRedirectMock).toHaveBeenCalledWith('/guest');
     expect(invalidateApiShortWindowCache).toHaveBeenCalledWith('/api/v1/auth/status');
+  });
+
+  it('converges to guest state when another tab publishes a session invalidation signal', async () => {
+    window.localStorage.setItem('dsa_chat_session_id', 'chat-session-1');
+    window.localStorage.setItem('dsa-selected-history-id', '42');
+    window.localStorage.setItem('wolfystock.auth.session-event.v1', JSON.stringify({
+      kind: 'login-confirmed',
+      at: 1,
+    }));
+    window.sessionStorage.setItem('dsa-admin-surface-mode', 'admin');
+
+    getStatus.mockResolvedValueOnce({
+      authEnabled: true,
+      loggedIn: true,
+      passwordSet: true,
+      passwordChangeable: true,
+      setupState: 'enabled',
+      currentUser: {
+        id: 'user-1',
+        username: 'admin',
+        displayName: 'Admin',
+        role: 'admin',
+        isAdmin: true,
+        isAuthenticated: true,
+        transitional: false,
+        authEnabled: true,
+      },
+    });
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>
+    );
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('logged-in'));
+    expect(screen.getByTestId('current-user')).toHaveTextContent('admin');
+
+    window.dispatchEvent(new StorageEvent('storage', {
+      key: 'wolfystock.auth.session-event.v1',
+      oldValue: JSON.stringify({ kind: 'login-confirmed', at: 1 }),
+      newValue: JSON.stringify({ kind: 'session-invalidated', at: 2 }),
+      storageArea: window.localStorage,
+    }));
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('logged-out'));
+    expect(screen.getByTestId('current-user')).toHaveTextContent('none');
+    expect(window.localStorage.getItem('dsa_chat_session_id')).toBeNull();
+    expect(window.localStorage.getItem('dsa-selected-history-id')).toBeNull();
+    expect(window.sessionStorage.getItem('dsa-admin-surface-mode')).toBeNull();
+    expect(resetDashboardState).toHaveBeenCalled();
+    expect(resetAdminSurfaceMode).toHaveBeenCalled();
+    expect(invalidateApiShortWindowCache).toHaveBeenCalledWith('/api/v1/auth/status');
+    expect(hardRedirectMock).not.toHaveBeenCalled();
+    expect(logout).not.toHaveBeenCalled();
+    expect(getStatus).toHaveBeenCalledTimes(1);
   });
 
   it('keeps logout on the active locale guest route', async () => {
