@@ -9,6 +9,9 @@ from typing import Any
 from sqlalchemy import desc, select
 from sqlalchemy.exc import IntegrityError
 
+from src.services.scenario_baseline_snapshot_contract import (
+    is_scenario_baseline_durable_readiness_state,
+)
 from src.storage import DatabaseManager, ScenarioBaselineSnapshotRow
 
 
@@ -32,7 +35,6 @@ _CONTENT_HASH_KEYS = (
     "readinessState",
     "targetEnvironmentEvidence",
 )
-_READINESS_STATES = {"ready", "partial", "observation_only"}
 
 
 class ScenarioBaselineSnapshotStorageError(ValueError):
@@ -180,7 +182,7 @@ def _validated_snapshot_payload(value: Mapping[str, Any]) -> dict[str, Any]:
     created_at = _required_timestamp(payload.get("createdAt"), "created_at")
     as_of = _required_timestamp(payload.get("asOf"), "as_of")
     readiness_state = _required_text(payload.get("readinessState"), "readiness_state")
-    if readiness_state not in _READINESS_STATES:
+    if not is_scenario_baseline_durable_readiness_state(readiness_state):
         raise ScenarioBaselineSnapshotStorageError("scenario_baseline_snapshot_readiness_invalid")
     input_refs = payload.get("inputSnapshotRefs")
     if not input_refs or not isinstance(input_refs, list) or not all(
