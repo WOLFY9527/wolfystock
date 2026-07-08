@@ -157,6 +157,10 @@ const MARKET_OVERVIEW_SETUP_ACTION_CLASS = 'inline-flex min-h-8 items-center rou
 
 function marketOverviewConsumerCopy(text: string): string {
   return text
+    .replace(/ETF flow proxy/gi, 'ETF 资金流指标')
+    .replace(/Institutional pressure proxy/gi, '机构压力指标')
+    .replace(/Industry breadth proxy/gi, '行业广度指标')
+    .replace(/\bproxy\b/gi, '部分数据')
     .replace(/存在备用或代理证据负担/g, '当前为延迟可用或部分可用状态')
     .replace(/备用或代理证据/g, '延迟可用或部分可用状态')
     .replace(/代理证据/g, '观察线索')
@@ -534,7 +538,7 @@ const MarketOverviewDirectionSummary: React.FC<{ summary: MarketDirectionalSumma
           <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
             {block.items.map((item, index) => (
               <span key={`${block.key}-${item}-${index}`} className={cn('max-w-full truncate rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1 text-[11px] font-semibold', block.tone)}>
-                {item}
+                {marketNarrativeCopy(item)}
               </span>
             ))}
           </div>
@@ -1043,12 +1047,12 @@ const MarketOverviewConclusionLayer: React.FC<{
   return (
     <section
       data-testid={testId}
-      data-market-research-flow="conclusion"
+      data-market-research-flow="market-thesis"
       className="min-w-0 border-b border-[color:var(--wolfy-divider)] bg-white/[0.018] p-3 md:px-4"
     >
       <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/38">市场叙事</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/38">市场论点</p>
           <h2
             data-testid="market-decision-semantics-advice-boundary"
             className="mt-2 text-2xl font-semibold leading-8 text-white/94 md:text-[34px]"
@@ -1133,7 +1137,7 @@ const MarketRegimeSynthesisResearchBlock: React.FC<{
   return (
     <section
       data-testid="market-regime-synthesis-research-block"
-      data-market-research-flow="regime-synthesis"
+      data-market-research-flow="regime-summary"
       className="mt-4 min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3"
     >
       <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -1223,18 +1227,12 @@ const MarketRegimeSynthesisResearchBlock: React.FC<{
 };
 
 const MarketOverviewDataNotesDisclosure: React.FC<{
-  directionalSummary: MarketDirectionalSummary;
-  regimeSynthesis?: MarketRegimeSynthesisHeaderView;
-  regimeSummary?: MarketOverviewRegimeSummaryView;
   decisionChips: MarketOverviewDecisionChipView[];
   supportingEvidence: MarketOverviewDecisionSemanticsLineView[];
   counterEvidence: MarketOverviewDecisionSemanticsLineView[];
   missingEvidence: MarketOverviewDecisionSemanticsLineView[];
   watchNext: MarketOverviewDecisionSemanticsLineView[];
 }> = ({
-  directionalSummary,
-  regimeSynthesis,
-  regimeSummary,
   decisionChips,
   supportingEvidence,
   counterEvidence,
@@ -1247,9 +1245,6 @@ const MarketOverviewDataNotesDisclosure: React.FC<{
     summary="更新时效、证据、风险与下一步观察默认折叠"
     className="mt-3 bg-black/10"
   >
-    <MarketOverviewDirectionSummary summary={directionalSummary} />
-    {regimeSummary ? <MarketOverviewRegimeSummaryBlock view={regimeSummary} /> : null}
-    <MarketRegimeSynthesisResearchBlock view={regimeSynthesis} />
     {decisionChips.length ? (
       <div data-testid="market-overview-decision-chip-details" className="mt-3 flex min-w-0 flex-wrap gap-2">
         {decisionChips.slice(0, 5).map((chip) => (
@@ -1361,7 +1356,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
   return (
     <section
       data-testid="market-decision-semantics-strip"
-      data-market-research-flow="decision-semantics"
+      data-market-research-flow="research-workbench"
       className={cn(
         'relative overflow-visible border-t border-[color:var(--wolfy-divider)] bg-white/[0.018] p-3 md:px-4',
         view?.insufficient ? 'opacity-85' : '',
@@ -1380,10 +1375,16 @@ const MarketDecisionSemanticsStrip: React.FC<{
           briefingSummary={briefingSummary}
           heroAnchors={heroAnchors}
         />
+        <section
+          data-testid="market-overview-regime-summary-lane"
+          data-market-research-flow="regime-summary"
+          className="mt-3 min-w-0"
+        >
+          <MarketOverviewDirectionSummary summary={directionalSummary} />
+          {regimeSummary ? <MarketOverviewRegimeSummaryBlock view={regimeSummary} /> : null}
+          <MarketRegimeSynthesisResearchBlock view={regimeSynthesis} />
+        </section>
         <MarketOverviewDataNotesDisclosure
-          directionalSummary={directionalSummary}
-          regimeSynthesis={regimeSynthesis}
-          regimeSummary={regimeSummary}
           decisionChips={decisionChips}
           supportingEvidence={supportingEvidence}
           counterEvidence={counterEvidence}

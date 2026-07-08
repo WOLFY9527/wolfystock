@@ -1981,13 +1981,13 @@ function expandPendingDataSourceSection() {
 }
 
 function getRowCardOrder(rowId: string): string[] {
-  const row = screen.getByTestId('market-overview-main-grid').querySelector(`[data-row-id="${rowId}"]`);
+  const row = document.querySelector(`[data-row-id="${rowId}"]`);
   return Array.from(row?.querySelectorAll('[data-testid^="market-overview-card-"]') || [])
     .map((node) => node.getAttribute('data-testid')?.replace('market-overview-card-', '') || '');
 }
 
 function getRowIds(): string[] {
-  return Array.from(screen.getByTestId('market-overview-main-grid').querySelectorAll('[data-testid="market-overview-row"]'))
+  return Array.from(document.querySelectorAll('[data-testid="market-overview-row"]'))
     .map((node) => node.getAttribute('data-row-id') || '');
 }
 
@@ -2701,7 +2701,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-workbench')).toBeInTheDocument();
     expect(screen.queryByTestId('market-overview-shell')).not.toBeInTheDocument();
     expect(screen.getByTestId('market-overview-market-monitor')).toBeInTheDocument();
-    expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent(/市场叙事/);
+    expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent(/市场论点/);
     expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent(/数据说明/);
     expect(screen.getByTestId('market-overview-visual-evidence-strip')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-visual-card-core-trends')).toBeInTheDocument();
@@ -2781,9 +2781,7 @@ describe('MarketOverviewPage', () => {
 
     expect(within(details).getByTestId('market-decision-debug-loading')).toHaveAttribute('aria-busy', 'true');
     expect(within(details).queryByTestId('market-regime-synthesis-header')).not.toBeInTheDocument();
-
-    expect(await within(details).findByTestId('market-regime-synthesis-header')).toBeInTheDocument();
-    expect(within(details).getByTestId('market-overview-official-macro-diagnostics')).toBeInTheDocument();
+    expect(await within(details).findByTestId('market-overview-official-macro-diagnostics')).toBeInTheDocument();
   });
 
   afterEach(() => {
@@ -2815,10 +2813,10 @@ describe('MarketOverviewPage', () => {
     expect(diagnostics).toHaveTextContent('查看数据诊断');
     expect(diagnostics).not.toHaveAttribute('open');
     const firstViewport = screen.getByTestId('market-overview-workbench');
-    expect(screen.getByTestId('market-overview-first-workbench')).toHaveAttribute('data-market-composition', 'observation-path');
-    expect(screen.getByTestId('market-overview-observation-brief')).toContainElement(screen.getByTestId('market-decision-semantics-strip'));
+    expect(screen.getByTestId('market-overview-first-workbench')).toHaveAttribute('data-market-composition', 'research-workbench-path');
+    expect(screen.getByTestId('market-overview-pulse-header')).toContainElement(screen.getByTestId('market-decision-semantics-strip'));
     expect(screen.getByTestId('market-overview-dominant-path')).toContainElement(screen.getByTestId('market-overview-core-trend-chart'));
-    expect(firstViewport).toHaveTextContent(/市场叙事|市场状态|发生了什么/);
+    expect(firstViewport).toHaveTextContent(/市场论点|市场状态|发生了什么/);
     expect(firstViewport.textContent || '').not.toMatch(
       /available|missing|not configured|provider_missing|blockedProductSurfaces|missingDataFamilies|sourceClass|sourcePath|contractVersion|inputSource|local_bounded_us_parquet_universe|noExternalCalls|providerCallsEnabled|not_requested/i,
     );
@@ -3078,11 +3076,11 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-hero-ribbon')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-hero-ribbon')).toHaveAttribute('data-linear-primitive', 'key-level-strip');
     expect(screen.getByTestId('market-decision-semantics-strip')).toBeInTheDocument();
-    expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent(/市场叙事/);
+    expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent(/市场论点/);
     expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent(/数据说明/);
     expect(screen.queryByTestId('market-overview-research-readiness-strip')).not.toBeInTheDocument();
     const conclusion = screen.getByTestId('market-overview-decision-readiness');
-    expect(conclusion).toHaveTextContent('市场叙事');
+    expect(conclusion).toHaveTextContent('市场论点');
     expect(conclusion).toHaveTextContent('发生了什么');
     expect(conclusion).toHaveTextContent('重要点');
     expect(conclusion).toHaveTextContent('下一步看什么');
@@ -3094,7 +3092,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-quick-actions')).toHaveTextContent('搜索个股');
     expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/偏强观察|中性观察|偏弱观察|数据不足|证据待补/);
     const details = expandMarketDecisionDetails();
-    expect(within(details).queryByTestId('market-regime-synthesis-header')).not.toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-regime-summary-lane')).toBeInTheDocument();
     expect(within(details).getByTestId('market-temperature-strip')).toBeInTheDocument();
     expect(within(details).getByTestId('market-briefing-card')).toHaveTextContent(/主要指数走强，VIX 回落|当前关键数据不足|数据待补/);
 
@@ -3399,7 +3397,7 @@ describe('MarketOverviewPage', () => {
     const primaryRail = screen.getByTestId('market-overview-primary-rail');
     const sideRail = screen.getByTestId('market-overview-side-rail');
 
-    expect(mainGrid).toHaveAttribute('data-market-monitor-layout', 'board-plus-context');
+    expect(mainGrid).toHaveAttribute('data-market-monitor-layout', 'drivers-plus-ledger');
     expect(primaryRail).toHaveClass('flex', 'flex-col');
     expect(primaryRail).not.toHaveClass('overflow-x-auto', 'stealth-scrollbar');
     expect(sideRail).toContainElement(screen.getByTestId('market-overview-context-rail'));
@@ -3459,10 +3457,10 @@ describe('MarketOverviewPage', () => {
     const topStack = await screen.findByTestId('market-overview-top-stack');
     const decisionReadiness = screen.getByTestId('market-overview-decision-readiness');
     expect(topStack.firstElementChild).toContainElement(screen.getByTestId('market-decision-semantics-strip'));
-    expect(topStack.querySelectorAll('[data-market-research-flow="decision-semantics"]')).toHaveLength(1);
+    expect(topStack.querySelectorAll('[data-market-research-flow="research-workbench"]')).toHaveLength(1);
     expect(screen.getByTestId('market-overview-main-grid').compareDocumentPosition(screen.getByTestId('market-decision-semantics-strip'))).toBe(Node.DOCUMENT_POSITION_PRECEDING);
     expect(screen.queryByTestId('market-overview-research-readiness-strip')).not.toBeInTheDocument();
-    expect(screen.getByTestId('market-overview-first-workbench')).toContainElement(screen.getByTestId('market-overview-observation-brief'));
+    expect(screen.getByTestId('market-overview-pulse-header')).toContainElement(screen.getByTestId('market-decision-semantics-strip'));
     expect(screen.getByTestId('market-overview-first-workbench')).toContainElement(screen.getByTestId('market-overview-dominant-path'));
     expect(decisionReadiness.compareDocumentPosition(screen.getByTestId('market-overview-main-grid'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(screen.getByTestId('market-overview-main-grid').compareDocumentPosition(screen.getByTestId('market-overview-visual-evidence-strip'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
@@ -3479,7 +3477,7 @@ describe('MarketOverviewPage', () => {
     const firstReadSummary = screen.getByRole('region', { name: /首读摘要|first-read summary/i });
     const evidenceDisclosure = screen.getByTestId('market-overview-evidence-disclosure');
 
-    expect(within(decisionReadiness).getByText('市场叙事')).toBeInTheDocument();
+    expect(within(decisionReadiness).getByText('市场论点')).toBeInTheDocument();
     expect(within(firstReadSummary).getAllByText('发生了什么')).toHaveLength(1);
     expect(within(firstReadSummary).getAllByText('重要点')).toHaveLength(1);
     expect(within(firstReadSummary).getAllByText('下一步看什么')).toHaveLength(1);
@@ -3489,10 +3487,10 @@ describe('MarketOverviewPage', () => {
     expect(evidenceDisclosure).not.toHaveAttribute('open');
     expect(within(evidenceDisclosure).getByRole('button', { name: '展开 数据说明' })).toBeInTheDocument();
     expect(firstReadSummary.compareDocumentPosition(evidenceDisclosure) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.queryByText('支持证据')).not.toBeInTheDocument();
-    expect(screen.queryByText('反证 / 风险')).not.toBeInTheDocument();
-    expect(screen.queryByText('缺失证据')).not.toBeInTheDocument();
-    expect(screen.queryByText('下一步观察')).not.toBeInTheDocument();
+    expect(within(evidenceDisclosure).queryByText('支持证据')).not.toBeInTheDocument();
+    expect(within(evidenceDisclosure).queryByText('反证 / 风险')).not.toBeInTheDocument();
+    expect(within(evidenceDisclosure).queryByText('缺失证据')).not.toBeInTheDocument();
+    expect(within(evidenceDisclosure).queryByText('下一步观察')).not.toBeInTheDocument();
     expect(screen.queryByTestId('market-decision-debug-details')).not.toBeInTheDocument();
   });
 
@@ -3829,9 +3827,9 @@ describe('MarketOverviewPage', () => {
     renderMarketOverviewWithLanguage('en');
 
     expect((await screen.findAllByText('S&P 500')).length).toBeGreaterThan(0);
-    const evidenceDetails = expandMarketEvidenceDetails();
-    expect(await within(evidenceDetails).findByTestId('market-overview-direction-summary')).toHaveTextContent('Market Bias / Direction Summary');
-    expect(within(evidenceDetails).getByTestId('market-overview-direction-summary')).toHaveTextContent('Current market:');
+    expandMarketEvidenceDetails();
+    expect(screen.getByTestId('market-overview-regime-summary-lane')).toHaveTextContent('Market Bias / Direction Summary');
+    expect(screen.getByTestId('market-overview-regime-summary-lane')).toHaveTextContent('Current market:');
     fireEvent.click(screen.getByRole('button', { name: 'US' }));
     expect(screen.getAllByText('Nasdaq 100').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Bitcoin').length).toBeGreaterThan(0);
@@ -3850,14 +3848,14 @@ describe('MarketOverviewPage', () => {
     render(createElement(MarketOverviewPage));
 
     const conclusion = await screen.findByTestId('market-overview-decision-readiness');
-    expect(conclusion).toHaveTextContent('市场叙事');
+    expect(conclusion).toHaveTextContent('市场论点');
     expect(conclusion).toHaveTextContent('发生了什么');
     expect(conclusion).toHaveTextContent('重要点');
     expect(conclusion).toHaveTextContent('下一步看什么');
     expect(conclusion.textContent || '').not.toMatch(/买入|卖出|买卖|target|stop|recommend/i);
-    const evidenceDetails = expandMarketEvidenceDetails();
-    await within(evidenceDetails).findByTestId('market-overview-direction-summary');
-    const summary = within(evidenceDetails).getByTestId('market-overview-direction-summary');
+    expandMarketEvidenceDetails();
+    await screen.findByTestId('market-overview-direction-summary');
+    const summary = screen.getByTestId('market-overview-direction-summary');
     expect(summary).toHaveTextContent('市场方向摘要');
     expect(summary).toHaveTextContent(/当前市场：证据不足|Current market: Evidence insufficient/);
     expect(summary).toHaveTextContent(/主要拖累|关键阻力/);
@@ -3876,7 +3874,7 @@ describe('MarketOverviewPage', () => {
     const readyView = render(createElement(MarketOverviewPage));
 
     const readyBand = await screen.findByTestId('market-overview-decision-readiness');
-    expect(readyBand).toHaveTextContent('市场叙事');
+    expect(readyBand).toHaveTextContent('市场论点');
     expect(readyBand).toHaveTextContent('发生了什么');
     expect(readyBand).toHaveTextContent('重要点');
     expect(readyBand).toHaveTextContent('下一步看什么');
@@ -4005,7 +4003,7 @@ describe('MarketOverviewPage', () => {
 
     const posturePanel = await screen.findByTestId('market-decision-semantics-strip');
 
-    expect(posturePanel).toHaveTextContent('市场叙事');
+    expect(posturePanel).toHaveTextContent('市场论点');
     expect(posturePanel).toHaveTextContent('数据说明');
     expect(posturePanel).toHaveTextContent('重要点');
     expect(posturePanel).toHaveTextContent('下一步看什么');
@@ -4020,11 +4018,12 @@ describe('MarketOverviewPage', () => {
     expect(within(posturePanel).queryByTestId('market-decision-debug-details')).not.toBeInTheDocument();
 
     const readinessBand = screen.getByTestId('market-overview-decision-readiness');
-    expect(readinessBand).toHaveTextContent(/市场叙事/);
-    expect(readinessBand).toHaveTextContent(/偏强观察|中性观察|偏弱观察|数据不足/);
+    expect(readinessBand).toHaveTextContent(/市场论点/);
+    expect(readinessBand).toHaveTextContent(/偏强观察|中性观察|偏弱观察|数据不足|事实有限|证据待补/);
 
     const evidence = expandMarketEvidenceDetails();
-    const synthesisBlock = await within(evidence).findByTestId('market-regime-synthesis-research-block');
+    const regimeLane = await screen.findByTestId('market-overview-regime-summary-lane');
+    const synthesisBlock = await within(regimeLane).findByTestId('market-regime-synthesis-research-block');
     const synthesisText = synthesisBlock.textContent || '';
     expect(synthesisBlock).toHaveTextContent('市场状态综合');
     expect(synthesisBlock).toHaveTextContent('风险偏好修复 / 流动性扩张');
@@ -4053,13 +4052,11 @@ describe('MarketOverviewPage', () => {
     expect(evidence).toHaveTextContent('Fed liquidity');
   });
 
-  it('keeps regimeSummary inside the existing evidence disclosure with consumer-safe observation wording', async () => {
+  it('keeps regimeSummary on the default regime lane with consumer-safe observation wording', async () => {
     render(createElement(MarketOverviewPage));
 
-    expect(screen.queryByTestId('market-overview-regime-summary')).not.toBeInTheDocument();
-
-    const evidence = expandMarketEvidenceDetails();
-    const regimeSummary = await within(evidence).findByTestId('market-overview-regime-summary');
+    const regimeLane = await screen.findByTestId('market-overview-regime-summary-lane');
+    const regimeSummary = await within(regimeLane).findByTestId('market-overview-regime-summary');
     const regimeSummaryText = regimeSummary.textContent || '';
 
     expect(regimeSummaryText).toContain('风险偏好修复仍以观察为主');
@@ -4130,8 +4127,8 @@ describe('MarketOverviewPage', () => {
     const readinessBand = await screen.findByTestId('market-overview-decision-readiness');
     expect(readinessBand).toBeInTheDocument();
 
-    const evidence = expandMarketEvidenceDetails();
-    await within(evidence).findByTestId('market-overview-direction-summary');
+    expandMarketEvidenceDetails();
+    await screen.findByTestId('market-overview-direction-summary');
 
     const titleText = Array.from(document.querySelectorAll<HTMLElement>('[title]'))
       .map((node) => node.getAttribute('title') || '')
@@ -4229,7 +4226,7 @@ describe('MarketOverviewPage', () => {
     expect(within(details).getByTestId('market-overview-temperature-summary')).toHaveTextContent(/可靠输入不足|暂不判定/);
     expect(within(details).getByTestId('market-overview-temperature-summary')).not.toHaveTextContent('N/A');
     expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/证据待补|偏强观察|中性观察|偏弱观察/);
-    expect(within(details).queryByTestId('market-regime-synthesis-header')).not.toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-regime-summary-lane')).toBeInTheDocument();
     expect(within(evidence).queryByTestId('market-regime-synthesis-research-block')).not.toBeInTheDocument();
     expect(screen.queryByText(/raw|payload/i)).not.toBeInTheDocument();
   });
@@ -4403,15 +4400,15 @@ describe('MarketOverviewPage', () => {
   it('does not force indices and fundsFlow into the side rail globally', async () => {
     render(createElement(MarketOverviewPage));
 
-    const primaryRail = await screen.findByTestId('market-overview-primary-rail');
+    const primaryPath = await screen.findByTestId('market-overview-first-workbench');
     const sideRail = screen.getByTestId('market-overview-side-rail');
 
     expect(screen.getByTestId('market-overview-shell')).toHaveAttribute('data-terminal-primitive', 'page-shell');
     expect(screen.getByTestId('market-overview-shell')).toHaveClass('w-full', 'flex-1', 'max-w-[var(--wolfy-consumer-shell-max,1880px)]');
     expect(screen.getByTestId('market-overview-workbench')).toHaveClass('bento-surface-root', 'w-full', 'flex-1');
     expect(screen.getByTestId('market-overview-workbench')).not.toHaveClass('mx-auto', 'max-w-[1800px]');
-    expect(primaryRail).toContainElement(screen.getByTestId('market-overview-card-indices'));
-    expect(primaryRail).toContainElement(screen.getByTestId('market-overview-card-fundsFlow'));
+    expect(primaryPath).toContainElement(screen.getByTestId('market-overview-card-indices'));
+    expect(primaryPath).toContainElement(screen.getByTestId('market-overview-card-fundsFlow'));
     expect(sideRail).not.toContainElement(screen.getByTestId('market-overview-card-indices'));
     expect(sideRail).not.toContainElement(screen.getByTestId('market-overview-card-fundsFlow'));
   });
@@ -4440,11 +4437,7 @@ describe('MarketOverviewPage', () => {
     expect(sideRail.className).not.toContain('max-h-[800px]');
     expect(sideRail.className).not.toContain('overflow-y-auto');
     expect(getRowCardOrder('all-hero')).toEqual(['indices', 'volatility', 'fundsFlow']);
-    expect(
-      screen
-        .getByTestId('market-overview-main-grid')
-        .querySelector('[data-row-id="all-hero"]'),
-    ).toHaveAttribute('data-row-columns', '3');
+    expect(document.querySelector('[data-row-id="all-hero"]')).toHaveAttribute('data-row-columns', '3');
     expect(screen.getByTestId('market-overview-card-indices')).toHaveAttribute('data-market-card-row', 'hero');
     expect(screen.getByTestId('market-overview-card-volatility')).toHaveAttribute('data-market-card-row', 'hero');
     expect(screen.getByTestId('market-overview-card-fundsFlow')).toHaveAttribute('data-market-card-row', 'hero');
@@ -4456,11 +4449,12 @@ describe('MarketOverviewPage', () => {
   it('keeps the primary market cards in a stable responsive grid below desktop', async () => {
     render(createElement(MarketOverviewPage));
 
-    const primaryRail = await screen.findByTestId('market-overview-primary-rail');
-    expect(primaryRail).toHaveClass('flex', 'flex-col', 'gap-4');
+    const primaryPath = await screen.findByTestId('market-overview-first-workbench');
+    expect(primaryPath).toHaveClass('grid', 'gap-4');
+    expect(primaryPath).toHaveAttribute('data-market-research-flow', 'primary-market-path');
     expect(screen.getByTestId('market-overview-hero-lane')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-secondary-grid')).toBeInTheDocument();
-    expect(primaryRail).not.toHaveClass('stealth-scrollbar', 'overflow-x-auto', 'overscroll-x-contain');
+    expect(primaryPath).not.toHaveClass('stealth-scrollbar', 'overflow-x-auto', 'overscroll-x-contain');
     expect(screen.getByTestId('market-overview-card-indices')).toHaveClass('min-w-0', 'w-full');
   });
 
@@ -4481,11 +4475,11 @@ describe('MarketOverviewPage', () => {
 
     render(createElement(MarketOverviewPage));
 
-    const primaryRail = await screen.findByTestId('market-overview-primary-rail');
+    const primaryPath = await screen.findByTestId('market-overview-first-workbench');
     for (const cardKey of ['indices', 'crypto'] as const) {
       const card = await screen.findByTestId(`market-overview-card-${cardKey}`);
       if (cardKey === 'indices') {
-        expect(primaryRail).toContainElement(card);
+        expect(primaryPath).toContainElement(card);
       } else {
         expect(screen.getByTestId('market-overview-secondary-grid')).toContainElement(card);
       }
@@ -4744,7 +4738,7 @@ describe('MarketOverviewPage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent(/数据可用|最近更新：/);
     });
-    expect(screen.getByTestId('market-overview-card-cryptoCore').closest('[data-testid="market-overview-main-grid"]')).toBeTruthy();
+    expect(screen.getByTestId('market-overview-card-cryptoCore').closest('[data-testid="market-overview-first-workbench"]')).toBeTruthy();
   });
 
   it('renders US breadth and sector health from the depth endpoint', async () => {

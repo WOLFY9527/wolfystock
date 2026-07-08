@@ -27,7 +27,6 @@ export type MarketOverviewExecutiveGroupView = {
 };
 
 type MarketOverviewWorkbenchGridProps = {
-  heroRows: React.ReactNode[];
   secondaryRows: React.ReactNode[];
   deepRows: React.ReactNode[];
   showDeepSection: boolean;
@@ -138,7 +137,6 @@ const ExecutiveSecondaryGroups: React.FC<{
 );
 
 export const MarketOverviewWorkbenchGrid: React.FC<MarketOverviewWorkbenchGridProps> = ({
-  heroRows,
   secondaryRows,
   deepRows,
   showDeepSection,
@@ -150,7 +148,8 @@ export const MarketOverviewWorkbenchGrid: React.FC<MarketOverviewWorkbenchGridPr
   <TerminalGrid
     data-testid="market-overview-main-grid"
     data-workbench-split="9:3"
-    data-market-monitor-layout="board-plus-context"
+    data-market-monitor-layout="drivers-plus-ledger"
+    data-market-research-flow="drivers-ledger"
     className="gap-4"
   >
     <section
@@ -160,10 +159,12 @@ export const MarketOverviewWorkbenchGrid: React.FC<MarketOverviewWorkbenchGridPr
     >
       <ConsoleBoard className="h-full">
         <div data-testid="market-overview-main-stack" className="flex min-w-0 flex-col gap-4 p-3 md:p-4">
-          <section data-testid="market-overview-hero-lane" data-card-tier="hero" className="min-w-0">
-            {heroRows}
-          </section>
-          <section data-testid="market-overview-secondary-grid" data-card-tier="secondary" className="flex min-w-0 flex-col gap-4">
+          <section
+            data-testid="market-overview-secondary-grid"
+            data-card-tier="secondary"
+            data-market-research-flow="key-drivers"
+            className="flex min-w-0 flex-col gap-4"
+          >
             {secondaryRows}
           </section>
           {showDeepSection ? (
@@ -181,7 +182,13 @@ export const MarketOverviewWorkbenchGrid: React.FC<MarketOverviewWorkbenchGridPr
         </div>
       </ConsoleBoard>
     </section>
-    <aside data-testid="market-overview-side-rail" data-mobile-order="rail" className="flex min-w-0 flex-col gap-3 xl:col-span-3">
+    <aside
+      data-testid="market-overview-side-rail"
+      data-mobile-order="rail"
+      data-market-research-flow="freshness-ledger"
+      aria-label="Freshness and data-quality ledger"
+      className="flex min-w-0 flex-col gap-3 xl:col-span-3"
+    >
       <ConsoleContextRail>
         <div data-testid="market-overview-rail" className="flex min-w-0 flex-col gap-3">
           {showContextRail ? <ContextHighlightsRail items={contextHighlights} /> : null}
