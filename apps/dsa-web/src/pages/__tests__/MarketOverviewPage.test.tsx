@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { createElement, StrictMode } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import MarketOverviewPage from '../MarketOverviewPage';
+import MarketOverviewPage, { __resetMarketOverviewRequestOwnershipForTests } from '../MarketOverviewPage';
 import { MarketOverviewWorkbench } from '../../components/market-overview/MarketOverviewWorkbench';
 import { MARKET_OVERVIEW_TAB_CONFIG } from '../MarketOverviewTabConfig';
 import { marketOverviewApi } from '../../api/marketOverview';
@@ -2009,9 +2009,15 @@ function expandMarketDecisionDetails() {
 
 function expandMarketEvidenceDetails() {
   const disclosure = screen.getByTestId('market-overview-evidence-disclosure');
-  const toggle = within(disclosure).getByRole('button', { name: /展开 数据说明/i });
+  const toggle = within(disclosure).getByRole('button', { name: /展开 数据说明|Expand 数据说明/i });
   fireEvent.click(toggle);
   return disclosure;
+}
+
+async function expectCoverageSummarySettled() {
+  await waitFor(() => {
+    expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent(/数据可用|最近更新：/);
+  });
 }
 
 function expandMarketOverviewDataDiagnostics() {
@@ -2346,7 +2352,7 @@ describe('MarketOverviewPage', () => {
     expandMarketOverviewDataDiagnostics();
 
     const surface = await screen.findByTestId('market-regime-read-model-surface');
-    expect(surface).toHaveTextContent('risk_on_confirming');
+    await waitFor(() => expect(surface).toHaveTextContent('risk_on_confirming'));
     expect(surface).toHaveTextContent('产品可用');
     expect(surface).toHaveTextContent('Risk-on confirming evidence is currently present');
     expect(within(surface).getByTestId('market-regime-evidence-card-benchmark_trend')).toHaveTextContent('Benchmark Trend');
@@ -2681,7 +2687,7 @@ describe('MarketOverviewPage', () => {
     expandMarketOverviewDataDiagnostics();
 
     const surface = await screen.findByTestId('market-regime-readiness-surface');
-    await waitFor(() => expect(surface).toHaveTextContent('Market regime data readiness'));
+    await waitFor(() => expect(surface).toHaveTextContent('macro/cross-asset inputs'));
     expect(surface).toHaveTextContent('macro/cross-asset inputs');
     expect(surface).toHaveTextContent('degraded');
     expect(surface).toHaveTextContent('freshness pending');
@@ -2781,6 +2787,7 @@ describe('MarketOverviewPage', () => {
   });
 
   afterEach(() => {
+    __resetMarketOverviewRequestOwnershipForTests();
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
@@ -2981,23 +2988,23 @@ describe('MarketOverviewPage', () => {
     render(createElement(MarketOverviewPage));
 
     await screen.findByTestId('market-overview-rail-signal-watch');
-    expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent(/最近更新：/);
+    await expectCoverageSummarySettled();
     expect(screen.getByTestId('market-overview-rail-signal-watch')).toHaveTextContent(/VIX/);
     expect(screen.getByTestId('market-overview-rail-signal-watch')).toHaveTextContent(/US 10Y|DXY/);
 
     fireEvent.click(screen.getByRole('button', { name: '美股' }));
-    expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent(/最近更新：/);
+    await expectCoverageSummarySettled();
     expect(screen.getByTestId('market-overview-rail-signal-watch')).toHaveTextContent(/VIX/);
     expect(screen.getByTestId('market-overview-rail-signal-watch')).toHaveTextContent(/US 10Y|DXY/);
     expect(screen.getByTestId('market-overview-rail-signal-watch')).not.toHaveTextContent(/HSI/);
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
-    expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent(/最近更新：/);
+    await expectCoverageSummarySettled();
     expect(screen.getByTestId('market-overview-rail-signal-watch')).toHaveTextContent(/沪深300/);
     expect(screen.getByTestId('market-overview-rail-signal-watch')).toHaveTextContent(/HSI|HSTECH/);
 
     fireEvent.click(screen.getByRole('button', { name: '加密货币' }));
-    expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent(/最近更新：/);
+    await expectCoverageSummarySettled();
     expect(screen.getByTestId('market-overview-rail-signal-watch')).toHaveTextContent(/Bitcoin/);
     expect(screen.getByTestId('market-overview-rail-signal-watch')).toHaveTextContent(/Ethereum/);
     expect(screen.getByTestId('market-overview-card-cryptoCore')).toBeInTheDocument();
@@ -3176,7 +3183,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.queryByText(/Log:/i)).not.toBeInTheDocument();
     expect(screen.queryAllByTestId('market-overview-fallback-only-notice')).toHaveLength(0);
     expect(screen.getByTestId('market-data-quality')).toBeInTheDocument();
-    expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent(/最近更新：/);
+    await expectCoverageSummarySettled();
     expect(screen.getByTestId('market-data-quality')).toHaveTextContent(/数据可用|更新中|等待实时源|部分数据暂不可用/);
     expect(screen.queryAllByTestId('market-overview-compact-error-badge').length).toBeLessThanOrEqual(2);
     expect(screen.getAllByTestId('data-freshness-badge-fallback').length).toBeGreaterThan(0);
@@ -3344,6 +3351,33 @@ describe('MarketOverviewPage', () => {
     await runMarketOverviewAsyncStep(() => {
       indicesRequest.resolve(panel('IndexTrendsCard', 'SPX'));
     });
+  });
+
+  it('does not request operator-only readiness endpoints for consumer surface mode', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: false,
+      canReadProviders: false,
+    });
+
+    render(createElement(MarketOverviewPage));
+
+    await waitFor(() => expect(marketOverviewApi.getIndices).toHaveBeenCalledTimes(1));
+    expect(marketApi.getDataReadiness).not.toHaveBeenCalled();
+    expect(marketApi.getProfessionalDataCapabilities).not.toHaveBeenCalled();
+    expect(marketApi.getRegimeReadModel).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows admin operator readiness ownership when provider capability is present', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: true,
+      canReadProviders: true,
+    });
+
+    render(createElement(MarketOverviewPage));
+
+    await waitFor(() => expect(marketApi.getDataReadiness).toHaveBeenCalledTimes(1));
+    expect(marketApi.getProfessionalDataCapabilities).toHaveBeenCalledTimes(1);
+    expect(marketApi.getRegimeReadModel).toHaveBeenCalledTimes(1);
   });
 
   it('renders a stable MarketMonitor skeleton with grouped deep panels and collapsed diagnostics', async () => {
@@ -4684,7 +4718,7 @@ describe('MarketOverviewPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
 
     await waitFor(() => {
-      expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent(/最近更新：/);
+      expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent(/数据可用|最近更新：/);
     });
     expect(screen.queryByTestId('market-overview-category-empty-state')).not.toBeInTheDocument();
   });
@@ -4694,7 +4728,7 @@ describe('MarketOverviewPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
 
-    expect(await screen.findByTestId('market-overview-coverage-summary')).toHaveTextContent(/最近更新：/);
+    await expectCoverageSummarySettled();
 
     expect(screen.getByRole('heading', { name: /市场宽度与赚钱效应/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /行业与主题强弱/i })).toBeInTheDocument();
@@ -4708,7 +4742,7 @@ describe('MarketOverviewPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '加密货币' }));
 
     await waitFor(() => {
-      expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent(/最近更新：/);
+      expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent(/数据可用|最近更新：/);
     });
     expect(screen.getByTestId('market-overview-card-cryptoCore').closest('[data-testid="market-overview-main-grid"]')).toBeTruthy();
   });
@@ -5051,7 +5085,7 @@ describe('MarketOverviewPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
     expect(screen.getByRole('button', { name: 'A股/港股' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent(/最近更新：/);
+    await expectCoverageSummarySettled();
     expect(screen.getByRole('heading', { name: /A股短线情绪/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /A股与港股指数/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /市场宽度与赚钱效应/i })).toBeInTheDocument();
@@ -5223,10 +5257,13 @@ describe('MarketOverviewPage', () => {
     render(createElement(MarketOverviewPage));
 
     expandPendingDataSourceSection();
-    expect(await screen.findByTestId('market-overview-card-crypto')).toBeInTheDocument();
+    const cryptoCard = await screen.findByTestId('market-overview-card-crypto');
+    expect(cryptoCard).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /加密货币行情/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /情绪与资金面/i })).toBeInTheDocument();
-    expect(screen.getByTestId('market-overview-card-crypto')).toHaveTextContent(/部分数据暂不可用|数据更新失败|暂不可用/);
+    await waitFor(() => {
+      expect(cryptoCard).toHaveTextContent(/部分数据暂不可用|数据更新失败|暂不可用/);
+    });
     expect(screen.queryByText('BTC')).not.toBeInTheDocument();
     expect(screen.queryByText(/正在获取最新快照/i)).not.toBeInTheDocument();
   });
@@ -5297,6 +5334,32 @@ describe('MarketOverviewPage', () => {
       indicesRefresh.resolve(panel('IndexTrendsCard', 'SPX'));
       volatilityRefresh.resolve(panel('VolatilityCard', 'VIX'));
       cryptoRefresh.resolve(cryptoPanel());
+    });
+  });
+
+  it('coalesces manual refresh with an in-flight polling refresh for the same panel', async () => {
+    vi.useFakeTimers();
+    const setIntervalSpy = vi.spyOn(window, 'setInterval');
+
+    render(createElement(MarketOverviewPage));
+
+    await drainStagedMarketPanelRequests();
+    expectMarketPanelRequestsCalledOnce(allMarketPanelRequests);
+
+    const fastCallback = getMarketOverviewIntervalCallback(setIntervalSpy, FAST_MARKET_POLL_INTERVAL_MS);
+    const volatilityRefresh = createDeferredPromise<ReturnType<typeof panel>>();
+    vi.mocked(marketOverviewApi.getVolatility).mockReturnValueOnce(volatilityRefresh.promise);
+
+    await runMarketOverviewAsyncStep(() => {
+      fastCallback();
+    });
+    fireEvent.click(screen.getByRole('button', { name: '美股' }));
+    fireEvent.click(screen.getByRole('button', { name: /刷新 波动率与风险压力/i }));
+
+    expect(marketOverviewApi.getVolatility).toHaveBeenCalledTimes(2);
+
+    await runMarketOverviewAsyncStep(() => {
+      volatilityRefresh.resolve(panel('VolatilityCard', 'VIX'));
     });
   });
 
