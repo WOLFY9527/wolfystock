@@ -9174,6 +9174,98 @@ html[data-theme-style='paper'] .stock-research-identity-header h2 {
   letter-spacing: 0;
 }
 
+html[data-theme-style='paper'] .stock-current-conclusion {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 0.58), rgb(246 241 232 / 0.72)),
+    rgb(251 248 243 / 0.78);
+  box-shadow: var(--shadow-tight);
+  padding: 1rem;
+}
+
+html[data-theme-style='paper'] .stock-current-conclusion__header {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
+}
+
+html[data-theme-style='paper'] .stock-current-conclusion__eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--sage-deep);
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+html[data-theme-style='paper'] .stock-current-conclusion__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.08rem, 1.75vw, 1.42rem);
+  font-weight: 740;
+  color: var(--wolfy-text-primary);
+  letter-spacing: 0;
+  line-height: 1.25;
+}
+
+html[data-theme-style='paper'] .stock-current-conclusion__grid {
+  display: grid;
+  min-width: 0;
+  gap: 0.68rem;
+  margin-top: 0.9rem;
+}
+
+html[data-theme-style='paper'] .stock-current-conclusion__item {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgb(255 255 255 / 0.44);
+  padding: 0.72rem 0.82rem;
+}
+
+html[data-theme-style='paper'] .stock-current-conclusion__item--primary {
+  background: rgb(245 247 239 / 0.7);
+}
+
+html[data-theme-style='paper'] .stock-current-conclusion__item > span {
+  display: block;
+  margin-bottom: 0.38rem;
+  color: var(--wolfy-text-muted);
+  font-size: 0.7rem;
+  font-weight: 730;
+  letter-spacing: 0;
+}
+
+html[data-theme-style='paper'] .stock-current-conclusion__item p {
+  margin: 0;
+  color: var(--wolfy-text-secondary);
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+
+html[data-theme-style='paper'] .stock-current-conclusion__item ul {
+  margin: 0;
+  padding-left: 1rem;
+  color: var(--wolfy-text-secondary);
+  font-size: 0.83rem;
+  line-height: 1.6;
+}
+
+html[data-theme-style='paper'] .stock-factor-evidence,
+html[data-theme-style='paper'] .stock-risk-triggers {
+  display: grid;
+  min-width: 0;
+  gap: 0.78rem;
+}
+
+@media (min-width: 900px) {
+  html[data-theme-style='paper'] .stock-current-conclusion__grid {
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  }
+}
+
 html[data-theme-style='paper'] .stock-analyst-memo {
   margin-top: 1rem;
   border-top: 1px solid var(--line);

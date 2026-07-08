@@ -938,6 +938,14 @@ type SingleStockEvidencePackEntry = {
   blockedCopyTestId: string;
 };
 
+type StockResearchConclusionView = {
+  interpretation: string;
+  supportingEvidence: string[];
+  uncertainty: string[];
+  invalidation: string[];
+  nextAction: string;
+};
+
 function StockWorkspaceSection({
   eyebrow,
   title,
@@ -966,6 +974,146 @@ function StockWorkspaceSection({
         {children}
       </div>
     </section>
+  );
+}
+
+function StockCurrentConclusionPanel({
+  view,
+  language,
+}: {
+  view: StockResearchConclusionView;
+  language: 'zh' | 'en';
+}) {
+  const isEnglish = language === 'en';
+  return (
+    <section
+      className="stock-current-conclusion"
+      data-testid="stock-current-research-conclusion"
+      aria-labelledby="stock-current-research-conclusion-title"
+    >
+      <div className="stock-current-conclusion__header">
+        <p className="stock-current-conclusion__eyebrow">{isEnglish ? 'Current Research Conclusion' : '当前研究结论'}</p>
+        <h3 id="stock-current-research-conclusion-title" className="stock-current-conclusion__title">
+          {view.interpretation}
+        </h3>
+      </div>
+      <div className="stock-current-conclusion__grid">
+        <div className="stock-current-conclusion__item stock-current-conclusion__item--primary">
+          <span>{isEnglish ? 'Supporting evidence' : '支持证据'}</span>
+          <RoughBulletList
+            items={view.supportingEvidence}
+            emptyText={isEnglish ? 'No supporting evidence is listed yet.' : '暂未列出支持证据。'}
+          />
+        </div>
+        <div className="stock-current-conclusion__item">
+          <span>{isEnglish ? 'Uncertainty' : '不确定性'}</span>
+          <RoughBulletList
+            items={view.uncertainty}
+            emptyText={isEnglish ? 'No uncertainty note is listed yet.' : '暂未列出不确定性。'}
+          />
+        </div>
+        <div className="stock-current-conclusion__item">
+          <span>{isEnglish ? 'Invalidation / risk' : '失效 / 风险条件'}</span>
+          <RoughBulletList
+            items={view.invalidation}
+            emptyText={isEnglish ? 'No invalidation condition is listed yet.' : '暂未列出失效条件。'}
+          />
+        </div>
+        <div className="stock-current-conclusion__item">
+          <span>{isEnglish ? 'Next research action' : '下一步研究动作'}</span>
+          <p>{view.nextAction}</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function StockFactorEvidencePanel({
+  scoreRows,
+  packet,
+  language,
+}: {
+  scoreRows: Array<{ key: string; label: string; value: number }>;
+  packet: SymbolResearchPacket | null;
+  language: 'zh' | 'en';
+}) {
+  const isEnglish = language === 'en';
+  const stackRows = packet ? buildEvidenceStackRows(packet, language) : [];
+  const readinessRows = stackRows.filter((row) => row.key !== 'quote' && row.key !== 'history');
+
+  return (
+    <div className="stock-factor-evidence" data-testid="stock-factor-evidence-panel">
+      {scoreRows.length ? (
+        <RoughSectionCard eyebrow={isEnglish ? 'Factor evidence' : '因子证据'} title={isEnglish ? 'Component evidence by relevance' : '按相关性排列的组件证据'}>
+          <RoughScoreRows
+            items={scoreRows}
+            emptyText={isEnglish ? 'No component score yet.' : '暂无组件评分。'}
+          />
+        </RoughSectionCard>
+      ) : (
+        <RoughSectionCard eyebrow={isEnglish ? 'Factor evidence' : '因子证据'} title={isEnglish ? 'Factor evidence unavailable' : '因子证据暂不可用'}>
+          <p className="text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+            {isEnglish ? 'No scored factor dimension is available for this packet.' : '当前研究包没有可展示的评分因子维度。'}
+          </p>
+        </RoughSectionCard>
+      )}
+      {readinessRows.length ? (
+        <RoughSectionCard eyebrow={isEnglish ? 'Data state' : '数据状态'} title={isEnglish ? 'Ready, partial, stale, unavailable' : '可用、部分、延迟、不可用'}>
+          <RoughKeyValueRows
+            rows={readinessRows.map((row) => ({
+              key: row.key,
+              label: row.label,
+              value: row.value,
+            }))}
+          />
+        </RoughSectionCard>
+      ) : null}
+    </div>
+  );
+}
+
+function StockRiskTriggersPanel({
+  data,
+  missingSummary,
+  language,
+}: {
+  data: StockStructureDecisionResponse;
+  missingSummary: string | null;
+  language: 'zh' | 'en';
+}) {
+  const isEnglish = language === 'en';
+  const observedRisks = safeConsumerList([
+    ...(data.riskObservations ?? []),
+    ...(data.researchNotes.riskFlags ?? []),
+  ], language).map((item) => mapConsumerStatusText(item, language));
+  const invalidationRows = safeConsumerList(data.explanation.whatInvalidatesIt ?? [], language);
+  const unknownEvidence = compactUnique([
+    missingSummary,
+    ...safeConsumerList(data.researchNotes.needsMoreEvidence ?? [], language),
+    ...safeConsumerList(data.evidenceGaps ?? [], language),
+  ].filter(Boolean) as string[]);
+
+  return (
+    <div className="stock-risk-triggers" data-testid="stock-risk-triggers-panel">
+      <RoughSectionCard eyebrow={isEnglish ? 'Observed risk evidence' : '已观察风险证据'} title={isEnglish ? 'What is already visible' : '当前已经可见'}>
+        <RoughBulletList
+          items={observedRisks}
+          emptyText={isEnglish ? 'No observed risk evidence is listed yet.' : '暂未列出已观察风险证据。'}
+        />
+      </RoughSectionCard>
+      <RoughSectionCard eyebrow={isEnglish ? 'Invalidation context' : '失效条件'} title={isEnglish ? 'What would change the interpretation' : '什么会改变当前解释'}>
+        <RoughBulletList
+          items={invalidationRows}
+          emptyText={isEnglish ? 'No threshold or invalidation condition is listed yet.' : '暂未列出阈值或失效条件。'}
+        />
+      </RoughSectionCard>
+      <RoughSectionCard eyebrow={isEnglish ? 'Unknown evidence' : '未知 / 待补证据'} title={isEnglish ? 'Not inferred as neutral' : '不按中性值处理'}>
+        <RoughBulletList
+          items={unknownEvidence}
+          emptyText={isEnglish ? 'No additional unknown evidence is listed yet.' : '暂未列出额外未知证据。'}
+        />
+      </RoughSectionCard>
+    </div>
   );
 }
 
@@ -1897,6 +2045,88 @@ function evidencePackTrustLabel(entry: SingleStockEvidencePackEntry | null, lang
   return language === 'en' ? 'Not ready yet' : '暂不可用';
 }
 
+function buildStockResearchConclusionView({
+  data,
+  quote,
+  history,
+  historyFailed,
+  researchPacket,
+  topScore,
+  language,
+}: {
+  data: StockStructureDecisionResponse;
+  quote: StockQuote | null;
+  history: StockHistoryResponse | null;
+  historyFailed: boolean;
+  researchPacket: SymbolResearchPacket | null;
+  topScore: { label: string; value: number } | undefined;
+  language: 'zh' | 'en';
+}): StockResearchConclusionView {
+  const displayStructureState = productReadStrongConclusionAllowed(data.productReadModel)
+    ? data.structureState
+    : (productReadClassificationDisplayState(data.productReadModel) || 'withheld');
+  const structureState = stockStructureStateLabel(displayStructureState, language)
+    || (language === 'en' ? 'Under review' : '待确认');
+  const confidenceValue = data.productReadModel?.confidence?.label || data.confidence;
+  const confidence = confidenceLabel(confidenceValue, language);
+  const availableBars = historyBarsCount(history, data);
+  const requiredBars = requiredHistoryBars(history, data);
+  const historyState = stockHistoryReadinessState({ history, failed: historyFailed, data, language });
+  const quoteFreshness = quote ? quoteBoundaryFreshnessLabel(quote, language).label : null;
+  const confirms = safeConsumerList(data.explanation.whatConfirmsIt ?? [], language);
+  const risks = safeConsumerList([
+    ...(data.explanation.whatInvalidatesIt ?? []),
+    ...(data.riskObservations ?? []),
+    ...(data.researchNotes.riskFlags ?? []),
+  ], language).map((item) => mapConsumerStatusText(item, language));
+  const gaps = compactUnique([
+    ...buildEvidenceGapLabels(researchPacket ?? {
+      symbol: data.ticker,
+      market: '',
+      identity: {},
+      quote: { state: 'unknown' },
+      history: { state: 'unknown' },
+      structure: { state: 'unknown' },
+      fundamentals: { state: 'unknown', fieldsAvailable: [] },
+      events: { state: 'unknown', latest: [] },
+      peer: { state: 'unknown' },
+      missingData: [],
+      researchStatus: 'unknown',
+      nextDataAction: '',
+      observationOnly: true,
+      decisionGrade: false,
+      noAdviceDisclosure: '',
+    }, language),
+    ...safeConsumerList(data.researchNotes.needsMoreEvidence ?? [], language),
+    ...safeConsumerList(data.evidenceGaps ?? [], language),
+  ]);
+  const nextAction = safeConsumerList(data.researchNotes.watchNext ?? [], language)[0]
+    || safeOptionalConsumerText(researchPacket?.nextDataAction, language)
+    || (language === 'en' ? 'Recheck after the next data refresh.' : '下一次数据刷新后复核。');
+
+  return {
+    interpretation: language === 'en'
+      ? `${data.ticker} is in ${structureState}; confidence is ${confidence}.`
+      : `${data.ticker} 当前为${structureState}；置信度为${confidence}。`,
+    supportingEvidence: compactUnique([
+      quoteFreshness ? (language === 'en' ? `Quote: ${quoteFreshness}` : `报价：${quoteFreshness}`) : null,
+      availableBars > 0 ? chartCoverageLabel(availableBars, requiredBars, language) : historyState.label,
+      topScore ? `${topScore.label} ${topScore.value}` : null,
+      ...confirms,
+    ].filter(Boolean) as string[]).slice(0, 4),
+    uncertainty: compactUnique([
+      ...gaps,
+      productReadStrongConclusionAllowed(data.productReadModel || researchPacket?.productReadModel || null)
+        ? null
+        : (language === 'en' ? 'Strong conclusion is withheld by the product read model.' : '产品读模型要求暂不形成强结论。'),
+    ].filter(Boolean) as string[]).slice(0, 4),
+    invalidation: risks.length ? risks.slice(0, 4) : [
+      language === 'en' ? 'No invalidation condition is listed yet.' : '暂未列出明确失效条件。',
+    ],
+    nextAction,
+  };
+}
+
 function StockAnalystMemo({
   language,
   observation,
@@ -2095,6 +2325,15 @@ function StockConsumerResearchSummary({
       label: localLabel(key, language),
       value,
     }))[0];
+  const conclusionView = buildStockResearchConclusionView({
+    data,
+    quote,
+    history,
+    historyFailed,
+    researchPacket,
+    topScore,
+    language,
+  });
   const keyEvidence = [
     availableBars > 0 ? (language === 'en' ? `${availableBars} historical bars` : `${availableBars} 根历史 K 线`) : null,
     topScore ? `${topScore.label} ${topScore.value}` : null,
@@ -2166,6 +2405,7 @@ function StockConsumerResearchSummary({
               <StatusBadge status={toneFor(displayStructureState)} label={structureState} size="sm" />
             </div>
           </div>
+          <StockCurrentConclusionPanel view={conclusionView} language={language} />
           <div data-testid="stock-price-history-visual-block" data-primary-analytical-surface="price-path">
             <StockHistoryCoreChart
               history={history}
@@ -3846,7 +4086,7 @@ export default function StockStructureDecisionPage() {
               <div
                 className="stock-workspace-product-flow"
                 data-testid="stock-workspace-product-flow"
-                data-product-flow="symbol-current-observation-known-facts-price-path-evidence-quality-evidence-package-structure-risks-next-checks"
+                data-product-flow="identity-data-state-current-conclusion-price-evidence-path-analyst-memo-factor-evidence-risk-triggers-peer-theme-context-evidence-ledger-data-limitations"
               >
                 <StockConsumerResearchSummary
                   data={data}
@@ -3861,10 +4101,10 @@ export default function StockStructureDecisionPage() {
                   localize={localize}
                 />
 
-                <div className="stock-workspace-grid stock-workspace-grid--evidence" data-testid="stock-evidence-workspace">
+                <div className="stock-workspace-grid stock-workspace-grid--evidence" data-testid="stock-identity-data-state-workspace">
                   <StockWorkspaceSection
-                    eyebrow={locale === 'en' ? 'Known facts' : '已知事实'}
-                    title={locale === 'en' ? 'Identity and bounded data state' : '标的身份与数据边界'}
+                    eyebrow={locale === 'en' ? 'Identity and data state' : '标的身份与数据状态'}
+                    title={locale === 'en' ? 'Current instrument and bounded data state' : '当前标的与有边界的数据状态'}
                     testId="stock-known-facts-panel"
                   >
                     {quoteBoundaryView ? (
@@ -3924,6 +4164,170 @@ export default function StockStructureDecisionPage() {
                   </StockWorkspaceSection>
 
                   <StockWorkspaceSection
+                    eyebrow={locale === 'en' ? 'Price and evidence path' : '价格与证据路径'}
+                    title={locale === 'en' ? 'Market path and technical evidence' : '市场路径与技术证据'}
+                    testId="stock-history-technical-workspace"
+                    className="stock-workspace-section--wide"
+                  >
+                    {!isCompareRequest && !symbolNotFound ? (
+                      <>
+                        <StockHistoryReadinessPanel
+                          history={history}
+                          failed={historyFailed}
+                          data={data}
+                          language={locale}
+                          showChart={false}
+                        />
+                        <StockTechnicalIndicatorsPanel
+                          indicators={technicalIndicators}
+                          failed={technicalIndicatorsFailed}
+                          loading={loading && !technicalIndicators && !technicalIndicatorsFailed}
+                          language={locale}
+                        />
+                      </>
+                    ) : (
+                      <TerminalEmptyState title={locale === 'en' ? 'Price path unavailable' : '价格路径暂不可用'}>
+                        {locale === 'en' ? 'Compare mode keeps the price path in each symbol evidence row.' : '对比模式下，价格路径保留在各标的证据行中。'}
+                      </TerminalEmptyState>
+                    )}
+                  </StockWorkspaceSection>
+
+                  <StockWorkspaceSection
+                    eyebrow={locale === 'en' ? 'Catalyst / options evidence' : '催化 / 期权证据'}
+                    title={locale === 'en' ? 'Supporting evidence readiness' : '支持证据就绪度'}
+                    testId="stock-catalyst-options-workspace"
+                    className="stock-workspace-section--wide"
+                  >
+                    <StockEarningsCatalystReadinessPanel
+                      packet={researchPacket}
+                      failed={researchPacketFailed}
+                      language={locale}
+                    />
+                    {!isCompareRequest && !symbolNotFound ? (
+                      <OptionsStructureSurface
+                        structure={optionsStructure}
+                        failed={optionsStructureFailed}
+                        loading={loading && !optionsStructure && !optionsStructureFailed}
+                        language={locale}
+                      />
+                    ) : null}
+                  </StockWorkspaceSection>
+                </div>
+
+                <StockWorkspaceSection
+                  eyebrow={locale === 'en' ? 'Analyst memo' : '分析备忘'}
+                  title={locale === 'en' ? 'Research narrative and evidence stack' : '研究叙事与证据栈'}
+                  testId="stock-analyst-memo-workspace"
+                  className="stock-workspace-section--workflow"
+                >
+                  <StockResearchPacketPanel
+                    packet={researchPacket}
+                    failed={researchPacketFailed}
+                    language={locale}
+                  />
+                  {isCompareRequest || comparePacket ? (
+                    <SymbolCompareEvidencePacketPanel
+                      packet={comparePacket}
+                      language={locale}
+                      requestedSymbols={requestedSymbols}
+                    />
+                  ) : null}
+                  {hasResearchPacket ? (
+                    <div className="grid gap-3 p-3 md:grid-cols-2">
+                      {explainRows.length ? (
+                        <RoughSectionCard eyebrow={locale === 'en' ? 'Structure logic' : '结构逻辑'} title={locale === 'en' ? 'Why this structure' : '结构解释'}>
+                          <RoughKeyValueRows rows={explainRows} />
+                        </RoughSectionCard>
+                      ) : null}
+                      {researchRows.length ? (
+                        <RoughSectionCard eyebrow={locale === 'en' ? 'Research notes' : '研究备注'} title={locale === 'en' ? 'What remains uncertain' : '仍需确认'}>
+                          <RoughKeyValueRows rows={researchRows} />
+                        </RoughSectionCard>
+                      ) : null}
+                      {keyLevelRows.length ? (
+                        <RoughSectionCard eyebrow={locale === 'en' ? 'Reference levels' : '参考位置'} title={locale === 'en' ? 'Key levels' : '关键位置'}>
+                          <RoughKeyValueRows rows={keyLevelRows} />
+                        </RoughSectionCard>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <StockStructureCannotResearchState
+                      data={data}
+                      language={locale}
+                      localize={localize}
+                    />
+                  )}
+                </StockWorkspaceSection>
+
+                <div className="stock-workspace-grid stock-workspace-grid--structure" data-testid="stock-structure-interpretation-workspace">
+                  <StockWorkspaceSection
+                    eyebrow={locale === 'en' ? 'Factor evidence' : '因子证据'}
+                    title={locale === 'en' ? 'Meaningful factor evidence' : '按含义组织的因子证据'}
+                    testId="stock-factor-evidence-workspace"
+                  >
+                    <StockFactorEvidencePanel
+                      scoreRows={scoreRows}
+                      packet={researchPacket}
+                      language={locale}
+                    />
+                  </StockWorkspaceSection>
+
+                  <StockWorkspaceSection
+                    eyebrow={locale === 'en' ? 'Risk triggers' : '风险触发'}
+                    title={locale === 'en' ? 'Observed risk and invalidation triggers' : '已观察风险与失效条件'}
+                    testId="stock-risk-triggers-workspace"
+                  >
+                    <StockRiskTriggersPanel
+                      data={data}
+                      missingSummary={missingDataSummary}
+                      language={locale}
+                    />
+                  </StockWorkspaceSection>
+
+                  <StockWorkspaceSection
+                    eyebrow={locale === 'en' ? 'Peer and theme context' : '同业与主题语境'}
+                    title={locale === 'en' ? 'Supporting context, not a widget cluster' : '作为支持证据，而非零散组件'}
+                    testId="stock-peer-theme-context-workspace"
+                    className="stock-workspace-section--wide"
+                  >
+                    {hasPeerCorrelationContent(data.peerCorrelationSnapshot) ? (
+                      <>
+                        <PeerCorrelationSnapshotBlock
+                          snapshot={data.peerCorrelationSnapshot}
+                          locale={locale}
+                          testId="stock-structure-peer-correlation-snapshot"
+                        />
+                        {compareWithPeerPath && comparablePeerSymbol ? (
+                          <div className="p-3">
+                            <CompareWithPeerLink
+                              language={locale}
+                              to={compareWithPeerPath}
+                              peerSymbol={comparablePeerSymbol}
+                            />
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <TerminalEmptyState title={locale === 'en' ? 'Peer context unavailable' : '同业语境暂不可用'}>
+                        {locale === 'en'
+                          ? 'Peer or theme evidence is not available yet; it is not treated as neutral.'
+                          : '同业或主题证据暂不可用，不按中性证据处理。'}
+                      </TerminalEmptyState>
+                    )}
+                  </StockWorkspaceSection>
+                </div>
+
+                <div className="stock-workspace-grid stock-workspace-grid--evidence" data-testid="stock-evidence-workspace">
+                  <StockWorkspaceSection
+                    eyebrow={locale === 'en' ? 'Evidence ledger' : '证据账本'}
+                    title={locale === 'en' ? 'Lineage, freshness, and limitations' : '血缘、新鲜度与限制'}
+                    testId="stock-evidence-ledger-workspace"
+                    className="stock-workspace-section--wide stock-workspace-section--ledger"
+                  >
+                    <StockEvidenceLedger rows={stockEvidenceLedgerRows} language={locale} />
+                  </StockWorkspaceSection>
+
+                  <StockWorkspaceSection
                     eyebrow={locale === 'en' ? 'Evidence package' : '证据包'}
                     title={locale === 'en' ? 'Copyable research packet' : '可复制的研究证据'}
                     testId="stock-evidence-package-workspace"
@@ -3945,9 +4349,27 @@ export default function StockStructureDecisionPage() {
                     )}
                   </StockWorkspaceSection>
 
-                  <div className="stock-workspace-section stock-workspace-section--wide stock-workspace-section--ledger">
-                    <StockEvidenceLedger rows={stockEvidenceLedgerRows} language={locale} />
-                  </div>
+                  <StockWorkspaceSection
+                    eyebrow={locale === 'en' ? 'Data limitations' : '数据限制'}
+                    title={locale === 'en' ? 'Explicit limitations and next checks' : '明确限制与下一步检查'}
+                    testId="stock-next-research-checks"
+                  >
+                    <StockMissingDataNextStepsPanel
+                      data={data}
+                      packet={researchPacket}
+                      missingSummary={missingDataSummary}
+                      optionsStructure={optionsStructure}
+                      optionsFailed={optionsStructureFailed}
+                      technicalIndicators={technicalIndicators}
+                      technicalFailed={technicalIndicatorsFailed}
+                      history={history}
+                      historyFailed={historyFailed}
+                      language={locale}
+                      showAdminReadinessCue={showAdminReadinessCue}
+                      symbol={data.ticker || primarySymbol}
+                      localize={localize}
+                    />
+                  </StockWorkspaceSection>
                 </div>
 
                 <StockWorkspaceSection
@@ -3972,147 +4394,6 @@ export default function StockStructureDecisionPage() {
                     testId="stock-research-workspace-flow"
                   />
                 </StockWorkspaceSection>
-
-                <div className="stock-workspace-grid stock-workspace-grid--structure" data-testid="stock-structure-interpretation-workspace">
-                  {!isCompareRequest && !symbolNotFound ? (
-                    <StockWorkspaceSection
-                      eyebrow={locale === 'en' ? 'Price history / technicals' : '价格历史 / 技术'}
-                      title={locale === 'en' ? 'Market path and technical evidence' : '市场路径与技术证据'}
-                      testId="stock-history-technical-workspace"
-                    >
-                      <StockHistoryReadinessPanel
-                        history={history}
-                        failed={historyFailed}
-                        data={data}
-                        language={locale}
-                        showChart={false}
-                      />
-                      <StockTechnicalIndicatorsPanel
-                        indicators={technicalIndicators}
-                        failed={technicalIndicatorsFailed}
-                        loading={loading && !technicalIndicators && !technicalIndicatorsFailed}
-                        language={locale}
-                      />
-                    </StockWorkspaceSection>
-                  ) : null}
-
-                  <StockWorkspaceSection
-                    eyebrow={locale === 'en' ? 'Catalysts / options' : '催化 / 期权'}
-                    title={locale === 'en' ? 'Readiness before conclusions' : '先看就绪度'}
-                    testId="stock-catalyst-options-workspace"
-                  >
-                    <StockEarningsCatalystReadinessPanel
-                      packet={researchPacket}
-                      failed={researchPacketFailed}
-                      language={locale}
-                    />
-                    {!isCompareRequest && !symbolNotFound ? (
-                      <OptionsStructureSurface
-                        structure={optionsStructure}
-                        failed={optionsStructureFailed}
-                        loading={loading && !optionsStructure && !optionsStructureFailed}
-                        language={locale}
-                      />
-                    ) : null}
-                  </StockWorkspaceSection>
-
-                  <StockWorkspaceSection
-                    eyebrow={locale === 'en' ? 'Structure interpretation' : '结构解释'}
-                    title={locale === 'en' ? 'Known, uncertain, conflicting evidence' : '已知、未知与相互制约的证据'}
-                    testId="stock-structure-evidence-workspace"
-                    className="stock-workspace-section--wide"
-                  >
-                    <StockResearchPacketPanel
-                      packet={researchPacket}
-                      failed={researchPacketFailed}
-                      language={locale}
-                    />
-                    {hasResearchPacket ? (
-                      <>
-                        {isCompareRequest || comparePacket ? (
-                          <SymbolCompareEvidencePacketPanel
-                            packet={comparePacket}
-                            language={locale}
-                            requestedSymbols={requestedSymbols}
-                          />
-                        ) : null}
-                        <div className="grid gap-3 p-3 md:grid-cols-2">
-                          {scoreRows.length ? (
-                            <RoughSectionCard eyebrow={locale === 'en' ? 'Scores' : '评分'} title={locale === 'en' ? 'Component scores' : '组件评分'}>
-                              <RoughScoreRows
-                                items={scoreRows}
-                                emptyText={locale === 'en' ? 'No component score yet.' : '暂无组件评分。'}
-                              />
-                            </RoughSectionCard>
-                          ) : null}
-                          {explainRows.length ? (
-                            <RoughSectionCard eyebrow={locale === 'en' ? 'Structure logic' : '结构逻辑'} title={locale === 'en' ? 'Why this structure' : '结构解释'}>
-                              <RoughKeyValueRows rows={explainRows} />
-                            </RoughSectionCard>
-                          ) : null}
-                          {researchRows.length ? (
-                            <RoughSectionCard eyebrow={locale === 'en' ? 'Research notes' : '研究备注'} title={locale === 'en' ? 'What remains uncertain' : '仍需确认'}>
-                              <RoughKeyValueRows rows={researchRows} />
-                            </RoughSectionCard>
-                          ) : null}
-                          {hasPeerCorrelationContent(data.peerCorrelationSnapshot) ? (
-                            <>
-                              <PeerCorrelationSnapshotBlock
-                                snapshot={data.peerCorrelationSnapshot}
-                                locale={locale}
-                                testId="stock-structure-peer-correlation-snapshot"
-                                className="md:col-span-2"
-                              />
-                              {compareWithPeerPath && comparablePeerSymbol ? (
-                                <div className="md:col-span-2">
-                                  <CompareWithPeerLink
-                                    language={locale}
-                                    to={compareWithPeerPath}
-                                    peerSymbol={comparablePeerSymbol}
-                                  />
-                                </div>
-                              ) : null}
-                            </>
-                          ) : null}
-                          {keyLevelRows.length ? (
-                            <RoughSectionCard eyebrow={locale === 'en' ? 'Reference levels' : '参考位置'} title={locale === 'en' ? 'Key levels' : '关键位置'}>
-                              <RoughKeyValueRows rows={keyLevelRows} />
-                            </RoughSectionCard>
-                          ) : null}
-                        </div>
-                      </>
-                    ) : (
-                      <StockStructureCannotResearchState
-                        data={data}
-                        language={locale}
-                        localize={localize}
-                      />
-                    )}
-                  </StockWorkspaceSection>
-
-                  <StockWorkspaceSection
-                    eyebrow={locale === 'en' ? 'Risks / limitations / next checks' : '风险 / 限制 / 下一步'}
-                    title={locale === 'en' ? 'What would change this interpretation' : '什么会改变当前解释'}
-                    testId="stock-next-research-checks"
-                    className="stock-workspace-section--wide"
-                  >
-                    <StockMissingDataNextStepsPanel
-                      data={data}
-                      packet={researchPacket}
-                      missingSummary={missingDataSummary}
-                      optionsStructure={optionsStructure}
-                      optionsFailed={optionsStructureFailed}
-                      technicalIndicators={technicalIndicators}
-                      technicalFailed={technicalIndicatorsFailed}
-                      history={history}
-                      historyFailed={historyFailed}
-                      language={locale}
-                      showAdminReadinessCue={showAdminReadinessCue}
-                      symbol={data.ticker || primarySymbol}
-                      localize={localize}
-                    />
-                  </StockWorkspaceSection>
-                </div>
               </div>
             ) : null}
           </ConsoleBoard>
