@@ -7,7 +7,6 @@ import asyncio
 import json
 import re
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -40,7 +39,12 @@ from src.services.crypto_realtime_service import get_crypto_realtime_service
 from src.services.consumer_issue_labels import sanitize_consumer_reason_payload
 from src.services.data_source_gap_registry_service import build_data_source_gap_registry
 from src.services.market_scenario_lab_engine import build_market_scenario_lab
-from src.services.scenario_baseline_snapshot_service import ScenarioBaselineSnapshotService
+from src.repositories.scenario_baseline_snapshot_repository import ScenarioBaselineSnapshotRepository
+from src.services.scenario_baseline_snapshot_service import (
+    ScenarioBaselineSnapshotService,
+    ScenarioBaselineSnapshotStorageError,
+)
+from src.storage import DatabaseManager
 from src.services.market_decision_cockpit_service import MarketDecisionCockpitService
 from src.services.market_data_readiness_diagnostics import build_market_data_readiness_diagnostics
 from src.services.market_overview_service import MarketOverviewService
@@ -68,7 +72,6 @@ from src.services.daily_intelligence_service import DailyIntelligenceService
 from src.services.us_history_helper import get_configured_us_stock_parquet_dir
 
 router = APIRouter()
-_DEFAULT_SCENARIO_BASELINE_SNAPSHOT_STORE_PATH = Path("output/scenario-baseline-snapshots.jsonl")
 _MAX_DATA_READINESS_SYMBOLS = 8
 _MAX_DATA_READINESS_SYMBOL_LENGTH = 24
 _MAX_REGIME_READ_MODEL_SYMBOLS = 8
@@ -138,9 +141,15 @@ def _owner_id(current_user: Optional[CurrentUser]) -> str | None:
 
 
 def _scenario_baseline_snapshot_service(request: Request) -> ScenarioBaselineSnapshotService:
-    store_path = getattr(request.app.state, "scenario_baseline_snapshot_store_path", None)
+    repository = getattr(request.app.state, "scenario_baseline_snapshot_repository", None)
+    if repository is None:
+        db_manager = getattr(request.app.state, "scenario_baseline_snapshot_db_manager", None)
+        if db_manager is None:
+            db_manager = DatabaseManager.get_instance()
+        repository = ScenarioBaselineSnapshotRepository(db_manager)
+        request.app.state.scenario_baseline_snapshot_repository = repository
     return ScenarioBaselineSnapshotService(
-        store_path=store_path or _DEFAULT_SCENARIO_BASELINE_SNAPSHOT_STORE_PATH,
+        repository=repository,
     )
 
 
@@ -683,7 +692,14 @@ def create_scenario_lab_baseline_snapshot(
             payload.model_dump(mode="json"),
             owner_id=_owner_id(current_user),
         )
-    except ValueError as exc:
+    except ScenarioBaselineSnapshotStorageError as exc:
+        message = str(exc)
+        if "immutable_snapshot_conflict" not in message:
+            raise safe_api_error(
+                status_code=500,
+                error="scenario_baseline_snapshot_storage_unavailable",
+                message="Scenario baseline snapshot storage is unavailable.",
+            ) from exc
         raise safe_api_error(
             status_code=409,
             error="scenario_baseline_snapshot_conflict",

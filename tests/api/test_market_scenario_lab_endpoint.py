@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from api.deps import CurrentUser, get_optional_current_user
 from api.v1.endpoints import market
+from src.storage import DatabaseManager
 
 
 FORBIDDEN_PUBLIC_TERMS = (
@@ -89,16 +90,21 @@ def _make_user(user_id: str, username: str = "scenario-user") -> CurrentUser:
 
 def _client(
     *,
-    snapshot_store_path: Path | None = None,
+    snapshot_db_manager: DatabaseManager | None = None,
     current_user: CurrentUser | None = None,
 ) -> TestClient:
     app = FastAPI()
-    if snapshot_store_path is not None:
-        app.state.scenario_baseline_snapshot_store_path = snapshot_store_path
+    if snapshot_db_manager is not None:
+        app.state.scenario_baseline_snapshot_db_manager = snapshot_db_manager
     if current_user is not None:
         app.dependency_overrides[get_optional_current_user] = lambda: current_user
     app.include_router(market.router, prefix="/api/v1/market")
     return TestClient(app)
+
+
+def _snapshot_db(tmp_path: Path, *, name: str = "scenario-api.sqlite") -> DatabaseManager:
+    DatabaseManager.reset_instance()
+    return DatabaseManager(db_url=f"sqlite:///{tmp_path / name}")
 
 
 def _base_regime() -> dict[str, Any]:
@@ -695,8 +701,8 @@ def test_market_scenario_lab_exposes_consumer_safe_baseline_snapshot_without_int
 def test_market_scenario_lab_baseline_snapshot_create_and_readback_are_explicit_and_owner_scoped(
     tmp_path: Path,
 ) -> None:
-    store_path = tmp_path / "scenario-baselines.jsonl"
-    client = _client(snapshot_store_path=store_path, current_user=_make_user("user-a", "alice"))
+    db = _snapshot_db(tmp_path)
+    client = _client(snapshot_db_manager=db, current_user=_make_user("user-a", "alice"))
 
     create_response = client.post(
         "/api/v1/market/scenario-lab/baseline-snapshots",
@@ -711,8 +717,6 @@ def test_market_scenario_lab_baseline_snapshot_create_and_readback_are_explicit_
     assert created["readinessState"] == "ready"
     assert created["observationOnly"] is False
     assert created["contentHash"].startswith("sha256:")
-    assert store_path.exists()
-    file_size_after_create = store_path.stat().st_size
 
     latest_response = client.get(
         "/api/v1/market/scenario-lab/baseline-snapshots/latest",
@@ -724,9 +728,8 @@ def test_market_scenario_lab_baseline_snapshot_create_and_readback_are_explicit_
     assert by_id_response.status_code == 200
     assert latest_response.json() == created
     assert by_id_response.json() == created
-    assert store_path.stat().st_size == file_size_after_create
 
-    other_user = _client(snapshot_store_path=store_path, current_user=_make_user("user-b", "bob"))
+    other_user = _client(snapshot_db_manager=db, current_user=_make_user("user-b", "bob"))
     other_user_read = other_user.get("/api/v1/market/scenario-lab/baseline-snapshots/baseline-api-durable")
     assert other_user_read.status_code == 404
     other_user_latest = other_user.get(
@@ -739,8 +742,8 @@ def test_market_scenario_lab_baseline_snapshot_create_and_readback_are_explicit_
 
 
 def test_market_scenario_lab_evaluation_does_not_persist_request_supplied_baseline(tmp_path: Path) -> None:
-    store_path = tmp_path / "scenario-baselines.jsonl"
-    client = _client(snapshot_store_path=store_path, current_user=_make_user("user-a", "alice"))
+    db = _snapshot_db(tmp_path)
+    client = _client(snapshot_db_manager=db, current_user=_make_user("user-a", "alice"))
     base = _ready_base_regime()
     base["scenarioBaselineSnapshot"] = _baseline_snapshot_create_payload("request-supplied-only")
 
@@ -751,7 +754,6 @@ def test_market_scenario_lab_evaluation_does_not_persist_request_supplied_baseli
 
     assert response.status_code == 200
     assert response.json()["scenarioBaselineSnapshot"]["snapshotId"] == "request-supplied-only"
-    assert store_path.exists() is False
 
     latest_response = client.get(
         "/api/v1/market/scenario-lab/baseline-snapshots/latest",
@@ -759,7 +761,6 @@ def test_market_scenario_lab_evaluation_does_not_persist_request_supplied_baseli
     )
     assert latest_response.status_code == 200
     assert latest_response.json()["status"] == "not_available"
-    assert store_path.exists() is False
 
 
 def test_market_scenario_lab_rejects_unsupported_named_scenario() -> None:

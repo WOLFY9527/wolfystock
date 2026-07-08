@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """Consumer-safe Scenario baseline snapshot service seam.
 
-The service is deliberately pure: it normalizes caller-supplied snapshot
-metadata and exposes missing/degraded category state without reading providers,
-credentials, cache, or database state.
+Non-durable normalization is deliberately pure: it normalizes caller-supplied
+snapshot metadata without reading providers, credentials, cache, or database
+state. Durable operations delegate to the injected canonical repository.
 """
 
 from __future__ import annotations
@@ -11,8 +11,12 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from pathlib import Path
 from typing import Any, Mapping
+
+from src.repositories.scenario_baseline_snapshot_repository import (
+    ScenarioBaselineSnapshotRepository,
+    ScenarioBaselineSnapshotStorageError,
+)
 
 
 SCENARIO_BASELINE_SNAPSHOT_SCHEMA_VERSION = "scenario_baseline_snapshot.v1"
@@ -68,9 +72,9 @@ _TIMESTAMP_RE = re.compile(r"^[0-9T:Z+\-./ ]{4,40}$")
 class ScenarioBaselineSnapshotService:
     """Normalize and read Scenario baseline snapshots through a small seam."""
 
-    def __init__(self, *, store_path: str | Path | None = None) -> None:
+    def __init__(self, *, repository: ScenarioBaselineSnapshotRepository | None = None) -> None:
         self._snapshots: dict[tuple[str, str], dict[str, Any]] = {}
-        self._store_path = Path(store_path) if store_path is not None else None
+        self._repository = repository
 
     def create_snapshot(self, payload: Mapping[str, Any] | None) -> dict[str, Any]:
         raw = payload if isinstance(payload, Mapping) else {}
@@ -153,33 +157,21 @@ class ScenarioBaselineSnapshotService:
         *,
         owner_id: str | None = None,
     ) -> dict[str, Any]:
+        if self._repository is None:
+            raise ScenarioBaselineSnapshotStorageError("scenario_baseline_snapshot_repository_required")
         snapshot = _normalize_durable_snapshot(payload, owner_id=owner_id)
-        existing = self.get_durable_snapshot(str(snapshot["snapshotId"]), owner_id=owner_id)
-        if existing is not None:
-            if existing.get("contentHash") != snapshot.get("contentHash"):
-                raise ValueError("immutable_snapshot_conflict")
-            return existing
-
-        if self._store_path is None:
-            key = (_owner_scope(owner_id)["value"], str(snapshot["snapshotId"]))
-            self._snapshots[key] = snapshot
-            return dict(snapshot)
-
-        self._store_path.parent.mkdir(parents=True, exist_ok=True)
-        with self._store_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
-            handle.write("\n")
-        return dict(snapshot)
+        return self._repository.upsert_snapshot(snapshot)
 
     def get_durable_snapshot(self, snapshot_id: str, *, owner_id: str | None = None) -> dict[str, Any] | None:
+        if self._repository is None:
+            raise ScenarioBaselineSnapshotStorageError("scenario_baseline_snapshot_repository_required")
         safe_snapshot_id = _safe_identifier(snapshot_id)
         if not safe_snapshot_id:
             return None
-        owner_scope = _owner_scope(owner_id)
-        for snapshot in reversed(self._read_durable_snapshots()):
-            if snapshot.get("snapshotId") == safe_snapshot_id and snapshot.get("ownerScope") == owner_scope:
-                return dict(snapshot)
-        return None
+        return self._repository.get_snapshot(
+            snapshot_id=safe_snapshot_id,
+            owner_scope=_owner_scope(owner_id),
+        )
 
     def get_latest_durable_snapshot(
         self,
@@ -187,40 +179,16 @@ class ScenarioBaselineSnapshotService:
         scope: Mapping[str, Any] | None = None,
         owner_id: str | None = None,
     ) -> dict[str, Any]:
+        if self._repository is None:
+            raise ScenarioBaselineSnapshotStorageError("scenario_baseline_snapshot_repository_required")
         normalized_scope = _normalize_scope(scope or {})
-        owner_scope = _owner_scope(owner_id)
-        candidates = [
-            snapshot
-            for snapshot in self._read_durable_snapshots()
-            if snapshot.get("ownerScope") == owner_scope and snapshot.get("scope") == normalized_scope
-        ]
-        if not candidates:
+        latest = self._repository.latest_for_scope(
+            owner_scope=_owner_scope(owner_id),
+            scope=normalized_scope,
+        )
+        if latest is None:
             return _missing_durable_snapshot(scope=normalized_scope, owner_id=owner_id)
-        latest = max(candidates, key=lambda item: (str(item.get("createdAt") or ""), str(item.get("snapshotId") or "")))
         return dict(latest)
-
-    def _read_durable_snapshots(self) -> list[dict[str, Any]]:
-        if self._store_path is None:
-            return [
-                dict(snapshot)
-                for key, snapshot in self._snapshots.items()
-                if isinstance(key, tuple) and len(key) == 2 and isinstance(snapshot, Mapping)
-            ]
-        if not self._store_path.exists():
-            return []
-        snapshots: list[dict[str, Any]] = []
-        with self._store_path.open("r", encoding="utf-8") as handle:
-            for line in handle:
-                text = line.strip()
-                if not text:
-                    continue
-                try:
-                    item = json.loads(text)
-                except json.JSONDecodeError:
-                    continue
-                if isinstance(item, dict):
-                    snapshots.append(item)
-        return snapshots
 
 
 def _normalize_durable_snapshot(payload: Mapping[str, Any] | None, *, owner_id: str | None) -> dict[str, Any]:
@@ -263,6 +231,7 @@ def _normalize_durable_snapshot(payload: Mapping[str, Any] | None, *, owner_id: 
     observation_only = readiness_state != "ready"
     status = "available" if readiness_state == "ready" else "partial" if normalized["snapshotId"] else "not_available"
     reason_code = "baseline_available" if status == "available" else "baseline_partial" if status == "partial" else "baseline_missing"
+    final_source = {**source, "observationOnly": observation_only}
     content_payload = {
         "schemaVersion": SCENARIO_BASELINE_DURABLE_SNAPSHOT_SCHEMA_VERSION,
         "snapshotId": normalized["snapshotId"],
@@ -270,7 +239,7 @@ def _normalize_durable_snapshot(payload: Mapping[str, Any] | None, *, owner_id: 
         "scope": scope,
         "createdAt": created_at,
         "asOf": as_of,
-        "source": source,
+        "source": final_source,
         "availableDataCategories": normalized["availableDataCategories"],
         "missingDataCategories": normalized["missingDataCategories"],
         "degradedDataCategories": normalized["degradedDataCategories"],
@@ -294,7 +263,7 @@ def _normalize_durable_snapshot(payload: Mapping[str, Any] | None, *, owner_id: 
         "ownerScope": _owner_scope(owner_id),
         "createdAt": created_at,
         "asOf": as_of,
-        "source": {**source, "observationOnly": observation_only},
+        "source": final_source,
         "inputSnapshotRefs": input_snapshot_refs,
         "sourceAuthoritySummary": source_authority_summary,
         "freshnessSummary": freshness_summary,
@@ -627,5 +596,6 @@ __all__ = [
     "SCENARIO_BASELINE_DURABLE_SNAPSHOT_SCHEMA_VERSION",
     "SCENARIO_BASELINE_NO_ADVICE_DISCLOSURE",
     "SCENARIO_BASELINE_SNAPSHOT_SCHEMA_VERSION",
+    "ScenarioBaselineSnapshotStorageError",
     "ScenarioBaselineSnapshotService",
 ]
