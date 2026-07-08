@@ -794,19 +794,23 @@ describe('StockStructureDecisionPage', () => {
     const productFlow = within(page).getByTestId('stock-workspace-product-flow');
     expect(productFlow).toHaveAttribute(
       'data-product-flow',
-      'symbol-current-observation-known-facts-price-path-evidence-quality-evidence-package-structure-risks-next-checks',
+      'identity-data-state-current-conclusion-price-evidence-path-analyst-memo-factor-evidence-risk-triggers-peer-theme-context-evidence-ledger-data-limitations',
     );
     expect(within(page).queryByTestId('observation-only-boundary')).not.toBeInTheDocument();
     for (const legacyId of legacyStockPresentationIds) {
       expect(within(page).queryByTestId(legacyId)).not.toBeInTheDocument();
     }
     const knownFacts = await within(page).findByTestId('stock-known-facts-panel');
+    const identityWorkspace = await within(page).findByTestId('stock-identity-data-state-workspace');
     const evidenceWorkspace = await within(page).findByTestId('stock-evidence-workspace');
     const evidencePackage = await within(page).findByTestId('stock-evidence-package-workspace');
+    const analystMemoWorkspace = await within(page).findByTestId('stock-analyst-memo-workspace');
     const structureWorkspace = await within(page).findByTestId('stock-structure-interpretation-workspace');
     const historyWorkspace = await within(page).findByTestId('stock-history-technical-workspace');
     const catalystOptionsWorkspace = await within(page).findByTestId('stock-catalyst-options-workspace');
-    const structureEvidenceWorkspace = await within(page).findByTestId('stock-structure-evidence-workspace');
+    const factorEvidenceWorkspace = await within(page).findByTestId('stock-factor-evidence-workspace');
+    const riskTriggersWorkspace = await within(page).findByTestId('stock-risk-triggers-workspace');
+    const peerThemeWorkspace = await within(page).findByTestId('stock-peer-theme-context-workspace');
     const nextChecksWorkspace = await within(page).findByTestId('stock-next-research-checks');
     const panel = await within(page).findByTestId('stock-research-packet-panel');
     const quotePanel = await within(page).findByTestId('stock-quote-boundary-panel');
@@ -828,15 +832,19 @@ describe('StockStructureDecisionPage', () => {
     expect(within(workflow).getByTestId('research-workspace-link-backtest')).toHaveAttribute('href', expect.stringContaining('/zh/backtest?'));
     expect(workflow).toHaveTextContent('只有需要持续观察时，再加入观察列表。');
     expect(workflow).not.toHaveTextContent(/provider|cache|runtime|debug|scannerRunId|watchlistItemId|立即买入|立即卖出|下单|保证收益/i);
-    expect(knownFacts).toHaveTextContent('标的身份与数据边界');
+    expect(identityWorkspace).toHaveTextContent('标的身份与数据状态');
+    expect(knownFacts).toHaveTextContent('当前标的与有边界的数据状态');
     expect(knownFacts).toHaveTextContent('基础研究包');
     expect(evidencePackage).toHaveTextContent('可复制的研究证据');
     expect(workflowSection).toHaveTextContent('研究流转');
     expect(historyWorkspace).toHaveTextContent('市场路径与技术证据');
-    expect(catalystOptionsWorkspace).toHaveTextContent('先看就绪度');
+    expect(catalystOptionsWorkspace).toHaveTextContent('支持证据就绪度');
     expect(optionsSurface).toHaveTextContent('专业结构指标');
-    expect(structureEvidenceWorkspace).toHaveTextContent('已知、未知与相互制约的证据');
-    expect(nextChecksWorkspace).toHaveTextContent('什么会改变当前解释');
+    expect(analystMemoWorkspace).toHaveTextContent('研究叙事与证据栈');
+    expect(factorEvidenceWorkspace).toHaveTextContent('按含义组织的因子证据');
+    expect(riskTriggersWorkspace).toHaveTextContent('已观察风险与失效条件');
+    expect(peerThemeWorkspace).toHaveTextContent('作为支持证据，而非零散组件');
+    expect(nextChecksWorkspace).toHaveTextContent('明确限制与下一步检查');
     expect(quotePanel).toHaveTextContent('报价来源与新鲜度');
     expect(quotePanel).toHaveTextContent('报价可用');
     expect(quotePanel).toHaveTextContent('来源已确认');
@@ -855,6 +863,13 @@ describe('StockStructureDecisionPage', () => {
     expect(summary).toHaveTextContent('置信度：中');
     expect(summary).toHaveTextContent('置信度为中：报价、历史与结构证据可用，但基本面、事件或同业证据仍限制结论强度。');
     expect(summary).toHaveTextContent('AAPL 当前呈现突破观察，报价最新可用，历史 K 线可用于查看走势。');
+    const conclusion = within(summary).getByTestId('stock-current-research-conclusion');
+    expect(conclusion).toHaveTextContent('当前研究结论');
+    expect(conclusion).toHaveTextContent('AAPL 当前为突破观察；置信度为中。');
+    expect(conclusion).toHaveTextContent('支持证据');
+    expect(conclusion).toHaveTextContent('不确定性');
+    expect(conclusion).toHaveTextContent('失效 / 风险条件');
+    expect(conclusion).toHaveTextContent('下一步研究动作');
     expect(summary).toHaveTextContent('Analyst Memo');
     expect(summary).toHaveTextContent('当前观察');
     expect(summary).toHaveTextContent('为什么');
@@ -897,9 +912,11 @@ describe('StockStructureDecisionPage', () => {
     const stockCoreChart = within(page).getByTestId('stock-history-core-chart');
     expect(within(page).getByTestId('stock-price-history-visual-block')).toContainElement(stockCoreChart);
     expect(stockCoreChart.compareDocumentPosition(knownFacts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(knownFacts.compareDocumentPosition(evidencePackage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(knownFacts.compareDocumentPosition(historyWorkspace) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(historyWorkspace.compareDocumentPosition(analystMemoWorkspace) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(analystMemoWorkspace.compareDocumentPosition(structureWorkspace) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(structureWorkspace.compareDocumentPosition(evidenceWorkspace) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(evidenceWorkspace.compareDocumentPosition(workflowSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(workflowSection.compareDocumentPosition(structureWorkspace) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(stockCoreChart).toHaveAttribute('data-chart-kind', 'stock-history');
     expect(stockCoreChart).toHaveTextContent('价格趋势');
     expect(stockCoreChart).toHaveTextContent('成交量');
@@ -962,6 +979,16 @@ describe('StockStructureDecisionPage', () => {
     expect(panel).toHaveTextContent('基本面待补');
     expect(panel).toHaveTextContent('新闻线索待补');
     expect(panel).toHaveTextContent('市场线索待补');
+    const factorPanel = within(page).getByTestId('stock-factor-evidence-panel');
+    expect(factorPanel).toHaveTextContent('因子证据');
+    expect(factorPanel).toHaveTextContent('按相关性排列的组件证据');
+    expect(factorPanel).toHaveTextContent('可用、部分、延迟、不可用');
+    const riskPanel = within(page).getByTestId('stock-risk-triggers-panel');
+    expect(riskPanel).toHaveTextContent('已观察风险证据');
+    expect(riskPanel).toHaveTextContent('失效条件');
+    expect(riskPanel).toHaveTextContent('未知 / 待补证据');
+    expect(riskPanel).toHaveTextContent('Closes fall back into the prior range.');
+    expect(riskPanel).toHaveTextContent('需要补充同业对照证据。');
     expect(catalystPanel).toHaveTextContent('财报 / 催化证据待补');
     expect(catalystPanel).toHaveTextContent('仍需补齐公告、财报或催化证据。');
     expect(nextStepsPanel).toHaveTextContent('下一步补齐资料');
