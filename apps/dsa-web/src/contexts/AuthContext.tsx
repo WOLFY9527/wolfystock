@@ -6,6 +6,11 @@ import type { CurrentUser } from '../api/auth';
 import { authApi } from '../api/auth';
 import { resetAdminSurfaceMode } from '../hooks/productSurfaceMode';
 import { useStockPoolStore } from '../stores/stockPoolStore';
+import {
+  AUTH_SESSION_EVENT_STORAGE_KEY,
+  publishAuthSessionInvalidated,
+  readAuthSessionEvent,
+} from '../utils/authSessionEvents';
 import { hardRedirect } from '../utils/browserRedirect';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 
@@ -113,7 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<ParsedApiError | null>(null);
-  const clearSessionState = () => {
+  const clearSessionState = useCallback(() => {
     setLoggedIn(false);
     setPasswordSet(false);
     setPasswordChangeable(false);
@@ -122,7 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoadError(null);
     useStockPoolStore.getState().resetDashboardState();
     resetAdminSurfaceMode();
-  };
+  }, []);
 
   const loadAuthStatus = useCallback(async ({ primeLoading }: { primeLoading: boolean }) => {
     if (primeLoading) {
@@ -165,6 +170,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     void loadAuthStatus({ primeLoading: false });
   }, [loadAuthStatus]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== AUTH_SESSION_EVENT_STORAGE_KEY || event.storageArea !== window.localStorage) {
+        return;
+      }
+      if (!readAuthSessionEvent(event.newValue)) {
+        return;
+      }
+
+      void clearAuthRelatedBrowserStorage().finally(() => {
+        invalidateApiShortWindowCache(AUTH_STATUS_PATH);
+        clearSessionState();
+      });
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [clearSessionState]);
 
   const login = async (
     params: {
@@ -231,6 +261,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     await clearAuthRelatedBrowserStorage();
+    publishAuthSessionInvalidated();
     invalidateApiShortWindowCache(AUTH_STATUS_PATH);
     clearSessionState();
     await wait(100);

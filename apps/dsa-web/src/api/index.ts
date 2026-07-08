@@ -7,6 +7,7 @@ import { API_BASE_URL } from '../utils/constants';
 import { getStoredUiLanguage } from '../i18n/core';
 import { attachParsedApiError } from './error';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
+import { publishAuthSessionInvalidated } from '../utils/authSessionEvents';
 
 export type ApiTimeoutTier = 'quick' | 'standard' | 'analysis';
 
@@ -263,6 +264,7 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (shouldRedirectToLogin(error)) {
+      publishAuthSessionInvalidated();
       const path = window.location.pathname + window.location.search;
       const redirect = encodeURIComponent(path);
       const routeLocale = parseLocaleFromPathname(window.location.pathname);

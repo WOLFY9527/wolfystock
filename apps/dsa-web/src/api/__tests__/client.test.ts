@@ -48,6 +48,7 @@ describe('apiClient auth redirect handling', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     window.history.replaceState({}, '', '/');
+    window.localStorage.clear();
     Object.defineProperty(window, 'location', {
       configurable: true,
       value: originalLocation,
@@ -84,6 +85,7 @@ describe('apiClient auth redirect handling', () => {
     })).rejects.toBeTruthy();
 
     expect(assignSpy).toHaveBeenCalledWith('/login?redirect=%2Fportfolio%3Fview%3Dholdings');
+    expect(window.localStorage.getItem('wolfystock.auth.session-event.v1')).toMatch(/session-invalidated/);
   });
 
   it('preserves the active locale when redirecting protected API failures to login', async () => {
@@ -148,6 +150,7 @@ describe('apiClient auth redirect handling', () => {
       })).rejects.toBeTruthy();
 
       expect(assignSpy).not.toHaveBeenCalled();
+      expect(window.localStorage.getItem('wolfystock.auth.session-event.v1')).toBeNull();
     },
   );
 
