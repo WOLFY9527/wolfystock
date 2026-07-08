@@ -183,6 +183,35 @@ const LoginPage: React.FC = () => {
     : isCreateUserMode
       ? copy.shellGuestHintCreate
       : copy.shellGuestHintLogin;
+  const authModeLabel = isAdminBootstrap
+    ? copy.panelEyebrowSetup
+    : isCreateUserMode
+      ? copy.panelEyebrowCreate
+      : copy.panelEyebrowLogin;
+  const authTitle = isAdminBootstrap
+    ? copy.heroTitleSetup
+    : isCreateUserMode
+      ? copy.heroTitleCreate
+      : copy.heroTitleLogin;
+  const authBody = isAdminBootstrap
+    ? copy.heroBodySetup
+    : isCreateUserMode
+      ? copy.heroBodyCreate
+      : copy.heroBodyLogin;
+  const authWorkbenchSteps = language === 'en'
+    ? ['Orient', 'Research', 'Save context']
+    : ['确认方向', '进入研究', '保存现场'];
+  const authTrustNotes = language === 'en'
+    ? [
+        'Routes and locale stay unchanged after authentication.',
+        'Guest preview remains available without changing account state.',
+        'Session authority stays with the existing auth provider.',
+      ]
+    : [
+        '登录后保持原路由与语言语境。',
+        '游客预览仍可用，不改变账户状态。',
+        '会话权限继续由现有 auth provider 负责。',
+      ];
 
   useEffect(() => {
     document.title = copy.documentTitle;
@@ -234,13 +263,34 @@ const LoginPage: React.FC = () => {
       <div className="auth-screen__backdrop" aria-hidden="true" />
       <div className="auth-screen__grid" aria-hidden="true" />
 
-      <div className="auth-shell auth-shell--panel-only">
+      <div className="auth-shell">
+        <section className="auth-hero" aria-labelledby="auth-hero-title">
+          <p className="auth-hero__eyebrow">{copy.heroEyebrow}</p>
+          <h1 id="auth-hero-title" className="auth-hero__title">{copy.shellProductName}</h1>
+          <p className="auth-hero__body">{copy.shellProductTagline}</p>
+          <div className="auth-hero__workflow" aria-label={language === 'en' ? 'Research workflow' : '研究工作流'}>
+            {authWorkbenchSteps.map((step, index) => (
+              <div key={step} className="auth-hero__workflow-step">
+                <span>{String(index + 1).padStart(2, '0')}</span>
+                <strong>{step}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="auth-hero__trust-card">
+            <p>{language === 'en' ? 'Product continuity' : '产品连续性'}</p>
+            <ul>
+              {authTrustNotes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
         <section className="auth-panel theme-panel-glass">
           <div className="flex items-start justify-between gap-4 rounded-[20px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-4 py-3">
             <div className="min-w-0">
-              <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-[color:var(--wolfy-text-muted)]">{copy.heroEyebrow}</p>
-              <p className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{copy.shellProductName}</p>
-              <p className="mt-1 text-xs leading-6 text-[color:var(--wolfy-text-secondary)]">{copy.shellProductTagline}</p>
+              <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-[color:var(--wolfy-text-muted)]">{authModeLabel}</p>
+              <p className="mt-2 text-xs leading-6 text-[color:var(--wolfy-text-secondary)]">{guestHint}</p>
             </div>
             <span className="inline-flex shrink-0 items-center rounded-full border border-[color:var(--state-success-border)] bg-[var(--state-success-bg)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-[color:var(--state-success-text)]">
               {copy.shellGuestStatus}
@@ -248,11 +298,11 @@ const LoginPage: React.FC = () => {
           </div>
 
           <div className="auth-panel__header">
-            <p className="label-uppercase text-secondary-text">{copy.heroEyebrow}</p>
-            <h1 className="auth-panel__title">
-              <span>{isAdminBootstrap ? copy.heroTitleSetup : isCreateUserMode ? copy.heroTitleCreate : copy.heroTitleLogin}</span>
-            </h1>
-            <p className="auth-panel__body">{isAdminBootstrap ? copy.heroBodySetup : isCreateUserMode ? copy.heroBodyCreate : copy.heroBodyLogin}</p>
+            <p className="label-uppercase text-secondary-text">{authModeLabel}</p>
+            <h2 className="auth-panel__title">
+              <span>{authTitle}</span>
+            </h2>
+            <p className="auth-panel__body">{authBody}</p>
             <div className="mt-4 rounded-[18px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-4 py-3">
               <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{copy.shellReturnHint}</p>
               <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -347,7 +397,7 @@ const LoginPage: React.FC = () => {
               type="submit"
               variant="primary"
               size="xl"
-              className="w-full mt-2 justify-center rounded-xl border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] py-3 text-sm font-bold text-[color:var(--theme-button-primary-text)] transition-all hover:bg-[#2f5135] active:scale-95"
+              className="w-full mt-2 justify-center rounded-xl border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] py-3 text-sm font-bold text-[color:var(--theme-button-primary-text)] transition-all hover:bg-[var(--sage)] active:scale-95"
               disabled={isSubmitting}
               isLoading={isSubmitting}
               loadingText={isAdminBootstrap ? copy.loadingTextSetup : isCreateUserMode ? copy.loadingTextCreate : copy.loadingTextLogin}

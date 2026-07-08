@@ -28,7 +28,7 @@ appTest('guest entry routes use research branding instead of AI persona copy', a
   await page.goto('/zh/guest');
   await appExpect(page.getByTestId('guest-home-clean-search')).toBeVisible({ timeout: 15_000 });
   await appExpect(page.getByTestId('guest-home-market-preview-strip')).toContainText('当前市场观察');
-  await appExpect(page.getByTestId('home-bento-omnibar-input')).toHaveAttribute('placeholder', '输入代码开始研究 (如 ORCL)...');
+  await appExpect(page.getByTestId('home-bento-omnibar-input')).toHaveAttribute('placeholder', '输入代码或名称开始研究...');
   await appExpect(page.locator('body')).not.toContainText(/WOLFY AI|唤醒 AI|INITIALIZING|terminal boot/i);
   await appExpect(page.getByTestId('guest-home-clean-search')).not.toContainText(/\bNVDA\b|NVIDIA|TSLA|Tesla/i);
   await baseExpect
