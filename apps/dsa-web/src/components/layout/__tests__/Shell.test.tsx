@@ -144,6 +144,9 @@ describe('Shell', () => {
     await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme', 'dark'));
     expect(themeButton).toHaveAttribute('aria-pressed', 'false');
     expect(themeButton).toHaveAttribute('data-theme-mode', 'dark');
+    expect(actionIsland).toHaveTextContent('墨色');
+    expect(actionIsland).not.toHaveTextContent('赛博');
+    expect(actionIsland).not.toHaveTextContent('Cyber');
     expect(window.localStorage.getItem('dsa-theme-style')).toBe('paper');
     expect(window.localStorage.getItem('dsa-theme-mode')).toBe('dark');
     expect(await within(actionIsland).findByTestId('shell-account-center-entry')).toBeInTheDocument();

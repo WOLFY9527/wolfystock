@@ -832,6 +832,9 @@ function useSidebarNavView({
 
   const nextColorMode = colorMode === 'dark' ? 'light' : 'dark';
   const ThemeIcon = colorMode === 'dark' ? Sun : Moon;
+  const currentThemeLabel = colorMode === 'light'
+    ? t('theme.paper')
+    : (language === 'en' ? 'Ink' : '墨色');
   const themeAction = (
     <button
       type="button"
@@ -849,13 +852,13 @@ function useSidebarNavView({
           </span>
           <DrawerUtilityLabel
             label={t('theme.label')}
-            value={!isGuest ? (colorMode === 'light' ? t('theme.paper') : t('theme.cyber')) : undefined}
+            value={!isGuest ? currentThemeLabel : undefined}
           />
         </>
       ) : (
         <span className="inline-flex items-center gap-1.5">
           <ThemeIcon className="size-3.5" aria-hidden="true" />
-          {!isGuest ? <span>{colorMode === 'light' ? t('theme.paper') : t('theme.cyber')}</span> : null}
+          {!isGuest ? <span>{currentThemeLabel}</span> : null}
         </span>
       )}
     </button>

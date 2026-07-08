@@ -7766,7 +7766,8 @@ button[data-variant='danger-subtle']:hover {
 .auth-screen {
   position: relative;
   min-height: 100vh;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   background:
     radial-gradient(circle at 50% -10%, hsl(var(--accent-primary-hsl) / 0.11), transparent 26%),
     linear-gradient(180deg, hsl(var(--bg-page-hsl)) 0%, hsl(var(--bg-page-hsl) / 0.94) 100%);
@@ -7796,13 +7797,13 @@ button[data-variant='danger-subtle']:hover {
   position: relative;
   z-index: 1;
   display: grid;
-  gap: clamp(1.5rem, 4vw, 3.5rem);
+  gap: clamp(1.5rem, 5vw, 4.25rem);
   align-items: center;
-  min-height: 100vh;
+  min-height: 100dvh;
   width: min(1180px, calc(100vw - 2rem));
   margin: 0 auto;
-  padding: 2rem 0 3rem;
-  grid-template-columns: minmax(0, 1fr) minmax(22rem, 28rem);
+  padding: clamp(1.5rem, 4vw, 3rem) 0;
+  grid-template-columns: minmax(0, 1fr) minmax(22rem, 30rem);
 }
 
 .auth-shell--panel-only {
@@ -7823,10 +7824,9 @@ button[data-variant='danger-subtle']:hover {
 .auth-hero__title {
   margin-top: 0.85rem;
   font-family: var(--font-display);
-  font-size: clamp(2.1rem, 4vw, 4.2rem);
-  line-height: 0.94;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: clamp(2.4rem, 5vw, 5.35rem);
+  line-height: 0.92;
+  letter-spacing: -0.04em;
 }
 
 .auth-hero__body {
@@ -7837,9 +7837,80 @@ button[data-variant='danger-subtle']:hover {
   color: var(--text-secondary);
 }
 
+.auth-hero__workflow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-top: 1.7rem;
+}
+
+.auth-hero__workflow-step,
+.auth-hero__trust-card {
+  border: 1px solid var(--wolfy-divider);
+  background: var(--wolfy-surface-console);
+}
+
+.auth-hero__workflow-step {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0.85rem 0.9rem;
+  border-radius: 1rem;
+}
+
+.auth-hero__workflow-step span {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--wolfy-text-muted);
+}
+
+.auth-hero__workflow-step strong {
+  min-width: 0;
+  color: var(--wolfy-text-primary);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.auth-hero__trust-card {
+  margin-top: 0.8rem;
+  padding: 1rem;
+  border-radius: 1.1rem;
+}
+
+.auth-hero__trust-card p {
+  color: var(--wolfy-text-primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.auth-hero__trust-card ul {
+  display: grid;
+  gap: 0.42rem;
+  margin: 0.7rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.auth-hero__trust-card li {
+  color: var(--wolfy-text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.auth-hero__trust-card li::before {
+  content: "";
+  display: inline-block;
+  width: 0.42rem;
+  height: 0.42rem;
+  margin-right: 0.52rem;
+  border-radius: 999px;
+  background: var(--sage);
+}
+
 .auth-panel {
   padding: 1.5rem;
   border-radius: var(--theme-panel-radius-lg);
+  border-color: var(--wolfy-divider);
 }
 
 .auth-panel__header {
@@ -7852,9 +7923,9 @@ button[data-variant='danger-subtle']:hover {
   align-items: center;
   margin-top: 0.55rem;
   font-family: var(--font-display);
-  font-size: 1.2rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: clamp(1.75rem, 3vw, 2.55rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
 }
 
 .auth-panel__body {
@@ -7884,12 +7955,47 @@ button[data-variant='danger-subtle']:hover {
   }
 
   .auth-shell {
-    padding-top: 6rem;
+    padding-top: 3rem;
   }
 
   .auth-hero {
     max-width: 44rem;
   }
+}
+
+@media (max-width: 767px) {
+  .auth-shell {
+    width: min(100% - 1rem, 32rem);
+    padding-block: 1rem 2rem;
+  }
+
+  .auth-hero__workflow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .auth-panel {
+    padding: 1rem;
+  }
+}
+
+html[data-theme-style='paper'] [data-home-surface-role='guest'] .home-research-action-button,
+html[data-theme-style='paper'] [data-home-surface-role='member'] .home-research-action-button {
+  border-color: var(--wolfy-divider);
+  background: var(--wolfy-surface-input);
+  color: var(--wolfy-text-secondary);
+}
+
+html[data-theme-style='paper'] [data-home-surface-role='guest'] .home-research-action-button:hover,
+html[data-theme-style='paper'] [data-home-surface-role='member'] .home-research-action-button:hover {
+  border-color: var(--wolfy-border-focus);
+  background: var(--overlay-hover);
+  color: var(--wolfy-text-primary);
+}
+
+html[data-theme-style='paper'] [data-home-surface-role='member'] .home-research-action-button--primary {
+  border-color: var(--home-action-report-border);
+  background: var(--home-action-report-bg);
+  color: var(--home-action-report-text);
 }
 
 @media (max-width: 1023px) {

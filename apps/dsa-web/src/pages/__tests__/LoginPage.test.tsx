@@ -417,12 +417,18 @@ describe('LoginPage', () => {
 
     const { container } = renderPage();
 
+    expect(screen.getByRole('heading', { level: 1, name: 'WolfyStock Research OS' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: translate('en', 'auth.login.heroTitleLogin') })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: translate('en', 'auth.login.heroTitleLogin') })).toBeInTheDocument();
     expect(screen.queryByText(translate('en', 'auth.login.continueAfterLogin'))).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: translate('en', 'auth.login.returnToGuest') })).toBeInTheDocument();
     expect(screen.getByText('WolfyStock Research OS')).toBeInTheDocument();
     expect(screen.getByText('Guest preview ready')).toBeInTheDocument();
     expect(screen.getByText('Need the read-only route first?')).toBeInTheDocument();
+    expect(screen.getByText('Product continuity')).toBeInTheDocument();
+    expect(screen.getByText('Routes and locale stay unchanged after authentication.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Research workflow')).toHaveTextContent('Orient');
+    expect(screen.getByLabelText('Research workflow')).toHaveTextContent('Save context');
     expect(screen.getByLabelText(translate('en', 'auth.login.passwordLabelLogin'))).toBeInTheDocument();
     expect(screen.getByPlaceholderText(translate('en', 'auth.login.usernamePlaceholderLogin'))).toHaveAttribute('placeholder', 'Enter email or username');
     expect(screen.getByLabelText(translate('en', 'auth.login.usernameLabel'))).toHaveClass(

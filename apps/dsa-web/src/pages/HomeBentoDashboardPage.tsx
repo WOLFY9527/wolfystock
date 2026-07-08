@@ -7415,7 +7415,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               <button
                 type="submit"
                 disabled={isBusy}
-                className="min-h-10 shrink-0 rounded-lg border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] px-5 text-sm font-semibold text-[color:var(--theme-button-primary-text)] shadow-none transition-colors hover:bg-[#2f5135] disabled:cursor-wait disabled:bg-[var(--wolfy-surface-inset)] disabled:text-[color:var(--wolfy-text-muted)]"
+                className="min-h-10 shrink-0 rounded-lg border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] px-5 text-sm font-semibold text-[color:var(--theme-button-primary-text)] shadow-none transition-colors hover:bg-[var(--sage)] disabled:cursor-wait disabled:bg-[var(--wolfy-surface-inset)] disabled:text-[color:var(--wolfy-text-muted)]"
                 data-testid="home-bento-analyze-button"
               >
                 {isHomeAnalyzing ? (locale === 'en' ? 'Analyzing...' : '分析中...') : (copy?.analyzeButton || standbyCopy.analyzeButton)}
@@ -7603,7 +7603,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                   )}
                   <Link
                     to={memberMarketBrief.actions[1]?.href || memberMarketBrief.actions[0]?.href || '#'}
-                    className="mt-4 inline-flex min-h-10 w-full items-center justify-center rounded-lg border border-[color:var(--wolfy-border-focus)] bg-[var(--wolfy-accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#8178e7] sm:w-auto"
+                    className="mt-4 inline-flex min-h-10 w-full items-center justify-center rounded-lg border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] px-4 text-sm font-semibold text-[color:var(--theme-button-primary-text)] transition-colors hover:bg-[var(--sage)] sm:w-auto"
                     data-testid="member-home-research-queue-action"
                   >
                     {memberMarketBrief.actions[1]?.label || (locale === 'en' ? 'Open Research Radar' : '打开研究雷达')}
@@ -7726,7 +7726,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                         className={cn(
                           'inline-flex min-h-10 min-w-0 items-center justify-center rounded-lg border px-4 text-sm font-semibold transition-colors',
                           action.primary
-                            ? 'border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] text-[color:var(--theme-button-primary-text)] hover:bg-[#2f5135]'
+                            ? 'border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] text-[color:var(--theme-button-primary-text)] hover:bg-[var(--sage)]'
                             : 'border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)]',
                         )}
                         data-testid={`member-home-market-action-${action.key}`}
@@ -7831,7 +7831,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                     </p>
                     <Link
                       to={registrationPath}
-                      className="theme-primary-action mt-3 inline-flex min-h-10 w-full items-center justify-center rounded-lg border px-4 text-sm font-semibold transition-colors hover:bg-[#2f5135] sm:w-auto"
+                      className="theme-primary-action mt-3 inline-flex min-h-10 w-full items-center justify-center rounded-lg border px-4 text-sm font-semibold transition-colors hover:bg-[var(--sage)] sm:w-auto"
                       data-testid="guest-home-registration-link"
                     >
                       {guestCommandConsoleCopy.unlockAction}
@@ -7854,15 +7854,15 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                   className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-4 sm:px-5')}
                   data-testid="guest-home-preview-strip"
                 >
-                  <p className="text-[11px] font-medium text-white/40">{guestCommandConsoleCopy.previewTitle}</p>
-                  <p className="mt-2 text-sm leading-6 text-white/62">
+                  <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{guestCommandConsoleCopy.previewTitle}</p>
+                  <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
                     {guestCommandConsoleCopy.previewBody}
                   </p>
                   <div className="mt-3 flex min-w-0 flex-wrap gap-2">
                     {guestCommandConsoleCopy.unlockItems.map((item) => (
                       <span
                         key={item}
-                        className="inline-flex min-h-8 items-center rounded-full border border-white/[0.07] bg-white/[0.03] px-3 text-xs font-medium text-white/72"
+                        className="inline-flex min-h-8 items-center rounded-full border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 text-xs font-medium text-[color:var(--wolfy-text-secondary)]"
                       >
                         {item}
                       </span>

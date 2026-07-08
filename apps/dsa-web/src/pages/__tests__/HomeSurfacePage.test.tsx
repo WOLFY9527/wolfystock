@@ -670,6 +670,9 @@ describe('HomeSurfacePage', () => {
     expect(guestTrustStrip).toHaveClass('rounded-[12px]');
     expect(guestTrustStrip).toHaveTextContent('安全下一步');
     expect(guestPreviewStrip).toHaveClass('rounded-[12px]');
+    expect(guestPreviewStrip.querySelector('.text-white\\/40')).not.toBeInTheDocument();
+    expect(guestPreviewStrip.querySelector('.text-white\\/62')).not.toBeInTheDocument();
+    expect(guestPreviewStrip.querySelector('.text-white\\/72')).not.toBeInTheDocument();
     expect(guestPreviewStrip).toHaveTextContent('登录后可用');
     expect(guestPreviewStrip).toHaveTextContent('回到上次研究现场');
     expect(guestSurface).not.toHaveTextContent('WolfyStock 分析面板');
