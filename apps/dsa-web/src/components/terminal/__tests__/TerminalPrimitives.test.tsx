@@ -59,7 +59,7 @@ describe('TerminalPrimitives', () => {
     expect(screen.getByText('Success')).toHaveClass('text-[color:var(--wolfy-market-up)]');
     expect(screen.getByText('Caution')).toHaveClass('bg-[var(--state-warning-bg)]', 'text-[color:var(--state-warning-text)]');
     expect(screen.getByText('Danger')).toHaveClass('text-[color:var(--wolfy-market-down)]');
-    expect(screen.getByText('Info')).toHaveClass('text-[color:var(--wolfy-accent)]');
+    expect(screen.getByText('Info')).toHaveClass('text-[color:var(--state-info-text)]');
   });
 
   it('renders compact empty states', () => {

@@ -60,7 +60,8 @@ describe('AuthGuardOverlay', () => {
       'z-10',
       'w-[min(92vw,28rem)]',
       'border',
-      'backdrop-blur-2xl',
+      'bg-[var(--wolfy-surface-elevated)]',
+      'text-center',
     );
     expect(screen.getByRole('heading', { name: '需要登录' })).toBeInTheDocument();
     expect(screen.getByText('请先登录后继续访问该页面。')).toBeInTheDocument();
@@ -101,7 +102,10 @@ describe('AuthGuardOverlay', () => {
     expect(screen.getByRole('heading', { name: 'Sign-in required' })).toBeInTheDocument();
     expect(screen.getByText('Sign in before continuing to this page.')).toBeInTheDocument();
     expect(screen.getByText('After signing in, you can return to the research page you just opened.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Go to sign in Portfolio' })).toHaveClass('bg-[var(--wolfy-accent)]', 'text-[#f7f8ff]');
+    expect(screen.getByRole('button', { name: 'Go to sign in Portfolio' })).toHaveClass(
+      'bg-[var(--theme-button-primary-bg)]',
+      'text-[color:var(--theme-button-primary-text)]',
+    );
     expect(screen.getByRole('button', { name: 'Return home' })).toBeInTheDocument();
     expectNoRawI18nKeys(container);
     fireEvent.click(screen.getByRole('button', { name: 'Go to sign in Portfolio' }));

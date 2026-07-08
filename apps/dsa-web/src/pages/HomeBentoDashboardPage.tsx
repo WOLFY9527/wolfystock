@@ -7415,7 +7415,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               <button
                 type="submit"
                 disabled={isBusy}
-                className="min-h-10 shrink-0 rounded-lg border border-[color:var(--wolfy-border-focus)] bg-[var(--wolfy-accent)] px-5 text-sm font-semibold text-white shadow-[0_0_22px_rgba(118,109,219,0.18)] transition-colors hover:bg-[#8178e7] disabled:cursor-wait disabled:bg-white/[0.05] disabled:text-white/42"
+                className="min-h-10 shrink-0 rounded-lg border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] px-5 text-sm font-semibold text-[color:var(--theme-button-primary-text)] shadow-none transition-colors hover:bg-[#2f5135] disabled:cursor-wait disabled:bg-[var(--wolfy-surface-inset)] disabled:text-[color:var(--wolfy-text-muted)]"
                 data-testid="home-bento-analyze-button"
               >
                 {isHomeAnalyzing ? (locale === 'en' ? 'Analyzing...' : '分析中...') : (copy?.analyzeButton || standbyCopy.analyzeButton)}
@@ -7428,7 +7428,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                   onClick={handleOpenHistoryDrawerClick}
                   onPointerUp={handleOpenHistoryDrawerPointerUp}
                   disabled={isBusy}
-                  className="home-research-action-button flex min-h-10 shrink-0 items-center justify-center rounded-lg border px-4 text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] disabled:cursor-wait disabled:text-white/34"
+                  className="home-research-action-button flex min-h-10 shrink-0 items-center justify-center rounded-lg border px-4 text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] disabled:cursor-wait disabled:text-[color:var(--wolfy-text-muted)]"
                   data-testid="home-bento-history-drawer-trigger"
                 >
                   <History className="h-4 w-4" aria-hidden="true" />
@@ -7442,12 +7442,12 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
             data-testid="home-bento-omnibar-input-shell"
           >
             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
-              <Search className="h-4 w-4 text-white/40" />
+              <Search className="h-4 w-4 text-[color:var(--wolfy-text-muted)]" />
             </div>
             <input
               data-testid="home-bento-omnibar-input"
               type="text"
-              className="h-full min-h-10 min-w-0 flex-1 bg-transparent pl-11 pr-4 text-sm leading-none text-white caret-[#93C5FD] outline-none [appearance:textfield] placeholder:text-white/30"
+              className="h-full min-h-10 min-w-0 flex-1 bg-transparent pl-11 pr-4 text-sm leading-none text-[color:var(--wolfy-text-primary)] caret-[color:var(--sage-deep)] outline-none [appearance:textfield] placeholder:text-[color:var(--wolfy-text-muted)]"
               value={searchQuery}
               aria-label={locale === 'en' ? 'Search ticker' : '搜索股票代码'}
               onChange={(event) => {
@@ -7726,7 +7726,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                         className={cn(
                           'inline-flex min-h-10 min-w-0 items-center justify-center rounded-lg border px-4 text-sm font-semibold transition-colors',
                           action.primary
-                            ? 'border-[color:var(--wolfy-border-focus)] bg-[var(--wolfy-accent)] text-white hover:bg-[#8178e7]'
+                            ? 'border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] text-[color:var(--theme-button-primary-text)] hover:bg-[#2f5135]'
                             : 'border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)]',
                         )}
                         data-testid={`member-home-market-action-${action.key}`}
@@ -7756,24 +7756,24 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               >
                 <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0 max-w-3xl">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
                       {guestCommandConsoleCopy.eyebrow}
                     </p>
-                    <h1 className="mt-2 text-[28px] font-semibold tracking-[0] text-white sm:text-[32px]">
+                    <h1 className="mt-2 text-[28px] font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)] sm:text-[32px]">
                       {guestCommandConsoleCopy.title}
                     </h1>
-                    <p className="mt-2 max-w-2xl text-sm leading-6 text-white/62 sm:text-[15px]">
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-[color:var(--wolfy-text-secondary)] sm:text-[15px]">
                       {guestCommandConsoleCopy.subtitle}
                     </p>
                   </div>
                   <div
-                    className="grid min-w-0 grid-cols-2 overflow-hidden rounded-[10px] border border-white/[0.06] text-[11px] sm:grid-cols-4 xl:max-w-[21rem]"
+                    className="grid min-w-0 grid-cols-2 overflow-hidden rounded-[10px] border border-[color:var(--wolfy-border-subtle)] text-[11px] sm:grid-cols-4 xl:max-w-[21rem]"
                     data-testid="guest-home-command-workflow"
                   >
                     {guestCommandConsoleCopy.workflow.map((item, index) => (
-                      <div key={item} className="min-w-0 border-b border-r border-white/[0.06] px-3 py-2.5 last:border-r-0 even:border-r-0 sm:border-b-0 sm:even:border-r sm:last:border-r-0">
-                        <span className="block font-mono text-[10px] text-white/26">0{index + 1}</span>
-                        <span className="mt-1 block truncate font-semibold text-white/72">{item}</span>
+                      <div key={item} className="min-w-0 border-b border-r border-[color:var(--wolfy-border-subtle)] px-3 py-2.5 last:border-r-0 even:border-r-0 sm:border-b-0 sm:even:border-r sm:last:border-r-0">
+                        <span className="block font-mono text-[10px] text-[color:var(--wolfy-text-muted)]">0{index + 1}</span>
+                        <span className="mt-1 block truncate font-semibold text-[color:var(--wolfy-text-secondary)]">{item}</span>
                       </div>
                     ))}
                   </div>
@@ -7782,8 +7782,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                 <div className="mt-4 grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
                   <div className="min-w-0">
                     <div className="mb-2 flex min-w-0 flex-wrap items-center justify-between gap-2">
-                      <p className="text-[11px] font-medium text-white/40">{guestCommandConsoleCopy.commandLabel}</p>
-                      <p className="text-[11px] text-white/30">{guestCommandConsoleCopy.commandHint}</p>
+                      <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{guestCommandConsoleCopy.commandLabel}</p>
+                      <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{guestCommandConsoleCopy.commandHint}</p>
                     </div>
                     {omnibarModule}
                   </div>
@@ -7794,16 +7794,16 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                   >
                     <div className="flex min-w-0 items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-[11px] font-medium text-white/40">{guestMarketSnapshot?.title}</p>
-                        <h2 className="mt-2 text-sm font-semibold text-white/88">{guestMarketSnapshot?.status}</h2>
+                        <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{guestMarketSnapshot?.title}</p>
+                        <h2 className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{guestMarketSnapshot?.status}</h2>
                       </div>
                       {guestMarketSnapshot?.asOf ? (
-                        <span className="shrink-0 rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-1 text-[10px] font-medium text-white/42">
+                        <span className="shrink-0 rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-1 text-[10px] font-medium text-[color:var(--wolfy-text-muted)]">
                           {guestMarketSnapshot.asOf}
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-2 text-sm leading-6 text-white/62">
+                    <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
                       {guestMarketSnapshot?.summary}
                     </p>
                     {guestMarketSnapshot?.items.length ? (
@@ -7811,27 +7811,27 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                         {guestMarketSnapshot.items.map((item) => (
                           <div
                             key={`${item.title}-${item.message}`}
-                            className="min-w-0 rounded-[10px] border border-white/[0.06] bg-white/[0.03] px-3 py-2.5"
+                            className="min-w-0 rounded-[10px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5"
                           >
-                            <p className="text-[11px] font-medium text-white/72">{item.title}</p>
+                            <p className="text-[11px] font-medium text-[color:var(--wolfy-text-secondary)]">{item.title}</p>
                             {item.message ? (
-                              <p className="mt-1 text-[11px] leading-5 text-white/46">{item.message}</p>
+                              <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{item.message}</p>
                             ) : null}
                           </div>
                         ))}
                       </div>
                     ) : null}
                     {guestMarketSnapshot?.sourceLabel ? (
-                      <p className="mt-3 text-[11px] text-white/38">
+                      <p className="mt-3 text-[11px] text-[color:var(--wolfy-text-muted)]">
                         {locale === 'en' ? 'Source' : '来源'}: {guestMarketSnapshot.sourceLabel}
                       </p>
                     ) : null}
-                    <p className="mt-3 text-[11px] leading-5 text-white/42">
+                    <p className="mt-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
                       {guestMarketSnapshot?.note}
                     </p>
                     <Link
                       to={registrationPath}
-                      className="mt-3 inline-flex min-h-10 w-full items-center justify-center rounded-lg border border-[color:var(--wolfy-border-focus)] bg-[var(--wolfy-accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#8178e7] sm:w-auto"
+                      className="theme-primary-action mt-3 inline-flex min-h-10 w-full items-center justify-center rounded-lg border px-4 text-sm font-semibold transition-colors hover:bg-[#2f5135] sm:w-auto"
                       data-testid="guest-home-registration-link"
                     >
                       {guestCommandConsoleCopy.unlockAction}
@@ -7845,8 +7845,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                   className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-4 sm:px-5')}
                   data-testid="guest-home-trust-strip"
                 >
-                  <p className="text-[11px] font-medium text-white/40">{guestCommandConsoleCopy.trustTitle}</p>
-                  <p className="mt-2 text-sm leading-6 text-white/62">
+                  <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{guestCommandConsoleCopy.trustTitle}</p>
+                  <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
                     {guestCommandConsoleCopy.trustBody}
                   </p>
                 </section>

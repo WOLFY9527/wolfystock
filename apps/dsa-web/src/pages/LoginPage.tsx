@@ -236,13 +236,13 @@ const LoginPage: React.FC = () => {
 
       <div className="auth-shell auth-shell--panel-only">
         <section className="auth-panel theme-panel-glass">
-          <div className="flex items-start justify-between gap-4 rounded-[20px] border border-white/10 bg-white/[0.03] px-4 py-3">
+          <div className="flex items-start justify-between gap-4 rounded-[20px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-4 py-3">
             <div className="min-w-0">
-              <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-white/40">{copy.heroEyebrow}</p>
-              <p className="mt-2 text-sm font-semibold text-white/92">{copy.shellProductName}</p>
-              <p className="mt-1 text-xs leading-6 text-white/55">{copy.shellProductTagline}</p>
+              <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-[color:var(--wolfy-text-muted)]">{copy.heroEyebrow}</p>
+              <p className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{copy.shellProductName}</p>
+              <p className="mt-1 text-xs leading-6 text-[color:var(--wolfy-text-secondary)]">{copy.shellProductTagline}</p>
             </div>
-            <span className="inline-flex shrink-0 items-center rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-100/85">
+            <span className="inline-flex shrink-0 items-center rounded-full border border-[color:var(--state-success-border)] bg-[var(--state-success-bg)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-[color:var(--state-success-text)]">
               {copy.shellGuestStatus}
             </span>
           </div>
@@ -253,18 +253,18 @@ const LoginPage: React.FC = () => {
               <span>{isAdminBootstrap ? copy.heroTitleSetup : isCreateUserMode ? copy.heroTitleCreate : copy.heroTitleLogin}</span>
             </h1>
             <p className="auth-panel__body">{isAdminBootstrap ? copy.heroBodySetup : isCreateUserMode ? copy.heroBodyCreate : copy.heroBodyLogin}</p>
-            <div className="mt-4 rounded-[18px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] px-4 py-3">
-              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/42">{copy.shellReturnHint}</p>
+            <div className="mt-4 rounded-[18px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-4 py-3">
+              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{copy.shellReturnHint}</p>
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-white/16 bg-white/[0.06] px-4 text-sm font-semibold text-white transition hover:border-white/24 hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="theme-secondary-action inline-flex min-h-[44px] items-center justify-center rounded-full border px-4 text-sm font-semibold transition hover:border-[color:var(--wolfy-divider)] hover:text-[color:var(--wolfy-text-primary)] disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={() => navigate(guestPath, { replace: true })}
                   disabled={isSubmitting}
                 >
                   {copy.returnToGuest}
                 </button>
-                <p className="flex-1 text-xs leading-6 text-white/52">{guestHint}</p>
+                <p className="flex-1 text-xs leading-6 text-[color:var(--wolfy-text-secondary)]">{guestHint}</p>
               </div>
             </div>
           </div>
@@ -274,7 +274,7 @@ const LoginPage: React.FC = () => {
               <Input
                 id="username"
                 type="text"
-                className="h-auto w-full bg-white/[0.03] border border-white/10 rounded-xl !px-4 py-3 text-white text-sm focus:border-white/20 outline-none transition-colors"
+                className="h-auto w-full rounded-xl border border-[color:var(--input-surface-border)] bg-[var(--input-surface-bg)] !px-4 py-3 text-sm text-[color:var(--wolfy-text-primary)] outline-none transition-colors placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--input-surface-border-focus)]"
                 label={copy.usernameLabel}
                 placeholder={isCreateUserMode ? copy.usernamePlaceholderCreate : copy.usernamePlaceholderLogin}
                 value={username}
@@ -289,7 +289,7 @@ const LoginPage: React.FC = () => {
               <Input
                 id="displayName"
                 type="text"
-                className="h-auto w-full bg-white/[0.03] border border-white/10 rounded-xl !px-4 py-3 text-white text-sm focus:border-white/20 outline-none transition-colors"
+                className="h-auto w-full rounded-xl border border-[color:var(--input-surface-border)] bg-[var(--input-surface-bg)] !px-4 py-3 text-sm text-[color:var(--wolfy-text-primary)] outline-none transition-colors placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--input-surface-border-focus)]"
                 label={copy.displayNameLabel}
                 placeholder={copy.displayNamePlaceholder}
                 value={displayName}
@@ -303,7 +303,7 @@ const LoginPage: React.FC = () => {
               id="password"
               type="password"
               allowTogglePassword
-              className="h-auto w-full bg-white/[0.03] border border-white/10 rounded-xl !pl-4 !pr-12 py-3 text-white text-sm focus:border-white/20 outline-none transition-colors"
+              className="h-auto w-full rounded-xl border border-[color:var(--input-surface-border)] bg-[var(--input-surface-bg)] !pl-4 !pr-12 py-3 text-sm text-[color:var(--wolfy-text-primary)] outline-none transition-colors placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--input-surface-border-focus)]"
               label={isAdminBootstrap ? copy.passwordLabelSetup : copy.passwordLabelLogin}
               placeholder={isAdminBootstrap ? copy.passwordPlaceholderSetup : copy.passwordPlaceholderLogin}
               value={password}
@@ -317,7 +317,7 @@ const LoginPage: React.FC = () => {
                 id="passwordConfirm"
                 type="password"
                 allowTogglePassword
-                className="h-auto w-full bg-white/[0.03] border border-white/10 rounded-xl !pl-4 !pr-12 py-3 text-white text-sm focus:border-white/20 outline-none transition-colors"
+                className="h-auto w-full rounded-xl border border-[color:var(--input-surface-border)] bg-[var(--input-surface-bg)] !pl-4 !pr-12 py-3 text-sm text-[color:var(--wolfy-text-primary)] outline-none transition-colors placeholder:text-[color:var(--wolfy-text-muted)] focus:border-[color:var(--input-surface-border-focus)]"
                 label={copy.passwordConfirmLabel}
                 placeholder={isAdminBootstrap ? copy.passwordConfirmPlaceholderSetup : copy.passwordConfirmPlaceholderLogin}
                 value={passwordConfirm}
@@ -347,7 +347,7 @@ const LoginPage: React.FC = () => {
               type="submit"
               variant="primary"
               size="xl"
-              className="w-full mt-2 py-3 bg-white text-black font-bold text-sm rounded-xl hover:bg-white/90 active:scale-95 transition-all justify-center"
+              className="w-full mt-2 justify-center rounded-xl border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] py-3 text-sm font-bold text-[color:var(--theme-button-primary-text)] transition-all hover:bg-[#2f5135] active:scale-95"
               disabled={isSubmitting}
               isLoading={isSubmitting}
               loadingText={isAdminBootstrap ? copy.loadingTextSetup : isCreateUserMode ? copy.loadingTextCreate : copy.loadingTextLogin}

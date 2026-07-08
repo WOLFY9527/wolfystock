@@ -21,11 +21,11 @@ const SOFT_TONE_CLASS: Record<StatusBadgeTone, string> = {
 };
 
 const SOLID_TONE_CLASS: Record<StatusBadgeTone, string> = {
-  success: 'border-[color:var(--state-success-border)] bg-[var(--state-success-text)] text-white',
-  danger: 'border-[color:var(--state-danger-border)] bg-[var(--state-danger-text)] text-white',
-  warning: 'border-[color:var(--state-warning-border)] bg-[var(--state-warning-text)] text-white',
-  info: 'border-[color:var(--state-info-border)] bg-[var(--state-info-text)] text-white',
-  default: 'border-[color:var(--line-strong)] bg-[var(--ink-soft)] text-white',
+  success: 'border-[color:var(--state-success-border)] bg-[var(--state-success-text)] text-[color:var(--wolfy-inverse-text)]',
+  danger: 'border-[color:var(--state-danger-border)] bg-[var(--state-danger-text)] text-[color:var(--wolfy-inverse-text)]',
+  warning: 'border-[color:var(--state-warning-border)] bg-[var(--state-warning-text)] text-[color:var(--wolfy-inverse-text)]',
+  info: 'border-[color:var(--state-info-border)] bg-[var(--state-info-text)] text-[color:var(--wolfy-inverse-text)]',
+  default: 'border-[color:var(--line-strong)] bg-[var(--wolfy-inverse-bg)] text-[color:var(--wolfy-inverse-text)]',
 };
 
 const OUTLINE_TONE_CLASS: Record<StatusBadgeTone, string> = {

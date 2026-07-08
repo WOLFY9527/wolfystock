@@ -56,6 +56,15 @@ describe('StatusBadge', () => {
     expect(screen.getByText('已通过校验')).toHaveAttribute('data-status', 'success');
   });
 
+  it('uses explicit inverse foreground tokens for solid badges', () => {
+    render(<StatusBadge status="success" variant="solid" label="已通过" />);
+
+    expect(screen.getByText('已通过')).toHaveClass(
+      'bg-[var(--state-success-text)]',
+      'text-[color:var(--wolfy-inverse-text)]',
+    );
+  });
+
   it('does not render skipped as 成功', () => {
     render(<StatusBadge status="not_needed" />);
     expect(screen.getByText('跳过')).toBeInTheDocument();

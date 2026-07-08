@@ -194,7 +194,7 @@ const TERMINAL_CHIP_CLASSES: Record<TerminalChipVariant, string> = {
   success: 'bg-transparent border border-[color:color-mix(in_srgb,var(--wolfy-market-up)_32%,transparent)] text-[color:var(--wolfy-market-up)] text-xs px-2.5 py-1 rounded-md',
   caution: 'bg-[var(--state-warning-bg)] border border-[color:var(--state-warning-border)] text-[color:var(--state-warning-text)] text-xs px-2.5 py-1 rounded-md',
   danger: 'bg-transparent border border-[color:color-mix(in_srgb,var(--wolfy-market-down)_32%,transparent)] text-[color:var(--wolfy-market-down)] text-xs px-2.5 py-1 rounded-md',
-  info: 'bg-transparent border border-[color:color-mix(in_srgb,var(--wolfy-accent)_36%,transparent)] text-[color:var(--wolfy-accent)] text-xs px-2.5 py-1 rounded-md',
+  info: 'bg-transparent border border-[color:color-mix(in_srgb,var(--wolfy-accent)_36%,transparent)] text-[color:var(--state-info-text)] text-xs px-2.5 py-1 rounded-md',
 };
 
 export function TerminalChip({
@@ -241,7 +241,7 @@ type NoticeVariant = 'neutral' | 'info' | 'caution' | 'danger';
 
 const NOTICE_CLASSES: Record<NoticeVariant, string> = {
   neutral: 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-secondary)]',
-  info: 'border-[color:color-mix(in_srgb,var(--wolfy-accent)_34%,transparent)] bg-transparent text-[color:var(--wolfy-accent)]',
+  info: 'border-[color:color-mix(in_srgb,var(--wolfy-accent)_34%,transparent)] bg-transparent text-[color:var(--state-info-text)]',
   caution: 'border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] text-[color:var(--state-warning-text)]',
   danger: 'border-[color:color-mix(in_srgb,var(--wolfy-market-down)_34%,transparent)] bg-transparent text-[color:var(--wolfy-market-down)]',
 };
