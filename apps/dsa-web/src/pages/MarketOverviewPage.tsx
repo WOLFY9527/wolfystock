@@ -57,6 +57,11 @@ const MARKET_OVERVIEW_SETUP_ACTION_CLASS = 'inline-flex min-h-8 items-center rou
 
 type PanelRequest = readonly [PanelKey, () => Promise<PanelState[PanelKey]>];
 type RefreshPanelRequestMode = 'route-entry' | 'background-refresh' | 'manual-refresh';
+type MarketOverviewReadinessSnapshot = {
+  officialRiskSourceReadiness: OfficialRiskSourceReadiness | null;
+  consumerEvidenceReadinessMatrix: ConsumerEvidenceReadinessMatrix | null;
+  crossAssetDriverReadiness: CrossAssetDriverReadiness | null;
+};
 type StagedPanelRequestGroup = {
   delayMs: number;
   requests: PanelRequest[];
@@ -543,17 +548,18 @@ function getPanelLoader(panelKey: PanelKey): (() => Promise<PanelState[PanelKey]
 }
 
 const inFlightPanelRequestCache = new Map<string, Promise<PanelState[PanelKey]>>();
+const inFlightReadinessRequestCache = new Map<string, Promise<unknown>>();
 
-function panelRequestCacheKey(panelKey: PanelKey, mode: RefreshPanelRequestMode): string {
-  return mode === 'manual-refresh' ? `manual-refresh:${String(panelKey)}` : `canonical:${String(panelKey)}`;
+function panelRequestCacheKey(panelKey: PanelKey): string {
+  return `market-overview:${String(panelKey)}`;
 }
 
 function loadPanelWithRequestDedupe(
   panelKey: PanelKey,
-  mode: RefreshPanelRequestMode,
+  _mode: RefreshPanelRequestMode,
   loadPanel: () => Promise<PanelState[PanelKey]>,
 ): Promise<PanelState[PanelKey]> {
-  const cacheKey = panelRequestCacheKey(panelKey, mode);
+  const cacheKey = panelRequestCacheKey(panelKey);
   const cached = inFlightPanelRequestCache.get(cacheKey);
   if (cached) {
     return cached;
@@ -565,6 +571,32 @@ function loadPanelWithRequestDedupe(
   });
   inFlightPanelRequestCache.set(cacheKey, promise);
   return promise;
+}
+
+function loadReadinessWithRequestDedupe<T>(cacheKey: string, load: () => Promise<T>): Promise<T> {
+  const cached = inFlightReadinessRequestCache.get(cacheKey) as Promise<T> | undefined;
+  if (cached) {
+    return cached;
+  }
+  const promise = load().finally(() => {
+    if (inFlightReadinessRequestCache.get(cacheKey) === promise) {
+      inFlightReadinessRequestCache.delete(cacheKey);
+    }
+  });
+  inFlightReadinessRequestCache.set(cacheKey, promise);
+  return promise;
+}
+
+export function __resetMarketOverviewRequestOwnershipForTests(): void {
+  if (!import.meta.env.TEST) {
+    return;
+  }
+  inFlightPanelRequestCache.clear();
+  inFlightReadinessRequestCache.clear();
+  cryptoStreamSubscribers.clear();
+  sharedCryptoEventSource?.close();
+  sharedCryptoEventSource = null;
+  latestCryptoStreamStatus = 'snapshot';
 }
 
 type CryptoStreamSubscriber = (update: {
@@ -1507,6 +1539,7 @@ const MarketOverviewPage = () => {
   const [cryptoRealtimeStatus, setCryptoRealtimeStatus] = useState<CryptoRealtimeStatus>('snapshot');
   const [autoRevalidateTick, setAutoRevalidateTick] = useState(0);
   const [localSnapshotPersistTick, setLocalSnapshotPersistTick] = useState(0);
+  const ownsOperatorReadinessRequests = Boolean(isAdminMode && canReadProviders);
   const autoRevalidateTimersRef = useRef<Partial<Record<PanelKey, number>>>({});
   const autoRevalidateAttemptsRef = useRef<Partial<Record<PanelKey, number>>>({});
   const autoRevalidateInFlightRef = useRef<Partial<Record<PanelKey, true>>>({});
@@ -1708,15 +1741,31 @@ const MarketOverviewPage = () => {
   }, [loadPanels]);
 
   useEffect(() => {
+    if (!ownsOperatorReadinessRequests) {
+      setOfficialRiskSourceReadiness(null);
+      setConsumerEvidenceReadinessMatrix(null);
+      setCrossAssetDriverReadiness(null);
+      return;
+    }
     let cancelled = false;
 
     async function loadSourceReadiness() {
       try {
-        const payload = await marketApi.getDataReadiness();
+        const payload = await loadReadinessWithRequestDedupe<MarketOverviewReadinessSnapshot>(
+          'operator:data-readiness',
+          async () => {
+            const readiness = await marketApi.getDataReadiness();
+            return {
+              officialRiskSourceReadiness: readiness?.officialRiskSourceReadiness || null,
+              consumerEvidenceReadinessMatrix: readiness?.consumerEvidenceReadinessMatrix || null,
+              crossAssetDriverReadiness: readiness?.crossAssetDriverReadiness || null,
+            };
+          },
+        );
         if (!cancelled) {
-          setOfficialRiskSourceReadiness(payload?.officialRiskSourceReadiness || null);
-          setConsumerEvidenceReadinessMatrix(payload?.consumerEvidenceReadinessMatrix || null);
-          setCrossAssetDriverReadiness(payload?.crossAssetDriverReadiness || null);
+          setOfficialRiskSourceReadiness(payload.officialRiskSourceReadiness);
+          setConsumerEvidenceReadinessMatrix(payload.consumerEvidenceReadinessMatrix);
+          setCrossAssetDriverReadiness(payload.crossAssetDriverReadiness);
         }
       } catch {
         if (!cancelled) {
@@ -1732,13 +1781,22 @@ const MarketOverviewPage = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [ownsOperatorReadinessRequests]);
 
   const loadProfessionalDataCapabilities = useCallback(async (cancelledRef?: { current: boolean }) => {
+    if (!ownsOperatorReadinessRequests) {
+      setProfessionalDataCapabilities(null);
+      setProfessionalDataCapabilitiesError(null);
+      setProfessionalDataCapabilitiesLoading(false);
+      return;
+    }
     setProfessionalDataCapabilitiesLoading(true);
     setProfessionalDataCapabilitiesError(null);
     try {
-      const payload = await marketApi.getProfessionalDataCapabilities();
+      const payload = await loadReadinessWithRequestDedupe(
+        'operator:professional-data-capabilities',
+        marketApi.getProfessionalDataCapabilities,
+      );
       if (!cancelledRef?.current) {
         setProfessionalDataCapabilities(buildProfessionalDataCapabilityRegistryView(payload));
       }
@@ -1752,7 +1810,7 @@ const MarketOverviewPage = () => {
         setProfessionalDataCapabilitiesLoading(false);
       }
     }
-  }, []);
+  }, [ownsOperatorReadinessRequests]);
 
   useEffect(() => {
     const cancelledRef = { current: false };
