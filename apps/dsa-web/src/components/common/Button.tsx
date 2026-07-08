@@ -27,8 +27,8 @@ const BUTTON_SIZE_STYLES = {
 const BUTTON_VARIANT_STYLES = {
   primary: '',
   secondary: '',
-  'settings-primary': '!rounded-[var(--theme-button-radius)] !border !border-[color:var(--theme-button-primary-border)] !bg-[var(--theme-button-primary-bg)] !px-6 !py-2.5 !text-sm !font-medium !text-[color:var(--theme-button-primary-text)] !shadow-none hover:!bg-[var(--sage-deep)]',
-  'settings-secondary': '!rounded-[var(--theme-button-radius)] !border !border-[color:var(--theme-button-secondary-border)] !bg-[var(--theme-button-secondary-bg)] !px-5 !py-2.5 !text-sm !font-medium !text-[color:var(--theme-button-secondary-text)] !shadow-none hover:!border-[color:var(--line-strong)] hover:!bg-[var(--surface-3)]',
+  'settings-primary': 'rounded-[var(--theme-button-radius)] border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] px-6 py-2.5 text-sm font-medium text-[color:var(--theme-button-primary-text)] shadow-none hover:bg-[var(--sage-deep)]',
+  'settings-secondary': 'rounded-[var(--theme-button-radius)] border border-[color:var(--theme-button-secondary-border)] bg-[var(--theme-button-secondary-bg)] px-5 py-2.5 text-sm font-medium text-[color:var(--theme-button-secondary-text)] shadow-none hover:border-[color:var(--line-strong)] hover:bg-[var(--surface-3)]',
   outline: '',
   ghost: '',
   gradient: 'rounded-[var(--theme-button-radius)] border border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] px-6 py-2.5 text-sm font-medium text-[color:var(--state-warning-text)] transition-all hover:bg-[var(--state-warning-bg-strong)]',

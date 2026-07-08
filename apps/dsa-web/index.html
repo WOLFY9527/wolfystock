@@ -8,30 +8,30 @@
     <title>WolfyStock</title>
     <script>
       (() => {
-        const themeStyle = 'spacex';
-        let colorMode = 'dark';
+        const themeStyle = 'paper';
+        let colorMode = 'light';
         try {
           const storedMode = window.localStorage.getItem('dsa-theme-mode');
-          colorMode = storedMode === 'light' || storedMode === 'dark' ? storedMode : 'dark';
+          colorMode = storedMode === 'light' || storedMode === 'dark' ? storedMode : 'light';
         } catch {
-          colorMode = 'dark';
+          colorMode = 'light';
         }
         document.documentElement.dataset.theme = colorMode;
         document.documentElement.dataset.themeStyle = themeStyle;
         document.documentElement.dataset.colorMode = colorMode;
         document.documentElement.classList.add(colorMode);
-        document.documentElement.style.setProperty('--preboot-bg', colorMode === 'light' ? '#f6f7fb' : '#000000');
+        document.documentElement.style.setProperty('--preboot-bg', '#F5F0EB');
       })();
     </script>
     <style>
       :root {
-        color-scheme: light dark;
+        color-scheme: light;
       }
       html,
       body {
         margin: 0;
         min-height: 100%;
-        background: var(--preboot-bg, #000000);
+        background: var(--preboot-bg, #F5F0EB);
       }
       #root {
         min-height: 100vh;

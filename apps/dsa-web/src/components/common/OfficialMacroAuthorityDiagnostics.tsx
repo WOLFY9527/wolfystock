@@ -27,7 +27,7 @@ export const OfficialMacroAuthorityDiagnostics: React.FC<{
       data-testid={testId}
       title={title}
       summary={`可计分 ${scoreEligibleCount} · 官方 ${officialCount} · 代理/观察 ${proxyCount + observationOnlyCount} · 缺口 ${gapCount + rejectedCount}`}
-      className="bg-white/[0.02]"
+      className="bg-[var(--wolfy-surface-muted)]"
     >
       <div className="grid min-w-0 gap-3">
         <TerminalSectionHeader
@@ -57,15 +57,15 @@ export const OfficialMacroAuthorityDiagnostics: React.FC<{
           <div
             key={row.key}
             className={cn(
-              'rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5',
+              'research-evidence-surface px-3 py-2.5',
               row.missing ? 'opacity-80' : '',
             )}
           >
             <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-white/84">{row.label}</p>
-                <p className="truncate font-mono text-[10px] uppercase tracking-[0.18em] text-white/34">{row.seriesId}</p>
-                <p className="mt-1 text-[11px] leading-5 text-white/45">{row.meta}</p>
+                <p className="truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{row.label}</p>
+                <p className="research-evidence-eyebrow truncate font-mono text-[10px] uppercase tracking-[0.18em]">{row.seriesId}</p>
+                <p className="research-evidence-muted mt-1 text-[11px] leading-5">{row.meta}</p>
                 {row.reasonText ? (
                   <p className="mt-1 break-words font-mono text-[10px] leading-5 text-amber-200/80">{row.reasonText}</p>
                 ) : null}

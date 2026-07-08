@@ -129,23 +129,23 @@ export const AuthGuardOverlay: React.FC<AuthGuardOverlayProps> = ({ moduleName, 
           className="pointer-events-none absolute inset-0 overflow-hidden opacity-80"
         >
           <div className="absolute inset-x-4 top-14 mx-auto grid max-w-6xl gap-4 sm:top-20">
-            <div className="h-14 rounded-[14px] border border-white/8 bg-white/[0.035]" />
+            <div className="h-14 rounded-[14px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]" />
             <div className="grid gap-4 md:grid-cols-[minmax(0,1.7fr)_minmax(18rem,0.8fr)]">
-              <div className="min-h-[26rem] rounded-[14px] border border-white/8 bg-white/[0.03] p-4">
-                <div className="mb-5 h-8 w-48 rounded-full bg-white/[0.06]" />
+              <div className="min-h-[26rem] rounded-[14px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-4">
+                <div className="mb-5 h-8 w-48 rounded-full bg-[var(--wolfy-surface-inset)]" />
                 <div className="grid gap-3">
-                  <div className="h-12 rounded-[10px] bg-white/[0.05]" />
-                  <div className="h-12 rounded-[10px] bg-white/[0.035]" />
-                  <div className="h-12 rounded-[10px] bg-white/[0.045]" />
-                  <div className="h-12 rounded-[10px] bg-white/[0.03]" />
+                  <div className="h-12 rounded-[10px] bg-[var(--wolfy-surface-inset-lift)]" />
+                  <div className="h-12 rounded-[10px] bg-[var(--wolfy-surface-inset)]" />
+                  <div className="h-12 rounded-[10px] bg-[var(--wolfy-surface-inset-lift)]" />
+                  <div className="h-12 rounded-[10px] bg-[var(--wolfy-surface-inset)]" />
                 </div>
               </div>
-              <div className="hidden min-h-[26rem] rounded-[14px] border border-white/8 bg-white/[0.026] p-4 md:block">
-                <div className="mb-4 h-7 w-32 rounded-full bg-white/[0.06]" />
+              <div className="hidden min-h-[26rem] rounded-[14px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-4 md:block">
+                <div className="mb-4 h-7 w-32 rounded-full bg-[var(--wolfy-surface-inset)]" />
                 <div className="space-y-3">
-                  <div className="h-16 rounded-[10px] bg-white/[0.04]" />
-                  <div className="h-16 rounded-[10px] bg-white/[0.032]" />
-                  <div className="h-16 rounded-[10px] bg-white/[0.04]" />
+                  <div className="h-16 rounded-[10px] bg-[var(--wolfy-surface-inset-lift)]" />
+                  <div className="h-16 rounded-[10px] bg-[var(--wolfy-surface-inset)]" />
+                  <div className="h-16 rounded-[10px] bg-[var(--wolfy-surface-inset-lift)]" />
                 </div>
               </div>
             </div>
@@ -155,17 +155,17 @@ export const AuthGuardOverlay: React.FC<AuthGuardOverlayProps> = ({ moduleName, 
 
       <div
         data-testid="auth-guard-scrim"
-        className="absolute inset-0 bg-[color:rgba(7,10,18,0.56)] backdrop-blur-md"
+        className="absolute inset-0 bg-[color:rgb(37_34_29_/_0.34)] backdrop-blur-md"
         aria-hidden="true"
       />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(128,136,255,0.13),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.04),transparent_42%)]" aria-hidden="true" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(212,165,116,0.18),transparent_34%),linear-gradient(180deg,rgba(255,253,248,0.12),transparent_42%)]" aria-hidden="true" />
 
       <section
         ref={cardRef}
-        className="relative z-10 flex w-[min(92vw,28rem)] flex-col items-center overflow-hidden rounded-[14px] border border-white/12 bg-[color:rgba(18,23,35,0.74)] px-5 py-6 text-center shadow-[0_24px_80px_rgba(3,7,18,0.38)] backdrop-blur-2xl sm:px-6 sm:py-7"
+        className="relative z-10 flex w-[min(92vw,28rem)] flex-col items-center overflow-hidden rounded-[18px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-elevated)] px-5 py-6 text-center shadow-[var(--wolfy-shadow-console)] sm:px-6 sm:py-7"
         data-testid="auth-guard-card"
       >
-        <div className="mx-auto mb-5 flex size-11 items-center justify-center rounded-full border border-white/12 bg-white/[0.07] text-[color:var(--wolfy-text-muted)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+        <div className="mx-auto mb-5 flex size-11 items-center justify-center rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-inset-lift)] text-[color:var(--wolfy-text-muted)]">
           <Lock className="size-4" aria-hidden="true" />
         </div>
         <h2 id={titleId} className="text-base font-semibold text-[color:var(--wolfy-text-primary)]">{title}</h2>

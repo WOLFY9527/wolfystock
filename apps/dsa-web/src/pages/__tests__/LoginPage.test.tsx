@@ -428,27 +428,27 @@ describe('LoginPage', () => {
     expect(screen.getByLabelText(translate('en', 'auth.login.usernameLabel'))).toHaveClass(
       '!px-4',
       'py-3',
-      'bg-white/[0.03]',
-      'border-white/10',
+      'bg-[var(--input-surface-bg)]',
+      'border-[color:var(--input-surface-border)]',
     );
     expect(screen.getByLabelText(translate('en', 'auth.login.passwordLabelLogin'))).toHaveClass(
       '!pl-4',
       '!pr-12',
       'py-3',
-      'bg-white/[0.03]',
-      'border-white/10',
+      'bg-[var(--input-surface-bg)]',
+      'border-[color:var(--input-surface-border)]',
     );
     expect(screen.getByRole('button', { name: translate('en', 'auth.login.submitLogin') })).toHaveClass(
       'mt-2',
-      'bg-white',
-      'text-black',
+      'bg-[var(--theme-button-primary-bg)]',
+      'text-[color:var(--theme-button-primary-text)]',
       'active:scale-95',
     );
     expect(screen.getByRole('button', { name: translate('en', 'auth.login.returnToGuest') })).toHaveClass(
       'min-h-[44px]',
       'rounded-full',
       'border',
-      'bg-white/[0.06]',
+      'theme-secondary-action',
     );
     expect(screen.getByRole('button', { name: translate('en', 'auth.login.submitLogin') })).toBeInTheDocument();
     expectNoRawI18nKeys(container, {
@@ -475,8 +475,8 @@ describe('LoginPage', () => {
     expect(screen.getByText('WolfyStock 研究工作台')).toBeInTheDocument();
     expect(screen.getByText('游客预览已就绪')).toBeInTheDocument();
     expect(screen.getByText('需要先回到只读游客路由？')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: translate('zh', 'auth.login.submitLogin') })).toHaveClass('bg-white', 'text-black');
-    expect(screen.getByRole('button', { name: translate('zh', 'auth.login.returnToGuest') })).toHaveClass('bg-white/[0.06]', 'border');
+    expect(screen.getByRole('button', { name: translate('zh', 'auth.login.submitLogin') })).toHaveClass('bg-[var(--theme-button-primary-bg)]', 'text-[color:var(--theme-button-primary-text)]');
+    expect(screen.getByRole('button', { name: translate('zh', 'auth.login.returnToGuest') })).toHaveClass('theme-secondary-action', 'border');
   });
 
   it('keeps login input adornments from sharing text space', () => {

@@ -153,19 +153,19 @@ const ConsumerEvidenceCoverageStrip: React.FC<ConsumerEvidenceCoverageStripProps
       <section
         data-testid={testId}
         className={cn(
-          'rounded-lg border border-white/[0.08] bg-white/[0.025] px-3 py-2.5',
+          'research-evidence-surface px-3 py-2.5',
           className,
         )}
       >
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/42">
+          <span className="research-evidence-eyebrow text-[10px] font-semibold uppercase tracking-[0.16em]">
             {resolvedTitle}
           </span>
           <TerminalChip variant="danger">
             {isEnglish ? 'Coverage unavailable' : '覆盖不可用'}
           </TerminalChip>
         </div>
-        <p className="mt-2 text-xs leading-5 text-white/64">
+        <p className="research-evidence-copy mt-2 text-xs leading-5">
           {isEnglish
             ? 'Evidence coverage is unavailable. Do not treat the current conclusion as research-ready.'
             : '证据覆盖暂不可用，当前结论不能视为研究就绪。'}
@@ -195,15 +195,15 @@ const ConsumerEvidenceCoverageStrip: React.FC<ConsumerEvidenceCoverageStripProps
   const showDisclosure = notes.length > 2 || secondaryEntries.length > 0;
 
   return (
-    <section
-      data-testid={testId}
-      className={cn(
-        'rounded-lg border border-white/[0.08] bg-white/[0.025] px-3 py-2.5',
+      <section
+        data-testid={testId}
+        className={cn(
+        'research-evidence-surface px-3 py-2.5',
         className,
       )}
     >
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/42">
+        <span className="research-evidence-eyebrow text-[10px] font-semibold uppercase tracking-[0.16em]">
           {resolvedTitle}
         </span>
         {primaryEntries.map(({ domain, status }) => (
@@ -214,12 +214,12 @@ const ConsumerEvidenceCoverageStrip: React.FC<ConsumerEvidenceCoverageStripProps
           </TerminalChip>
         ))}
       </div>
-      <p className="mt-2 text-xs leading-5 text-white/64">
+      <p className="research-evidence-copy mt-2 text-xs leading-5">
         {summaryLine}
       </p>
       {showDisclosure ? (
-        <details className="mt-2 rounded-[10px] border border-white/[0.06] bg-white/[0.015] px-3 py-2.5">
-          <summary className="cursor-pointer list-none text-[11px] font-medium text-white/52 marker:hidden">
+        <details className="research-evidence-surface--nested mt-2 px-3 py-2.5">
+          <summary className="research-evidence-muted cursor-pointer list-none text-[11px] font-medium marker:hidden">
             {isEnglish ? 'More evidence details' : '更多证据细节'}
           </summary>
           <div className="mt-2 flex min-w-0 flex-col gap-2">
@@ -237,7 +237,7 @@ const ConsumerEvidenceCoverageStrip: React.FC<ConsumerEvidenceCoverageStripProps
             {notes.length ? (
               <div className="space-y-1.5">
                 {notes.map((note) => (
-                  <p key={note} className="text-[11px] leading-5 text-white/60">
+                  <p key={note} className="research-evidence-copy text-[11px] leading-5">
                     {note}
                   </p>
                 ))}

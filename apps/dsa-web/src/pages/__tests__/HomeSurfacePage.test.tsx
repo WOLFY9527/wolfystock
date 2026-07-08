@@ -889,9 +889,17 @@ describe('HomeSurfacePage', () => {
     expect(homeSearch).toHaveAttribute('placeholder', '输入代码或名称开始研究...');
     expect(homeSearch).toHaveValue('');
     expect(screen.getByTestId('home-bento-omnibar-input-shell')).toHaveClass('overflow-hidden', 'rounded-lg', 'border', 'border-[color:var(--wolfy-border-subtle)]', 'bg-[var(--wolfy-surface-console)]');
-    expect(homeSearch).toHaveClass('bg-transparent', 'text-sm', 'leading-none', 'pl-11', 'caret-[#93C5FD]');
+    expect(homeSearch).toHaveClass(
+      'bg-transparent',
+      'text-sm',
+      'leading-none',
+      'pl-11',
+      'text-[color:var(--wolfy-text-primary)]',
+      'caret-[color:var(--sage-deep)]',
+      'placeholder:text-[color:var(--wolfy-text-muted)]',
+    );
     expect(screen.getByTestId('home-bento-analyze-button')).toHaveTextContent('分析');
-    expect(screen.getByTestId('home-bento-analyze-button')).toHaveClass('rounded-lg', 'bg-[var(--wolfy-accent)]');
+    expect(screen.getByTestId('home-bento-analyze-button')).toHaveClass('rounded-lg', 'bg-[var(--theme-button-primary-bg)]');
     expect(within(commandBar).getByTestId('home-bento-history-drawer-trigger')).toBeInTheDocument();
     expect(within(commandBar).getByRole('button', { name: '历史记录' })).toBeInTheDocument();
 

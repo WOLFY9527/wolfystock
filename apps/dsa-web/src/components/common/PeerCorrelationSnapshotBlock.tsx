@@ -166,13 +166,13 @@ const PeerCorrelationSnapshotBlock: React.FC<PeerCorrelationSnapshotBlockProps> 
   return (
     <section
       className={cn(
-        'min-w-0 rounded-[10px] border border-white/[0.08] bg-white/[0.024] px-3 py-3',
+        'research-evidence-surface min-w-0 px-3 py-3',
         className,
       )}
       data-testid={testId}
     >
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/42">
+        <span className="research-evidence-eyebrow text-[10px] font-semibold uppercase tracking-[0.16em]">
           {resolvedTitle}
         </span>
         <TerminalChip variant={stateVariant(snapshot.correlationState)}>
@@ -183,70 +183,70 @@ const PeerCorrelationSnapshotBlock: React.FC<PeerCorrelationSnapshotBlockProps> 
         </TerminalChip>
       </div>
 
-      <p className="mt-2 min-w-0 break-words text-xs leading-5 text-white/62">
+      <p className="research-evidence-copy mt-2 min-w-0 break-words text-xs leading-5">
         {peerGroupLabel}
         {peerSymbols.length ? ` / ${peerSymbols.join(', ')}` : ''}
       </p>
 
       <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2">
-        <div className="min-w-0 rounded-[8px] border border-white/[0.06] bg-white/[0.018] px-3 py-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/36">
+        <div className="research-evidence-surface--nested min-w-0 px-3 py-2.5">
+          <p className="research-evidence-eyebrow text-[10px] font-semibold uppercase tracking-[0.12em]">
             {isEnglish ? 'Peer evidence' : '同业证据'}
           </p>
           <div className="mt-2 space-y-1.5">
             {peerEvidence.length ? peerEvidence.map((item) => (
-              <p key={`${item.symbol}-${item.state}-${item.overlapDays}`} className="text-xs leading-5 text-white/66">
-                <span className="font-semibold text-white/78">{item.symbol}</span>
+              <p key={`${item.symbol}-${item.state}-${item.overlapDays}`} className="research-evidence-copy text-xs leading-5">
+                <span className="font-semibold text-[color:var(--wolfy-text-primary)]">{item.symbol}</span>
                 {' / '}
                 <span>{peerStateLabel(item.state, locale)}</span>
                 {' - '}
                 <span>{evidenceSummary(locale, item)}</span>
               </p>
             )) : (
-              <p className="text-xs leading-5 text-white/50">{emptyEvidence}</p>
+              <p className="research-evidence-muted text-xs leading-5">{emptyEvidence}</p>
             )}
           </div>
         </div>
 
-        <div className="min-w-0 rounded-[8px] border border-white/[0.06] bg-white/[0.018] px-3 py-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/36">
+        <div className="research-evidence-surface--nested min-w-0 px-3 py-2.5">
+          <p className="research-evidence-eyebrow text-[10px] font-semibold uppercase tracking-[0.12em]">
             {isEnglish ? 'Divergence evidence' : '背离证据'}
           </p>
           <div className="mt-2 space-y-1.5">
             {divergenceEvidence.length ? divergenceEvidence.map((item) => (
-              <p key={`${item.symbol}-${item.state}-${item.overlapDays}`} className="text-xs leading-5 text-white/66">
-                <span className="font-semibold text-white/78">{item.symbol}</span>
+              <p key={`${item.symbol}-${item.state}-${item.overlapDays}`} className="research-evidence-copy text-xs leading-5">
+                <span className="font-semibold text-[color:var(--wolfy-text-primary)]">{item.symbol}</span>
                 {' / '}
                 <span>{peerStateLabel(item.state, locale)}</span>
                 {' - '}
                 <span>{evidenceSummary(locale, item)}</span>
               </p>
             )) : (
-              <p className="text-xs leading-5 text-white/50">{emptyDivergence}</p>
+              <p className="research-evidence-muted text-xs leading-5">{emptyDivergence}</p>
             )}
           </div>
         </div>
 
-        <div className="min-w-0 rounded-[8px] border border-white/[0.06] bg-white/[0.018] px-3 py-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/36">
+        <div className="research-evidence-surface--nested min-w-0 px-3 py-2.5">
+          <p className="research-evidence-eyebrow text-[10px] font-semibold uppercase tracking-[0.12em]">
             {isEnglish ? 'Input limits' : '输入限制'}
           </p>
-          <p className="mt-2 text-xs leading-5 text-white/62">
+          <p className="research-evidence-copy mt-2 text-xs leading-5">
             {isEnglish ? 'Stale: ' : '过期输入：'}
             {staleInputs.length ? staleInputs.join(isEnglish ? ' / ' : '；') : emptyInput}
           </p>
-          <p className="mt-1 text-xs leading-5 text-white/62">
+          <p className="research-evidence-copy mt-1 text-xs leading-5">
             {isEnglish ? 'Missing: ' : '缺失输入：'}
             {missingInputs.length ? missingInputs.join(isEnglish ? ' / ' : '；') : emptyInput}
           </p>
         </div>
 
-        <div className="min-w-0 rounded-[8px] border border-white/[0.06] bg-white/[0.018] px-3 py-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/36">
+        <div className="research-evidence-surface--nested min-w-0 px-3 py-2.5">
+          <p className="research-evidence-eyebrow text-[10px] font-semibold uppercase tracking-[0.12em]">
             {isEnglish ? 'Research boundary' : '研究边界'}
           </p>
-          <p className="mt-2 text-xs leading-5 text-white/62">{boundary}</p>
-          <p className="mt-1 text-xs leading-5 text-white/62">
+          <p className="research-evidence-copy mt-2 text-xs leading-5">{boundary}</p>
+          <p className="research-evidence-copy mt-1 text-xs leading-5">
             {isEnglish ? 'Next: ' : '下一步：'}
             {nextSteps.length ? nextSteps.join(isEnglish ? ' / ' : '；') : (isEnglish ? 'Continue peer review after fresh evidence arrives.' : '等待新的同业证据后继续复核。')}
           </p>

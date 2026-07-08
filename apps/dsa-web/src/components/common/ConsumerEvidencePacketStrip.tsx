@@ -196,15 +196,15 @@ const ConsumerEvidencePacketStrip: React.FC<ConsumerEvidencePacketStripProps> = 
     <section
       data-testid={testId}
       className={cn(
-        'rounded-lg border border-white/[0.08] bg-white/[0.025] px-3 py-2.5',
+        'research-evidence-surface px-3 py-2.5',
         className,
       )}
     >
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/42">
+        <span className="research-evidence-eyebrow text-[10px] font-semibold uppercase tracking-[0.16em]">
           {resolvedTitle}
         </span>
-        <span className="text-[11px] text-white/52">
+        <span className="research-evidence-muted text-[11px]">
           {isEnglish ? 'Packet state' : '整体状态'}
         </span>
         <TerminalChip variant={statusVariant(packetState)}>
@@ -221,10 +221,10 @@ const ConsumerEvidencePacketStrip: React.FC<ConsumerEvidencePacketStripProps> = 
         ))}
       </div>
       <div className="mt-2 space-y-1.5">
-        <p className="text-xs leading-5 text-white/64">{fundamentalsSummary}</p>
-        <p className="text-xs leading-5 text-white/64">{newsSummary}</p>
-        {reasonLine ? <p className="text-[11px] leading-5 text-white/52">{reasonLine}</p> : null}
-        <p className="text-[11px] leading-5 text-white/52">
+        <p className="research-evidence-copy text-xs leading-5">{fundamentalsSummary}</p>
+        <p className="research-evidence-copy text-xs leading-5">{newsSummary}</p>
+        {reasonLine ? <p className="research-evidence-muted text-[11px] leading-5">{reasonLine}</p> : null}
+        <p className="research-evidence-muted text-[11px] leading-5">
           {isEnglish ? 'Observe only, not investment advice.' : '仅供观察，不构成投资建议。'}
         </p>
       </div>
