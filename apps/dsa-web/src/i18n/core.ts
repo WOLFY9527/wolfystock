@@ -3412,7 +3412,7 @@ This memo is for research discussion and does not constitute investment advice.`
       },
     },
     home: {
-      documentTitle: 'Daily Stock Analysis - WolfyStock',
+      documentTitle: 'WolfyStock',
       eyebrow: 'Unified research workspace',
       title: 'Stock Research Workspace',
       subtitle: 'Structured analysis workflow. Focused conclusions, execution plans, and full reports.',
