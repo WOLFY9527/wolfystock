@@ -373,6 +373,42 @@ class MarketOverviewSnapshot(Base):
     )
 
 
+class QuoteOhlcvSnapshotRow(Base):
+    """Canonical quote/OHLCV snapshot lineage row owned by DatabaseManager."""
+
+    __tablename__ = 'quote_ohlcv_snapshots'
+
+    snapshot_id = Column(String(96), primary_key=True)
+    snapshot_kind = Column(String(16), nullable=False, index=True)
+    symbol = Column(String(32), nullable=False, index=True)
+    market = Column(String(16), nullable=False, index=True)
+    quote_as_of = Column(String(64))
+    bar_trade_date_time = Column(String(64))
+    retrieval_time = Column(String(64), nullable=False, index=True)
+    source_id = Column(String(96), nullable=False)
+    source_type = Column(String(64), nullable=False)
+    authority_state = Column(String(64), nullable=False)
+    display_state = Column(String(64), nullable=False)
+    freshness_state = Column(String(64), nullable=False)
+    coverage_state = Column(String(64), nullable=False)
+    ohlcv_basis = Column(String(32))
+    lineage_ref = Column(String(255), nullable=False)
+    payload_json = Column(Text, nullable=False)
+    payload_fingerprint = Column(String(64), nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+
+    __table_args__ = (
+        Index(
+            'ix_quote_ohlcv_snapshots_symbol_lookup',
+            'market',
+            'symbol',
+            'snapshot_kind',
+            'retrieval_time',
+        ),
+        Index('ix_quote_ohlcv_snapshots_lineage_ref', 'lineage_ref'),
+    )
+
+
 class AppUser(Base):
     """Persisted application user identity for the multi-user foundation."""
 
