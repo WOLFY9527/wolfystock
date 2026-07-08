@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """Consumer-safe Scenario baseline snapshot service seam.
 
-The service is deliberately pure: it normalizes caller-supplied snapshot
-metadata and exposes missing/degraded category state without reading providers,
-credentials, cache, or database state.
+Non-durable normalization is deliberately pure: it normalizes caller-supplied
+snapshot metadata without reading providers, credentials, cache, or database
+state. Durable operations delegate to the injected canonical repository.
 """
 
 from __future__ import annotations
@@ -13,8 +13,14 @@ import json
 import re
 from typing import Any, Mapping
 
+from src.repositories.scenario_baseline_snapshot_repository import (
+    ScenarioBaselineSnapshotRepository,
+    ScenarioBaselineSnapshotStorageError,
+)
+
 
 SCENARIO_BASELINE_SNAPSHOT_SCHEMA_VERSION = "scenario_baseline_snapshot.v1"
+SCENARIO_BASELINE_DURABLE_SNAPSHOT_SCHEMA_VERSION = "scenario_baseline_snapshot.v2"
 SCENARIO_BASELINE_NO_ADVICE_DISCLOSURE = "Research planning only; not a personalized decision basis."
 
 _CATEGORY_ORDER = (
@@ -51,8 +57,11 @@ _DEGRADED_STATES = {"degraded", "partial", "stale", "limited"}
 _MISSING_STATES = {"missing", "unavailable", "blocked", "no_data", "none", ""}
 _SAFE_SOURCE_DATA_STATES = {"real_cached", "request_supplied", "demo_static_sample", "unavailable"}
 _SAFE_FRESHNESS_STATES = {"fresh", "recent", "stale", "unavailable", "unknown", "no_evidence"}
+_READY_FRESHNESS_STATES = {"fresh", "recent"}
+_AUTHORITY_STATES = {"authoritative", "observation_only", "unavailable"}
+_TARGET_EVIDENCE_PRESENT_STATES = {"present", "ready", "available", "validated"}
 _FORBIDDEN_TEXT_RE = re.compile(
-    r"providerclass|providername|api[_ -]?key|env|token|credential|requestid|traceid|"
+    r"providerclass|providername|api[_ -]?key|\benv\b|token|credential|requestid|traceid|"
     r"cachekey|rawpayload|exceptionclass|exceptionchain|https?://|traceback|stack",
     re.IGNORECASE,
 )
@@ -63,8 +72,9 @@ _TIMESTAMP_RE = re.compile(r"^[0-9T:Z+\-./ ]{4,40}$")
 class ScenarioBaselineSnapshotService:
     """Normalize and read Scenario baseline snapshots through a small seam."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, repository: ScenarioBaselineSnapshotRepository | None = None) -> None:
         self._snapshots: dict[tuple[str, str], dict[str, Any]] = {}
+        self._repository = repository
 
     def create_snapshot(self, payload: Mapping[str, Any] | None) -> dict[str, Any]:
         raw = payload if isinstance(payload, Mapping) else {}
@@ -140,6 +150,238 @@ class ScenarioBaselineSnapshotService:
             "comparisonReady": False,
             "noAdviceDisclosure": SCENARIO_BASELINE_NO_ADVICE_DISCLOSURE,
         }
+
+    def create_durable_snapshot(
+        self,
+        payload: Mapping[str, Any] | None,
+        *,
+        owner_id: str | None = None,
+    ) -> dict[str, Any]:
+        if self._repository is None:
+            raise ScenarioBaselineSnapshotStorageError("scenario_baseline_snapshot_repository_required")
+        snapshot = _normalize_durable_snapshot(payload, owner_id=owner_id)
+        return self._repository.upsert_snapshot(snapshot)
+
+    def get_durable_snapshot(self, snapshot_id: str, *, owner_id: str | None = None) -> dict[str, Any] | None:
+        if self._repository is None:
+            raise ScenarioBaselineSnapshotStorageError("scenario_baseline_snapshot_repository_required")
+        safe_snapshot_id = _safe_identifier(snapshot_id)
+        if not safe_snapshot_id:
+            return None
+        return self._repository.get_snapshot(
+            snapshot_id=safe_snapshot_id,
+            owner_scope=_owner_scope(owner_id),
+        )
+
+    def get_latest_durable_snapshot(
+        self,
+        *,
+        scope: Mapping[str, Any] | None = None,
+        owner_id: str | None = None,
+    ) -> dict[str, Any]:
+        if self._repository is None:
+            raise ScenarioBaselineSnapshotStorageError("scenario_baseline_snapshot_repository_required")
+        normalized_scope = _normalize_scope(scope or {})
+        latest = self._repository.latest_for_scope(
+            owner_scope=_owner_scope(owner_id),
+            scope=normalized_scope,
+        )
+        if latest is None:
+            return _missing_durable_snapshot(scope=normalized_scope, owner_id=owner_id)
+        return dict(latest)
+
+
+def _normalize_durable_snapshot(payload: Mapping[str, Any] | None, *, owner_id: str | None) -> dict[str, Any]:
+    raw = payload if isinstance(payload, Mapping) else {}
+    normalized = ScenarioBaselineSnapshotService().create_snapshot(raw)
+    scope = normalized["scope"]
+    source = normalized["source"]
+    created_at = normalized["createdAt"] or _safe_timestamp(raw.get("createdAt") or raw.get("created_at"))
+    as_of = _safe_timestamp(
+        raw.get("asOf")
+        or raw.get("as_of")
+        or source.get("asOf")
+        or raw.get("lastUpdated")
+        or raw.get("snapshotAsOf")
+    )
+    if created_at is None:
+        created_at = as_of
+    input_snapshot_refs = _safe_text_list(
+        raw.get("inputSnapshotRefs")
+        or raw.get("input_snapshot_refs")
+        or raw.get("inputSnapshots")
+        or raw.get("inputRefs")
+    )
+    missing_input_list = _safe_text_list(
+        raw.get("missingInputList")
+        or raw.get("missing_input_list")
+        or raw.get("missingInputs")
+        or raw.get("missingDataCategories")
+    )
+    source_authority_summary = _source_authority_summary(raw.get("sourceAuthoritySummary"), source=source)
+    freshness_summary = _freshness_summary(raw.get("freshnessSummary"), source=source, as_of=as_of)
+    target_environment_evidence = _target_environment_evidence(raw.get("targetEnvironmentEvidence"))
+    readiness_state = _durable_readiness_state(
+        normalized=normalized,
+        source_authority_summary=source_authority_summary,
+        freshness_summary=freshness_summary,
+        missing_input_list=missing_input_list,
+        target_environment_evidence=target_environment_evidence,
+    )
+    observation_only = readiness_state != "ready"
+    status = "available" if readiness_state == "ready" else "partial" if normalized["snapshotId"] else "not_available"
+    reason_code = "baseline_available" if status == "available" else "baseline_partial" if status == "partial" else "baseline_missing"
+    final_source = {**source, "observationOnly": observation_only}
+    content_payload = {
+        "schemaVersion": SCENARIO_BASELINE_DURABLE_SNAPSHOT_SCHEMA_VERSION,
+        "snapshotId": normalized["snapshotId"],
+        "ownerScope": _owner_scope(owner_id),
+        "scope": scope,
+        "createdAt": created_at,
+        "asOf": as_of,
+        "source": final_source,
+        "availableDataCategories": normalized["availableDataCategories"],
+        "missingDataCategories": normalized["missingDataCategories"],
+        "degradedDataCategories": normalized["degradedDataCategories"],
+        "inputSnapshotRefs": input_snapshot_refs,
+        "sourceAuthoritySummary": source_authority_summary,
+        "freshnessSummary": freshness_summary,
+        "missingInputList": missing_input_list,
+        "readinessState": readiness_state,
+        "targetEnvironmentEvidence": target_environment_evidence,
+    }
+    content_hash = f"sha256:{_stable_hash(content_payload)}"
+    snapshot_id = normalized["snapshotId"] or f"scenario-baseline-{content_hash.removeprefix('sha256:')[:16]}"
+    content_payload["snapshotId"] = snapshot_id
+    content_hash = f"sha256:{_stable_hash(content_payload)}"
+    return {
+        **normalized,
+        "schemaVersion": SCENARIO_BASELINE_DURABLE_SNAPSHOT_SCHEMA_VERSION,
+        "status": status,
+        "reasonCode": reason_code,
+        "snapshotId": snapshot_id,
+        "ownerScope": _owner_scope(owner_id),
+        "createdAt": created_at,
+        "asOf": as_of,
+        "source": final_source,
+        "inputSnapshotRefs": input_snapshot_refs,
+        "sourceAuthoritySummary": source_authority_summary,
+        "freshnessSummary": freshness_summary,
+        "missingInputList": missing_input_list,
+        "readinessState": readiness_state,
+        "targetEnvironmentEvidence": target_environment_evidence,
+        "contentHash": content_hash,
+        "contentVersionRef": f"{SCENARIO_BASELINE_DURABLE_SNAPSHOT_SCHEMA_VERSION}:{content_hash}",
+        "observationOnly": observation_only,
+        "comparisonReady": not observation_only and status == "available",
+    }
+
+
+def _missing_durable_snapshot(*, scope: Mapping[str, Any], owner_id: str | None) -> dict[str, Any]:
+    owner_scope = _owner_scope(owner_id)
+    return {
+        "schemaVersion": SCENARIO_BASELINE_DURABLE_SNAPSHOT_SCHEMA_VERSION,
+        "status": "not_available",
+        "reasonCode": "baseline_missing",
+        "snapshotId": None,
+        "ownerScope": owner_scope,
+        "scope": _normalize_scope(scope),
+        "createdAt": None,
+        "asOf": None,
+        "source": {
+            "dataState": "unavailable",
+            "freshness": "unavailable",
+            "asOf": None,
+            "sourceAuthorityAllowed": False,
+            "observationOnly": True,
+        },
+        "availableDataCategories": [],
+        "missingDataCategories": list(_CATEGORY_ORDER),
+        "degradedDataCategories": [],
+        "labels": [],
+        "notes": "Baseline snapshot is not available.",
+        "inputSnapshotRefs": [],
+        "sourceAuthoritySummary": {"state": "unavailable", "allowed": False, "reasonCodes": ["baseline_missing"]},
+        "freshnessSummary": {"state": "unavailable", "asOf": None},
+        "missingInputList": list(_CATEGORY_ORDER),
+        "readinessState": "not_available",
+        "targetEnvironmentEvidence": {"state": "missing", "evidenceRefs": []},
+        "contentHash": None,
+        "contentVersionRef": None,
+        "observationOnly": True,
+        "comparisonReady": False,
+        "noAdviceDisclosure": SCENARIO_BASELINE_NO_ADVICE_DISCLOSURE,
+    }
+
+
+def _owner_scope(owner_id: str | None) -> dict[str, str]:
+    text = _safe_identifier(owner_id) or "anonymous"
+    return {"type": "user" if text != "anonymous" else "anonymous", "value": text}
+
+
+def _source_authority_summary(value: Any, *, source: Mapping[str, Any]) -> dict[str, Any]:
+    raw = value if isinstance(value, Mapping) else {}
+    state = _normalize_token(raw.get("state") or raw.get("status"))
+    if state not in _AUTHORITY_STATES:
+        state = "authoritative" if source.get("sourceAuthorityAllowed") else "observation_only"
+    allowed = bool(raw.get("allowed") if "allowed" in raw else source.get("sourceAuthorityAllowed"))
+    if state != "authoritative":
+        allowed = False
+    return {
+        "state": state,
+        "allowed": allowed,
+        "reasonCodes": _safe_text_list(raw.get("reasonCodes") or raw.get("reason_codes")),
+    }
+
+
+def _freshness_summary(value: Any, *, source: Mapping[str, Any], as_of: str | None) -> dict[str, Any]:
+    raw = value if isinstance(value, Mapping) else {}
+    state = _normalize_token(raw.get("state") or raw.get("freshness") or source.get("freshness"))
+    if state not in _SAFE_FRESHNESS_STATES:
+        state = "unknown"
+    return {
+        "state": state,
+        "asOf": _safe_timestamp(raw.get("asOf") or raw.get("as_of") or as_of),
+    }
+
+
+def _target_environment_evidence(value: Any) -> dict[str, Any]:
+    raw = value if isinstance(value, Mapping) else {}
+    state = _normalize_token(raw.get("state") or raw.get("status"))
+    if state not in {*_TARGET_EVIDENCE_PRESENT_STATES, "missing", "unavailable", "blocked"}:
+        state = "missing"
+    return {
+        "state": state,
+        "evidenceRefs": _safe_text_list(raw.get("evidenceRefs") or raw.get("evidence_refs") or raw.get("refs")),
+    }
+
+
+def _durable_readiness_state(
+    *,
+    normalized: Mapping[str, Any],
+    source_authority_summary: Mapping[str, Any],
+    freshness_summary: Mapping[str, Any],
+    missing_input_list: list[str],
+    target_environment_evidence: Mapping[str, Any],
+) -> str:
+    if normalized.get("status") == "not_available":
+        return "not_available"
+    source = normalized.get("source") if isinstance(normalized.get("source"), Mapping) else {}
+    target_evidence_state = _normalize_token(target_environment_evidence.get("state"))
+    target_evidence_present = target_evidence_state in _TARGET_EVIDENCE_PRESENT_STATES
+    if (
+        normalized.get("status") == "available"
+        and source.get("dataState") == "real_cached"
+        and source_authority_summary.get("state") == "authoritative"
+        and source_authority_summary.get("allowed") is True
+        and freshness_summary.get("state") in _READY_FRESHNESS_STATES
+        and not missing_input_list
+        and target_evidence_present
+    ):
+        return "ready"
+    if source.get("dataState") in {"request_supplied", "demo_static_sample"} or freshness_summary.get("state") == "stale":
+        return "observation_only"
+    return "partial"
 
 
 def _normalize_scope(raw: Mapping[str, Any]) -> dict[str, str]:
@@ -345,8 +587,15 @@ def _deterministic_snapshot_id(
     return f"scenario-baseline-{digest}"
 
 
+def _stable_hash(value: Mapping[str, Any]) -> str:
+    payload = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 __all__ = [
+    "SCENARIO_BASELINE_DURABLE_SNAPSHOT_SCHEMA_VERSION",
     "SCENARIO_BASELINE_NO_ADVICE_DISCLOSURE",
     "SCENARIO_BASELINE_SNAPSHOT_SCHEMA_VERSION",
+    "ScenarioBaselineSnapshotStorageError",
     "ScenarioBaselineSnapshotService",
 ]

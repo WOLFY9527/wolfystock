@@ -6,12 +6,15 @@ from __future__ import annotations
 import copy
 import json
 import re
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from api.deps import CurrentUser, get_optional_current_user
 from api.v1.endpoints import market
+from src.storage import DatabaseManager
 
 
 FORBIDDEN_PUBLIC_TERMS = (
@@ -72,10 +75,36 @@ SAFE_DRILLDOWN_ROUTES = {
 }
 
 
-def _client() -> TestClient:
+def _make_user(user_id: str, username: str = "scenario-user") -> CurrentUser:
+    return CurrentUser(
+        user_id=user_id,
+        username=username,
+        display_name=username,
+        role="user",
+        is_admin=False,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+    )
+
+
+def _client(
+    *,
+    snapshot_db_manager: DatabaseManager | None = None,
+    current_user: CurrentUser | None = None,
+) -> TestClient:
     app = FastAPI()
+    if snapshot_db_manager is not None:
+        app.state.scenario_baseline_snapshot_db_manager = snapshot_db_manager
+    if current_user is not None:
+        app.dependency_overrides[get_optional_current_user] = lambda: current_user
     app.include_router(market.router, prefix="/api/v1/market")
     return TestClient(app)
+
+
+def _snapshot_db(tmp_path: Path, *, name: str = "scenario-api.sqlite") -> DatabaseManager:
+    DatabaseManager.reset_instance()
+    return DatabaseManager(db_url=f"sqlite:///{tmp_path / name}")
 
 
 def _base_regime() -> dict[str, Any]:
@@ -136,6 +165,42 @@ def _ready_base_regime() -> dict[str, Any]:
         driver["evidenceState"] = "score_grade"
         driver["score"] = driver["score"] or 15
     return base
+
+
+def _baseline_snapshot_create_payload(snapshot_id: str = "baseline-api-durable") -> dict[str, Any]:
+    return {
+        "snapshotId": snapshot_id,
+        "scope": {"type": "market", "value": "US"},
+        "createdAt": "2026-07-07T09:31:00Z",
+        "asOf": "2026-07-07T09:30:00Z",
+        "source": {
+            "dataState": "real_cached",
+            "freshness": "fresh",
+            "asOf": "2026-07-07T09:30:00Z",
+            "sourceAuthorityAllowed": True,
+        },
+        "categories": {
+            "price": {"state": "available"},
+            "marketRegime": {"state": "available"},
+            "volatility": {"state": "available"},
+            "flowPositioning": {"state": "available"},
+            "optionsGreeks": {"state": "available"},
+        },
+        "inputSnapshotRefs": ["market-overview:2026-07-07T09:30:00Z"],
+        "sourceAuthoritySummary": {
+            "state": "authoritative",
+            "allowed": True,
+            "reasonCodes": ["target_environment_evidence_present"],
+        },
+        "freshnessSummary": {
+            "state": "fresh",
+            "asOf": "2026-07-07T09:30:00Z",
+        },
+        "targetEnvironmentEvidence": {
+            "state": "present",
+            "evidenceRefs": ["uat-runtime:scenario-baseline"],
+        },
+    }
 
 
 def _serialized_values(payload: object) -> str:
@@ -631,6 +696,71 @@ def test_market_scenario_lab_exposes_consumer_safe_baseline_snapshot_without_int
     ):
         assert marker not in serialized
         assert marker.lower() not in serialized.lower()
+
+
+def test_market_scenario_lab_baseline_snapshot_create_and_readback_are_explicit_and_owner_scoped(
+    tmp_path: Path,
+) -> None:
+    db = _snapshot_db(tmp_path)
+    client = _client(snapshot_db_manager=db, current_user=_make_user("user-a", "alice"))
+
+    create_response = client.post(
+        "/api/v1/market/scenario-lab/baseline-snapshots",
+        json=_baseline_snapshot_create_payload(),
+    )
+
+    assert create_response.status_code == 200
+    created = create_response.json()
+    assert created["snapshotId"] == "baseline-api-durable"
+    assert created["ownerScope"] == {"type": "user", "value": "user-a"}
+    assert created["status"] == "available"
+    assert created["readinessState"] == "ready"
+    assert created["observationOnly"] is False
+    assert created["contentHash"].startswith("sha256:")
+
+    latest_response = client.get(
+        "/api/v1/market/scenario-lab/baseline-snapshots/latest",
+        params={"scopeType": "market", "scopeValue": "US"},
+    )
+    by_id_response = client.get("/api/v1/market/scenario-lab/baseline-snapshots/baseline-api-durable")
+
+    assert latest_response.status_code == 200
+    assert by_id_response.status_code == 200
+    assert latest_response.json() == created
+    assert by_id_response.json() == created
+
+    other_user = _client(snapshot_db_manager=db, current_user=_make_user("user-b", "bob"))
+    other_user_read = other_user.get("/api/v1/market/scenario-lab/baseline-snapshots/baseline-api-durable")
+    assert other_user_read.status_code == 404
+    other_user_latest = other_user.get(
+        "/api/v1/market/scenario-lab/baseline-snapshots/latest",
+        params={"scopeType": "market", "scopeValue": "US"},
+    )
+    assert other_user_latest.status_code == 200
+    assert other_user_latest.json()["status"] == "not_available"
+    assert other_user_latest.json()["ownerScope"] == {"type": "user", "value": "user-b"}
+
+
+def test_market_scenario_lab_evaluation_does_not_persist_request_supplied_baseline(tmp_path: Path) -> None:
+    db = _snapshot_db(tmp_path)
+    client = _client(snapshot_db_manager=db, current_user=_make_user("user-a", "alice"))
+    base = _ready_base_regime()
+    base["scenarioBaselineSnapshot"] = _baseline_snapshot_create_payload("request-supplied-only")
+
+    response = client.post(
+        "/api/v1/market/scenario-lab",
+        json={"baseRegime": base, "scenarioName": "riskOnConfirmation"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["scenarioBaselineSnapshot"]["snapshotId"] == "request-supplied-only"
+
+    latest_response = client.get(
+        "/api/v1/market/scenario-lab/baseline-snapshots/latest",
+        params={"scopeType": "market", "scopeValue": "US"},
+    )
+    assert latest_response.status_code == 200
+    assert latest_response.json()["status"] == "not_available"
 
 
 def test_market_scenario_lab_rejects_unsupported_named_scenario() -> None:

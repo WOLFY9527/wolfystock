@@ -409,6 +409,45 @@ class QuoteOhlcvSnapshotRow(Base):
     )
 
 
+class ScenarioBaselineSnapshotRow(Base):
+    """Canonical Scenario Lab baseline snapshot row owned by DatabaseManager."""
+
+    __tablename__ = 'scenario_baseline_snapshots'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_type = Column(String(32), nullable=False)
+    owner_value = Column(String(96), nullable=False)
+    snapshot_id = Column(String(96), nullable=False)
+    scope_type = Column(String(16), nullable=False)
+    scope_value = Column(String(32), nullable=False)
+    created_at = Column(String(64), nullable=False)
+    as_of = Column(String(64), nullable=False)
+    readiness_state = Column(String(32), nullable=False)
+    content_hash = Column(String(96), nullable=False)
+    content_version_ref = Column(String(180), nullable=False)
+    payload_json = Column(Text, nullable=False)
+    created_at_db = Column(DateTime, default=datetime.now, nullable=False, index=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            'owner_type',
+            'owner_value',
+            'snapshot_id',
+            name='uix_scenario_baseline_owner_snapshot',
+        ),
+        Index(
+            'ix_scenario_baseline_latest_scope',
+            'owner_type',
+            'owner_value',
+            'scope_type',
+            'scope_value',
+            'as_of',
+            'created_at',
+            'snapshot_id',
+        ),
+    )
+
+
 class AppUser(Base):
     """Persisted application user identity for the multi-user foundation."""
 
