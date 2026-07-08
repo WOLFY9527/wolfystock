@@ -10,14 +10,14 @@
   "discovery": {
     "candidateMarkdownAfterPolicy": 3,
     "excludedByReason": {
-      "legacy_untracked_agent_mirror": 3,
+      "legacy_external_product_doc": 1,
       "not_in_hard_collapse_source_set": 3,
       "required_ai_governance_symlink": 1,
       "required_github_workflow_markdown": 7,
       "required_repository_skill_asset": 4
     },
     "includedSourceCount": 3,
-    "markdownDiscovered": 21,
+    "markdownDiscovered": 19,
     "prunedDirectoryNames": [
       ".cache",
       ".codex",
@@ -58,12 +58,12 @@
     "path": "scripts/build_ai_project_manual.py",
     "readsProductionDataPaths": false,
     "requiresApiKeys": false,
-    "sha256": "0b3d9317a814749810d074387b95655b9e89168da74cb768b23f2cd9f8316702",
+    "sha256": "7153db4e3191cd4cd4c74ff2265a9b3afde67d4c7d300883bfe804f3f0ca7aa5",
     "version": 4
   },
   "includedSources": [
     {
-      "bytes": 4522,
+      "bytes": 4616,
       "categories": [
         "governance",
         "workflow"
@@ -71,11 +71,11 @@
       "lineCount": 94,
       "path": "AGENTS.md",
       "purpose": "repository AI-agent rules and hard safety boundaries",
-      "sha256": "d735f6f86cca545aa3e6884037ee4fb573d4edfc98f7ae829f29ddd21b1ff398",
+      "sha256": "346d0fd36ffa5f371fad7bc793d5dc28bc2f88d484a1e646506b65641d51aeaa",
       "title": "AGENTS.md"
     },
     {
-      "bytes": 4782,
+      "bytes": 4918,
       "categories": [
         "onboarding",
         "product"
@@ -83,11 +83,11 @@
       "lineCount": 136,
       "path": "README.md",
       "purpose": "human product entrypoint and supported run commands",
-      "sha256": "e1877ce5b35166099d16d17873c91bdb2c57d34acc25852bdaedc42d3d67ef68",
+      "sha256": "78c85d4845c42a85f2a1ba965b10939c73854b073d7995b85863f3859d264ef7",
       "title": "WolfyStock"
     },
     {
-      "bytes": 738,
+      "bytes": 755,
       "categories": [
         "governance",
         "sources"
@@ -95,14 +95,14 @@
       "lineCount": 17,
       "path": "docs/DOCS_INDEX.md",
       "purpose": "tiny canonical documentation pointer",
-      "sha256": "2ea80605b35f2ee1bdcc17a74f7b53f31f6f15a5d912c0f3105a28ed95504281",
+      "sha256": "c42fdefe65806eb5d4ae7519f150019d5695cad6b16f4774df24ea15349019e7",
       "title": "WolfyStock Docs Index"
     }
   ],
   "outputs": {
     "manifest": "docs/AI_PROJECT_MANUAL_SOURCES.json",
     "manual": "docs/AI_PROJECT_MANUAL.md",
-    "manualSha256": "8ee957969a73fe0751c38914a80b7453b502aa5f838327567e8682d64bdd56c9"
+    "manualSha256": "5f7b1c700c5ae1533f06997370f1d5c2de96666698dee61793050d735243cf24"
   },
   "schemaVersion": 2,
   "sections": [
