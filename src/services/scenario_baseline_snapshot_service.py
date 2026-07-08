@@ -17,6 +17,9 @@ from src.repositories.scenario_baseline_snapshot_repository import (
     ScenarioBaselineSnapshotRepository,
     ScenarioBaselineSnapshotStorageError,
 )
+from src.services.scenario_baseline_snapshot_contract import (
+    is_scenario_baseline_durable_readiness_state,
+)
 
 
 SCENARIO_BASELINE_SNAPSHOT_SCHEMA_VERSION = "scenario_baseline_snapshot.v1"
@@ -228,6 +231,8 @@ def _normalize_durable_snapshot(payload: Mapping[str, Any] | None, *, owner_id: 
         missing_input_list=missing_input_list,
         target_environment_evidence=target_environment_evidence,
     )
+    if not is_scenario_baseline_durable_readiness_state(readiness_state):
+        raise ScenarioBaselineSnapshotStorageError("scenario_baseline_snapshot_readiness_invalid")
     observation_only = readiness_state != "ready"
     status = "available" if readiness_state == "ready" else "partial" if normalized["snapshotId"] else "not_available"
     reason_code = "baseline_available" if status == "available" else "baseline_partial" if status == "partial" else "baseline_missing"

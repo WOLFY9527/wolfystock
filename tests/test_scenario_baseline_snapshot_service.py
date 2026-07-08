@@ -400,6 +400,48 @@ def test_explicit_durable_snapshot_creation_records_reproducibility_contract(tmp
     assert reloaded.get_latest_durable_snapshot(scope={"type": "market", "value": "US"}, owner_id="user-a") == snapshot
 
 
+def test_zero_usable_data_durable_snapshot_persists_domain_not_available_state(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    payload = _durable_ready_payload(snapshot_id="baseline-zero-usable")
+    payload.pop("snapshotId")
+    payload.pop("createdAt")
+    payload.pop("asOf")
+    payload["source"] = {
+        "dataState": "unavailable",
+        "freshness": "unavailable",
+        "asOf": "2026-07-07T09:30:00Z",
+        "sourceAuthorityAllowed": False,
+    }
+    payload["categories"] = {
+        "price": {"state": "missing"},
+        "marketRegime": {"state": "missing"},
+        "volatility": {"state": "missing"},
+        "flowPositioning": {"state": "missing"},
+        "optionsGreeks": {"state": "missing"},
+    }
+    payload["inputSnapshotRefs"] = ["market-overview:missing:2026-07-07T09:30:00Z"]
+    payload["sourceAuthoritySummary"] = {
+        "state": "unavailable",
+        "allowed": False,
+        "reasonCodes": ["source_authority_unavailable"],
+    }
+    payload["freshnessSummary"] = {"state": "unavailable", "asOf": "2026-07-07T09:30:00Z"}
+    payload["missingInputList"] = ["market_price", "market_regime", "volatility", "market_flow", "options_greeks"]
+    payload["targetEnvironmentEvidence"] = {"state": "missing", "evidenceRefs": []}
+
+    snapshot = service.create_durable_snapshot(payload, owner_id="user-a")
+
+    assert snapshot["status"] == "not_available"
+    assert snapshot["reasonCode"] == "baseline_missing"
+    assert snapshot["readinessState"] == "not_available"
+    assert snapshot["snapshotId"].startswith("scenario-baseline-")
+    assert snapshot["observationOnly"] is True
+    assert snapshot["comparisonReady"] is False
+    assert snapshot["contentHash"].startswith("sha256:")
+    assert snapshot["inputSnapshotRefs"] == ["market-overview:missing:2026-07-07T09:30:00Z"]
+    assert service.get_durable_snapshot(snapshot["snapshotId"], owner_id="user-a") == snapshot
+
+
 def test_durable_readback_is_side_effect_free_when_snapshot_is_missing(tmp_path: Path) -> None:
     db_path = tmp_path / "passive.sqlite"
     engine = create_engine(f"sqlite:///{db_path}", pool_pre_ping=True)

@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from api.deps import CurrentUser, get_optional_current_user
 from api.v1.endpoints import market
+from src.repositories.scenario_baseline_snapshot_repository import ScenarioBaselineSnapshotStorageError
 from src.storage import DatabaseManager
 
 
@@ -201,6 +202,41 @@ def _baseline_snapshot_create_payload(snapshot_id: str = "baseline-api-durable")
             "evidenceRefs": ["uat-runtime:scenario-baseline"],
         },
     }
+
+
+def _not_available_baseline_snapshot_create_payload(
+    snapshot_id: str = "baseline-api-not-available",
+) -> dict[str, Any]:
+    payload = _baseline_snapshot_create_payload(snapshot_id)
+    payload.pop("snapshotId")
+    payload.pop("createdAt")
+    payload.pop("asOf")
+    payload["source"] = {
+        "dataState": "unavailable",
+        "freshness": "unavailable",
+        "asOf": "2026-07-07T09:30:00Z",
+        "sourceAuthorityAllowed": False,
+    }
+    payload["categories"] = {
+        "price": {"state": "missing"},
+        "marketRegime": {"state": "missing"},
+        "volatility": {"state": "missing"},
+        "flowPositioning": {"state": "missing"},
+        "optionsGreeks": {"state": "missing"},
+    }
+    payload["inputSnapshotRefs"] = ["market-overview:missing:2026-07-07T09:30:00Z"]
+    payload["sourceAuthoritySummary"] = {
+        "state": "unavailable",
+        "allowed": False,
+        "reasonCodes": ["source_authority_unavailable"],
+    }
+    payload["freshnessSummary"] = {
+        "state": "unavailable",
+        "asOf": "2026-07-07T09:30:00Z",
+    }
+    payload["missingInputList"] = ["market_price", "market_regime", "volatility", "market_flow", "options_greeks"]
+    payload["targetEnvironmentEvidence"] = {"state": "missing", "evidenceRefs": []}
+    return payload
 
 
 def _serialized_values(payload: object) -> str:
@@ -739,6 +775,71 @@ def test_market_scenario_lab_baseline_snapshot_create_and_readback_are_explicit_
     assert other_user_latest.status_code == 200
     assert other_user_latest.json()["status"] == "not_available"
     assert other_user_latest.json()["ownerScope"] == {"type": "user", "value": "user-b"}
+
+
+def test_market_scenario_lab_durable_create_preserves_domain_not_available_without_storage_500(
+    tmp_path: Path,
+) -> None:
+    db = _snapshot_db(tmp_path)
+    client = _client(snapshot_db_manager=db, current_user=_make_user("user-a", "alice"))
+
+    create_response = client.post(
+        "/api/v1/market/scenario-lab/baseline-snapshots",
+        json=_not_available_baseline_snapshot_create_payload(),
+    )
+
+    assert create_response.status_code == 200
+    created = create_response.json()
+    assert created["snapshotId"].startswith("scenario-baseline-")
+    assert created["status"] == "not_available"
+    assert created["reasonCode"] == "baseline_missing"
+    assert created["readinessState"] == "not_available"
+    assert created["ownerScope"] == {"type": "user", "value": "user-a"}
+    assert created["contentHash"].startswith("sha256:")
+
+    latest_response = client.get(
+        "/api/v1/market/scenario-lab/baseline-snapshots/latest",
+        params={"scopeType": "market", "scopeValue": "US"},
+    )
+    by_id_response = client.get(f"/api/v1/market/scenario-lab/baseline-snapshots/{created['snapshotId']}")
+
+    assert latest_response.status_code == 200
+    assert by_id_response.status_code == 200
+    assert latest_response.json() == created
+    assert by_id_response.json() == created
+
+
+def test_market_scenario_lab_durable_create_maps_domain_validation_distinct_from_storage_failure(
+    tmp_path: Path,
+) -> None:
+    db = _snapshot_db(tmp_path)
+    client = _client(snapshot_db_manager=db, current_user=_make_user("user-a", "alice"))
+    invalid_domain_payload = _baseline_snapshot_create_payload("baseline-api-domain-invalid")
+    invalid_domain_payload["inputSnapshotRefs"] = []
+
+    domain_response = client.post(
+        "/api/v1/market/scenario-lab/baseline-snapshots",
+        json=invalid_domain_payload,
+    )
+
+    assert domain_response.status_code == 422
+    assert domain_response.json()["detail"]["error"] == "scenario_baseline_snapshot_invalid"
+
+    class FailingRepository:
+        def upsert_snapshot(self, snapshot: dict[str, Any]) -> dict[str, Any]:
+            raise ScenarioBaselineSnapshotStorageError("scenario_baseline_snapshot_database_write_failed")
+
+    app = FastAPI()
+    app.state.scenario_baseline_snapshot_repository = FailingRepository()
+    app.dependency_overrides[get_optional_current_user] = lambda: _make_user("user-a", "alice")
+    app.include_router(market.router, prefix="/api/v1/market")
+    storage_response = TestClient(app).post(
+        "/api/v1/market/scenario-lab/baseline-snapshots",
+        json=_baseline_snapshot_create_payload("baseline-api-storage-failure"),
+    )
+
+    assert storage_response.status_code == 500
+    assert storage_response.json()["detail"]["error"] == "scenario_baseline_snapshot_storage_unavailable"
 
 
 def test_market_scenario_lab_evaluation_does_not_persist_request_supplied_baseline(tmp_path: Path) -> None:

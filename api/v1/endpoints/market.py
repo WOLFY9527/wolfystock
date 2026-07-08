@@ -76,6 +76,18 @@ _MAX_DATA_READINESS_SYMBOLS = 8
 _MAX_DATA_READINESS_SYMBOL_LENGTH = 24
 _MAX_REGIME_READ_MODEL_SYMBOLS = 8
 _MAX_REGIME_READ_MODEL_SYMBOL_LENGTH = 16
+_SCENARIO_BASELINE_SNAPSHOT_STORAGE_ERROR_MARKERS = frozenset(
+    {
+        "database",
+        "db_",
+        "storage",
+        "repository_required",
+        "write_failed",
+        "commit_failure",
+        "connection",
+        "session",
+    }
+)
 _MARKET_CONSUMER_DIAGNOSTIC_KEYS = frozenset(
     {
         "activationhint",
@@ -694,16 +706,22 @@ def create_scenario_lab_baseline_snapshot(
         )
     except ScenarioBaselineSnapshotStorageError as exc:
         message = str(exc)
-        if "immutable_snapshot_conflict" not in message:
+        if "immutable_snapshot_conflict" in message:
+            raise safe_api_error(
+                status_code=409,
+                error="scenario_baseline_snapshot_conflict",
+                message="Scenario baseline snapshot already exists with different immutable content.",
+            ) from exc
+        if _scenario_baseline_snapshot_error_is_storage_unavailable(message):
             raise safe_api_error(
                 status_code=500,
                 error="scenario_baseline_snapshot_storage_unavailable",
                 message="Scenario baseline snapshot storage is unavailable.",
             ) from exc
         raise safe_api_error(
-            status_code=409,
-            error="scenario_baseline_snapshot_conflict",
-            message="Scenario baseline snapshot already exists with different immutable content.",
+            status_code=422,
+            error="scenario_baseline_snapshot_invalid",
+            message="Scenario baseline snapshot request does not satisfy the durable baseline contract.",
         ) from exc
 
 
@@ -747,6 +765,11 @@ def get_scenario_lab_baseline_snapshot(
             message="Scenario baseline snapshot is not available.",
         )
     return snapshot
+
+
+def _scenario_baseline_snapshot_error_is_storage_unavailable(message: str) -> bool:
+    normalized = str(message or "").strip().lower()
+    return any(marker in normalized for marker in _SCENARIO_BASELINE_SNAPSHOT_STORAGE_ERROR_MARKERS)
 
 
 @router.post(
