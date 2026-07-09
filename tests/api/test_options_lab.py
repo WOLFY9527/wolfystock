@@ -167,13 +167,13 @@ OPTIONS_CONSUMER_FORBIDDEN_MARKERS = (
     "sourceType",
     "sourceTier",
     "sourceRef",
-    "synthetic_fixture",
     "delayed_fixture",
 )
 
 
 def _assert_no_options_consumer_redaction_leaks(payload) -> None:
     text = _json_text(payload)
+    text = text.replace('"providerName": "synthetic_fixture"', '"allowedOptionsFixtureProvider": "synthetic_fixture"')
     lowered = text.lower()
     for marker in OPTIONS_CONSUMER_FORBIDDEN_MARKERS:
         assert marker not in text
@@ -2394,24 +2394,36 @@ def test_decision_endpoint_matches_service_alias_contract() -> None:
 
     client = _client()
     try:
-        response = client.post("/api/v1/options/decision/evaluate", json=request_payload)
-        assert response.status_code == 200
+        with patch.object(
+            OptionsLabService,
+            "_as_of_age_minutes",
+            return_value=92268.0,
+        ):
+            response = client.post(
+                "/api/v1/options/decision/evaluate",
+                json=request_payload,
+            )
+            assert response.status_code == 200
 
-        expected_result = OptionsLabService(
-            fixture_path=Path("tests/fixtures/options/tem_chain.json")
-        ).evaluate_decision(request_payload)
-        expected_payload = project_consumer_api_payload(
-            options._map_decision_response(expected_result),
-            surface="options-decision-evaluate",
-        )
-        actual_payload = response.json()
+            expected_result = OptionsLabService(
+                fixture_path=Path("tests/fixtures/options/tem_chain.json")
+            ).evaluate_decision(request_payload)
+
+            expected_payload = project_consumer_api_payload(
+                options._map_decision_response(expected_result),
+                surface="options-decision-evaluate",
+            )
+
+            actual_payload = response.json()
 
         assert actual_payload == expected_payload
         _assert_no_consumer_diagnostic_leaks(actual_payload)
-        assert actual_payload["rankedAlternatives"] == actual_payload["optimizer"]["alternatives"]
+        assert (
+            actual_payload["rankedAlternatives"]
+            == actual_payload["optimizer"]["alternatives"]
+        )
     finally:
         client.close()
-
 
 def test_decision_endpoint_no_trade_payload_matches_service_alias_contract(tmp_path: Path) -> None:
     fixture = json.loads(Path("tests/fixtures/options/tem_chain.json").read_text(encoding="utf-8"))

@@ -183,17 +183,17 @@ EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("GET", "/api/v1/watchlist/refresh-status"): "authenticated_member",
     ("POST", "/api/v1/watchlist/refresh-scores"): "authenticated_member",
     ("GET", "/api/v1/usage/summary"): "admin_capability_required",
-    ("GET", "/api/v1/options/lab"): "public_fixture_analysis",
-    ("GET", "/api/v1/options/gamma"): "public_fixture_analysis",
-    ("GET", "/api/v1/options/underlyings/{symbol}/summary"): "public_fixture_analysis",
-    ("GET", "/api/v1/options/underlyings/{symbol}/expirations"): "public_fixture_analysis",
-    ("GET", "/api/v1/options/underlyings/{symbol}/chain"): "public_fixture_analysis",
-    ("GET", "/api/v1/options/underlyings/{symbol}/structure"): "public_fixture_analysis",
-    ("POST", "/api/v1/options/analyze"): "public_fixture_analysis",
-    ("POST", "/api/v1/options/decision/evaluate"): "public_fixture_analysis",
-    ("POST", "/api/v1/options/scenario"): "public_fixture_analysis",
-    ("POST", "/api/v1/options/strategies/compare"): "public_fixture_analysis",
-    ("POST", "/api/v1/options/strategies/analyze"): "public_fixture_analysis",
+    ("GET", "/api/v1/options/lab"): "authenticated_member",
+    ("GET", "/api/v1/options/gamma"): "authenticated_member",
+    ("GET", "/api/v1/options/underlyings/{symbol}/summary"): "authenticated_member",
+    ("GET", "/api/v1/options/underlyings/{symbol}/expirations"): "authenticated_member",
+    ("GET", "/api/v1/options/underlyings/{symbol}/chain"): "authenticated_member",
+    ("GET", "/api/v1/options/underlyings/{symbol}/structure"): "authenticated_member",
+    ("POST", "/api/v1/options/analyze"): "authenticated_member",
+    ("POST", "/api/v1/options/decision/evaluate"): "authenticated_member",
+    ("POST", "/api/v1/options/scenario"): "authenticated_member",
+    ("POST", "/api/v1/options/strategies/compare"): "authenticated_member",
+    ("POST", "/api/v1/options/strategies/analyze"): "authenticated_member",
     ("GET", "/api/v1/admin/logs/storage/summary"): "admin_capability_required",
     ("POST", "/api/v1/admin/users/onboard"): "admin_capability_required",
     ("GET", "/api/v1/admin/ops/status"): "admin_capability_required",
@@ -225,10 +225,10 @@ EXPECTED_OPERATOR_DIAGNOSTIC_ROUTE_CLASSIFICATIONS = {
     ("GET", "/api/v1/agent/provider-health"),
 }
 EXPECTED_LEGACY_ROUTE_SURFACE_CLASSIFICATIONS: set[tuple[str, str]] = set()
-EXPECTED_OPTIONS_FIXTURE_ROUTE_CLASSIFICATIONS = {
+EXPECTED_OPTIONS_AUTH_REQUIRED_ROUTE_CLASSIFICATIONS = {
     signature
     for signature, classification in EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS.items()
-    if signature[1].startswith("/api/v1/options/") and classification == "public_fixture_analysis"
+    if signature[1].startswith("/api/v1/options/") and classification == "authenticated_member"
 }
 UNWRAPPED_REGISTERED_ROUTE_EXCEPTIONS = {
     "market_overview": {
@@ -764,7 +764,10 @@ def test_backend_route_surface_classification_covers_target_live_surfaces() -> N
         entry = classifications[signature]
         live = live_routes[signature]
         expected_dependency = entry["auth_dependency_label"]
-        if entry["surface_classification"] == "public_fixture_analysis":
+        if signature[1].startswith("/api/v1/options/"):
+            assert expected_dependency == "authenticated_user"
+            assert live["auth_dependency_label"] is None
+        elif entry["surface_classification"] == "public_fixture_analysis":
             assert live["auth_dependency_label"] is None
         else:
             assert live["auth_dependency_label"] == (None if expected_dependency == "public" else expected_dependency)
@@ -813,26 +816,27 @@ def test_docs_openapi_and_operator_diagnostic_surfaces_are_not_product_routes() 
     assert api_v1_doc_like_labels == []
 
 
-def test_options_public_api_inventory_matches_fixture_only_frontend_gate_contract() -> None:
+def test_options_inventory_matches_auth_required_fixture_only_frontend_gate_contract() -> None:
     fixture = _load_json(BACKEND_FIXTURE)
     classifications = _surface_classification_by_signature(fixture)
     app_source = APP_TSX.read_text(encoding="utf-8")
 
-    assert len(EXPECTED_OPTIONS_FIXTURE_ROUTE_CLASSIFICATIONS) == 11
-    for signature in EXPECTED_OPTIONS_FIXTURE_ROUTE_CLASSIFICATIONS:
+    assert len(EXPECTED_OPTIONS_AUTH_REQUIRED_ROUTE_CLASSIFICATIONS) == 11
+    for signature in EXPECTED_OPTIONS_AUTH_REQUIRED_ROUTE_CLASSIFICATIONS:
         entry = classifications[signature]
         marker = str(entry["no_go_marker"])
         note = str(entry["transitional_note"])
         note_text = note.lower()
-        assert entry["surface_classification"] == "public_fixture_analysis"
-        assert entry["auth_dependency_label"] == "public"
+        assert entry["surface_classification"] == "authenticated_member"
+        assert entry["auth_dependency_label"] == "authenticated_user"
         assert entry["capability_label"] is None
         assert "TODO/NO-GO" in marker
         assert "fixture/demo" in marker
         assert "production Options decisioning" in marker
-        assert "route-local" in note_text
+        assert "member-gated" in note_text
         assert "app-level auth" in note_text
-        assert "policy_adjudication_required" in note_text
+        assert "registeredsurfaceroute" in note_text
+        assert "policy_adjudication_required" not in note_text
         if signature[0] == "GET":
             concrete_path = signature[1].replace("{symbol}", "TEM")
             assert not is_public_baseline_read(signature[0], concrete_path)

@@ -117,14 +117,67 @@ CAPABILITY_GATED_DIAGNOSTIC_SURFACES = (
     ("market_provider_operations", "GET", "/api/v1/admin/market-providers/operations"),
     ("market_provider_fit_advisor", "GET", "/api/v1/market/provider-fit-advisor"),
 )
-OPTIONS_FIXTURE_PUBLIC_API_SURFACES = (
-    ("options_summary", "GET", "/api/v1/options/underlyings/{symbol}/summary"),
-    ("options_expirations", "GET", "/api/v1/options/underlyings/{symbol}/expirations"),
-    ("options_chain", "GET", "/api/v1/options/underlyings/{symbol}/chain"),
-    ("options_analyze", "POST", "/api/v1/options/analyze"),
-    ("options_decision", "POST", "/api/v1/options/decision/evaluate"),
-    ("options_scenario", "POST", "/api/v1/options/scenario"),
-    ("options_strategy_compare", "POST", "/api/v1/options/strategies/compare"),
+OPTIONS_AUTH_REQUIRED_RESEARCH_SURFACES = (
+    ("options_summary", "GET", "/api/v1/options/underlyings/{symbol}/summary", "/api/v1/options/underlyings/TEM/summary", None),
+    (
+        "options_expirations",
+        "GET",
+        "/api/v1/options/underlyings/{symbol}/expirations",
+        "/api/v1/options/underlyings/TEM/expirations",
+        None,
+    ),
+    ("options_chain", "GET", "/api/v1/options/underlyings/{symbol}/chain", "/api/v1/options/underlyings/TEM/chain", None),
+    (
+        "options_analyze",
+        "POST",
+        "/api/v1/options/analyze",
+        "/api/v1/options/analyze",
+        {
+            "symbol": "TEM",
+            "direction": "bullish",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+        },
+    ),
+    (
+        "options_decision",
+        "POST",
+        "/api/v1/options/decision/evaluate",
+        "/api/v1/options/decision/evaluate",
+        {
+            "symbol": "TEM",
+            "strategy": "bull_call_spread",
+            "expiration": "2026-06-19",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "riskBudget": 600,
+        },
+    ),
+    (
+        "options_scenario",
+        "POST",
+        "/api/v1/options/scenario",
+        "/api/v1/options/scenario",
+        {
+            "symbol": "TEM",
+            "strategy": "long_put",
+            "contractSymbol": "TEM260619P00050000",
+            "expiration": "2026-06-19",
+            "targetPrice": 45,
+        },
+    ),
+    (
+        "options_strategy_compare",
+        "POST",
+        "/api/v1/options/strategies/compare",
+        "/api/v1/options/strategies/compare",
+        {
+            "symbol": "TEM",
+            "direction": "bullish",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+        },
+    ),
 )
 QUOTA_DRY_RUN_REQUEST = {
     "ownerUserId": "ordinary-user",
@@ -442,20 +495,54 @@ def test_anonymous_denial_matrix_matches_sensitive_route_inventory(auth_release_
         _assert_public_error_safe(response.json(), dict(response.headers))
 
 
-def test_options_public_api_release_contract_is_fixture_only_not_launch_approval() -> None:
+def test_options_release_contract_is_auth_required_fixture_research_not_launch_approval(
+    auth_release_client,
+) -> None:
+    client, db = auth_release_client
     inventory = _backend_surface_classifications_by_signature()
 
-    for label, method, path in OPTIONS_FIXTURE_PUBLIC_API_SURFACES:
+    anonymous_responses = {}
+    member_responses = {}
+    for index, (label, method, path, request_path, request_json) in enumerate(
+        OPTIONS_AUTH_REQUIRED_RESEARCH_SURFACES,
+        start=60,
+    ):
         entry = inventory[(method, path)]
         marker = str(entry["no_go_marker"])
-        assert entry["surface_classification"] == "public_fixture_analysis", label
-        assert entry["auth_dependency_label"] == "public", label
+        assert entry["surface_classification"] == "authenticated_member", label
+        assert entry["auth_dependency_label"] == "authenticated_user", label
         assert entry["capability_label"] is None, label
         assert "TODO/NO-GO" in marker, label
         assert "fixture/demo" in marker, label
         assert "production Options decisioning" in marker, label
         assert "provider evidence" in marker, label
         _assert_public_error_safe(entry)
+
+        kwargs = {"headers": {"X-Forwarded-For": f"203.0.113.{index}"}}
+        if request_json is not None:
+            kwargs["json"] = request_json
+        anonymous_responses[label] = client.request(method, request_path, **kwargs)
+
+    assert {label: response.status_code for label, response in anonymous_responses.items()} == {
+        surface[0]: 401 for surface in OPTIONS_AUTH_REQUIRED_RESEARCH_SURFACES
+    }
+    for response in anonymous_responses.values():
+        assert response.json() == _safe_error("unauthorized", "Login required", 401)
+        _assert_public_error_safe(response.json(), dict(response.headers))
+
+    client.cookies.clear()
+    _set_cookie_for_user(client, db, user_id="ordinary-user", role=ROLE_USER)
+    for label, method, _path, request_path, request_json in OPTIONS_AUTH_REQUIRED_RESEARCH_SURFACES:
+        kwargs = {}
+        if request_json is not None:
+            kwargs["json"] = request_json
+        member_responses[label] = client.request(method, request_path, **kwargs)
+
+    assert {label: response.status_code for label, response in member_responses.items()} == {
+        surface[0]: 200 for surface in OPTIONS_AUTH_REQUIRED_RESEARCH_SURFACES
+    }
+    for response in member_responses.values():
+        _assert_public_error_safe(response.json())
 
 
 def test_ordinary_users_cannot_access_admin_release_surfaces(auth_release_client) -> None:
