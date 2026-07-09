@@ -100,7 +100,7 @@ import {
   ResearchRiskLimits,
   SectionTitle,
   type NextResearchActionItem,
-  type ResearchObservationFact,
+
   type ResearchQualityFacet,
 } from '../components/research/anatomy';
 
@@ -202,14 +202,14 @@ type HomeDailyResearchView = {
 const HOME_LOCAL_SURFACE_PANEL_CLASS = 'min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)]';
 const HOME_LOCAL_INSET_PANEL_CLASS = 'min-w-0 rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)]';
 const HOME_LOCAL_RAIL_CARD_CLASS =
-  'home-research-rail-card min-w-0 rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-3.5 md:px-5 md:py-4';
+  'home-research-rail-card min-w-0 rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-3.5 py-2.5 md:px-4 md:py-3';
 const HOME_LOCAL_STAGE_CLASS =
   'home-research-stage mx-auto flex w-full max-w-[var(--wolfy-consumer-shell-max,1880px)] min-w-0 flex-col gap-[var(--wolfy-consumer-shell-gap,1rem)] px-[var(--wolfy-consumer-shell-gutter,1rem)] py-[var(--wolfy-consumer-shell-padding-block,1rem)]';
-const HOME_LOCAL_FIXED_GRID_CLASS = 'home-research-fixed-grid w-full min-w-0 gap-4 overflow-visible';
+const HOME_LOCAL_FIXED_GRID_CLASS = 'home-research-fixed-grid w-full min-w-0 gap-3 overflow-visible';
 const HOME_LOCAL_HEADER_STRIP_CLASS =
-  'mb-4 min-w-0 rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-4 md:px-5';
+  'mb-3 min-w-0 rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-3.5 py-3 md:px-5 md:py-3.5';
 const HOME_LOCAL_SECONDARY_DECK_CLASS =
-  'home-research-secondary-deck mt-4 min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-3 md:px-5 md:py-3';
+  'home-research-secondary-deck mt-3 min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-2.5 md:px-5 md:py-3';
 const GUEST_PREVIEW_TIMEOUT_MS = 4_000;
 
 const LazyFullDecisionReportDrawer = lazy(() => import('../components/home-bento/FullDecisionReportDrawer'));
@@ -2198,18 +2198,7 @@ function HomeConclusionFirstConsole({
       detail: primaryAction.detail,
     },
   ] as const;
-  // Observation facts stay complementary to the first-read summary zone (no repeated section labels).
-  const observationKnown: ResearchObservationFact[] = [
-    { key: 'support', label: isEnglish ? 'Support' : '支撑', body: supportCopy },
-    { key: 'state', body: `${researchReadiness.verdictLabel} · ${firstReadItems[0].detail}` },
-  ];
-  const observationUnknown: ResearchObservationFact[] = [
-    { key: 'boundary', body: `${qualityPreview} · ${firstReadItems[1].detail}` },
-    { key: 'missing', label: isEnglish ? 'Missing data' : '仍缺失数据', body: missingCopy },
-  ];
-  const observationChanging: ResearchObservationFact[] = [
-    { key: 'focus', body: nextCopy },
-  ];
+  // G017: no ObservationHead fact wall — first-read / support / risk / next own those semantics.
   const qualityFacets: ResearchQualityFacet[] = [
     {
       key: 'data-state',
@@ -2242,9 +2231,10 @@ function HomeConclusionFirstConsole({
       data-visual-role="conclusion-research-console"
       data-research-density="editorial"
     >
-      <div className="min-w-0 px-4 py-4 md:px-5 md:py-5">
+      <div className="min-w-0 px-3 py-2.5 sm:px-4 sm:py-3 md:px-5">
+        {/* A. Judgment gate — research boundary posture before deep diagnostics */}
         <div
-          className="mb-3 flex min-w-0 flex-wrap items-center gap-2"
+          className="mb-1.5 flex min-w-0 flex-wrap items-center gap-1.5"
           data-testid="home-research-judgment-gate"
         >
           <TraceBadge tone={dataQualityReport ? dataQualityChipTone(dataQualityReport) : 'neutral'}>
@@ -2262,11 +2252,13 @@ function HomeConclusionFirstConsole({
           </TraceBadge>
         </div>
 
+        {/* B. Conclusion-first head — known / changed / uncertain without fact-wall restatement */}
         <div className="min-w-0" data-testid="home-research-current-conclusion">
           <ObservationHead
             density="editorial"
             locale={researchLocale}
             data-testid="home-research-observation-head"
+            className="!border-0 !bg-transparent !p-0 !shadow-none"
             eyebrow={isEnglish ? 'Current conclusion' : '当前结论'}
             title={(
               <span data-testid="home-bento-decision-signal-hero" className="text-[color:var(--wolfy-text-primary)]">
@@ -2274,43 +2266,30 @@ function HomeConclusionFirstConsole({
               </span>
             )}
             lead={(
-              <span data-testid="home-bento-decision-action">
-                {currentConclusion}
+              // LeadText is <p>; phrasing-only children (no nested block elements).
+              <span className="block space-y-1" data-testid="home-research-conclusion-hierarchy">
+                <span className="block text-sm font-semibold leading-5 text-[color:var(--wolfy-text-primary)]" data-testid="home-bento-decision-action">
+                  {currentConclusion}
+                </span>
+                <span className="block text-[13px] leading-5 text-[color:var(--wolfy-text-secondary)]">
+                  <span className="mr-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">
+                    {isEnglish ? 'Support' : '支撑'}
+                  </span>
+                  {supportCopy}
+                </span>
+                <span className="block text-[13px] leading-5 text-[color:var(--wolfy-text-secondary)]">
+                  <span className="mr-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--wolfy-text-muted)]">
+                    {isEnglish ? 'Uncertain' : '仍不确定'}
+                  </span>
+                  {missingCopy}
+                </span>
               </span>
             )}
-            status={(
-              <MetricStrip
-                className="overflow-hidden rounded-[8px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] sm:grid-cols-3"
-                items={[
-                  {
-                    key: 'score',
-                    label: isEnglish ? 'Research score' : '研究评分',
-                    value: scoreDisplayValue,
-                    testId: 'home-research-score-strip',
-                  },
-                  {
-                    key: 'confidence',
-                    label: isEnglish ? 'Confidence' : '可信度',
-                    value: confidenceVisual.label,
-                    testId: 'home-research-confidence-strip',
-                  },
-                  {
-                    key: 'data-state',
-                    label: isEnglish ? 'Data state' : '数据状态',
-                    value: dataQualityLabel,
-                    testId: 'home-research-data-state-strip',
-                  },
-                ]}
-              />
-            )}
-            known={observationKnown}
-            unknown={observationUnknown}
-            changing={observationChanging}
           >
             <div className="min-w-0" data-testid="home-bento-decision-insight">
               <span className="sr-only">{isEnglish ? 'Research thesis' : '研究结论依据'}</span>
               <p
-                className="max-w-[72rem] min-w-0 break-words text-[13px] leading-[1.65] text-[color:var(--wolfy-text-secondary)] whitespace-normal"
+                className="max-w-[72rem] min-w-0 break-words text-[13px] leading-[1.55] text-[color:var(--wolfy-text-secondary)] whitespace-normal"
                 data-testid="home-bento-decision-insight-copy"
               >
                 {thesisCopy}
@@ -2319,45 +2298,53 @@ function HomeConclusionFirstConsole({
           </ObservationHead>
         </div>
 
-        <section
-          className="mt-3 grid min-w-0 gap-0 overflow-hidden rounded-[10px] border border-[color:var(--wolfy-divider)] md:grid-cols-2 xl:grid-cols-4"
-          data-testid="home-research-first-read-summary"
-          aria-label={isEnglish ? 'First-read summary' : '首读摘要'}
-        >
-          {firstReadItems.map((item, index) => (
-            <article
-              key={item.key}
-              className={cn(
-                'min-w-0 border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3.5 py-3',
-                index < firstReadItems.length - 1 && 'border-b xl:border-b-0 xl:border-r',
-                index % 2 === 0 && index < firstReadItems.length - 1 && 'md:border-r',
-                index < 2 && 'md:border-b xl:border-b-0',
-              )}
-              data-testid={`home-research-first-read-${item.key}`}
-            >
-              <p className="text-[11px] font-semibold tracking-[0] text-[color:var(--wolfy-text-muted)]">{item.label}</p>
-              <p className="mt-1.5 break-words text-sm font-semibold leading-5 text-[color:var(--wolfy-text-primary)]">{item.value}</p>
-              <p className="mt-1.5 break-words text-[11px] leading-5 text-[color:var(--wolfy-text-secondary)]">{item.detail}</p>
-            </article>
-          ))}
-        </section>
-
-        <div className="mt-3" data-testid="home-research-quick-actions">
-          <NextResearchAction
-            density="editorial"
-            locale={researchLocale}
-            compact
-            title={isEnglish ? 'Continue research' : '继续研究'}
-            steps={nextActionSteps}
+        {/* C. Subordinate score / confidence / data-state — not the lead hero */}
+        <div className="mt-2 min-w-0" data-testid="home-research-metric-adjacency">
+          <MetricStrip
+            className="overflow-hidden rounded-[8px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] sm:grid-cols-3"
+            items={[
+              {
+                key: 'score',
+                label: isEnglish ? 'Research score' : '研究评分',
+                value: scoreDisplayValue,
+                testId: 'home-research-score-strip',
+              },
+              {
+                key: 'confidence',
+                label: isEnglish ? 'Confidence' : '可信度',
+                value: confidenceVisual.label,
+                testId: 'home-research-confidence-strip',
+              },
+              {
+                key: 'data-state',
+                label: isEnglish ? 'Data state' : '数据状态',
+                value: dataQualityLabel,
+                testId: 'home-research-data-state-strip',
+              },
+            ]}
           />
         </div>
 
-        <div className="mt-3 grid min-w-0 gap-0 overflow-hidden rounded-[10px] border border-[color:var(--wolfy-divider)] md:grid-cols-3">
-          <div className="min-w-0 border-b border-[color:var(--wolfy-divider)] px-4 py-3 md:border-b-0 md:border-r" data-testid="home-research-support-factors">
-            <p className="text-[11px] font-semibold tracking-[0] text-[color:var(--wolfy-text-muted)]">{isEnglish ? 'Key support factors' : '关键支撑因素'}</p>
-            <p className="mt-2 break-words text-xs font-semibold leading-[1.55] text-[color:var(--wolfy-text-secondary)]">{supportCopy}</p>
+        {/* D. Evidence + risk limits + next watch — early research path (before supporting first-read grid) */}
+        <div
+          className="mt-2 grid min-w-0 gap-0 overflow-hidden rounded-[8px] border border-[color:var(--wolfy-divider)] md:grid-cols-3"
+          data-testid="home-research-evidence-risk-workbench"
+        >
+          <div
+            className="min-w-0 border-b border-[color:var(--wolfy-divider)] px-3 py-1.5 md:border-b-0 md:border-r"
+            data-testid="home-research-support-factors"
+          >
+            <p className="text-[11px] font-semibold tracking-[0] text-[color:var(--wolfy-text-muted)]">
+              {isEnglish ? 'Key support factors' : '关键支撑因素'}
+            </p>
+            <p className="mt-0.5 line-clamp-2 break-words text-xs font-semibold leading-[1.4] text-[color:var(--wolfy-text-secondary)]">
+              {supportCopy}
+            </p>
           </div>
-          <div className="min-w-0 border-b border-[color:var(--wolfy-divider)] px-4 py-3 md:border-b-0 md:border-r" data-testid="home-research-risk-boundaries">
+          <div
+            className="min-w-0 border-b border-[color:var(--wolfy-divider)] px-3 py-1.5 md:border-b-0 md:border-r"
+            data-testid="home-research-risk-boundaries"
+          >
             <ResearchRiskLimits
               density="editorial"
               locale={researchLocale}
@@ -2367,14 +2354,54 @@ function HomeConclusionFirstConsole({
               data-testid="home-research-risk-limits"
             />
           </div>
-          <div className="min-w-0 px-4 py-3" data-testid="home-research-next-actions">
-            <p className="text-[11px] font-semibold tracking-[0] text-[color:var(--wolfy-text-muted)]">{isEnglish ? 'Next watch point' : '下一步关注点'}</p>
-            <p className="mt-2 break-words text-xs font-semibold leading-[1.55] text-[color:var(--wolfy-text-secondary)]">{nextCopy}</p>
+          <div className="min-w-0 px-3 py-1.5" data-testid="home-research-next-actions">
+            <p className="text-[11px] font-semibold tracking-[0] text-[color:var(--wolfy-text-muted)]">
+              {isEnglish ? 'Next watch point' : '下一步关注点'}
+            </p>
+            <p className="mt-0.5 line-clamp-2 break-words text-xs font-semibold leading-[1.4] text-[color:var(--wolfy-text-secondary)]">
+              {nextCopy}
+            </p>
           </div>
         </div>
 
+        {/* E. Single continuation path — early, using existing valid workflows only */}
+        <div className="mt-2" data-testid="home-research-quick-actions">
+          <NextResearchAction
+            density="editorial"
+            locale={researchLocale}
+            compact
+            title={isEnglish ? 'Continue research' : '继续研究'}
+            steps={nextActionSteps}
+          />
+        </div>
+
+        {/* F. First-read supporting strip — dense hierarchy, not equal-card monopoly */}
+        <section
+          className="mt-2 grid min-w-0 gap-0 overflow-hidden rounded-[8px] border border-[color:var(--wolfy-divider)] md:grid-cols-2 xl:grid-cols-4"
+          data-testid="home-research-first-read-summary"
+          aria-label={isEnglish ? 'First-read summary' : '首读摘要'}
+        >
+          {firstReadItems.map((item, index) => (
+            <article
+              key={item.key}
+              className={cn(
+                'min-w-0 border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-1.5',
+                index < firstReadItems.length - 1 && 'border-b xl:border-b-0 xl:border-r',
+                index % 2 === 0 && index < firstReadItems.length - 1 && 'md:border-r',
+                index < 2 && 'md:border-b xl:border-b-0',
+              )}
+              data-testid={`home-research-first-read-${item.key}`}
+            >
+              <p className="text-[11px] font-semibold tracking-[0] text-[color:var(--wolfy-text-muted)]">{item.label}</p>
+              <p className="mt-0.5 break-words text-[13px] font-semibold leading-5 text-[color:var(--wolfy-text-primary)]">{item.value}</p>
+              <p className="mt-0.5 line-clamp-1 break-words text-[11px] leading-4 text-[color:var(--wolfy-text-secondary)] sm:line-clamp-2">{item.detail}</p>
+            </article>
+          ))}
+        </section>
+
+        {/* G. Deeper data quality / packet / provenance — collapsed, not first-fold monopoly */}
         <details
-          className="group mt-4 min-w-0 rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2.5"
+          className="group mt-2 min-w-0 rounded-[8px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-1.5"
           data-testid="home-research-trust-strip"
         >
           <summary
@@ -2384,7 +2411,7 @@ function HomeConclusionFirstConsole({
             <span>{isEnglish ? 'View research boundary' : '查看研究边界'}</span>
             <span className="text-[color:var(--wolfy-text-muted)] transition-transform group-open:rotate-180" aria-hidden="true">▾</span>
           </summary>
-          <div className="mt-2.5 space-y-4 border-t border-[color:var(--wolfy-divider)] pt-3 text-[11px]">
+          <div className="mt-2 space-y-3 border-t border-[color:var(--wolfy-divider)] pt-2.5 text-[11px]">
             <ResearchDataQualityComposition
               density="editorial"
               locale={researchLocale}
@@ -2439,7 +2466,7 @@ function HomeConclusionFirstConsole({
               ) : null}
             </ResearchDataQualityComposition>
             <div className="divide-y divide-[color:var(--wolfy-divider)] text-[11px]">
-              <div className="flex min-w-0 items-start justify-between gap-4 py-2.5">
+              <div className="flex min-w-0 items-start justify-between gap-4 py-2">
                 <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{isEnglish ? 'Data state' : '数据状态'}</span>
                 <span
                   className="min-w-0 break-words text-right text-[color:var(--wolfy-text-secondary)] whitespace-normal"
@@ -2448,7 +2475,7 @@ function HomeConclusionFirstConsole({
                   {qualityPreview}
                 </span>
               </div>
-              <div className="flex min-w-0 items-start justify-between gap-4 py-2.5">
+              <div className="flex min-w-0 items-start justify-between gap-4 py-2">
                 <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{isEnglish ? 'Research boundary' : '研究边界'}</span>
                 <span className="min-w-0 break-words text-right text-[color:var(--wolfy-text-secondary)] whitespace-normal">
                   {dataQualityLabel}
@@ -2459,7 +2486,7 @@ function HomeConclusionFirstConsole({
                 { label: isEnglish ? 'Missing data' : '仍缺失数据', value: missingCopy },
                 { label: isEnglish ? 'Impact' : '对结论的影响', value: qualityImpactCopy },
               ].map((item) => (
-                <div key={item.label} className="flex min-w-0 items-start justify-between gap-4 py-2.5">
+                <div key={item.label} className="flex min-w-0 items-start justify-between gap-4 py-2">
                   <span className="shrink-0 text-[color:var(--wolfy-text-muted)]">{item.label}</span>
                   <span className="min-w-0 break-words text-right text-[color:var(--wolfy-text-secondary)] whitespace-normal">{displaySlotValue(item.value, locale)}</span>
                 </div>
@@ -3005,7 +3032,7 @@ function LinearObservationPanel({
   );
 
   return (
-    <div className="home-research-rail-body relative flex min-w-0 flex-col gap-4 px-0 py-0">
+    <div className="home-research-rail-body relative flex min-w-0 flex-col gap-2.5 px-0 py-0">
       <section
         className={HOME_LOCAL_RAIL_CARD_CLASS}
         data-testid="home-bento-card-strategy"
@@ -3029,7 +3056,7 @@ function LinearObservationPanel({
             {dashboard.strategy.detailLabel}
           </button>
         </div>
-        <p className="mt-2 line-clamp-2 min-w-0 break-words text-xs leading-[1.65] text-[color:var(--wolfy-text-secondary)]">
+        <p className="mt-1.5 line-clamp-2 min-w-0 break-words text-xs leading-[1.55] text-[color:var(--wolfy-text-secondary)]">
           {actionCopy}
         </p>
       </section>
@@ -3059,7 +3086,7 @@ function LinearObservationPanel({
         <div className="flex min-w-0 items-center justify-between gap-3">
           <p className="text-sm font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)]">{isEnglish ? 'Main risk' : '主要风险'}</p>
         </div>
-        <p className="mt-2 line-clamp-2 min-w-0 break-words text-xs leading-[1.65] text-[color:var(--wolfy-text-secondary)]">
+        <p className="mt-1.5 line-clamp-2 min-w-0 break-words text-xs leading-[1.55] text-[color:var(--wolfy-text-secondary)]">
           {riskCopy}
         </p>
       </section>
@@ -3070,7 +3097,7 @@ function LinearObservationPanel({
         data-rail-section="next-step"
       >
         <p className="text-sm font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)]">{isEnglish ? 'Next step' : '下一步'}</p>
-        <p className="mt-2 line-clamp-2 min-w-0 break-words text-xs leading-[1.65] text-[color:var(--wolfy-text-secondary)]">
+        <p className="mt-1.5 line-clamp-2 min-w-0 break-words text-xs leading-[1.55] text-[color:var(--wolfy-text-secondary)]">
           {nextCopy}
         </p>
       </section>
@@ -8185,23 +8212,23 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                         data-testid="home-research-header-strip"
                       >
                         <div
-                          className="flex min-w-0 flex-wrap items-start justify-between gap-4"
+                          className="flex min-w-0 flex-wrap items-start justify-between gap-3"
                           data-testid="home-bento-decision-company-header"
                         >
-                          <div className="flex min-w-0 items-start gap-4">
+                          <div className="flex min-w-0 items-start gap-3">
                             {readyCopy.ticker === 'ORCL' ? (
                               <div
-                                className="home-research-company-mark-oracle flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-[14px] border border-red-300/10 bg-[linear-gradient(145deg,#ff5b2d,#b51915)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_14px_34px_rgba(185,25,21,0.18)]"
+                                className="home-research-company-mark-oracle flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] border border-red-300/10 bg-[linear-gradient(145deg,#ff5b2d,#b51915)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_24px_rgba(185,25,21,0.16)] sm:h-14 sm:w-14"
                                 data-testid="home-research-company-mark"
                                 data-company-mark="oracle-logo"
                                 aria-label="Oracle"
                               >
                                 <span className="sr-only">{readyCopy.ticker.slice(0, 2)}</span>
-                                <span className="h-5 w-11 rounded-full border-[5px] border-[color:var(--wolfy-border-default)]" />
+                                <span className="h-4 w-9 rounded-full border-[4px] border-[color:var(--wolfy-border-default)]" />
                               </div>
                             ) : (
                               <div
-                                className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-[14px] border border-[color:var(--wolfy-border-subtle)] bg-[linear-gradient(145deg,rgba(118,109,219,0.34),rgba(23,31,54,0.92)_48%,rgba(75,94,172,0.28))] font-mono text-sm font-semibold text-[color:var(--wolfy-text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]"
+                                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] border border-[color:var(--wolfy-border-subtle)] bg-[linear-gradient(145deg,rgba(118,109,219,0.34),rgba(23,31,54,0.92)_48%,rgba(75,94,172,0.28))] font-mono text-xs font-semibold text-[color:var(--wolfy-text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] sm:h-14 sm:w-14 sm:text-sm"
                                 data-testid="home-research-company-mark"
                                 data-company-mark="fallback-monogram"
                                 aria-hidden="true"
@@ -8209,17 +8236,17 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                                 {readyCopy.ticker.slice(0, 2)}
                               </div>
                             )}
-                            <div className="min-w-0 pt-1.5">
+                            <div className="min-w-0 pt-0.5">
                               {sessionOriginLabel ? (
                                 <span
                                   data-testid="home-research-session-origin"
-                                  className="inline-flex items-center rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-inset)] px-2.5 py-1 text-[10px] font-medium tracking-[0.08em] text-[color:var(--wolfy-text-secondary)]"
+                                  className="inline-flex items-center rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-inset)] px-2 py-0.5 text-[10px] font-medium tracking-[0.08em] text-[color:var(--wolfy-text-secondary)]"
                                 >
                                   {sessionOriginLabel}
                                 </span>
                               ) : null}
-                              <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-                                <h1 className="min-w-0 truncate text-[30px] font-medium tracking-[0] text-[color:var(--wolfy-text-primary)] md:text-[34px]">
+                              <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+                                <h1 className="min-w-0 truncate text-[24px] font-medium tracking-[0] text-[color:var(--wolfy-text-primary)] sm:text-[28px] md:text-[30px]">
                                   {readyCopy.decision.company}
                                 </h1>
                                 <span
@@ -8230,7 +8257,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                                 </span>
                               </div>
                               <p
-                                className={`text-[12px] leading-5 text-[color:var(--wolfy-text-muted)]${sessionOriginLabel ? ' mt-1.5' : ' mt-2'}`}
+                                className={`text-[12px] leading-5 text-[color:var(--wolfy-text-muted)]${sessionOriginLabel ? ' mt-1' : ' mt-1'}`}
                                 data-testid="home-bento-decision-sector"
                               >
                                 {[resolveLinearSectorTrail(locale, readyCopy.decision.sector), readyCopy.sessionBadge, readyCopy.regimeBadge].filter(Boolean).join(' / ')}
