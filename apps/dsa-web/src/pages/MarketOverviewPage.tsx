@@ -159,10 +159,18 @@ const AUTO_REVALIDATE_PANEL_KEYS: PanelKey[] = [
   'cnShortSentiment',
 ];
 
+const UNAVAILABLE_TEMPERATURE_SCORE = {
+  value: null as number | null,
+  label: '数据不足',
+  trend: 'stable' as const,
+  description: '数据待补',
+};
+
 const createUnavailableTemperature = (warning = '市场温度数据待补'): MarketTemperatureResponse => ({
   source: 'unavailable',
   sourceLabel: '待补数据',
-  updatedAt: new Date(0).toISOString(),
+  // No observation exists — do not invent epoch or client-now evidence timestamps.
+  updatedAt: '',
   freshness: 'unavailable',
   isFallback: false,
   warning,
@@ -176,18 +184,18 @@ const createUnavailableTemperature = (warning = '市场温度数据待补'): Mar
   disabledReason: 'missing_required_evidence',
   unavailableReason: 'market_overview_inputs_unavailable',
   scores: {
-    overall: { value: 50, label: '数据不足', trend: 'stable', description: '数据待补' },
-    usRiskAppetite: { value: 50, label: '数据不足', trend: 'stable', description: '数据待补' },
-    cnMoneyEffect: { value: 50, label: '数据不足', trend: 'stable', description: '数据待补' },
-    macroPressure: { value: 50, label: '数据不足', trend: 'stable', description: '数据待补' },
-    liquidity: { value: 50, label: '数据不足', trend: 'stable', description: '数据待补' },
+    overall: { ...UNAVAILABLE_TEMPERATURE_SCORE },
+    usRiskAppetite: { ...UNAVAILABLE_TEMPERATURE_SCORE },
+    cnMoneyEffect: { ...UNAVAILABLE_TEMPERATURE_SCORE },
+    macroPressure: { ...UNAVAILABLE_TEMPERATURE_SCORE },
+    liquidity: { ...UNAVAILABLE_TEMPERATURE_SCORE },
   },
 });
 
 const createUnavailableBriefing = (warning = '市场简报数据待补'): MarketBriefingResponse => ({
   source: 'unavailable',
   sourceLabel: '待补数据',
-  updatedAt: new Date(0).toISOString(),
+  updatedAt: '',
   freshness: 'unavailable',
   isFallback: false,
   warning,
@@ -202,7 +210,7 @@ const createUnavailableBriefing = (warning = '市场简报数据待补'): Market
 const createUnavailableFutures = (warning = '期货数据待补'): MarketFuturesResponse => ({
   source: 'unavailable',
   sourceLabel: '待补数据',
-  updatedAt: new Date(0).toISOString(),
+  updatedAt: '',
   freshness: 'unavailable',
   isFallback: false,
   warning,
@@ -212,7 +220,7 @@ const createUnavailableFutures = (warning = '期货数据待补'): MarketFutures
 const createUnavailableCnShortSentiment = (warning = '短线情绪数据待补'): CnShortSentimentResponse => ({
   source: 'unavailable',
   sourceLabel: '待补数据',
-  updatedAt: new Date(0).toISOString(),
+  updatedAt: '',
   freshness: 'unavailable',
   isFallback: false,
   warning,
@@ -385,17 +393,17 @@ function describePanelError(error: unknown): string {
 }
 
 function fallbackPanel(panelName: string, error: unknown): MarketOverviewPanel {
-  const updatedAt = new Date().toISOString();
   const warning = describePanelError(error);
+  // Error envelope without observation: preserve missing timestamps (not client-now or epoch).
   return {
     panelName,
-    lastRefreshAt: updatedAt,
+    lastRefreshAt: '',
     status: 'failure',
     errorMessage: '更新失败：数据更新失败',
     source: 'error',
     sourceLabel: '数据更新中',
-    updatedAt,
-    asOf: updatedAt,
+    updatedAt: '',
+    asOf: undefined,
     freshness: 'error',
     isFallback: true,
     isStale: true,
@@ -409,25 +417,21 @@ function fallbackPanelValue(panelKey: PanelKey, error: unknown): PanelState[Pane
     case 'temperature':
       return {
         ...createUnavailableTemperature(),
-        updatedAt: new Date().toISOString(),
         warning: `市场温度数据待补。${describePanelError(error)}`,
       } as PanelState[PanelKey];
     case 'briefing':
       return {
         ...createUnavailableBriefing(),
-        updatedAt: new Date().toISOString(),
         warning: `市场简报数据待补。${describePanelError(error)}`,
       } as PanelState[PanelKey];
     case 'futures':
       return {
         ...createUnavailableFutures(),
-        updatedAt: new Date().toISOString(),
         warning: `期货数据待补。${describePanelError(error)}`,
       } as PanelState[PanelKey];
     case 'cnShortSentiment':
       return {
         ...createUnavailableCnShortSentiment(),
-        updatedAt: new Date().toISOString(),
         warning: `短线情绪数据待补。${describePanelError(error)}`,
       } as PanelState[PanelKey];
     case 'indices':
@@ -586,6 +590,16 @@ function loadReadinessWithRequestDedupe<T>(cacheKey: string, load: () => Promise
   inFlightReadinessRequestCache.set(cacheKey, promise);
   return promise;
 }
+
+/** Test-only access to unavailable/error panel factories (no production callers). */
+export const __marketOverviewPanelFactoriesForTests = {
+  createUnavailableTemperature: (warning?: string) => createUnavailableTemperature(warning),
+  createUnavailableBriefing: (warning?: string) => createUnavailableBriefing(warning),
+  createUnavailableFutures: (warning?: string) => createUnavailableFutures(warning),
+  createUnavailableCnShortSentiment: (warning?: string) => createUnavailableCnShortSentiment(warning),
+  fallbackPanel: (panelName: string, error: unknown) => fallbackPanel(panelName, error),
+  fallbackPanelValue: (panelKey: PanelKey, error: unknown) => fallbackPanelValue(panelKey, error),
+};
 
 export function __resetMarketOverviewRequestOwnershipForTests(): void {
   if (!import.meta.env.TEST) {

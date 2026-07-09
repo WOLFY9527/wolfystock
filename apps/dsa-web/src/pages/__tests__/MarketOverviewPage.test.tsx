@@ -3,7 +3,10 @@ import { resolve } from 'node:path';
 import { createElement, StrictMode } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import MarketOverviewPage, { __resetMarketOverviewRequestOwnershipForTests } from '../MarketOverviewPage';
+import MarketOverviewPage, {
+  __marketOverviewPanelFactoriesForTests,
+  __resetMarketOverviewRequestOwnershipForTests,
+} from '../MarketOverviewPage';
 import { MarketOverviewWorkbench } from '../../components/market-overview/MarketOverviewWorkbench';
 import { MARKET_OVERVIEW_TAB_CONFIG } from '../MarketOverviewTabConfig';
 import { marketOverviewApi } from '../../api/marketOverview';
@@ -1849,11 +1852,11 @@ const unreliableTemperaturePayload = () => ({
     notInvestmentAdvice: true,
   },
   scores: {
-    overall: { value: 50, label: '数据不足', trend: 'stable' as const, description: '数据待补' },
-    usRiskAppetite: { value: 50, label: '数据不足', trend: 'stable' as const, description: '数据待补' },
-    cnMoneyEffect: { value: 50, label: '数据不足', trend: 'stable' as const, description: '数据待补' },
-    macroPressure: { value: 50, label: '数据不足', trend: 'stable' as const, description: '数据待补' },
-    liquidity: { value: 50, label: '数据不足', trend: 'stable' as const, description: '数据待补' },
+    overall: { value: null, label: '数据不足', trend: 'stable' as const, description: '数据待补' },
+    usRiskAppetite: { value: null, label: '数据不足', trend: 'stable' as const, description: '数据待补' },
+    cnMoneyEffect: { value: null, label: '数据不足', trend: 'stable' as const, description: '数据待补' },
+    macroPressure: { value: null, label: '数据不足', trend: 'stable' as const, description: '数据待补' },
+    liquidity: { value: null, label: '数据不足', trend: 'stable' as const, description: '数据待补' },
   },
 });
 
@@ -2496,6 +2499,38 @@ describe('MarketOverviewPage', () => {
     expect(surface.textContent || '').not.toMatch(
       /GEX|vanna|charm|providerClass|providerName|providerAttempted|requiredProviderClass|sourceAuthorityRouter|endpointHost|apiKeyPresent|exceptionClass|exceptionChain|requestId|traceId|cacheKey|rawPayload|credential|token|env/i,
     );
+  });
+
+  it('error and unavailable panel factories do not invent client-now or epoch evidence timestamps', () => {
+    const factories = __marketOverviewPanelFactoriesForTests;
+    const before = Date.now();
+
+    const unavailable = factories.createUnavailableTemperature();
+    const briefing = factories.createUnavailableBriefing();
+    const futures = factories.createUnavailableFutures();
+    const shortSentiment = factories.createUnavailableCnShortSentiment();
+    const errorPanel = factories.fallbackPanel('IndexTrendsCard', new Error('timeout'));
+    const temperatureFallback = factories.fallbackPanelValue('temperature', new Error('timeout')) as {
+      updatedAt?: string;
+      asOf?: string;
+      scores?: { overall?: { value?: number | null } };
+    };
+
+    for (const payload of [unavailable, briefing, futures, shortSentiment, errorPanel, temperatureFallback]) {
+      expect(payload.updatedAt || '').toBe('');
+      expect(payload.asOf).toBeFalsy();
+      expect(String(payload.updatedAt || '')).not.toMatch(/1970-01-01/);
+      if (payload.updatedAt) {
+        const parsed = Date.parse(payload.updatedAt);
+        expect(Number.isNaN(parsed) || parsed < before - 60_000 || parsed > Date.now() + 60_000).toBe(true);
+      }
+    }
+
+    expect(errorPanel.lastRefreshAt).toBe('');
+    expect(errorPanel.status).toBe('failure');
+    expect(errorPanel.asOf).toBeUndefined();
+    expect(unavailable.scores.overall.value).toBeNull();
+    expect(temperatureFallback.scores?.overall?.value).toBeNull();
   });
 
   it('fails closed when market overview panels are unavailable instead of rendering local sample markets', async () => {
@@ -4276,6 +4311,37 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-regime-summary-lane')).toBeInTheDocument();
     expect(within(evidence).queryByTestId('market-regime-synthesis-research-block')).not.toBeInTheDocument();
     expect(screen.queryByText(/raw|payload/i)).not.toBeInTheDocument();
+  });
+
+  it('renders temperature unavailable without mid-scale 50 false-neutral score', async () => {
+    vi.mocked(marketApi.getTemperature).mockResolvedValueOnce({
+      source: 'unavailable',
+      sourceLabel: '待补数据',
+      updatedAt: '',
+      freshness: 'unavailable',
+      isFallback: false,
+      isReliable: false,
+      temperatureAvailable: false,
+      conclusionAllowed: false,
+      disabledReason: 'missing_required_evidence',
+      unavailableReason: 'market_overview_inputs_unavailable',
+      warning: '市场温度数据待补',
+      scores: {
+        overall: { value: null, label: '数据不足', trend: 'stable', description: '数据待补' },
+        usRiskAppetite: { value: null, label: '数据不足', trend: 'stable', description: '数据待补' },
+        cnMoneyEffect: { value: null, label: '数据不足', trend: 'stable', description: '数据待补' },
+        macroPressure: { value: null, label: '数据不足', trend: 'stable', description: '数据待补' },
+        liquidity: { value: null, label: '数据不足', trend: 'stable', description: '数据待补' },
+      },
+    } as never);
+
+    render(createElement(MarketOverviewPage));
+
+    const details = expandMarketDecisionDetails();
+    const temperatureSummary = await within(details).findByTestId('market-overview-temperature-summary');
+    expect(temperatureSummary).toHaveTextContent('暂不判定');
+    expect(temperatureSummary).not.toHaveTextContent(/\b50\b/);
+    expect(within(details).getByTestId('market-temperature-unreliable-summary')).toBeInTheDocument();
   });
 
   it('keeps the reliable-inputs fallback copy when additive flags are omitted but counts are still insufficient', async () => {

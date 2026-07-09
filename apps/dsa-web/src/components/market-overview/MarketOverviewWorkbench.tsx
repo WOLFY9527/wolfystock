@@ -15,6 +15,7 @@ import type {
   MarketTemperatureResponse,
   MarketTemperatureScore,
 } from '../../api/market';
+import { isMarketTemperatureReliable } from '../../api/market';
 import {
   MARKET_OVERVIEW_TAB_CONFIG,
   type MarketOverviewModuleId,
@@ -664,11 +665,12 @@ function buildMetricPanel(
   const basePanel = firstSourcePanelForMetrics(panels, metricIds);
   return {
     panelName,
-    lastRefreshAt: basePanel?.lastRefreshAt || new Date(0).toISOString(),
+    // Missing source panel must not invent epoch/client-now evidence timestamps.
+    lastRefreshAt: basePanel?.lastRefreshAt || '',
     status: basePanel?.status || 'success',
     source: basePanel?.source || 'unavailable',
     sourceLabel: basePanel?.sourceLabel || '未接入',
-    updatedAt: basePanel?.updatedAt,
+    updatedAt: basePanel?.updatedAt || '',
     asOf: basePanel?.asOf,
     freshness: basePanel?.freshness || 'cached',
     isFallback: basePanel?.isFallback,
@@ -686,7 +688,7 @@ function buildFilteredPanel(
 ): MarketOverviewPanel {
   const symbolSet = new Set(symbols);
   const items = sourcePanel?.items.filter((item) => symbolSet.has(item.symbol)) || [];
-  const updatedAt = sourcePanel?.updatedAt || new Date(0).toISOString();
+  const updatedAt = sourcePanel?.updatedAt || '';
   return {
     ...(sourcePanel || {}),
     panelName,
@@ -1295,6 +1297,9 @@ function formatPercent(value?: number | null): string {
 }
 
 function scoreTone(score: MarketTemperatureScore, pressure = false): string {
+  if (typeof score.value !== 'number' || !Number.isFinite(score.value)) {
+    return 'text-[color:var(--wolfy-text-muted)]';
+  }
   if (pressure) {
     return score.value >= 65 ? 'text-rose-400' : score.value >= 55 ? 'text-amber-300' : 'text-emerald-400';
   }
@@ -2019,13 +2024,7 @@ function buildMarketDecisionSemanticsView(
 }
 
 function isTemperatureReliable(data: MarketTemperatureResponse): boolean {
-  return Boolean(
-    data.temperatureAvailable !== false
-    && data.conclusionAllowed !== false
-    && data.isReliable !== false
-    && (data.confidence == null || data.confidence >= 0.45)
-    && (data.reliableInputCount == null || data.reliableInputCount >= 3),
-  );
+  return isMarketTemperatureReliable(data);
 }
 
 function hasInsufficientReliableInputs(data: MarketTemperatureResponse): boolean {
@@ -2281,13 +2280,19 @@ function describeDirectionalItem(item?: MarketOverviewItem, fallbackLabel = 'N/A
 }
 
 function scoreStateLabel(score: MarketTemperatureScore, pressure = false): string {
+  if (typeof score.value !== 'number' || !Number.isFinite(score.value)) {
+    return score.label || '数据不足';
+  }
   if (pressure) {
     return score.value >= 65 ? '偏高' : score.value >= 55 ? '中性偏高' : score.value <= 40 ? '偏低' : '中性';
   }
   return score.label || (score.value >= 60 ? '偏强' : score.value <= 45 ? '偏弱' : '中性');
 }
 
-function buildDecisionChipVariant(value: number, pressure = false): MarketOverviewDecisionChipView['variant'] {
+function buildDecisionChipVariant(value: number | null | undefined, pressure = false): MarketOverviewDecisionChipView['variant'] {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 'neutral';
+  }
   if (pressure) {
     return value >= 65 ? 'danger' : value >= 55 ? 'caution' : 'success';
   }

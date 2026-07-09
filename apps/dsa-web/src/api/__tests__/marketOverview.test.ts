@@ -254,4 +254,71 @@ describe('marketOverviewApi', () => {
       },
     });
   });
+
+  it('preserves backend breadth claim and metric coverage semantics through normalizePanel', async () => {
+    const { marketOverviewApi } = await import('../marketOverview');
+
+    get.mockResolvedValueOnce({
+      data: {
+        panel_name: 'ChinaBreadthCard',
+        last_refresh_at: '2026-06-07T09:00:00Z',
+        status: 'partial',
+        source: 'computed_from_authorized_eod_grouped_daily',
+        source_label: 'Authorized EOD breadth',
+        updated_at: '2026-06-07T09:01:00Z',
+        as_of: '2026-06-07T09:00:00Z',
+        freshness: 'delayed',
+        breadth_claim_type: 'computed_from_authorized_eod_grouped_daily',
+        official_exchange_published_breadth: false,
+        fulfilled_metrics: ['ADVANCERS', 'DECLINERS', 'UNCHANGED', 'ADVANCE_DECLINE_RATIO'],
+        missing_metrics: ['NEW_HIGHS', 'NEW_LOWS', 'HIGH_LOW_RATIO'],
+        metric_coverage_ratio: 4 / 7,
+        broad_market_claim_allowed: true,
+        reason_codes: ['partial_metric_coverage'],
+        items: [
+          {
+            symbol: 'ADVANCERS',
+            label: 'Advancers',
+            value: 1800,
+            freshness: 'delayed',
+          },
+        ],
+      },
+    });
+
+    const panel = await marketOverviewApi.getIndices();
+
+    expect(panel.breadthClaimType).toBe('computed_from_authorized_eod_grouped_daily');
+    expect(panel.officialExchangePublishedBreadth).toBe(false);
+    expect(panel.fulfilledMetrics).toEqual(['ADVANCERS', 'DECLINERS', 'UNCHANGED', 'ADVANCE_DECLINE_RATIO']);
+    expect(panel.missingMetrics).toEqual(['NEW_HIGHS', 'NEW_LOWS', 'HIGH_LOW_RATIO']);
+    expect(panel.metricCoverageRatio).toBeCloseTo(4 / 7);
+    expect(panel.broadMarketClaimAllowed).toBe(true);
+    expect(panel.reasonCodes).toEqual(['partial_metric_coverage']);
+  });
+
+  it('does not invent breadth coverage when backend omits it', async () => {
+    const { marketOverviewApi } = await import('../marketOverview');
+
+    get.mockResolvedValueOnce({
+      data: {
+        panel_name: 'IndexTrendsCard',
+        last_refresh_at: '2026-06-07T09:00:00Z',
+        status: 'success',
+        source: 'yahoo',
+        updated_at: '2026-06-07T09:01:00Z',
+        as_of: '2026-06-07T09:00:00Z',
+        freshness: 'live',
+        items: [{ symbol: 'SPX', label: 'S&P 500', value: 5200 }],
+      },
+    });
+
+    const panel = await marketOverviewApi.getIndices();
+
+    expect(panel.breadthClaimType).toBeUndefined();
+    expect(panel.metricCoverageRatio).toBeUndefined();
+    expect(panel.fulfilledMetrics).toBeUndefined();
+    expect(panel.missingMetrics).toBeUndefined();
+    expect(panel.broadMarketClaimAllowed).toBeUndefined();
+  });
 });
