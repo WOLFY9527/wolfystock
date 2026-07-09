@@ -7942,129 +7942,170 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
             className="mx-auto flex w-full max-w-[1880px] flex-1 min-w-0 flex-col overflow-x-hidden px-3 py-3 sm:px-4 xl:px-6 2xl:px-8"
             data-testid="guest-home-clean-search"
           >
-            <div className="flex w-full min-w-0 flex-col gap-4 overflow-x-hidden" data-testid="guest-home-first-screen-stack">
+            <div className="flex w-full min-w-0 flex-col gap-3 overflow-x-hidden" data-testid="guest-home-first-screen-stack">
               <section
-                className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'overflow-x-hidden px-4 py-4 sm:px-5 sm:py-5')}
+                className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'overflow-x-hidden px-4 py-3.5 sm:px-5 sm:py-4')}
                 data-testid="guest-home-command-surface"
                 data-layout-zone="RouteConsole"
                 data-visual-role="guest-command-console"
               >
-                <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                {/* Header: research entry identity + compact workflow annotation */}
+                <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                   <div className="min-w-0 max-w-3xl">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
                       {guestCommandConsoleCopy.eyebrow}
                     </p>
-                    <h1 className="mt-2 text-[28px] font-semibold tracking-[0] text-[color:var(--wolfy-text-primary)] sm:text-[32px]">
+                    <h1 className="mt-1 text-[22px] font-semibold leading-tight tracking-[0] text-[color:var(--wolfy-text-primary)] sm:text-[26px]">
                       {guestCommandConsoleCopy.title}
                     </h1>
-                    <p className="mt-2 max-w-2xl text-sm leading-6 text-[color:var(--wolfy-text-secondary)] sm:text-[15px]">
+                    <p className="mt-1.5 max-w-2xl text-[13px] leading-5 text-[color:var(--wolfy-text-secondary)] sm:text-sm sm:leading-6">
                       {guestCommandConsoleCopy.subtitle}
                     </p>
                   </div>
-                  <div
-                    className="grid min-w-0 grid-cols-2 overflow-hidden rounded-[10px] border border-[color:var(--wolfy-border-subtle)] text-[11px] sm:grid-cols-4 xl:max-w-[21rem]"
+                  <ol
+                    className="flex min-w-0 shrink-0 flex-wrap items-center gap-x-1 gap-y-1 rounded-[8px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-1.5 text-[11px]"
                     data-testid="guest-home-command-workflow"
+                    aria-label={locale === 'en' ? 'Research flow' : '研究流程'}
                   >
                     {guestCommandConsoleCopy.workflow.map((item, index) => (
-                      <div key={item} className="min-w-0 border-b border-r border-[color:var(--wolfy-border-subtle)] px-3 py-2.5 last:border-r-0 even:border-r-0 sm:border-b-0 sm:even:border-r sm:last:border-r-0">
-                        <span className="block font-mono text-[10px] text-[color:var(--wolfy-text-muted)]">0{index + 1}</span>
-                        <span className="mt-1 block truncate font-semibold text-[color:var(--wolfy-text-secondary)]">{item}</span>
-                      </div>
+                      <li key={item} className="flex min-w-0 items-center gap-1">
+                        {index > 0 ? (
+                          <span className="mx-0.5 text-[color:var(--wolfy-text-muted)]" aria-hidden="true">
+                            →
+                          </span>
+                        ) : null}
+                        <span className="font-mono text-[10px] tabular-nums text-[color:var(--wolfy-text-muted)]">
+                          0{index + 1}
+                        </span>
+                        <span className="font-semibold text-[color:var(--wolfy-text-secondary)]">{item}</span>
+                      </li>
                     ))}
-                  </div>
+                  </ol>
                 </div>
 
-                <div className="mt-4 grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
-                  <div className="min-w-0">
-                    <div className="mb-2 flex min-w-0 flex-wrap items-center justify-between gap-2">
-                      <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{guestCommandConsoleCopy.commandLabel}</p>
-                      <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{guestCommandConsoleCopy.commandHint}</p>
-                    </div>
-                    {omnibarModule}
+                {/* Dominant research command */}
+                <div className="mt-3 min-w-0" data-testid="guest-home-command-plane-primary">
+                  <div className="mb-1.5 flex min-w-0 flex-wrap items-center justify-between gap-2">
+                    <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{guestCommandConsoleCopy.commandLabel}</p>
+                    <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{guestCommandConsoleCopy.commandHint}</p>
                   </div>
-                  <aside
-                    className={cn(HOME_LOCAL_INSET_PANEL_CLASS, 'min-w-0 px-4 py-4')}
-                    data-testid="guest-home-market-preview-strip"
-                    aria-busy={guestMarketSnapshot?.state === 'loading' ? 'true' : 'false'}
-                  >
-                    <div className="flex min-w-0 items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{guestMarketSnapshot?.title}</p>
-                        <h2 className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{guestMarketSnapshot?.status}</h2>
-                      </div>
+                  {omnibarModule}
+                </div>
+
+                {/* Current market observation — integrated subordinate band, not a disconnected side card */}
+                <aside
+                  className={cn(HOME_LOCAL_INSET_PANEL_CLASS, 'mt-3 min-w-0 px-3.5 py-3 sm:px-4')}
+                  data-testid="guest-home-market-preview-strip"
+                  aria-busy={guestMarketSnapshot?.state === 'loading' ? 'true' : 'false'}
+                >
+                  <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{guestMarketSnapshot?.title}</p>
+                      <h2 className="mt-1 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{guestMarketSnapshot?.status}</h2>
+                    </div>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                       {guestMarketSnapshot?.asOf ? (
-                        <span className="shrink-0 rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2.5 py-1 text-[10px] font-medium text-[color:var(--wolfy-text-muted)]">
+                        <span className="shrink-0 rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-panel)] px-2.5 py-1 text-[10px] font-medium text-[color:var(--wolfy-text-muted)]">
                           {guestMarketSnapshot.asOf}
                         </span>
                       ) : null}
+                      {guestMarketSnapshot?.sourceLabel ? (
+                        <span className="shrink-0 text-[10px] text-[color:var(--wolfy-text-muted)]">
+                          {locale === 'en' ? 'Source' : '来源'}: {guestMarketSnapshot.sourceLabel}
+                        </span>
+                      ) : null}
                     </div>
-                    <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-                      {guestMarketSnapshot?.summary}
+                  </div>
+                  <p className="mt-1.5 text-[13px] leading-5 text-[color:var(--wolfy-text-secondary)] sm:text-sm sm:leading-6">
+                    {guestMarketSnapshot?.summary}
+                  </p>
+                  {(() => {
+                    const summaryText = String(guestMarketSnapshot?.summary || '').trim();
+                    const uniqueItems = (guestMarketSnapshot?.items || []).filter((item) => {
+                      const title = String(item.title || '').trim();
+                      const message = String(item.message || '').trim();
+                      if (!title && !message) return false;
+                      // Drop parent/child restatements of the same observation sentence.
+                      if (message && (message === summaryText || summaryText.includes(message))) {
+                        if (!title || title === summaryText || summaryText.includes(title) || message.includes(title)) {
+                          return false;
+                        }
+                      }
+                      if (title && !message && (title === summaryText || summaryText.includes(title))) {
+                        return false;
+                      }
+                      return true;
+                    });
+                    if (!uniqueItems.length) return null;
+                    return (
+                      <ul className="mt-2 flex min-w-0 flex-col gap-1 border-t border-[color:var(--wolfy-border-subtle)] pt-2 sm:flex-row sm:flex-wrap sm:gap-x-4 sm:gap-y-1">
+                        {uniqueItems.map((item) => {
+                          const title = String(item.title || '').trim();
+                          const message = String(item.message || '').trim();
+                          const showMessage = Boolean(message && message !== title && message !== summaryText);
+                          return (
+                            <li
+                              key={`${title}-${message}`}
+                              className="min-w-0 text-[11px] leading-5 text-[color:var(--wolfy-text-secondary)]"
+                            >
+                              <span className="font-semibold text-[color:var(--wolfy-text-primary)]">{title}</span>
+                              {showMessage ? (
+                                <span className="text-[color:var(--wolfy-text-muted)]"> — {message}</span>
+                              ) : null}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    );
+                  })()}
+                  <p className="mt-2 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+                    {guestMarketSnapshot?.note}
+                  </p>
+                </aside>
+
+                {/* Safe next step + account continuity — one compact research continuation strip */}
+                <div className="mt-3 grid min-w-0 gap-2 border-t border-[color:var(--wolfy-border-subtle)] pt-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-start lg:gap-4">
+                  <section
+                    className="min-w-0 rounded-[12px] px-0 py-0"
+                    data-testid="guest-home-trust-strip"
+                  >
+                    <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{guestCommandConsoleCopy.trustTitle}</p>
+                    <p className="mt-1 text-[13px] leading-5 text-[color:var(--wolfy-text-secondary)]">
+                      {guestCommandConsoleCopy.trustBody}
                     </p>
-                    {guestMarketSnapshot?.items.length ? (
-                      <div className="mt-3 grid min-w-0 gap-2.5">
-                        {guestMarketSnapshot.items.map((item) => (
-                          <div
-                            key={`${item.title}-${item.message}`}
-                            className="min-w-0 rounded-[10px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5"
-                          >
-                            <p className="text-[11px] font-medium text-[color:var(--wolfy-text-secondary)]">{item.title}</p>
-                            {item.message ? (
-                              <p className="mt-1 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">{item.message}</p>
-                            ) : null}
-                          </div>
-                        ))}
+                  </section>
+                  <section
+                    className="min-w-0 rounded-[12px] px-0 py-0"
+                    data-testid="guest-home-preview-strip"
+                  >
+                    <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{guestCommandConsoleCopy.previewTitle}</p>
+                        <p className="mt-1 text-[13px] leading-5 text-[color:var(--wolfy-text-secondary)]">
+                          {guestCommandConsoleCopy.previewBody}
+                        </p>
                       </div>
-                    ) : null}
-                    {guestMarketSnapshot?.sourceLabel ? (
-                      <p className="mt-3 text-[11px] text-[color:var(--wolfy-text-muted)]">
-                        {locale === 'en' ? 'Source' : '来源'}: {guestMarketSnapshot.sourceLabel}
-                      </p>
-                    ) : null}
-                    <p className="mt-3 text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
-                      {guestMarketSnapshot?.note}
-                    </p>
-                    <Link
-                      to={registrationPath}
-                      className="theme-primary-action mt-3 inline-flex min-h-10 w-full items-center justify-center rounded-lg border px-4 text-sm font-semibold transition-colors hover:bg-[var(--sage)] sm:w-auto"
-                      data-testid="guest-home-registration-link"
-                    >
-                      {guestCommandConsoleCopy.unlockAction}
-                    </Link>
-                  </aside>
+                      <Link
+                        to={registrationPath}
+                        className="theme-primary-action inline-flex min-h-10 w-full shrink-0 items-center justify-center rounded-lg border px-4 text-sm font-semibold transition-colors hover:bg-[var(--sage)] sm:w-auto"
+                        data-testid="guest-home-registration-link"
+                      >
+                        {guestCommandConsoleCopy.unlockAction}
+                      </Link>
+                    </div>
+                    <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+                      {guestCommandConsoleCopy.unlockItems.map((item) => (
+                        <span
+                          key={item}
+                          className="inline-flex min-h-8 items-center rounded-full border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-2.5 text-[11px] font-medium text-[color:var(--wolfy-text-secondary)]"
+                        >
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </section>
                 </div>
               </section>
-
-              <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-                <section
-                  className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-4 sm:px-5')}
-                  data-testid="guest-home-trust-strip"
-                >
-                  <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{guestCommandConsoleCopy.trustTitle}</p>
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-                    {guestCommandConsoleCopy.trustBody}
-                  </p>
-                </section>
-                <section
-                  className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-4 sm:px-5')}
-                  data-testid="guest-home-preview-strip"
-                >
-                  <p className="text-[11px] font-medium text-[color:var(--wolfy-text-muted)]">{guestCommandConsoleCopy.previewTitle}</p>
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-                    {guestCommandConsoleCopy.previewBody}
-                  </p>
-                  <div className="mt-3 flex min-w-0 flex-wrap gap-2">
-                    {guestCommandConsoleCopy.unlockItems.map((item) => (
-                      <span
-                        key={item}
-                        className="inline-flex min-h-8 items-center rounded-full border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 text-xs font-medium text-[color:var(--wolfy-text-secondary)]"
-                      >
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                </section>
-              </div>
             </div>
           </section>
         ) : (() => {
