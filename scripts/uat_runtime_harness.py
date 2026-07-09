@@ -60,6 +60,10 @@ EXIT_OK = 0
 EXIT_FAILED = 1
 
 
+def is_windows() -> bool:
+    return os.name == "nt"
+
+
 @dataclass(frozen=True)
 class PortOwner:
     pid: int
@@ -279,7 +283,7 @@ def ensure_frontend_dependencies(repo_root: Path) -> dict[str, Any]:
 def find_port_owner(host: str, port: int) -> PortOwner | None:
     if not _can_connect(host, port):
         return None
-    if os.name == "nt":
+    if is_windows():
         return _find_windows_port_owner(port)
     lsof = shutil.which("lsof")
     if not lsof:
@@ -306,7 +310,7 @@ def find_port_owner(host: str, port: int) -> PortOwner | None:
 def process_cwd(pid: int) -> str | None:
     if pid <= 0:
         return None
-    if os.name == "nt":
+    if is_windows():
         return None
     proc_cwd = Path("/proc") / str(pid) / "cwd"
     try:
@@ -337,7 +341,7 @@ def process_cwd(pid: int) -> str | None:
 def process_command(pid: int) -> str | None:
     if pid <= 0:
         return None
-    if os.name == "nt":
+    if is_windows():
         return _windows_process_command(pid)
     ps = shutil.which("ps")
     if not ps:
@@ -355,7 +359,7 @@ def process_command(pid: int) -> str | None:
 
 
 def process_start_time(pid: int) -> str | None:
-    if os.name == "nt":
+    if is_windows():
         return _windows_process_start_time(pid)
     ps = shutil.which("ps")
     if pid <= 0 or not ps:
@@ -373,7 +377,7 @@ def process_start_time(pid: int) -> str | None:
 def _probe_process(pid: int) -> ProcessProbe:
     if pid <= 0:
         return ProcessProbe(state="absent")
-    if os.name == "nt":
+    if is_windows():
         return _probe_windows_process(pid)
     try:
         os.kill(pid, 0)
@@ -385,7 +389,7 @@ def _probe_process(pid: int) -> ProcessProbe:
 
 
 def _terminate_pid(pid: int) -> None:
-    if os.name != "nt":
+    if not is_windows():
         os.kill(pid, signal.SIGTERM)
         return
     handle, error = _open_windows_process(_windows_terminate_access(), pid)
@@ -450,12 +454,14 @@ def _windows_process_command(pid: int) -> str | None:
 
 def _find_windows_port_owner(port: int) -> PortOwner | None:
     script = (
-        "$conn = @(Get-NetTCPConnection -State Listen -LocalPort %d -ErrorAction SilentlyContinue | Select-Object -First 1);"
-        "if (-not $conn) { exit 0 };"
-        "$pid = [int]$conn.OwningProcess;"
+        "$connections = @(Get-NetTCPConnection -State Listen -LocalPort %d -ErrorAction SilentlyContinue "
+        "| Sort-Object -Property OwningProcess,LocalAddress,LocalPort "
+        "| Select-Object -First 1);"
+        "if ($connections.Count -lt 1) { exit 0 };"
+        "$ownerProcessId = [int]$connections[0].OwningProcess;"
         "$command = $null;"
-        "try { $proc = Get-CimInstance Win32_Process -Filter \"ProcessId = $pid\" -ErrorAction Stop; $command = $proc.CommandLine } catch {};"
-        "@{ pid = $pid; command = $command } | ConvertTo-Json -Compress"
+        "try { $proc = Get-CimInstance Win32_Process -Filter \"ProcessId = $ownerProcessId\" -ErrorAction Stop; $command = $proc.CommandLine } catch {};"
+        "@{ pid = $ownerProcessId; command = $command } | ConvertTo-Json -Compress"
     ) % int(port)
     completed = _run_windows_powershell(script)
     if completed is None or completed.returncode != 0 or not completed.stdout.strip():
@@ -548,7 +554,7 @@ def start_runtime(
     python_bin: str | None = None,
     run_log_path: Path | None = None,
 ) -> subprocess.Popen[str]:
-    python = python_bin or str(repo_root / ".venv" / "bin" / "python")
+    python = python_bin or str(_default_venv_python(repo_root))
     if not Path(python).exists():
         python = sys.executable
     command = [python, str(repo_root / "main.py"), "--serve-only", "--host", host, "--port", str(port)]
@@ -569,6 +575,12 @@ def start_runtime(
     if run_log_path is not None and hasattr(log_handle, "close"):
         setattr(process, "_wolfystock_run_log_handle", log_handle)
     return process
+
+
+def _default_venv_python(repo_root: Path) -> Path:
+    if is_windows():
+        return repo_root / ".venv" / "Scripts" / "python.exe"
+    return repo_root / ".venv" / "bin" / "python"
 
 
 def stop_owned_runtime(process: subprocess.Popen[str] | None) -> dict[str, Any]:
@@ -645,7 +657,7 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
 
     expected_start = str(runtime.get("processStartTime") or "").strip()
     observed_start = str(process_start_time(pid) or "").strip()
-    if os.name == "nt" and not expected_start:
+    if is_windows() and not expected_start:
         result = {
             "status": "rejected",
             "reasonCode": "ownership_unverifiable",
@@ -654,7 +666,7 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
         }
         _append_lifecycle_event(evidence_path, result)
         return result
-    if os.name == "nt" and expected_start and not observed_start:
+    if is_windows() and expected_start and not observed_start:
         reprobe = _probe_process(pid)
         if reprobe.state == "absent":
             result = {"status": "absent", "reasonCode": "runtime_already_absent", "pid": pid}
@@ -698,7 +710,7 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
             _append_lifecycle_event(evidence_path, result)
             return result
         if not observed_cwd:
-            if os.name != "nt":
+            if not is_windows():
                 result = {
                     "status": "rejected",
                     "reasonCode": "pid_cwd_unavailable",
@@ -730,7 +742,7 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
                 }
                 _append_lifecycle_event(evidence_path, result)
                 return result
-    elif os.name == "nt" and expected_command and observed_command and expected_command != observed_command:
+    elif is_windows() and expected_command and observed_command and expected_command != observed_command:
         result = {
             "status": "rejected",
             "reasonCode": "pid_command_mismatch",
@@ -1334,11 +1346,14 @@ def run_preflight(
 ) -> dict[str, Any]:
     evidence = load_evidence(evidence_path)
     run = evidence.get("run") if isinstance(evidence.get("run"), Mapping) else {}
+    runtime = evidence.get("runtime") if isinstance(evidence.get("runtime"), Mapping) else {}
     source = evidence.get("source") if isinstance(evidence.get("source"), Mapping) else {}
     frontend = evidence.get("frontend") if isinstance(evidence.get("frontend"), Mapping) else {}
     run_port = _safe_int(port if port is not None else run.get("port"))
     run_pid = _safe_int(run.get("pid"))
     expected_cwd = str(run.get("cwd") or "")
+    expected_start = str(runtime.get("processStartTime") or "").strip()
+    expected_command = _normalize_command_line(runtime.get("command"))
     expected_asset = dict(run.get("assetIdentity") if isinstance(run.get("assetIdentity"), Mapping) else frontend)
     expected_asset_name = str(expected_asset.get("mainJsAssetFilename") or frontend.get("mainJsAssetFilename") or "")
 
@@ -1354,8 +1369,18 @@ def run_preflight(
         observed=observed_sha,
     )
 
-    alive = pid_is_alive(run_pid)
-    checks["pidAlive"] = _preflight_check(alive, expected=True, observed=alive)
+    probe = _probe_process(run_pid)
+    alive = probe.state == "alive"
+    checks["pidAlive"] = _preflight_check(
+        alive,
+        expected={"state": "alive"},
+        observed={"state": probe.state, "windowsError": probe.windows_error},
+    )
+    checks["ownedByHarness"] = _preflight_check(
+        runtime.get("ownedByHarness") is True,
+        expected=True,
+        observed=runtime.get("ownedByHarness"),
+    )
 
     owner = find_port_owner(host, run_port)
     owner_payload = owner.__dict__ if owner else None
@@ -1366,12 +1391,42 @@ def run_preflight(
     )
 
     observed_cwd = process_cwd(run_pid) if run_pid > 0 else None
-    cwd_ok = bool(
-        expected_cwd
-        and observed_cwd
-        and Path(observed_cwd).resolve() == Path(expected_cwd).resolve()
+    if expected_cwd and observed_cwd:
+        cwd_ok = Path(observed_cwd).resolve() == Path(expected_cwd).resolve()
+        checks["cwd"] = _preflight_check(cwd_ok, expected=expected_cwd, observed=observed_cwd)
+    elif is_windows() and expected_cwd and observed_cwd is None:
+        checks["cwd"] = _preflight_check_unavailable(
+            expected=expected_cwd,
+            observed={"cwd": None, "reasonCode": "cwd_unobservable"},
+        )
+    else:
+        checks["cwd"] = _preflight_check(False, expected=expected_cwd, observed=observed_cwd)
+
+    observed_start = str(process_start_time(run_pid) or "").strip() if run_pid > 0 else ""
+    start_required = is_windows() or bool(expected_start)
+    checks["processStartTime"] = _preflight_check(
+        bool(not start_required or (expected_start and observed_start and expected_start == observed_start)),
+        expected=expected_start or ("present" if start_required else None),
+        observed=observed_start or None,
     )
-    checks["cwd"] = _preflight_check(cwd_ok, expected=expected_cwd, observed=observed_cwd)
+
+    observed_command = _normalize_command_line(process_command(run_pid)) if run_pid > 0 else ""
+    command_required = bool(
+        is_windows()
+        and (
+            expected_command
+            or (expected_cwd and observed_cwd is None)
+        )
+    )
+    command_ok = bool(
+        not command_required
+        or (expected_command and observed_command and expected_command == observed_command)
+    )
+    checks["commandIdentity"] = _preflight_check(
+        command_ok,
+        expected=expected_command or ("present" if command_required else None),
+        observed=observed_command or None,
+    )
 
     asset_ok = bool(expected_asset.get("indexHtmlHash") or expected_asset_name)
     checks["assetIdentity"] = _preflight_check(asset_ok, expected="non-empty", observed=expected_asset)
@@ -1393,7 +1448,7 @@ def run_preflight(
         observed={"path": run_log_path, "exists": Path(run_log_path).exists() if run_log_path else False},
     )
 
-    status = "PASS" if all(item["status"] == "PASS" for item in checks.values()) else "FAIL"
+    status = "PASS" if all(item["status"] != "FAIL" for item in checks.values()) else "FAIL"
     return {
         "contract": "wolfystock_uat_runtime_preflight_v1",
         "status": status,
@@ -1484,6 +1539,14 @@ def _preflight_direct_http(*, host: str, port: int, expected_asset_name: str) ->
 def _preflight_check(ok: bool, *, expected: Any, observed: Any) -> dict[str, Any]:
     return {
         "status": "PASS" if ok else "FAIL",
+        "expected": expected,
+        "observed": observed,
+    }
+
+
+def _preflight_check_unavailable(*, expected: Any, observed: Any) -> dict[str, Any]:
+    return {
+        "status": "UNAVAILABLE",
         "expected": expected,
         "observed": observed,
     }
