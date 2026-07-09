@@ -115,6 +115,378 @@ def _valid_source(expected_sha: str = "45b6965d") -> dict[str, object]:
     }
 
 
+def _write_uat_evidence(
+    evidence_dir: Path,
+    *,
+    run_id: str,
+    source_sha: str | None = "45b6965d",
+    run_sha: str | None = "45b6965d",
+    expected_sha: str | None = None,
+    runtime_sha: str | None = None,
+    generated_at: str | None = "2026-07-05T00:00:00+00:00",
+    start_time: str | None = "2026-07-05T00:00:00+00:00",
+    pid: int = 43210,
+    port: int = 8102,
+    status: str = "PASS",
+) -> Path:
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    source: dict[str, object] = {}
+    if source_sha is not None:
+        source["gitSha"] = source_sha
+    if expected_sha is not None:
+        source["expectedGitSha"] = expected_sha
+    run: dict[str, object] = {
+        "runId": run_id,
+        "pid": pid,
+        "cwd": str(evidence_dir.resolve()),
+        "port": port,
+        "assetIdentity": {"mainJsAssetFilename": "index-CKPdXr8Q.js"},
+        "runLogPath": str(evidence_dir / f"{run_id}-runtime.log"),
+    }
+    if run_sha is not None:
+        run["sha"] = run_sha
+    if start_time is not None:
+        run["startTime"] = start_time
+    runtime: dict[str, object] = {
+        "ownedByHarness": True,
+        "processStartTime": "2026-07-05T00:00:00+00:00",
+        "command": f"{sys.executable} main.py --serve-only --port {port}",
+        "listener": {"host": "127.0.0.1", "port": port},
+    }
+    if runtime_sha is not None:
+        runtime["sha"] = runtime_sha
+    payload: dict[str, object] = {
+        "contract": "wolfystock_uat_runtime_harness_v1",
+        "status": status,
+        "source": source,
+        "run": run,
+        "runtime": runtime,
+        "frontend": {"mainJsAssetFilename": "index-CKPdXr8Q.js"},
+    }
+    if generated_at is not None:
+        payload["generatedAt"] = generated_at
+    filename = "uat-runtime-harness-evidence.json" if run_id == "legacy" else f"{run_id}-evidence.json"
+    path = evidence_dir / filename
+    run["evidencePath"] = str(path)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+def _patch_preflight_identity_ok(monkeypatch, tmp_path: Path, *, port: int = 8102) -> None:
+    command = f"{sys.executable} main.py --serve-only --port {port}"
+    monkeypatch.setattr(harness, "_probe_process", lambda _pid: harness.ProcessProbe(state="alive"))
+    monkeypatch.setattr(harness, "process_cwd", lambda _pid: str(tmp_path.resolve()))
+    monkeypatch.setattr(harness, "process_start_time", lambda _pid: "2026-07-05T00:00:00+00:00")
+    monkeypatch.setattr(harness, "process_command", lambda _pid: command)
+    monkeypatch.setattr(
+        harness,
+        "find_port_owner",
+        lambda _host, _port: harness.PortOwner(pid=43210, cwd=str(tmp_path.resolve()), command=command),
+    )
+    monkeypatch.setattr(harness, "DirectNoProxyHttpClient", lambda: _FakeClient())
+
+
+def test_latest_evidence_prefers_current_provenance_over_newer_stale_mtime(tmp_path: Path) -> None:
+    evidence_dir = tmp_path / "evidence"
+    stale = _write_uat_evidence(
+        evidence_dir,
+        run_id="uat-20260705T000000-stale",
+        source_sha="1111111",
+        run_sha="1111111",
+        generated_at="2026-07-05T00:00:00+00:00",
+        start_time="2026-07-05T00:00:00+00:00",
+    )
+    current = _write_uat_evidence(
+        evidence_dir,
+        run_id="uat-20260705T000001-current",
+        source_sha="45b6965d",
+        run_sha="45b6965d",
+        generated_at="2026-07-05T00:00:01+00:00",
+        start_time="2026-07-05T00:00:01+00:00",
+    )
+    os.utime(current, (100, 100))
+    os.utime(stale, (200, 200))
+
+    selected = harness._latest_evidence_path(evidence_dir, required_sha="45b6965d")
+
+    assert selected == current
+
+
+def test_explicit_preflight_path_wins_over_implicit_current_candidate(monkeypatch, tmp_path: Path) -> None:
+    evidence_dir = tmp_path / "evidence"
+    explicit = _write_uat_evidence(
+        evidence_dir,
+        run_id="uat-20260705T000000-explicit",
+        source_sha="1111111",
+        run_sha="1111111",
+        generated_at="2026-07-05T00:00:00+00:00",
+        start_time="2026-07-05T00:00:00+00:00",
+    )
+    _write_uat_evidence(
+        evidence_dir,
+        run_id="uat-20260705T000100-current",
+        source_sha="45b6965d",
+        run_sha="45b6965d",
+        generated_at="2026-07-05T00:01:00+00:00",
+        start_time="2026-07-05T00:01:00+00:00",
+    )
+    _patch_preflight_identity_ok(monkeypatch, evidence_dir)
+
+    result = harness.run_preflight(
+        evidence_path=explicit,
+        expected_sha="45b6965d",
+        host="127.0.0.1",
+        port=8102,
+        selection={"mode": "explicit", "selectionReason": "explicit_evidence_path"},
+    )
+
+    assert result["evidencePath"] == str(explicit)
+    assert result["selection"]["mode"] == "explicit"
+    assert result["selection"]["freshnessClassification"] == "STALE"
+    assert result["evidenceFreshness"]["classification"] == "STALE"
+
+
+def test_latest_evidence_uses_embedded_timestamp_before_mtime(tmp_path: Path) -> None:
+    evidence_dir = tmp_path / "evidence"
+    older = _write_uat_evidence(
+        evidence_dir,
+        run_id="uat-20260705T000000-older",
+        generated_at="2026-07-05T00:00:00+00:00",
+        start_time="2026-07-05T00:00:00+00:00",
+    )
+    newer = _write_uat_evidence(
+        evidence_dir,
+        run_id="uat-20260705T000100-newer",
+        generated_at="2026-07-05T00:01:00+00:00",
+        start_time="2026-07-05T00:01:00+00:00",
+    )
+    os.utime(newer, (100, 100))
+    os.utime(older, (200, 200))
+
+    selected = harness._latest_evidence_path(evidence_dir, required_sha="45b6965d")
+
+    assert selected == newer
+
+
+def test_latest_evidence_tie_breaks_deterministically_by_path(tmp_path: Path) -> None:
+    evidence_dir = tmp_path / "evidence"
+    first = _write_uat_evidence(
+        evidence_dir,
+        run_id="uat-20260705T000000-aaaa",
+        generated_at="2026-07-05T00:00:00+00:00",
+        start_time="2026-07-05T00:00:00+00:00",
+    )
+    second = _write_uat_evidence(
+        evidence_dir,
+        run_id="uat-20260705T000000-bbbb",
+        generated_at="2026-07-05T00:00:00+00:00",
+        start_time="2026-07-05T00:00:00+00:00",
+    )
+    os.utime(first, (100, 100))
+    os.utime(second, (100, 100))
+
+    selected = harness._latest_evidence_path(evidence_dir, required_sha="45b6965d")
+
+    assert selected == first
+
+
+def test_latest_evidence_rejects_invalid_json_candidate(tmp_path: Path) -> None:
+    evidence_dir = tmp_path / "evidence"
+    valid = _write_uat_evidence(
+        evidence_dir,
+        run_id="uat-20260705T000000-valid",
+        generated_at="2026-07-05T00:00:00+00:00",
+        start_time="2026-07-05T00:00:00+00:00",
+    )
+    invalid = evidence_dir / "uat-20260705T000001-invalid-evidence.json"
+    invalid.write_text("{", encoding="utf-8")
+    os.utime(valid, (100, 100))
+    os.utime(invalid, (200, 200))
+
+    selected = harness._latest_evidence_path(evidence_dir, required_sha="45b6965d")
+
+    assert selected == valid
+
+
+def test_latest_evidence_handles_malformed_timestamp_as_legacy_compatibility(tmp_path: Path) -> None:
+    evidence_dir = tmp_path / "evidence"
+    malformed_timestamp = _write_uat_evidence(
+        evidence_dir,
+        run_id="uat-20260705T000000-malformed",
+        generated_at="not-a-timestamp",
+        start_time="also-not-a-timestamp",
+    )
+    valid_timestamp = _write_uat_evidence(
+        evidence_dir,
+        run_id="uat-20260705T000001-valid",
+        generated_at="2026-07-05T00:00:01+00:00",
+        start_time="2026-07-05T00:00:01+00:00",
+    )
+    os.utime(valid_timestamp, (100, 100))
+    os.utime(malformed_timestamp, (200, 200))
+
+    selected, selection = harness._latest_evidence_path(
+        evidence_dir,
+        required_sha="45b6965d",
+        return_selection=True,
+    )
+
+    assert selected == valid_timestamp
+    assert selection["selectionReason"] == "provenance_current_embedded_timestamp"
+
+
+def test_evidence_freshness_classification_states(tmp_path: Path) -> None:
+    current = harness.load_evidence(
+        _write_uat_evidence(tmp_path / "current", run_id="uat-current", source_sha="45b6965d", run_sha="45b6965d")
+    )
+    stale = harness.load_evidence(
+        _write_uat_evidence(tmp_path / "stale", run_id="uat-stale", source_sha="1111111", run_sha="1111111")
+    )
+    unknown = harness.load_evidence(
+        _write_uat_evidence(tmp_path / "unknown", run_id="uat-unknown", source_sha=None, run_sha=None)
+    )
+    mismatch = harness.load_evidence(
+        _write_uat_evidence(tmp_path / "mismatch", run_id="uat-mismatch", source_sha="45b6965d", run_sha="1111111")
+    )
+    invalid = harness.load_evidence(
+        _write_uat_evidence(tmp_path / "invalid", run_id="uat-invalid", source_sha="not-a-sha", run_sha="not-a-sha")
+    )
+
+    assert harness._classify_evidence_freshness(current, required_sha="45b6965d")["classification"] == "CURRENT"
+    assert harness._classify_evidence_freshness(stale, required_sha="45b6965d")["classification"] == "STALE"
+    assert harness._classify_evidence_freshness(unknown, required_sha="45b6965d")["classification"] == "UNKNOWN"
+    assert harness._classify_evidence_freshness(mismatch, required_sha="45b6965d")["classification"] == "MISMATCH"
+    assert harness._classify_evidence_freshness(invalid, required_sha="45b6965d")["classification"] == "INVALID"
+
+
+def test_preflight_exposes_selection_reason_and_stale_explicit_path(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    evidence_path = _write_uat_evidence(
+        tmp_path,
+        run_id="uat-20260705T000000-stale",
+        source_sha="1111111",
+        run_sha="1111111",
+    )
+    _patch_preflight_identity_ok(monkeypatch, tmp_path)
+
+    result = harness.run_preflight(
+        evidence_path=evidence_path,
+        expected_sha="45b6965d",
+        host="127.0.0.1",
+        port=8102,
+        selection={"mode": "explicit", "selectionReason": "explicit_evidence_path"},
+    )
+
+    assert result["status"] == "FAIL"
+    assert result["evidenceFreshness"]["classification"] == "STALE"
+    assert result["evidenceFreshness"]["historicalOnly"] is True
+    assert result["selection"]["mode"] == "explicit"
+    assert result["selection"]["selectionReason"] == "explicit_evidence_path"
+
+
+def test_preflight_cli_implicit_latest_exposes_selection_reason(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    evidence_dir = tmp_path / "evidence"
+    selected = _write_uat_evidence(
+        evidence_dir,
+        run_id="uat-20260705T000001-current",
+        source_sha="45b6965d",
+        run_sha="45b6965d",
+        generated_at="2026-07-05T00:00:01+00:00",
+        start_time="2026-07-05T00:00:01+00:00",
+    )
+    _write_uat_evidence(
+        evidence_dir,
+        run_id="uat-20260705T000000-stale",
+        source_sha="1111111",
+        run_sha="1111111",
+        generated_at="2026-07-05T00:00:00+00:00",
+        start_time="2026-07-05T00:00:00+00:00",
+    )
+    _patch_preflight_identity_ok(monkeypatch, evidence_dir)
+
+    exit_code = harness.main(
+        [
+            "--preflight",
+            "--expected-sha",
+            "45b6965d",
+            "--evidence-dir",
+            str(evidence_dir),
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["evidencePath"] == str(selected)
+    assert payload["selection"]["mode"] == "implicit"
+    assert payload["selection"]["selectionReason"] == "provenance_current_embedded_timestamp"
+    assert payload["selection"]["freshnessClassification"] == "CURRENT"
+
+
+def test_stop_rejects_stale_evidence_before_termination_when_current_authority_required(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    evidence_path = _write_uat_evidence(
+        tmp_path,
+        run_id="uat-20260705T000000-stale",
+        source_sha="1111111",
+        run_sha="1111111",
+    )
+    monkeypatch.setattr(harness, "_terminate_pid", lambda _pid: pytest.fail("stale evidence must not terminate"))
+
+    result = harness.stop_runtime_from_evidence(
+        evidence_path,
+        required_sha="45b6965d",
+        enforce_current=True,
+    )
+
+    assert result["status"] == "rejected"
+    assert result["reasonCode"] == "evidence_not_current"
+    assert result["evidenceFreshness"]["classification"] == "STALE"
+
+
+def test_stop_from_evidence_cli_implicit_stale_rejects_before_identity_checks(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    evidence_dir = tmp_path / "evidence"
+    stale = _write_uat_evidence(
+        evidence_dir,
+        run_id="uat-20260705T000000-stale",
+        source_sha="1111111",
+        run_sha="1111111",
+    )
+    monkeypatch.setattr(harness, "_probe_process", lambda _pid: pytest.fail("stale evidence must not probe process"))
+    monkeypatch.setattr(harness, "_terminate_pid", lambda _pid: pytest.fail("stale evidence must not terminate"))
+
+    exit_code = harness.main(
+        [
+            "--stop-from-evidence",
+            "--expected-sha",
+            "45b6965d",
+            "--evidence-dir",
+            str(evidence_dir),
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert payload["status"] == "rejected"
+    assert payload["reasonCode"] == "evidence_not_current"
+    assert payload["evidencePath"] == str(stale)
+    assert payload["selection"]["mode"] == "implicit"
+    assert payload["evidenceFreshness"]["classification"] == "STALE"
+
+
 def test_build_uat_runtime_env_removes_proxy_vars_and_sets_isolation_flags() -> None:
     env = harness.build_uat_runtime_env(
         {

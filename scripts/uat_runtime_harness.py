@@ -86,6 +86,19 @@ class ProcessProbe:
     windows_error: int | None = None
 
 
+@dataclass(frozen=True)
+class EvidenceCandidate:
+    path: Path
+    loaded: bool
+    evidence: dict[str, Any] | None
+    freshness: dict[str, Any]
+    timestamp: datetime | None
+    run_id: str
+    mtime: float
+    legacy: bool
+    selection_reason: str
+
+
 class DirectNoProxyHttpClient:
     """Small urllib client that explicitly ignores process proxy settings."""
 
@@ -602,8 +615,39 @@ def pid_is_alive(pid: int) -> bool:
     return _probe_process(pid).state == "alive"
 
 
-def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
+def stop_runtime_from_evidence(
+    evidence_path: Path,
+    *,
+    required_sha: str | None = None,
+    enforce_current: bool = False,
+    selection: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     evidence = load_evidence(evidence_path)
+    freshness = _classify_evidence_freshness(evidence, required_sha=required_sha)
+    selection_payload = _merge_selection_payload(
+        selection,
+        path=evidence_path,
+        default_mode="explicit",
+        default_reason="explicit_evidence_path",
+        freshness=freshness,
+    )
+
+    def _finish_stop_result(result: dict[str, Any]) -> dict[str, Any]:
+        result.setdefault("evidencePath", str(evidence_path))
+        result.setdefault("selection", selection_payload)
+        result.setdefault("evidenceFreshness", freshness)
+        _append_lifecycle_event(evidence_path, result)
+        return result
+
+    if enforce_current and freshness.get("classification") != "CURRENT":
+        result = {
+            "status": "rejected",
+            "reasonCode": "evidence_not_current",
+            "evidencePath": str(evidence_path),
+            "selection": selection_payload,
+            "evidenceFreshness": freshness,
+        }
+        return _finish_stop_result(result)
     run = evidence.get("run") if isinstance(evidence.get("run"), Mapping) else {}
     runtime = evidence.get("runtime") if isinstance(evidence.get("runtime"), Mapping) else {}
     pid = _safe_int(run.get("pid"))
@@ -611,8 +655,7 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
     expected_command = _normalize_command_line(runtime.get("command"))
     if pid <= 0:
         result = {"status": "rejected", "reasonCode": "pid_missing", "pid": pid}
-        _append_lifecycle_event(evidence_path, result)
-        return result
+        return _finish_stop_result(result)
 
     if runtime.get("ownedByHarness") is not True:
         result = {
@@ -620,8 +663,7 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
             "reasonCode": "not_harness_owned",
             "pid": pid,
         }
-        _append_lifecycle_event(evidence_path, result)
-        return result
+        return _finish_stop_result(result)
 
     probe = _probe_process(pid)
     if probe.state == "absent":
@@ -632,8 +674,7 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
             "processState": probe.state,
             "windowsError": probe.windows_error,
         }
-        _append_lifecycle_event(evidence_path, result)
-        return result
+        return _finish_stop_result(result)
     if probe.state == "access_denied":
         result = {
             "status": "rejected",
@@ -642,8 +683,7 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
             "processState": probe.state,
             "windowsError": probe.windows_error,
         }
-        _append_lifecycle_event(evidence_path, result)
-        return result
+        return _finish_stop_result(result)
     if probe.state != "alive":
         result = {
             "status": "rejected",
@@ -652,8 +692,7 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
             "processState": probe.state,
             "windowsError": probe.windows_error,
         }
-        _append_lifecycle_event(evidence_path, result)
-        return result
+        return _finish_stop_result(result)
 
     expected_start = str(runtime.get("processStartTime") or "").strip()
     observed_start = str(process_start_time(pid) or "").strip()
@@ -664,18 +703,15 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
             "pid": pid,
             "missingIdentity": ["processStartTime"],
         }
-        _append_lifecycle_event(evidence_path, result)
-        return result
+        return _finish_stop_result(result)
     if is_windows() and expected_start and not observed_start:
         reprobe = _probe_process(pid)
         if reprobe.state == "absent":
             result = {"status": "absent", "reasonCode": "runtime_already_absent", "pid": pid}
-            _append_lifecycle_event(evidence_path, result)
-            return result
+            return _finish_stop_result(result)
         if reprobe.state == "access_denied":
             result = {"status": "rejected", "reasonCode": "access_denied", "pid": pid}
-            _append_lifecycle_event(evidence_path, result)
-            return result
+            return _finish_stop_result(result)
         result = {
             "status": "rejected",
             "reasonCode": "ownership_unverifiable",
@@ -683,8 +719,7 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
             "expectedProcessStartTime": expected_start,
             "observedProcessStartTime": observed_start or None,
         }
-        _append_lifecycle_event(evidence_path, result)
-        return result
+        return _finish_stop_result(result)
     if expected_start and observed_start and expected_start != observed_start:
         result = {
             "status": "rejected",
@@ -693,8 +728,7 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
             "expectedProcessStartTime": expected_start,
             "observedProcessStartTime": observed_start,
         }
-        _append_lifecycle_event(evidence_path, result)
-        return result
+        return _finish_stop_result(result)
 
     observed_cwd = process_cwd(pid)
     observed_command = _normalize_command_line(process_command(pid))
@@ -707,8 +741,7 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
                 "expectedCwd": expected_cwd,
                 "observedCwd": observed_cwd,
             }
-            _append_lifecycle_event(evidence_path, result)
-            return result
+            return _finish_stop_result(result)
         if not observed_cwd:
             if not is_windows():
                 result = {
@@ -718,8 +751,7 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
                     "expectedCwd": expected_cwd,
                     "observedCwd": observed_cwd,
                 }
-                _append_lifecycle_event(evidence_path, result)
-                return result
+                return _finish_stop_result(result)
             if not expected_command or not observed_command:
                 result = {
                     "status": "rejected",
@@ -730,8 +762,7 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
                     "expectedCommand": expected_command or None,
                     "observedCommand": observed_command or None,
                 }
-                _append_lifecycle_event(evidence_path, result)
-                return result
+                return _finish_stop_result(result)
             if expected_command != observed_command:
                 result = {
                     "status": "rejected",
@@ -740,8 +771,7 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
                     "expectedCommand": expected_command,
                     "observedCommand": observed_command,
                 }
-                _append_lifecycle_event(evidence_path, result)
-                return result
+                return _finish_stop_result(result)
     elif is_windows() and expected_command and observed_command and expected_command != observed_command:
         result = {
             "status": "rejected",
@@ -750,8 +780,7 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
             "expectedCommand": expected_command,
             "observedCommand": observed_command,
         }
-        _append_lifecycle_event(evidence_path, result)
-        return result
+        return _finish_stop_result(result)
 
     listener = runtime.get("listener") if isinstance(runtime.get("listener"), Mapping) else {}
     expected_port = _safe_int(listener.get("port") or run.get("port"))
@@ -766,8 +795,7 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
                 "expectedPort": expected_port,
                 "observedPortOwner": owner.__dict__,
             }
-            _append_lifecycle_event(evidence_path, result)
-            return result
+            return _finish_stop_result(result)
         if owner is None:
             result = {
                 "status": "rejected",
@@ -775,19 +803,16 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
                 "pid": pid,
                 "expectedPort": expected_port,
             }
-            _append_lifecycle_event(evidence_path, result)
-            return result
+            return _finish_stop_result(result)
 
     try:
         _terminate_pid(pid)
     except ProcessLookupError:
         result = {"status": "absent", "reasonCode": "runtime_already_absent", "pid": pid}
-        _append_lifecycle_event(evidence_path, result)
-        return result
+        return _finish_stop_result(result)
     except PermissionError:
         result = {"status": "rejected", "reasonCode": "access_denied", "pid": pid}
-        _append_lifecycle_event(evidence_path, result)
-        return result
+        return _finish_stop_result(result)
     except OSError as exc:
         result = {
             "status": "rejected",
@@ -796,11 +821,9 @@ def stop_runtime_from_evidence(evidence_path: Path) -> dict[str, Any]:
             "errorType": type(exc).__name__,
             "windowsError": getattr(exc, "winerror", None),
         }
-        _append_lifecycle_event(evidence_path, result)
-        return result
+        return _finish_stop_result(result)
     result = {"status": "stopped", "reasonCode": "task_owned_pid_terminated", "pid": pid, "cwd": observed_cwd}
-    _append_lifecycle_event(evidence_path, result)
-    return result
+    return _finish_stop_result(result)
 
 
 def wait_for_readiness(client: DirectNoProxyHttpClient, base_url: str, *, timeout_seconds: float) -> dict[str, Any]:
@@ -921,6 +944,214 @@ def load_evidence(evidence_path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("evidence_root_not_object")
     return payload
+
+
+def _evidence_sha_fields(evidence: Mapping[str, Any]) -> dict[str, str | None]:
+    source = evidence.get("source") if isinstance(evidence.get("source"), Mapping) else {}
+    run = evidence.get("run") if isinstance(evidence.get("run"), Mapping) else {}
+    runtime = evidence.get("runtime") if isinstance(evidence.get("runtime"), Mapping) else {}
+    return {
+        "sourceGitSha": _clean_optional_string(source.get("gitSha")),
+        "sourceExpectedGitSha": _clean_optional_string(source.get("expectedGitSha")),
+        "runSha": _clean_optional_string(run.get("sha")),
+        "runtimeSha": _clean_optional_string(runtime.get("sha")),
+    }
+
+
+def _classify_evidence_freshness(evidence: Mapping[str, Any], *, required_sha: str | None) -> dict[str, Any]:
+    sha_fields = _evidence_sha_fields(evidence)
+    present = {key: value for key, value in sha_fields.items() if value}
+    malformed = {key: value for key, value in present.items() if not _looks_like_git_sha(value)}
+    required = _clean_optional_string(required_sha)
+    run = evidence.get("run") if isinstance(evidence.get("run"), Mapping) else {}
+    run_id = _clean_optional_string(run.get("runId"))
+
+    result: dict[str, Any] = {
+        "classification": "UNKNOWN",
+        "reasonCode": "sha_provenance_missing",
+        "historicalOnly": False,
+        "requiredSha": required,
+        "runId": run_id,
+        "sha": sha_fields,
+    }
+    if malformed:
+        result.update(
+            {
+                "classification": "INVALID",
+                "reasonCode": "sha_provenance_malformed",
+                "malformedFields": malformed,
+                "historicalOnly": True,
+            }
+        )
+        return result
+
+    authoritative_values = {
+        value
+        for key, value in present.items()
+        if key in {"sourceGitSha", "sourceExpectedGitSha", "runSha", "runtimeSha"} and value
+    }
+    if len(authoritative_values) > 1:
+        result.update(
+            {
+                "classification": "MISMATCH",
+                "reasonCode": "sha_provenance_conflict",
+                "historicalOnly": True,
+            }
+        )
+        return result
+    if not authoritative_values:
+        return result
+
+    evidence_sha = next(iter(authoritative_values))
+    result["evidenceSha"] = evidence_sha
+    if not required:
+        result.update({"classification": "UNKNOWN", "reasonCode": "required_sha_missing"})
+        return result
+    if evidence_sha == required:
+        result.update({"classification": "CURRENT", "reasonCode": "required_sha_matched"})
+        return result
+    result.update(
+        {
+            "classification": "STALE",
+            "reasonCode": "required_sha_not_matched",
+            "historicalOnly": True,
+        }
+    )
+    return result
+
+
+def _clean_optional_string(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+def _looks_like_git_sha(value: str) -> bool:
+    return 7 <= len(value) <= 64 and all(ch in "0123456789abcdefABCDEF" for ch in value)
+
+
+def _parse_evidence_timestamp(evidence: Mapping[str, Any]) -> tuple[datetime | None, str]:
+    run = evidence.get("run") if isinstance(evidence.get("run"), Mapping) else {}
+    for field_name, raw in (("generatedAt", evidence.get("generatedAt")), ("run.startTime", run.get("startTime"))):
+        value = _clean_optional_string(raw)
+        if not value:
+            continue
+        try:
+            normalized = value.replace("Z", "+00:00")
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            return None, f"malformed_{field_name.replace('.', '_')}"
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc), field_name
+    return None, "timestamp_missing"
+
+
+def _selection_payload(
+    *,
+    path: Path,
+    mode: str,
+    selection_reason: str,
+    freshness: Mapping[str, Any] | None = None,
+    timestamp: datetime | None = None,
+) -> dict[str, Any]:
+    return {
+        "mode": mode,
+        "selectionReason": selection_reason,
+        "evidencePath": str(path),
+        "freshnessClassification": (freshness or {}).get("classification"),
+        "freshnessReasonCode": (freshness or {}).get("reasonCode"),
+        "runId": (freshness or {}).get("runId"),
+        "requiredSha": (freshness or {}).get("requiredSha"),
+        "evidenceSha": (freshness or {}).get("evidenceSha"),
+        "timestamp": timestamp.isoformat() if timestamp else None,
+        "historicalOnly": bool((freshness or {}).get("historicalOnly")),
+    }
+
+
+def _merge_selection_payload(
+    selection: Mapping[str, Any] | None,
+    *,
+    path: Path,
+    default_mode: str,
+    default_reason: str,
+    freshness: Mapping[str, Any],
+    timestamp: datetime | None = None,
+) -> dict[str, Any]:
+    payload = _selection_payload(
+        path=path,
+        mode=str((selection or {}).get("mode") or default_mode),
+        selection_reason=str((selection or {}).get("selectionReason") or default_reason),
+        freshness=freshness,
+        timestamp=timestamp,
+    )
+    for key, value in (selection or {}).items():
+        if value is not None:
+            payload[key] = value
+    return payload
+
+
+def _candidate_selection_bucket(candidate: EvidenceCandidate) -> int:
+    classification = str(candidate.freshness.get("classification") or "")
+    if not candidate.loaded or classification == "INVALID":
+        return 0
+    if classification == "CURRENT":
+        return 5
+    if classification == "STALE":
+        return 4
+    if classification == "UNKNOWN":
+        return 3 if candidate.timestamp else 2
+    if classification == "MISMATCH":
+        return 1
+    return 1
+
+
+def _build_evidence_candidate(path: Path, *, required_sha: str | None) -> EvidenceCandidate:
+    legacy = path.name == "uat-runtime-harness-evidence.json"
+    try:
+        evidence = load_evidence(path)
+        freshness = _classify_evidence_freshness(evidence, required_sha=required_sha)
+        timestamp, timestamp_reason = _parse_evidence_timestamp(evidence)
+        run = evidence.get("run") if isinstance(evidence.get("run"), Mapping) else {}
+        run_id = str(run.get("runId") or "")
+        if freshness["classification"] == "INVALID":
+            reason = str(freshness.get("reasonCode") or "invalid_provenance")
+        elif timestamp is not None:
+            reason = f"provenance_{freshness['classification'].lower()}_embedded_timestamp"
+        elif not legacy:
+            reason = f"provenance_{freshness['classification'].lower()}_filename"
+        else:
+            reason = f"legacy_fallback_{timestamp_reason}"
+        return EvidenceCandidate(
+            path=path,
+            loaded=True,
+            evidence=evidence,
+            freshness=freshness,
+            timestamp=timestamp,
+            run_id=run_id,
+            mtime=path.stat().st_mtime,
+            legacy=legacy,
+            selection_reason=reason,
+        )
+    except Exception as exc:
+        freshness = {
+            "classification": "INVALID",
+            "reasonCode": "evidence_unreadable",
+            "historicalOnly": True,
+            "requiredSha": _clean_optional_string(required_sha),
+            "errorType": type(exc).__name__,
+            "sha": {},
+        }
+        return EvidenceCandidate(
+            path=path,
+            loaded=False,
+            evidence=None,
+            freshness=freshness,
+            timestamp=None,
+            run_id="",
+            mtime=path.stat().st_mtime if path.exists() else 0.0,
+            legacy=legacy,
+            selection_reason="invalid_unreadable",
+        )
 
 
 def build_run_identity(
@@ -1268,13 +1499,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         evidence_dir = repo_root / evidence_dir
 
     if args.preflight:
-        evidence_path = args.evidence_path or _latest_evidence_path(evidence_dir)
+        if args.evidence_path:
+            evidence_path = args.evidence_path
+            selection = _selection_payload(
+                path=evidence_path,
+                mode="explicit",
+                selection_reason="explicit_evidence_path",
+            )
+        else:
+            evidence_path, selection = _latest_evidence_path(
+                evidence_dir,
+                required_sha=args.expected_sha,
+                return_selection=True,
+            )
         try:
             result = run_preflight(
                 evidence_path=evidence_path,
                 expected_sha=args.expected_sha,
                 host=args.host,
                 port=args.port,
+                selection=selection,
             )
         except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
             result = _preflight_error_result(evidence_path=evidence_path, error=exc)
@@ -1283,9 +1527,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_OK if result.get("status") == "PASS" else EXIT_FAILED
 
     if args.stop_from_evidence:
-        evidence_path = args.evidence_path or _latest_evidence_path(evidence_dir)
+        implicit_stop = args.evidence_path is None
+        if args.evidence_path:
+            evidence_path = args.evidence_path
+            selection = _selection_payload(
+                path=evidence_path,
+                mode="explicit",
+                selection_reason="explicit_evidence_path",
+            )
+        else:
+            evidence_path, selection = _latest_evidence_path(
+                evidence_dir,
+                required_sha=args.expected_sha,
+                return_selection=True,
+            )
         try:
-            result = stop_runtime_from_evidence(evidence_path)
+            result = stop_runtime_from_evidence(
+                evidence_path,
+                required_sha=args.expected_sha,
+                enforce_current=implicit_stop,
+                selection=selection,
+            )
         except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
             result = {
                 "status": "rejected",
@@ -1343,6 +1605,7 @@ def run_preflight(
     expected_sha: str | None,
     host: str,
     port: int | None = None,
+    selection: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     evidence = load_evidence(evidence_path)
     run = evidence.get("run") if isinstance(evidence.get("run"), Mapping) else {}
@@ -1357,6 +1620,7 @@ def run_preflight(
     expected_asset = dict(run.get("assetIdentity") if isinstance(run.get("assetIdentity"), Mapping) else frontend)
     expected_asset_name = str(expected_asset.get("mainJsAssetFilename") or frontend.get("mainJsAssetFilename") or "")
 
+    freshness = _classify_evidence_freshness(evidence, required_sha=expected_sha)
     checks: dict[str, dict[str, Any]] = {}
     evidence_status = str(evidence.get("status") or "")
     checks["evidenceStatus"] = _preflight_check(evidence_status == "PASS", expected="PASS", observed=evidence_status)
@@ -1367,6 +1631,11 @@ def run_preflight(
         bool(observed_sha and (not sha_expected or observed_sha == sha_expected)),
         expected=sha_expected,
         observed=observed_sha,
+    )
+    checks["evidenceFreshness"] = _preflight_check(
+        freshness.get("classification") == "CURRENT" if expected_sha else freshness.get("classification") != "INVALID",
+        expected="CURRENT" if expected_sha else "readable_non_invalid_provenance",
+        observed=freshness,
     )
 
     probe = _probe_process(run_pid)
@@ -1454,6 +1723,14 @@ def run_preflight(
         "status": status,
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "evidencePath": str(evidence_path),
+        "selection": _merge_selection_payload(
+            selection,
+            path=evidence_path,
+            default_mode="explicit",
+            default_reason="explicit_evidence_path",
+            freshness=freshness,
+        ),
+        "evidenceFreshness": freshness,
         "host": host,
         "port": run_port,
         "run": {
@@ -1603,13 +1880,78 @@ def _safe_int(value: Any) -> int:
         return 0
 
 
-def _latest_evidence_path(evidence_dir: Path) -> Path:
-    matches = sorted(evidence_dir.glob("uat-*-evidence.json"), key=lambda item: item.stat().st_mtime, reverse=True)
-    if matches:
-        return matches[0]
+def _latest_evidence_path(
+    evidence_dir: Path,
+    *,
+    required_sha: str | None = None,
+    requested_run_id: str | None = None,
+    return_selection: bool = False,
+) -> Path | tuple[Path, dict[str, Any]]:
+    candidates: list[Path] = sorted(evidence_dir.glob("uat-*-evidence.json"), key=lambda item: item.name)
     legacy = evidence_dir / "uat-runtime-harness-evidence.json"
     if legacy.exists():
-        return legacy
+        candidates.append(legacy)
+    if candidates:
+        ranked = [_build_evidence_candidate(path, required_sha=required_sha) for path in candidates]
+        requested = _clean_optional_string(requested_run_id)
+        if requested:
+            exact = [candidate for candidate in ranked if candidate.loaded and candidate.run_id == requested]
+            if exact:
+                selected = sorted(
+                    exact,
+                    key=lambda candidate: (
+                        -_candidate_selection_bucket(candidate),
+                        -(candidate.timestamp.timestamp() if candidate.timestamp else float("-inf")),
+                        candidate.path.name,
+                    ),
+                )[0]
+                payload = _selection_payload(
+                    path=selected.path,
+                    mode="implicit",
+                    selection_reason="requested_run_id_match",
+                    freshness=selected.freshness,
+                    timestamp=selected.timestamp,
+                )
+                return (selected.path, payload) if return_selection else selected.path
+
+        selected = sorted(
+            ranked,
+            key=lambda candidate: (
+                -_candidate_selection_bucket(candidate),
+                -(candidate.timestamp.timestamp() if candidate.timestamp else float("-inf")),
+                candidate.legacy,
+                candidate.path.name,
+                -candidate.mtime,
+            ),
+        )[0]
+        if selected.loaded and selected.freshness.get("classification") != "INVALID":
+            payload = _selection_payload(
+                path=selected.path,
+                mode="implicit",
+                selection_reason=selected.selection_reason,
+                freshness=selected.freshness,
+                timestamp=selected.timestamp,
+            )
+            return (selected.path, payload) if return_selection else selected.path
+        valid = [candidate for candidate in ranked if candidate.loaded and candidate.freshness.get("classification") != "INVALID"]
+        if valid:
+            fallback = sorted(valid, key=lambda candidate: (candidate.path.name, -candidate.mtime))[0]
+            payload = _selection_payload(
+                path=fallback.path,
+                mode="implicit",
+                selection_reason="valid_legacy_compatibility_fallback",
+                freshness=fallback.freshness,
+                timestamp=fallback.timestamp,
+            )
+            return (fallback.path, payload) if return_selection else fallback.path
+        payload = _selection_payload(
+            path=selected.path,
+            mode="implicit",
+            selection_reason="no_valid_evidence_candidate",
+            freshness=selected.freshness,
+            timestamp=selected.timestamp,
+        )
+        return (selected.path, payload) if return_selection else selected.path
     raise FileNotFoundError(f"no UAT runtime evidence JSON found under {evidence_dir}")
 
 
