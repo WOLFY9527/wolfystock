@@ -113,17 +113,23 @@ function getReasonLabels(readiness: BacktestExecutionReadiness | null | undefine
 }
 
 function toneClasses(tone: ReadinessTone): string {
-  if (tone === 'ready') return 'border-emerald-400/20 bg-emerald-400/10 text-emerald-50';
-  if (tone === 'warning') return 'border-amber-400/20 bg-amber-400/10 text-amber-50';
-  if (tone === 'blocked') return 'border-rose-400/20 bg-rose-400/10 text-rose-50';
-  return 'border-white/10 bg-white/[0.03] text-white/72';
+  if (tone === 'ready') {
+    return 'border-[color:var(--state-success-border)] bg-[var(--state-success-bg)] text-[color:var(--state-success-text)]';
+  }
+  if (tone === 'warning') {
+    return 'border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] text-[color:var(--state-warning-text)]';
+  }
+  if (tone === 'blocked') {
+    return 'border-[color:var(--state-danger-border)] bg-[var(--state-danger-bg)] text-[color:var(--state-danger-text)]';
+  }
+  return 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-text-primary)]';
 }
 
 function ToneIcon({ tone }: { tone: ReadinessTone }) {
-  if (tone === 'ready') return <CheckCircle2 className="size-4 text-emerald-300" />;
-  if (tone === 'warning') return <AlertTriangle className="size-4 text-amber-300" />;
-  if (tone === 'blocked') return <XCircle className="size-4 text-rose-300" />;
-  return <CircleDashed className="size-4 text-white/42" />;
+  if (tone === 'ready') return <CheckCircle2 className="size-4 text-[color:var(--state-success-text)]" />;
+  if (tone === 'warning') return <AlertTriangle className="size-4 text-[color:var(--state-warning-text)]" />;
+  if (tone === 'blocked') return <XCircle className="size-4 text-[color:var(--state-danger-text)]" />;
+  return <CircleDashed className="size-4 text-[color:var(--wolfy-text-muted)]" />;
 }
 
 function getHistoricalStatusLabel(readiness: BacktestHistoricalOhlcvReadiness | null | undefined, language: BacktestLanguage): string {
@@ -231,15 +237,15 @@ const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelP
         <ToneIcon tone={stateInfo.tone} />
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">{title}</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{title}</p>
             {hasReadiness ? (
-              <span className="rounded-full border border-current/20 px-2 py-0.5 text-[11px] font-semibold">
+              <span className="rounded-full border border-current/25 bg-[var(--wolfy-surface-rail)] px-2 py-0.5 text-[11px] font-semibold text-current">
                 {stateInfo[language]}
               </span>
             ) : null}
           </div>
-          <h3 className="mt-2 text-sm font-semibold">{subtitle}</h3>
-          <p className="mt-2 text-sm leading-6 opacity-[0.78]">{body}</p>
+          <h3 className="mt-2 text-sm font-semibold text-current">{subtitle}</h3>
+          <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{body}</p>
           <ProductReadModelStatusStrip
             model={productReadModel}
             language={language}
@@ -249,9 +255,9 @@ const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelP
           />
 
           <div className="mt-3 grid gap-2 text-xs md:grid-cols-3">
-            <div className="rounded-lg border border-current/10 bg-black/10 px-3 py-2">
-              <p className="opacity-55">{language === 'en' ? 'Result view' : '结果结构'}</p>
-              <p className="mt-1 font-semibold">
+            <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-3 py-2">
+              <p className="text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Result view' : '结果结构'}</p>
+              <p className="mt-1 font-semibold text-[color:var(--wolfy-text-primary)]">
                 {resultAvailable
                   ? (language === 'en' ? 'Ready' : '可用')
                   : samplesInitializing
@@ -259,14 +265,14 @@ const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelP
                     : (language === 'en' ? 'Not ready' : '不可用')}
               </p>
             </div>
-            <div className="rounded-lg border border-current/10 bg-black/10 px-3 py-2">
-              <p className="opacity-55">{language === 'en' ? 'Benchmark-relative metrics' : '基准相对指标'}</p>
-              <p className="mt-1 font-semibold">{benchmarkMissing ? (language === 'en' ? 'Not ready' : '不可用') : (language === 'en' ? 'As returned' : '按回执展示')}</p>
+            <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-3 py-2">
+              <p className="text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Benchmark-relative metrics' : '基准相对指标'}</p>
+              <p className="mt-1 font-semibold text-[color:var(--wolfy-text-primary)]">{benchmarkMissing ? (language === 'en' ? 'Not ready' : '不可用') : (language === 'en' ? 'As returned' : '按回执展示')}</p>
             </div>
-            <div className="rounded-lg border border-current/10 bg-black/10 px-3 py-2">
-              <p className="opacity-55">{language === 'en' ? 'Boundary' : '边界'}</p>
-              <p className="mt-1 flex items-center gap-1 font-semibold">
-                <ShieldCheck className="size-3.5" />
+            <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-3 py-2">
+              <p className="text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Boundary' : '边界'}</p>
+              <p className="mt-1 flex items-center gap-1 font-semibold text-[color:var(--wolfy-text-primary)]">
+                <ShieldCheck className="size-3.5 text-[color:var(--wolfy-text-muted)]" />
                 {language === 'en' ? 'Research only' : '仅供研究'}
               </p>
             </div>
@@ -276,41 +282,41 @@ const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelP
             <div
               data-testid={`${testId}-historical-ohlcv`}
               data-historical-ohlcv-status={normalizeToken(historicalOhlcvReadiness?.status) || 'unknown'}
-              className="mt-3 rounded-lg border border-current/10 bg-black/10 px-3 py-3 text-xs"
+              className="mt-3 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-3 py-3 text-xs text-[color:var(--wolfy-text-primary)]"
             >
               <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-                <p className="font-semibold">{language === 'en' ? 'Historical data readiness' : '历史数据就绪度'}</p>
-                <span className="rounded-full border border-current/20 px-2 py-0.5 font-semibold">
+                <p className="font-semibold text-[color:var(--wolfy-text-primary)]">{language === 'en' ? 'Historical data readiness' : '历史数据就绪度'}</p>
+                <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-2 py-0.5 font-semibold text-[color:var(--wolfy-text-secondary)]">
                   {getHistoricalStatusLabel(historicalOhlcvReadiness, language)}
                 </span>
               </div>
               <div className="mt-3 grid gap-2 md:grid-cols-2">
                 <p>
-                  <span className="opacity-55">{language === 'en' ? 'Bars' : 'Bars'}: </span>
-                  <span className="font-semibold">
+                  <span className="text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Bars' : 'Bars'}: </span>
+                  <span className="font-semibold text-[color:var(--wolfy-text-primary)]">
                     {historicalOhlcvReadiness?.availableBarCount ?? 0}/{historicalOhlcvReadiness?.requiredBarCount ?? 0}
                   </span>
                 </p>
                 <p>
-                  <span className="opacity-55">{language === 'en' ? 'Missing classes' : '缺失数据'}: </span>
-                  <span className="font-semibold">{getHistoricalDataClassLabels(historicalOhlcvReadiness, language)}</span>
+                  <span className="text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Missing classes' : '缺失数据'}: </span>
+                  <span className="font-semibold text-[color:var(--wolfy-text-primary)]">{getHistoricalDataClassLabels(historicalOhlcvReadiness, language)}</span>
                 </p>
                 <p>
-                  <span className="opacity-55">{language === 'en' ? 'Adjusted prices' : '复权价格'}: </span>
-                  <span className="font-semibold">{adjustedRequirement?.required ? (adjustedRequirement.state || 'unknown') : (language === 'en' ? 'Not required' : '未要求')}</span>
+                  <span className="text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Adjusted prices' : '复权价格'}: </span>
+                  <span className="font-semibold text-[color:var(--wolfy-text-primary)]">{adjustedRequirement?.required ? (adjustedRequirement.state || 'unknown') : (language === 'en' ? 'Not required' : '未要求')}</span>
                 </p>
                 <p>
-                  <span className="opacity-55">{language === 'en' ? 'Benchmark' : '基准'}: </span>
-                  <span className="font-semibold">{benchmarkReadiness?.required ? (benchmarkReadiness.status || 'unknown') : (language === 'en' ? 'Not requested' : '未请求')}</span>
+                  <span className="text-[color:var(--wolfy-text-muted)]">{language === 'en' ? 'Benchmark' : '基准'}: </span>
+                  <span className="font-semibold text-[color:var(--wolfy-text-primary)]">{benchmarkReadiness?.required ? (benchmarkReadiness.status || 'unknown') : (language === 'en' ? 'Not requested' : '未请求')}</span>
                 </p>
               </div>
-              <p className="mt-3 leading-5 opacity-80">
+              <p className="mt-3 leading-5 text-[color:var(--wolfy-text-secondary)]">
                 {sanitizeHistoricalReadinessText(historicalOhlcvReadiness?.consumerSafeMessage, language) || (historicalExecutable
                   ? (language === 'en' ? 'Historical price data coverage is available for this request.' : '当前请求具备历史价格数据覆盖。')
                   : (language === 'en' ? 'Historical price data readiness blocks execution.' : '历史价格数据就绪度阻止执行。'))}
               </p>
               {historicalOhlcvReadiness?.operatorNextAction ? (
-                <p className="mt-2 leading-5 opacity-70">
+                <p className="mt-2 leading-5 text-[color:var(--wolfy-text-muted)]">
                   {language === 'en' ? 'Next action: ' : '下一步：'}{sanitizeHistoricalReadinessText(historicalOhlcvReadiness.operatorNextAction, language)}
                 </p>
               ) : null}
@@ -320,7 +326,7 @@ const BacktestExecutionReadinessPanel: React.FC<BacktestExecutionReadinessPanelP
           {reasonLabels.length ? (
             <ul className="mt-3 grid gap-2 text-xs leading-5">
               {reasonLabels.map((label) => (
-                <li key={label} className="rounded-lg border border-current/10 bg-black/10 px-3 py-2">
+                <li key={label} className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-3 py-2 text-[color:var(--wolfy-text-secondary)]">
                   {label}
                 </li>
               ))}

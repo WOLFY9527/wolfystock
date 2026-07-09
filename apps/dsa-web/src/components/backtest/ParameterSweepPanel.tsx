@@ -37,8 +37,8 @@ type PanelState = {
 };
 
 const containerClass = 'rounded-xl border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-4';
-const fieldClass = 'w-full min-w-0 min-h-[42px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-white outline-none transition-all focus:border-[color:var(--wolfy-accent-focus)] focus:bg-white/[0.05]';
-const labelClass = 'text-[10px] font-bold uppercase tracking-widest text-white/40';
+const fieldClass = 'w-full min-w-0 min-h-[42px] rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2 text-sm leading-6 text-[color:var(--wolfy-text-primary)] outline-none transition-all focus:border-[color:var(--wolfy-accent-focus)] focus:bg-[var(--surface)]';
+const labelClass = 'text-[10px] font-bold uppercase tracking-widest text-[color:var(--wolfy-text-muted)]';
 const primaryButtonClass = 'inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-[color:var(--theme-button-primary-border)] bg-[var(--theme-button-primary-bg)] px-4 py-2 text-sm font-semibold text-[color:var(--theme-button-primary-text)] transition-colors hover:bg-[var(--sage-deep)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--wolfy-accent-focus)] disabled:cursor-not-allowed disabled:opacity-45';
 const UNKNOWN_ZH = '待补证';
 const UNKNOWN_EN = 'unknown';
@@ -397,9 +397,9 @@ function getStateTone(status: PanelStatus): 'success' | 'warning' | 'neutral' {
 
 function stateBadgeClass(status: PanelStatus): string {
   const tone = getStateTone(status);
-  if (tone === 'success') return 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100';
-  if (tone === 'warning') return 'border-amber-400/25 bg-amber-400/10 text-amber-100';
-  return 'border-white/10 bg-white/[0.03] text-white/58';
+  if (tone === 'success') return 'border-[color:var(--state-success-border)] bg-[var(--state-success-bg)] text-[color:var(--state-success-text)]';
+  if (tone === 'warning') return 'border-[color:var(--state-warning-border)] bg-[var(--state-warning-bg)] text-[color:var(--state-warning-text)]';
+  return 'border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] text-[color:var(--wolfy-text-secondary)]';
 }
 
 function getInitialState(): PanelState {
@@ -637,14 +637,14 @@ const ParameterSweepPanel: React.FC<ParameterSweepPanelProps> = ({
   };
 
   const renderRow = (label: string, value: React.ReactNode) => (
-    <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+    <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] p-3">
       <p className={labelClass}>{label}</p>
-      <div className="mt-2 text-sm text-white/78">{value}</div>
+      <div className="mt-2 text-sm text-[color:var(--wolfy-text-primary)]">{value}</div>
     </div>
   );
 
   const renderSummaryChip = (label: string, value: unknown) => (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/68">
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-3 py-1 text-xs text-[color:var(--wolfy-text-secondary)]">
       <span>{label}</span>
       <span>{String(value ?? '--')}</span>
     </span>
@@ -656,10 +656,10 @@ const ParameterSweepPanel: React.FC<ParameterSweepPanelProps> = ({
         <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
             <p className={labelClass}>{language === 'en' ? 'Parameter sweep' : '参数扫描'}</p>
-            <h3 className="mt-2 text-lg font-semibold text-white">
+            <h3 className="mt-2 text-lg font-semibold text-[color:var(--wolfy-text-primary)]">
               {language === 'en' ? 'Bounded supplied-input sweep' : '有界的输入驱动参数扫描'}
             </h3>
-            <p className="mt-1 text-sm text-white/52">
+            <p className="mt-1 text-sm text-[color:var(--wolfy-text-secondary)]">
               {language === 'en'
                 ? 'Research-only, diagnostic-only, no stored run identity, no external hydration.'
                 : '仅用于研究与诊断，不生成存储运行身份，不执行外部补全。'}
@@ -715,16 +715,16 @@ const ParameterSweepPanel: React.FC<ParameterSweepPanelProps> = ({
             </label>
             {renderRow(language === 'en' ? 'Sweep basis' : '扫描基准', (
               <div className="flex flex-wrap gap-2">
-                <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-white/62">{code || '--'}</span>
-                <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-white/62">{startDate || '--'}</span>
-                <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-white/62">{endDate || '--'}</span>
+                <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-1 text-xs text-[color:var(--wolfy-text-secondary)]">{code || '--'}</span>
+                <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-1 text-xs text-[color:var(--wolfy-text-secondary)]">{startDate || '--'}</span>
+                <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-1 text-xs text-[color:var(--wolfy-text-secondary)]">{endDate || '--'}</span>
               </div>
             ))}
             {renderRow(language === 'en' ? 'Execution guard' : '执行护栏', (
               <div className="flex flex-wrap gap-2">
-                <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-white/62">{language === 'en' ? 'confirmed' : '已确认'}</span>
-                <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-white/62">{language === 'en' ? 'research only' : '研究仅'}</span>
-                <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-white/62">{parseStale ? (language === 'en' ? 'stale' : '已过期') : (language === 'en' ? 'fresh' : '最新')}</span>
+                <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-1 text-xs text-[color:var(--wolfy-text-secondary)]">{language === 'en' ? 'confirmed' : '已确认'}</span>
+                <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-1 text-xs text-[color:var(--wolfy-text-secondary)]">{language === 'en' ? 'research only' : '研究仅'}</span>
+                <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-1 text-xs text-[color:var(--wolfy-text-secondary)]">{parseStale ? (language === 'en' ? 'stale' : '已过期') : (language === 'en' ? 'fresh' : '最新')}</span>
               </div>
             ))}
           </div>
@@ -786,13 +786,13 @@ const ParameterSweepPanel: React.FC<ParameterSweepPanelProps> = ({
               {renderRow(language === 'en' ? 'Lineage state' : '谱系状态', formatLineageState(lineage.readinessState, language))}
               {renderRow(language === 'en' ? 'Bar boundary' : 'bar 边界', (
                 <div className="flex flex-wrap gap-2">
-                  <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-white/62">
+                  <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-1 text-xs text-[color:var(--wolfy-text-secondary)]">
                     {language === 'en' ? 'supplied bars' : '已输入 bars'}: {barBoundary.suppliedBarsToRunner === false ? 'false' : 'true'}
                   </span>
-                  <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-white/62">
+                  <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-1 text-xs text-[color:var(--wolfy-text-secondary)]">
                     {language === 'en' ? 'hydration calls' : '补全调用'}: {barBoundary.providerCallsExecuted === false ? 'false' : 'true'}
                   </span>
-                  <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-white/62">
+                  <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-1 text-xs text-[color:var(--wolfy-text-secondary)]">
                     {language === 'en' ? 'local bars' : '本地 bars'}: {barBoundary.localBars === false ? 'false' : 'true'}
                   </span>
                 </div>
@@ -802,7 +802,7 @@ const ParameterSweepPanel: React.FC<ParameterSweepPanelProps> = ({
               {renderRow(language === 'en' ? 'Missing lineage gaps' : '缺失谱系项', missingFields.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {missingFields.map((field) => (
-                    <span key={field} className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-white/62">
+                    <span key={field} className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-1 text-xs text-[color:var(--wolfy-text-secondary)]">
                       {toSafeLabel(field, language)}
                     </span>
                   ))}
@@ -810,10 +810,10 @@ const ParameterSweepPanel: React.FC<ParameterSweepPanelProps> = ({
               ) : (language === 'en' ? 'none' : '无'))}
               {renderRow(language === 'en' ? 'Reproducibility hashes' : '可复现性哈希', (
                 <div className="flex flex-wrap gap-2">
-                  <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-white/62">
+                  <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-1 text-xs text-[color:var(--wolfy-text-secondary)]">
                     {language === 'en' ? 'input shape' : '输入形状'}: {formatHash(lineage.reproducibility?.inputShapeHashSha256)}
                   </span>
-                  <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-white/62">
+                  <span className="rounded-full border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-2.5 py-1 text-xs text-[color:var(--wolfy-text-secondary)]">
                     {language === 'en' ? 'grid descriptor' : '网格描述'}: {formatHash(reproducibility.gridDescriptorHashSha256 || lineage.reproducibility?.gridDescriptorHashSha256)}
                   </span>
                 </div>

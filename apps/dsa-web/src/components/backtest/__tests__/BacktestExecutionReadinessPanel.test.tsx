@@ -67,4 +67,27 @@ describe('BacktestExecutionReadinessPanel', () => {
     expect(panel).toHaveTextContent('历史样本正在准备，尚不能确认结果可用。');
     expect(panel).not.toHaveTextContent(/被阻塞|不可用|等待就绪度|OHLCV/i);
   });
+
+  it('uses paper surface tokens instead of dark-theme white foreground residue', () => {
+    render(
+      <BacktestExecutionReadinessPanel
+        language="zh"
+        readiness={{
+          state: 'unknown',
+          resultContractAvailable: false,
+          benchmarkState: 'missing',
+          reasonCodes: ['missing_benchmark'],
+        }}
+      />,
+    );
+
+    const panel = screen.getByTestId('backtest-execution-readiness-panel');
+    expect(panel.className).not.toMatch(/\btext-white\b/);
+    expect(panel.className).not.toMatch(/text-emerald-50|text-amber-50|text-rose-50/);
+    expect(panel.className).toMatch(/wolfy-text-primary|state-success|state-warning|state-danger|wolfy-surface-input/);
+    expect(panel).toHaveTextContent('数据就绪度');
+    expect(panel).toHaveTextContent('结果结构');
+    expect(panel).toHaveTextContent('不可用');
+    expect(panel).toHaveTextContent('仅供研究');
+  });
 });

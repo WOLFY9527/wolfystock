@@ -91,8 +91,8 @@ type Props = {
 };
 
 type HistoricalWizardStep = 'scope' | 'params' | 'execute' | 'results';
-const GHOST_FIELD_CLASS = 'w-full min-w-0 min-h-[44px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm leading-6 text-white outline-none transition-all focus:border-emerald-500/50 focus:bg-white/[0.05]';
-const GHOST_CHECKBOX_CLASS = 'h-4 w-4 shrink-0 rounded border border-white/15 bg-white/[0.03] text-emerald-400 accent-emerald-400';
+const GHOST_FIELD_CLASS = 'w-full min-w-0 min-h-[44px] rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2.5 text-sm leading-6 text-[color:var(--wolfy-text-primary)] outline-none transition-all focus:border-[color:var(--wolfy-accent-focus)] focus:bg-[var(--surface)]';
+const GHOST_CHECKBOX_CLASS = 'h-4 w-4 shrink-0 rounded border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] text-[color:var(--wolfy-accent)] accent-[var(--wolfy-accent)]';
 
 const HistoricalEvaluationPanel: React.FC<Props> = ({
   normalizedCode,
@@ -520,7 +520,7 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
         </section>
 
         <section
-          className={`col-span-1 w-full min-w-0 flex flex-col gap-4 bg-white/[0.02] border border-white/5 rounded-[24px] p-5 ${isProfessionalMode ? 'lg:col-span-5' : 'lg:col-span-4'}`}
+          className={`col-span-1 w-full min-w-0 flex flex-col gap-4 rounded-[24px] border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-5 ${isProfessionalMode ? 'lg:col-span-5' : 'lg:col-span-4'}`}
           data-testid="historical-inspection-panel"
         >
           <div className="grid gap-3 min-w-0">
