@@ -9,9 +9,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "production_config_readiness.py"
 READY_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "release" / "production_config_readiness.ready.json"
 MISSING_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "release" / "production_config_readiness.missing.json"
-DEPLOY_DOC = REPO_ROOT / "docs" / "DEPLOY.md"
-DEPLOY_EN_DOC = REPO_ROOT / "docs" / "DEPLOY_EN.md"
-DEPLOYMENT_CHECKLIST = REPO_ROOT / "docs" / "audits" / "deployment-readiness-checklist.md"
+PRODUCTION_READINESS_OWNER = REPO_ROOT / "docs" / "AI_PROJECT_MANUAL.md"
 
 PUBLIC_ENV_FLAG_CLASSIFICATIONS = {
     "APP_ENV": "**GATED**",
@@ -202,30 +200,35 @@ def test_production_config_readiness_default_mode_is_safe_no_go() -> None:
 
 
 def test_public_deployment_env_flag_matrix_is_documented_and_guarded() -> None:
-    checklist = DEPLOYMENT_CHECKLIST.read_text(encoding="utf-8")
-    deploy_docs = [
-        DEPLOY_DOC.read_text(encoding="utf-8"),
-        DEPLOY_EN_DOC.read_text(encoding="utf-8"),
-    ]
+    readiness_owner = PRODUCTION_READINESS_OWNER.read_text(encoding="utf-8")
+
+    assert "## Production Readiness Documentation Authority" in readiness_owner
+    assert "docs/audits/deployment-readiness-checklist.md`, `docs/DEPLOY.md`, and `docs/DEPLOY_EN.md`" in readiness_owner
+    assert "must not be recreated as compatibility shims" in readiness_owner
 
     for name, classification in PUBLIC_ENV_FLAG_CLASSIFICATIONS.items():
-        assert f"| `{name}` |" in checklist
-        assert classification in checklist
-        for doc in deploy_docs:
-            assert f"| `{name}` |" in doc
-            assert classification in doc
+        assert f"| `{name}` |" in readiness_owner
+        assert classification in readiness_owner
 
     for required_phrase in (
+        "Canonical owner: this generated manual",
+        "Production environment marker",
+        "Authentication enablement",
+        "Fail-closed production posture",
+        "CORS and CSRF allowlist",
+        "Secret and config handling",
+        "Docs/OpenAPI production exposure",
+        "Database and persistence readiness",
+        "Runtime startup verification",
+        "Health and readiness checks",
+        "Rollback and operational validation",
         "target-environment evidence",
         "raw `.env` values",
         "provider, quota, auth/RBAC",
         "live-enforcement approval",
         "NO-GO",
     ):
-        assert required_phrase in checklist
+        assert required_phrase in readiness_owner
 
-    assert "不改变运行时默认值" in deploy_docs[0]
-    assert "不是 quota、计费、auth 或分布式限流" in deploy_docs[0]
-    assert "does not change runtime" in deploy_docs[1]
-    assert "defaults" in deploy_docs[1]
-    assert "not quota, billing, auth, or distributed rate-limit enforcement" in deploy_docs[1]
+    assert "does not change runtime defaults" in readiness_owner
+    assert "not quota, billing, auth, or distributed rate-limit enforcement" in readiness_owner
