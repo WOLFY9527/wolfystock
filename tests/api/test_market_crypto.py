@@ -137,12 +137,15 @@ class MarketCryptoApiTestCase(unittest.TestCase):
 
         self.assertLess(elapsed, 0.5)
         self.assertTrue(payload["items"])
-        self.assertEqual(payload["freshness"], "fallback")
-        self.assertTrue(payload["isFallback"])
+        self.assertEqual(payload["freshness"], "unavailable")
+        self.assertFalse(payload["isFallback"])
+        self.assertTrue(payload["fallbackUsed"])
+        self.assertTrue(payload["isUnavailable"])
         self.assertTrue(payload["isRefreshing"])
-        self.assertEqual(payload["source"], "fallback")
-        self.assertEqual(payload["sourceLabel"], "备用数据")
-        self.assertIn("正在获取实时加密货币行情", payload["warning"])
+        self.assertEqual(payload["source"], "unavailable")
+        self.assertEqual(payload["sourceLabel"], "未接入")
+        self.assertIn("未生成备用价格", payload["warning"])
+        self.assertTrue(all(item.get("value") is None for item in payload["items"]))
         release_fetch.set()
         self.assertTrue(service._market_cache.wait_for_refreshes(timeout=2))
 
@@ -222,15 +225,22 @@ class MarketCryptoApiTestCase(unittest.TestCase):
 
         symbols = {item["symbol"] for item in payload["items"]}
         self.assertTrue({"BTC", "ETH", "BNB"}.issubset(symbols))
-        self.assertEqual(payload["freshness"], "fallback")
-        self.assertTrue(payload["isFallback"])
+        self.assertEqual(payload["freshness"], "unavailable")
+        self.assertFalse(payload["isFallback"])
+        self.assertTrue(payload["fallbackUsed"])
+        self.assertTrue(payload["isUnavailable"])
         self.assertNotEqual(payload["freshness"], "live")
+        self.assertEqual(payload["source"], "unavailable")
+        self.assertIn("未生成备用价格", payload["warning"])
         for item in payload["items"]:
             self.assertIn("symbol", item)
             self.assertIn("name", item)
             self.assertIn("value", item)
             self.assertIn("changePercent", item)
             self.assertIn("sparkline", item)
+            self.assertIsNone(item["value"])
+            self.assertIsNone(item["changePercent"])
+            self.assertTrue(item["isUnavailable"])
 
     def test_crypto_real_snapshot_counts_as_real(self) -> None:
         service = MarketOverviewService()

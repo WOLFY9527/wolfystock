@@ -7,6 +7,7 @@ import copy
 import json
 import re
 import unittest
+from http import HTTPStatus
 from unittest.mock import MagicMock, patch
 
 from fastapi import FastAPI
@@ -21,6 +22,79 @@ FORBIDDEN_ADVICE_RE = re.compile(
     r"\b(buy|sell|hold|recommendation|target|stop|position\s*sizing)\b|买入|卖出|持有|目标价|止损|仓位",
     re.IGNORECASE,
 )
+
+
+def _json_response_payload(response):
+    assert response.status_code == HTTPStatus.OK
+    return json.loads(response.body.decode("utf-8"))
+
+
+def _mark_live_items(panel: dict, source: str) -> None:
+    panel["source"] = source
+    panel["sourceLabel"] = "实时数据"
+    panel["fallbackUsed"] = False
+    panel["isFallback"] = False
+    panel["freshness"] = "live"
+    for item in panel.get("items", []):
+        item["source"] = source
+        item["sourceLabel"] = "实时数据"
+        item["fallbackUsed"] = False
+        item["isFallback"] = False
+        item["freshness"] = "live"
+
+
+def _replace_crypto_with_live_fixture(inputs: dict) -> None:
+    inputs["crypto"] = {
+        "source": "binance",
+        "sourceLabel": "实时数据",
+        "fallbackUsed": False,
+        "isFallback": False,
+        "freshness": "live",
+        "items": [
+            {
+                "symbol": "BTC",
+                "name": "Bitcoin",
+                "price": 70000.0,
+                "value": 70000.0,
+                "change": 1.2,
+                "changePercent": 1.2,
+                "source": "binance",
+                "sourceType": "exchange_public",
+                "sourceLabel": "实时数据",
+                "freshness": "live",
+                "fallbackUsed": False,
+                "isFallback": False,
+            },
+            {
+                "symbol": "ETH",
+                "name": "Ethereum",
+                "price": 3500.0,
+                "value": 3500.0,
+                "change": 0.4,
+                "changePercent": 0.4,
+                "source": "binance",
+                "sourceType": "exchange_public",
+                "sourceLabel": "实时数据",
+                "freshness": "live",
+                "fallbackUsed": False,
+                "isFallback": False,
+            },
+            {
+                "symbol": "BNB",
+                "name": "BNB",
+                "price": 610.0,
+                "value": 610.0,
+                "change": -0.2,
+                "changePercent": -0.2,
+                "source": "binance",
+                "sourceType": "exchange_public",
+                "sourceLabel": "实时数据",
+                "freshness": "live",
+                "fallbackUsed": False,
+                "isFallback": False,
+            },
+        ],
+    }
 
 
 def test_market_optional_auth_transitional_user_projects_as_anonymous_actor() -> None:
@@ -60,7 +134,7 @@ class MarketBriefingApiTestCase(unittest.TestCase):
         }
 
         with patch("api.v1.endpoints.market.MarketOverviewService", return_value=service):
-            payload = market.get_market_briefing()
+            payload = _json_response_payload(market.get_market_briefing())
 
         self.assertEqual(payload["source"], "computed")
         self.assertTrue(payload["updatedAt"])
@@ -195,19 +269,9 @@ class MarketBriefingApiTestCase(unittest.TestCase):
         service = MarketOverviewService()
         inputs = copy.deepcopy(service._fallback_market_temperature_inputs())
 
-        for key, source in (("indices", "sina"), ("rates", "sina"), ("crypto", "binance")):
-            panel = inputs[key]
-            panel["source"] = source
-            panel["sourceLabel"] = "实时数据"
-            panel["fallbackUsed"] = False
-            panel["isFallback"] = False
-            panel["freshness"] = "live"
-            for item in panel.get("items", []):
-                item["source"] = source
-                item["sourceLabel"] = "实时数据"
-                item["fallbackUsed"] = False
-                item["isFallback"] = False
-                item["freshness"] = "live"
+        for key, source in (("indices", "sina"), ("rates", "sina")):
+            _mark_live_items(inputs[key], source)
+        _replace_crypto_with_live_fixture(inputs)
 
         inputs["fx"]["source"] = "fallback"
         inputs["fx"]["sourceLabel"] = "备用数据"
@@ -286,6 +350,11 @@ class MarketBriefingApiTestCase(unittest.TestCase):
                 "sourceType": "exchange_public",
                 "freshness": "live",
                 "isFallback": False,
+                "isUnavailable": False,
+                "value": 70000.0,
+                "price": 70000.0,
+                "change": 1.2,
+                "changePercent": 1.2,
             }
         )
 
