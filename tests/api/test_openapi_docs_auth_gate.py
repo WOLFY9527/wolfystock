@@ -15,6 +15,17 @@ from src.multi_user import ROLE_ADMIN, ROLE_USER
 from src.storage import DatabaseManager
 
 
+def _safe_error(error: str, message: str, status: int) -> dict[str, object]:
+    return {
+        "error": error,
+        "code": error,
+        "message": message,
+        "status": status,
+        "reason": error,
+        "consumerSafeMessage": message,
+    }
+
+
 def _reset_auth_globals() -> None:
     auth._auth_enabled = None
     auth._session_secret = None
@@ -113,7 +124,7 @@ def test_root_docs_surfaces_require_login_when_auth_enabled(docs_auth_client: Te
     response = docs_auth_client.get(path, follow_redirects=False)
 
     assert response.status_code == 401
-    assert response.json() == {"error": "unauthorized", "message": "Login required"}
+    assert response.json() == _safe_error("unauthorized", "Login required", 401)
     assert "set-cookie" not in {key.lower() for key in response.headers}
     assert "traceback" not in response.text.lower()
 
@@ -128,7 +139,7 @@ def test_root_docs_surfaces_reject_non_admin_users_when_auth_enabled(
     response = docs_auth_client.get(path, follow_redirects=False)
 
     assert response.status_code == 403
-    assert response.json() == {"error": "admin_required", "message": "Admin access required"}
+    assert response.json() == _safe_error("admin_required", "Admin access required", 403)
     assert "docs-user" not in response.text
 
 
@@ -169,4 +180,4 @@ def test_existing_api_v1_openapi_surface_stays_blocked_for_anonymous_users_when_
     response = docs_auth_client.get("/api/v1/openapi.json", follow_redirects=False)
 
     assert response.status_code == 401
-    assert response.json() == {"error": "unauthorized", "message": "Login required"}
+    assert response.json() == _safe_error("unauthorized", "Login required", 401)

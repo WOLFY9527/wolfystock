@@ -11,6 +11,17 @@ from api.v1.endpoints import stocks
 from src.services.us_history_helper import LOCAL_US_PARQUET_SOURCE
 
 
+class _FailingStockService:
+    def __init__(self, message: str) -> None:
+        self.message = message
+
+    def get_intraday_data(self, **kwargs):
+        raise RuntimeError(self.message)
+
+    def get_history_data(self, **kwargs):
+        raise RuntimeError(self.message)
+
+
 def test_stock_history_endpoint_reads_cached_us_bars_without_provider_network() -> None:
     app = FastAPI()
     app.include_router(stocks.router, prefix="/api/v1/stocks")
@@ -84,6 +95,7 @@ def test_stock_history_endpoint_reads_cached_us_bars_without_provider_network() 
         days=2,
         manager=manager,
         log_context="[stock history]",
+        allow_provider_fallback=True,
     )
 
 
@@ -163,3 +175,37 @@ def test_stock_history_endpoint_reports_insufficient_coverage_without_provider_m
     assert readiness["usableBars"] == 40
     assert readiness["missingBars"] == 50
     assert readiness["missingRequirements"] == ["insufficient_history"]
+
+
+def test_stock_intraday_internal_error_does_not_echo_provider_exception() -> None:
+    app = FastAPI()
+    app.include_router(stocks.router, prefix="/api/v1/stocks")
+    client = TestClient(app)
+    marker = "Traceback provider token secret raw failure"
+
+    with patch("api.v1.endpoints.stocks.StockService", return_value=_FailingStockService(marker)):
+        response = client.get("/api/v1/stocks/AAPL/intraday")
+
+    payload = response.json()
+    assert response.status_code == 500
+    assert payload["detail"]["error"] == "internal_error"
+    assert payload["detail"]["code"] == "internal_error"
+    assert payload["detail"]["message"] == "获取日内行情失败"
+    assert marker not in response.text
+
+
+def test_stock_history_internal_error_does_not_echo_provider_exception() -> None:
+    app = FastAPI()
+    app.include_router(stocks.router, prefix="/api/v1/stocks")
+    client = TestClient(app)
+    marker = "Traceback provider token secret raw failure"
+
+    with patch("api.v1.endpoints.stocks.StockService", return_value=_FailingStockService(marker)):
+        response = client.get("/api/v1/stocks/AAPL/history")
+
+    payload = response.json()
+    assert response.status_code == 500
+    assert payload["detail"]["error"] == "internal_error"
+    assert payload["detail"]["code"] == "internal_error"
+    assert payload["detail"]["message"] == "获取历史行情失败"
+    assert marker not in response.text

@@ -134,7 +134,12 @@ _MARKET_SENSITIVE_TEXT_RE = re.compile(
 
 
 def _actor(current_user: Optional[CurrentUser]) -> Optional[Dict[str, Any]]:
-    if current_user is None or not hasattr(current_user, "user_id"):
+    if (
+        current_user is None
+        or not hasattr(current_user, "user_id")
+        or not bool(getattr(current_user, "is_authenticated", False))
+        or bool(getattr(current_user, "transitional", False))
+    ):
         return {"actor_type": "anonymous", "role": "anonymous", "display_name": "Anonymous"}
     return {
         "user_id": current_user.user_id,

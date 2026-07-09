@@ -13,6 +13,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from api.v1.errors import build_safe_error_payload
 from api.deps import resolve_current_user
 from api.middlewares.public_abuse_limiter import add_public_api_abuse_limiter
 from api.route_access_policy import is_public_baseline_read
@@ -92,10 +93,11 @@ def _csrf_origin_allowed(request: Request) -> bool:
 def _error_response(request: Request, *, status_code: int, error: str, message: str) -> JSONResponse:
     response = JSONResponse(
         status_code=status_code,
-        content={
-            "error": error,
-            "message": message,
-        },
+        content=build_safe_error_payload(
+            error=error,
+            message=message,
+            status_code=status_code,
+        ),
     )
     return apply_security_headers(response, request)
 

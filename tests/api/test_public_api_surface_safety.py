@@ -96,6 +96,17 @@ def _json_text(payload: object) -> str:
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 
+def _safe_error(error: str, message: str, status: int) -> dict[str, object]:
+    return {
+        "error": error,
+        "code": error,
+        "message": message,
+        "status": status,
+        "reason": error,
+        "consumerSafeMessage": message,
+    }
+
+
 def _route_surface_classifications() -> dict[tuple[str, str], str]:
     fixture = json.loads(BACKEND_ROUTE_CLASSIFICATION_FIXTURE.read_text(encoding="utf-8"))
     return {
@@ -429,7 +440,7 @@ def test_legacy_api_v1_openapi_path_is_unsupported_not_a_docs_surface() -> None:
             unsupported_response = client.get(LEGACY_UNSUPPORTED_OPENAPI_PATH)
 
         assert fail_closed_response.status_code == 401
-        assert fail_closed_response.json() == {"error": "unauthorized", "message": "Login required"}
+        assert fail_closed_response.json() == _safe_error("unauthorized", "Login required", 401)
         _assert_public_surface_safe(fail_closed_response.json())
         assert unsupported_response.status_code == 404
     finally:
@@ -450,7 +461,7 @@ def test_unauthenticated_admin_routes_fail_closed_with_sanitized_errors() -> Non
 
         assert [response.status_code for response in responses] == [401, 401, 401]
         for response in responses:
-            assert response.json() == {"error": "unauthorized", "message": "Login required"}
+            assert response.json() == _safe_error("unauthorized", "Login required", 401)
             _assert_public_surface_safe(response.json())
     finally:
         client.close()
@@ -653,7 +664,7 @@ def test_unauthenticated_admin_abuse_payloads_fail_closed_before_request_body_is
 
         assert [response.status_code for response in responses] == [401, 401]
         for response in responses:
-            assert response.json() == {"error": "unauthorized", "message": "Login required"}
+            assert response.json() == _safe_error("unauthorized", "Login required", 401)
             _assert_public_surface_safe(response.json())
     finally:
         client.close()
@@ -709,7 +720,7 @@ def test_unauthenticated_admin_abuse_payloads_fail_closed_even_after_public_erro
 
         assert [response.status_code for response in responses] == [401, 401]
         for response in responses:
-            assert response.json() == {"error": "unauthorized", "message": "Login required"}
+            assert response.json() == _safe_error("unauthorized", "Login required", 401)
             _assert_public_surface_safe(response.json())
     finally:
         client.close()
@@ -1014,7 +1025,7 @@ def test_hot_public_bucket_preserves_auth_fail_closed_and_limits_public_errors(m
 
         assert admin_response.status_code == 401
         assert public_response.status_code == 429
-        assert admin_response.json() == {"error": "unauthorized", "message": "Login required"}
+        assert admin_response.json() == _safe_error("unauthorized", "Login required", 401)
         assert public_response.json() == {
             "error": "rate_limited",
             "message": "Too many public API errors; retry later.",

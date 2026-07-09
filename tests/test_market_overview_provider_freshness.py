@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from api.deps import CurrentUser
+from api.v1.endpoints import market_overview
 from src.services.market_overview_service import (
     MarketOverviewService,
     get_freshness_status,
@@ -42,6 +44,25 @@ ENGINEERING_REASON_ALIASES = {
     "mock",
     "fallback",
 }
+
+
+def test_market_overview_optional_auth_transitional_user_projects_as_anonymous_actor() -> None:
+    current_user = CurrentUser(
+        user_id="bootstrap-admin",
+        username="admin",
+        display_name="Bootstrap Admin",
+        role="admin",
+        is_admin=True,
+        is_authenticated=False,
+        transitional=True,
+        auth_enabled=False,
+    )
+
+    actor = market_overview._actor(current_user)
+
+    assert actor == {"actor_type": "anonymous", "role": "anonymous", "display_name": "Anonymous"}
+    assert "user_id" not in actor
+    assert "session_id" not in actor
 
 
 def test_freshness_helper_normalizes_core_states_without_silent_upgrade() -> None:
