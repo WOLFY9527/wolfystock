@@ -146,12 +146,12 @@ ROUTE_GROUP_SPECS = [
 ]
 
 OPTION_FIXTURE_MARKER = (
-    "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; "
-    "production Options decisioning needs accepted real provider evidence before public launch."
+    "TODO/NO-GO: authenticated Options research surface remains fixture/demo analysis only; "
+    "production Options decisioning needs accepted real provider evidence before launch."
 )
 OPTION_POLICY_NOTE = (
-    "POLICY_ADJUDICATION_REQUIRED: route-local Options API tests exercise fixture/demo handlers without app-level auth middleware; "
-    "the production app-level middleware does not list /api/v1/options/* in public baseline policy, so do not widen public access without product approval."
+    "Member-gated by production app-level AuthMiddleware and frontend RegisteredSurfaceRoute; "
+    "route-local fixture handlers remain read-only observation-only contracts."
 )
 
 
@@ -318,7 +318,7 @@ def _surface_classification_for_route(route: dict[str, str | None]) -> tuple[str
     path = str(route["path"])
     auth_label = route["auth_dependency_label"]
     if path.startswith("/api/v1/options/"):
-        return "public_fixture_analysis", OPTION_FIXTURE_MARKER, OPTION_POLICY_NOTE
+        return "authenticated_member", OPTION_FIXTURE_MARKER, OPTION_POLICY_NOTE
     if path.startswith("/api/v1/agent/"):
         if path in {"/api/v1/agent/status", "/api/v1/agent/models", "/api/v1/agent/provider-health"}:
             if auth_label == "admin_capability":
@@ -366,7 +366,9 @@ def _build_surface_classifications(live_routes: dict[tuple[str, str], dict[str, 
             continue
         classification, no_go, note = _surface_classification_for_route(route)
         auth_label = _public_dependency_label(method, path, route["auth_dependency_label"])
-        if classification == "public_fixture_analysis":
+        if path.startswith("/api/v1/options/") and classification == "authenticated_member":
+            auth_label = "authenticated_user"
+        elif classification == "public_fixture_analysis":
             auth_label = "public"
         entries.append(
             _surface_entry(

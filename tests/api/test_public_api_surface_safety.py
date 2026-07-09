@@ -85,7 +85,7 @@ DIAGNOSTIC_ROUTES_EXCLUDED_FROM_SAFE_BYPASS = {
     ("GET", "/api/v1/agent/models"),
     ("GET", "/api/v1/agent/provider-health"),
 }
-OPTIONS_FIXTURE_PUBLIC_API_SURFACES = {
+OPTIONS_AUTH_REQUIRED_RESEARCH_SURFACES = {
     ("GET", "/api/v1/options/underlyings/{symbol}/summary"),
     ("GET", "/api/v1/options/underlyings/{symbol}/chain"),
     ("POST", "/api/v1/options/decision/evaluate"),
@@ -1995,14 +1995,14 @@ def test_public_api_abuse_limiter_operator_valid_session_bypass_survives_strict_
         _reset_auth_globals()
 
 
-def test_options_launch_surface_matrix_is_fixture_backed_explicit_and_safe() -> None:
+def test_options_auth_required_surface_matrix_is_fixture_backed_explicit_and_safe() -> None:
     route_classifications = _route_surface_classifications()
     assert {
         signature: route_classifications[signature]
-        for signature in OPTIONS_FIXTURE_PUBLIC_API_SURFACES
+        for signature in OPTIONS_AUTH_REQUIRED_RESEARCH_SURFACES
     } == {
-        signature: "public_fixture_analysis"
-        for signature in OPTIONS_FIXTURE_PUBLIC_API_SURFACES
+        signature: "authenticated_member"
+        for signature in OPTIONS_AUTH_REQUIRED_RESEARCH_SURFACES
     }
 
     client = _options_client()

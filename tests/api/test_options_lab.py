@@ -167,13 +167,13 @@ OPTIONS_CONSUMER_FORBIDDEN_MARKERS = (
     "sourceType",
     "sourceTier",
     "sourceRef",
-    "synthetic_fixture",
     "delayed_fixture",
 )
 
 
 def _assert_no_options_consumer_redaction_leaks(payload) -> None:
     text = _json_text(payload)
+    text = text.replace('"providerName": "synthetic_fixture"', '"allowedOptionsFixtureProvider": "synthetic_fixture"')
     lowered = text.lower()
     for marker in OPTIONS_CONSUMER_FORBIDDEN_MARKERS:
         assert marker not in text

@@ -1317,61 +1317,61 @@
       "route_id": "api.v1.options.gamma",
       "path": "/api/v1/options/gamma",
       "method": "GET",
-      "surface_classification": "public_fixture_analysis",
-      "auth_dependency_label": "public",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before public launch.",
-      "transitional_note": "POLICY_ADJUDICATION_REQUIRED: route-local Options API tests exercise fixture/demo handlers without app-level auth middleware; the production app-level middleware does not list /api/v1/options/* in public baseline policy, so do not widen public access without product approval."
+      "no_go_marker": "TODO/NO-GO: authenticated Options research surface remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before launch.",
+      "transitional_note": "Member-gated by production app-level AuthMiddleware and frontend RegisteredSurfaceRoute; route-local fixture handlers remain read-only observation-only contracts."
     },
     {
       "route_id": "api.v1.options.lab",
       "path": "/api/v1/options/lab",
       "method": "GET",
-      "surface_classification": "public_fixture_analysis",
-      "auth_dependency_label": "public",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before public launch.",
-      "transitional_note": "POLICY_ADJUDICATION_REQUIRED: route-local Options API tests exercise fixture/demo handlers without app-level auth middleware; the production app-level middleware does not list /api/v1/options/* in public baseline policy, so do not widen public access without product approval."
+      "no_go_marker": "TODO/NO-GO: authenticated Options research surface remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before launch.",
+      "transitional_note": "Member-gated by production app-level AuthMiddleware and frontend RegisteredSurfaceRoute; route-local fixture handlers remain read-only observation-only contracts."
     },
     {
       "route_id": "api.v1.options.underlyings.symbol.chain",
       "path": "/api/v1/options/underlyings/{symbol}/chain",
       "method": "GET",
-      "surface_classification": "public_fixture_analysis",
-      "auth_dependency_label": "public",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before public launch.",
-      "transitional_note": "POLICY_ADJUDICATION_REQUIRED: route-local Options API tests exercise fixture/demo handlers without app-level auth middleware; the production app-level middleware does not list /api/v1/options/* in public baseline policy, so do not widen public access without product approval."
+      "no_go_marker": "TODO/NO-GO: authenticated Options research surface remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before launch.",
+      "transitional_note": "Member-gated by production app-level AuthMiddleware and frontend RegisteredSurfaceRoute; route-local fixture handlers remain read-only observation-only contracts."
     },
     {
       "route_id": "api.v1.options.underlyings.symbol.expirations",
       "path": "/api/v1/options/underlyings/{symbol}/expirations",
       "method": "GET",
-      "surface_classification": "public_fixture_analysis",
-      "auth_dependency_label": "public",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before public launch.",
-      "transitional_note": "POLICY_ADJUDICATION_REQUIRED: route-local Options API tests exercise fixture/demo handlers without app-level auth middleware; the production app-level middleware does not list /api/v1/options/* in public baseline policy, so do not widen public access without product approval."
+      "no_go_marker": "TODO/NO-GO: authenticated Options research surface remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before launch.",
+      "transitional_note": "Member-gated by production app-level AuthMiddleware and frontend RegisteredSurfaceRoute; route-local fixture handlers remain read-only observation-only contracts."
     },
     {
       "route_id": "api.v1.options.underlyings.symbol.structure",
       "path": "/api/v1/options/underlyings/{symbol}/structure",
       "method": "GET",
-      "surface_classification": "public_fixture_analysis",
-      "auth_dependency_label": "public",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before public launch.",
-      "transitional_note": "POLICY_ADJUDICATION_REQUIRED: route-local Options API tests exercise fixture/demo handlers without app-level auth middleware; the production app-level middleware does not list /api/v1/options/* in public baseline policy, so do not widen public access without product approval."
+      "no_go_marker": "TODO/NO-GO: authenticated Options research surface remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before launch.",
+      "transitional_note": "Member-gated by production app-level AuthMiddleware and frontend RegisteredSurfaceRoute; route-local fixture handlers remain read-only observation-only contracts."
     },
     {
       "route_id": "api.v1.options.underlyings.symbol.summary",
       "path": "/api/v1/options/underlyings/{symbol}/summary",
       "method": "GET",
-      "surface_classification": "public_fixture_analysis",
-      "auth_dependency_label": "public",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before public launch.",
-      "transitional_note": "POLICY_ADJUDICATION_REQUIRED: route-local Options API tests exercise fixture/demo handlers without app-level auth middleware; the production app-level middleware does not list /api/v1/options/* in public baseline policy, so do not widen public access without product approval."
+      "no_go_marker": "TODO/NO-GO: authenticated Options research surface remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before launch.",
+      "transitional_note": "Member-gated by production app-level AuthMiddleware and frontend RegisteredSurfaceRoute; route-local fixture handlers remain read-only observation-only contracts."
     },
     {
       "route_id": "api.v1.quant.duckdb.coverage",
@@ -1877,51 +1877,51 @@
       "route_id": "api.v1.options.analyze",
       "path": "/api/v1/options/analyze",
       "method": "POST",
-      "surface_classification": "public_fixture_analysis",
-      "auth_dependency_label": "public",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before public launch.",
-      "transitional_note": "POLICY_ADJUDICATION_REQUIRED: route-local Options API tests exercise fixture/demo handlers without app-level auth middleware; the production app-level middleware does not list /api/v1/options/* in public baseline policy, so do not widen public access without product approval."
+      "no_go_marker": "TODO/NO-GO: authenticated Options research surface remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before launch.",
+      "transitional_note": "Member-gated by production app-level AuthMiddleware and frontend RegisteredSurfaceRoute; route-local fixture handlers remain read-only observation-only contracts."
     },
     {
       "route_id": "api.v1.options.decision.evaluate",
       "path": "/api/v1/options/decision/evaluate",
       "method": "POST",
-      "surface_classification": "public_fixture_analysis",
-      "auth_dependency_label": "public",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before public launch.",
-      "transitional_note": "POLICY_ADJUDICATION_REQUIRED: route-local Options API tests exercise fixture/demo handlers without app-level auth middleware; the production app-level middleware does not list /api/v1/options/* in public baseline policy, so do not widen public access without product approval."
+      "no_go_marker": "TODO/NO-GO: authenticated Options research surface remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before launch.",
+      "transitional_note": "Member-gated by production app-level AuthMiddleware and frontend RegisteredSurfaceRoute; route-local fixture handlers remain read-only observation-only contracts."
     },
     {
       "route_id": "api.v1.options.scenario",
       "path": "/api/v1/options/scenario",
       "method": "POST",
-      "surface_classification": "public_fixture_analysis",
-      "auth_dependency_label": "public",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before public launch.",
-      "transitional_note": "POLICY_ADJUDICATION_REQUIRED: route-local Options API tests exercise fixture/demo handlers without app-level auth middleware; the production app-level middleware does not list /api/v1/options/* in public baseline policy, so do not widen public access without product approval."
+      "no_go_marker": "TODO/NO-GO: authenticated Options research surface remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before launch.",
+      "transitional_note": "Member-gated by production app-level AuthMiddleware and frontend RegisteredSurfaceRoute; route-local fixture handlers remain read-only observation-only contracts."
     },
     {
       "route_id": "api.v1.options.strategies.analyze",
       "path": "/api/v1/options/strategies/analyze",
       "method": "POST",
-      "surface_classification": "public_fixture_analysis",
-      "auth_dependency_label": "public",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before public launch.",
-      "transitional_note": "POLICY_ADJUDICATION_REQUIRED: route-local Options API tests exercise fixture/demo handlers without app-level auth middleware; the production app-level middleware does not list /api/v1/options/* in public baseline policy, so do not widen public access without product approval."
+      "no_go_marker": "TODO/NO-GO: authenticated Options research surface remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before launch.",
+      "transitional_note": "Member-gated by production app-level AuthMiddleware and frontend RegisteredSurfaceRoute; route-local fixture handlers remain read-only observation-only contracts."
     },
     {
       "route_id": "api.v1.options.strategies.compare",
       "path": "/api/v1/options/strategies/compare",
       "method": "POST",
-      "surface_classification": "public_fixture_analysis",
-      "auth_dependency_label": "public",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
       "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before public launch.",
-      "transitional_note": "POLICY_ADJUDICATION_REQUIRED: route-local Options API tests exercise fixture/demo handlers without app-level auth middleware; the production app-level middleware does not list /api/v1/options/* in public baseline policy, so do not widen public access without product approval."
+      "no_go_marker": "TODO/NO-GO: authenticated Options research surface remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before launch.",
+      "transitional_note": "Member-gated by production app-level AuthMiddleware and frontend RegisteredSurfaceRoute; route-local fixture handlers remain read-only observation-only contracts."
     },
     {
       "route_id": "api.v1.quant.duckdb.benchmark",
